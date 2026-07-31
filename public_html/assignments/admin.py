@@ -1,3 +1,39 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import Assignment, Review, Submission, SubmissionPhoto
+
+
+class SubmissionInline(admin.TabularInline):
+    model = Submission
+    extra = 0
+    readonly_fields = ('task', 'answer_text', 'answer_number',
+                       'interval_low', 'interval_high', 'updated_at')
+    can_delete = False
+
+
+@admin.register(Assignment)
+class AssignmentAdmin(admin.ModelAdmin):
+    list_display = ('worksheet', 'student', 'status', 'grade_scale',
+                    'assigned_at', 'due_at')
+    list_filter = ('status', 'grade_scale')
+    search_fields = ('worksheet__title', 'student__username',
+                     'student__last_name')
+    inlines = [SubmissionInline]
+
+
+class SubmissionPhotoInline(admin.TabularInline):
+    model = SubmissionPhoto
+    extra = 0
+
+
+@admin.register(Submission)
+class SubmissionAdmin(admin.ModelAdmin):
+    list_display = ('assignment', 'task', 'display_answer', 'updated_at')
+    inlines = [SubmissionPhotoInline]
+
+
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    list_display = ('submission', 'grade_word', 'grade_points',
+                    'reviewer', 'reviewed_at')
+    list_filter = ('grade_word',)
