@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Мои задания — EgorMath{% endblock %}
+{% block content %}
+<h1>Мои задания</h1>
+
+{% if assignments %}
+<table class="list">
+  <tr><th>Листок</th><th>Учитель</th><th>Выдано</th><th>Срок</th><th>Статус</th><th></th></tr>
+  {% for a in assignments %}
+  <tr>
+    <td>{{ a.worksheet.title }}</td>
+    <td>{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>
+    <td>{{ a.assigned_at|date:'d.m.Y' }}</td>
+    <td>{% if a.due_at %}{{ a.due_at|date:'d.m.Y H:i' }}{% else %}—{% endif %}</td>
+    <td><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span></td>
+    <td><a class="btn btn-small" href="{% url 'assignment_detail' a.pk %}">Открыть</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="card"><p class="muted">Вам пока не назначено ни одного задания.</p></div>
+{% endif %}
+{% endblock %}

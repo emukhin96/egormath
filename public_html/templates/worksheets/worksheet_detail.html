@@ -1,0 +1,173 @@
+{% extends 'base.html' %}
+{% block title %}{{ worksheet.title }} — EgorMath{% endblock %}
+{% block content %}
+<h1>{{ worksheet.title }}
+  <span class="muted">{{ worksheet.grade_label }}</span>
+</h1>
+
+<p>
+  <a class="btn btn-secondary" href="{% url 'worksheet_edit' worksheet.pk %}">Свойства</a>
+  <a class="btn" href="{% url 'worksheet_pdf' worksheet.pk %}?variant=student">PDF для ученика</a>
+  <a class="btn" href="{% url 'worksheet_pdf' worksheet.pk %}?variant=answers">PDF с ответами</a>
+  <a class="btn" href="{% url 'worksheet_pdf' worksheet.pk %}?variant=teacher">PDF для учителя</a>
+  <a class="btn btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}">.tex</a>
+</p>
+
+<div class="card">
+  <h2>Задачи листка ({{ items|length }})</h2>
+  {% if items %}
+  <table class="list">
+    <tr><th></th><th>Рубрика</th><th>Задача</th><th></th></tr>
+    {% for item in items %}
+    <tr>
+      <td class="mono">{{ forloop.counter }}</td>
+      <td style="min-width:180px">
+        <form method="post" action="{% url 'worksheet_set_rubric' worksheet.pk item.pk %}">
+          {% csrf_token %}
+          <input type="text" name="rubric" value="{{ item.rubric }}" placeholder="— продолжение —" style="max-width:160px">
+          <input type="text" name="rubric_note" value="{{ item.rubric_note }}" placeholder="пояснение" style="max-width:160px">
+          <button type="submit" class="btn btn-small btn-secondary">ok</button>
+        </form>
+      </td>
+      <td>
+        <div class="math-content task-text">{{ item.task.text_latex|truncatechars:180 }}</div>
+        <span class="task-meta">
+          #{{ item.task.pk }}
+          {% if item.task.stars %}· <span class="stars">{{ item.task.get_stars_display }}</span>{% endif %}
+          · <a href="{% url 'task_detail' item.task.pk %}">открыть</a>
+          · <a href="{% url 'task_edit' item.task.pk %}">править</a>
+        </span>
+      </td>
+      <td style="white-space:nowrap">
+        <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'up' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.first %}disabled{% endif %}>↑</button></form>
+        <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'down' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.last %}disabled{% endif %}>↓</button></form>
+        <form method="post" action="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-danger">×</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="helptext">Рубрика задаётся у задачи, с которой она начинается; у остальных
+    задач рубрики поле пустое (продолжение). Первая рубрика по умолчанию — «Задачи».</p>
+  {% else %}
+  <p class="muted">Задач пока нет — найдите их в базе ниже или создайте новую.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Добавить задачи</h2>
+  <form method="get" class="filters">
+    <div>
+      <label for="s_q">Поиск по базе</label>
+      <input type="text" name="q" id="s_q" value="{{ params.q|default:'' }}">
+    </div>
+    <div>
+      <label for="s_grade">Класс</label>
+      <input type="number" name="grade" id="s_grade" min="1" max="11" value="{{ params.grade|default:'' }}">
+    </div>
+    <div>
+      <label for="s_tag">Тег</label>
+      <input type="text" name="tag" id="s_tag" value="{{ params.tag|default:'' }}">
+    </div>
+    <div><button type="submit" class="btn">Найти</button></div>
+    <div style="margin-left:auto">
+      <a class="btn" href="{% url 'task_create' %}?worksheet={{ worksheet.pk }}">Создать новую задачу</a>
+    </div>
+  </form>
+
+  {% if search_active %}
+    {% if found_tasks %}
+    <table class="list">
+      {% for task in found_tasks %}
+      <tr>
+        <td>
+          <div class="math-content task-text">{{ task.text_latex|truncatechars:180 }}</div>
+          <span class="task-meta">#{{ task.pk }}{% if task.grade_level %} · {{ task.grade_level }} класс{% endif %}</span>
+        </td>
+        <td style="white-space:nowrap">
+          <form method="post" action="{% url 'worksheet_add_task' worksheet.pk %}" class="inline-form">
+            {% csrf_token %}
+            <input type="hidden" name="task_id" value="{{ task.pk }}">
+            <button type="submit" class="btn btn-small">Добавить</button>
+          </form>
+          <a class="btn btn-small btn-secondary" href="{% url 'task_detail' task.pk %}">Открыть</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="muted">Ничего не найдено.</p>
+    {% endif %}
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Назначить ученикам</h2>
+  {% if student_profiles %}
+  <form method="post" action="{% url 'assign_worksheet' worksheet.pk %}">
+    {% csrf_token %}
+    <p>
+      {% for p in student_profiles %}
+      <label style="font-weight:normal">
+        <input type="checkbox" name="students" value="{{ p.user_id }}"
+               {% if p.user_id in assigned_ids %}checked disabled{% endif %}>
+        {{ p.user.get_full_name }}{% if p.grade %} ({{ p.grade }} кл.){% endif %}
+        {% if p.user_id in assigned_ids %}<span class="muted">— уже назначено</span>{% endif %}
+      </label>
+      {% endfor %}
+    </p>
+    <p>
+      <label for="a_scale">Шкала оценивания</label>
+      <select name="grade_scale" id="a_scale" style="max-width:340px">
+        <option value="words">Отметки: отлично / хорошо / средне / плохо</option>
+        <option value="points">Числовая шкала (баллы)</option>
+      </select>
+    </p>
+    <p>
+      <label for="a_due">Срок сдачи (необязательно)</label>
+      <input type="datetime-local" name="due_at" id="a_due" style="max-width:250px">
+    </p>
+    <button type="submit" class="btn">Назначить выбранным</button>
+  </form>
+  {% else %}
+  <p class="muted">У вас нет учеников. <a href="{% url 'students' %}">Добавьте учеников</a>.</p>
+  {% endif %}
+
+  {% if assignments %}
+  <h2>Назначения</h2>
+  <table class="list">
+    <tr><th>Ученик</th><th>Статус</th><th></th></tr>
+    {% for a in assignments %}
+    <tr>
+      <td>{{ a.student.get_full_name|default:a.student.username }}</td>
+      <td><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span></td>
+      <td>{% if a.status == 'submitted' or a.status == 'reviewed' %}
+        <a class="btn btn-small btn-secondary" href="{% url 'review_assignment' a.pk %}">
+          {% if a.status == 'submitted' %}Проверить{% else %}Открыть{% endif %}</a>
+      {% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Публичные ссылки</h2>
+  {% for link in share_links %}
+  <p>
+    <a href="{% url 'public_worksheet' link.token %}" class="mono">{{ request.scheme }}://{{ request.get_host }}{% url 'public_worksheet' link.token %}</a>
+    {% if not link.is_active %}<span class="badge badge-returned">отключена</span>{% endif %}
+    <form method="post" action="{% url 'share_toggle' worksheet.pk link.pk %}" class="inline-form">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-small btn-secondary">
+        {% if link.is_active %}Отключить{% else %}Включить{% endif %}</button>
+    </form>
+  </p>
+  {% empty %}
+  <p class="muted">Ссылок нет. Любой человек с такой ссылкой видит листок без ответов и без входа на сайт.</p>
+  {% endfor %}
+  <form method="post" action="{% url 'share_create' worksheet.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-secondary">Создать ссылку</button>
+  </form>
+</div>
+{% endblock %}

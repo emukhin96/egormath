@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block title %}{% if worksheet %}{{ worksheet.title }}{% else %}Новый листок{% endif %} — EgorMath{% endblock %}
+{% block content %}
+<h1>{% if worksheet %}Свойства листка{% else %}Новый листок{% endif %}</h1>
+<div class="card">
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn">Сохранить</button>
+    <a class="btn btn-secondary" href="{% if worksheet %}{% url 'worksheet_detail' worksheet.pk %}{% else %}{% url 'worksheet_list' %}{% endif %}">Отмена</a>
+  </form>
+</div>
+{% endblock %}

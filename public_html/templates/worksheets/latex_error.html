@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Ошибка компиляции — EgorMath{% endblock %}
+{% block content %}
+<h1>Ошибка компиляции PDF</h1>
+<div class="card">
+  <p>Листок «{{ worksheet.title }}» не удалось собрать в PDF.</p>
+  <p class="msg msg-error">{{ error }}</p>
+  {% if error.log %}
+  <h2>Фрагмент лога LaTeX</h2>
+  <pre class="log">{{ error.log }}</pre>
+  {% endif %}
+  <p>Чаще всего причина — ошибка в LaTeX-коде одной из задач.
+     Проверьте недавно изменённые задачи, посмотрите
+     <a href="{% url 'worksheet_tex' worksheet.pk %}">.tex-исходник</a>
+     листка или соберите его локально.</p>
+  <p><a class="btn btn-secondary" href="{% url 'worksheet_detail' worksheet.pk %}">Вернуться к листку</a></p>
+</div>
+{% endblock %}

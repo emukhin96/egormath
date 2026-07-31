@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Вход — EgorMath{% endblock %}
+{% block content %}
+<div class="card login-box">
+  <h1>Вход</h1>
+  {% if form.errors %}
+    <div class="msg msg-error">Неверный логин или пароль.</div>
+  {% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <p>
+      <label for="id_username">Логин</label>
+      <input type="text" name="username" id="id_username" autofocus required>
+    </p>
+    <p>
+      <label for="id_password">Пароль</label>
+      <input type="password" name="password" id="id_password" required>
+    </p>
+    <input type="hidden" name="next" value="{{ next }}">
+    <button type="submit" class="btn">Войти</button>
+  </form>
+</div>
+{% endblock %}

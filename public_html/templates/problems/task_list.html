@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}База задач — EgorMath{% endblock %}
+{% block content %}
+<h1>База задач</h1>
+
+<div class="card">
+  <form method="get" class="filters">
+    <div>
+      <label for="f_q">Поиск</label>
+      <input type="text" name="q" id="f_q" value="{{ params.q|default:'' }}" placeholder="ключевые слова">
+    </div>
+    <div>
+      <label for="f_grade">Класс</label>
+      <select name="grade" id="f_grade">
+        <option value="">Любой</option>
+        {% for g, label in grade_choices %}
+        <option value="{{ g }}" {% if params.grade == g|stringformat:'s' %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="f_tag">Тег</label>
+      <select name="tag" id="f_tag">
+        <option value="">Любой</option>
+        {% for t in tags %}
+        <option value="{{ t.name }}" {% if params.tag == t.name %}selected{% endif %}>{{ t.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if params.topic %}<input type="hidden" name="topic" value="{{ params.topic }}">{% endif %}
+    <div><button type="submit" class="btn">Найти</button></div>
+    <div><a class="btn btn-secondary" href="{% url 'task_list' %}">Сбросить</a></div>
+    <div style="margin-left:auto"><a class="btn" href="{% url 'task_create' %}">Новая задача</a></div>
+  </form>
+
+  <h2>Рубрикатор</h2>
+  <p>
+    {% if current_topic %}
+      <strong>Тема: {{ current_topic }}</strong> —
+      <a href="{% url 'task_list' %}?q={{ params.q|default:'' }}">убрать фильтр</a>
+    {% endif %}
+  </p>
+  <p>
+    {% for topic in topics %}
+      <a href="?topic={{ topic.pk }}">{{ topic.name }}</a>{% if topic.children.all %}
+      ({% for child in topic.children.all %}<a href="?topic={{ child.pk }}" class="muted">{{ child.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}){% endif %}{% if not forloop.last %} · {% endif %}
+    {% endfor %}
+  </p>
+</div>
+
+{% if page.object_list %}
+<table class="list">
+  <tr><th>Задача</th><th>Класс</th><th>Темы</th><th>Теги</th><th></th></tr>
+  {% for task in page %}
+  <tr>
+    <td>
+      <div class="math-content task-text">{{ task.text_latex|truncatechars:220 }}</div>
+      {% if task.stars %}<span class="stars">{{ task.get_stars_display }}</span>{% endif %}
+    </td>
+    <td>{{ task.grade_level|default:'—' }}</td>
+    <td class="task-meta">{% for t in task.topics.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+    <td class="task-meta">{% for t in task.tags.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+    <td>
+      <a class="btn btn-small btn-secondary" href="{% url 'task_detail' task.pk %}">Открыть</a>
+      {% block task_actions %}{% endblock %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if page.has_other_pages %}
+<p>
+  {% if page.has_previous %}<a href="?{{ params.urlencode }}&page={{ page.previous_page_number }}">← Назад</a>{% endif %}
+  Страница {{ page.number }} из {{ page.paginator.num_pages }}
+  {% if page.has_next %}<a href="?{{ params.urlencode }}&page={{ page.next_page_number }}">Вперёд →</a>{% endif %}
+</p>
+{% endif %}
+{% else %}
+<div class="card"><p class="muted">Задачи не найдены. Попробуйте изменить фильтры или <a href="{% url 'task_create' %}">создайте новую</a>.</p></div>
+{% endif %}
+{% endblock %}

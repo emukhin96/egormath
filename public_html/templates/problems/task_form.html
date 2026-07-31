@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block title %}{% if task %}Задача #{{ task.pk }}{% else %}Новая задача{% endif %} — EgorMath{% endblock %}
+{% block content %}
+<h1>{% if task %}Редактирование задачи #{{ task.pk }}{% else %}Новая задача{% endif %}</h1>
+
+<div class="card">
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+
+    <h2>Источники (учебники/задачники)</h2>
+    {{ formset.management_form }}
+    <table class="list">
+      <tr><th>Источник</th><th>Номер</th><th>Удалить</th></tr>
+      {% for f in formset %}
+      <tr>
+        <td>{{ f.id }}{{ f.source }}</td>
+        <td>{{ f.number }}</td>
+        <td>{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
+      </tr>
+      {% for err in f.non_field_errors %}<tr><td colspan="3" class="errorlist">{{ err }}</td></tr>{% endfor %}
+      {% endfor %}
+    </table>
+    <p class="helptext">Новые учебники добавляет администратор в админке.</p>
+
+    <p>
+      <button type="submit" class="btn">Сохранить</button>
+      <a class="btn btn-secondary" href="{% if task %}{% url 'task_detail' task.pk %}{% else %}{% url 'task_list' %}{% endif %}">Отмена</a>
+    </p>
+  </form>
+  <p class="helptext">Условие, ответ и решение — в LaTeX (как для пакета egor).
+    Математика в тексте: $...$, вынесенные формулы: \[...\].</p>
+</div>
+{% endblock %}

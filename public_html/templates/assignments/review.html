@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block title %}Проверка: {{ assignment.worksheet.title }} — EgorMath{% endblock %}
+{% block content %}
+<h1>Проверка работы</h1>
+<p class="muted">
+  {{ assignment.worksheet.title }} ·
+  {{ assignment.student.get_full_name|default:assignment.student.username }}
+  · отправлено {{ assignment.submitted_at|date:'d.m.Y H:i' }}
+  · <span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span>
+</p>
+
+<form method="post" action="{% url 'save_review' assignment.pk %}">
+  {% csrf_token %}
+  {% for row in rows %}
+  <div class="card">
+    <p><strong>{{ forloop.counter }}.</strong>
+      {% if row.task.stars %}<span class="stars">{{ row.task.get_stars_display }}</span>{% endif %}
+    </p>
+    <div class="math-content task-text">{{ row.task.text_latex|linebreaksbr }}</div>
+
+    {% if row.task.answer_latex %}
+    <div class="answer-box math-content"><strong>Эталонный ответ:</strong> {{ row.task.answer_latex }}</div>
+    {% endif %}
+    {% if row.task.solution_latex %}
+    <details><summary class="muted">Эталонное решение</summary>
+      <div class="solution-box math-content">{{ row.task.solution_latex|linebreaksbr }}</div>
+    </details>
+    {% endif %}
+
+    {% if row.submission %}
+      <p><strong>Ответ ученика:</strong>
+        {% if row.submission.display_answer %}
+          <span class="math-content">{{ row.submission.display_answer }}</span>
+        {% else %}
+          <span class="muted">нет ответа</span>
+        {% endif %}
+      </p>
+      {% if row.submission.photos.all %}
+      <div class="photo-grid">
+        {% for photo in row.submission.photos.all %}
+        <a href="{% url 'photo_file' photo.pk %}" target="_blank"><img src="{% url 'photo_file' photo.pk %}" alt="фото решения"></a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <p>
+        {% if is_points %}
+          <label>Баллы</label>
+          <input type="text" name="sub{{ row.submission.pk }}_points"
+                 value="{% if row.review.grade_points != None %}{{ row.review.grade_points }}{% endif %}"
+                 style="max-width:120px">
+        {% else %}
+          <label>Отметка</label>
+          <select name="sub{{ row.submission.pk }}_grade" style="max-width:200px">
+            <option value="">—</option>
+            {% for value, label in grade_choices %}
+            <option value="{{ value }}" {% if row.review.grade_word == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        {% endif %}
+      </p>
+      <p>
+        <label>Комментарий</label>
+        <textarea name="sub{{ row.submission.pk }}_comment" rows="2">{{ row.review.comment|default:'' }}</textarea>
+      </p>
+    {% else %}
+      <p class="muted">Ученик не отправлял ответ на эту задачу.</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <div class="card">
+    <button type="submit" name="action" value="save" class="btn btn-secondary">Сохранить черновик</button>
+    <button type="submit" name="action" value="complete" class="btn">Завершить проверку</button>
+    <button type="submit" name="action" value="return" class="btn btn-danger"
+            onclick="return confirm('Вернуть работу ученику на доработку?')">Вернуть на доработку</button>
+  </div>
+</form>
+{% endblock %}

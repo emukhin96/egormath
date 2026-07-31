@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Мои листки — EgorMath{% endblock %}
+{% block content %}
+<h1>Мои листки</h1>
+<p><a class="btn" href="{% url 'worksheet_create' %}">Создать листок</a></p>
+
+{% if worksheets %}
+<table class="list">
+  <tr><th>Название</th><th>Класс</th><th>Задач</th><th>Изменён</th><th>PDF</th></tr>
+  {% for w in worksheets %}
+  <tr>
+    <td><a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a></td>
+    <td>{{ w.grade_label }}</td>
+    <td>{{ w.items.count }}</td>
+    <td>{{ w.updated_at|date:'d.m.Y H:i' }}</td>
+    <td>
+      <a class="btn btn-small btn-secondary" href="{% url 'worksheet_pdf' w.pk %}?variant=student">ученик</a>
+      <a class="btn btn-small btn-secondary" href="{% url 'worksheet_pdf' w.pk %}?variant=answers">с ответами</a>
+      <a class="btn btn-small btn-secondary" href="{% url 'worksheet_pdf' w.pk %}?variant=teacher">учитель</a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="card"><p class="muted">Листков пока нет.</p></div>
+{% endif %}
+{% endblock %}

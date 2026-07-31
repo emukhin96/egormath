@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}{{ worksheet.title }} — EgorMath{% endblock %}
+{% block content %}
+<h1>{{ worksheet.title }}</h1>
+<p class="muted">
+  {{ worksheet.grade_label }}{% if worksheet.subtitle %} · {{ worksheet.subtitle }}{% endif %}
+  · {{ worksheet.display_author }}
+</p>
+<p><a class="btn" href="{% url 'public_worksheet_pdf' token %}">Скачать PDF</a></p>
+
+<div class="card">
+  {% for item in items %}
+    {% if item.rubric %}<h2>{{ item.rubric }}</h2>
+      {% if item.rubric_note %}<p class="muted math-content">{{ item.rubric_note }}</p>{% endif %}
+    {% endif %}
+    <p>
+      <strong>{{ forloop.counter }}.</strong>
+      {% if item.task.stars %}<span class="stars">{{ item.task.get_stars_display }}</span>{% endif %}
+    </p>
+    <div class="math-content task-text">{{ item.task.text_latex|linebreaksbr }}</div>
+    {% if item.task.subitems_latex %}
+    <div class="math-content task-text muted">{{ item.task.subitems_latex|linebreaksbr }}</div>
+    {% endif %}
+    {% if not forloop.last %}<hr style="border:none;border-top:1px solid var(--border)">{% endif %}
+  {% empty %}
+  <p class="muted">В листке пока нет задач.</p>
+  {% endfor %}
+</div>
+<p class="helptext">Формулы отображаются приближённо. Точный вид — в PDF.</p>
+{% endblock %}

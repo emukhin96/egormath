@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}Ученики — EgorMath{% endblock %}
+{% block content %}
+<h1>Мои ученики</h1>
+
+{% if new_credentials %}
+<div class="credentials">
+  <strong>Учётные данные ученика {{ new_credentials.name }}</strong> —
+  сохраните и передайте ученику, пароль показывается только один раз:<br>
+  Логин: <code>{{ new_credentials.username }}</code>
+  Пароль: <code>{{ new_credentials.password }}</code>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Добавить ученика</h2>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn">Создать ученика</button>
+    <span class="helptext">Логин и пароль будут сгенерированы автоматически.</span>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Список</h2>
+  {% if student_profiles %}
+  <table class="list">
+    <tr><th>Ученик</th><th>Класс</th><th>Логин</th><th></th></tr>
+    {% for p in student_profiles %}
+    <tr>
+      <td>{{ p.user.get_full_name }}</td>
+      <td>{{ p.grade|default:'—' }}</td>
+      <td class="mono">{{ p.user.username }}</td>
+      <td>
+        <form method="post" action="{% url 'reset_student_password' p.user_id %}" class="inline-form"
+              onsubmit="return confirm('Сбросить пароль ученика {{ p.user.get_full_name }}?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-small btn-secondary">Сбросить пароль</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">Учеников пока нет — добавьте первого через форму выше.</p>
+  {% endif %}
+</div>
+{% endblock %}
