@@ -1,0 +1,161 @@
+"""
+Настройки egormath-web.
+
+Локальная разработка: SQLite, DEBUG=True (по умолчанию).
+Продакшен (Timeweb): секреты в <корень сайта>/.secrets/, MySQL.
+Переключение: файл .secrets/DJANGO_ENV со значением "production"
+или переменная окружения DJANGO_ENV=production.
+"""
+
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent  # public_html/
+SITE_ROOT = BASE_DIR.parent                        # корень репозитория / сайта
+SECRETS_DIR = SITE_ROOT / '.secrets'
+
+
+def read_secret(name, default=None):
+    """Секрет из переменной окружения или файла .secrets/<name>."""
+    value = os.environ.get(name)
+    if value:
+        return value.strip()
+    path = SECRETS_DIR / name
+    if path.exists():
+        return path.read_text().strip()
+    return default
+
+
+DJANGO_ENV = read_secret('DJANGO_ENV', 'development')
+IS_PRODUCTION = DJANGO_ENV == 'production'
+
+SECRET_KEY = read_secret(
+    'DJANGO_SECRET_KEY',
+    'django-insecure-dev-only-key-do-not-use-in-production',
+)
+
+DEBUG = not IS_PRODUCTION
+
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in read_secret('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+    if h.strip()
+]
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'accounts',
+    'problems',
+    'worksheets',
+    'assignments',
+]
+
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+ROOT_URLCONF = 'core.urls'
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [BASE_DIR / 'templates'],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = 'core.wsgi.application'
+
+if IS_PRODUCTION:
+    import pymysql
+
+    pymysql.install_as_MySQLdb()
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': read_secret('DB_NAME', ''),
+            'USER': read_secret('DB_USER', ''),
+            'PASSWORD': read_secret('DB_PASSWORD', ''),
+            'HOST': read_secret('DB_HOST', '127.0.0.1'),
+            'PORT': read_secret('DB_PORT', '3306'),
+            'OPTIONS': {'charset': 'utf8mb4'},
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+     'OPTIONS': {'min_length': 6}},
+]
+
+LANGUAGE_CODE = 'ru'
+TIME_ZONE = 'Europe/Moscow'
+USE_I18N = True
+USE_TZ = True
+
+STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Медиа (фото решений, кэш PDF) храним ВНЕ public_html: файлы приватные,
+# раздаются только через view с проверкой прав.
+MEDIA_ROOT = SITE_ROOT / 'media'
+MEDIA_URL = '/media/'
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/dashboard/'
+LOGOUT_REDIRECT_URL = '/accounts/login/'
+
+# Школьников не разлогиниваем месяц
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
+
+# LaTeX API (тот же сервер, что у chgkmsu)
+LATEX_API_URL = read_secret('LATEX_API_URL', 'http://81.200.147.78:8000')
+LATEX_API_KEY = read_secret('LATEX_API_KEY', '')
+LATEX_API_TIMEOUT = int(read_secret('LATEX_API_TIMEOUT', '120'))
+
+# Ограничения на фото решений
+SUBMISSION_PHOTO_MAX_SIZE_MB = 15       # до сжатия
+SUBMISSION_PHOTO_MAX_SIDE = 1600        # px, большая сторона после сжатия
+SUBMISSION_PHOTO_MAX_COUNT = 6          # фото на одну задачу
+
+if IS_PRODUCTION:
+    CSRF_TRUSTED_ORIGINS = [
+        'https://' + h for h in ALLOWED_HOSTS if not h.startswith('.')
+    ]
+    SECURE_BROWSER_XSS_FILTER = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+# Локальные переопределения (не в git)
+try:
+    from .local_settings import *  # noqa: F401,F403
+except ImportError:
+    pass

@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtualenv
+venv/
+
+# Django
+db.sqlite3
+public_html/staticfiles/
+media/
+local_settings.py
+public_html/core/local_settings.py
+
+# Secrets
+.secrets/
+
+# OS / editors
+.DS_Store
+*.swp
+
+# Dropbox conflict copies
+*conflicted copy*
+*Конфликтующая копия*
