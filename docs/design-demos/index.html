@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Варианты редизайна EgorMath</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: #17243a;
+      background: #eef3f9;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    header {
+      padding: 64px max(24px, calc((100vw - 1120px) / 2));
+      color: white;
+      background:
+        radial-gradient(circle at 85% 20%, rgb(101 153 224 / 35%), transparent 28%),
+        linear-gradient(125deg, #102f60, #21559c);
+    }
+    .eyebrow {
+      color: #9fc2f2;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    h1 {
+      max-width: 760px;
+      margin: 10px 0 14px;
+      font-size: clamp(34px, 5vw, 54px);
+      line-height: 1.05;
+      letter-spacing: -.045em;
+    }
+    header p {
+      max-width: 700px;
+      margin: 0;
+      color: #c5d7ee;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 42px 24px 70px;
+    }
+    .note {
+      margin-bottom: 26px;
+      padding: 14px 17px;
+      border: 1px solid #cfdced;
+      border-radius: 12px;
+      color: #52647c;
+      background: #f9fbfe;
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+    }
+    article {
+      position: relative;
+      min-height: 300px;
+      padding: 27px;
+      overflow: hidden;
+      border: 1px solid #d7e1ee;
+      border-radius: 18px;
+      background: white;
+      box-shadow: 0 10px 30px rgb(25 64 116 / 8%);
+    }
+    article::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 7px;
+      background: var(--accent);
+    }
+    .number {
+      position: absolute;
+      right: 22px;
+      top: 19px;
+      color: #e6edf6;
+      font-size: 58px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    article h2 {
+      position: relative;
+      margin: 7px 0 9px;
+      font-size: 22px;
+      letter-spacing: -.025em;
+    }
+    article > p {
+      position: relative;
+      min-height: 46px;
+      margin: 0 0 18px;
+      color: #6b7b90;
+      line-height: 1.55;
+    }
+    ul {
+      min-height: 70px;
+      margin: 0 0 23px;
+      padding-left: 18px;
+      color: #43536a;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    a {
+      position: relative;
+      min-height: 42px;
+      padding: 10px 15px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 9px;
+      color: white;
+      background: var(--accent);
+      text-decoration: none;
+      font-weight: 650;
+    }
+    a:hover { filter: brightness(.9); }
+    .workbench { --accent: #1765b5; }
+    .academy { --accent: #2c67b5; }
+    .documents { --accent: #294f72; }
+    .cards { --accent: #3d78d5; }
+    .recommended {
+      margin-left: 7px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: #236042;
+      background: #e4f5ec;
+      font-size: 9px;
+      font-weight: 700;
+      vertical-align: middle;
+    }
+    @media (max-width: 720px) {
+      header { padding-block: 44px; }
+      .grid { grid-template-columns: 1fr; }
+      article { min-height: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="eyebrow">Интерактивные HTML-прототипы</span>
+    <h1>Четыре направления редизайна EgorMath</h1>
+    <p>Откройте любой вариант, переключайтесь между кабинетами учителя и ученика,
+      базой задач и конструктором. В верхней панели можно проверить три размера экрана.</p>
+  </header>
+  <main>
+    <div class="note">Это изолированные статические прототипы: они не меняют Django-приложение
+      и открываются напрямую с диска. Данные внутри демонстрационные.</div>
+    <div class="grid">
+      <article class="workbench">
+        <span class="number">01</span>
+        <span class="eyebrow">Плотный интерфейс</span>
+        <h2>Рабочая панель</h2>
+        <p>Практичный инструмент для ежедневной работы с большими списками.</p>
+        <ul><li>Контрастная боковая навигация</li><li>Компактные таблицы и панели</li><li>Высокая плотность информации</li></ul>
+        <a href="workbench.html">Открыть демо →</a>
+      </article>
+      <article class="academy">
+        <span class="number">02</span>
+        <span class="eyebrow">Образовательная среда</span>
+        <h2>Современная академия <span class="recommended">Рекомендуем</span></h2>
+        <p>Спокойный универсальный интерфейс с ясной визуальной иерархией.</p>
+        <ul><li>Мягкие карточки и поверхности</li><li>Больше воздуха между блоками</li><li>Подходит учителю и ученику</li></ul>
+        <a href="academy.html">Открыть демо →</a>
+      </article>
+      <article class="documents">
+        <span class="number">03</span>
+        <span class="eyebrow">Фокус на содержании</span>
+        <h2>Документы и математика</h2>
+        <p>Редакторский стиль, подчёркивающий математические материалы.</p>
+        <ul><li>Сдержанная геометрия</li><li>Serif-заголовки и бумажный лист</li><li>Минимум декоративных элементов</li></ul>
+        <a href="documents.html">Открыть демо →</a>
+      </article>
+      <article class="cards">
+        <span class="number">04</span>
+        <span class="eyebrow">Дружелюбный интерфейс</span>
+        <h2>Модульные карточки</h2>
+        <p>Наглядное представление заданий, статусов и основных действий.</p>
+        <ul><li>Крупные точки входа</li><li>Выразительные синие акценты</li><li>Особенно удобен ученикам</li></ul>
+        <a href="cards.html">Открыть демо →</a>
+      </article>
+    </div>
+  </main>
+</body>
+</html>

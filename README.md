@@ -14,6 +14,24 @@
 
 Django 4.2 (Python 3.10), SQLite локально / MySQL на проде (Timeweb shared),
 PDF — внешний LaTeX API-сервер (LuaLaTeX), KaTeX для формул на сайте.
+Стили — Tailwind CSS v4 (standalone CLI): исходник
+`public_html/static/css/input.css`, собранный артефакт
+`public_html/static/css/app.css` (коммитится в git).
+
+### Сборка CSS
+
+На сервере Node **не нужен**. После изменений в `input.css` или новых
+utility-классов в шаблонах локально:
+
+```bash
+make build-css   # скачает CLI в tools/ при необходимости
+make check       # сборка + тесты + проверка, что app.css закоммичен свежим
+```
+
+Правило: **новый utility в шаблоне → `make build-css` → закоммитить `app.css`**.
+Повторяющиеся куски лучше выносить в `@layer components` в `input.css`,
+а не копировать длинные class-строки. Подробности — в
+[docs/PIPELINE.md](docs/PIPELINE.md).
 
 ## Локальный запуск
 
@@ -33,9 +51,13 @@ cd public_html
 Для генерации PDF нужен ключ API: файл `.secrets/LATEX_API_KEY` в корне
 проекта (или переменная окружения).
 
-## Деплой
+## Разработка и деплой
 
-См. [deploy/DEPLOY.md](deploy/DEPLOY.md).
+Процесс работы (локальный запуск, ветки, PR-ревью, CI) —
+[docs/PIPELINE.md](docs/PIPELINE.md).
+
+Деплой на Timeweb отложен; инструкция сохранена как справочная:
+[deploy/DEPLOY.md](deploy/DEPLOY.md).
 
 ## Структура
 
@@ -46,5 +68,6 @@ cd public_html
   - `worksheets/` — листки, генерация .tex/PDF, публичные ссылки
   - `assignments/` — назначения, ответы учеников, проверка
 - `deploy/` — файлы для деплоя на Timeweb (wsgi, .htaccess, auto_pull)
+- `docs/` — процесс разработки (`PIPELINE.md`)
 - `media/` (не в git) — фото решений и кэш PDF, вне public_html
 - `.secrets/` (не в git) — секреты продакшена

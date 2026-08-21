@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  TAILWIND_VERSION: v4.3.3
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        working-directory: public_html
+        run: python manage.py test
+
+      - name: Rebuild CSS
+        run: |
+          mkdir -p tools
+          curl -sL -o tools/tailwindcss \
+            "https://github.com/tailwindlabs/tailwindcss/releases/download/${TAILWIND_VERSION}/tailwindcss-linux-x64"
+          chmod +x tools/tailwindcss
+          tools/tailwindcss -i public_html/static/css/input.css \
+            -o public_html/static/css/app.css --minify
+
+      - name: Check app.css is up to date
+        run: |
+          if ! git diff --exit-code -- public_html/static/css/app.css; then
+            echo "::error::app.css отличается от сборки input.css. Запустите 'make build-css' и закоммитьте результат."
+            exit 1
+          fi

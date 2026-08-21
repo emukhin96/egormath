@@ -23,3 +23,7 @@ public_html/core/local_settings.py
 # Dropbox conflict copies
 *conflicted copy*
 *Конфликтующая копия*
+
+# Tailwind standalone CLI binary (download via `make build-css`)
+tools/tailwindcss
+tools/tailwindcss.exe
