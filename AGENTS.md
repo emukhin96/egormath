@@ -16,13 +16,17 @@ Timeweb сейчас отложен — весь цикл разработки �
 ```bash
 python3.10 -m venv venv
 ./venv/bin/pip install -r requirements.txt
-cd public_html && ../venv/bin/python manage.py migrate
+(cd public_html && ../venv/bin/python manage.py migrate)
 
 make check        # build-css + manage.py test + проверка, что app.css свежий
 make build-css    # только пересборка Tailwind
 make watch-css    # пересборка в фоне при правке шаблонов/CSS
 make test         # только Django-тесты
 ```
+
+`make`-команды запускаются из корня репозитория — не оставайся в
+`public_html` после `migrate`/`runserver`, иначе `make` не найдёт корневой
+`Makefile`.
 
 Перед любым коммитом с изменениями в шаблонах, `input.css` или Python-коде
 обязательно гоняй `make check` и чини всё, что он находит.
