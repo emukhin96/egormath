@@ -5,11 +5,12 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from PIL import Image
 
-from problems.models import Task
+from problems.models import Task, TaskSubitem
 from problems.tests import make_student, make_teacher
 from worksheets.tests import make_worksheet
 
-from .models import Assignment, Review, Submission, SubmissionPhoto
+from .models import (Assignment, Review, Submission, SubmissionPart,
+                     SubmissionPhoto)
 
 
 def make_assignment(teacher, student, **kwargs):
@@ -84,6 +85,29 @@ class StudentAnswerTests(TestCase):
             reverse('save_answers', args=[self.assignment.pk]),
             {f'task{task.pk}_text': 'меняю ответ'})
         self.assertEqual(response.status_code, 403)
+
+    def test_save_subitem_answers(self):
+        """У задачи с подпунктами ответы сохраняются отдельно (SubmissionPart)."""
+        item = self.assignment.worksheet.ordered_items()[0]
+        task = item.task
+        task.answer_type = Task.ANSWER_NUMBER
+        task.save()
+        s1 = TaskSubitem.objects.create(task=task, order=10, text_latex='$1+1$')
+        s2 = TaskSubitem.objects.create(task=task, order=20, text_latex='$2+2$')
+        self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]), {
+                f'task{task.pk}_sub{s1.pk}_number': '2',
+                f'task{task.pk}_sub{s2.pk}_number': '4',
+            })
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=task)
+        parts = {p.subitem_id: p for p in submission.parts.all()}
+        self.assertEqual(parts[s1.pk].answer_number, '2')
+        self.assertEqual(parts[s2.pk].answer_number, '4')
+        # Страница задания показывает ответы по подпунктам
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(response, f'task{task.pk}_sub{s1.pk}_number')
 
     def test_photo_upload_compression(self):
         task = self.tasks[0]

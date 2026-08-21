@@ -38,3 +38,28 @@ class Profile(models.Model):
     @property
     def is_student(self):
         return self.role == self.ROLE_STUDENT
+
+
+class StudentGroup(models.Model):
+    """Произвольная группа учеников одного учителя (ученик может состоять
+    в нескольких группах)."""
+
+    teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='owned_groups', verbose_name='Учитель')
+    name = models.CharField('Название', max_length=100)
+    students = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True,
+        related_name='member_groups', verbose_name='Ученики')
+
+    class Meta:
+        verbose_name = 'Группа учеников'
+        verbose_name_plural = 'Группы учеников'
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['teacher', 'name'], name='unique_group_teacher_name'),
+        ]
+
+    def __str__(self):
+        return self.name

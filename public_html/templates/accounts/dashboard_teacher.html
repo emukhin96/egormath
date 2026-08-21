@@ -1,10 +1,36 @@
 {% extends 'base.html' %}
 {% block title %}Кабинет учителя — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/dashboard_teacher.html' %}{% endblock %}
 {% block content %}
-<h1>Кабинет учителя</h1>
+<div class="page-head">
+  <div>
+    <span class="page-eyebrow">Рабочая панель</span>
+    <h1>Кабинет учителя</h1>
+    <p class="page-subtitle">Работы на проверке, листки и последние действия.</p>
+  </div>
+  <a class="btn" href="{% url 'worksheet_create' %}">Создать листок</a>
+</div>
 
-<div class="card">
-  <h2>Ожидают проверки {% if pending %}({{ pending|length }}){% endif %}</h2>
+<div class="stat-grid">
+  <div class="stat">
+    <span class="stat-label">На проверке</span>
+    <span class="stat-value">{{ pending|length }}</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Листков</span>
+    <span class="stat-value">{{ worksheets_total }}</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Учеников</span>
+    <span class="stat-value">{{ students_total }}</span>
+  </div>
+</div>
+
+<div class="card panel-priority">
+  <div class="card-head">
+    <div><span class="page-eyebrow">Приоритет</span><h2>Ожидают проверки</h2></div>
+    {% if pending %}<span class="counter">{{ pending|length }}</span>{% endif %}
+  </div>
   {% if pending %}
   <table class="list">
     <tr><th>Листок</th><th>Ученик</th><th>Отправлено</th><th></th></tr>
@@ -22,43 +48,46 @@
   {% endif %}
 </div>
 
-<div class="card">
-  <h2>Мои листки</h2>
-  {% if worksheets %}
-  <table class="list">
-    <tr><th>Название</th><th>Класс</th><th>Задач</th><th>Изменён</th><th></th></tr>
-    {% for w in worksheets %}
-    <tr>
-      <td><a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a></td>
-      <td>{{ w.grade_label }}</td>
-      <td>{{ w.items.count }}</td>
-      <td>{{ w.updated_at|date:'d.m.Y' }}</td>
-      <td><a class="btn btn-small btn-secondary" href="{% url 'worksheet_pdf' w.pk %}?variant=student">PDF</a></td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% else %}
-  <p class="muted">Листков пока нет.</p>
-  {% endif %}
-  <p><a class="btn" href="{% url 'worksheet_create' %}">Создать листок</a></p>
-</div>
+<div class="grid-2">
+  <div class="card">
+    <h2>Мои листки</h2>
+    {% if worksheets %}
+    <table class="list">
+      <tr><th>Название</th><th>Класс</th><th>Задач</th><th></th></tr>
+      {% for w in worksheets %}
+      <tr>
+        <td>
+          <a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a>
+          {% if w.comment %}<div class="muted task-meta">{{ w.comment|truncatechars:80 }}</div>{% endif %}
+        </td>
+        <td>{{ w.grade_label }}</td>
+        <td>{{ w.items_total }}</td>
+        <td><a class="btn btn-small btn-secondary" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' w.pk %}?variant=student">PDF</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="muted">Листков пока нет.</p>
+    {% endif %}
+  </div>
 
-<div class="card">
-  <h2>Недавно проверенные</h2>
-  {% if reviewed %}
-  <table class="list">
-    <tr><th>Листок</th><th>Ученик</th><th>Проверено</th><th></th></tr>
-    {% for a in reviewed %}
-    <tr>
-      <td>{{ a.worksheet.title }}</td>
-      <td>{{ a.student.get_full_name|default:a.student.username }}</td>
-      <td>{{ a.reviewed_at|date:'d.m.Y H:i' }}</td>
-      <td><a class="btn btn-small btn-secondary" href="{% url 'review_assignment' a.pk %}">Открыть</a></td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% else %}
-  <p class="muted">Пока ничего не проверено.</p>
-  {% endif %}
+  <div class="card">
+    <h2>Недавно проверенные</h2>
+    {% if reviewed %}
+    <table class="list">
+      <tr><th>Листок</th><th>Ученик</th><th>Проверено</th><th></th></tr>
+      {% for a in reviewed %}
+      <tr>
+        <td>{{ a.worksheet.title }}</td>
+        <td>{{ a.student.get_full_name|default:a.student.username }}</td>
+        <td>{{ a.reviewed_at|date:'d.m.Y' }}</td>
+        <td><a class="btn btn-small btn-secondary" href="{% url 'review_assignment' a.pk %}">Открыть</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="muted">Пока ничего не проверено.</p>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

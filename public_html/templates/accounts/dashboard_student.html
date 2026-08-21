@@ -1,23 +1,51 @@
 {% extends 'base.html' %}
 {% block title %}Мои задания — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/dashboard_student.html' %}{% endblock %}
 {% block content %}
-<h1>Мои задания</h1>
+<div class="page-head">
+  <div>
+    <span class="page-eyebrow">Кабинет ученика</span>
+    <h1>Мои задания</h1>
+    <p class="page-subtitle">Текущие, возвращённые и завершённые работы.</p>
+  </div>
+  {% if assignments %}
+  <p class="muted">Всего заданий: {{ assignments|length }}</p>
+  {% endif %}
+</div>
 
-{% if assignments %}
-<table class="list">
-  <tr><th>Листок</th><th>Учитель</th><th>Выдано</th><th>Срок</th><th>Статус</th><th></th></tr>
-  {% for a in assignments %}
-  <tr>
-    <td>{{ a.worksheet.title }}</td>
-    <td>{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>
-    <td>{{ a.assigned_at|date:'d.m.Y' }}</td>
-    <td>{% if a.due_at %}{{ a.due_at|date:'d.m.Y H:i' }}{% else %}—{% endif %}</td>
-    <td><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span></td>
-    <td><a class="btn btn-small" href="{% url 'assignment_detail' a.pk %}">Открыть</a></td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
+{% if current %}
+<div class="hero-card">
+  <div class="hero-body">
+    <p class="hero-title">{{ current.worksheet.title }}</p>
+    <p class="hero-meta">
+      <span>Учитель: {{ current.worksheet.owner.get_full_name|default:current.worksheet.owner.username }}</span>
+      <span>·</span>
+      <span>Срок: {% if current.due_at %}{{ current.due_at|date:'d.m.Y H:i' }}{% else %}не задан{% endif %}</span>
+      <span class="badge badge-{{ current.status }}">{{ current.get_status_display }}</span>
+    </p>
+  </div>
+  <a class="btn" href="{% url 'assignment_detail' current.pk %}">Открыть задание</a>
+</div>
+{% endif %}
+
+{% if rest %}
+<div class="card">
+  <h2>{% if current %}Остальные задания{% else %}Все задания{% endif %}</h2>
+  <table class="list">
+    <tr><th>Листок</th><th>Учитель</th><th>Выдано</th><th>Срок</th><th>Статус</th><th></th></tr>
+    {% for a in rest %}
+    <tr>
+      <td>{{ a.worksheet.title }}</td>
+      <td>{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>
+      <td>{{ a.assigned_at|date:'d.m.Y' }}</td>
+      <td>{% if a.due_at %}{{ a.due_at|date:'d.m.Y H:i' }}{% else %}—{% endif %}</td>
+      <td><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span></td>
+      <td><a class="btn btn-small btn-secondary" href="{% url 'assignment_detail' a.pk %}">Открыть</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% elif not current %}
 <div class="card"><p class="muted">Вам пока не назначено ни одного задания.</p></div>
 {% endif %}
 {% endblock %}

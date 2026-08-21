@@ -1,0 +1,12 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Массовая операция</p>
+  <h2>Формат ответов</h2>
+  <p class="sidebar-copy">Каждый ответ — с новой строки. Поддерживаются формы <code>123. ответ</code> и <code>123) ответ</code>.</p>
+</section>
+{% if rows %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Предпросмотр</p>
+  <div class="sidebar-stat"><strong>{{ rows|length }}</strong><span>строк сопоставлено</span></div>
+  <p class="sidebar-copy">Конфликты не перезаписываются без отдельной отметки.</p>
+</section>
+{% endif %}

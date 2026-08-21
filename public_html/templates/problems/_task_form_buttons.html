@@ -1,0 +1,15 @@
+{# Кнопки формы задачи; используются сверху и снизу страницы #}
+<p class="form-buttons">
+  {% if can_save_local %}
+  <button type="submit" name="save" class="btn">Сохранить в базе</button>
+  <button type="submit" name="save_local" class="btn btn-secondary"
+          title="Задача в базе не изменится; в листке появится её локальная копия">
+    Сохранить только для этого листка</button>
+  {% else %}
+  <button type="submit" class="btn">Сохранить</button>
+  <button type="submit" name="save_and_next" class="btn btn-secondary"
+          title="Сохранить и открыть форму новой задачи с теми же темами, тегами и источником (номер +1)">
+    Сохранить и добавить следующую</button>
+  {% endif %}
+  <a class="btn btn-secondary" href="{% if worksheet %}{% url 'worksheet_detail' worksheet.pk %}{% elif task %}{% url 'task_detail' task.pk %}{% else %}{% url 'task_list' %}{% endif %}">Отмена</a>
+</p>

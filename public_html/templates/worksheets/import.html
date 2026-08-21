@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Импорт .tex — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/import.html' %}{% endblock %}
+{% block content %}
+<div class="page-head"><div><span class="page-eyebrow">Листки</span>
+  <h1>Импорт листка из .tex</h1>
+  <p class="page-subtitle">Предпросмотр структуры перед созданием листка.</p>
+</div></div>
+
+<div class="card">
+  <p class="helptext">Поддерживается формат пакета egor / egormath: шапка
+    <code>\bighead</code>, рубрики <code>\rubr</code>, задачи
+    <code>\task</code> / <code>\taskans</code>, тексты
+    <code>\plaintext</code>. Задачи, текст которых уже есть в базе,
+    будут переиспользованы; новые — сохранены в базу автоматически.
+    Картинки (<code>\includegraphics</code>, <code>\taskpic</code>)
+    автоматически не переносятся: после импорта догрузите файлы
+    на страницах задач — ссылки в тексте вида <code>\taskpic{1}</code>
+    подхватятся по номеру.</p>
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <p>
+      <label for="i_file">Файл .tex</label>
+      <input type="file" name="file" id="i_file" accept=".tex,text/plain">
+    </p>
+    <p>
+      <label for="i_tex">…или вставьте текст</label>
+      <textarea name="tex" id="i_tex" rows="12" class="mono">{{ tex }}</textarea>
+    </p>
+    <button type="submit" name="action" value="preview" class="btn">Предпросмотр</button>
+  </form>
+</div>
+
+{% if preview %}
+<div class="card">
+  <h2>Предпросмотр</h2>
+  <p>
+    <strong>{{ preview.header.title|default:'(без названия)' }}</strong>
+    {% if preview.header.left %} · {{ preview.header.left }}{% endif %}
+    {% if preview.header.right %} · {{ preview.header.right }}{% endif %}
+    {% if preview.header.subtitle %} · {{ preview.header.subtitle }}{% endif %}
+  </p>
+  <table class="list">
+    <tr><th>Элемент</th><th>Содержимое</th><th>Статус</th></tr>
+    {% for row in preview.rows %}
+    <tr>
+      <td>{% if row.kind == 'task' %}задача{% elif row.kind == 'rubric' %}рубрика{% else %}текст{% endif %}</td>
+      <td>
+        {% if row.kind == 'task' %}
+        <div class="math-content task-text">{{ row.data.text|truncatechars:200 }}</div>
+        {% if row.data.subitems %}<span class="task-meta">подпунктов: {{ row.data.subitems|length }}</span>{% endif %}
+        {% if row.data.images %}<span class="task-meta">картинки (догрузить после импорта): {{ row.data.images|join:', ' }}</span>{% endif %}
+        {% elif row.kind == 'rubric' %}
+        <strong>{{ row.data.rubric }}</strong>{% if row.data.note %} — {{ row.data.note }}{% endif %}
+        {% else %}
+        {{ row.data.text|truncatechars:200 }}
+        {% endif %}
+      </td>
+      <td>
+        {% if row.kind == 'task' %}
+          {% if row.existing_id %}<span class="badge badge-reviewed">в базе #{{ row.existing_id }}</span>
+          {% else %}<span class="badge badge-assigned">новая</span>{% endif %}
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="helptext">Новых задач будет создано: {{ preview.new_tasks }}.</p>
+  <form method="post">
+    {% csrf_token %}
+    <textarea name="tex" hidden>{{ tex }}</textarea>
+    <button type="submit" name="action" value="create" class="btn">Создать листок</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

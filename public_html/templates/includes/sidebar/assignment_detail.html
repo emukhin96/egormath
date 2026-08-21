@@ -1,0 +1,22 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Задание</p>
+  <h2>{{ assignment.worksheet.title|truncatechars:34 }}</h2>
+  <ul class="sidebar-list">
+    <li><strong>Статус:</strong> {{ assignment.get_status_display }}</li>
+    <li><strong>Срок:</strong> {% if assignment.due_at %}{{ assignment.due_at|date:"d.m.Y H:i" }}{% else %}не задан{% endif %}</li>
+    <li><strong>Учитель:</strong> {{ assignment.worksheet.owner.get_full_name|default:assignment.worksheet.owner.username }}</li>
+    <li><strong>Элементов:</strong> {{ rows|length }}</li>
+  </ul>
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Состояние</p>
+  {% if editable %}
+  <p class="sidebar-copy">Ответы можно сохранять как черновик до отправки.</p>
+  {% else %}
+  <p class="sidebar-copy">Редактирование закрыто. Дождитесь проверки или возврата работы.</p>
+  {% endif %}
+  <div class="sidebar-actions">
+    <a class="sidebar-action" target="_blank" rel="noopener"
+       href="{% url 'worksheet_pdf' assignment.worksheet.pk %}?variant=student">Скачать PDF</a>
+  </div>
+</section>

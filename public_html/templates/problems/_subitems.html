@@ -1,0 +1,11 @@
+{% comment %}Подпункты задачи списком «а) …» без \item; ожидает subitems.
+Пунктуация («;» между пунктами, «.» в конце) расставляется здесь — в базе
+тексты хранятся без знака препинания.{% endcomment %}
+{% load task_extras %}
+{% if subitems %}
+<ol class="subitems">
+  {% for s in subitems %}
+  <li><span class="math-content">{{ s.text_latex|web_text }}</span>{% if forloop.last %}.{% else %};{% endif %}</li>
+  {% endfor %}
+</ol>
+{% endif %}

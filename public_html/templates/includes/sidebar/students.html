@@ -1,0 +1,23 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Ученики</p>
+  <h2>{% if current_group %}{{ current_group.name }}{% else %}Все ученики{% endif %}</h2>
+  <div class="sidebar-stats">
+    <div class="sidebar-stat"><strong>{{ student_profiles|length }}</strong><span>в списке</span></div>
+    <div class="sidebar-stat"><strong>{{ groups|length }}</strong><span>групп</span></div>
+  </div>
+</section>
+{% if groups %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Группы</p>
+  <ul class="sidebar-list">
+    <li><a href="{% url 'students' %}">Все ученики</a></li>
+    {% for group in groups %}
+    <li><a href="{% url 'students' %}?group={{ group.pk }}">{{ group.name }} ({{ group.students.count }})</a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Подсказка</p>
+  <p class="sidebar-copy">Логин и временный пароль показываются один раз после создания ученика.</p>
+</section>

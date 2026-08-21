@@ -1,14 +1,18 @@
 {% extends 'base.html' %}
+{% load task_extras %}
 {% block title %}{{ assignment.worksheet.title }} — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/assignment_detail.html' %}{% endblock %}
 {% block content %}
-<h1>{{ assignment.worksheet.title }}</h1>
-<p class="muted">
+<div class="page-head">
+  <div><span class="page-eyebrow">Задание</span><h1>{{ assignment.worksheet.title }}</h1>
+  <p class="page-subtitle">
   Учитель: {{ assignment.worksheet.owner.get_full_name|default:assignment.worksheet.owner.username }}
   · выдано {{ assignment.assigned_at|date:'d.m.Y' }}
   {% if assignment.due_at %} · срок: {{ assignment.due_at|date:'d.m.Y H:i' }}{% endif %}
   · <span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span>
-</p>
-<p><a class="btn btn-secondary" href="{% url 'worksheet_pdf' assignment.worksheet.pk %}?variant=student">Скачать PDF</a></p>
+  </p></div>
+  <a class="btn btn-secondary" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' assignment.worksheet.pk %}?variant=student">Скачать PDF</a>
+</div>
 
 {% if not editable %}
 <div class="msg msg-warning">
@@ -20,37 +24,42 @@
 <form method="post" action="{% url 'save_answers' assignment.pk %}">
   {% csrf_token %}
   {% for row in rows %}
+  {% if row.task == None %}
   <div class="card">
-    {% if row.item.rubric %}<p class="muted"><strong>{{ row.item.rubric }}</strong></p>{% endif %}
-    <p><strong>{{ forloop.counter }}.</strong>
-      {% if row.task.stars %}<span class="stars">{{ row.task.get_stars_display }}</span>{% endif %}
-    </p>
-    <div class="math-content task-text">{{ row.task.text_latex|linebreaksbr }}</div>
-    {% if row.task.subitems_latex %}
-    <div class="math-content task-text muted">{{ row.task.subitems_latex|linebreaksbr }}</div>
+    {% if row.item.is_rubric %}
+    <h2>{{ row.item.rubric }}</h2>
+    {% if row.item.rubric_note %}<p class="muted math-content">{{ row.item.rubric_note }}</p>{% endif %}
+    {% else %}
+    <div class="math-content task-text">{{ row.item.text_latex|linebreaksbr }}</div>
     {% endif %}
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="task-line">
+      <span class="ws-num">{{ row.number }}.</span>
+      {% if row.item.effective_stars %}<span class="stars">{% for _ in ''|center:row.item.effective_stars %}★{% endfor %}</span>{% endif %}
+      <span class="math-content task-text">{{ row.task.text_latex|web_text }}</span>
+    </div>
+    {% include 'problems/_task_images.html' with task=row.task %}
 
     {% with sub=row.submission %}
+    {% if row.subrows %}
+    <ol class="subitems">
+      {% for sr in row.subrows %}
+      <li>
+        <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{% if forloop.last %}.{% else %};{% endif %}
+        <div class="subitem-answer">
+          {% include 'assignments/_answer_fields.html' with prefix=sr.prefix answer_type=row.task.answer_type obj=sr.part editable=editable %}
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
     <p>
-      {% if row.task.answer_type == 'number' %}
-        <label>Ответ (число)</label>
-        <input type="text" name="task{{ row.task.pk }}_number"
-               value="{{ sub.answer_number|default:'' }}" style="max-width:200px"
-               {% if not editable %}disabled{% endif %}>
-      {% elif row.task.answer_type == 'interval' %}
-        <label>Ответ (промежуток)</label>
-        от <input type="text" name="task{{ row.task.pk }}_low"
-               value="{{ sub.interval_low|default:'' }}" style="max-width:140px;display:inline-block"
-               {% if not editable %}disabled{% endif %}>
-        до <input type="text" name="task{{ row.task.pk }}_high"
-               value="{{ sub.interval_high|default:'' }}" style="max-width:140px;display:inline-block"
-               {% if not editable %}disabled{% endif %}>
-      {% else %}
-        <label>Ответ</label>
-        <textarea name="task{{ row.task.pk }}_text" rows="2"
-                  {% if not editable %}disabled{% endif %}>{{ sub.answer_text|default:'' }}</textarea>
-      {% endif %}
+      <label>Ответ{% if row.task.answer_type == 'number' %} (число){% elif row.task.answer_type == 'interval' %} (промежуток){% endif %}</label>
+      {% include 'assignments/_answer_fields.html' with prefix=row.prefix answer_type=row.task.answer_type obj=sub editable=editable %}
     </p>
+    {% endif %}
 
     {% if sub and sub.photos.all %}
     <div class="photo-grid">
@@ -76,6 +85,7 @@
     {% endif %}
     {% endwith %}
   </div>
+  {% endif %}
   {% endfor %}
 
   {% if editable %}
@@ -95,13 +105,15 @@
   <p class="helptext">К каждой задаче можно приложить фото рукописного решения
     (jpeg/png/webp, до {{ assignment.worksheet.items.count }} задач, максимум 6 фото на задачу).</p>
   {% for row in rows %}
+  {% if row.task %}
   <form method="post" action="{% url 'upload_photo' assignment.pk row.task.pk %}"
         enctype="multipart/form-data" class="filters" style="margin-bottom:8px">
     {% csrf_token %}
-    <div style="min-width:70px"><strong>№ {{ forloop.counter }}</strong></div>
+    <div style="min-width:70px"><strong>№ {{ row.number }}</strong></div>
     <div><input type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple></div>
     <div><button type="submit" class="btn btn-small btn-secondary">Загрузить</button></div>
   </form>
+  {% endif %}
   {% endfor %}
 </div>
 {% endif %}

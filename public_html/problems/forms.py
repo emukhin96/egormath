@@ -1,23 +1,20 @@
 from django import forms
 from django.forms import inlineformset_factory
 
-from .models import Task, TaskSource
+from .models import Task, TaskImage, TaskSource, TaskSubitem
 
 
 class TaskForm(forms.ModelForm):
     class Meta:
         model = Task
-        fields = ['text_latex', 'subitems_latex', 'columns',
+        fields = ['text_latex', 'columns',
                   'answer_latex', 'solution_latex',
                   'grade_level', 'stars', 'answer_type', 'topics', 'tags']
         widgets = {
             'text_latex': forms.Textarea(attrs={'rows': 5}),
-            'subitems_latex': forms.Textarea(attrs={
-                'rows': 3,
-                'placeholder': '\\item первый подпункт;\n\\item второй подпункт.'}),
             'answer_latex': forms.Textarea(attrs={'rows': 2}),
             'solution_latex': forms.Textarea(attrs={'rows': 4}),
-            'topics': forms.SelectMultiple(attrs={'size': 10}),
+            'topics': forms.SelectMultiple(attrs={'size': 6}),
             'tags': forms.CheckboxSelectMultiple(),
         }
 
@@ -25,6 +22,28 @@ class TaskForm(forms.ModelForm):
 TaskSourceFormSet = inlineformset_factory(
     Task, TaskSource,
     fields=['source', 'number'],
+    extra=1, can_delete=True,
+)
+
+
+TaskSubitemFormSet = inlineformset_factory(
+    Task, TaskSubitem,
+    fields=['order', 'text_latex', 'answer_latex'],
+    widgets={
+        'text_latex': forms.Textarea(attrs={'rows': 2}),
+        'answer_latex': forms.Textarea(attrs={'rows': 1}),
+    },
+    extra=1, can_delete=True,
+)
+
+
+TaskImageFormSet = inlineformset_factory(
+    Task, TaskImage,
+    fields=['order', 'image'],
+    widgets={
+        'image': forms.ClearableFileInput(
+            attrs={'accept': '.png,.jpg,.jpeg,.pdf,image/*'}),
+    },
     extra=1, can_delete=True,
 )
 

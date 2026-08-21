@@ -1,0 +1,33 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Листок</p>
+  <h2>{{ worksheet.title|truncatechars:34 }}</h2>
+  <ul class="sidebar-list">
+    <li><strong>Класс:</strong> {{ worksheet.grade_label }}</li>
+    <li><strong>Элементов:</strong> {{ rows|length }}</li>
+    <li><strong>Назначений:</strong> {{ assignments|length }}</li>
+    <li><strong>Публичных ссылок:</strong> {{ share_links|length }}</li>
+  </ul>
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Действия</p>
+  <div class="sidebar-actions">
+    <a class="sidebar-action" href="{% url 'worksheet_edit' worksheet.pk %}">Свойства листка</a>
+    <a class="sidebar-action" target="_blank" rel="noopener"
+       href="{% url 'worksheet_pdf' worksheet.pk %}?variant=student">PDF для ученика</a>
+    <a class="sidebar-action" href="#add-tasks">Добавить задачи</a>
+    <a class="sidebar-action" href="#assign-students">Назначить ученикам</a>
+  </div>
+</section>
+{% if assignments %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Назначения</p>
+  <ul class="sidebar-list">
+    {% for assignment in assignments|slice:":5" %}
+    <li>
+      {{ assignment.student.get_full_name|default:assignment.student.username|truncatechars:24 }}
+      <br><span>{{ assignment.get_status_display }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}

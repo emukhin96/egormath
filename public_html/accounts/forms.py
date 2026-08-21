@@ -4,7 +4,7 @@ from django import forms
 from django.contrib.auth.models import User
 from django.utils.text import slugify
 
-from .models import Profile
+from .models import Profile, StudentGroup
 
 # Транслитерация для генерации логина из фамилии
 _TRANSLIT = {
@@ -54,3 +54,61 @@ class StudentCreateForm(forms.Form):
             user=user, role=Profile.ROLE_STUDENT,
             grade=self.cleaned_data.get('grade'), teacher=teacher)
         return user, password
+
+
+class StudentEditForm(forms.Form):
+    """Правка данных ученика: имя, фамилия, класс, группы."""
+    first_name = forms.CharField(label='Имя', max_length=150)
+    last_name = forms.CharField(label='Фамилия', max_length=150)
+    grade = forms.IntegerField(
+        label='Класс', min_value=1, max_value=11, required=False)
+    groups = forms.ModelMultipleChoiceField(
+        label='Группы', required=False,
+        queryset=StudentGroup.objects.none(),
+        widget=forms.CheckboxSelectMultiple)
+
+    def __init__(self, *args, teacher=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if teacher is not None:
+            self.fields['groups'].queryset = teacher.owned_groups.all()
+
+    def save(self, profile):
+        user = profile.user
+        user.first_name = self.cleaned_data['first_name']
+        user.last_name = self.cleaned_data['last_name']
+        user.save()
+        profile.grade = self.cleaned_data.get('grade')
+        profile.save()
+        selected = set(self.cleaned_data['groups'])
+        for group in self.fields['groups'].queryset:
+            if group in selected:
+                group.students.add(user)
+            else:
+                group.students.remove(user)
+        return user
+
+
+class StudentGroupForm(forms.ModelForm):
+    class Meta:
+        model = StudentGroup
+        fields = ['name']
+
+    def __init__(self, *args, teacher=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.teacher = teacher
+
+    def clean_name(self):
+        name = self.cleaned_data['name'].strip()
+        qs = StudentGroup.objects.filter(teacher=self.teacher, name=name)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError('Группа с таким названием уже есть.')
+        return name
+
+    def save(self, commit=True):
+        group = super().save(commit=False)
+        group.teacher = self.teacher
+        if commit:
+            group.save()
+        return group

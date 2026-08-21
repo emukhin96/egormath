@@ -1,9 +1,21 @@
 {% extends 'base.html' %}
+{% load task_extras %}
 {% block title %}База задач — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/task_list.html' %}{% endblock %}
 {% block content %}
-<h1>База задач</h1>
+<div class="page-head">
+  <div>
+    <span class="page-eyebrow">Материалы</span>
+    <h1>База задач</h1>
+    <p class="page-subtitle">Поиск и быстрое редактирование задач.</p>
+  </div>
+  <div class="form-buttons">
+    <a class="btn" href="{% url 'task_create' %}">Новая задача</a>
+    <a class="btn btn-secondary" href="{% url 'bulk_answers' %}">Массовые ответы</a>
+  </div>
+</div>
 
-<div class="card">
+<div class="card filter-card">
   <form method="get" class="filters">
     <div>
       <label for="f_q">Поиск</label>
@@ -30,34 +42,61 @@
     {% if params.topic %}<input type="hidden" name="topic" value="{{ params.topic }}">{% endif %}
     <div><button type="submit" class="btn">Найти</button></div>
     <div><a class="btn btn-secondary" href="{% url 'task_list' %}">Сбросить</a></div>
-    <div style="margin-left:auto"><a class="btn" href="{% url 'task_create' %}">Новая задача</a></div>
   </form>
-
-  <h2>Рубрикатор</h2>
-  <p>
-    {% if current_topic %}
-      <strong>Тема: {{ current_topic }}</strong> —
-      <a href="{% url 'task_list' %}?q={{ params.q|default:'' }}">убрать фильтр</a>
-    {% endif %}
-  </p>
-  <p>
-    {% for topic in topics %}
-      <a href="?topic={{ topic.pk }}">{{ topic.name }}</a>{% if topic.children.all %}
-      ({% for child in topic.children.all %}<a href="?topic={{ child.pk }}" class="muted">{{ child.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}){% endif %}{% if not forloop.last %} · {% endif %}
-    {% endfor %}
-  </p>
 </div>
 
 {% if page.object_list %}
+<div class="card task-catalog">
+<div class="table-summary"><strong>Найдено: {{ page.paginator.count }}</strong><span>Изменения сохраняются автоматически</span></div>
 <table class="list">
-  <tr><th>Задача</th><th>Класс</th><th>Темы</th><th>Теги</th><th></th></tr>
+  <tr><th>Задача</th><th>Класс</th><th>Ответ</th><th>Источник</th><th>Темы</th><th>Теги</th><th></th></tr>
   {% for task in page %}
+  {% with ref=task.source_refs.all|first %}
   <tr>
     <td>
-      <div class="math-content task-text">{{ task.text_latex|truncatechars:220 }}</div>
-      {% if task.stars %}<span class="stars">{{ task.get_stars_display }}</span>{% endif %}
+      <div class="task-line">
+        {% if task.stars %}<span class="stars">{{ task.get_stars_display }}</span>{% endif %}
+        <span class="math-content task-text">{{ task.text_latex|web_text|truncatechars:220 }}</span>
+      </div>
+      {% include 'problems/_subitems.html' with subitems=task.subitems.all %}
     </td>
-    <td>{{ task.grade_level|default:'—' }}</td>
+    <td>
+      <form method="post" action="{% url 'task_quick_update' task.pk %}"
+            data-autosave="change" class="inline-form">
+        {% csrf_token %}
+        <select name="grade_level" class="quick-select" title="Класс — сохраняется сразу">
+          <option value="">—</option>
+          {% for g, label in grade_choices %}
+          <option value="{{ g }}" {% if task.grade_level == g %}selected{% endif %}>{{ g }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    </td>
+    <td>
+      <form method="post" action="{% url 'task_quick_update' task.pk %}"
+            data-autosave="debounce">
+        {% csrf_token %}
+        <textarea name="answer_latex" rows="1" class="quick-input"
+                  title="Ответ (LaTeX) — сохраняется сам">{{ task.answer_latex }}</textarea>
+      </form>
+    </td>
+    <td>
+      <form method="post" action="{% url 'task_quick_update' task.pk %}"
+            data-autosave="debounce" class="quick-source">
+        {% csrf_token %}
+        <select name="source" class="quick-select" title="Источник — сохраняется сам">
+          <option value="">—</option>
+          {% for s in sources %}
+          <option value="{{ s.pk }}" {% if ref.source_id == s.pk %}selected{% endif %}>{{ s|truncatechars:40 }}</option>
+          {% endfor %}
+        </select>
+        <input type="text" name="number" value="{{ ref.number|default:'' }}"
+               placeholder="№" class="quick-number">
+        {% if task.source_refs.all|length > 1 %}
+        <span class="task-meta">и ещё {{ task.source_refs.all|length|add:'-1' }}</span>
+        {% endif %}
+      </form>
+    </td>
     <td class="task-meta">{% for t in task.topics.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
     <td class="task-meta">{% for t in task.tags.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
     <td>
@@ -65,8 +104,10 @@
       {% block task_actions %}{% endblock %}
     </td>
   </tr>
+  {% endwith %}
   {% endfor %}
 </table>
+</div>
 
 {% if page.has_other_pages %}
 <p>

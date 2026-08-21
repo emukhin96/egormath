@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load task_extras %}
 {% block title %}{{ worksheet.title }} — EgorMath{% endblock %}
 {% block content %}
 <h1>{{ worksheet.title }}</h1>
@@ -6,22 +7,27 @@
   {{ worksheet.grade_label }}{% if worksheet.subtitle %} · {{ worksheet.subtitle }}{% endif %}
   · {{ worksheet.display_author }}
 </p>
-<p><a class="btn" href="{% url 'public_worksheet_pdf' token %}">Скачать PDF</a></p>
+<p><a class="btn" target="_blank" rel="noopener" href="{% url 'public_worksheet_pdf' token %}">Скачать PDF</a></p>
 
 <div class="card">
-  {% for item in items %}
-    {% if item.rubric %}<h2>{{ item.rubric }}</h2>
-      {% if item.rubric_note %}<p class="muted math-content">{{ item.rubric_note }}</p>{% endif %}
-    {% endif %}
-    <p>
-      <strong>{{ forloop.counter }}.</strong>
-      {% if item.task.stars %}<span class="stars">{{ item.task.get_stars_display }}</span>{% endif %}
-    </p>
-    <div class="math-content task-text">{{ item.task.text_latex|linebreaksbr }}</div>
-    {% if item.task.subitems_latex %}
-    <div class="math-content task-text muted">{{ item.task.subitems_latex|linebreaksbr }}</div>
+  {% for row in rows %}
+    {% with item=row.item %}
+    {% if item.task_id %}
+    <div class="task-line">
+      <span class="ws-num">{{ row.number }}.</span>
+      {% if item.effective_stars %}<span class="stars">{% for _ in ''|center:item.effective_stars %}★{% endfor %}</span>{% endif %}
+      <span class="math-content task-text">{{ item.task.text_latex|web_text }}</span>
+    </div>
+    {% include 'problems/_subitems.html' with subitems=row.subitems %}
+    {% include 'problems/_task_images.html' with task=item.task %}
+    {% elif item.is_rubric %}
+    <h2>{{ item.rubric }}</h2>
+    {% if item.rubric_note %}<p class="muted math-content">{{ item.rubric_note }}</p>{% endif %}
+    {% else %}
+    <div class="math-content task-text">{{ item.text_latex|linebreaksbr }}</div>
     {% endif %}
     {% if not forloop.last %}<hr style="border:none;border-top:1px solid var(--border)">{% endif %}
+    {% endwith %}
   {% empty %}
   <p class="muted">В листке пока нет задач.</p>
   {% endfor %}

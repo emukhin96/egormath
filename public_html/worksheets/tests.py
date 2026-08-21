@@ -3,7 +3,7 @@ from unittest import mock
 from django.test import TestCase
 from django.urls import reverse
 
-from problems.models import Task
+from problems.models import Task, TaskSubitem
 from problems.tests import make_student, make_teacher
 
 from .latex import task_to_tex, worksheet_to_tex
@@ -22,15 +22,29 @@ def make_worksheet(owner, title='Квадратные уравнения', n_tas
     return worksheet
 
 
+def make_item(worksheet, task, **kwargs):
+    return WorksheetItem.objects.create(
+        worksheet=worksheet, task=task, order=1000, **kwargs)
+
+
+def make_rubric(worksheet, name, order, note=''):
+    return WorksheetItem.objects.create(
+        worksheet=worksheet, rubric=name, rubric_note=note, order=order)
+
+
 class LatexGenerationTests(TestCase):
     def setUp(self):
         self.teacher = make_teacher()
+        self.worksheet = Worksheet.objects.create(
+            title='Тест', owner=self.teacher)
 
     def test_task_to_tex_full(self):
         task = Task.objects.create(
-            text_latex='Вычислите:', subitems_latex='\\item $2+2$;',
-            columns=2, answer_latex='4', solution_latex='Очевидно.', stars=1)
-        tex = task_to_tex(task)
+            text_latex='Вычислите:', columns=2,
+            answer_latex='4', solution_latex='Очевидно.', stars=1)
+        TaskSubitem.objects.create(task=task, order=10, text_latex='$2+2$;')
+        item = make_item(self.worksheet, task)
+        tex = task_to_tex(item)
         self.assertIn('\\task{1}{2}{%', tex)
         self.assertIn('[{\\item $2+2$;}]', tex)
         self.assertIn('[{4}]', tex)
@@ -38,21 +52,69 @@ class LatexGenerationTests(TestCase):
 
     def test_task_to_tex_omits_trailing_args(self):
         task = Task.objects.create(text_latex='Просто задача')
-        tex = task_to_tex(task)
+        tex = task_to_tex(make_item(self.worksheet, task))
         self.assertNotIn('[', tex.replace('\\[', ''))
 
     def test_answer_with_brackets_is_protected(self):
         task = Task.objects.create(
             text_latex='Неравенство', answer_latex='$x \\in [1; 2]$')
-        tex = task_to_tex(task)
+        tex = task_to_tex(make_item(self.worksheet, task))
         self.assertIn('[{$x \\in [1; 2]$}]', tex)
+
+    def test_overrides(self):
+        task = Task.objects.create(text_latex='Задача', stars=1, columns=0)
+        item = make_item(self.worksheet, task,
+                         stars_override=3, columns_override=2)
+        tex = task_to_tex(item)
+        self.assertIn('\\task{3}{2}{%', tex)
+
+    def test_subitem_punctuation(self):
+        # В базе подпункты без знаков препинания — система расставляет
+        # «;» между пунктами и «.» после последнего
+        task = Task.objects.create(text_latex='Вычислите:')
+        for i, text in enumerate(['$1+1$', '$2+2$', '$3+3$']):
+            TaskSubitem.objects.create(
+                task=task, order=(i + 1) * 10, text_latex=text)
+        tex = task_to_tex(make_item(self.worksheet, task))
+        self.assertIn(
+            '[{\\item $1+1$;\n\\item $2+2$;\n\\item $3+3$.}]', tex)
+
+    def test_subitem_punctuation_follows_selection(self):
+        # Последний ВЫБРАННЫЙ подпункт получает точку
+        task = Task.objects.create(text_latex='Вычислите:')
+        s1 = TaskSubitem.objects.create(
+            task=task, order=10, text_latex='$1+1$')
+        TaskSubitem.objects.create(task=task, order=20, text_latex='$2+2$')
+        item = make_item(self.worksheet, task, all_subitems=False)
+        item.subitems.set([s1])
+        tex = task_to_tex(item)
+        self.assertIn('\\item $1+1$.', tex)
+
+    def test_subitem_selection_and_answers(self):
+        task = Task.objects.create(text_latex='Вычислите:')
+        s1 = TaskSubitem.objects.create(
+            task=task, order=10, text_latex='$1+1$;', answer_latex='2')
+        TaskSubitem.objects.create(
+            task=task, order=20, text_latex='$2+2$;', answer_latex='4')
+        s3 = TaskSubitem.objects.create(
+            task=task, order=30, text_latex='$3+3$;', answer_latex='6')
+        item = make_item(self.worksheet, task, all_subitems=False)
+        item.subitems.set([s1, s3])
+        tex = task_to_tex(item)
+        self.assertIn('\\item $1+1$;', tex)
+        self.assertNotIn('$2+2$', tex)
+        self.assertIn('\\item $3+3$;', tex)
+        # Ответы перенумерованы заново: а) и б)
+        self.assertIn('[{а)~2; б)~6}]', tex)
 
     def test_worksheet_variants(self):
         worksheet = make_worksheet(self.teacher)
         student_tex = worksheet_to_tex(worksheet, 'student')
         self.assertIn('\\usepackage{egor}', student_tex)
         self.assertIn('\\bighead{Квадратные уравнения}{8 класс}', student_tex)
-        self.assertIn('\\rubr{Задачи}', student_tex)
+        # Рубрик нет — список стартует вручную, без \rubr
+        self.assertNotIn('\\rubr', student_tex)
+        self.assertIn('\\begin{enumerate}', student_tex)
         self.assertIn('\\end{enumerate}', student_tex)
 
         answers_tex = worksheet_to_tex(worksheet, 'answers')
@@ -62,18 +124,132 @@ class LatexGenerationTests(TestCase):
         self.assertIn('\\usepackage[answers=inline,solutions]{egor}',
                       teacher_tex)
 
-    def test_rubric_grouping(self):
+    def test_rubric_items(self):
         worksheet = make_worksheet(self.teacher, n_tasks=3)
-        items = list(worksheet.ordered_items())
-        items[0].rubric = 'Разминка'
-        items[0].save()
-        items[2].rubric = 'Основная часть'
-        items[2].rubric_note = 'Решаем письменно'
-        items[2].save()
+        # Рубрики — самостоятельные элементы перед задачами 1 и 3
+        make_rubric(worksheet, 'Разминка', order=5)
+        make_rubric(worksheet, 'Основная часть', order=25,
+                    note='Решаем письменно')
         tex = worksheet_to_tex(worksheet, 'student')
         self.assertIn('\\rubr{Разминка}', tex)
         self.assertIn('\\rubr{Основная часть}[{Решаем письменно}]', tex)
         self.assertEqual(tex.count('\\rubr'), 2)
+        # \rubr сам открывает список — ручного \begin{enumerate} нет
+        self.assertNotIn('\\begin{enumerate}', tex)
+        self.assertEqual(tex.count('\\end{enumerate}'), 1)
+
+    def test_task_before_first_rubric_opens_list(self):
+        worksheet = make_worksheet(self.teacher, n_tasks=2)
+        # Рубрика после первой задачи: список уже открыт вручную
+        make_rubric(worksheet, 'Основная часть', order=15)
+        tex = worksheet_to_tex(worksheet, 'student')
+        self.assertEqual(tex.count('\\begin{enumerate}'), 1)
+        self.assertLess(tex.index('\\begin{enumerate}'), tex.index('\\rubr'))
+
+    def test_text_item(self):
+        worksheet = make_worksheet(self.teacher)
+        WorksheetItem.objects.create(
+            worksheet=worksheet, order=15,
+            text_latex='Вспомните формулу дискриминанта.')
+        tex = worksheet_to_tex(worksheet, 'student')
+        self.assertIn('\\plaintext{%', tex)
+        self.assertIn('Вспомните формулу дискриминанта.', tex)
+        # Текст между задачами — без пустого \item[]
+        self.assertNotIn('\\item[]', tex)
+
+    def test_text_right_after_rubric(self):
+        # \plaintext сразу после \rubr требует пустого \item[] —
+        # иначе LaTeX падает на тексте внутри enumerate до первого пункта
+        worksheet = make_worksheet(self.teacher)
+        make_rubric(worksheet, 'Разминка', order=5)
+        WorksheetItem.objects.create(
+            worksheet=worksheet, order=6, text_latex='Считаем устно.')
+        tex = worksheet_to_tex(worksheet, 'student')
+        pos_rubr = tex.index('\\rubr{Разминка}')
+        pos_item = tex.index('\\item[]')
+        pos_text = tex.index('\\plaintext')
+        self.assertLess(pos_rubr, pos_item)
+        self.assertLess(pos_item, pos_text)
+        self.assertEqual(tex.count('\\item[]'), 1)
+
+    def test_worksheet_duplicate(self):
+        worksheet = make_worksheet(self.teacher)
+        make_rubric(worksheet, 'Разминка', order=5)
+        items = list(worksheet.ordered_items())
+        items[1].stars_override = 2
+        items[1].save()
+        copy = worksheet.duplicate()
+        self.assertEqual(copy.title, 'Квадратные уравнения (копия)')
+        self.assertEqual(copy.items.count(), worksheet.items.count())
+        copied = list(copy.ordered_items())
+        self.assertEqual(copied[0].rubric, 'Разминка')
+        self.assertTrue(copied[0].is_rubric)
+        self.assertEqual(copied[1].stars_override, 2)
+        self.assertEqual(copied[1].task_id, items[1].task_id)
+
+    def test_task_images_in_tex(self):
+        task = Task.objects.create(text_latex='Задача с картинкой')
+        task.images.create(image='task_images/pic1.png', order=10)
+        task.images.create(image='task_images/pic2.jpg', order=20)
+        item = make_item(self.worksheet, task)
+        tex = task_to_tex(item)
+        self.assertIn('\\taskpic{pic1.png}', tex)
+        self.assertIn('\\taskpic{pic2.jpg}', tex)
+        ws_tex = worksheet_to_tex(self.worksheet, 'student')
+        self.assertIn('\\flushpics', ws_tex)
+        self.assertLess(ws_tex.index('\\end{enumerate}'),
+                        ws_tex.index('\\flushpics'))
+        # Без картинок \flushpics не выводится
+        other = make_worksheet(self.teacher, title='Без картинок')
+        self.assertNotIn('\\flushpics', worksheet_to_tex(other, 'student'))
+
+    def test_taskpic_refs_in_text(self):
+        # \taskpic{N} в тексте → имя файла; лишние ссылки убираются;
+        # картинки без ссылки — автоматически в конец условия
+        task = Task.objects.create(
+            text_latex='См.\\ рисунок \\taskpic{1} и \\taskpic{3}.')
+        task.images.create(image='task_images/a.png', order=10)
+        task.images.create(image='task_images/b.png', order=20)
+        tex = task_to_tex(make_item(self.worksheet, task))
+        self.assertIn('рисунок \\taskpic{a.png}', tex)
+        self.assertNotIn('\\taskpic{1}', tex)
+        self.assertNotIn('\\taskpic{3}', tex)  # картинки №3 нет — удалена
+        # b.png не упомянута в тексте — добавлена в конец условия
+        self.assertEqual(tex.count('\\taskpic{b.png}'), 1)
+        self.assertLess(tex.index('a.png'), tex.index('b.png'))
+
+    def test_taskpic_ref_in_subitem(self):
+        task = Task.objects.create(text_latex='Задача')
+        task.images.create(image='task_images/a.png', order=10)
+        TaskSubitem.objects.create(
+            task=task, order=10, text_latex='пункт с рисунком \\taskpic{1}')
+        tex = task_to_tex(make_item(self.worksheet, task))
+        # Ссылка из подпункта учтена — в конец условия не дублируется
+        self.assertEqual(tex.count('\\taskpic{a.png}'), 1)
+
+    def test_collect_assets(self):
+        import io
+        import tempfile
+
+        from django.core.files.base import ContentFile
+        from django.test import override_settings
+        from PIL import Image
+
+        from .services import collect_assets
+
+        buf = io.BytesIO()
+        Image.new('RGB', (10, 10), 'white').save(buf, format='PNG')
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(MEDIA_ROOT=tmp):
+                task = Task.objects.create(text_latex='С файлом')
+                image = task.images.create(order=10)
+                image.image.save('схема.png', ContentFile(buf.getvalue()),
+                                 save=True)
+                make_item(self.worksheet, task)
+                assets = collect_assets(self.worksheet)
+        self.assertEqual(len(assets), 1)
+        self.assertEqual(assets[0]['filename'], image.filename)
+        self.assertTrue(assets[0]['content_base64'])
 
     def test_header_escaping(self):
         worksheet = Worksheet.objects.create(
@@ -100,6 +276,22 @@ class WorksheetViewTests(TestCase):
             reverse('worksheet_detail', args=[self.worksheet.pk]))
         self.assertEqual(response.status_code, 404)
 
+    def test_builder_renders(self):
+        self.login_teacher()
+        from problems.models import TaskSubitem
+        make_rubric(self.worksheet, 'Разминка', order=5)
+        item = self.worksheet.ordered_items()[1]
+        TaskSubitem.objects.create(
+            task=item.task, order=10, text_latex='подпункт а')
+        WorksheetItem.objects.create(
+            worksheet=self.worksheet, order=99, text_latex='Текст-вставка')
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.assertContains(response, 'Разминка')
+        self.assertContains(response, 'подпункт а')
+        self.assertContains(response, 'Текст-вставка')
+        self.assertContains(response, 'Дублировать')
+
     def test_add_and_move_and_remove_task(self):
         self.login_teacher()
         task = Task.objects.create(text_latex='Новая задача')
@@ -119,6 +311,152 @@ class WorksheetViewTests(TestCase):
             'worksheet_remove_item', args=[self.worksheet.pk, items2[1].pk]))
         self.assertEqual(self.worksheet.items.count(), 2)
 
+    def test_reorder(self):
+        self.login_teacher()
+        items = list(self.worksheet.ordered_items())
+        ids = ','.join(str(i.pk) for i in reversed(items))
+        response = self.client.post(
+            reverse('worksheet_reorder', args=[self.worksheet.pk]),
+            {'order': ids})
+        self.assertEqual(response.status_code, 200)
+        new_items = list(self.worksheet.ordered_items())
+        self.assertEqual([i.pk for i in new_items],
+                         [i.pk for i in reversed(items)])
+
+    def test_list_filters_and_sort(self):
+        from problems.models import Topic
+        self.login_teacher()
+        topic = Topic.objects.create(name='Уравнения')
+        # Тема у самого листка
+        ws_manual = make_worksheet(self.teacher, title='А-листок')
+        ws_manual.grade = 8
+        ws_manual.save()
+        ws_manual.topics.add(topic)
+        # Тема у задачи листка
+        ws_by_task = make_worksheet(self.teacher, title='Б-листок')
+        ws_by_task.ordered_items()[0].task.topics.add(topic)
+
+        url = reverse('worksheet_list')
+        response = self.client.get(url, {'topic': topic.pk})
+        titles = [w.title for w in response.context['worksheets']]
+        self.assertIn('А-листок', titles)
+        self.assertIn('Б-листок', titles)
+        self.assertNotIn(self.worksheet.title, titles)
+
+        response = self.client.get(url, {'grade': '8'})
+        titles = [w.title for w in response.context['worksheets']]
+        self.assertEqual(titles, ['А-листок'])
+
+        response = self.client.get(url, {'order': 'title'})
+        titles = [w.title for w in response.context['worksheets']]
+        self.assertEqual(titles, sorted(titles))
+
+        # Невалидные параметры не роняют страницу
+        response = self.client.get(url, {
+            'order': 'hack', 'created_from': 'garbage', 'grade': 'x'})
+        self.assertEqual(response.status_code, 200)
+
+    def test_rename(self):
+        self.login_teacher()
+        response = self.client.post(
+            reverse('worksheet_rename', args=[self.worksheet.pk]),
+            {'title': 'Новое имя'})
+        self.assertRedirects(
+            response, reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.worksheet.refresh_from_db()
+        self.assertEqual(self.worksheet.title, 'Новое имя')
+        # Пустое имя не сохраняется
+        self.client.post(
+            reverse('worksheet_rename', args=[self.worksheet.pk]),
+            {'title': '  '})
+        self.worksheet.refresh_from_db()
+        self.assertEqual(self.worksheet.title, 'Новое имя')
+
+    def test_copy_view(self):
+        self.login_teacher()
+        response = self.client.post(
+            reverse('worksheet_copy', args=[self.worksheet.pk]))
+        copy = Worksheet.objects.get(title__endswith='(копия)')
+        self.assertRedirects(
+            response, reverse('worksheet_detail', args=[copy.pk]))
+        self.assertEqual(copy.items.count(), self.worksheet.items.count())
+
+    def test_add_text_and_edit(self):
+        self.login_teacher()
+        self.client.post(
+            reverse('worksheet_add_element', args=[self.worksheet.pk]),
+            {'kind': 'text', 'text_latex': 'Пояснение к листку'})
+        item = self.worksheet.items.get(task__isnull=True)
+        self.assertEqual(item.text_latex, 'Пояснение к листку')
+        self.client.post(
+            reverse('worksheet_edit_text',
+                    args=[self.worksheet.pk, item.pk]),
+            {'text_latex': 'Новый текст'})
+        item.refresh_from_db()
+        self.assertEqual(item.text_latex, 'Новый текст')
+
+    def test_add_edit_delete_rubric(self):
+        self.login_teacher()
+        self.client.post(
+            reverse('worksheet_add_element', args=[self.worksheet.pk]),
+            {'kind': 'rubric', 'rubric': 'Разминка', 'rubric_note': 'устно'})
+        item = self.worksheet.items.get(task__isnull=True)
+        self.assertTrue(item.is_rubric)
+        self.assertEqual(item.rubric, 'Разминка')
+        self.assertEqual(item.rubric_note, 'устно')
+        # Рубрика добавляется в конец
+        self.assertEqual(list(self.worksheet.ordered_items())[-1].pk, item.pk)
+
+        self.client.post(
+            reverse('worksheet_set_rubric',
+                    args=[self.worksheet.pk, item.pk]),
+            {'rubric': 'Основная часть', 'rubric_note': ''})
+        item.refresh_from_db()
+        self.assertEqual(item.rubric, 'Основная часть')
+        self.assertEqual(item.rubric_note, '')
+
+        self.client.post(
+            reverse('worksheet_remove_item',
+                    args=[self.worksheet.pk, item.pk]))
+        self.assertFalse(self.worksheet.items.filter(pk=item.pk).exists())
+
+    def test_item_settings(self):
+        self.login_teacher()
+        from problems.models import TaskSubitem
+        item = self.worksheet.ordered_items()[0]
+        s1 = TaskSubitem.objects.create(
+            task=item.task, order=10, text_latex='а-пункт')
+        TaskSubitem.objects.create(
+            task=item.task, order=20, text_latex='б-пункт')
+        self.client.post(
+            reverse('worksheet_item_settings',
+                    args=[self.worksheet.pk, item.pk]),
+            {'stars': '2', 'columns': '3', 'subitems': [str(s1.pk)]})
+        item.refresh_from_db()
+        self.assertEqual(item.stars_override, 2)
+        self.assertEqual(item.columns_override, 3)
+        self.assertFalse(item.all_subitems)
+        self.assertEqual([s.pk for s in item.selected_subitems()], [s1.pk])
+
+    def test_autosave_returns_json(self):
+        self.login_teacher()
+        item = self.worksheet.ordered_items()[0]
+        response = self.client.post(
+            reverse('worksheet_item_settings',
+                    args=[self.worksheet.pk, item.pk]),
+            {'stars': '2'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        item.refresh_from_db()
+        self.assertEqual(item.stars_override, 2)
+
+        # Ошибка (пустое название) → JSON с ok=False и статус 400
+        response = self.client.post(
+            reverse('worksheet_rename', args=[self.worksheet.pk]),
+            {'title': ' '}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()['ok'])
+
     @mock.patch('worksheets.services.compile_latex',
                 return_value=b'%PDF-1.5 fake')
     def test_pdf_generation_and_cache(self, mocked):
@@ -135,9 +473,7 @@ class WorksheetViewTests(TestCase):
         self.assertEqual(mocked.call_count, 1)
 
         # Изменение листка → перегенерация
-        item = self.worksheet.ordered_items()[0]
-        item.rubric = 'Новая рубрика'
-        item.save()
+        make_rubric(self.worksheet, 'Новая рубрика', order=5)
         response = self.client.get(url, {'variant': 'student'})
         self.assertEqual(mocked.call_count, 2)
         self.assertEqual(
@@ -157,6 +493,141 @@ class WorksheetViewTests(TestCase):
         # Вариант с ответами ученику запрещён
         response = self.client.get(url, {'variant': 'teacher'})
         self.assertEqual(response.status_code, 403)
+
+
+SAMPLE_TEX = r'''\documentclass[a5paper,10pt]{article}
+\usepackage{egor}
+\begin{document}
+\bighead{Дроби \& проценты}{8 класс}{И. Иванов}[{Осень}]
+
+\rubr{Разминка}[{Устно}]
+
+\task{1}{0}{%
+Вычислите $\frac{1}{2}+\frac{1}{3}$.%
+}[{}][{$\frac56$}]
+
+\plaintext{%
+Дальше — письменно.%
+}
+
+\rubr{Основная часть}
+
+\task{2}{2}{%
+Найдите значение:%
+}[{\item $2+2$; \item $3 \cdot [1+2]$.}][{а)~4; б)~9}][{Считаем в столбик.}]
+
+\end{document}
+'''
+
+
+class ImportTexTests(TestCase):
+    def setUp(self):
+        self.teacher = make_teacher()
+
+    def test_parse(self):
+        from .import_tex import parse_tex
+        parsed = parse_tex(SAMPLE_TEX)
+        self.assertEqual(parsed['header']['title'], 'Дроби & проценты')
+        self.assertEqual(parsed['header']['left'], '8 класс')
+        self.assertEqual(parsed['header']['right'], 'И. Иванов')
+        self.assertEqual(parsed['header']['subtitle'], 'Осень')
+        kinds = [k for k, _ in parsed['elements']]
+        self.assertEqual(kinds, ['rubric', 'task', 'text', 'rubric', 'task'])
+        rubric = parsed['elements'][0][1]
+        self.assertEqual(rubric['rubric'], 'Разминка')
+        self.assertEqual(rubric['note'], 'Устно')
+        task1 = parsed['elements'][1][1]
+        self.assertEqual(task1['stars'], 1)
+        self.assertEqual(task1['text'], 'Вычислите $\\frac{1}{2}+\\frac{1}{3}$.')
+        self.assertEqual(task1['answer'], '$\\frac56$')
+        task2 = parsed['elements'][4][1]
+        self.assertEqual(task2['columns'], 2)
+        # Скобка ] внутри {…} не ломает разбор опциональных аргументов;
+        # хвостовые «;» и «.» срезаются — их расставляет система
+        self.assertEqual(task2['subitems'],
+                         ['$2+2$', '$3 \\cdot [1+2]$'])
+        self.assertEqual(task2['solution'], 'Считаем в столбик.')
+
+    def test_create_and_dedup(self):
+        from .import_tex import create_worksheet, parse_tex
+        existing = Task.objects.create(
+            text_latex='Вычислите  $\\frac{1}{2}+\\frac{1}{3}$.',
+            created_by=self.teacher)
+        parsed = parse_tex(SAMPLE_TEX)
+        worksheet, missing = create_worksheet(parsed, owner=self.teacher)
+        self.assertEqual(missing, [])
+        self.assertEqual(worksheet.title, 'Дроби & проценты')
+        self.assertEqual(worksheet.grade_label, '8 класс')
+        items = list(worksheet.ordered_items())
+        self.assertEqual(len(items), 5)
+        # Первая задача найдена в базе (нормализация пробелов), вторая создана
+        self.assertEqual(items[1].task_id, existing.pk)
+        new_task = items[4].task
+        self.assertEqual(new_task.stars, 2)
+        self.assertEqual(new_task.subitems.count(), 2)
+        self.assertEqual(Task.objects.count(), 2)
+
+    def test_round_trip(self):
+        from .import_tex import create_worksheet, parse_tex
+        parsed = parse_tex(SAMPLE_TEX)
+        worksheet, _ = create_worksheet(parsed, owner=self.teacher)
+        tex = worksheet_to_tex(worksheet, 'teacher')
+        reparsed = parse_tex(tex)
+        self.assertEqual(reparsed['header'], parsed['header'])
+        self.assertEqual(
+            [k for k, _ in reparsed['elements']],
+            [k for k, _ in parsed['elements']])
+        for (_, orig), (_, again) in zip(parsed['elements'],
+                                         reparsed['elements']):
+            if 'text' in orig:
+                self.assertEqual(orig['text'], again['text'])
+            if 'subitems' in orig:
+                self.assertEqual(orig['subitems'], again['subitems'])
+
+    def test_import_graphics(self):
+        from .import_tex import create_worksheet, parse_tex
+        tex = ('\\begin{document}\n'
+               '\\task{0}{0}{%\n'
+               'См.\\ рисунок \\includegraphics[width=4cm]{pic-a.png}, '
+               'снова \\includegraphics{pic-a.png}, '
+               '\\taskpic{pic-b.jpg} '
+               'и \\includegraphics[height=6.5cm]{apo-math-wave11-pic1.pdf}.%\n}\n'
+               '\\end{document}')
+        parsed = parse_tex(tex)
+        data = parsed['elements'][0][1]
+        self.assertEqual(data['images'],
+                         ['pic-a.png', 'pic-b.jpg', 'apo-math-wave11-pic1.pdf'])
+        self.assertNotIn('includegraphics', data['text'])
+        # Один файл — одна ссылка-номер, даже при повторном упоминании
+        self.assertEqual(data['text'].count('\\taskpic{1}'), 2)
+        self.assertIn('\\taskpic{2}', data['text'])
+        self.assertIn('\\taskpic{3}', data['text'])  # PDF-графика — тоже
+
+        worksheet, missing = create_worksheet(parsed, owner=self.teacher)
+        self.assertEqual(len(missing), 1)
+        self.assertEqual(missing[0]['files'],
+                         ['pic-a.png', 'pic-b.jpg', 'apo-math-wave11-pic1.pdf'])
+        self.assertEqual(missing[0]['task'],
+                         worksheet.ordered_items()[0].task)
+
+    def test_import_view(self):
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('worksheet_import')
+        response = self.client.post(
+            url, {'tex': SAMPLE_TEX, 'action': 'preview'})
+        self.assertContains(response, 'новая')
+        self.assertContains(response, 'Разминка')
+
+        response = self.client.post(
+            url, {'tex': SAMPLE_TEX, 'action': 'create'})
+        worksheet = Worksheet.objects.get(owner=self.teacher)
+        self.assertRedirects(
+            response, reverse('worksheet_detail', args=[worksheet.pk]))
+        self.assertEqual(worksheet.items.count(), 5)
+
+        response = self.client.post(
+            url, {'tex': 'нет команд', 'action': 'preview'})
+        self.assertContains(response, 'Ошибка разбора')
 
 
 class ShareLinkTests(TestCase):

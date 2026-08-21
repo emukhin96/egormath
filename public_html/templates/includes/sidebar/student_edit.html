@@ -1,0 +1,15 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Карточка ученика</p>
+  <h2>{{ profile.user.get_full_name }}</h2>
+  <ul class="sidebar-list">
+    <li><strong>Логин:</strong> <span class="mono">{{ profile.user.username }}</span></li>
+    <li><strong>Класс:</strong> {{ profile.grade|default:"—" }}</li>
+  </ul>
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Подсказка</p>
+  <p class="sidebar-copy">Ученик может состоять в нескольких группах. Смена групп не удаляет выданные задания.</p>
+  <div class="sidebar-actions">
+    <a class="sidebar-action" href="{% url 'students' %}">К списку учеников</a>
+  </div>
+</section>

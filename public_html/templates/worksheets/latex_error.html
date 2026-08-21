@@ -1,7 +1,10 @@
 {% extends 'base.html' %}
 {% block title %}Ошибка компиляции — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/diagnostic.html' %}{% endblock %}
 {% block content %}
-<h1>Ошибка компиляции PDF</h1>
+<div class="page-head"><div><span class="page-eyebrow">Диагностика PDF</span>
+  <h1>Ошибка компиляции</h1><p class="page-subtitle">{{ worksheet.title }}</p>
+</div></div>
 <div class="card">
   <p>Листок «{{ worksheet.title }}» не удалось собрать в PDF.</p>
   <p class="msg msg-error">{{ error }}</p>

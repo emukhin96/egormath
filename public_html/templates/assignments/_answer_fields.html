@@ -1,0 +1,16 @@
+{# Поля ответа: ожидает prefix, answer_type, obj (Submission/SubmissionPart или None), editable #}
+{% if answer_type == 'number' %}
+  <input type="text" name="{{ prefix }}_number" placeholder="число"
+         value="{{ obj.answer_number|default:'' }}" style="max-width:200px;display:inline-block"
+         {% if not editable %}disabled{% endif %}>
+{% elif answer_type == 'interval' %}
+  от <input type="text" name="{{ prefix }}_low"
+         value="{{ obj.interval_low|default:'' }}" style="max-width:140px;display:inline-block"
+         {% if not editable %}disabled{% endif %}>
+  до <input type="text" name="{{ prefix }}_high"
+         value="{{ obj.interval_high|default:'' }}" style="max-width:140px;display:inline-block"
+         {% if not editable %}disabled{% endif %}>
+{% else %}
+  <textarea name="{{ prefix }}_text" rows="2" placeholder="ответ"
+            {% if not editable %}disabled{% endif %}>{{ obj.answer_text|default:'' }}</textarea>
+{% endif %}

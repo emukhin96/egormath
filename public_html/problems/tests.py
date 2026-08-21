@@ -1,10 +1,13 @@
+import re
+
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import Profile
 
-from .latex_utils import escape_latex, strip_latex
+from .latex_utils import escape_latex, split_items, strip_latex
 from .models import Tag, Task, Topic
 
 
@@ -32,6 +35,10 @@ class LatexUtilsTests(TestCase):
         s = strip_latex(r'Решите уравнение $x^2-5x+6=0$ \textbf{устно}')
         self.assertIn('Решите уравнение', s)
         self.assertNotIn('\\textbf', s)
+
+    def test_split_items_strips_punctuation(self):
+        chunks = split_items('\\item $1+1$; \\item $2+2$ ; \\item $3+3$.')
+        self.assertEqual(chunks, ['$1+1$', '$2+2$', '$3+3$'])
 
 
 class TaskModelTests(TestCase):
@@ -83,15 +90,307 @@ class CatalogViewTests(TestCase):
     def test_task_create(self):
         self.client.login(username='teacher1', password='pass12345')
         response = self.client.post(reverse('task_create'), {
-            'text_latex': 'Вычислите $2+2$',
-            'subitems_latex': '', 'columns': 0,
+            'text_latex': 'Вычислите $2+2$', 'columns': 0,
             'answer_latex': '4', 'solution_latex': '',
             'stars': 0, 'answer_type': 'number',
-            'source_refs-TOTAL_FORMS': 1,
-            'source_refs-INITIAL_FORMS': 0,
-            'source_refs-MIN_NUM_FORMS': 0,
-            'source_refs-MAX_NUM_FORMS': 1000,
+            **formset_management('source_refs', total=0),
+            **formset_management('subitems', total=0),
+            **formset_management('images', total=0),
         })
         task = Task.objects.get(answer_latex='4')
         self.assertRedirects(response, reverse('task_detail', args=[task.pk]))
         self.assertEqual(task.created_by, self.teacher)
+
+    def test_task_create_with_subitems(self):
+        self.client.login(username='teacher1', password='pass12345')
+        self.client.post(reverse('task_create'), {
+            'text_latex': 'Вычислите:', 'columns': 2,
+            'answer_latex': '', 'solution_latex': '',
+            'stars': 1, 'answer_type': 'number',
+            **formset_management('source_refs', total=0),
+            **formset_management('subitems', total=2),
+            **formset_management('images', total=0),
+            'subitems-0-order': 10, 'subitems-0-text_latex': '$1+1$;',
+            'subitems-0-answer_latex': '2',
+            'subitems-1-order': 20, 'subitems-1-text_latex': '$2+2$.',
+            'subitems-1-answer_latex': '4',
+        })
+        task = Task.objects.get(text_latex='Вычислите:')
+        self.assertEqual(task.subitems.count(), 2)
+        self.assertEqual(task.subitems.first().answer_latex, '2')
+
+    def test_variants_hidden_from_catalog(self):
+        variant = Task.objects.create(
+            text_latex='Копия', variant_of=self.task)
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('task_list'))
+        self.assertContains(response, 'Сократите')
+        self.assertNotContains(response, 'Копия')
+        self.assertIsNotNone(variant.pk)
+
+
+def formset_management(prefix, total=0, initial=0):
+    return {
+        f'{prefix}-TOTAL_FORMS': total,
+        f'{prefix}-INITIAL_FORMS': initial,
+        f'{prefix}-MIN_NUM_FORMS': 0,
+        f'{prefix}-MAX_NUM_FORMS': 1000,
+    }
+
+
+class QuickEntryTests(TestCase):
+    """«Сохранить и добавить следующую» и массовое добавление ответов."""
+
+    def setUp(self):
+        from .models import Source, TaskSource
+        self.teacher = make_teacher()
+        self.topic = Topic.objects.create(name='Дроби')
+        self.source = Source.objects.create(title='Задачник')
+        self.client.login(username='teacher1', password='pass12345')
+        self.Source, self.TaskSource = Source, TaskSource
+
+    def test_save_and_next(self):
+        response = self.client.post(reverse('task_create'), {
+            'text_latex': 'Первая задача', 'columns': 0,
+            'answer_latex': '', 'solution_latex': '',
+            'stars': 2, 'answer_type': 'text', 'grade_level': 7,
+            'topics': [self.topic.pk],
+            'save_and_next': '',
+            **formset_management('source_refs', total=1),
+            'source_refs-0-source': self.source.pk,
+            'source_refs-0-number': '5.17а',
+            **formset_management('subitems', total=0),
+            **formset_management('images', total=0),
+        })
+        task = Task.objects.get(text_latex='Первая задача')
+        self.assertRedirects(
+            response, reverse('task_create') + f'?from={task.pk}')
+
+        # Форма новой задачи предзаполнена, номер источника +1
+        response = self.client.get(
+            reverse('task_create'), {'from': task.pk})
+        self.assertEqual(response.context['form'].initial['stars'], 2)
+        self.assertEqual(response.context['form'].initial['grade_level'], 7)
+        self.assertIn(self.topic.pk,
+                      response.context['form'].initial['topics'])
+        self.assertContains(response, '5.18а')
+
+    def test_bulk_answers(self):
+        t1 = Task.objects.create(text_latex='Задача 1',
+                                 created_by=self.teacher)
+        t2 = Task.objects.create(text_latex='Задача 2', answer_latex='старый',
+                                 created_by=self.teacher)
+        self.TaskSource.objects.create(task=t1, source=self.source,
+                                       number='101')
+        self.TaskSource.objects.create(task=t2, source=self.source,
+                                       number='102')
+        url = reverse('bulk_answers')
+        text = '101. 42\n102. новый\n103. 7\nмусор без номера'
+
+        response = self.client.post(
+            url, {'source': self.source.pk, 'answers': text,
+                  'action': 'preview'})
+        statuses = {r['number']: r['status'] for r in response.context['rows']}
+        self.assertEqual(statuses['101'], 'new')
+        self.assertEqual(statuses['102'], 'conflict')
+        self.assertEqual(statuses['103'], 'notfound')
+
+        # Применение: конфликт без галочки не перезаписывается
+        self.client.post(url, {'source': self.source.pk, 'answers': text,
+                               'action': 'apply'})
+        t1.refresh_from_db()
+        t2.refresh_from_db()
+        self.assertEqual(t1.answer_latex, '42')
+        self.assertEqual(t2.answer_latex, 'старый')
+
+        # С галочкой «перезаписать» — обновляется
+        self.client.post(url, {'source': self.source.pk, 'answers': text,
+                               'action': 'apply', 'overwrite': [t2.pk]})
+        t2.refresh_from_db()
+        self.assertEqual(t2.answer_latex, 'новый')
+
+
+class QuickUpdateTests(TestCase):
+    """Горячее редактирование класса/ответа/источника из списка задач."""
+
+    def setUp(self):
+        from .models import Source
+        self.teacher = make_teacher()
+        self.task = Task.objects.create(
+            text_latex='Задача', created_by=self.teacher)
+        self.source = Source.objects.create(title='Задачник')
+        self.client.login(username='teacher1', password='pass12345')
+        self.url = reverse('task_quick_update', args=[self.task.pk])
+
+    def test_update_grade_and_answer(self):
+        response = self.client.post(
+            self.url, {'grade_level': '7', 'answer_latex': ' 42 '})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.grade_level, 7)
+        self.assertEqual(self.task.answer_latex, '42')
+        # Сброс класса пустым значением
+        self.client.post(self.url, {'grade_level': ''})
+        self.task.refresh_from_db()
+        self.assertIsNone(self.task.grade_level)
+
+    def test_invalid_grade_rejected(self):
+        response = self.client.post(self.url, {'grade_level': '99'})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()['ok'])
+
+    def test_source_create_update_delete(self):
+        from .models import TaskSource
+        # Создание первого источника
+        self.client.post(
+            self.url, {'source': str(self.source.pk), 'number': '101'})
+        ref = TaskSource.objects.get(task=self.task)
+        self.assertEqual(ref.number, '101')
+        # Обновление номера
+        self.client.post(
+            self.url, {'source': str(self.source.pk), 'number': '102'})
+        ref.refresh_from_db()
+        self.assertEqual(ref.number, '102')
+        # Пустой источник — удаление привязки
+        self.client.post(self.url, {'source': '', 'number': ''})
+        self.assertFalse(TaskSource.objects.filter(task=self.task).exists())
+
+    def test_get_not_allowed(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 405)
+
+    def test_student_forbidden(self):
+        make_student(self.teacher)
+        self.client.login(username='student1', password='pass12345')
+        response = self.client.post(self.url, {'grade_level': '7'})
+        self.assertEqual(response.status_code, 403)
+
+
+class TemplateHygieneTests(TestCase):
+    """Стражи от утечки комментариев шаблонов в HTML."""
+
+    def test_hash_comments_are_single_line(self):
+        """{# … #} в Django строго однострочный: перенос строки внутри
+        превращает комментарий в видимый текст страницы."""
+        templates_dir = settings.BASE_DIR / 'templates'
+        problems = []
+        for path in sorted(templates_dir.rglob('*.html')):
+            text = path.read_text(encoding='utf-8')
+            for match in re.finditer(r'\{#', text):
+                end = text.find('#}', match.start())
+                if end == -1 or '\n' in text[match.start():end]:
+                    line = text.count('\n', 0, match.start()) + 1
+                    problems.append(f'{path.relative_to(templates_dir)}:{line}')
+        self.assertEqual(problems, [],
+                         'Многострочные/незакрытые {# #} утекут в HTML')
+
+    def test_task_form_has_no_leaked_comment(self):
+        make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('task_create'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, '{#')
+        self.assertNotContains(response, 'Тумблер')
+
+
+class TaskImagePdfTests(TestCase):
+    """PDF-иллюстрации: хранение без сжатия и корректная отдача файла."""
+
+    PDF_BYTES = (b'%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n'
+                 b'trailer<</Root 1 0 R>>\n%%EOF\n')
+
+    def test_pdf_saved_without_compression(self):
+        import tempfile
+
+        from django.core.files.base import ContentFile
+        from django.test import override_settings
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(MEDIA_ROOT=tmp):
+                task = Task.objects.create(text_latex='С PDF-рисунком')
+                image = task.images.create(order=10)
+                image.image.save('wave11-pic1.pdf',
+                                 ContentFile(self.PDF_BYTES), save=True)
+                self.assertTrue(image.is_pdf)
+                self.assertTrue(image.filename.endswith('.pdf'))
+                # Содержимое не тронуто сжатием
+                with image.image.open('rb') as f:
+                    self.assertEqual(f.read(), self.PDF_BYTES)
+
+                make_teacher()
+                self.client.login(username='teacher1', password='pass12345')
+                response = self.client.get(
+                    reverse('task_image_file', args=[image.pk]))
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers['Content-Type'],
+                                 'application/pdf')
+                response.close()
+
+    def test_pdf_in_latex_output(self):
+        from worksheets.latex import task_to_tex
+        from worksheets.models import Worksheet, WorksheetItem
+
+        teacher = make_teacher()
+        task = Task.objects.create(text_latex='Волна \\taskpic{1}')
+        task.images.create(image='task_images/wave11-pic1.pdf', order=10)
+        worksheet = Worksheet.objects.create(title='Л', owner=teacher)
+        item = WorksheetItem.objects.create(
+            worksheet=worksheet, task=task, order=10)
+        self.assertIn('\\taskpic{wave11-pic1.pdf}', task_to_tex(item))
+
+
+class LocalVariantTests(TestCase):
+    """Развилка «сохранить в базе / только в листке» при правке задачи."""
+
+    def setUp(self):
+        from worksheets.models import Worksheet, WorksheetItem
+        self.teacher = make_teacher()
+        self.task = Task.objects.create(
+            text_latex='Оригинал', answer_latex='1', stars=1,
+            created_by=self.teacher)
+        self.worksheet = Worksheet.objects.create(
+            title='Листок', owner=self.teacher)
+        self.item = WorksheetItem.objects.create(
+            worksheet=self.worksheet, task=self.task, order=10)
+        self.client.login(username='teacher1', password='pass12345')
+
+    def edit_url(self):
+        return (reverse('task_edit', args=[self.task.pk])
+                + f'?worksheet={self.worksheet.pk}&item={self.item.pk}')
+
+    def post_data(self, **extra):
+        data = {
+            'text_latex': 'Изменённый текст', 'columns': 0,
+            'answer_latex': '1', 'solution_latex': '',
+            'stars': 1, 'answer_type': 'text',
+            **formset_management('source_refs'),
+            **formset_management('subitems'),
+            **formset_management('images'),
+        }
+        data.update(extra)
+        return data
+
+    def test_save_to_base(self):
+        response = self.client.post(self.edit_url(), self.post_data(save=''))
+        self.assertRedirects(
+            response, reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.text_latex, 'Изменённый текст')
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.task_id, self.task.pk)
+
+    def test_save_local_creates_variant(self):
+        response = self.client.post(
+            self.edit_url(), self.post_data(save_local=''))
+        self.assertRedirects(
+            response, reverse('worksheet_detail', args=[self.worksheet.pk]))
+        # Оригинал не изменился
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.text_latex, 'Оригинал')
+        # Элемент листка перенацелен на копию
+        self.item.refresh_from_db()
+        variant = self.item.task
+        self.assertNotEqual(variant.pk, self.task.pk)
+        self.assertEqual(variant.variant_of_id, self.task.pk)
+        self.assertEqual(variant.text_latex, 'Изменённый текст')

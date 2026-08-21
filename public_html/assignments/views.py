@@ -9,7 +9,8 @@ from accounts.decorators import student_required, teacher_required
 from problems.models import Task
 from worksheets.models import Worksheet
 
-from .models import Assignment, Review, Submission, SubmissionPhoto
+from .models import (Assignment, Review, Submission, SubmissionPart,
+                     SubmissionPhoto)
 
 
 # --- Назначение листка ученикам (действие учителя со страницы листка) ---
@@ -19,7 +20,14 @@ from .models import Assignment, Review, Submission, SubmissionPhoto
 def assign_worksheet(request, worksheet_id):
     worksheet = get_object_or_404(
         Worksheet, pk=worksheet_id, owner=request.user)
-    student_ids = request.POST.getlist('students')
+    student_ids = set(request.POST.getlist('students'))
+    # Выбранные группы: назначение всем участникам
+    group_ids = request.POST.getlist('groups')
+    if group_ids:
+        group_student_ids = (request.user.owned_groups
+                             .filter(pk__in=group_ids)
+                             .values_list('students__id', flat=True))
+        student_ids |= {str(pk) for pk in group_student_ids if pk}
     grade_scale = request.POST.get('grade_scale', Assignment.SCALE_WORDS)
     if grade_scale not in dict(Assignment.SCALE_CHOICES):
         grade_scale = Assignment.SCALE_WORDS
@@ -52,24 +60,47 @@ def _student_assignment(request, pk):
         pk=pk, student=request.user)
 
 
-@student_required
-def assignment_detail(request, pk):
-    assignment = _student_assignment(request, pk)
-    items = assignment.worksheet.ordered_items()
-    submissions = {
-        s.task_id: s for s in
-        assignment.submissions.prefetch_related('photos', 'review')
-    }
+def _assignment_rows(assignment, with_review=False):
+    """Строки листка для ученика/учителя: задачи с подпунктами и ответами,
+    текстовые элементы — только для отображения."""
+    qs = assignment.submissions.prefetch_related('photos', 'parts')
+    qs = qs.select_related('review') if with_review \
+        else qs.prefetch_related('review')
+    submissions = {s.task_id: s for s in qs}
     rows = []
-    for item in items:
+    number = 0
+    for item in assignment.worksheet.ordered_items():
+        if item.task_id is None:
+            rows.append({'item': item, 'task': None, 'number': None})
+            continue
+        number += 1
+        submission = submissions.get(item.task_id)
+        parts = {}
+        if submission:
+            parts = {p.subitem_id: p for p in submission.parts.all()}
+        subitems = item.selected_subitems()
         rows.append({
             'item': item,
             'task': item.task,
-            'submission': submissions.get(item.task_id),
+            'number': number,
+            'prefix': f'task{item.task_id}',
+            'submission': submission,
+            'review': getattr(submission, 'review', None) if submission else None,
+            'subrows': [
+                {'subitem': s, 'part': parts.get(s.pk),
+                 'prefix': f'task{item.task_id}_sub{s.pk}'}
+                for s in subitems
+            ],
         })
+    return rows
+
+
+@student_required
+def assignment_detail(request, pk):
+    assignment = _student_assignment(request, pk)
     return render(request, 'assignments/assignment_detail.html', {
         'assignment': assignment,
-        'rows': rows,
+        'rows': _assignment_rows(assignment),
         'editable': assignment.is_editable_by_student,
     })
 
@@ -83,24 +114,54 @@ def _get_or_create_submission(assignment, task_id):
     return submission
 
 
+def _answer_fields(answer_type, post, prefix):
+    """Поля ответа по типу задачи из POST с данным префиксом."""
+    if answer_type == Task.ANSWER_NUMBER:
+        return {'answer_number': post.get(f'{prefix}_number', '').strip()}
+    if answer_type == Task.ANSWER_INTERVAL:
+        return {'interval_low': post.get(f'{prefix}_low', '').strip(),
+                'interval_high': post.get(f'{prefix}_high', '').strip()}
+    return {'answer_text': post.get(f'{prefix}_text', '').strip()}
+
+
 @student_required
 @require_POST
 def save_answers(request, pk):
-    """Сохраняет все текстовые/числовые ответы одной формой."""
+    """Сохраняет все текстовые/числовые ответы одной формой.
+
+    У задач с подпунктами — отдельный ответ на каждый подпункт
+    (SubmissionPart), у остальных — ответ на задачу целиком.
+    """
     assignment = _student_assignment(request, pk)
     if not assignment.is_editable_by_student:
         raise PermissionDenied('Работа уже отправлена на проверку.')
     for item in assignment.worksheet.ordered_items():
+        if item.task_id is None:
+            continue
         task = item.task
         prefix = f'task{task.pk}'
-        fields = {}
-        if task.answer_type == Task.ANSWER_NUMBER:
-            fields['answer_number'] = request.POST.get(f'{prefix}_number', '').strip()
-        elif task.answer_type == Task.ANSWER_INTERVAL:
-            fields['interval_low'] = request.POST.get(f'{prefix}_low', '').strip()
-            fields['interval_high'] = request.POST.get(f'{prefix}_high', '').strip()
-        else:
-            fields['answer_text'] = request.POST.get(f'{prefix}_text', '').strip()
+        subitems = item.selected_subitems()
+        if subitems:
+            part_fields = {
+                s: _answer_fields(task.answer_type, request.POST,
+                                  f'{prefix}_sub{s.pk}')
+                for s in subitems
+            }
+            has_values = any(
+                any(f.values()) for f in part_fields.values())
+            if not (has_values or assignment.submissions
+                    .filter(task=task).exists()):
+                continue
+            submission, _ = Submission.objects.get_or_create(
+                assignment=assignment, task=task)
+            for subitem, fields in part_fields.items():
+                part, _ = SubmissionPart.objects.get_or_create(
+                    submission=submission, subitem=subitem)
+                for name, value in fields.items():
+                    setattr(part, name, value)
+                part.save()
+            continue
+        fields = _answer_fields(task.answer_type, request.POST, prefix)
         if any(fields.values()) or assignment.submissions.filter(task=task).exists():
             submission, _ = Submission.objects.get_or_create(
                 assignment=assignment, task=task)
@@ -169,6 +230,8 @@ def submit_assignment(request, pk):
         raise PermissionDenied('Работа уже отправлена на проверку.')
     # Строки-ответы для всех задач: учителю удобно ставить отметки и за пустые
     for item in assignment.worksheet.ordered_items():
+        if item.task_id is None:
+            continue
         Submission.objects.get_or_create(
             assignment=assignment, task=item.task)
     assignment.status = Assignment.STATUS_SUBMITTED
@@ -189,25 +252,9 @@ def _teacher_assignment(request, pk):
 @teacher_required
 def review_assignment(request, pk):
     assignment = _teacher_assignment(request, pk)
-    submissions = {
-        s.task_id: s for s in
-        assignment.submissions.prefetch_related('photos').select_related('review')
-    }
-    rows = []
-    for item in assignment.worksheet.ordered_items():
-        submission = submissions.get(item.task_id)
-        review = None
-        if submission:
-            review = getattr(submission, 'review', None)
-        rows.append({
-            'item': item,
-            'task': item.task,
-            'submission': submission,
-            'review': review,
-        })
     return render(request, 'assignments/review.html', {
         'assignment': assignment,
-        'rows': rows,
+        'rows': _assignment_rows(assignment, with_review=True),
         'grade_choices': Review.GRADE_CHOICES,
         'is_points': assignment.grade_scale == Assignment.SCALE_POINTS,
     })

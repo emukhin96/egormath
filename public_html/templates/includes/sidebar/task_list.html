@@ -1,0 +1,35 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Каталог</p>
+  <h2>Фильтры задач</h2>
+  <div class="sidebar-stats">
+    <div class="sidebar-stat"><strong>{{ page.paginator.count }}</strong><span>найдено</span></div>
+    <div class="sidebar-stat"><strong>{{ page.number }}</strong><span>страница</span></div>
+  </div>
+  {% if params.q or params.grade or params.tag or params.topic %}
+  <ul class="sidebar-list">
+    {% if params.q %}<li><strong>Поиск:</strong> {{ params.q|truncatechars:24 }}</li>{% endif %}
+    {% if params.grade %}<li><strong>Класс:</strong> {{ params.grade }}</li>{% endif %}
+    {% if params.tag %}<li><strong>Тег:</strong> {{ params.tag }}</li>{% endif %}
+    {% if current_topic %}<li><strong>Тема:</strong> {{ current_topic.name }}</li>{% endif %}
+  </ul>
+  <div class="sidebar-actions">
+    <a class="sidebar-action" href="{% url 'task_list' %}">Сбросить фильтры</a>
+  </div>
+  {% endif %}
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Рубрикатор</p>
+  <ul class="sidebar-list">
+    {% for topic in topics %}
+    <li><a href="?topic={{ topic.pk }}">{{ topic.name }}</a></li>
+    {% empty %}
+    <li>Темы ещё не добавлены</li>
+    {% endfor %}
+  </ul>
+</section>
+<section class="sidebar-section">
+  <div class="sidebar-actions">
+    <a class="sidebar-action" href="{% url 'task_create' %}">Новая задача</a>
+    <a class="sidebar-action" href="{% url 'bulk_answers' %}">Массовые ответы</a>
+  </div>
+</section>

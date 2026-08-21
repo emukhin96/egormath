@@ -1,7 +1,14 @@
 {% extends 'base.html' %}
 {% block title %}Ученики — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/students.html' %}{% endblock %}
 {% block content %}
-<h1>Мои ученики</h1>
+<div class="page-head">
+  <div>
+    <span class="page-eyebrow">Класс</span>
+    <h1>Мои ученики</h1>
+    <p class="page-subtitle">Учётные данные, классы и учебные группы.</p>
+  </div>
+</div>
 
 {% if new_credentials %}
 <div class="credentials">
@@ -23,16 +30,55 @@
 </div>
 
 <div class="card">
-  <h2>Список</h2>
+  <h2>Группы</h2>
+  {% if groups %}
+  <p>
+    <a class="btn btn-small {% if not current_group %}btn{% else %}btn-secondary{% endif %}" href="{% url 'students' %}">Все ученики</a>
+    {% for g in groups %}
+    <a class="btn btn-small {% if current_group == g %}btn{% else %}btn-secondary{% endif %}"
+       href="{% url 'students' %}?group={{ g.pk }}">{{ g.name }} ({{ g.students.count }})</a>
+    {% endfor %}
+  </p>
+  {% if current_group %}
+  <form method="post" action="{% url 'group_rename' current_group.pk %}" class="filters">
+    {% csrf_token %}
+    <div><input type="text" name="name" value="{{ current_group.name }}" style="max-width:220px"></div>
+    <div><button type="submit" class="btn btn-small btn-secondary">Переименовать</button></div>
+    <div>
+      <button type="submit" class="btn btn-small btn-danger"
+              formaction="{% url 'group_delete' current_group.pk %}"
+              onclick="return confirm('Удалить группу «{{ current_group.name }}»? Ученики останутся.')">
+        Удалить группу</button>
+    </div>
+  </form>
+  {% endif %}
+  {% endif %}
+  <form method="post" class="filters">
+    {% csrf_token %}
+    <div>
+      <label for="g_name">Новая группа</label>
+      {{ group_form.name }}
+    </div>
+    <div><button type="submit" name="create_group" class="btn btn-small">Создать группу</button></div>
+    {% if group_form.errors %}<div class="errorlist">{{ group_form.name.errors|join:' ' }}</div>{% endif %}
+  </form>
+  <p class="helptext">Ученик может состоять в нескольких группах.
+    Состав групп меняется на странице ученика («Изменить»).</p>
+</div>
+
+<div class="card">
+  <h2>Список{% if current_group %}: {{ current_group.name }}{% endif %}</h2>
   {% if student_profiles %}
   <table class="list">
-    <tr><th>Ученик</th><th>Класс</th><th>Логин</th><th></th></tr>
+    <tr><th>Ученик</th><th>Класс</th><th>Группы</th><th>Логин</th><th></th></tr>
     {% for p in student_profiles %}
     <tr>
       <td>{{ p.user.get_full_name }}</td>
       <td>{{ p.grade|default:'—' }}</td>
+      <td>{% for g in p.user.member_groups.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
       <td class="mono">{{ p.user.username }}</td>
       <td>
+        <a class="btn btn-small btn-secondary" href="{% url 'student_edit' p.user_id %}">Изменить</a>
         <form method="post" action="{% url 'reset_student_password' p.user_id %}" class="inline-form"
               onsubmit="return confirm('Сбросить пароль ученика {{ p.user.get_full_name }}?');">
           {% csrf_token %}
@@ -43,7 +89,7 @@
     {% endfor %}
   </table>
   {% else %}
-  <p class="muted">Учеников пока нет — добавьте первого через форму выше.</p>
+  <p class="muted">{% if current_group %}В этой группе пока нет учеников.{% else %}Учеников пока нет — добавьте первого через форму выше.{% endif %}</p>
   {% endif %}
 </div>
 {% endblock %}

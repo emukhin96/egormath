@@ -6,7 +6,7 @@ from django.core.files.base import ContentFile
 from django.db import models
 from PIL import Image
 
-from problems.models import Task
+from problems.models import Task, TaskSubitem
 from worksheets.models import Worksheet
 
 
@@ -111,7 +111,55 @@ class Submission(models.Model):
 
     @property
     def is_empty(self):
-        return not (self.display_answer or self.photos.exists())
+        return not (self.display_answer or self.photos.exists()
+                    or any(not p.is_empty for p in self.parts.all()))
+
+
+class SubmissionPart(models.Model):
+    """Ответ ученика на один подпункт задачи. Тип ответа — как у задачи."""
+
+    submission = models.ForeignKey(
+        Submission, on_delete=models.CASCADE, related_name='parts',
+        verbose_name='Ответ на задачу')
+    subitem = models.ForeignKey(
+        TaskSubitem, on_delete=models.CASCADE, related_name='submission_parts',
+        verbose_name='Подпункт')
+    answer_text = models.TextField('Ответ (текст)', blank=True)
+    answer_number = models.CharField(
+        'Ответ (число)', max_length=64, blank=True)
+    interval_low = models.CharField(
+        'Промежуток: от', max_length=64, blank=True)
+    interval_high = models.CharField(
+        'Промежуток: до', max_length=64, blank=True)
+    updated_at = models.DateTimeField('Изменён', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Ответ на подпункт'
+        verbose_name_plural = 'Ответы на подпункты'
+        ordering = ['subitem__order', 'subitem_id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['submission', 'subitem'],
+                name='unique_submissionpart_submission_subitem'),
+        ]
+
+    def __str__(self):
+        return f'{self.submission} / подпункт #{self.subitem_id}'
+
+    @property
+    def display_answer(self):
+        t = self.submission.task.answer_type
+        if t == Task.ANSWER_NUMBER:
+            return self.answer_number
+        if t == Task.ANSWER_INTERVAL:
+            if self.interval_low or self.interval_high:
+                return f'от {self.interval_low or "−∞"} до {self.interval_high or "+∞"}'
+            return ''
+        return self.answer_text
+
+    @property
+    def is_empty(self):
+        return not self.display_answer
 
 
 def _photo_upload_to(instance, filename):

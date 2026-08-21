@@ -39,6 +39,14 @@ TOPICS = {
 
 TAGS = ['ОГЭ', 'ЕГЭ (база)', 'ЕГЭ (профиль)', 'МЦКО', 'ВПР', 'Олимпиада', 'Устный счёт']
 
+# Ветки экзаменов: «Задание N» — подтемы; задача может иметь несколько тем,
+# поэтому одна задача может соответствовать нескольким номерам заданий.
+EXAM_BRANCHES = {
+    'ОГЭ': 25,
+    'ЕГЭ (профиль)': 19,
+    'ЕГЭ (база)': 21,
+}
+
 
 class Command(BaseCommand):
     help = 'Создаёт стартовый рубрикатор тем и базовые теги'
@@ -52,6 +60,16 @@ class Command(BaseCommand):
             for i, child_name in enumerate(children):
                 _, was_created = Topic.objects.get_or_create(
                     name=child_name, parent=parent, defaults={'order': i})
+                created_topics += was_created
+
+        for branch_name, count in EXAM_BRANCHES.items():
+            parent, was_created = Topic.objects.get_or_create(
+                name=branch_name, parent=None)
+            created_topics += was_created
+            for n in range(1, count + 1):
+                _, was_created = Topic.objects.get_or_create(
+                    name=f'Задание {n}', parent=parent,
+                    defaults={'order': n})
                 created_topics += was_created
 
         created_tags = 0

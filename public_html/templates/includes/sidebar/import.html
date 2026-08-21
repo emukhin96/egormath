@@ -1,0 +1,23 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Импорт .tex</p>
+  <h2>Поддерживаемые команды</h2>
+  <ul class="sidebar-list">
+    <li><code>\bighead</code> — шапка</li>
+    <li><code>\rubr</code> — рубрика</li>
+    <li><code>\task</code> / <code>\taskans</code> — задача</li>
+    <li><code>\plaintext</code> — текст</li>
+  </ul>
+</section>
+{% if preview %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Предпросмотр</p>
+  <div class="sidebar-stats">
+    <div class="sidebar-stat"><strong>{{ preview.rows|length }}</strong><span>элементов</span></div>
+    <div class="sidebar-stat"><strong>{{ preview.new_tasks }}</strong><span>новых задач</span></div>
+  </div>
+</section>
+{% endif %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Важно</p>
+  <p class="sidebar-copy">Файлы картинок нужно догрузить в задачи после импорта.</p>
+</section>

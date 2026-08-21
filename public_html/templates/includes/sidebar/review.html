@@ -1,0 +1,17 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Проверка работы</p>
+  <h2>{{ assignment.student.get_full_name|default:assignment.student.username }}</h2>
+  <ul class="sidebar-list">
+    <li><strong>Листок:</strong> {{ assignment.worksheet.title|truncatechars:28 }}</li>
+    <li><strong>Статус:</strong> {{ assignment.get_status_display }}</li>
+    <li><strong>Отправлено:</strong> {{ assignment.submitted_at|date:"d.m.Y H:i" }}</li>
+    <li><strong>Шкала:</strong> {% if is_points %}баллы{% else %}словесные отметки{% endif %}</li>
+  </ul>
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Действия</p>
+  <p class="sidebar-copy">Черновик сохраняет отметки. Завершение открывает результат ученику, возврат снова разрешает редактирование.</p>
+  <div class="sidebar-actions">
+    <a class="sidebar-action" href="{% url 'worksheet_detail' assignment.worksheet.pk %}">Открыть листок</a>
+  </div>
+</section>

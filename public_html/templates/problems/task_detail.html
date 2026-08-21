@@ -1,18 +1,28 @@
 {% extends 'base.html' %}
+{% load task_extras %}
 {% block title %}Задача #{{ task.pk }} — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/task_detail.html' %}{% endblock %}
 {% block content %}
-<h1>Задача #{{ task.pk }}
-  {% if task.stars %}<span class="stars">{{ task.get_stars_display }}</span>{% endif %}
-</h1>
+<div class="page-head">
+  <div><span class="page-eyebrow">База задач</span>
+    <h1>Задача #{{ task.pk }} {% if task.stars %}<span class="stars">{{ task.get_stars_display }}</span>{% endif %}</h1>
+    {% if task.variant_of_id %}<span class="badge badge-returned">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}
+  </div>
+  <a class="btn" href="{% url 'task_edit' task.pk %}">Редактировать</a>
+</div>
 
 <div class="card">
-  <div class="math-content task-text">{{ task.text_latex|linebreaksbr }}</div>
-  {% if task.subitems_latex %}
-  <div class="math-content task-text muted">{{ task.subitems_latex|linebreaksbr }}</div>
-  {% endif %}
+  <div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
+  {% include 'problems/_subitems.html' with subitems=task.subitems.all %}
+  {% include 'problems/_task_images.html' with task=task %}
 
   {% if task.answer_latex %}
   <div class="answer-box math-content"><strong>Ответ:</strong> {{ task.answer_latex }}</div>
+  {% endif %}
+  {% if task.has_subitem_answers %}
+  <div class="answer-box math-content"><strong>Ответы на подпункты:</strong>
+    {% for s in task.subitems.all %}{% if s.answer_latex %}{{ forloop.counter0|subitem_label }})&nbsp;{{ s.answer_latex }}; {% endif %}{% endfor %}
+  </div>
   {% endif %}
   {% if task.solution_latex %}
   <div class="solution-box math-content"><strong>Решение:</strong> {{ task.solution_latex|linebreaksbr }}</div>
@@ -34,7 +44,6 @@
     создана {{ task.created_at|date:'d.m.Y' }}
   </p>
   <p>
-    <a class="btn" href="{% url 'task_edit' task.pk %}">Редактировать</a>
     <a class="btn btn-secondary" href="{% url 'task_list' %}">К базе задач</a>
   </p>
   <p class="helptext">Формулы на сайте отображаются приближённо (KaTeX).

@@ -1,0 +1,9 @@
+{% comment %}Тумблер-«замок»: закрепить значение поля для следующих новых
+задач. Ожидает field — имя поля формы (атрибут name); логика — в
+task_form.js.{% endcomment %}
+<label class="ws-toggle pin-toggle"
+       title="Закрепить: следующая новая задача получит это же значение">
+  <input type="checkbox" data-pin="{{ field }}">
+  <span class="ws-toggle-slider"></span>
+  <span class="pin-icon" aria-hidden="true">🔓</span>
+</label>

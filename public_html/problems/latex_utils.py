@@ -26,6 +26,26 @@ def escape_latex(text):
     return _escape_re.sub(lambda m: _LATEX_ESCAPE[m.group()], text)
 
 
+_ITEM_RE = re.compile(r'\\item\b')
+
+
+def split_items(text):
+    """Разбивает LaTeX-текст подпунктов по \\item; текст до первого \\item
+    (если есть) считается первым подпунктом. Хвостовые «;» и «.» срезаются:
+    в базе подпункты хранятся без знака препинания, система расставляет
+    их сама при выводе."""
+    chunks = [strip_subitem_punct(c) for c in _ITEM_RE.split(text)]
+    return [c for c in chunks if c]
+
+
+def strip_subitem_punct(text):
+    """Срезает знак препинания в конце подпункта («;» или «.»)."""
+    text = text.strip()
+    if text.endswith((';', '.')):
+        text = text[:-1].rstrip()
+    return text
+
+
 def strip_latex(text):
     """
     Грубо "раздевает" LaTeX-текст до обычного текста для поиска по ключевым

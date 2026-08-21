@@ -1,7 +1,10 @@
 {% extends 'base.html' %}
 {% block title %}.tex — {{ worksheet.title }} — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/diagnostic.html' %}{% endblock %}
 {% block content %}
-<h1>.tex-исходник: {{ worksheet.title }} <span class="muted">({{ variant }})</span></h1>
+<div class="page-head"><div><span class="page-eyebrow">Диагностика PDF</span>
+  <h1>.tex-исходник</h1><p class="page-subtitle">{{ worksheet.title }} · {{ variant }}</p>
+</div></div>
 <p>
   <a class="btn btn-small btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}?variant=student">ученик</a>
   <a class="btn btn-small btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}?variant=answers">с ответами</a>

@@ -1,0 +1,24 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Листки</p>
+  <h2>{% if current_topic %}{{ current_topic.name }}{% else %}Все материалы{% endif %}</h2>
+  <div class="sidebar-stat"><strong>{{ worksheets|length }}</strong><span>показано листков</span></div>
+  {% if current_topic %}
+  <div class="sidebar-actions">
+    <a class="sidebar-action" href="{% url 'worksheet_list' %}">Убрать тему</a>
+  </div>
+  {% endif %}
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Темы</p>
+  <ul class="sidebar-list">
+    {% for topic in topics %}
+    <li><a href="?topic={{ topic.pk }}">{{ topic.name }}</a></li>
+    {% empty %}<li>Темы не добавлены</li>{% endfor %}
+  </ul>
+</section>
+<section class="sidebar-section">
+  <div class="sidebar-actions">
+    <a class="sidebar-action" href="{% url 'worksheet_create' %}">Создать листок</a>
+    <a class="sidebar-action" href="{% url 'worksheet_import' %}">Импортировать .tex</a>
+  </div>
+</section>

@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% load task_extras %}
+{% block title %}Массовое добавление ответов — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/bulk_answers.html' %}{% endblock %}
+{% block content %}
+<div class="page-head"><div><span class="page-eyebrow">База задач</span>
+  <h1>Массовое добавление ответов</h1>
+  <p class="page-subtitle">Сопоставление ответов по источнику и номеру задачи.</p>
+</div></div>
+
+<div class="card">
+  <p class="helptext">Ответы из конца учебника: выберите источник и вставьте
+    строки вида <code>номер. ответ</code> (или <code>номер) ответ</code>).
+    Номер сопоставляется с «номером в источнике» у задач. Существующие ответы
+    не перезаписываются без явного подтверждения.</p>
+  <form method="post">
+    {% csrf_token %}
+    <p>
+      <label for="b_source">Источник</label>
+      <select name="source" id="b_source" required style="max-width:420px">
+        <option value="">— выберите —</option>
+        {% for s in sources %}
+        <option value="{{ s.pk }}" {% if source_id == s.pk %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </p>
+    <p>
+      <label for="b_answers">Ответы</label>
+      <textarea name="answers" id="b_answers" rows="10" class="mono"
+                placeholder="123. 42&#10;124. $x=5$&#10;5.17а. нет решений">{{ text }}</textarea>
+    </p>
+    <button type="submit" name="action" value="preview" class="btn">Предпросмотр</button>
+  </form>
+</div>
+
+{% if rows %}
+<div class="card">
+  <h2>Результат сопоставления</h2>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="source" value="{{ source_id }}">
+    <textarea name="answers" hidden>{{ text }}</textarea>
+    <table class="list">
+      <tr><th>Номер</th><th>Задача</th><th>Текущий ответ</th><th>Новый ответ</th><th>Статус</th></tr>
+      {% for row in rows %}
+      <tr>
+        <td class="mono">{{ row.number }}</td>
+        <td>{% if row.task %}
+          <a href="{% url 'task_detail' row.task.pk %}">#{{ row.task.pk }}</a>
+          <span class="math-content task-text">{{ row.task.text_latex|web_text|truncatechars:120 }}</span>
+        {% else %}—{% endif %}</td>
+        <td class="math-content">{{ row.task.answer_latex|default:'' }}</td>
+        <td class="math-content">{{ row.answer|default:'' }}</td>
+        <td>
+          {% if row.status == 'new' %}<span class="badge badge-assigned">будет записан</span>
+          {% elif row.status == 'same' %}<span class="badge badge-reviewed">уже совпадает</span>
+          {% elif row.status == 'applied' %}<span class="badge badge-reviewed">записан</span>
+          {% elif row.status == 'conflict' %}
+          <span class="badge badge-returned">конфликт</span>
+          <label style="font-weight:normal;white-space:nowrap">
+            <input type="checkbox" name="overwrite" value="{{ row.task.pk }}"> перезаписать
+          </label>
+          {% elif row.status == 'notfound' %}<span class="badge badge-returned">номер не найден</span>
+          {% else %}<span class="badge badge-returned">строка не распознана</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    <button type="submit" name="action" value="apply" class="btn">Применить</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

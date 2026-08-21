@@ -1,0 +1,11 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Диагностика</p>
+  <h2>{{ worksheet.title|truncatechars:34 }}</h2>
+  <p class="sidebar-copy">Исходник и лог нужны для локального воспроизведения ошибок LuaLaTeX.</p>
+</section>
+<section class="sidebar-section">
+  <div class="sidebar-actions">
+    <a class="sidebar-action" href="{% url 'worksheet_detail' worksheet.pk %}">Вернуться к листку</a>
+    <a class="sidebar-action" href="{% url 'worksheet_tex' worksheet.pk %}">Открыть .tex</a>
+  </div>
+</section>

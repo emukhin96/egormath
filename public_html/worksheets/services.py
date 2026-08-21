@@ -26,15 +26,22 @@ class LatexCompileError(Exception):
         self.log = log
 
 
-def compile_latex(tex_content, doc_id='doc'):
-    """Компилирует .tex через удалённый API, возвращает байты PDF."""
+def compile_latex(tex_content, doc_id='doc', assets=None):
+    """Компилирует .tex через удалённый API, возвращает байты PDF.
+
+    assets — [{'filename': …, 'content_base64': …}] (картинки задач);
+    без них payload не меняется (обратная совместимость с API).
+    """
     if not settings.LATEX_API_KEY:
         raise LatexCompileError(
             'Не задан ключ LaTeX API (LATEX_API_KEY). '
             'Добавьте его в .secrets/ или переменные окружения.')
+    tex_file = {'team_id': doc_id, 'tex_content': tex_content}
+    if assets:
+        tex_file['assets'] = assets
     payload = {
         'api_key': settings.LATEX_API_KEY,
-        'tex_files': [{'team_id': doc_id, 'tex_content': tex_content}],
+        'tex_files': [tex_file],
     }
     url = settings.LATEX_API_URL.rstrip('/') + '/api/v1/compile-latex'
     try:
@@ -61,6 +68,26 @@ def compile_latex(tex_content, doc_id='doc'):
     return base64.b64decode(data['pdf_base64'])
 
 
+def collect_assets(worksheet):
+    """Файлы картинок задач листка для передачи в LaTeX API."""
+    assets = []
+    seen = set()
+    for item in worksheet.ordered_items():
+        if not item.task_id:
+            continue
+        for image in item.task.images.all():
+            name = image.filename
+            if name in seen or not image.image.storage.exists(image.image.name):
+                continue
+            seen.add(name)
+            with image.image.open('rb') as f:
+                assets.append({
+                    'filename': name,
+                    'content_base64': base64.b64encode(f.read()).decode(),
+                })
+    return assets
+
+
 def get_worksheet_pdf(worksheet, variant):
     """PDF листка с кэшированием: перегенерация только при изменении .tex."""
     tex = worksheet_to_tex(worksheet, variant)
@@ -71,7 +98,9 @@ def get_worksheet_pdf(worksheet, variant):
     if cached and cached.file and cached.file.storage.exists(cached.file.name):
         return cached
 
-    pdf_bytes = compile_latex(tex, doc_id=f'ws{worksheet.pk}-{variant}')
+    pdf_bytes = compile_latex(
+        tex, doc_id=f'ws{worksheet.pk}-{variant}',
+        assets=collect_assets(worksheet))
 
     # Устаревшие версии этого варианта больше не нужны
     for old in WorksheetPdf.objects.filter(worksheet=worksheet, variant=variant):

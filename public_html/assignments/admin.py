@@ -1,6 +1,7 @@
 from django.contrib import admin
 
-from .models import Assignment, Review, Submission, SubmissionPhoto
+from .models import (Assignment, Review, Submission, SubmissionPart,
+                     SubmissionPhoto)
 
 
 class SubmissionInline(admin.TabularInline):
@@ -26,10 +27,15 @@ class SubmissionPhotoInline(admin.TabularInline):
     extra = 0
 
 
+class SubmissionPartInline(admin.TabularInline):
+    model = SubmissionPart
+    extra = 0
+
+
 @admin.register(Submission)
 class SubmissionAdmin(admin.ModelAdmin):
     list_display = ('assignment', 'task', 'display_answer', 'updated_at')
-    inlines = [SubmissionPhotoInline]
+    inlines = [SubmissionPartInline, SubmissionPhotoInline]
 
 
 @admin.register(Review)

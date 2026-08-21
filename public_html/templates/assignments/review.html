@@ -1,22 +1,54 @@
 {% extends 'base.html' %}
+{% load task_extras %}
 {% block title %}Проверка: {{ assignment.worksheet.title }} — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/review.html' %}{% endblock %}
 {% block content %}
+<div class="page-head"><div><span class="page-eyebrow">Работа ученика</span>
 <h1>Проверка работы</h1>
-<p class="muted">
+<p class="page-subtitle">
   {{ assignment.worksheet.title }} ·
   {{ assignment.student.get_full_name|default:assignment.student.username }}
   · отправлено {{ assignment.submitted_at|date:'d.m.Y H:i' }}
   · <span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span>
 </p>
+</div></div>
 
 <form method="post" action="{% url 'save_review' assignment.pk %}">
   {% csrf_token %}
   {% for row in rows %}
+  {% if row.task == None %}
   <div class="card">
-    <p><strong>{{ forloop.counter }}.</strong>
-      {% if row.task.stars %}<span class="stars">{{ row.task.get_stars_display }}</span>{% endif %}
-    </p>
-    <div class="math-content task-text">{{ row.task.text_latex|linebreaksbr }}</div>
+    {% if row.item.is_rubric %}
+    <h2>{{ row.item.rubric }}</h2>
+    {% if row.item.rubric_note %}<p class="muted math-content">{{ row.item.rubric_note }}</p>{% endif %}
+    {% else %}
+    <div class="math-content task-text">{{ row.item.text_latex|linebreaksbr }}</div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="task-line">
+      <span class="ws-num">{{ row.number }}.</span>
+      {% if row.item.effective_stars %}<span class="stars">{% for _ in ''|center:row.item.effective_stars %}★{% endfor %}</span>{% endif %}
+      <span class="math-content task-text">{{ row.task.text_latex|web_text }}</span>
+    </div>
+    {% include 'problems/_task_images.html' with task=row.task %}
+    {% if row.subrows %}
+    <ol class="subitems">
+      {% for sr in row.subrows %}
+      <li>
+        <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{% if forloop.last %}.{% else %};{% endif %}
+        — <strong>ответ ученика:</strong>
+        {% if sr.part and sr.part.display_answer %}
+          <span class="math-content">{{ sr.part.display_answer }}</span>
+        {% else %}<span class="muted">нет</span>{% endif %}
+        {% if sr.subitem.answer_latex %}
+          <span class="muted">(эталон: <span class="math-content">{{ sr.subitem.answer_latex }}</span>)</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
 
     {% if row.task.answer_latex %}
     <div class="answer-box math-content"><strong>Эталонный ответ:</strong> {{ row.task.answer_latex }}</div>
@@ -28,6 +60,7 @@
     {% endif %}
 
     {% if row.submission %}
+      {% if not row.subrows %}
       <p><strong>Ответ ученика:</strong>
         {% if row.submission.display_answer %}
           <span class="math-content">{{ row.submission.display_answer }}</span>
@@ -35,6 +68,7 @@
           <span class="muted">нет ответа</span>
         {% endif %}
       </p>
+      {% endif %}
       {% if row.submission.photos.all %}
       <div class="photo-grid">
         {% for photo in row.submission.photos.all %}
@@ -67,6 +101,7 @@
       <p class="muted">Ученик не отправлял ответ на эту задачу.</p>
     {% endif %}
   </div>
+  {% endif %}
   {% endfor %}
 
   <div class="card">

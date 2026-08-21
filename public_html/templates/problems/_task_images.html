@@ -1,0 +1,12 @@
+{% if task.images.all %}
+<div class="task-images">
+  {% for img in task.images.all %}
+  {% if img.is_pdf %}
+  <a class="task-image-pdf" href="{% url 'task_image_file' img.pk %}"
+     target="_blank" rel="noopener">PDF-иллюстрация: {{ img.filename }}</a>
+  {% else %}
+  <img src="{% url 'task_image_file' img.pk %}" alt="иллюстрация к задаче" loading="lazy">
+  {% endif %}
+  {% endfor %}
+</div>
+{% endif %}

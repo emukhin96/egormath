@@ -1,59 +1,187 @@
 {% extends 'base.html' %}
+{% load static task_extras %}
 {% block title %}{{ worksheet.title }} — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/worksheet_detail.html' %}{% endblock %}
 {% block content %}
-<h1>{{ worksheet.title }}
-  <span class="muted">{{ worksheet.grade_label }}</span>
-</h1>
+<span class="page-eyebrow">Конструктор листка</span>
+<details class="ws-title-edit">
+  <summary>
+    <h1>{{ worksheet.title }}
+      <span class="muted">{{ worksheet.grade_label }}</span>
+      <span class="ws-rubric-hint" title="Переименовать">✎</span>
+    </h1>
+  </summary>
+  <form method="post" action="{% url 'worksheet_rename' worksheet.pk %}"
+        class="ws-rubric-form" data-autosave="debounce">
+    {% csrf_token %}
+    <input type="text" name="title" value="{{ worksheet.title }}" maxlength="190" required style="max-width:420px">
+  </form>
+</details>
 
-<p>
+{% if worksheet.comment %}
+<p class="ws-comment muted">{{ worksheet.comment|linebreaksbr }}</p>
+{% endif %}
+
+<div class="ws-toolbar">
   <a class="btn btn-secondary" href="{% url 'worksheet_edit' worksheet.pk %}">Свойства</a>
-  <a class="btn" href="{% url 'worksheet_pdf' worksheet.pk %}?variant=student">PDF для ученика</a>
-  <a class="btn" href="{% url 'worksheet_pdf' worksheet.pk %}?variant=answers">PDF с ответами</a>
-  <a class="btn" href="{% url 'worksheet_pdf' worksheet.pk %}?variant=teacher">PDF для учителя</a>
+  <form method="post" action="{% url 'worksheet_copy' worksheet.pk %}" class="inline-form">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-secondary">Дублировать</button>
+  </form>
+  <a class="btn" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' worksheet.pk %}?variant=student">PDF для ученика</a>
+  <a class="btn" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' worksheet.pk %}?variant=answers">PDF с ответами</a>
+  <a class="btn" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' worksheet.pk %}?variant=teacher">PDF для учителя</a>
   <a class="btn btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}">.tex</a>
-</p>
+</div>
 
-<div class="card">
-  <h2>Задачи листка ({{ items|length }})</h2>
-  {% if items %}
-  <table class="list">
-    <tr><th></th><th>Рубрика</th><th>Задача</th><th></th></tr>
-    {% for item in items %}
-    <tr>
-      <td class="mono">{{ forloop.counter }}</td>
-      <td style="min-width:180px">
-        <form method="post" action="{% url 'worksheet_set_rubric' worksheet.pk item.pk %}">
-          {% csrf_token %}
-          <input type="text" name="rubric" value="{{ item.rubric }}" placeholder="— продолжение —" style="max-width:160px">
-          <input type="text" name="rubric_note" value="{{ item.rubric_note }}" placeholder="пояснение" style="max-width:160px">
-          <button type="submit" class="btn btn-small btn-secondary">ok</button>
-        </form>
-      </td>
-      <td>
-        <div class="math-content task-text">{{ item.task.text_latex|truncatechars:180 }}</div>
-        <span class="task-meta">
-          #{{ item.task.pk }}
-          {% if item.task.stars %}· <span class="stars">{{ item.task.get_stars_display }}</span>{% endif %}
-          · <a href="{% url 'task_detail' item.task.pk %}">открыть</a>
-          · <a href="{% url 'task_edit' item.task.pk %}">править</a>
-        </span>
-      </td>
-      <td style="white-space:nowrap">
-        <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'up' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.first %}disabled{% endif %}>↑</button></form>
-        <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'down' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.last %}disabled{% endif %}>↓</button></form>
-        <form method="post" action="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-danger">×</button></form>
-      </td>
-    </tr>
+<div class="card worksheet-items-card">
+  <h2>Задачи листка
+    <label class="ws-toggle" title="Показывать ответы и решения задач">
+      <input type="checkbox" id="toggle-answers">
+      <span class="ws-toggle-slider"></span>
+      <span class="ws-toggle-text">ответы и решения</span>
+    </label>
+  </h2>
+  {% if rows %}
+  <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}">
+    {% for row in rows %}
+    {% with item=row.item %}
+    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" data-id="{{ item.pk }}">
+      <div class="ws-body">
+        <span class="drag-handle" title="Перетащите, чтобы изменить порядок">⠿</span>
+
+        {% if item.task_id %}
+        {# --- Задача --- #}
+        <div class="ws-content">
+          <form id="settings-{{ item.pk }}" method="post" class="ws-settings"
+                data-autosave="change"
+                action="{% url 'worksheet_item_settings' worksheet.pk item.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="stars"
+                   value="{{ item.stars_override|default_if_none:'' }}">
+          </form>
+          <div class="task-line">
+            <span class="ws-num">{{ row.number }}.</span>
+            <span class="ws-stars" data-form="settings-{{ item.pk }}"
+                  data-effective="{{ item.effective_stars }}"
+                  title="Сложность в листке — кликните по звезде">
+              {% for value, label in stars_choices %}{% if value %}<button type="button" class="ws-star{% if item.effective_stars >= value %} on{% endif %}" data-value="{{ value }}">★</button>{% endif %}{% endfor %}
+            </span>
+            <span class="math-content task-text">{{ item.task.text_latex|web_text }}</span>
+          </div>
+          {% if item.task.subitems.all %}
+          <ol class="subitems">
+            {% for s in item.task.subitems.all %}
+            <li>
+              <label class="subitem-label">
+                <input type="checkbox" name="subitems" value="{{ s.pk }}"
+                       form="settings-{{ item.pk }}"
+                       {% if row.selected_ids == None or s.pk in row.selected_ids %}checked{% endif %}>
+                <span class="math-content">{{ s.text_latex|web_text }}</span>{% if forloop.last %}.{% else %};{% endif %}
+              </label>
+              {% if s.answer_latex %}<span class="ws-answers muted"> — ответ: <span class="math-content">{{ s.answer_latex }}</span></span>{% endif %}
+            </li>
+            {% endfor %}
+          </ol>
+          {% endif %}
+          {% include 'problems/_task_images.html' with task=item.task %}
+          {% if item.task.answer_latex or item.task.solution_latex %}
+          <div class="ws-answers">
+            {% if item.task.answer_latex %}
+            <div class="answer-box math-content"><strong>Ответ:</strong> {{ item.task.answer_latex }}</div>
+            {% endif %}
+            {% if item.task.solution_latex %}
+            <div class="solution-box math-content"><strong>Решение:</strong> {{ item.task.solution_latex|linebreaksbr }}</div>
+            {% endif %}
+          </div>
+          {% endif %}
+          <div class="task-meta">
+            #{{ item.task.pk }}{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}
+            · <a href="{% url 'task_detail' item.task.pk %}">открыть</a>
+            · <a href="{% url 'task_edit' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}">править</a>
+            · <button type="button" class="link-btn ws-star-reset"
+                      data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
+                      {% if item.stars_override == None %}hidden{% endif %}>звёзды как в базе ({{ item.task.stars }})</button>
+            {% if item.task.subitems.all %}
+            <label class="inline-label">колонки
+              <input type="number" name="columns" form="settings-{{ item.pk }}"
+                     min="0" max="6" value="{{ item.columns_override|default_if_none:'' }}"
+                     placeholder="{{ item.task.columns }}" class="ws-columns"></label>
+            {% endif %}
+          </div>
+        </div>
+
+        {% elif item.is_rubric %}
+        {# --- Рубрика: горизонтальный заголовок, как в PDF --- #}
+        <div class="ws-content">
+          <details class="ws-rubric-edit">
+            <summary>
+              <span class="ws-rubric-band"><span class="ws-rubric-name">{{ item.rubric }}</span>
+                {% if item.rubric_note %}<span class="muted"> — {{ item.rubric_note }}</span>{% endif %}
+                <span class="ws-rubric-hint">править</span></span>
+            </summary>
+            <form method="post" action="{% url 'worksheet_set_rubric' worksheet.pk item.pk %}"
+                  class="ws-rubric-form" data-autosave="debounce">
+              {% csrf_token %}
+              <input type="text" name="rubric" value="{{ item.rubric }}" placeholder="Название рубрики">
+              <input type="text" name="rubric_note" value="{{ item.rubric_note }}" placeholder="Пояснение (текст-правило)">
+            </form>
+          </details>
+        </div>
+
+        {% else %}
+        {# --- Произвольный текст --- #}
+        <div class="ws-content ws-textitem">
+          <form method="post" action="{% url 'worksheet_edit_text' worksheet.pk item.pk %}"
+                data-autosave="debounce">
+            {% csrf_token %}
+            <span class="task-meta">Текст между задачами (в PDF — \plaintext):</span>
+            <textarea name="text_latex" rows="2">{{ item.text_latex }}</textarea>
+          </form>
+        </div>
+        {% endif %}
+
+        <div class="ws-actions">
+          <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'up' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.first %}disabled{% endif %}>↑</button></form>
+          <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'down' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.last %}disabled{% endif %}>↓</button></form>
+          <form method="post" action="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-danger">×</button></form>
+        </div>
+      </div>
+    </div>
+    {% endwith %}
     {% endfor %}
-  </table>
-  <p class="helptext">Рубрика задаётся у задачи, с которой она начинается; у остальных
-    задач рубрики поле пустое (продолжение). Первая рубрика по умолчанию — «Задачи».</p>
+  </div>
+  <p class="helptext">Перетаскивайте элементы за ⠿. Рубрика — самостоятельный
+    элемент: задачи ниже неё относятся к ней до следующей рубрики. Если рубрик
+    нет вовсе — в PDF список начнётся без заголовка. Снятые подпункты не попадут
+    в листок (текст задачи остаётся всегда).</p>
   {% else %}
   <p class="muted">Задач пока нет — найдите их в базе ниже или создайте новую.</p>
   {% endif %}
+
+  <details class="ws-add-text">
+    <summary>+ Добавить текст между задачами</summary>
+    <form method="post" action="{% url 'worksheet_add_element' worksheet.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="kind" value="text">
+      <textarea name="text_latex" rows="2" placeholder="Произвольный текст (LaTeX), например пояснение или указание"></textarea>
+      <button type="submit" class="btn btn-small">Добавить</button>
+    </form>
+  </details>
+
+  <details class="ws-add-text">
+    <summary>+ Добавить рубрику</summary>
+    <form method="post" action="{% url 'worksheet_add_element' worksheet.pk %}" class="ws-rubric-form">
+      {% csrf_token %}
+      <input type="hidden" name="kind" value="rubric">
+      <input type="text" name="rubric" placeholder="Название рубрики">
+      <input type="text" name="rubric_note" placeholder="Пояснение (необязательно)">
+      <button type="submit" class="btn btn-small">Добавить</button>
+    </form>
+  </details>
 </div>
 
-<div class="card">
+<div class="card" id="add-tasks">
   <h2>Добавить задачи</h2>
   <form method="get" class="filters">
     <div>
@@ -80,7 +208,7 @@
       {% for task in found_tasks %}
       <tr>
         <td>
-          <div class="math-content task-text">{{ task.text_latex|truncatechars:180 }}</div>
+          <div class="math-content task-text">{{ task.text_latex|web_text|truncatechars:180 }}</div>
           <span class="task-meta">#{{ task.pk }}{% if task.grade_level %} · {{ task.grade_level }} класс{% endif %}</span>
         </td>
         <td style="white-space:nowrap">
@@ -100,11 +228,22 @@
   {% endif %}
 </div>
 
-<div class="card">
+<div class="card" id="assign-students">
   <h2>Назначить ученикам</h2>
   {% if student_profiles %}
   <form method="post" action="{% url 'assign_worksheet' worksheet.pk %}">
     {% csrf_token %}
+    {% if groups %}
+    <p>
+      <span class="helptext">Группы (назначается всем участникам):</span>
+      {% for g in groups %}
+      <label style="font-weight:normal">
+        <input type="checkbox" name="groups" value="{{ g.pk }}">
+        {{ g.name }} <span class="muted">({{ g.students.count }})</span>
+      </label>
+      {% endfor %}
+    </p>
+    {% endif %}
     <p>
       {% for p in student_profiles %}
       <label style="font-weight:normal">
@@ -170,4 +309,7 @@
     <button type="submit" class="btn btn-secondary">Создать ссылку</button>
   </form>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<script defer src="{% static 'js/builder.js' %}"></script>
 {% endblock %}

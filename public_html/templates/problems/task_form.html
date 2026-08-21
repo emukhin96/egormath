@@ -1,34 +1,194 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}{% if task %}Задача #{{ task.pk }}{% else %}Новая задача{% endif %} — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/task_form.html' %}{% endblock %}
 {% block content %}
-<h1>{% if task %}Редактирование задачи #{{ task.pk }}{% else %}Новая задача{% endif %}</h1>
+<div class="page-head">
+  <div><span class="page-eyebrow">Редактор задачи</span>
+    <h1>{% if task %}Задача #{{ task.pk }}{% else %}Новая задача{% endif %}</h1>
+    {% if task.variant_of_id %}<span class="badge badge-returned">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}
+  </div>
+</div>
+
+{% if worksheet %}
+<p class="muted">Из конструктора листка «{{ worksheet.title }}».</p>
+{% endif %}
 
 <div class="card">
-  <form method="post">
+  <form method="post" enctype="multipart/form-data" id="task-form"
+        {% if not task %}data-new-task="1"{% endif %}>
     {% csrf_token %}
-    {{ form.as_p }}
+    {% include 'problems/_task_form_buttons.html' %}
+    {{ form.non_field_errors }}
+
+    <p>
+      <label for="{{ form.text_latex.id_for_label }}">{{ form.text_latex.label }}</label>
+      {{ form.text_latex.errors }}{{ form.text_latex }}
+      <span class="helptext">Условие в LaTeX, как для пакета egor; математика — $...$ и \[...\].
+        Ссылка на картинку в нужном месте текста: \taskpic{1}, \taskpic{2}
+        (номер — из таблицы «Картинки» ниже); картинки без ссылки добавляются
+        в конец условия автоматически.</span>
+    </p>
+
+    <div class="form-grid">
+      <div>
+        <div class="label-row">
+          <label for="{{ form.grade_level.id_for_label }}">Класс</label>
+          {% include 'problems/_pin.html' with field='grade_level' %}
+        </div>
+        {{ form.grade_level.errors }}{{ form.grade_level }}
+      </div>
+      <div>
+        <div class="label-row">
+          <label for="{{ form.stars.id_for_label }}">Сложность</label>
+          {% include 'problems/_pin.html' with field='stars' %}
+        </div>
+        {{ form.stars.errors }}{{ form.stars }}
+      </div>
+      <div>
+        <div class="label-row">
+          <label for="{{ form.answer_type.id_for_label }}">Тип ответа</label>
+          {% include 'problems/_pin.html' with field='answer_type' %}
+        </div>
+        {{ form.answer_type.errors }}{{ form.answer_type }}
+      </div>
+      <div>
+        <div class="label-row">
+          <label for="{{ form.columns.id_for_label }}">Колонки подпунктов</label>
+          {% include 'problems/_pin.html' with field='columns' %}
+        </div>
+        {{ form.columns.errors }}{{ form.columns }}
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div>
+        <div class="label-row">
+          <label for="{{ form.topics.id_for_label }}">Темы</label>
+          {% include 'problems/_pin.html' with field='topics' %}
+        </div>
+        {{ form.topics.errors }}{{ form.topics }}
+      </div>
+      <div>
+        <div class="label-row">
+          <label>Теги</label>
+          {% include 'problems/_pin.html' with field='tags' %}
+        </div>
+        {{ form.tags.errors }}
+        <div class="tag-checks">{{ form.tags }}</div>
+      </div>
+    </div>
+
+    <p>
+      <label for="{{ form.answer_latex.id_for_label }}">{{ form.answer_latex.label }}</label>
+      {{ form.answer_latex.errors }}{{ form.answer_latex }}
+    </p>
+    <p>
+      <label for="{{ form.solution_latex.id_for_label }}">{{ form.solution_latex.label }}</label>
+      {{ form.solution_latex.errors }}{{ form.solution_latex }}
+    </p>
+
+    <h2>Подпункты</h2>
+    <p class="helptext">Каждый подпункт — отдельной строкой, без \item и без
+      знака препинания в конце: «;» и «.» система расставит сама. При
+      составлении листка подпункты можно включать выборочно.</p>
+    {{ subitem_formset.management_form }}
+    {{ subitem_formset.non_form_errors }}
+    <table class="list formset" data-formset="{{ subitem_formset.prefix }}">
+      <tr><th style="width:70px">Порядок</th><th>Текст (LaTeX)</th><th>Ответ (LaTeX)</th><th>Удалить</th></tr>
+      {% for f in subitem_formset %}
+      <tr class="formset-row">
+        <td>{{ f.id }}{{ f.order }}</td>
+        <td>{{ f.text_latex.errors }}{{ f.text_latex }}</td>
+        <td>{{ f.answer_latex.errors }}{{ f.answer_latex }}</td>
+        <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="btn btn-small btn-secondary formset-remove" title="Убрать строку">×</button>{% endif %}</td>
+      </tr>
+      {% for err in f.non_field_errors %}<tr><td colspan="4" class="errorlist">{{ err }}</td></tr>{% endfor %}
+      {% endfor %}
+    </table>
+    <template data-formset="{{ subitem_formset.prefix }}">
+      <tr class="formset-row">
+        <td>{{ subitem_formset.empty_form.id }}{{ subitem_formset.empty_form.order }}</td>
+        <td>{{ subitem_formset.empty_form.text_latex }}</td>
+        <td>{{ subitem_formset.empty_form.answer_latex }}</td>
+        <td><button type="button" class="btn btn-small btn-secondary formset-remove" title="Убрать строку">×</button></td>
+      </tr>
+    </template>
+    <p><button type="button" class="btn btn-small btn-secondary formset-add"
+               data-formset="{{ subitem_formset.prefix }}">+ подпункт</button></p>
+
+    <h2>Картинки</h2>
+    <p class="helptext">Иллюстрации к условию: в PDF верстаются внизу страницы
+      с подписью «К задаче N» (\taskpic / \flushpics). Форматы: PNG/JPEG или
+      векторный PDF. Картинку можно вставить прямо из буфера обмена
+      (Ctrl+V / Cmd+V на этой странице).</p>
+    {{ image_formset.management_form }}
+    {{ image_formset.non_form_errors }}
+    <table class="list formset" data-formset="{{ image_formset.prefix }}" data-images="1">
+      <tr><th style="width:70px">Порядок</th><th>Файл</th><th>Ссылка в тексте</th><th>Удалить</th></tr>
+      {% for f in image_formset %}
+      <tr class="formset-row">
+        <td>{{ f.id }}{{ f.order }}</td>
+        <td>
+          {% if f.instance.pk and f.instance.is_pdf %}
+          <a class="task-image-pdf" href="{% url 'task_image_file' f.instance.pk %}"
+             target="_blank" rel="noopener">PDF: {{ f.instance.filename }}</a>
+          <img alt="" class="pic-preview" hidden>
+          {% elif f.instance.pk %}
+          <img src="{% url 'task_image_file' f.instance.pk %}" alt="" class="pic-preview">
+          {% else %}
+          <img alt="" class="pic-preview" hidden>
+          {% endif %}
+          {{ f.image.errors }}{{ f.image }}
+        </td>
+        <td class="pic-snippet mono"></td>
+        <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="btn btn-small btn-secondary formset-remove" title="Убрать строку">×</button>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    <template data-formset="{{ image_formset.prefix }}">
+      <tr class="formset-row">
+        <td>{{ image_formset.empty_form.id }}{{ image_formset.empty_form.order }}</td>
+        <td><img alt="" class="pic-preview" hidden>{{ image_formset.empty_form.image }}</td>
+        <td class="pic-snippet mono"></td>
+        <td><button type="button" class="btn btn-small btn-secondary formset-remove" title="Убрать строку">×</button></td>
+      </tr>
+    </template>
+    <p><button type="button" class="btn btn-small btn-secondary formset-add"
+               data-formset="{{ image_formset.prefix }}">+ картинка</button></p>
 
     <h2>Источники (учебники/задачники)</h2>
     {{ formset.management_form }}
-    <table class="list">
-      <tr><th>Источник</th><th>Номер</th><th>Удалить</th></tr>
-      {% for f in formset %}
+    {{ formset.non_form_errors }}
+    <table class="list formset" data-formset="{{ formset.prefix }}">
       <tr>
-        <td>{{ f.id }}{{ f.source }}</td>
-        <td>{{ f.number }}</td>
-        <td>{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
+        <th>Источник
+          {% include 'problems/_pin.html' with field=formset.prefix|add:'-0-source' %}
+        </th>
+        <th>Номер</th><th>Удалить</th>
+      </tr>
+      {% for f in formset %}
+      <tr class="formset-row">
+        <td>{{ f.id }}{{ f.source.errors }}{{ f.source }}</td>
+        <td>{{ f.number.errors }}{{ f.number }}</td>
+        <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="btn btn-small btn-secondary formset-remove" title="Убрать строку">×</button>{% endif %}</td>
       </tr>
       {% for err in f.non_field_errors %}<tr><td colspan="3" class="errorlist">{{ err }}</td></tr>{% endfor %}
       {% endfor %}
     </table>
+    <template data-formset="{{ formset.prefix }}">
+      <tr class="formset-row">
+        <td>{{ formset.empty_form.id }}{{ formset.empty_form.source }}</td>
+        <td>{{ formset.empty_form.number }}</td>
+        <td><button type="button" class="btn btn-small btn-secondary formset-remove" title="Убрать строку">×</button></td>
+      </tr>
+    </template>
+    <p><button type="button" class="btn btn-small btn-secondary formset-add"
+               data-formset="{{ formset.prefix }}">+ источник</button></p>
     <p class="helptext">Новые учебники добавляет администратор в админке.</p>
 
-    <p>
-      <button type="submit" class="btn">Сохранить</button>
-      <a class="btn btn-secondary" href="{% if task %}{% url 'task_detail' task.pk %}{% else %}{% url 'task_list' %}{% endif %}">Отмена</a>
-    </p>
+    {% include 'problems/_task_form_buttons.html' %}
   </form>
-  <p class="helptext">Условие, ответ и решение — в LaTeX (как для пакета egor).
-    Математика в тексте: $...$, вынесенные формулы: \[...\].</p>
 </div>
+<script defer src="{% static 'js/task_form.js' %}"></script>
 {% endblock %}
