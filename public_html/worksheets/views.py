@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.db import models, transaction
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -560,6 +561,12 @@ def worksheet_pdf_editor(request, pk):
     })
 
 
+# Ограничения черновой компиляции: разумный максимум исходника и одна
+# сборка на пользователя одновременно (каждая занимает воркер и квоту
+# LaTeX API на десятки секунд)
+PDF_EDITOR_TEX_LIMIT = 200_000
+
+
 @teacher_required
 @require_POST
 def worksheet_pdf_compile(request, pk):
@@ -574,6 +581,20 @@ def worksheet_pdf_compile(request, pk):
         return JsonResponse(
             {'ok': False, 'message': 'Пустой документ', 'log': ''},
             status=400)
+    if len(tex) > PDF_EDITOR_TEX_LIMIT:
+        return JsonResponse(
+            {'ok': False,
+             'message': f'Документ слишком большой '
+                        f'(лимит {PDF_EDITOR_TEX_LIMIT} символов)',
+             'log': ''},
+            status=400)
+    lock_key = f'pdf-editor-compile-{request.user.pk}'
+    if not cache.add(lock_key, 1, timeout=180):
+        return JsonResponse(
+            {'ok': False,
+             'message': 'Предыдущая сборка ещё идёт — дождитесь её '
+                        'завершения', 'log': ''},
+            status=429)
     try:
         pdf_bytes = compile_latex(
             tex, doc_id=f'ws{worksheet.pk}-editor',
@@ -581,6 +602,8 @@ def worksheet_pdf_compile(request, pk):
     except LatexCompileError as exc:
         return JsonResponse(
             {'ok': False, 'message': str(exc), 'log': exc.log}, status=502)
+    finally:
+        cache.delete(lock_key)
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = (
         f'inline; filename="{worksheet.pdf_filename()}"')

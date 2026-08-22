@@ -621,6 +621,33 @@ class WorksheetViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.json()['ok'])
 
+        # Слишком большой исходник — 400 без похода в LaTeX API
+        from worksheets.views import PDF_EDITOR_TEX_LIMIT
+        calls_before = mocked.call_count
+        response = self.client.post(
+            url, {'tex': 'x' * (PDF_EDITOR_TEX_LIMIT + 1)})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(mocked.call_count, calls_before)
+
+    @mock.patch('worksheets.views.compile_latex', return_value=b'%PDF-1.5')
+    def test_pdf_editor_compile_locked(self, mocked):
+        # Пока идёт сборка пользователя, вторая параллельная — 429
+        from django.core.cache import cache
+        self.login_teacher()
+        url = reverse('worksheet_pdf_compile', args=[self.worksheet.pk])
+        lock_key = f'pdf-editor-compile-{self.teacher.pk}'
+        cache.add(lock_key, 1, timeout=180)
+        try:
+            response = self.client.post(
+                url, {'tex': r'\documentclass{article}'})
+            self.assertEqual(response.status_code, 429)
+            mocked.assert_not_called()
+        finally:
+            cache.delete(lock_key)
+        # После завершения (лок снят) сборка снова доступна
+        response = self.client.post(url, {'tex': r'\documentclass{article}'})
+        self.assertEqual(response.status_code, 200)
+
     @mock.patch('worksheets.views.compile_latex',
                 side_effect=LatexCompileError(
                     'Ошибка компиляции LaTeX.', log='! Undefined control'))
