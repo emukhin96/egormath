@@ -81,6 +81,38 @@ class WebTexTests(TestCase):
         # цельное выражение
         self.assertEqual(self.render('$x+\\annot{a}$'), '$x+\\annot{a}$')
 
+    def test_margin_marks(self):
+        # Семейство пометок egor.sty: \rev, \oge, \complex, \annotnoframe
+        self.assertEqual(
+            self.render('\\rev Повторите тему.'),
+            '<span class="tex-annot tex-annot-noframe">↻</span>'
+            ' Повторите тему.')
+        self.assertEqual(
+            self.render('\\oge Из банка заданий.'),
+            '<span class="tex-annot">ОГЭ</span> Из банка заданий.')
+        self.assertEqual(
+            self.render('\\complex Задача со звёздочкой.'),
+            '<span class="tex-annot tex-annot-noframe">★</span>'
+            ' Задача со звёздочкой.')
+        self.assertEqual(
+            self.render('\\annotnoframe{устно} Сосчитайте.'),
+            '<span class="tex-annot tex-annot-noframe">устно</span>'
+            ' Сосчитайте.')
+
+    def test_source_and_textbit(self):
+        self.assertEqual(
+            self.render('\\source{Ткачук, №5} Докажите.'),
+            '<span class="tex-source">Ткачук, №5</span> Докажите.')
+        self.assertEqual(
+            self.render('\\textbit{Важно:} правило.'),
+            '<b><i>Важно:</i></b> правило.')
+
+    def test_annot_with_math_inside(self):
+        # Формула внутри аргумента пометки сохраняется для KaTeX
+        self.assertEqual(
+            self.render('\\annot{для $x>0$} Решите.'),
+            '<span class="tex-annot">для $x&gt;0$</span> Решите.')
+
     def test_preview_safe_truncation(self):
         from problems.web_tex import tex_preview_html
         # Обрезка не разрезает формулу: $…$ у границы уходит целиком

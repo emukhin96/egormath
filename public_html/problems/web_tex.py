@@ -1,10 +1,11 @@
 """Преобразование LaTeX-текста задач в HTML для веб-страниц.
 
 Формулы ($…$ и $$…$$) не трогаем — их рендерит KaTeX в браузере.
-Обрабатываются «форматирующие» конструкции, которые иначе видны как
-сырой код: комментарии %, переносы \\ и \par, аннотации \annot{…},
-неразрывный пробел ~, экранированные символы (\%, \& …) и таблицы
-tabular (превращаются в HTML-таблицу).
+Обрабатываются «форматирующие» конструкции пакета egor, которые иначе
+видны как сырой код: комментарии %, переносы \\ и \par, пометки на полях
+(\annot, \annotnoframe, \oge, \fipi, \rev, \complex, \starred, \home),
+\source, \textbit, неразрывный пробел ~, экранированные символы
+(\%, \& …) и таблицы tabular (превращаются в HTML-таблицу).
 """
 
 import re
@@ -18,6 +19,12 @@ _BR = '\x01'
 _NBSP = '\x02'
 _ANNOT_OPEN = '\x03'
 _ANNOT_CLOSE = '\x04'
+_NOFRAME_OPEN = '\x07'
+_NOFRAME_CLOSE = '\x08'
+_SOURCE_OPEN = '\x0b'
+_SOURCE_CLOSE = '\x0c'
+_BOLDIT_OPEN = '\x0e'
+_BOLDIT_CLOSE = '\x0f'
 
 # Все разделители формул, которые рендерит KaTeX (static/js/math.js):
 # $$…$$, \[…\], $…$, \(…\) — внутри них текст не преобразуем
@@ -25,13 +32,56 @@ _MATH_RE = re.compile(
     r'\$\$.*?\$\$|\\\[.*?\\\]|\$.*?\$|\\\(.*?\\\)', re.S)
 _TABULAR_RE = re.compile(
     r'\\begin\{tabular\}\s*(\{[^{}]*\})?(.*?)\\end\{tabular\}', re.S)
-_ANNOT_RE = re.compile(r'\\annot\{((?:[^{}]|\{[^{}]*\})*)\}', re.S)
+_ARG = r'\{((?:[^{}]|\{[^{}]*\})*)\}'
+_ANNOT_RE = re.compile(r'\\annot' + _ARG, re.S)
+_NOFRAME_RE = re.compile(r'\\annotnoframe' + _ARG, re.S)
+_SOURCE_RE = re.compile(r'\\source' + _ARG, re.S)
+_TEXTBIT_RE = re.compile(r'\\textbit' + _ARG, re.S)
 _COMMENT_RE = re.compile(r'(?<!\\)%[^\n]*')
 _TASKPIC_RE = re.compile(r'\s*\\taskpic(?:\[[^\]]*\])?\{[^}]*\}')
+
+
+def _wrap(open_marker, close_marker):
+    return lambda m: open_marker + m.group(1).strip() + close_marker
+
+
+# Команды egor.sty вне формул → маркеры (порядок важен: сперва алиасы,
+# у которых нет аргументов, потом команды с аргументом)
+_COMMANDS = [
+    (re.compile(r'\\oge\b'), _ANNOT_OPEN + 'ОГЭ' + _ANNOT_CLOSE),
+    (re.compile(r'\\fipi\b'), _ANNOT_OPEN + 'ФИПИ' + _ANNOT_CLOSE),
+    # \rev = \annotnoframe{$\circlearrowright$} — пометка «повторение»
+    (re.compile(r'\\rev\b'), _NOFRAME_OPEN + '↻' + _NOFRAME_CLOSE),
+    (re.compile(r'\\(?:complex|starred)\b'),
+     _NOFRAME_OPEN + '★' + _NOFRAME_CLOSE),
+    (re.compile(r'\\home\b'), _NOFRAME_OPEN + '⌂' + _NOFRAME_CLOSE),
+    (_ANNOT_RE, _wrap(_ANNOT_OPEN, _ANNOT_CLOSE)),
+    (_NOFRAME_RE, _wrap(_NOFRAME_OPEN, _NOFRAME_CLOSE)),
+    (_SOURCE_RE, _wrap(_SOURCE_OPEN, _SOURCE_CLOSE)),
+    (_TEXTBIT_RE, _wrap(_BOLDIT_OPEN, _BOLDIT_CLOSE)),
+]
 
 # Замены в тексте вне формул (внутри $…$ всё это понимает KaTeX)
 _UNESCAPE = [('\\%', '%'), ('\\&', '&'), ('\\_', '_'), ('\\#', '#'),
              ('\\,', ' ')]
+
+
+def _sub_outside_math(pattern, repl, text):
+    """pattern.sub(repl, text), но совпадения внутри формул не трогаются.
+
+    Аргумент команды при этом может содержать формулу ($…$ внутри
+    \\annot{…} остаётся и рендерится KaTeX уже внутри span).
+    """
+    spans = [m.span() for m in _MATH_RE.finditer(text)]
+
+    def guarded(match):
+        start = match.start()
+        for a, b in spans:
+            if a <= start < b:
+                return match.group(0)
+        return repl(match) if callable(repl) else repl
+
+    return pattern.sub(guarded, text)
 
 
 def _plain(text):
@@ -44,21 +94,20 @@ def _plain(text):
     return text
 
 
-def _prepare(text):
-    """Все преобразования фрагмента вне формул: taskpic, annot, _plain."""
-    text = _TASKPIC_RE.sub('', text)
-    text = _ANNOT_RE.sub(
-        lambda m: _ANNOT_OPEN + m.group(1).strip() + _ANNOT_CLOSE, text)
-    return _plain(text)
-
-
 def _markers_to_html(html):
     return (html
             .replace(_BR + _BR, '<br><br>')
             .replace(_BR, '<br>')
             .replace(_NBSP, '&nbsp;')
             .replace(_ANNOT_OPEN, '<span class="tex-annot">')
-            .replace(_ANNOT_CLOSE, '</span>'))
+            .replace(_ANNOT_CLOSE, '</span>')
+            .replace(_NOFRAME_OPEN,
+                     '<span class="tex-annot tex-annot-noframe">')
+            .replace(_NOFRAME_CLOSE, '</span>')
+            .replace(_SOURCE_OPEN, '<span class="tex-source">')
+            .replace(_SOURCE_CLOSE, '</span>')
+            .replace(_BOLDIT_OPEN, '<b><i>')
+            .replace(_BOLDIT_CLOSE, '</i></b>'))
 
 
 def _fragment_html(text):
@@ -104,15 +153,18 @@ def tex_to_web_html(source):
         tables.append(match.group(2))
         return f'\x05{len(tables) - 1}\x06'
 
-    text = _TABULAR_RE.sub(stash, text)
+    text = _sub_outside_math(_TABULAR_RE, stash, text)
+    text = _sub_outside_math(_TASKPIC_RE, '', text)
+    for pattern, repl in _COMMANDS:
+        text = _sub_outside_math(pattern, repl, text)
 
     parts = []
     pos = 0
     for m in _MATH_RE.finditer(text):
-        parts.append(_prepare(text[pos:m.start()]))
+        parts.append(_plain(text[pos:m.start()]))
         parts.append(m.group(0))
         pos = m.end()
-    parts.append(_prepare(text[pos:]))
+    parts.append(_plain(text[pos:]))
 
     html = _markers_to_html(escape(''.join(parts)))
     for i, body in enumerate(tables):

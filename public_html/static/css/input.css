@@ -1104,6 +1104,19 @@
     font-style: italic;
   }
 
+  /* Пометки без рамки (\rev, \complex, \home): просто приглушённый знак */
+  .tex-annot-noframe {
+    font-style: normal;
+    margin-right: 4px;
+  }
+
+  /* Источник задания \source{…} */
+  .tex-source {
+    color: var(--muted);
+    font-size: 0.85em;
+    margin-right: 4px;
+  }
+
   /* Таблица tabular из tex-текста задачи */
   .tex-table {
     border-collapse: collapse;
