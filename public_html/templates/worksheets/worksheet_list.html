@@ -67,8 +67,38 @@
       <a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a>
       {% if w.comment %}<div class="muted ws-comment" style="font-size:.85rem">{{ w.comment|truncatechars:120 }}</div>{% endif %}
     </td>
-    <td>{{ w.grade|default:'—' }}</td>
-    <td class="task-meta">{% for t in w.topics.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
+    <td>
+      <form method="post" action="{% url 'worksheet_quick_update' w.pk %}"
+            data-autosave="change" class="inline-form">
+        {% csrf_token %}
+        <select name="grade" class="quick-select" aria-label="Класс листка">
+          <option value="">—</option>
+          {% for g, label in grade_choices %}
+          <option value="{{ g }}" {% if w.grade == g %}selected{% endif %}>{{ g }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    </td>
+    <td class="task-meta">
+      <span>{% for t in w.topics.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</span>
+      <button type="button" class="linklike" data-dialog-open="topics-dialog-{{ w.pk }}"
+              title="Изменить темы листка">✎</button>
+      <dialog id="topics-dialog-{{ w.pk }}" class="dialog">
+        <form method="post" action="{% url 'worksheet_quick_update' w.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="topics_submitted" value="1">
+          <h3>Темы: {{ w.title|truncatechars:40 }}</h3>
+          <div class="dialog-topics">
+            {% include 'includes/topic_checkboxes.html' with topics=topics selected=w.topics.all %}
+          </div>
+          <div class="form-buttons">
+            <button type="submit" class="btn btn-small">Сохранить</button>
+            <button type="button" class="btn btn-small btn-secondary"
+                    data-dialog-close>Отмена</button>
+          </div>
+        </form>
+      </dialog>
+    </td>
     <td>{{ w.items_total }}</td>
     <td>{{ w.created_at|date:'d.m.Y' }}</td>
     <td>{{ w.updated_at|date:'d.m.Y H:i' }}</td>
@@ -82,6 +112,11 @@
         {% csrf_token %}
         <button type="submit" class="btn btn-small btn-secondary" title="Создать дубликат листка">Дублировать</button>
       </form>
+      <form method="post" action="{% url 'worksheet_delete' w.pk %}" class="inline-form"
+            onsubmit="return confirm('Удалить листок «{{ w.title|escapejs }}»? Будут удалены и его назначения ученикам.');">
+        {% csrf_token %}
+        <button type="submit" class="icon-btn" title="Удалить листок" aria-label="Удалить листок">×</button>
+      </form>
     </td>
   </tr>
   {% endfor %}
@@ -90,4 +125,19 @@
 {% else %}
 <div class="card"><p class="muted">Листков не найдено.</p></div>
 {% endif %}
+
+<script>
+document.addEventListener('click', function (e) {
+  var opener = e.target.closest('[data-dialog-open]');
+  if (opener) {
+    var dialog = document.getElementById(opener.dataset.dialogOpen);
+    if (dialog) dialog.showModal();
+    return;
+  }
+  if (e.target.closest('[data-dialog-close]')) {
+    var open = e.target.closest('dialog');
+    if (open) open.close();
+  }
+});
+</script>
 {% endblock %}

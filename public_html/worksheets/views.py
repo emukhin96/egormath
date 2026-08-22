@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_date
 
 from accounts.decorators import get_role, teacher_required
 from accounts.models import Profile
-from problems.models import Task, Topic
+from problems.models import Task, Topic, topic_tree
 from problems.views import filter_tasks
 
 from .forms import WorksheetForm
@@ -82,8 +82,7 @@ def worksheet_list(request):
         'params': params,
         'order': order,
         'grade_choices': Task.GRADE_CHOICES,
-        'topics': Topic.objects.filter(parent=None)
-                               .prefetch_related('children'),
+        'topics': topic_tree(),
         'current_topic': current_topic,
     })
 
@@ -240,6 +239,44 @@ def worksheet_copy(request, pk):
     messages.success(
         request, f'Создана копия «{copy.title}» — можно редактировать.')
     return redirect('worksheet_detail', pk=copy.pk)
+
+
+@teacher_required
+@require_POST
+def worksheet_delete(request, pk):
+    """Удаление листка из списка (вместе с назначениями и ссылками)."""
+    worksheet = _own_worksheet(request, pk)
+    title = worksheet.title
+    worksheet.delete()
+    messages.success(request, f'Листок «{title}» удалён.')
+    return redirect('worksheet_list')
+
+
+@teacher_required
+@require_POST
+def worksheet_quick_update(request, pk):
+    """Горячее редактирование из списка листков: класс и темы.
+
+    Меняет только присланные поля. Темы приходят из popup-диалога:
+    маркер topics_submitted отличает «снять все темы» от «тем не присылали».
+    """
+    worksheet = _own_worksheet(request, pk)
+    if 'grade' in request.POST:
+        value = request.POST['grade'].strip()
+        if value and value not in {str(g) for g, _ in Task.GRADE_CHOICES}:
+            return _builder_response(
+                request, pk, ok=False, message='Недопустимый класс')
+        worksheet.grade = int(value) if value else None
+        worksheet.save(update_fields=['grade', 'updated_at'])
+    if request.POST.get('topics_submitted'):
+        ids = [t for t in request.POST.getlist('topics') if t.isdigit()]
+        worksheet.topics.set(Topic.objects.filter(pk__in=ids))
+        # M2M-операции не трогают auto_now — обновляем дату явно
+        worksheet.save(update_fields=['updated_at'])
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True})
+    messages.success(request, f'Листок «{worksheet.title}» обновлён.')
+    return redirect('worksheet_list')
 
 
 def add_task_to_worksheet(request, worksheet_id, task):
