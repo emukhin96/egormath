@@ -465,12 +465,29 @@ class WorksheetViewTests(TestCase):
         self.assertEqual(self.worksheet.grade_label, '9 класс')
 
         # Темы: назначение и полное снятие (маркер topics_submitted)
+        before = self.worksheet.updated_at
         response = self.client.post(
             url, {'topics_submitted': '1', 'topics': [str(topic.pk)]})
         self.assertRedirects(response, reverse('worksheet_list'))
         self.assertEqual(list(self.worksheet.topics.all()), [topic])
+        # Смена тем обновляет дату изменения (M2M не трогает auto_now сам)
+        self.worksheet.refresh_from_db()
+        self.assertGreater(self.worksheet.updated_at, before)
         self.client.post(url, {'topics_submitted': '1'})
         self.assertEqual(self.worksheet.topics.count(), 0)
+
+    def test_topics_dialog_shows_deep_tree(self):
+        # Тема-«внук» должна попадать в диалог выбора тем
+        from problems.models import Topic
+        root = Topic.objects.create(name='Алгебра')
+        child = Topic.objects.create(name='Уравнения', parent=root)
+        grand = Topic.objects.create(name='Квадратные', parent=child)
+        self.worksheet.topics.add(grand)
+        self.login_teacher()
+        response = self.client.get(reverse('worksheet_list'))
+        self.assertContains(response, 'Квадратные')
+        self.assertRegex(
+            response.content.decode(), rf'value="{grand.pk}"\s+checked')
 
     def test_add_text_and_edit(self):
         self.login_teacher()
@@ -742,6 +759,17 @@ class ImportTexTests(TestCase):
         self.assertEqual(task.stars, 3)
         self.assertEqual(task.answer_latex, '5/6')
         self.assertEqual(task.solution_latex, 'Общий знаменатель 6.')
+
+    def test_import_create_ignores_unknown_topic(self):
+        # Поддельный/удалённый id темы не должен ронять создание (500)
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create', 'topic_1': '99999',
+        })
+        self.assertEqual(response.status_code, 302)
+        worksheet = Worksheet.objects.get(owner=self.teacher)
+        task = worksheet.items.filter(task__isnull=False).first().task
+        self.assertEqual(task.topics.count(), 0)
 
 
 class ShareLinkTests(TestCase):

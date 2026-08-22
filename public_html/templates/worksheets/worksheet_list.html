@@ -89,20 +89,7 @@
           <input type="hidden" name="topics_submitted" value="1">
           <h3>Темы: {{ w.title|truncatechars:40 }}</h3>
           <div class="dialog-topics">
-            {% for root in topics %}
-            <label class="dialog-topic">
-              <input type="checkbox" name="topics" value="{{ root.pk }}"
-                     {% if root in w.topics.all %}checked{% endif %}>
-              {{ root.name }}
-            </label>
-            {% for child in root.children.all %}
-            <label class="dialog-topic dialog-topic-child">
-              <input type="checkbox" name="topics" value="{{ child.pk }}"
-                     {% if child in w.topics.all %}checked{% endif %}>
-              {{ child.name }}
-            </label>
-            {% endfor %}
-            {% endfor %}
+            {% include 'includes/topic_checkboxes.html' with topics=topics selected=w.topics.all %}
           </div>
           <div class="form-buttons">
             <button type="submit" class="btn btn-small">Сохранить</button>
@@ -128,7 +115,7 @@
       <form method="post" action="{% url 'worksheet_delete' w.pk %}" class="inline-form"
             onsubmit="return confirm('Удалить листок «{{ w.title|escapejs }}»? Будут удалены и его назначения ученикам.');">
         {% csrf_token %}
-        <button type="submit" class="btn btn-small btn-danger" title="Удалить листок" aria-label="Удалить листок">×</button>
+        <button type="submit" class="icon-btn" title="Удалить листок" aria-label="Удалить листок">×</button>
       </form>
     </td>
   </tr>

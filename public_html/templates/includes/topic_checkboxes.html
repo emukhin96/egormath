@@ -1,0 +1,8 @@
+{# Чекбоксы дерева тем для диалогов: topics — topic_tree(), selected — выбранные темы #}
+{% for t in topics %}
+<label class="dialog-topic"{% if t.depth %} style="--depth: {{ t.depth }}"{% endif %}>
+  <input type="checkbox" name="topics" value="{{ t.pk }}"
+         {% if t in selected %}checked{% endif %}>
+  {{ t.name }}
+</label>
+{% endfor %}

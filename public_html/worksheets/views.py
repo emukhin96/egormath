@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.db import models
+from django.db import models, transaction
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_date
 
 from accounts.decorators import get_role, teacher_required
 from accounts.models import Profile
-from problems.models import Task, Topic
+from problems.models import Task, Topic, topic_tree
 from problems.views import filter_tasks
 
 from .forms import WorksheetForm
@@ -82,8 +82,7 @@ def worksheet_list(request):
         'params': params,
         'order': order,
         'grade_choices': Task.GRADE_CHOICES,
-        'topics': Topic.objects.filter(parent=None)
-                               .prefetch_related('children'),
+        'topics': topic_tree(),
         'current_topic': current_topic,
     })
 
@@ -92,6 +91,9 @@ def _import_overrides(post, parsed):
     """Назначения задачам из предпросмотра импорта: класс/тема/звёзды/ответ."""
     overrides = {}
     valid_grades = {str(g) for g, _ in Task.GRADE_CHOICES}
+    # Только реально существующие темы: поддельный или устаревший id
+    # иначе уронит task.topics.add() уже после создания части объектов
+    valid_topics = set(Topic.objects.values_list('pk', flat=True))
     for i, (kind, data) in enumerate(parsed['elements']):
         if kind != 'task':
             continue
@@ -100,7 +102,7 @@ def _import_overrides(post, parsed):
         if grade in valid_grades:
             extra['grade_level'] = int(grade)
         topic = post.get(f'topic_{i}', '').strip()
-        if topic.isdigit():
+        if topic.isdigit() and int(topic) in valid_topics:
             extra['topic_id'] = int(topic)
         stars = post.get(f'stars_{i}', '').strip()
         if stars.isdigit():
@@ -140,9 +142,11 @@ def worksheet_import(request):
             return render(request, 'worksheets/import.html', context)
 
         if request.POST.get('action') == 'create':
-            worksheet, missing_images = create_worksheet(
-                parsed, owner=request.user,
-                overrides=_import_overrides(request.POST, parsed))
+            # Атомарно: при любой ошибке не остаётся полусозданный листок
+            with transaction.atomic():
+                worksheet, missing_images = create_worksheet(
+                    parsed, owner=request.user,
+                    overrides=_import_overrides(request.POST, parsed))
             messages.success(
                 request,
                 f'Листок «{worksheet.title}» импортирован '
@@ -324,6 +328,8 @@ def worksheet_quick_update(request, pk):
     if request.POST.get('topics_submitted'):
         ids = [t for t in request.POST.getlist('topics') if t.isdigit()]
         worksheet.topics.set(Topic.objects.filter(pk__in=ids))
+        # M2M-операции не трогают auto_now — обновляем дату явно
+        worksheet.save(update_fields=['updated_at'])
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         return JsonResponse({'ok': True})
     messages.success(request, f'Листок «{worksheet.title}» обновлён.')
