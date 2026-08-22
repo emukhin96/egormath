@@ -760,6 +760,17 @@ class ImportTexTests(TestCase):
         self.assertEqual(task.answer_latex, '5/6')
         self.assertEqual(task.solution_latex, 'Общий знаменатель 6.')
 
+    def test_import_create_ignores_unknown_topic(self):
+        # Поддельный/удалённый id темы не должен ронять создание (500)
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create', 'topic_1': '99999',
+        })
+        self.assertEqual(response.status_code, 302)
+        worksheet = Worksheet.objects.get(owner=self.teacher)
+        task = worksheet.items.filter(task__isnull=False).first().task
+        self.assertEqual(task.topics.count(), 0)
+
 
 class ShareLinkTests(TestCase):
     def setUp(self):
