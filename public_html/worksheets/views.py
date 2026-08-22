@@ -563,6 +563,8 @@ def public_worksheet(request, token):
         'worksheet': worksheet,
         'rows': rows,
         'token': token,
+        # Публичная страница — только просмотр: без контекстной панели
+        'minimal_page': True,
     })
 
 

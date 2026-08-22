@@ -1,0 +1,7 @@
+{% load task_extras %}
+{# Строка задачи в просмотре: широкий экран — звёзды «на полях» левее номера, узкий — между номером и текстом без переноса #}
+<div class="task-row">
+  <span class="ws-num">{{ number }}.</span>
+  {% if stars %}<span class="stars">{% for _ in ''|center:stars %}★{% endfor %}</span>{% endif %}
+  <span class="math-content task-text">{{ text|web_text }}</span>
+</div>

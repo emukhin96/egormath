@@ -751,6 +751,15 @@ class ShareLinkTests(TestCase):
         # Ответы не показываются
         self.assertNotContains(response, 'Ответ')
 
+    def test_public_page_minimal_for_logged_in(self):
+        # Даже залогиненный учитель видит публичную страницу без контекстной панели
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(
+            reverse('public_worksheet', args=[self.link.token]))
+        self.assertNotContains(response, 'context-sidebar')
+        self.assertContains(response, 'minimal-body')
+        self.assertContains(response, 'task-row')
+
     def test_inactive_link_404(self):
         self.link.is_active = False
         self.link.save()

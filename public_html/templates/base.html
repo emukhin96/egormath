@@ -17,7 +17,8 @@
   <script defer src="{% static 'js/dialogs.js' %}"></script>
   {% block extra_head %}{% endblock %}
 </head>
-<body class="{% if user.is_authenticated %}app-body{% else %}minimal-body{% endif %} {% block body_class %}{% endblock %}">
+{# minimal_page=True в контексте страницы отключает контекстную панель (например, публичный листок) #}
+<body class="{% if user.is_authenticated and not minimal_page %}app-body{% else %}minimal-body{% endif %} {% block body_class %}{% endblock %}">
 <header class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="{% url 'index' %}">Egor<span>Math</span></a>
@@ -31,10 +32,12 @@
         {% endif %}
       </nav>
       <div class="topbar-user">
+        {% if not minimal_page %}
         <button type="button" class="context-toggle" id="context-toggle"
                 aria-controls="context-sidebar" aria-expanded="false">
           Контекст
         </button>
+        {% endif %}
         <span class="user-avatar" aria-hidden="true">{{ user.get_full_name|default:user.username|first|upper }}</span>
         <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
         <form method="post" action="{% url 'logout' %}" class="inline-form">
@@ -46,7 +49,7 @@
   </div>
 </header>
 
-{% if user.is_authenticated %}
+{% if user.is_authenticated and not minimal_page %}
 <div class="app-shell">
   <aside class="context-sidebar" id="context-sidebar" aria-label="Контекст страницы">
     <div class="sidebar-mobile-head">
@@ -74,7 +77,7 @@
   {% endif %}
   {% block content %}{% endblock %}
 </main>
-{% if user.is_authenticated %}
+{% if user.is_authenticated and not minimal_page %}
 </div>
 {% endif %}
 
