@@ -17,11 +17,11 @@
     badgeTimer = setTimeout(function () { badge.hidden = true; }, ok ? 1500 : 4000);
   }
 
-  function autosave(form) {
-    fetch(form.action, {
+  function send(form, body) {
+    return fetch(form.action, {
       method: 'POST',
       headers: {'X-Requested-With': 'XMLHttpRequest'},
-      body: new FormData(form),
+      body: body,
     }).then(function (r) {
       return r.json().catch(function () { return {ok: r.ok, message: ''}; });
     }).then(function (data) {
@@ -29,6 +29,19 @@
     }).catch(function () {
       showSaved(false, 'Нет связи — изменение не сохранено');
     });
+  }
+
+  /* Запросы одной формы выполняются строго по очереди: параллельные fetch
+     могут завершиться не по порядку, и сервер записал бы устаревшее
+     значение. Данные снимаются в момент вызова, до постановки в очередь. */
+  var queues = new WeakMap();
+
+  function autosave(form) {
+    var body = new FormData(form);
+    var queued = (queues.get(form) || Promise.resolve()).then(function () {
+      return send(form, body);
+    });
+    queues.set(form, queued);
   }
 
   var debounceTimers = new WeakMap();
