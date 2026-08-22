@@ -44,6 +44,23 @@ def _plain(text):
     return text
 
 
+def _prepare(text):
+    """Все преобразования фрагмента вне формул: taskpic, annot, _plain."""
+    text = _TASKPIC_RE.sub('', text)
+    text = _ANNOT_RE.sub(
+        lambda m: _ANNOT_OPEN + m.group(1).strip() + _ANNOT_CLOSE, text)
+    return _plain(text)
+
+
+def _markers_to_html(html):
+    return (html
+            .replace(_BR + _BR, '<br><br>')
+            .replace(_BR, '<br>')
+            .replace(_NBSP, '&nbsp;')
+            .replace(_ANNOT_OPEN, '<span class="tex-annot">')
+            .replace(_ANNOT_CLOSE, '</span>'))
+
+
 def _fragment_html(text):
     """Экранированный HTML фрагмента: формулы нетронуты, остальное — _plain."""
     parts = []
@@ -53,13 +70,7 @@ def _fragment_html(text):
         parts.append(m.group(0))
         pos = m.end()
     parts.append(_plain(text[pos:]))
-    html = escape(''.join(parts))
-    return (html
-            .replace(_BR + _BR, '<br><br>')
-            .replace(_BR, '<br>')
-            .replace(_NBSP, '&nbsp;')
-            .replace(_ANNOT_OPEN, '<span class="tex-annot">')
-            .replace(_ANNOT_CLOSE, '</span>'))
+    return _markers_to_html(escape(''.join(parts)))
 
 
 def _table_html(body):
@@ -77,11 +88,15 @@ def _table_html(body):
 
 
 def tex_to_web_html(source):
-    """HTML-версия текста задачи для веб-страниц (формулы рендерит KaTeX)."""
-    text = _TASKPIC_RE.sub('', source or '').strip()
-    text = _COMMENT_RE.sub('', text)
-    text = _ANNOT_RE.sub(
-        lambda m: _ANNOT_OPEN + m.group(1).strip() + _ANNOT_CLOSE, text)
+    """HTML-версия текста задачи для веб-страниц (формулы рендерит KaTeX).
+
+    Сначала прячутся таблицы (внутри tabular есть свои $…$ и \\\\),
+    затем выделяются формулы, и все остальные преобразования применяются
+    только к фрагментам вне формул — команды внутри $…$ достаются KaTeX
+    нетронутыми. Комментарии режутся первыми: в TeX % — комментарий
+    и в тексте, и в математике.
+    """
+    text = _COMMENT_RE.sub('', source or '').strip()
 
     tables = []
 
@@ -90,7 +105,43 @@ def tex_to_web_html(source):
         return f'\x05{len(tables) - 1}\x06'
 
     text = _TABULAR_RE.sub(stash, text)
-    html = _fragment_html(text.strip())
+
+    parts = []
+    pos = 0
+    for m in _MATH_RE.finditer(text):
+        parts.append(_prepare(text[pos:m.start()]))
+        parts.append(m.group(0))
+        pos = m.end()
+    parts.append(_prepare(text[pos:]))
+
+    html = _markers_to_html(escape(''.join(parts)))
     for i, body in enumerate(tables):
         html = html.replace(f'\x05{i}\x06', _table_html(body))
     return mark_safe(html)
+
+
+def _safe_cut(text, limit):
+    """Обрезка tex-исходника, не разрезающая формулу или команду посередине."""
+    cut = text[:limit]
+    # незакрытая формула $…: откат до её начала
+    if cut.count('$') % 2:
+        cut = cut[:cut.rfind('$')]
+    # незакрытые аргументы команд: откат до последней открытой скобки
+    while cut.count('{') > cut.count('}'):
+        cut = cut[:cut.rfind('{')]
+    # недописанная команда в конце (…\taskpi, …\\)
+    cut = re.sub(r'\\+[a-zA-Z]*$', '', cut)
+    return cut.rstrip()
+
+
+def tex_preview_html(source, limit=220):
+    """Сокращённое HTML-превью условия для списков.
+
+    Обрезает tex-исходник по безопасной границе (не внутри формулы
+    или команды) и только потом преобразует в HTML — усечённого
+    HTML или сломанных формул не бывает.
+    """
+    text = _COMMENT_RE.sub('', source or '').strip()
+    if len(text) > limit:
+        text = _safe_cut(text, limit) + '…'
+    return tex_to_web_html(text)
