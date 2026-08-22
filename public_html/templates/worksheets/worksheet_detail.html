@@ -293,7 +293,7 @@
   <h2>Публичные ссылки</h2>
   {% for link in share_links %}
   <p>
-    <a href="{% url 'public_worksheet' link.token %}" class="mono">{{ request.scheme }}://{{ request.get_host }}{% url 'public_worksheet' link.token %}</a>
+    <a href="{% url 'public_worksheet' link.token %}" class="mono" target="_blank" rel="noopener">{{ request.scheme }}://{{ request.get_host }}{% url 'public_worksheet' link.token %}</a>
     {% if not link.is_active %}<span class="badge badge-returned">отключена</span>{% endif %}
     <form method="post" action="{% url 'share_toggle' worksheet.pk link.pk %}" class="inline-form">
       {% csrf_token %}

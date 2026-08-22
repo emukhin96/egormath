@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from assignments.models import Assignment
+from problems.models import Task
 from worksheets.models import Worksheet
 
 from .decorators import get_role, teacher_required
@@ -55,6 +56,8 @@ def teacher_dashboard(request):
             owner=request.user).count(),
         'students_total': Profile.objects.filter(
             teacher=request.user, role=Profile.ROLE_STUDENT).count(),
+        'tasks_total': Task.objects.filter(
+            variant_of__isnull=True).count(),
     })
 
 
