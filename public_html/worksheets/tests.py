@@ -418,12 +418,29 @@ class WorksheetViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
         # Темы: назначение и полное снятие (маркер topics_submitted)
+        before = self.worksheet.updated_at
         response = self.client.post(
             url, {'topics_submitted': '1', 'topics': [str(topic.pk)]})
         self.assertRedirects(response, reverse('worksheet_list'))
         self.assertEqual(list(self.worksheet.topics.all()), [topic])
+        # Смена тем обновляет дату изменения (M2M не трогает auto_now сам)
+        self.worksheet.refresh_from_db()
+        self.assertGreater(self.worksheet.updated_at, before)
         self.client.post(url, {'topics_submitted': '1'})
         self.assertEqual(self.worksheet.topics.count(), 0)
+
+    def test_topics_dialog_shows_deep_tree(self):
+        # Тема-«внук» должна попадать в диалог выбора тем
+        from problems.models import Topic
+        root = Topic.objects.create(name='Алгебра')
+        child = Topic.objects.create(name='Уравнения', parent=root)
+        grand = Topic.objects.create(name='Квадратные', parent=child)
+        self.worksheet.topics.add(grand)
+        self.login_teacher()
+        response = self.client.get(reverse('worksheet_list'))
+        self.assertContains(response, 'Квадратные')
+        self.assertRegex(
+            response.content.decode(), rf'value="{grand.pk}"\s+checked')
 
     def test_add_text_and_edit(self):
         self.login_teacher()
