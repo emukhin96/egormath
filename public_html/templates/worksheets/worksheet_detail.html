@@ -61,7 +61,8 @@
                    value="{{ item.stars_override|default_if_none:'' }}">
           </form>
           <div class="task-line">
-            <span class="ws-num">{{ row.number }}.</span>
+            <a class="ws-num" href="{% url 'task_detail' item.task.pk %}"
+               title="Открыть задачу #{{ item.task.pk }}">{{ row.number }}.</a>
             <span class="ws-stars" data-form="settings-{{ item.pk }}"
                   data-effective="{{ item.effective_stars }}"
                   title="Сложность в листке — кликните по звезде">
@@ -97,7 +98,6 @@
           {% endif %}
           <div class="task-meta">
             #{{ item.task.pk }}{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}
-            · <a href="{% url 'task_detail' item.task.pk %}">открыть</a>
             · <a href="{% url 'task_edit' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}">править</a>
             · <button type="button" class="link-btn ws-star-reset"
                       data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
@@ -116,9 +116,9 @@
         <div class="ws-content">
           <details class="ws-rubric-edit">
             <summary>
-              <span class="ws-rubric-band"><span class="ws-rubric-name">{{ item.rubric }}</span>
-                {% if item.rubric_note %}<span class="muted"> — {{ item.rubric_note }}</span>{% endif %}
-                <span class="ws-rubric-hint">править</span></span>
+              <span class="ws-rubric-name">{{ item.rubric }}</span>
+              {% if item.rubric_note %}<span class="muted"> — {{ item.rubric_note }}</span>{% endif %}
+              <span class="ws-rubric-hint">править</span>
             </summary>
             <form method="post" action="{% url 'worksheet_set_rubric' worksheet.pk item.pk %}"
                   class="ws-rubric-form" data-autosave="debounce">
@@ -209,7 +209,7 @@
       <tr>
         <td>
           <div class="math-content task-text">{{ task.text_latex|web_text|truncatechars:180 }}</div>
-          <span class="task-meta">#{{ task.pk }}{% if task.grade_level %} · {{ task.grade_level }} класс{% endif %}</span>
+          <span class="task-meta"><a href="{% url 'task_detail' task.pk %}" title="Открыть задачу">#{{ task.pk }}</a>{% if task.grade_level %} · {{ task.grade_level }} класс{% endif %}</span>
         </td>
         <td style="white-space:nowrap">
           <form method="post" action="{% url 'worksheet_add_task' worksheet.pk %}" class="inline-form">
@@ -217,7 +217,6 @@
             <input type="hidden" name="task_id" value="{{ task.pk }}">
             <button type="submit" class="btn btn-small">Добавить</button>
           </form>
-          <a class="btn btn-small btn-secondary" href="{% url 'task_detail' task.pk %}">Открыть</a>
         </td>
       </tr>
       {% endfor %}

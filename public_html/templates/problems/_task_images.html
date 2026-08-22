@@ -2,8 +2,12 @@
 <div class="task-images">
   {% for img in task.images.all %}
   {% if img.is_pdf %}
-  <a class="task-image-pdf" href="{% url 'task_image_file' img.pk %}"
-     target="_blank" rel="noopener">PDF-иллюстрация: {{ img.filename }}</a>
+  <object class="task-image-object" type="application/pdf"
+          data="{% url 'task_image_file' img.pk %}#toolbar=0&navpanes=0"
+          aria-label="PDF-иллюстрация: {{ img.filename }}">
+    <a class="task-image-pdf" href="{% url 'task_image_file' img.pk %}"
+       target="_blank" rel="noopener">PDF-иллюстрация: {{ img.filename }}</a>
+  </object>
   {% else %}
   <img src="{% url 'task_image_file' img.pk %}" alt="иллюстрация к задаче" loading="lazy">
   {% endif %}
