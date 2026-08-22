@@ -1466,23 +1466,35 @@
     margin: var(--space-3) 0 var(--space-4);
   }
 
-  .ws-title-edit summary {
-    list-style: none;
-    cursor: pointer;
+  /* Заголовок и подзаголовок листка — редактирование кликом по тексту */
+  .ws-title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    flex-wrap: wrap;
   }
 
-  .ws-title-edit summary::-webkit-details-marker {
-    display: none;
+  .ws-editable {
+    cursor: text;
+    border-radius: 4px;
+    padding-inline: 2px;
   }
 
-  .ws-title-edit summary h1 {
-    display: inline-block;
-    margin-bottom: 4px;
+  .ws-editable:hover,
+  .ws-editable:focus-visible {
+    background: #e4eef9;
+    outline: none;
   }
 
-  .ws-title-edit .ws-rubric-hint {
-    float: none;
-    margin-left: 6px;
+  .ws-title-input {
+    font-size: 1.6rem;
+    font-weight: 700;
+    max-width: 560px;
+  }
+
+  .ws-subtitle-input {
+    max-width: 240px;
+    font-size: 1rem;
   }
 
   .ws-add-text summary {

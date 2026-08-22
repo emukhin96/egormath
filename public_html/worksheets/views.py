@@ -213,6 +213,7 @@ def worksheet_detail(request, pk):
         'assigned_ids': assigned_ids,
         'groups': groups,
         'stars_choices': Task.STARS_CHOICES,
+        'grade_choices': Task.GRADE_CHOICES,
         'share_links': worksheet.share_links.order_by('-created_at'),
         'assignments': worksheet.assignments.select_related('student'),
     })
@@ -235,8 +236,24 @@ def worksheet_rename(request, pk):
 @teacher_required
 @require_POST
 def worksheet_copy(request, pk):
+    """Дубликат листка; поля из диалога дублирования переопределяют копию."""
     worksheet = _own_worksheet(request, pk)
     copy = worksheet.duplicate()
+    title = request.POST.get('title', '').strip()
+    if title:
+        copy.title = title
+    if 'grade_label' in request.POST:
+        copy.grade_label = request.POST['grade_label'].strip()[:100]
+    if 'pdf_basename' in request.POST:
+        copy.pdf_basename = request.POST['pdf_basename'].strip()[:80]
+    if 'grade' in request.POST:
+        grade = request.POST['grade'].strip()
+        if grade in {str(g) for g, _ in Task.GRADE_CHOICES}:
+            copy.grade = int(grade)
+        elif not grade:
+            copy.grade = None
+    copy.save()
+    copy.topics.set(worksheet.topics.all())
     messages.success(
         request, f'Создана копия «{copy.title}» — можно редактировать.')
     return redirect('worksheet_detail', pk=copy.pk)
@@ -269,6 +286,9 @@ def worksheet_quick_update(request, pk):
                 request, pk, ok=False, message='Недопустимый класс')
         worksheet.grade = int(value) if value else None
         worksheet.save(update_fields=['grade', 'updated_at'])
+    if 'grade_label' in request.POST:
+        worksheet.grade_label = request.POST['grade_label'].strip()[:100]
+        worksheet.save(update_fields=['grade_label', 'updated_at'])
     if request.POST.get('topics_submitted'):
         ids = [t for t in request.POST.getlist('topics') if t.isdigit()]
         worksheet.topics.set(Topic.objects.filter(pk__in=ids))
@@ -452,7 +472,7 @@ def _worksheet_pdf_response(worksheet, variant):
     pdf = get_worksheet_pdf(worksheet, variant)
     return FileResponse(
         pdf.file.open('rb'), content_type='application/pdf',
-        filename=f'{worksheet.title}-{variant}.pdf'.replace(' ', '_'))
+        filename=worksheet.pdf_filename(variant))
 
 
 def worksheet_pdf(request, pk):

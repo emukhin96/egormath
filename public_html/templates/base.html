@@ -14,6 +14,7 @@
   <script defer src="{% static 'js/math.js' %}"></script>
   <script defer src="{% static 'js/autosave.js' %}"></script>
   <script defer src="{% static 'js/shell.js' %}"></script>
+  <script defer src="{% static 'js/dialogs.js' %}"></script>
   {% block extra_head %}{% endblock %}
 </head>
 <body class="{% if user.is_authenticated %}app-body{% else %}minimal-body{% endif %} {% block body_class %}{% endblock %}">

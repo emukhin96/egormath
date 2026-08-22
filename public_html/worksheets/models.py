@@ -1,3 +1,4 @@
+import re
 import secrets
 
 from django.conf import settings
@@ -8,6 +9,21 @@ from problems.models import Task, TaskSubitem, Topic
 
 def _new_token():
     return secrets.token_urlsafe(16)
+
+
+_TRANSLIT = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+    'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+    'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+    'ф': 'f', 'х': 'h', 'ц': 'c', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+    'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+}
+
+
+def _translit(text):
+    """Транслитерация для имён файлов: кириллица → латиница, без спецсимволов."""
+    out = ''.join(_TRANSLIT.get(ch, ch) for ch in text.lower())
+    return re.sub(r'[^a-z0-9]+', '', out)
 
 
 class Worksheet(models.Model):
@@ -33,6 +49,10 @@ class Worksheet(models.Model):
     author_name = models.CharField(
         'Правый верхний подзаголовок', max_length=190, blank=True,
         help_text='Третий аргумент \\bighead; если пусто — имя владельца')
+    pdf_basename = models.CharField(
+        'Имя PDF-файла', max_length=80, blank=True,
+        help_text='Без расширения, например alg8-kv_ur; '
+                  'пусто — сгенерируется из темы, класса и названия')
     created_at = models.DateTimeField('Создан', auto_now_add=True)
     updated_at = models.DateTimeField('Изменён', auto_now=True)
 
@@ -52,6 +72,21 @@ class Worksheet(models.Model):
         return (self.items.select_related('task')
                 .prefetch_related('task__subitems', 'task__images', 'subitems')
                 .order_by('order', 'id'))
+
+    def _auto_pdf_basename(self):
+        """Имя файла по шаблону «тема + класс — короткое название»: alg8-kv_ur."""
+        topic = self.topics.order_by('pk').first()
+        prefix = _translit(topic.name)[:3] if topic else 'list'
+        grade = str(self.grade) if self.grade else ''
+        words = re.findall(r'[а-яёa-z0-9]+', self.title.lower())[:3]
+        short = '_'.join(filter(None, (_translit(w)[:2] for w in words)))
+        return f'{prefix}{grade}-{short}' if short else f'{prefix}{grade}'
+
+    def pdf_filename(self, variant=''):
+        """Имя PDF: ручное pdf_basename или автогенерация + суффикс варианта."""
+        base = self.pdf_basename.strip() or self._auto_pdf_basename()
+        suffix = {'answers': '-otvety', 'teacher': '-uchitel'}.get(variant, '')
+        return f'{base}{suffix}.pdf'
 
     def duplicate(self):
         """Полная копия листка со всеми элементами и настройками."""

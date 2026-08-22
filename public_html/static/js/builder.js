@@ -7,17 +7,55 @@
     var autosave = window.EgorAutosave.autosave;
     var showSaved = window.EgorAutosave.showSaved;
 
-    // Переименование листка: обновляем заголовок страницы на лету
-    var titleInput = document.querySelector(
-      '.ws-title-edit form[data-autosave] input[name=title]');
-    if (titleInput) {
-      titleInput.addEventListener('input', function () {
-        var h1 = document.querySelector('.ws-title-edit h1');
-        if (h1 && titleInput.value.trim()) {
-          h1.childNodes[0].textContent = titleInput.value.trim() + ' ';
+    // --- Заголовок и подзаголовок: редактирование кликом по тексту ---
+    document.querySelectorAll('.ws-editable').forEach(function (span) {
+      var input = document.querySelector(
+        '[data-edit-input="' + span.dataset.edit + '"]');
+      if (!input) return;
+      var form = input.form
+        || document.getElementById(input.getAttribute('form'));
+      var finishing = false;
+
+      function open() {
+        span.hidden = true;
+        input.hidden = false;
+        input.focus();
+        input.select();
+      }
+
+      function render(value) {
+        span.textContent = value || span.dataset.placeholder || '';
+      }
+
+      function finish(save) {
+        if (finishing) return;
+        finishing = true;
+        var value = input.value.trim();
+        var mustKeep = input.required && !value;
+        if (save && !mustKeep && value !== span.textContent.trim()) {
+          input.value = value;
+          render(value);
+          if (form && window.EgorAutosave) window.EgorAutosave.autosave(form);
+        } else {
+          // Откат к текущему отображаемому значению
+          var shown = span.textContent.trim();
+          input.value = shown === span.dataset.placeholder ? '' : shown;
         }
+        input.hidden = true;
+        span.hidden = false;
+        finishing = false;
+      }
+
+      span.addEventListener('click', open);
+      span.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
       });
-    }
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+      input.addEventListener('blur', function () { finish(true); });
+    });
 
     // --- Кликабельные звёзды ---
     function paintStars(widget, count) {
