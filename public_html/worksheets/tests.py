@@ -381,6 +381,45 @@ class WorksheetViewTests(TestCase):
             response, reverse('worksheet_detail', args=[copy.pk]))
         self.assertEqual(copy.items.count(), self.worksheet.items.count())
 
+    def test_copy_with_overrides(self):
+        from problems.models import Topic
+        self.login_teacher()
+        topic = Topic.objects.create(name='Алгебра')
+        self.worksheet.topics.add(topic)
+        response = self.client.post(
+            reverse('worksheet_copy', args=[self.worksheet.pk]), {
+                'title': 'Копия для 9-х',
+                'grade_label': '9 класс',
+                'grade': '9',
+                'pdf_basename': 'alg9-kv_ur',
+            })
+        copy = Worksheet.objects.get(title='Копия для 9-х')
+        self.assertRedirects(
+            response, reverse('worksheet_detail', args=[copy.pk]))
+        self.assertEqual(copy.grade_label, '9 класс')
+        self.assertEqual(copy.grade, 9)
+        self.assertEqual(copy.pdf_basename, 'alg9-kv_ur')
+        self.assertEqual(list(copy.topics.all()), [topic])
+        self.assertEqual(copy.items.count(), self.worksheet.items.count())
+
+    def test_pdf_filename(self):
+        from problems.models import Topic
+        self.worksheet.grade = 8
+        self.worksheet.title = 'Квадратные уравнения'
+        self.worksheet.save()
+        self.worksheet.topics.add(Topic.objects.create(name='Алгебра'))
+        self.assertEqual(self.worksheet.pdf_filename('student'), 'alg8-kv_ur.pdf')
+        self.assertEqual(
+            self.worksheet.pdf_filename('answers'), 'alg8-kv_ur-otvety.pdf')
+        self.assertEqual(
+            self.worksheet.pdf_filename('teacher'), 'alg8-kv_ur-uchitel.pdf')
+        # Ручное имя приоритетнее автогенерации
+        self.worksheet.pdf_basename = 'custom_name'
+        self.assertEqual(self.worksheet.pdf_filename('student'), 'custom_name.pdf')
+        # Без темы и класса — безопасный fallback
+        other = Worksheet.objects.create(title='Тест', owner=self.teacher)
+        self.assertEqual(other.pdf_filename('student'), 'list-te.pdf')
+
     def test_delete(self):
         # Чужой учитель удалить не может
         self.client.login(username='teacher2', password='pass12345')
@@ -416,6 +455,14 @@ class WorksheetViewTests(TestCase):
         response = self.client.post(
             url, {'grade': '99'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 400)
+
+        # Подзаголовок (grade_label) — для inline-редактирования в конструкторе
+        response = self.client.post(
+            url, {'grade_label': '9 класс'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        self.worksheet.refresh_from_db()
+        self.assertEqual(self.worksheet.grade_label, '9 класс')
 
         # Темы: назначение и полное снятие (маркер topics_submitted)
         before = self.worksheet.updated_at

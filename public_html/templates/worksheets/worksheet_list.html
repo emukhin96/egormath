@@ -126,18 +126,4 @@
 <div class="card"><p class="muted">Листков не найдено.</p></div>
 {% endif %}
 
-<script>
-document.addEventListener('click', function (e) {
-  var opener = e.target.closest('[data-dialog-open]');
-  if (opener) {
-    var dialog = document.getElementById(opener.dataset.dialogOpen);
-    if (dialog) dialog.showModal();
-    return;
-  }
-  if (e.target.closest('[data-dialog-close]')) {
-    var open = e.target.closest('dialog');
-    if (open) open.close();
-  }
-});
-</script>
 {% endblock %}
