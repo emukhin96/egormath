@@ -1092,11 +1092,14 @@
     font-weight: 700;
   }
 
-  a.ws-num {
+  /* Ссылка на задачу — на её ID (#87), не на порядковом номере */
+  .task-id {
+    font-weight: 700;
     text-decoration: none;
+    white-space: nowrap;
   }
 
-  a.ws-num:hover {
+  .task-id:hover {
     text-decoration: underline;
   }
 
