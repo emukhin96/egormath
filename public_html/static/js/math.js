@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', function () {
         {left: '$', right: '$', display: false},
         {left: '\\(', right: '\\)', display: false},
       ],
+      // Команды egor.sty, которых KaTeX не знает
+      macros: {'\\degr': '^{\\circ}'},
       throwOnError: false,
     });
   });

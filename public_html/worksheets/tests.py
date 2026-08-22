@@ -749,6 +749,42 @@ class ImportTexTests(TestCase):
         self.assertEqual(new_task.subitems.count(), 2)
         self.assertEqual(Task.objects.count(), 2)
 
+    def test_dedup_considers_subitems(self):
+        from .import_tex import create_worksheet, find_existing_task, \
+            parse_tex
+        # Одинаковое основное условие, разные подпункты — разные задачи
+        base = Task.objects.create(
+            text_latex='Решите уравнение:', created_by=self.teacher)
+        base.subitems.create(order=10, text_latex='$x^2=4$')
+        base.subitems.create(order=20, text_latex='$x^2=9$')
+        tex = ('\\begin{document}\n'
+               '\\task{0}{0}{Решите уравнение:}'
+               '[{\\item $x^2=16$; \\item $x^2=25$.}]\n'
+               '\\end{document}')
+        worksheet, _ = create_worksheet(parse_tex(tex), owner=self.teacher)
+        new_task = worksheet.items.get(task__isnull=False).task
+        self.assertNotEqual(new_task.pk, base.pk)
+        # Полное совпадение (условие + подпункты) — задача находится
+        self.assertEqual(
+            find_existing_task('Решите уравнение:', ['$x^2=4$', '$x^2=9$']),
+            base.pk)
+        self.assertIsNone(
+            find_existing_task('Решите уравнение:', ['$x^2=4$']))
+
+    def test_import_updates_existing_answer(self):
+        # Горячее добавление ответа/решения к задаче, найденной в базе
+        existing = Task.objects.create(
+            text_latex='Вычислите  $\\frac{1}{2}+\\frac{1}{3}$.',
+            created_by=self.teacher)
+        self.client.login(username='teacher1', password='pass12345')
+        self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create',
+            'answer_1': '$5/6$', 'solution_1': 'Общий знаменатель 6.',
+        })
+        existing.refresh_from_db()
+        self.assertEqual(existing.answer_latex, '$5/6$')
+        self.assertEqual(existing.solution_latex, 'Общий знаменатель 6.')
+
     def test_round_trip(self):
         from .import_tex import create_worksheet, parse_tex
         parsed = parse_tex(SAMPLE_TEX)
