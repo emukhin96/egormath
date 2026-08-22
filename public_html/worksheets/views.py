@@ -123,8 +123,7 @@ def worksheet_import(request):
     context = {
         'tex': '', 'preview': None,
         'grade_choices': Task.GRADE_CHOICES,
-        'topics': Topic.objects.filter(parent=None)
-                               .prefetch_related('children'),
+        'topics': topic_tree(),
     }
     if request.method == 'POST':
         tex = request.POST.get('tex', '')

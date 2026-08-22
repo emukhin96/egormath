@@ -52,6 +52,7 @@ def topic_tree():
     def walk(parent_id, depth):
         for topic in by_parent.get(parent_id, []):
             topic.depth = depth
+            topic.indent = '— ' * depth  # префикс для <option> в select
             yield topic
             yield from walk(topic.pk, depth + 1)
 

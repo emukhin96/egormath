@@ -57,10 +57,7 @@
       <label class="inline-label">тема
         <select id="bulk-topic" class="quick-select">
           <option value="">—</option>
-          {% for root in topics %}
-          <option value="{{ root.pk }}">{{ root.name }}</option>
-          {% for child in root.children.all %}<option value="{{ child.pk }}">— {{ child.name }}</option>{% endfor %}
-          {% endfor %}
+          {% include 'includes/topic_options.html' %}
         </select>
       </label>
       <label class="inline-label">звёзды
@@ -130,10 +127,7 @@
             <label class="inline-label">тема
               <select name="topic_{{ forloop.counter0 }}" class="quick-select">
                 <option value="">—</option>
-                {% for root in topics %}
-                <option value="{{ root.pk }}">{{ root.name }}</option>
-                {% for child in root.children.all %}<option value="{{ child.pk }}">— {{ child.name }}</option>{% endfor %}
-                {% endfor %}
+                {% include 'includes/topic_options.html' %}
               </select>
             </label>
             <label class="inline-label">звёзды

@@ -1,6 +1,6 @@
 from django import template
 
-from problems.web_tex import tex_to_web_html
+from problems.web_tex import tex_preview_html, tex_to_web_html
 from worksheets.latex import subitem_label as _subitem_label
 
 register = template.Library()
@@ -18,3 +18,10 @@ def web_text(text):
     форматирующие tex-команды (%, \\\\, \\par, \\annot, tabular…) переведены
     в HTML, формулы остаются для KaTeX."""
     return tex_to_web_html(text)
+
+
+@register.filter
+def web_text_preview(text, limit=220):
+    """Сокращённое превью условия для списков: обрезка по безопасной
+    границе tex (не внутри формулы/команды), затем перевод в HTML."""
+    return tex_preview_html(text, int(limit))
