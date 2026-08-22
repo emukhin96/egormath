@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_date
 
 from accounts.decorators import get_role, teacher_required
 from accounts.models import Profile
-from problems.models import Task, Topic
+from problems.models import Task, Topic, topic_tree
 from problems.views import filter_tasks
 
 from .forms import WorksheetForm
@@ -82,8 +82,7 @@ def worksheet_list(request):
         'params': params,
         'order': order,
         'grade_choices': Task.GRADE_CHOICES,
-        'topics': Topic.objects.filter(parent=None)
-                               .prefetch_related('children'),
+        'topics': topic_tree(),
         'current_topic': current_topic,
     })
 
@@ -292,6 +291,8 @@ def worksheet_quick_update(request, pk):
     if request.POST.get('topics_submitted'):
         ids = [t for t in request.POST.getlist('topics') if t.isdigit()]
         worksheet.topics.set(Topic.objects.filter(pk__in=ids))
+        # M2M-операции не трогают auto_now — обновляем дату явно
+        worksheet.save(update_fields=['updated_at'])
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         return JsonResponse({'ok': True})
     messages.success(request, f'Листок «{worksheet.title}» обновлён.')

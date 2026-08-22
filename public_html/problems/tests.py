@@ -325,6 +325,9 @@ class TaskImagePdfTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.headers['Content-Type'],
                                  'application/pdf')
+                # PDF встраивается в страницы через <object> — DENY нельзя
+                self.assertEqual(response.headers['X-Frame-Options'],
+                                 'SAMEORIGIN')
                 response.close()
 
     def test_pdf_in_latex_output(self):
