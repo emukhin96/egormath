@@ -88,31 +88,27 @@
         </td>
         <td>
           {% if row.kind == 'task' %}
-          <div class="math-content task-text">{{ row.data.text|truncatechars:300 }}</div>
+          <div class="math-content task-text">{{ row.data.text }}</div>
           {% if row.data.subitems %}
           <ol class="subitems">
             {% for sub in row.data.subitems %}
-            <li><span class="math-content">{{ sub|truncatechars:160 }}</span></li>
+            <li><span class="math-content">{{ sub }}</span></li>
             {% endfor %}
           </ol>
           {% endif %}
-          {% if not row.existing_id %}
           <div class="import-answers">
             <label class="inline-label">ответ
               <input type="text" name="answer_{{ forloop.counter0 }}" class="quick-input"
-                     value="{{ row.data.answer }}" placeholder="ответ (LaTeX)"></label>
+                     value="{{ row.answer_value }}" placeholder="ответ (LaTeX)"></label>
             <label class="inline-label">решение
-              <input type="text" name="solution_{{ forloop.counter0 }}" class="quick-input"
-                     value="{{ row.data.solution }}" placeholder="решение (LaTeX)"></label>
+              <textarea name="solution_{{ forloop.counter0 }}" class="quick-input"
+                        rows="1" placeholder="решение (LaTeX)">{{ row.solution_value }}</textarea></label>
           </div>
-          {% else %}
-            {% if row.data.answer %}<div class="task-meta">ответ: <span class="math-content">{{ row.data.answer }}</span></div>{% endif %}
-          {% endif %}
           {% if row.data.images %}<span class="task-meta">картинки (догрузить после импорта): {{ row.data.images|join:', ' }}</span>{% endif %}
           {% elif row.kind == 'rubric' %}
           <strong>{{ row.data.rubric }}</strong>{% if row.data.note %} — {{ row.data.note }}{% endif %}
           {% else %}
-          {{ row.data.text|truncatechars:200 }}
+          {{ row.data.text }}
           {% endif %}
         </td>
         <td>
@@ -151,8 +147,9 @@
       {% endfor %}
     </table>
     <p class="helptext">Новых задач будет создано: {{ preview.new_tasks }}.
-      Класс, тема, звёзды, ответы и решения применяются только к новым задачам —
-      существующие в базе не меняются.</p>
+      Класс, тема и звёзды применяются только к новым задачам. Ответ и
+      решение можно править у любой задачи — у существующих они
+      обновятся в базе.</p>
     <button type="submit" name="action" value="create" class="btn">Создать листок</button>
   </form>
 </div>
