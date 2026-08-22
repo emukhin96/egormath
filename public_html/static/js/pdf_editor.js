@@ -30,8 +30,24 @@
     var download = document.getElementById('download-btn');
     var csrf = root.querySelector('input[name=csrfmiddlewaretoken]').value;
     var currentUrl = null;
+    var controller = null;
+
+    // PDF и ссылка скачивания всегда соответствуют последней сборке:
+    // при старте новой (или ошибке) старый результат убирается,
+    // а незавершённый запрос отменяется — устаревший ответ не может
+    // перезаписать актуальный.
+    function clearResult() {
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      currentUrl = null;
+      frame.removeAttribute('src');
+      download.hidden = true;
+      download.removeAttribute('href');
+    }
 
     function compile() {
+      if (controller) controller.abort();
+      controller = new AbortController();
+      clearResult();
       status.textContent = 'Сборка…';
       log.hidden = true;
       var body = new URLSearchParams();
@@ -41,9 +57,9 @@
         headers: {'X-CSRFToken': csrf,
                   'Content-Type': 'application/x-www-form-urlencoded'},
         body: body.toString(),
+        signal: controller.signal,
       }).then(function (r) {
         if (r.ok) return r.blob().then(function (blob) {
-          if (currentUrl) URL.revokeObjectURL(currentUrl);
           currentUrl = URL.createObjectURL(blob);
           frame.src = currentUrl;
           download.href = currentUrl;
@@ -57,7 +73,8 @@
             log.hidden = false;
           }
         });
-      }).catch(function () {
+      }).catch(function (err) {
+        if (err && err.name === 'AbortError') return;
         status.textContent = 'Нет связи с сервером';
       });
     }
