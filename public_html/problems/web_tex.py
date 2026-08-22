@@ -19,7 +19,10 @@ _NBSP = '\x02'
 _ANNOT_OPEN = '\x03'
 _ANNOT_CLOSE = '\x04'
 
-_MATH_RE = re.compile(r'\$\$.*?\$\$|\$.*?\$', re.S)
+# Все разделители формул, которые рендерит KaTeX (static/js/math.js):
+# $$…$$, \[…\], $…$, \(…\) — внутри них текст не преобразуем
+_MATH_RE = re.compile(
+    r'\$\$.*?\$\$|\\\[.*?\\\]|\$.*?\$|\\\(.*?\\\)', re.S)
 _TABULAR_RE = re.compile(
     r'\\begin\{tabular\}\s*(\{[^{}]*\})?(.*?)\\end\{tabular\}', re.S)
 _ANNOT_RE = re.compile(r'\\annot\{((?:[^{}]|\{[^{}]*\})*)\}', re.S)

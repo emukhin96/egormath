@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils.html import escape
 
 from accounts.models import Profile
 
@@ -67,6 +68,13 @@ class WebTexTests(TestCase):
     def test_math_is_untouched(self):
         # Внутри $…$ команды не трогаем — их рендерит KaTeX
         self.assertEqual(self.render('$a~b \\\\ c$'), '$a~b \\\\ c$')
+
+    def test_bracket_math_is_untouched(self):
+        # KaTeX рендерит и \(…\)/\[…\] — внутри них \\ не превращаем в <br>
+        matrix = '\\[\\begin{matrix}a\\\\b\\end{matrix}\\]'
+        self.assertEqual(self.render(matrix), escape(matrix))
+        inline = 'Дано \\(a~b \\\\ c\\), найдите.'
+        self.assertEqual(self.render(inline), escape(inline))
 
     def test_tabular(self):
         html = self.render(
