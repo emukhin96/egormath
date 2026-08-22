@@ -381,6 +381,50 @@ class WorksheetViewTests(TestCase):
             response, reverse('worksheet_detail', args=[copy.pk]))
         self.assertEqual(copy.items.count(), self.worksheet.items.count())
 
+    def test_delete(self):
+        # Чужой учитель удалить не может
+        self.client.login(username='teacher2', password='pass12345')
+        response = self.client.post(
+            reverse('worksheet_delete', args=[self.worksheet.pk]))
+        self.assertEqual(response.status_code, 404)
+        # Владелец удаляет, редирект в список
+        self.login_teacher()
+        response = self.client.post(
+            reverse('worksheet_delete', args=[self.worksheet.pk]))
+        self.assertRedirects(response, reverse('worksheet_list'))
+        self.assertFalse(
+            Worksheet.objects.filter(pk=self.worksheet.pk).exists())
+
+    def test_quick_update(self):
+        from problems.models import Topic
+        self.login_teacher()
+        topic = Topic.objects.create(name='Уравнения')
+        url = reverse('worksheet_quick_update', args=[self.worksheet.pk])
+
+        # Класс: сохранение и сброс, ответ JSON для fetch-автосохранения
+        response = self.client.post(
+            url, {'grade': '8'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        self.worksheet.refresh_from_db()
+        self.assertEqual(self.worksheet.grade, 8)
+        self.client.post(
+            url, {'grade': ''}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.worksheet.refresh_from_db()
+        self.assertIsNone(self.worksheet.grade)
+        # Недопустимый класс отклоняется
+        response = self.client.post(
+            url, {'grade': '99'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 400)
+
+        # Темы: назначение и полное снятие (маркер topics_submitted)
+        response = self.client.post(
+            url, {'topics_submitted': '1', 'topics': [str(topic.pk)]})
+        self.assertRedirects(response, reverse('worksheet_list'))
+        self.assertEqual(list(self.worksheet.topics.all()), [topic])
+        self.client.post(url, {'topics_submitted': '1'})
+        self.assertEqual(self.worksheet.topics.count(), 0)
+
     def test_add_text_and_edit(self):
         self.login_teacher()
         self.client.post(
