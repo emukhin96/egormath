@@ -103,9 +103,10 @@
     <td>{{ w.created_at|date:'d.m.Y' }}</td>
     <td>{{ w.updated_at|date:'d.m.Y H:i' }}</td>
     <td>
-      <a class="btn btn-small btn-secondary" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' w.pk %}?variant=student">ученик</a>
-      <a class="btn btn-small btn-secondary" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' w.pk %}?variant=answers">с ответами</a>
-      <a class="btn btn-small btn-secondary" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' w.pk %}?variant=teacher">учитель</a>
+      {# Одна кнопка: страница предпросмотра и сборки, вариант выбирается там #}
+      <a class="btn btn-small btn-secondary"
+         href="{% url 'worksheet_pdf_editor' w.pk %}"
+         title="Предпросмотр и сборка PDF (ученик / с ответами / учитель)">PDF</a>
     </td>
     <td>
       <form method="post" action="{% url 'worksheet_copy' w.pk %}" class="inline-form">
