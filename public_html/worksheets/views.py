@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db import models
-from django.http import FileResponse, Http404, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.html import format_html
@@ -19,7 +19,8 @@ from .import_tex import (TexImportError, create_worksheet,
                          match_existing_tasks, parse_tex)
 from .latex import worksheet_to_tex
 from .models import ShareLink, Worksheet, WorksheetItem, WorksheetPdf
-from .services import LatexCompileError, get_worksheet_pdf
+from .services import (LatexCompileError, collect_assets, compile_latex,
+                       get_worksheet_pdf)
 
 
 def _own_worksheet(request, pk):
@@ -535,6 +536,50 @@ def worksheet_pdf(request, pk):
             'error': exc,
             'tex': worksheet_to_tex(worksheet, variant),
         }, status=502)
+
+
+@teacher_required
+def worksheet_pdf_editor(request, pk):
+    """Split-редактор PDF: слева исходный tex (можно править), справа PDF."""
+    worksheet = _own_worksheet(request, pk)
+    variant = request.GET.get('variant', WorksheetPdf.VARIANT_STUDENT)
+    if variant not in dict(WorksheetPdf.VARIANT_CHOICES):
+        raise Http404
+    return render(request, 'worksheets/pdf_editor.html', {
+        'worksheet': worksheet,
+        'variant': variant,
+        'variant_label': dict(WorksheetPdf.VARIANT_CHOICES)[variant],
+        'variant_choices': WorksheetPdf.VARIANT_CHOICES,
+        'tex': worksheet_to_tex(worksheet, variant),
+        'pdf_filename': worksheet.pdf_filename(variant),
+    })
+
+
+@teacher_required
+@require_POST
+def worksheet_pdf_compile(request, pk):
+    """Компиляция tex из редактора (в т.ч. с ручными правками учителя).
+
+    Возвращает PDF-байты либо JSON с логом ошибки компиляции. Кэш PDF
+    листка не трогает — это «черновая» сборка именно присланного кода.
+    """
+    worksheet = _own_worksheet(request, pk)
+    tex = request.POST.get('tex', '')
+    if not tex.strip():
+        return JsonResponse(
+            {'ok': False, 'message': 'Пустой документ', 'log': ''},
+            status=400)
+    try:
+        pdf_bytes = compile_latex(
+            tex, doc_id=f'ws{worksheet.pk}-editor',
+            assets=collect_assets(worksheet))
+    except LatexCompileError as exc:
+        return JsonResponse(
+            {'ok': False, 'message': str(exc), 'log': exc.log}, status=502)
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = (
+        f'inline; filename="{worksheet.pdf_filename()}"')
+    return response
 
 
 @teacher_required

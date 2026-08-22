@@ -8,6 +8,7 @@ from problems.tests import make_student, make_teacher
 
 from .latex import task_to_tex, worksheet_to_tex
 from .models import ShareLink, Worksheet, WorksheetItem, WorksheetPdf
+from .services import LatexCompileError
 
 
 def make_worksheet(owner, title='Квадратные уравнения', n_tasks=2):
@@ -569,6 +570,52 @@ class WorksheetViewTests(TestCase):
         self.assertEqual(mocked.call_count, 2)
         self.assertEqual(
             WorksheetPdf.objects.filter(worksheet=self.worksheet).count(), 1)
+
+    def test_pdf_editor_page(self):
+        self.login_teacher()
+        response = self.client.get(
+            reverse('worksheet_pdf_editor', args=[self.worksheet.pk]),
+            {'variant': 'answers'})
+        self.assertContains(response, 'id="tex-source"')
+        self.assertContains(response, '\\documentclass')
+        self.assertContains(response, 'С ответами')
+        # Чужой листок недоступен
+        self.client.login(username='teacher2', password='pass12345')
+        response = self.client.get(
+            reverse('worksheet_pdf_editor', args=[self.worksheet.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    @mock.patch('worksheets.views.compile_latex',
+                return_value=b'%PDF-1.5 fake')
+    def test_pdf_editor_compile(self, mocked):
+        self.login_teacher()
+        url = reverse('worksheet_pdf_compile', args=[self.worksheet.pk])
+        response = self.client.post(url, {'tex': r'\documentclass{article}'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(
+            mocked.call_args.args[0], r'\documentclass{article}')
+        # Черновая сборка не пишет в кэш PDF
+        self.assertEqual(
+            WorksheetPdf.objects.filter(worksheet=self.worksheet).count(), 0)
+
+        # Пустой документ — 400
+        response = self.client.post(url, {'tex': '  '})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()['ok'])
+
+    @mock.patch('worksheets.views.compile_latex',
+                side_effect=LatexCompileError(
+                    'Ошибка компиляции LaTeX.', log='! Undefined control'))
+    def test_pdf_editor_compile_error(self, mocked):
+        self.login_teacher()
+        response = self.client.post(
+            reverse('worksheet_pdf_compile', args=[self.worksheet.pk]),
+            {'tex': r'\bad'})
+        self.assertEqual(response.status_code, 502)
+        data = response.json()
+        self.assertFalse(data['ok'])
+        self.assertIn('Undefined control', data['log'])
 
     @mock.patch('worksheets.services.compile_latex',
                 return_value=b'%PDF-1.5 fake')
