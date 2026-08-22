@@ -49,12 +49,14 @@
 <div class="card task-catalog">
 <div class="table-summary"><strong>Найдено: {{ page.paginator.count }}</strong><span>Изменения сохраняются автоматически</span></div>
 <table class="list">
-  <tr><th>Задача</th><th>Класс</th><th>Ответ</th><th>Источник</th><th>Темы</th><th>Теги</th><th></th></tr>
+  <tr><th>Задача</th><th>Класс</th><th>Ответ</th><th>Источник</th><th>Темы</th><th>Теги</th></tr>
   {% for task in page %}
   {% with ref=task.source_refs.all|first %}
   <tr>
     <td>
       <div class="task-line">
+        <a class="task-id" href="{% url 'task_detail' task.pk %}"
+           title="Открыть задачу">#{{ task.pk }}</a>
         {% if task.stars %}<span class="stars">{{ task.get_stars_display }}</span>{% endif %}
         <span class="math-content task-text">{{ task.text_latex|web_text|truncatechars:220 }}</span>
       </div>
@@ -99,10 +101,6 @@
     </td>
     <td class="task-meta">{% for t in task.topics.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
     <td class="task-meta">{% for t in task.tags.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
-    <td>
-      <a class="btn btn-small btn-secondary" href="{% url 'task_detail' task.pk %}">Открыть</a>
-      {% block task_actions %}{% endblock %}
-    </td>
   </tr>
   {% endwith %}
   {% endfor %}

@@ -862,6 +862,43 @@
     overflow: hidden;
   }
 
+  /* Тексту задачи — не меньше половины ширины, служебные колонки — по минимуму */
+  .task-catalog table.list {
+    table-layout: fixed;
+  }
+
+  .task-catalog table.list th:nth-child(1) {
+    width: 50%;
+  }
+
+  .task-catalog table.list th:nth-child(2) {
+    width: 72px;
+  }
+
+  .task-catalog table.list th:nth-child(3) {
+    width: 15%;
+  }
+
+  .task-catalog table.list th:nth-child(4) {
+    width: 17%;
+  }
+
+  .task-catalog table.list select,
+  .task-catalog table.list textarea,
+  .task-catalog table.list input {
+    max-width: 100%;
+  }
+
+  .task-id {
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .task-id:hover {
+    text-decoration: underline;
+  }
+
   /* Запрещены акцентные рамки с одной стороны (border-top/left/right/bottom
      цветом --accent): выделение панелей — только фоном или тенью. */
   .panel-priority {
@@ -1014,6 +1051,11 @@
 
   .math-content {
     line-height: 1.55;
+  }
+
+  /* Формула — неделимый блок: не разрывается при переносе строк */
+  .math-content .katex {
+    display: inline-block;
   }
 
   .ws-ghost {
