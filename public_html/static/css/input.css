@@ -1565,6 +1565,39 @@
     flex-wrap: wrap;
   }
 
+  /* Карточка задачи: горячее редактирование подпунктов и классификации */
+  .quick-subitems {
+    display: grid;
+    gap: var(--space-1);
+    margin-block: var(--space-2);
+  }
+
+  .quick-subitem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .quick-subitem-form {
+    display: flex;
+    flex: 1;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .quick-subitem-form input[name="text_latex"] {
+    flex: 1;
+    max-width: none;
+  }
+
+  .quick-classify {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-4);
+    margin-block: var(--space-2);
+  }
+
   /* Предпросмотр импорта: панель массового назначения и поля строк */
   .import-bulk {
     display: flex;
