@@ -267,8 +267,26 @@ def match_existing_tasks(parsed):
     return matches
 
 
-def create_worksheet(parsed, owner, title=''):
+def find_existing_task(text):
+    """pk задачи каталога с тем же нормализованным условием или None.
+
+    Та же проверка, что при импорте, — используется и при ручном создании
+    задачи, чтобы не плодить дубли под разными ID.
+    """
+    normalized = normalize_task_text(text)
+    for pk, existing in (Task.objects.filter(variant_of__isnull=True)
+                         .values_list('pk', 'text_latex')):
+        if normalize_task_text(existing) == normalized:
+            return pk
+    return None
+
+
+def create_worksheet(parsed, owner, title='', overrides=None):
     """Создаёт листок с элементами; новые задачи сохраняются в базу.
+
+    overrides — назначения из предпросмотра по индексу элемента:
+    {'grade_level', 'topic_id', 'stars', 'answer', 'solution'}.
+    Применяются только к новым задачам (существующие в базе не меняются).
 
     Возвращает (worksheet, missing_images): файлы картинок при импорте
     не переносятся, missing_images — список {'task': Task, 'files': […]}
@@ -276,6 +294,7 @@ def create_worksheet(parsed, owner, title=''):
     """
     header = parsed['header']
     matches = match_existing_tasks(parsed)
+    overrides = overrides or {}
     worksheet = Worksheet.objects.create(
         title=title or header['title'] or 'Импортированный листок',
         grade_label=header['left'],
@@ -298,10 +317,17 @@ def create_worksheet(parsed, owner, title=''):
             if task_pk is not None:
                 task = Task.objects.get(pk=task_pk)
             else:
+                extra = overrides.get(i, {})
                 task = Task.objects.create(
-                    text_latex=data['text'], stars=data['stars'],
-                    columns=data['columns'], answer_latex=data['answer'],
-                    solution_latex=data['solution'], created_by=owner)
+                    text_latex=data['text'],
+                    stars=extra.get('stars', data['stars']),
+                    columns=data['columns'],
+                    answer_latex=extra.get('answer', data['answer']),
+                    solution_latex=extra.get('solution', data['solution']),
+                    grade_level=extra.get('grade_level'),
+                    created_by=owner)
+                if extra.get('topic_id'):
+                    task.topics.add(extra['topic_id'])
                 for j, chunk in enumerate(data['subitems']):
                     TaskSubitem.objects.create(
                         task=task, order=(j + 1) * 10, text_latex=chunk)

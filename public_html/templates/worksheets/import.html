@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}Импорт .tex — EgorMath{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/import.html' %}{% endblock %}
 {% block content %}
@@ -40,37 +41,127 @@
     {% if preview.header.right %} · {{ preview.header.right }}{% endif %}
     {% if preview.header.subtitle %} · {{ preview.header.subtitle }}{% endif %}
   </p>
-  <table class="list">
-    <tr><th>Элемент</th><th>Содержимое</th><th>Статус</th></tr>
-    {% for row in preview.rows %}
-    <tr>
-      <td>{% if row.kind == 'task' %}задача{% elif row.kind == 'rubric' %}рубрика{% else %}текст{% endif %}</td>
-      <td>
-        {% if row.kind == 'task' %}
-        <div class="math-content task-text">{{ row.data.text|truncatechars:200 }}</div>
-        {% if row.data.subitems %}<span class="task-meta">подпунктов: {{ row.data.subitems|length }}</span>{% endif %}
-        {% if row.data.images %}<span class="task-meta">картинки (догрузить после импорта): {{ row.data.images|join:', ' }}</span>{% endif %}
-        {% elif row.kind == 'rubric' %}
-        <strong>{{ row.data.rubric }}</strong>{% if row.data.note %} — {{ row.data.note }}{% endif %}
-        {% else %}
-        {{ row.data.text|truncatechars:200 }}
-        {% endif %}
-      </td>
-      <td>
-        {% if row.kind == 'task' %}
-          {% if row.existing_id %}<span class="badge badge-reviewed">в базе #{{ row.existing_id }}</span>
-          {% else %}<span class="badge badge-assigned">новая</span>{% endif %}
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-  </table>
-  <p class="helptext">Новых задач будет создано: {{ preview.new_tasks }}.</p>
-  <form method="post">
+
+  <form method="post" id="import-create-form">
     {% csrf_token %}
     <textarea name="tex" hidden>{{ tex }}</textarea>
+
+    <div class="import-bulk" hidden id="import-bulk">
+      <strong>Выделено: <span id="bulk-count">0</span></strong>
+      <label class="inline-label">класс
+        <select id="bulk-grade" class="quick-select">
+          <option value="">—</option>
+          {% for g, label in grade_choices %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="inline-label">тема
+        <select id="bulk-topic" class="quick-select">
+          <option value="">—</option>
+          {% for root in topics %}
+          <option value="{{ root.pk }}">{{ root.name }}</option>
+          {% for child in root.children.all %}<option value="{{ child.pk }}">— {{ child.name }}</option>{% endfor %}
+          {% endfor %}
+        </select>
+      </label>
+      <label class="inline-label">звёзды
+        <select id="bulk-stars" class="quick-select">
+          <option value="">—</option>
+          <option value="0">без звёзд</option>
+          <option value="1">★</option>
+          <option value="2">★★</option>
+          <option value="3">★★★</option>
+        </select>
+      </label>
+      <button type="button" class="btn btn-small btn-secondary" id="bulk-apply">Применить к выделенным</button>
+    </div>
+
+    <table class="list import-preview">
+      <tr>
+        <th><input type="checkbox" id="select-all" title="Выделить все новые задачи"></th>
+        <th>Содержимое</th>
+        <th>Назначения</th>
+        <th>Статус</th>
+      </tr>
+      {% for row in preview.rows %}
+      <tr{% if row.kind == 'rubric' %} class="rubric-row"{% endif %}>
+        <td>
+          {% if row.kind == 'task' and not row.existing_id %}
+          <input type="checkbox" class="row-select" data-index="{{ forloop.counter0 }}">
+          {% endif %}
+        </td>
+        <td>
+          {% if row.kind == 'task' %}
+          <div class="math-content task-text">{{ row.data.text|truncatechars:300 }}</div>
+          {% if row.data.subitems %}
+          <ol class="subitems">
+            {% for sub in row.data.subitems %}
+            <li><span class="math-content">{{ sub|truncatechars:160 }}</span></li>
+            {% endfor %}
+          </ol>
+          {% endif %}
+          {% if not row.existing_id %}
+          <div class="import-answers">
+            <label class="inline-label">ответ
+              <input type="text" name="answer_{{ forloop.counter0 }}" class="quick-input"
+                     value="{{ row.data.answer }}" placeholder="ответ (LaTeX)"></label>
+            <label class="inline-label">решение
+              <input type="text" name="solution_{{ forloop.counter0 }}" class="quick-input"
+                     value="{{ row.data.solution }}" placeholder="решение (LaTeX)"></label>
+          </div>
+          {% else %}
+            {% if row.data.answer %}<div class="task-meta">ответ: <span class="math-content">{{ row.data.answer }}</span></div>{% endif %}
+          {% endif %}
+          {% if row.data.images %}<span class="task-meta">картинки (догрузить после импорта): {{ row.data.images|join:', ' }}</span>{% endif %}
+          {% elif row.kind == 'rubric' %}
+          <strong>{{ row.data.rubric }}</strong>{% if row.data.note %} — {{ row.data.note }}{% endif %}
+          {% else %}
+          {{ row.data.text|truncatechars:200 }}
+          {% endif %}
+        </td>
+        <td>
+          {% if row.kind == 'task' and not row.existing_id %}
+          <div class="import-assign">
+            <label class="inline-label">класс
+              <select name="grade_{{ forloop.counter0 }}" class="quick-select">
+                <option value="">—</option>
+                {% for g, label in grade_choices %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+              </select>
+            </label>
+            <label class="inline-label">тема
+              <select name="topic_{{ forloop.counter0 }}" class="quick-select">
+                <option value="">—</option>
+                {% for root in topics %}
+                <option value="{{ root.pk }}">{{ root.name }}</option>
+                {% for child in root.children.all %}<option value="{{ child.pk }}">— {{ child.name }}</option>{% endfor %}
+                {% endfor %}
+              </select>
+            </label>
+            <label class="inline-label">звёзды
+              <select name="stars_{{ forloop.counter0 }}" class="quick-select">
+                <option value="0" {% if row.data.stars == 0 %}selected{% endif %}>без звёзд</option>
+                <option value="1" {% if row.data.stars == 1 %}selected{% endif %}>★</option>
+                <option value="2" {% if row.data.stars == 2 %}selected{% endif %}>★★</option>
+                <option value="3" {% if row.data.stars == 3 %}selected{% endif %}>★★★</option>
+              </select>
+            </label>
+          </div>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.kind == 'task' %}
+            {% if row.existing_id %}<span class="badge badge-reviewed">в базе #{{ row.existing_id }}</span>
+            {% else %}<span class="badge badge-assigned">новая</span>{% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    <p class="helptext">Новых задач будет создано: {{ preview.new_tasks }}.
+      Класс, тема, звёзды, ответы и решения применяются только к новым задачам —
+      существующие в базе не меняются.</p>
     <button type="submit" name="action" value="create" class="btn">Создать листок</button>
   </form>
 </div>
+<script defer src="{% static 'js/import.js' %}"></script>
 {% endif %}
 {% endblock %}

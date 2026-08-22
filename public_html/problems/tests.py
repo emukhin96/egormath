@@ -119,6 +119,28 @@ class CatalogViewTests(TestCase):
         self.assertEqual(task.subitems.count(), 2)
         self.assertEqual(task.subitems.first().answer_latex, '2')
 
+    def test_task_create_duplicate_warning(self):
+        # Условие совпадает с существующей задачей (с точностью до пробелов)
+        self.client.login(username='teacher1', password='pass12345')
+        data = {
+            'text_latex': '  ' + self.task.text_latex + '  ', 'columns': 0,
+            'answer_latex': '', 'solution_latex': '',
+            'stars': 0, 'answer_type': 'number',
+            **formset_management('source_refs', total=0),
+            **formset_management('subitems', total=0),
+            **formset_management('images', total=0),
+        }
+        before = Task.objects.count()
+        response = self.client.post(reverse('task_create'), data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'уже есть в базе')
+        self.assertContains(response, 'Всё равно создать')
+        self.assertEqual(Task.objects.count(), before)
+        # «Всё равно создать» обходит проверку
+        response = self.client.post(
+            reverse('task_create'), {**data, 'force_create': '1'})
+        self.assertEqual(Task.objects.count(), before + 1)
+
     def test_variants_hidden_from_catalog(self):
         variant = Task.objects.create(
             text_latex='Копия', variant_of=self.task)

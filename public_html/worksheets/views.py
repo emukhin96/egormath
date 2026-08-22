@@ -88,10 +88,41 @@ def worksheet_list(request):
     })
 
 
+def _import_overrides(post, parsed):
+    """Назначения задачам из предпросмотра импорта: класс/тема/звёзды/ответ."""
+    overrides = {}
+    valid_grades = {str(g) for g, _ in Task.GRADE_CHOICES}
+    for i, (kind, data) in enumerate(parsed['elements']):
+        if kind != 'task':
+            continue
+        extra = {}
+        grade = post.get(f'grade_{i}', '').strip()
+        if grade in valid_grades:
+            extra['grade_level'] = int(grade)
+        topic = post.get(f'topic_{i}', '').strip()
+        if topic.isdigit():
+            extra['topic_id'] = int(topic)
+        stars = post.get(f'stars_{i}', '').strip()
+        if stars.isdigit():
+            extra['stars'] = max(0, min(3, int(stars)))
+        if f'answer_{i}' in post:
+            extra['answer'] = post[f'answer_{i}'].strip()
+        if f'solution_{i}' in post:
+            extra['solution'] = post[f'solution_{i}'].strip()
+        if extra:
+            overrides[i] = extra
+    return overrides
+
+
 @teacher_required
 def worksheet_import(request):
     """Импорт .tex-листка (пакет egor): вставка/файл → предпросмотр → создание."""
-    context = {'tex': '', 'preview': None}
+    context = {
+        'tex': '', 'preview': None,
+        'grade_choices': Task.GRADE_CHOICES,
+        'topics': Topic.objects.filter(parent=None)
+                               .prefetch_related('children'),
+    }
     if request.method == 'POST':
         tex = request.POST.get('tex', '')
         upload = request.FILES.get('file')
@@ -110,7 +141,8 @@ def worksheet_import(request):
 
         if request.POST.get('action') == 'create':
             worksheet, missing_images = create_worksheet(
-                parsed, owner=request.user)
+                parsed, owner=request.user,
+                overrides=_import_overrides(request.POST, parsed))
             messages.success(
                 request,
                 f'Листок «{worksheet.title}» импортирован '

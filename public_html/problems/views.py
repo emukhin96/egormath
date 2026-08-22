@@ -320,6 +320,28 @@ def _task_form(request, task):
                       and task.variant_of_id is None)
         if (form.is_valid() and source_fs.is_valid()
                 and subitem_fs.is_valid() and image_fs.is_valid()):
+            # Дедупликация: не создавать вторую задачу с тем же условием
+            if task is None and 'force_create' not in request.POST:
+                from worksheets.import_tex import find_existing_task
+                duplicate_pk = find_existing_task(
+                    form.cleaned_data['text_latex'])
+                if duplicate_pk is not None:
+                    messages.warning(
+                        request,
+                        f'Задача с таким условием уже есть в базе — '
+                        f'#{duplicate_pk}. Проверьте её или нажмите '
+                        f'«Всё равно создать».')
+                    return render(request, 'problems/task_form.html', {
+                        'form': form,
+                        'formset': source_fs,
+                        'subitem_formset': subitem_fs,
+                        'image_formset': image_fs,
+                        'task': task,
+                        'worksheet': worksheet,
+                        'item': item,
+                        'can_save_local': False,
+                        'duplicate_pk': duplicate_pk,
+                    })
             if save_local:
                 variant = _save_local_variant(
                     request.user, task, form, source_fs, subitem_fs)

@@ -708,6 +708,11 @@ class ImportTexTests(TestCase):
             url, {'tex': SAMPLE_TEX, 'action': 'preview'})
         self.assertContains(response, 'новая')
         self.assertContains(response, 'Разминка')
+        # В предпросмотре видны сами подпункты, а не только их количество
+        self.assertContains(response, '$2+2$')
+        # И поля назначений для новых задач
+        self.assertContains(response, 'name="grade_1"')
+        self.assertContains(response, 'name="answer_1"')
 
         response = self.client.post(
             url, {'tex': SAMPLE_TEX, 'action': 'create'})
@@ -719,6 +724,24 @@ class ImportTexTests(TestCase):
         response = self.client.post(
             url, {'tex': 'нет команд', 'action': 'preview'})
         self.assertContains(response, 'Ошибка разбора')
+
+    def test_import_create_with_overrides(self):
+        from problems.models import Topic
+        topic = Topic.objects.create(name='Дроби')
+        self.client.login(username='teacher1', password='pass12345')
+        # Элемент с индексом 1 — первая задача (после рубрики «Разминка»)
+        self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create',
+            'grade_1': '8', 'topic_1': str(topic.pk), 'stars_1': '3',
+            'answer_1': '5/6', 'solution_1': 'Общий знаменатель 6.',
+        })
+        worksheet = Worksheet.objects.get(owner=self.teacher)
+        task = worksheet.items.filter(task__isnull=False).first().task
+        self.assertEqual(task.grade_level, 8)
+        self.assertEqual(list(task.topics.all()), [topic])
+        self.assertEqual(task.stars, 3)
+        self.assertEqual(task.answer_latex, '5/6')
+        self.assertEqual(task.solution_latex, 'Общий знаменатель 6.')
 
 
 class ShareLinkTests(TestCase):

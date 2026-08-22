@@ -169,6 +169,29 @@
     font-size: 0.92rem;
   }
 
+  /* Preflight обнуляет кнопку выбора файла — возвращаем ей вид кнопки */
+  input[type="file"] {
+    max-width: 640px;
+    color: var(--muted);
+  }
+
+  ::file-selector-button {
+    margin-right: var(--space-2);
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  ::file-selector-button:hover {
+    background: #edf3f9;
+  }
+
   .helptext {
     color: var(--muted);
     font-size: 0.85rem;
@@ -1523,6 +1546,39 @@
     gap: 4px;
     align-items: center;
     flex-wrap: wrap;
+  }
+
+  /* Предпросмотр импорта: панель массового назначения и поля строк */
+  .import-bulk {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    margin-bottom: var(--space-3);
+    background: #e4eef9;
+    border-radius: var(--radius);
+  }
+
+  .import-preview th:first-child {
+    width: 34px;
+  }
+
+  .import-assign {
+    display: grid;
+    gap: var(--space-1);
+    min-width: 150px;
+  }
+
+  .import-answers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
+  }
+
+  .import-preview .rubric-row td {
+    background: #eef2f6;
   }
 
   /* Панель действий листка — без заливки и рамки, сливается с фоном страницы */
