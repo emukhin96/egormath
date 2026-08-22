@@ -404,11 +404,17 @@ def _task_form(request, task):
                 duplicate_pk = find_existing_task(
                     form.cleaned_data['text_latex'])
                 if duplicate_pk is not None:
-                    messages.warning(
-                        request,
+                    warning = (
                         f'Задача с таким условием уже есть в базе — '
                         f'#{duplicate_pk}. Проверьте её или нажмите '
                         f'«Всё равно создать».')
+                    # Файловые поля браузер не пересылает при повторной
+                    # отправке формы — предупреждаем, что их надо выбрать
+                    # заново
+                    if request.FILES:
+                        warning += (' Выбранные файлы картинок при этом '
+                                    'нужно указать заново.')
+                    messages.warning(request, warning)
                     return render(request, 'problems/task_form.html', {
                         'form': form,
                         'formset': source_fs,

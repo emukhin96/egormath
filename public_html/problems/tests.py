@@ -76,6 +76,25 @@ class WebTexTests(TestCase):
         inline = 'Дано \\(a~b \\\\ c\\), найдите.'
         self.assertEqual(self.render(inline), escape(inline))
 
+    def test_commands_inside_math_are_untouched(self):
+        # \annot и прочее внутри $…$ не преобразуем — KaTeX должен видеть
+        # цельное выражение
+        self.assertEqual(self.render('$x+\\annot{a}$'), '$x+\\annot{a}$')
+
+    def test_preview_safe_truncation(self):
+        from problems.web_tex import tex_preview_html
+        # Обрезка не разрезает формулу: $…$ у границы уходит целиком
+        text = 'Вычислите значение выражения $x^2+3x-4$ при $x=2$.'
+        html = str(tex_preview_html(text, limit=32))
+        self.assertNotIn('$x^2', html.replace('Вычислите значение выражения',
+                                              ''))
+        self.assertEqual(html.count('$') % 2, 0)
+        # Недописанная команда у границы не остаётся в превью
+        html = str(tex_preview_html('Смотри рисунок \\taskpic{file.pdf}', 20))
+        self.assertNotIn('\\taskpi', html)
+        # Короткий текст — без изменений и многоточия
+        self.assertEqual(str(tex_preview_html('Коротко.', 100)), 'Коротко.')
+
     def test_tabular(self):
         html = self.render(
             '\\begin{tabular}{|c|c|}\\hline $x$ & 1 \\\\ $y$ & 2 '
