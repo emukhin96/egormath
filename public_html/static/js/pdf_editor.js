@@ -4,20 +4,27 @@
 (function () {
   'use strict';
 
-  // Строки, которые добавляет переключатель шрифта (вставляются после egor).
-  // Сервер собирает LuaLaTeX, поэтому шрифты меняем через fontspec.
-  var FONT_LINES = {
-    cm: [],
-    schoolbook: ['\\usepackage{fontspec}',
-                 '\\setmainfont{TeX Gyre Schola}'],
-    palatino: ['\\usepackage{fontspec}',
-               '\\setmainfont{TeX Gyre Pagella}'],
-  };
-  var ALL_FONT_LINES = [
-    '\\usepackage{fontspec}',
-    '\\setmainfont{TeX Gyre Schola}',
-    '\\setmainfont{TeX Gyre Pagella}',
-  ];
+  // Шрифт переключается штатной опцией пакета egor:
+  // \usepackage[font=cm|school|palatino]{egor} (см. документацию egor.sty).
+  var EGOR_RE = /\\usepackage(?:\[([^\]]*)\])?\{egor\}/;
+
+  function setEgorFont(tex, value) {
+    return tex.replace(EGOR_RE, function (_m, opts) {
+      var parts = (opts || '').split(',')
+        .map(function (s) { return s.trim(); })
+        .filter(function (s) { return s && s.indexOf('font=') !== 0; });
+      if (value !== 'cm') parts.push('font=' + value);
+      return parts.length
+        ? '\\usepackage[' + parts.join(',') + ']{egor}'
+        : '\\usepackage{egor}';
+    });
+  }
+
+  function getEgorFont(tex) {
+    var opts = (tex.match(EGOR_RE) || [])[1] || '';
+    var m = opts.match(/font=(cm|school|palatino)/);
+    return m ? m[1] : 'cm';
+  }
 
   document.addEventListener('DOMContentLoaded', function () {
     var root = document.querySelector('.pdf-editor');
@@ -61,7 +68,9 @@
       }).then(function (r) {
         if (r.ok) return r.blob().then(function (blob) {
           currentUrl = URL.createObjectURL(blob);
-          frame.src = currentUrl;
+          // navpanes=0 прячет боковую панель миниатюр страниц во встроенном
+          // просмотрщике (как в Adobe Acrobat по умолчанию)
+          frame.src = currentUrl + '#navpanes=0&view=FitH';
           download.href = currentUrl;
           download.hidden = false;
           status.textContent = '';
@@ -87,19 +96,7 @@
       } else if (kind === 'paper') {
         tex = tex.replace(/\ba[45]paper\b/, value);
       } else if (kind === 'font') {
-        var lines = tex.split('\n').filter(function (line) {
-          return ALL_FONT_LINES.indexOf(line.trim()) === -1;
-        });
-        var extra = FONT_LINES[value] || [];
-        if (extra.length) {
-          for (var i = 0; i < lines.length; i += 1) {
-            if (/\\usepackage(\[[^\]]*\])?\{egor\}/.test(lines[i])) {
-              lines.splice.apply(lines, [i + 1, 0].concat(extra));
-              break;
-            }
-          }
-        }
-        tex = lines.join('\n');
+        tex = setEgorFont(tex, value);
       }
       source.value = tex;
       markActive();
@@ -111,8 +108,7 @@
       var current = {
         size: (tex.match(/\b(1[012]pt)\b/) || [])[1] || '',
         paper: (tex.match(/\b(a[45]paper)\b/) || [])[1] || '',
-        font: tex.indexOf('TeX Gyre Schola') !== -1 ? 'schoolbook'
-          : tex.indexOf('TeX Gyre Pagella') !== -1 ? 'palatino' : 'cm',
+        font: getEgorFont(tex),
       };
       document.querySelectorAll('.switch-group').forEach(function (group) {
         group.querySelectorAll('button').forEach(function (btn) {
