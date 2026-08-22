@@ -210,7 +210,7 @@
       {% for task in found_tasks %}
       <tr>
         <td>
-          <div class="math-content task-text">{{ task.text_latex|web_text|truncatechars:180 }}</div>
+          <div class="math-content task-text">{{ task.text_latex|truncatechars:180|web_text }}</div>
           <span class="task-meta"><a href="{% url 'task_detail' task.pk %}" title="Открыть задачу">#{{ task.pk }}</a>{% if task.grade_level %} · {{ task.grade_level }} класс{% endif %}</span>
         </td>
         <td style="white-space:nowrap">

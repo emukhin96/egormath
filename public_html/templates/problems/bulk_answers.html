@@ -47,7 +47,7 @@
         <td class="mono">{{ row.number }}</td>
         <td>{% if row.task %}
           <a href="{% url 'task_detail' row.task.pk %}">#{{ row.task.pk }}</a>
-          <span class="math-content task-text">{{ row.task.text_latex|web_text|truncatechars:120 }}</span>
+          <span class="math-content task-text">{{ row.task.text_latex|truncatechars:120|web_text }}</span>
         {% else %}—{% endif %}</td>
         <td class="math-content">{{ row.task.answer_latex|default:'' }}</td>
         <td class="math-content">{{ row.answer|default:'' }}</td>

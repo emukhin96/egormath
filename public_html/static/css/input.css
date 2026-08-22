@@ -1081,6 +1081,23 @@
     display: inline-block;
   }
 
+  /* Аннотация \annot{…} из tex-текста задачи */
+  .tex-annot {
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* Таблица tabular из tex-текста задачи */
+  .tex-table {
+    border-collapse: collapse;
+    margin: var(--space-2) 0;
+  }
+
+  .tex-table td {
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+  }
+
   .ws-ghost {
     opacity: 0.4;
     background: #eef3fb;

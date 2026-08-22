@@ -41,6 +41,46 @@ class LatexUtilsTests(TestCase):
         self.assertEqual(chunks, ['$1+1$', '$2+2$', '$3+3$'])
 
 
+class WebTexTests(TestCase):
+    """Серверный препроцессор tex → HTML для веб-страниц."""
+
+    def render(self, text):
+        from problems.web_tex import tex_to_web_html
+        return str(tex_to_web_html(text))
+
+    def test_comments_and_annot(self):
+        self.assertEqual(self.render('%\\annot{}\nНайдите $x$.'),
+                         'Найдите $x$.')
+        self.assertEqual(
+            self.render('\\annot{для устного счёта} Вычислите.'),
+            '<span class="tex-annot">для устного счёта</span> Вычислите.')
+
+    def test_line_breaks_and_spacing(self):
+        self.assertEqual(self.render('Первая строка.\\\\Вторая.'),
+                         'Первая строка.<br>Вторая.')
+        self.assertEqual(self.render('Абзац.\\par Новый.'),
+                         'Абзац.<br><br> Новый.')
+        self.assertEqual(self.render('на 5~см больше'),
+                         'на 5&nbsp;см больше')
+        self.assertEqual(self.render('на 33\\%'), 'на 33%')
+
+    def test_math_is_untouched(self):
+        # Внутри $…$ команды не трогаем — их рендерит KaTeX
+        self.assertEqual(self.render('$a~b \\\\ c$'), '$a~b \\\\ c$')
+
+    def test_tabular(self):
+        html = self.render(
+            '\\begin{tabular}{|c|c|}\\hline $x$ & 1 \\\\ $y$ & 2 '
+            '\\\\ \\hline\\end{tabular}')
+        self.assertIn('<table class="tex-table">', html)
+        self.assertIn('<tr><td>$x$</td><td>1</td></tr>', html)
+        self.assertIn('<tr><td>$y$</td><td>2</td></tr>', html)
+
+    def test_html_is_escaped(self):
+        self.assertEqual(self.render('<script>alert(1)</script>'),
+                         '&lt;script&gt;alert(1)&lt;/script&gt;')
+
+
 class TaskModelTests(TestCase):
     def test_text_plain_autofill(self):
         task = Task.objects.create(text_latex=r'Найдите \emph{корни}: $x^2=4$')
