@@ -63,8 +63,7 @@
                    value="{{ item.stars_override|default_if_none:'' }}">
           </form>
           <div class="task-line">
-            <a class="ws-num" href="{% url 'task_detail' item.task.pk %}"
-               title="Открыть задачу #{{ item.task.pk }}">{{ row.number }}.</a>
+            <span class="ws-num">{{ row.number }}.</span>
             <span class="ws-stars" data-form="settings-{{ item.pk }}"
                   data-effective="{{ item.effective_stars }}"
                   title="Сложность в листке — кликните по звезде">
@@ -99,7 +98,7 @@
           </div>
           {% endif %}
           <div class="task-meta">
-            #{{ item.task.pk }}{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}
+            <a class="task-id" href="{% url 'task_detail' item.task.pk %}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}
             · <a href="{% url 'task_edit' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}">править</a>
             · <button type="button" class="link-btn ws-star-reset"
                       data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
@@ -146,7 +145,7 @@
         <div class="ws-actions">
           <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'up' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.first %}disabled{% endif %}>↑</button></form>
           <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'down' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.last %}disabled{% endif %}>↓</button></form>
-          <form method="post" action="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-danger">×</button></form>
+          <form method="post" action="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" class="inline-form">{% csrf_token %}<button class="icon-btn" title="Убрать из листка" aria-label="Убрать из листка">×</button></form>
         </div>
       </div>
     </div>
