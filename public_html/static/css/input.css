@@ -340,6 +340,25 @@
     font-size: 0.82rem;
   }
 
+  /* Неброская кнопка-иконка (например, × удаления): не выше строки текста */
+  .icon-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 1.05rem;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 6px;
+    vertical-align: baseline;
+  }
+
+  .icon-btn:hover {
+    color: var(--err);
+    background: #fdeaea;
+  }
+
   .linklike:hover {
     color: var(--accent);
   }
@@ -767,14 +786,12 @@
     gap: var(--space-2);
     font-weight: 400;
     margin: 0;
+    /* --depth задаёт уровень вложенности темы (дерево любой глубины) */
+    padding-left: calc(var(--depth, 0) * 20px);
   }
 
   .dialog-topic input {
     width: auto;
-  }
-
-  .dialog-topic-child {
-    padding-left: var(--space-5);
   }
 
   .credentials {
@@ -1181,14 +1198,6 @@
 
   .ws-num {
     font-weight: 700;
-  }
-
-  a.ws-num {
-    text-decoration: none;
-  }
-
-  a.ws-num:hover {
-    text-decoration: underline;
   }
 
   .task-line .stars {

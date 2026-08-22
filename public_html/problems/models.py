@@ -39,6 +39,25 @@ class Topic(models.Model):
         return ids
 
 
+def topic_tree():
+    """Все темы плоским списком в порядке дерева; у каждой — атрибут depth.
+
+    Для чекбоксов/списков, где нужно показать дерево любой глубины
+    (диалоги выбора тем). Один запрос к БД.
+    """
+    by_parent = {}
+    for topic in Topic.objects.all():
+        by_parent.setdefault(topic.parent_id, []).append(topic)
+
+    def walk(parent_id, depth):
+        for topic in by_parent.get(parent_id, []):
+            topic.depth = depth
+            yield topic
+            yield from walk(topic.pk, depth + 1)
+
+    return list(walk(None, 0))
+
+
 class Tag(models.Model):
     name = models.CharField('Название', max_length=64, unique=True)
 

@@ -124,20 +124,7 @@
       <input type="hidden" name="topics_submitted" value="1">
       <h3>Темы задачи #{{ task.pk }}</h3>
       <div class="dialog-topics">
-        {% for root in topics %}
-        <label class="dialog-topic">
-          <input type="checkbox" name="topics" value="{{ root.pk }}"
-                 {% if root in task.topics.all %}checked{% endif %}>
-          {{ root.name }}
-        </label>
-        {% for child in root.children.all %}
-        <label class="dialog-topic dialog-topic-child">
-          <input type="checkbox" name="topics" value="{{ child.pk }}"
-                 {% if child in task.topics.all %}checked{% endif %}>
-          {{ child.name }}
-        </label>
-        {% endfor %}
-        {% endfor %}
+        {% include 'includes/topic_checkboxes.html' with topics=topics selected=task.topics.all %}
       </div>
       <div class="form-buttons">
         <button type="submit" class="btn btn-small">Сохранить</button>

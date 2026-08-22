@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 
 from accounts.decorators import teacher_required
@@ -14,7 +15,7 @@ from accounts.decorators import teacher_required
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
                     TaskSubitemFormSet)
 from .models import (Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
-                     Topic)
+                     Topic, topic_tree)
 
 
 def filter_tasks(params):
@@ -178,9 +179,14 @@ def task_subitem_add(request, pk):
     return redirect('task_detail', pk=pk)
 
 
+@xframe_options_sameorigin
 def task_image_file(request, pk):
     """Файл картинки задачи. Картинки не приватные: задачи видны ученикам
-    в заданиях и любому — по публичной ссылке листка."""
+    в заданиях и любому — по публичной ссылке листка.
+
+    sameorigin: PDF-иллюстрации встраиваются в страницы через <object>,
+    а XFrameOptionsMiddleware по умолчанию ставит DENY.
+    """
     image = get_object_or_404(TaskImage, pk=pk)
     if not image.image.storage.exists(image.image.name):
         raise Http404
@@ -197,8 +203,7 @@ def task_detail(request, pk):
         'task': task,
         'grade_choices': Task.GRADE_CHOICES,
         'stars_choices': Task.STARS_CHOICES,
-        'topics': Topic.objects.filter(parent=None)
-                               .prefetch_related('children'),
+        'topics': topic_tree(),
         'tags_value': ', '.join(t.name for t in task.tags.all()),
     })
 
