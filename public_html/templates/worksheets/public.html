@@ -13,11 +13,7 @@
   {% for row in rows %}
     {% with item=row.item %}
     {% if item.task_id %}
-    <div class="task-line">
-      <span class="ws-num">{{ row.number }}.</span>
-      {% if item.effective_stars %}<span class="stars">{% for _ in ''|center:item.effective_stars %}★{% endfor %}</span>{% endif %}
-      <span class="math-content task-text">{{ item.task.text_latex|web_text }}</span>
-    </div>
+    {% include 'includes/task_row.html' with number=row.number stars=item.effective_stars text=item.task.text_latex %}
     {% include 'problems/_subitems.html' with subitems=row.subitems %}
     {% include 'problems/_task_images.html' with task=item.task %}
     {% elif item.is_rubric %}

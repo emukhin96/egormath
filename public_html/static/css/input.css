@@ -1113,6 +1113,32 @@
     flex-wrap: wrap;
   }
 
+  /* Строка задачи в режиме просмотра: звёзды «на полях» слева от номера,
+     текст всех задач выровнен по одной вертикали */
+  .task-row {
+    display: grid;
+    grid-template-columns: 52px max-content minmax(0, 1fr);
+    column-gap: var(--space-2);
+    align-items: baseline;
+  }
+
+  .task-row .stars {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .task-row .ws-num {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .task-row .task-text {
+    grid-column: 3;
+    grid-row: 1;
+    margin: 0;
+  }
+
   .ws-num {
     font-weight: 700;
   }
@@ -1596,6 +1622,23 @@
   }
 
   @media (max-width: 760px) {
+    /* Узкие экраны: звёзды между номером и текстом, без переноса текста */
+    .task-row {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: var(--space-2);
+      align-items: baseline;
+    }
+
+    .task-row .stars {
+      flex: none;
+    }
+
+    .task-row .task-text {
+      flex: 1;
+      min-width: 0;
+    }
+
     .topbar-inner {
       flex-wrap: wrap;
       gap: var(--space-2);

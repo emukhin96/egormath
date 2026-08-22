@@ -35,11 +35,7 @@
   </div>
   {% else %}
   <div class="card">
-    <div class="task-line">
-      <span class="ws-num">{{ row.number }}.</span>
-      {% if row.item.effective_stars %}<span class="stars">{% for _ in ''|center:row.item.effective_stars %}★{% endfor %}</span>{% endif %}
-      <span class="math-content task-text">{{ row.task.text_latex|web_text }}</span>
-    </div>
+    {% include 'includes/task_row.html' with number=row.number stars=row.item.effective_stars text=row.task.text_latex %}
     {% include 'problems/_task_images.html' with task=row.task %}
 
     {% with sub=row.submission %}
