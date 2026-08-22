@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 
 from accounts.decorators import teacher_required
@@ -178,9 +179,14 @@ def task_subitem_add(request, pk):
     return redirect('task_detail', pk=pk)
 
 
+@xframe_options_sameorigin
 def task_image_file(request, pk):
     """Файл картинки задачи. Картинки не приватные: задачи видны ученикам
-    в заданиях и любому — по публичной ссылке листка."""
+    в заданиях и любому — по публичной ссылке листка.
+
+    sameorigin: PDF-иллюстрации встраиваются в страницы через <object>,
+    а XFrameOptionsMiddleware по умолчанию ставит DENY.
+    """
     image = get_object_or_404(TaskImage, pk=pk)
     if not image.image.storage.exists(image.image.name):
         raise Http404
