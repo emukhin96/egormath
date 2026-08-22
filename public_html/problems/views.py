@@ -15,7 +15,7 @@ from accounts.decorators import teacher_required
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
                     TaskSubitemFormSet)
 from .models import (Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
-                     Topic)
+                     Topic, topic_tree)
 
 
 def filter_tasks(params):
@@ -203,8 +203,7 @@ def task_detail(request, pk):
         'task': task,
         'grade_choices': Task.GRADE_CHOICES,
         'stars_choices': Task.STARS_CHOICES,
-        'topics': Topic.objects.filter(parent=None)
-                               .prefetch_related('children'),
+        'topics': topic_tree(),
         'tags_value': ', '.join(t.name for t in task.tags.all()),
     })
 
