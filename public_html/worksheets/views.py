@@ -271,6 +271,18 @@ def worksheet_delete(request, pk):
 
 @teacher_required
 @require_POST
+def worksheet_bulk_delete(request):
+    """Массовое удаление листков, выбранных чекбоксами в списке."""
+    ids = request.POST.getlist('ids')
+    worksheets = Worksheet.objects.filter(owner=request.user, pk__in=ids)
+    count = worksheets.count()
+    worksheets.delete()
+    messages.success(request, f'Удалено листков: {count}.')
+    return redirect('worksheet_list')
+
+
+@teacher_required
+@require_POST
 def worksheet_quick_update(request, pk):
     """Горячее редактирование из списка листков: класс и темы.
 

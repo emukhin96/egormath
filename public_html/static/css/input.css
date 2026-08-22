@@ -307,6 +307,38 @@
     display: inline;
   }
 
+  /* Ячейка действий строки: кнопки не переносятся на новую строку */
+  td.row-actions {
+    white-space: nowrap;
+  }
+
+  td.row-actions .inline-form {
+    display: inline-block;
+  }
+
+  /* Массовое выделение в списках: ширина с учётом паддингов ячейки */
+  .col-select {
+    width: 44px;
+  }
+
+  table.list input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
+  }
+
+  .bulk-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
   .linklike {
     background: none;
     border: none;
@@ -879,25 +911,30 @@
     overflow: hidden;
   }
 
-  /* Тексту задачи — не меньше половины ширины, служебные колонки — по минимуму */
+  /* Тексту задачи — не меньше половины ширины, служебные колонки — по
+     минимуму. Первая колонка — чекбоксы массового выделения. */
   .task-catalog table.list {
     table-layout: fixed;
   }
 
   .task-catalog table.list th:nth-child(1) {
-    width: 50%;
+    width: 44px;
   }
 
   .task-catalog table.list th:nth-child(2) {
-    width: 72px;
+    width: 48%;
   }
 
   .task-catalog table.list th:nth-child(3) {
-    width: 15%;
+    width: 64px;
   }
 
   .task-catalog table.list th:nth-child(4) {
-    width: 17%;
+    width: 13%;
+  }
+
+  .task-catalog table.list th:nth-child(5) {
+    width: 15%;
   }
 
   .task-catalog table.list select,
@@ -1555,6 +1592,9 @@
     cursor: text;
     border-radius: 4px;
     padding-inline: 2px;
+    /* компенсация паддинга: текст заголовка ровно по левому краю
+       колонки — вровень с page-eyebrow и остальными элементами */
+    margin-inline: -2px;
   }
 
   .ws-editable:hover,

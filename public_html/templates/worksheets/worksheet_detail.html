@@ -3,6 +3,9 @@
 {% block title %}{{ worksheet.title }} — EgorMath{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/worksheet_detail.html' %}{% endblock %}
 {% block content %}
+{# Шапка в стандартном .page-head — как на остальных страницах #}
+<div class="page-head">
+<div>
 <span class="page-eyebrow">Конструктор листка</span>
 {# Заголовок и подзаголовок редактируются кликом по тексту (builder.js) #}
 <h1 class="ws-title">
@@ -18,14 +21,15 @@
          type="text" name="grade_label" value="{{ worksheet.grade_label }}"
          maxlength="100" hidden>
 </h1>
+{% if worksheet.comment %}
+<p class="ws-comment muted">{{ worksheet.comment|linebreaksbr }}</p>
+{% endif %}
+</div>
+</div>
 <form id="title-inline-form" method="post" hidden
       action="{% url 'worksheet_rename' worksheet.pk %}">{% csrf_token %}</form>
 <form id="subtitle-inline-form" method="post" hidden
       action="{% url 'worksheet_quick_update' worksheet.pk %}">{% csrf_token %}</form>
-
-{% if worksheet.comment %}
-<p class="ws-comment muted">{{ worksheet.comment|linebreaksbr }}</p>
-{% endif %}
 
 <div class="ws-toolbar">
   <a class="btn btn-secondary" href="{% url 'worksheet_edit' worksheet.pk %}">Свойства</a>

@@ -7,14 +7,16 @@ from django.db.models import Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.views.decorators.http import require_POST
 
 from accounts.decorators import teacher_required
 
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
                     TaskSubitemFormSet)
 from .models import (Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
-                     Topic)
+                     Topic, topic_tree)
 
 
 def filter_tasks(params):
@@ -59,12 +61,57 @@ def task_list(request):
     return render(request, 'problems/task_list.html', {
         'page': page,
         'topics': topics,
+        'topics_flat': topic_tree(),
         'tags': Tag.objects.all(),
         'sources': Source.objects.all(),
         'current_topic': current_topic,
         'params': request.GET,
         'grade_choices': Task.GRADE_CHOICES,
     })
+
+
+@teacher_required
+@require_POST
+def task_bulk_update(request):
+    """Массовое назначение класса/темы/звёзд выбранным в списке задачам."""
+    ids = request.POST.getlist('ids')
+    tasks = Task.objects.filter(variant_of__isnull=True, pk__in=ids)
+    fields = {}
+    grade = request.POST.get('grade_level', '').strip()
+    if grade:
+        if grade not in {str(g) for g, _ in Task.GRADE_CHOICES}:
+            messages.error(request, 'Недопустимый класс.')
+            return redirect(_safe_next(request))
+        fields['grade_level'] = int(grade)
+    stars = request.POST.get('stars', '').strip()
+    if stars:
+        if stars not in {'0', '1', '2', '3'}:
+            messages.error(request, 'Недопустимое число звёзд.')
+            return redirect(_safe_next(request))
+        fields['stars'] = int(stars)
+    topic = None
+    topic_id = request.POST.get('topic_id', '').strip()
+    if topic_id:
+        topic = Topic.objects.filter(pk=topic_id).first()
+    if not fields and topic is None:
+        messages.error(request, 'Выберите, что назначить: класс, тему '
+                                'или звёзды.')
+        return redirect(_safe_next(request))
+    if fields:
+        tasks.update(**fields)
+    if topic is not None:
+        for task in tasks:
+            task.topics.add(topic)
+    messages.success(request, f'Обновлено задач: {tasks.count()}.')
+    return redirect(_safe_next(request))
+
+
+def _safe_next(request):
+    """Возврат к списку задач с сохранением фильтров (next из формы)."""
+    next_url = request.POST.get('next', '')
+    if url_has_allowed_host_and_scheme(next_url, allowed_hosts=None):
+        return next_url
+    return reverse('task_list')
 
 
 @teacher_required
