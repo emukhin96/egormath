@@ -159,9 +159,19 @@ def worksheet_import(request):
             return redirect('worksheet_detail', pk=worksheet.pk)
 
         matches = match_existing_tasks(parsed)
+        existing = Task.objects.in_bulk([m for m in matches if m])
         rows = []
         for (kind, data), match in zip(parsed['elements'], matches):
-            rows.append({'kind': kind, 'data': data, 'existing_id': match})
+            row = {'kind': kind, 'data': data, 'existing_id': match}
+            if kind == 'task':
+                # Поля ответа/решения предзаполняются: для найденных
+                # в базе — текущими значениями задачи, для новых — из .tex
+                source = existing[match] if match else None
+                row['answer_value'] = (
+                    source.answer_latex if source else data['answer'])
+                row['solution_value'] = (
+                    source.solution_latex if source else data['solution'])
+            rows.append(row)
         context['preview'] = {
             'header': parsed['header'],
             'rows': rows,
