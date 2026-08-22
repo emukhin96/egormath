@@ -35,11 +35,10 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: .github/codex/prompts/review.md
           output-file: codex-review.json
+          output-schema-file: .github/codex/review-schema.json
           sandbox: read-only
-          read-only: true
           safety-strategy: drop-sudo
-          codex-args: >-
-            ["--ephemeral", "--output-schema", ".github/codex/review-schema.json"]
+          codex-args: '["--ephemeral"]'
 
   publish:
     name: Publish review comments
