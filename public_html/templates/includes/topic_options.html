@@ -1,0 +1,4 @@
+{# Опции дерева тем для <select>: topics — topic_tree(), selected — pk выбранной #}
+{% for t in topics %}
+<option value="{{ t.pk }}"{% if t.pk == selected %} selected{% endif %}>{{ t.indent }}{{ t.name }}</option>
+{% endfor %}
