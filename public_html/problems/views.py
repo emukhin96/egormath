@@ -107,9 +107,21 @@ def task_quick_update(request, pk):
         ids = [t for t in request.POST.getlist('topics') if t.isdigit()]
         task.topics.set(Topic.objects.filter(pk__in=ids))
     if request.POST.get('tags_submitted'):
-        names = [n.strip() for n in request.POST.get('tags', '').split(',')]
-        task.tags.set([Tag.objects.get_or_create(name=name)[0]
-                       for name in names if name])
+        # Запятая — разделитель, поэтому имена тегов без запятых
+        names = [n.strip()
+                 for n in request.POST.get('tags', '').split(',') if n.strip()]
+        max_len = Tag._meta.get_field('name').max_length
+        too_long = [n for n in names if len(n) > max_len]
+        if too_long:
+            return JsonResponse(
+                {'ok': False,
+                 'message': f'Тег длиннее {max_len} символов: '
+                            f'{too_long[0][:40]}…'},
+                status=400)
+        tags = [Tag.objects.get_or_create(name=name)[0] for name in names]
+        # Тег с запятой в имени через это поле не выразить — не теряем его
+        tags += [t for t in task.tags.all() if ',' in t.name]
+        task.tags.set(tags)
     if 'source' in request.POST:
         ref = task.source_refs.order_by('pk').first()
         source_id = request.POST['source'].strip()

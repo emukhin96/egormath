@@ -349,6 +349,17 @@ class QuickUpdateTests(TestCase):
         self.assertEqual(
             sorted(t.name for t in self.task.tags.all()),
             ['ОГЭ', 'устный счёт'])
+        # Слишком длинный тег — контролируемая ошибка, а не 500 из БД
+        response = self.xhr_post(
+            {'tags_submitted': '1', 'tags': 'х' * 65})
+        self.assertEqual(response.status_code, 400)
+        # Существующий тег с запятой в имени не теряется при сохранении
+        legacy = Tag.objects.create(name='алгебра, геометрия')
+        self.task.tags.add(legacy)
+        self.xhr_post({'tags_submitted': '1', 'tags': 'ОГЭ'})
+        self.assertEqual(
+            sorted(t.name for t in self.task.tags.all()),
+            ['ОГЭ', 'алгебра, геометрия'])
         # Обычная (не fetch) отправка — редирект на карточку
         response = self.client.post(
             self.url, {'topics_submitted': '1'})
