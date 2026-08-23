@@ -679,3 +679,26 @@ class LocalVariantTests(TestCase):
         self.assertNotEqual(variant.pk, self.task.pk)
         self.assertEqual(variant.variant_of_id, self.task.pk)
         self.assertEqual(variant.text_latex, 'Изменённый текст')
+
+    def test_save_local_keeps_subitem_solutions(self):
+        sub = self.task.subitems.create(
+            order=10, text_latex='$1+1$', answer_latex='2',
+            solution_latex='Сложение')
+        response = self.client.post(self.edit_url(), self.post_data(
+            save_local='',
+            **formset_management('subitems', total=1, initial=1),
+            **{
+                'subitems-0-id': sub.pk,
+                'subitems-0-order': 10,
+                'subitems-0-text_latex': '$1+1$',
+                'subitems-0-answer_latex': '2',
+                'subitems-0-solution_latex': 'Сложение',
+            }))
+        self.assertEqual(response.status_code, 302)
+        self.item.refresh_from_db()
+        variant_sub = self.item.task.subitems.get()
+        self.assertEqual(variant_sub.solution_latex, 'Сложение')
+        self.assertEqual(variant_sub.answer_latex, '2')
+        # Оригинал не тронут
+        sub.refresh_from_db()
+        self.assertEqual(sub.solution_latex, 'Сложение')
