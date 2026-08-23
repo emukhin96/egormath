@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils.html import escape
 
 from accounts.models import Profile
 
@@ -39,6 +40,121 @@ class LatexUtilsTests(TestCase):
     def test_split_items_strips_punctuation(self):
         chunks = split_items('\\item $1+1$; \\item $2+2$ ; \\item $3+3$.')
         self.assertEqual(chunks, ['$1+1$', '$2+2$', '$3+3$'])
+
+
+class WebTexTests(TestCase):
+    """Серверный препроцессор tex → HTML для веб-страниц."""
+
+    def render(self, text):
+        from problems.web_tex import tex_to_web_html
+        return str(tex_to_web_html(text))
+
+    def test_comments_and_annot(self):
+        self.assertEqual(self.render('%\\annot{}\nНайдите $x$.'),
+                         'Найдите $x$.')
+        self.assertEqual(
+            self.render('\\annot{для устного счёта} Вычислите.'),
+            '<span class="tex-annot">для устного счёта</span> Вычислите.')
+
+    def test_line_breaks_and_spacing(self):
+        self.assertEqual(self.render('Первая строка.\\\\Вторая.'),
+                         'Первая строка.<br>Вторая.')
+        self.assertEqual(self.render('Абзац.\\par Новый.'),
+                         'Абзац.<br><br> Новый.')
+        self.assertEqual(self.render('на 5~см больше'),
+                         'на 5&nbsp;см больше')
+        self.assertEqual(self.render('на 33\\%'), 'на 33%')
+
+    def test_math_is_untouched(self):
+        # Внутри $…$ команды не трогаем — их рендерит KaTeX
+        self.assertEqual(self.render('$a~b \\\\ c$'), '$a~b \\\\ c$')
+
+    def test_bracket_math_is_untouched(self):
+        # KaTeX рендерит и \(…\)/\[…\] — внутри них \\ не превращаем в <br>
+        matrix = '\\[\\begin{matrix}a\\\\b\\end{matrix}\\]'
+        self.assertEqual(self.render(matrix), escape(matrix))
+        inline = 'Дано \\(a~b \\\\ c\\), найдите.'
+        self.assertEqual(self.render(inline), escape(inline))
+
+    def test_commands_inside_math_are_untouched(self):
+        # \annot и прочее внутри $…$ не преобразуем — KaTeX должен видеть
+        # цельное выражение
+        self.assertEqual(self.render('$x+\\annot{a}$'), '$x+\\annot{a}$')
+
+    def test_margin_marks(self):
+        # Семейство пометок egor.sty: \rev, \oge, \complex, \annotnoframe
+        self.assertEqual(
+            self.render('\\rev Повторите тему.'),
+            '<span class="tex-annot tex-annot-noframe">↻</span>'
+            ' Повторите тему.')
+        self.assertEqual(
+            self.render('\\oge Из банка заданий.'),
+            '<span class="tex-annot">ОГЭ</span> Из банка заданий.')
+        self.assertEqual(
+            self.render('\\complex Задача со звёздочкой.'),
+            '<span class="tex-annot tex-annot-noframe">★</span>'
+            ' Задача со звёздочкой.')
+        self.assertEqual(
+            self.render('\\annotnoframe{устно} Сосчитайте.'),
+            '<span class="tex-annot tex-annot-noframe">устно</span>'
+            ' Сосчитайте.')
+
+    def test_source_and_textbit(self):
+        self.assertEqual(
+            self.render('\\source{Ткачук, №5} Докажите.'),
+            '<span class="tex-source">Ткачук, №5</span> Докажите.')
+        self.assertEqual(
+            self.render('\\textbit{Важно:} правило.'),
+            '<b><i>Важно:</i></b> правило.')
+
+    def test_annot_with_math_inside(self):
+        # Формула внутри аргумента пометки сохраняется для KaTeX
+        self.assertEqual(
+            self.render('\\annot{для $x>0$} Решите.'),
+            '<span class="tex-annot">для $x&gt;0$</span> Решите.')
+
+    def test_preview_safe_truncation(self):
+        from problems.web_tex import tex_preview_html
+        # Обрезка не разрезает формулу: $…$ у границы уходит целиком
+        text = 'Вычислите значение выражения $x^2+3x-4$ при $x=2$.'
+        html = str(tex_preview_html(text, limit=32))
+        self.assertNotIn('$x^2', html.replace('Вычислите значение выражения',
+                                              ''))
+        self.assertEqual(html.count('$') % 2, 0)
+        # Недописанная команда у границы не остаётся в превью
+        html = str(tex_preview_html('Смотри рисунок \\taskpic{file.pdf}', 20))
+        self.assertNotIn('\\taskpi', html)
+        # Короткий текст — без изменений и многоточия
+        self.assertEqual(str(tex_preview_html('Коротко.', 100)), 'Коротко.')
+
+    def test_tabular(self):
+        html = self.render(
+            '\\begin{tabular}{|c|c|}\\hline $x$ & 1 \\\\ $y$ & 2 '
+            '\\\\ \\hline\\end{tabular}')
+        self.assertIn('<table class="tex-table">', html)
+        self.assertIn('<tr><td>$x$</td><td>1</td></tr>', html)
+        self.assertIn('<tr><td>$y$</td><td>2</td></tr>', html)
+
+    def test_tabular_math_with_breaks_in_cell(self):
+        # \\ и & внутри формулы в ячейке — часть формулы, не разделители
+        html = self.render(
+            '\\begin{tabular}{|c|c|}'
+            '$\\begin{matrix}a\\\\b\\end{matrix}$ & 1\\end{tabular}')
+        self.assertIn(
+            '<tr><td>$\\begin{matrix}a\\\\b\\end{matrix}$</td>'
+            '<td>1</td></tr>', html)
+
+    def test_preview_cut_inside_bracket_math(self):
+        from problems.web_tex import tex_preview_html
+        # Граница внутри \(…\) — формула откатывается целиком
+        text = 'Найдите корни уравнения \\(x^2 - 5x + 6 = 0\\) устно.'
+        html = str(tex_preview_html(text, limit=30))
+        self.assertNotIn('\\(x^2', html)
+        self.assertNotIn('\\(', html)
+
+    def test_html_is_escaped(self):
+        self.assertEqual(self.render('<script>alert(1)</script>'),
+                         '&lt;script&gt;alert(1)&lt;/script&gt;')
 
 
 class TaskModelTests(TestCase):

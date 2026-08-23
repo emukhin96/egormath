@@ -58,7 +58,7 @@
         <a class="task-id" href="{% url 'task_detail' task.pk %}"
            title="Открыть задачу">#{{ task.pk }}</a>
         {% if task.stars %}<span class="stars">{{ task.get_stars_display }}</span>{% endif %}
-        <span class="math-content task-text">{{ task.text_latex|web_text|truncatechars:220 }}</span>
+        <span class="math-content task-text">{{ task.text_latex|web_text_preview:220 }}</span>
       </div>
       {% include 'problems/_subitems.html' with subitems=task.subitems.all %}
     </td>

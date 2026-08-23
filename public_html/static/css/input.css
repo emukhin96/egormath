@@ -1098,6 +1098,36 @@
     display: inline-block;
   }
 
+  /* Аннотация \annot{…} из tex-текста задачи */
+  .tex-annot {
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* Пометки без рамки (\rev, \complex, \home): просто приглушённый знак */
+  .tex-annot-noframe {
+    font-style: normal;
+    margin-right: 4px;
+  }
+
+  /* Источник задания \source{…} */
+  .tex-source {
+    color: var(--muted);
+    font-size: 0.85em;
+    margin-right: 4px;
+  }
+
+  /* Таблица tabular из tex-текста задачи */
+  .tex-table {
+    border-collapse: collapse;
+    margin: var(--space-2) 0;
+  }
+
+  .tex-table td {
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+  }
+
   .ws-ghost {
     opacity: 0.4;
     background: #eef3fb;
