@@ -19,10 +19,10 @@ def read_secret(name, default=None):
     """Секрет из переменной окружения или файла .secrets/<name>."""
     value = os.environ.get(name)
     if value:
-        return value.strip()
+        return value.strip().strip('"').strip("'")
     path = SECRETS_DIR / name
     if path.exists():
-        return path.read_text().strip()
+        return path.read_text(encoding='utf-8-sig').strip().strip('"').strip("'")
     return default
 
 
@@ -144,9 +144,11 @@ LATEX_API_TIMEOUT = int(read_secret('LATEX_API_TIMEOUT', '120'))
 # Нейрогенерация ответов/решений (Gemini API). Без ключа кнопки на
 # импорте вернут понятную ошибку. Запасной вариант качества — модель
 # gemini-2.5-flash одной настройкой GEMINI_MODEL.
-GEMINI_API_KEY = read_secret('GEMINI_API_KEY', '')
+GEMINI_API_KEY = (read_secret('GEMINI_API_KEY', '')
+                  or read_secret('GOOGLE_API_KEY', ''))
 GEMINI_MODEL = read_secret('GEMINI_MODEL', 'gemini-2.5-flash-lite')
 GEMINI_TIMEOUT = int(read_secret('GEMINI_TIMEOUT', '60'))
+GEMINI_RATE_PER_MINUTE = int(read_secret('GEMINI_RATE_PER_MINUTE', '20'))
 
 # Профили шрифтов, доступные в PDF-редакторе (опция font= пакета egor).
 # school и palatino требуют подготовленного LaTeX API: xelatex + mathspec

@@ -13,9 +13,12 @@
 
 import json
 import logging
+from datetime import timedelta
 
 import requests
 from django.conf import settings
+from django.db import transaction
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +58,48 @@ class NeuroError(Exception):
     """Ошибка нейрогенерации с сообщением, пригодным для показа учителю."""
 
 
+class NeuroQuotaError(NeuroError):
+    """Превышен лимит частоты или параллелизма."""
+
+
+def _api_key():
+    """Ключ из настроек: GEMINI_API_KEY или запасной GOOGLE_API_KEY."""
+    return (getattr(settings, 'GEMINI_API_KEY', '')
+            or getattr(settings, 'GOOGLE_API_KEY', '')
+            or '')
+
+
+def acquire_quota(user):
+    """Один одновременный запрос и N вызовов в минуту на учителя."""
+    from problems.models import NeuroSolveQuota
+    now = timezone.now()
+    limit = getattr(settings, 'GEMINI_RATE_PER_MINUTE', 20)
+    lock_sec = getattr(settings, 'GEMINI_TIMEOUT', 60) + 15
+    with transaction.atomic():
+        quota, _ = NeuroSolveQuota.objects.select_for_update().get_or_create(
+            user=user,
+            defaults={'window_started': now, 'window_count': 0})
+        if (quota.in_flight_at
+                and (now - quota.in_flight_at).total_seconds() < lock_sec):
+            raise NeuroQuotaError(
+                'Подождите: предыдущая генерация ещё идёт.')
+        if now - quota.window_started >= timedelta(minutes=1):
+            quota.window_started = now
+            quota.window_count = 0
+        if quota.window_count >= limit:
+            raise NeuroQuotaError(
+                'Слишком много запросов к нейросети, подождите минуту.')
+        quota.window_count += 1
+        quota.in_flight_at = now
+        quota.save(update_fields=[
+            'window_started', 'window_count', 'in_flight_at'])
+
+
+def release_quota(user):
+    from problems.models import NeuroSolveQuota
+    NeuroSolveQuota.objects.filter(user=user).update(in_flight_at=None)
+
+
 def _build_prompt(text, subitems):
     lines = [_INSTRUCTION, '', 'Задача:', text.strip()]
     if subitems:
@@ -72,11 +117,12 @@ def solve_task(text, subitems=()):
     'subitem_solutions'} (строки и списки строк). Бросает NeuroError
     при любой проблеме: нет ключа, сбой сети, невалидный ответ модели.
     """
-    api_key = settings.GEMINI_API_KEY
+    api_key = _api_key()
     if not api_key:
         raise NeuroError(
-            'Нейрогенерация не настроена: нет ключа GEMINI_API_KEY '
-            '(файл .secrets/GEMINI_API_KEY или переменная окружения).')
+            'Нейрогенерация не настроена: нет ключа API '
+            '(.secrets/GEMINI_API_KEY или переменная GEMINI_API_KEY / '
+            'GOOGLE_API_KEY). Перезапустите сервер после добавления ключа.')
     subitems = [s for s in (subitems or []) if s.strip()]
     total = len(text) + sum(len(s) for s in subitems)
     if not text.strip():
@@ -105,6 +151,19 @@ def solve_task(text, subitems=()):
     if response.status_code != 200:
         logger.warning('Gemini API: HTTP %s %s',
                        response.status_code, response.text[:500])
+        detail = ''
+        try:
+            payload = response.json()
+            err = payload.get('error') if isinstance(payload, dict) else None
+            if isinstance(err, dict):
+                detail = err.get('message') or ''
+        except (ValueError, AttributeError, TypeError):
+            detail = ''
+        if not isinstance(detail, str):
+            detail = ''
+        if response.status_code in (401, 403) or 'API key' in detail:
+            raise NeuroError(
+                'Ключ Gemini отклонён сервером. Проверьте GEMINI_API_KEY.')
         raise NeuroError('Сервис нейрогенерации вернул ошибку '
                          f'(HTTP {response.status_code}).')
     try:

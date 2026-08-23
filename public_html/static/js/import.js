@@ -80,7 +80,7 @@
     var csrf = form.querySelector('[name="csrfmiddlewaretoken"]').value;
 
     function setField(name, value) {
-      if (!value) return;
+      if (value == null) return;
       var field = form.querySelector('[name="' + name + '"]');
       if (field) field.value = value;
     }

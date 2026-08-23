@@ -149,6 +149,7 @@ def worksheet_import(request):
         'tex': '', 'preview': None,
         'grade_choices': Task.GRADE_CHOICES,
         'topics': topic_tree(),
+        'gemini_ready': bool(settings.GEMINI_API_KEY),
     }
     if request.method == 'POST':
         tex = request.POST.get('tex', '')
@@ -234,7 +235,8 @@ def worksheet_import_solve(request):
     {answer, solution, subitem_answers, subitem_solutions}. Ничего не
     сохраняет — результат живёт в полях формы до создания листка.
     """
-    from problems.neuro import MAX_TASK_CHARS, NeuroError, solve_task
+    from problems.neuro import (MAX_TASK_CHARS, NeuroError, NeuroQuotaError,
+                               acquire_quota, release_quota, solve_task)
     try:
         payload = json.loads(request.body)
         text = str(payload.get('text') or '')
@@ -246,9 +248,14 @@ def worksheet_import_solve(request):
             {'error': 'Задача слишком длинная для нейрогенерации.'},
             status=400)
     try:
+        acquire_quota(request.user)
         result = solve_task(text, subitems)
+    except NeuroQuotaError as exc:
+        return JsonResponse({'error': str(exc)}, status=429)
     except NeuroError as exc:
         return JsonResponse({'error': str(exc)}, status=502)
+    finally:
+        release_quota(request.user)
     return JsonResponse(result)
 
 

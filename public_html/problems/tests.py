@@ -76,7 +76,7 @@ class NeuroTests(TestCase):
         from django.test import override_settings
 
         from .neuro import NeuroError, solve_task
-        with override_settings(GEMINI_API_KEY=''):
+        with override_settings(GEMINI_API_KEY='', GOOGLE_API_KEY=''):
             with self.assertRaises(NeuroError):
                 solve_task('Задача')
 
@@ -120,6 +120,19 @@ class NeuroTests(TestCase):
                 with self.assertLogs('problems.neuro', level='WARNING'):
                     with self.assertRaises(NeuroError):
                         solve_task('Задача')
+
+    def test_quota_parallel_and_rate(self):
+        from django.test import override_settings
+
+        from .neuro import NeuroQuotaError, acquire_quota, release_quota
+        user = make_teacher('neuro-user')
+        with override_settings(GEMINI_RATE_PER_MINUTE=1, GEMINI_TIMEOUT=60):
+            acquire_quota(user)
+            with self.assertRaises(NeuroQuotaError):
+                acquire_quota(user)
+            release_quota(user)
+            with self.assertRaises(NeuroQuotaError):
+                acquire_quota(user)
 
     def test_too_long_raises(self):
         from django.test import override_settings

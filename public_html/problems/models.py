@@ -288,3 +288,24 @@ class TaskSource(models.Model):
 
     def __str__(self):
         return f'{self.source} № {self.number}'
+
+
+class NeuroSolveQuota(models.Model):
+    """Квота нейрогенерации: не больше N запросов в минуту и один in-flight.
+
+    Платный внешний API и синхронный вызов до минуты — без серверного
+    лимита любой учитель мог бы исчерпать баланс и воркеры.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        verbose_name='Пользователь', related_name='neuro_quota')
+    in_flight_at = models.DateTimeField('Занят с', null=True, blank=True)
+    window_started = models.DateTimeField('Начало окна')
+    window_count = models.PositiveIntegerField('Запросов в окне', default=0)
+
+    class Meta:
+        verbose_name = 'Квота нейрогенерации'
+        verbose_name_plural = 'Квоты нейрогенерации'
+
+    def __str__(self):
+        return f'Квота нейросети: {self.user}'

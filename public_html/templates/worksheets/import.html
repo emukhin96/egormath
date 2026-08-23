@@ -47,6 +47,10 @@
     {% if preview.header.right %} · {{ preview.header.right }}{% endif %}
     {% if preview.header.subtitle %} · {{ preview.header.subtitle }}{% endif %}
   </p>
+  {% if not gemini_ready %}
+  <p class="helptext">Нейрогенерация выключена: положите ключ в
+    <code>.secrets/GEMINI_API_KEY</code> и перезапустите сервер.</p>
+  {% endif %}
 
   {# Панель массовых действий — общий контракт bulk.js; форма не отправляется: значения копируются в поля выделенных строк #}
   <form id="import-bulk-form" class="bulk-bar" data-bulk hidden>

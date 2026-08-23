@@ -1039,6 +1039,18 @@ class ImportTexTests(TestCase):
             url, 'не json', content_type='application/json')
         self.assertEqual(response.status_code, 400)
 
+    def test_import_solve_rate_limit(self):
+        from problems.neuro import NeuroQuotaError
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('worksheet_import_solve')
+        with mock.patch('problems.neuro.acquire_quota',
+                        side_effect=NeuroQuotaError('подождите')):
+            response = self.client.post(
+                url, {'text': 'Задача', 'subitems': []},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.json()['error'], 'подождите')
+
     def test_import_solve_requires_teacher(self):
         make_student(self.teacher)
         self.client.login(username='student1', password='pass12345')
