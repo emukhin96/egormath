@@ -1,3 +1,4 @@
+import json
 import re
 
 from django.conf import settings
@@ -55,6 +56,78 @@ class LatexUtilsTests(TestCase):
             'чему равен $x$',
             '$2+2$',
         ])
+
+
+class NeuroTests(TestCase):
+    """Сервис нейрогенерации ответов/решений (Gemini, REST)."""
+
+    def _response(self, data, status=200):
+        from unittest import mock
+        response = mock.Mock()
+        response.status_code = status
+        response.text = 'raw'
+        response.json.return_value = {
+            'candidates': [{'content': {'parts': [{
+                'text': json.dumps(data)}]}}],
+        }
+        return response
+
+    def test_no_key_raises(self):
+        from django.test import override_settings
+
+        from .neuro import NeuroError, solve_task
+        with override_settings(GEMINI_API_KEY=''):
+            with self.assertRaises(NeuroError):
+                solve_task('Задача')
+
+    def test_solve_task_parses_and_normalizes(self):
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from . import neuro
+        payload = {
+            'answer': ' 42 ', 'solution': 'Очевидно.',
+            # Лишний элемент отрезается, недостающий добивается пустым
+            'subitem_answers': ['1', '2', '3'],
+            'subitem_solutions': ['a'],
+        }
+        with override_settings(GEMINI_API_KEY='k', GEMINI_MODEL='m',
+                               GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=self._response(payload)) as post:
+                result = neuro.solve_task('Задача', ['$x$', '$y$'])
+        self.assertEqual(result['answer'], '42')
+        self.assertEqual(result['solution'], 'Очевидно.')
+        self.assertEqual(result['subitem_answers'], ['1', '2'])
+        self.assertEqual(result['subitem_solutions'], ['a', ''])
+        body = post.call_args.kwargs['json']
+        self.assertIn('Задача', body['contents'][0]['parts'][0]['text'])
+        self.assertEqual(
+            body['generationConfig']['response_mime_type'],
+            'application/json')
+
+    def test_http_error_raises(self):
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from .neuro import NeuroError, solve_task
+        response = mock.Mock(status_code=503, text='oops')
+        with override_settings(GEMINI_API_KEY='k'):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=response):
+                with self.assertLogs('problems.neuro', level='WARNING'):
+                    with self.assertRaises(NeuroError):
+                        solve_task('Задача')
+
+    def test_too_long_raises(self):
+        from django.test import override_settings
+
+        from .neuro import MAX_TASK_CHARS, NeuroError, solve_task
+        with override_settings(GEMINI_API_KEY='k'):
+            with self.assertRaises(NeuroError):
+                solve_task('x' * (MAX_TASK_CHARS + 1))
 
 
 class WebTexTests(TestCase):

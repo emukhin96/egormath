@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 
 from django.conf import settings
@@ -214,7 +215,41 @@ def worksheet_import(request):
             'new_tasks': sum(1 for r in rows
                              if r['kind'] == 'task' and not r['existing_id']),
         }
+        # Исходные тексты задач для кнопок нейрогенерации (json_script):
+        # из KaTeX-рендера LaTeX обратно не достать
+        context['solve_payloads'] = {
+            str(i): {'text': data['text'], 'subitems': data['subitems']}
+            for i, (kind, data) in enumerate(parsed['elements'])
+            if kind == 'task'
+        }
     return render(request, 'worksheets/import.html', context)
+
+
+@teacher_required
+@require_POST
+def worksheet_import_solve(request):
+    """Нейрогенерация ответа/решения одной задачи для предпросмотра импорта.
+
+    Принимает JSON {text, subitems: […]}, возвращает черновики
+    {answer, solution, subitem_answers, subitem_solutions}. Ничего не
+    сохраняет — результат живёт в полях формы до создания листка.
+    """
+    from problems.neuro import MAX_TASK_CHARS, NeuroError, solve_task
+    try:
+        payload = json.loads(request.body)
+        text = str(payload.get('text') or '')
+        subitems = [str(s) for s in (payload.get('subitems') or [])]
+    except (ValueError, TypeError, AttributeError):
+        return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+    if len(text) + sum(len(s) for s in subitems) > MAX_TASK_CHARS:
+        return JsonResponse(
+            {'error': 'Задача слишком длинная для нейрогенерации.'},
+            status=400)
+    try:
+        result = solve_task(text, subitems)
+    except NeuroError as exc:
+        return JsonResponse({'error': str(exc)}, status=502)
+    return JsonResponse(result)
 
 
 @teacher_required

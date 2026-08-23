@@ -998,6 +998,55 @@ class ImportTexTests(TestCase):
         task = worksheet.items.filter(task__isnull=False).first().task
         self.assertEqual(task.topics.count(), 0)
 
+    def test_import_preview_has_neuro_controls(self):
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(
+            reverse('worksheet_import'), {'tex': SAMPLE_TEX,
+                                          'action': 'preview'})
+        self.assertContains(response, 'neuro-btn')
+        self.assertContains(response, 'bulk-solve')
+        # Исходные LaTeX-тексты задач для запросов генерации
+        self.assertContains(response, 'import-solve-data')
+        self.assertContains(response, reverse('worksheet_import_solve'))
+
+    def test_import_solve_endpoint(self):
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('worksheet_import_solve')
+        drafts = {'answer': '4', 'solution': 'Сложение.',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        with mock.patch('problems.neuro.solve_task',
+                        return_value=drafts) as solve:
+            response = self.client.post(
+                url, {'text': '$2+2$?', 'subitems': []},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), drafts)
+        solve.assert_called_once_with('$2+2$?', [])
+
+    def test_import_solve_reports_neuro_error(self):
+        from problems.neuro import NeuroError
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('worksheet_import_solve')
+        with mock.patch('problems.neuro.solve_task',
+                        side_effect=NeuroError('нет ключа')):
+            response = self.client.post(
+                url, {'text': 'Задача', 'subitems': []},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()['error'], 'нет ключа')
+        # Мусор в теле запроса — 400, а не 500
+        response = self.client.post(
+            url, 'не json', content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_import_solve_requires_teacher(self):
+        make_student(self.teacher)
+        self.client.login(username='student1', password='pass12345')
+        response = self.client.post(
+            reverse('worksheet_import_solve'), {'text': 'x'},
+            content_type='application/json')
+        self.assertEqual(response.status_code, 403)
+
 
 class ShareLinkTests(TestCase):
     def setUp(self):

@@ -66,5 +66,100 @@
         form.classList.toggle('show-answers', toggle.checked);
       });
     }
+
+    function showAnswers() {
+      if (toggle && !toggle.checked) {
+        toggle.checked = true;
+        form.classList.add('show-answers');
+      }
+    }
+
+    /* --- Нейрогенерация ответов/решений (черновики в поля формы) --- */
+    var solveDataEl = document.getElementById('import-solve-data');
+    var solveData = solveDataEl ? JSON.parse(solveDataEl.textContent) : {};
+    var csrf = form.querySelector('[name="csrfmiddlewaretoken"]').value;
+
+    function setField(name, value) {
+      if (!value) return;
+      var field = form.querySelector('[name="' + name + '"]');
+      if (field) field.value = value;
+    }
+
+    function solveRow(index) {
+      var data = solveData[index];
+      if (!data) return Promise.resolve();
+      return fetch(window.IMPORT_SOLVE_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrf,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify(data),
+      }).then(function (response) {
+        return response.json().then(function (result) {
+          if (!response.ok) {
+            throw new Error(result.error || 'Ошибка генерации.');
+          }
+          setField('answer_' + index, result.answer);
+          setField('solution_' + index, result.solution);
+          (result.subitem_answers || []).forEach(function (value, j) {
+            setField('answer_' + index + '_' + j, value);
+          });
+          (result.subitem_solutions || []).forEach(function (value, j) {
+            setField('solution_' + index + '_' + j, value);
+          });
+          showAnswers();
+        });
+      });
+    }
+
+    document.querySelectorAll('.neuro-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        btn.disabled = true;
+        btn.textContent = 'генерация…';
+        solveRow(btn.dataset.index).then(function () {
+          btn.textContent = '✨ сгенерировать';
+        }).catch(function (err) {
+          btn.textContent = '✨ сгенерировать';
+          alert(err.message);
+        }).finally(function () {
+          btn.disabled = false;
+        });
+      });
+    });
+
+    var bulkSolve = document.getElementById('bulk-solve');
+    if (bulkSolve) {
+      bulkSolve.addEventListener('click', function () {
+        var queue = selected().map(function (box) {
+          return box.dataset.index;
+        });
+        if (!queue.length) return;
+        var label = bulkSolve.textContent;
+        var done = 0;
+        var failed = 0;
+        bulkSolve.disabled = true;
+        // Последовательно, по одной задаче — без параллельной пачки запросов
+        queue.reduce(function (chain, index) {
+          return chain.then(function () {
+            bulkSolve.textContent =
+              'Генерация ' + (done + 1) + '/' + queue.length + '…';
+            return solveRow(index).then(function () {
+              done += 1;
+            }).catch(function () {
+              failed += 1;
+            });
+          });
+        }, Promise.resolve()).then(function () {
+          bulkSolve.textContent = label;
+          bulkSolve.disabled = false;
+          if (failed) {
+            alert('Не удалось сгенерировать: ' + failed + ' из ' +
+                  queue.length + '. Проверьте настройку GEMINI_API_KEY.');
+          }
+        });
+      });
+    }
   });
 })();

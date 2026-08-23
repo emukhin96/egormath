@@ -141,6 +141,13 @@ LATEX_API_URL = read_secret('LATEX_API_URL', 'http://81.200.147.78:8000')
 LATEX_API_KEY = read_secret('LATEX_API_KEY', '')
 LATEX_API_TIMEOUT = int(read_secret('LATEX_API_TIMEOUT', '120'))
 
+# Нейрогенерация ответов/решений (Gemini API). Без ключа кнопки на
+# импорте вернут понятную ошибку. Запасной вариант качества — модель
+# gemini-2.5-flash одной настройкой GEMINI_MODEL.
+GEMINI_API_KEY = read_secret('GEMINI_API_KEY', '')
+GEMINI_MODEL = read_secret('GEMINI_MODEL', 'gemini-2.5-flash-lite')
+GEMINI_TIMEOUT = int(read_secret('GEMINI_TIMEOUT', '60'))
+
 # Профили шрифтов, доступные в PDF-редакторе (опция font= пакета egor).
 # school и palatino требуют подготовленного LaTeX API: xelatex + mathspec
 # + шрифты SchoolBookC/TextBookC/Palatino (сервер настроен, см.
