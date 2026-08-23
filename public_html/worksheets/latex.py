@@ -93,9 +93,13 @@ def task_to_tex(item):
     for i, name in enumerate(filenames):
         if i not in used:
             body += '\n\\taskpic{%s}' % name
+    # Без подпунктов колонки обнуляются: \columned{0} печатает только
+    # условие, а columns>=1 с пустым списком падают на «missing \item»
+    # (пустой [{}] всё равно передаётся, когда дальше идёт ответ)
+    columns = item.effective_columns if sub_lines else 0
     parts = [
         '\\task{%d}{%d}{%%\n%s%%\n}' % (
-            item.effective_stars, item.effective_columns, body),
+            item.effective_stars, columns, body),
     ]
     subitems = '\n'.join(sub_lines)
     answer = _combined_answer(task, subitem_objs)

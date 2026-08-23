@@ -65,10 +65,20 @@ class LatexGenerationTests(TestCase):
 
     def test_overrides(self):
         task = Task.objects.create(text_latex='Задача', stars=1, columns=0)
+        TaskSubitem.objects.create(task=task, order=10, text_latex='пункт')
         item = make_item(self.worksheet, task,
                          stars_override=3, columns_override=2)
         tex = task_to_tex(item)
         self.assertIn('\\task{3}{2}{%', tex)
+
+    def test_columns_zeroed_without_subitems(self):
+        # columns>=1 без подпунктов дают пустой список и «missing \item»
+        # при компиляции; без подпунктов колонки принудительно 0
+        task = Task.objects.create(
+            text_latex='Задача', columns=2, answer_latex='7')
+        tex = task_to_tex(make_item(self.worksheet, task))
+        self.assertIn('\\task{0}{0}{%', tex)
+        self.assertIn('[{}][{7}]', tex)
 
     def test_subitem_punctuation(self):
         # В базе подпункты без знаков препинания — система расставляет
@@ -610,13 +620,17 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'id="tex-source"')
         self.assertContains(response, '\\documentclass')
         self.assertContains(response, 'С ответами')
-        # По умолчанию доступен только cm: кнопки school/palatino скрыты,
-        # пока LaTeX API не подготовлен (settings.PDF_EDITOR_FONTS)
-        self.assertNotContains(response, 'data-value="palatino"')
-        with self.settings(PDF_EDITOR_FONTS=['cm', 'school', 'palatino']):
+        # LaTeX API настроен — все три шрифта доступны по умолчанию
+        self.assertContains(response, 'data-value="cm"')
+        self.assertContains(response, 'data-value="school"')
+        self.assertContains(response, 'data-value="palatino"')
+        # Переключатель режима диагностики (опция diagn пакета egor)
+        self.assertContains(response, 'data-switch="diagn"')
+        # Для окружения без шрифтов выбор сужается настройкой
+        with self.settings(PDF_EDITOR_FONTS=['cm']):
             response = self.client.get(
                 reverse('worksheet_pdf_editor', args=[self.worksheet.pk]))
-            self.assertContains(response, 'data-value="palatino"')
+            self.assertNotContains(response, 'data-value="palatino"')
         # Чужой листок недоступен
         self.client.login(username='teacher2', password='pass12345')
         response = self.client.get(

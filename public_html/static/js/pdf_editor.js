@@ -4,26 +4,46 @@
 (function () {
   'use strict';
 
-  // Шрифт переключается штатной опцией пакета egor:
-  // \usepackage[font=cm|school|palatino]{egor} (см. документацию egor.sty).
+  // Шрифт и режим переключаются штатными опциями пакета egor:
+  // \usepackage[font=cm|school|palatino,diagn]{egor} (см. egor.sty).
   var EGOR_RE = /\\usepackage(?:\[([^\]]*)\])?\{egor\}/;
 
-  function setEgorFont(tex, value) {
-    return tex.replace(EGOR_RE, function (_m, opts) {
-      var parts = (opts || '').split(',')
-        .map(function (s) { return s.trim(); })
-        .filter(function (s) { return s && s.indexOf('font=') !== 0; });
-      if (value !== 'cm') parts.push('font=' + value);
+  function egorOptions(tex) {
+    return ((tex.match(EGOR_RE) || [])[1] || '').split(',')
+      .map(function (s) { return s.trim(); })
+      .filter(Boolean);
+  }
+
+  function withEgorOptions(tex, parts) {
+    return tex.replace(EGOR_RE, function () {
       return parts.length
         ? '\\usepackage[' + parts.join(',') + ']{egor}'
         : '\\usepackage{egor}';
     });
   }
 
+  function setEgorFont(tex, value) {
+    var parts = egorOptions(tex).filter(function (s) {
+      return s.indexOf('font=') !== 0;
+    });
+    if (value !== 'cm') parts.push('font=' + value);
+    return withEgorOptions(tex, parts);
+  }
+
   function getEgorFont(tex) {
-    var opts = (tex.match(EGOR_RE) || [])[1] || '';
-    var m = opts.match(/font=(cm|school|palatino)/);
+    var m = egorOptions(tex).join(',').match(/font=(cm|school|palatino)/);
     return m ? m[1] : 'cm';
+  }
+
+  // diagn — режим диагностической работы (номера задач в рамках)
+  function setEgorDiagn(tex, on) {
+    var parts = egorOptions(tex).filter(function (s) { return s !== 'diagn'; });
+    if (on === 'on') parts.push('diagn');
+    return withEgorOptions(tex, parts);
+  }
+
+  function getEgorDiagn(tex) {
+    return egorOptions(tex).indexOf('diagn') !== -1 ? 'on' : 'off';
   }
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -110,6 +130,8 @@
         tex = tex.replace(/\ba[45]paper\b/, value);
       } else if (kind === 'font') {
         tex = setEgorFont(tex, value);
+      } else if (kind === 'diagn') {
+        tex = setEgorDiagn(tex, value);
       }
       source.value = tex;
       markActive();
@@ -122,6 +144,7 @@
         size: (tex.match(/\b(1[012]pt)\b/) || [])[1] || '',
         paper: (tex.match(/\b(a[45]paper)\b/) || [])[1] || '',
         font: getEgorFont(tex),
+        diagn: getEgorDiagn(tex),
       };
       document.querySelectorAll('.switch-group').forEach(function (group) {
         group.querySelectorAll('button').forEach(function (btn) {

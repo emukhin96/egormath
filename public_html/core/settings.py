@@ -142,12 +142,13 @@ LATEX_API_KEY = read_secret('LATEX_API_KEY', '')
 LATEX_API_TIMEOUT = int(read_secret('LATEX_API_TIMEOUT', '120'))
 
 # Профили шрифтов, доступные в PDF-редакторе (опция font= пакета egor).
-# school и palatino включать только после подготовки LaTeX API:
-# xelatex + mathspec + шрифты SchoolBookC/TextBookC/Palatino
-# (см. deploy/patch_latex_api_egormath.py), иначе кнопки гарантированно
-# дают ошибку компиляции. Пример: PDF_EDITOR_FONTS=cm,school,palatino
+# school и palatino требуют подготовленного LaTeX API: xelatex + mathspec
+# + шрифты SchoolBookC/TextBookC/Palatino (сервер настроен, см.
+# deploy/patch_latex_api_egormath.py). Если окружение без шрифтов —
+# сузить, например PDF_EDITOR_FONTS=cm
 PDF_EDITOR_FONTS = [
-    f.strip() for f in read_secret('PDF_EDITOR_FONTS', 'cm').split(',')
+    f.strip()
+    for f in read_secret('PDF_EDITOR_FONTS', 'cm,school,palatino').split(',')
     if f.strip()]
 
 # Ограничения на фото решений
