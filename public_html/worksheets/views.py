@@ -274,7 +274,7 @@ def worksheet_rename(request, pk):
         return _builder_response(
             request, pk, ok=False, message='Название не может быть пустым.')
     worksheet.title = title
-    worksheet.save()
+    worksheet.save(update_fields=['title', 'updated_at'])
     return _builder_response(request, pk)
 
 

@@ -79,18 +79,24 @@ def task_quick_update(request, pk):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'message': 'Только POST'}, status=405)
     task = get_object_or_404(Task, pk=pk)
+    # Сохраняем только присланные поля (update_fields): формы на карточке
+    # автосохраняются параллельно, и полный task.save() затирал бы поля,
+    # изменённые соседним запросом, устаревшими значениями
+    updated = []
     if 'grade_level' in request.POST:
         value = request.POST['grade_level'].strip()
         if value and value not in {str(g) for g, _ in Task.GRADE_CHOICES}:
             return JsonResponse(
                 {'ok': False, 'message': 'Недопустимый класс'}, status=400)
         task.grade_level = int(value) if value else None
+        updated.append('grade_level')
     if 'stars' in request.POST:
         value = request.POST['stars'].strip()
         if value not in {str(s) for s, _ in Task.STARS_CHOICES}:
             return JsonResponse(
                 {'ok': False, 'message': 'Недопустимые звёзды'}, status=400)
         task.stars = int(value)
+        updated.append('stars')
     if 'text_latex' in request.POST:
         value = request.POST['text_latex'].strip()
         if not value:
@@ -98,11 +104,15 @@ def task_quick_update(request, pk):
                 {'ok': False, 'message': 'Условие не может быть пустым'},
                 status=400)
         task.text_latex = value
+        updated.append('text_latex')
     if 'answer_latex' in request.POST:
         task.answer_latex = request.POST['answer_latex'].strip()
+        updated.append('answer_latex')
     if 'solution_latex' in request.POST:
         task.solution_latex = request.POST['solution_latex'].strip()
-    task.save()
+        updated.append('solution_latex')
+    if updated:
+        task.save(update_fields=updated)
     if request.POST.get('topics_submitted'):
         ids = [t for t in request.POST.getlist('topics') if t.isdigit()]
         task.topics.set(Topic.objects.filter(pk__in=ids))
@@ -163,15 +173,19 @@ def task_subitem_update(request, pk, spk):
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
             return JsonResponse({'ok': True})
         return redirect('task_detail', pk=pk)
+    updated = []
     if 'text_latex' in request.POST:
         value = request.POST['text_latex'].strip()
         if not value:
             return JsonResponse(
                 {'ok': False, 'message': 'Текст подпункта пуст'}, status=400)
         subitem.text_latex = value
+        updated.append('text_latex')
     if 'answer_latex' in request.POST:
         subitem.answer_latex = request.POST['answer_latex'].strip()
-    subitem.save()
+        updated.append('answer_latex')
+    if updated:
+        subitem.save(update_fields=updated)
     return JsonResponse({'ok': True})
 
 

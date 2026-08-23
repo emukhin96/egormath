@@ -376,6 +376,25 @@ class QuickUpdateTests(TestCase):
         self.task.refresh_from_db()
         self.assertIsNone(self.task.grade_level)
 
+    def test_partial_save_does_not_touch_other_fields(self):
+        # Параллельные autosave-формы: запрос с одними звёздами не должен
+        # затирать ответ, изменённый соседним запросом (update_fields)
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        self.task.answer_latex = 'старый'
+        self.task.save()
+        with CaptureQueriesContext(connection) as ctx:
+            self.xhr_post({'stars': '2'})
+        updates = [q['sql'] for q in ctx.captured_queries
+                   if q['sql'].startswith('UPDATE')]
+        self.assertEqual(len(updates), 1)
+        self.assertIn('stars', updates[0])
+        self.assertNotIn('answer_latex', updates[0])
+        # text_plain пересчитывается и при частичном сохранении условия
+        self.xhr_post({'text_latex': 'Новое $x$'})
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.text_plain, 'Новое x')
+
     def test_update_card_fields(self):
         # Поля карточки задачи: звёзды, условие, решение, темы, теги
         response = self.xhr_post({
