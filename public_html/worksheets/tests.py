@@ -675,6 +675,42 @@ class ImportTexTests(TestCase):
         self.assertEqual(new_task.subitems.count(), 2)
         self.assertEqual(Task.objects.count(), 2)
 
+    def test_dedup_considers_subitems(self):
+        from .import_tex import create_worksheet, find_existing_task, \
+            parse_tex
+        # Одинаковое основное условие, разные подпункты — разные задачи
+        base = Task.objects.create(
+            text_latex='Решите уравнение:', created_by=self.teacher)
+        base.subitems.create(order=10, text_latex='$x^2=4$')
+        base.subitems.create(order=20, text_latex='$x^2=9$')
+        tex = ('\\begin{document}\n'
+               '\\task{0}{0}{Решите уравнение:}'
+               '[{\\item $x^2=16$; \\item $x^2=25$.}]\n'
+               '\\end{document}')
+        worksheet, _ = create_worksheet(parse_tex(tex), owner=self.teacher)
+        new_task = worksheet.items.get(task__isnull=False).task
+        self.assertNotEqual(new_task.pk, base.pk)
+        # Полное совпадение (условие + подпункты) — задача находится
+        self.assertEqual(
+            find_existing_task('Решите уравнение:', ['$x^2=4$', '$x^2=9$']),
+            base.pk)
+        self.assertIsNone(
+            find_existing_task('Решите уравнение:', ['$x^2=4$']))
+
+    def test_import_updates_existing_answer(self):
+        # Горячее добавление ответа/решения к задаче, найденной в базе
+        existing = Task.objects.create(
+            text_latex='Вычислите  $\\frac{1}{2}+\\frac{1}{3}$.',
+            created_by=self.teacher)
+        self.client.login(username='teacher1', password='pass12345')
+        self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create',
+            'answer_1': '$5/6$', 'solution_1': 'Общий знаменатель 6.',
+        })
+        existing.refresh_from_db()
+        self.assertEqual(existing.answer_latex, '$5/6$')
+        self.assertEqual(existing.solution_latex, 'Общий знаменатель 6.')
+
     def test_round_trip(self):
         from .import_tex import create_worksheet, parse_tex
         parsed = parse_tex(SAMPLE_TEX)
@@ -725,6 +761,11 @@ class ImportTexTests(TestCase):
             url, {'tex': SAMPLE_TEX, 'action': 'preview'})
         self.assertContains(response, 'новая')
         self.assertContains(response, 'Разминка')
+        # В предпросмотре видны сами подпункты, а не только их количество
+        self.assertContains(response, '$2+2$')
+        # И поля назначений для новых задач
+        self.assertContains(response, 'name="grade_1"')
+        self.assertContains(response, 'name="answer_1"')
 
         response = self.client.post(
             url, {'tex': SAMPLE_TEX, 'action': 'create'})
@@ -736,6 +777,35 @@ class ImportTexTests(TestCase):
         response = self.client.post(
             url, {'tex': 'нет команд', 'action': 'preview'})
         self.assertContains(response, 'Ошибка разбора')
+
+    def test_import_create_with_overrides(self):
+        from problems.models import Topic
+        topic = Topic.objects.create(name='Дроби')
+        self.client.login(username='teacher1', password='pass12345')
+        # Элемент с индексом 1 — первая задача (после рубрики «Разминка»)
+        self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create',
+            'grade_1': '8', 'topic_1': str(topic.pk), 'stars_1': '3',
+            'answer_1': '5/6', 'solution_1': 'Общий знаменатель 6.',
+        })
+        worksheet = Worksheet.objects.get(owner=self.teacher)
+        task = worksheet.items.filter(task__isnull=False).first().task
+        self.assertEqual(task.grade_level, 8)
+        self.assertEqual(list(task.topics.all()), [topic])
+        self.assertEqual(task.stars, 3)
+        self.assertEqual(task.answer_latex, '5/6')
+        self.assertEqual(task.solution_latex, 'Общий знаменатель 6.')
+
+    def test_import_create_ignores_unknown_topic(self):
+        # Поддельный/удалённый id темы не должен ронять создание (500)
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create', 'topic_1': '99999',
+        })
+        self.assertEqual(response.status_code, 302)
+        worksheet = Worksheet.objects.get(owner=self.teacher)
+        task = worksheet.items.filter(task__isnull=False).first().task
+        self.assertEqual(task.topics.count(), 0)
 
 
 class ShareLinkTests(TestCase):

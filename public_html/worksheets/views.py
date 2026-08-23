@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.db import models
+from django.db import models, transaction
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -87,10 +87,43 @@ def worksheet_list(request):
     })
 
 
+def _import_overrides(post, parsed):
+    """Назначения задачам из предпросмотра импорта: класс/тема/звёзды/ответ."""
+    overrides = {}
+    valid_grades = {str(g) for g, _ in Task.GRADE_CHOICES}
+    # Только реально существующие темы: поддельный или устаревший id
+    # иначе уронит task.topics.add() уже после создания части объектов
+    valid_topics = set(Topic.objects.values_list('pk', flat=True))
+    for i, (kind, data) in enumerate(parsed['elements']):
+        if kind != 'task':
+            continue
+        extra = {}
+        grade = post.get(f'grade_{i}', '').strip()
+        if grade in valid_grades:
+            extra['grade_level'] = int(grade)
+        topic = post.get(f'topic_{i}', '').strip()
+        if topic.isdigit() and int(topic) in valid_topics:
+            extra['topic_id'] = int(topic)
+        stars = post.get(f'stars_{i}', '').strip()
+        if stars.isdigit():
+            extra['stars'] = max(0, min(3, int(stars)))
+        if f'answer_{i}' in post:
+            extra['answer'] = post[f'answer_{i}'].strip()
+        if f'solution_{i}' in post:
+            extra['solution'] = post[f'solution_{i}'].strip()
+        if extra:
+            overrides[i] = extra
+    return overrides
+
+
 @teacher_required
 def worksheet_import(request):
     """Импорт .tex-листка (пакет egor): вставка/файл → предпросмотр → создание."""
-    context = {'tex': '', 'preview': None}
+    context = {
+        'tex': '', 'preview': None,
+        'grade_choices': Task.GRADE_CHOICES,
+        'topics': topic_tree(),
+    }
     if request.method == 'POST':
         tex = request.POST.get('tex', '')
         upload = request.FILES.get('file')
@@ -108,8 +141,11 @@ def worksheet_import(request):
             return render(request, 'worksheets/import.html', context)
 
         if request.POST.get('action') == 'create':
-            worksheet, missing_images = create_worksheet(
-                parsed, owner=request.user)
+            # Атомарно: при любой ошибке не остаётся полусозданный листок
+            with transaction.atomic():
+                worksheet, missing_images = create_worksheet(
+                    parsed, owner=request.user,
+                    overrides=_import_overrides(request.POST, parsed))
             messages.success(
                 request,
                 f'Листок «{worksheet.title}» импортирован '
@@ -123,9 +159,19 @@ def worksheet_import(request):
             return redirect('worksheet_detail', pk=worksheet.pk)
 
         matches = match_existing_tasks(parsed)
+        existing = Task.objects.in_bulk([m for m in matches if m])
         rows = []
         for (kind, data), match in zip(parsed['elements'], matches):
-            rows.append({'kind': kind, 'data': data, 'existing_id': match})
+            row = {'kind': kind, 'data': data, 'existing_id': match}
+            if kind == 'task':
+                # Поля ответа/решения предзаполняются: для найденных
+                # в базе — текущими значениями задачи, для новых — из .tex
+                source = existing[match] if match else None
+                row['answer_value'] = (
+                    source.answer_latex if source else data['answer'])
+                row['solution_value'] = (
+                    source.solution_latex if source else data['solution'])
+            rows.append(row)
         context['preview'] = {
             'header': parsed['header'],
             'rows': rows,

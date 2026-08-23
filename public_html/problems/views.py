@@ -326,6 +326,39 @@ def _task_form(request, task):
                       and task.variant_of_id is None)
         if (form.is_valid() and source_fs.is_valid()
                 and subitem_fs.is_valid() and image_fs.is_valid()):
+            # Дедупликация: не создавать вторую задачу с теми же условием
+            # и подпунктами
+            if task is None and 'force_create' not in request.POST:
+                from worksheets.import_tex import find_existing_task
+                new_subitems = [
+                    row.get('text_latex', '')
+                    for row in subitem_fs.cleaned_data
+                    if row and not row.get('DELETE')]
+                duplicate_pk = find_existing_task(
+                    form.cleaned_data['text_latex'], new_subitems)
+                if duplicate_pk is not None:
+                    warning = (
+                        f'Задача с таким условием уже есть в базе — '
+                        f'#{duplicate_pk}. Проверьте её или нажмите '
+                        f'«Всё равно создать».')
+                    # Файловые поля браузер не пересылает при повторной
+                    # отправке формы — предупреждаем, что их надо выбрать
+                    # заново
+                    if request.FILES:
+                        warning += (' Выбранные файлы картинок при этом '
+                                    'нужно указать заново.')
+                    messages.warning(request, warning)
+                    return render(request, 'problems/task_form.html', {
+                        'form': form,
+                        'formset': source_fs,
+                        'subitem_formset': subitem_fs,
+                        'image_formset': image_fs,
+                        'task': task,
+                        'worksheet': worksheet,
+                        'item': item,
+                        'can_save_local': False,
+                        'duplicate_pk': duplicate_pk,
+                    })
             if save_local:
                 variant = _save_local_variant(
                     request.user, task, form, source_fs, subitem_fs)

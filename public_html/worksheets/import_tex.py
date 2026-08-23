@@ -248,27 +248,65 @@ def parse_tex(source):
 
 # --- Дедупликация и создание ---
 
+def _task_signature(text, subitems=()):
+    """Ключ дедупликации: нормализованное условие + подпункты по порядку.
+
+    Основное условие часто совпадает («Решите уравнение:» и т.п.),
+    поэтому задачи с разными подпунктами — разные задачи.
+    """
+    return (normalize_task_text(text),
+            tuple(s for s in (normalize_task_text(x) for x in subitems)
+                  if s))
+
+
+def _known_signatures():
+    """Сигнатуры всех задач каталога: {(условие, подпункты): pk}."""
+    subs = {}
+    for task_id, sub_text in (TaskSubitem.objects
+                              .filter(task__variant_of__isnull=True)
+                              .order_by('task_id', 'order', 'id')
+                              .values_list('task_id', 'text_latex')):
+        subs.setdefault(task_id, []).append(sub_text)
+    known = {}
+    for pk, text in (Task.objects.filter(variant_of__isnull=True)
+                     .values_list('pk', 'text_latex')):
+        known.setdefault(_task_signature(text, subs.get(pk, ())), pk)
+    return known
+
+
 def match_existing_tasks(parsed):
-    """Для каждой задачи ищет совпадение в базе по нормализованному тексту.
+    """Для каждой задачи ищет совпадение в базе по условию и подпунктам.
 
     Возвращает список той же длины, что elements: pk задачи или None
     (None и для нетасковых элементов).
     """
-    known = {}
-    for pk, text in (Task.objects.filter(variant_of__isnull=True)
-                     .values_list('pk', 'text_latex')):
-        known.setdefault(normalize_task_text(text), pk)
+    known = _known_signatures()
     matches = []
     for kind, data in parsed['elements']:
         if kind != 'task':
             matches.append(None)
             continue
-        matches.append(known.get(normalize_task_text(data['text'])))
+        matches.append(
+            known.get(_task_signature(data['text'], data['subitems'])))
     return matches
 
 
-def create_worksheet(parsed, owner, title=''):
+def find_existing_task(text, subitems=()):
+    """pk задачи каталога с тем же условием и подпунктами или None.
+
+    Та же проверка, что при импорте, — используется и при ручном создании
+    задачи, чтобы не плодить дубли под разными ID.
+    """
+    return _known_signatures().get(_task_signature(text, subitems))
+
+
+def create_worksheet(parsed, owner, title='', overrides=None):
     """Создаёт листок с элементами; новые задачи сохраняются в базу.
+
+    overrides — назначения из предпросмотра по индексу элемента:
+    {'grade_level', 'topic_id', 'stars', 'answer', 'solution'}.
+    Класс/тема/звёзды применяются только к новым задачам; ответ и решение
+    обновляются и у найденных в базе (горячее редактирование при импорте).
 
     Возвращает (worksheet, missing_images): файлы картинок при импорте
     не переносятся, missing_images — список {'task': Task, 'files': […]}
@@ -276,6 +314,7 @@ def create_worksheet(parsed, owner, title=''):
     """
     header = parsed['header']
     matches = match_existing_tasks(parsed)
+    overrides = overrides or {}
     worksheet = Worksheet.objects.create(
         title=title or header['title'] or 'Импортированный листок',
         grade_label=header['left'],
@@ -297,11 +336,31 @@ def create_worksheet(parsed, owner, title=''):
             task_pk = matches[i]
             if task_pk is not None:
                 task = Task.objects.get(pk=task_pk)
+                # Ответ/решение можно горячо править и у существующих
+                # задач (класс/тему/звёзды существующих не трогаем)
+                extra = overrides.get(i, {})
+                updates = []
+                if 'answer' in extra and extra['answer'] != task.answer_latex:
+                    task.answer_latex = extra['answer']
+                    updates.append('answer_latex')
+                if ('solution' in extra
+                        and extra['solution'] != task.solution_latex):
+                    task.solution_latex = extra['solution']
+                    updates.append('solution_latex')
+                if updates:
+                    task.save(update_fields=updates)
             else:
+                extra = overrides.get(i, {})
                 task = Task.objects.create(
-                    text_latex=data['text'], stars=data['stars'],
-                    columns=data['columns'], answer_latex=data['answer'],
-                    solution_latex=data['solution'], created_by=owner)
+                    text_latex=data['text'],
+                    stars=extra.get('stars', data['stars']),
+                    columns=data['columns'],
+                    answer_latex=extra.get('answer', data['answer']),
+                    solution_latex=extra.get('solution', data['solution']),
+                    grade_level=extra.get('grade_level'),
+                    created_by=owner)
+                if extra.get('topic_id'):
+                    task.topics.add(extra['topic_id'])
                 for j, chunk in enumerate(data['subitems']):
                     TaskSubitem.objects.create(
                         task=task, order=(j + 1) * 10, text_latex=chunk)
