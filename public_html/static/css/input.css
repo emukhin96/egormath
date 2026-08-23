@@ -1075,6 +1075,7 @@
   }
 
   ol.subitems {
+    --subitem-marker: 1.35rem;
     list-style: lower-alpha;
     list-style: cyrillic-lower;
     margin: 4px 0 4px 26px;
@@ -1239,10 +1240,47 @@
     flex-shrink: 0;
   }
 
+  .task-line .task-main,
   .task-line .task-text {
     flex: 1;
     min-width: 0;
     margin: 0;
+  }
+
+  .task-line .task-main .task-text {
+    flex: none;
+  }
+
+  /* Каталог: колонка звёзд всегда занята — текст и «а)» всех строк
+     на одной вертикали, а не правее у задач со звёздами. */
+  .task-catalog .task-line {
+    display: grid;
+    grid-template-columns: 3.25rem 52px minmax(0, 1fr);
+    column-gap: 6px;
+    align-items: baseline;
+  }
+
+  .task-catalog .task-line .task-id {
+    grid-column: 1;
+  }
+
+  .task-catalog .task-line .stars {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .task-catalog .task-line .task-main {
+    grid-column: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Каталог: ::marker «а)» — первый знак на линии текста, не правее. */
+  .task-line .task-main ol.subitems {
+    margin-left: 0;
+    padding-left: 0;
+    list-style-position: inside;
   }
 
   /* Просмотр: звёзды на полях слева от номера, текст всех задач
@@ -1279,12 +1317,11 @@
     white-space: nowrap;
   }
 
-  /* Просмотр листка: рубрики, \plaintext, подпункты и картинки —
-     по той же вертикали, что основной текст задач. Маркер «а)»
-     сидит в padding, поэтому начало подпункта = линия текста. */
+  /* Просмотр: ::marker «а)» на линии основного текста. */
   .ws-view ol.subitems {
-    margin-left: calc(var(--task-indent) - 1.35rem);
-    padding-left: 1.35rem;
+    margin-left: var(--task-indent);
+    padding-left: 0;
+    list-style-position: inside;
   }
 
   .ws-view h2,
@@ -1297,7 +1334,7 @@
   /* Конструктор: «а)» на вертикали номеров (1., 2.), не правее. */
   .worksheet-items-card ol.subitems {
     margin-left: 0;
-    padding-left: 1.35rem;
+    padding-left: var(--subitem-marker);
   }
 
   /* Шапка публичной страницы: заголовок и подзаголовок компактно,
@@ -1947,7 +1984,8 @@
     /* Узкий экран: без «полей» — рубрики и тексты с края карточки */
     .ws-view ol.subitems {
       margin-left: 0;
-      padding-left: 1.35rem;
+      padding-left: 0;
+      list-style-position: inside;
     }
 
     .ws-view h2,
