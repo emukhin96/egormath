@@ -135,6 +135,23 @@ class WebTexTests(TestCase):
         self.assertIn('<tr><td>$x$</td><td>1</td></tr>', html)
         self.assertIn('<tr><td>$y$</td><td>2</td></tr>', html)
 
+    def test_tabular_math_with_breaks_in_cell(self):
+        # \\ и & внутри формулы в ячейке — часть формулы, не разделители
+        html = self.render(
+            '\\begin{tabular}{|c|c|}'
+            '$\\begin{matrix}a\\\\b\\end{matrix}$ & 1\\end{tabular}')
+        self.assertIn(
+            '<tr><td>$\\begin{matrix}a\\\\b\\end{matrix}$</td>'
+            '<td>1</td></tr>', html)
+
+    def test_preview_cut_inside_bracket_math(self):
+        from problems.web_tex import tex_preview_html
+        # Граница внутри \(…\) — формула откатывается целиком
+        text = 'Найдите корни уравнения \\(x^2 - 5x + 6 = 0\\) устно.'
+        html = str(tex_preview_html(text, limit=30))
+        self.assertNotIn('\\(x^2', html)
+        self.assertNotIn('\\(', html)
+
     def test_html_is_escaped(self):
         self.assertEqual(self.render('<script>alert(1)</script>'),
                          '&lt;script&gt;alert(1)&lt;/script&gt;')
@@ -358,6 +375,25 @@ class QuickUpdateTests(TestCase):
         self.xhr_post({'grade_level': ''})
         self.task.refresh_from_db()
         self.assertIsNone(self.task.grade_level)
+
+    def test_partial_save_does_not_touch_other_fields(self):
+        # Параллельные autosave-формы: запрос с одними звёздами не должен
+        # затирать ответ, изменённый соседним запросом (update_fields)
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        self.task.answer_latex = 'старый'
+        self.task.save()
+        with CaptureQueriesContext(connection) as ctx:
+            self.xhr_post({'stars': '2'})
+        updates = [q['sql'] for q in ctx.captured_queries
+                   if q['sql'].startswith('UPDATE')]
+        self.assertEqual(len(updates), 1)
+        self.assertIn('stars', updates[0])
+        self.assertNotIn('answer_latex', updates[0])
+        # text_plain пересчитывается и при частичном сохранении условия
+        self.xhr_post({'text_latex': 'Новое $x$'})
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.text_plain, 'Новое x')
 
     def test_update_card_fields(self):
         # Поля карточки задачи: звёзды, условие, решение, темы, теги

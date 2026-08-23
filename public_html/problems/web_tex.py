@@ -84,6 +84,24 @@ def _sub_outside_math(pattern, repl, text):
     return pattern.sub(guarded, text)
 
 
+def _split_outside_math(text, pattern):
+    """Разбиение по разделителю, стоящему вне формул.
+
+    Нужен таблицам: перенос \\\\ внутри $\\begin{matrix}…$ в ячейке —
+    часть формулы, а не конец строки таблицы.
+    """
+    spans = [m.span() for m in _MATH_RE.finditer(text)]
+    parts = []
+    last = 0
+    for m in re.finditer(pattern, text):
+        if any(a <= m.start() < b for a, b in spans):
+            continue
+        parts.append(text[last:m.start()])
+        last = m.end()
+    parts.append(text[last:])
+    return parts
+
+
 def _plain(text):
     """Замены в фрагменте вне формул: переносы, ~, экранированные символы."""
     text = re.sub(r'\\par\b', _BR + _BR, text)
@@ -123,11 +141,15 @@ def _fragment_html(text):
 
 
 def _table_html(body):
-    """tabular → <table>: строки по \\\\, ячейки по неэкранированному &."""
+    """tabular → <table>: строки по \\\\, ячейки по неэкранированному &.
+
+    Разделители ищутся только вне формул: \\\\ и & внутри $…$
+    (например, в matrix или cases в ячейке) принадлежат формуле.
+    """
     body = body.replace('\\hline', '')
     rows = []
-    for row in body.split('\\\\'):
-        cells = [c.strip() for c in re.split(r'(?<!\\)&', row)]
+    for row in _split_outside_math(body, r'\\\\'):
+        cells = [c.strip() for c in _split_outside_math(row, r'(?<!\\)&')]
         if not any(cells):
             continue
         rows.append('<tr>'
@@ -174,8 +196,16 @@ def tex_to_web_html(source):
 
 def _safe_cut(text, limit):
     """Обрезка tex-исходника, не разрезающая формулу или команду посередине."""
+    # граница внутри формулы любого вида ($…$, $$…$$, \(…\), \[…\]) —
+    # откат к началу этой формулы
+    for m in _MATH_RE.finditer(text):
+        if m.start() < limit < m.end():
+            limit = m.start()
+            break
+        if m.start() >= limit:
+            break
     cut = text[:limit]
-    # незакрытая формула $…: откат до её начала
+    # незакрытая формула $… (непарный $ в самом исходнике): откат до начала
     if cut.count('$') % 2:
         cut = cut[:cut.rfind('$')]
     # незакрытые аргументы команд: откат до последней открытой скобки

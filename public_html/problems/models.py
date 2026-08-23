@@ -148,6 +148,10 @@ class Task(models.Model):
 
     def save(self, *args, **kwargs):
         self.text_plain = strip_latex(self.text_latex)
+        # При частичном сохранении text_plain едет вместе с text_latex
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None and 'text_latex' in update_fields:
+            kwargs['update_fields'] = list(update_fields) + ['text_plain']
         super().save(*args, **kwargs)
 
     @property
