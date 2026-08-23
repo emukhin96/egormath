@@ -169,6 +169,18 @@ class LatexGenerationTests(TestCase):
         # Текст между задачами — без пустого \item[]
         self.assertNotIn('\\item[]', tex)
 
+    def test_text_item_styles(self):
+        # Стиль текстового элемента выбирает команду egor
+        worksheet = make_worksheet(self.teacher)
+        for style, command in (('rule', 'ruletext'), ('light', 'lighttext'),
+                               ('memo', 'memotext')):
+            item = WorksheetItem.objects.create(
+                worksheet=worksheet, order=15,
+                text_latex='Правило.', text_style=style)
+            tex = worksheet_to_tex(worksheet, 'student')
+            self.assertIn('\\%s{%%' % command, tex)
+            item.delete()
+
     def test_text_right_after_rubric(self):
         # \plaintext сразу после \rubr требует пустого \item[] —
         # иначе LaTeX падает на тексте внутри enumerate до первого пункта
@@ -527,6 +539,24 @@ class WorksheetViewTests(TestCase):
             {'text_latex': 'Новый текст'})
         item.refresh_from_db()
         self.assertEqual(item.text_latex, 'Новый текст')
+        # Смена стиля текста сохраняется, мусорное значение игнорируется
+        self.client.post(
+            reverse('worksheet_edit_text',
+                    args=[self.worksheet.pk, item.pk]),
+            {'text_latex': 'Новый текст', 'text_style': 'memo'})
+        item.refresh_from_db()
+        self.assertEqual(item.text_style, 'memo')
+        self.client.post(
+            reverse('worksheet_edit_text',
+                    args=[self.worksheet.pk, item.pk]),
+            {'text_latex': 'Новый текст', 'text_style': 'hacked'})
+        item.refresh_from_db()
+        self.assertEqual(item.text_style, 'memo')
+        # Переключатель стиля отображается в конструкторе
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.assertContains(response, 'style-seg')
+        self.assertContains(response, 'name="text_style"')
 
     def test_add_edit_delete_rubric(self):
         self.login_teacher()
@@ -767,6 +797,22 @@ class ImportTexTests(TestCase):
         self.assertEqual(task2['subitems'],
                          ['$2+2$', '$3 \\cdot [1+2]$'])
         self.assertEqual(task2['solution'], 'Считаем в столбик.')
+
+    def test_parse_text_styles(self):
+        # \ruletext/\lighttext/\memotext импортируются со своим стилем
+        from .import_tex import create_worksheet, parse_tex
+        tex = ('\\begin{document}\n'
+               '\\ruletext{Правило.}\n'
+               '\\lighttext{Замечание.}\n'
+               '\\memotext{Запомни!}\n'
+               '\\plaintext{Просто текст.}\n'
+               '\\end{document}')
+        parsed = parse_tex(tex)
+        styles = [data['style'] for kind, data in parsed['elements']]
+        self.assertEqual(styles, ['rule', 'light', 'memo', 'plain'])
+        worksheet, _ = create_worksheet(parsed, owner=self.teacher)
+        saved = [item.text_style for item in worksheet.ordered_items()]
+        self.assertEqual(saved, ['rule', 'light', 'memo', 'plain'])
 
     def test_create_and_dedup(self):
         from .import_tex import create_worksheet, parse_tex

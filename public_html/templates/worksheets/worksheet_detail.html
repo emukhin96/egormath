@@ -139,7 +139,13 @@
           <form method="post" action="{% url 'worksheet_edit_text' worksheet.pk item.pk %}"
                 data-autosave="debounce">
             {% csrf_token %}
-            <span class="task-meta">Текст между задачами (в PDF — \plaintext):</span>
+            <span class="task-meta">Текст между задачами:</span>
+            <span class="style-seg" title="Оформление текста в PDF и на страницах">
+              {% for value, label in item.TEXT_STYLE_CHOICES %}
+              <label><input type="radio" name="text_style" value="{{ value }}"
+                     {% if item.text_style == value %}checked{% endif %}><span>{{ label }}</span></label>
+              {% endfor %}
+            </span>
             <textarea name="text_latex" rows="2">{{ item.text_latex }}</textarea>
           </form>
         </div>

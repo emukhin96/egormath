@@ -105,6 +105,14 @@ class Worksheet(models.Model):
 
 
 class WorksheetItem(models.Model):
+    # Стили текстового элемента — команды пакета egor
+    TEXT_STYLE_CHOICES = [
+        ('plain', 'Обычный'),
+        ('rule', 'Правило'),
+        ('light', 'Тонкая линия'),
+        ('memo', 'Памятка'),
+    ]
+
     worksheet = models.ForeignKey(
         Worksheet, on_delete=models.CASCADE, related_name='items',
         verbose_name='Листок')
@@ -114,6 +122,11 @@ class WorksheetItem(models.Model):
     text_latex = models.TextField(
         'Произвольный текст (LaTeX)', blank=True,
         help_text='Элемент-текст между задачами (в PDF — \\plaintext)')
+    text_style = models.CharField(
+        'Стиль текста', max_length=10, choices=TEXT_STYLE_CHOICES,
+        default='plain',
+        help_text='Оформление текстового элемента: \\plaintext, \\ruletext, '
+                  '\\lighttext или \\memotext пакета egor')
     order = models.PositiveIntegerField('Порядок', default=0)
     rubric = models.CharField(
         'Рубрика', max_length=190, blank=True,

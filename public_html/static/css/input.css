@@ -1085,6 +1085,79 @@
     margin: 2px 0;
   }
 
+  /* Стили текстовых элементов листка — веб-аналоги боксов egor.sty
+     (\ruletext, \lighttext, \memotext) */
+  .ws-text-rule {
+    background: #ececec;
+    border-left: 4px solid #000;
+    padding: 6px 12px;
+    font-size: 0.92em;
+  }
+
+  .ws-text-light {
+    border-left: 2px solid #000;
+    padding: 4px 12px;
+    font-size: 0.92em;
+  }
+
+  .ws-text-memo {
+    position: relative;
+    border: 1px solid #b6bdc9;
+    border-left: 18px solid #8a93a3;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.92em;
+  }
+
+  .ws-text-memo::before {
+    content: "!";
+    position: absolute;
+    top: 50%;
+    left: -18px;
+    width: 18px;
+    transform: translateY(-50%);
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  /* Сегментный переключатель стиля текстового элемента в конструкторе */
+  .style-seg {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    vertical-align: middle;
+  }
+
+  .style-seg label {
+    cursor: pointer;
+  }
+
+  .style-seg input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .style-seg span {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  .style-seg input:checked + span {
+    background: var(--card);
+    color: var(--accent-dark);
+    font-weight: 600;
+    box-shadow: var(--panel-shadow);
+  }
+
   .subitem-label {
     display: inline;
     font-weight: normal;

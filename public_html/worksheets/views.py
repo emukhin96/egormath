@@ -493,7 +493,12 @@ def worksheet_edit_text(request, pk, item_id):
             request, pk, ok=False,
             message='Текст пустой — не сохранено (удалите элемент кнопкой ×).')
     item.text_latex = text
-    item.save()
+    updated = ['text_latex']
+    style = request.POST.get('text_style', '')
+    if style in dict(WorksheetItem.TEXT_STYLE_CHOICES):
+        item.text_style = style
+        updated.append('text_style')
+    item.save(update_fields=updated)
     return _builder_response(request, pk, message='Текст сохранён.')
 
 
