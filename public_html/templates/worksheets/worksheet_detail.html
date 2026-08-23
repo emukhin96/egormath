@@ -82,7 +82,7 @@
                 <input type="checkbox" name="subitems" value="{{ s.pk }}"
                        form="settings-{{ item.pk }}"
                        {% if row.selected_ids == None or s.pk in row.selected_ids %}checked{% endif %}>
-                <span class="math-content">{{ s.text_latex|web_text }}</span>{% if forloop.last %}.{% else %};{% endif %}
+                <span class="math-content">{{ s.text_latex|web_text }}</span>{{ s.text_latex|subitem_tail:forloop.last }}
               </label>
               {% if s.answer_latex %}<span class="ws-answers muted"> — ответ: <span class="math-content">{{ s.answer_latex }}</span></span>{% endif %}
             </li>

@@ -43,7 +43,7 @@
     <ol class="subitems">
       {% for sr in row.subrows %}
       <li>
-        <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{% if forloop.last %}.{% else %};{% endif %}
+        <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}
         <div class="subitem-answer">
           {% include 'assignments/_answer_fields.html' with prefix=sr.prefix answer_type=row.task.answer_type obj=sr.part editable=editable %}
         </div>

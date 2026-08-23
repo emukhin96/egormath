@@ -304,9 +304,11 @@ def create_worksheet(parsed, owner, title='', overrides=None):
     """Создаёт листок с элементами; новые задачи сохраняются в базу.
 
     overrides — назначения из предпросмотра по индексу элемента:
-    {'grade_level', 'topic_id', 'stars', 'answer', 'solution'}.
-    Класс/тема/звёзды применяются только к новым задачам; ответ и решение
-    обновляются и у найденных в базе (горячее редактирование при импорте).
+    {'grade_level', 'topic_id', 'stars', 'answer', 'solution',
+     'subitem_answers', 'subitem_solutions', 'skip'}.
+    Класс/тема/звёзды применяются только к новым задачам; ответы и решения
+    (в т.ч. по подпунктам) обновляются и у найденных в базе (горячее
+    редактирование при импорте). skip — строка «удалена из импорта».
 
     Возвращает (worksheet, missing_images): файлы картинок при импорте
     не переносятся, missing_images — список {'task': Task, 'files': […]}
@@ -333,12 +335,16 @@ def create_worksheet(parsed, owner, title='', overrides=None):
             WorksheetItem.objects.create(
                 worksheet=worksheet, order=order, text_latex=data['text'])
         else:
+            extra = overrides.get(i, {})
+            if extra.get('skip'):
+                continue
+            sub_answers = extra.get('subitem_answers', {})
+            sub_solutions = extra.get('subitem_solutions', {})
             task_pk = matches[i]
             if task_pk is not None:
                 task = Task.objects.get(pk=task_pk)
-                # Ответ/решение можно горячо править и у существующих
+                # Ответы/решения можно горячо править и у существующих
                 # задач (класс/тему/звёзды существующих не трогаем)
-                extra = overrides.get(i, {})
                 updates = []
                 if 'answer' in extra and extra['answer'] != task.answer_latex:
                     task.answer_latex = extra['answer']
@@ -349,8 +355,20 @@ def create_worksheet(parsed, owner, title='', overrides=None):
                     updates.append('solution_latex')
                 if updates:
                     task.save(update_fields=updates)
+                if sub_answers or sub_solutions:
+                    for j, sub in enumerate(task.subitems.all()):
+                        sub_updates = []
+                        if (j in sub_answers
+                                and sub_answers[j] != sub.answer_latex):
+                            sub.answer_latex = sub_answers[j]
+                            sub_updates.append('answer_latex')
+                        if (j in sub_solutions
+                                and sub_solutions[j] != sub.solution_latex):
+                            sub.solution_latex = sub_solutions[j]
+                            sub_updates.append('solution_latex')
+                        if sub_updates:
+                            sub.save(update_fields=sub_updates)
             else:
-                extra = overrides.get(i, {})
                 task = Task.objects.create(
                     text_latex=data['text'],
                     stars=extra.get('stars', data['stars']),
@@ -363,7 +381,9 @@ def create_worksheet(parsed, owner, title='', overrides=None):
                     task.topics.add(extra['topic_id'])
                 for j, chunk in enumerate(data['subitems']):
                     TaskSubitem.objects.create(
-                        task=task, order=(j + 1) * 10, text_latex=chunk)
+                        task=task, order=(j + 1) * 10, text_latex=chunk,
+                        answer_latex=sub_answers.get(j, ''),
+                        solution_latex=sub_solutions.get(j, ''))
                 if data.get('images'):
                     missing_images.append(
                         {'task': task, 'files': data['images']})

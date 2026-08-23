@@ -41,6 +41,21 @@ class LatexUtilsTests(TestCase):
         chunks = split_items('\\item $1+1$; \\item $2+2$ ; \\item $3+3$.')
         self.assertEqual(chunks, ['$1+1$', '$2+2$', '$3+3$'])
 
+    def test_split_items_keeps_sentence_punctuation(self):
+        # Подпункт-предложение (заглавная буква + «.»/«?») хранит свой знак,
+        # фрагменты перечисления — без знака
+        chunks = split_items(
+            '\\item Докажите неравенство. '
+            '\\item Верно ли обратное? '
+            '\\item чему равен $x$? '
+            '\\item $2+2$;')
+        self.assertEqual(chunks, [
+            'Докажите неравенство.',
+            'Верно ли обратное?',
+            'чему равен $x$',
+            '$2+2$',
+        ])
+
 
 class WebTexTests(TestCase):
     """Серверный препроцессор tex → HTML для веб-страниц."""

@@ -25,3 +25,16 @@ def web_text_preview(text, limit=220):
     """Сокращённое превью условия для списков: обрезка по безопасной
     границе tex (не внутри формулы/команды), затем перевод в HTML."""
     return tex_preview_html(text, int(limit))
+
+
+@register.filter
+def subitem_tail(text, is_last):
+    """Знак после подпункта: «;» между пунктами, «.» после последнего.
+
+    Подпункты-предложения хранятся со своим знаком («Приведите пример.») —
+    таким ничего не добавляется.
+    """
+    text = (text or '').rstrip()
+    if text and text[-1] in ';.!?:':
+        return ''
+    return '.' if is_last else ';'

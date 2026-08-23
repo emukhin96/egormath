@@ -897,6 +897,15 @@ class ImportTexTests(TestCase):
         # И поля назначений для новых задач
         self.assertContains(response, 'name="grade_1"')
         self.assertContains(response, 'name="answer_1"')
+        # У задачи с подпунктами (индекс 4) — поля на каждый подпункт,
+        # общих task-level полей нет
+        self.assertContains(response, 'name="answer_4_0"')
+        self.assertContains(response, 'name="solution_4_1"')
+        self.assertNotContains(response, 'name="answer_4"')
+        # Тумблер показа ответов и панель массовых действий
+        self.assertContains(response, 'toggle-import-answers')
+        self.assertContains(response, 'import-bulk-form')
+        self.assertContains(response, 'Удалить из импорта')
 
         response = self.client.post(
             url, {'tex': SAMPLE_TEX, 'action': 'create'})
@@ -926,6 +935,57 @@ class ImportTexTests(TestCase):
         self.assertEqual(task.stars, 3)
         self.assertEqual(task.answer_latex, '5/6')
         self.assertEqual(task.solution_latex, 'Общий знаменатель 6.')
+
+    def test_import_subitem_answers(self):
+        # Ответы/решения по подпунктам сохраняются в новые TaskSubitem
+        self.client.login(username='teacher1', password='pass12345')
+        self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create',
+            'answer_4_0': '4', 'solution_4_0': 'Сложение.',
+            'answer_4_1': '9',
+        })
+        worksheet = Worksheet.objects.get(owner=self.teacher)
+        task = worksheet.ordered_items()[4].task
+        subs = list(task.subitems.all())
+        self.assertEqual(subs[0].answer_latex, '4')
+        self.assertEqual(subs[0].solution_latex, 'Сложение.')
+        self.assertEqual(subs[1].answer_latex, '9')
+        self.assertEqual(subs[1].solution_latex, '')
+
+    def test_import_updates_existing_subitem_answers(self):
+        # Горячая правка ответов подпунктов у задачи, найденной в базе
+        existing = Task.objects.create(
+            text_latex='Найдите значение:', created_by=self.teacher)
+        existing.subitems.create(order=10, text_latex='$2+2$')
+        existing.subitems.create(
+            order=20, text_latex='$3 \\cdot [1+2]$', answer_latex='8')
+        self.client.login(username='teacher1', password='pass12345')
+        self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create',
+            'answer_4_0': '4', 'answer_4_1': '9',
+        })
+        subs = list(existing.subitems.all())
+        self.assertEqual(subs[0].answer_latex, '4')
+        self.assertEqual(subs[1].answer_latex, '9')
+
+    def test_import_skip_row(self):
+        # Помеченная «удалить из импорта» задача не создаётся и не попадает
+        # в листок
+        self.client.login(username='teacher1', password='pass12345')
+        self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create', 'skip_1': '1',
+        })
+        worksheet = Worksheet.objects.get(owner=self.teacher)
+        self.assertEqual(worksheet.items.count(), 4)
+        self.assertFalse(Task.objects.filter(
+            text_latex__contains='\\frac{1}{2}').exists())
+        # Пустое значение skip_N (флажок не взводился) ничего не пропускает
+        Worksheet.objects.all().delete()
+        self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create', 'skip_1': '',
+        })
+        worksheet = Worksheet.objects.get(owner=self.teacher)
+        self.assertEqual(worksheet.items.count(), 5)
 
     def test_import_create_ignores_unknown_topic(self):
         # Поддельный/удалённый id темы не должен ронять создание (500)
