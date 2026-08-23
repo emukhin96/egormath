@@ -1221,10 +1221,11 @@
   }
 
   /* Строка задачи в режиме просмотра: звёзды «на полях» слева от номера,
-     текст всех задач выровнен по одной вертикали */
+     текст всех задач выровнен по одной вертикали. Колонка номера
+     фиксированная — текст не «пляшет» между строками с 1. и 12. */
   .task-row {
     display: grid;
-    grid-template-columns: 52px max-content minmax(0, 1fr);
+    grid-template-columns: 52px 2.2em minmax(0, 1fr);
     column-gap: var(--space-2);
     align-items: baseline;
   }
@@ -1256,6 +1257,59 @@
 
   .task-line .task-text {
     margin: 0;
+  }
+
+  /* Каталог задач: текст никогда не переносится целиком на новую строку
+     после звёзд — как на публичной странице листка */
+  .task-catalog .task-line {
+    flex-wrap: nowrap;
+  }
+
+  .task-catalog .task-line .task-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Просмотр листка (публичная страница, кабинет ученика, проверка):
+     рубрики, тексты, подпункты и картинки выравниваются по колонке
+     основного текста задач; звёзды остаются левее всех — «на полях».
+     Отступ = колонка звёзд + колонка номера + два grid-gap. */
+  .ws-view {
+    --task-indent: calc(52px + 2.2em + 2 * var(--space-2));
+  }
+
+  .ws-view ol.subitems {
+    /* табуляция вправо относительно основного текста задачи */
+    margin-left: calc(var(--task-indent) + 16px);
+  }
+
+  .ws-view h2,
+  .ws-view .ws-text,
+  .ws-view .ws-rubric-note,
+  .ws-view .task-images {
+    margin-left: var(--task-indent);
+  }
+
+  /* Шапка публичной страницы: заголовок и подзаголовок компактно,
+     кнопка PDF — в правом верхнем углу */
+  .public-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+
+  .public-head h1 {
+    margin: 0 0 var(--space-1);
+  }
+
+  .public-head p {
+    margin: 0;
+  }
+
+  .public-head .btn {
+    flex-shrink: 0;
   }
 
   .ws-star-reset {
@@ -1878,6 +1932,18 @@
     .task-row .task-text {
       flex: 1;
       min-width: 0;
+    }
+
+    /* Узкий экран: без «полей» — отступы просмотра сбрасываются */
+    .ws-view ol.subitems {
+      margin-left: 26px;
+    }
+
+    .ws-view h2,
+    .ws-view .ws-text,
+    .ws-view .ws-rubric-note,
+    .ws-view .task-images {
+      margin-left: 0;
     }
 
     .topbar-inner {
