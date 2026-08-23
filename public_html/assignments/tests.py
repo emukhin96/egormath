@@ -62,6 +62,22 @@ class StudentAnswerTests(TestCase):
                       self.assignment.worksheet.ordered_items()]
         self.client.login(username='student1', password='pass12345')
 
+    def test_hidden_items_excluded_for_student(self):
+        # Скрытая задача не видна на странице задания и не принимает ответ
+        item = self.assignment.worksheet.items.order_by('order').first()
+        self.assignment.hidden_items.add(item)
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        rows = response.context['rows']
+        self.assertNotIn(item.task_id, [r['task'].pk for r in rows if r['task']])
+        # Нумерация пересчитана: оставшаяся задача — №1
+        self.assertEqual([r['number'] for r in rows if r['task']], [1])
+        self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{item.task_id}_text': 'подсмотрел'})
+        self.assertFalse(Submission.objects.filter(
+            assignment=self.assignment, task=item.task).exists())
+
     def test_save_answers_and_submit(self):
         task = self.tasks[0]
         response = self.client.post(

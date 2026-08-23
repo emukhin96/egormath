@@ -240,6 +240,11 @@ class ShareLink(models.Model):
         'Токен', max_length=32, unique=True, default=_new_token)
     is_active = models.BooleanField('Активна', default=True)
     created_at = models.DateTimeField('Создана', auto_now_add=True)
+    hidden_items = models.ManyToManyField(
+        WorksheetItem, blank=True, related_name='hidden_in_links',
+        verbose_name='Скрытые задачи',
+        help_text='Эти элементы листка не показываются по данной ссылке '
+                  '(страница и PDF)')
 
     class Meta:
         verbose_name = 'Публичная ссылка'

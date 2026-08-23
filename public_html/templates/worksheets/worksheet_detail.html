@@ -152,11 +152,55 @@
         {% endif %}
 
         <div class="ws-actions">
+          {% if item.task_id and share_links or item.task_id and assignments %}
+          <button type="button"
+                  class="icon-btn vis-btn{% if row.hidden_links or row.hidden_assignments %} vis-on{% endif %}"
+                  data-dialog-open="vis-{{ item.pk }}"
+                  title="Видимость по ссылкам и ученикам"
+                  aria-label="Видимость по ссылкам и ученикам"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          {% endif %}
           <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'up' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.first %}disabled{% endif %}>↑</button></form>
           <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'down' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.last %}disabled{% endif %}>↓</button></form>
           <form method="post" action="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" class="inline-form">{% csrf_token %}<button class="icon-btn" title="Убрать из листка" aria-label="Убрать из листка">×</button></form>
         </div>
       </div>
+
+      {% if item.task_id and share_links or item.task_id and assignments %}
+      <dialog id="vis-{{ item.pk }}" class="dialog">
+        <form method="post" action="{% url 'worksheet_item_visibility' worksheet.pk item.pk %}">
+          {% csrf_token %}
+          <h3>Видимость задачи {{ row.number }}</h3>
+          <p class="helptext">Отмеченные ссылки и ученики <strong>не увидят</strong>
+            задачу — ни на странице, ни в PDF (нумерация пересчитается).</p>
+          {% if share_links %}
+          <p class="task-meta">Публичные ссылки</p>
+          <div class="dialog-topics">
+            {% for link in share_links %}
+            <label class="dialog-topic">
+              <input type="checkbox" name="hide_links" value="{{ link.pk }}"
+                     {% if link.pk in row.hidden_links %}checked{% endif %}>
+              Ссылка от {{ link.created_at|date:'d.m.Y H:i' }}{% if not link.is_active %} <span class="muted">(отключена)</span>{% endif %}
+            </label>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if assignments %}
+          <p class="task-meta">Ученики</p>
+          <div class="dialog-topics">
+            {% for a in assignments %}
+            <label class="dialog-topic">
+              <input type="checkbox" name="hide_assignments" value="{{ a.pk }}"
+                     {% if a.pk in row.hidden_assignments %}checked{% endif %}>
+              {{ a.student.get_full_name|default:a.student.username }}
+            </label>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <button type="submit" class="btn btn-small">Сохранить</button>
+          <button type="button" class="btn btn-small btn-secondary" data-dialog-close>Отмена</button>
+        </form>
+      </dialog>
+      {% endif %}
     </div>
     {% endwith %}
     {% endfor %}

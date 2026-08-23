@@ -391,6 +391,21 @@
     background: #fdeaea;
   }
 
+  /* Кнопка видимости задачи в конструкторе: синяя, не «опасная» */
+  .vis-btn:hover {
+    color: var(--accent);
+    background: #e8f1fb;
+  }
+
+  .vis-btn svg {
+    vertical-align: -2px;
+  }
+
+  /* Задача где-то скрыта — кнопка подсвечена */
+  .vis-btn.vis-on {
+    color: var(--accent);
+  }
+
   .linklike:hover {
     color: var(--accent);
   }

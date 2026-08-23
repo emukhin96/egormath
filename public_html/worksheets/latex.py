@@ -140,7 +140,9 @@ def rubric_to_tex(item):
     return tex
 
 
-def worksheet_to_tex(worksheet, variant='student'):
+def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
+    """exclude_ids — pk элементов, скрытых для конкретной ссылки/ученика."""
+    exclude_ids = exclude_ids or set()
     options = VARIANT_OPTIONS[variant]
     usepackage = ('\\usepackage[%s]{egor}' % options) if options \
         else '\\usepackage{egor}'
@@ -162,7 +164,8 @@ def worksheet_to_tex(worksheet, variant='student'):
     lines.append(bighead)
     lines.append('')
 
-    items = list(worksheet.ordered_items())
+    items = [item for item in worksheet.ordered_items()
+             if item.pk not in exclude_ids]
     list_open = False
     list_has_item = False
     for item in items:

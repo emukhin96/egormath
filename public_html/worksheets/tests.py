@@ -979,6 +979,47 @@ class ShareLinkTests(TestCase):
         # Ответы не показываются
         self.assertNotContains(response, 'Ответ')
 
+    def test_hidden_items_excluded_from_public_page(self):
+        first = self.worksheet.items.order_by('order').first()
+        self.link.hidden_items.add(first)
+        response = self.client.get(
+            reverse('public_worksheet', args=[self.link.token]))
+        self.assertNotContains(response, 'x^2-2x=0')
+        # Нумерация пересчитана: оставшаяся задача — под номером 1
+        rows = response.context['rows']
+        self.assertEqual([r['number'] for r in rows], [1])
+        # Другая ссылка того же листка показывает всё
+        other = ShareLink.objects.create(worksheet=self.worksheet)
+        response = self.client.get(
+            reverse('public_worksheet', args=[other.token]))
+        self.assertEqual(len(response.context['rows']), 2)
+
+    def test_hidden_items_excluded_from_tex(self):
+        first = self.worksheet.items.order_by('order').first()
+        tex_full = worksheet_to_tex(self.worksheet, 'student')
+        tex_cut = worksheet_to_tex(self.worksheet, 'student',
+                                   exclude_ids={first.pk})
+        self.assertIn(first.task.text_latex, tex_full)
+        self.assertNotIn(first.task.text_latex, tex_cut)
+
+    def test_visibility_endpoint(self):
+        self.client.login(username='teacher1', password='pass12345')
+        first = self.worksheet.items.order_by('order').first()
+        url = reverse('worksheet_item_visibility',
+                      args=[self.worksheet.pk, first.pk])
+        self.client.post(url, {'hide_links': [self.link.pk]})
+        self.assertEqual(set(self.link.hidden_items.all()), {first})
+        # Повторный POST без галочки — задача снова видна
+        self.client.post(url, {})
+        self.assertEqual(self.link.hidden_items.count(), 0)
+
+    def test_visibility_dialog_in_builder(self):
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.assertContains(response, 'vis-btn')
+        self.assertContains(response, 'hide_links')
+
     def test_public_page_minimal_for_logged_in(self):
         # Даже залогиненный учитель видит публичную страницу без контекстной панели
         self.client.login(username='teacher1', password='pass12345')

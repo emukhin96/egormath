@@ -67,9 +67,12 @@ def _assignment_rows(assignment, with_review=False):
     qs = qs.select_related('review') if with_review \
         else qs.prefetch_related('review')
     submissions = {s.task_id: s for s in qs}
+    hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     rows = []
     number = 0
     for item in assignment.worksheet.ordered_items():
+        if item.pk in hidden:
+            continue
         if item.task_id is None:
             rows.append({'item': item, 'task': None, 'number': None})
             continue
@@ -135,8 +138,9 @@ def save_answers(request, pk):
     assignment = _student_assignment(request, pk)
     if not assignment.is_editable_by_student:
         raise PermissionDenied('Работа уже отправлена на проверку.')
+    hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     for item in assignment.worksheet.ordered_items():
-        if item.task_id is None:
+        if item.task_id is None or item.pk in hidden:
             continue
         task = item.task
         prefix = f'task{task.pk}'
