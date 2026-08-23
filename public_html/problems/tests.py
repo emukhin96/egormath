@@ -360,18 +360,103 @@ class QuickUpdateTests(TestCase):
         self.client.login(username='teacher1', password='pass12345')
         self.url = reverse('task_quick_update', args=[self.task.pk])
 
+    def xhr_post(self, data):
+        return self.client.post(
+            self.url, data, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
     def test_update_grade_and_answer(self):
-        response = self.client.post(
-            self.url, {'grade_level': '7', 'answer_latex': ' 42 '})
+        response = self.xhr_post({'grade_level': '7', 'answer_latex': ' 42 '})
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['ok'])
         self.task.refresh_from_db()
         self.assertEqual(self.task.grade_level, 7)
         self.assertEqual(self.task.answer_latex, '42')
         # Сброс класса пустым значением
-        self.client.post(self.url, {'grade_level': ''})
+        self.xhr_post({'grade_level': ''})
         self.task.refresh_from_db()
         self.assertIsNone(self.task.grade_level)
+
+    def test_partial_save_does_not_touch_other_fields(self):
+        # Параллельные autosave-формы: запрос с одними звёздами не должен
+        # затирать ответ, изменённый соседним запросом (update_fields)
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        self.task.answer_latex = 'старый'
+        self.task.save()
+        with CaptureQueriesContext(connection) as ctx:
+            self.xhr_post({'stars': '2'})
+        updates = [q['sql'] for q in ctx.captured_queries
+                   if q['sql'].startswith('UPDATE')]
+        self.assertEqual(len(updates), 1)
+        self.assertIn('stars', updates[0])
+        self.assertNotIn('answer_latex', updates[0])
+        # text_plain пересчитывается и при частичном сохранении условия
+        self.xhr_post({'text_latex': 'Новое $x$'})
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.text_plain, 'Новое x')
+
+    def test_update_card_fields(self):
+        # Поля карточки задачи: звёзды, условие, решение, темы, теги
+        response = self.xhr_post({
+            'stars': '2', 'text_latex': ' Новое условие ',
+            'solution_latex': 'Решение.',
+        })
+        self.assertTrue(response.json()['ok'])
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.stars, 2)
+        self.assertEqual(self.task.text_latex, 'Новое условие')
+        self.assertEqual(self.task.solution_latex, 'Решение.')
+        # Пустое условие отклоняется
+        response = self.xhr_post({'text_latex': '   '})
+        self.assertEqual(response.status_code, 400)
+
+        topic = Topic.objects.create(name='Дроби')
+        self.xhr_post({'topics_submitted': '1', 'topics': [str(topic.pk)]})
+        self.assertEqual(list(self.task.topics.all()), [topic])
+        self.xhr_post({'tags_submitted': '1', 'tags': 'ОГЭ, устный счёт'})
+        self.assertEqual(
+            sorted(t.name for t in self.task.tags.all()),
+            ['ОГЭ', 'устный счёт'])
+        # Слишком длинный тег — контролируемая ошибка, а не 500 из БД
+        response = self.xhr_post(
+            {'tags_submitted': '1', 'tags': 'х' * 65})
+        self.assertEqual(response.status_code, 400)
+        # Существующий тег с запятой в имени не теряется при сохранении
+        legacy = Tag.objects.create(name='алгебра, геометрия')
+        self.task.tags.add(legacy)
+        self.xhr_post({'tags_submitted': '1', 'tags': 'ОГЭ'})
+        self.assertEqual(
+            sorted(t.name for t in self.task.tags.all()),
+            ['ОГЭ', 'алгебра, геометрия'])
+        # Обычная (не fetch) отправка — редирект на карточку
+        response = self.client.post(
+            self.url, {'topics_submitted': '1'})
+        self.assertRedirects(
+            response, reverse('task_detail', args=[self.task.pk]))
+        self.assertEqual(self.task.topics.count(), 0)
+
+    def test_subitem_add_update_delete(self):
+        add_url = reverse('task_subitem_add', args=[self.task.pk])
+        response = self.client.post(
+            add_url, {'text_latex': '$1+1$;', 'answer_latex': '2'})
+        self.assertRedirects(
+            response, reverse('task_detail', args=[self.task.pk]))
+        subitem = self.task.subitems.get()
+        self.assertEqual(subitem.answer_latex, '2')
+
+        upd_url = reverse(
+            'task_subitem_update', args=[self.task.pk, subitem.pk])
+        response = self.client.post(
+            upd_url, {'text_latex': '$2+2$;', 'answer_latex': '4'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertTrue(response.json()['ok'])
+        subitem.refresh_from_db()
+        self.assertEqual(subitem.text_latex, '$2+2$;')
+
+        response = self.client.post(upd_url, {'delete': '1'})
+        self.assertRedirects(
+            response, reverse('task_detail', args=[self.task.pk]))
+        self.assertEqual(self.task.subitems.count(), 0)
 
     def test_invalid_grade_rejected(self):
         response = self.client.post(self.url, {'grade_level': '99'})

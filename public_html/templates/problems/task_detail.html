@@ -5,34 +5,137 @@
 {% block content %}
 <div class="page-head">
   <div><span class="page-eyebrow">База задач</span>
-    <h1>Задача #{{ task.pk }} {% if task.stars %}<span class="stars">{{ task.get_stars_display }}</span>{% endif %}</h1>
+    <h1>Задача #{{ task.pk }}</h1>
     {% if task.variant_of_id %}<span class="badge badge-returned">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}
   </div>
-  <a class="btn" href="{% url 'task_edit' task.pk %}">Редактировать</a>
+  <a class="btn btn-secondary" href="{% url 'task_edit' task.pk %}"
+     title="Полная форма: картинки, источники, тип ответа">Полная форма</a>
 </div>
 
 <div class="card">
   <div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
-  {% include 'problems/_subitems.html' with subitems=task.subitems.all %}
+  <details class="ws-add-text">
+    <summary>править условие</summary>
+    <form method="post" action="{% url 'task_quick_update' task.pk %}"
+          data-autosave="debounce">
+      {% csrf_token %}
+      <textarea name="text_latex" rows="4">{{ task.text_latex }}</textarea>
+      <span class="helptext">Сохраняется само; отображение обновится после перезагрузки страницы.</span>
+    </form>
+  </details>
+
+  {% if task.subitems.all %}
+  <h3>Подпункты</h3>
+  <div class="quick-subitems">
+    {% for s in task.subitems.all %}
+    <div class="quick-subitem">
+      <span class="ws-num">{{ forloop.counter0|subitem_label }})</span>
+      <form method="post" action="{% url 'task_subitem_update' task.pk s.pk %}"
+            data-autosave="debounce" class="quick-subitem-form">
+        {% csrf_token %}
+        <input type="text" name="text_latex" value="{{ s.text_latex }}"
+               aria-label="Текст подпункта">
+        <input type="text" name="answer_latex" value="{{ s.answer_latex }}"
+               placeholder="ответ" class="quick-input" aria-label="Ответ подпункта">
+      </form>
+      <form method="post" action="{% url 'task_subitem_update' task.pk s.pk %}"
+            class="inline-form"
+            onsubmit="return confirm('Удалить подпункт?');">
+        {% csrf_token %}
+        <input type="hidden" name="delete" value="1">
+        <button type="submit" class="btn btn-small btn-danger"
+                title="Удалить подпункт">×</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <details class="ws-add-text">
+    <summary>+ добавить подпункт</summary>
+    <form method="post" action="{% url 'task_subitem_add' task.pk %}" class="quick-subitem">
+      {% csrf_token %}
+      <input type="text" name="text_latex" placeholder="текст подпункта (LaTeX)" required>
+      <input type="text" name="answer_latex" placeholder="ответ" class="quick-input">
+      <button type="submit" class="btn btn-small">Добавить</button>
+    </form>
+  </details>
+
   {% include 'problems/_task_images.html' with task=task %}
 
-  {% if task.answer_latex %}
-  <div class="answer-box math-content"><strong>Ответ:</strong> {{ task.answer_latex }}</div>
-  {% endif %}
+  <h3>Ответ и решение</h3>
+  <form method="post" action="{% url 'task_quick_update' task.pk %}"
+        data-autosave="debounce">
+    {% csrf_token %}
+    <p>
+      <label for="qa_answer">Ответ (LaTeX)</label>
+      <textarea name="answer_latex" id="qa_answer" rows="1">{{ task.answer_latex }}</textarea>
+    </p>
+    <p>
+      <label for="qa_solution">Решение (LaTeX)</label>
+      <textarea name="solution_latex" id="qa_solution" rows="3">{{ task.solution_latex }}</textarea>
+    </p>
+    <span class="helptext">Сохраняется само по мере ввода.</span>
+  </form>
   {% if task.has_subitem_answers %}
   <div class="answer-box math-content"><strong>Ответы на подпункты:</strong>
     {% for s in task.subitems.all %}{% if s.answer_latex %}{{ forloop.counter0|subitem_label }})&nbsp;{{ s.answer_latex }}; {% endif %}{% endfor %}
   </div>
   {% endif %}
-  {% if task.solution_latex %}
-  <div class="solution-box math-content"><strong>Решение:</strong> {{ task.solution_latex|linebreaksbr }}</div>
-  {% endif %}
+
+  <h3>Классификация</h3>
+  <div class="quick-classify">
+    <form method="post" action="{% url 'task_quick_update' task.pk %}"
+          data-autosave="change" class="inline-form">
+      {% csrf_token %}
+      <label class="inline-label">класс
+        <select name="grade_level" class="quick-select">
+          <option value="">—</option>
+          {% for g, label in grade_choices %}
+          <option value="{{ g }}" {% if task.grade_level == g %}selected{% endif %}>{{ g }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="inline-label">звёзды
+        <select name="stars" class="quick-select">
+          {% for v, label in stars_choices %}
+          <option value="{{ v }}" {% if task.stars == v %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
+    <span class="task-meta">
+      Темы: {% for t in task.topics.all %}{{ t.name }}{% if not forloop.last %}; {% endif %}{% empty %}—{% endfor %}
+      <button type="button" class="linklike" data-dialog-open="topics-dialog"
+              title="Изменить темы">✎</button>
+    </span>
+    <form method="post" action="{% url 'task_quick_update' task.pk %}"
+          data-autosave="debounce" class="inline-form">
+      {% csrf_token %}
+      <input type="hidden" name="tags_submitted" value="1">
+      <label class="inline-label">теги
+        <input type="text" name="tags" value="{{ tags_value }}"
+               placeholder="через запятую" class="quick-input"></label>
+    </form>
+  </div>
+
+  <dialog id="topics-dialog" class="dialog">
+    <form method="post" action="{% url 'task_quick_update' task.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="topics_submitted" value="1">
+      <h3>Темы задачи #{{ task.pk }}</h3>
+      <div class="dialog-topics">
+        {% include 'includes/topic_checkboxes.html' with topics=topics selected=task.topics.all %}
+      </div>
+      <div class="form-buttons">
+        <button type="submit" class="btn btn-small">Сохранить</button>
+        <button type="button" class="btn btn-small btn-secondary"
+                data-dialog-close>Отмена</button>
+      </div>
+    </form>
+  </dialog>
 
   <p class="task-meta">
-    {% if task.grade_level %}Класс: {{ task.grade_level }} · {% endif %}
-    Тип ответа: {{ task.get_answer_type_display }}
-    {% if task.topics.all %} · Темы: {% for t in task.topics.all %}{{ t }}{% if not forloop.last %}; {% endif %}{% endfor %}{% endif %}
-    {% if task.tags.all %} · Теги: {% for t in task.tags.all %}{{ t }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
+    Тип ответа: {{ task.get_answer_type_display }} (меняется в полной форме)
   </p>
   {% if task.source_refs.all %}
   <p class="task-meta">Источники:

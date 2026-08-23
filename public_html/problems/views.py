@@ -8,13 +8,14 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.views.decorators.http import require_POST
 
 from accounts.decorators import teacher_required
 
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
                     TaskSubitemFormSet)
 from .models import (Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
-                     Topic)
+                     Topic, topic_tree)
 
 
 def filter_tasks(params):
@@ -69,23 +70,68 @@ def task_list(request):
 
 @teacher_required
 def task_quick_update(request, pk):
-    """Горячее редактирование из списка задач: класс, ответ, источник.
+    """Горячее редактирование задачи (список и карточка): присланные поля.
 
-    Меняет только присланные поля; отвечает JSON для fetch-автосохранения.
-    Источник — первый TaskSource задачи (создаётся/обновляется/удаляется).
+    Отвечает JSON для fetch-автосохранения. Источник — первый TaskSource
+    задачи (создаётся/обновляется/удаляется). Темы и теги приходят целиком
+    с маркерами topics_submitted / tags_submitted (пустой список = снять все).
     """
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'message': 'Только POST'}, status=405)
     task = get_object_or_404(Task, pk=pk)
+    # Сохраняем только присланные поля (update_fields): формы на карточке
+    # автосохраняются параллельно, и полный task.save() затирал бы поля,
+    # изменённые соседним запросом, устаревшими значениями
+    updated = []
     if 'grade_level' in request.POST:
         value = request.POST['grade_level'].strip()
         if value and value not in {str(g) for g, _ in Task.GRADE_CHOICES}:
             return JsonResponse(
                 {'ok': False, 'message': 'Недопустимый класс'}, status=400)
         task.grade_level = int(value) if value else None
+        updated.append('grade_level')
+    if 'stars' in request.POST:
+        value = request.POST['stars'].strip()
+        if value not in {str(s) for s, _ in Task.STARS_CHOICES}:
+            return JsonResponse(
+                {'ok': False, 'message': 'Недопустимые звёзды'}, status=400)
+        task.stars = int(value)
+        updated.append('stars')
+    if 'text_latex' in request.POST:
+        value = request.POST['text_latex'].strip()
+        if not value:
+            return JsonResponse(
+                {'ok': False, 'message': 'Условие не может быть пустым'},
+                status=400)
+        task.text_latex = value
+        updated.append('text_latex')
     if 'answer_latex' in request.POST:
         task.answer_latex = request.POST['answer_latex'].strip()
-    task.save()
+        updated.append('answer_latex')
+    if 'solution_latex' in request.POST:
+        task.solution_latex = request.POST['solution_latex'].strip()
+        updated.append('solution_latex')
+    if updated:
+        task.save(update_fields=updated)
+    if request.POST.get('topics_submitted'):
+        ids = [t for t in request.POST.getlist('topics') if t.isdigit()]
+        task.topics.set(Topic.objects.filter(pk__in=ids))
+    if request.POST.get('tags_submitted'):
+        # Запятая — разделитель, поэтому имена тегов без запятых
+        names = [n.strip()
+                 for n in request.POST.get('tags', '').split(',') if n.strip()]
+        max_len = Tag._meta.get_field('name').max_length
+        too_long = [n for n in names if len(n) > max_len]
+        if too_long:
+            return JsonResponse(
+                {'ok': False,
+                 'message': f'Тег длиннее {max_len} символов: '
+                            f'{too_long[0][:40]}…'},
+                status=400)
+        tags = [Tag.objects.get_or_create(name=name)[0] for name in names]
+        # Тег с запятой в имени через это поле не выразить — не теряем его
+        tags += [t for t in task.tags.all() if ',' in t.name]
+        task.tags.set(tags)
     if 'source' in request.POST:
         ref = task.source_refs.order_by('pk').first()
         source_id = request.POST['source'].strip()
@@ -110,7 +156,53 @@ def task_quick_update(request, pk):
             return JsonResponse(
                 {'ok': False, 'message': 'Такой источник у задачи уже есть'},
                 status=400)
+    # Обычная отправка формы (например, диалог тем) — назад на карточку
+    if request.headers.get('x-requested-with') != 'XMLHttpRequest':
+        messages.success(request, 'Задача обновлена.')
+        return redirect('task_detail', pk=task.pk)
     return JsonResponse({'ok': True})
+
+
+@teacher_required
+@require_POST
+def task_subitem_update(request, pk, spk):
+    """Горячее редактирование подпункта на карточке задачи (или удаление)."""
+    subitem = get_object_or_404(TaskSubitem, pk=spk, task_id=pk)
+    if request.POST.get('delete'):
+        subitem.delete()
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({'ok': True})
+        return redirect('task_detail', pk=pk)
+    updated = []
+    if 'text_latex' in request.POST:
+        value = request.POST['text_latex'].strip()
+        if not value:
+            return JsonResponse(
+                {'ok': False, 'message': 'Текст подпункта пуст'}, status=400)
+        subitem.text_latex = value
+        updated.append('text_latex')
+    if 'answer_latex' in request.POST:
+        subitem.answer_latex = request.POST['answer_latex'].strip()
+        updated.append('answer_latex')
+    if updated:
+        subitem.save(update_fields=updated)
+    return JsonResponse({'ok': True})
+
+
+@teacher_required
+@require_POST
+def task_subitem_add(request, pk):
+    """Добавление подпункта прямо с карточки задачи."""
+    task = get_object_or_404(Task, pk=pk)
+    text = request.POST.get('text_latex', '').strip()
+    if text:
+        last = task.subitems.order_by('-order').first()
+        TaskSubitem.objects.create(
+            task=task, order=(last.order + 10) if last else 10,
+            text_latex=text,
+            answer_latex=request.POST.get('answer_latex', '').strip())
+        messages.success(request, 'Подпункт добавлен.')
+    return redirect('task_detail', pk=pk)
 
 
 @xframe_options_sameorigin
@@ -133,7 +225,13 @@ def task_detail(request, pk):
     task = get_object_or_404(
         Task.objects.prefetch_related('topics', 'tags', 'source_refs__source'),
         pk=pk)
-    return render(request, 'problems/task_detail.html', {'task': task})
+    return render(request, 'problems/task_detail.html', {
+        'task': task,
+        'grade_choices': Task.GRADE_CHOICES,
+        'stars_choices': Task.STARS_CHOICES,
+        'topics': topic_tree(),
+        'tags_value': ', '.join(t.name for t in task.tags.all()),
+    })
 
 
 @teacher_required
