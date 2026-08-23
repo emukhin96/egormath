@@ -141,6 +141,15 @@ LATEX_API_URL = read_secret('LATEX_API_URL', 'http://81.200.147.78:8000')
 LATEX_API_KEY = read_secret('LATEX_API_KEY', '')
 LATEX_API_TIMEOUT = int(read_secret('LATEX_API_TIMEOUT', '120'))
 
+# Профили шрифтов, доступные в PDF-редакторе (опция font= пакета egor).
+# school и palatino включать только после подготовки LaTeX API:
+# xelatex + mathspec + шрифты SchoolBookC/TextBookC/Palatino
+# (см. deploy/patch_latex_api_egormath.py), иначе кнопки гарантированно
+# дают ошибку компиляции. Пример: PDF_EDITOR_FONTS=cm,school,palatino
+PDF_EDITOR_FONTS = [
+    f.strip() for f in read_secret('PDF_EDITOR_FONTS', 'cm').split(',')
+    if f.strip()]
+
 # Ограничения на фото решений
 SUBMISSION_PHOTO_MAX_SIZE_MB = 15       # до сжатия
 SUBMISSION_PHOTO_MAX_SIDE = 1600        # px, большая сторона после сжатия

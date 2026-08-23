@@ -2,8 +2,12 @@
 """Патч /opt/latex-api/app.py для EgorMath.
 
 Что делает:
-  1. Два прогона lualatex (нумерация страниц thepage/pageref LastPage).
+  1. Два прогона компилятора (нумерация страниц thepage/pageref LastPage).
   2. Опциональное поле assets у tex_files (картинки задач).
+  3. Компилятор — xelatex (рядом с LUALATEX_PATH): font=school/palatino
+     в egor.sty требуют mathspec, а mathspec — только XeTeX. font=cm
+     (fontspec) тоже собирается xelatex.
+  4. В ошибке клиенту отдаётся хвост лога (не первые 3000 символов).
 
 Запуск на VPS (от root или с sudo):
   sudo python3 /tmp/patch_latex_api_egormath.py
@@ -25,7 +29,9 @@ APP_PATH = Path('/opt/latex-api/app.py')
 NEW_COMPILE_TEX = '''def compile_tex(tex_content: str, output_name: str, assets=None) -> Path:
     """Компилирует LaTeX в PDF.
 
-    Два прогона lualatex нужны для pageref{LastPage} (колонтитул egor: «2/5»).
+    Два прогона xelatex нужны для pageref{LastPage} (колонтитул egor: «2/5»).
+    XeTeX — из‑за mathspec в профилях font=school/palatino пакета egor;
+    font=cm (fontspec) собирается тем же движком.
     assets — опциональный список [{"filename": "...", "content_base64": "..."}]
     (картинки задач EgorMath); без него поведение как раньше.
     """
@@ -63,50 +69,39 @@ NEW_COMPILE_TEX = '''def compile_tex(tex_content: str, output_name: str, assets=
         (compile_dir / filename).write_bytes(raw)
         logger.info(f"Wrote asset {filename} ({len(raw)} bytes)")
 
-    # Команда компиляции
+    # Тот же каталог, что у LUALATEX_PATH (обычно .../bin/x86_64-linux/lualatex)
+    xelatex_path = str(Path(LUALATEX_PATH).with_name('xelatex'))
     cmd = [
-        LUALATEX_PATH,
+        xelatex_path,
         '-interaction=nonstopmode',
         '-output-directory', str(compile_dir),
         str(tex_file)
     ]
 
-    # Настраиваем переменные окружения для TeX Live
     env = os.environ.copy()
-    # Добавить переменные окружения TeX Live если нужно
+
+    def _run_pass(label):
+        logger.info(f"Running ({label}): {' '.join(cmd)}")
+        result = subprocess.run(
+            cmd,
+            cwd=str(compile_dir),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=LUALATEX_TIMEOUT
+        )
+        logger.info(f"XeLaTeX {label} exit code: {result.returncode}")
+        if result.returncode != 0:
+            logger.error(f"XeLaTeX {label} failed:\\n{result.stdout}")
+            # хвост: фатальная ошибка в конце, не в преамбуле tikz
+            tail = result.stdout[-8000:] if result.stdout else ''
+            raise RuntimeError(f"XeLaTeX {label} failed: {tail}")
+        return result
 
     try:
-        # Первый прогон
-        logger.info(f"Running (pass 1): {' '.join(cmd)}")
-        result = subprocess.run(
-            cmd,
-            cwd=str(compile_dir),
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=LUALATEX_TIMEOUT
-        )
-        logger.info(f"LuaLaTeX pass 1 exit code: {result.returncode}")
-        if result.returncode != 0:
-            logger.error(f"LuaLaTeX compilation failed:\\n{result.stdout}")
-            raise RuntimeError(f"LuaLaTeX compilation failed: {result.stdout[:3000]}")
-
-        # Второй прогон — pageref LastPage в колонтитулах egor
-        logger.info(f"Running (pass 2): {' '.join(cmd)}")
-        result = subprocess.run(
-            cmd,
-            cwd=str(compile_dir),
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=LUALATEX_TIMEOUT
-        )
-        logger.info(f"LuaLaTeX pass 2 exit code: {result.returncode}")
-        if result.returncode != 0:
-            logger.error(f"LuaLaTeX pass 2 failed:\\n{result.stdout}")
-            raise RuntimeError(f"LuaLaTeX pass 2 failed: {result.stdout[:3000]}")
+        _run_pass('pass 1')
+        _run_pass('pass 2')
 
         if not pdf_file.exists():
             raise RuntimeError("PDF file was not created")
@@ -115,7 +110,7 @@ NEW_COMPILE_TEX = '''def compile_tex(tex_content: str, output_name: str, assets=
         return pdf_file
 
     except subprocess.TimeoutExpired:
-        logger.error(f"LuaLaTeX compilation timeout ({LUALATEX_TIMEOUT}s)")
+        logger.error(f"XeLaTeX compilation timeout ({LUALATEX_TIMEOUT}s)")
         raise RuntimeError(f"Compilation timeout ({LUALATEX_TIMEOUT}s)")
     except Exception as e:
         logger.error(f"Compilation error: {type(e).__name__}: {e}")
@@ -145,27 +140,16 @@ def main() -> int:
     shutil.copy2(APP_PATH, backup)
     print(f'Backup: {backup}')
 
-    # Уже пропатчено?
-    already_two_pass = 'Running (pass 2)' in src or 'pass 2' in src
+    already_two_pass = 'Running (pass 2)' in src or "('pass 2')" in src
     already_assets = 'assets=tex_file.get("assets")' in src or "assets=tex_file.get('assets')" in src
+    already_xelatex = "with_name('xelatex')" in src or 'XeLaTeX' in src
 
-    if already_two_pass and already_assets:
-        # Убрать SyntaxWarning от docstring с \pageref, если остался от старой версии патча
-        cleaned = src.replace(
-            'для \\pageref{LastPage}', 'для pageref{LastPage}'
-        ).replace(
-            'для \pageref{LastPage}', 'для pageref{LastPage}'
-        ).replace(
-            '— \\pageref{LastPage} в', '— pageref LastPage в'
-        ).replace(
-            '— \pageref{LastPage} в', '— pageref LastPage в'
-        )
-        if cleaned != src:
-            APP_PATH.write_text(cleaned, encoding='utf-8')
-            print('Уже пропатчено; поправил docstring (SyntaxWarning).')
-        else:
-            print('Уже пропатчено (два прогона + assets). Ничего не меняю.')
+    if already_two_pass and already_assets and already_xelatex:
+        print('Уже пропатчено (два прогона + assets + xelatex). Ничего не меняю.')
         return 0
+
+    # Старый патч (lualatex + два прогона): всё равно переписать compile_tex
+    # на xelatex. Early-return только когда движок уже XeTeX.
 
     # Замена функции compile_tex целиком (от def до следующего def merge_pdfs)
     func_re = re.compile(
