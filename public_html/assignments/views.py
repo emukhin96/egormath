@@ -110,7 +110,8 @@ def assignment_detail(request, pk):
 
 def _get_or_create_submission(assignment, task_id):
     task = get_object_or_404(Task, pk=task_id)
-    if not assignment.worksheet.items.filter(task=task).exists():
+    if not assignment.worksheet.items.filter(
+            task=task, deleted_at__isnull=True).exists():
         raise Http404
     submission, _ = Submission.objects.get_or_create(
         assignment=assignment, task=task)

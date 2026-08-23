@@ -391,6 +391,19 @@
     background: #fdeaea;
   }
 
+  /* Плашка «элемент удалён — Отменить» в конструкторе */
+  .undo-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    margin-bottom: var(--space-3);
+    background: #fff8e6;
+    border: 1px solid #e7d9ac;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+  }
+
   /* Кнопка видимости задачи в конструкторе: синяя, не «опасная» */
   .vis-btn:hover {
     color: var(--accent);

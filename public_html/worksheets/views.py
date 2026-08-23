@@ -224,6 +224,8 @@ def worksheet_detail(request, pk):
     worksheet = _own_worksheet(request, pk)
     items = list(worksheet.ordered_items())
     task_ids = [item.task_id for item in items if item.task_id]
+    deleted_items = list(worksheet.items.filter(deleted_at__isnull=False)
+                         .select_related('task'))
 
     # Кто скрывает какие элементы: {item_id: {pk ссылок/назначений}}
     share_links = list(worksheet.share_links.order_by('-created_at')
@@ -284,6 +286,7 @@ def worksheet_detail(request, pk):
         'grade_choices': Task.GRADE_CHOICES,
         'share_links': share_links,
         'assignments': assignments,
+        'deleted_items': deleted_items,
     })
 
 
@@ -401,10 +404,31 @@ def worksheet_add_task(request, pk):
 @teacher_required
 @require_POST
 def worksheet_remove_item(request, pk, item_id):
+    """Мягкое удаление: элемент прячется, плашка «Отменить» может вернуть.
+
+    Отмена одноуровневая — прежний «мусор» листка при новом удалении
+    вычищается насовсем.
+    """
     worksheet = _own_worksheet(request, pk)
-    item = get_object_or_404(WorksheetItem, pk=item_id, worksheet=worksheet)
-    item.delete()
+    item = get_object_or_404(
+        WorksheetItem, pk=item_id, worksheet=worksheet,
+        deleted_at__isnull=True)
+    worksheet.items.filter(deleted_at__isnull=False).delete()
+    item.deleted_at = timezone.now()
+    item.save(update_fields=['deleted_at'])
     messages.success(request, 'Элемент убран из листка.')
+    return redirect('worksheet_detail', pk=pk)
+
+
+@teacher_required
+@require_POST
+def worksheet_restore_item(request, pk):
+    """Возвращает последний мягко удалённый элемент («Отменить»)."""
+    worksheet = _own_worksheet(request, pk)
+    restored = (worksheet.items.filter(deleted_at__isnull=False)
+                .update(deleted_at=None))
+    if restored:
+        messages.success(request, 'Элемент возвращён в листок.')
     return redirect('worksheet_detail', pk=pk)
 
 
@@ -457,7 +481,7 @@ def worksheet_reorder(request, pk):
     worksheet = _own_worksheet(request, pk)
     raw = request.POST.get('order', '')
     id_list = [int(x) for x in raw.split(',') if x.strip().isdigit()]
-    items = {i.pk: i for i in worksheet.items.all()}
+    items = {i.pk: i for i in worksheet.items.filter(deleted_at__isnull=True)}
     changed = []
     for pos, item_id in enumerate(id_list):
         item = items.get(item_id)
