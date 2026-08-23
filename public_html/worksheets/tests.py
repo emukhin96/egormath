@@ -1002,6 +1002,21 @@ class ShareLinkTests(TestCase):
         self.assertIn(first.task.text_latex, tex_full)
         self.assertNotIn(first.task.text_latex, tex_cut)
 
+    def test_empty_rubric_dropped_when_tasks_hidden(self):
+        # Рубрика, все задачи которой скрыты, не должна оставлять
+        # пустой enumerate — иначе PDF падает на «missing \\item»
+        last = self.worksheet.items.order_by('order').last()
+        rubric = make_rubric(self.worksheet, 'Дополнительно', order=50)
+        extra = Task.objects.create(
+            text_latex='Скрытая задача хвоста', created_by=self.teacher)
+        tail = WorksheetItem.objects.create(
+            worksheet=self.worksheet, task=extra, order=60)
+        tex = worksheet_to_tex(self.worksheet, 'student',
+                               exclude_ids={tail.pk})
+        self.assertNotIn('\\rubr{Дополнительно}', tex)
+        self.assertIn(last.task.text_latex, tex)
+        self.assertNotIn('Скрытая задача хвоста', tex)
+
     def test_visibility_endpoint(self):
         self.client.login(username='teacher1', password='pass12345')
         first = self.worksheet.items.order_by('order').first()

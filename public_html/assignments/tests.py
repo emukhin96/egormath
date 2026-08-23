@@ -78,6 +78,23 @@ class StudentAnswerTests(TestCase):
         self.assertFalse(Submission.objects.filter(
             assignment=self.assignment, task=item.task).exists())
 
+    def test_hidden_item_blocks_photo_and_submit(self):
+        hidden = self.assignment.worksheet.items.order_by('order').first()
+        visible = self.assignment.worksheet.items.order_by('order').last()
+        self.assignment.hidden_items.add(hidden)
+        response = self.client.post(
+            reverse('upload_photo', args=[self.assignment.pk, hidden.task_id]),
+            {'photos': fake_photo()})
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Submission.objects.filter(
+            assignment=self.assignment, task=hidden.task).exists())
+        self.client.post(
+            reverse('submit_assignment', args=[self.assignment.pk]))
+        self.assertFalse(Submission.objects.filter(
+            assignment=self.assignment, task=hidden.task).exists())
+        self.assertTrue(Submission.objects.filter(
+            assignment=self.assignment, task=visible.task).exists())
+
     def test_save_answers_and_submit(self):
         task = self.tasks[0]
         response = self.client.post(

@@ -108,10 +108,25 @@ def assignment_detail(request, pk):
     })
 
 
+def _visible_task_item(assignment, task):
+    """Элемент листка с этой задачей, видимый ученику, или 404.
+
+    Скрытые через assignment.hidden_items задачи нельзя ни сохранять,
+    ни снабжать фото — иначе обходится фильтр страницы задания.
+    """
+    hidden = assignment.hidden_items.values('pk')
+    item = (assignment.worksheet.items
+            .filter(task=task)
+            .exclude(pk__in=hidden)
+            .first())
+    if item is None:
+        raise Http404
+    return item
+
+
 def _get_or_create_submission(assignment, task_id):
     task = get_object_or_404(Task, pk=task_id)
-    if not assignment.worksheet.items.filter(task=task).exists():
-        raise Http404
+    _visible_task_item(assignment, task)
     submission, _ = Submission.objects.get_or_create(
         assignment=assignment, task=task)
     return submission
@@ -232,9 +247,10 @@ def submit_assignment(request, pk):
     assignment = _student_assignment(request, pk)
     if not assignment.is_editable_by_student:
         raise PermissionDenied('Работа уже отправлена на проверку.')
-    # Строки-ответы для всех задач: учителю удобно ставить отметки и за пустые
+    # Строки-ответы для видимых задач: скрытые не создаём
+    hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     for item in assignment.worksheet.ordered_items():
-        if item.task_id is None:
+        if item.task_id is None or item.pk in hidden:
             continue
         Submission.objects.get_or_create(
             assignment=assignment, task=item.task)
