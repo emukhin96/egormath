@@ -562,6 +562,27 @@ class WorksheetViewTests(TestCase):
         second.refresh_from_db()
         self.assertIsNotNone(second.deleted_at)
 
+    def test_readd_restores_trashed_task_instead_of_duplicate(self):
+        # Повторное добавление задачи из корзины восстанавливает элемент,
+        # «Отменить» после этого не плодит дубль
+        self.login_teacher()
+        item = self.worksheet.items.order_by('order').first()
+        task = item.task
+        self.client.post(reverse(
+            'worksheet_remove_item', args=[self.worksheet.pk, item.pk]))
+        self.client.post(reverse(
+            'worksheet_add_task', args=[self.worksheet.pk]),
+            {'task_id': task.pk})
+        item.refresh_from_db()
+        self.assertIsNone(item.deleted_at)
+        self.assertEqual(
+            self.worksheet.items.filter(task=task).count(), 1)
+        self.client.post(reverse(
+            'worksheet_restore_item', args=[self.worksheet.pk]))
+        self.assertEqual(
+            self.worksheet.items.filter(
+                task=task, deleted_at__isnull=True).count(), 1)
+
     def test_duplicate_skips_deleted(self):
         item = self.worksheet.items.order_by('order').first()
         item.deleted_at = timezone.now()
