@@ -1213,20 +1213,45 @@
     margin-top: -2px;
   }
 
+  /* Колонки строки задачи. rem, не em: иначе --task-indent на h2
+     (1.25rem) становится заметно шире, чем у основного текста. */
+  .task-row,
+  .ws-view {
+    --task-stars-col: 52px;
+    --task-num-col: 2rem;
+    --task-indent: calc(
+      var(--task-stars-col) + var(--task-num-col) + 2 * var(--space-2)
+    );
+  }
+
+  /* Конструктор и каталог: номер, звёзды и текст всегда в одной строке.
+     Раньше flex-wrap переносил длинный .task-text целиком под звёзды. */
   .task-line {
     display: flex;
     gap: 6px;
     align-items: baseline;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
-  /* Строка задачи в режиме просмотра: звёзды «на полях» слева от номера,
-     текст всех задач выровнен по одной вертикали. Колонка номера
-     фиксированная — текст не «пляшет» между строками с 1. и 12.
-     3.6em хватает на трёхзначный номер с точкой («100.»). */
+  .task-line .stars,
+  .task-line .ws-stars,
+  .task-line .ws-num {
+    flex-shrink: 0;
+  }
+
+  .task-line .task-text {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+  }
+
+  /* Просмотр: звёзды на полях слева от номера, текст всех задач
+     по одной вертикали. Колонка номера — под «12.» / «99.»; редкий
+     «100.» занимает зазор, а не раздувает табуляцию у всех строк. */
   .task-row {
     display: grid;
-    grid-template-columns: 52px 3.6em minmax(0, 1fr);
+    grid-template-columns:
+      var(--task-stars-col) var(--task-num-col) minmax(0, 1fr);
     column-gap: var(--space-2);
     align-items: baseline;
   }
@@ -1250,38 +1275,16 @@
 
   .ws-num {
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
-  .task-line .stars {
-    flex-shrink: 0;
-  }
-
-  .task-line .task-text {
-    margin: 0;
-  }
-
-  /* Каталог задач: текст никогда не переносится целиком на новую строку
-     после звёзд — как на публичной странице листка */
-  .task-catalog .task-line {
-    flex-wrap: nowrap;
-  }
-
-  .task-catalog .task-line .task-text {
-    flex: 1;
-    min-width: 0;
-  }
-
-  /* Просмотр листка (публичная страница, кабинет ученика, проверка):
-     рубрики, тексты, подпункты и картинки выравниваются по колонке
-     основного текста задач; звёзды остаются левее всех — «на полях».
-     Отступ = колонка звёзд + колонка номера + два grid-gap. */
-  .ws-view {
-    --task-indent: calc(52px + 3.6em + 2 * var(--space-2));
-  }
-
+  /* Просмотр листка: рубрики, \plaintext, подпункты и картинки —
+     по той же вертикали, что основной текст задач. Маркер «а)»
+     сидит в padding, поэтому начало подпункта = линия текста. */
   .ws-view ol.subitems {
-    /* табуляция вправо относительно основного текста задачи */
-    margin-left: calc(var(--task-indent) + 16px);
+    margin-left: calc(var(--task-indent) - 1.35rem);
+    padding-left: 1.35rem;
   }
 
   .ws-view h2,
@@ -1289,6 +1292,12 @@
   .ws-view .ws-rubric-note,
   .ws-view .task-images {
     margin-left: var(--task-indent);
+  }
+
+  /* Конструктор: «а)» на вертикали номеров (1., 2.), не правее. */
+  .worksheet-items-card ol.subitems {
+    margin-left: 0;
+    padding-left: 1.35rem;
   }
 
   /* Шапка публичной страницы: заголовок и подзаголовок компактно,
@@ -1935,9 +1944,10 @@
       min-width: 0;
     }
 
-    /* Узкий экран: без «полей» — отступы просмотра сбрасываются */
+    /* Узкий экран: без «полей» — рубрики и тексты с края карточки */
     .ws-view ol.subitems {
-      margin-left: 26px;
+      margin-left: 0;
+      padding-left: 1.35rem;
     }
 
     .ws-view h2,
