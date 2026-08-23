@@ -96,10 +96,12 @@
             {% endfor %}
           </ol>
           {% endif %}
+          {# textarea, не input: многострочный LaTeX (в т.ч. с %-комментариями)
+             не должен терять переводы строк #}
           <div class="import-answers">
             <label class="inline-label">ответ
-              <input type="text" name="answer_{{ forloop.counter0 }}" class="quick-input"
-                     value="{{ row.answer_value }}" placeholder="ответ (LaTeX)"></label>
+              <textarea name="answer_{{ forloop.counter0 }}" class="quick-input"
+                        rows="1" placeholder="ответ (LaTeX)">{{ row.answer_value }}</textarea></label>
             <label class="inline-label">решение
               <textarea name="solution_{{ forloop.counter0 }}" class="quick-input"
                         rows="1" placeholder="решение (LaTeX)">{{ row.solution_value }}</textarea></label>
