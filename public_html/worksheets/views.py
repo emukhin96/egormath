@@ -1,9 +1,13 @@
+from datetime import timedelta
+
+from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.db import models
-from django.http import FileResponse, Http404, JsonResponse
+from django.db import IntegrityError, models, transaction
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import format_html
 from django.views.decorators.http import require_POST
 
@@ -18,8 +22,10 @@ from .forms import WorksheetForm
 from .import_tex import (TexImportError, create_worksheet,
                          match_existing_tasks, parse_tex)
 from .latex import worksheet_to_tex
-from .models import ShareLink, Worksheet, WorksheetItem, WorksheetPdf
-from .services import LatexCompileError, get_worksheet_pdf
+from .models import (PdfCompileLock, ShareLink, Worksheet, WorksheetItem,
+                     WorksheetPdf)
+from .services import (LatexCompileError, collect_assets, compile_latex,
+                       get_worksheet_pdf)
 
 
 def _own_worksheet(request, pk):
@@ -87,10 +93,43 @@ def worksheet_list(request):
     })
 
 
+def _import_overrides(post, parsed):
+    """Назначения задачам из предпросмотра импорта: класс/тема/звёзды/ответ."""
+    overrides = {}
+    valid_grades = {str(g) for g, _ in Task.GRADE_CHOICES}
+    # Только реально существующие темы: поддельный или устаревший id
+    # иначе уронит task.topics.add() уже после создания части объектов
+    valid_topics = set(Topic.objects.values_list('pk', flat=True))
+    for i, (kind, data) in enumerate(parsed['elements']):
+        if kind != 'task':
+            continue
+        extra = {}
+        grade = post.get(f'grade_{i}', '').strip()
+        if grade in valid_grades:
+            extra['grade_level'] = int(grade)
+        topic = post.get(f'topic_{i}', '').strip()
+        if topic.isdigit() and int(topic) in valid_topics:
+            extra['topic_id'] = int(topic)
+        stars = post.get(f'stars_{i}', '').strip()
+        if stars.isdigit():
+            extra['stars'] = max(0, min(3, int(stars)))
+        if f'answer_{i}' in post:
+            extra['answer'] = post[f'answer_{i}'].strip()
+        if f'solution_{i}' in post:
+            extra['solution'] = post[f'solution_{i}'].strip()
+        if extra:
+            overrides[i] = extra
+    return overrides
+
+
 @teacher_required
 def worksheet_import(request):
     """Импорт .tex-листка (пакет egor): вставка/файл → предпросмотр → создание."""
-    context = {'tex': '', 'preview': None}
+    context = {
+        'tex': '', 'preview': None,
+        'grade_choices': Task.GRADE_CHOICES,
+        'topics': topic_tree(),
+    }
     if request.method == 'POST':
         tex = request.POST.get('tex', '')
         upload = request.FILES.get('file')
@@ -108,8 +147,11 @@ def worksheet_import(request):
             return render(request, 'worksheets/import.html', context)
 
         if request.POST.get('action') == 'create':
-            worksheet, missing_images = create_worksheet(
-                parsed, owner=request.user)
+            # Атомарно: при любой ошибке не остаётся полусозданный листок
+            with transaction.atomic():
+                worksheet, missing_images = create_worksheet(
+                    parsed, owner=request.user,
+                    overrides=_import_overrides(request.POST, parsed))
             messages.success(
                 request,
                 f'Листок «{worksheet.title}» импортирован '
@@ -123,9 +165,19 @@ def worksheet_import(request):
             return redirect('worksheet_detail', pk=worksheet.pk)
 
         matches = match_existing_tasks(parsed)
+        existing = Task.objects.in_bulk([m for m in matches if m])
         rows = []
         for (kind, data), match in zip(parsed['elements'], matches):
-            rows.append({'kind': kind, 'data': data, 'existing_id': match})
+            row = {'kind': kind, 'data': data, 'existing_id': match}
+            if kind == 'task':
+                # Поля ответа/решения предзаполняются: для найденных
+                # в базе — текущими значениями задачи, для новых — из .tex
+                source = existing[match] if match else None
+                row['answer_value'] = (
+                    source.answer_latex if source else data['answer'])
+                row['solution_value'] = (
+                    source.solution_latex if source else data['solution'])
+            rows.append(row)
         context['preview'] = {
             'header': parsed['header'],
             'rows': rows,
@@ -228,7 +280,7 @@ def worksheet_rename(request, pk):
         return _builder_response(
             request, pk, ok=False, message='Название не может быть пустым.')
     worksheet.title = title
-    worksheet.save()
+    worksheet.save(update_fields=['title', 'updated_at'])
     return _builder_response(request, pk)
 
 
@@ -516,6 +568,101 @@ def worksheet_pdf(request, pk):
             'error': exc,
             'tex': worksheet_to_tex(worksheet, variant),
         }, status=502)
+
+
+# Профили font= пакета egor; в редакторе показываются только включённые
+# в settings.PDF_EDITOR_FONTS (school/palatino требуют подготовки сервера)
+PDF_EDITOR_FONT_LABELS = (
+    ('cm', 'Computer Modern'),
+    ('school', 'Schoolbook'),
+    ('palatino', 'Palatino'),
+)
+
+
+@teacher_required
+def worksheet_pdf_editor(request, pk):
+    """Split-редактор PDF: слева исходный tex (можно править), справа PDF."""
+    worksheet = _own_worksheet(request, pk)
+    variant = request.GET.get('variant', WorksheetPdf.VARIANT_STUDENT)
+    if variant not in dict(WorksheetPdf.VARIANT_CHOICES):
+        raise Http404
+    font_choices = [(v, label) for v, label in PDF_EDITOR_FONT_LABELS
+                    if v in settings.PDF_EDITOR_FONTS]
+    return render(request, 'worksheets/pdf_editor.html', {
+        'worksheet': worksheet,
+        'variant': variant,
+        'variant_label': dict(WorksheetPdf.VARIANT_CHOICES)[variant],
+        'variant_choices': WorksheetPdf.VARIANT_CHOICES,
+        'tex': worksheet_to_tex(worksheet, variant),
+        'pdf_filename': worksheet.pdf_filename(variant),
+        'font_choices': font_choices,
+    })
+
+
+# Ограничения черновой компиляции: разумный максимум исходника и одна
+# сборка на пользователя одновременно (каждая занимает воркер и квоту
+# LaTeX API на десятки секунд)
+PDF_EDITOR_TEX_LIMIT = 200_000
+PDF_EDITOR_LOCK_TIMEOUT = timedelta(seconds=180)
+
+
+def _acquire_compile_lock(user):
+    """Берёт межпроцессный lock сборки PDF; False — сборка уже идёт.
+
+    Lock в БД (см. PdfCompileLock): работает и при нескольких
+    WSGI-процессах, где LocMemCache бесполезен.
+    """
+    PdfCompileLock.objects.filter(
+        user=user,
+        created_at__lt=timezone.now() - PDF_EDITOR_LOCK_TIMEOUT).delete()
+    try:
+        with transaction.atomic():
+            PdfCompileLock.objects.create(user=user)
+        return True
+    except IntegrityError:
+        return False
+
+
+@teacher_required
+@require_POST
+def worksheet_pdf_compile(request, pk):
+    """Компиляция tex из редактора (в т.ч. с ручными правками учителя).
+
+    Возвращает PDF-байты либо JSON с логом ошибки компиляции. Кэш PDF
+    листка не трогает — это «черновая» сборка именно присланного кода.
+    """
+    worksheet = _own_worksheet(request, pk)
+    tex = request.POST.get('tex', '')
+    if not tex.strip():
+        return JsonResponse(
+            {'ok': False, 'message': 'Пустой документ', 'log': ''},
+            status=400)
+    if len(tex) > PDF_EDITOR_TEX_LIMIT:
+        return JsonResponse(
+            {'ok': False,
+             'message': f'Документ слишком большой '
+                        f'(лимит {PDF_EDITOR_TEX_LIMIT} символов)',
+             'log': ''},
+            status=400)
+    if not _acquire_compile_lock(request.user):
+        return JsonResponse(
+            {'ok': False,
+             'message': 'Предыдущая сборка ещё идёт — дождитесь её '
+                        'завершения', 'log': ''},
+            status=429)
+    try:
+        pdf_bytes = compile_latex(
+            tex, doc_id=f'ws{worksheet.pk}-editor',
+            assets=collect_assets(worksheet))
+    except LatexCompileError as exc:
+        return JsonResponse(
+            {'ok': False, 'message': str(exc), 'log': exc.log}, status=502)
+    finally:
+        PdfCompileLock.objects.filter(user=request.user).delete()
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = (
+        f'inline; filename="{worksheet.pdf_filename()}"')
+    return response
 
 
 @teacher_required

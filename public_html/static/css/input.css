@@ -169,6 +169,29 @@
     font-size: 0.92rem;
   }
 
+  /* Preflight обнуляет кнопку выбора файла — возвращаем ей вид кнопки */
+  input[type="file"] {
+    max-width: 640px;
+    color: var(--muted);
+  }
+
+  ::file-selector-button {
+    margin-right: var(--space-2);
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  ::file-selector-button:hover {
+    background: #edf3f9;
+  }
+
   .helptext {
     color: var(--muted);
     font-size: 0.85rem;
@@ -1112,6 +1135,36 @@
     display: inline-block;
   }
 
+  /* Аннотация \annot{…} из tex-текста задачи */
+  .tex-annot {
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* Пометки без рамки (\rev, \complex, \home): просто приглушённый знак */
+  .tex-annot-noframe {
+    font-style: normal;
+    margin-right: 4px;
+  }
+
+  /* Источник задания \source{…} */
+  .tex-source {
+    color: var(--muted);
+    font-size: 0.85em;
+    margin-right: 4px;
+  }
+
+  /* Таблица tabular из tex-текста задачи */
+  .tex-table {
+    border-collapse: collapse;
+    margin: var(--space-2) 0;
+  }
+
+  .tex-table td {
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+  }
+
   .ws-ghost {
     opacity: 0.4;
     background: #eef3fb;
@@ -1569,6 +1622,145 @@
     gap: 4px;
     align-items: center;
     flex-wrap: wrap;
+  }
+
+  /* Карточка задачи: горячее редактирование подпунктов и классификации */
+  .quick-subitems {
+    display: grid;
+    gap: var(--space-1);
+    margin-block: var(--space-2);
+  }
+
+  .quick-subitem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .quick-subitem-form {
+    display: flex;
+    flex: 1;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .quick-subitem-form input[name="text_latex"] {
+    flex: 1;
+    max-width: none;
+  }
+
+  .quick-classify {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-4);
+    margin-block: var(--space-2);
+  }
+
+  /* Split-редактор PDF: слева tex-код, справа предпросмотр */
+  .pdf-editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-4);
+    align-items: stretch;
+  }
+
+  .pdf-editor-pane {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .pdf-editor-source {
+    flex: 1;
+    min-height: 70vh;
+    max-width: none;
+    resize: vertical;
+  }
+
+  .pdf-editor-frame {
+    flex: 1;
+    min-height: 70vh;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: #fff;
+    width: 100%;
+  }
+
+  .pdf-editor-toolbar {
+    min-height: 34px;
+  }
+
+  @media (max-width: 1050px) {
+    .pdf-editor {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* Группы-переключатели в контекстной панели редактора PDF */
+  .sidebar-switches .sidebar-kicker {
+    margin-top: var(--space-3);
+  }
+
+  .switch-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .switch-group button {
+    padding: 5px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.07);
+    color: #dce8f8;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+
+  .switch-group button:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+
+  .switch-group button.is-active {
+    background: #fff;
+    color: var(--accent-dark);
+    border-color: #fff;
+    font-weight: 600;
+  }
+
+  /* Предпросмотр импорта: панель массового назначения и поля строк */
+  .import-bulk {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    margin-bottom: var(--space-3);
+    background: #e4eef9;
+    border-radius: var(--radius);
+  }
+
+  .import-preview th:first-child {
+    width: 34px;
+  }
+
+  .import-assign {
+    display: grid;
+    gap: var(--space-1);
+    min-width: 150px;
+  }
+
+  .import-answers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
+  }
+
+  .import-preview .rubric-row td {
+    background: #eef2f6;
   }
 
   /* Панель действий листка — без заливки и рамки, сливается с фоном страницы */

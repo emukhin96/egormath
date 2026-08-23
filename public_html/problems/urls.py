@@ -11,6 +11,10 @@ urlpatterns = [
     path('<int:pk>/edit/', views.task_edit, name='task_edit'),
     path('<int:pk>/quick/', views.task_quick_update,
          name='task_quick_update'),
+    path('<int:pk>/subitems/add/', views.task_subitem_add,
+         name='task_subitem_add'),
+    path('<int:pk>/subitems/<int:spk>/', views.task_subitem_update,
+         name='task_subitem_update'),
     path('images/<int:pk>/file/', views.task_image_file,
          name='task_image_file'),
 ]

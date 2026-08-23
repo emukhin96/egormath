@@ -52,6 +52,7 @@ def topic_tree():
     def walk(parent_id, depth):
         for topic in by_parent.get(parent_id, []):
             topic.depth = depth
+            topic.indent = '— ' * depth  # префикс для <option> в select
             yield topic
             yield from walk(topic.pk, depth + 1)
 
@@ -147,6 +148,10 @@ class Task(models.Model):
 
     def save(self, *args, **kwargs):
         self.text_plain = strip_latex(self.text_latex)
+        # При частичном сохранении text_plain едет вместе с text_latex
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None and 'text_latex' in update_fields:
+            kwargs['update_fields'] = list(update_fields) + ['text_plain']
         super().save(*args, **kwargs)
 
     @property

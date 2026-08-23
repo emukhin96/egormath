@@ -235,3 +235,24 @@ class ShareLink(models.Model):
     def __str__(self):
         state = 'активна' if self.is_active else 'отключена'
         return f'{self.worksheet} /s/{self.token}/ ({state})'
+
+
+class PdfCompileLock(models.Model):
+    """Межпроцессный lock «одна черновая сборка PDF на пользователя».
+
+    Кэш по умолчанию (LocMemCache) свой в каждом WSGI-процессе и не даёт
+    общей блокировки, поэтому lock хранится в БД: уникальность user
+    атомарно гарантируется СУБД. Протухшие записи (упавший процесс)
+    удаляются при следующей попытке взять lock.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        verbose_name='Пользователь')
+    created_at = models.DateTimeField('Взят', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Блокировка сборки PDF'
+        verbose_name_plural = 'Блокировки сборки PDF'
+
+    def __str__(self):
+        return f'Сборка PDF: {self.user} с {self.created_at:%H:%M:%S}'

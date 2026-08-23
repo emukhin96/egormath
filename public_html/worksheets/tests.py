@@ -2,12 +2,14 @@ from unittest import mock
 
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from problems.models import Task, TaskSubitem
 from problems.tests import make_student, make_teacher
 
 from .latex import task_to_tex, worksheet_to_tex
 from .models import ShareLink, Worksheet, WorksheetItem, WorksheetPdf
+from .services import LatexCompileError
 
 
 def make_worksheet(owner, title='Квадратные уравнения', n_tasks=2):
@@ -600,6 +602,89 @@ class WorksheetViewTests(TestCase):
         self.assertEqual(
             WorksheetPdf.objects.filter(worksheet=self.worksheet).count(), 1)
 
+    def test_pdf_editor_page(self):
+        self.login_teacher()
+        response = self.client.get(
+            reverse('worksheet_pdf_editor', args=[self.worksheet.pk]),
+            {'variant': 'answers'})
+        self.assertContains(response, 'id="tex-source"')
+        self.assertContains(response, '\\documentclass')
+        self.assertContains(response, 'С ответами')
+        # По умолчанию доступен только cm: кнопки school/palatino скрыты,
+        # пока LaTeX API не подготовлен (settings.PDF_EDITOR_FONTS)
+        self.assertNotContains(response, 'data-value="palatino"')
+        with self.settings(PDF_EDITOR_FONTS=['cm', 'school', 'palatino']):
+            response = self.client.get(
+                reverse('worksheet_pdf_editor', args=[self.worksheet.pk]))
+            self.assertContains(response, 'data-value="palatino"')
+        # Чужой листок недоступен
+        self.client.login(username='teacher2', password='pass12345')
+        response = self.client.get(
+            reverse('worksheet_pdf_editor', args=[self.worksheet.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    @mock.patch('worksheets.views.compile_latex',
+                return_value=b'%PDF-1.5 fake')
+    def test_pdf_editor_compile(self, mocked):
+        self.login_teacher()
+        url = reverse('worksheet_pdf_compile', args=[self.worksheet.pk])
+        response = self.client.post(url, {'tex': r'\documentclass{article}'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(
+            mocked.call_args.args[0], r'\documentclass{article}')
+        # Черновая сборка не пишет в кэш PDF
+        self.assertEqual(
+            WorksheetPdf.objects.filter(worksheet=self.worksheet).count(), 0)
+
+        # Пустой документ — 400
+        response = self.client.post(url, {'tex': '  '})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()['ok'])
+
+        # Слишком большой исходник — 400 без похода в LaTeX API
+        from worksheets.views import PDF_EDITOR_TEX_LIMIT
+        calls_before = mocked.call_count
+        response = self.client.post(
+            url, {'tex': 'x' * (PDF_EDITOR_TEX_LIMIT + 1)})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(mocked.call_count, calls_before)
+
+    @mock.patch('worksheets.views.compile_latex', return_value=b'%PDF-1.5')
+    def test_pdf_editor_compile_locked(self, mocked):
+        # Пока идёт сборка пользователя, вторая параллельная — 429.
+        # Lock хранится в БД (PdfCompileLock) — общий для всех процессов
+        from worksheets.models import PdfCompileLock
+        self.login_teacher()
+        url = reverse('worksheet_pdf_compile', args=[self.worksheet.pk])
+        PdfCompileLock.objects.create(user=self.teacher)
+        response = self.client.post(url, {'tex': r'\documentclass{article}'})
+        self.assertEqual(response.status_code, 429)
+        mocked.assert_not_called()
+        # Протухший lock (упавший процесс) снимается автоматически
+        from worksheets.views import PDF_EDITOR_LOCK_TIMEOUT
+        PdfCompileLock.objects.update(
+            created_at=timezone.now() - PDF_EDITOR_LOCK_TIMEOUT * 2)
+        response = self.client.post(url, {'tex': r'\documentclass{article}'})
+        self.assertEqual(response.status_code, 200)
+        # После завершения lock снят — сборка снова доступна
+        self.assertEqual(PdfCompileLock.objects.count(), 0)
+        response = self.client.post(url, {'tex': r'\documentclass{article}'})
+        self.assertEqual(response.status_code, 200)
+
+    @mock.patch('worksheets.views.compile_latex',
+                side_effect=LatexCompileError(
+                    'Ошибка компиляции LaTeX.', log='! Undefined control'))
+    def test_pdf_editor_compile_error(self, mocked):
+        self.login_teacher()
+        response = self.client.post(
+            reverse('worksheet_pdf_compile', args=[self.worksheet.pk]),
+            {'tex': r'\bad'})
+        self.assertEqual(response.status_code, 502)
+        data = response.json()
+        self.assertFalse(data['ok'])
+        self.assertIn('Undefined control', data['log'])
+
     @mock.patch('worksheets.services.compile_latex',
                 return_value=b'%PDF-1.5 fake')
     def test_student_pdf_access(self, mocked):
@@ -688,6 +773,42 @@ class ImportTexTests(TestCase):
         self.assertEqual(new_task.subitems.count(), 2)
         self.assertEqual(Task.objects.count(), 2)
 
+    def test_dedup_considers_subitems(self):
+        from .import_tex import create_worksheet, find_existing_task, \
+            parse_tex
+        # Одинаковое основное условие, разные подпункты — разные задачи
+        base = Task.objects.create(
+            text_latex='Решите уравнение:', created_by=self.teacher)
+        base.subitems.create(order=10, text_latex='$x^2=4$')
+        base.subitems.create(order=20, text_latex='$x^2=9$')
+        tex = ('\\begin{document}\n'
+               '\\task{0}{0}{Решите уравнение:}'
+               '[{\\item $x^2=16$; \\item $x^2=25$.}]\n'
+               '\\end{document}')
+        worksheet, _ = create_worksheet(parse_tex(tex), owner=self.teacher)
+        new_task = worksheet.items.get(task__isnull=False).task
+        self.assertNotEqual(new_task.pk, base.pk)
+        # Полное совпадение (условие + подпункты) — задача находится
+        self.assertEqual(
+            find_existing_task('Решите уравнение:', ['$x^2=4$', '$x^2=9$']),
+            base.pk)
+        self.assertIsNone(
+            find_existing_task('Решите уравнение:', ['$x^2=4$']))
+
+    def test_import_updates_existing_answer(self):
+        # Горячее добавление ответа/решения к задаче, найденной в базе
+        existing = Task.objects.create(
+            text_latex='Вычислите  $\\frac{1}{2}+\\frac{1}{3}$.',
+            created_by=self.teacher)
+        self.client.login(username='teacher1', password='pass12345')
+        self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create',
+            'answer_1': '$5/6$', 'solution_1': 'Общий знаменатель 6.',
+        })
+        existing.refresh_from_db()
+        self.assertEqual(existing.answer_latex, '$5/6$')
+        self.assertEqual(existing.solution_latex, 'Общий знаменатель 6.')
+
     def test_round_trip(self):
         from .import_tex import create_worksheet, parse_tex
         parsed = parse_tex(SAMPLE_TEX)
@@ -738,6 +859,11 @@ class ImportTexTests(TestCase):
             url, {'tex': SAMPLE_TEX, 'action': 'preview'})
         self.assertContains(response, 'новая')
         self.assertContains(response, 'Разминка')
+        # В предпросмотре видны сами подпункты, а не только их количество
+        self.assertContains(response, '$2+2$')
+        # И поля назначений для новых задач
+        self.assertContains(response, 'name="grade_1"')
+        self.assertContains(response, 'name="answer_1"')
 
         response = self.client.post(
             url, {'tex': SAMPLE_TEX, 'action': 'create'})
@@ -749,6 +875,35 @@ class ImportTexTests(TestCase):
         response = self.client.post(
             url, {'tex': 'нет команд', 'action': 'preview'})
         self.assertContains(response, 'Ошибка разбора')
+
+    def test_import_create_with_overrides(self):
+        from problems.models import Topic
+        topic = Topic.objects.create(name='Дроби')
+        self.client.login(username='teacher1', password='pass12345')
+        # Элемент с индексом 1 — первая задача (после рубрики «Разминка»)
+        self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create',
+            'grade_1': '8', 'topic_1': str(topic.pk), 'stars_1': '3',
+            'answer_1': '5/6', 'solution_1': 'Общий знаменатель 6.',
+        })
+        worksheet = Worksheet.objects.get(owner=self.teacher)
+        task = worksheet.items.filter(task__isnull=False).first().task
+        self.assertEqual(task.grade_level, 8)
+        self.assertEqual(list(task.topics.all()), [topic])
+        self.assertEqual(task.stars, 3)
+        self.assertEqual(task.answer_latex, '5/6')
+        self.assertEqual(task.solution_latex, 'Общий знаменатель 6.')
+
+    def test_import_create_ignores_unknown_topic(self):
+        # Поддельный/удалённый id темы не должен ронять создание (500)
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(reverse('worksheet_import'), {
+            'tex': SAMPLE_TEX, 'action': 'create', 'topic_1': '99999',
+        })
+        self.assertEqual(response.status_code, 302)
+        worksheet = Worksheet.objects.get(owner=self.teacher)
+        task = worksheet.items.filter(task__isnull=False).first().task
+        self.assertEqual(task.topics.count(), 0)
 
 
 class ShareLinkTests(TestCase):

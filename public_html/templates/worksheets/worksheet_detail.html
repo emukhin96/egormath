@@ -34,9 +34,8 @@
 <div class="ws-toolbar">
   <a class="btn btn-secondary" href="{% url 'worksheet_edit' worksheet.pk %}">Свойства</a>
   <button type="button" class="btn btn-secondary" data-dialog-open="copy-dialog">Дублировать</button>
-  <a class="btn" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' worksheet.pk %}?variant=student">PDF для ученика</a>
-  <a class="btn" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' worksheet.pk %}?variant=answers">PDF с ответами</a>
-  <a class="btn" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' worksheet.pk %}?variant=teacher">PDF для учителя</a>
+  {# Одна кнопка PDF: варианты (ученик/ответы/учитель) выбираются на странице сборки #}
+  <a class="btn" href="{% url 'worksheet_pdf_editor' worksheet.pk %}">PDF</a>
   <a class="btn btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}">.tex</a>
 </div>
 
@@ -213,7 +212,7 @@
       {% for task in found_tasks %}
       <tr>
         <td>
-          <div class="math-content task-text">{{ task.text_latex|web_text|truncatechars:180 }}</div>
+          <div class="math-content task-text">{{ task.text_latex|web_text_preview:180 }}</div>
           <span class="task-meta"><a href="{% url 'task_detail' task.pk %}" title="Открыть задачу">#{{ task.pk }}</a>{% if task.grade_level %} · {{ task.grade_level }} класс{% endif %}</span>
         </td>
         <td style="white-space:nowrap">
