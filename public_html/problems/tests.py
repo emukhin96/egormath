@@ -348,6 +348,43 @@ class QuickEntryTests(TestCase):
         self.assertEqual(t2.answer_latex, 'новый')
 
 
+class BulkUpdateTests(TestCase):
+    """Массовое назначение класса/темы/звёзд из списка задач."""
+
+    def setUp(self):
+        self.teacher = make_teacher()
+        self.t1 = Task.objects.create(text_latex='A', created_by=self.teacher)
+        self.t2 = Task.objects.create(text_latex='B', created_by=self.teacher)
+        self.topic = Topic.objects.create(name='Уравнения')
+        self.client.login(username='teacher1', password='pass12345')
+        self.url = reverse('task_bulk_update')
+
+    def test_bulk_assign(self):
+        response = self.client.post(self.url, {
+            'ids': [self.t1.pk, self.t2.pk],
+            'grade_level': '8', 'stars': '2', 'topic_id': self.topic.pk,
+            'next': '/problems/?grade=8',
+        })
+        self.assertRedirects(response, '/problems/?grade=8')
+        for task in (self.t1, self.t2):
+            task.refresh_from_db()
+            self.assertEqual(task.grade_level, 8)
+            self.assertEqual(task.stars, 2)
+            self.assertIn(self.topic, task.topics.all())
+
+    def test_bulk_partial_and_validation(self):
+        # Только звёзды: класс не трогаем
+        self.client.post(self.url, {'ids': [self.t1.pk], 'stars': '1'})
+        self.t1.refresh_from_db()
+        self.assertEqual(self.t1.stars, 1)
+        self.assertIsNone(self.t1.grade_level)
+        # Недопустимый класс — ничего не меняется
+        self.client.post(self.url,
+                         {'ids': [self.t1.pk], 'grade_level': '99'})
+        self.t1.refresh_from_db()
+        self.assertIsNone(self.t1.grade_level)
+
+
 class QuickUpdateTests(TestCase):
     """Горячее редактирование класса/ответа/источника из списка задач."""
 

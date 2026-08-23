@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load task_extras %}
+{% load static task_extras %}
 {% block title %}База задач — EgorMath{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/task_list.html' %}{% endblock %}
 {% block content %}
@@ -46,13 +46,49 @@
 </div>
 
 {% if page.object_list %}
+<form id="task-bulk-form" method="post" action="{% url 'task_bulk_update' %}"
+      class="bulk-bar" data-bulk hidden>
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+  <strong data-bulk-count>Выбрано: 0</strong>
+  <label class="inline-label">класс
+    <select name="grade_level" class="quick-select">
+      <option value="">—</option>
+      {% for g, label in grade_choices %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="inline-label">тема
+    <select name="topic_id" class="quick-select">
+      <option value="">—</option>
+      {% include 'includes/topic_options.html' with topics=topics_flat selected=None %}
+    </select>
+  </label>
+  <label class="inline-label">звёзды
+    <select name="stars" class="quick-select">
+      <option value="">—</option>
+      <option value="0">без звёзд</option>
+      <option value="1">★</option>
+      <option value="2">★★</option>
+      <option value="3">★★★</option>
+    </select>
+  </label>
+  <button type="submit" class="btn btn-small">Применить к выбранным</button>
+</form>
 <div class="card task-catalog">
 <div class="table-summary"><strong>Найдено: {{ page.paginator.count }}</strong><span>Изменения сохраняются автоматически</span></div>
 <table class="list">
-  <tr><th>Задача</th><th>Класс</th><th>Ответ</th><th>Источник</th><th>Темы</th><th>Теги</th></tr>
+  <tr>
+    <th class="col-select"><input type="checkbox" data-bulk-all="task-bulk-form"
+        title="Выбрать все задачи на странице"></th>
+    <th>Задача</th><th>Класс</th><th>Ответ</th><th>Источник</th><th>Темы</th><th>Теги</th>
+  </tr>
   {% for task in page %}
   {% with ref=task.source_refs.all|first %}
   <tr>
+    <td class="col-select">
+      <input type="checkbox" class="row-select" name="ids" value="{{ task.pk }}"
+             form="task-bulk-form" title="Выбрать задачу">
+    </td>
     <td>
       <div class="task-line">
         <a class="task-id" href="{% url 'task_detail' task.pk %}"
@@ -117,4 +153,5 @@
 {% else %}
 <div class="card"><p class="muted">Задачи не найдены. Попробуйте изменить фильтры или <a href="{% url 'task_create' %}">создайте новую</a>.</p></div>
 {% endif %}
+<script defer src="{% static 'js/bulk.js' %}"></script>
 {% endblock %}

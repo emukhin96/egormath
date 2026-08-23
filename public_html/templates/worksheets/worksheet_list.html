@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}Мои листки — EgorMath{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/worksheet_list.html' %}{% endblock %}
 {% block content %}
@@ -57,12 +58,27 @@
 </div>
 
 {% if worksheets %}
+<form id="ws-bulk-form" method="post" action="{% url 'worksheet_bulk_delete' %}"
+      class="bulk-bar" data-bulk hidden
+      onsubmit="return confirm('Удалить выбранные листки? Будут удалены и их назначения ученикам.');">
+  {% csrf_token %}
+  <strong data-bulk-count>Выбрано: 0</strong>
+  <button type="submit" class="btn btn-small btn-danger">Удалить выбранные</button>
+</form>
 <div class="card worksheet-catalog">
 <div class="table-summary"><strong>Листков: {{ worksheets|length }}</strong><span>Тема учитывается у листка и его задач</span></div>
 <table class="list">
-  <tr><th>Название</th><th>Класс</th><th>Темы</th><th>Задач</th><th>Создан</th><th>Изменён</th><th>PDF</th><th></th></tr>
+  <tr>
+    <th class="col-select"><input type="checkbox" data-bulk-all="ws-bulk-form"
+        title="Выбрать все листки"></th>
+    <th>Название</th><th>Класс</th><th>Темы</th><th>Задач</th><th>Создан</th><th>Изменён</th><th>PDF</th><th></th>
+  </tr>
   {% for w in worksheets %}
   <tr>
+    <td class="col-select">
+      <input type="checkbox" class="row-select" name="ids" value="{{ w.pk }}"
+             form="ws-bulk-form" title="Выбрать листок">
+    </td>
     <td>
       <a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a>
       {% if w.comment %}<div class="muted ws-comment" style="font-size:.85rem">{{ w.comment|truncatechars:120 }}</div>{% endif %}
@@ -108,7 +124,7 @@
          href="{% url 'worksheet_pdf_editor' w.pk %}"
          title="Предпросмотр и сборка PDF (ученик / с ответами / учитель)">PDF</a>
     </td>
-    <td>
+    <td class="row-actions">
       <form method="post" action="{% url 'worksheet_copy' w.pk %}" class="inline-form">
         {% csrf_token %}
         <button type="submit" class="btn btn-small btn-secondary" title="Создать дубликат листка">Дублировать</button>
@@ -127,4 +143,5 @@
 <div class="card"><p class="muted">Листков не найдено.</p></div>
 {% endif %}
 
+<script defer src="{% static 'js/bulk.js' %}"></script>
 {% endblock %}
