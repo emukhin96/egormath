@@ -135,6 +135,23 @@ class WebTexTests(TestCase):
         self.assertIn('<tr><td>$x$</td><td>1</td></tr>', html)
         self.assertIn('<tr><td>$y$</td><td>2</td></tr>', html)
 
+    def test_tabular_math_with_breaks_in_cell(self):
+        # \\ и & внутри формулы в ячейке — часть формулы, не разделители
+        html = self.render(
+            '\\begin{tabular}{|c|c|}'
+            '$\\begin{matrix}a\\\\b\\end{matrix}$ & 1\\end{tabular}')
+        self.assertIn(
+            '<tr><td>$\\begin{matrix}a\\\\b\\end{matrix}$</td>'
+            '<td>1</td></tr>', html)
+
+    def test_preview_cut_inside_bracket_math(self):
+        from problems.web_tex import tex_preview_html
+        # Граница внутри \(…\) — формула откатывается целиком
+        text = 'Найдите корни уравнения \\(x^2 - 5x + 6 = 0\\) устно.'
+        html = str(tex_preview_html(text, limit=30))
+        self.assertNotIn('\\(x^2', html)
+        self.assertNotIn('\\(', html)
+
     def test_html_is_escaped(self):
         self.assertEqual(self.render('<script>alert(1)</script>'),
                          '&lt;script&gt;alert(1)&lt;/script&gt;')
