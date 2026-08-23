@@ -46,6 +46,20 @@ def _combined_answer(task, subitems):
     return ' '.join(parts)
 
 
+def _combined_solution(task, subitems):
+    """Общее решение задачи + решения подпунктов («а) …; б) …»)."""
+    parts = []
+    if task.solution_latex.strip():
+        parts.append(task.solution_latex.strip())
+    sub_solutions = [
+        '%s)~%s' % (subitem_label(i), s.solution_latex.strip())
+        for i, s in enumerate(subitems) if s.solution_latex.strip()
+    ]
+    if sub_solutions:
+        parts.append('; '.join(sub_solutions))
+    return ' '.join(parts)
+
+
 # Ссылка на картинку в тексте задачи: \taskpic{N}, N — номер по порядку
 TASKPIC_REF_RE = re.compile(r'\\taskpic\{(\d+)\}')
 
@@ -103,7 +117,7 @@ def task_to_tex(item):
     ]
     subitems = '\n'.join(sub_lines)
     answer = _combined_answer(task, subitem_objs)
-    solution = task.solution_latex.strip()
+    solution = _combined_solution(task, subitem_objs)
     # Хвостовые пустые аргументы опускаем, промежуточные передаём пустыми
     tail = []
     if solution:

@@ -37,6 +37,8 @@
                aria-label="Текст подпункта">
         <input type="text" name="answer_latex" value="{{ s.answer_latex }}"
                placeholder="ответ" class="quick-input" aria-label="Ответ подпункта">
+        <input type="text" name="solution_latex" value="{{ s.solution_latex }}"
+               placeholder="решение" class="quick-input" aria-label="Решение подпункта">
       </form>
       <form method="post" action="{% url 'task_subitem_update' task.pk s.pk %}"
             class="inline-form"
@@ -56,12 +58,14 @@
       {% csrf_token %}
       <input type="text" name="text_latex" placeholder="текст подпункта (LaTeX)" required>
       <input type="text" name="answer_latex" placeholder="ответ" class="quick-input">
+      <input type="text" name="solution_latex" placeholder="решение" class="quick-input">
       <button type="submit" class="btn btn-small">Добавить</button>
     </form>
   </details>
 
   {% include 'problems/_task_images.html' with task=task %}
 
+  {% if not task.subitems.all %}
   <h3>Ответ и решение</h3>
   <form method="post" action="{% url 'task_quick_update' task.pk %}"
         data-autosave="debounce">
@@ -76,10 +80,29 @@
     </p>
     <span class="helptext">Сохраняется само по мере ввода.</span>
   </form>
-  {% if task.has_subitem_answers %}
-  <div class="answer-box math-content"><strong>Ответы на подпункты:</strong>
-    {% for s in task.subitems.all %}{% if s.answer_latex %}{{ forloop.counter0|subitem_label }})&nbsp;{{ s.answer_latex }}; {% endif %}{% endfor %}
-  </div>
+  {% else %}
+  {# У задач с подпунктами ответы/решения — по подпунктам; общие поля видны только ради непустых старых значений #}
+  {% if task.answer_latex or task.solution_latex %}
+  <h3>Общие ответ и решение <span class="muted">(устаревшие — у задачи есть подпункты)</span></h3>
+  <form method="post" action="{% url 'task_quick_update' task.pk %}"
+        data-autosave="debounce">
+    {% csrf_token %}
+    {% if task.answer_latex %}
+    <p>
+      <label for="qa_answer">Ответ (LaTeX)</label>
+      <textarea name="answer_latex" id="qa_answer" rows="1">{{ task.answer_latex }}</textarea>
+    </p>
+    {% endif %}
+    {% if task.solution_latex %}
+    <p>
+      <label for="qa_solution">Решение (LaTeX)</label>
+      <textarea name="solution_latex" id="qa_solution" rows="3">{{ task.solution_latex }}</textarea>
+    </p>
+    {% endif %}
+    <span class="helptext">Очистите поле, чтобы убрать общее значение —
+      останутся только ответы/решения по подпунктам.</span>
+  </form>
+  {% endif %}
   {% endif %}
 
   <h3>Классификация</h3>

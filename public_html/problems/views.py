@@ -230,6 +230,9 @@ def task_subitem_update(request, pk, spk):
     if 'answer_latex' in request.POST:
         subitem.answer_latex = request.POST['answer_latex'].strip()
         updated.append('answer_latex')
+    if 'solution_latex' in request.POST:
+        subitem.solution_latex = request.POST['solution_latex'].strip()
+        updated.append('solution_latex')
     if updated:
         subitem.save(update_fields=updated)
     return JsonResponse({'ok': True})
@@ -246,7 +249,8 @@ def task_subitem_add(request, pk):
         TaskSubitem.objects.create(
             task=task, order=(last.order + 10) if last else 10,
             text_latex=text,
-            answer_latex=request.POST.get('answer_latex', '').strip())
+            answer_latex=request.POST.get('answer_latex', '').strip(),
+            solution_latex=request.POST.get('solution_latex', '').strip())
         messages.success(request, 'Подпункт добавлен.')
     return redirect('task_detail', pk=pk)
 

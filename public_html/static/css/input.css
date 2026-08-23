@@ -1649,6 +1649,12 @@
     max-width: none;
   }
 
+  /* Ответ и решение подпункта — фиксированная доля, текст не сжимается */
+  .quick-subitem-form input[name="answer_latex"],
+  .quick-subitem-form input[name="solution_latex"] {
+    flex: 0 1 200px;
+  }
+
   .quick-classify {
     display: flex;
     flex-wrap: wrap;

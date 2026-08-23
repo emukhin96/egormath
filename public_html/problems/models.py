@@ -255,6 +255,7 @@ class TaskSubitem(models.Model):
     order = models.PositiveIntegerField('Порядок', default=0)
     text_latex = models.TextField('Текст подпункта (LaTeX)')
     answer_latex = models.TextField('Ответ (LaTeX)', blank=True)
+    solution_latex = models.TextField('Решение (LaTeX)', blank=True)
 
     class Meta:
         verbose_name = 'Подпункт задачи'

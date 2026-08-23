@@ -119,6 +119,25 @@ class LatexGenerationTests(TestCase):
         # Ответы перенумерованы заново: а) и б)
         self.assertIn('[{а)~2; б)~6}]', tex)
 
+    def test_subitem_solutions_combined(self):
+        # Решения подпунктов собираются в 6-й аргумент \task как ответы
+        task = Task.objects.create(text_latex='Вычислите:')
+        TaskSubitem.objects.create(
+            task=task, order=10, text_latex='$1+1$', answer_latex='2',
+            solution_latex='Складываем единицы')
+        TaskSubitem.objects.create(
+            task=task, order=20, text_latex='$2+2$', answer_latex='4',
+            solution_latex='Складываем двойки')
+        item = make_item(self.worksheet, task)
+        tex = task_to_tex(item)
+        self.assertIn('[{а)~Складываем единицы; б)~Складываем двойки}]', tex)
+        # Общее решение задачи идёт перед решениями подпунктов
+        task.solution_latex = 'Общий план.'
+        task.save()
+        tex = task_to_tex(item)
+        self.assertIn('[{Общий план. а)~Складываем единицы; '
+                      'б)~Складываем двойки}]', tex)
+
     def test_worksheet_variants(self):
         worksheet = make_worksheet(self.teacher)
         student_tex = worksheet_to_tex(worksheet, 'student')
