@@ -37,12 +37,11 @@
     var download = document.getElementById('download-btn');
     var csrf = root.querySelector('input[name=csrfmiddlewaretoken]').value;
     var currentUrl = null;
-    var controller = null;
+    var inFlight = false;
+    var pending = false;
 
     // PDF и ссылка скачивания всегда соответствуют последней сборке:
-    // при старте новой (или ошибке) старый результат убирается,
-    // а незавершённый запрос отменяется — устаревший ответ не может
-    // перезаписать актуальный.
+    // при старте новой (или ошибке) старый результат убирается.
     function clearResult() {
       if (currentUrl) URL.revokeObjectURL(currentUrl);
       currentUrl = null;
@@ -51,9 +50,18 @@
       download.removeAttribute('href');
     }
 
+    // Сборки сериализуются, а не отменяются: abort закрыл бы только fetch
+    // в браузере, серверная компиляция продолжила бы держать lock, и новый
+    // запрос получил бы 429. Пока сборка идёт, новые клики лишь помечают
+    // pending; по завершении устаревший результат отбрасывается и сборка
+    // запускается заново с актуальным кодом.
     function compile() {
-      if (controller) controller.abort();
-      controller = new AbortController();
+      if (inFlight) {
+        pending = true;
+        status.textContent = 'Сборка…';
+        return;
+      }
+      inFlight = true;
       clearResult();
       status.textContent = 'Сборка…';
       log.hidden = true;
@@ -64,8 +72,8 @@
         headers: {'X-CSRFToken': csrf,
                   'Content-Type': 'application/x-www-form-urlencoded'},
         body: body.toString(),
-        signal: controller.signal,
       }).then(function (r) {
+        if (pending) return null;  // код уже изменился — результат устарел
         if (r.ok) return r.blob().then(function (blob) {
           currentUrl = URL.createObjectURL(blob);
           // navpanes=0 прячет боковую панель миниатюр страниц во встроенном
@@ -82,9 +90,14 @@
             log.hidden = false;
           }
         });
-      }).catch(function (err) {
-        if (err && err.name === 'AbortError') return;
-        status.textContent = 'Нет связи с сервером';
+      }).catch(function () {
+        if (!pending) status.textContent = 'Нет связи с сервером';
+      }).finally(function () {
+        inFlight = false;
+        if (pending) {
+          pending = false;
+          compile();
+        }
       });
     }
 

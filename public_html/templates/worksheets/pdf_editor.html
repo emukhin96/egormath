@@ -14,12 +14,14 @@
       <button type="button" data-value="11pt">11</button>
       <button type="button" data-value="12pt">12</button>
     </div>
+    {% if font_choices|length > 1 %}
     <p class="sidebar-kicker">Шрифт</p>
     <div class="switch-group" data-switch="font">
-      <button type="button" data-value="cm">Computer Modern</button>
-      <button type="button" data-value="school">Schoolbook</button>
-      <button type="button" data-value="palatino">Palatino</button>
+      {% for value, label in font_choices %}
+      <button type="button" data-value="{{ value }}">{{ label }}</button>
+      {% endfor %}
     </div>
+    {% endif %}
     <p class="sidebar-kicker">Бумага</p>
     <div class="switch-group" data-switch="paper">
       <button type="button" data-value="a4paper">A4</button>

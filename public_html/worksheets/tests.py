@@ -2,6 +2,7 @@ from unittest import mock
 
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from problems.models import Task, TaskSubitem
 from problems.tests import make_student, make_teacher
@@ -596,6 +597,13 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'id="tex-source"')
         self.assertContains(response, '\\documentclass')
         self.assertContains(response, 'С ответами')
+        # По умолчанию доступен только cm: кнопки school/palatino скрыты,
+        # пока LaTeX API не подготовлен (settings.PDF_EDITOR_FONTS)
+        self.assertNotContains(response, 'data-value="palatino"')
+        with self.settings(PDF_EDITOR_FONTS=['cm', 'school', 'palatino']):
+            response = self.client.get(
+                reverse('worksheet_pdf_editor', args=[self.worksheet.pk]))
+            self.assertContains(response, 'data-value="palatino"')
         # Чужой листок недоступен
         self.client.login(username='teacher2', password='pass12345')
         response = self.client.get(
@@ -631,20 +639,23 @@ class WorksheetViewTests(TestCase):
 
     @mock.patch('worksheets.views.compile_latex', return_value=b'%PDF-1.5')
     def test_pdf_editor_compile_locked(self, mocked):
-        # Пока идёт сборка пользователя, вторая параллельная — 429
-        from django.core.cache import cache
+        # Пока идёт сборка пользователя, вторая параллельная — 429.
+        # Lock хранится в БД (PdfCompileLock) — общий для всех процессов
+        from worksheets.models import PdfCompileLock
         self.login_teacher()
         url = reverse('worksheet_pdf_compile', args=[self.worksheet.pk])
-        lock_key = f'pdf-editor-compile-{self.teacher.pk}'
-        cache.add(lock_key, 1, timeout=180)
-        try:
-            response = self.client.post(
-                url, {'tex': r'\documentclass{article}'})
-            self.assertEqual(response.status_code, 429)
-            mocked.assert_not_called()
-        finally:
-            cache.delete(lock_key)
-        # После завершения (лок снят) сборка снова доступна
+        PdfCompileLock.objects.create(user=self.teacher)
+        response = self.client.post(url, {'tex': r'\documentclass{article}'})
+        self.assertEqual(response.status_code, 429)
+        mocked.assert_not_called()
+        # Протухший lock (упавший процесс) снимается автоматически
+        from worksheets.views import PDF_EDITOR_LOCK_TIMEOUT
+        PdfCompileLock.objects.update(
+            created_at=timezone.now() - PDF_EDITOR_LOCK_TIMEOUT * 2)
+        response = self.client.post(url, {'tex': r'\documentclass{article}'})
+        self.assertEqual(response.status_code, 200)
+        # После завершения lock снят — сборка снова доступна
+        self.assertEqual(PdfCompileLock.objects.count(), 0)
         response = self.client.post(url, {'tex': r'\documentclass{article}'})
         self.assertEqual(response.status_code, 200)
 
