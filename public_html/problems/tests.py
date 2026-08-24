@@ -109,6 +109,46 @@ class NeuroTests(TestCase):
             body['generationConfig']['response_mime_type'],
             'application/json')
 
+    def test_invented_subitems_fold_into_answer(self):
+        """Параметр без подпунктов модель часто кладёт в массивы — не теряем."""
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from . import neuro
+        payload = {
+            'answer': '', 'solution': '',
+            'subitem_answers': ['$x=3/a$', 'нет корней'],
+            'subitem_solutions': ['при $a\\neq 0$', 'при $a=0$'],
+        }
+        with override_settings(GEMINI_API_KEY='k', GEMINI_MODEL='m',
+                               GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=self._response(payload)):
+                result = neuro.solve_task('Решите $2ax=6$')
+        self.assertEqual(result['answer'], '$x=3/a$; нет корней')
+        self.assertIn('при $a\\neq 0$', result['solution'])
+        self.assertIn('при $a=0$', result['solution'])
+        self.assertEqual(result['subitem_answers'], [])
+        self.assertEqual(result['subitem_solutions'], [])
+
+    def test_empty_draft_raises(self):
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from .neuro import NeuroError, solve_task
+        payload = {
+            'answer': '', 'solution': '',
+            'subitem_answers': [], 'subitem_solutions': [],
+        }
+        with override_settings(GEMINI_API_KEY='k'):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=self._response(payload)):
+                with self.assertRaises(NeuroError) as ctx:
+                    solve_task('Задача')
+        self.assertIn('не вернула ответ', str(ctx.exception))
+
     def test_http_error_raises(self):
         from unittest import mock
 

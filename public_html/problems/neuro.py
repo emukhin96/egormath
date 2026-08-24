@@ -32,10 +32,12 @@ _INSTRUCTION = (
     '- answer: краткий ответ,\n'
     '- solution: краткое решение (основные шаги, без воды),\n'
     '- subitem_answers, subitem_solutions: массивы по подпунктам.\n'
-    'Если у задачи есть подпункты — заполняй только массивы (по одному '
-    'элементу на каждый подпункт, в том же порядке), а answer и solution '
-    'оставь пустыми строками. Если подпунктов нет — заполняй answer и '
-    'solution, а массивы оставь пустыми.\n'
+    'Если в запросе есть блок «Подпункты» — заполняй только массивы '
+    '(по одному элементу на каждый, в том же порядке), а answer и '
+    'solution оставь пустыми строками. Если блока «Подпункты» нет — '
+    'это одна задача: пиши ответ и разбор в answer и solution. '
+    'Случаи параметра тоже туда, не выдумывай подпункты '
+    '(массивы оставь пустыми).\n'
     'Формулы — в LaTeX ($…$), совместимом с пакетами amsmath/egor. '
     'Текст — по-русски. Если решить не удаётся, верни пустые строки.'
 )
@@ -186,20 +188,54 @@ def solve_task(text, subitems=()):
                        response.text[:500])
         raise NeuroError('Не удалось разобрать ответ нейросети.') from exc
 
-    def _s(value):
-        return value.strip() if isinstance(value, str) else ''
+    result = _normalize_drafts(data, subitems)
+    if not (result['answer'] or result['solution']
+            or any(result['subitem_answers'])
+            or any(result['subitem_solutions'])):
+        raise NeuroError(
+            'Нейросеть не вернула ответ. Попробуйте ещё раз.')
+    return result
 
-    def _lst(value, length):
-        items = [_s(v) for v in value] if isinstance(value, list) else []
-        # Приводим к числу подпунктов: лишнее отрезаем, недостающее — пустое
-        return (items + [''] * length)[:length]
 
+def _s(value):
+    return value.strip() if isinstance(value, str) else ''
+
+
+def _lst(value, length):
+    items = [_s(v) for v in value] if isinstance(value, list) else []
+    # Приводим к числу подпунктов: лишнее отрезаем, недостающее — пустое
+    return (items + [''] * length)[:length]
+
+
+def _normalize_drafts(data, subitems):
+    """Собрать черновики. Ложные «подпункты» (случаи параметра) —
+    в answer/solution, если у задачи подпунктов нет."""
+    if not isinstance(data, dict):
+        data = {}
+    answer = _s(data.get('answer'))
+    solution = _s(data.get('solution'))
+    raw_ans = data.get('subitem_answers')
+    raw_sol = data.get('subitem_solutions')
+    if subitems:
+        return {
+            'answer': answer,
+            'solution': solution,
+            'subitem_answers': _lst(raw_ans, len(subitems)),
+            'subitem_solutions': _lst(raw_sol, len(subitems)),
+        }
+    extra_ans = [_s(v) for v in raw_ans] if isinstance(raw_ans, list) else []
+    extra_sol = [_s(v) for v in raw_sol] if isinstance(raw_sol, list) else []
+    extra_ans = [v for v in extra_ans if v]
+    extra_sol = [v for v in extra_sol if v]
+    if not answer and extra_ans:
+        answer = '; '.join(extra_ans)
+    if not solution and extra_sol:
+        solution = '\n\n'.join(extra_sol)
     return {
-        'answer': _s(data.get('answer')),
-        'solution': _s(data.get('solution')),
-        'subitem_answers': _lst(data.get('subitem_answers'), len(subitems)),
-        'subitem_solutions': _lst(data.get('subitem_solutions'),
-                                  len(subitems)),
+        'answer': answer,
+        'solution': solution,
+        'subitem_answers': [],
+        'subitem_solutions': [],
     }
 
 
