@@ -21,7 +21,7 @@
     <h2>{{ item.rubric }}</h2>
     {% if item.rubric_note %}<p class="muted math-content ws-rubric-note">{{ item.rubric_note }}</p>{% endif %}
     {% else %}
-    <div class="math-content task-text ws-text">{{ item.text_latex|linebreaksbr }}</div>
+    <div class="math-content task-text ws-text ws-text-{{ item.text_style }}">{{ item.text_latex|web_text }}</div>
     {% endif %}
     {% if not forloop.last %}<hr style="border:none;border-top:1px solid var(--border)">{% endif %}
     {% endwith %}

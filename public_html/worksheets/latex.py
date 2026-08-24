@@ -117,9 +117,19 @@ def task_to_tex(item):
     return ''.join(parts)
 
 
+# Команды egor для стилей текстового элемента (WorksheetItem.text_style)
+TEXT_STYLE_COMMANDS = {
+    'plain': 'plaintext',
+    'rule': 'ruletext',
+    'light': 'lighttext',
+    'memo': 'memotext',
+}
+
+
 def text_to_tex(item):
-    """Произвольный текст между задачами — \\plaintext пакета egor."""
-    return '\\plaintext{%%\n%s%%\n}' % item.text_latex.strip()
+    """Произвольный текст между задачами — \\plaintext/\\ruletext/… egor."""
+    command = TEXT_STYLE_COMMANDS.get(item.text_style, 'plaintext')
+    return '\\%s{%%\n%s%%\n}' % (command, item.text_latex.strip())
 
 
 def rubric_to_tex(item):

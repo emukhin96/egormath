@@ -22,7 +22,7 @@
     <h2>{{ row.item.rubric }}</h2>
     {% if row.item.rubric_note %}<p class="muted math-content ws-rubric-note">{{ row.item.rubric_note }}</p>{% endif %}
     {% else %}
-    <div class="math-content task-text ws-text">{{ row.item.text_latex|linebreaksbr }}</div>
+    <div class="math-content task-text ws-text ws-text-{{ row.item.text_style }}">{{ row.item.text_latex|web_text }}</div>
     {% endif %}
   </div>
   {% else %}
