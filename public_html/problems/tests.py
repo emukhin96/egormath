@@ -123,6 +123,29 @@ class NeuroTests(TestCase):
                     with self.assertRaises(NeuroError):
                         solve_task('Задача')
 
+    def test_retired_model_shows_api_message(self):
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from .neuro import NeuroError, solve_task
+        response = mock.Mock(status_code=404, text='not found')
+        response.json.return_value = {
+            'error': {
+                'message': (
+                    'This model models/gemini-2.5-flash-lite '
+                    'is no longer available'),
+            },
+        }
+        with override_settings(GEMINI_API_KEY='k'):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=response):
+                with self.assertLogs('problems.neuro', level='WARNING'):
+                    with self.assertRaises(NeuroError) as ctx:
+                        solve_task('Задача')
+        self.assertIn('недоступна', str(ctx.exception))
+        self.assertIn('gemini-2.5-flash-lite', str(ctx.exception))
+
     def test_quota_parallel_and_rate(self):
         from django.test import override_settings
 
@@ -204,6 +227,15 @@ class NeuroTests(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.answer_latex, '4')
         self.assertEqual(task.solution_latex, 'Сложение.')
+
+    def test_superuser_without_profile_gets_neuro_js(self):
+        """Суперпользователь без профиля — учитель по get_role, скрипт должен грузиться."""
+        admin = User.objects.create_superuser('admin', 'a@b.c', 'pass12345')
+        task = Task.objects.create(text_latex='$2+2$', created_by=admin)
+        self.client.login(username='admin', password='pass12345')
+        response = self.client.get(reverse('task_detail', args=[task.pk]))
+        self.assertContains(response, 'js/neuro.js')
+        self.assertContains(response, 'NEURO_SOLVE_URL')
 
 
 class WebTexTests(TestCase):

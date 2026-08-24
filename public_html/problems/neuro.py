@@ -7,8 +7,7 @@
 что оператор оставил после проверки.
 
 Ключ — GEMINI_API_KEY из .secrets/ или окружения (как LATEX_API_KEY),
-модель — settings.GEMINI_MODEL (по умолчанию gemini-2.5-flash-lite,
-самый дешёвый разумный вариант: ~0.04 цента на типовую задачу).
+модель — settings.GEMINI_MODEL (по умолчанию gemini-3.5-flash-lite).
 """
 
 import json
@@ -172,6 +171,11 @@ def solve_task(text, subitems=()):
         if response.status_code in (401, 403) or 'API key' in detail:
             raise NeuroError(
                 'Ключ Gemini отклонён сервером. Проверьте GEMINI_API_KEY.')
+        if response.status_code == 404:
+            hint = detail or ('модель %s' % settings.GEMINI_MODEL)
+            raise NeuroError(
+                'Модель нейросети недоступна: %s. '
+                'Проверьте GEMINI_MODEL.' % hint[:240])
         raise NeuroError('Сервис нейрогенерации вернул ошибку '
                          f'(HTTP {response.status_code}).')
     try:
