@@ -59,8 +59,11 @@ make test         # только Django-тесты
   существующей истории репозитория.
 - Не переименовывай стабильные CSS-классы/ID без необходимости: `.btn`,
   `.card`, `.ws-*`, `context-sidebar`, `context-toggle`, `sidebar-close`,
-  `sidebar-backdrop` — на них завязаны шаблоны и JS (`shell.js`,
+  `sidebar-backdrop`, `#ws-saved` — на них завязаны шаблоны и JS (`shell.js`,
   `autosave.js`, `builder.js`).
+- Уведомления об успехе — тост `#ws-saved` справа снизу (`EgorAutosave.showSaved`),
+  не новые плашки `.msg-success`. Подробности — в [docs/PIPELINE.md](docs/PIPELINE.md),
+  раздел «Уведомления пользователя».
 - Новый повторяющийся набор Tailwind-утилит — в `@layer components`
   (`public_html/static/css/input.css`), а не длинной строкой `class="..."`
   по шаблонам.

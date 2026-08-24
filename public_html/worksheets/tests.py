@@ -117,7 +117,7 @@ class LatexGenerationTests(TestCase):
         self.assertNotIn('$2+2$', tex)
         self.assertIn('\\item $3+3$;', tex)
         # Ответы перенумерованы заново: а) и б)
-        self.assertIn('[{а)~2; б)~6}]', tex)
+        self.assertIn(r'[{а)~2 \\ б)~6}]', tex)
 
     def test_subitem_solutions_combined(self):
         # Решения подпунктов собираются в 6-й аргумент \task как ответы
@@ -130,13 +130,15 @@ class LatexGenerationTests(TestCase):
             solution_latex='Складываем двойки')
         item = make_item(self.worksheet, task)
         tex = task_to_tex(item)
-        self.assertIn('[{а)~Складываем единицы; б)~Складываем двойки}]', tex)
+        self.assertIn(
+            r'[{а)~Складываем единицы \\ б)~Складываем двойки}]', tex)
         # Общее решение задачи идёт перед решениями подпунктов
         task.solution_latex = 'Общий план.'
         task.save()
         tex = task_to_tex(item)
-        self.assertIn('[{Общий план. а)~Складываем единицы; '
-                      'б)~Складываем двойки}]', tex)
+        self.assertIn(
+            r'[{Общий план. \\ а)~Складываем единицы \\ '
+            r'б)~Складываем двойки}]', tex)
 
     def test_worksheet_variants(self):
         worksheet = make_worksheet(self.teacher)
@@ -187,6 +189,18 @@ class LatexGenerationTests(TestCase):
         self.assertIn('Вспомните формулу дискриминанта.', tex)
         # Текст между задачами — без пустого \item[]
         self.assertNotIn('\\item[]', tex)
+
+    def test_text_item_styles(self):
+        # Стиль текстового элемента выбирает команду egor
+        worksheet = make_worksheet(self.teacher)
+        for style, command in (('rule', 'ruletext'), ('light', 'lighttext'),
+                               ('memo', 'memotext')):
+            item = WorksheetItem.objects.create(
+                worksheet=worksheet, order=15,
+                text_latex='Правило.', text_style=style)
+            tex = worksheet_to_tex(worksheet, 'student')
+            self.assertIn('\\%s{%%' % command, tex)
+            item.delete()
 
     def test_text_right_after_rubric(self):
         # \plaintext сразу после \rubr требует пустого \item[] —
@@ -276,11 +290,13 @@ class LatexGenerationTests(TestCase):
                 image = task.images.create(order=10)
                 image.image.save('схема.png', ContentFile(buf.getvalue()),
                                  save=True)
-                make_item(self.worksheet, task)
+                item = make_item(self.worksheet, task)
                 assets = collect_assets(self.worksheet)
+                hidden = collect_assets(self.worksheet, exclude_ids={item.pk})
         self.assertEqual(len(assets), 1)
         self.assertEqual(assets[0]['filename'], image.filename)
         self.assertTrue(assets[0]['content_base64'])
+        self.assertEqual(hidden, [])
 
     def test_header_escaping(self):
         worksheet = Worksheet.objects.create(
@@ -340,7 +356,9 @@ class WorksheetViewTests(TestCase):
 
         self.client.post(reverse(
             'worksheet_remove_item', args=[self.worksheet.pk, items2[1].pk]))
-        self.assertEqual(self.worksheet.items.count(), 2)
+        # Мягкое удаление: элемент скрыт, но остаётся до следующего удаления
+        self.assertEqual(self.worksheet.ordered_items().count(), 2)
+        self.assertEqual(self.worksheet.items.count(), 3)
 
     def test_reorder(self):
         self.login_teacher()
@@ -533,6 +551,71 @@ class WorksheetViewTests(TestCase):
         self.assertRegex(
             response.content.decode(), rf'value="{grand.pk}"\s+checked')
 
+    def test_remove_item_soft_delete_and_undo(self):
+        self.login_teacher()
+        item = self.worksheet.items.order_by('order').first()
+        self.client.post(reverse(
+            'worksheet_remove_item', args=[self.worksheet.pk, item.pk]))
+        item.refresh_from_db()
+        self.assertIsNotNone(item.deleted_at)
+        # Скрыт из конструктора и из .tex, но плашка отмены на месте
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.assertNotIn(item.pk,
+                         [r['item'].pk for r in response.context['rows']])
+        self.assertContains(response, 'undo-bar')
+        self.assertContains(response, 'ws-toast-src')
+        self.assertContains(response, 'Задача удалена из листка.')
+        self.assertNotIn(item.task.text_latex,
+                         worksheet_to_tex(self.worksheet, 'student'))
+        # «Отменить» возвращает элемент
+        restore = self.client.post(reverse(
+            'worksheet_restore_item', args=[self.worksheet.pk]), follow=True)
+        item.refresh_from_db()
+        self.assertIsNone(item.deleted_at)
+        self.assertContains(restore, 'Задача возвращена в листок.')
+
+    def test_second_remove_purges_previous_trash(self):
+        # Отмена одноуровневая: новое удаление затирает прежний «мусор»
+        self.login_teacher()
+        first, second = list(self.worksheet.items.order_by('order'))
+        self.client.post(reverse(
+            'worksheet_remove_item', args=[self.worksheet.pk, first.pk]))
+        self.client.post(reverse(
+            'worksheet_remove_item', args=[self.worksheet.pk, second.pk]))
+        self.assertFalse(
+            self.worksheet.items.filter(pk=first.pk).exists())
+        second.refresh_from_db()
+        self.assertIsNotNone(second.deleted_at)
+
+    def test_readd_restores_trashed_task_instead_of_duplicate(self):
+        # Повторное добавление задачи из корзины восстанавливает элемент,
+        # «Отменить» после этого не плодит дубль
+        self.login_teacher()
+        item = self.worksheet.items.order_by('order').first()
+        task = item.task
+        self.client.post(reverse(
+            'worksheet_remove_item', args=[self.worksheet.pk, item.pk]))
+        self.client.post(reverse(
+            'worksheet_add_task', args=[self.worksheet.pk]),
+            {'task_id': task.pk})
+        item.refresh_from_db()
+        self.assertIsNone(item.deleted_at)
+        self.assertEqual(
+            self.worksheet.items.filter(task=task).count(), 1)
+        self.client.post(reverse(
+            'worksheet_restore_item', args=[self.worksheet.pk]))
+        self.assertEqual(
+            self.worksheet.items.filter(
+                task=task, deleted_at__isnull=True).count(), 1)
+
+    def test_duplicate_skips_deleted(self):
+        item = self.worksheet.items.order_by('order').first()
+        item.deleted_at = timezone.now()
+        item.save(update_fields=['deleted_at'])
+        copy = self.worksheet.duplicate()
+        self.assertEqual(copy.items.count(), 1)
+
     def test_add_text_and_edit(self):
         self.login_teacher()
         self.client.post(
@@ -546,6 +629,24 @@ class WorksheetViewTests(TestCase):
             {'text_latex': 'Новый текст'})
         item.refresh_from_db()
         self.assertEqual(item.text_latex, 'Новый текст')
+        # Смена стиля текста сохраняется, мусорное значение игнорируется
+        self.client.post(
+            reverse('worksheet_edit_text',
+                    args=[self.worksheet.pk, item.pk]),
+            {'text_latex': 'Новый текст', 'text_style': 'memo'})
+        item.refresh_from_db()
+        self.assertEqual(item.text_style, 'memo')
+        self.client.post(
+            reverse('worksheet_edit_text',
+                    args=[self.worksheet.pk, item.pk]),
+            {'text_latex': 'Новый текст', 'text_style': 'hacked'})
+        item.refresh_from_db()
+        self.assertEqual(item.text_style, 'memo')
+        # Переключатель стиля отображается в конструкторе
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.assertContains(response, 'style-seg')
+        self.assertContains(response, 'name="text_style"')
 
     def test_add_edit_delete_rubric(self):
         self.login_teacher()
@@ -570,7 +671,9 @@ class WorksheetViewTests(TestCase):
         self.client.post(
             reverse('worksheet_remove_item',
                     args=[self.worksheet.pk, item.pk]))
-        self.assertFalse(self.worksheet.items.filter(pk=item.pk).exists())
+        # Мягкое удаление: рубрика исчезает из конструктора и .tex
+        self.assertNotIn(
+            item.pk, [i.pk for i in self.worksheet.ordered_items()])
 
     def test_item_settings(self):
         self.login_teacher()
@@ -786,6 +889,22 @@ class ImportTexTests(TestCase):
         self.assertEqual(task2['subitems'],
                          ['$2+2$', '$3 \\cdot [1+2]$'])
         self.assertEqual(task2['solution'], 'Считаем в столбик.')
+
+    def test_parse_text_styles(self):
+        # \ruletext/\lighttext/\memotext импортируются со своим стилем
+        from .import_tex import create_worksheet, parse_tex
+        tex = ('\\begin{document}\n'
+               '\\ruletext{Правило.}\n'
+               '\\lighttext{Замечание.}\n'
+               '\\memotext{Запомни!}\n'
+               '\\plaintext{Просто текст.}\n'
+               '\\end{document}')
+        parsed = parse_tex(tex)
+        styles = [data['style'] for kind, data in parsed['elements']]
+        self.assertEqual(styles, ['rule', 'light', 'memo', 'plain'])
+        worksheet, _ = create_worksheet(parsed, owner=self.teacher)
+        saved = [item.text_style for item in worksheet.ordered_items()]
+        self.assertEqual(saved, ['rule', 'light', 'memo', 'plain'])
 
     def test_create_and_dedup(self):
         from .import_tex import create_worksheet, parse_tex
@@ -1011,6 +1130,111 @@ class ShareLinkTests(TestCase):
         self.assertContains(response, 'Квадратные уравнения')
         # Ответы не показываются
         self.assertNotContains(response, 'Ответ')
+
+    def test_public_subtitle_skips_empty_parts(self):
+        # Пустые grade_label/subtitle не оставляют «висячих» разделителей
+        self.worksheet.grade_label = ''
+        self.worksheet.subtitle = ''
+        self.worksheet.save()
+        response = self.client.get(
+            reverse('public_worksheet', args=[self.link.token]))
+        line = response.context['subtitle_line']
+        self.assertFalse(line.startswith('·'))
+        self.assertNotIn('· ·', line)
+        # Заполненные части соединяются через «·»
+        self.worksheet.grade_label = 'Алгебра · 8 класс'
+        self.worksheet.subtitle = 'Вариант 1'
+        self.worksheet.save()
+        response = self.client.get(
+            reverse('public_worksheet', args=[self.link.token]))
+        self.assertIn('Вариант 1 ·', response.context['subtitle_line'])
+
+    def test_hidden_items_excluded_from_public_page(self):
+        first = self.worksheet.items.order_by('order').first()
+        self.link.hidden_items.add(first)
+        response = self.client.get(
+            reverse('public_worksheet', args=[self.link.token]))
+        self.assertNotContains(response, 'x^2-2x=0')
+        # Нумерация пересчитана: оставшаяся задача — под номером 1
+        rows = response.context['rows']
+        self.assertEqual([r['number'] for r in rows], [1])
+        # Другая ссылка того же листка показывает всё
+        other = ShareLink.objects.create(worksheet=self.worksheet)
+        response = self.client.get(
+            reverse('public_worksheet', args=[other.token]))
+        self.assertEqual(len(response.context['rows']), 2)
+
+    def test_hidden_items_excluded_from_tex(self):
+        first = self.worksheet.items.order_by('order').first()
+        tex_full = worksheet_to_tex(self.worksheet, 'student')
+        tex_cut = worksheet_to_tex(self.worksheet, 'student',
+                                   exclude_ids={first.pk})
+        self.assertIn(first.task.text_latex, tex_full)
+        self.assertNotIn(first.task.text_latex, tex_cut)
+
+    def test_empty_rubric_dropped_when_tasks_hidden(self):
+        # Рубрика, все задачи которой скрыты, не должна оставлять
+        # пустой enumerate — иначе PDF падает на «missing \\item»
+        last = self.worksheet.items.order_by('order').last()
+        rubric = make_rubric(self.worksheet, 'Дополнительно', order=50)
+        extra = Task.objects.create(
+            text_latex='Скрытая задача хвоста', created_by=self.teacher)
+        tail = WorksheetItem.objects.create(
+            worksheet=self.worksheet, task=extra, order=60)
+        tex = worksheet_to_tex(self.worksheet, 'student',
+                               exclude_ids={tail.pk})
+        self.assertNotIn('\\rubr{Дополнительно}', tex)
+        self.assertIn(last.task.text_latex, tex)
+        self.assertNotIn('Скрытая задача хвоста', tex)
+
+    def test_visibility_endpoint(self):
+        self.client.login(username='teacher1', password='pass12345')
+        first = self.worksheet.items.order_by('order').first()
+        url = reverse('worksheet_item_visibility',
+                      args=[self.worksheet.pk, first.pk])
+        self.client.post(url, {'hide_links': [self.link.pk]})
+        self.assertEqual(set(self.link.hidden_items.all()), {first})
+        # Повторный POST без галочки — задача снова видна
+        self.client.post(url, {})
+        self.assertEqual(self.link.hidden_items.count(), 0)
+
+    def test_visibility_dialog_in_builder(self):
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.assertContains(response, 'vis-btn')
+        self.assertContains(response, 'hide_links')
+        # Пока ни у кого не скрыта — обычный глаз, не перечёркнутый
+        self.assertContains(response, 'Видна всем ссылкам и ученикам')
+        self.assertNotContains(response, 'vis-on')
+
+        first = self.worksheet.items.order_by('order').first()
+        self.link.hidden_items.add(first)
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.assertContains(response, 'vis-on')
+        self.assertContains(response, 'Скрыта у части ссылок или учеников')
+
+    @mock.patch('worksheets.services.compile_latex',
+                return_value=b'%PDF-1.5 fake')
+    def test_filtered_pdf_is_cached(self, mocked):
+        first = self.worksheet.items.order_by('order').first()
+        self.link.hidden_items.add(first)
+        url = reverse('public_worksheet_pdf', args=[self.link.token])
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(mocked.call_count, 1)
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(mocked.call_count, 1)
+        # Другая ссылка без скрытий — полный tex, отдельный кэш
+        other = ShareLink.objects.create(worksheet=self.worksheet)
+        other_url = reverse('public_worksheet_pdf', args=[other.token])
+        self.assertEqual(self.client.get(other_url).status_code, 200)
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(self.client.get(other_url).status_code, 200)
+        self.assertEqual(mocked.call_count, 2)
+        # Полный PDF не вытесняет отфильтрованный
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(mocked.call_count, 2)
 
     def test_public_page_minimal_for_logged_in(self):
         # Даже залогиненный учитель видит публичную страницу без контекстной панели

@@ -7,6 +7,7 @@ from PIL import Image
 
 from problems.models import Task, TaskSubitem
 from problems.tests import make_student, make_teacher
+from worksheets.models import WorksheetItem
 from worksheets.tests import make_worksheet
 
 from .models import (Assignment, Review, Submission, SubmissionPart,
@@ -61,6 +62,39 @@ class StudentAnswerTests(TestCase):
         self.tasks = [item.task for item in
                       self.assignment.worksheet.ordered_items()]
         self.client.login(username='student1', password='pass12345')
+
+    def test_hidden_items_excluded_for_student(self):
+        # Скрытая задача не видна на странице задания и не принимает ответ
+        item = self.assignment.worksheet.items.order_by('order').first()
+        self.assignment.hidden_items.add(item)
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        rows = response.context['rows']
+        self.assertNotIn(item.task_id, [r['task'].pk for r in rows if r['task']])
+        # Нумерация пересчитана: оставшаяся задача — №1
+        self.assertEqual([r['number'] for r in rows if r['task']], [1])
+        self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{item.task_id}_text': 'подсмотрел'})
+        self.assertFalse(Submission.objects.filter(
+            assignment=self.assignment, task=item.task).exists())
+
+    def test_hidden_item_blocks_photo_and_submit(self):
+        hidden = self.assignment.worksheet.items.order_by('order').first()
+        visible = self.assignment.worksheet.items.order_by('order').last()
+        self.assignment.hidden_items.add(hidden)
+        response = self.client.post(
+            reverse('upload_photo', args=[self.assignment.pk, hidden.task_id]),
+            {'photos': fake_photo()})
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Submission.objects.filter(
+            assignment=self.assignment, task=hidden.task).exists())
+        self.client.post(
+            reverse('submit_assignment', args=[self.assignment.pk]))
+        self.assertFalse(Submission.objects.filter(
+            assignment=self.assignment, task=hidden.task).exists())
+        self.assertTrue(Submission.objects.filter(
+            assignment=self.assignment, task=visible.task).exists())
 
     def test_save_answers_and_submit(self):
         task = self.tasks[0]
@@ -209,6 +243,45 @@ class ReviewFlowTests(TestCase):
             })
         review = Review.objects.get(submission=submission)
         self.assertEqual(float(review.grade_points), 7.5)
+
+    def test_save_review_keeps_hidden_task_review(self):
+        # Скрытая после проверки задача пропадает из формы, но её отзыв
+        # не должен удаляться при сохранении остальных оценок
+        hidden_item = self.assignment.worksheet.items.order_by('order').first()
+        visible_item = self.assignment.worksheet.items.order_by('order').last()
+        hidden_sub = Submission.objects.get(
+            assignment=self.assignment, task=hidden_item.task)
+        visible_sub, _ = Submission.objects.get_or_create(
+            assignment=self.assignment, task=visible_item.task)
+        Review.objects.create(
+            submission=hidden_sub, grade_word='good', reviewer=self.teacher)
+        self.assignment.hidden_items.add(hidden_item)
+        self.client.post(
+            reverse('save_review', args=[self.assignment.pk]), {
+                f'sub{visible_sub.pk}_grade': 'medium',
+                'action': 'save',
+            })
+        self.assertTrue(Review.objects.filter(
+            submission=hidden_sub, grade_word='good').exists())
+        self.assertEqual(
+            Review.objects.get(submission=visible_sub).grade_word, 'medium')
+
+    def test_save_review_when_only_one_copy_hidden(self):
+        # Одна задача дважды в листке: скрыт только один элемент —
+        # оценку по общему Submission всё ещё можно сохранить
+        item = self.assignment.worksheet.items.order_by('order').first()
+        WorksheetItem.objects.create(
+            worksheet=self.assignment.worksheet, task=item.task, order=90)
+        self.assignment.hidden_items.add(item)
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=item.task)
+        self.client.post(
+            reverse('save_review', args=[self.assignment.pk]), {
+                f'sub{submission.pk}_grade': 'poor',
+                'action': 'save',
+            })
+        self.assertEqual(
+            Review.objects.get(submission=submission).grade_word, 'poor')
 
     def test_foreign_teacher_cannot_review(self):
         make_teacher('teacher2')

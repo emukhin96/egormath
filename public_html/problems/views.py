@@ -336,7 +336,8 @@ def _save_local_variant(user, original, form, source_fs, subitem_fs):
         TaskSubitem.objects.create(
             task=variant, order=data.get('order') or 0,
             text_latex=data['text_latex'],
-            answer_latex=data.get('answer_latex') or '')
+            answer_latex=data.get('answer_latex') or '',
+            solution_latex=data.get('solution_latex') or '')
     for data in source_fs.cleaned_data:
         if not data or data.get('DELETE') or not data.get('source'):
             continue

@@ -47,6 +47,17 @@
       <span class="ws-toggle-text">ответы и решения</span>
     </label>
   </h2>
+  {% if deleted_items %}
+  <div class="undo-bar">
+    {% for d in deleted_items %}
+    <span>{% if d.task_id %}Задача <a href="{% url 'task_detail' d.task.pk %}">#{{ d.task.pk }}</a> удалена из листка.{% elif d.is_rubric %}Рубрика «{{ d.rubric }}» удалена из листка.{% else %}Текстовый элемент удалён из листка.{% endif %}</span>
+    {% endfor %}
+    <form method="post" action="{% url 'worksheet_restore_item' worksheet.pk %}" class="inline-form">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-small btn-secondary">Отменить</button>
+    </form>
+  </div>
+  {% endif %}
   {% if rows %}
   <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}">
     {% for row in rows %}
@@ -139,18 +150,76 @@
           <form method="post" action="{% url 'worksheet_edit_text' worksheet.pk item.pk %}"
                 data-autosave="debounce">
             {% csrf_token %}
-            <span class="task-meta">Текст между задачами (в PDF — \plaintext):</span>
+            <span class="task-meta">Текст между задачами:</span>
+            <span class="style-seg" title="Оформление текста в PDF и на страницах">
+              {% for value, label in item.TEXT_STYLE_CHOICES %}
+              <label><input type="radio" name="text_style" value="{{ value }}"
+                     {% if item.text_style == value %}checked{% endif %}><span>{{ label }}</span></label>
+              {% endfor %}
+            </span>
             <textarea name="text_latex" rows="2">{{ item.text_latex }}</textarea>
           </form>
         </div>
         {% endif %}
 
         <div class="ws-actions">
+          {% if item.task_id and share_links or item.task_id and assignments %}
+          {% if row.hidden_links or row.hidden_assignments %}
+          <button type="button"
+                  class="icon-btn vis-btn vis-on"
+                  data-dialog-open="vis-{{ item.pk }}"
+                  title="Скрыта у части ссылок или учеников"
+                  aria-label="Скрыта у части ссылок или учеников"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button>
+          {% else %}
+          <button type="button"
+                  class="icon-btn vis-btn"
+                  data-dialog-open="vis-{{ item.pk }}"
+                  title="Видна всем ссылкам и ученикам"
+                  aria-label="Видна всем ссылкам и ученикам"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          {% endif %}
+          {% endif %}
           <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'up' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.first %}disabled{% endif %}>↑</button></form>
           <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'down' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.last %}disabled{% endif %}>↓</button></form>
           <form method="post" action="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" class="inline-form">{% csrf_token %}<button class="icon-btn" title="Убрать из листка" aria-label="Убрать из листка">×</button></form>
         </div>
       </div>
+
+      {% if item.task_id and share_links or item.task_id and assignments %}
+      <dialog id="vis-{{ item.pk }}" class="dialog">
+        <form method="post" action="{% url 'worksheet_item_visibility' worksheet.pk item.pk %}">
+          {% csrf_token %}
+          <h3>Видимость задачи {{ row.number }}</h3>
+          <p class="helptext">Отмеченные ссылки и ученики <strong>не увидят</strong>
+            задачу — ни на странице, ни в PDF (нумерация пересчитается).</p>
+          {% if share_links %}
+          <p class="task-meta">Публичные ссылки</p>
+          <div class="dialog-topics">
+            {% for link in share_links %}
+            <label class="dialog-topic">
+              <input type="checkbox" name="hide_links" value="{{ link.pk }}"
+                     {% if link.pk in row.hidden_links %}checked{% endif %}>
+              Ссылка от {{ link.created_at|date:'d.m.Y H:i' }}{% if not link.is_active %} <span class="muted">(отключена)</span>{% endif %}
+            </label>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if assignments %}
+          <p class="task-meta">Ученики</p>
+          <div class="dialog-topics">
+            {% for a in assignments %}
+            <label class="dialog-topic">
+              <input type="checkbox" name="hide_assignments" value="{{ a.pk }}"
+                     {% if a.pk in row.hidden_assignments %}checked{% endif %}>
+              {{ a.student.get_full_name|default:a.student.username }}
+            </label>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <button type="submit" class="btn btn-small">Сохранить</button>
+          <button type="button" class="btn btn-small btn-secondary" data-dialog-close>Отмена</button>
+        </form>
+      </dialog>
+      {% endif %}
     </div>
     {% endwith %}
     {% endfor %}
