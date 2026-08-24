@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('worksheets', '0011_worksheetpdf_filter_key'),
+        ('worksheets', '0012_worksheetpdf_unique_filter_key'),
     ]
 
     operations = [
