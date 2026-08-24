@@ -69,7 +69,8 @@ class Worksheet(models.Model):
         return self.author_name or self.owner.get_full_name() or self.owner.username
 
     def ordered_items(self):
-        return (self.items.select_related('task')
+        return (self.items.filter(deleted_at__isnull=True)
+                .select_related('task')
                 .prefetch_related('task__subitems', 'task__images', 'subitems')
                 .order_by('order', 'id'))
 
@@ -94,7 +95,7 @@ class Worksheet(models.Model):
         copy.pk = None
         copy.title = f'{self.title} (копия)'
         copy.save()
-        for item in self.items.all():
+        for item in self.items.filter(deleted_at__isnull=True):
             selected = list(item.subitems.all())
             item.pk = None
             item.worksheet = copy
@@ -148,6 +149,10 @@ class WorksheetItem(models.Model):
         TaskSubitem, blank=True, related_name='worksheet_items',
         verbose_name='Выбранные подпункты',
         help_text='Используется, когда «Все подпункты» выключено')
+    deleted_at = models.DateTimeField(
+        'Удалено', null=True, blank=True,
+        help_text='Мягкое удаление: элемент можно вернуть кнопкой '
+                  '«Отменить» до следующего удаления')
 
     class Meta:
         verbose_name = 'Элемент листка'

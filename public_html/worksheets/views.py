@@ -223,7 +223,12 @@ def worksheet_detail(request, pk):
     """Конструктор листка: задачи, поиск по базе, назначение, ссылки."""
     worksheet = _own_worksheet(request, pk)
     items = list(worksheet.ordered_items())
-    task_ids = [item.task_id for item in items if item.task_id]
+    # И активные, и в корзине — чтобы удалённая задача не всплыла
+    # в поиске конструктора и не добавилась второй раз
+    task_ids = list(worksheet.items.exclude(task_id=None)
+                    .values_list('task_id', flat=True))
+    deleted_items = list(worksheet.items.filter(deleted_at__isnull=False)
+                         .select_related('task'))
 
     # Кто скрывает какие элементы: {item_id: {pk ссылок/назначений}}
     share_links = list(worksheet.share_links.order_by('-created_at')
@@ -284,6 +289,7 @@ def worksheet_detail(request, pk):
         'grade_choices': Task.GRADE_CHOICES,
         'share_links': share_links,
         'assignments': assignments,
+        'deleted_items': deleted_items,
     })
 
 
@@ -381,12 +387,30 @@ def worksheet_quick_update(request, pk):
 
 
 def add_task_to_worksheet(request, worksheet_id, task):
-    """Добавляет задачу в конец листка (используется и из создания задачи)."""
+    """Добавляет задачу в конец листка (используется и из создания задачи).
+
+    Повторное добавление задачи из корзины — это восстановление, а не
+    второй элемент: иначе «Отменить» дало бы дубль.
+    """
     worksheet = get_object_or_404(
         Worksheet, pk=worksheet_id, owner=request.user)
-    last = worksheet.items.aggregate(m=models.Max('order'))['m'] or 0
-    WorksheetItem.objects.create(
-        worksheet=worksheet, task=task, order=last + 10)
+    with transaction.atomic():
+        Worksheet.objects.select_for_update().get(pk=worksheet.pk)
+        if worksheet.items.filter(task=task, deleted_at__isnull=True).exists():
+            messages.info(request, f'Задача #{task.pk} уже есть в листке.')
+            return redirect('worksheet_detail', pk=worksheet.pk)
+        trashed = worksheet.items.filter(
+            task=task, deleted_at__isnull=False).first()
+        if trashed:
+            worksheet.items.filter(deleted_at__isnull=False).exclude(
+                pk=trashed.pk).delete()
+            trashed.deleted_at = None
+            trashed.save(update_fields=['deleted_at'])
+            messages.success(request, f'Задача #{task.pk} возвращена в листок.')
+            return redirect('worksheet_detail', pk=worksheet.pk)
+        last = worksheet.items.aggregate(m=models.Max('order'))['m'] or 0
+        WorksheetItem.objects.create(
+            worksheet=worksheet, task=task, order=last + 10)
     messages.success(request, f'Задача #{task.pk} добавлена в «{worksheet.title}».')
     return redirect('worksheet_detail', pk=worksheet.pk)
 
@@ -401,10 +425,59 @@ def worksheet_add_task(request, pk):
 @teacher_required
 @require_POST
 def worksheet_remove_item(request, pk, item_id):
+    """Мягкое удаление: элемент прячется, плашка «Отменить» может вернуть.
+
+    Отмена одноуровневая — прежний «мусор» листка при новом удалении
+    вычищается насовсем.
+    """
     worksheet = _own_worksheet(request, pk)
-    item = get_object_or_404(WorksheetItem, pk=item_id, worksheet=worksheet)
-    item.delete()
-    messages.success(request, 'Элемент убран из листка.')
+    with transaction.atomic():
+        Worksheet.objects.select_for_update().get(pk=worksheet.pk)
+        item = get_object_or_404(
+            WorksheetItem, pk=item_id, worksheet=worksheet,
+            deleted_at__isnull=True)
+        worksheet.items.filter(deleted_at__isnull=False).delete()
+        item.deleted_at = timezone.now()
+        item.save(update_fields=['deleted_at'])
+        if item.task_id:
+            msg = 'Задача удалена из листка.'
+        elif item.is_rubric:
+            msg = 'Рубрика удалена из листка.'
+        else:
+            msg = 'Текст удалён из листка.'
+    return _builder_response(request, pk, message=msg)
+
+
+@teacher_required
+@require_POST
+def worksheet_restore_item(request, pk):
+    """Возвращает последний мягко удалённый элемент («Отменить»)."""
+    worksheet = _own_worksheet(request, pk)
+    with transaction.atomic():
+        Worksheet.objects.select_for_update().get(pk=worksheet.pk)
+        restored = 0
+        kind = None
+        for item in worksheet.items.filter(deleted_at__isnull=False):
+            if (item.task_id and worksheet.items.filter(
+                    task_id=item.task_id, deleted_at__isnull=True).exists()):
+                item.delete()
+                continue
+            item.deleted_at = None
+            item.save(update_fields=['deleted_at'])
+            restored += 1
+            if item.task_id:
+                kind = 'task'
+            elif item.is_rubric:
+                kind = 'rubric'
+            else:
+                kind = 'text'
+    if restored:
+        msg = {
+            'task': 'Задача возвращена в листок.',
+            'rubric': 'Рубрика возвращена в листок.',
+            'text': 'Текст возвращён в листок.',
+        }.get(kind, 'Элемент возвращён в листок.')
+        return _builder_response(request, pk, message=msg)
     return redirect('worksheet_detail', pk=pk)
 
 
@@ -457,7 +530,7 @@ def worksheet_reorder(request, pk):
     worksheet = _own_worksheet(request, pk)
     raw = request.POST.get('order', '')
     id_list = [int(x) for x in raw.split(',') if x.strip().isdigit()]
-    items = {i.pk: i for i in worksheet.items.all()}
+    items = {i.pk: i for i in worksheet.items.filter(deleted_at__isnull=True)}
     changed = []
     for pos, item_id in enumerate(id_list):
         item = items.get(item_id)

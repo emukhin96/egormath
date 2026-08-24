@@ -335,7 +335,9 @@ class WorksheetViewTests(TestCase):
 
         self.client.post(reverse(
             'worksheet_remove_item', args=[self.worksheet.pk, items2[1].pk]))
-        self.assertEqual(self.worksheet.items.count(), 2)
+        # Мягкое удаление: элемент скрыт, но остаётся до следующего удаления
+        self.assertEqual(self.worksheet.ordered_items().count(), 2)
+        self.assertEqual(self.worksheet.items.count(), 3)
 
     def test_reorder(self):
         self.login_teacher()
@@ -528,6 +530,71 @@ class WorksheetViewTests(TestCase):
         self.assertRegex(
             response.content.decode(), rf'value="{grand.pk}"\s+checked')
 
+    def test_remove_item_soft_delete_and_undo(self):
+        self.login_teacher()
+        item = self.worksheet.items.order_by('order').first()
+        self.client.post(reverse(
+            'worksheet_remove_item', args=[self.worksheet.pk, item.pk]))
+        item.refresh_from_db()
+        self.assertIsNotNone(item.deleted_at)
+        # Скрыт из конструктора и из .tex, но плашка отмены на месте
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.assertNotIn(item.pk,
+                         [r['item'].pk for r in response.context['rows']])
+        self.assertContains(response, 'undo-bar')
+        self.assertContains(response, 'ws-toast-src')
+        self.assertContains(response, 'Задача удалена из листка.')
+        self.assertNotIn(item.task.text_latex,
+                         worksheet_to_tex(self.worksheet, 'student'))
+        # «Отменить» возвращает элемент
+        restore = self.client.post(reverse(
+            'worksheet_restore_item', args=[self.worksheet.pk]), follow=True)
+        item.refresh_from_db()
+        self.assertIsNone(item.deleted_at)
+        self.assertContains(restore, 'Задача возвращена в листок.')
+
+    def test_second_remove_purges_previous_trash(self):
+        # Отмена одноуровневая: новое удаление затирает прежний «мусор»
+        self.login_teacher()
+        first, second = list(self.worksheet.items.order_by('order'))
+        self.client.post(reverse(
+            'worksheet_remove_item', args=[self.worksheet.pk, first.pk]))
+        self.client.post(reverse(
+            'worksheet_remove_item', args=[self.worksheet.pk, second.pk]))
+        self.assertFalse(
+            self.worksheet.items.filter(pk=first.pk).exists())
+        second.refresh_from_db()
+        self.assertIsNotNone(second.deleted_at)
+
+    def test_readd_restores_trashed_task_instead_of_duplicate(self):
+        # Повторное добавление задачи из корзины восстанавливает элемент,
+        # «Отменить» после этого не плодит дубль
+        self.login_teacher()
+        item = self.worksheet.items.order_by('order').first()
+        task = item.task
+        self.client.post(reverse(
+            'worksheet_remove_item', args=[self.worksheet.pk, item.pk]))
+        self.client.post(reverse(
+            'worksheet_add_task', args=[self.worksheet.pk]),
+            {'task_id': task.pk})
+        item.refresh_from_db()
+        self.assertIsNone(item.deleted_at)
+        self.assertEqual(
+            self.worksheet.items.filter(task=task).count(), 1)
+        self.client.post(reverse(
+            'worksheet_restore_item', args=[self.worksheet.pk]))
+        self.assertEqual(
+            self.worksheet.items.filter(
+                task=task, deleted_at__isnull=True).count(), 1)
+
+    def test_duplicate_skips_deleted(self):
+        item = self.worksheet.items.order_by('order').first()
+        item.deleted_at = timezone.now()
+        item.save(update_fields=['deleted_at'])
+        copy = self.worksheet.duplicate()
+        self.assertEqual(copy.items.count(), 1)
+
     def test_add_text_and_edit(self):
         self.login_teacher()
         self.client.post(
@@ -583,7 +650,9 @@ class WorksheetViewTests(TestCase):
         self.client.post(
             reverse('worksheet_remove_item',
                     args=[self.worksheet.pk, item.pk]))
-        self.assertFalse(self.worksheet.items.filter(pk=item.pk).exists())
+        # Мягкое удаление: рубрика исчезает из конструктора и .tex
+        self.assertNotIn(
+            item.pk, [i.pk for i in self.worksheet.ordered_items()])
 
     def test_item_settings(self):
         self.login_teacher()

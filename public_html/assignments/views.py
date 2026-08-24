@@ -116,7 +116,7 @@ def _visible_task_item(assignment, task):
     """
     hidden = assignment.hidden_items.values('pk')
     item = (assignment.worksheet.items
-            .filter(task=task)
+            .filter(task=task, deleted_at__isnull=True)
             .exclude(pk__in=hidden)
             .first())
     if item is None:

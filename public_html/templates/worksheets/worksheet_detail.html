@@ -47,6 +47,17 @@
       <span class="ws-toggle-text">ответы и решения</span>
     </label>
   </h2>
+  {% if deleted_items %}
+  <div class="undo-bar">
+    {% for d in deleted_items %}
+    <span>{% if d.task_id %}Задача <a href="{% url 'task_detail' d.task.pk %}">#{{ d.task.pk }}</a> удалена из листка.{% elif d.is_rubric %}Рубрика «{{ d.rubric }}» удалена из листка.{% else %}Текстовый элемент удалён из листка.{% endif %}</span>
+    {% endfor %}
+    <form method="post" action="{% url 'worksheet_restore_item' worksheet.pk %}" class="inline-form">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-small btn-secondary">Отменить</button>
+    </form>
+  </div>
+  {% endif %}
   {% if rows %}
   <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}">
     {% for row in rows %}
