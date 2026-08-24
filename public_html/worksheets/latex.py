@@ -33,8 +33,12 @@ def subitem_label(index):
 
 
 def _for_task_opt(text):
-    """Опциональный аргумент \\task не \\long: пустая строка (\\par) его обрывает."""
-    return re.sub(r'\n\s*\n+', r' \\\\ ', text.strip())
+    """Готовит текст для опционального аргумента \\task.
+
+    Аргумент не \\long: пустая строка (\\par) его обрывает. \\mbox{}\\\\
+    даёт перенос и после display-формулы (иначе «no line here to end»).
+    """
+    return re.sub(r'\n\s*\n+', r' \\mbox{}\\\\ ', text.strip())
 
 
 def _join_labeled(parts, wrapper='stack'):
@@ -46,10 +50,10 @@ def _join_labeled(parts, wrapper='stack'):
     """
     if len(parts) <= 1:
         return parts[0] if parts else ''
-    body = ' \\\\ '.join(parts)
     if wrapper == 'mini':
+        body = ' \\mbox{}\\\\ '.join(parts)
         return '\\begin{minipage}[t]{\\linewidth}%%\n%s%%\n\\end{minipage}' % body
-    return '\\shortstack[l]{%s}' % body
+    return '\\shortstack[l]{%s}' % ' \\\\ '.join(parts)
 
 
 def _combined_answer(task, subitems):
