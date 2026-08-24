@@ -131,15 +131,18 @@ class LatexGenerationTests(TestCase):
         item = make_item(self.worksheet, task)
         tex = task_to_tex(item)
         self.assertIn(
-            r'[{\shortstack[l]{а)~Складываем единицы \\ '
-            r'б)~Складываем двойки}}]', tex)
+            '\\begin{minipage}[t]{\\linewidth}%\n'
+            'а)~Складываем единицы \\mbox{}\\\\ б)~Складываем двойки%\n'
+            '\\end{minipage}', tex)
         # Общее решение задачи идёт перед решениями подпунктов
-        task.solution_latex = 'Общий план.'
+        task.solution_latex = 'Общий план.\n\nСначала оценки.'
         task.save()
         tex = task_to_tex(item)
+        self.assertIn('\\begin{minipage}[t]{\\linewidth}', tex)
         self.assertIn(
-            r'[{\shortstack[l]{Общий план. \\ а)~Складываем единицы \\ '
-            r'б)~Складываем двойки}}]', tex)
+            'Общий план. \\mbox{}\\\\ Сначала оценки. \\mbox{}\\\\ '
+            'а)~Складываем', tex)
+        self.assertIn('\\end{minipage}', tex)
 
     def test_worksheet_variants(self):
         worksheet = make_worksheet(self.teacher)
