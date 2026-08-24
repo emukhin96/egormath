@@ -32,15 +32,19 @@ def subitem_label(index):
     return str(index + 1)
 
 
-def _join_labeled(parts):
+def _join_labeled(parts, wrapper='stack'):
     """Склеивает куски ответа/решения, каждый на своей строке.
 
-    Голый \\\\ в варианте answers=table завершает строку таблицы пакета egor.
-    \\shortstack держит переносы внутри ячейки и работает в answers=inline.
+    Голый \\\\ в answers=table завершает строку таблицы пакета egor.
+    Ответы короткие — \\shortstack по ширине содержимого.
+    Решения могут быть с абзацами и display-формулами — minipage.
     """
     if len(parts) <= 1:
         return parts[0] if parts else ''
-    return '\\shortstack[l]{%s}' % ' \\\\ '.join(parts)
+    body = ' \\\\ '.join(parts)
+    if wrapper == 'mini':
+        return '\\begin{minipage}[t]{\\linewidth}%%\n%s%%\n\\end{minipage}' % body
+    return '\\shortstack[l]{%s}' % body
 
 
 def _combined_answer(task, subitems):
@@ -52,7 +56,7 @@ def _combined_answer(task, subitems):
         '%s)~%s' % (subitem_label(i), s.answer_latex.strip())
         for i, s in enumerate(subitems) if s.answer_latex.strip()
     )
-    return _join_labeled(parts)
+    return _join_labeled(parts, 'stack')
 
 
 def _combined_solution(task, subitems):
@@ -64,7 +68,7 @@ def _combined_solution(task, subitems):
         '%s)~%s' % (subitem_label(i), s.solution_latex.strip())
         for i, s in enumerate(subitems) if s.solution_latex.strip()
     )
-    return _join_labeled(parts)
+    return _join_labeled(parts, 'mini')
 
 
 # Ссылка на картинку в тексте задачи: \taskpic{N}, N — номер по порядку
