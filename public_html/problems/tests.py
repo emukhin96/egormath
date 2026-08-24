@@ -171,6 +171,21 @@ class TaskModelTests(TestCase):
         self.assertIn(child.pk, ids)
         self.assertIn(grandchild.pk, ids)
 
+    def test_make_variant_copies_subitem_solutions(self):
+        task = Task.objects.create(text_latex='Вычислите')
+        task.subitems.create(
+            order=10, text_latex='$1+1$', answer_latex='2',
+            solution_latex='Сложение')
+        variant = task.make_variant()
+        self.assertNotEqual(variant.pk, task.pk)
+        copy = variant.subitems.get()
+        self.assertEqual(copy.text_latex, '$1+1$')
+        self.assertEqual(copy.answer_latex, '2')
+        self.assertEqual(copy.solution_latex, 'Сложение')
+        # Оригинал не тронут
+        original = task.subitems.get()
+        self.assertEqual(original.solution_latex, 'Сложение')
+
 
 class CatalogViewTests(TestCase):
     def setUp(self):
@@ -501,21 +516,25 @@ class QuickUpdateTests(TestCase):
 
     def test_task_page_fields_depend_on_subitems(self):
         detail_url = reverse('task_detail', args=[self.task.pk])
-        # Без подпунктов — общие поля ответа/решения на месте
+        # Без подпунктов — предпросмотр и общие поля ответа/решения
         response = self.client.get(detail_url)
         self.assertContains(response, 'name="answer_latex"')
-        # С подпунктами и пустыми общими полями общие поля скрываются,
-        # у каждого подпункта — свои поля ответа и решения
-        self.task.subitems.create(order=10, text_latex='$1+1$')
-        response = self.client.get(detail_url)
-        self.assertContains(response, 'name="solution_latex"')
-        self.assertNotContains(response, 'qa_answer')
-        # Непустое legacy-значение общего ответа остаётся видимым
-        self.task.answer_latex = '2'
+        self.assertContains(response, 'qa_answer')
+        self.assertContains(response, 'править ответ')
+        # С подпунктами общих полей нет даже при непустом legacy-ответе;
+        # у каждого подпункта — предпросмотр и свои поля ответа/решения
+        self.task.subitems.create(
+            order=10, text_latex='$1+1$', answer_latex='2',
+            solution_latex='Сложение')
+        self.task.answer_latex = 'legacy'
         self.task.save()
         response = self.client.get(detail_url)
-        self.assertContains(response, 'qa_answer')
-        self.assertContains(response, 'устаревшие')
+        self.assertContains(response, 'name="solution_latex"')
+        self.assertContains(response, 'править подпункт')
+        self.assertContains(response, '>Ответ<')
+        self.assertNotContains(response, 'qa_answer')
+        self.assertNotContains(response, 'устаревшие')
+        self.assertNotContains(response, 'legacy')
 
     def test_invalid_grade_rejected(self):
         response = self.client.post(self.url, {'grade_level': '99'})

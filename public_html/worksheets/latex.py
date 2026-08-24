@@ -32,32 +32,33 @@ def subitem_label(index):
     return str(index + 1)
 
 
+def _join_labeled(parts):
+    """Склеивает куски ответа/решения, каждый на своей строке (\\\\ в TeX)."""
+    return ' \\\\ '.join(parts)
+
+
 def _combined_answer(task, subitems):
-    """Общий ответ задачи + ответы выбранных подпунктов («а) …; б) …»)."""
+    """Общий ответ задачи + ответы выбранных подпунктов (каждый с новой строки)."""
     parts = []
     if task.answer_latex.strip():
         parts.append(task.answer_latex.strip())
-    sub_answers = [
+    parts.extend(
         '%s)~%s' % (subitem_label(i), s.answer_latex.strip())
         for i, s in enumerate(subitems) if s.answer_latex.strip()
-    ]
-    if sub_answers:
-        parts.append('; '.join(sub_answers))
-    return ' '.join(parts)
+    )
+    return _join_labeled(parts)
 
 
 def _combined_solution(task, subitems):
-    """Общее решение задачи + решения подпунктов («а) …; б) …»)."""
+    """Общее решение задачи + решения подпунктов (каждый с новой строки)."""
     parts = []
     if task.solution_latex.strip():
         parts.append(task.solution_latex.strip())
-    sub_solutions = [
+    parts.extend(
         '%s)~%s' % (subitem_label(i), s.solution_latex.strip())
         for i, s in enumerate(subitems) if s.solution_latex.strip()
-    ]
-    if sub_solutions:
-        parts.append('; '.join(sub_solutions))
-    return ' '.join(parts)
+    )
+    return _join_labeled(parts)
 
 
 # Ссылка на картинку в тексте задачи: \taskpic{N}, N — номер по порядку
