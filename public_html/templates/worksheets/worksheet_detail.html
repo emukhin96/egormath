@@ -153,11 +153,19 @@
 
         <div class="ws-actions">
           {% if item.task_id and share_links or item.task_id and assignments %}
+          {% if row.hidden_links or row.hidden_assignments %}
           <button type="button"
-                  class="icon-btn vis-btn{% if row.hidden_links or row.hidden_assignments %} vis-on{% endif %}"
+                  class="icon-btn vis-btn vis-on"
                   data-dialog-open="vis-{{ item.pk }}"
-                  title="Видимость по ссылкам и ученикам"
-                  aria-label="Видимость по ссылкам и ученикам"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                  title="Скрыта у части ссылок или учеников"
+                  aria-label="Скрыта у части ссылок или учеников"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button>
+          {% else %}
+          <button type="button"
+                  class="icon-btn vis-btn"
+                  data-dialog-open="vis-{{ item.pk }}"
+                  title="Видна всем ссылкам и ученикам"
+                  aria-label="Видна всем ссылкам и ученикам"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          {% endif %}
           {% endif %}
           <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'up' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.first %}disabled{% endif %}>↑</button></form>
           <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'down' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.last %}disabled{% endif %}>↓</button></form>

@@ -1052,6 +1052,37 @@ class ShareLinkTests(TestCase):
             reverse('worksheet_detail', args=[self.worksheet.pk]))
         self.assertContains(response, 'vis-btn')
         self.assertContains(response, 'hide_links')
+        # Пока ни у кого не скрыта — обычный глаз, не перечёркнутый
+        self.assertContains(response, 'Видна всем ссылкам и ученикам')
+        self.assertNotContains(response, 'vis-on')
+
+        first = self.worksheet.items.order_by('order').first()
+        self.link.hidden_items.add(first)
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.assertContains(response, 'vis-on')
+        self.assertContains(response, 'Скрыта у части ссылок или учеников')
+
+    @mock.patch('worksheets.services.compile_latex',
+                return_value=b'%PDF-1.5 fake')
+    def test_filtered_pdf_is_cached(self, mocked):
+        first = self.worksheet.items.order_by('order').first()
+        self.link.hidden_items.add(first)
+        url = reverse('public_worksheet_pdf', args=[self.link.token])
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(mocked.call_count, 1)
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(mocked.call_count, 1)
+        # Другая ссылка без скрытий — полный tex, отдельный кэш
+        other = ShareLink.objects.create(worksheet=self.worksheet)
+        other_url = reverse('public_worksheet_pdf', args=[other.token])
+        self.assertEqual(self.client.get(other_url).status_code, 200)
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(self.client.get(other_url).status_code, 200)
+        self.assertEqual(mocked.call_count, 2)
+        # Полный PDF не вытесняет отфильтрованный
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(mocked.call_count, 2)
 
     def test_public_page_minimal_for_logged_in(self):
         # Даже залогиненный учитель видит публичную страницу без контекстной панели

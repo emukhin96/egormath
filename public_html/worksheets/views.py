@@ -580,21 +580,8 @@ def worksheet_item_settings(request, pk, item_id):
 
 
 def _worksheet_pdf_response(worksheet, variant, exclude_ids=None):
-    """PDF листка; со скрытыми элементами — сборка мимо кэша WorksheetPdf.
-
-    Кэш хранит только полные варианты: наборы скрытий индивидуальны
-    для каждой ссылки/ученика и меняются независимо от листка.
-    """
-    if exclude_ids:
-        tex = worksheet_to_tex(worksheet, variant, exclude_ids=exclude_ids)
-        pdf_bytes = compile_latex(
-            tex, doc_id=f'ws{worksheet.pk}-{variant}-filtered',
-            assets=collect_assets(worksheet))
-        response = HttpResponse(pdf_bytes, content_type='application/pdf')
-        response['Content-Disposition'] = (
-            f'inline; filename="{worksheet.pdf_filename(variant)}"')
-        return response
-    pdf = get_worksheet_pdf(worksheet, variant)
+    """PDF листка, в том числе со скрытыми элементами — через кэш WorksheetPdf."""
+    pdf = get_worksheet_pdf(worksheet, variant, exclude_ids=exclude_ids)
     return FileResponse(
         pdf.file.open('rb'), content_type='application/pdf',
         filename=worksheet.pdf_filename(variant))

@@ -286,8 +286,18 @@ def save_review(request, pk):
     assignment = _teacher_assignment(request, pk)
     action = request.POST.get('action', 'save')
 
+    hidden_task_ids = set(
+        assignment.hidden_items.filter(task__isnull=False)
+        .values_list('task_id', flat=True))
     for submission in assignment.submissions.all():
+        if submission.task_id in hidden_task_ids:
+            continue
         prefix = f'sub{submission.pk}'
+        # Полей нет в POST — задачу скрыли или убрали из формы: отзыв не трогаем
+        if (f'{prefix}_grade' not in request.POST
+                and f'{prefix}_points' not in request.POST
+                and f'{prefix}_comment' not in request.POST):
+            continue
         grade_word = request.POST.get(f'{prefix}_grade', '')
         grade_points_raw = request.POST.get(f'{prefix}_points', '').strip()
         comment = request.POST.get(f'{prefix}_comment', '').strip()

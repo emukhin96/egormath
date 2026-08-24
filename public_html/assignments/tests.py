@@ -243,6 +243,28 @@ class ReviewFlowTests(TestCase):
         review = Review.objects.get(submission=submission)
         self.assertEqual(float(review.grade_points), 7.5)
 
+    def test_save_review_keeps_hidden_task_review(self):
+        # Скрытая после проверки задача пропадает из формы, но её отзыв
+        # не должен удаляться при сохранении остальных оценок
+        hidden_item = self.assignment.worksheet.items.order_by('order').first()
+        visible_item = self.assignment.worksheet.items.order_by('order').last()
+        hidden_sub = Submission.objects.get(
+            assignment=self.assignment, task=hidden_item.task)
+        visible_sub, _ = Submission.objects.get_or_create(
+            assignment=self.assignment, task=visible_item.task)
+        Review.objects.create(
+            submission=hidden_sub, grade_word='good', reviewer=self.teacher)
+        self.assignment.hidden_items.add(hidden_item)
+        self.client.post(
+            reverse('save_review', args=[self.assignment.pk]), {
+                f'sub{visible_sub.pk}_grade': 'medium',
+                'action': 'save',
+            })
+        self.assertTrue(Review.objects.filter(
+            submission=hidden_sub, grade_word='good').exists())
+        self.assertEqual(
+            Review.objects.get(submission=visible_sub).grade_word, 'medium')
+
     def test_foreign_teacher_cannot_review(self):
         make_teacher('teacher2')
         self.client.login(username='teacher2', password='pass12345')
