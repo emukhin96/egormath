@@ -116,7 +116,15 @@ def _read_args(text, pos, required, optional):
 # --- Разбор документа ---
 
 _COMMAND_RE = re.compile(
-    r'\\(bighead|rubr|taskans|task|plaintext)\b')
+    r'\\(bighead|rubr|taskans|task|plaintext|ruletext|lighttext|memotext)\b')
+
+# Команда текста → значение WorksheetItem.text_style
+_TEXT_STYLES = {
+    'plaintext': 'plain',
+    'ruletext': 'rule',
+    'lighttext': 'light',
+    'memotext': 'memo',
+}
 
 _UNESCAPE = [
     (r'\&', '&'), (r'\%', '%'), (r'\$', '$'), (r'\#', '#'), (r'\_', '_'),
@@ -173,7 +181,7 @@ def parse_tex(source):
         ('rubric', {'rubric', 'note'})
         ('task', {'stars', 'columns', 'text', 'subitems', 'answer',
                   'solution'})
-        ('text', {'text'})
+        ('text', {'text', 'style'})
     """
     body = source
     m = re.search(r'\\begin\{document\}', source)
@@ -236,9 +244,12 @@ def parse_tex(source):
                 'solution': _clean(opts[2]) if len(opts) > 2 else '',
                 'images': images,
             }))
-        elif name == 'plaintext':
+        elif name in _TEXT_STYLES:
             args, _, pos = _read_args(body, pos, required=1, optional=0)
-            elements.append(('text', {'text': _clean(args[0])}))
+            elements.append(('text', {
+                'text': _clean(args[0]),
+                'style': _TEXT_STYLES[name],
+            }))
     if not elements:
         raise TexImportError(
             'В документе не найдено ни одной команды \\task, \\rubr '
@@ -331,7 +342,8 @@ def create_worksheet(parsed, owner, title='', overrides=None):
                 rubric=data['rubric'], rubric_note=data['note'])
         elif kind == 'text':
             WorksheetItem.objects.create(
-                worksheet=worksheet, order=order, text_latex=data['text'])
+                worksheet=worksheet, order=order, text_latex=data['text'],
+                text_style=data.get('style', 'plain'))
         else:
             task_pk = matches[i]
             if task_pk is not None:

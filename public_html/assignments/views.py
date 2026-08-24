@@ -67,9 +67,12 @@ def _assignment_rows(assignment, with_review=False):
     qs = qs.select_related('review') if with_review \
         else qs.prefetch_related('review')
     submissions = {s.task_id: s for s in qs}
+    hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     rows = []
     number = 0
     for item in assignment.worksheet.ordered_items():
+        if item.pk in hidden:
+            continue
         if item.task_id is None:
             rows.append({'item': item, 'task': None, 'number': None})
             continue
@@ -105,10 +108,25 @@ def assignment_detail(request, pk):
     })
 
 
+def _visible_task_item(assignment, task):
+    """Элемент листка с этой задачей, видимый ученику, или 404.
+
+    Скрытые через assignment.hidden_items задачи нельзя ни сохранять,
+    ни снабжать фото — иначе обходится фильтр страницы задания.
+    """
+    hidden = assignment.hidden_items.values('pk')
+    item = (assignment.worksheet.items
+            .filter(task=task, deleted_at__isnull=True)
+            .exclude(pk__in=hidden)
+            .first())
+    if item is None:
+        raise Http404
+    return item
+
+
 def _get_or_create_submission(assignment, task_id):
     task = get_object_or_404(Task, pk=task_id)
-    if not assignment.worksheet.items.filter(task=task).exists():
-        raise Http404
+    _visible_task_item(assignment, task)
     submission, _ = Submission.objects.get_or_create(
         assignment=assignment, task=task)
     return submission
@@ -135,8 +153,9 @@ def save_answers(request, pk):
     assignment = _student_assignment(request, pk)
     if not assignment.is_editable_by_student:
         raise PermissionDenied('Работа уже отправлена на проверку.')
+    hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     for item in assignment.worksheet.ordered_items():
-        if item.task_id is None:
+        if item.task_id is None or item.pk in hidden:
             continue
         task = item.task
         prefix = f'task{task.pk}'
@@ -228,9 +247,10 @@ def submit_assignment(request, pk):
     assignment = _student_assignment(request, pk)
     if not assignment.is_editable_by_student:
         raise PermissionDenied('Работа уже отправлена на проверку.')
-    # Строки-ответы для всех задач: учителю удобно ставить отметки и за пустые
+    # Строки-ответы для видимых задач: скрытые не создаём
+    hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     for item in assignment.worksheet.ordered_items():
-        if item.task_id is None:
+        if item.task_id is None or item.pk in hidden:
             continue
         Submission.objects.get_or_create(
             assignment=assignment, task=item.task)
@@ -266,8 +286,21 @@ def save_review(request, pk):
     assignment = _teacher_assignment(request, pk)
     action = request.POST.get('action', 'save')
 
+    hidden_item_ids = set(assignment.hidden_items.values_list('pk', flat=True))
+    visible_task_ids = set(
+        assignment.worksheet.items.filter(task__isnull=False)
+        .exclude(pk__in=hidden_item_ids)
+        .values_list('task_id', flat=True))
     for submission in assignment.submissions.all():
+        # Пропускаем только если у задачи нет ни одного видимого элемента
+        if submission.task_id not in visible_task_ids:
+            continue
         prefix = f'sub{submission.pk}'
+        # Полей нет в POST — задачу скрыли или убрали из формы: отзыв не трогаем
+        if (f'{prefix}_grade' not in request.POST
+                and f'{prefix}_points' not in request.POST
+                and f'{prefix}_comment' not in request.POST):
+            continue
         grade_word = request.POST.get(f'{prefix}_grade', '')
         grade_points_raw = request.POST.get(f'{prefix}_points', '').strip()
         comment = request.POST.get(f'{prefix}_comment', '').strip()

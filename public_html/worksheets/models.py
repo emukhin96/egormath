@@ -69,7 +69,8 @@ class Worksheet(models.Model):
         return self.author_name or self.owner.get_full_name() or self.owner.username
 
     def ordered_items(self):
-        return (self.items.select_related('task')
+        return (self.items.filter(deleted_at__isnull=True)
+                .select_related('task')
                 .prefetch_related('task__subitems', 'task__images', 'subitems')
                 .order_by('order', 'id'))
 
@@ -94,7 +95,7 @@ class Worksheet(models.Model):
         copy.pk = None
         copy.title = f'{self.title} (копия)'
         copy.save()
-        for item in self.items.all():
+        for item in self.items.filter(deleted_at__isnull=True):
             selected = list(item.subitems.all())
             item.pk = None
             item.worksheet = copy
@@ -105,6 +106,14 @@ class Worksheet(models.Model):
 
 
 class WorksheetItem(models.Model):
+    # Стили текстового элемента — команды пакета egor
+    TEXT_STYLE_CHOICES = [
+        ('plain', 'Обычный'),
+        ('rule', 'Правило'),
+        ('light', 'Тонкая линия'),
+        ('memo', 'Памятка'),
+    ]
+
     worksheet = models.ForeignKey(
         Worksheet, on_delete=models.CASCADE, related_name='items',
         verbose_name='Листок')
@@ -114,6 +123,11 @@ class WorksheetItem(models.Model):
     text_latex = models.TextField(
         'Произвольный текст (LaTeX)', blank=True,
         help_text='Элемент-текст между задачами (в PDF — \\plaintext)')
+    text_style = models.CharField(
+        'Стиль текста', max_length=10, choices=TEXT_STYLE_CHOICES,
+        default='plain',
+        help_text='Оформление текстового элемента: \\plaintext, \\ruletext, '
+                  '\\lighttext или \\memotext пакета egor')
     order = models.PositiveIntegerField('Порядок', default=0)
     rubric = models.CharField(
         'Рубрика', max_length=190, blank=True,
@@ -135,6 +149,10 @@ class WorksheetItem(models.Model):
         TaskSubitem, blank=True, related_name='worksheet_items',
         verbose_name='Выбранные подпункты',
         help_text='Используется, когда «Все подпункты» выключено')
+    deleted_at = models.DateTimeField(
+        'Удалено', null=True, blank=True,
+        help_text='Мягкое удаление: элемент можно вернуть кнопкой '
+                  '«Отменить» до следующего удаления')
 
     class Meta:
         verbose_name = 'Элемент листка'
@@ -203,6 +221,9 @@ class WorksheetPdf(models.Model):
     variant = models.CharField(
         'Вариант', max_length=10, choices=VARIANT_CHOICES)
     content_hash = models.CharField('Хеш содержимого', max_length=64)
+    filter_key = models.CharField(
+        'Ключ скрытий', max_length=40, blank=True, default='',
+        help_text='Пусто — полный листок; иначе идентификатор набора скрытых элементов')
     file = models.FileField('Файл', upload_to='worksheet_pdfs/%Y/%m/')
     created_at = models.DateTimeField('Создан', auto_now_add=True)
 
@@ -211,7 +232,7 @@ class WorksheetPdf(models.Model):
         verbose_name_plural = 'PDF листков'
         constraints = [
             models.UniqueConstraint(
-                fields=['worksheet', 'variant', 'content_hash'],
+                fields=['worksheet', 'variant', 'filter_key', 'content_hash'],
                 name='unique_worksheet_pdf'),
         ]
 
@@ -227,6 +248,11 @@ class ShareLink(models.Model):
         'Токен', max_length=32, unique=True, default=_new_token)
     is_active = models.BooleanField('Активна', default=True)
     created_at = models.DateTimeField('Создана', auto_now_add=True)
+    hidden_items = models.ManyToManyField(
+        WorksheetItem, blank=True, related_name='hidden_in_links',
+        verbose_name='Скрытые задачи',
+        help_text='Эти элементы листка не показываются по данной ссылке '
+                  '(страница и PDF)')
 
     class Meta:
         verbose_name = 'Публичная ссылка'

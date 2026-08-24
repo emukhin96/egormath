@@ -72,7 +72,11 @@
 {% endif %}
   {% if messages %}
     {% for message in messages %}
+      {% if 'error' in message.tags or 'warning' in message.tags %}
       <div class="msg msg-{{ message.tags }}">{{ message }}</div>
+      {% else %}
+      <div class="msg msg-success ws-toast-src" data-ok="1">{{ message }}</div>
+      {% endif %}
     {% endfor %}
   {% endif %}
   {% block content %}{% endblock %}
