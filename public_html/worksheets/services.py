@@ -69,12 +69,17 @@ def compile_latex(tex_content, doc_id='doc', assets=None):
     return base64.b64decode(data['pdf_base64'])
 
 
-def collect_assets(worksheet):
-    """Файлы картинок задач листка для передачи в LaTeX API."""
+def collect_assets(worksheet, exclude_ids=None):
+    """Файлы картинок задач листка для передачи в LaTeX API.
+
+    exclude_ids — скрытые элементы: их картинки не уходят в сборку,
+    чтобы не подменять одноимённые файлы видимых задач и не раздувать запрос.
+    """
+    exclude_ids = set(exclude_ids or ())
     assets = []
     seen = set()
     for item in worksheet.ordered_items():
-        if not item.task_id:
+        if item.pk in exclude_ids or not item.task_id:
             continue
         for image in item.task.images.all():
             name = image.filename
@@ -119,7 +124,7 @@ def get_worksheet_pdf(worksheet, variant, exclude_ids=None):
     suffix = f'-{filter_key}' if filter_key else ''
     pdf_bytes = compile_latex(
         tex, doc_id=f'ws{worksheet.pk}-{variant}{suffix}',
-        assets=collect_assets(worksheet))
+        assets=collect_assets(worksheet, exclude_ids=exclude_ids))
 
     stale = WorksheetPdf.objects.filter(
         worksheet=worksheet, variant=variant, filter_key=filter_key)

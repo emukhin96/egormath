@@ -269,11 +269,13 @@ class LatexGenerationTests(TestCase):
                 image = task.images.create(order=10)
                 image.image.save('схема.png', ContentFile(buf.getvalue()),
                                  save=True)
-                make_item(self.worksheet, task)
+                item = make_item(self.worksheet, task)
                 assets = collect_assets(self.worksheet)
+                hidden = collect_assets(self.worksheet, exclude_ids={item.pk})
         self.assertEqual(len(assets), 1)
         self.assertEqual(assets[0]['filename'], image.filename)
         self.assertTrue(assets[0]['content_base64'])
+        self.assertEqual(hidden, [])
 
     def test_header_escaping(self):
         worksheet = Worksheet.objects.create(
