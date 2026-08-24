@@ -41,6 +41,23 @@ class LatexUtilsTests(TestCase):
         chunks = split_items('\\item $1+1$; \\item $2+2$ ; \\item $3+3$.')
         self.assertEqual(chunks, ['$1+1$', '$2+2$', '$3+3$'])
 
+    def test_split_items_keeps_sentence_punctuation(self):
+        # Предложение с «.» и любой «?» сохраняются; служебные «;»/«.»
+        # у фрагментов перечисления срезаются
+        chunks = split_items(
+            '\\item Докажите неравенство. '
+            '\\item Верно ли обратное? '
+            '\\item чему равен $x$? '
+            '\\item $x>0$? '
+            '\\item $2+2$;')
+        self.assertEqual(chunks, [
+            'Докажите неравенство.',
+            'Верно ли обратное?',
+            'чему равен $x$?',
+            '$x>0$?',
+            '$2+2$',
+        ])
+
 
 class WebTexTests(TestCase):
     """Серверный препроцессор tex → HTML для веб-страниц."""
@@ -398,6 +415,18 @@ class BulkUpdateTests(TestCase):
                          {'ids': [self.t1.pk], 'grade_level': '99'})
         self.t1.refresh_from_db()
         self.assertIsNone(self.t1.grade_level)
+
+    def test_bulk_delete_skips_used_tasks(self):
+        from worksheets.models import Worksheet, WorksheetItem
+        ws = Worksheet.objects.create(title='Листок', owner=self.teacher)
+        WorksheetItem.objects.create(worksheet=ws, task=self.t1, order=10)
+        response = self.client.post(self.url, {
+            'ids': [self.t1.pk, self.t2.pk], 'delete': '1',
+        })
+        self.assertRedirects(response, reverse('task_list'))
+        # Задача из листка остаётся, свободная удалена
+        self.assertTrue(Task.objects.filter(pk=self.t1.pk).exists())
+        self.assertFalse(Task.objects.filter(pk=self.t2.pk).exists())
 
 
 class QuickUpdateTests(TestCase):

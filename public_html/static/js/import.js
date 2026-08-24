@@ -1,37 +1,20 @@
-/* Предпросмотр импорта .tex: выделение задач и массовое назначение
-   класса/темы/звёзд. Значения копируются в поля выделенных строк —
-   на сервер уходят обычные поля grade_N/topic_N/stars_N. */
+/* Предпросмотр импорта .tex. Выделение строк — общий контракт bulk.js
+   (форма import-bulk-form); здесь — действия над выделенными строками:
+   массовое назначение класса/темы/звёзд (значения копируются в поля
+   строк — на сервер уходят обычные grade_N/topic_N/stars_N), пометка
+   «удалить из импорта» (skip_N) и тумблер показа ответов/решений. */
 (function () {
   'use strict';
 
   document.addEventListener('DOMContentLoaded', function () {
     var form = document.getElementById('import-create-form');
     if (!form) return;
-    var panel = document.getElementById('import-bulk');
-    var count = document.getElementById('bulk-count');
-    var selectAll = document.getElementById('select-all');
+    var bulkForm = document.getElementById('import-bulk-form');
     var boxes = Array.prototype.slice.call(
-      form.querySelectorAll('.row-select'));
+      document.querySelectorAll('.row-select[form="import-bulk-form"]'));
 
     function selected() {
       return boxes.filter(function (b) { return b.checked; });
-    }
-
-    function refresh() {
-      var n = selected().length;
-      panel.hidden = n === 0;
-      count.textContent = n;
-      if (selectAll) {
-        selectAll.checked = n > 0 && n === boxes.length;
-      }
-    }
-
-    boxes.forEach(function (b) { b.addEventListener('change', refresh); });
-    if (selectAll) {
-      selectAll.addEventListener('change', function () {
-        boxes.forEach(function (b) { b.checked = selectAll.checked; });
-        refresh();
-      });
     }
 
     document.getElementById('bulk-apply').addEventListener('click', function () {
@@ -49,5 +32,39 @@
         });
       });
     });
+
+    // «Удаление» из импорта — клиентская пометка: строка гаснет,
+    // skip_N уходит на сервер, и тот пропускает её при создании листка
+    function setSkipped(index, skipped) {
+      var row = document.querySelector('[data-import-row="' + index + '"]');
+      if (!row) return;
+      row.classList.toggle('import-skipped', skipped);
+      var flag = form.querySelector('[name="skip_' + index + '"]');
+      if (flag) flag.value = skipped ? '1' : '';
+      var state = row.querySelector('.import-skip-state');
+      if (state) state.hidden = !skipped;
+    }
+
+    document.getElementById('bulk-skip').addEventListener('click', function () {
+      selected().forEach(function (box) {
+        setSkipped(box.dataset.index, true);
+        box.checked = false;
+      });
+      // bulk.js прячет панель сам по change; диспатчим его вручную
+      boxes[0].dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    document.querySelectorAll('.import-restore').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        setSkipped(btn.closest('[data-import-row]').dataset.importRow, false);
+      });
+    });
+
+    var toggle = document.getElementById('toggle-import-answers');
+    if (toggle) {
+      toggle.addEventListener('change', function () {
+        form.classList.toggle('show-answers', toggle.checked);
+      });
+    }
   });
 })();

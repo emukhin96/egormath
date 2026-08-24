@@ -5,7 +5,7 @@
 {% if subitems %}
 <ol class="subitems">
   {% for s in subitems %}
-  <li><span class="math-content">{{ s.text_latex|web_text }}</span>{% if forloop.last %}.{% else %};{% endif %}</li>
+  <li><span class="math-content">{{ s.text_latex|web_text }}</span>{{ s.text_latex|subitem_tail:forloop.last }}</li>
   {% endfor %}
 </ol>
 {% endif %}

@@ -58,12 +58,25 @@
 </div>
 
 {% if worksheets %}
-<form id="ws-bulk-form" method="post" action="{% url 'worksheet_bulk_delete' %}"
-      class="bulk-bar" data-bulk hidden
-      onsubmit="return confirm('Удалить выбранные листки? Будут удалены и их назначения ученикам.');">
+<form id="ws-bulk-form" method="post" action="{% url 'worksheet_bulk_update' %}"
+      class="bulk-bar" data-bulk hidden>
   {% csrf_token %}
   <strong data-bulk-count>Выбрано: 0</strong>
-  <button type="submit" class="btn btn-small btn-danger">Удалить выбранные</button>
+  <label class="inline-label">класс
+    <select name="grade" class="quick-select">
+      <option value="">—</option>
+      {% for g, label in grade_choices %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="inline-label">тема
+    <select name="topic_id" class="quick-select">
+      <option value="">—</option>
+      {% include 'includes/topic_options.html' with topics=topics selected=None %}
+    </select>
+  </label>
+  <button type="submit" name="apply" value="1" class="btn btn-small">Применить к выбранным</button>
+  <button type="submit" name="delete" value="1" class="btn btn-small btn-danger"
+          onclick="return confirm('Удалить выбранные листки? Будут удалены и их назначения ученикам.');">Удалить выбранные</button>
 </form>
 <div class="card worksheet-catalog">
 <div class="table-summary"><strong>Листков: {{ worksheets|length }}</strong><span>Тема учитывается у листка и его задач</span></div>

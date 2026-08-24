@@ -33,7 +33,7 @@
     <ol class="subitems">
       {% for sr in row.subrows %}
       <li>
-        <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{% if forloop.last %}.{% else %};{% endif %}
+        <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}
         — <strong>ответ ученика:</strong>
         {% if sr.part and sr.part.display_answer %}
           <span class="math-content">{{ sr.part.display_answer }}</span>

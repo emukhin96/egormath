@@ -362,6 +362,14 @@
     border-radius: var(--radius);
   }
 
+  /* label в базе — block с margin; внутри панели держим одну линию с кнопками */
+  .bulk-bar .inline-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-bottom: 0;
+  }
+
   .linklike {
     background: none;
     border: none;
@@ -1996,11 +2004,37 @@
     min-width: 150px;
   }
 
+  /* Поля ответов/решений скрыты, пока не включён тумблер «ответы и решения» */
   .import-answers {
-    display: flex;
+    display: none;
     flex-wrap: wrap;
     gap: var(--space-2);
     margin-top: var(--space-1);
+  }
+
+  #import-create-form.show-answers .import-answers {
+    display: flex;
+  }
+
+  .import-answers .quick-input {
+    flex: 1 1 200px;
+  }
+
+  /* Строка, помеченная «удалить из импорта» */
+  .import-skipped td {
+    opacity: 0.45;
+  }
+
+  .import-skipped .task-text,
+  .import-skipped .subitems {
+    text-decoration: line-through;
+  }
+
+  .import-skip-state {
+    display: block;
+    margin-top: var(--space-1);
+    font-size: 0.8rem;
+    color: var(--err);
   }
 
   .import-preview .rubric-row td {

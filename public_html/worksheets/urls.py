@@ -10,6 +10,7 @@ urlpatterns = [
     path('<int:pk>/edit/', views.worksheet_edit, name='worksheet_edit'),
     path('<int:pk>/copy/', views.worksheet_copy, name='worksheet_copy'),
     path('<int:pk>/delete/', views.worksheet_delete, name='worksheet_delete'),
+    path('bulk/', views.worksheet_bulk_update, name='worksheet_bulk_update'),
     path('bulk-delete/', views.worksheet_bulk_delete,
          name='worksheet_bulk_delete'),
     path('<int:pk>/quick/', views.worksheet_quick_update,

@@ -94,7 +94,12 @@ def worksheet_list(request):
 
 
 def _import_overrides(post, parsed):
-    """Назначения задачам из предпросмотра импорта: класс/тема/звёзды/ответ."""
+    """Назначения задачам из предпросмотра импорта: класс/тема/звёзды/ответ.
+
+    У задач с подпунктами ответы/решения собираются по подпунктам
+    (answer_N_M / solution_N_M); skip_N помечает строку «удалена
+    из импорта».
+    """
     overrides = {}
     valid_grades = {str(g) for g, _ in Task.GRADE_CHOICES}
     # Только реально существующие темы: поддельный или устаревший id
@@ -104,6 +109,9 @@ def _import_overrides(post, parsed):
         if kind != 'task':
             continue
         extra = {}
+        if post.get(f'skip_{i}'):
+            overrides[i] = {'skip': True}
+            continue
         grade = post.get(f'grade_{i}', '').strip()
         if grade in valid_grades:
             extra['grade_level'] = int(grade)
@@ -117,6 +125,17 @@ def _import_overrides(post, parsed):
             extra['answer'] = post[f'answer_{i}'].strip()
         if f'solution_{i}' in post:
             extra['solution'] = post[f'solution_{i}'].strip()
+        sub_answers = {}
+        sub_solutions = {}
+        for j in range(len(data['subitems'])):
+            if f'answer_{i}_{j}' in post:
+                sub_answers[j] = post[f'answer_{i}_{j}'].strip()
+            if f'solution_{i}_{j}' in post:
+                sub_solutions[j] = post[f'solution_{i}_{j}'].strip()
+        if sub_answers:
+            extra['subitem_answers'] = sub_answers
+        if sub_solutions:
+            extra['subitem_solutions'] = sub_solutions
         if extra:
             overrides[i] = extra
     return overrides
@@ -165,7 +184,8 @@ def worksheet_import(request):
             return redirect('worksheet_detail', pk=worksheet.pk)
 
         matches = match_existing_tasks(parsed)
-        existing = Task.objects.in_bulk([m for m in matches if m])
+        existing = (Task.objects.prefetch_related('subitems')
+                    .in_bulk([m for m in matches if m]))
         rows = []
         for (kind, data), match in zip(parsed['elements'], matches):
             row = {'kind': kind, 'data': data, 'existing_id': match}
@@ -177,6 +197,16 @@ def worksheet_import(request):
                     source.answer_latex if source else data['answer'])
                 row['solution_value'] = (
                     source.solution_latex if source else data['solution'])
+                # У задач с подпунктами — поля на каждый подпункт
+                db_subs = list(source.subitems.all()) if source else []
+                row['sub_rows'] = [
+                    {'text': chunk,
+                     'answer': (db_subs[j].answer_latex
+                                if j < len(db_subs) else ''),
+                     'solution': (db_subs[j].solution_latex
+                                  if j < len(db_subs) else '')}
+                    for j, chunk in enumerate(data['subitems'])
+                ]
             rows.append(row)
         context['preview'] = {
             'header': parsed['header'],
@@ -347,12 +377,47 @@ def worksheet_delete(request, pk):
 @teacher_required
 @require_POST
 def worksheet_bulk_delete(request):
-    """Массовое удаление листков, выбранных чекбоксами в списке."""
+    """Старый маршрут bulk-delete/: удаление по ids, без поля delete."""
     ids = request.POST.getlist('ids')
     worksheets = Worksheet.objects.filter(owner=request.user, pk__in=ids)
     count = worksheets.count()
     worksheets.delete()
     messages.success(request, f'Удалено листков: {count}.')
+    return redirect('worksheet_list')
+
+
+@teacher_required
+@require_POST
+def worksheet_bulk_update(request):
+    """Массовые действия над выбранными листками: назначение или удаление."""
+    if request.POST.get('delete'):
+        return worksheet_bulk_delete(request)
+    ids = request.POST.getlist('ids')
+    worksheets = Worksheet.objects.filter(owner=request.user, pk__in=ids)
+    fields = {}
+    grade = request.POST.get('grade', '').strip()
+    if grade:
+        if grade not in {str(g) for g, _ in Task.GRADE_CHOICES}:
+            messages.error(request, 'Недопустимый класс.')
+            return redirect('worksheet_list')
+        fields['grade'] = int(grade)
+    topic = None
+    topic_id = request.POST.get('topic_id', '').strip()
+    if topic_id:
+        topic = Topic.objects.filter(pk=topic_id).first()
+    if not fields and topic is None:
+        messages.error(request, 'Выберите, что назначить: класс или тему.')
+        return redirect('worksheet_list')
+    now = timezone.now()
+    if fields:
+        fields['updated_at'] = now
+        worksheets.update(**fields)
+    if topic is not None:
+        for worksheet in worksheets:
+            worksheet.topics.add(topic)
+        if 'updated_at' not in fields:
+            worksheets.update(updated_at=now)
+    messages.success(request, f'Обновлено листков: {worksheets.count()}.')
     return redirect('worksheet_list')
 
 
