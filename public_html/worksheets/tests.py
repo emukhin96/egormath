@@ -50,7 +50,9 @@ class LatexGenerationTests(TestCase):
         self.assertIn('\\task{1}{2}{%', tex)
         self.assertIn('[{\\item $2+2$;}]', tex)
         self.assertIn('[{4}]', tex)
-        self.assertIn('[{Очевидно.}]', tex)
+        self.assertIn(
+            '[{\\mbox{}\\\\ \\begin{minipage}[t]{\\linewidth}%\n'
+            'Очевидно.%\n\\end{minipage}}]', tex)
 
     def test_task_to_tex_omits_trailing_args(self):
         task = Task.objects.create(text_latex='Просто задача')
@@ -131,7 +133,7 @@ class LatexGenerationTests(TestCase):
         item = make_item(self.worksheet, task)
         tex = task_to_tex(item)
         self.assertIn(
-            '\\begin{minipage}[t]{\\linewidth}%\n'
+            '\\mbox{}\\\\ \\begin{minipage}[t]{\\linewidth}%\n'
             'а)~Складываем единицы \\mbox{}\\\\ б)~Складываем двойки%\n'
             '\\end{minipage}', tex)
         # Общее решение задачи идёт перед решениями подпунктов

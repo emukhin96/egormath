@@ -52,9 +52,8 @@ def _join_labeled(parts, wrapper='stack'):
         return ''
     needs_wrap = len(parts) > 1 or any('\\\\' in p for p in parts)
     if wrapper == 'mini':
+        # Всегда minipage: после «Решение.» идёт перенос, блок на всю строку
         body = ' \\mbox{}\\\\ '.join(parts)
-        if not needs_wrap:
-            return parts[0]
         return '\\begin{minipage}[t]{\\linewidth}%%\n%s%%\n\\end{minipage}' % body
     body = ' \\\\ '.join(parts)
     if not needs_wrap:
@@ -83,7 +82,12 @@ def _combined_solution(task, subitems):
         '%s)~%s' % (subitem_label(i), _for_task_opt(s.solution_latex))
         for i, s in enumerate(subitems) if s.solution_latex.strip()
     )
-    return _join_labeled(parts, 'mini')
+    text = _join_labeled(parts, 'mini')
+    if not text:
+        return ''
+    # egor печатает «\textit{Решение}. #1» в одной строке — перенос, чтобы
+    # minipage не сдвигался на ширину слова
+    return '\\mbox{}\\\\ %s' % text
 
 
 # Ссылка на картинку в тексте задачи: \taskpic{N}, N — номер по порядку
