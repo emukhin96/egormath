@@ -46,21 +46,24 @@
               onsubmit="return confirm('Удалить подпункт?');">
           {% csrf_token %}
           <input type="hidden" name="delete" value="1">
-          <button type="submit" class="btn btn-small btn-danger"
-                  title="Удалить подпункт">×</button>
+          <button type="submit" class="icon-btn"
+                  title="Удалить подпункт" aria-label="Удалить подпункт">×</button>
         </form>
       </div>
       <details class="ws-add-text">
         <summary>править подпункт</summary>
         <form method="post" action="{% url 'task_subitem_update' task.pk s.pk %}"
-              data-autosave="debounce" class="quick-subitem-form">
+              data-autosave="debounce">
           {% csrf_token %}
-          <input type="text" name="text_latex" value="{{ s.text_latex }}"
-                 aria-label="Текст подпункта">
-          <input type="text" name="answer_latex" value="{{ s.answer_latex }}"
-                 placeholder="ответ" class="quick-input" aria-label="Ответ подпункта">
-          <input type="text" name="solution_latex" value="{{ s.solution_latex }}"
-                 placeholder="решение" class="quick-input" aria-label="Решение подпункта">
+          <div class="subitem-grid-row subitem-edit-form">
+            <span aria-hidden="true"></span>
+            <textarea name="text_latex" rows="2" aria-label="Текст подпункта">{{ s.text_latex }}</textarea>
+            <textarea name="answer_latex" rows="2" placeholder="ответ"
+                      aria-label="Ответ подпункта">{{ s.answer_latex }}</textarea>
+            <textarea name="solution_latex" rows="3" placeholder="решение"
+                      aria-label="Решение подпункта">{{ s.solution_latex }}</textarea>
+            <span aria-hidden="true"></span>
+          </div>
         </form>
       </details>
     </div>
@@ -69,12 +72,19 @@
   {% endif %}
   <details class="ws-add-text">
     <summary>+ добавить подпункт</summary>
-    <form method="post" action="{% url 'task_subitem_add' task.pk %}" class="quick-subitem">
+    <form method="post" action="{% url 'task_subitem_add' task.pk %}"
+          class="subitem-add-form">
       {% csrf_token %}
-      <input type="text" name="text_latex" placeholder="текст подпункта (LaTeX)" required>
-      <input type="text" name="answer_latex" placeholder="ответ" class="quick-input">
-      <input type="text" name="solution_latex" placeholder="решение" class="quick-input">
-      <button type="submit" class="btn btn-small">Добавить</button>
+      <div class="subitem-grid-row subitem-edit-form">
+        <span aria-hidden="true"></span>
+        <textarea name="text_latex" rows="2" placeholder="текст подпункта (LaTeX)" required></textarea>
+        <textarea name="answer_latex" rows="2" placeholder="ответ"></textarea>
+        <textarea name="solution_latex" rows="2" placeholder="решение"></textarea>
+        <span aria-hidden="true"></span>
+      </div>
+      <div class="form-buttons">
+        <button type="submit" class="btn">Добавить</button>
+      </div>
     </form>
   </details>
 
@@ -150,8 +160,8 @@
         {% include 'includes/topic_checkboxes.html' with topics=topics selected=task.topics.all %}
       </div>
       <div class="form-buttons">
-        <button type="submit" class="btn btn-small">Сохранить</button>
-        <button type="button" class="btn btn-small btn-secondary"
+        <button type="submit" class="btn">Сохранить</button>
+        <button type="button" class="btn btn-secondary"
                 data-dialog-close>Отмена</button>
       </div>
     </form>
