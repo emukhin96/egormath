@@ -9,8 +9,8 @@ from django.utils.html import escape
 
 from accounts.models import Profile
 
-from .latex_utils import (escape_latex, split_items, strip_latex,
-                          wrap_bare_math)
+from .latex_utils import (escape_latex, restore_json_eaten_latex,
+                          split_items, strip_latex, wrap_bare_math)
 from .models import Tag, Task, Topic
 
 
@@ -82,6 +82,22 @@ class LatexUtilsTests(TestCase):
         self.assertIn(r'$a^2 = \frac{16}{25}$', wrapped)
         self.assertIn(r'$a = \pm \frac{4}{5}$', wrapped)
         self.assertEqual(wrap_bare_math(wrapped), wrapped)
+
+    def test_restore_json_eaten_latex(self):
+        # json.loads съедает \f и \t: form feed + "rac", tab + "imes"
+        self.assertEqual(restore_json_eaten_latex('-\x0crac{1}{2}'),
+                         r'-\frac{1}{2}')
+        eaten_times = 'a \times b'  # обычная строка: \t → tab
+        self.assertIn('\t', eaten_times)
+        self.assertEqual(restore_json_eaten_latex(eaten_times),
+                         r'a \times b')
+        self.assertEqual(restore_json_eaten_latex(r'a \times b'),
+                         r'a \times b')
+        self.assertEqual(
+            restore_json_eaten_latex('шаг.\nПриведем'),
+            'шаг.\nПриведем')
+        self.assertEqual(restore_json_eaten_latex(r'-\frac{1}{2}'),
+                         r'-\frac{1}{2}')
 
 
 class NeuroTests(TestCase):
@@ -174,6 +190,32 @@ class NeuroTests(TestCase):
                 result = neuro.solve_task('При каких a...')
         self.assertEqual(result['answer'], r'$a = \pm \frac{4}{5}$')
         self.assertIn(r'$D = 25a^2 - 16$', result['solution'])
+
+    def test_solve_task_restores_json_eaten_commands(self):
+        """Gemini пишет \\frac без экранирования — json.loads даёт form feed."""
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from . import neuro
+        # Как Gemini: в JSON один слэш перед f/t, не два
+        raw = (
+            '{"answer": "$-\\frac{1}{2}$",'
+            ' "solution": "a \\times b",'
+            ' "subitem_answers": [], "subitem_solutions": []}')
+        self.assertIn('\x0c', json.loads(raw)['answer'])
+        response = mock.Mock(status_code=200, text='ok')
+        response.json.return_value = {
+            'candidates': [{'content': {'parts': [{'text': raw}]}}],
+        }
+        with override_settings(GEMINI_API_KEY='k', GEMINI_MODEL='m',
+                               GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=response):
+                result = neuro.solve_task('Упростите')
+        self.assertIn(r'\frac', result['answer'])
+        self.assertNotIn('\x0c', result['answer'])
+        self.assertIn(r'\times', result['solution'])
 
     def test_empty_draft_raises(self):
         from unittest import mock

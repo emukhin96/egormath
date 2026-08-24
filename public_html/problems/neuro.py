@@ -19,7 +19,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from .latex_utils import wrap_bare_math
+from .latex_utils import restore_json_eaten_latex, wrap_bare_math
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +202,9 @@ def solve_task(text, subitems=()):
 
 
 def _s(value):
-    return value.strip() if isinstance(value, str) else ''
+    if not isinstance(value, str):
+        return ''
+    return restore_json_eaten_latex(value).strip()
 
 
 def _lst(value, length):

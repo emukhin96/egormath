@@ -59,6 +59,30 @@ def strip_subitem_punct(text):
     return text
 
 
+# JSON съедает \\f/\\t/\\b/\\r как управляющие символы (Gemini часто
+# пишет "\frac" вместо "\\frac" в JSON). Восстанавливаем, только если
+# дальше идут буквы команды: \x0c+rac → \frac, tab+imes → \times.
+# Настоящие \r\n и перевод строки перед кириллицей не трогаем.
+_JSON_EATEN_LATEX = (
+    (re.compile('\x0c(?=[A-Za-z])'), r'\\f'),
+    (re.compile('\t(?=[A-Za-z])'), r'\\t'),
+    (re.compile('\x08(?=[A-Za-z])'), r'\\b'),
+    (re.compile('\r(?=[A-Za-z])'), r'\\r'),
+    # \\n+eq → \neq; обычный абзац (цифра/кириллица) не совпадает
+    (re.compile('\n(?=(?:eq|ewline|otin|ot\\b|eg\\b|u\\b|abla|i\\b))'),
+     r'\\n'),
+)
+
+
+def restore_json_eaten_latex(text):
+    """Вернуть \\frac/\\times, которые json.loads превратил в form feed/tab."""
+    if not text:
+        return text
+    for pattern, repl in _JSON_EATEN_LATEX:
+        text = pattern.sub(repl, text)
+    return text
+
+
 # Уже обёрнутые формулы не трогаем (те же разделители, что KaTeX)
 _MATH_SPAN_RE = re.compile(
     r'\$\$.*?\$\$|\\\[.*?\\\]|\$.*?\$|\\\(.*?\\\)', re.S)
