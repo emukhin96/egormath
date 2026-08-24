@@ -490,13 +490,19 @@ class WorksheetViewTests(TestCase):
         second = Worksheet.objects.create(title='Второй', owner=self.teacher)
         self.login_teacher()
         response = self.client.post(reverse('worksheet_bulk_delete'), {
-            'ids': [self.worksheet.pk, second.pk, other.pk],
-            'delete': '1'})
+            'ids': [self.worksheet.pk, second.pk, other.pk]})
         self.assertRedirects(response, reverse('worksheet_list'))
         # Свои удалены, чужой листок не тронут
         self.assertFalse(Worksheet.objects.filter(
             pk__in=[self.worksheet.pk, second.pk]).exists())
         self.assertTrue(Worksheet.objects.filter(pk=other.pk).exists())
+
+    def test_bulk_update_without_fields_does_not_delete(self):
+        self.login_teacher()
+        response = self.client.post(reverse('worksheet_bulk_update'), {
+            'ids': [self.worksheet.pk]})
+        self.assertRedirects(response, reverse('worksheet_list'))
+        self.assertTrue(Worksheet.objects.filter(pk=self.worksheet.pk).exists())
 
     def test_bulk_assign(self):
         from problems.models import Topic

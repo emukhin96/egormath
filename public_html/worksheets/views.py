@@ -376,15 +376,24 @@ def worksheet_delete(request, pk):
 
 @teacher_required
 @require_POST
-def worksheet_bulk_update(request):
-    """Массовые действия над выбранными листками: назначение или удаление."""
+def worksheet_bulk_delete(request):
+    """Старый маршрут bulk-delete/: удаление по ids, без поля delete."""
     ids = request.POST.getlist('ids')
     worksheets = Worksheet.objects.filter(owner=request.user, pk__in=ids)
+    count = worksheets.count()
+    worksheets.delete()
+    messages.success(request, f'Удалено листков: {count}.')
+    return redirect('worksheet_list')
+
+
+@teacher_required
+@require_POST
+def worksheet_bulk_update(request):
+    """Массовые действия над выбранными листками: назначение или удаление."""
     if request.POST.get('delete'):
-        count = worksheets.count()
-        worksheets.delete()
-        messages.success(request, f'Удалено листков: {count}.')
-        return redirect('worksheet_list')
+        return worksheet_bulk_delete(request)
+    ids = request.POST.getlist('ids')
+    worksheets = Worksheet.objects.filter(owner=request.user, pk__in=ids)
     fields = {}
     grade = request.POST.get('grade', '').strip()
     if grade:
@@ -410,9 +419,6 @@ def worksheet_bulk_update(request):
             worksheets.update(updated_at=now)
     messages.success(request, f'Обновлено листков: {worksheets.count()}.')
     return redirect('worksheet_list')
-
-
-worksheet_bulk_delete = worksheet_bulk_update
 
 
 @teacher_required
