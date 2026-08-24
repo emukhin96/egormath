@@ -73,9 +73,28 @@ def task_list(request):
 @teacher_required
 @require_POST
 def task_bulk_update(request):
-    """Массовое назначение класса/темы/звёзд выбранным в списке задачам."""
+    """Массовые действия над выбранными задачами: назначение или удаление."""
     ids = request.POST.getlist('ids')
     tasks = Task.objects.filter(variant_of__isnull=True, pk__in=ids)
+    if request.POST.get('delete'):
+        deleted = 0
+        blocked = 0
+        for task in list(tasks):
+            if task.worksheet_items.exists() or task.submissions.exists():
+                blocked += 1
+                continue
+            task.delete()
+            deleted += 1
+        if deleted:
+            messages.success(request, f'Удалено задач: {deleted}.')
+        if blocked:
+            messages.error(
+                request,
+                f'Не удалено (есть в листке или есть ответы учеников): '
+                f'{blocked}.')
+        if not deleted and not blocked:
+            messages.error(request, 'Не выбрано ни одной задачи.')
+        return redirect(_safe_next(request))
     fields = {}
     grade = request.POST.get('grade_level', '').strip()
     if grade:

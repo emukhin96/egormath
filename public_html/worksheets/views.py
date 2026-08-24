@@ -376,14 +376,43 @@ def worksheet_delete(request, pk):
 
 @teacher_required
 @require_POST
-def worksheet_bulk_delete(request):
-    """Массовое удаление листков, выбранных чекбоксами в списке."""
+def worksheet_bulk_update(request):
+    """Массовые действия над выбранными листками: назначение или удаление."""
     ids = request.POST.getlist('ids')
     worksheets = Worksheet.objects.filter(owner=request.user, pk__in=ids)
-    count = worksheets.count()
-    worksheets.delete()
-    messages.success(request, f'Удалено листков: {count}.')
+    if request.POST.get('delete'):
+        count = worksheets.count()
+        worksheets.delete()
+        messages.success(request, f'Удалено листков: {count}.')
+        return redirect('worksheet_list')
+    fields = {}
+    grade = request.POST.get('grade', '').strip()
+    if grade:
+        if grade not in {str(g) for g, _ in Task.GRADE_CHOICES}:
+            messages.error(request, 'Недопустимый класс.')
+            return redirect('worksheet_list')
+        fields['grade'] = int(grade)
+    topic = None
+    topic_id = request.POST.get('topic_id', '').strip()
+    if topic_id:
+        topic = Topic.objects.filter(pk=topic_id).first()
+    if not fields and topic is None:
+        messages.error(request, 'Выберите, что назначить: класс или тему.')
+        return redirect('worksheet_list')
+    now = timezone.now()
+    if fields:
+        fields['updated_at'] = now
+        worksheets.update(**fields)
+    if topic is not None:
+        for worksheet in worksheets:
+            worksheet.topics.add(topic)
+        if 'updated_at' not in fields:
+            worksheets.update(updated_at=now)
+    messages.success(request, f'Обновлено листков: {worksheets.count()}.')
     return redirect('worksheet_list')
+
+
+worksheet_bulk_delete = worksheet_bulk_update
 
 
 @teacher_required

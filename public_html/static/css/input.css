@@ -362,6 +362,14 @@
     border-radius: var(--radius);
   }
 
+  /* label в базе — block с margin; внутри панели держим одну линию с кнопками */
+  .bulk-bar .inline-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-bottom: 0;
+  }
+
   .linklike {
     background: none;
     border: none;

@@ -416,6 +416,18 @@ class BulkUpdateTests(TestCase):
         self.t1.refresh_from_db()
         self.assertIsNone(self.t1.grade_level)
 
+    def test_bulk_delete_skips_used_tasks(self):
+        from worksheets.models import Worksheet, WorksheetItem
+        ws = Worksheet.objects.create(title='Листок', owner=self.teacher)
+        WorksheetItem.objects.create(worksheet=ws, task=self.t1, order=10)
+        response = self.client.post(self.url, {
+            'ids': [self.t1.pk, self.t2.pk], 'delete': '1',
+        })
+        self.assertRedirects(response, reverse('task_list'))
+        # Задача из листка остаётся, свободная удалена
+        self.assertTrue(Task.objects.filter(pk=self.t1.pk).exists())
+        self.assertFalse(Task.objects.filter(pk=self.t2.pk).exists())
+
 
 class QuickUpdateTests(TestCase):
     """Горячее редактирование класса/ответа/источника из списка задач."""

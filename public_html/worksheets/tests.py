@@ -489,12 +489,27 @@ class WorksheetViewTests(TestCase):
         second = Worksheet.objects.create(title='Второй', owner=self.teacher)
         self.login_teacher()
         response = self.client.post(reverse('worksheet_bulk_delete'), {
-            'ids': [self.worksheet.pk, second.pk, other.pk]})
+            'ids': [self.worksheet.pk, second.pk, other.pk],
+            'delete': '1'})
         self.assertRedirects(response, reverse('worksheet_list'))
         # Свои удалены, чужой листок не тронут
         self.assertFalse(Worksheet.objects.filter(
             pk__in=[self.worksheet.pk, second.pk]).exists())
         self.assertTrue(Worksheet.objects.filter(pk=other.pk).exists())
+
+    def test_bulk_assign(self):
+        from problems.models import Topic
+        topic = Topic.objects.create(name='Геометрия')
+        second = Worksheet.objects.create(title='Второй', owner=self.teacher)
+        self.login_teacher()
+        response = self.client.post(reverse('worksheet_bulk_update'), {
+            'ids': [self.worksheet.pk, second.pk],
+            'grade': '8', 'topic_id': topic.pk, 'apply': '1'})
+        self.assertRedirects(response, reverse('worksheet_list'))
+        for ws in (self.worksheet, second):
+            ws.refresh_from_db()
+            self.assertEqual(ws.grade, 8)
+            self.assertIn(topic, ws.topics.all())
 
     def test_quick_update(self):
         from problems.models import Topic
