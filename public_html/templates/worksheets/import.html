@@ -78,7 +78,7 @@
     </label>
     <button type="button" class="btn btn-small btn-secondary" id="bulk-apply">Применить к выделенным</button>
     <button type="button" class="btn btn-small btn-secondary" id="bulk-solve"
-            title="Черновики ответов и решений — проверьте и поправьте перед созданием">Сгенерировать</button>
+            title="Черновики ответов и решений — проверьте и поправьте перед созданием">Добавить AI-решение</button>
     <button type="button" class="btn btn-small btn-danger" id="bulk-skip">Удалить из импорта</button>
   </form>
 
@@ -171,7 +171,7 @@
             {% else %}<span class="badge badge-assigned">новая</span>{% endif %}
             <button type="button" class="btn btn-small btn-secondary neuro-btn"
                     data-index="{{ forloop.counter0 }}"
-                    title="Черновик ответа и решения — проверьте и поправьте перед созданием">Сгенерировать</button>
+                    title="Черновик ответа и решения — проверьте и поправьте перед созданием">Добавить AI-решение</button>
             <span class="import-skip-state" hidden>не будет импортирована —
               <button type="button" class="linklike import-restore">вернуть</button></span>
           {% endif %}

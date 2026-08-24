@@ -89,7 +89,8 @@
     </p>
     <div class="form-buttons">
       <button type="button" class="btn btn-secondary" data-neuro="task-form"
-              title="Черновик ответа и решения от нейросети — проверьте перед сохранением">Сгенерировать</button>
+              {% if task %}data-task-id="{{ task.pk }}"{% endif %}
+              title="Черновик ответа и решения от нейросети — проверьте перед сохранением">Добавить AI-решение</button>
     </div>
 
     <h2>Подпункты</h2>

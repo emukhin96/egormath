@@ -70,7 +70,11 @@ def _api_key():
 
 
 def acquire_quota(user):
-    """Один одновременный запрос и N вызовов в минуту на учителя."""
+    """Один одновременный запрос и N вызовов в минуту на учителя.
+
+    Возвращает метку in_flight_at — её же передают в release_quota,
+    чтобы 429 чужого запроса не снял блокировку текущего.
+    """
     from problems.models import NeuroSolveQuota
     now = timezone.now()
     limit = getattr(settings, 'GEMINI_RATE_PER_MINUTE', 20)
@@ -93,11 +97,15 @@ def acquire_quota(user):
         quota.in_flight_at = now
         quota.save(update_fields=[
             'window_started', 'window_count', 'in_flight_at'])
+        quota.refresh_from_db(fields=['in_flight_at'])
+        return quota.in_flight_at
 
 
-def release_quota(user):
+def release_quota(user, started_at):
+    """Снять блокировку только того запроса, который её взял."""
     from problems.models import NeuroSolveQuota
-    NeuroSolveQuota.objects.filter(user=user).update(in_flight_at=None)
+    NeuroSolveQuota.objects.filter(
+        user=user, in_flight_at=started_at).update(in_flight_at=None)
 
 
 def _build_prompt(text, subitems):

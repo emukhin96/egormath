@@ -624,15 +624,17 @@ def task_neuro_solve(request):
         return JsonResponse(
             {'error': 'Задача слишком длинная для нейрогенерации.'},
             status=400)
+    acquired_at = None
     try:
-        acquire_quota(request.user)
+        acquired_at = acquire_quota(request.user)
         result = solve_task(text, subitems)
     except NeuroQuotaError as exc:
         return JsonResponse({'error': str(exc)}, status=429)
     except NeuroError as exc:
         return JsonResponse({'error': str(exc)}, status=502)
     finally:
-        release_quota(request.user)
+        if acquired_at is not None:
+            release_quota(request.user, acquired_at)
     if task is not None and payload.get('apply'):
         apply_result(task, result, overwrite=bool(payload.get('overwrite')))
     return JsonResponse(result)

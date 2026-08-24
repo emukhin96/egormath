@@ -346,7 +346,10 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'Дублировать')
         self.assertContains(response, 'data-neuro="apply"')
         self.assertContains(response, 'data-neuro="apply-missing"')
-        self.assertContains(response, 'Сгенерировать')
+        self.assertContains(response, 'href="#" data-neuro="apply"')
+        self.assertContains(response, 'Добавить AI-решение')
+        self.assertContains(response, 'Добавить AI-решение без ответа')
+        self.assertContains(response, 'js/neuro.js')
 
     def test_add_and_move_and_remove_task(self):
         self.login_teacher()
@@ -1172,7 +1175,7 @@ class ImportTexTests(TestCase):
                                           'action': 'preview'})
         self.assertContains(response, 'neuro-btn')
         self.assertContains(response, 'bulk-solve')
-        self.assertContains(response, 'Сгенерировать')
+        self.assertContains(response, 'Добавить AI-решение')
         self.assertNotContains(response, '✨')
         # Исходные LaTeX-тексты задач для запросов генерации
         self.assertContains(response, 'import-solve-data')

@@ -129,12 +129,34 @@ class NeuroTests(TestCase):
         from .neuro import NeuroQuotaError, acquire_quota, release_quota
         user = make_teacher('neuro-user')
         with override_settings(GEMINI_RATE_PER_MINUTE=1, GEMINI_TIMEOUT=60):
-            acquire_quota(user)
+            started = acquire_quota(user)
             with self.assertRaises(NeuroQuotaError):
                 acquire_quota(user)
-            release_quota(user)
+            release_quota(user, started)
             with self.assertRaises(NeuroQuotaError):
                 acquire_quota(user)
+
+    def test_quota_429_keeps_inflight(self):
+        """Чужой 429 не снимает блокировку текущего запроса."""
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from .models import NeuroSolveQuota
+        from .neuro import acquire_quota
+        teacher = make_teacher()
+        self.client.login(username=teacher.username, password='pass12345')
+        with override_settings(GEMINI_RATE_PER_MINUTE=20, GEMINI_TIMEOUT=60):
+            started = acquire_quota(teacher)
+            with mock.patch('problems.neuro.solve_task') as solve:
+                response = self.client.post(
+                    reverse('task_neuro_solve'),
+                    {'text': 'Задача'},
+                    content_type='application/json')
+            self.assertEqual(response.status_code, 429)
+            solve.assert_not_called()
+            quota = NeuroSolveQuota.objects.get(user=teacher)
+            self.assertEqual(quota.in_flight_at, started)
 
     def test_too_long_raises(self):
         from django.test import override_settings
@@ -689,7 +711,9 @@ class QuickUpdateTests(TestCase):
         self.assertContains(response, 'icon-btn')
         self.assertContains(response, 'class="btn">Добавить')
         self.assertContains(response, 'data-neuro="task-detail"')
-        self.assertContains(response, 'Сгенерировать')
+        self.assertContains(response, 'data-task-id="%s"' % self.task.pk)
+        self.assertContains(response, 'Добавить AI-решение')
+        self.assertContains(response, 'js/neuro.js')
         self.assertNotContains(response, 'qa_answer')
         self.assertNotContains(response, 'устаревшие')
         self.assertNotContains(response, 'legacy')

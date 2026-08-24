@@ -10,7 +10,8 @@
   </div>
   <div class="form-buttons">
     <button type="button" class="btn btn-secondary" data-neuro="task-detail"
-            title="Черновик ответа и решения от нейросети — проверьте и поправьте">Сгенерировать</button>
+            data-task-id="{{ task.pk }}"
+            title="Черновик ответа и решения от нейросети — проверьте и поправьте">Добавить AI-решение</button>
     <a class="btn btn-secondary" href="{% url 'task_edit' task.pk %}"
        title="Полная форма: картинки, источники, тип ответа">Полная форма</a>
   </div>

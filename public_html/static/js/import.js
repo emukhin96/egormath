@@ -77,7 +77,7 @@
     /* --- Нейрогенерация: общий EgorNeuro.solve, поля остаются в форме --- */
     var solveDataEl = document.getElementById('import-solve-data');
     var solveData = solveDataEl ? JSON.parse(solveDataEl.textContent) : {};
-    var neuroLabel = (window.EgorNeuro && EgorNeuro.label) || 'Сгенерировать';
+    var neuroLabel = (window.EgorNeuro && EgorNeuro.label) || 'Добавить AI-решение';
 
     function setField(name, value) {
       if (value == null) return;
