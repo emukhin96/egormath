@@ -71,7 +71,8 @@ make watch-css
 (`.ws-saved-error`) — ошибка. Показ: `EgorAutosave.showSaved(ok, message)`.
 
 - Краткое подтверждение действия (`messages.success` / `messages.info`)
-  уходит в этот тост через скрытый `.ws-toast-src` в `base.html`.
+  рендерится как `.msg-success.ws-toast-src`: без JS это обычная плашка,
+  `autosave.js` прячет её и показывает тост.
 - Не пишите новые плашки `.msg-success` сверху страницы и не дублируйте
   тост баннером в контенте.
 - `.msg-error` / `.msg-warning` оставляем только когда сообщение должно

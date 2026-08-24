@@ -80,6 +80,7 @@
       if (i >= nodes.length) return;
       var node = nodes[i++];
       showSaved(node.dataset.ok !== '0', (node.textContent || '').trim());
+      node.hidden = true;
       if (i < nodes.length) {
         setTimeout(next, node.dataset.ok !== '0' ? 1600 : 4100);
       }

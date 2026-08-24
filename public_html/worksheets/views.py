@@ -394,23 +394,23 @@ def add_task_to_worksheet(request, worksheet_id, task):
     """
     worksheet = get_object_or_404(
         Worksheet, pk=worksheet_id, owner=request.user)
-    if worksheet.items.filter(task=task, deleted_at__isnull=True).exists():
-        messages.info(request, f'Задача #{task.pk} уже есть в листке.')
-        return redirect('worksheet_detail', pk=worksheet.pk)
-    trashed = worksheet.items.filter(
-        task=task, deleted_at__isnull=False).first()
-    if trashed:
-        with transaction.atomic():
-            Worksheet.objects.select_for_update().get(pk=worksheet.pk)
+    with transaction.atomic():
+        Worksheet.objects.select_for_update().get(pk=worksheet.pk)
+        if worksheet.items.filter(task=task, deleted_at__isnull=True).exists():
+            messages.info(request, f'Задача #{task.pk} уже есть в листке.')
+            return redirect('worksheet_detail', pk=worksheet.pk)
+        trashed = worksheet.items.filter(
+            task=task, deleted_at__isnull=False).first()
+        if trashed:
             worksheet.items.filter(deleted_at__isnull=False).exclude(
                 pk=trashed.pk).delete()
             trashed.deleted_at = None
             trashed.save(update_fields=['deleted_at'])
-        messages.success(request, f'Задача #{task.pk} возвращена в листок.')
-        return redirect('worksheet_detail', pk=worksheet.pk)
-    last = worksheet.items.aggregate(m=models.Max('order'))['m'] or 0
-    WorksheetItem.objects.create(
-        worksheet=worksheet, task=task, order=last + 10)
+            messages.success(request, f'Задача #{task.pk} возвращена в листок.')
+            return redirect('worksheet_detail', pk=worksheet.pk)
+        last = worksheet.items.aggregate(m=models.Max('order'))['m'] or 0
+        WorksheetItem.objects.create(
+            worksheet=worksheet, task=task, order=last + 10)
     messages.success(request, f'Задача #{task.pk} добавлена в «{worksheet.title}».')
     return redirect('worksheet_detail', pk=worksheet.pk)
 
