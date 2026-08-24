@@ -33,8 +33,14 @@ def subitem_label(index):
 
 
 def _join_labeled(parts):
-    """Склеивает куски ответа/решения, каждый на своей строке (\\\\ в TeX)."""
-    return ' \\\\ '.join(parts)
+    """Склеивает куски ответа/решения, каждый на своей строке.
+
+    Голый \\\\ в варианте answers=table завершает строку таблицы пакета egor.
+    \\shortstack держит переносы внутри ячейки и работает в answers=inline.
+    """
+    if len(parts) <= 1:
+        return parts[0] if parts else ''
+    return '\\shortstack[l]{%s}' % ' \\\\ '.join(parts)
 
 
 def _combined_answer(task, subitems):

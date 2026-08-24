@@ -117,7 +117,7 @@ class LatexGenerationTests(TestCase):
         self.assertNotIn('$2+2$', tex)
         self.assertIn('\\item $3+3$;', tex)
         # Ответы перенумерованы заново: а) и б)
-        self.assertIn(r'[{а)~2 \\ б)~6}]', tex)
+        self.assertIn(r'[{\shortstack[l]{а)~2 \\ б)~6}}]', tex)
 
     def test_subitem_solutions_combined(self):
         # Решения подпунктов собираются в 6-й аргумент \task как ответы
@@ -131,14 +131,15 @@ class LatexGenerationTests(TestCase):
         item = make_item(self.worksheet, task)
         tex = task_to_tex(item)
         self.assertIn(
-            r'[{а)~Складываем единицы \\ б)~Складываем двойки}]', tex)
+            r'[{\shortstack[l]{а)~Складываем единицы \\ '
+            r'б)~Складываем двойки}}]', tex)
         # Общее решение задачи идёт перед решениями подпунктов
         task.solution_latex = 'Общий план.'
         task.save()
         tex = task_to_tex(item)
         self.assertIn(
-            r'[{Общий план. \\ а)~Складываем единицы \\ '
-            r'б)~Складываем двойки}]', tex)
+            r'[{\shortstack[l]{Общий план. \\ а)~Складываем единицы \\ '
+            r'б)~Складываем двойки}}]', tex)
 
     def test_worksheet_variants(self):
         worksheet = make_worksheet(self.teacher)
