@@ -227,7 +227,7 @@ class WorksheetPdf(models.Model):
         verbose_name_plural = 'PDF листков'
         constraints = [
             models.UniqueConstraint(
-                fields=['worksheet', 'variant', 'content_hash'],
+                fields=['worksheet', 'variant', 'filter_key', 'content_hash'],
                 name='unique_worksheet_pdf'),
         ]
 
