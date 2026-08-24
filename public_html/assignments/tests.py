@@ -7,6 +7,7 @@ from PIL import Image
 
 from problems.models import Task, TaskSubitem
 from problems.tests import make_student, make_teacher
+from worksheets.models import WorksheetItem
 from worksheets.tests import make_worksheet
 
 from .models import (Assignment, Review, Submission, SubmissionPart,
@@ -264,6 +265,23 @@ class ReviewFlowTests(TestCase):
             submission=hidden_sub, grade_word='good').exists())
         self.assertEqual(
             Review.objects.get(submission=visible_sub).grade_word, 'medium')
+
+    def test_save_review_when_only_one_copy_hidden(self):
+        # Одна задача дважды в листке: скрыт только один элемент —
+        # оценку по общему Submission всё ещё можно сохранить
+        item = self.assignment.worksheet.items.order_by('order').first()
+        WorksheetItem.objects.create(
+            worksheet=self.assignment.worksheet, task=item.task, order=90)
+        self.assignment.hidden_items.add(item)
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=item.task)
+        self.client.post(
+            reverse('save_review', args=[self.assignment.pk]), {
+                f'sub{submission.pk}_grade': 'poor',
+                'action': 'save',
+            })
+        self.assertEqual(
+            Review.objects.get(submission=submission).grade_word, 'poor')
 
     def test_foreign_teacher_cannot_review(self):
         make_teacher('teacher2')
