@@ -48,12 +48,18 @@ def _join_labeled(parts, wrapper='stack'):
     Ответы короткие — \\shortstack по ширине содержимого.
     Решения могут быть с абзацами и display-формулами — minipage.
     """
-    if len(parts) <= 1:
-        return parts[0] if parts else ''
+    if not parts:
+        return ''
+    needs_wrap = len(parts) > 1 or any('\\\\' in p for p in parts)
     if wrapper == 'mini':
         body = ' \\mbox{}\\\\ '.join(parts)
+        if not needs_wrap:
+            return parts[0]
         return '\\begin{minipage}[t]{\\linewidth}%%\n%s%%\n\\end{minipage}' % body
-    return '\\shortstack[l]{%s}' % ' \\\\ '.join(parts)
+    body = ' \\\\ '.join(parts)
+    if not needs_wrap:
+        return parts[0]
+    return '\\shortstack[l]{%s}' % body
 
 
 def _combined_answer(task, subitems):
