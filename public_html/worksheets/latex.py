@@ -32,18 +32,62 @@ def subitem_label(index):
     return str(index + 1)
 
 
+def _for_task_opt(text):
+    """Готовит текст для опционального аргумента \\task.
+
+    Аргумент не \\long: пустая строка (\\par) его обрывает. \\mbox{}\\\\
+    даёт перенос и после display-формулы (иначе «no line here to end»).
+    """
+    return re.sub(r'\n\s*\n+', r' \\mbox{}\\\\ ', text.strip())
+
+
+def _join_labeled(parts, wrapper='stack'):
+    """Склеивает куски ответа/решения, каждый на своей строке.
+
+    Голый \\\\ в answers=table завершает строку таблицы пакета egor.
+    Ответы короткие — \\shortstack по ширине содержимого.
+    Решения могут быть с абзацами и display-формулами — minipage.
+    """
+    if not parts:
+        return ''
+    needs_wrap = len(parts) > 1 or any('\\\\' in p for p in parts)
+    if wrapper == 'mini':
+        # Всегда minipage: после «Решение.» идёт перенос, блок на всю строку
+        body = ' \\mbox{}\\\\ '.join(parts)
+        return '\\begin{minipage}[t]{\\linewidth}%%\n%s%%\n\\end{minipage}' % body
+    body = ' \\\\ '.join(parts)
+    if not needs_wrap:
+        return parts[0]
+    return '\\shortstack[l]{%s}' % body
+
+
 def _combined_answer(task, subitems):
-    """Общий ответ задачи + ответы выбранных подпунктов («а) …; б) …»)."""
+    """Общий ответ задачи + ответы выбранных подпунктов (каждый с новой строки)."""
     parts = []
     if task.answer_latex.strip():
-        parts.append(task.answer_latex.strip())
-    sub_answers = [
-        '%s)~%s' % (subitem_label(i), s.answer_latex.strip())
+        parts.append(_for_task_opt(task.answer_latex))
+    parts.extend(
+        '%s)~%s' % (subitem_label(i), _for_task_opt(s.answer_latex))
         for i, s in enumerate(subitems) if s.answer_latex.strip()
-    ]
-    if sub_answers:
-        parts.append('; '.join(sub_answers))
-    return ' '.join(parts)
+    )
+    return _join_labeled(parts, 'stack')
+
+
+def _combined_solution(task, subitems):
+    """Общее решение задачи + решения подпунктов (каждый с новой строки)."""
+    parts = []
+    if task.solution_latex.strip():
+        parts.append(_for_task_opt(task.solution_latex))
+    parts.extend(
+        '%s)~%s' % (subitem_label(i), _for_task_opt(s.solution_latex))
+        for i, s in enumerate(subitems) if s.solution_latex.strip()
+    )
+    text = _join_labeled(parts, 'mini')
+    if not text:
+        return ''
+    # egor печатает «\textit{Решение}. #1» в одной строке — перенос, чтобы
+    # minipage не сдвигался на ширину слова
+    return '\\mbox{}\\\\ %s' % text
 
 
 # Ссылка на картинку в тексте задачи: \taskpic{N}, N — номер по порядку
@@ -103,7 +147,7 @@ def task_to_tex(item):
     ]
     subitems = '\n'.join(sub_lines)
     answer = _combined_answer(task, subitem_objs)
-    solution = task.solution_latex.strip()
+    solution = _combined_solution(task, subitem_objs)
     # Хвостовые пустые аргументы опускаем, промежуточные передаём пустыми
     tail = []
     if solution:

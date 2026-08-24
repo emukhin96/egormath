@@ -26,26 +26,43 @@
 
   {% if task.subitems.all %}
   <h3>Подпункты</h3>
-  <div class="quick-subitems">
+  <div class="subitem-grid">
+    <div class="subitem-grid-head">
+      <span></span>
+      <span>Условие</span>
+      <span>Ответ</span>
+      <span>Решение</span>
+      <span></span>
+    </div>
     {% for s in task.subitems.all %}
-    <div class="quick-subitem">
-      <span class="ws-num">{{ forloop.counter0|subitem_label }})</span>
-      <form method="post" action="{% url 'task_subitem_update' task.pk s.pk %}"
-            data-autosave="debounce" class="quick-subitem-form">
-        {% csrf_token %}
-        <input type="text" name="text_latex" value="{{ s.text_latex }}"
-               aria-label="Текст подпункта">
-        <input type="text" name="answer_latex" value="{{ s.answer_latex }}"
-               placeholder="ответ" class="quick-input" aria-label="Ответ подпункта">
-      </form>
-      <form method="post" action="{% url 'task_subitem_update' task.pk s.pk %}"
-            class="inline-form"
-            onsubmit="return confirm('Удалить подпункт?');">
-        {% csrf_token %}
-        <input type="hidden" name="delete" value="1">
-        <button type="submit" class="btn btn-small btn-danger"
-                title="Удалить подпункт">×</button>
-      </form>
+    <div class="subitem-block">
+      <div class="subitem-grid-row">
+        <span class="ws-num">{{ forloop.counter0|subitem_label }})</span>
+        <div class="math-content">{% if s.text_latex %}{{ s.text_latex|web_text }}{% else %}<span class="muted">—</span>{% endif %}</div>
+        <div class="math-content">{% if s.answer_latex %}{{ s.answer_latex|web_text }}{% else %}<span class="muted">—</span>{% endif %}</div>
+        <div class="math-content">{% if s.solution_latex %}{{ s.solution_latex|web_text|linebreaksbr }}{% else %}<span class="muted">—</span>{% endif %}</div>
+        <form method="post" action="{% url 'task_subitem_update' task.pk s.pk %}"
+              class="inline-form"
+              onsubmit="return confirm('Удалить подпункт?');">
+          {% csrf_token %}
+          <input type="hidden" name="delete" value="1">
+          <button type="submit" class="btn btn-small btn-danger"
+                  title="Удалить подпункт">×</button>
+        </form>
+      </div>
+      <details class="ws-add-text">
+        <summary>править подпункт</summary>
+        <form method="post" action="{% url 'task_subitem_update' task.pk s.pk %}"
+              data-autosave="debounce" class="quick-subitem-form">
+          {% csrf_token %}
+          <input type="text" name="text_latex" value="{{ s.text_latex }}"
+                 aria-label="Текст подпункта">
+          <input type="text" name="answer_latex" value="{{ s.answer_latex }}"
+                 placeholder="ответ" class="quick-input" aria-label="Ответ подпункта">
+          <input type="text" name="solution_latex" value="{{ s.solution_latex }}"
+                 placeholder="решение" class="quick-input" aria-label="Решение подпункта">
+        </form>
+      </details>
     </div>
     {% endfor %}
   </div>
@@ -56,30 +73,36 @@
       {% csrf_token %}
       <input type="text" name="text_latex" placeholder="текст подпункта (LaTeX)" required>
       <input type="text" name="answer_latex" placeholder="ответ" class="quick-input">
+      <input type="text" name="solution_latex" placeholder="решение" class="quick-input">
       <button type="submit" class="btn btn-small">Добавить</button>
     </form>
   </details>
 
   {% include 'problems/_task_images.html' with task=task %}
 
-  <h3>Ответ и решение</h3>
-  <form method="post" action="{% url 'task_quick_update' task.pk %}"
-        data-autosave="debounce">
-    {% csrf_token %}
-    <p>
-      <label for="qa_answer">Ответ (LaTeX)</label>
-      <textarea name="answer_latex" id="qa_answer" rows="1">{{ task.answer_latex }}</textarea>
-    </p>
-    <p>
-      <label for="qa_solution">Решение (LaTeX)</label>
-      <textarea name="solution_latex" id="qa_solution" rows="3">{{ task.solution_latex }}</textarea>
-    </p>
-    <span class="helptext">Сохраняется само по мере ввода.</span>
-  </form>
-  {% if task.has_subitem_answers %}
-  <div class="answer-box math-content"><strong>Ответы на подпункты:</strong>
-    {% for s in task.subitems.all %}{% if s.answer_latex %}{{ forloop.counter0|subitem_label }})&nbsp;{{ s.answer_latex }}; {% endif %}{% endfor %}
-  </div>
+  {% if not task.subitems.all %}
+  <h3>Ответ</h3>
+  <div class="math-content">{% if task.answer_latex %}{{ task.answer_latex|web_text }}{% else %}<span class="muted">—</span>{% endif %}</div>
+  <details class="ws-add-text">
+    <summary>править ответ</summary>
+    <form method="post" action="{% url 'task_quick_update' task.pk %}"
+          data-autosave="debounce">
+      {% csrf_token %}
+      <textarea name="answer_latex" id="qa_answer" rows="2">{{ task.answer_latex }}</textarea>
+      <span class="helptext">Сохраняется само; отображение обновится после перезагрузки страницы.</span>
+    </form>
+  </details>
+  <h3>Решение</h3>
+  <div class="math-content">{% if task.solution_latex %}{{ task.solution_latex|web_text|linebreaksbr }}{% else %}<span class="muted">—</span>{% endif %}</div>
+  <details class="ws-add-text">
+    <summary>править решение</summary>
+    <form method="post" action="{% url 'task_quick_update' task.pk %}"
+          data-autosave="debounce">
+      {% csrf_token %}
+      <textarea name="solution_latex" id="qa_solution" rows="4">{{ task.solution_latex }}</textarea>
+      <span class="helptext">Сохраняется само; отображение обновится после перезагрузки страницы.</span>
+    </form>
+  </details>
   {% endif %}
 
   <h3>Классификация</h3>

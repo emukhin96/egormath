@@ -28,10 +28,11 @@ TaskSourceFormSet = inlineformset_factory(
 
 TaskSubitemFormSet = inlineformset_factory(
     Task, TaskSubitem,
-    fields=['order', 'text_latex', 'answer_latex'],
+    fields=['order', 'text_latex', 'answer_latex', 'solution_latex'],
     widgets={
         'text_latex': forms.Textarea(attrs={'rows': 2}),
         'answer_latex': forms.Textarea(attrs={'rows': 1}),
+        'solution_latex': forms.Textarea(attrs={'rows': 1}),
     },
     extra=1, can_delete=True,
 )

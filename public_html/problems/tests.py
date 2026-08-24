@@ -171,6 +171,21 @@ class TaskModelTests(TestCase):
         self.assertIn(child.pk, ids)
         self.assertIn(grandchild.pk, ids)
 
+    def test_make_variant_copies_subitem_solutions(self):
+        task = Task.objects.create(text_latex='Вычислите')
+        task.subitems.create(
+            order=10, text_latex='$1+1$', answer_latex='2',
+            solution_latex='Сложение')
+        variant = task.make_variant()
+        self.assertNotEqual(variant.pk, task.pk)
+        copy = variant.subitems.get()
+        self.assertEqual(copy.text_latex, '$1+1$')
+        self.assertEqual(copy.answer_latex, '2')
+        self.assertEqual(copy.solution_latex, 'Сложение')
+        # Оригинал не тронут
+        original = task.subitems.get()
+        self.assertEqual(original.solution_latex, 'Сложение')
+
 
 class CatalogViewTests(TestCase):
     def setUp(self):
@@ -475,25 +490,51 @@ class QuickUpdateTests(TestCase):
     def test_subitem_add_update_delete(self):
         add_url = reverse('task_subitem_add', args=[self.task.pk])
         response = self.client.post(
-            add_url, {'text_latex': '$1+1$;', 'answer_latex': '2'})
+            add_url, {'text_latex': '$1+1$;', 'answer_latex': '2',
+                      'solution_latex': 'Очевидно'})
         self.assertRedirects(
             response, reverse('task_detail', args=[self.task.pk]))
         subitem = self.task.subitems.get()
         self.assertEqual(subitem.answer_latex, '2')
+        self.assertEqual(subitem.solution_latex, 'Очевидно')
 
         upd_url = reverse(
             'task_subitem_update', args=[self.task.pk, subitem.pk])
         response = self.client.post(
-            upd_url, {'text_latex': '$2+2$;', 'answer_latex': '4'},
+            upd_url, {'text_latex': '$2+2$;', 'answer_latex': '4',
+                      'solution_latex': 'Считаем столбиком'},
             HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertTrue(response.json()['ok'])
         subitem.refresh_from_db()
         self.assertEqual(subitem.text_latex, '$2+2$;')
+        self.assertEqual(subitem.solution_latex, 'Считаем столбиком')
 
         response = self.client.post(upd_url, {'delete': '1'})
         self.assertRedirects(
             response, reverse('task_detail', args=[self.task.pk]))
         self.assertEqual(self.task.subitems.count(), 0)
+
+    def test_task_page_fields_depend_on_subitems(self):
+        detail_url = reverse('task_detail', args=[self.task.pk])
+        # Без подпунктов — предпросмотр и общие поля ответа/решения
+        response = self.client.get(detail_url)
+        self.assertContains(response, 'name="answer_latex"')
+        self.assertContains(response, 'qa_answer')
+        self.assertContains(response, 'править ответ')
+        # С подпунктами общих полей нет даже при непустом legacy-ответе;
+        # у каждого подпункта — предпросмотр и свои поля ответа/решения
+        self.task.subitems.create(
+            order=10, text_latex='$1+1$', answer_latex='2',
+            solution_latex='Сложение')
+        self.task.answer_latex = 'legacy'
+        self.task.save()
+        response = self.client.get(detail_url)
+        self.assertContains(response, 'name="solution_latex"')
+        self.assertContains(response, 'править подпункт')
+        self.assertContains(response, '>Ответ<')
+        self.assertNotContains(response, 'qa_answer')
+        self.assertNotContains(response, 'устаревшие')
+        self.assertNotContains(response, 'legacy')
 
     def test_invalid_grade_rejected(self):
         response = self.client.post(self.url, {'grade_level': '99'})
@@ -657,3 +698,26 @@ class LocalVariantTests(TestCase):
         self.assertNotEqual(variant.pk, self.task.pk)
         self.assertEqual(variant.variant_of_id, self.task.pk)
         self.assertEqual(variant.text_latex, 'Изменённый текст')
+
+    def test_save_local_keeps_subitem_solutions(self):
+        sub = self.task.subitems.create(
+            order=10, text_latex='$1+1$', answer_latex='2',
+            solution_latex='Сложение')
+        response = self.client.post(self.edit_url(), self.post_data(
+            save_local='',
+            **formset_management('subitems', total=1, initial=1),
+            **{
+                'subitems-0-id': sub.pk,
+                'subitems-0-order': 10,
+                'subitems-0-text_latex': '$1+1$',
+                'subitems-0-answer_latex': '2',
+                'subitems-0-solution_latex': 'Сложение',
+            }))
+        self.assertEqual(response.status_code, 302)
+        self.item.refresh_from_db()
+        variant_sub = self.item.task.subitems.get()
+        self.assertEqual(variant_sub.solution_latex, 'Сложение')
+        self.assertEqual(variant_sub.answer_latex, '2')
+        # Оригинал не тронут
+        sub.refresh_from_db()
+        self.assertEqual(sub.solution_latex, 'Сложение')

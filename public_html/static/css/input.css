@@ -1832,6 +1832,36 @@
     flex-wrap: wrap;
   }
 
+  /* Карточка задачи: предпросмотр подпунктов (условие / ответ / решение) */
+  .subitem-grid {
+    display: grid;
+    gap: var(--space-3);
+    margin-block: var(--space-2);
+  }
+
+  .subitem-grid-head,
+  .subitem-grid-row {
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.2fr) auto;
+    gap: var(--space-2);
+    align-items: start;
+  }
+
+  .subitem-grid-head {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .subitem-block {
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  .subitem-block .ws-add-text {
+    margin-top: 0;
+  }
+
   /* Карточка задачи: горячее редактирование подпунктов и классификации */
   .quick-subitems {
     display: grid;
@@ -1855,6 +1885,12 @@
   .quick-subitem-form input[name="text_latex"] {
     flex: 1;
     max-width: none;
+  }
+
+  /* Ответ и решение подпункта — фиксированная доля, текст не сжимается */
+  .quick-subitem-form input[name="answer_latex"],
+  .quick-subitem-form input[name="solution_latex"] {
+    flex: 0 1 200px;
   }
 
   .quick-classify {
