@@ -9,7 +9,8 @@ from django.utils.html import escape
 
 from accounts.models import Profile
 
-from .latex_utils import escape_latex, split_items, strip_latex
+from .latex_utils import (escape_latex, split_items, strip_latex,
+                          wrap_bare_math)
 from .models import Tag, Task, Topic
 
 
@@ -58,6 +59,29 @@ class LatexUtilsTests(TestCase):
             '$x>0$?',
             '$2+2$',
         ])
+
+    def test_wrap_bare_math_task9_style(self):
+        # Ответ целиком — формула без долларов
+        self.assertEqual(
+            wrap_bare_math(r'a = \pm \frac{4}{5}'),
+            r'$a = \pm \frac{4}{5}$')
+        # Уже обёрнутое не трогаем
+        self.assertEqual(
+            wrap_bare_math(r'$a = \pm \frac{4}{5}$'),
+            r'$a = \pm \frac{4}{5}$')
+        self.assertEqual(wrap_bare_math('нет корней'), 'нет корней')
+        self.assertEqual(wrap_bare_math('42'), '42')
+        solution = (
+            'Дискриминант D = (-5a)^2 - 4 \\cdot 1 \\cdot 4 = 25a^2 - 16. '
+            'Приравняем дискриминант к нулю: 25a^2 - 16 = 0, откуда '
+            'a^2 = \\frac{16}{25}, следовательно a = \\pm \\frac{4}{5}.')
+        wrapped = wrap_bare_math(solution)
+        self.assertIn(r'$D = (-5a)^2 - 4 \cdot 1 \cdot 4 = 25a^2 - 16$',
+                      wrapped)
+        self.assertIn(r'$25a^2 - 16 = 0$', wrapped)
+        self.assertIn(r'$a^2 = \frac{16}{25}$', wrapped)
+        self.assertIn(r'$a = \pm \frac{4}{5}$', wrapped)
+        self.assertEqual(wrap_bare_math(wrapped), wrapped)
 
 
 class NeuroTests(TestCase):
@@ -131,6 +155,25 @@ class NeuroTests(TestCase):
         self.assertIn('при $a=0$', result['solution'])
         self.assertEqual(result['subitem_answers'], [])
         self.assertEqual(result['subitem_solutions'], [])
+
+    def test_solve_task_wraps_bare_math(self):
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from . import neuro
+        payload = {
+            'answer': r'a = \pm \frac{4}{5}',
+            'solution': r'Дискриминант D = 25a^2 - 16.',
+            'subitem_answers': [], 'subitem_solutions': [],
+        }
+        with override_settings(GEMINI_API_KEY='k', GEMINI_MODEL='m',
+                               GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=self._response(payload)):
+                result = neuro.solve_task('При каких a...')
+        self.assertEqual(result['answer'], r'$a = \pm \frac{4}{5}$')
+        self.assertIn(r'$D = 25a^2 - 16$', result['solution'])
 
     def test_empty_draft_raises(self):
         from unittest import mock

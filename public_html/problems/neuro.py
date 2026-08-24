@@ -19,6 +19,8 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from .latex_utils import wrap_bare_math
+
 logger = logging.getLogger(__name__)
 
 GEMINI_URL = ('https://generativelanguage.googleapis.com/v1beta/'
@@ -38,8 +40,10 @@ _INSTRUCTION = (
     'это одна задача: пиши ответ и разбор в answer и solution. '
     'Случаи параметра тоже туда, не выдумывай подпункты '
     '(массивы оставь пустыми).\n'
-    'Формулы — в LaTeX ($…$), совместимом с пакетами amsmath/egor. '
-    'Текст — по-русски. Если решить не удаётся, верни пустые строки.'
+    'Каждую формулу оборачивай в $…$, даже одну: '
+    '$a=\\pm\\frac{4}{5}$, не пиши a = \\pm \\frac{4}{5} без долларов. '
+    'Совместимо с amsmath/egor. Текст — по-русски. '
+    'Если решить не удаётся, верни пустые строки.'
 )
 
 _RESPONSE_SCHEMA = {
@@ -218,10 +222,12 @@ def _normalize_drafts(data, subitems):
     raw_sol = data.get('subitem_solutions')
     if subitems:
         return {
-            'answer': answer,
-            'solution': solution,
-            'subitem_answers': _lst(raw_ans, len(subitems)),
-            'subitem_solutions': _lst(raw_sol, len(subitems)),
+            'answer': wrap_bare_math(answer),
+            'solution': wrap_bare_math(solution),
+            'subitem_answers': [wrap_bare_math(v)
+                               for v in _lst(raw_ans, len(subitems))],
+            'subitem_solutions': [wrap_bare_math(v)
+                                 for v in _lst(raw_sol, len(subitems))],
         }
     extra_ans = [_s(v) for v in raw_ans] if isinstance(raw_ans, list) else []
     extra_sol = [_s(v) for v in raw_sol] if isinstance(raw_sol, list) else []
@@ -232,8 +238,8 @@ def _normalize_drafts(data, subitems):
     if not solution and extra_sol:
         solution = '\n\n'.join(extra_sol)
     return {
-        'answer': answer,
-        'solution': solution,
+        'answer': wrap_bare_math(answer),
+        'solution': wrap_bare_math(solution),
         'subitem_answers': [],
         'subitem_solutions': [],
     }
