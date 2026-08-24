@@ -8,8 +8,12 @@
     <h1>Задача #{{ task.pk }}</h1>
     {% if task.variant_of_id %}<span class="badge badge-returned">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}
   </div>
-  <a class="btn btn-secondary" href="{% url 'task_edit' task.pk %}"
-     title="Полная форма: картинки, источники, тип ответа">Полная форма</a>
+  <div class="form-buttons">
+    <button type="button" class="btn btn-secondary" data-neuro="task-detail"
+            title="Черновик ответа и решения от нейросети — проверьте и поправьте">Сгенерировать</button>
+    <a class="btn btn-secondary" href="{% url 'task_edit' task.pk %}"
+       title="Полная форма: картинки, источники, тип ответа">Полная форма</a>
+  </div>
 </div>
 
 <div class="card">

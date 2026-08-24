@@ -344,6 +344,9 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'подпункт а')
         self.assertContains(response, 'Текст-вставка')
         self.assertContains(response, 'Дублировать')
+        self.assertContains(response, 'data-neuro="apply"')
+        self.assertContains(response, 'data-neuro="apply-missing"')
+        self.assertContains(response, 'Сгенерировать')
 
     def test_add_and_move_and_remove_task(self):
         self.login_teacher()
@@ -1169,9 +1172,11 @@ class ImportTexTests(TestCase):
                                           'action': 'preview'})
         self.assertContains(response, 'neuro-btn')
         self.assertContains(response, 'bulk-solve')
+        self.assertContains(response, 'Сгенерировать')
+        self.assertNotContains(response, '✨')
         # Исходные LaTeX-тексты задач для запросов генерации
         self.assertContains(response, 'import-solve-data')
-        self.assertContains(response, reverse('worksheet_import_solve'))
+        self.assertContains(response, reverse('task_neuro_solve'))
 
     def test_import_solve_endpoint(self):
         self.client.login(username='teacher1', password='pass12345')

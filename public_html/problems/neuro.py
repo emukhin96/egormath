@@ -189,3 +189,39 @@ def solve_task(text, subitems=()):
         'subitem_solutions': _lst(data.get('subitem_solutions'),
                                   len(subitems)),
     }
+
+
+def apply_result(task, result, overwrite=False):
+    """Записать черновик в рабочие поля задачи.
+
+    Пустые значения модели пропускаем. Непустое поле не затираем, пока
+    overwrite=False — чтобы не снести проверенный ответ.
+    """
+    subs = list(task.subitems.order_by('order', 'pk'))
+    answers = result.get('subitem_answers') or []
+    solutions = result.get('subitem_solutions') or []
+    if subs:
+        for i, sub in enumerate(subs):
+            fields = []
+            ans = answers[i] if i < len(answers) else ''
+            sol = solutions[i] if i < len(solutions) else ''
+            if ans and (overwrite or not sub.answer_latex.strip()):
+                sub.answer_latex = ans
+                fields.append('answer_latex')
+            if sol and (overwrite or not sub.solution_latex.strip()):
+                sub.solution_latex = sol
+                fields.append('solution_latex')
+            if fields:
+                sub.save(update_fields=fields)
+        return
+    fields = []
+    ans = result.get('answer') or ''
+    sol = result.get('solution') or ''
+    if ans and (overwrite or not task.answer_latex.strip()):
+        task.answer_latex = ans
+        fields.append('answer_latex')
+    if sol and (overwrite or not task.solution_latex.strip()):
+        task.solution_latex = sol
+        fields.append('solution_latex')
+    if fields:
+        task.save(update_fields=fields)

@@ -229,34 +229,9 @@ def worksheet_import(request):
 @teacher_required
 @require_POST
 def worksheet_import_solve(request):
-    """Нейрогенерация ответа/решения одной задачи для предпросмотра импорта.
-
-    Принимает JSON {text, subitems: […]}, возвращает черновики
-    {answer, solution, subitem_answers, subitem_solutions}. Ничего не
-    сохраняет — результат живёт в полях формы до создания листка.
-    """
-    from problems.neuro import (MAX_TASK_CHARS, NeuroError, NeuroQuotaError,
-                               acquire_quota, release_quota, solve_task)
-    try:
-        payload = json.loads(request.body)
-        text = str(payload.get('text') or '')
-        subitems = [str(s) for s in (payload.get('subitems') or [])]
-    except (ValueError, TypeError, AttributeError):
-        return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
-    if len(text) + sum(len(s) for s in subitems) > MAX_TASK_CHARS:
-        return JsonResponse(
-            {'error': 'Задача слишком длинная для нейрогенерации.'},
-            status=400)
-    try:
-        acquire_quota(request.user)
-        result = solve_task(text, subitems)
-    except NeuroQuotaError as exc:
-        return JsonResponse({'error': str(exc)}, status=429)
-    except NeuroError as exc:
-        return JsonResponse({'error': str(exc)}, status=502)
-    finally:
-        release_quota(request.user)
-    return JsonResponse(result)
+    """Тот же эндпоинт, что /problems/solve/: черновик для предпросмотра."""
+    from problems.views import task_neuro_solve
+    return task_neuro_solve(request)
 
 
 @teacher_required

@@ -144,6 +144,45 @@ class NeuroTests(TestCase):
             with self.assertRaises(NeuroError):
                 solve_task('x' * (MAX_TASK_CHARS + 1))
 
+    def test_apply_result_skips_filled_unless_overwrite(self):
+        from .neuro import apply_result
+        task = Task.objects.create(
+            text_latex='Задача', answer_latex='старый', created_by=make_teacher())
+        apply_result(task, {'answer': 'новый', 'solution': 'Шаг'},
+                     overwrite=False)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, 'старый')
+        self.assertEqual(task.solution_latex, 'Шаг')
+        apply_result(task, {'answer': 'новый', 'solution': 'Другое'},
+                     overwrite=True)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, 'новый')
+        self.assertEqual(task.solution_latex, 'Другое')
+
+    def test_solve_endpoint_apply_and_form_only(self):
+        from unittest import mock
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        task = Task.objects.create(text_latex='$2+2$', created_by=teacher)
+        drafts = {'answer': '4', 'solution': 'Сложение.',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        url = reverse('task_neuro_solve')
+        with mock.patch('problems.neuro.solve_task', return_value=drafts):
+            response = self.client.post(
+                url, {'text': '$2+2$', 'subitems': []},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, '')
+        with mock.patch('problems.neuro.solve_task', return_value=drafts):
+            response = self.client.post(
+                url, {'task_id': task.pk, 'apply': True},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, '4')
+        self.assertEqual(task.solution_latex, 'Сложение.')
+
 
 class WebTexTests(TestCase):
     """Серверный препроцессор tex → HTML для веб-страниц."""
@@ -649,6 +688,8 @@ class QuickUpdateTests(TestCase):
         self.assertContains(response, '>Ответ<')
         self.assertContains(response, 'icon-btn')
         self.assertContains(response, 'class="btn">Добавить')
+        self.assertContains(response, 'data-neuro="task-detail"')
+        self.assertContains(response, 'Сгенерировать')
         self.assertNotContains(response, 'qa_answer')
         self.assertNotContains(response, 'устаревшие')
         self.assertNotContains(response, 'legacy')

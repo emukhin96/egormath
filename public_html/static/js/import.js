@@ -74,10 +74,10 @@
       }
     }
 
-    /* --- Нейрогенерация ответов/решений (черновики в поля формы) --- */
+    /* --- Нейрогенерация: общий EgorNeuro.solve, поля остаются в форме --- */
     var solveDataEl = document.getElementById('import-solve-data');
     var solveData = solveDataEl ? JSON.parse(solveDataEl.textContent) : {};
-    var csrf = form.querySelector('[name="csrfmiddlewaretoken"]').value;
+    var neuroLabel = (window.EgorNeuro && EgorNeuro.label) || 'Сгенерировать';
 
     function setField(name, value) {
       if (value == null) return;
@@ -87,41 +87,28 @@
 
     function solveRow(index) {
       var data = solveData[index];
-      if (!data) return Promise.resolve();
-      return fetch(window.IMPORT_SOLVE_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': csrf,
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-        body: JSON.stringify(data),
-      }).then(function (response) {
-        return response.json().then(function (result) {
-          if (!response.ok) {
-            throw new Error(result.error || 'Ошибка генерации.');
-          }
-          setField('answer_' + index, result.answer);
-          setField('solution_' + index, result.solution);
-          (result.subitem_answers || []).forEach(function (value, j) {
-            setField('answer_' + index + '_' + j, value);
-          });
-          (result.subitem_solutions || []).forEach(function (value, j) {
-            setField('solution_' + index + '_' + j, value);
-          });
-          showAnswers();
+      if (!data || !window.EgorNeuro) return Promise.resolve();
+      return EgorNeuro.solve(data).then(function (result) {
+        setField('answer_' + index, result.answer);
+        setField('solution_' + index, result.solution);
+        (result.subitem_answers || []).forEach(function (value, j) {
+          setField('answer_' + index + '_' + j, value);
         });
+        (result.subitem_solutions || []).forEach(function (value, j) {
+          setField('solution_' + index + '_' + j, value);
+        });
+        showAnswers();
       });
     }
 
     document.querySelectorAll('.neuro-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         btn.disabled = true;
-        btn.textContent = 'генерация…';
+        btn.textContent = 'Генерация…';
         solveRow(btn.dataset.index).then(function () {
-          btn.textContent = '✨ сгенерировать';
+          btn.textContent = neuroLabel;
         }).catch(function (err) {
-          btn.textContent = '✨ сгенерировать';
+          btn.textContent = neuroLabel;
           alert(err.message);
         }).finally(function () {
           btn.disabled = false;

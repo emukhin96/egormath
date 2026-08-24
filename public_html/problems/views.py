@@ -1,3 +1,4 @@
+import json
 import re
 
 from django.contrib import messages
@@ -588,3 +589,50 @@ def _task_form(request, task):
                            and item.task_id == task.pk
                            and task.variant_of_id is None),
     })
+
+
+@teacher_required
+@require_POST
+def task_neuro_solve(request):
+    """Нейрогенерация черновика ответа/решения.
+
+    JSON {text, subitems} и/или {task_id, apply, overwrite}.
+    Без apply ничего не пишет в базу — черновик уходит в поля формы.
+    С apply=true записывает в задачу (конструктор листка).
+    """
+    from .neuro import (MAX_TASK_CHARS, NeuroError, NeuroQuotaError,
+                        acquire_quota, apply_result, release_quota,
+                        solve_task)
+    try:
+        payload = json.loads(request.body)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+
+    task = None
+    task_id = payload.get('task_id')
+    if task_id not in (None, ''):
+        task = get_object_or_404(Task, pk=task_id)
+
+    text = str(payload.get('text') or '')
+    subitems = [str(s) for s in (payload.get('subitems') or [])]
+    if task is not None and not text.strip():
+        text = task.text_latex
+        subitems = [s.text_latex for s in task.subitems.order_by('order', 'pk')]
+    if len(text) + sum(len(s) for s in subitems) > MAX_TASK_CHARS:
+        return JsonResponse(
+            {'error': 'Задача слишком длинная для нейрогенерации.'},
+            status=400)
+    try:
+        acquire_quota(request.user)
+        result = solve_task(text, subitems)
+    except NeuroQuotaError as exc:
+        return JsonResponse({'error': str(exc)}, status=429)
+    except NeuroError as exc:
+        return JsonResponse({'error': str(exc)}, status=502)
+    finally:
+        release_quota(request.user)
+    if task is not None and payload.get('apply'):
+        apply_result(task, result, overwrite=bool(payload.get('overwrite')))
+    return JsonResponse(result)

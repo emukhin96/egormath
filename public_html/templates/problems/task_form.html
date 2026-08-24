@@ -87,6 +87,10 @@
       <label for="{{ form.solution_latex.id_for_label }}">{{ form.solution_latex.label }}</label>
       {{ form.solution_latex.errors }}{{ form.solution_latex }}
     </p>
+    <div class="form-buttons">
+      <button type="button" class="btn btn-secondary" data-neuro="task-form"
+              title="Черновик ответа и решения от нейросети — проверьте перед сохранением">Сгенерировать</button>
+    </div>
 
     <h2>Подпункты</h2>
     <p class="helptext">Каждый подпункт — отдельной строкой, без \item и без

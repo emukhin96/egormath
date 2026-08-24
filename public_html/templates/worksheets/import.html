@@ -78,7 +78,7 @@
     </label>
     <button type="button" class="btn btn-small btn-secondary" id="bulk-apply">Применить к выделенным</button>
     <button type="button" class="btn btn-small btn-secondary" id="bulk-solve"
-            title="Нейрогенерация черновиков ответов и решений — проверьте и поправьте перед созданием">Сгенерировать для выбранных</button>
+            title="Черновики ответов и решений — проверьте и поправьте перед созданием">Сгенерировать</button>
     <button type="button" class="btn btn-small btn-danger" id="bulk-skip">Удалить из импорта</button>
   </form>
 
@@ -169,9 +169,9 @@
           {% if row.kind == 'task' %}
             {% if row.existing_id %}<span class="badge badge-reviewed">в базе #{{ row.existing_id }}</span>
             {% else %}<span class="badge badge-assigned">новая</span>{% endif %}
-            <button type="button" class="linklike neuro-btn"
+            <button type="button" class="btn btn-small btn-secondary neuro-btn"
                     data-index="{{ forloop.counter0 }}"
-                    title="Нейрогенерация черновика ответа и решения — проверьте и поправьте перед созданием">✨ сгенерировать</button>
+                    title="Черновик ответа и решения — проверьте и поправьте перед созданием">Сгенерировать</button>
             <span class="import-skip-state" hidden>не будет импортирована —
               <button type="button" class="linklike import-restore">вернуть</button></span>
           {% endif %}
@@ -186,7 +186,6 @@
   </form>
 </div>
 {{ solve_payloads|json_script:'import-solve-data' }}
-<script>window.IMPORT_SOLVE_URL = '{% url 'worksheet_import_solve' %}';</script>
 <script defer src="{% static 'js/bulk.js' %}"></script>
 <script defer src="{% static 'js/import.js' %}"></script>
 {% endif %}
