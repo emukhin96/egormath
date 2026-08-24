@@ -439,8 +439,13 @@ def worksheet_remove_item(request, pk, item_id):
         worksheet.items.filter(deleted_at__isnull=False).delete()
         item.deleted_at = timezone.now()
         item.save(update_fields=['deleted_at'])
-    messages.success(request, 'Элемент убран из листка.')
-    return redirect('worksheet_detail', pk=pk)
+        if item.task_id:
+            msg = 'Задача удалена из листка.'
+        elif item.is_rubric:
+            msg = 'Рубрика удалена из листка.'
+        else:
+            msg = 'Текст удалён из листка.'
+    return _builder_response(request, pk, message=msg)
 
 
 @teacher_required
@@ -451,6 +456,7 @@ def worksheet_restore_item(request, pk):
     with transaction.atomic():
         Worksheet.objects.select_for_update().get(pk=worksheet.pk)
         restored = 0
+        kind = None
         for item in worksheet.items.filter(deleted_at__isnull=False):
             if (item.task_id and worksheet.items.filter(
                     task_id=item.task_id, deleted_at__isnull=True).exists()):
@@ -459,8 +465,19 @@ def worksheet_restore_item(request, pk):
             item.deleted_at = None
             item.save(update_fields=['deleted_at'])
             restored += 1
+            if item.task_id:
+                kind = 'task'
+            elif item.is_rubric:
+                kind = 'rubric'
+            else:
+                kind = 'text'
     if restored:
-        messages.success(request, 'Элемент возвращён в листок.')
+        msg = {
+            'task': 'Задача возвращена в листок.',
+            'rubric': 'Рубрика возвращена в листок.',
+            'text': 'Текст возвращён в листок.',
+        }.get(kind, 'Элемент возвращён в листок.')
+        return _builder_response(request, pk, message=msg)
     return redirect('worksheet_detail', pk=pk)
 
 

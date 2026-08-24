@@ -541,13 +541,16 @@ class WorksheetViewTests(TestCase):
         self.assertNotIn(item.pk,
                          [r['item'].pk for r in response.context['rows']])
         self.assertContains(response, 'undo-bar')
+        self.assertContains(response, 'ws-toast-src')
+        self.assertContains(response, 'Задача удалена из листка.')
         self.assertNotIn(item.task.text_latex,
                          worksheet_to_tex(self.worksheet, 'student'))
         # «Отменить» возвращает элемент
-        self.client.post(reverse(
-            'worksheet_restore_item', args=[self.worksheet.pk]))
+        restore = self.client.post(reverse(
+            'worksheet_restore_item', args=[self.worksheet.pk]), follow=True)
         item.refresh_from_db()
         self.assertIsNone(item.deleted_at)
+        self.assertContains(restore, 'Задача возвращена в листок.')
 
     def test_second_remove_purges_previous_trash(self):
         # Отмена одноуровневая: новое удаление затирает прежний «мусор»

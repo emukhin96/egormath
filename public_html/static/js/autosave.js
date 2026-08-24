@@ -10,7 +10,7 @@
   function showSaved(ok, message) {
     var badge = document.getElementById('ws-saved');
     if (!badge) return;
-    badge.textContent = ok ? 'Сохранено ✓' : (message || 'Ошибка сохранения');
+    badge.textContent = message || (ok ? 'Сохранено ✓' : 'Ошибка сохранения');
     badge.classList.toggle('ws-saved-error', !ok);
     badge.hidden = false;
     clearTimeout(badgeTimer);
@@ -70,4 +70,20 @@
   });
 
   window.EgorAutosave = {showSaved: showSaved, autosave: autosave};
+
+  /* Flash-сообщения Django (success/info) — тот же тост справа снизу. */
+  document.addEventListener('DOMContentLoaded', function () {
+    var nodes = document.querySelectorAll('.ws-toast-src');
+    if (!nodes.length) return;
+    var i = 0;
+    function next() {
+      if (i >= nodes.length) return;
+      var node = nodes[i++];
+      showSaved(node.dataset.ok !== '0', (node.textContent || '').trim());
+      if (i < nodes.length) {
+        setTimeout(next, node.dataset.ok !== '0' ? 1600 : 4100);
+      }
+    }
+    next();
+  });
 })();
