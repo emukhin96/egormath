@@ -979,6 +979,24 @@ class ShareLinkTests(TestCase):
         # Ответы не показываются
         self.assertNotContains(response, 'Ответ')
 
+    def test_public_subtitle_skips_empty_parts(self):
+        # Пустые grade_label/subtitle не оставляют «висячих» разделителей
+        self.worksheet.grade_label = ''
+        self.worksheet.subtitle = ''
+        self.worksheet.save()
+        response = self.client.get(
+            reverse('public_worksheet', args=[self.link.token]))
+        line = response.context['subtitle_line']
+        self.assertFalse(line.startswith('·'))
+        self.assertNotIn('· ·', line)
+        # Заполненные части соединяются через «·»
+        self.worksheet.grade_label = 'Алгебра · 8 класс'
+        self.worksheet.subtitle = 'Вариант 1'
+        self.worksheet.save()
+        response = self.client.get(
+            reverse('public_worksheet', args=[self.link.token]))
+        self.assertIn('Вариант 1 ·', response.context['subtitle_line'])
+
     def test_hidden_items_excluded_from_public_page(self):
         first = self.worksheet.items.order_by('order').first()
         self.link.hidden_items.add(first)
