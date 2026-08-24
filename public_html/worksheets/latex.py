@@ -140,6 +140,34 @@ def rubric_to_tex(item):
     return tex
 
 
+def _drop_empty_rubrics(items):
+    """Убирает рубрики, после которых до следующей нет задач и текста.
+
+    \\rubr открывает enumerate: если все задачи рубрики скрыты, LaTeX
+    падает на «perhaps a missing \\item». Текстовый элемент после
+    пустой рубрики оставляем — для него уже есть \\item[].
+    """
+    kept = []
+    i = 0
+    n = len(items)
+    while i < n:
+        item = items[i]
+        if item.is_rubric:
+            has_content = False
+            for nxt in items[i + 1:]:
+                if nxt.is_rubric:
+                    break
+                if nxt.task_id or nxt.is_text:
+                    has_content = True
+                    break
+            if not has_content:
+                i += 1
+                continue
+        kept.append(item)
+        i += 1
+    return kept
+
+
 def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
     """exclude_ids — pk элементов, скрытых для конкретной ссылки/ученика."""
     exclude_ids = exclude_ids or set()
@@ -164,8 +192,10 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
     lines.append(bighead)
     lines.append('')
 
-    items = [item for item in worksheet.ordered_items()
-             if item.pk not in exclude_ids]
+    items = _drop_empty_rubrics([
+        item for item in worksheet.ordered_items()
+        if item.pk not in exclude_ids
+    ])
     list_open = False
     list_has_item = False
     for item in items:
@@ -196,6 +226,10 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
         list_has_item = True
 
     if list_open:
+        if not list_has_item:
+            # Пустой enumerate (рубрика без видимых задач и без текста)
+            # всё равно нужно закрыть без ошибки «missing \\item»
+            lines.append('\\item[]')
         lines.append('')
         lines.append('\\end{enumerate}')
     if any(item.task_id and item.task.images.all() for item in items):

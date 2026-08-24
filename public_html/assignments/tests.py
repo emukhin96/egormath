@@ -78,6 +78,23 @@ class StudentAnswerTests(TestCase):
         self.assertFalse(Submission.objects.filter(
             assignment=self.assignment, task=item.task).exists())
 
+    def test_hidden_item_blocks_photo_and_submit(self):
+        hidden = self.assignment.worksheet.items.order_by('order').first()
+        visible = self.assignment.worksheet.items.order_by('order').last()
+        self.assignment.hidden_items.add(hidden)
+        response = self.client.post(
+            reverse('upload_photo', args=[self.assignment.pk, hidden.task_id]),
+            {'photos': fake_photo()})
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Submission.objects.filter(
+            assignment=self.assignment, task=hidden.task).exists())
+        self.client.post(
+            reverse('submit_assignment', args=[self.assignment.pk]))
+        self.assertFalse(Submission.objects.filter(
+            assignment=self.assignment, task=hidden.task).exists())
+        self.assertTrue(Submission.objects.filter(
+            assignment=self.assignment, task=visible.task).exists())
+
     def test_save_answers_and_submit(self):
         task = self.tasks[0]
         response = self.client.post(
@@ -225,6 +242,28 @@ class ReviewFlowTests(TestCase):
             })
         review = Review.objects.get(submission=submission)
         self.assertEqual(float(review.grade_points), 7.5)
+
+    def test_save_review_keeps_hidden_task_review(self):
+        # Скрытая после проверки задача пропадает из формы, но её отзыв
+        # не должен удаляться при сохранении остальных оценок
+        hidden_item = self.assignment.worksheet.items.order_by('order').first()
+        visible_item = self.assignment.worksheet.items.order_by('order').last()
+        hidden_sub = Submission.objects.get(
+            assignment=self.assignment, task=hidden_item.task)
+        visible_sub, _ = Submission.objects.get_or_create(
+            assignment=self.assignment, task=visible_item.task)
+        Review.objects.create(
+            submission=hidden_sub, grade_word='good', reviewer=self.teacher)
+        self.assignment.hidden_items.add(hidden_item)
+        self.client.post(
+            reverse('save_review', args=[self.assignment.pk]), {
+                f'sub{visible_sub.pk}_grade': 'medium',
+                'action': 'save',
+            })
+        self.assertTrue(Review.objects.filter(
+            submission=hidden_sub, grade_word='good').exists())
+        self.assertEqual(
+            Review.objects.get(submission=visible_sub).grade_word, 'medium')
 
     def test_foreign_teacher_cannot_review(self):
         make_teacher('teacher2')

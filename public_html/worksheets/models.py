@@ -221,6 +221,9 @@ class WorksheetPdf(models.Model):
     variant = models.CharField(
         'Вариант', max_length=10, choices=VARIANT_CHOICES)
     content_hash = models.CharField('Хеш содержимого', max_length=64)
+    filter_key = models.CharField(
+        'Ключ скрытий', max_length=40, blank=True, default='',
+        help_text='Пусто — полный листок; иначе идентификатор набора скрытых элементов')
     file = models.FileField('Файл', upload_to='worksheet_pdfs/%Y/%m/')
     created_at = models.DateTimeField('Создан', auto_now_add=True)
 

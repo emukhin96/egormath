@@ -1045,6 +1045,24 @@ class ShareLinkTests(TestCase):
         # Ответы не показываются
         self.assertNotContains(response, 'Ответ')
 
+    def test_public_subtitle_skips_empty_parts(self):
+        # Пустые grade_label/subtitle не оставляют «висячих» разделителей
+        self.worksheet.grade_label = ''
+        self.worksheet.subtitle = ''
+        self.worksheet.save()
+        response = self.client.get(
+            reverse('public_worksheet', args=[self.link.token]))
+        line = response.context['subtitle_line']
+        self.assertFalse(line.startswith('·'))
+        self.assertNotIn('· ·', line)
+        # Заполненные части соединяются через «·»
+        self.worksheet.grade_label = 'Алгебра · 8 класс'
+        self.worksheet.subtitle = 'Вариант 1'
+        self.worksheet.save()
+        response = self.client.get(
+            reverse('public_worksheet', args=[self.link.token]))
+        self.assertIn('Вариант 1 ·', response.context['subtitle_line'])
+
     def test_hidden_items_excluded_from_public_page(self):
         first = self.worksheet.items.order_by('order').first()
         self.link.hidden_items.add(first)
@@ -1068,6 +1086,21 @@ class ShareLinkTests(TestCase):
         self.assertIn(first.task.text_latex, tex_full)
         self.assertNotIn(first.task.text_latex, tex_cut)
 
+    def test_empty_rubric_dropped_when_tasks_hidden(self):
+        # Рубрика, все задачи которой скрыты, не должна оставлять
+        # пустой enumerate — иначе PDF падает на «missing \\item»
+        last = self.worksheet.items.order_by('order').last()
+        rubric = make_rubric(self.worksheet, 'Дополнительно', order=50)
+        extra = Task.objects.create(
+            text_latex='Скрытая задача хвоста', created_by=self.teacher)
+        tail = WorksheetItem.objects.create(
+            worksheet=self.worksheet, task=extra, order=60)
+        tex = worksheet_to_tex(self.worksheet, 'student',
+                               exclude_ids={tail.pk})
+        self.assertNotIn('\\rubr{Дополнительно}', tex)
+        self.assertIn(last.task.text_latex, tex)
+        self.assertNotIn('Скрытая задача хвоста', tex)
+
     def test_visibility_endpoint(self):
         self.client.login(username='teacher1', password='pass12345')
         first = self.worksheet.items.order_by('order').first()
@@ -1085,6 +1118,37 @@ class ShareLinkTests(TestCase):
             reverse('worksheet_detail', args=[self.worksheet.pk]))
         self.assertContains(response, 'vis-btn')
         self.assertContains(response, 'hide_links')
+        # Пока ни у кого не скрыта — обычный глаз, не перечёркнутый
+        self.assertContains(response, 'Видна всем ссылкам и ученикам')
+        self.assertNotContains(response, 'vis-on')
+
+        first = self.worksheet.items.order_by('order').first()
+        self.link.hidden_items.add(first)
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.assertContains(response, 'vis-on')
+        self.assertContains(response, 'Скрыта у части ссылок или учеников')
+
+    @mock.patch('worksheets.services.compile_latex',
+                return_value=b'%PDF-1.5 fake')
+    def test_filtered_pdf_is_cached(self, mocked):
+        first = self.worksheet.items.order_by('order').first()
+        self.link.hidden_items.add(first)
+        url = reverse('public_worksheet_pdf', args=[self.link.token])
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(mocked.call_count, 1)
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(mocked.call_count, 1)
+        # Другая ссылка без скрытий — полный tex, отдельный кэш
+        other = ShareLink.objects.create(worksheet=self.worksheet)
+        other_url = reverse('public_worksheet_pdf', args=[other.token])
+        self.assertEqual(self.client.get(other_url).status_code, 200)
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(self.client.get(other_url).status_code, 200)
+        self.assertEqual(mocked.call_count, 2)
+        # Полный PDF не вытесняет отфильтрованный
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(mocked.call_count, 2)
 
     def test_public_page_minimal_for_logged_in(self):
         # Даже залогиненный учитель видит публичную страницу без контекстной панели
