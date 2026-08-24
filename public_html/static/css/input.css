@@ -666,6 +666,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: max-content;
+    max-width: 100%;
+    flex: 0 0 auto;
     background: var(--accent);
     color: #fff;
     border: none;
@@ -1840,25 +1843,41 @@
     flex-wrap: wrap;
   }
 
-  /* Карточка задачи: предпросмотр подпунктов (условие / ответ / решение) */
+  /* Карточка задачи: предпросмотр и правка подпунктов в одних колонках.
+     Переменная на строке — чтобы форма «добавить» вне .subitem-grid
+     считала те же доли. Последняя колонка фиксирована под .icon-btn,
+     иначе крестик или кнопка «Добавить» раздувают/сжимают поля. */
+  .subitem-grid-head,
+  .subitem-grid-row {
+    --subitem-cols: 2.5rem minmax(0, 1.2fr) minmax(4.5rem, 0.5fr) minmax(0, 2.6fr) 2rem;
+    display: grid;
+    grid-template-columns: var(--subitem-cols);
+    gap: var(--space-2);
+    align-items: start;
+    justify-items: stretch;
+  }
+
   .subitem-grid {
     display: grid;
     gap: var(--space-3);
     margin-block: var(--space-2);
   }
 
-  .subitem-grid-head,
-  .subitem-grid-row {
-    display: grid;
-    grid-template-columns: 2.5rem minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.2fr) auto;
-    gap: var(--space-2);
-    align-items: start;
-  }
-
   .subitem-grid-head {
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--muted);
+    text-align: left;
+  }
+
+  .subitem-grid-head > * {
+    justify-self: start;
+    text-align: left;
+  }
+
+  .subitem-grid-row > .math-content {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .subitem-block {
@@ -1868,6 +1887,36 @@
 
   .subitem-block .ws-add-text {
     margin-top: 0;
+  }
+
+  .subitem-grid-row > .inline-form,
+  .subitem-grid-row > .icon-btn {
+    justify-self: start;
+    width: auto;
+  }
+
+  .subitem-edit-form input,
+  .subitem-edit-form textarea {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin: 0;
+    box-sizing: border-box;
+  }
+
+  .subitem-add-form {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .subitem-add-form .form-buttons {
+    margin-top: 0;
+  }
+
+  .subitem-add-form .subitem-edit-form textarea {
+    height: 4.25rem;
+    min-height: 4.25rem;
+    resize: vertical;
   }
 
   /* Карточка задачи: горячее редактирование подпунктов и классификации */
@@ -2092,6 +2141,18 @@
   .ws-add-text textarea {
     max-width: none;
     margin: var(--space-2) 0;
+  }
+
+  .ws-add-text .subitem-edit-form textarea {
+    margin: 0;
+  }
+
+  .ws-add-text > form {
+    margin-top: var(--space-2);
+  }
+
+  .ws-add-text > .subitem-add-form {
+    margin-top: var(--space-3);
   }
 
   .muted {

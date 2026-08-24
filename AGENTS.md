@@ -58,9 +58,16 @@ make test         # только Django-тесты
 - Комментарии, docstring'и и сообщения коммитов — на русском, в стиле
   существующей истории репозитория.
 - Не переименовывай стабильные CSS-классы/ID без необходимости: `.btn`,
-  `.card`, `.ws-*`, `context-sidebar`, `context-toggle`, `sidebar-close`,
-  `sidebar-backdrop`, `#ws-saved` — на них завязаны шаблоны и JS (`shell.js`,
-  `autosave.js`, `builder.js`).
+  `.card`, `.ws-*`, `.icon-btn`, `context-sidebar`, `context-toggle`,
+  `sidebar-close`, `sidebar-backdrop`, `#ws-saved` — на них завязаны шаблоны
+  и JS (`shell.js`, `autosave.js`, `builder.js`).
+- Кнопки и крестики удаления — стандарт в [docs/PIPELINE.md](docs/PIPELINE.md),
+  раздел «Кнопки и символы закрытия»: обычное действие как «К базе задач»
+  (`.btn.btn-secondary`), Сохранить/Отправить/Добавить/PDF — то же, но
+  заливка `.btn`, точечное удаление — `.icon-btn` (`×`), не красная кнопка.
+- Отступы в формах — там же, раздел «Отступы в формах»: поле ↔ кнопка
+  только `--space-2` (8px), заголовок блока ↔ поля — `--space-3` (12px),
+  `--space-1` (4px) внутри контрола, не между полем и кнопкой.
 - Уведомления об успехе — тост `#ws-saved` справа снизу (`EgorAutosave.showSaved`),
   не новые плашки `.msg-success`. Подробности — в [docs/PIPELINE.md](docs/PIPELINE.md),
   раздел «Уведомления пользователя».

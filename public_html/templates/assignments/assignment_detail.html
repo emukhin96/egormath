@@ -63,9 +63,10 @@
       <span>
         <a href="{% url 'photo_file' photo.pk %}" target="_blank"><img src="{% url 'photo_file' photo.pk %}" alt="фото решения"></a>
         {% if editable %}
-        <button type="submit" class="btn btn-small btn-danger"
+        <button type="submit" class="icon-btn"
                 formaction="{% url 'delete_photo' assignment.pk photo.pk %}"
-                formmethod="post" onclick="return confirm('Удалить фото?')">×</button>
+                formmethod="post" onclick="return confirm('Удалить фото?')"
+                title="Удалить фото" aria-label="Удалить фото">×</button>
         {% endif %}
       </span>
       {% endfor %}

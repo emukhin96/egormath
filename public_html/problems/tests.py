@@ -561,6 +561,8 @@ class QuickUpdateTests(TestCase):
         self.assertContains(response, 'name="solution_latex"')
         self.assertContains(response, 'править подпункт')
         self.assertContains(response, '>Ответ<')
+        self.assertContains(response, 'icon-btn')
+        self.assertContains(response, 'class="btn">Добавить')
         self.assertNotContains(response, 'qa_answer')
         self.assertNotContains(response, 'устаревшие')
         self.assertNotContains(response, 'legacy')
