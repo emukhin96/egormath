@@ -6,6 +6,7 @@ JSON {"api_key": ..., "tex_files": [{"team_id": ..., "tex_content": ...}]},
 """
 
 import base64
+import hashlib
 import logging
 
 import requests
@@ -68,12 +69,17 @@ def compile_latex(tex_content, doc_id='doc', assets=None):
     return base64.b64decode(data['pdf_base64'])
 
 
-def collect_assets(worksheet):
-    """Файлы картинок задач листка для передачи в LaTeX API."""
+def collect_assets(worksheet, exclude_ids=None):
+    """Файлы картинок задач листка для передачи в LaTeX API.
+
+    exclude_ids — скрытые элементы: их картинки не уходят в сборку,
+    чтобы не подменять одноимённые файлы видимых задач и не раздувать запрос.
+    """
+    exclude_ids = set(exclude_ids or ())
     assets = []
     seen = set()
     for item in worksheet.ordered_items():
-        if not item.task_id:
+        if item.pk in exclude_ids or not item.task_id:
             continue
         for image in item.task.images.all():
             name = image.filename
@@ -88,28 +94,48 @@ def collect_assets(worksheet):
     return assets
 
 
-def get_worksheet_pdf(worksheet, variant):
-    """PDF листка с кэшированием: перегенерация только при изменении .tex."""
-    tex = worksheet_to_tex(worksheet, variant)
+def _pdf_filter_key(exclude_ids):
+    """Стабильный ключ набора скрытых элементов; пусто — полный листок."""
+    ids = sorted({int(x) for x in (exclude_ids or ())})
+    if not ids:
+        return ''
+    raw = ','.join(str(i) for i in ids).encode()
+    return hashlib.sha1(raw).hexdigest()[:16]
+
+
+def get_worksheet_pdf(worksheet, variant, exclude_ids=None):
+    """PDF листка с кэшированием: перегенерация только при изменении .tex.
+
+    exclude_ids — скрытые элементы конкретной ссылки/ученика. Кэш ключуется
+    парой (filter_key, content_hash): разные наборы скрытий не вытесняют
+    друг друга и полный вариант.
+    """
+    exclude_ids = set(exclude_ids or ())
+    filter_key = _pdf_filter_key(exclude_ids)
+    tex = worksheet_to_tex(worksheet, variant, exclude_ids=exclude_ids)
     content_hash = tex_hash(tex)
     cached = WorksheetPdf.objects.filter(
-        worksheet=worksheet, variant=variant, content_hash=content_hash,
+        worksheet=worksheet, variant=variant,
+        filter_key=filter_key, content_hash=content_hash,
     ).first()
     if cached and cached.file and cached.file.storage.exists(cached.file.name):
         return cached
 
+    suffix = f'-{filter_key}' if filter_key else ''
     pdf_bytes = compile_latex(
-        tex, doc_id=f'ws{worksheet.pk}-{variant}',
-        assets=collect_assets(worksheet))
+        tex, doc_id=f'ws{worksheet.pk}-{variant}{suffix}',
+        assets=collect_assets(worksheet, exclude_ids=exclude_ids))
 
-    # Устаревшие версии этого варианта больше не нужны
-    for old in WorksheetPdf.objects.filter(worksheet=worksheet, variant=variant):
+    stale = WorksheetPdf.objects.filter(
+        worksheet=worksheet, variant=variant, filter_key=filter_key)
+    for old in stale:
         old.file.delete(save=False)
         old.delete()
 
     pdf = WorksheetPdf(
-        worksheet=worksheet, variant=variant, content_hash=content_hash)
+        worksheet=worksheet, variant=variant,
+        content_hash=content_hash, filter_key=filter_key)
     pdf.file.save(
-        f'worksheet-{worksheet.pk}-{variant}.pdf',
+        f'worksheet-{worksheet.pk}-{variant}{suffix}.pdf',
         ContentFile(pdf_bytes), save=True)
     return pdf

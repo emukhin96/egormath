@@ -37,6 +37,8 @@ urlpatterns = [
          name='worksheet_edit_text'),
     path('<int:pk>/items/<int:item_id>/settings/',
          views.worksheet_item_settings, name='worksheet_item_settings'),
+    path('<int:pk>/items/<int:item_id>/visibility/',
+         views.worksheet_item_visibility, name='worksheet_item_visibility'),
     path('<int:pk>/share/', views.share_create, name='share_create'),
     path('<int:pk>/share/<int:link_id>/toggle/', views.share_toggle,
          name='share_toggle'),

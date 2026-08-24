@@ -391,6 +391,27 @@
     background: #fdeaea;
   }
 
+  /* Кнопка видимости задачи в конструкторе: синяя, не «опасная» */
+  .vis-btn {
+    padding: 3px 5px;
+  }
+
+  .vis-btn:hover {
+    color: var(--accent);
+    background: #e8f1fb;
+  }
+
+  .vis-btn svg {
+    display: block;
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Перечёркнутый глаз: задача скрыта хотя бы у одного участника */
+  .vis-btn.vis-on {
+    color: var(--accent);
+  }
+
   .linklike:hover {
     color: var(--accent);
   }

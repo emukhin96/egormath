@@ -225,6 +225,21 @@ def worksheet_detail(request, pk):
     items = list(worksheet.ordered_items())
     task_ids = [item.task_id for item in items if item.task_id]
 
+    # Кто скрывает какие элементы: {item_id: {pk ссылок/назначений}}
+    share_links = list(worksheet.share_links.order_by('-created_at')
+                       .prefetch_related('hidden_items'))
+    assignments = list(worksheet.assignments.select_related('student')
+                       .prefetch_related('hidden_items'))
+    link_hidden = {}
+    for link in share_links:
+        for hidden_item in link.hidden_items.all():
+            link_hidden.setdefault(hidden_item.pk, set()).add(link.pk)
+    assignment_hidden = {}
+    for assignment in assignments:
+        for hidden_item in assignment.hidden_items.all():
+            assignment_hidden.setdefault(
+                hidden_item.pk, set()).add(assignment.pk)
+
     # Строки конструктора: сквозная нумерация только для задач
     rows = []
     number = 0
@@ -237,6 +252,8 @@ def worksheet_detail(request, pk):
             'selected_ids': ({s.pk for s in item.subitems.all()}
                              if item.task_id and not item.all_subitems
                              else None),
+            'hidden_links': link_hidden.get(item.pk, set()),
+            'hidden_assignments': assignment_hidden.get(item.pk, set()),
         })
 
     # Поиск задач для добавления (правая часть страницы)
@@ -265,8 +282,8 @@ def worksheet_detail(request, pk):
         'groups': groups,
         'stars_choices': Task.STARS_CHOICES,
         'grade_choices': Task.GRADE_CHOICES,
-        'share_links': worksheet.share_links.order_by('-created_at'),
-        'assignments': worksheet.assignments.select_related('student'),
+        'share_links': share_links,
+        'assignments': assignments,
     })
 
 
@@ -504,6 +521,30 @@ def worksheet_edit_text(request, pk, item_id):
 
 @teacher_required
 @require_POST
+def worksheet_item_visibility(request, pk, item_id):
+    """Скрытие задачи по публичным ссылкам и назначениям учеников."""
+    worksheet = _own_worksheet(request, pk)
+    item = get_object_or_404(
+        WorksheetItem, pk=item_id, worksheet=worksheet, task__isnull=False)
+    hide_links = {int(x) for x in request.POST.getlist('hide_links')
+                  if x.isdigit()}
+    for link in worksheet.share_links.all():
+        if link.pk in hide_links:
+            link.hidden_items.add(item)
+        else:
+            link.hidden_items.remove(item)
+    hide_assignments = {int(x) for x in request.POST.getlist(
+        'hide_assignments') if x.isdigit()}
+    for assignment in worksheet.assignments.all():
+        if assignment.pk in hide_assignments:
+            assignment.hidden_items.add(item)
+        else:
+            assignment.hidden_items.remove(item)
+    return _builder_response(request, pk, message='Видимость сохранена.')
+
+
+@teacher_required
+@require_POST
 def worksheet_item_settings(request, pk, item_id):
     """Звёзды/колонки и выбор подпунктов для задачи в листке."""
     worksheet = _own_worksheet(request, pk)
@@ -538,8 +579,9 @@ def worksheet_item_settings(request, pk, item_id):
         request, pk, message='Настройки задачи в листке сохранены.')
 
 
-def _worksheet_pdf_response(worksheet, variant):
-    pdf = get_worksheet_pdf(worksheet, variant)
+def _worksheet_pdf_response(worksheet, variant, exclude_ids=None):
+    """PDF листка, в том числе со скрытыми элементами — через кэш WorksheetPdf."""
+    pdf = get_worksheet_pdf(worksheet, variant, exclude_ids=exclude_ids)
     return FileResponse(
         pdf.file.open('rb'), content_type='application/pdf',
         filename=worksheet.pdf_filename(variant))
@@ -563,8 +605,17 @@ def worksheet_pdf(request, pk):
                          and variant == WorksheetPdf.VARIANT_STUDENT)):
         raise PermissionDenied
 
+    # Ученик получает PDF без задач, скрытых в его назначении
+    exclude_ids = None
+    if not is_owner:
+        assignment = worksheet.assignments.filter(
+            student=request.user).first()
+        exclude_ids = set(
+            assignment.hidden_items.values_list('pk', flat=True))
+
     try:
-        return _worksheet_pdf_response(worksheet, variant)
+        return _worksheet_pdf_response(worksheet, variant,
+                                       exclude_ids=exclude_ids)
     except LatexCompileError as exc:
         if not is_owner:
             raise Http404
@@ -704,18 +755,23 @@ def share_toggle(request, pk, link_id):
 
 # --- Публичные страницы (без входа) ---
 
-def _shared_worksheet(token):
-    link = ShareLink.objects.filter(token=token, is_active=True).first()
+def _shared_link(token):
+    link = (ShareLink.objects.filter(token=token, is_active=True)
+            .select_related('worksheet').first())
     if link is None:
         raise Http404
-    return link.worksheet
+    return link
 
 
 def public_worksheet(request, token):
-    worksheet = _shared_worksheet(token)
+    link = _shared_link(token)
+    worksheet = link.worksheet
+    hidden = set(link.hidden_items.values_list('pk', flat=True))
     rows = []
     number = 0
     for item in worksheet.ordered_items():
+        if item.pk in hidden:
+            continue
         if item.task_id:
             number += 1
         rows.append({
@@ -739,8 +795,11 @@ def public_worksheet(request, token):
 
 
 def public_worksheet_pdf(request, token):
-    worksheet = _shared_worksheet(token)
+    link = _shared_link(token)
+    hidden = set(link.hidden_items.values_list('pk', flat=True))
     try:
-        return _worksheet_pdf_response(worksheet, WorksheetPdf.VARIANT_STUDENT)
+        return _worksheet_pdf_response(
+            link.worksheet, WorksheetPdf.VARIANT_STUDENT,
+            exclude_ids=hidden)
     except LatexCompileError:
         raise Http404
