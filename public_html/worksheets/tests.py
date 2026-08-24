@@ -972,6 +972,24 @@ class ImportTexTests(TestCase):
         self.assertIsNone(
             find_existing_task('Решите уравнение:', ['$x^2=4$']))
 
+    def test_dedup_ignores_subitem_trailing_punct(self):
+        from .import_tex import create_worksheet, find_existing_task, \
+            parse_tex
+        # Старые записи без точки; новые предложения импортируются с точкой
+        existing = Task.objects.create(
+            text_latex='Докажите:', created_by=self.teacher)
+        existing.subitems.create(order=10, text_latex='Докажите неравенство')
+        tex = ('\\begin{document}\n'
+               '\\task{0}{0}{Докажите:}'
+               '[{\\item Докажите неравенство.}]\n'
+               '\\end{document}')
+        worksheet, _ = create_worksheet(parse_tex(tex), owner=self.teacher)
+        self.assertEqual(worksheet.items.get().task_id, existing.pk)
+        self.assertEqual(Task.objects.count(), 1)
+        self.assertEqual(
+            find_existing_task('Докажите:', ['Докажите неравенство.']),
+            existing.pk)
+
     def test_import_updates_existing_answer(self):
         # Горячее добавление ответа/решения к задаче, найденной в базе
         existing = Task.objects.create(

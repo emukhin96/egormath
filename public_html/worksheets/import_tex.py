@@ -259,6 +259,18 @@ def parse_tex(source):
 
 # --- Дедупликация и создание ---
 
+def _norm_subitem_signature(text):
+    """Хвостовая пунктуация не участвует в дедупе.
+
+    Старые подпункты хранятся без точки, новые предложения — с точкой;
+    без нормализации повторный импорт создал бы дубликат.
+    """
+    text = normalize_task_text(text)
+    if text.endswith((';', '.', '?')):
+        text = text[:-1].rstrip()
+    return text
+
+
 def _task_signature(text, subitems=()):
     """Ключ дедупликации: нормализованное условие + подпункты по порядку.
 
@@ -266,7 +278,7 @@ def _task_signature(text, subitems=()):
     поэтому задачи с разными подпунктами — разные задачи.
     """
     return (normalize_task_text(text),
-            tuple(s for s in (normalize_task_text(x) for x in subitems)
+            tuple(s for s in (_norm_subitem_signature(x) for x in subitems)
                   if s))
 
 
