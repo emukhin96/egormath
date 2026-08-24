@@ -48,6 +48,12 @@ class Assignment(models.Model):
     due_at = models.DateTimeField('Срок сдачи', null=True, blank=True)
     submitted_at = models.DateTimeField('Отправлено', null=True, blank=True)
     reviewed_at = models.DateTimeField('Проверено', null=True, blank=True)
+    hidden_items = models.ManyToManyField(
+        'worksheets.WorksheetItem', blank=True,
+        related_name='hidden_in_assignments',
+        verbose_name='Скрытые задачи',
+        help_text='Эти элементы листка не показываются данному ученику '
+                  '(страница задания и PDF)')
 
     class Meta:
         verbose_name = 'Назначение'

@@ -175,7 +175,9 @@ class Task(models.Model):
         for sub in original.subitems.all():
             TaskSubitem.objects.create(
                 task=copy, order=sub.order,
-                text_latex=sub.text_latex, answer_latex=sub.answer_latex)
+                text_latex=sub.text_latex,
+                answer_latex=sub.answer_latex,
+                solution_latex=sub.solution_latex)
         for img in original.images.all():
             # Копия строки ссылается на тот же файл в storage
             copy.images.create(image=img.image.name, order=img.order)

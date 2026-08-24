@@ -72,7 +72,9 @@
       <option value="3">★★★</option>
     </select>
   </label>
-  <button type="submit" class="btn btn-small">Применить к выбранным</button>
+  <button type="submit" name="apply" value="1" class="btn btn-small">Применить к выбранным</button>
+  <button type="submit" name="delete" value="1" class="btn btn-small btn-danger"
+          onclick="return confirm('Удалить выбранные задачи? Задачи из листков и с ответами учеников останутся.');">Удалить выбранные</button>
 </form>
 <div class="card task-catalog">
 <div class="table-summary"><strong>Найдено: {{ page.paginator.count }}</strong><span>Изменения сохраняются автоматически</span></div>
@@ -93,10 +95,12 @@
       <div class="task-line">
         <a class="task-id" href="{% url 'task_detail' task.pk %}"
            title="Открыть задачу">#{{ task.pk }}</a>
-        {% if task.stars %}<span class="stars">{{ task.get_stars_display }}</span>{% endif %}
-        <span class="math-content task-text">{{ task.text_latex|web_text_preview:220 }}</span>
+        <span class="stars">{% if task.stars %}{{ task.get_stars_display }}{% endif %}</span>
+        <div class="task-main">
+          <span class="math-content task-text">{{ task.text_latex|web_text_preview:220 }}</span>
+          {% include 'problems/_subitems.html' with subitems=task.subitems.all %}
+        </div>
       </div>
-      {% include 'problems/_subitems.html' with subitems=task.subitems.all %}
     </td>
     <td>
       <form method="post" action="{% url 'task_quick_update' task.pk %}"

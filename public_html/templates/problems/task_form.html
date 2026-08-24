@@ -95,15 +95,16 @@
     {{ subitem_formset.management_form }}
     {{ subitem_formset.non_form_errors }}
     <table class="list formset" data-formset="{{ subitem_formset.prefix }}">
-      <tr><th style="width:70px">Порядок</th><th>Текст (LaTeX)</th><th>Ответ (LaTeX)</th><th>Удалить</th></tr>
+      <tr><th style="width:70px">Порядок</th><th>Текст (LaTeX)</th><th>Ответ (LaTeX)</th><th>Решение (LaTeX)</th><th>Удалить</th></tr>
       {% for f in subitem_formset %}
       <tr class="formset-row">
         <td>{{ f.id }}{{ f.order }}</td>
         <td>{{ f.text_latex.errors }}{{ f.text_latex }}</td>
         <td>{{ f.answer_latex.errors }}{{ f.answer_latex }}</td>
-        <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="btn btn-small btn-secondary formset-remove" title="Убрать строку">×</button>{% endif %}</td>
+        <td>{{ f.solution_latex.errors }}{{ f.solution_latex }}</td>
+        <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button>{% endif %}</td>
       </tr>
-      {% for err in f.non_field_errors %}<tr><td colspan="4" class="errorlist">{{ err }}</td></tr>{% endfor %}
+      {% for err in f.non_field_errors %}<tr><td colspan="5" class="errorlist">{{ err }}</td></tr>{% endfor %}
       {% endfor %}
     </table>
     <template data-formset="{{ subitem_formset.prefix }}">
@@ -111,7 +112,8 @@
         <td>{{ subitem_formset.empty_form.id }}{{ subitem_formset.empty_form.order }}</td>
         <td>{{ subitem_formset.empty_form.text_latex }}</td>
         <td>{{ subitem_formset.empty_form.answer_latex }}</td>
-        <td><button type="button" class="btn btn-small btn-secondary formset-remove" title="Убрать строку">×</button></td>
+        <td>{{ subitem_formset.empty_form.solution_latex }}</td>
+        <td><button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button></td>
       </tr>
     </template>
     <p><button type="button" class="btn btn-small btn-secondary formset-add"
@@ -142,7 +144,7 @@
           {{ f.image.errors }}{{ f.image }}
         </td>
         <td class="pic-snippet mono"></td>
-        <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="btn btn-small btn-secondary formset-remove" title="Убрать строку">×</button>{% endif %}</td>
+        <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button>{% endif %}</td>
       </tr>
       {% endfor %}
     </table>
@@ -151,7 +153,7 @@
         <td>{{ image_formset.empty_form.id }}{{ image_formset.empty_form.order }}</td>
         <td><img alt="" class="pic-preview" hidden>{{ image_formset.empty_form.image }}</td>
         <td class="pic-snippet mono"></td>
-        <td><button type="button" class="btn btn-small btn-secondary formset-remove" title="Убрать строку">×</button></td>
+        <td><button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button></td>
       </tr>
     </template>
     <p><button type="button" class="btn btn-small btn-secondary formset-add"
@@ -171,7 +173,7 @@
       <tr class="formset-row">
         <td>{{ f.id }}{{ f.source.errors }}{{ f.source }}</td>
         <td>{{ f.number.errors }}{{ f.number }}</td>
-        <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="btn btn-small btn-secondary formset-remove" title="Убрать строку">×</button>{% endif %}</td>
+        <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button>{% endif %}</td>
       </tr>
       {% for err in f.non_field_errors %}<tr><td colspan="3" class="errorlist">{{ err }}</td></tr>{% endfor %}
       {% endfor %}
@@ -180,7 +182,7 @@
       <tr class="formset-row">
         <td>{{ formset.empty_form.id }}{{ formset.empty_form.source }}</td>
         <td>{{ formset.empty_form.number }}</td>
-        <td><button type="button" class="btn btn-small btn-secondary formset-remove" title="Убрать строку">×</button></td>
+        <td><button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button></td>
       </tr>
     </template>
     <p><button type="button" class="btn btn-small btn-secondary formset-add"

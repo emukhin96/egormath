@@ -25,16 +25,16 @@
   {% csrf_token %}
   {% for row in rows %}
   {% if row.task == None %}
-  <div class="card">
+  <div class="card ws-view">
     {% if row.item.is_rubric %}
     <h2>{{ row.item.rubric }}</h2>
-    {% if row.item.rubric_note %}<p class="muted math-content">{{ row.item.rubric_note }}</p>{% endif %}
+    {% if row.item.rubric_note %}<p class="muted math-content ws-rubric-note">{{ row.item.rubric_note }}</p>{% endif %}
     {% else %}
-    <div class="math-content task-text">{{ row.item.text_latex|linebreaksbr }}</div>
+    <div class="math-content task-text ws-text ws-text-{{ row.item.text_style }}">{{ row.item.text_latex|web_text }}</div>
     {% endif %}
   </div>
   {% else %}
-  <div class="card">
+  <div class="card ws-view">
     {% include 'includes/task_row.html' with number=row.number stars=row.item.effective_stars text=row.task.text_latex %}
     {% include 'problems/_task_images.html' with task=row.task %}
 
@@ -63,9 +63,10 @@
       <span>
         <a href="{% url 'photo_file' photo.pk %}" target="_blank"><img src="{% url 'photo_file' photo.pk %}" alt="фото решения"></a>
         {% if editable %}
-        <button type="submit" class="btn btn-small btn-danger"
+        <button type="submit" class="icon-btn"
                 formaction="{% url 'delete_photo' assignment.pk photo.pk %}"
-                formmethod="post" onclick="return confirm('Удалить фото?')">×</button>
+                formmethod="post" onclick="return confirm('Удалить фото?')"
+                title="Удалить фото" aria-label="Удалить фото">×</button>
         {% endif %}
       </span>
       {% endfor %}

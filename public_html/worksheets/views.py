@@ -295,7 +295,27 @@ def worksheet_detail(request, pk):
     """Конструктор листка: задачи, поиск по базе, назначение, ссылки."""
     worksheet = _own_worksheet(request, pk)
     items = list(worksheet.ordered_items())
-    task_ids = [item.task_id for item in items if item.task_id]
+    # И активные, и в корзине — чтобы удалённая задача не всплыла
+    # в поиске конструктора и не добавилась второй раз
+    task_ids = list(worksheet.items.exclude(task_id=None)
+                    .values_list('task_id', flat=True))
+    deleted_items = list(worksheet.items.filter(deleted_at__isnull=False)
+                         .select_related('task'))
+
+    # Кто скрывает какие элементы: {item_id: {pk ссылок/назначений}}
+    share_links = list(worksheet.share_links.order_by('-created_at')
+                       .prefetch_related('hidden_items'))
+    assignments = list(worksheet.assignments.select_related('student')
+                       .prefetch_related('hidden_items'))
+    link_hidden = {}
+    for link in share_links:
+        for hidden_item in link.hidden_items.all():
+            link_hidden.setdefault(hidden_item.pk, set()).add(link.pk)
+    assignment_hidden = {}
+    for assignment in assignments:
+        for hidden_item in assignment.hidden_items.all():
+            assignment_hidden.setdefault(
+                hidden_item.pk, set()).add(assignment.pk)
 
     # Строки конструктора: сквозная нумерация только для задач
     rows = []
@@ -309,6 +329,8 @@ def worksheet_detail(request, pk):
             'selected_ids': ({s.pk for s in item.subitems.all()}
                              if item.task_id and not item.all_subitems
                              else None),
+            'hidden_links': link_hidden.get(item.pk, set()),
+            'hidden_assignments': assignment_hidden.get(item.pk, set()),
         })
 
     # Поиск задач для добавления (правая часть страницы)
@@ -337,8 +359,9 @@ def worksheet_detail(request, pk):
         'groups': groups,
         'stars_choices': Task.STARS_CHOICES,
         'grade_choices': Task.GRADE_CHOICES,
-        'share_links': worksheet.share_links.order_by('-created_at'),
-        'assignments': worksheet.assignments.select_related('student'),
+        'share_links': share_links,
+        'assignments': assignments,
+        'deleted_items': deleted_items,
     })
 
 
@@ -396,12 +419,47 @@ def worksheet_delete(request, pk):
 @teacher_required
 @require_POST
 def worksheet_bulk_delete(request):
-    """Массовое удаление листков, выбранных чекбоксами в списке."""
+    """Старый маршрут bulk-delete/: удаление по ids, без поля delete."""
     ids = request.POST.getlist('ids')
     worksheets = Worksheet.objects.filter(owner=request.user, pk__in=ids)
     count = worksheets.count()
     worksheets.delete()
     messages.success(request, f'Удалено листков: {count}.')
+    return redirect('worksheet_list')
+
+
+@teacher_required
+@require_POST
+def worksheet_bulk_update(request):
+    """Массовые действия над выбранными листками: назначение или удаление."""
+    if request.POST.get('delete'):
+        return worksheet_bulk_delete(request)
+    ids = request.POST.getlist('ids')
+    worksheets = Worksheet.objects.filter(owner=request.user, pk__in=ids)
+    fields = {}
+    grade = request.POST.get('grade', '').strip()
+    if grade:
+        if grade not in {str(g) for g, _ in Task.GRADE_CHOICES}:
+            messages.error(request, 'Недопустимый класс.')
+            return redirect('worksheet_list')
+        fields['grade'] = int(grade)
+    topic = None
+    topic_id = request.POST.get('topic_id', '').strip()
+    if topic_id:
+        topic = Topic.objects.filter(pk=topic_id).first()
+    if not fields and topic is None:
+        messages.error(request, 'Выберите, что назначить: класс или тему.')
+        return redirect('worksheet_list')
+    now = timezone.now()
+    if fields:
+        fields['updated_at'] = now
+        worksheets.update(**fields)
+    if topic is not None:
+        for worksheet in worksheets:
+            worksheet.topics.add(topic)
+        if 'updated_at' not in fields:
+            worksheets.update(updated_at=now)
+    messages.success(request, f'Обновлено листков: {worksheets.count()}.')
     return redirect('worksheet_list')
 
 
@@ -436,12 +494,30 @@ def worksheet_quick_update(request, pk):
 
 
 def add_task_to_worksheet(request, worksheet_id, task):
-    """Добавляет задачу в конец листка (используется и из создания задачи)."""
+    """Добавляет задачу в конец листка (используется и из создания задачи).
+
+    Повторное добавление задачи из корзины — это восстановление, а не
+    второй элемент: иначе «Отменить» дало бы дубль.
+    """
     worksheet = get_object_or_404(
         Worksheet, pk=worksheet_id, owner=request.user)
-    last = worksheet.items.aggregate(m=models.Max('order'))['m'] or 0
-    WorksheetItem.objects.create(
-        worksheet=worksheet, task=task, order=last + 10)
+    with transaction.atomic():
+        Worksheet.objects.select_for_update().get(pk=worksheet.pk)
+        if worksheet.items.filter(task=task, deleted_at__isnull=True).exists():
+            messages.info(request, f'Задача #{task.pk} уже есть в листке.')
+            return redirect('worksheet_detail', pk=worksheet.pk)
+        trashed = worksheet.items.filter(
+            task=task, deleted_at__isnull=False).first()
+        if trashed:
+            worksheet.items.filter(deleted_at__isnull=False).exclude(
+                pk=trashed.pk).delete()
+            trashed.deleted_at = None
+            trashed.save(update_fields=['deleted_at'])
+            messages.success(request, f'Задача #{task.pk} возвращена в листок.')
+            return redirect('worksheet_detail', pk=worksheet.pk)
+        last = worksheet.items.aggregate(m=models.Max('order'))['m'] or 0
+        WorksheetItem.objects.create(
+            worksheet=worksheet, task=task, order=last + 10)
     messages.success(request, f'Задача #{task.pk} добавлена в «{worksheet.title}».')
     return redirect('worksheet_detail', pk=worksheet.pk)
 
@@ -456,10 +532,59 @@ def worksheet_add_task(request, pk):
 @teacher_required
 @require_POST
 def worksheet_remove_item(request, pk, item_id):
+    """Мягкое удаление: элемент прячется, плашка «Отменить» может вернуть.
+
+    Отмена одноуровневая — прежний «мусор» листка при новом удалении
+    вычищается насовсем.
+    """
     worksheet = _own_worksheet(request, pk)
-    item = get_object_or_404(WorksheetItem, pk=item_id, worksheet=worksheet)
-    item.delete()
-    messages.success(request, 'Элемент убран из листка.')
+    with transaction.atomic():
+        Worksheet.objects.select_for_update().get(pk=worksheet.pk)
+        item = get_object_or_404(
+            WorksheetItem, pk=item_id, worksheet=worksheet,
+            deleted_at__isnull=True)
+        worksheet.items.filter(deleted_at__isnull=False).delete()
+        item.deleted_at = timezone.now()
+        item.save(update_fields=['deleted_at'])
+        if item.task_id:
+            msg = 'Задача удалена из листка.'
+        elif item.is_rubric:
+            msg = 'Рубрика удалена из листка.'
+        else:
+            msg = 'Текст удалён из листка.'
+    return _builder_response(request, pk, message=msg)
+
+
+@teacher_required
+@require_POST
+def worksheet_restore_item(request, pk):
+    """Возвращает последний мягко удалённый элемент («Отменить»)."""
+    worksheet = _own_worksheet(request, pk)
+    with transaction.atomic():
+        Worksheet.objects.select_for_update().get(pk=worksheet.pk)
+        restored = 0
+        kind = None
+        for item in worksheet.items.filter(deleted_at__isnull=False):
+            if (item.task_id and worksheet.items.filter(
+                    task_id=item.task_id, deleted_at__isnull=True).exists()):
+                item.delete()
+                continue
+            item.deleted_at = None
+            item.save(update_fields=['deleted_at'])
+            restored += 1
+            if item.task_id:
+                kind = 'task'
+            elif item.is_rubric:
+                kind = 'rubric'
+            else:
+                kind = 'text'
+    if restored:
+        msg = {
+            'task': 'Задача возвращена в листок.',
+            'rubric': 'Рубрика возвращена в листок.',
+            'text': 'Текст возвращён в листок.',
+        }.get(kind, 'Элемент возвращён в листок.')
+        return _builder_response(request, pk, message=msg)
     return redirect('worksheet_detail', pk=pk)
 
 
@@ -512,7 +637,7 @@ def worksheet_reorder(request, pk):
     worksheet = _own_worksheet(request, pk)
     raw = request.POST.get('order', '')
     id_list = [int(x) for x in raw.split(',') if x.strip().isdigit()]
-    items = {i.pk: i for i in worksheet.items.all()}
+    items = {i.pk: i for i in worksheet.items.filter(deleted_at__isnull=True)}
     changed = []
     for pos, item_id in enumerate(id_list):
         item = items.get(item_id)
@@ -565,8 +690,37 @@ def worksheet_edit_text(request, pk, item_id):
             request, pk, ok=False,
             message='Текст пустой — не сохранено (удалите элемент кнопкой ×).')
     item.text_latex = text
-    item.save()
+    updated = ['text_latex']
+    style = request.POST.get('text_style', '')
+    if style in dict(WorksheetItem.TEXT_STYLE_CHOICES):
+        item.text_style = style
+        updated.append('text_style')
+    item.save(update_fields=updated)
     return _builder_response(request, pk, message='Текст сохранён.')
+
+
+@teacher_required
+@require_POST
+def worksheet_item_visibility(request, pk, item_id):
+    """Скрытие задачи по публичным ссылкам и назначениям учеников."""
+    worksheet = _own_worksheet(request, pk)
+    item = get_object_or_404(
+        WorksheetItem, pk=item_id, worksheet=worksheet, task__isnull=False)
+    hide_links = {int(x) for x in request.POST.getlist('hide_links')
+                  if x.isdigit()}
+    for link in worksheet.share_links.all():
+        if link.pk in hide_links:
+            link.hidden_items.add(item)
+        else:
+            link.hidden_items.remove(item)
+    hide_assignments = {int(x) for x in request.POST.getlist(
+        'hide_assignments') if x.isdigit()}
+    for assignment in worksheet.assignments.all():
+        if assignment.pk in hide_assignments:
+            assignment.hidden_items.add(item)
+        else:
+            assignment.hidden_items.remove(item)
+    return _builder_response(request, pk, message='Видимость сохранена.')
 
 
 @teacher_required
@@ -605,8 +759,9 @@ def worksheet_item_settings(request, pk, item_id):
         request, pk, message='Настройки задачи в листке сохранены.')
 
 
-def _worksheet_pdf_response(worksheet, variant):
-    pdf = get_worksheet_pdf(worksheet, variant)
+def _worksheet_pdf_response(worksheet, variant, exclude_ids=None):
+    """PDF листка, в том числе со скрытыми элементами — через кэш WorksheetPdf."""
+    pdf = get_worksheet_pdf(worksheet, variant, exclude_ids=exclude_ids)
     return FileResponse(
         pdf.file.open('rb'), content_type='application/pdf',
         filename=worksheet.pdf_filename(variant))
@@ -630,8 +785,17 @@ def worksheet_pdf(request, pk):
                          and variant == WorksheetPdf.VARIANT_STUDENT)):
         raise PermissionDenied
 
+    # Ученик получает PDF без задач, скрытых в его назначении
+    exclude_ids = None
+    if not is_owner:
+        assignment = worksheet.assignments.filter(
+            student=request.user).first()
+        exclude_ids = set(
+            assignment.hidden_items.values_list('pk', flat=True))
+
     try:
-        return _worksheet_pdf_response(worksheet, variant)
+        return _worksheet_pdf_response(worksheet, variant,
+                                       exclude_ids=exclude_ids)
     except LatexCompileError as exc:
         if not is_owner:
             raise Http404
@@ -771,18 +935,23 @@ def share_toggle(request, pk, link_id):
 
 # --- Публичные страницы (без входа) ---
 
-def _shared_worksheet(token):
-    link = ShareLink.objects.filter(token=token, is_active=True).first()
+def _shared_link(token):
+    link = (ShareLink.objects.filter(token=token, is_active=True)
+            .select_related('worksheet').first())
     if link is None:
         raise Http404
-    return link.worksheet
+    return link
 
 
 def public_worksheet(request, token):
-    worksheet = _shared_worksheet(token)
+    link = _shared_link(token)
+    worksheet = link.worksheet
+    hidden = set(link.hidden_items.values_list('pk', flat=True))
     rows = []
     number = 0
     for item in worksheet.ordered_items():
+        if item.pk in hidden:
+            continue
         if item.task_id:
             number += 1
         rows.append({
@@ -790,18 +959,27 @@ def public_worksheet(request, token):
             'number': number if item.task_id else None,
             'subitems': item.selected_subitems(),
         })
+    # Подзаголовок — только непустые части, без «висячих» разделителей
+    subtitle_line = ' · '.join(
+        part.strip() for part in (worksheet.grade_label, worksheet.subtitle,
+                                  worksheet.display_author)
+        if part and part.strip())
     return render(request, 'worksheets/public.html', {
         'worksheet': worksheet,
         'rows': rows,
         'token': token,
+        'subtitle_line': subtitle_line,
         # Публичная страница — только просмотр: без контекстной панели
         'minimal_page': True,
     })
 
 
 def public_worksheet_pdf(request, token):
-    worksheet = _shared_worksheet(token)
+    link = _shared_link(token)
+    hidden = set(link.hidden_items.values_list('pk', flat=True))
     try:
-        return _worksheet_pdf_response(worksheet, WorksheetPdf.VARIANT_STUDENT)
+        return _worksheet_pdf_response(
+            link.worksheet, WorksheetPdf.VARIANT_STUDENT,
+            exclude_ids=hidden)
     except LatexCompileError:
         raise Http404

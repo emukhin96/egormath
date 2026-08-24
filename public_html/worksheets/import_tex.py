@@ -116,7 +116,15 @@ def _read_args(text, pos, required, optional):
 # --- Разбор документа ---
 
 _COMMAND_RE = re.compile(
-    r'\\(bighead|rubr|taskans|task|plaintext)\b')
+    r'\\(bighead|rubr|taskans|task|plaintext|ruletext|lighttext|memotext)\b')
+
+# Команда текста → значение WorksheetItem.text_style
+_TEXT_STYLES = {
+    'plaintext': 'plain',
+    'ruletext': 'rule',
+    'lighttext': 'light',
+    'memotext': 'memo',
+}
 
 _UNESCAPE = [
     (r'\&', '&'), (r'\%', '%'), (r'\$', '$'), (r'\#', '#'), (r'\_', '_'),
@@ -173,7 +181,7 @@ def parse_tex(source):
         ('rubric', {'rubric', 'note'})
         ('task', {'stars', 'columns', 'text', 'subitems', 'answer',
                   'solution'})
-        ('text', {'text'})
+        ('text', {'text', 'style'})
     """
     body = source
     m = re.search(r'\\begin\{document\}', source)
@@ -236,9 +244,12 @@ def parse_tex(source):
                 'solution': _clean(opts[2]) if len(opts) > 2 else '',
                 'images': images,
             }))
-        elif name == 'plaintext':
+        elif name in _TEXT_STYLES:
             args, _, pos = _read_args(body, pos, required=1, optional=0)
-            elements.append(('text', {'text': _clean(args[0])}))
+            elements.append(('text', {
+                'text': _clean(args[0]),
+                'style': _TEXT_STYLES[name],
+            }))
     if not elements:
         raise TexImportError(
             'В документе не найдено ни одной команды \\task, \\rubr '
@@ -248,6 +259,18 @@ def parse_tex(source):
 
 # --- Дедупликация и создание ---
 
+def _norm_subitem_signature(text):
+    """Хвостовая пунктуация не участвует в дедупе.
+
+    Старые подпункты хранятся без точки, новые предложения — с точкой;
+    без нормализации повторный импорт создал бы дубликат.
+    """
+    text = normalize_task_text(text)
+    if text.endswith((';', '.', '?')):
+        text = text[:-1].rstrip()
+    return text
+
+
 def _task_signature(text, subitems=()):
     """Ключ дедупликации: нормализованное условие + подпункты по порядку.
 
@@ -255,7 +278,7 @@ def _task_signature(text, subitems=()):
     поэтому задачи с разными подпунктами — разные задачи.
     """
     return (normalize_task_text(text),
-            tuple(s for s in (normalize_task_text(x) for x in subitems)
+            tuple(s for s in (_norm_subitem_signature(x) for x in subitems)
                   if s))
 
 
@@ -333,7 +356,8 @@ def create_worksheet(parsed, owner, title='', overrides=None):
                 rubric=data['rubric'], rubric_note=data['note'])
         elif kind == 'text':
             WorksheetItem.objects.create(
-                worksheet=worksheet, order=order, text_latex=data['text'])
+                worksheet=worksheet, order=order, text_latex=data['text'],
+                text_style=data.get('style', 'plain'))
         else:
             extra = overrides.get(i, {})
             if extra.get('skip'):

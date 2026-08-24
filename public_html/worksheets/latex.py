@@ -32,32 +32,62 @@ def subitem_label(index):
     return str(index + 1)
 
 
+def _for_task_opt(text):
+    """Готовит текст для опционального аргумента \\task.
+
+    Аргумент не \\long: пустая строка (\\par) его обрывает. \\mbox{}\\\\
+    даёт перенос и после display-формулы (иначе «no line here to end»).
+    """
+    return re.sub(r'\n\s*\n+', r' \\mbox{}\\\\ ', text.strip())
+
+
+def _join_labeled(parts, wrapper='stack'):
+    """Склеивает куски ответа/решения, каждый на своей строке.
+
+    Голый \\\\ в answers=table завершает строку таблицы пакета egor.
+    Ответы короткие — \\shortstack по ширине содержимого.
+    Решения могут быть с абзацами и display-формулами — minipage.
+    """
+    if not parts:
+        return ''
+    needs_wrap = len(parts) > 1 or any('\\\\' in p for p in parts)
+    if wrapper == 'mini':
+        # Всегда minipage: после «Решение.» идёт перенос, блок на всю строку
+        body = ' \\mbox{}\\\\ '.join(parts)
+        return '\\begin{minipage}[t]{\\linewidth}%%\n%s%%\n\\end{minipage}' % body
+    body = ' \\\\ '.join(parts)
+    if not needs_wrap:
+        return parts[0]
+    return '\\shortstack[l]{%s}' % body
+
+
 def _combined_answer(task, subitems):
-    """Общий ответ задачи + ответы выбранных подпунктов («а) …; б) …»)."""
+    """Общий ответ задачи + ответы выбранных подпунктов (каждый с новой строки)."""
     parts = []
     if task.answer_latex.strip():
-        parts.append(task.answer_latex.strip())
-    sub_answers = [
-        '%s)~%s' % (subitem_label(i), s.answer_latex.strip())
+        parts.append(_for_task_opt(task.answer_latex))
+    parts.extend(
+        '%s)~%s' % (subitem_label(i), _for_task_opt(s.answer_latex))
         for i, s in enumerate(subitems) if s.answer_latex.strip()
-    ]
-    if sub_answers:
-        parts.append('; '.join(sub_answers))
-    return ' '.join(parts)
+    )
+    return _join_labeled(parts, 'stack')
 
 
 def _combined_solution(task, subitems):
-    """Общее решение задачи + решения подпунктов («а) …; б) …»)."""
+    """Общее решение задачи + решения подпунктов (каждый с новой строки)."""
     parts = []
     if task.solution_latex.strip():
-        parts.append(task.solution_latex.strip())
-    sub_solutions = [
-        '%s)~%s' % (subitem_label(i), s.solution_latex.strip())
+        parts.append(_for_task_opt(task.solution_latex))
+    parts.extend(
+        '%s)~%s' % (subitem_label(i), _for_task_opt(s.solution_latex))
         for i, s in enumerate(subitems) if s.solution_latex.strip()
-    ]
-    if sub_solutions:
-        parts.append('; '.join(sub_solutions))
-    return ' '.join(parts)
+    )
+    text = _join_labeled(parts, 'mini')
+    if not text:
+        return ''
+    # egor печатает «\textit{Решение}. #1» в одной строке — перенос, чтобы
+    # minipage не сдвигался на ширину слова
+    return '\\mbox{}\\\\ %s' % text
 
 
 # Ссылка на картинку в тексте задачи: \taskpic{N}, N — номер по порядку
@@ -131,9 +161,19 @@ def task_to_tex(item):
     return ''.join(parts)
 
 
+# Команды egor для стилей текстового элемента (WorksheetItem.text_style)
+TEXT_STYLE_COMMANDS = {
+    'plain': 'plaintext',
+    'rule': 'ruletext',
+    'light': 'lighttext',
+    'memo': 'memotext',
+}
+
+
 def text_to_tex(item):
-    """Произвольный текст между задачами — \\plaintext пакета egor."""
-    return '\\plaintext{%%\n%s%%\n}' % item.text_latex.strip()
+    """Произвольный текст между задачами — \\plaintext/\\ruletext/… egor."""
+    command = TEXT_STYLE_COMMANDS.get(item.text_style, 'plaintext')
+    return '\\%s{%%\n%s%%\n}' % (command, item.text_latex.strip())
 
 
 def rubric_to_tex(item):
@@ -144,7 +184,37 @@ def rubric_to_tex(item):
     return tex
 
 
-def worksheet_to_tex(worksheet, variant='student'):
+def _drop_empty_rubrics(items):
+    """Убирает рубрики, после которых до следующей нет задач и текста.
+
+    \\rubr открывает enumerate: если все задачи рубрики скрыты, LaTeX
+    падает на «perhaps a missing \\item». Текстовый элемент после
+    пустой рубрики оставляем — для него уже есть \\item[].
+    """
+    kept = []
+    i = 0
+    n = len(items)
+    while i < n:
+        item = items[i]
+        if item.is_rubric:
+            has_content = False
+            for nxt in items[i + 1:]:
+                if nxt.is_rubric:
+                    break
+                if nxt.task_id or nxt.is_text:
+                    has_content = True
+                    break
+            if not has_content:
+                i += 1
+                continue
+        kept.append(item)
+        i += 1
+    return kept
+
+
+def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
+    """exclude_ids — pk элементов, скрытых для конкретной ссылки/ученика."""
+    exclude_ids = exclude_ids or set()
     options = VARIANT_OPTIONS[variant]
     usepackage = ('\\usepackage[%s]{egor}' % options) if options \
         else '\\usepackage{egor}'
@@ -166,7 +236,10 @@ def worksheet_to_tex(worksheet, variant='student'):
     lines.append(bighead)
     lines.append('')
 
-    items = list(worksheet.ordered_items())
+    items = _drop_empty_rubrics([
+        item for item in worksheet.ordered_items()
+        if item.pk not in exclude_ids
+    ])
     list_open = False
     list_has_item = False
     for item in items:
@@ -197,6 +270,10 @@ def worksheet_to_tex(worksheet, variant='student'):
         list_has_item = True
 
     if list_open:
+        if not list_has_item:
+            # Пустой enumerate (рубрика без видимых задач и без текста)
+            # всё равно нужно закрыть без ошибки «missing \\item»
+            lines.append('\\item[]')
         lines.append('')
         lines.append('\\end{enumerate}')
     if any(item.task_id and item.task.images.all() for item in items):
