@@ -139,7 +139,7 @@ class LatexGenerationTests(TestCase):
         task.save()
         tex = task_to_tex(item)
         self.assertIn('\\begin{minipage}[t]{\\linewidth}', tex)
-        self.assertIn('Общий план.\n\nСначала оценки. \\\\ а)~Складываем', tex)
+        self.assertIn('Общий план. \\\\ Сначала оценки. \\\\ а)~Складываем', tex)
         self.assertIn('\\end{minipage}', tex)
 
     def test_worksheet_variants(self):

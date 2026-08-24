@@ -32,6 +32,11 @@ def subitem_label(index):
     return str(index + 1)
 
 
+def _for_task_opt(text):
+    """Опциональный аргумент \\task не \\long: пустая строка (\\par) его обрывает."""
+    return re.sub(r'\n\s*\n+', r' \\\\ ', text.strip())
+
+
 def _join_labeled(parts, wrapper='stack'):
     """Склеивает куски ответа/решения, каждый на своей строке.
 
@@ -51,9 +56,9 @@ def _combined_answer(task, subitems):
     """Общий ответ задачи + ответы выбранных подпунктов (каждый с новой строки)."""
     parts = []
     if task.answer_latex.strip():
-        parts.append(task.answer_latex.strip())
+        parts.append(_for_task_opt(task.answer_latex))
     parts.extend(
-        '%s)~%s' % (subitem_label(i), s.answer_latex.strip())
+        '%s)~%s' % (subitem_label(i), _for_task_opt(s.answer_latex))
         for i, s in enumerate(subitems) if s.answer_latex.strip()
     )
     return _join_labeled(parts, 'stack')
@@ -63,9 +68,9 @@ def _combined_solution(task, subitems):
     """Общее решение задачи + решения подпунктов (каждый с новой строки)."""
     parts = []
     if task.solution_latex.strip():
-        parts.append(task.solution_latex.strip())
+        parts.append(_for_task_opt(task.solution_latex))
     parts.extend(
-        '%s)~%s' % (subitem_label(i), s.solution_latex.strip())
+        '%s)~%s' % (subitem_label(i), _for_task_opt(s.solution_latex))
         for i, s in enumerate(subitems) if s.solution_latex.strip()
     )
     return _join_labeled(parts, 'mini')
