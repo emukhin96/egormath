@@ -1,6 +1,5 @@
 """Утилиты для работы с LaTeX-текстом задач."""
 
-import json
 import re
 
 # Спецсимволы LaTeX для экранирования "обычного" текста (заголовки и т.п.)
@@ -84,91 +83,179 @@ def restore_json_eaten_latex(text):
     return text
 
 
-# JSON-эскейпы, которые json.loads превращает в управляющие символы.
-# Внутри строки "\frac" — это LaTeX, не form feed: удваиваем слэш до разбора.
-_JSON_CTRL_ESC = frozenset('nrtbf')
+# Свой разбор JSON нейросети: json.loads нельзя — \\frac/\\neq/\\, в строке
+# для него то form feed, то перевод строки, то синтаксическая ошибка.
+# Здесь \\ и \" — единственные JSON-эскейпы; всё остальное после \\ — TeX.
+# Настоящий перевод строки внутри кавычек разрешён (как в JSON5).
+_FENCE_RE = re.compile(r'^```(?:json)?\s*|\s*```$', re.I)
 _HEX = frozenset('0123456789abcdefABCDEF')
 
 
-def protect_latex_json_escapes(raw):
-    """В строках JSON удвоить слэш у TeX-команд, не трогая \\\" и \\\\.
-
-    Gemini часто пишет ``\\frac`` как один слэш. Тогда ``json.loads``
-    читает ``\\f`` как form feed. Здесь смотрим сырой текст: если после
-    ``\\f``/``\\t``/``\\b``/``\\r`` идёт буква команды — вставляем второй
-    слэш. ``\\n`` не трогаем: в корректном JSON это перевод строки
-    (``hello\\nWorld``), его не отличить от ``\\neq``. ``\\r\\n`` тоже
-    оставляем. Уже экранированное ``\\\\frac`` не меняется: ``\\\\``
-    съедается как экранированный слэш, ``f`` остаётся буквой.
-    """
-    if not raw:
-        return raw
-    out = []
-    i = 0
-    n = len(raw)
-    in_string = False
-    while i < n:
-        ch = raw[i]
-        if not in_string:
-            out.append(ch)
-            if ch == '"':
-                in_string = True
-            i += 1
-            continue
-        if ch == '\\' and i + 1 < n:
-            nxt = raw[i + 1]
-            if nxt in '"\\/':
-                out.append(raw[i:i + 2])
-                i += 2
-                continue
-            if nxt == 'u':
-                hexpart = raw[i + 2:i + 6]
-                after = raw[i + 6] if i + 6 < n else ''
-                if (len(hexpart) == 4 and all(c in _HEX for c in hexpart)
-                        and not after.isalpha()):
-                    out.append(raw[i:i + 6])
-                    i += 6
-                    continue
-                # \underline / \union или \u без 4 hex — TeX, не юникод
-                out.append('\\\\')
-                out.append('u')
-                i += 2
-                continue
-            if nxt in _JSON_CTRL_ESC:
-                after = raw[i + 2] if i + 2 < n else ''
-                if nxt == 'n' or (nxt == 'r' and after == 'n'):
-                    out.append(raw[i:i + 2])
-                    i += 2
-                    continue
-                if after.isalpha():
-                    out.append('\\\\')
-                    out.append(nxt)
-                    i += 2
-                    continue
-                out.append(raw[i:i + 2])
-                i += 2
-                continue
-            # \, \; \{ \} \$ \quad — невалидный JSON-эскейп, это TeX
-            out.append('\\\\')
-            out.append(nxt)
-            i += 2
-            continue
-        if ch == '"':
-            in_string = False
-        out.append(ch)
-        i += 1
-    return ''.join(out)
-
-
-_FENCE_RE = re.compile(r'^```(?:json)?\s*|\s*```$', re.I)
+class NeuroJsonError(ValueError):
+    """Ответ модели нельзя разобрать даже как TeX-JSON."""
 
 
 def loads_neuro_json(raw):
-    """json.loads с защитой TeX в строках; срезает markdown-ограду при наличии."""
+    """Разобрать JSON черновика нейросети, сохраняя TeX-команды."""
     if not isinstance(raw, str):
-        raise ValueError('ожидалась JSON-строка')
+        raise NeuroJsonError('ожидалась JSON-строка')
     text = _FENCE_RE.sub('', raw.strip())
-    return json.loads(protect_latex_json_escapes(text))
+    return _NeuroJson(text).parse_value()
+
+
+class _NeuroJson:
+    def __init__(self, text):
+        self.s = text
+        self.i = 0
+        self.n = len(text)
+
+    def peek(self):
+        return self.s[self.i] if self.i < self.n else ''
+
+    def skip_ws(self):
+        while self.i < self.n and self.s[self.i] in ' \t\r\n':
+            self.i += 1
+
+    def parse_value(self):
+        self.skip_ws()
+        ch = self.peek()
+        if ch == '{':
+            return self._object()
+        if ch == '[':
+            return self._array()
+        if ch == '"':
+            return self._string()
+        if ch == 't':
+            return self._literal('true', True)
+        if ch == 'f':
+            return self._literal('false', False)
+        if ch == 'n':
+            return self._literal('null', None)
+        if ch == '-' or ch.isdigit():
+            return self._number()
+        raise NeuroJsonError(
+            'неожиданный символ %r на позиции %d' % (ch, self.i))
+
+    def _literal(self, word, value):
+        if self.s[self.i:self.i + len(word)] != word:
+            raise NeuroJsonError('ожидалось %s' % word)
+        self.i += len(word)
+        return value
+
+    def _object(self):
+        self.i += 1
+        result = {}
+        self.skip_ws()
+        if self.peek() == '}':
+            self.i += 1
+            return result
+        while True:
+            self.skip_ws()
+            if self.peek() != '"':
+                raise NeuroJsonError('ожидался ключ')
+            key = self._string()
+            self.skip_ws()
+            if self.peek() != ':':
+                raise NeuroJsonError('ожидалось :')
+            self.i += 1
+            result[key] = self.parse_value()
+            self.skip_ws()
+            if self.peek() == ',':
+                self.i += 1
+                self.skip_ws()
+                if self.peek() == '}':
+                    self.i += 1
+                    return result
+                continue
+            if self.peek() == '}':
+                self.i += 1
+                return result
+            raise NeuroJsonError('ожидалась запятая или }')
+
+    def _array(self):
+        self.i += 1
+        result = []
+        self.skip_ws()
+        if self.peek() == ']':
+            self.i += 1
+            return result
+        while True:
+            result.append(self.parse_value())
+            self.skip_ws()
+            if self.peek() == ',':
+                self.i += 1
+                self.skip_ws()
+                if self.peek() == ']':
+                    self.i += 1
+                    return result
+                continue
+            if self.peek() == ']':
+                self.i += 1
+                return result
+            raise NeuroJsonError('ожидалась запятая или ]')
+
+    def _string(self):
+        self.i += 1
+        out = []
+        while self.i < self.n:
+            ch = self.s[self.i]
+            self.i += 1
+            if ch == '"':
+                return ''.join(out)
+            if ch != '\\':
+                out.append(ch)
+                continue
+            if self.i >= self.n:
+                raise NeuroJsonError('обрыв строки после \\')
+            nxt = self.s[self.i]
+            self.i += 1
+            if nxt == '"':
+                out.append('"')
+            elif nxt == '\\':
+                out.append('\\')
+            elif nxt == '/':
+                out.append('/')
+            elif nxt == 'u':
+                hexpart = self.s[self.i:self.i + 4]
+                after = self.s[self.i + 4] if self.i + 4 < self.n else ''
+                if (len(hexpart) == 4 and all(c in _HEX for c in hexpart)
+                        and not after.isalpha()):
+                    out.append(chr(int(hexpart, 16)))
+                    self.i += 4
+                else:
+                    out.append('\\')
+                    out.append('u')
+            else:
+                # \frac \neq \, \{ \times \right — всегда TeX, не \f/\n/\t
+                out.append('\\')
+                out.append(nxt)
+        raise NeuroJsonError('незакрытая строка')
+
+    def _number(self):
+        start = self.i
+        if self.peek() == '-':
+            self.i += 1
+        if not self.peek().isdigit():
+            raise NeuroJsonError('ожидалось число')
+        while self.peek().isdigit():
+            self.i += 1
+        if self.peek() == '.':
+            self.i += 1
+            while self.peek().isdigit():
+                self.i += 1
+        if self.peek() in 'eE':
+            self.i += 1
+            if self.peek() in '+-':
+                self.i += 1
+            while self.peek().isdigit():
+                self.i += 1
+        return json_number(self.s[start:self.i])
+
+
+def json_number(text):
+    if any(c in text for c in '.eE'):
+        return float(text)
+    return int(text)
 
 
 # Уже обёрнутые формулы не трогаем (те же разделители, что KaTeX)

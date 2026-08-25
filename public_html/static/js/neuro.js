@@ -224,12 +224,10 @@
     if (kind === 'task-detail') {
       if (!confirmOverwrite(detailHasExisting())) return;
       withBusy(el, function () {
-        var payload = payloadFor(el, collectDetail());
-        if (el.dataset.taskId) {
-          payload.task_id = el.dataset.taskId;
-          payload.apply = true;
-          payload.overwrite = detailHasExisting();
-        }
+        var payload = el.dataset.taskId
+          ? {task_id: el.dataset.taskId, apply: true,
+             overwrite: detailHasExisting()}
+          : payloadFor(el, collectDetail());
         return solve(payload).then(fillDetail);
       }).then(function () {
         toast(true, 'Черновик в полях — проверьте и поправьте');
@@ -239,7 +237,10 @@
     if (kind === 'task-form') {
       if (!confirmOverwrite(formHasExisting())) return;
       withBusy(el, function () {
-        return solve(payloadFor(el, collectForm())).then(fillForm);
+        var payload = el.dataset.taskId
+          ? {task_id: el.dataset.taskId}
+          : payloadFor(el, collectForm());
+        return solve(payload).then(fillForm);
       }).then(function () {
         toast(true, 'Черновик в полях — проверьте перед сохранением');
       }).catch(function () {});

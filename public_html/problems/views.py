@@ -615,11 +615,14 @@ def task_neuro_solve(request):
     if task_id not in (None, ''):
         task = get_object_or_404(Task, pk=task_id)
 
-    text = str(payload.get('text') or '')
-    subitems = [str(s) for s in (payload.get('subitems') or [])]
-    if task is not None and not text.strip():
+    if task is not None:
+        # Условие и подпункты — из базы: с формы легко уехать без подпунктов
+        # («Решите уравнение:» без дробей) и получить пустой отказ модели.
         text = task.text_latex
         subitems = [s.text_latex for s in task.subitems.order_by('order', 'pk')]
+    else:
+        text = str(payload.get('text') or '')
+        subitems = [str(s) for s in (payload.get('subitems') or [])]
     if len(text) + sum(len(s) for s in subitems) > MAX_TASK_CHARS:
         return JsonResponse(
             {'error': 'Задача слишком длинная для нейрогенерации.'},

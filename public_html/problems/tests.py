@@ -10,8 +10,8 @@ from django.utils.html import escape
 from accounts.models import Profile
 
 from .latex_utils import (escape_latex, loads_neuro_json,
-                          protect_latex_json_escapes, restore_json_eaten_latex,
-                          split_items, strip_latex, wrap_bare_math)
+                          restore_json_eaten_latex, split_items, strip_latex,
+                          wrap_bare_math)
 from .models import Tag, Task, Topic
 
 
@@ -100,33 +100,36 @@ class LatexUtilsTests(TestCase):
         self.assertEqual(restore_json_eaten_latex(r'-\frac{1}{2}'),
                          r'-\frac{1}{2}')
 
-    def test_protect_latex_json_escapes(self):
+    def test_loads_neuro_json_keeps_tex_commands(self):
         sloppy = (
             '{"answer": "$-\\frac{1}{2}$",'
-            ' "solution": "a \\times b \\right)"}')
+            ' "solution": "a \\times b \\right) $x \\neq 0$"}')
         data = loads_neuro_json(sloppy)
         self.assertEqual(data['answer'], r'$-\frac{1}{2}$')
-        self.assertEqual(data['solution'], r'a \times b \right)')
-        # Корректный JSON (два слэша) не портим
-        clean = json.dumps({
-            'answer': r'$-\frac{1}{2}$',
-            'note': 'hello\nWorld',
-        })
-        self.assertEqual(protect_latex_json_escapes(clean), clean)
-        self.assertEqual(loads_neuro_json(clean)['note'], 'hello\nWorld')
-        # \r\n в строке остаётся переводом, не \right
-        rn = '{"x": "a\\r\\nb"}'
-        self.assertEqual(loads_neuro_json(rn)['x'], 'a\r\nb')
-        # \underline не должен уйти в \\uXXXX
+        self.assertEqual(data['solution'], r'a \times b \right) $x \neq 0$')
+        # Корректно экранированный json.dumps (\frac → \\frac)
+        clean = json.dumps({'answer': r'$-\frac{1}{2}$'})
+        self.assertEqual(loads_neuro_json(clean)['answer'], r'$-\frac{1}{2}$')
         under = '{"x": "\\underline{A}"}'
         self.assertEqual(loads_neuro_json(under)['x'], r'\underline{A}')
-        # \, и \{ — невалидный JSON, без защиты json.loads падает
         thin = '{"x": "a\\,b \\{1\\}"}'
         with self.assertRaises(ValueError):
             json.loads(thin)
         self.assertEqual(loads_neuro_json(thin)['x'], r'a\,b \{1\}')
+        # Настоящий перевод строки внутри кавычек (как печатает модель)
+        nl = '{"x": "шаг 1.\nшаг 2."}'
+        self.assertEqual(loads_neuro_json(nl)['x'], 'шаг 1.\nшаг 2.')
         fenced = '```json\n{"answer": "1", "solution": "", "subitem_answers": [], "subitem_solutions": []}\n```'
         self.assertEqual(loads_neuro_json(fenced)['answer'], '1')
+        # Хвост как у задачи 75: подпункты и \neq / \frac без удвоения
+        raw75 = (
+            '{\n  "answer": "",\n  "solution": "",\n'
+            '  "subitem_answers": ["$x = -2$"],\n'
+            '  "subitem_solutions": ["$x \\neq 1$, $t = \\frac{1}{x}$"]\n}')
+        parsed = loads_neuro_json(raw75)
+        self.assertEqual(parsed['subitem_answers'], ['$x = -2$'])
+        self.assertEqual(parsed['subitem_solutions'][0],
+                         r'$x \neq 1$, $t = \frac{1}{x}$')
 
 
 class NeuroTests(TestCase):
@@ -381,6 +384,28 @@ class NeuroTests(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.answer_latex, '4')
         self.assertEqual(task.solution_latex, 'Сложение.')
+
+    def test_solve_endpoint_uses_task_from_db(self):
+        """task_id: условие и подпункты с базы, не из обрезанного тела запроса."""
+        from unittest import mock
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        task = Task.objects.create(
+            text_latex='Решите уравнение:', created_by=teacher)
+        task.subitems.create(order=10, text_latex=r'$\frac{x}{2}=0$')
+        drafts = {'answer': '', 'solution': '',
+                  'subitem_answers': ['$x=0$'],
+                  'subitem_solutions': ['Шаг']}
+        with mock.patch('problems.neuro.solve_task', return_value=drafts) as solve:
+            response = self.client.post(
+                reverse('task_neuro_solve'),
+                {'task_id': task.pk, 'text': 'Решите уравнение:',
+                 'subitems': [], 'apply': True},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        solve.assert_called_once_with('Решите уравнение:', [r'$\frac{x}{2}=0$'])
+        task.subitems.get().refresh_from_db()
+        self.assertEqual(task.subitems.get().answer_latex, '$x=0$')
 
     def test_superuser_without_profile_gets_neuro_js(self):
         """Суперпользователь без профиля — учитель по get_role, скрипт должен грузиться."""
