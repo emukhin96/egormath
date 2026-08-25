@@ -10,7 +10,6 @@
 модель — settings.GEMINI_MODEL (по умолчанию gemini-3.5-flash-lite).
 """
 
-import json
 import logging
 from datetime import timedelta
 
@@ -19,7 +18,8 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from .latex_utils import restore_json_eaten_latex, wrap_bare_math
+from .latex_utils import (loads_neuro_json, restore_json_eaten_latex,
+                          wrap_bare_math)
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +186,7 @@ def solve_task(text, subitems=()):
                          f'(HTTP {response.status_code}).')
     try:
         raw = response.json()['candidates'][0]['content']['parts'][0]['text']
-        data = json.loads(raw)
+        data = loads_neuro_json(raw)
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         logger.warning('Gemini API: неожиданный формат ответа: %s',
                        response.text[:500])

@@ -9,7 +9,8 @@ from django.utils.html import escape
 
 from accounts.models import Profile
 
-from .latex_utils import (escape_latex, restore_json_eaten_latex,
+from .latex_utils import (escape_latex, loads_neuro_json,
+                          protect_latex_json_escapes, restore_json_eaten_latex,
                           split_items, strip_latex, wrap_bare_math)
 from .models import Tag, Task, Topic
 
@@ -98,6 +99,27 @@ class LatexUtilsTests(TestCase):
             'шаг.\nПриведем')
         self.assertEqual(restore_json_eaten_latex(r'-\frac{1}{2}'),
                          r'-\frac{1}{2}')
+
+    def test_protect_latex_json_escapes(self):
+        sloppy = (
+            '{"answer": "$-\\frac{1}{2}$",'
+            ' "solution": "a \\times b \\right)"}')
+        data = loads_neuro_json(sloppy)
+        self.assertEqual(data['answer'], r'$-\frac{1}{2}$')
+        self.assertEqual(data['solution'], r'a \times b \right)')
+        # Корректный JSON (два слэша) не портим
+        clean = json.dumps({
+            'answer': r'$-\frac{1}{2}$',
+            'note': 'hello\nWorld',
+        })
+        self.assertEqual(protect_latex_json_escapes(clean), clean)
+        self.assertEqual(loads_neuro_json(clean)['note'], 'hello\nWorld')
+        # \r\n в строке остаётся переводом, не \right
+        rn = '{"x": "a\\r\\nb"}'
+        self.assertEqual(loads_neuro_json(rn)['x'], 'a\r\nb')
+        # \underline не должен уйти в \\uXXXX
+        under = '{"x": "\\underline{A}"}'
+        self.assertEqual(loads_neuro_json(under)['x'], r'\underline{A}')
 
 
 class NeuroTests(TestCase):

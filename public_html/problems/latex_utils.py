@@ -1,5 +1,6 @@
 """Утилиты для работы с LaTeX-текстом задач."""
 
+import json
 import re
 
 # Спецсимволы LaTeX для экранирования "обычного" текста (заголовки и т.п.)
@@ -81,6 +82,87 @@ def restore_json_eaten_latex(text):
     for pattern, repl in _JSON_EATEN_LATEX:
         text = pattern.sub(repl, text)
     return text
+
+
+# JSON-эскейпы, которые json.loads превращает в управляющие символы.
+# Внутри строки "\frac" — это LaTeX, не form feed: удваиваем слэш до разбора.
+_JSON_CTRL_ESC = frozenset('nrtbf')
+_HEX = frozenset('0123456789abcdefABCDEF')
+
+
+def protect_latex_json_escapes(raw):
+    """В строках JSON удвоить слэш у TeX-команд, не трогая \\\" и \\\\.
+
+    Gemini часто пишет ``\\frac`` как один слэш. Тогда ``json.loads``
+    читает ``\\f`` как form feed. Здесь смотрим сырой текст: если после
+    ``\\f``/``\\t``/``\\b``/``\\r`` идёт буква команды — вставляем второй
+    слэш. ``\\n`` не трогаем: в корректном JSON это перевод строки
+    (``hello\\nWorld``), его не отличить от ``\\neq``. ``\\r\\n`` тоже
+    оставляем. Уже экранированное ``\\\\frac`` не меняется: ``\\\\``
+    съедается как экранированный слэш, ``f`` остаётся буквой.
+    """
+    if not raw:
+        return raw
+    out = []
+    i = 0
+    n = len(raw)
+    in_string = False
+    while i < n:
+        ch = raw[i]
+        if not in_string:
+            out.append(ch)
+            if ch == '"':
+                in_string = True
+            i += 1
+            continue
+        if ch == '\\' and i + 1 < n:
+            nxt = raw[i + 1]
+            if nxt in '"\\/':
+                out.append(raw[i:i + 2])
+                i += 2
+                continue
+            if nxt == 'u':
+                hexpart = raw[i + 2:i + 6]
+                after = raw[i + 6] if i + 6 < n else ''
+                if (len(hexpart) == 4 and all(c in _HEX for c in hexpart)
+                        and not after.isalpha()):
+                    out.append(raw[i:i + 6])
+                    i += 6
+                    continue
+                # \underline / \union или \u без 4 hex — TeX, не юникод
+                out.append('\\\\')
+                out.append('u')
+                i += 2
+                continue
+            if nxt in _JSON_CTRL_ESC:
+                after = raw[i + 2] if i + 2 < n else ''
+                if nxt == 'n' or (nxt == 'r' and after == 'n'):
+                    out.append(raw[i:i + 2])
+                    i += 2
+                    continue
+                if after.isalpha():
+                    out.append('\\\\')
+                    out.append(nxt)
+                    i += 2
+                    continue
+                out.append(raw[i:i + 2])
+                i += 2
+                continue
+            if nxt.isalpha():
+                out.append('\\\\')
+                out.append(nxt)
+                i += 2
+                continue
+        if ch == '"':
+            in_string = False
+        out.append(ch)
+        i += 1
+    return ''.join(out)
+
+
+def loads_neuro_json(raw):
+    """json.loads с защитой TeX-команд в строках (см. protect_latex_json_escapes)."""
+    return json.loads(protect_latex_json_escapes(raw))
 
 
 # Уже обёрнутые формулы не трогаем (те же разделители, что KaTeX)
