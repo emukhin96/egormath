@@ -224,7 +224,13 @@
     if (kind === 'task-detail') {
       if (!confirmOverwrite(detailHasExisting())) return;
       withBusy(el, function () {
-        return solve(payloadFor(el, collectDetail())).then(fillDetail);
+        var payload = payloadFor(el, collectDetail());
+        if (el.dataset.taskId) {
+          payload.task_id = el.dataset.taskId;
+          payload.apply = true;
+          payload.overwrite = detailHasExisting();
+        }
+        return solve(payload).then(fillDetail);
       }).then(function () {
         toast(true, 'Черновик в полях — проверьте и поправьте');
       }).catch(function () {});

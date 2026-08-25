@@ -120,6 +120,13 @@ class LatexUtilsTests(TestCase):
         # \underline не должен уйти в \\uXXXX
         under = '{"x": "\\underline{A}"}'
         self.assertEqual(loads_neuro_json(under)['x'], r'\underline{A}')
+        # \, и \{ — невалидный JSON, без защиты json.loads падает
+        thin = '{"x": "a\\,b \\{1\\}"}'
+        with self.assertRaises(ValueError):
+            json.loads(thin)
+        self.assertEqual(loads_neuro_json(thin)['x'], r'a\,b \{1\}')
+        fenced = '```json\n{"answer": "1", "solution": "", "subitem_answers": [], "subitem_solutions": []}\n```'
+        self.assertEqual(loads_neuro_json(fenced)['answer'], '1')
 
 
 class NeuroTests(TestCase):

@@ -148,11 +148,11 @@ def protect_latex_json_escapes(raw):
                 out.append(raw[i:i + 2])
                 i += 2
                 continue
-            if nxt.isalpha():
-                out.append('\\\\')
-                out.append(nxt)
-                i += 2
-                continue
+            # \, \; \{ \} \$ \quad — невалидный JSON-эскейп, это TeX
+            out.append('\\\\')
+            out.append(nxt)
+            i += 2
+            continue
         if ch == '"':
             in_string = False
         out.append(ch)
@@ -160,9 +160,15 @@ def protect_latex_json_escapes(raw):
     return ''.join(out)
 
 
+_FENCE_RE = re.compile(r'^```(?:json)?\s*|\s*```$', re.I)
+
+
 def loads_neuro_json(raw):
-    """json.loads с защитой TeX-команд в строках (см. protect_latex_json_escapes)."""
-    return json.loads(protect_latex_json_escapes(raw))
+    """json.loads с защитой TeX в строках; срезает markdown-ограду при наличии."""
+    if not isinstance(raw, str):
+        raise ValueError('ожидалась JSON-строка')
+    text = _FENCE_RE.sub('', raw.strip())
+    return json.loads(protect_latex_json_escapes(text))
 
 
 # Уже обёрнутые формулы не трогаем (те же разделители, что KaTeX)

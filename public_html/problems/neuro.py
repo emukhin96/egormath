@@ -189,7 +189,7 @@ def solve_task(text, subitems=()):
         data = loads_neuro_json(raw)
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         logger.warning('Gemini API: неожиданный формат ответа: %s',
-                       response.text[:500])
+                       (raw if 'raw' in locals() else response.text)[:500])
         raise NeuroError('Не удалось разобрать ответ нейросети.') from exc
 
     result = _normalize_drafts(data, subitems)
