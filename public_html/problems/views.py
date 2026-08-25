@@ -615,14 +615,27 @@ def task_neuro_solve(request):
     if task_id not in (None, ''):
         task = get_object_or_404(Task, pk=task_id)
 
-    if task is not None:
-        # Условие и подпункты — из базы: с формы легко уехать без подпунктов
-        # («Решите уравнение:» без дробей) и получить пустой отказ модели.
-        text = task.text_latex
+    # Поля формы, если ключ передан; база — только запасной вариант.
+    # Пустой массив subitems тоже считается переданным (не подменяем).
+    if 'text' in payload:
+        text = payload['text']
+        if not isinstance(text, str):
+            return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+    elif task is not None:
+        text = task.text_latex or ''
+    else:
+        text = ''
+
+    if 'subitems' in payload:
+        raw_subs = payload['subitems']
+        if (not isinstance(raw_subs, list)
+                or any(not isinstance(s, str) for s in raw_subs)):
+            return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+        subitems = raw_subs
+    elif task is not None:
         subitems = [s.text_latex for s in task.subitems.order_by('order', 'pk')]
     else:
-        text = str(payload.get('text') or '')
-        subitems = [str(s) for s in (payload.get('subitems') or [])]
+        subitems = []
     if len(text) + sum(len(s) for s in subitems) > MAX_TASK_CHARS:
         return JsonResponse(
             {'error': 'Задача слишком длинная для нейрогенерации.'},

@@ -28,6 +28,9 @@ GEMINI_URL = ('https://generativelanguage.googleapis.com/v1beta/'
 
 # Предохранитель от случайной отправки огромных текстов (и большого счёта)
 MAX_TASK_CHARS = 8000
+# Без потолка Gemini 3.5 крутит thinking бесконечно и висит до таймаута
+# клиента (задача 79: 90с без байта; с maxOutputTokens — ответ за ~2с).
+MAX_OUTPUT_TOKENS = 4096
 
 _INSTRUCTION = (
     'Ты — учитель математики. Реши задачу и верни JSON с полями:\n'
@@ -136,31 +139,49 @@ def solve_task(text, subitems=()):
             'Нейрогенерация не настроена: нет ключа API '
             '(.secrets/GEMINI_API_KEY или переменная GEMINI_API_KEY / '
             'GOOGLE_API_KEY). Перезапустите сервер после добавления ключа.')
-    subitems = [s for s in (subitems or []) if s.strip()]
+    # Пустые подпункты не выкидываем: иначе ответы съезжают по строкам формы.
+    subitems = list(subitems or [])
     total = len(text) + sum(len(s) for s in subitems)
     if not text.strip():
         raise NeuroError('Пустое условие задачи.')
     if total > MAX_TASK_CHARS:
         raise NeuroError('Задача слишком длинная для нейрогенерации.')
 
-    payload = {
-        'contents': [{'parts': [{'text': _build_prompt(text, subitems)}]}],
-        'generationConfig': {
+    timeout = settings.GEMINI_TIMEOUT
+    response = None
+    last_timeout = None
+    # Повтор без schema: Gemini 3.5 иногда зависает на constrained JSON.
+    for attempt, use_schema in ((1, True), (2, False)):
+        gen = {
             'response_mime_type': 'application/json',
-            'response_schema': _RESPONSE_SCHEMA,
-        },
-    }
-    try:
-        response = requests.post(
-            GEMINI_URL % settings.GEMINI_MODEL,
-            json=payload,
-            headers={'x-goog-api-key': api_key},
-            timeout=settings.GEMINI_TIMEOUT,
-        )
-    except requests.RequestException as exc:
-        logger.warning('Gemini API недоступен: %s', exc)
-        raise NeuroError('Сервис нейрогенерации недоступен, '
-                         'попробуйте позже.') from exc
+            'maxOutputTokens': MAX_OUTPUT_TOKENS,
+        }
+        if use_schema:
+            gen['response_schema'] = _RESPONSE_SCHEMA
+        payload = {
+            'contents': [{'parts': [{'text': _build_prompt(text, subitems)}]}],
+            'generationConfig': gen,
+        }
+        try:
+            response = requests.post(
+                GEMINI_URL % settings.GEMINI_MODEL,
+                json=payload,
+                headers={'x-goog-api-key': api_key},
+                timeout=timeout,
+            )
+            last_timeout = None
+            break
+        except requests.Timeout as exc:
+            last_timeout = exc
+            logger.warning('Gemini API: таймаут попытка %s/%s', attempt, 2)
+        except requests.RequestException as exc:
+            logger.warning('Gemini API недоступен: %s', exc)
+            raise NeuroError('Сервис нейрогенерации недоступен, '
+                             'попробуйте позже.') from exc
+    if last_timeout is not None:
+        raise NeuroError(
+            'Нейросеть не успела ответить. Попробуйте ещё раз.'
+        ) from last_timeout
     if response.status_code != 200:
         logger.warning('Gemini API: HTTP %s %s',
                        response.status_code, response.text[:500])

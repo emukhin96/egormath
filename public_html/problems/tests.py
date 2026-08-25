@@ -119,6 +119,11 @@ class LatexUtilsTests(TestCase):
         # Настоящий перевод строки внутри кавычек (как печатает модель)
         nl = '{"x": "шаг 1.\nшаг 2."}'
         self.assertEqual(loads_neuro_json(nl)['x'], 'шаг 1.\nшаг 2.')
+        # Корректный JSON-эскейп \n — перевод строки, не буквальный \\n
+        escaped = '{"x": "шаг 1.\\nшаг 2."}'
+        self.assertEqual(loads_neuro_json(escaped)['x'], 'шаг 1.\nшаг 2.')
+        escaped_en = '{"x": "line 1.\\nline 2."}'
+        self.assertEqual(loads_neuro_json(escaped_en)['x'], 'line 1.\nline 2.')
         fenced = '```json\n{"answer": "1", "solution": "", "subitem_answers": [], "subitem_solutions": []}\n```'
         self.assertEqual(loads_neuro_json(fenced)['answer'], '1')
         # Хвост как у задачи 75: подпункты и \neq / \frac без удвоения
@@ -130,6 +135,8 @@ class LatexUtilsTests(TestCase):
         self.assertEqual(parsed['subitem_answers'], ['$x = -2$'])
         self.assertEqual(parsed['subitem_solutions'][0],
                          r'$x \neq 1$, $t = \frac{1}{x}$')
+        dumped = json.dumps({'x': 'a\nb'})
+        self.assertEqual(loads_neuro_json(dumped)['x'], 'a\nb')
 
 
 class NeuroTests(TestCase):
@@ -180,6 +187,7 @@ class NeuroTests(TestCase):
         self.assertEqual(
             body['generationConfig']['response_mime_type'],
             'application/json')
+        self.assertEqual(body['generationConfig']['maxOutputTokens'], 4096)
 
     def test_invented_subitems_fold_into_answer(self):
         """Параметр без подпунктов модель часто кладёт в массивы — не теряем."""
@@ -385,8 +393,8 @@ class NeuroTests(TestCase):
         self.assertEqual(task.answer_latex, '4')
         self.assertEqual(task.solution_latex, 'Сложение.')
 
-    def test_solve_endpoint_uses_task_from_db(self):
-        """task_id: условие и подпункты с базы, не из обрезанного тела запроса."""
+    def test_solve_endpoint_uses_task_from_db_when_fields_omitted(self):
+        """Без text/subitems в теле — условие и подпункты с базы."""
         from unittest import mock
         teacher = make_teacher()
         self.client.login(username='teacher1', password='pass12345')
@@ -399,13 +407,103 @@ class NeuroTests(TestCase):
         with mock.patch('problems.neuro.solve_task', return_value=drafts) as solve:
             response = self.client.post(
                 reverse('task_neuro_solve'),
-                {'task_id': task.pk, 'text': 'Решите уравнение:',
-                 'subitems': [], 'apply': True},
+                {'task_id': task.pk, 'apply': True},
                 content_type='application/json')
         self.assertEqual(response.status_code, 200)
         solve.assert_called_once_with('Решите уравнение:', [r'$\frac{x}{2}=0$'])
         task.subitems.get().refresh_from_db()
         self.assertEqual(task.subitems.get().answer_latex, '$x=0$')
+
+    def test_solve_endpoint_prefers_request_fields(self):
+        """Переданные text/subitems важнее базы — даже пустой массив."""
+        from unittest import mock
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        task = Task.objects.create(
+            text_latex='Старое условие', created_by=teacher)
+        task.subitems.create(order=10, text_latex=r'$x=1$')
+        drafts = {'answer': '8', 'solution': 'Сложение.',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        with mock.patch('problems.neuro.solve_task', return_value=drafts) as solve:
+            response = self.client.post(
+                reverse('task_neuro_solve'),
+                {'task_id': task.pk, 'text': 'Найдите $3+5$',
+                 'subitems': []},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        solve.assert_called_once_with('Найдите $3+5$', [])
+
+    def test_solve_endpoint_rejects_bad_subitems(self):
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('task_neuro_solve')
+        for bad in (1, 'abc', [1], [None], {'a': 'b'}):
+            response = self.client.post(
+                url, {'text': 'Задача', 'subitems': bad},
+                content_type='application/json')
+            self.assertEqual(response.status_code, 400, msg=bad)
+
+    def test_solve_task_keeps_empty_subitem_slots(self):
+        """Пустой подпункт не сдвигает ответы следующих строк."""
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from . import neuro
+        payload = {
+            'answer': '', 'solution': '',
+            'subitem_answers': ['A', '', 'C'],
+            'subitem_solutions': ['sa', '', 'sc'],
+        }
+        with override_settings(GEMINI_API_KEY='k', GEMINI_MODEL='m',
+                               GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=self._response(payload)) as post:
+                result = neuro.solve_task('Задача', ['a', '', 'c'])
+        self.assertEqual(result['subitem_answers'], ['A', '', 'C'])
+        prompt = post.call_args.kwargs['json']['contents'][0]['parts'][0]['text']
+        self.assertIn('1) a', prompt)
+        self.assertIn('3) c', prompt)
+
+    def test_solve_task_retries_timeout(self):
+        from unittest import mock
+
+        import requests
+        from django.test import override_settings
+
+        from . import neuro
+        payload = {
+            'answer': '8', 'solution': 'Сложение.',
+            'subitem_answers': [], 'subitem_solutions': [],
+        }
+        timed_out = requests.Timeout('read timed out')
+        with override_settings(GEMINI_API_KEY='k', GEMINI_MODEL='m',
+                               GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            side_effect=[timed_out,
+                                         self._response(payload)]) as post:
+                result = neuro.solve_task('3+5')
+        self.assertEqual(result['answer'], '8')
+        self.assertEqual(post.call_count, 2)
+        first = post.call_args_list[0].kwargs['json']['generationConfig']
+        second = post.call_args_list[1].kwargs['json']['generationConfig']
+        self.assertIn('response_schema', first)
+        self.assertNotIn('response_schema', second)
+
+    def test_solve_task_timeout_message(self):
+        from unittest import mock
+
+        import requests
+        from django.test import override_settings
+
+        from .neuro import NeuroError, solve_task
+        with override_settings(GEMINI_API_KEY='k', GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            side_effect=requests.Timeout('read timed out')):
+                with self.assertLogs('problems.neuro', level='WARNING'):
+                    with self.assertRaises(NeuroError) as ctx:
+                        solve_task('Задача')
+        self.assertIn('не успела ответить', str(ctx.exception))
 
     def test_superuser_without_profile_gets_neuro_js(self):
         """Суперпользователь без профиля — учитель по get_role, скрипт должен грузиться."""

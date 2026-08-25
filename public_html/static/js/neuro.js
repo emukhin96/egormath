@@ -192,13 +192,13 @@
   }
 
   function payloadFor(el, collected) {
-    if (collected && collected.text && collected.text.trim()) {
-      return collected;
+    var payload = {};
+    if (collected) {
+      payload.text = collected.text || '';
+      payload.subitems = collected.subitems || [];
     }
-    if (el.dataset.taskId) {
-      return {task_id: el.dataset.taskId};
-    }
-    return collected || {};
+    if (el.dataset.taskId) payload.task_id = el.dataset.taskId;
+    return payload;
   }
 
   function applyTask(el) {
@@ -224,10 +224,9 @@
     if (kind === 'task-detail') {
       if (!confirmOverwrite(detailHasExisting())) return;
       withBusy(el, function () {
-        var payload = el.dataset.taskId
-          ? {task_id: el.dataset.taskId, apply: true,
-             overwrite: detailHasExisting()}
-          : payloadFor(el, collectDetail());
+        var payload = payloadFor(el, collectDetail());
+        payload.apply = true;
+        payload.overwrite = detailHasExisting();
         return solve(payload).then(fillDetail);
       }).then(function () {
         toast(true, 'Черновик в полях — проверьте и поправьте');
@@ -237,10 +236,7 @@
     if (kind === 'task-form') {
       if (!confirmOverwrite(formHasExisting())) return;
       withBusy(el, function () {
-        var payload = el.dataset.taskId
-          ? {task_id: el.dataset.taskId}
-          : payloadFor(el, collectForm());
-        return solve(payload).then(fillForm);
+        return solve(payloadFor(el, collectForm())).then(fillForm);
       }).then(function () {
         toast(true, 'Черновик в полях — проверьте перед сохранением');
       }).catch(function () {});

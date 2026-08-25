@@ -83,12 +83,48 @@ def restore_json_eaten_latex(text):
     return text
 
 
-# Свой разбор JSON нейросети: json.loads нельзя — \\frac/\\neq/\\, в строке
-# для него то form feed, то перевод строки, то синтаксическая ошибка.
-# Здесь \\ и \" — единственные JSON-эскейпы; всё остальное после \\ — TeX.
+# Свой разбор JSON нейросети: json.loads нельзя — \\, / \\{ ломают его,
+# а \\frac/\\neq он превращает в form feed и перевод строки.
+# Штатные эскейпы (\\n \\t \\r \\b \\f) декодируем как JSON, если это не
+# известная TeX-команда (\\neq, \\frac, \\times, \\right, …).
 # Настоящий перевод строки внутри кавычек разрешён (как в JSON5).
 _FENCE_RE = re.compile(r'^```(?:json)?\s*|\s*```$', re.I)
 _HEX = frozenset('0123456789abcdefABCDEF')
+_JSON_ESC = {
+    'b': '\b',
+    'f': '\f',
+    'n': '\n',
+    'r': '\r',
+    't': '\t',
+}
+# TeX-команды, чьё имя начинается с буквы JSON-эскейпа. \\n + «шаг» —
+# перевод строки; \\n + eq — \\neq.
+_TEX_JSON_COLLISIONS = frozenset({
+    'nabla', 'natural', 'ne', 'neg', 'neq', 'newcommand', 'newline',
+    'nexists', 'ngtr', 'ni', 'nleftarrow', 'nLeftrightarrow', 'nleq',
+    'nleqslant', 'nless', 'nmid', 'noindent', 'nparallel', 'nprec',
+    'nRightarrow', 'nrightarrow', 'nsim', 'nsubseteq', 'nsucc',
+    'nsupseteq', 'nu', 'nvDash', 'nvdash', 'nVdash', 'not', 'notin',
+    'normalsize',
+    'tan', 'tanh', 'tau', 'tbinom', 'text', 'textbf', 'textbackslash',
+    'textit', 'textrm', 'textsc', 'textsf', 'textsl', 'textnormal',
+    'texttt', 'textup', 'tfrac', 'theta', 'thickspace', 'thinspace',
+    'tilde', 'times', 'to', 'top', 'triangle', 'triangleleft',
+    'trianglelefteq', 'triangleq', 'triangleright', 'trianglerighteq',
+    'widetilde',
+    'fbox', 'flat', 'flushleft', 'flushright', 'footnotesize',
+    'forall', 'frac',
+    'backslash', 'bar', 'because', 'begin', 'beta', 'bfseries',
+    'big', 'Big', 'bigcap', 'bigcup', 'bigg', 'Bigg', 'biggl',
+    'Biggl', 'biggr', 'Biggr', 'bigl', 'Bigl', 'bigoplus',
+    'bigotimes', 'bigr', 'Bigr', 'bigvee', 'bigwedge', 'binom',
+    'bigskip', 'bot', 'bowtie', 'bullet',
+    'mathbb', 'mathbf', 'mathcal', 'mathfrak',
+    'mathit', 'mathrm', 'mathscr', 'mathsf', 'mathtt', 'boldsymbol',
+    'rangle', 'rceil', 'restriction', 'rfloor', 'rho', 'right',
+    'rightarrow', 'Rightarrow', 'rightharpoondown', 'rightharpoonup',
+    'rightleftharpoons', 'rmoustache', 'rule', 'rvert',
+})
 
 
 class NeuroJsonError(ValueError):
@@ -225,8 +261,19 @@ class _NeuroJson:
                 else:
                     out.append('\\')
                     out.append('u')
+            elif nxt in _JSON_ESC:
+                name = nxt
+                j = self.i
+                while j < self.n and self.s[j].isalpha():
+                    name += self.s[j]
+                    j += 1
+                if name in _TEX_JSON_COLLISIONS:
+                    out.append('\\')
+                    out.append(nxt)
+                else:
+                    out.append(_JSON_ESC[nxt])
             else:
-                # \frac \neq \, \{ \times \right — всегда TeX, не \f/\n/\t
+                # \, \{ \left \alpha — не JSON-эскейпы, оставляем TeX
                 out.append('\\')
                 out.append(nxt)
         raise NeuroJsonError('незакрытая строка')
