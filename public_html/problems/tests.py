@@ -785,6 +785,63 @@ class RubricatorTests(TestCase):
         seed_rubricator()
         self.assertEqual(Topic.objects.filter(code='ALG.07.03').count(), first)
 
+    def test_seed_keeps_linked_legacy_topics(self):
+        from problems.rubricator import seed_rubricator, set_task_topics
+        teacher = make_teacher()
+        old = Topic.objects.create(name='Старая алгебра')
+        unused = Topic.objects.create(name='Никому не нужна')
+        task = Task.objects.create(text_latex='x', created_by=teacher)
+        set_task_topics(task, [old.pk], old.pk)
+        seed_rubricator()
+        old.refresh_from_db()
+        self.assertTrue(Topic.objects.filter(pk=old.pk).exists())
+        self.assertIn(old, task.topics.all())
+        self.assertFalse(Topic.objects.filter(pk=unused.pk).exists())
+        self.assertTrue(Topic.objects.filter(code='_LEGACY').exists())
+        self.assertEqual(old.parent, Topic.objects.get(code='_LEGACY'))
+
+    def test_invalid_create_keeps_taxonomy_selection(self):
+        from problems.rubricator import seed_rubricator
+        seed_rubricator()
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        topic = Topic.objects.get(code='ALG.07.03')
+        response = self.client.post(reverse('task_create'), {
+            'text_latex': '', 'columns': 0, 'stars': 0,
+            'answer_type': 'number',
+            'topics': [str(topic.pk)],
+            'primary_topic': str(topic.pk),
+            'grade_bands': ['GRADE_8'],
+            **formset_management('source_refs', total=0),
+            **formset_management('subitems', total=0),
+            **formset_management('images', total=0),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(str(topic.pk), response.context['selected_json'])
+        self.assertIn('GRADE_8', response.context['selected_json'])
+        self.assertFalse(Task.objects.filter(created_by=teacher).exists())
+
+    def test_duplicate_warning_keeps_taxonomy_selection(self):
+        from problems.rubricator import seed_rubricator
+        seed_rubricator()
+        teacher = make_teacher()
+        existing = Task.objects.create(
+            text_latex='Один и тот же текст xyz', created_by=teacher)
+        topic = Topic.objects.get(code='GEO.01.01')
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(reverse('task_create'), {
+            'text_latex': existing.text_latex, 'columns': 0, 'stars': 0,
+            'answer_type': 'number',
+            'topics': [str(topic.pk)],
+            'primary_topic': str(topic.pk),
+            **formset_management('source_refs', total=0),
+            **formset_management('subitems', total=0),
+            **formset_management('images', total=0),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'уже есть в базе')
+        self.assertIn(str(topic.pk), response.context['selected_json'])
+
     def test_one_primary_topic_optional(self):
         from problems.models import TaskTopic
         from problems.rubricator import set_task_topics

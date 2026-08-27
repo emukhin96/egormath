@@ -20,6 +20,7 @@ from problems.rubricator import (GRADE_LEVEL_TO_CODE, apply_worksheet_taxonomy,
                                  dumps_state, filter_by_taxonomy,
                                  filter_state_from_params, parse_grade_choice,
                                  set_grade_bands, taxonomy_page_context,
+                                 taxonomy_state_from_post,
                                  worksheet_taxonomy_state)
 from problems.views import filter_tasks
 
@@ -233,7 +234,9 @@ def worksheet_create(request):
             return redirect('worksheet_detail', pk=worksheet.pk)
     else:
         form = WorksheetForm()
-    ctx = taxonomy_page_context()
+    tax_state = (taxonomy_state_from_post(request.POST)
+                 if request.method == 'POST' else None)
+    ctx = taxonomy_page_context(tax_state)
     ctx.update({'form': form})
     return render(request, 'worksheets/worksheet_form.html', ctx)
 
@@ -250,7 +253,10 @@ def worksheet_edit(request, pk):
             return redirect('worksheet_detail', pk=worksheet.pk)
     else:
         form = WorksheetForm(instance=worksheet)
-    ctx = taxonomy_page_context(worksheet_taxonomy_state(worksheet))
+    tax_state = (taxonomy_state_from_post(request.POST)
+                 if request.method == 'POST'
+                 else worksheet_taxonomy_state(worksheet))
+    ctx = taxonomy_page_context(tax_state)
     ctx.update({'form': form, 'worksheet': worksheet})
     return render(request, 'worksheets/worksheet_form.html', ctx)
 

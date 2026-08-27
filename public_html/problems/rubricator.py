@@ -48,15 +48,57 @@ def known_topic_codes():
     return codes
 
 
+LEGACY_ROOT_CODE = '_LEGACY'
+
+
+def _topic_ids_in_use():
+    """Темы, на которые ссылаются задачи или листки, плюс их предки."""
+    ids = set(TaskTopic.objects.values_list('topic_id', flat=True))
+    from worksheets.models import Worksheet
+    ids.update(Worksheet.topics.through.objects.values_list(
+        'topic_id', flat=True))
+    parent_of = dict(Topic.objects.values_list('pk', 'parent_id'))
+    extra = set()
+    for pk in ids:
+        parent = parent_of.get(pk)
+        while parent and parent not in ids and parent not in extra:
+            extra.add(parent)
+            parent = parent_of.get(parent)
+    return ids | extra
+
+
+def _park_uncoded_topics(in_use):
+    """Уводит связанные темы без кода под корень «Прежние темы».
+
+    Иначе update_or_create нового дерева падает на unique (name, parent).
+    """
+    parked = list(Topic.objects.filter(
+        Q(code__isnull=True) | Q(code=''), pk__in=in_use))
+    if not parked:
+        return
+    holder, _ = Topic.objects.update_or_create(
+        code=LEGACY_ROOT_CODE,
+        defaults={'name': 'Прежние темы', 'parent': None, 'order': 10_000})
+    for topic in parked:
+        if topic.pk == holder.pk:
+            continue
+        topic.parent = holder
+        topic.name = '%s [%s]' % (topic.name, topic.pk)
+        topic.save(update_fields=['parent', 'name'])
+
+
 def seed_rubricator():
     """Создаёт или обновляет дерево, классы, фасеты и экзамены по коду.
 
-    Старые темы без кода из прежнего seed_topics удаляются: у существующих
-    задач связей с ними после миграции уже нет.
+    Связанные старые темы без кода не удаляются: их переносим под
+    «Прежние темы», чтобы не потерять разметку задач и листков.
     """
-    known = known_topic_codes()
-    Topic.objects.filter(Q(code__isnull=True) | Q(code='')).delete()
-    Topic.objects.exclude(code__in=known).delete()
+    known = known_topic_codes() | {LEGACY_ROOT_CODE}
+    in_use = _topic_ids_in_use()
+    Topic.objects.filter(Q(code__isnull=True) | Q(code='')).exclude(
+        pk__in=in_use).delete()
+    _park_uncoded_topics(in_use)
+    Topic.objects.exclude(code__in=known).exclude(pk__in=in_use).delete()
 
     created_topics = 0
     for block_i, (block_code, block_name, sections) in enumerate(BLOCKS):
@@ -399,6 +441,34 @@ def task_taxonomy_state(task):
         'facets': list(task.facet_values.values_list('pk', flat=True)),
         'exams': list(task.exam_items.values_list('pk', flat=True)),
         'difficulty': task.difficulty,
+    }
+
+
+def taxonomy_state_from_post(post):
+    """Состояние виджета из POST — выбор не теряется при ошибке формы."""
+    topics = parse_int_ids(getlist(post, 'topics'))
+    primary_raw = post.get('primary_topic')
+    if primary_raw in (None, ''):
+        primary = None
+    else:
+        try:
+            primary = int(primary_raw)
+        except (TypeError, ValueError):
+            primary = None
+        if primary not in topics:
+            primary = None
+    raw_diff = (post.get('difficulty') or '').strip()
+    if raw_diff.isdigit() and int(raw_diff) in range(1, 6):
+        difficulty = int(raw_diff)
+    else:
+        difficulty = None
+    return {
+        'topics': topics,
+        'primary': primary,
+        'grades': [g for g in getlist(post, 'grade_bands') if g],
+        'facets': parse_int_ids(getlist(post, 'facet_values')),
+        'exams': parse_int_ids(getlist(post, 'exam_items')),
+        'difficulty': difficulty,
     }
 
 

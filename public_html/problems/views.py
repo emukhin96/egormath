@@ -21,7 +21,8 @@ from .rubricator import (GRADE_LEVEL_TO_CODE, apply_task_taxonomy,
                          dumps_state, filter_by_taxonomy,
                          filter_state_from_params, parse_grade_choice,
                          set_grade_bands, set_task_topics,
-                         taxonomy_page_context, task_taxonomy_state)
+                         taxonomy_page_context, taxonomy_state_from_post,
+                         task_taxonomy_state)
 
 
 def filter_tasks(params):
@@ -524,7 +525,8 @@ def _task_form(request, task):
                         warning += (' Выбранные файлы картинок при этом '
                                     'нужно указать заново.')
                     messages.warning(request, warning)
-                    ctx = taxonomy_page_context()
+                    ctx = taxonomy_page_context(
+                        taxonomy_state_from_post(request.POST))
                     ctx.update({
                         'form': form,
                         'formset': source_fs,
@@ -588,7 +590,9 @@ def _task_form(request, task):
         source_fs = TaskSourceFormSet(instance=task, initial=source_initial)
         subitem_fs = TaskSubitemFormSet(instance=task)
         image_fs = TaskImageFormSet(instance=task)
-    if task is not None:
+    if request.method == 'POST':
+        tax_state = taxonomy_state_from_post(request.POST)
+    elif task is not None:
         tax_state = task_taxonomy_state(task)
     elif request.GET.get('from'):
         prev = Task.objects.filter(pk=request.GET.get('from') or 0).first()
