@@ -445,6 +445,35 @@ class NeuroTests(TestCase):
         mixed.subitems.create(order=20, text_latex='б')
         self.assertTrue(mixed.has_blank_answer)
 
+    def test_apply_holds_quota_until_write(self):
+        """apply_result идёт при занятой квоте, иначе гонка overwrite."""
+        from unittest import mock
+
+        from .models import NeuroSolveQuota
+        teacher = make_teacher()
+        self.client.login(username=teacher.username, password='pass12345')
+        task = Task.objects.create(text_latex='Задача', created_by=teacher)
+        drafts = {'answer': '4', 'solution': 'Шаг',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        seen = {}
+
+        def fake_apply(task_obj, result, **kwargs):
+            quota = NeuroSolveQuota.objects.get(user=teacher)
+            seen['held'] = quota.in_flight_at is not None
+
+        with mock.patch('problems.neuro.solve_task', return_value=drafts):
+            with mock.patch('problems.neuro.apply_result',
+                            side_effect=fake_apply) as apply_mock:
+                response = self.client.post(
+                    reverse('task_neuro_solve'),
+                    {'task_id': task.pk, 'apply': True},
+                    content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        apply_mock.assert_called_once()
+        self.assertTrue(seen.get('held'))
+        quota = NeuroSolveQuota.objects.get(user=teacher)
+        self.assertIsNone(quota.in_flight_at)
+
     def test_solve_endpoint_apply_and_form_only(self):
         from unittest import mock
         teacher = make_teacher()
@@ -602,6 +631,8 @@ class NeuroTests(TestCase):
         self.assertNotIn('payload.apply = true', js)
         self.assertIn('if (!silent)', js)
         self.assertIn('if (!id || seen[id]) return;', js)
+        self.assertIn('function saveFilledForms(forms)', js)
+        self.assertIn('EgorAutosave.autosave(form)', js)
         teacher = make_teacher('neuro-form')
         self.client.login(username=teacher.username, password='pass12345')
         response = self.client.get(reverse('task_create'))

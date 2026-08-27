@@ -96,7 +96,26 @@
     return {text: text, subitems: subitems};
   }
 
+  function rememberForm(el, forms) {
+    if (!el) return;
+    var form = el.form || el.closest('form[data-autosave]');
+    if (form && form.dataset.autosave && forms.indexOf(form) === -1) {
+      forms.push(form);
+    }
+  }
+
+  function saveFilledForms(forms) {
+    // Карточка без кнопки «Сохранить»: после проверки — явный автосейв,
+    // не событие input (оно писало черновик ещё до просмотра).
+    if (!forms.length) return false;
+    if (!window.confirm('Сохранить черновик в задачу?')) return false;
+    if (!window.EgorAutosave) return false;
+    forms.forEach(function (form) { EgorAutosave.autosave(form); });
+    return true;
+  }
+
   function fillDetail(result, answersOnly) {
+    var forms = [];
     var blocks = document.querySelectorAll('.subitem-block');
     if (blocks.length) {
       blocks.forEach(function (block, i) {
@@ -106,14 +125,16 @@
           '.subitem-edit-form textarea[name="answer_latex"]');
         if (!answersOnly || (ansEl && !ansEl.value.trim())) {
           setValue(ansEl, (result.subitem_answers || [])[i], true);
+          rememberForm(ansEl, forms);
         }
         if (!answersOnly) {
-          setValue(block.querySelector(
-            '.subitem-edit-form textarea[name="solution_latex"]'),
-            (result.subitem_solutions || [])[i], true);
+          var solEl = block.querySelector(
+            '.subitem-edit-form textarea[name="solution_latex"]');
+          setValue(solEl, (result.subitem_solutions || [])[i], true);
+          rememberForm(solEl, forms);
         }
       });
-      return;
+      return forms;
     }
     var answerBox = document.getElementById('qa_answer');
     var solutionBox = document.getElementById('qa_solution');
@@ -125,8 +146,13 @@
     }
     if (!answersOnly || (answerBox && !answerBox.value.trim())) {
       setValue(answerBox, result.answer, true);
+      rememberForm(answerBox, forms);
     }
-    if (!answersOnly) setValue(solutionBox, result.solution, true);
+    if (!answersOnly) {
+      setValue(solutionBox, result.solution, true);
+      rememberForm(solutionBox, forms);
+    }
+    return forms;
   }
 
   function detailHasExisting() {
@@ -310,10 +336,13 @@
       }
       withBusy(el, function () {
         return solve(payloadFor(el, collectDetail())).then(function (result) {
-          fillDetail(result, answersOnly);
+          return fillDetail(result, answersOnly);
         });
-      }).then(function () {
-        toast(true, 'Черновик в полях — проверьте и поправьте');
+      }).then(function (forms) {
+        var saved = saveFilledForms(forms || []);
+        toast(true, saved
+          ? 'Черновик сохранён — проверьте и поправьте'
+          : 'Черновик в полях — сохраните, когда проверите');
       }).catch(function () {});
       return;
     }

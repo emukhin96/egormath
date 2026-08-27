@@ -677,6 +677,14 @@ def task_neuro_solve(request):
     try:
         acquired_at = acquire_quota(request.user)
         result = solve_task(text, subitems)
+        # Пишем, пока квота ещё занята: иначе второй запрос успеет
+        # записаться раньше, и первый с overwrite затрёт его устаревшим.
+        if task is not None and payload.get('apply'):
+            apply_result(
+                task, result,
+                overwrite=bool(payload.get('overwrite')),
+                answers_only=bool(payload.get('answers_only')),
+            )
     except NeuroQuotaError as exc:
         return JsonResponse({'error': str(exc)}, status=429)
     except NeuroError as exc:
@@ -684,10 +692,4 @@ def task_neuro_solve(request):
     finally:
         if acquired_at is not None:
             release_quota(request.user, acquired_at)
-    if task is not None and payload.get('apply'):
-        apply_result(
-            task, result,
-            overwrite=bool(payload.get('overwrite')),
-            answers_only=bool(payload.get('answers_only')),
-        )
     return JsonResponse(result)
