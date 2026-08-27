@@ -132,24 +132,9 @@
     return filled;
   }
 
-  function collectForm() {
-    var textEl = document.getElementById('id_text_latex');
-    var text = textEl ? textEl.value : '';
-    var subitems = [];
-    document.querySelectorAll(
-      'table.formset[data-formset="subitems"] tr.formset-row'
-    ).forEach(function (row) {
-      var del = row.querySelector('input[name$="-DELETE"]');
-      if (del && del.checked) return;
-      var field = row.querySelector('textarea[name$="-text_latex"]');
-      if (field && field.name.indexOf('__prefix__') === -1) {
-        subitems.push(field.value);
-      }
-    });
-    return {text: text, subitems: subitems};
-  }
-
-  function fillForm(result) {
+  function formSubitemRows() {
+    // extra=1 всегда даёт пустую строку; без фильтра задача без подпунктов
+    // уходит в модель как один пустой, а ответ пишется не в основные поля.
     var rows = [];
     document.querySelectorAll(
       'table.formset[data-formset="subitems"] tr.formset-row'
@@ -157,10 +142,24 @@
       var del = row.querySelector('input[name$="-DELETE"]');
       if (del && del.checked) return;
       var field = row.querySelector('textarea[name$="-text_latex"]');
-      if (field && field.name.indexOf('__prefix__') === -1) {
-        rows.push(row);
-      }
+      if (!field || field.name.indexOf('__prefix__') !== -1) return;
+      if (!field.value.trim()) return;
+      rows.push(row);
     });
+    return rows;
+  }
+
+  function collectForm() {
+    var textEl = document.getElementById('id_text_latex');
+    var text = textEl ? textEl.value : '';
+    var subitems = formSubitemRows().map(function (row) {
+      return row.querySelector('textarea[name$="-text_latex"]').value;
+    });
+    return {text: text, subitems: subitems};
+  }
+
+  function fillForm(result) {
+    var rows = formSubitemRows();
     if (rows.length) {
       rows.forEach(function (row, i) {
         setValue(row.querySelector('textarea[name$="-answer_latex"]'),

@@ -538,6 +538,20 @@ class NeuroTests(TestCase):
         self.assertContains(response, 'js/neuro.js')
         self.assertContains(response, 'NEURO_SOLVE_URL')
 
+    def test_neuro_js_skips_empty_formset_extra_row(self):
+        """Пустая extra=1 строка formset не считается подпунктом."""
+        from pathlib import Path
+
+        from django.conf import settings
+
+        js = (Path(settings.BASE_DIR) / 'static/js/neuro.js').read_text()
+        self.assertIn('function formSubitemRows()', js)
+        self.assertIn('if (!field.value.trim()) return;', js)
+        teacher = make_teacher('neuro-form')
+        self.client.login(username=teacher.username, password='pass12345')
+        response = self.client.get(reverse('task_create'))
+        self.assertContains(response, 'id_subitems-0-text_latex')
+
 
 class WebTexTests(TestCase):
     """Серверный препроцессор tex → HTML для веб-страниц."""
