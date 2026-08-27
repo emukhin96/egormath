@@ -629,7 +629,7 @@ def _task_form(request, task):
 def task_neuro_solve(request):
     """Нейрогенерация черновика ответа/решения.
 
-    JSON {text, subitems} и/или {task_id, apply, overwrite}.
+    JSON {text, subitems} и/или {task_id, apply, overwrite, answers_only}.
     Без apply ничего не пишет в базу — черновик уходит в поля формы.
     С apply=true записывает в задачу (конструктор листка).
     """
@@ -685,5 +685,9 @@ def task_neuro_solve(request):
         if acquired_at is not None:
             release_quota(request.user, acquired_at)
     if task is not None and payload.get('apply'):
-        apply_result(task, result, overwrite=bool(payload.get('overwrite')))
+        apply_result(
+            task, result,
+            overwrite=bool(payload.get('overwrite')),
+            answers_only=bool(payload.get('answers_only')),
+        )
     return JsonResponse(result)

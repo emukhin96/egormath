@@ -357,12 +357,12 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'подпункт а')
         self.assertContains(response, 'Текст-вставка')
         self.assertContains(response, 'Дублировать')
-        self.assertContains(response, 'data-neuro="apply"')
-        self.assertContains(response, 'data-neuro="apply-missing"')
+        self.assertContains(response, 'data-neuro="apply-answers"')
+        self.assertContains(response, 'data-neuro="apply-all"')
         self.assertContains(response, 'data-no-answer="1"')
-        self.assertContains(response, 'href="#" data-neuro="apply"')
-        self.assertContains(response, 'Добавить AI-решение')
-        self.assertContains(response, 'Добавить AI-решение без ответа')
+        self.assertContains(response, 'Дописать AI-ответ к решениям')
+        self.assertContains(response, 'Добавить AI-решения и ответ')
+        self.assertNotContains(response, 'без ответа')
         self.assertContains(response, 'js/neuro.js')
 
     def test_add_and_move_and_remove_task(self):

@@ -74,6 +74,9 @@
       {{ form.solution_latex.errors }}{{ form.solution_latex }}
     </p>
     <div class="form-buttons">
+      <button type="button" class="btn btn-secondary" data-neuro="task-form-answer"
+              {% if task %}data-task-id="{{ task.pk }}"{% endif %}
+              title="Ответ в пустые поля — существующие ответы и решения не трогаем">Дописать AI-ответ</button>
       <button type="button" class="btn btn-secondary" data-neuro="task-form"
               {% if task %}data-task-id="{{ task.pk }}"{% endif %}
               title="Черновик ответа и решения от нейросети — проверьте перед сохранением">Добавить AI-решение</button>

@@ -274,11 +274,12 @@ def _normalize_drafts(data, subitems):
     }
 
 
-def apply_result(task, result, overwrite=False):
+def apply_result(task, result, overwrite=False, answers_only=False):
     """Записать черновик в рабочие поля задачи.
 
     Пустые значения модели пропускаем. Непустое поле не затираем, пока
     overwrite=False — чтобы не снести проверенный ответ.
+    answers_only=True — только ответ, решение не трогаем («дописать ответ»).
     """
     subs = list(task.subitems.order_by('order', 'pk'))
     answers = result.get('subitem_answers') or []
@@ -291,7 +292,8 @@ def apply_result(task, result, overwrite=False):
             if ans and (overwrite or not sub.answer_latex.strip()):
                 sub.answer_latex = ans
                 fields.append('answer_latex')
-            if sol and (overwrite or not sub.solution_latex.strip()):
+            if (not answers_only and sol
+                    and (overwrite or not sub.solution_latex.strip())):
                 sub.solution_latex = sol
                 fields.append('solution_latex')
             if fields:
@@ -303,7 +305,8 @@ def apply_result(task, result, overwrite=False):
     if ans and (overwrite or not task.answer_latex.strip()):
         task.answer_latex = ans
         fields.append('answer_latex')
-    if sol and (overwrite or not task.solution_latex.strip()):
+    if (not answers_only and sol
+            and (overwrite or not task.solution_latex.strip())):
         task.solution_latex = sol
         fields.append('solution_latex')
     if fields:

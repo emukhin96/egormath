@@ -9,6 +9,9 @@
     {% if task.variant_of_id %}<span class="badge badge-returned">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}
   </div>
   <div class="form-buttons">
+    <button type="button" class="btn btn-secondary" data-neuro="task-detail-answer"
+            data-task-id="{{ task.pk }}"
+            title="Ответ в пустые поля — существующие ответы и решения не трогаем">Дописать AI-ответ</button>
     <button type="button" class="btn btn-secondary" data-neuro="task-detail"
             data-task-id="{{ task.pk }}"
             title="Черновик ответа и решения от нейросети — проверьте и поправьте">Добавить AI-решение</button>

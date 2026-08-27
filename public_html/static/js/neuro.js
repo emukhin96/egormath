@@ -93,18 +93,22 @@
     return {text: text, subitems: subitems};
   }
 
-  function fillDetail(result) {
+  function fillDetail(result, answersOnly) {
     var blocks = document.querySelectorAll('.subitem-block');
     if (blocks.length) {
       blocks.forEach(function (block, i) {
         var box = block.querySelector('details');
         if (box) box.open = true;
-        setValue(block.querySelector(
-          '.subitem-edit-form textarea[name="answer_latex"]'),
-          (result.subitem_answers || [])[i]);
-        setValue(block.querySelector(
-          '.subitem-edit-form textarea[name="solution_latex"]'),
-          (result.subitem_solutions || [])[i]);
+        var ansEl = block.querySelector(
+          '.subitem-edit-form textarea[name="answer_latex"]');
+        if (!answersOnly || (ansEl && !ansEl.value.trim())) {
+          setValue(ansEl, (result.subitem_answers || [])[i]);
+        }
+        if (!answersOnly) {
+          setValue(block.querySelector(
+            '.subitem-edit-form textarea[name="solution_latex"]'),
+            (result.subitem_solutions || [])[i]);
+        }
       });
       return;
     }
@@ -113,11 +117,13 @@
     if (answerBox && answerBox.closest('details')) {
       answerBox.closest('details').open = true;
     }
-    if (solutionBox && solutionBox.closest('details')) {
+    if (!answersOnly && solutionBox && solutionBox.closest('details')) {
       solutionBox.closest('details').open = true;
     }
-    setValue(answerBox, result.answer);
-    setValue(solutionBox, result.solution);
+    if (!answersOnly || (answerBox && !answerBox.value.trim())) {
+      setValue(answerBox, result.answer);
+    }
+    if (!answersOnly) setValue(solutionBox, result.solution);
   }
 
   function detailHasExisting() {
@@ -130,6 +136,21 @@
       if (el.value.trim()) filled = true;
     });
     return filled;
+  }
+
+  function detailAnswersMissing() {
+    var blocks = document.querySelectorAll('.subitem-block');
+    if (blocks.length) {
+      var missing = false;
+      blocks.forEach(function (block) {
+        var el = block.querySelector(
+          '.subitem-edit-form textarea[name="answer_latex"]');
+        if (!el || !el.value.trim()) missing = true;
+      });
+      return missing;
+    }
+    var answerBox = document.getElementById('qa_answer');
+    return !answerBox || !answerBox.value.trim();
   }
 
   function formSubitemRows() {
@@ -158,19 +179,28 @@
     return {text: text, subitems: subitems};
   }
 
-  function fillForm(result) {
+  function fillForm(result, answersOnly) {
     var rows = formSubitemRows();
     if (rows.length) {
       rows.forEach(function (row, i) {
-        setValue(row.querySelector('textarea[name$="-answer_latex"]'),
-          (result.subitem_answers || [])[i]);
-        setValue(row.querySelector('textarea[name$="-solution_latex"]'),
-          (result.subitem_solutions || [])[i]);
+        var ansEl = row.querySelector('textarea[name$="-answer_latex"]');
+        if (!answersOnly || (ansEl && !ansEl.value.trim())) {
+          setValue(ansEl, (result.subitem_answers || [])[i]);
+        }
+        if (!answersOnly) {
+          setValue(row.querySelector('textarea[name$="-solution_latex"]'),
+            (result.subitem_solutions || [])[i]);
+        }
       });
       return;
     }
-    setValue(document.getElementById('id_answer_latex'), result.answer);
-    setValue(document.getElementById('id_solution_latex'), result.solution);
+    var answerBox = document.getElementById('id_answer_latex');
+    if (!answersOnly || (answerBox && !answerBox.value.trim())) {
+      setValue(answerBox, result.answer);
+    }
+    if (!answersOnly) {
+      setValue(document.getElementById('id_solution_latex'), result.solution);
+    }
   }
 
   function formHasExisting() {
@@ -190,6 +220,20 @@
     return filled;
   }
 
+  function formAnswersMissing() {
+    var rows = formSubitemRows();
+    if (rows.length) {
+      var missing = false;
+      rows.forEach(function (row) {
+        var el = row.querySelector('textarea[name$="-answer_latex"]');
+        if (!el || !el.value.trim()) missing = true;
+      });
+      return missing;
+    }
+    var answerBox = document.getElementById('id_answer_latex');
+    return !answerBox || !answerBox.value.trim();
+  }
+
   function payloadFor(el, collected) {
     var payload = {};
     if (collected) {
@@ -200,21 +244,42 @@
     return payload;
   }
 
-  function applyTask(el) {
-    var noAnswer = el.dataset.noAnswer === '1';
-    var hasAnswer = el.dataset.hasAnswer === '1';
-    var overwrite = hasAnswer && !noAnswer;
-    if (overwrite && !confirmOverwrite(true)) return Promise.resolve();
+  function worksheetTasks(extra) {
+    extra = extra || '';
+    return Array.prototype.slice.call(
+      document.querySelectorAll(
+        '#ws-items .ws-item[data-task-id]' + extra));
+  }
+
+  function runApplyQueue(el, items, extra) {
+    extra = extra || {};
+    var done = 0;
+    var failed = 0;
     return withBusy(el, function () {
-      return solve({
-        task_id: el.dataset.taskId,
-        apply: true,
-        overwrite: overwrite,
-      });
+      return items.reduce(function (chain, item) {
+        return chain.then(function () {
+          el.textContent = 'Генерация ' + (done + 1) + '/' +
+            items.length + '…';
+          return solve({
+            task_id: item.dataset.taskId,
+            apply: true,
+            overwrite: !!extra.overwrite,
+            answers_only: !!extra.answersOnly,
+          }).then(function () {
+            done += 1;
+          }).catch(function () {
+            failed += 1;
+          });
+        });
+      }, Promise.resolve());
     }).then(function () {
-      toast(true, 'Черновик записан — проверьте задачу');
+      if (failed) {
+        toast(false, 'Не удалось: ' + failed + ' из ' + items.length);
+      } else {
+        toast(true, 'Черновики записаны — проверьте задачи');
+      }
       window.location.reload();
-    });
+    }).catch(function () {});
   }
 
   function onClick(ev) {
@@ -222,62 +287,64 @@
     if (!el) return;
     ev.preventDefault();
     var kind = el.dataset.neuro;
-    if (kind === 'task-detail') {
-      if (!confirmOverwrite(detailHasExisting())) return;
+    if (kind === 'task-detail' || kind === 'task-detail-answer') {
+      var answersOnly = kind === 'task-detail-answer';
+      if (answersOnly) {
+        if (!detailAnswersMissing()) {
+          toast(false, 'Ответ уже есть');
+          return;
+        }
+      } else if (!confirmOverwrite(detailHasExisting())) {
+        return;
+      }
       withBusy(el, function () {
-        return solve(payloadFor(el, collectDetail())).then(fillDetail);
+        return solve(payloadFor(el, collectDetail())).then(function (result) {
+          fillDetail(result, answersOnly);
+        });
       }).then(function () {
         toast(true, 'Черновик в полях — проверьте и поправьте');
       }).catch(function () {});
       return;
     }
-    if (kind === 'task-form') {
-      if (!confirmOverwrite(formHasExisting())) return;
+    if (kind === 'task-form' || kind === 'task-form-answer') {
+      var formAnswersOnly = kind === 'task-form-answer';
+      if (formAnswersOnly) {
+        if (!formAnswersMissing()) {
+          toast(false, 'Ответ уже есть');
+          return;
+        }
+      } else if (!confirmOverwrite(formHasExisting())) {
+        return;
+      }
       withBusy(el, function () {
-        return solve(payloadFor(el, collectForm())).then(fillForm);
+        return solve(payloadFor(el, collectForm())).then(function (result) {
+          fillForm(result, formAnswersOnly);
+        });
       }).then(function () {
         toast(true, 'Черновик в полях — проверьте перед сохранением');
       }).catch(function () {});
       return;
     }
-    if (kind === 'apply') {
-      applyTask(el).catch(function () {});
-      return;
-    }
-    if (kind === 'apply-missing') {
-      var queue = Array.prototype.slice.call(
-        document.querySelectorAll(
-          '[data-neuro="apply"][data-no-answer="1"]'));
-      if (!queue.length) {
+    if (kind === 'apply-answers') {
+      var missing = worksheetTasks('[data-no-answer="1"]');
+      if (!missing.length) {
         toast(false, 'Нет задач без ответа');
         return;
       }
-      var done = 0;
-      var failed = 0;
-      withBusy(el, function () {
-        return queue.reduce(function (chain, item) {
-          return chain.then(function () {
-            el.textContent = 'Генерация ' + (done + 1) + '/' +
-              queue.length + '…';
-            return solve({
-              task_id: item.dataset.taskId,
-              apply: true,
-              overwrite: false,
-            }).then(function () {
-              done += 1;
-            }).catch(function () {
-              failed += 1;
-            });
-          });
-        }, Promise.resolve());
-      }).then(function () {
-        if (failed) {
-          toast(false, 'Не удалось: ' + failed + ' из ' + queue.length);
-        } else {
-          toast(true, 'Черновики записаны — проверьте задачи');
-        }
-        window.location.reload();
-      }).catch(function () {});
+      runApplyQueue(el, missing, {answersOnly: true});
+      return;
+    }
+    if (kind === 'apply-all') {
+      var all = worksheetTasks();
+      if (!all.length) {
+        toast(false, 'Нет задач в листке');
+        return;
+      }
+      var hasExisting = all.some(function (item) {
+        return item.dataset.hasAnswer === '1';
+      });
+      if (!confirmOverwrite(hasExisting)) return;
+      runApplyQueue(el, all, {overwrite: hasExisting});
     }
   }
 

@@ -413,6 +413,19 @@ class NeuroTests(TestCase):
         self.assertEqual(task.answer_latex, 'новый')
         self.assertEqual(task.solution_latex, 'Другое')
 
+    def test_apply_result_answers_only_skips_solution(self):
+        from .neuro import apply_result
+        task = Task.objects.create(
+            text_latex='Задача', solution_latex='старое',
+            created_by=make_teacher())
+        apply_result(
+            task,
+            {'answer': '4', 'solution': 'новое'},
+            answers_only=True)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, '4')
+        self.assertEqual(task.solution_latex, 'старое')
+
     def test_has_blank_answer(self):
         teacher = make_teacher()
         empty = Task.objects.create(text_latex='Пустая', created_by=teacher)
@@ -1123,8 +1136,10 @@ class QuickUpdateTests(TestCase):
         self.assertContains(response, '>Ответ<')
         self.assertContains(response, 'icon-btn')
         self.assertContains(response, 'class="btn">Добавить')
+        self.assertContains(response, 'data-neuro="task-detail-answer"')
         self.assertContains(response, 'data-neuro="task-detail"')
         self.assertContains(response, 'data-task-id="%s"' % self.task.pk)
+        self.assertContains(response, 'Дописать AI-ответ')
         self.assertContains(response, 'Добавить AI-решение')
         self.assertContains(response, 'js/neuro.js')
         self.assertNotContains(response, 'qa_answer')
