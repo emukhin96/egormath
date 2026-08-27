@@ -179,15 +179,33 @@ def _collection_locator(path):
     return f'{prefix or "section"}-{digest}'
 
 
-def _collection_for_path(batch, path, cache):
+def _leaf_collection_locator(collection_key, path):
+    """Отделяет стабильные ключи листьев от вычисляемых ключей разделов."""
+    if collection_key:
+        locator = f'key:{collection_key}'
+        if len(locator) <= 500:
+            return locator
+        digest = hashlib.sha256(collection_key.encode('utf-8')).hexdigest()
+        return f'key-sha256:{digest}'
+    return _collection_locator(path)
+
+
+def _collection_for_path(batch, path, cache, collection_key=''):
     from worksheets.models import Collection, Worksheet
 
     parent = None
     for depth in range(1, len(path) + 1):
         prefix = path[:depth]
-        locator = _collection_locator(prefix)
+        is_leaf = depth == len(path)
+        locator = (_leaf_collection_locator(collection_key, prefix)
+                   if is_leaf else _collection_locator(prefix))
         if locator in cache:
-            parent = cache[locator]
+            collection = cache[locator]
+            if is_leaf and collection.source_path != prefix:
+                raise TextbookImportError(
+                    f'Ключ подборки {collection_key} используется для '
+                    'разных путей в одной партии.')
+            parent = collection
             continue
         collection = (Collection.objects
                       .select_related('worksheet')
@@ -203,10 +221,23 @@ def _collection_for_path(batch, path, cache):
             collection = Collection.objects.create(
                 worksheet=worksheet, source=batch.source, parent=parent,
                 locator=locator, source_path=prefix, order=depth * 10,
-                is_published=(depth == len(path)))
-        elif depth == len(path) and not collection.is_published:
-            collection.is_published = True
-            collection.save(update_fields=['is_published'])
+                is_published=is_leaf)
+        elif is_leaf:
+            collection_updates = []
+            if collection.parent_id != (parent.pk if parent else None):
+                collection.parent = parent
+                collection_updates.append('parent')
+            if collection.source_path != prefix:
+                collection.source_path = prefix
+                collection_updates.append('source_path')
+            if not collection.is_published:
+                collection.is_published = True
+                collection_updates.append('is_published')
+            if collection_updates:
+                collection.save(update_fields=collection_updates)
+            if collection.worksheet.title != prefix[-1][:190]:
+                collection.worksheet.title = prefix[-1][:190]
+                collection.worksheet.save(update_fields=['title'])
         cache[locator] = collection
         parent = collection
     return parent
@@ -337,7 +368,9 @@ def commit_batch(batch, *, user):
         path = [str(x).strip() for x in draft.source_path if str(x).strip()]
         if not path:
             path = [draft.collection_title.strip() or batch.title]
-        collection = _collection_for_path(batch, path, collection_cache)
+        collection = _collection_for_path(
+            batch, path, collection_cache,
+            collection_key=draft.collection_key.strip())
         if collection:
             worksheet = collection.worksheet
             if draft.topic_id:

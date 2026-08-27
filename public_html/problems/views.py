@@ -826,6 +826,8 @@ def textbook_import_review(request, batch_pk, pk):
                         updated.author_solution_latex = \
                             candidate.author_solution_latex
                         updated.solution_source_external_id = source_key
+            else:
+                updated.solution_source_external_id = ''
             if not form.errors:
                 updated.reviewed_by = request.user
                 updated.reviewed_at = timezone.now()

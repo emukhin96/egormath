@@ -200,6 +200,51 @@ class TextbookImportTests(TestCase):
             source_path=['Алгебра', 'Квадратные уравнения'])
         self.assertEqual(leaf.worksheet.items.count(), 1)
 
+    def test_different_collection_keys_keep_same_named_leaves_separate(self):
+        topic = Topic.objects.create(name='Тема одинаковых названий')
+        payload = bundle(source_path=['Раздел', 'Упражнения'])
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='1.2.38', source_number='38',
+            collection_key='alg.other', text_latex='Вторая задача.'))
+        batch = self.create_batch(payload)
+        batch.drafts.update(
+            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+
+        commit_batch(batch, user=self.teacher)
+
+        leaves = Collection.objects.filter(is_published=True)
+        self.assertEqual(leaves.count(), 2)
+        self.assertEqual(
+            set(leaves.values_list('locator', flat=True)),
+            {'key:alg.quadratic', 'key:alg.other'})
+        self.assertEqual(
+            sorted(collection.worksheet.items.count()
+                   for collection in leaves), [1, 1])
+
+    def test_collection_key_survives_display_title_change(self):
+        topic = Topic.objects.create(name='Тема переименования')
+        first = self.create_batch(bundle(
+            source_path=['Старое название'],
+            collection_title='Старое название'))
+        first.drafts.update(
+            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        commit_batch(first, user=self.teacher)
+
+        second = self.create_batch(bundle(
+            external_id='1.2.38', source_number='38',
+            source_path=['Новое название'],
+            collection_title='Новое название', text_latex='Вторая задача.'))
+        second.drafts.update(
+            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        commit_batch(second, user=self.teacher)
+
+        leaves = Collection.objects.filter(is_published=True)
+        self.assertEqual(leaves.count(), 1)
+        leaf = leaves.get(locator='key:alg.quadratic')
+        self.assertEqual(leaf.source_path, ['Новое название'])
+        self.assertEqual(leaf.worksheet.title, 'Новое название')
+        self.assertEqual(leaf.worksheet.items.count(), 2)
+
     def test_review_pages_render(self):
         batch = self.create_batch()
         self.client.login(username='teacher1', password='pass12345')
@@ -251,3 +296,39 @@ class TextbookImportTests(TestCase):
         self.assertContains(response, 'уже существует в этой партии')
         second.refresh_from_db()
         self.assertEqual(second.external_id, '1.2.38')
+
+    def test_review_clears_previous_solution_match(self):
+        payload = bundle(author_solution_latex='')
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='solution-37',
+            source_number='решение 37',
+            author_solution_latex='Полное решение.'))
+        batch = self.create_batch(payload)
+        draft = batch.drafts.get(external_id='1.2.37')
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse(
+            'textbook_import_review', args=[batch.pk, draft.pk])
+        base_form = {
+            'external_id': draft.external_id,
+            'source_number': draft.source_number,
+            'text_latex': draft.text_latex,
+            'subitems': '[]',
+            'author_answer_latex': draft.author_answer_latex,
+            'author_solution_latex': '',
+            'status': TextbookTaskDraft.STATUS_REVIEW,
+        }
+
+        response = self.client.post(
+            url, {**base_form, 'copy_solution_from': 'solution-37'})
+        self.assertEqual(response.status_code, 302)
+        draft.refresh_from_db()
+        self.assertEqual(draft.solution_source_external_id, 'solution-37')
+
+        response = self.client.post(
+            url, {**base_form, 'copy_solution_from': '',
+                  'author_solution_latex': 'Решение исправлено вручную.'})
+        self.assertEqual(response.status_code, 302)
+        draft.refresh_from_db()
+        self.assertEqual(draft.solution_source_external_id, '')
+        self.assertEqual(
+            draft.author_solution_latex, 'Решение исправлено вручную.')
