@@ -308,13 +308,14 @@ class LatexGenerationTests(TestCase):
 
     def test_taskpic_ref_in_ai_answer_moves_to_task_body(self):
         task = Task.objects.create(
-            text_latex='Задача',
+            text_latex=r'Задача с рисунком \taskpic{1}',
             answer_latex=r'Ответ по рисунку \taskpic{1}.')
         task.images.create(image='task_images/answer.png', order=10)
         tex = task_to_tex(make_item(self.worksheet, task))
         self.assertEqual(tex.count(r'\taskpic{answer.png}'), 1)
         self.assertNotIn(r'\taskpic{1}', tex)
         self.assertIn('Ответ по рисунку', tex)
+        # Одна и та же ссылка в body и answer не дублируется.
         self.assertLess(
             tex.index(r'\taskpic{answer.png}'),
             tex.index(r'[{Ответ по рисунку'))

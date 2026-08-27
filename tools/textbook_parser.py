@@ -93,6 +93,7 @@ class Marker:
     start: int
     end: int
     external_id: str
+    kind: str = ""
 
 
 @dataclass(frozen=True)
@@ -397,14 +398,14 @@ def _shestakov_marker(text: str, match: re.Match) -> Marker:
         closing = re.match(r"\s*\}", text[marker_end:])
         if closing:
             marker_end += closing.end()
-        return Marker(line_start, marker_end, code)
+        return Marker(line_start, marker_end, code, "heading")
     if re.fullmatch(r"\\caption\{\s*", prefix):
         figure_start = text.rfind(r"\begin{figure}", 0, line_start)
         prior_figure_end = text.rfind(r"\end{figure}", 0, line_start)
         if figure_start > prior_figure_end:
             # OCR иногда заменяет номер задачи подписью к первому рисунку.
             # Начинаем блок с figure, чтобы изображение осталось у задачи.
-            return Marker(figure_start, figure_start, code)
+            return Marker(figure_start, figure_start, code, "caption")
         itemize_start = text.rfind(r"\begin{itemize}", 0, line_start)
         prior_itemize_end = text.rfind(r"\end{itemize}", 0, line_start)
         marker_end = match.end()
@@ -413,10 +414,10 @@ def _shestakov_marker(text: str, match: re.Match) -> Marker:
             marker_end += closing.end()
         if itemize_start > prior_itemize_end:
             # В решебнике caption иногда заменяет заголовок задачи.
-            return Marker(itemize_start, marker_end, code)
+            return Marker(itemize_start, marker_end, code, "caption")
     if re.fullmatch(r"\\item\[\s*", prefix):
-        return Marker(line_start, match.end(), code)
-    return Marker(match.start(), match.end(), code)
+        return Marker(line_start, match.end(), code, "item")
+    return Marker(match.start(), match.end(), code, "direct")
 
 
 def shestakov_markers(text: str) -> list[Marker]:
@@ -620,7 +621,9 @@ def merge_solutions(
     all_solution_markers = []
     for marker in raw_solution_markers:
         if (all_solution_markers
-                and all_solution_markers[-1].external_id == marker.external_id):
+                and all_solution_markers[-1].external_id == marker.external_id
+                and all_solution_markers[-1].kind == "caption"
+                and marker.kind == "caption"):
             # Повтор caption с тем же кодом — продолжение того же решения.
             continue
         all_solution_markers.append(marker)

@@ -156,6 +156,22 @@ class TextbookParserTests(unittest.TestCase):
         self.assertEqual(tasks[0].text_latex, "Первое условие.")
         self.assertNotIn("Дубль OCR", tasks[0].text_latex)
 
+    def test_duplicate_direct_solution_marker_is_still_a_boundary(self):
+        task_text = "\n".join([
+            "1.1.A01 Первая задача.",
+            "1.1.A02 Вторая задача.",
+        ])
+        solution_text = "\n".join([
+            "1.1.A01 Первое решение.",
+            "1.1.A01 Дубль OCR решения.",
+            "1.1.A02 Второе решение.",
+        ])
+        tasks, diagnostics = parse_shestakov(task_text, solution_text)
+        self.assertEqual(
+            tasks[0].author_solution_latex, "Первое решение.")
+        self.assertNotIn("Дубль OCR", tasks[0].author_solution_latex)
+        self.assertEqual(diagnostics["duplicate_solution_ids"], ["1.1.A01"])
+
     def test_outer_list_does_not_trigger_environment_warning(self):
         task = task_from_block(
             Marker(0, 0, "1.1.A01"),

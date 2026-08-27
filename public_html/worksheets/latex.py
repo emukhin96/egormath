@@ -132,8 +132,9 @@ def task_to_tex(item):
     task = item.task
     subitem_objs = item.selected_subitems()
     filenames = [image.filename for image in task.images.all()]
-    used = set()
-    body = _resolve_taskpics(task.text_latex.strip(), filenames, used)
+    body_used = set()
+    body = _resolve_taskpics(task.text_latex.strip(), filenames, body_used)
+    used = set(body_used)
     sub_texts = []
     deferred_pics = set()
     for subitem in subitem_objs:
@@ -174,7 +175,8 @@ def task_to_tex(item):
     # Рисунки из optional-аргументов и рисунки без ссылки
     # выводим один раз в основном теле задачи.
     for i, name in enumerate(filenames):
-        if i in deferred_pics or i not in used:
+        if ((i in deferred_pics and i not in body_used)
+                or i not in used):
             body += '\n\\taskpic{%s}' % name
     parts = [
         '\\task{%d}{%d}{%%\n%s%%\n}' % (
