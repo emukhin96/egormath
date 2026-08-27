@@ -134,6 +134,12 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             warnings.append(
                 'Требуется загрузить файлы изображений: '
                 + ', '.join(images))
+        subitems = normalize_subitems(row.get('subitems'))
+        text_latex = _required_string(
+            row, 'text_latex', allow_blank=True)
+        if not text_latex and not subitems:
+            raise TextbookImportError(
+                f'Задача {external_id} не содержит условия или подпунктов.')
         drafts.append(TextbookTaskDraft(
             batch=batch,
             external_id=external_id,
@@ -144,8 +150,8 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             collection_key=str(row.get('collection_key') or '')[:500],
             collection_title=str(row.get('collection_title') or '')[:190],
             topic_original=str(row.get('topic_original') or '')[:255],
-            text_latex=_required_string(row, 'text_latex'),
-            subitems=normalize_subitems(row.get('subitems')),
+            text_latex=text_latex,
+            subitems=subitems,
             images=images,
             author_answer_latex=str(
                 row.get('author_answer_latex') or '').strip(),

@@ -320,6 +320,27 @@ class LatexGenerationTests(TestCase):
             tex.index(r'\taskpic{answer.png}'),
             tex.index(r'[{Ответ по рисунку'))
 
+    def test_answer_and_solution_pictures_follow_pdf_variant(self):
+        task = Task.objects.create(
+            text_latex='Задача без рисунка в условии',
+            answer_latex=r'Ответ с рисунком \taskpic{1}.',
+            author_solution_latex=r'Решение с рисунком \taskpic{2}.')
+        task.images.create(image='task_images/answer.png', order=10)
+        task.images.create(image='task_images/solution.png', order=20)
+        make_item(self.worksheet, task)
+
+        student_tex = worksheet_to_tex(self.worksheet, 'student')
+        self.assertNotIn(r'\taskpic{answer.png}', student_tex)
+        self.assertNotIn(r'\taskpic{solution.png}', student_tex)
+
+        answers_tex = worksheet_to_tex(self.worksheet, 'answers')
+        self.assertEqual(answers_tex.count(r'\taskpic{answer.png}'), 1)
+        self.assertNotIn(r'\taskpic{solution.png}', answers_tex)
+
+        teacher_tex = worksheet_to_tex(self.worksheet, 'teacher')
+        self.assertEqual(teacher_tex.count(r'\taskpic{answer.png}'), 1)
+        self.assertEqual(teacher_tex.count(r'\taskpic{solution.png}'), 1)
+
     def test_collect_assets(self):
         import io
         import tempfile

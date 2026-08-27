@@ -70,6 +70,32 @@ class TextbookImportTests(TestCase):
         batch = self.create_batch(bundle(confidence='NaN'))
         self.assertEqual(batch.drafts.get().confidence, 0)
 
+    def test_task_with_only_subitems_can_be_uploaded_and_reviewed(self):
+        payload = bundle(text_latex='', subitems=[{
+            'label': 'а', 'text_latex': 'Первый подпункт.',
+        }])
+        batch = self.create_batch(payload)
+        draft = batch.drafts.get()
+        self.assertEqual(draft.text_latex, '')
+
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(reverse(
+            'textbook_import_review', args=[batch.pk, draft.pk]), {
+                'external_id': draft.external_id,
+                'source_number': draft.source_number,
+                'text_latex': '',
+                'subitems': json.dumps(draft.subitems),
+                'author_answer_latex': draft.author_answer_latex,
+                'author_solution_latex': draft.author_solution_latex,
+                'status': TextbookTaskDraft.STATUS_REVIEW,
+            })
+        self.assertEqual(response.status_code, 302)
+
+    def test_task_without_text_or_subitems_is_rejected(self):
+        with self.assertRaisesMessage(
+                TextbookImportError, 'не содержит условия или подпунктов'):
+            self.create_batch(bundle(text_latex='', subitems=[]))
+
     def test_images_are_recorded_and_block_commit_without_assets(self):
         topic = Topic.objects.create(name='Тема с рисунком')
         batch = self.create_batch(bundle(images=['figure-1.png']))
@@ -255,6 +281,18 @@ class TextbookImportTests(TestCase):
             'textbook_import_review', args=[batch.pk, batch.drafts.get().pk]))
         self.assertContains(review, 'Авторский ответ')
         self.assertContains(review, 'Сохранить и дальше')
+
+    def test_batch_detail_counts_all_drafts_by_status(self):
+        payload = bundle()
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='1.2.38', source_number='38'))
+        batch = self.create_batch(payload)
+        self.client.login(username='teacher1', password='pass12345')
+
+        response = self.client.get(
+            reverse('textbook_import_detail', args=[batch.pk]))
+
+        self.assertContains(response, 'Не проверена (2)')
 
     def test_review_rejects_structurally_invalid_subitems(self):
         batch = self.create_batch()

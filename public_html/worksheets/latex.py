@@ -123,7 +123,7 @@ def _resolve_taskpics(text, filenames, used):
     return TASKPIC_REF_RE.sub(repl, text)
 
 
-def task_to_tex(item):
+def task_to_tex(item, variant='teacher'):
     """\\task{звёзды}{колонки}{условие}[подпункты][ответ][решение]
 
     Работает от элемента листка: звёзды/колонки — с учётом переопределений,
@@ -164,13 +164,19 @@ def task_to_tex(item):
     answer_used = set()
     answer = _resolve_taskpics(answer, filenames, answer_used)
     answer = re.sub(r'\s*\\taskpic\{[^{}]+\}', '', answer)
-    deferred_pics.update(answer_used)
+    # Рисунок из ответа нельзя переносить в ученическое условие: иначе
+    # даже скрытый пакетом egor ответ раскроет часть материала.
+    if variant != 'student':
+        deferred_pics.update(answer_used)
     used.update(answer_used)
     solution = _combined_solution(task, subitem_objs)
     solution_used = set()
     solution = _resolve_taskpics(solution, filenames, solution_used)
     solution = re.sub(r'\s*\\taskpic\{[^{}]+\}', '', solution)
-    deferred_pics.update(solution_used)
+    # Решения видны только в teacher-варианте. В answers/student их
+    # изображения также не должны оказываться в основном теле задачи.
+    if variant == 'teacher':
+        deferred_pics.update(solution_used)
     used.update(solution_used)
     # Рисунки из optional-аргументов и рисунки без ссылки
     # выводим один раз в основном теле задачи.
@@ -301,7 +307,7 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
             lines.append('\\begin{enumerate}')
             list_open = True
         lines.append('')
-        lines.append(task_to_tex(item))
+        lines.append(task_to_tex(item, variant))
         list_has_item = True
 
     if list_open:

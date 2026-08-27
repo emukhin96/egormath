@@ -780,7 +780,10 @@ def textbook_import_detail(request, pk):
         drafts = drafts.filter(status=status)
     paginator = Paginator(drafts, 50)
     page = paginator.get_page(request.GET.get('page'))
-    counts = dict(batch.drafts.values_list('status').annotate(n=Count('pk')))
+    # Meta.ordering по external_id иначе попадает в GROUP BY: для каждого
+    # статуса получаем много строк с единицей, а dict оставляет последнюю.
+    counts = dict(batch.drafts.order_by().values_list('status')
+                  .annotate(n=Count('pk')))
     status_tabs = [
         {'value': value, 'label': label, 'count': counts.get(value, 0)}
         for value, label in TextbookTaskDraft.STATUS_CHOICES

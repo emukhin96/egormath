@@ -71,6 +71,9 @@ class TextbookBundleUploadForm(forms.Form):
 
 
 class TextbookDraftReviewForm(forms.ModelForm):
+    text_latex = forms.CharField(
+        label='Условие (LaTeX)', required=False,
+        widget=forms.Textarea(attrs={'rows': 8}))
     copy_solution_from = forms.CharField(
         label='Взять решение у ключа', max_length=190, required=False,
         help_text='Оставьте пустым, чтобы править текущий текст вручную')
@@ -83,7 +86,6 @@ class TextbookDraftReviewForm(forms.ModelForm):
             'status',
         ]
         widgets = {
-            'text_latex': forms.Textarea(attrs={'rows': 8}),
             'subitems': forms.Textarea(attrs={'rows': 8}),
             'author_answer_latex': forms.Textarea(attrs={'rows': 3}),
             'author_solution_latex': forms.Textarea(attrs={'rows': 12}),
@@ -106,3 +108,12 @@ class TextbookDraftReviewForm(forms.ModelForm):
             raise forms.ValidationError(
                 'Такой ключ уже существует в этой партии.')
         return external_id
+
+    def clean(self):
+        cleaned = super().clean()
+        if (not str(cleaned.get('text_latex') or '').strip()
+                and not cleaned.get('subitems')):
+            self.add_error(
+                'text_latex',
+                'Укажите общее условие или хотя бы один подпункт.')
+        return cleaned
