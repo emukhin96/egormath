@@ -346,6 +346,30 @@ class NeuroTests(TestCase):
             quota = NeuroSolveQuota.objects.get(user=teacher)
             self.assertEqual(quota.in_flight_at, started)
 
+    def test_quota_lock_covers_schema_retry(self):
+        """Блокировка живёт на обе попытки solve_task, не на один таймаут."""
+        from datetime import timedelta
+        from unittest import mock
+
+        from django.test import override_settings
+        from django.utils import timezone
+
+        from .neuro import NeuroQuotaError, acquire_quota
+        user = make_teacher('neuro-lock')
+        now = timezone.now()
+        with override_settings(GEMINI_RATE_PER_MINUTE=20, GEMINI_TIMEOUT=60):
+            with mock.patch('problems.neuro.timezone.now', return_value=now):
+                acquire_quota(user)
+            # Старый lock_sec = timeout+15; повтор без schema ещё мог бы идти.
+            still_held = now + timedelta(seconds=75)
+            with mock.patch('problems.neuro.timezone.now',
+                            return_value=still_held):
+                with self.assertRaises(NeuroQuotaError):
+                    acquire_quota(user)
+            stale = now + timedelta(seconds=136)
+            with mock.patch('problems.neuro.timezone.now', return_value=stale):
+                acquire_quota(user)
+
     def test_too_long_raises(self):
         from django.test import override_settings
 

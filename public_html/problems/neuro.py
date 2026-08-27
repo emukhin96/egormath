@@ -31,6 +31,10 @@ MAX_TASK_CHARS = 8000
 # Без потолка Gemini 3.5 крутит thinking бесконечно и висит до таймаута
 # клиента (задача 79: 90с без байта; с maxOutputTokens — ответ за ~2с).
 MAX_OUTPUT_TOKENS = 4096
+# True — с response_schema, False — повтор без него: Gemini 3.5 иногда
+# зависает на constrained JSON. Срок квоты = attempts × timeout + slack.
+SOLVE_SCHEMA_ATTEMPTS = (True, False)
+_QUOTA_LOCK_SLACK_SEC = 15
 
 _INSTRUCTION = (
     'Ты — учитель математики. Реши задачу и верни JSON с полями:\n'
@@ -86,7 +90,8 @@ def acquire_quota(user):
     from problems.models import NeuroSolveQuota
     now = timezone.now()
     limit = getattr(settings, 'GEMINI_RATE_PER_MINUTE', 20)
-    lock_sec = getattr(settings, 'GEMINI_TIMEOUT', 60) + 15
+    timeout = getattr(settings, 'GEMINI_TIMEOUT', 60)
+    lock_sec = timeout * len(SOLVE_SCHEMA_ATTEMPTS) + _QUOTA_LOCK_SLACK_SEC
     with transaction.atomic():
         quota, _ = NeuroSolveQuota.objects.select_for_update().get_or_create(
             user=user,
@@ -150,8 +155,8 @@ def solve_task(text, subitems=()):
     timeout = settings.GEMINI_TIMEOUT
     response = None
     last_timeout = None
-    # Повтор без schema: Gemini 3.5 иногда зависает на constrained JSON.
-    for attempt, use_schema in ((1, True), (2, False)):
+    attempts = len(SOLVE_SCHEMA_ATTEMPTS)
+    for attempt, use_schema in enumerate(SOLVE_SCHEMA_ATTEMPTS, start=1):
         gen = {
             'response_mime_type': 'application/json',
             'maxOutputTokens': MAX_OUTPUT_TOKENS,
@@ -173,7 +178,8 @@ def solve_task(text, subitems=()):
             break
         except requests.Timeout as exc:
             last_timeout = exc
-            logger.warning('Gemini API: таймаут попытка %s/%s', attempt, 2)
+            logger.warning('Gemini API: таймаут попытка %s/%s',
+                           attempt, attempts)
         except requests.RequestException as exc:
             logger.warning('Gemini API недоступен: %s', exc)
             raise NeuroError('Сервис нейрогенерации недоступен, '
