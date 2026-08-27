@@ -3,18 +3,28 @@ import unittest
 from pathlib import Path
 
 from tools.textbook_parser import (
+    Marker,
+    ImportBundle,
+    expected_shestakov_ids,
     numeric_markers,
+    path_at,
     parse_galitsky,
     parse_shestakov,
-    shestakov_markers,
-    write_bundle,
-    ImportBundle,
-    path_at,
     sections,
+    shestakov_markers,
+    task_from_block,
+    write_bundle,
 )
 
 
 class TextbookParserTests(unittest.TestCase):
+    def test_shestakov_expected_number_grid_has_1220_tasks(self):
+        expected = expected_shestakov_ids()
+        self.assertEqual(len(expected), 1220)
+        self.assertIn("1.1.A01", expected)
+        self.assertIn("10.3.D15", expected)
+        self.assertIn("11.1.D10", expected)
+
     def test_section_path_replaces_sibling_at_same_level(self):
         text = (
             r"\section{Глава 1}\subsection{Тема A} задача "
@@ -25,11 +35,193 @@ class TextbookParserTests(unittest.TestCase):
         self.assertEqual(path_at(headings, pos), ["Глава 1", "Тема B"])
 
     def test_shestakov_normalizes_split_and_cyrillic_code(self):
-        text = r"1.1.A01 one \item[1.1.] В02 two 2.3.С10 three"
+        text = "\n".join([
+            r"1.1.A01 one",
+            r"  \item[1.1.] В02 two",
+            r"2.3.С10 three",
+            r"В тексте упомянута задача 9.9.D09, но это не маркер.",
+            r"\caption{3.4.C05}",
+        ])
         self.assertEqual(
             [item.external_id for item in shestakov_markers(text)],
-            ["1.1.A01", "1.1.B02", "2.3.C10"],
+            ["1.1.A01", "1.1.B02", "2.3.C10", "3.4.C05"],
         )
+
+    def test_caption_marker_keeps_task_image(self):
+        task_text = "\n".join([
+            r"\begin{figure}",
+            r"\includegraphics{graph-79}",
+            r"\caption{7.1.D10}",
+            r"\end{figure}",
+            "Условие с графиком.",
+        ])
+        tasks, _ = parse_shestakov(task_text, "")
+        self.assertEqual([task.external_id for task in tasks], ["7.1.D10"])
+        self.assertEqual(tasks[0].images, ["graph-79"])
+        self.assertIn("Условие с графиком", tasks[0].text_latex)
+        self.assertNotIn(r"\begin{figure}", tasks[0].text_latex)
+        self.assertIn(r"\taskpic{1}", tasks[0].text_latex)
+
+    def test_solution_marker_can_end_previous_line(self):
+        task_text = "\n".join([
+            "1.1.A01 Первое условие.",
+            "1.1.A02 Второе условие.",
+        ])
+        solution_text = "\n".join([
+            "1.1.A01 Ответ: 1. 1.1.A02",
+            "Ответ: 2.",
+        ])
+        tasks, diagnostics = parse_shestakov(task_text, solution_text)
+        self.assertEqual(
+            [task.author_answer_latex for task in tasks], ["1.", "2."])
+        self.assertEqual(diagnostics["matched_solutions"], 2)
+
+    def test_immediate_next_code_caption_stays_with_current_solution(self):
+        task_text = "\n".join([
+            "10.2.A09 Первая задача.",
+            "10.2.A10 Вторая задача.",
+        ])
+        solution_text = "\n".join([
+            "10.2.A09",
+            r"\begin{figure}",
+            r"\includegraphics{diagram-a09}",
+            r"\caption{10.2.A10}",
+            r"\end{figure}",
+            "Решение первой задачи.",
+        ])
+        tasks, diagnostics = parse_shestakov(task_text, solution_text)
+        by_id = {task.external_id: task for task in tasks}
+        self.assertIn(
+            r"\taskpic{1}", by_id["10.2.A09"].author_solution_latex)
+        self.assertEqual(by_id["10.2.A09"].images, ["diagram-a09"])
+        self.assertEqual(by_id["10.2.A10"].author_solution_latex, "")
+        self.assertEqual(diagnostics["matched_solutions"], 1)
+
+    def test_caption_after_substantive_solution_can_start_next_solution(self):
+        task_text = "\n".join([
+            "7.2.C04 Первая задача.",
+            "7.2.C05 Вторая задача.",
+        ])
+        solution_text = "\n".join([
+            "7.2.C04 Решение первой задачи.",
+            r"\begin{figure}",
+            r"\includegraphics{diagram-c05}",
+            r"\caption{7.2.C05}",
+            r"\end{figure}",
+            "Решение второй задачи.",
+        ])
+        tasks, diagnostics = parse_shestakov(task_text, solution_text)
+        by_id = {task.external_id: task for task in tasks}
+        self.assertNotIn(
+            "diagram-c05", by_id["7.2.C04"].author_solution_latex)
+        self.assertIn(
+            r"\taskpic{1}", by_id["7.2.C05"].author_solution_latex)
+        self.assertEqual(by_id["7.2.C05"].images, ["diagram-c05"])
+        self.assertEqual(diagnostics["matched_solutions"], 2)
+
+    def test_shestakov_sorts_physical_columns_by_canonical_code(self):
+        task_text = "\n".join([
+            r"\section*{§1. Тема}",
+            r"1.1.A01 Первая.",
+            r"\begin{itemize}",
+            r"  \item[1.1.] C01 Третья.",
+            r"  \item[1.1.] B01 Вторая.",
+            r"\end{itemize}",
+        ])
+        solution_text = "\n".join([
+            "1.1.A01 Ответ: 1.",
+            "1.1.B01 Ответ: 2.",
+            "1.1.C01 Ответ: 3.",
+        ])
+        tasks, diagnostics = parse_shestakov(task_text, solution_text)
+        self.assertEqual(
+            [task.external_id for task in tasks],
+            ["1.1.A01", "1.1.B01", "1.1.C01"],
+        )
+        self.assertEqual(
+            diagnostics["physical_order_break_ids"], ["1.1.B01"])
+        self.assertNotIn(
+            "Несбалансированные LaTeX-окружения внутри блока",
+            tasks[0].warnings,
+        )
+
+    def test_duplicate_marker_still_limits_previous_block(self):
+        task_text = "\n".join([
+            "1.1.A01 Первое условие.",
+            "1.1.A01 Дубль OCR.",
+            "1.1.A02 Второе условие.",
+        ])
+        tasks, diagnostics = parse_shestakov(task_text, "")
+        self.assertEqual(diagnostics["duplicate_task_ids"], ["1.1.A01"])
+        self.assertEqual(tasks[0].text_latex, "Первое условие.")
+        self.assertNotIn("Дубль OCR", tasks[0].text_latex)
+
+    def test_outer_list_does_not_trigger_environment_warning(self):
+        task = task_from_block(
+            Marker(0, 0, "1.1.A01"),
+            r"Условие. \begin{itemize} \item[] Текст.",
+            ["Тема"],
+        )
+        self.assertNotIn(
+            "Несбалансированные LaTeX-окружения внутри блока",
+            task.warnings,
+        )
+
+    def test_mixed_plain_and_item_subitems_are_split(self):
+        task_text = "\n".join([
+            "1.1.A01 Найдите:",
+            r"\\ а) $1+1$;",
+            r"\item[б)] $2+2$.",
+        ])
+        tasks, _ = parse_shestakov(task_text, "")
+        self.assertEqual(tasks[0].text_latex, "Найдите:")
+        self.assertEqual(
+            [(item.label, item.text_latex) for item in tasks[0].subitems],
+            [("а", "$1+1$;"), ("б", "$2+2$.")],
+        )
+
+    def test_nested_numbered_list_stays_inside_letter_subitem(self):
+        task_text = "\n".join([
+            "1.1.A01 Исследуйте:",
+            r"\\ а) первый график",
+            r"\begin{itemize}",
+            r"\item[1)] нуль;",
+            r"\item[2)] минимум.",
+            r"\end{itemize}",
+            r"\\ б) второй график.",
+        ])
+        tasks, _ = parse_shestakov(task_text, "")
+        self.assertEqual(
+            [item.label for item in tasks[0].subitems], ["а", "б"])
+        self.assertIn("нуль", tasks[0].subitems[0].text_latex)
+        self.assertIn("минимум", tasks[0].subitems[0].text_latex)
+
+    def test_interleaved_column_tail_returns_to_previous_task(self):
+        task_text = "\n".join([
+            r"1.1.C01 а) Левая колонка, пункт а.",
+            r"\begin{itemize}",
+            r"\item[1.1.] B01 Правая колонка:",
+            r"\\ а) Правый пункт а;",
+            r"\\ б) Правый пункт б.",
+            r"\begin{itemize}",
+            r"\item[б)] Левая колонка, пункт б.",
+            r"\end{itemize}",
+            r"\end{itemize}",
+        ])
+        tasks, diagnostics = parse_shestakov(task_text, "")
+        by_id = {task.external_id: task for task in tasks}
+        self.assertEqual(
+            [item.label for item in by_id["1.1.C01"].subitems], ["а", "б"])
+        self.assertIn(
+            "Левая колонка, пункт б",
+            by_id["1.1.C01"].subitems[1].text_latex)
+        self.assertEqual(
+            [item.label for item in by_id["1.1.B01"].subitems], ["а", "б"])
+        self.assertNotIn(
+            "Левая колонка", by_id["1.1.B01"].subitems[1].text_latex)
+        self.assertEqual(diagnostics["detached_column_fragments"], [{
+            "from": "1.1.B01", "to": "1.1.C01",
+        }])
 
     def test_numeric_markers_only_accept_task_boundaries(self):
         text = "1.1. First\n\\item[1.2.] Second\nvalue 3.14. not a task"
@@ -65,17 +257,160 @@ class TextbookParserTests(unittest.TestCase):
         self.assertIn("Решение", tasks[0].author_solution_latex)
 
     def test_parsed_tasks_always_have_zero_stars(self):
-        task_text = r"\section*{§1. Целые числа} 1.1.A01 Найдите $1+1$."
+        task_text = "\n".join([
+            r"\section*{§1. Целые числа}",
+            r"1.1.A01 Найдите $1+1$.",
+        ])
         solution_text = r"1.1.A01 Ответ: 2."
         tasks, _ = parse_shestakov(task_text, solution_text)
         self.assertEqual(tasks[0].stars, 0)
 
     def test_shestakov_pairs_separate_solution_book(self):
-        task_text = r"\section*{§1. Целые числа} 1.1.A01 Найдите $1+1$."
+        task_text = "\n".join([
+            r"\section*{§1. Целые числа}",
+            r"1.1.A01 Найдите $1+1$.",
+        ])
         solution_text = r"1.1.A01 $1+1=2$. Ответ: 2."
         tasks, diagnostics = parse_shestakov(task_text, solution_text)
         self.assertEqual(tasks[0].author_answer_latex, "2.")
+        self.assertIn("$1+1=2$", tasks[0].author_solution_latex)
+        self.assertIn("Ответ: 2.", tasks[0].author_solution_latex)
         self.assertEqual(diagnostics["matched_solutions"], 1)
+
+    def test_solution_section_and_list_markup_does_not_leak(self):
+        task_text = "\n".join([
+            "1.1.A01 Первая задача.",
+            "1.1.A02 Вторая задача.",
+        ])
+        solution_text = "\n".join([
+            r"\subsection*{1.1.A01}",
+            r"\begin{itemize}",
+            r"\item[а)] Первый пункт.",
+            r"\item[б)] Второй пункт.",
+            r"\end{itemize}",
+            r"\subsection*{1.1.A02}",
+            "Другое решение.",
+        ])
+        tasks, _ = parse_shestakov(task_text, solution_text)
+        first = tasks[0].author_solution_latex
+        self.assertNotIn(r"\item", first)
+        self.assertNotIn(r"\subsection", first)
+        self.assertFalse(first.startswith("}"))
+        self.assertIn("а)~Первый пункт", first)
+        self.assertIn("б)~Второй пункт", first)
+
+    def test_missing_task_solution_still_limits_previous_solution(self):
+        task_text = "\n".join([
+            "8.1.D04 Первая задача.",
+            "8.1.D07 Следующая распознанная задача.",
+        ])
+        solution_text = "\n".join([
+            r"\subsection*{8.1.D04}",
+            "Решение D04.",
+            r"\subsection*{8.1.D05}",
+            "Решение нераспознанной D05.",
+            r"\subsection*{8.1.D06}",
+            "Решение нераспознанной D06.",
+            r"\subsection*{8.1.D07}",
+            "Решение D07.",
+        ])
+        tasks, diagnostics = parse_shestakov(task_text, solution_text)
+        self.assertEqual(tasks[0].author_solution_latex, "Решение D04.")
+        self.assertEqual(tasks[1].author_solution_latex, "Решение D07.")
+        self.assertEqual(
+            diagnostics["ignored_solution_code_refs"],
+            ["8.1.D05", "8.1.D06"],
+        )
+
+    def test_missing_solution_boundary_warns_previous_task(self):
+        task_text = "\n".join([
+            "10.1.C04 Первая задача.",
+            "10.1.C05 Вторая задача.",
+        ])
+        solution_text = "\n".join([
+            "10.1.C04 Решение C04.",
+            "Склеенное начало решения C05.",
+        ])
+        tasks, diagnostics = parse_shestakov(task_text, solution_text)
+        self.assertTrue(any(
+            "10.1.C05" in warning for warning in tasks[0].warnings))
+        self.assertEqual(
+            diagnostics["solution_boundary_review_predecessors"],
+            {"10.1.C04": ["10.1.C05"]},
+        )
+
+    def test_solution_image_is_added_to_task_assets(self):
+        task_text = "10.1.C04 Задача с чертежом в решении."
+        solution_text = "\n".join([
+            r"\begin{itemize}",
+            r"\captionsetup{labelformat=empty}",
+            r"\caption{10.1.C04}",
+            r"\includegraphics[max width=\textwidth]{solution-figure}",
+            r"\caption{$y=\frac{1}{x}$}",
+            "Решение.",
+            r"\end{itemize}",
+        ])
+        tasks, _ = parse_shestakov(task_text, solution_text)
+        self.assertEqual(tasks[0].images, ["solution-figure"])
+        self.assertIn(
+            r"\taskpic{1}",
+            tasks[0].author_solution_latex,
+        )
+        self.assertNotIn(
+            r"\includegraphics", tasks[0].author_solution_latex)
+        self.assertNotIn(
+            r"\caption", tasks[0].author_solution_latex)
+
+    def test_task_float_becomes_numbered_taskpic(self):
+        task_text = "\n".join([
+            "7.1.D03 Сравните:",
+            r"\ а) Первый график.",
+            r"\ б) Второй график.",
+            r"\begin{figure}[h]",
+            r"\begin{center}",
+            r"\includegraphics[max width=\textwidth]{graph-one}",
+            r"\captionsetup{labelformat=empty}",
+            r"\caption{Рис. 1}",
+            r"\end{center}",
+            r"\end{figure}",
+        ])
+        tasks, _ = parse_shestakov(task_text, "")
+        task = tasks[0]
+        combined = "\n".join(
+            [task.text_latex] + [item.text_latex for item in task.subitems])
+        self.assertEqual(task.images, ["graph-one"])
+        self.assertIn(r"\taskpic{1}", combined)
+        self.assertNotIn(r"\includegraphics", combined)
+        self.assertNotIn(r"\begin{figure}", combined)
+        self.assertNotIn("\n\n", combined)
+
+    def test_shestakov_keeps_full_solution_without_explicit_answer(self):
+        task_text = "1.1.A01 Докажите тождество."
+        solution_text = "1.1.A01 Раскроем скобки и приведём подобные."
+        tasks, _ = parse_shestakov(task_text, solution_text)
+        self.assertEqual(tasks[0].author_answer_latex, "")
+        self.assertEqual(
+            tasks[0].author_solution_latex,
+            "Раскроем скобки и приведём подобные.")
+
+    def test_shestakov_trims_exam_appendices_after_last_task(self):
+        task_text = "\n".join([
+            "11.1.D10 Последнее условие.",
+            "Экзаменационные работы по алгебре для общеобразовательных классов",
+            "Вариант 1. Это не часть задачи.",
+        ])
+        solution_text = "\n".join([
+            "11.1.D10 Последнее решение. Ответ: 3.",
+            r"\section*{Приложение 3. Примерные варианты экзаменационных работ}",
+            "Издательский хвост 641-00-30.",
+        ])
+        tasks, diagnostics = parse_shestakov(task_text, solution_text)
+        self.assertEqual(tasks[0].text_latex, "Последнее условие.")
+        self.assertNotIn("641-00-30", tasks[0].author_solution_latex)
+        self.assertTrue(
+            diagnostics["tasks_truncated_before_exam_variants"])
+        self.assertTrue(
+            diagnostics["solutions_truncated_before_exam_variants"])
 
     def test_writer_creates_three_review_artifacts(self):
         bundle = ImportBundle(1, "test", {}, [], {

@@ -290,6 +290,21 @@ class LatexGenerationTests(TestCase):
         tex = task_to_tex(make_item(self.worksheet, task))
         # Ссылка из подпункта учтена — в конец условия не дублируется
         self.assertEqual(tex.count('\\taskpic{a.png}'), 1)
+        self.assertLess(
+            tex.index(r"\taskpic{a.png}"), tex.index(r"[{\item"))
+
+    def test_taskpic_ref_in_solution_moves_to_task_body(self):
+        task = Task.objects.create(
+            text_latex='Задача',
+            author_solution_latex=r'Чертеж: \taskpic{1}.')
+        task.images.create(image='task_images/solution.png', order=10)
+        tex = task_to_tex(make_item(self.worksheet, task))
+        self.assertEqual(tex.count(r'\taskpic{solution.png}'), 1)
+        self.assertNotIn(r'\taskpic{1}', tex)
+        self.assertIn('Чертеж:', tex)
+        self.assertLess(
+            tex.index(r'\taskpic{solution.png}'),
+            tex.index(r'[{\mbox{}\\ \begin{minipage}'))
 
     def test_collect_assets(self):
         import io

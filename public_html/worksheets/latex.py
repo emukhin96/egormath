@@ -134,10 +134,18 @@ def task_to_tex(item):
     filenames = [image.filename for image in task.images.all()]
     used = set()
     body = _resolve_taskpics(task.text_latex.strip(), filenames, used)
-    sub_texts = [
-        _resolve_taskpics(s.text_latex.strip(), filenames, used)
-        for s in subitem_objs
-    ]
+    sub_texts = []
+    deferred_pics = set()
+    for subitem in subitem_objs:
+        subitem_used = set()
+        sub_text = _resolve_taskpics(
+            subitem.text_latex.strip(), filenames, subitem_used)
+        # Пакет egor не выводит \\taskpic из опционального
+        # аргумента подпунктов, поэтому переносим ссылки в тело.
+        sub_text = re.sub(r'\s*\\taskpic\{[^{}]+\}', '', sub_text)
+        deferred_pics.update(subitem_used)
+        used.update(subitem_used)
+        sub_texts.append(sub_text)
     # Пунктуация подпунктов: «;» между пунктами, «.» после последнего
     # (в базе тексты хранятся без знака препинания на конце)
     sub_lines = []
@@ -146,22 +154,27 @@ def task_to_tex(item):
         if text and text[-1] not in ';.!?:':
             text += punct
         sub_lines.append('\\item %s' % text)
-    # Картинки без ссылки в тексте — в конец условия;
-    # \taskpic копит их в условии, блок выпускает \flushpics
-    for i, name in enumerate(filenames):
-        if i not in used:
-            body += '\n\\taskpic{%s}' % name
     # Без подпунктов колонки обнуляются: \columned{0} печатает только
     # условие, а columns>=1 с пустым списком падают на «missing \item»
     # (пустой [{}] всё равно передаётся, когда дальше идёт ответ)
     columns = item.effective_columns if sub_lines else 0
+    subitems = '\n'.join(sub_lines)
+    answer = _combined_answer(task, subitem_objs)
+    solution = _combined_solution(task, subitem_objs)
+    solution_used = set()
+    solution = _resolve_taskpics(solution, filenames, solution_used)
+    solution = re.sub(r'\s*\\taskpic\{[^{}]+\}', '', solution)
+    deferred_pics.update(solution_used)
+    used.update(solution_used)
+    # Рисунки из optional-аргументов и рисунки без ссылки
+    # выводим один раз в основном теле задачи.
+    for i, name in enumerate(filenames):
+        if i in deferred_pics or i not in used:
+            body += '\n\\taskpic{%s}' % name
     parts = [
         '\\task{%d}{%d}{%%\n%s%%\n}' % (
             item.effective_stars, columns, body),
     ]
-    subitems = '\n'.join(sub_lines)
-    answer = _combined_answer(task, subitem_objs)
-    solution = _combined_solution(task, subitem_objs)
     # Хвостовые пустые аргументы опускаем, промежуточные передаём пустыми
     tail = []
     if solution:

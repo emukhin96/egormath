@@ -27,7 +27,26 @@ ANSWER_HEADING_RE = re.compile(
 )
 SECTION_COMMAND_RE = re.compile(r"\\(?P<level>section|subsection|subsubsection)\*?\{")
 ALPHA_ITEM_RE = re.compile(r"\\item\[\s*(?P<label>[a-zа-яё0-9]+)\s*\)\s*\]", re.I)
-BEGIN_END_LIST_RE = re.compile(r"\\(?:begin|end)\{(?:itemize|enumerate)\}")
+PLAIN_ALPHA_ITEM_RE = re.compile(
+    r"(?im)(?:^|(?<=\\\\)|(?<=\n))[ \t]*"
+    r"(?P<label>[a-zа-яё0-9]+)\)\s*")
+BLOCK_WRAPPER_RE = re.compile(
+    r"\\(?:begin|end)\{(?:itemize|enumerate|document)\}")
+LIST_ENV_RE = re.compile(
+    r"\\(?P<action>begin|end)\{(?:itemize|enumerate)\}")
+EMPTY_ITEM_RE = re.compile(r"\\item\[\s*\]")
+ANY_ITEM_RE = re.compile(
+    r"\\item(?:\[\s*(?P<label>[^]]+?)\s*\])?[ \t]*")
+RAW_IMAGE_RE = re.compile(
+    r"\\includegraphics\s*(?:\[[^]]*\])?\s*\{(?P<path>[^{}]+)\}")
+FLOAT_WRAPPER_RE = re.compile(
+    r"\\(?:begin|end)\{(?:figure|center)\}(?:\[[^]]*\])?")
+FLOAT_META_COMMAND_RE = re.compile(
+    r"\\(?:captionsetup|caption)\s*\{")
+STRUCTURAL_HEADING_RE = re.compile(
+    r"\\(?:sub)*section\*?\{[^{}]*\}")
+OCR_FIGURE_WRAPPER_RE = re.compile(
+    r"\\textbackslash\s+(?:begin|end)\\?\{figure\\?\}(?:\\\\)?")
 
 
 @dataclass
@@ -102,6 +121,20 @@ def read_group(text: str, open_pos: int) -> tuple[str, int]:
     raise ValueError(f"Незакрытая группа в позиции {open_pos}")
 
 
+def remove_group_commands(text: str, pattern: re.Pattern) -> str:
+    """Удаляет команды со сбалансированным {...} целиком."""
+    spans = []
+    for match in pattern.finditer(text):
+        try:
+            _, end = read_group(text, match.end() - 1)
+        except ValueError:
+            continue
+        spans.append((match.start(), end))
+    for start, end in reversed(spans):
+        text = text[:start] + text[end:]
+    return text
+
+
 def sections(text: str) -> list[Section]:
     result = []
     for match in SECTION_COMMAND_RE.finditer(text):
@@ -117,11 +150,15 @@ def clean(value: str) -> str:
     value = re.sub(r"%\s*\n", "\n", value)
     value = re.sub(r"[ \t]+", " ", value)
     value = re.sub(r"\n[ \t]+", "\n", value)
+    # \\task пакета egor имеет не-long опциональные
+    # аргументы: пустая строка в подпункте обрывает сборку PDF.
+    value = re.sub(r"\n\s*\n+", "\n", value)
     return value.strip()
 
 
 def strip_outer_lists(value: str) -> str:
-    return clean(BEGIN_END_LIST_RE.sub("", value))
+    value = BLOCK_WRAPPER_RE.sub("", value)
+    return clean(EMPTY_ITEM_RE.sub("", value))
 
 
 def path_at(all_sections: Sequence[Section], pos: int) -> list[str]:
@@ -147,19 +184,82 @@ def path_at(all_sections: Sequence[Section], pos: int) -> list[str]:
     return [title for title in stack if title]
 
 
+def _subitem_marker_data(body: str) -> list[tuple[int, int, str, int]]:
+    markers = [
+        (match.start(), match.end(), match.group("label"))
+        for match in ALPHA_ITEM_RE.finditer(body)
+    ]
+    for match in PLAIN_ALPHA_ITEM_RE.finditer(body):
+        start = match.start()
+        if body[max(0, start - 2):start] == r"\\":
+            start -= 2
+        markers.append((start, match.end(), match.group("label")))
+    markers.sort(key=lambda item: item[0])
+    events = list(LIST_ENV_RE.finditer(body))
+    event_index = 0
+    depth = 0
+    markers_with_depth = []
+    for marker in markers:
+        while (event_index < len(events)
+               and events[event_index].start() < marker[0]):
+            if events[event_index].group("action") == "begin":
+                depth += 1
+            else:
+                # Блок задачи может начинаться внутри внешнего itemize,
+                # открытого до её маркера: не уходим в отрицательную глубину.
+                depth = max(0, depth - 1)
+            event_index += 1
+        markers_with_depth.append((*marker, depth))
+    return markers_with_depth
+
+
 def split_subitems(body: str) -> tuple[str, list[SubitemDraft]]:
-    markers = list(ALPHA_ITEM_RE.finditer(body))
+    marker_data = _subitem_marker_data(body)
+    markers = []
+    if marker_data:
+        min_depth = min(marker[3] for marker in marker_data)
+        markers = [marker[:3] for marker in marker_data
+                   if marker[3] == min_depth]
     # Один item часто является оболочкой OCR, а не настоящим подпунктом.
     if len(markers) < 2:
         return strip_outer_lists(body), []
-    parent = strip_outer_lists(body[: markers[0].start()])
+    parent = strip_outer_lists(body[:markers[0][0]])
     items = []
-    for i, marker in enumerate(markers):
-        end = markers[i + 1].start() if i + 1 < len(markers) else len(body)
-        text = strip_outer_lists(body[marker.end() : end])
+    for i, (start, marker_end, label) in enumerate(markers):
+        end = markers[i + 1][0] if i + 1 < len(markers) else len(body)
+        text = strip_outer_lists(body[marker_end:end])
         if text:
-            items.append(SubitemDraft(marker.group("label"), text))
+            items.append(SubitemDraft(label, text))
     return parent, items
+
+
+def detach_column_tail(body: str) -> tuple[str, str]:
+    """Отделяет вложенный хвост соседней колонки после пары а/б."""
+    marker_data = _subitem_marker_data(body)
+    if not marker_data:
+        return body, ""
+    min_depth = min(marker[3] for marker in marker_data)
+    top = [marker for marker in marker_data if marker[3] == min_depth]
+    if len(top) < 2:
+        return body, ""
+    detachable_labels = {"a", "b", "а", "б", "6"}
+    top_labels = {
+        marker[2].lower() for marker in top
+        if marker[2].lower() in detachable_labels
+    }
+    for start, marker_end, label, depth in marker_data:
+        if (start > top[-1][0] and depth > min_depth
+                and label.lower() in top_labels):
+            container_start = body.rfind(
+                r"\begin{itemize}", top[-1][1], start)
+            if container_start < 0:
+                container_start = start
+            detached = strip_outer_lists(body[container_start:])
+            detached = ALPHA_ITEM_RE.sub(
+                lambda match: r"\\ " + match.group("label") + ") ",
+                detached)
+            return body[:container_start], detached
+    return body, ""
 
 
 def extract_images(body: str) -> list[str]:
@@ -168,7 +268,22 @@ def extract_images(body: str) -> list[str]:
     )))
 
 
+def normalize_task_images(body: str) -> tuple[str, list[str]]:
+    """Заменяет OCR-float на штатные \\taskpic{N}."""
+    images = list(dict.fromkeys(
+        match.group("path") for match in RAW_IMAGE_RE.finditer(body)))
+    positions = {path: index + 1 for index, path in enumerate(images)}
+    body = RAW_IMAGE_RE.sub(
+        lambda match: rf"\taskpic{{{positions[match.group('path')]}}}",
+        body,
+    )
+    body = FLOAT_WRAPPER_RE.sub("", body)
+    body = remove_group_commands(body, FLOAT_META_COMMAND_RE)
+    return body, images
+
+
 def task_from_block(marker: Marker, body: str, source_path: list[str]) -> TaskDraft:
+    body, images = normalize_task_images(body)
     text, subitems = split_subitems(body)
     topic = source_path[-1] if source_path else ""
     warnings = []
@@ -176,7 +291,13 @@ def task_from_block(marker: Marker, body: str, source_path: list[str]) -> TaskDr
     if len(re.sub(r"\\\w+|\s+", "", text)) < 8 and not subitems:
         warnings.append("Слишком короткое условие")
         confidence -= 0.35
-    if body.count(r"\begin{") != body.count(r"\end{"):
+    # В OCR Шестакова внешний itemize часто обозначает физическую колонку и
+    # закономерно начинается в одном блоке задачи, а заканчивается в другом.
+    # Проверяем только содержательные окружения нормализованного блока.
+    structural_body = BLOCK_WRAPPER_RE.sub("", body)
+    begin_envs = Counter(re.findall(r"\\begin\{([^{}]+)\}", structural_body))
+    end_envs = Counter(re.findall(r"\\end\{([^{}]+)\}", structural_body))
+    if begin_envs != end_envs:
         warnings.append("Несбалансированные LaTeX-окружения внутри блока")
         confidence -= 0.20
     return TaskDraft(
@@ -188,7 +309,7 @@ def task_from_block(marker: Marker, body: str, source_path: list[str]) -> TaskDr
         topic_original=topic,
         text_latex=text,
         subitems=subitems,
-        images=extract_images(body),
+        images=images,
         confidence=max(0.0, confidence),
         warnings=warnings,
     )
@@ -205,14 +326,115 @@ SH_CODE_RE = re.compile(
     r"(?P<level>[A-DАВСД])\s*(?P<number>\d{2})(?!\d)", re.I
 )
 LEVEL_TRANSLATION = str.maketrans({"А": "A", "В": "B", "С": "C", "Д": "D"})
+SH_APPENDIX_RE = re.compile(
+    r"(?im)^\s*(?:"
+    r"\\section\*?\{\s*Приложение\s*3\.\s*"
+    r"Примерные варианты экзаменационных работ\s*\}"
+    r"|Экзаменационные работы по алгебре "
+    r"для общеобразовательных классов)\s*$"
+)
+
+
+def trim_shestakov_appendix(text: str) -> tuple[str, bool]:
+    """Отсекает экзаменационные варианты после основного задачника."""
+    boundary = SH_APPENDIX_RE.search(text)
+    if not boundary:
+        return text, False
+    return text[:boundary.start()], True
+
+
+def _shestakov_marker(text: str, match: re.Match) -> Marker:
+    level = match.group("level").upper().translate(LEVEL_TRANSLATION)
+    code = (
+        f'{int(match.group("chapter"))}.{int(match.group("section"))}.'
+        f'{level}{match.group("number")}'
+    )
+    line_start = text.rfind("\n", 0, match.start()) + 1
+    prefix = text[line_start:match.start()].strip()
+    if re.fullmatch(r"\\(?:sub)*section\*?\{\s*", prefix):
+        marker_end = match.end()
+        closing = re.match(r"\s*\}", text[marker_end:])
+        if closing:
+            marker_end += closing.end()
+        return Marker(line_start, marker_end, code)
+    if re.fullmatch(r"\\caption\{\s*", prefix):
+        figure_start = text.rfind(r"\begin{figure}", 0, line_start)
+        prior_figure_end = text.rfind(r"\end{figure}", 0, line_start)
+        if figure_start > prior_figure_end:
+            # OCR иногда заменяет номер задачи подписью к первому рисунку.
+            # Начинаем блок с figure, чтобы изображение осталось у задачи.
+            return Marker(figure_start, figure_start, code)
+        itemize_start = text.rfind(r"\begin{itemize}", 0, line_start)
+        prior_itemize_end = text.rfind(r"\end{itemize}", 0, line_start)
+        marker_end = match.end()
+        closing = re.match(r"\s*\}", text[marker_end:])
+        if closing:
+            marker_end += closing.end()
+        if itemize_start > prior_itemize_end:
+            # В решебнике caption иногда заменяет заголовок задачи.
+            return Marker(itemize_start, marker_end, code)
+    if re.fullmatch(r"\\item\[\s*", prefix):
+        return Marker(line_start, match.end(), code)
+    return Marker(match.start(), match.end(), code)
 
 
 def shestakov_markers(text: str) -> list[Marker]:
+    """Маркеры условий: начало строки, task-item или код в caption."""
     result = []
     for match in SH_CODE_RE.finditer(text):
-        level = match.group("level").upper().translate(LEVEL_TRANSLATION)
-        code = f'{int(match.group("chapter"))}.{int(match.group("section"))}.{level}{match.group("number")}'
-        result.append(Marker(match.start(), match.end(), code))
+        line_start = text.rfind("\n", 0, match.start()) + 1
+        prefix = text[line_start:match.start()].strip()
+        if prefix and not (
+                re.fullmatch(r"\\item\[\s*", prefix)
+                or re.fullmatch(r"\\caption\{\s*", prefix)):
+            continue
+        result.append(_shestakov_marker(text, match))
+    return result
+
+
+def shestakov_solution_markers(text: str) -> list[Marker]:
+    """В решебнике следующий код может стоять в конце предыдущей строки."""
+    result = []
+    for match in SH_CODE_RE.finditer(text):
+        marker = _shestakov_marker(text, match)
+        line_start = text.rfind("\n", 0, match.start()) + 1
+        prefix = text[line_start:match.start()].strip()
+        is_caption = bool(re.fullmatch(r"\\caption\{\s*", prefix))
+        if (is_caption and result
+                and not text[result[-1].end:marker.start].strip()):
+            # Подпись сразу после номера — рисунок текущего решения, а OCR-код
+            # в caption часто ошибочно указывает номер следующей задачи.
+            continue
+        result.append(marker)
+    return result
+
+
+def shestakov_sort_key(code: str) -> tuple[int, int, int, int]:
+    match = re.fullmatch(r"(\d+)\.(\d+)\.([A-D])(\d+)", code)
+    if not match:
+        raise ValueError(f"Неканонический код Шестакова: {code}")
+    return (
+        int(match.group(1)), int(match.group(2)),
+        ord(match.group(3)), int(match.group(4)),
+    )
+
+
+def expected_shestakov_ids() -> set[str]:
+    """Полная каноническая сетка номеров, заявленная в структуре книги."""
+    result = set()
+    for chapter in range(1, 9):
+        for section in range(1, 4):
+            for level in "ABCD":
+                for number in range(1, 11):
+                    result.add(f"{chapter}.{section}.{level}{number:02d}")
+    for level in "ABCD":
+        for number in range(1, 11):
+            result.add(f"9.1.{level}{number:02d}")
+            result.add(f"11.1.{level}{number:02d}")
+    for section in range(1, 4):
+        for level in "ABCD":
+            for number in range(1, 16):
+                result.add(f"10.{section}.{level}{number:02d}")
     return result
 
 
@@ -281,12 +503,71 @@ def split_answer_solution(body: str) -> tuple[str, str]:
     return answer, solution
 
 
-def merge_solutions(tasks: list[TaskDraft], solution_text: str, marker_factory) -> dict:
-    solution_markers = marker_factory(solution_text)
-    solution_markers, duplicate_solutions = unique_markers(solution_markers)
+def split_full_solution(body: str) -> tuple[str, str]:
+    """Для отдельного решебника сохраняет весь блок как авторское решение."""
+    solution = strip_outer_lists(body)
+    solution = STRUCTURAL_HEADING_RE.sub("", solution)
+    solution = FLOAT_WRAPPER_RE.sub("", solution)
+    solution = OCR_FIGURE_WRAPPER_RE.sub("", solution)
+    solution = remove_group_commands(solution, FLOAT_META_COMMAND_RE)
+    solution = RAW_IMAGE_RE.sub(
+        lambda match: rf"\taskpic{{{match.group('path')}}}", solution)
+    solution = solution.lstrip("} \t\n")
+    item_number = 0
+
+    def replace_item(match: re.Match) -> str:
+        nonlocal item_number
+        item_number += 1
+        label = clean(match.group("label") or "")
+        prefix = "" if item_number == 1 else r" \mbox{}\\ "
+        return prefix + (label + "~" if label else "")
+
+    # \\item вне itemize ломает PDF; метки оставляем как
+    # обычный текст с явным переносом между пунктами.
+    solution = clean(ANY_ITEM_RE.sub(replace_item, solution))
+    answers = [
+        clean(match.group(1))
+        for match in re.finditer(
+            r"(?im)\bОтвет\s*:\s*(.+?)(?:\\\\)?\s*$", solution)
+        if clean(match.group(1))
+    ]
+    return "\n".join(answers), solution
+
+
+def merge_solutions(
+        tasks: list[TaskDraft], solution_text: str, marker_factory,
+        *, full_solutions: bool = False) -> dict:
+    raw_solution_markers = marker_factory(solution_text)
+    task_ids = {task.external_id for task in tasks}
+    ignored_solution_code_refs = sorted({
+        marker.external_id for marker in raw_solution_markers
+        if marker.external_id not in task_ids
+    })
+    allowed_markers = [marker for marker in raw_solution_markers
+                       if marker.external_id in task_ids]
+    counts = Counter(marker.external_id for marker in allowed_markers)
+    duplicate_solutions = {
+        key for key, count in counts.items() if count > 1
+    }
+    all_solution_markers = []
+    for marker in raw_solution_markers:
+        if (all_solution_markers
+                and all_solution_markers[-1].external_id == marker.external_id):
+            # Повтор caption с тем же кодом — продолжение того же решения.
+            continue
+        all_solution_markers.append(marker)
     solution_map = {}
-    for marker, body in blocks(solution_text, solution_markers):
-        solution_map[marker.external_id] = split_answer_solution(body)
+    # Повторный маркер всё равно участвует в границах блока: иначе его текст
+    # будет ошибочно приклеен к предыдущему решению. Для самого ключа
+    # консервативно сохраняем первое вхождение и отправляем дубль на проверку.
+    splitter = split_full_solution if full_solutions else split_answer_solution
+    for marker, body in blocks(solution_text, all_solution_markers):
+        if marker.external_id not in task_ids:
+            continue
+        images = extract_images(body) if full_solutions else []
+        answer, solution = splitter(body)
+        solution_map.setdefault(
+            marker.external_id, (answer, solution, images))
     matched = 0
     for task in tasks:
         found = solution_map.get(task.external_id)
@@ -294,39 +575,140 @@ def merge_solutions(tasks: list[TaskDraft], solution_text: str, marker_factory) 
             task.warnings.append("Не найден авторский ответ/решение")
             task.confidence = max(0.0, task.confidence - 0.15)
             continue
-        task.author_answer_latex, task.author_solution_latex = found
+        (task.author_answer_latex, task.author_solution_latex,
+         solution_images) = found
+        task.images.extend(
+            image for image in solution_images if image not in task.images)
+        for image in solution_images:
+            task.author_solution_latex = task.author_solution_latex.replace(
+                rf"\taskpic{{{image}}}",
+                rf"\taskpic{{{task.images.index(image) + 1}}}",
+            )
         matched += 1
     return {
-        "solution_markers": len(solution_markers),
+        "solution_marker_occurrences": len(allowed_markers),
+        "solution_boundaries": len(all_solution_markers),
+        "solution_markers": len(solution_map),
         "duplicate_solution_ids": sorted(duplicate_solutions),
         "matched_solutions": matched,
-        "unmatched_solution_ids": sorted(set(solution_map) - {task.external_id for task in tasks}),
+        "unmatched_solution_ids": sorted(set(solution_map) - task_ids),
+        "ignored_solution_code_refs": ignored_solution_code_refs,
+        "tasks_without_solution_ids": sorted(task_ids - set(solution_map)),
     }
 
 
 def parse_shestakov(tasks_text: str, solutions_text: str) -> tuple[list[TaskDraft], dict]:
+    tasks_text, tasks_truncated = trim_shestakov_appendix(tasks_text)
+    solutions_text, solutions_truncated = trim_shestakov_appendix(
+        solutions_text)
     all_markers = shestakov_markers(tasks_text)
-    markers, duplicate_tasks = unique_markers(all_markers)
+    marker_counts = Counter(marker.external_id for marker in all_markers)
+    duplicate_tasks = {
+        key for key, count in marker_counts.items() if count > 1
+    }
     headings = sections(tasks_text)
-    tasks = [
-        task_from_block(marker, body, path_at(headings, marker.start))
-        for marker, body in blocks(tasks_text, markers)
-    ]
+    raw_blocks = [[marker, body]
+                  for marker, body in blocks(tasks_text, all_markers)]
+    detached_column_fragments = []
+    for index in range(1, len(raw_blocks)):
+        previous_marker, previous_body = raw_blocks[index - 1]
+        marker, body = raw_blocks[index]
+        if (shestakov_sort_key(marker.external_id)
+                >= shestakov_sort_key(previous_marker.external_id)):
+            continue
+        main, detached = detach_column_tail(body)
+        if not detached:
+            continue
+        previous_body = re.sub(
+            r"\\begin\{itemize\}\s*$", "", previous_body)
+        raw_blocks[index - 1][1] = previous_body + "\n" + detached
+        raw_blocks[index][1] = main
+        detached_column_fragments.append({
+            "from": marker.external_id,
+            "to": previous_marker.external_id,
+        })
+    tasks = []
+    seen = set()
+    for marker, body in raw_blocks:
+        if marker.external_id in seen:
+            continue
+        seen.add(marker.external_id)
+        tasks.append(task_from_block(
+            marker, body, path_at(headings, marker.start)))
     # Падение номера в линейном потоке часто означает склейку двух колонок OCR.
     previous = None
+    previous_task = None
+    physical_order_break_ids = []
+    physical_order_affected_ids = set()
     for task in tasks:
-        parts = re.match(r"(\d+)\.(\d+)\.([A-D])(\d+)", task.external_id)
-        key = tuple(map(int, parts.group(1, 2))) + (ord(parts.group(3)), int(parts.group(4)))
+        key = shestakov_sort_key(task.external_id)
         if previous is not None and key < previous:
-            task.warnings.append("Нарушен порядок номеров: возможна склейка колонок OCR")
-            task.confidence = max(0.0, task.confidence - 0.25)
+            physical_order_break_ids.append(task.external_id)
+            physical_order_affected_ids.update(
+                [previous_task.external_id, task.external_id])
         previous = key
+        previous_task = task
+    boundary_warning = (
+        "Нарушен порядок номеров рядом с задачей: проверить границу колонок OCR")
+    for task in tasks:
+        if task.external_id in physical_order_affected_ids:
+            task.warnings.append(boundary_warning)
+            task.confidence = max(0.0, task.confidence - 0.25)
+    tasks.sort(key=lambda task: shestakov_sort_key(task.external_id))
+    parsed_ids = {task.external_id for task in tasks}
+    expected_ids = expected_shestakov_ids()
     diagnostics = {
         "task_marker_occurrences": len(all_markers),
         "unique_tasks": len(tasks),
         "duplicate_task_ids": sorted(duplicate_tasks),
+        "physical_order_break_ids": physical_order_break_ids,
+        "physical_order_affected_ids": sorted(
+            physical_order_affected_ids, key=shestakov_sort_key),
+        "detached_column_fragments": detached_column_fragments,
+        "missing_task_ids": sorted(
+            expected_ids - parsed_ids, key=shestakov_sort_key),
+        "unexpected_task_ids": sorted(
+            parsed_ids - expected_ids, key=shestakov_sort_key),
+        "tasks_truncated_before_exam_variants": tasks_truncated,
+        "solutions_truncated_before_exam_variants": solutions_truncated,
     }
-    diagnostics.update(merge_solutions(tasks, solutions_text, shestakov_markers))
+    solution_diagnostics = merge_solutions(
+        tasks, solutions_text, shestakov_solution_markers,
+        full_solutions=True)
+    diagnostics.update(solution_diagnostics)
+    raw_solution_ids = {
+        marker.external_id for marker in shestakov_solution_markers(
+            solutions_text)
+    }
+    unbounded_next_ids = set(solution_diagnostics[
+        "tasks_without_solution_ids"])
+    unbounded_next_ids.update(
+        (expected_ids - parsed_ids) - raw_solution_ids)
+    by_key = sorted(
+        ((shestakov_sort_key(task.external_id), task) for task in tasks),
+        key=lambda item: item[0],
+    )
+    suspicious_predecessors: dict[str, list[str]] = {}
+    for missing_id in sorted(unbounded_next_ids, key=shestakov_sort_key):
+        missing_key = shestakov_sort_key(missing_id)
+        prior = [task for key, task in by_key if key < missing_key]
+        if not prior or not prior[-1].author_solution_latex:
+            continue
+        suspicious_predecessors.setdefault(
+            prior[-1].external_id, []).append(missing_id)
+    task_by_id = {task.external_id: task for task in tasks}
+    for prior_id, next_ids in suspicious_predecessors.items():
+        task = task_by_id[prior_id]
+        task.warnings.append(
+            "У следующего номера нет границы решения ("
+            + ", ".join(next_ids)
+            + "): проверить окончание авторского решения")
+        task.confidence = max(0.0, task.confidence - 0.20)
+    diagnostics["solution_boundary_review_predecessors"] = {
+        key: value for key, value in sorted(
+            suspicious_predecessors.items(),
+            key=lambda item: shestakov_sort_key(item[0]))
+    }
     return tasks, diagnostics
 
 
@@ -470,13 +852,20 @@ def write_bundle(bundle: ImportBundle, output: Path) -> None:
         f"- С авторским ответом: {bundle.diagnostics['tasks_with_author_answer']}",
         f"- С авторским решением: {bundle.diagnostics['tasks_with_author_solution']}",
         f"- С предупреждениями: {bundle.diagnostics['review_counts'].get('warning', 0)}",
-        "",
-        "## Диагностика",
-        "",
-        "```json",
-        json.dumps(bundle.diagnostics, ensure_ascii=False, indent=2),
-        "```",
     ]
+    if "missing_task_ids" in bundle.diagnostics:
+        lines.extend([
+            f"- Пропущено ожидаемых номеров: "
+            f"{len(bundle.diagnostics['missing_task_ids'])}",
+            f"- Однозначно сопоставлено решений: "
+            f"{bundle.diagnostics['matched_solutions']}",
+            f"- Затронуто нарушениями порядка колонок: "
+            f"{len(bundle.diagnostics['physical_order_affected_ids'])}",
+        ])
+    lines.extend([
+        "", "## Диагностика", "", "```json",
+        json.dumps(bundle.diagnostics, ensure_ascii=False, indent=2), "```",
+    ])
     (output / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
