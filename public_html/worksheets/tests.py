@@ -1198,6 +1198,10 @@ class ImportTexTests(TestCase):
         # Исходные LaTeX-тексты задач для запросов генерации
         self.assertContains(response, 'import-solve-data')
         self.assertContains(response, reverse('task_neuro_solve'))
+        from pathlib import Path
+        from django.conf import settings
+        js = (Path(settings.BASE_DIR) / 'static/js/import.js').read_text()
+        self.assertIn('!String(value).trim()', js)
 
     def test_import_solve_endpoint(self):
         self.client.login(username='teacher1', password='pass12345')

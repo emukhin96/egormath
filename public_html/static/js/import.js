@@ -80,7 +80,9 @@
     var neuroLabel = (window.EgorNeuro && EgorNeuro.label) || 'Добавить AI-решение';
 
     function setField(name, value) {
-      if (value == null) return;
+      // Как apply_result / setValue: пустое от модели не затирает
+      // уже заполненный ответ найденной в базе задачи.
+      if (value == null || !String(value).trim()) return;
       var field = form.querySelector('[name="' + name + '"]');
       if (field) field.value = value;
     }
