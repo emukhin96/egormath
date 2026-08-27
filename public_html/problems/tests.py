@@ -922,3 +922,18 @@ class RubricatorTests(TestCase):
         self.assertEqual(legacy.grade_option, 10)
         response = self.client.get(reverse('task_list'), {'grade': 11})
         self.assertContains(response, 'Старшая школа xyz')
+
+    def test_legacy_grade_1_4_still_saves(self):
+        # В селекте 1–4 нет, но старое значение поля не должно ломать форму
+        from problems.forms import TaskForm
+        teacher = make_teacher()
+        task = Task.objects.create(
+            text_latex='Младшие классы', grade_level=3, created_by=teacher)
+        form = TaskForm({
+            'text_latex': task.text_latex, 'columns': 0, 'stars': 0,
+            'answer_type': 'text', 'grade_level': '3',
+        }, instance=task)
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        task.refresh_from_db()
+        self.assertEqual(task.grade_level, 3)

@@ -1097,6 +1097,8 @@ class ImportTexTests(TestCase):
 
     def test_import_create_with_overrides(self):
         from problems.models import Topic
+        from problems.rubricator import seed_rubricator
+        seed_rubricator()
         topic = Topic.objects.create(name='Дроби')
         self.client.login(username='teacher1', password='pass12345')
         # Элемент с индексом 1 — первая задача (после рубрики «Разминка»)
@@ -1108,6 +1110,8 @@ class ImportTexTests(TestCase):
         worksheet = Worksheet.objects.get(owner=self.teacher)
         task = worksheet.items.filter(task__isnull=False).first().task
         self.assertEqual(task.grade_level, 8)
+        self.assertEqual(
+            list(task.grade_bands.values_list('code', flat=True)), ['GRADE_8'])
         self.assertEqual(list(task.topics.all()), [topic])
         self.assertEqual(task.stars, 3)
         self.assertEqual(task.answer_latex, '5/6')

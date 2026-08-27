@@ -223,11 +223,14 @@ class Task(models.Model):
         (ANSWER_INTERVAL, 'Числовой промежуток'),
     ]
 
-    # 10 и 11 — одна метка. GRADE_CHOICES — для селектов; в поле 11 остаётся валидным.
+    # 10 и 11 — одна метка. GRADE_CHOICES — для селектов 5–11.
+    # GRADE_FIELD_CHOICES оставляет 1–4 и 11 валидными для старых записей.
     GRADE_CHOICES = [
         (5, '5'), (6, '6'), (7, '7'), (8, '8'), (9, '9'), (10, '10–11'),
     ]
-    GRADE_FIELD_CHOICES = GRADE_CHOICES + [(11, '10–11')]
+    GRADE_FIELD_CHOICES = (
+        [(g, str(g)) for g in range(1, 5)] + GRADE_CHOICES + [(11, '10–11')]
+    )
     STARS_CHOICES = [(i, '★' * i if i else 'без звёзд') for i in range(4)]
     DIFFICULTY_CHOICES = [(i, str(i)) for i in range(1, 6)]
 
