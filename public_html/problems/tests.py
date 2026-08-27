@@ -633,6 +633,7 @@ class NeuroTests(TestCase):
         self.assertIn('if (!id || seen[id]) return;', js)
         self.assertIn('function saveFilledForms(forms)', js)
         self.assertIn('EgorAutosave.autosave(form)', js)
+        self.assertIn('!String(value).trim()', js)
         teacher = make_teacher('neuro-form')
         self.client.login(username=teacher.username, password='pass12345')
         response = self.client.get(reverse('task_create'))

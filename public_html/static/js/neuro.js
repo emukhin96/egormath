@@ -50,12 +50,14 @@
   }
 
   function setValue(el, value, silent) {
-    if (!el || value == null) return;
+    // Как apply_result: пустое от модели не затирает уже заполненное поле.
+    if (!el || value == null || !String(value).trim()) return false;
     el.value = value;
     // Без input автосейв на карточке не запишет черновик до проверки.
     if (!silent) {
       el.dispatchEvent(new Event('input', {bubbles: true}));
     }
+    return true;
   }
 
   function confirmOverwrite(hasExisting) {
@@ -124,14 +126,16 @@
         var ansEl = block.querySelector(
           '.subitem-edit-form textarea[name="answer_latex"]');
         if (!answersOnly || (ansEl && !ansEl.value.trim())) {
-          setValue(ansEl, (result.subitem_answers || [])[i], true);
-          rememberForm(ansEl, forms);
+          if (setValue(ansEl, (result.subitem_answers || [])[i], true)) {
+            rememberForm(ansEl, forms);
+          }
         }
         if (!answersOnly) {
           var solEl = block.querySelector(
             '.subitem-edit-form textarea[name="solution_latex"]');
-          setValue(solEl, (result.subitem_solutions || [])[i], true);
-          rememberForm(solEl, forms);
+          if (setValue(solEl, (result.subitem_solutions || [])[i], true)) {
+            rememberForm(solEl, forms);
+          }
         }
       });
       return forms;
@@ -145,12 +149,14 @@
       solutionBox.closest('details').open = true;
     }
     if (!answersOnly || (answerBox && !answerBox.value.trim())) {
-      setValue(answerBox, result.answer, true);
-      rememberForm(answerBox, forms);
+      if (setValue(answerBox, result.answer, true)) {
+        rememberForm(answerBox, forms);
+      }
     }
     if (!answersOnly) {
-      setValue(solutionBox, result.solution, true);
-      rememberForm(solutionBox, forms);
+      if (setValue(solutionBox, result.solution, true)) {
+        rememberForm(solutionBox, forms);
+      }
     }
     return forms;
   }
