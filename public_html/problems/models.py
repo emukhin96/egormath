@@ -316,15 +316,16 @@ class Task(models.Model):
         return any(s.answer_latex.strip() for s in self.subitems.all())
 
     @property
-    def has_blank_neuro_fields(self):
-        """Пустые поля, которые apply_result дополнит при overwrite=False."""
+    def has_blank_answer(self):
+        """Нет ответа: кнопка «без ответа» берёт только такие задачи.
+
+        Решение без ответа — всё ещё «без ответа». Ответ без решения —
+        ответ уже есть, пакет эту задачу пропускает.
+        """
         subs = list(self.subitems.all())
         if subs:
-            return any(
-                not s.answer_latex.strip() or not s.solution_latex.strip()
-                for s in subs)
-        return (not (self.answer_latex or '').strip()
-                or not (self.solution_latex or '').strip())
+            return any(not s.answer_latex.strip() for s in subs)
+        return not (self.answer_latex or '').strip()
 
     def make_variant(self, user=None):
         """Скрытая копия задачи для «локальной» правки в одном листке."""

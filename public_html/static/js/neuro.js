@@ -201,9 +201,9 @@
   }
 
   function applyTask(el) {
-    var incomplete = el.dataset.incomplete === '1';
+    var noAnswer = el.dataset.noAnswer === '1';
     var hasAnswer = el.dataset.hasAnswer === '1';
-    var overwrite = hasAnswer && !incomplete;
+    var overwrite = hasAnswer && !noAnswer;
     if (overwrite && !confirmOverwrite(true)) return Promise.resolve();
     return withBusy(el, function () {
       return solve({
@@ -247,9 +247,9 @@
     if (kind === 'apply-missing') {
       var queue = Array.prototype.slice.call(
         document.querySelectorAll(
-          '[data-neuro="apply"][data-incomplete="1"]'));
+          '[data-neuro="apply"][data-no-answer="1"]'));
       if (!queue.length) {
-        toast(false, 'Нет задач с пустыми полями ответа или решения');
+        toast(false, 'Нет задач без ответа');
         return;
       }
       var done = 0;

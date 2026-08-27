@@ -15,14 +15,22 @@ SITE_ROOT = BASE_DIR.parent                        # корень репозит
 SECRETS_DIR = SITE_ROOT / '.secrets'
 
 
+def _unwrap_quotes(value):
+    """Снять только парную обёртку кавычек, не резать край пароля."""
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
+        return value[1:-1]
+    return value
+
+
 def read_secret(name, default=None):
     """Секрет из переменной окружения или файла .secrets/<name>."""
     value = os.environ.get(name)
     if value:
-        return value.strip().strip('"').strip("'")
+        return _unwrap_quotes(value)
     path = SECRETS_DIR / name
     if path.exists():
-        return path.read_text(encoding='utf-8-sig').strip().strip('"').strip("'")
+        return _unwrap_quotes(path.read_text(encoding='utf-8-sig'))
     return default
 
 

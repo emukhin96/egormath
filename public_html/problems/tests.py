@@ -3,7 +3,7 @@ import re
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils.html import escape
 
@@ -13,6 +13,26 @@ from .latex_utils import (escape_latex, loads_neuro_json,
                           restore_json_eaten_latex, split_items, strip_latex,
                           wrap_bare_math)
 from .models import Tag, Task, Topic
+
+
+class ReadSecretTests(SimpleTestCase):
+    """Кавычки вокруг секрета — только парная обёртка, не край пароля."""
+
+    def test_unwraps_matching_quotes_keeps_unmatched(self):
+        import os
+        from unittest import mock
+
+        from core.settings import read_secret
+        cases = (
+            ('"abc"', 'abc'),
+            ("'abc'", 'abc'),
+            ("abc'", "abc'"),
+            ('"abc\'', '"abc\''),
+            ('  xyz  ', 'xyz'),
+        )
+        for raw, expected in cases:
+            with mock.patch.dict(os.environ, {'TEST_SECRET': raw}):
+                self.assertEqual(read_secret('TEST_SECRET'), expected, raw)
 
 
 def make_teacher(username='teacher1'):
@@ -393,21 +413,24 @@ class NeuroTests(TestCase):
         self.assertEqual(task.answer_latex, 'новый')
         self.assertEqual(task.solution_latex, 'Другое')
 
-    def test_has_blank_neuro_fields(self):
+    def test_has_blank_answer(self):
         teacher = make_teacher()
         empty = Task.objects.create(text_latex='Пустая', created_by=teacher)
-        self.assertTrue(empty.has_blank_neuro_fields)
-        partial = Task.objects.create(
-            text_latex='Частично', answer_latex='4', created_by=teacher)
-        self.assertTrue(partial.has_blank_neuro_fields)
+        self.assertTrue(empty.has_blank_answer)
+        answer_only = Task.objects.create(
+            text_latex='Есть ответ', answer_latex='4', created_by=teacher)
+        self.assertFalse(answer_only.has_blank_answer)
+        solution_only = Task.objects.create(
+            text_latex='Есть решение', solution_latex='Шаг', created_by=teacher)
+        self.assertTrue(solution_only.has_blank_answer)
         full = Task.objects.create(
             text_latex='Полная', answer_latex='4', solution_latex='Шаг',
             created_by=teacher)
-        self.assertFalse(full.has_blank_neuro_fields)
+        self.assertFalse(full.has_blank_answer)
         mixed = Task.objects.create(text_latex='Подпункты', created_by=teacher)
         mixed.subitems.create(order=10, text_latex='а', answer_latex='1')
         mixed.subitems.create(order=20, text_latex='б')
-        self.assertTrue(mixed.has_blank_neuro_fields)
+        self.assertTrue(mixed.has_blank_answer)
 
     def test_solve_endpoint_apply_and_form_only(self):
         from unittest import mock
