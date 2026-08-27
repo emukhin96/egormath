@@ -88,3 +88,10 @@ class TextbookDraftReviewForm(forms.ModelForm):
             'author_answer_latex': forms.Textarea(attrs={'rows': 3}),
             'author_solution_latex': forms.Textarea(attrs={'rows': 12}),
         }
+
+    def clean_subitems(self):
+        from .textbook_import import TextbookImportError, normalize_subitems
+        try:
+            return normalize_subitems(self.cleaned_data['subitems'])
+        except TextbookImportError as exc:
+            raise forms.ValidationError(str(exc)) from exc

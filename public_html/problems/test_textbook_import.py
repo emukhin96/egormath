@@ -169,3 +169,22 @@ class TextbookImportTests(TestCase):
             'textbook_import_review', args=[batch.pk, batch.drafts.get().pk]))
         self.assertContains(review, 'Авторский ответ')
         self.assertContains(review, 'Сохранить и дальше')
+
+    def test_review_rejects_structurally_invalid_subitems(self):
+        batch = self.create_batch()
+        draft = batch.drafts.get()
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(reverse(
+            'textbook_import_review', args=[batch.pk, draft.pk]), {
+                'external_id': draft.external_id,
+                'source_number': draft.source_number,
+                'text_latex': draft.text_latex,
+                'subitems': '{}',
+                'author_answer_latex': draft.author_answer_latex,
+                'author_solution_latex': draft.author_solution_latex,
+                'status': TextbookTaskDraft.STATUS_APPROVED,
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'должно быть массивом')
+        draft.refresh_from_db()
+        self.assertEqual(draft.status, TextbookTaskDraft.STATUS_REVIEW)

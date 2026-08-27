@@ -125,22 +125,26 @@ def strip_outer_lists(value: str) -> str:
 
 
 def path_at(all_sections: Sequence[Section], pos: int) -> list[str]:
-    """Возвращает ближайшие смысловые заголовки до позиции задачи."""
+    """Возвращает стек смысловых заголовков по уровням LaTeX."""
     ignored = {
         "УПРАЖНЕНИЯ", "УРОВЕНЬ А", "УРОВЕНЬ В", "УРОВЕНЬ B",
         "УРОВЕНЬ С", "УРОВЕНЬ C", "УРОВЕНЬ D", "ГЛАВА",
     }
-    preceding = [item for item in all_sections if item.start < pos]
-    chosen: list[str] = []
-    for item in preceding[-12:]:
+    level_index = {"section": 0, "subsection": 1, "subsubsection": 2}
+    stack: list[str | None] = [None, None, None]
+    for item in all_sections:
+        if item.start >= pos:
+            break
         normalized = re.sub(r"\s+", " ", item.title).strip().upper()
         if normalized in ignored or normalized.isdigit():
             continue
         if "ОГЛАВЛЕНИ" in normalized or "ПРЕДИСЛОВ" in normalized:
             continue
-        if item.title not in chosen:
-            chosen.append(item.title)
-    return chosen[-3:]
+        index = level_index[item.level]
+        stack[index] = item.title
+        for deeper in range(index + 1, len(stack)):
+            stack[deeper] = None
+    return [title for title in stack if title]
 
 
 def split_subitems(body: str) -> tuple[str, list[SubitemDraft]]:

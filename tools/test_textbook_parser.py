@@ -9,10 +9,21 @@ from tools.textbook_parser import (
     shestakov_markers,
     write_bundle,
     ImportBundle,
+    path_at,
+    sections,
 )
 
 
 class TextbookParserTests(unittest.TestCase):
+    def test_section_path_replaces_sibling_at_same_level(self):
+        text = (
+            r"\section{Глава 1}\subsection{Тема A} задача "
+            r"\subsection{Тема B} другая задача"
+        )
+        headings = sections(text)
+        pos = text.index("другая задача")
+        self.assertEqual(path_at(headings, pos), ["Глава 1", "Тема B"])
+
     def test_shestakov_normalizes_split_and_cyrillic_code(self):
         text = r"1.1.A01 one \item[1.1.] В02 two 2.3.С10 three"
         self.assertEqual(

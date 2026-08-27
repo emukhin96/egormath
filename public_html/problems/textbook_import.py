@@ -47,7 +47,7 @@ def _string_list(value, key):
     return [x.strip() for x in value if x.strip()]
 
 
-def _subitems(value):
+def normalize_subitems(value):
     if value is None:
         return []
     if not isinstance(value, list):
@@ -138,7 +138,7 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             collection_title=str(row.get('collection_title') or '')[:190],
             topic_original=str(row.get('topic_original') or '')[:255],
             text_latex=_required_string(row, 'text_latex'),
-            subitems=_subitems(row.get('subitems')),
+            subitems=normalize_subitems(row.get('subitems')),
             author_answer_latex=str(
                 row.get('author_answer_latex') or '').strip(),
             author_solution_latex=str(
