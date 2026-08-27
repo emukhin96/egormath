@@ -160,6 +160,11 @@ def task_to_tex(item):
     columns = item.effective_columns if sub_lines else 0
     subitems = '\n'.join(sub_lines)
     answer = _combined_answer(task, subitem_objs)
+    answer_used = set()
+    answer = _resolve_taskpics(answer, filenames, answer_used)
+    answer = re.sub(r'\s*\\taskpic\{[^{}]+\}', '', answer)
+    deferred_pics.update(answer_used)
+    used.update(answer_used)
     solution = _combined_solution(task, subitem_objs)
     solution_used = set()
     solution = _resolve_taskpics(solution, filenames, solution_used)

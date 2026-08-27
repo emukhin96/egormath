@@ -306,6 +306,19 @@ class LatexGenerationTests(TestCase):
             tex.index(r'\taskpic{solution.png}'),
             tex.index(r'[{\mbox{}\\ \begin{minipage}'))
 
+    def test_taskpic_ref_in_ai_answer_moves_to_task_body(self):
+        task = Task.objects.create(
+            text_latex='Задача',
+            answer_latex=r'Ответ по рисунку \taskpic{1}.')
+        task.images.create(image='task_images/answer.png', order=10)
+        tex = task_to_tex(make_item(self.worksheet, task))
+        self.assertEqual(tex.count(r'\taskpic{answer.png}'), 1)
+        self.assertNotIn(r'\taskpic{1}', tex)
+        self.assertIn('Ответ по рисунку', tex)
+        self.assertLess(
+            tex.index(r'\taskpic{answer.png}'),
+            tex.index(r'[{Ответ по рисунку'))
+
     def test_collect_assets(self):
         import io
         import tempfile
