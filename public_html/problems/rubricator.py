@@ -67,38 +67,42 @@ def _topic_ids_in_use():
     return ids | extra
 
 
-def _park_uncoded_topics(in_use):
-    """Уводит связанные темы без кода под корень «Прежние темы».
+def _park_uncoded_topics():
+    """Уводит темы без кода под корень «Прежние темы», сохраняя дерево.
 
-    Иначе update_or_create нового дерева падает на unique (name, parent).
+    Переподчиняем только корни старых веток (parent пустой или уже с кодом).
+    Иначе unique (name, parent) столкнётся с новым справочником.
     """
-    parked = list(Topic.objects.filter(
-        Q(code__isnull=True) | Q(code=''), pk__in=in_use))
-    if not parked:
+    uncoded = Topic.objects.filter(Q(code__isnull=True) | Q(code=''))
+    uncoded_pks = set(uncoded.values_list('pk', flat=True))
+    if not uncoded_pks:
         return
     holder, _ = Topic.objects.update_or_create(
         code=LEGACY_ROOT_CODE,
         defaults={'name': 'Прежние темы', 'parent': None, 'order': 10_000})
-    for topic in parked:
+    for topic in Topic.objects.filter(pk__in=uncoded_pks):
         if topic.pk == holder.pk:
             continue
+        if topic.parent_id in uncoded_pks:
+            continue
         topic.parent = holder
-        topic.name = '%s [%s]' % (topic.name, topic.pk)
+        if Topic.objects.filter(parent=holder, name=topic.name).exclude(
+                pk=topic.pk).exists():
+            topic.name = '%s [%s]' % (topic.name, topic.pk)
         topic.save(update_fields=['parent', 'name'])
 
 
 def seed_rubricator():
     """Создаёт или обновляет дерево, классы, фасеты и экзамены по коду.
 
-    Связанные старые темы без кода не удаляются: их переносим под
-    «Прежние темы», чтобы не потерять разметку задач и листков.
+    Старые темы без кода не удаляются: их ветки переносятся под
+    «Прежние темы» целиком, разметка задач и листков сохраняется.
     """
     known = known_topic_codes() | {LEGACY_ROOT_CODE}
+    _park_uncoded_topics()
     in_use = _topic_ids_in_use()
-    Topic.objects.filter(Q(code__isnull=True) | Q(code='')).exclude(
-        pk__in=in_use).delete()
-    _park_uncoded_topics(in_use)
-    Topic.objects.exclude(code__in=known).exclude(pk__in=in_use).delete()
+    Topic.objects.exclude(code__in=known).exclude(
+        Q(code__isnull=True) | Q(code='')).exclude(pk__in=in_use).delete()
 
     created_topics = 0
     for block_i, (block_code, block_name, sections) in enumerate(BLOCKS):

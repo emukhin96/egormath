@@ -785,20 +785,26 @@ class RubricatorTests(TestCase):
         seed_rubricator()
         self.assertEqual(Topic.objects.filter(code='ALG.07.03').count(), first)
 
-    def test_seed_keeps_linked_legacy_topics(self):
+    def test_seed_keeps_legacy_topic_tree(self):
         from problems.rubricator import seed_rubricator, set_task_topics
         teacher = make_teacher()
-        old = Topic.objects.create(name='Старая алгебра')
-        unused = Topic.objects.create(name='Никому не нужна')
+        algebra = Topic.objects.create(name='Старая алгебра')
+        equations = Topic.objects.create(name='Уравнения', parent=algebra)
+        quadratic = Topic.objects.create(name='Квадратные', parent=equations)
+        unused = Topic.objects.create(name='Заготовка без задач')
         task = Task.objects.create(text_latex='x', created_by=teacher)
-        set_task_topics(task, [old.pk], old.pk)
+        set_task_topics(task, [quadratic.pk], quadratic.pk)
         seed_rubricator()
-        old.refresh_from_db()
-        self.assertTrue(Topic.objects.filter(pk=old.pk).exists())
-        self.assertIn(old, task.topics.all())
-        self.assertFalse(Topic.objects.filter(pk=unused.pk).exists())
-        self.assertTrue(Topic.objects.filter(code='_LEGACY').exists())
-        self.assertEqual(old.parent, Topic.objects.get(code='_LEGACY'))
+        holder = Topic.objects.get(code='_LEGACY')
+        algebra.refresh_from_db()
+        equations.refresh_from_db()
+        quadratic.refresh_from_db()
+        unused.refresh_from_db()
+        self.assertEqual(algebra.parent, holder)
+        self.assertEqual(equations.parent, algebra)
+        self.assertEqual(quadratic.parent, equations)
+        self.assertEqual(unused.parent, holder)
+        self.assertIn(quadratic, task.topics.all())
 
     def test_invalid_create_keeps_taxonomy_selection(self):
         from problems.rubricator import seed_rubricator
