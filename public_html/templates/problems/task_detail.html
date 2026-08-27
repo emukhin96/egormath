@@ -127,10 +127,7 @@
       {% csrf_token %}
       <label class="inline-label">класс
         <select name="grade_level" class="quick-select">
-          <option value="">—</option>
-          {% for g, label in grade_choices %}
-          <option value="{{ g }}" {% if task.grade_level == g %}selected{% endif %}>{{ g }}</option>
-          {% endfor %}
+          {% include 'includes/grade_options.html' with selected=task.grade_option %}
         </select>
       </label>
       <label class="inline-label">звёзды
@@ -141,11 +138,11 @@
         </select>
       </label>
     </form>
-    <span class="task-meta">
-      Темы: {% for t in task.topics.all %}{{ t.name }}{% if not forloop.last %}; {% endif %}{% empty %}—{% endfor %}
-      <button type="button" class="linklike" data-dialog-open="topics-dialog"
-              title="Изменить темы">✎</button>
-    </span>
+    <form method="post" action="{% url 'task_quick_update' task.pk %}"
+          data-autosave="change">
+      {% csrf_token %}
+      {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=True grades=False selected_json=selected_json %}
+    </form>
     <form method="post" action="{% url 'task_quick_update' task.pk %}"
           data-autosave="debounce" class="inline-form">
       {% csrf_token %}
@@ -155,22 +152,6 @@
                placeholder="через запятую" class="quick-input"></label>
     </form>
   </div>
-
-  <dialog id="topics-dialog" class="dialog">
-    <form method="post" action="{% url 'task_quick_update' task.pk %}">
-      {% csrf_token %}
-      <input type="hidden" name="topics_submitted" value="1">
-      <h3>Темы задачи #{{ task.pk }}</h3>
-      <div class="dialog-topics">
-        {% include 'includes/topic_checkboxes.html' with topics=topics selected=task.topics.all %}
-      </div>
-      <div class="form-buttons">
-        <button type="submit" class="btn">Сохранить</button>
-        <button type="button" class="btn btn-secondary"
-                data-dialog-close>Отмена</button>
-      </div>
-    </form>
-  </dialog>
 
   <p class="task-meta">
     Тип ответа: {{ task.get_answer_type_display }} (меняется в полной форме)

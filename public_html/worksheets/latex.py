@@ -16,6 +16,18 @@ VARIANT_OPTIONS = {
     'teacher': 'answers=inline,solutions',
 }
 
+# TeX Live 2025-11 убрал \tbl_save_outer_table_cols: из ядра, а bidi
+# (xelatex, его подтягивает egor) всё ещё вставляет вызов в \@@array.
+# Без заглушки падают array/tabular/cases — в том числе формулы систем
+# в \plaintext после импорта Word/TeX. Определяем команду, только если
+# её нет: на старых ядрах оставляем настоящую реализацию.
+ARRAY_BIDI_SHIM = (
+    '\\ExplSyntaxOn\n'
+    '\\cs_if_exist:NF \\tbl_save_outer_table_cols:\n'
+    '  {\\cs_gset_eq:NN \\tbl_save_outer_table_cols: \\scan_stop:}\n'
+    '\\ExplSyntaxOff'
+)
+
 # Метки подпунктов как у \asbuk (без ё, й, ъ, ы, ь) — для сводного ответа
 CYRILLIC_LABELS = 'абвгдежзиклмнопрстуфхцчшщэюя'
 
@@ -222,6 +234,7 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
     lines = [
         '\\documentclass[a5paper,10pt]{article}',
         usepackage,
+        ARRAY_BIDI_SHIM,
         '',
         '\\begin{document}',
     ]

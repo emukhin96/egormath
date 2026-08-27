@@ -15,6 +15,7 @@
   <script defer src="{% static 'js/autosave.js' %}"></script>
   <script defer src="{% static 'js/shell.js' %}"></script>
   <script defer src="{% static 'js/dialogs.js' %}"></script>
+  <script defer src="{% static 'js/taxonomy.js' %}"></script>
   {# Как верхнее меню: суперпользователь без профиля тоже учитель (get_role). #}
   {% if user.profile.is_teacher or user.is_superuser %}
   <script>window.NEURO_SOLVE_URL = '{% url "task_neuro_solve" %}';</script>
@@ -95,6 +96,7 @@
 <footer class="footer">
   <div class="container">EgorMath — листки с задачами по математике</div>
 </footer>
+{% include 'includes/taxonomy_catalog.html' %}
 {% block extra_js %}{% endblock %}
 </body>
 </html>

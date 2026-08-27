@@ -30,17 +30,11 @@
         в конец условия автоматически.</span>
     </p>
 
+    {{ form.grade_level }}
     <div class="form-grid">
       <div>
         <div class="label-row">
-          <label for="{{ form.grade_level.id_for_label }}">Класс</label>
-          {% include 'problems/_pin.html' with field='grade_level' %}
-        </div>
-        {{ form.grade_level.errors }}{{ form.grade_level }}
-      </div>
-      <div>
-        <div class="label-row">
-          <label for="{{ form.stars.id_for_label }}">Сложность</label>
+          <label for="{{ form.stars.id_for_label }}">Сложность листка</label>
           {% include 'problems/_pin.html' with field='stars' %}
         </div>
         {{ form.stars.errors }}{{ form.stars }}
@@ -61,22 +55,14 @@
       </div>
     </div>
 
-    <div class="form-grid">
-      <div>
-        <div class="label-row">
-          <label for="{{ form.topics.id_for_label }}">Темы</label>
-          {% include 'problems/_pin.html' with field='topics' %}
-        </div>
-        {{ form.topics.errors }}{{ form.topics }}
+    <div>
+      <div class="label-row">
+        <label>Рубрикатор</label>
+        {% include 'problems/_pin.html' with field='topics' %}
+        {% include 'problems/_pin.html' with field='grade_bands' %}
+        {% include 'problems/_pin.html' with field='facet_values' %}
       </div>
-      <div>
-        <div class="label-row">
-          <label>Теги</label>
-          {% include 'problems/_pin.html' with field='tags' %}
-        </div>
-        {{ form.tags.errors }}
-        <div class="tag-checks">{{ form.tags }}</div>
-      </div>
+      {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=True grades=True selected_json=selected_json %}
     </div>
 
     <p>

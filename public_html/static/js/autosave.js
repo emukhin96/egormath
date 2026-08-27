@@ -52,8 +52,9 @@
 
   document.addEventListener('change', function (e) {
     var control = e.target;
-    var form = control.form
-      || (control.getAttribute('form')
+    var form = (control.closest && control.closest('form'))
+      || control.form
+      || (control.getAttribute && control.getAttribute('form')
           && document.getElementById(control.getAttribute('form')));
     if (form && form.dataset.autosave === 'change') autosave(form);
   });

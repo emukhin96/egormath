@@ -339,9 +339,24 @@
     display: inline-block;
   }
 
-  /* Массовое выделение в списках: ширина с учётом паддингов ячейки */
-  .col-select {
-    width: 44px;
+  /* Массовое выделение: узкая колонка, остаток ширины не сюда */
+  table.list th.col-select,
+  table.list td.col-select {
+    width: 2.25rem;
+    max-width: 2.25rem;
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+    box-sizing: border-box;
+  }
+
+  .col-grade {
+    width: 4.75rem;
+    max-width: 4.75rem;
+    box-sizing: border-box;
+  }
+
+  .col-grade .quick-select {
+    max-width: 100%;
   }
 
   table.list input[type="checkbox"] {
@@ -812,6 +827,12 @@
     min-width: 130px;
   }
 
+  .filters > div.tax-filter {
+    flex: 1 1 14rem;
+    min-width: 12rem;
+    max-width: 22rem;
+  }
+
   .filters input,
   .filters select {
     max-width: 220px;
@@ -976,39 +997,76 @@
   .task-catalog,
   .worksheet-catalog {
     padding-top: var(--space-4);
-    overflow: hidden;
+    overflow: visible;
   }
 
-  /* Тексту задачи — не меньше половины ширины, служебные колонки — по
-     минимуму. Первая колонка — чекбоксы массового выделения. */
+  /* Служебные колонки — фиксированная ширина через colgroup; «Задача»
+     забирает остаток. Иначе table-layout:fixed отдаёт лишние проценты
+     в первую колонку (чекбоксы). */
   .task-catalog table.list {
     table-layout: fixed;
+    width: 100%;
   }
 
-  .task-catalog table.list th:nth-child(1) {
-    width: 44px;
+  .task-catalog col.col-select {
+    width: 2.25rem;
   }
 
-  .task-catalog table.list th:nth-child(2) {
-    width: 48%;
+  .task-catalog col.col-grade {
+    width: 4.75rem;
   }
 
-  .task-catalog table.list th:nth-child(3) {
-    width: 64px;
+  .task-catalog col.col-answer {
+    width: 9rem;
   }
 
-  .task-catalog table.list th:nth-child(4) {
-    width: 13%;
+  .task-catalog col.col-source {
+    width: 12rem;
   }
 
-  .task-catalog table.list th:nth-child(5) {
-    width: 15%;
+  .task-catalog col.col-topics {
+    width: 13rem;
+  }
+
+  .task-catalog table.list select[hidden],
+  .task-catalog table.list select[aria-hidden="true"] {
+    display: none !important;
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
   }
 
   .task-catalog table.list select,
   .task-catalog table.list textarea,
   .task-catalog table.list input {
     max-width: 100%;
+  }
+
+  .task-catalog td.col-answer,
+  .task-catalog td.col-source {
+    overflow: hidden;
+  }
+
+  .task-catalog td.col-answer .quick-input {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .task-catalog td.col-source .quick-source {
+    min-width: 0;
+  }
+
+  .task-catalog td.col-source .quick-select {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .task-catalog td.col-source .quick-number {
+    width: 3.25rem;
+    flex: none;
   }
 
   .task-id {
@@ -1369,11 +1427,10 @@
     flex: none;
   }
 
-  /* Каталог: колонка звёзд всегда занята — текст и «а)» всех строк
-     на одной вертикали, а не правее у задач со звёздами. */
+  /* Каталог: номер и текст, без колонки звёзд. */
   .task-catalog .task-line {
     display: grid;
-    grid-template-columns: 3.25rem 52px minmax(0, 1fr);
+    grid-template-columns: 3.25rem minmax(0, 1fr);
     column-gap: 6px;
     align-items: baseline;
   }
@@ -1382,13 +1439,8 @@
     grid-column: 1;
   }
 
-  .task-catalog .task-line .stars {
-    grid-column: 2;
-    justify-self: start;
-  }
-
   .task-catalog .task-line .task-main {
-    grid-column: 3;
+    grid-column: 2;
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -2362,6 +2414,240 @@
       display: block;
       overflow-x: auto;
     }
+  }
+
+  .tax-picker {
+    display: grid;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .tax-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    align-items: center;
+    min-height: 1.75rem;
+  }
+
+  .tax-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+    padding: 2px 6px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #fff;
+    font-size: 0.8rem;
+    line-height: 1.3;
+  }
+
+  .tax-chip.is-primary {
+    border-color: var(--accent);
+    background: #eef5ff;
+  }
+
+  .tax-chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 18rem;
+  }
+
+  .tax-picker-compact .tax-chips,
+  .tax-picker-compact .tax-empty {
+    cursor: pointer;
+  }
+
+  .tax-picker-compact .tax-chip-label {
+    max-width: 8rem;
+  }
+
+  .tax-chip-star,
+  .tax-chip-x {
+    border: 0;
+    background: transparent;
+    padding: 0 2px;
+    cursor: pointer;
+    line-height: 1;
+    color: inherit;
+  }
+
+  .tax-empty {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  .tax-search {
+    width: 100%;
+    max-width: 28rem;
+  }
+
+  .tax-picker-compact .tax-search {
+    max-width: none;
+  }
+
+  .tax-panel {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .tax-picker-compact {
+    position: relative;
+  }
+
+  .tax-picker-compact .tax-panel {
+    position: absolute;
+    z-index: 20;
+    top: 100%;
+    left: auto;
+    right: 0;
+    width: min(26rem, 80vw);
+    padding: var(--space-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #fff;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  }
+
+  /* display:grid у .tax-panel иначе перебивает атрибут hidden */
+  .tax-picker-compact .tax-panel[hidden] {
+    display: none;
+  }
+
+  .tax-suggest-hint {
+    margin: 0;
+    padding: var(--space-2);
+    font-size: 0.82rem;
+  }
+
+  .tax-picker-compact .tax-node {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    padding-left: calc(var(--depth, 0) * 16px);
+  }
+
+  .tax-twist {
+    flex: none;
+    width: 1.35rem;
+    min-width: 1.35rem;
+    border: 0;
+    background: transparent;
+    padding: 4px 0;
+    cursor: pointer;
+    color: var(--muted);
+    font: inherit;
+    line-height: 1.3;
+  }
+
+  .tax-twist:hover {
+    color: var(--accent-dark);
+  }
+
+  .tax-picker-compact .tax-node button[data-tax-node] {
+    flex: 1;
+    width: auto;
+    padding-left: 6px;
+  }
+
+  .tax-grades {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .tax-toggle-grade {
+    min-width: 1.75rem;
+    padding: 2px 6px;
+  }
+
+  .tax-more {
+    border: 0;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    padding: 2px 0;
+  }
+
+  .tax-more:hover {
+    color: var(--accent-dark);
+  }
+
+  .tax-tree {
+    display: grid;
+    gap: 1px;
+    max-height: 18rem;
+    overflow-y: auto;
+    padding: var(--space-1) 0;
+  }
+
+  .tax-node > [data-tax-node] {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    padding: 4px 8px 4px calc(8px + var(--depth, 0) * 16px);
+    border-radius: 6px;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 400;
+  }
+
+  .tax-node > [data-tax-node]:hover,
+  .tax-node.is-selected > [data-tax-node] {
+    background: #eef5ff;
+  }
+
+  .tax-node.is-branch:not(.is-open) + .tax-node {
+    /* скрытие потомков без JS-фильтра: ниже рисуем всех, JS ставит is-open */
+  }
+
+  .tax-code {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tax-count {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .tax-facets {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .tax-facet-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: var(--space-1);
+  }
+
+  .tax-facet-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .tax-toggle {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
+  .tax-toggle.is-on {
+    border-color: var(--accent);
+    background: #eef5ff;
   }
 }
 

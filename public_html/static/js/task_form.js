@@ -121,6 +121,9 @@
     }
 
     function getValue(name) {
+      if (window.EgorTaxonomy && window.EgorTaxonomy.has(form, name)) {
+        return window.EgorTaxonomy.get(form, name);
+      }
       var els = fieldControls(name);
       if (!els.length) return null;
       var el = els[0];
@@ -138,6 +141,9 @@
     }
 
     function setValue(name, value) {
+      if (window.EgorTaxonomy && window.EgorTaxonomy.set(form, name, value)) {
+        return;
+      }
       var els = fieldControls(name);
       if (!els.length || value == null) return;
       var el = els[0];

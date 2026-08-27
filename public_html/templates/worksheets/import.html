@@ -57,8 +57,7 @@
     <strong data-bulk-count>Выбрано: 0</strong>
     <label class="inline-label">класс
       <select id="bulk-grade" class="quick-select">
-        <option value="">—</option>
-        {% for g, label in grade_choices %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+        {% include 'includes/grade_options.html' %}
       </select>
     </label>
     <label class="inline-label">тема
@@ -144,8 +143,7 @@
           <div class="import-assign">
             <label class="inline-label">класс
               <select name="grade_{{ forloop.counter0 }}" class="quick-select">
-                <option value="">—</option>
-                {% for g, label in grade_choices %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+                {% include 'includes/grade_options.html' %}
               </select>
             </label>
             <label class="inline-label">тема
