@@ -51,22 +51,6 @@ def known_topic_codes():
 LEGACY_ROOT_CODE = '_LEGACY'
 
 
-def _topic_ids_in_use():
-    """Темы, на которые ссылаются задачи или листки, плюс их предки."""
-    ids = set(TaskTopic.objects.values_list('topic_id', flat=True))
-    from worksheets.models import Worksheet
-    ids.update(Worksheet.topics.through.objects.values_list(
-        'topic_id', flat=True))
-    parent_of = dict(Topic.objects.values_list('pk', 'parent_id'))
-    extra = set()
-    for pk in ids:
-        parent = parent_of.get(pk)
-        while parent and parent not in ids and parent not in extra:
-            extra.add(parent)
-            parent = parent_of.get(parent)
-    return ids | extra
-
-
 def _park_uncoded_topics():
     """Уводит темы без кода под корень «Прежние темы», сохраняя дерево.
 
@@ -95,14 +79,10 @@ def _park_uncoded_topics():
 def seed_rubricator():
     """Создаёт или обновляет дерево, классы, фасеты и экзамены по коду.
 
-    Старые темы без кода не удаляются: их ветки переносятся под
-    «Прежние темы» целиком, разметка задач и листков сохраняется.
+    Существующие темы не удаляются: ветки без кода переносятся под
+    «Прежние темы», пользовательские коды остаются на месте.
     """
-    known = known_topic_codes() | {LEGACY_ROOT_CODE}
     _park_uncoded_topics()
-    in_use = _topic_ids_in_use()
-    Topic.objects.exclude(code__in=known).exclude(
-        Q(code__isnull=True) | Q(code='')).exclude(pk__in=in_use).delete()
 
     created_topics = 0
     for block_i, (block_code, block_name, sections) in enumerate(BLOCKS):

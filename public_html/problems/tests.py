@@ -826,6 +826,12 @@ class RubricatorTests(TestCase):
         self.assertEqual(unused.parent, holder)
         self.assertIn(quadratic, task.topics.all())
 
+    def test_seed_keeps_custom_coded_topic(self):
+        from problems.rubricator import seed_rubricator
+        custom = Topic.objects.create(code='CUSTOM.01', name='Своя тема')
+        seed_rubricator()
+        self.assertTrue(Topic.objects.filter(pk=custom.pk, code='CUSTOM.01').exists())
+
     def test_invalid_create_keeps_taxonomy_selection(self):
         from problems.rubricator import seed_rubricator
         seed_rubricator()
