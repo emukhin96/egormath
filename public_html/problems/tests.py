@@ -449,6 +449,10 @@ class NeuroTests(TestCase):
         answer_only = Task.objects.create(
             text_latex='Есть ответ', answer_latex='4', created_by=teacher)
         self.assertFalse(answer_only.has_blank_answer)
+        author_answer = Task.objects.create(
+            text_latex='Есть авторский ответ', author_answer_latex='5',
+            created_by=teacher)
+        self.assertFalse(author_answer.has_blank_answer)
         solution_only = Task.objects.create(
             text_latex='Есть решение', solution_latex='Шаг', created_by=teacher)
         self.assertTrue(solution_only.has_blank_answer)
@@ -460,6 +464,13 @@ class NeuroTests(TestCase):
         mixed.subitems.create(order=10, text_latex='а', answer_latex='1')
         mixed.subitems.create(order=20, text_latex='б')
         self.assertTrue(mixed.has_blank_answer)
+        author_subitems = Task.objects.create(
+            text_latex='Авторские подпункты', created_by=teacher)
+        author_subitems.subitems.create(
+            order=10, text_latex='а', author_answer_latex='1')
+        author_subitems.subitems.create(
+            order=20, text_latex='б', author_answer_latex='2')
+        self.assertFalse(author_subitems.has_blank_answer)
 
     def test_apply_holds_quota_until_write(self):
         """apply_result идёт при занятой квоте, иначе гонка overwrite."""

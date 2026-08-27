@@ -342,8 +342,8 @@ class Task(models.Model):
         """
         subs = list(self.subitems.all())
         if subs:
-            return any(not s.answer_latex.strip() for s in subs)
-        return not (self.answer_latex or '').strip()
+            return any(not s.effective_answer_latex for s in subs)
+        return not self.effective_answer_latex
 
     def make_variant(self, user=None):
         """Скрытая копия задачи для «локальной» правки в одном листке."""
