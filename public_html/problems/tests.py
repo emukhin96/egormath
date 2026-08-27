@@ -600,6 +600,8 @@ class NeuroTests(TestCase):
         self.assertIn('function formSubitemRows()', js)
         self.assertIn('if (!field.value.trim()) return;', js)
         self.assertNotIn('payload.apply = true', js)
+        self.assertIn('if (!silent)', js)
+        self.assertIn('if (!id || seen[id]) return;', js)
         teacher = make_teacher('neuro-form')
         self.client.login(username=teacher.username, password='pass12345')
         response = self.client.get(reverse('task_create'))

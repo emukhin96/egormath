@@ -49,10 +49,13 @@
     });
   }
 
-  function setValue(el, value) {
+  function setValue(el, value, silent) {
     if (!el || value == null) return;
     el.value = value;
-    el.dispatchEvent(new Event('input', {bubbles: true}));
+    // Без input автосейв на карточке не запишет черновик до проверки.
+    if (!silent) {
+      el.dispatchEvent(new Event('input', {bubbles: true}));
+    }
   }
 
   function confirmOverwrite(hasExisting) {
@@ -102,12 +105,12 @@
         var ansEl = block.querySelector(
           '.subitem-edit-form textarea[name="answer_latex"]');
         if (!answersOnly || (ansEl && !ansEl.value.trim())) {
-          setValue(ansEl, (result.subitem_answers || [])[i]);
+          setValue(ansEl, (result.subitem_answers || [])[i], true);
         }
         if (!answersOnly) {
           setValue(block.querySelector(
             '.subitem-edit-form textarea[name="solution_latex"]'),
-            (result.subitem_solutions || [])[i]);
+            (result.subitem_solutions || [])[i], true);
         }
       });
       return;
@@ -121,9 +124,9 @@
       solutionBox.closest('details').open = true;
     }
     if (!answersOnly || (answerBox && !answerBox.value.trim())) {
-      setValue(answerBox, result.answer);
+      setValue(answerBox, result.answer, true);
     }
-    if (!answersOnly) setValue(solutionBox, result.solution);
+    if (!answersOnly) setValue(solutionBox, result.solution, true);
   }
 
   function detailHasExisting() {
@@ -185,21 +188,21 @@
       rows.forEach(function (row, i) {
         var ansEl = row.querySelector('textarea[name$="-answer_latex"]');
         if (!answersOnly || (ansEl && !ansEl.value.trim())) {
-          setValue(ansEl, (result.subitem_answers || [])[i]);
+          setValue(ansEl, (result.subitem_answers || [])[i], true);
         }
         if (!answersOnly) {
           setValue(row.querySelector('textarea[name$="-solution_latex"]'),
-            (result.subitem_solutions || [])[i]);
+            (result.subitem_solutions || [])[i], true);
         }
       });
       return;
     }
     var answerBox = document.getElementById('id_answer_latex');
     if (!answersOnly || (answerBox && !answerBox.value.trim())) {
-      setValue(answerBox, result.answer);
+      setValue(answerBox, result.answer, true);
     }
     if (!answersOnly) {
-      setValue(document.getElementById('id_solution_latex'), result.solution);
+      setValue(document.getElementById('id_solution_latex'), result.solution, true);
     }
   }
 
@@ -246,9 +249,17 @@
 
   function worksheetTasks(extra) {
     extra = extra || '';
-    return Array.prototype.slice.call(
-      document.querySelectorAll(
-        '#ws-items .ws-item[data-task-id]' + extra));
+    var nodes = document.querySelectorAll(
+      '#ws-items .ws-item[data-task-id]' + extra);
+    var seen = {};
+    var unique = [];
+    Array.prototype.forEach.call(nodes, function (item) {
+      var id = item.dataset.taskId;
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      unique.push(item);
+    });
+    return unique;
   }
 
   function runApplyQueue(el, items, extra) {
