@@ -4,6 +4,13 @@ from . import views
 
 urlpatterns = [
     path('', views.worksheet_list, name='worksheet_list'),
+    path('collections/', views.collection_list, name='collection_list'),
+    path('collections/<int:pk>/', views.collection_detail,
+         name='collection_detail'),
+    path('collections/<int:pk>/use/', views.collection_use,
+         name='collection_use'),
+    path('collections/<int:pk>/edit/', views.collection_edit,
+         name='collection_edit'),
     path('new/', views.worksheet_create, name='worksheet_create'),
     path('import/', views.worksheet_import, name='worksheet_import'),
     path('import/solve/', views.worksheet_import_solve,

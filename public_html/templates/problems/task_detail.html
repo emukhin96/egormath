@@ -47,8 +47,8 @@
       <div class="subitem-grid-row">
         <span class="ws-num">{{ forloop.counter0|subitem_label }})</span>
         <div class="math-content">{% if s.text_latex %}{{ s.text_latex|web_text }}{% else %}<span class="muted">—</span>{% endif %}</div>
-        <div class="math-content">{% if s.answer_latex %}{{ s.answer_latex|web_text }}{% else %}<span class="muted">—</span>{% endif %}</div>
-        <div class="math-content">{% if s.solution_latex %}{{ s.solution_latex|web_text|linebreaksbr }}{% else %}<span class="muted">—</span>{% endif %}</div>
+        <div class="math-content">{% if s.effective_answer_latex %}{{ s.effective_answer_latex|web_text }}{% else %}<span class="muted">—</span>{% endif %}</div>
+        <div class="math-content">{% if s.effective_solution_latex %}{{ s.effective_solution_latex|web_text|linebreaksbr }}{% else %}<span class="muted">—</span>{% endif %}</div>
         <form method="post" action="{% url 'task_subitem_update' task.pk s.pk %}"
               class="inline-form"
               onsubmit="return confirm('Удалить подпункт?');">
@@ -100,7 +100,8 @@
 
   {% if not task.subitems.all %}
   <h3>Ответ</h3>
-  <div class="math-content">{% if task.answer_latex %}{{ task.answer_latex|web_text }}{% else %}<span class="muted">—</span>{% endif %}</div>
+  <div class="math-content">{% if task.effective_answer_latex %}{{ task.effective_answer_latex|web_text }}{% else %}<span class="muted">—</span>{% endif %}</div>
+  {% if task.author_answer_latex %}<p class="helptext">Авторский ответ сохранён отдельно{% if task.answer_latex %}; выше показан редакторский/AI-вариант{% endif %}.</p>{% endif %}
   <details class="ws-add-text">
     <summary>править ответ</summary>
     <form method="post" action="{% url 'task_quick_update' task.pk %}"
@@ -111,7 +112,8 @@
     </form>
   </details>
   <h3>Решение</h3>
-  <div class="math-content">{% if task.solution_latex %}{{ task.solution_latex|web_text|linebreaksbr }}{% else %}<span class="muted">—</span>{% endif %}</div>
+  <div class="math-content">{% if task.effective_solution_latex %}{{ task.effective_solution_latex|web_text|linebreaksbr }}{% else %}<span class="muted">—</span>{% endif %}</div>
+  {% if task.author_solution_latex %}<p class="helptext">Авторское решение сохранено отдельно{% if task.solution_latex %}; выше показан редакторский/AI-вариант{% endif %}.</p>{% endif %}
   <details class="ws-add-text">
     <summary>править решение</summary>
     <form method="post" action="{% url 'task_quick_update' task.pk %}"

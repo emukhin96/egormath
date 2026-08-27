@@ -29,8 +29,8 @@ from .forms import WorksheetForm
 from .import_tex import (TexImportError, create_worksheet,
                          match_existing_tasks, parse_tex)
 from .latex import worksheet_to_tex
-from .models import (PdfCompileLock, ShareLink, Worksheet, WorksheetItem,
-                     WorksheetPdf)
+from .models import (Collection, PdfCompileLock, ShareLink, Worksheet,
+                     WorksheetItem, WorksheetPdf)
 from .services import (LatexCompileError, collect_assets, compile_latex,
                        get_worksheet_pdf)
 
@@ -59,7 +59,8 @@ WORKSHEET_ORDERINGS = {
 def worksheet_list(request):
     """Каталог листков: фильтры по классу/теме/датам и сортировка."""
     params = request.GET
-    worksheets = (Worksheet.objects.filter(owner=request.user)
+    worksheets = (Worksheet.objects.filter(
+                      owner=request.user, collection__isnull=True)
                   .prefetch_related('topics', 'grade_bands')
                   .annotate(items_total=models.Count('items', distinct=True)))
 
@@ -335,8 +336,10 @@ def worksheet_detail(request, pk):
         worksheet.assignments.values_list('student_id', flat=True))
     groups = request.user.owned_groups.prefetch_related('students')
 
+    collection = Collection.objects.filter(worksheet=worksheet).first()
     return render(request, 'worksheets/worksheet_detail.html', {
         'worksheet': worksheet,
+        'collection': collection,
         'items': items,
         'rows': rows,
         'found_tasks': found_tasks,
@@ -351,6 +354,82 @@ def worksheet_detail(request, pk):
         'assignments': assignments,
         'deleted_items': deleted_items,
     })
+
+
+@teacher_required
+def collection_list(request):
+    """Каталог опубликованных подборок и черновиков текущего редактора."""
+    collections = (Collection.objects
+                   .filter(models.Q(is_published=True)
+                           | models.Q(worksheet__owner=request.user))
+                   .select_related('worksheet', 'source', 'parent')
+                   .prefetch_related('children')
+                   .annotate(items_total=models.Count(
+                       'worksheet__items',
+                       filter=models.Q(
+                           worksheet__items__deleted_at__isnull=True)))
+                   .order_by('source', 'order', 'pk'))
+    return render(request, 'worksheets/collection_list.html', {
+        'collections': collections,
+    })
+
+
+def _visible_collection(request, pk):
+    collection = get_object_or_404(
+        Collection.objects.select_related('worksheet', 'source', 'parent'),
+        pk=pk)
+    if (not collection.is_published
+            and collection.worksheet.owner_id != request.user.pk
+            and not request.user.is_superuser):
+        raise PermissionDenied
+    return collection
+
+
+@teacher_required
+def collection_detail(request, pk):
+    collection = _visible_collection(request, pk)
+    items = list(collection.worksheet.ordered_items())
+    rows = []
+    number = 0
+    for item in items:
+        if item.task_id:
+            number += 1
+        rows.append({
+            'item': item,
+            'number': number if item.task_id else None,
+            'subitems': item.selected_subitems() if item.task_id else [],
+        })
+    return render(request, 'worksheets/collection_detail.html', {
+        'collection': collection,
+        'worksheet': collection.worksheet,
+        'rows': rows,
+        'can_use': bool(items),
+        'can_edit': collection.worksheet.owner_id == request.user.pk,
+    })
+
+
+@teacher_required
+@require_POST
+def collection_use(request, pk):
+    collection = _visible_collection(request, pk)
+    if not collection.worksheet.items.filter(
+            deleted_at__isnull=True).exists():
+        messages.error(request, 'Организационная группа не содержит элементов.')
+        return redirect('collection_detail', pk=collection.pk)
+    worksheet = collection.worksheet.duplicate(owner=request.user)
+    worksheet.title = collection.worksheet.title
+    worksheet.save(update_fields=['title', 'updated_at'])
+    messages.success(
+        request, f'Подборка «{worksheet.title}» скопирована в мои листки.')
+    return redirect('worksheet_detail', pk=worksheet.pk)
+
+
+@teacher_required
+def collection_edit(request, pk):
+    collection = _visible_collection(request, pk)
+    if collection.worksheet.owner_id != request.user.pk:
+        raise PermissionDenied
+    return redirect('worksheet_detail', pk=collection.worksheet_id)
 
 
 @teacher_required

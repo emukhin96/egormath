@@ -242,6 +242,12 @@ class Task(models.Model):
         help_text='0 — подпункты одной колонкой; N — подпункты в N колонок')
     answer_latex = models.TextField('Ответ (LaTeX)', blank=True)
     solution_latex = models.TextField('Решение (LaTeX)', blank=True)
+    author_answer_latex = models.TextField(
+        'Авторский ответ (LaTeX)', blank=True,
+        help_text='Ответ из задачника; AI и редактор это поле не меняют')
+    author_solution_latex = models.TextField(
+        'Авторское решение (LaTeX)', blank=True,
+        help_text='Решение или указание из задачника; AI это поле не меняет')
     text_plain = models.TextField(
         'Текст для поиска', blank=True, editable=False,
         help_text='Автоматически: условие без LaTeX-команд')
@@ -313,7 +319,19 @@ class Task(models.Model):
 
     @property
     def has_subitem_answers(self):
-        return any(s.answer_latex.strip() for s in self.subitems.all())
+        return any(s.effective_answer_latex for s in self.subitems.all())
+
+    @property
+    def effective_answer_latex(self):
+        """Проверенная редакторская/AI-версия, иначе текст из источника."""
+        return (self.answer_latex or '').strip() or \
+            (self.author_answer_latex or '').strip()
+
+    @property
+    def effective_solution_latex(self):
+        """Проверенная редакторская/AI-версия, иначе текст из источника."""
+        return (self.solution_latex or '').strip() or \
+            (self.author_solution_latex or '').strip()
 
     @property
     def has_blank_answer(self):
@@ -324,8 +342,8 @@ class Task(models.Model):
         """
         subs = list(self.subitems.all())
         if subs:
-            return any(not s.answer_latex.strip() for s in subs)
-        return not (self.answer_latex or '').strip()
+            return any(not s.effective_answer_latex for s in subs)
+        return not self.effective_answer_latex
 
     def make_variant(self, user=None):
         """Скрытая копия задачи для «локальной» правки в одном листке."""
@@ -340,13 +358,17 @@ class Task(models.Model):
         copy.tags.set(original.tags.all())
         for ref in original.source_refs.all():
             TaskSource.objects.create(
-                task=copy, source=ref.source, number=ref.number)
+                task=copy, source=ref.source, number=ref.number,
+                locator=None, source_path=ref.source_path,
+                page=ref.page)
         for sub in original.subitems.all():
             TaskSubitem.objects.create(
                 task=copy, order=sub.order,
                 text_latex=sub.text_latex,
                 answer_latex=sub.answer_latex,
-                solution_latex=sub.solution_latex)
+                solution_latex=sub.solution_latex,
+                author_answer_latex=sub.author_answer_latex,
+                author_solution_latex=sub.author_solution_latex)
         for img in original.images.all():
             # Копия строки ссылается на тот же файл в storage
             copy.images.create(image=img.image.name, order=img.order)
@@ -478,6 +500,10 @@ class TaskSubitem(models.Model):
     text_latex = models.TextField('Текст подпункта (LaTeX)')
     answer_latex = models.TextField('Ответ (LaTeX)', blank=True)
     solution_latex = models.TextField('Решение (LaTeX)', blank=True)
+    author_answer_latex = models.TextField(
+        'Авторский ответ (LaTeX)', blank=True)
+    author_solution_latex = models.TextField(
+        'Авторское решение (LaTeX)', blank=True)
 
     class Meta:
         verbose_name = 'Подпункт задачи'
@@ -488,6 +514,16 @@ class TaskSubitem(models.Model):
         return f'Задача #{self.task_id}, подпункт {self.order}: ' \
                f'{strip_latex(self.text_latex)[:40]}'
 
+    @property
+    def effective_answer_latex(self):
+        return (self.answer_latex or '').strip() or \
+            (self.author_answer_latex or '').strip()
+
+    @property
+    def effective_solution_latex(self):
+        return (self.solution_latex or '').strip() or \
+            (self.author_solution_latex or '').strip()
+
 
 class TaskSource(models.Model):
     task = models.ForeignKey(
@@ -497,8 +533,16 @@ class TaskSource(models.Model):
         Source, on_delete=models.CASCADE, related_name='task_refs',
         verbose_name='Источник')
     number = models.CharField(
-        'Номер в источнике', max_length=32,
+        'Номер в источнике', max_length=190,
         help_text='Например: 123, 5.17а, №452')
+    locator = models.CharField(
+        'Ключ в источнике', max_length=190, null=True, blank=True,
+        help_text='Стабильный ключ импорта, например 1.1.A01')
+    source_path = models.JSONField(
+        'Путь в источнике', default=list, blank=True,
+        help_text='Глава, параграф, уровень или вариант')
+    page = models.PositiveIntegerField(
+        'Страница', null=True, blank=True)
 
     class Meta:
         verbose_name = 'Номер задачи в источнике'
@@ -506,10 +550,132 @@ class TaskSource(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=['task', 'source'], name='unique_task_source'),
+            models.UniqueConstraint(
+                fields=['source', 'locator'],
+                name='unique_source_locator'),
         ]
 
     def __str__(self):
         return f'{self.source} № {self.number}'
+
+    def save(self, *args, **kwargs):
+        """При ручной смене источника старый ключ импорта недействителен."""
+        changed_source = False
+        if self.pk:
+            previous_source = (TaskSource.objects.filter(pk=self.pk)
+                               .values_list('source_id', flat=True).first())
+            changed_source = (previous_source is not None
+                              and previous_source != self.source_id)
+        if changed_source:
+            self.locator = None
+            self.source_path = []
+            self.page = None
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None:
+                kwargs['update_fields'] = list(set(update_fields) | {
+                    'locator', 'source_path', 'page'})
+        super().save(*args, **kwargs)
+
+
+class TextbookImportBatch(models.Model):
+    """Партия черновиков, полученная из проверяемого JSON парсера."""
+
+    STATUS_REVIEW = 'review'
+    STATUS_READY = 'ready'
+    STATUS_IMPORTED = 'imported'
+    STATUS_CHOICES = [
+        (STATUS_REVIEW, 'На проверке'),
+        (STATUS_READY, 'Готова к загрузке'),
+        (STATUS_IMPORTED, 'Загружена'),
+    ]
+
+    title = models.CharField('Название партии', max_length=190)
+    profile = models.CharField('Профиль парсера', max_length=32)
+    source = models.ForeignKey(
+        Source, on_delete=models.PROTECT, related_name='import_batches',
+        verbose_name='Источник')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name='textbook_import_batches', verbose_name='Редактор')
+    status = models.CharField(
+        'Статус', max_length=12, choices=STATUS_CHOICES,
+        default=STATUS_REVIEW)
+    diagnostics = models.JSONField('Диагностика', default=dict, blank=True)
+    created_at = models.DateTimeField('Создана', auto_now_add=True)
+    updated_at = models.DateTimeField('Изменена', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Импорт задачника'
+        verbose_name_plural = 'Импорты задачников'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.title
+
+
+class TextbookTaskDraft(models.Model):
+    """Одна вручную проверяемая задача до записи в рабочий каталог."""
+
+    STATUS_REVIEW = 'needs_review'
+    STATUS_APPROVED = 'approved'
+    STATUS_CONFLICT = 'conflict'
+    STATUS_SKIPPED = 'skipped'
+    STATUS_CHOICES = [
+        (STATUS_REVIEW, 'Не проверена'),
+        (STATUS_APPROVED, 'Одобрена'),
+        (STATUS_CONFLICT, 'Конфликт'),
+        (STATUS_SKIPPED, 'Пропущена'),
+    ]
+
+    batch = models.ForeignKey(
+        TextbookImportBatch, on_delete=models.CASCADE, related_name='drafts',
+        verbose_name='Партия')
+    external_id = models.CharField('Ключ задачи', max_length=190)
+    source_number = models.CharField('Номер в источнике', max_length=190)
+    source_path = models.JSONField('Путь в источнике', default=list, blank=True)
+    collection_key = models.CharField(
+        'Ключ подборки', max_length=500, blank=True)
+    collection_title = models.CharField(
+        'Название подборки', max_length=190, blank=True)
+    topic_original = models.CharField(
+        'Тема в задачнике', max_length=255, blank=True)
+    topic = models.ForeignKey(
+        Topic, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='textbook_drafts', verbose_name='Тема рубрикатора')
+    text_latex = models.TextField('Условие (LaTeX)')
+    subitems = models.JSONField('Подпункты', default=list, blank=True)
+    images = models.JSONField('Изображения', default=list, blank=True)
+    author_answer_latex = models.TextField('Авторский ответ', blank=True)
+    author_solution_latex = models.TextField('Авторское решение', blank=True)
+    solution_source_external_id = models.CharField(
+        'Ключ сопоставленного решения', max_length=190, blank=True)
+    confidence = models.DecimalField(
+        'Уверенность', max_digits=4, decimal_places=3, default=0)
+    warnings = models.JSONField('Предупреждения', default=list, blank=True)
+    status = models.CharField(
+        'Статус', max_length=16, choices=STATUS_CHOICES,
+        default=STATUS_REVIEW)
+    imported_task = models.ForeignKey(
+        Task, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='textbook_drafts', verbose_name='Созданная задача')
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='reviewed_textbook_drafts',
+        verbose_name='Проверил')
+    reviewed_at = models.DateTimeField('Проверена', null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Черновик задачи из задачника'
+        verbose_name_plural = 'Черновики задач из задачника'
+        ordering = ['external_id', 'pk']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['batch', 'external_id'],
+                name='unique_batch_external_task'),
+        ]
+
+    def __str__(self):
+        return f'{self.batch}: {self.external_id}'
 
 
 class NeuroSolveQuota(models.Model):

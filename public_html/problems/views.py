@@ -2,22 +2,26 @@ import json
 import re
 
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import IntegrityError
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 
 from accounts.decorators import teacher_required
 
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
-                    TaskSubitemFormSet)
+                    TaskSubitemFormSet, TextbookBundleUploadForm,
+                    TextbookDraftReviewForm)
 from .models import (Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
-                     Topic, topic_tree)
+                     TextbookImportBatch, TextbookTaskDraft, Topic,
+                     topic_tree)
 from .rubricator import (GRADE_LEVEL_TO_CODE, apply_task_taxonomy,
                          dumps_state, filter_by_taxonomy,
                          filter_state_from_params, parse_grade_choice,
@@ -717,3 +721,183 @@ def task_neuro_solve(request):
         if acquired_at is not None:
             release_quota(request.user, acquired_at)
     return JsonResponse(result)
+
+
+def _own_import_batch(request, pk):
+    batch = get_object_or_404(TextbookImportBatch, pk=pk)
+    if batch.created_by_id != request.user.pk and not request.user.is_superuser:
+        raise PermissionDenied
+    return batch
+
+
+@teacher_required
+def textbook_import_list(request):
+    batches = TextbookImportBatch.objects.all()
+    if not request.user.is_superuser:
+        batches = batches.filter(created_by=request.user)
+    batches = (batches.select_related('source', 'created_by')
+               .annotate(total=Count('drafts')))
+    return render(request, 'problems/textbook_import_list.html', {
+        'batches': batches,
+    })
+
+
+@teacher_required
+def textbook_import_upload(request):
+    from .textbook_import import (TextbookImportError,
+                                  create_batch_from_bundle, read_bundle)
+    if request.method == 'POST':
+        form = TextbookBundleUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            try:
+                payload = read_bundle(form.cleaned_data['bundle'])
+                batch = create_batch_from_bundle(
+                    payload, user=request.user,
+                    title=form.cleaned_data['title'],
+                    source_title=form.cleaned_data['source_title'],
+                    source_author=form.cleaned_data['source_author'],
+                    source_year=form.cleaned_data['source_year'])
+            except TextbookImportError as exc:
+                form.add_error('bundle', str(exc))
+            else:
+                messages.success(
+                    request,
+                    f'Партия создана: {batch.drafts.count()} задач.')
+                return redirect('textbook_import_detail', pk=batch.pk)
+    else:
+        form = TextbookBundleUploadForm()
+    return render(request, 'problems/textbook_import_upload.html', {
+        'form': form,
+    })
+
+
+@teacher_required
+def textbook_import_detail(request, pk):
+    batch = _own_import_batch(request, pk)
+    status = request.GET.get('status', '')
+    drafts = batch.drafts.select_related('topic', 'imported_task')
+    if status in dict(TextbookTaskDraft.STATUS_CHOICES):
+        drafts = drafts.filter(status=status)
+    paginator = Paginator(drafts, 50)
+    page = paginator.get_page(request.GET.get('page'))
+    counts = dict(batch.drafts.values_list('status').annotate(n=Count('pk')))
+    status_tabs = [
+        {'value': value, 'label': label, 'count': counts.get(value, 0)}
+        for value, label in TextbookTaskDraft.STATUS_CHOICES
+    ]
+    return render(request, 'problems/textbook_import_detail.html', {
+        'batch': batch,
+        'page': page,
+        'counts': counts,
+        'status': status,
+        'status_tabs': status_tabs,
+    })
+
+
+@teacher_required
+def textbook_import_review(request, batch_pk, pk):
+    batch = _own_import_batch(request, batch_pk)
+    draft = get_object_or_404(
+        TextbookTaskDraft.objects.select_related('topic'),
+        batch=batch, pk=pk)
+    if request.method == 'POST':
+        form = TextbookDraftReviewForm(request.POST, instance=draft)
+        if form.is_valid():
+            updated = form.save(commit=False)
+            source_key = form.cleaned_data.get('copy_solution_from', '').strip()
+            if source_key:
+                candidate = batch.drafts.filter(external_id=source_key).first()
+                if candidate is None:
+                    form.add_error(
+                        'copy_solution_from', 'В этой партии такого ключа нет.')
+                else:
+                    used = (batch.drafts
+                            .exclude(pk=draft.pk)
+                            .filter(solution_source_external_id=source_key,
+                                    status=TextbookTaskDraft.STATUS_APPROVED)
+                            .first())
+                    if used:
+                        form.add_error(
+                            'copy_solution_from',
+                            f'Решение уже одобрено для {used.external_id}.')
+                    else:
+                        updated.author_answer_latex = \
+                            candidate.author_answer_latex
+                        updated.author_solution_latex = \
+                            candidate.author_solution_latex
+                        updated.solution_source_external_id = source_key
+            else:
+                updated.solution_source_external_id = ''
+            if not form.errors:
+                updated.reviewed_by = request.user
+                updated.reviewed_at = timezone.now()
+                updated.save()
+                messages.success(request, f'{updated.external_id}: сохранено.')
+                next_draft = (batch.drafts
+                              .filter(external_id__gt=updated.external_id)
+                              .order_by('external_id', 'pk').first())
+                if request.POST.get('save_next') and next_draft:
+                    return redirect(
+                        'textbook_import_review', batch_pk=batch.pk,
+                        pk=next_draft.pk)
+                return redirect('textbook_import_detail', pk=batch.pk)
+    else:
+        solution_key = draft.solution_source_external_id
+        if solution_key == draft.external_id:
+            solution_key = ''
+        form = TextbookDraftReviewForm(
+            instance=draft,
+            initial={'copy_solution_from': solution_key})
+    previous = (batch.drafts.filter(external_id__lt=draft.external_id)
+                .order_by('-external_id', '-pk').first())
+    following = (batch.drafts.filter(external_id__gt=draft.external_id)
+                 .order_by('external_id', 'pk').first())
+    candidates = (batch.drafts.exclude(pk=draft.pk)
+                  .exclude(author_solution_latex='')
+                  .order_by('external_id')[:12])
+    return render(request, 'problems/textbook_import_review.html', {
+        'batch': batch,
+        'draft': draft,
+        'form': form,
+        'previous': previous,
+        'following': following,
+        'candidates': candidates,
+    })
+
+
+@teacher_required
+@require_POST
+def textbook_import_approve_clean(request, pk):
+    batch = _own_import_batch(request, pk)
+    drafts = list(batch.drafts.filter(
+        status=TextbookTaskDraft.STATUS_REVIEW))
+    approved = []
+    now = timezone.now()
+    for draft in drafts:
+        if not draft.warnings and draft.confidence == 1 and draft.topic_id:
+            draft.status = TextbookTaskDraft.STATUS_APPROVED
+            draft.reviewed_by = request.user
+            draft.reviewed_at = now
+            approved.append(draft)
+    TextbookTaskDraft.objects.bulk_update(
+        approved, ['status', 'reviewed_by', 'reviewed_at'])
+    messages.success(request, f'Автоматически одобрено: {len(approved)}.')
+    return redirect('textbook_import_detail', pk=batch.pk)
+
+
+@teacher_required
+@require_POST
+def textbook_import_commit(request, pk):
+    from .textbook_import import TextbookImportError, commit_batch
+    batch = _own_import_batch(request, pk)
+    try:
+        result = commit_batch(batch, user=request.user)
+    except TextbookImportError as exc:
+        messages.error(request, str(exc))
+        return redirect('textbook_import_detail', pk=batch.pk)
+    messages.success(
+        request,
+        'Импорт завершён: создано задач — %(created)s, '
+        'переиспользовано — %(reused)s, новых подборок — %(collections)s.'
+        % result)
+    return redirect('collection_list')

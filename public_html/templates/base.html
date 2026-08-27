@@ -34,6 +34,7 @@
         {% if user.profile.is_teacher or user.is_superuser %}
           <a href="{% url 'task_list' %}"{% if 'task' in request.resolver_match.url_name or request.resolver_match.url_name == 'bulk_answers' %} class="is-active"{% endif %}>База задач</a>
           <a href="{% url 'worksheet_list' %}"{% if 'worksheet' in request.resolver_match.url_name %} class="is-active"{% endif %}>Листки</a>
+          <a href="{% url 'collection_list' %}"{% if 'collection' in request.resolver_match.url_name %} class="is-active"{% endif %}>Подборки</a>
           <a href="{% url 'students' %}"{% if 'student' in request.resolver_match.url_name or 'group' in request.resolver_match.url_name %} class="is-active"{% endif %}>Ученики</a>
         {% endif %}
       </nav>

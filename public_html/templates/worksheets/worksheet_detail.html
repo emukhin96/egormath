@@ -6,7 +6,7 @@
 {# Шапка в стандартном .page-head — как на остальных страницах #}
 <div class="page-head">
 <div>
-<span class="page-eyebrow">Конструктор листка</span>
+<span class="page-eyebrow">{% if collection %}Конструктор подборки{% else %}Конструктор листка{% endif %}</span>
 {# Заголовок и подзаголовок редактируются кликом по тексту (builder.js) #}
 <h1 class="ws-title">
   <span class="ws-editable" data-edit="title" tabindex="0" role="button"
@@ -26,6 +26,13 @@
 {% endif %}
 </div>
 </div>
+{% if collection %}
+<div class="msg msg-warning">
+  Это каталожная подборка из источника «{{ collection.source }}».
+  Все изменения сразу меняют её backing-листок; личную копию создаёт кнопка
+  «Использовать подборку» на странице каталога.
+</div>
+{% endif %}
 <form id="title-inline-form" method="post" hidden
       action="{% url 'worksheet_rename' worksheet.pk %}">{% csrf_token %}</form>
 <form id="subtitle-inline-form" method="post" hidden
@@ -66,7 +73,7 @@
   <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}">
     {% for row in rows %}
     {% with item=row.item %}
-    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" data-id="{{ item.pk }}"{% if item.task_id %} data-task-id="{{ item.task.pk }}" data-has-answer="{% if item.task.answer_latex or item.task.solution_latex or item.task.has_subitem_answers %}1{% endif %}" data-no-answer="{% if item.task.has_blank_answer %}1{% endif %}"{% endif %}>
+    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" data-id="{{ item.pk }}"{% if item.task_id %} data-task-id="{{ item.task.pk }}" data-has-answer="{% if item.task.effective_answer_latex or item.task.effective_solution_latex or item.task.has_subitem_answers %}1{% endif %}" data-no-answer="{% if item.task.has_blank_answer %}1{% endif %}"{% endif %}>
       <div class="ws-body">
         <span class="drag-handle" title="Перетащите, чтобы изменить порядок">⠿</span>
 
@@ -99,19 +106,19 @@
                        {% if row.selected_ids == None or s.pk in row.selected_ids %}checked{% endif %}>
                 <span class="math-content">{{ s.text_latex|web_text }}</span>{{ s.text_latex|subitem_tail:forloop.last }}
               </label>
-              {% if s.answer_latex %}<span class="ws-answers muted"> — ответ: <span class="math-content">{{ s.answer_latex }}</span></span>{% endif %}
+              {% if s.effective_answer_latex %}<span class="ws-answers muted"> — ответ: <span class="math-content">{{ s.effective_answer_latex }}</span></span>{% endif %}
             </li>
             {% endfor %}
           </ol>
           {% endif %}
           {% include 'problems/_task_images.html' with task=item.task %}
-          {% if item.task.answer_latex or item.task.solution_latex %}
+          {% if item.task.effective_answer_latex or item.task.effective_solution_latex %}
           <div class="ws-answers">
-            {% if item.task.answer_latex %}
-            <div class="answer-box math-content"><strong>Ответ:</strong> {{ item.task.answer_latex }}</div>
+            {% if item.task.effective_answer_latex %}
+            <div class="answer-box math-content"><strong>Ответ:</strong> {{ item.task.effective_answer_latex }}</div>
             {% endif %}
-            {% if item.task.solution_latex %}
-            <div class="solution-box math-content"><strong>Решение:</strong> {{ item.task.solution_latex|linebreaksbr }}</div>
+            {% if item.task.effective_solution_latex %}
+            <div class="solution-box math-content"><strong>Решение:</strong> {{ item.task.effective_solution_latex|linebreaksbr }}</div>
             {% endif %}
           </div>
           {% endif %}

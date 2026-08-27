@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from .models import (ExamItem, ExamModel, FacetType, FacetValue, GradeBand,
                      Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
-                     Topic)
+                     TextbookImportBatch, TextbookTaskDraft, Topic)
 
 
 @admin.register(Topic)
@@ -33,6 +33,14 @@ class TaskSourceInline(admin.TabularInline):
 class TaskSubitemInline(admin.TabularInline):
     model = TaskSubitem
     extra = 0
+
+
+class TextbookTaskDraftInline(admin.TabularInline):
+    model = TextbookTaskDraft
+    extra = 0
+    fields = ('external_id', 'source_number', 'status', 'confidence')
+    readonly_fields = fields
+    show_change_link = True
 
 
 class TaskImageInline(admin.TabularInline):
@@ -79,3 +87,17 @@ class ExamItemAdmin(admin.ModelAdmin):
     list_display = ('code', 'item_number', 'name', 'exam_model')
     list_filter = ('exam_model',)
     search_fields = ('code', 'name')
+
+
+@admin.register(TextbookImportBatch)
+class TextbookImportBatchAdmin(admin.ModelAdmin):
+    list_display = ('title', 'source', 'profile', 'status', 'created_at')
+    list_filter = ('status', 'profile')
+    inlines = [TextbookTaskDraftInline]
+
+
+@admin.register(TextbookTaskDraft)
+class TextbookTaskDraftAdmin(admin.ModelAdmin):
+    list_display = ('external_id', 'batch', 'status', 'confidence', 'topic')
+    list_filter = ('status', 'batch')
+    search_fields = ('external_id', 'source_number', 'text_latex')

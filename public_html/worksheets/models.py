@@ -98,11 +98,13 @@ class Worksheet(models.Model):
         suffix = {'answers': '-otvety', 'teacher': '-uchitel'}.get(variant, '')
         return f'{base}{suffix}.pdf'
 
-    def duplicate(self):
+    def duplicate(self, owner=None):
         """Полная копия листка со всеми элементами и настройками."""
         copy = Worksheet.objects.get(pk=self.pk)
         copy.pk = None
         copy.title = f'{self.title} (копия)'
+        if owner is not None:
+            copy.owner = owner
         copy.save()
         copy.topics.set(self.topics.all())
         copy.grade_bands.set(self.grade_bands.all())
@@ -114,6 +116,38 @@ class Worksheet(models.Model):
             if selected:
                 item.subitems.set(selected)
         return copy
+
+
+class Collection(models.Model):
+    """Каталожная подборка с полноценным Worksheet как содержимым."""
+
+    worksheet = models.OneToOneField(
+        Worksheet, on_delete=models.CASCADE, related_name='collection',
+        verbose_name='Листок-содержимое')
+    source = models.ForeignKey(
+        'problems.Source', on_delete=models.PROTECT,
+        related_name='collections', verbose_name='Источник')
+    parent = models.ForeignKey(
+        'self', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='children', verbose_name='Родительская подборка')
+    locator = models.CharField('Ключ в источнике', max_length=500)
+    source_path = models.JSONField(
+        'Путь в источнике', default=list, blank=True)
+    order = models.PositiveIntegerField('Порядок', default=0)
+    is_published = models.BooleanField('Опубликована', default=False)
+
+    class Meta:
+        verbose_name = 'Подборка'
+        verbose_name_plural = 'Подборки'
+        ordering = ['source', 'order', 'pk']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['source', 'locator'],
+                name='unique_collection_source_locator'),
+        ]
+
+    def __str__(self):
+        return self.worksheet.title
 
 
 class WorksheetItem(models.Model):

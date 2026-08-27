@@ -2649,6 +2649,29 @@
     border-color: var(--accent);
     background: #eef5ff;
   }
+
+  .import-review-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-4);
+    align-items: start;
+  }
+
+  .import-review-grid textarea,
+  .import-review-grid select,
+  .import-review-grid input[type="text"] {
+    width: 100%;
+  }
+
+  .import-review-actions {
+    grid-column: 1 / -1;
+  }
+
+  @media (max-width: 900px) {
+    .import-review-grid {
+      grid-template-columns: 1fr;
+    }
+  }
 }
 
 @counter-style cyrillic-lower {

@@ -38,20 +38,20 @@
         {% if sr.part and sr.part.display_answer %}
           <span class="math-content">{{ sr.part.display_answer }}</span>
         {% else %}<span class="muted">нет</span>{% endif %}
-        {% if sr.subitem.answer_latex %}
-          <span class="muted">(эталон: <span class="math-content">{{ sr.subitem.answer_latex }}</span>)</span>
+        {% if sr.subitem.effective_answer_latex %}
+          <span class="muted">(эталон: <span class="math-content">{{ sr.subitem.effective_answer_latex }}</span>)</span>
         {% endif %}
       </li>
       {% endfor %}
     </ol>
     {% endif %}
 
-    {% if row.task.answer_latex %}
-    <div class="answer-box math-content"><strong>Эталонный ответ:</strong> {{ row.task.answer_latex }}</div>
+    {% if row.task.effective_answer_latex %}
+    <div class="answer-box math-content"><strong>Эталонный ответ:</strong> {{ row.task.effective_answer_latex }}</div>
     {% endif %}
-    {% if row.task.solution_latex %}
+    {% if row.task.effective_solution_latex %}
     <details><summary class="muted">Эталонное решение</summary>
-      <div class="solution-box math-content">{{ row.task.solution_latex|linebreaksbr }}</div>
+      <div class="solution-box math-content">{{ row.task.effective_solution_latex|linebreaksbr }}</div>
     </details>
     {% endif %}
 

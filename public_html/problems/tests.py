@@ -426,6 +426,22 @@ class NeuroTests(TestCase):
         self.assertEqual(task.answer_latex, '4')
         self.assertEqual(task.solution_latex, 'старое')
 
+    def test_apply_result_never_changes_author_fields(self):
+        """AI пишет только в редакторские поля, авторский текст неизменяем."""
+        from .neuro import apply_result
+        task = Task.objects.create(
+            text_latex='Задача', author_answer_latex='автор: 4',
+            author_solution_latex='авторское решение',
+            created_by=make_teacher())
+        apply_result(
+            task, {'answer': 'AI: 4', 'solution': 'AI-решение'},
+            overwrite=True)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, 'AI: 4')
+        self.assertEqual(task.solution_latex, 'AI-решение')
+        self.assertEqual(task.author_answer_latex, 'автор: 4')
+        self.assertEqual(task.author_solution_latex, 'авторское решение')
+
     def test_has_blank_answer(self):
         teacher = make_teacher()
         empty = Task.objects.create(text_latex='Пустая', created_by=teacher)
@@ -433,6 +449,10 @@ class NeuroTests(TestCase):
         answer_only = Task.objects.create(
             text_latex='Есть ответ', answer_latex='4', created_by=teacher)
         self.assertFalse(answer_only.has_blank_answer)
+        author_answer = Task.objects.create(
+            text_latex='Есть авторский ответ', author_answer_latex='5',
+            created_by=teacher)
+        self.assertFalse(author_answer.has_blank_answer)
         solution_only = Task.objects.create(
             text_latex='Есть решение', solution_latex='Шаг', created_by=teacher)
         self.assertTrue(solution_only.has_blank_answer)
@@ -444,6 +464,13 @@ class NeuroTests(TestCase):
         mixed.subitems.create(order=10, text_latex='а', answer_latex='1')
         mixed.subitems.create(order=20, text_latex='б')
         self.assertTrue(mixed.has_blank_answer)
+        author_subitems = Task.objects.create(
+            text_latex='Авторские подпункты', created_by=teacher)
+        author_subitems.subitems.create(
+            order=10, text_latex='а', author_answer_latex='1')
+        author_subitems.subitems.create(
+            order=20, text_latex='б', author_answer_latex='2')
+        self.assertFalse(author_subitems.has_blank_answer)
 
     def test_apply_holds_quota_until_write(self):
         """apply_result идёт при занятой квоте, иначе гонка overwrite."""
@@ -844,6 +871,33 @@ class TaskModelTests(TestCase):
         # Оригинал не тронут
         original = task.subitems.get()
         self.assertEqual(original.solution_latex, 'Сложение')
+
+    def test_make_variant_does_not_claim_import_locator(self):
+        from problems.models import Source, TaskSource
+        source = Source.objects.create(title='Задачник вариантов')
+        task = Task.objects.create(text_latex='Исходная задача')
+        TaskSource.objects.create(
+            task=task, source=source, number='12', locator='chapter/12',
+            source_path=['Глава'])
+        variant = task.make_variant()
+        copied = variant.source_refs.get()
+        self.assertIsNone(copied.locator)
+        self.assertEqual(copied.source_path, ['Глава'])
+
+    def test_changing_source_clears_import_provenance(self):
+        from problems.models import Source, TaskSource
+        first = Source.objects.create(title='Первый задачник')
+        second = Source.objects.create(title='Второй задачник')
+        task = Task.objects.create(text_latex='Задача из источника')
+        ref = TaskSource.objects.create(
+            task=task, source=first, number='7', locator='chapter/7',
+            source_path=['Глава'], page=12)
+        ref.source = second
+        ref.save(update_fields=['source'])
+        ref.refresh_from_db()
+        self.assertIsNone(ref.locator)
+        self.assertEqual(ref.source_path, [])
+        self.assertIsNone(ref.page)
 
 
 class CatalogViewTests(TestCase):

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ShareLink, Worksheet, WorksheetItem, WorksheetPdf
+from .models import Collection, ShareLink, Worksheet, WorksheetItem, WorksheetPdf
 
 
 class WorksheetItemInline(admin.TabularInline):
@@ -28,3 +28,10 @@ class WorksheetPdfAdmin(admin.ModelAdmin):
     list_display = ('worksheet', 'variant', 'content_hash', 'created_at')
     list_filter = ('variant',)
     readonly_fields = ('worksheet', 'variant', 'content_hash', 'file', 'created_at')
+
+
+@admin.register(Collection)
+class CollectionAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'source', 'parent', 'is_published', 'order')
+    list_filter = ('is_published', 'source')
+    search_fields = ('worksheet__title', 'locator')
