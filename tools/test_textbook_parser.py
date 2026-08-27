@@ -195,6 +195,29 @@ class TextbookParserTests(unittest.TestCase):
             [item.label for item in tasks[0].subitems], ["а", "б"])
         self.assertIn("нуль", tasks[0].subitems[0].text_latex)
         self.assertIn("минимум", tasks[0].subitems[0].text_latex)
+        self.assertNotIn(r"\item", tasks[0].subitems[0].text_latex)
+        self.assertIn("1)~нуль", tasks[0].subitems[0].text_latex)
+
+    def test_misnested_second_letter_is_promoted_over_numbered_items(self):
+        task_text = "\n".join([
+            "7.1.A01 a) Первый график:",
+            r"\begin{itemize}",
+            r"\item[1)] нули;",
+            r"\item[2)] минимум.",
+            r"\item[б)] Второй график:",
+            r"\begin{itemize}",
+            r"\item[1)] нули;",
+            r"\end{itemize}",
+            r"\item[2)] максимум.",
+            r"\end{itemize}",
+        ])
+        tasks, _ = parse_shestakov(task_text, "")
+        self.assertEqual(
+            [item.label for item in tasks[0].subitems], ["a", "б"])
+        self.assertTrue(all(
+            r"\item" not in item.text_latex for item in tasks[0].subitems))
+        self.assertIn("1)~нули", tasks[0].subitems[0].text_latex)
+        self.assertIn("2)~максимум", tasks[0].subitems[1].text_latex)
 
     def test_interleaved_column_tail_returns_to_previous_task(self):
         task_text = "\n".join([
@@ -384,6 +407,34 @@ class TextbookParserTests(unittest.TestCase):
         self.assertNotIn(r"\begin{figure}", combined)
         self.assertNotIn("\n\n", combined)
 
+    def test_existing_taskpic_is_included_in_assets_and_renumbered(self):
+        task_text = "\n".join([
+            "7.1.D03 Задача с рисунками.",
+            r"\taskpic{already-normalized.png}",
+            r"\includegraphics{second-image.jpg}",
+        ])
+        tasks, _ = parse_shestakov(task_text, "")
+        self.assertEqual(
+            tasks[0].images,
+            ["already-normalized.png", "second-image.jpg"],
+        )
+        self.assertIn(r"\taskpic{1}", tasks[0].text_latex)
+        self.assertIn(r"\taskpic{2}", tasks[0].text_latex)
+
+    def test_solution_reference_to_task_code_is_not_a_marker(self):
+        task_text = "\n".join([
+            "1.1.A01 Первая задача.",
+            "1.1.A02 Вторая задача.",
+        ])
+        solution_text = "\n".join([
+            "1.1.A01 Ответ: смотрите задачу 1.1.A02",
+            "и получаем ответ 1.",
+        ])
+        tasks, diagnostics = parse_shestakov(task_text, solution_text)
+        self.assertIn("1.1.A02", tasks[0].author_solution_latex)
+        self.assertEqual(tasks[1].author_solution_latex, "")
+        self.assertEqual(diagnostics["matched_solutions"], 1)
+
     def test_shestakov_keeps_full_solution_without_explicit_answer(self):
         task_text = "1.1.A01 Докажите тождество."
         solution_text = "1.1.A01 Раскроем скобки и приведём подобные."
@@ -392,6 +443,15 @@ class TextbookParserTests(unittest.TestCase):
         self.assertEqual(
             tasks[0].author_solution_latex,
             "Раскроем скобки и приведём подобные.")
+
+    def test_full_solution_drops_only_edge_linebreaks(self):
+        task_text = "1.1.A01 Исследуйте функцию."
+        solution_text = "1.1.A01\n\\\\\nПервая строка.\\\\\nВторая строка.\\\\"
+        tasks, _ = parse_shestakov(task_text, solution_text)
+        solution = tasks[0].author_solution_latex
+        self.assertFalse(solution.startswith(r"\\"))
+        self.assertFalse(solution.endswith(r"\\"))
+        self.assertIn(r"Первая строка.\\", solution)
 
     def test_shestakov_trims_exam_appendices_after_last_task(self):
         task_text = "\n".join([

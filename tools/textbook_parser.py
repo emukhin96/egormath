@@ -39,6 +39,9 @@ ANY_ITEM_RE = re.compile(
     r"\\item(?:\[\s*(?P<label>[^]]+?)\s*\])?[ \t]*")
 RAW_IMAGE_RE = re.compile(
     r"\\includegraphics\s*(?:\[[^]]*\])?\s*\{(?P<path>[^{}]+)\}")
+TASK_IMAGE_RE = re.compile(
+    r"\\(?:includegraphics|taskpic)\s*(?:\[[^]]*\])?\s*"
+    r"\{(?P<path>[^{}]+)\}")
 FLOAT_WRAPPER_RE = re.compile(
     r"\\(?:begin|end)\{(?:figure|center)\}(?:\[[^]]*\])?")
 FLOAT_META_COMMAND_RE = re.compile(
@@ -156,9 +159,17 @@ def clean(value: str) -> str:
     return value.strip()
 
 
-def strip_outer_lists(value: str) -> str:
+def strip_outer_lists(value: str, *, flatten_items: bool = True) -> str:
     value = BLOCK_WRAPPER_RE.sub("", value)
-    return clean(EMPTY_ITEM_RE.sub("", value))
+    value = EMPTY_ITEM_RE.sub("", value)
+    if flatten_items:
+        value = ANY_ITEM_RE.sub(
+            lambda match: (
+                " " + clean(match.group("label") or "") + "~"
+                if match.group("label") else " "),
+            value,
+        )
+    return clean(value)
 
 
 def path_at(all_sections: Sequence[Section], pos: int) -> list[str]:
@@ -220,6 +231,36 @@ def split_subitems(body: str) -> tuple[str, list[SubitemDraft]]:
         min_depth = min(marker[3] for marker in marker_data)
         markers = [marker[:3] for marker in marker_data
                    if marker[3] == min_depth]
+        letter_markers = [
+            marker for marker in marker_data
+            if marker[2].isalpha() or marker[2] == "6"
+        ]
+        if letter_markers:
+            letter_depth = min(marker[3] for marker in letter_markers)
+            shallow_letters = [
+                marker for marker in letter_markers
+                if marker[3] == letter_depth
+            ]
+            # OCR иногда ошибочно вкладывает б) в список
+            # числовых пунктов а); поднимаем один уровень, только
+            # если на минимальной глубине нет пары буквенных меток.
+            deeper_letters = [
+                marker for marker in letter_markers
+                if marker[3] == letter_depth + 1
+            ]
+            can_promote_pair = (
+                len(shallow_letters) == 1
+                and len(deeper_letters) == 1
+                and shallow_letters[0][2].lower() in {"a", "а"}
+                and deeper_letters[0][2].lower() in {"b", "б", "6"}
+            )
+            chosen_letters = (
+                shallow_letters if len(shallow_letters) >= 2
+                else shallow_letters + deeper_letters
+                if can_promote_pair else []
+            )
+            if letter_depth == min_depth and len(chosen_letters) >= 2:
+                markers = [marker[:3] for marker in chosen_letters]
     # Один item часто является оболочкой OCR, а не настоящим подпунктом.
     if len(markers) < 2:
         return strip_outer_lists(body), []
@@ -271,9 +312,9 @@ def extract_images(body: str) -> list[str]:
 def normalize_task_images(body: str) -> tuple[str, list[str]]:
     """Заменяет OCR-float на штатные \\taskpic{N}."""
     images = list(dict.fromkeys(
-        match.group("path") for match in RAW_IMAGE_RE.finditer(body)))
+        match.group("path") for match in TASK_IMAGE_RE.finditer(body)))
     positions = {path: index + 1 for index, path in enumerate(images)}
-    body = RAW_IMAGE_RE.sub(
+    body = TASK_IMAGE_RE.sub(
         lambda match: rf"\taskpic{{{positions[match.group('path')]}}}",
         body,
     )
@@ -398,8 +439,32 @@ def shestakov_solution_markers(text: str) -> list[Marker]:
     for match in SH_CODE_RE.finditer(text):
         marker = _shestakov_marker(text, match)
         line_start = text.rfind("\n", 0, match.start()) + 1
+        line_end = text.find("\n", match.end())
+        if line_end < 0:
+            line_end = len(text)
         prefix = text[line_start:match.start()].strip()
+        suffix = text[match.end():line_end].strip()
         is_caption = bool(re.fullmatch(r"\\caption\{\s*", prefix))
+        is_direct = not prefix
+        is_heading = bool(re.fullmatch(
+            r"\\(?:sub)*section\*?\{\s*", prefix))
+        is_item_label = bool(re.fullmatch(r"\\item\[\s*", prefix))
+        looks_like_reference = bool(re.search(
+            r"(?i)\b(?:задач\w*|номер\w*)\s*$", prefix))
+        is_inline_transition = (
+            (not suffix or bool(re.fullmatch(r"\\\\", suffix)))
+            and not looks_like_reference
+            and (
+                bool(re.match(r"\\item\[", prefix))
+                or bool(re.match(
+                    r"[a-zа-яё0-9]+\)\s*", prefix, re.I))
+                or bool(re.search(r"(?i)\bОтвет\s*:", prefix))
+            )
+        )
+        if not (is_direct or is_heading or is_item_label
+                or is_caption or is_inline_transition):
+            # Внутритекстовая ссылка на другую задачу не граница.
+            continue
         if (is_caption and result
                 and not text[result[-1].end:marker.start].strip()):
             # Подпись сразу после номера — рисунок текущего решения, а OCR-код
@@ -505,7 +570,7 @@ def split_answer_solution(body: str) -> tuple[str, str]:
 
 def split_full_solution(body: str) -> tuple[str, str]:
     """Для отдельного решебника сохраняет весь блок как авторское решение."""
-    solution = strip_outer_lists(body)
+    solution = strip_outer_lists(body, flatten_items=False)
     solution = STRUCTURAL_HEADING_RE.sub("", solution)
     solution = FLOAT_WRAPPER_RE.sub("", solution)
     solution = OCR_FIGURE_WRAPPER_RE.sub("", solution)
@@ -525,6 +590,9 @@ def split_full_solution(body: str) -> tuple[str, str]:
     # \\item вне itemize ломает PDF; метки оставляем как
     # обычный текст с явным переносом между пунктами.
     solution = clean(ANY_ITEM_RE.sub(replace_item, solution))
+    # Голые \\ по краям minipage дают `no line here to end`.
+    solution = re.sub(r"^(?:\\\\\s*)+", "", solution)
+    solution = re.sub(r"(?:\s*\\\\)+$", "", solution)
     answers = [
         clean(match.group(1))
         for match in re.finditer(
