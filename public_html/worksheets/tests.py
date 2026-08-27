@@ -359,6 +359,7 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'Дублировать')
         self.assertContains(response, 'data-neuro="apply"')
         self.assertContains(response, 'data-neuro="apply-missing"')
+        self.assertContains(response, 'data-incomplete="1"')
         self.assertContains(response, 'href="#" data-neuro="apply"')
         self.assertContains(response, 'Добавить AI-решение')
         self.assertContains(response, 'Добавить AI-решение без ответа')

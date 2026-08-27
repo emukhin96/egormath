@@ -38,7 +38,7 @@
   <a class="btn" href="{% url 'worksheet_pdf_editor' worksheet.pk %}">PDF</a>
   <a class="btn btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}">.tex</a>
   <button type="button" class="btn btn-secondary" data-neuro="apply-missing"
-          title="Черновики только для задач без ответа — проверьте после записи">Добавить AI-решение без ответа</button>
+          title="Черновики для задач с пустыми полями ответа или решения — проверьте после записи">Добавить AI-решение без ответа</button>
 </div>
 
 <div class="card worksheet-items-card">
@@ -118,6 +118,7 @@
             · <a href="{% url 'task_edit' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}">править</a>
             · <a href="#" data-neuro="apply" data-task-id="{{ item.task.pk }}"
                  data-has-answer="{% if item.task.answer_latex or item.task.solution_latex or item.task.has_subitem_answers %}1{% endif %}"
+                 data-incomplete="{% if item.task.has_blank_neuro_fields %}1{% endif %}"
                  title="Черновик ответа и решения — запишется в задачу, проверьте">Добавить AI-решение</a>
             · <button type="button" class="link-btn ws-star-reset"
                       data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"

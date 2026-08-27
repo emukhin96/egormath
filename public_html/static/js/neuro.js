@@ -201,8 +201,10 @@
   }
 
   function applyTask(el) {
-    var overwrite = el.dataset.hasAnswer === '1';
-    if (!confirmOverwrite(overwrite)) return Promise.resolve();
+    var incomplete = el.dataset.incomplete === '1';
+    var hasAnswer = el.dataset.hasAnswer === '1';
+    var overwrite = hasAnswer && !incomplete;
+    if (overwrite && !confirmOverwrite(true)) return Promise.resolve();
     return withBusy(el, function () {
       return solve({
         task_id: el.dataset.taskId,
@@ -247,9 +249,10 @@
     }
     if (kind === 'apply-missing') {
       var queue = Array.prototype.slice.call(
-        document.querySelectorAll('[data-neuro="apply"][data-has-answer=""]'));
+        document.querySelectorAll(
+          '[data-neuro="apply"][data-incomplete="1"]'));
       if (!queue.length) {
-        toast(false, 'Нет задач без ответа');
+        toast(false, 'Нет задач с пустыми полями ответа или решения');
         return;
       }
       var done = 0;

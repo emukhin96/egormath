@@ -393,6 +393,22 @@ class NeuroTests(TestCase):
         self.assertEqual(task.answer_latex, 'новый')
         self.assertEqual(task.solution_latex, 'Другое')
 
+    def test_has_blank_neuro_fields(self):
+        teacher = make_teacher()
+        empty = Task.objects.create(text_latex='Пустая', created_by=teacher)
+        self.assertTrue(empty.has_blank_neuro_fields)
+        partial = Task.objects.create(
+            text_latex='Частично', answer_latex='4', created_by=teacher)
+        self.assertTrue(partial.has_blank_neuro_fields)
+        full = Task.objects.create(
+            text_latex='Полная', answer_latex='4', solution_latex='Шаг',
+            created_by=teacher)
+        self.assertFalse(full.has_blank_neuro_fields)
+        mixed = Task.objects.create(text_latex='Подпункты', created_by=teacher)
+        mixed.subitems.create(order=10, text_latex='а', answer_latex='1')
+        mixed.subitems.create(order=20, text_latex='б')
+        self.assertTrue(mixed.has_blank_neuro_fields)
+
     def test_solve_endpoint_apply_and_form_only(self):
         from unittest import mock
         teacher = make_teacher()
