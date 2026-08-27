@@ -95,3 +95,14 @@ class TextbookDraftReviewForm(forms.ModelForm):
             return normalize_subitems(self.cleaned_data['subitems'])
         except TextbookImportError as exc:
             raise forms.ValidationError(str(exc)) from exc
+
+    def clean_external_id(self):
+        external_id = self.cleaned_data['external_id'].strip()
+        if (self.instance.batch_id
+                and TextbookTaskDraft.objects.filter(
+                    batch_id=self.instance.batch_id,
+                    external_id=external_id).exclude(pk=self.instance.pk)
+                .exists()):
+            raise forms.ValidationError(
+                'Такой ключ уже существует в этой партии.')
+        return external_id

@@ -229,3 +229,25 @@ class TextbookImportTests(TestCase):
         self.assertContains(response, 'должно быть массивом')
         draft.refresh_from_db()
         self.assertEqual(draft.status, TextbookTaskDraft.STATUS_REVIEW)
+
+    def test_review_rejects_duplicate_external_id(self):
+        payload = bundle()
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='1.2.38', source_number='38'))
+        batch = self.create_batch(payload)
+        first, second = list(batch.drafts.all())
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(reverse(
+            'textbook_import_review', args=[batch.pk, second.pk]), {
+                'external_id': first.external_id,
+                'source_number': second.source_number,
+                'text_latex': second.text_latex,
+                'subitems': '[]',
+                'author_answer_latex': second.author_answer_latex,
+                'author_solution_latex': second.author_solution_latex,
+                'status': TextbookTaskDraft.STATUS_REVIEW,
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'уже существует в этой партии')
+        second.refresh_from_db()
+        self.assertEqual(second.external_id, '1.2.38')
