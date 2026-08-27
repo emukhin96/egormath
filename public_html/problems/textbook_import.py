@@ -187,6 +187,10 @@ def _collection_for_path(batch, path, cache):
                       .select_related('worksheet')
                       .filter(source=batch.source, locator=locator)
                       .first())
+        if (collection is not None
+                and collection.worksheet.owner_id != batch.created_by_id):
+            raise TextbookImportError(
+                f'Подборка «{prefix[-1]}» принадлежит другому редактору.')
         if collection is None:
             worksheet = Worksheet.objects.create(
                 title=prefix[-1][:190], owner=batch.created_by)

@@ -558,6 +558,24 @@ class TaskSource(models.Model):
     def __str__(self):
         return f'{self.source} № {self.number}'
 
+    def save(self, *args, **kwargs):
+        """При ручной смене источника старый ключ импорта недействителен."""
+        changed_source = False
+        if self.pk:
+            previous_source = (TaskSource.objects.filter(pk=self.pk)
+                               .values_list('source_id', flat=True).first())
+            changed_source = (previous_source is not None
+                              and previous_source != self.source_id)
+        if changed_source:
+            self.locator = None
+            self.source_path = []
+            self.page = None
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None:
+                kwargs['update_fields'] = list(set(update_fields) | {
+                    'locator', 'source_path', 'page'})
+        super().save(*args, **kwargs)
+
 
 class TextbookImportBatch(models.Model):
     """Партия черновиков, полученная из проверяемого JSON парсера."""

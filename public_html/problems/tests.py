@@ -884,6 +884,21 @@ class TaskModelTests(TestCase):
         self.assertIsNone(copied.locator)
         self.assertEqual(copied.source_path, ['Глава'])
 
+    def test_changing_source_clears_import_provenance(self):
+        from problems.models import Source, TaskSource
+        first = Source.objects.create(title='Первый задачник')
+        second = Source.objects.create(title='Второй задачник')
+        task = Task.objects.create(text_latex='Задача из источника')
+        ref = TaskSource.objects.create(
+            task=task, source=first, number='7', locator='chapter/7',
+            source_path=['Глава'], page=12)
+        ref.source = second
+        ref.save(update_fields=['source'])
+        ref.refresh_from_db()
+        self.assertIsNone(ref.locator)
+        self.assertEqual(ref.source_path, [])
+        self.assertIsNone(ref.page)
+
 
 class CatalogViewTests(TestCase):
     def setUp(self):

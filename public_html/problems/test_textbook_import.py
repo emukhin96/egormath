@@ -165,6 +165,27 @@ class TextbookImportTests(TestCase):
         with self.assertRaisesMessage(TextbookImportError, 'условие подпункта'):
             commit_batch(second, user=self.teacher)
 
+    def test_another_editor_cannot_extend_owned_collection(self):
+        topic = Topic.objects.create(name='Тема владельца')
+        first = self.create_batch()
+        first.drafts.update(
+            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        commit_batch(first, user=self.teacher)
+
+        other = make_teacher('teacher2')
+        second = create_batch_from_bundle(
+            bundle(external_id='1.2.38', source_number='38'),
+            user=other, title='Чужая партия',
+            source_title='Тестовый задачник', source_author='Автор')
+        second.drafts.update(
+            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        with self.assertRaisesMessage(TextbookImportError,
+                                      'другому редактору'):
+            commit_batch(second, user=other)
+        leaf = Collection.objects.get(
+            source_path=['Алгебра', 'Квадратные уравнения'])
+        self.assertEqual(leaf.worksheet.items.count(), 1)
+
     def test_review_pages_render(self):
         batch = self.create_batch()
         self.client.login(username='teacher1', password='pass12345')
