@@ -498,6 +498,41 @@ class NeuroTests(TestCase):
         self.assertEqual(task.answer_latex, '4')
         self.assertEqual(task.solution_latex, 'Сложение.')
 
+    def test_solve_endpoint_rejects_string_flags(self):
+        """«false» как строка не должна включать apply/overwrite."""
+        from unittest import mock
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        task = Task.objects.create(
+            text_latex='Задача', answer_latex='старый', created_by=teacher)
+        drafts = {'answer': 'новый', 'solution': 'Шаг',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        with mock.patch('problems.neuro.solve_task', return_value=drafts) as solve:
+            response = self.client.post(
+                reverse('task_neuro_solve'),
+                {'task_id': task.pk, 'apply': 'false', 'overwrite': 'false'},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        solve.assert_not_called()
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, 'старый')
+
+    def test_solve_endpoint_apply_false_skips_write(self):
+        from unittest import mock
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        task = Task.objects.create(text_latex='Задача', created_by=teacher)
+        drafts = {'answer': '4', 'solution': 'Шаг',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        with mock.patch('problems.neuro.solve_task', return_value=drafts):
+            response = self.client.post(
+                reverse('task_neuro_solve'),
+                {'task_id': task.pk, 'apply': False},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, '')
+
     def test_solve_endpoint_uses_task_from_db_when_fields_omitted(self):
         """Без text/subitems в теле — условие и подпункты с базы."""
         from unittest import mock

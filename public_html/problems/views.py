@@ -624,6 +624,16 @@ def _task_form(request, task):
     return render(request, 'problems/task_form.html', ctx)
 
 
+def _neuro_flag(payload, key):
+    """JSON-булево: нет ключа / null → False; иначе только true/false."""
+    if key not in payload or payload[key] is None:
+        return False
+    value = payload[key]
+    if not isinstance(value, bool):
+        raise ValueError(key)
+    return value
+
+
 @teacher_required
 @require_POST
 def task_neuro_solve(request):
@@ -681,17 +691,23 @@ def task_neuro_solve(request):
         return JsonResponse(
             {'error': 'Задача слишком длинная для нейрогенерации.'},
             status=400)
+    try:
+        apply = _neuro_flag(payload, 'apply')
+        overwrite = _neuro_flag(payload, 'overwrite')
+        answers_only = _neuro_flag(payload, 'answers_only')
+    except ValueError:
+        return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
     acquired_at = None
     try:
         acquired_at = acquire_quota(request.user)
         result = solve_task(text, subitems)
         # Пишем, пока квота ещё занята: иначе второй запрос успеет
         # записаться раньше, и первый с overwrite затрёт его устаревшим.
-        if task is not None and payload.get('apply'):
+        if task is not None and apply:
             apply_result(
                 task, result,
-                overwrite=bool(payload.get('overwrite')),
-                answers_only=bool(payload.get('answers_only')),
+                overwrite=overwrite,
+                answers_only=answers_only,
             )
     except NeuroQuotaError as exc:
         return JsonResponse({'error': str(exc)}, status=429)
