@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 
-from problems.models import Source, Task
+from problems.models import Source, Task, TaskSubitem
 from problems.tests import make_teacher
 from worksheets.latex import worksheet_to_tex
 from worksheets.models import Collection, Worksheet, WorksheetItem
@@ -17,6 +17,8 @@ class CollectionTests(TestCase):
         self.task = Task.objects.create(
             text_latex='Вычислите $2+2$.', author_answer_latex='4',
             author_solution_latex='$2+2=4$.', stars=0, created_by=self.owner)
+        TaskSubitem.objects.create(
+            task=self.task, order=10, text_latex='Поясните вычисление')
         WorksheetItem.objects.create(
             worksheet=self.worksheet, task=self.task, order=10)
         WorksheetItem.objects.create(
@@ -51,9 +53,10 @@ class CollectionTests(TestCase):
         self.client.login(username='teacher1', password='pass12345')
         self.assertContains(self.client.get(reverse('collection_list')),
                             'Готовая тема')
-        self.assertContains(self.client.get(reverse(
-            'collection_detail', args=[self.collection.pk])),
-            'Использовать подборку')
+        detail = self.client.get(reverse(
+            'collection_detail', args=[self.collection.pk]))
+        self.assertContains(detail, 'Использовать подборку')
+        self.assertContains(detail, 'Поясните вычисление')
         editor = self.client.get(reverse(
             'collection_edit', args=[self.collection.pk]), follow=True)
         self.assertContains(editor, 'Конструктор подборки')

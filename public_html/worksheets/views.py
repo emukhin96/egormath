@@ -394,7 +394,11 @@ def collection_detail(request, pk):
     for item in items:
         if item.task_id:
             number += 1
-        rows.append({'item': item, 'number': number if item.task_id else None})
+        rows.append({
+            'item': item,
+            'number': number if item.task_id else None,
+            'subitems': item.selected_subitems() if item.task_id else [],
+        })
     return render(request, 'worksheets/collection_detail.html', {
         'collection': collection,
         'worksheet': collection.worksheet,

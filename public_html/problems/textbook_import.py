@@ -93,9 +93,15 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
         raise TextbookImportError(
             f'В одной партии допускается не больше {MAX_BUNDLE_TASKS} задач.')
 
-    source, _ = Source.objects.get_or_create(
-        title=source_title.strip(), author=source_author.strip(),
-        year=source_year)
+    source_lookup = {
+        'title': source_title.strip(), 'author': source_author.strip(),
+        'year': source_year,
+    }
+    # Старые данные не гарантируют уникальность Source; выбираем первую
+    # запись детерминированно вместо необработанного MultipleObjectsReturned.
+    source = Source.objects.filter(**source_lookup).order_by('pk').first()
+    if source is None:
+        source = Source.objects.create(**source_lookup)
     batch = TextbookImportBatch.objects.create(
         title=title.strip(), profile=profile.strip(), source=source,
         created_by=user,
@@ -217,6 +223,11 @@ def _merge_subitem_author_fields(task, draft):
             f'{draft.external_id}: число подпунктов существующей задачи '
             'отличается от импортируемого.')
     for sub, incoming in zip(existing, draft.subitems):
+        incoming_text = str(incoming.get('text_latex') or '').strip()
+        if sub.text_latex.strip() != incoming_text:
+            raise TextbookImportError(
+                f'{draft.external_id}: условие подпункта {sub.order} '
+                'отличается от уже загруженного.')
         updates = []
         for field in ('author_answer_latex', 'author_solution_latex'):
             value = str(incoming.get(field) or '').strip()

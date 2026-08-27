@@ -56,6 +56,16 @@ class TextbookImportTests(TestCase):
         self.assertEqual(TextbookTaskDraft.objects.count(), 1)
         self.assertEqual(Task.objects.count(), 0)
 
+    def test_duplicate_legacy_sources_choose_first(self):
+        from problems.models import Source
+        first = Source.objects.create(
+            title='Повтор', author='Автор', year=2000)
+        Source.objects.create(title='Повтор', author='Автор', year=2000)
+        batch = create_batch_from_bundle(
+            bundle(), user=self.teacher, title='Партия',
+            source_title='Повтор', source_author='Автор', source_year=2000)
+        self.assertEqual(batch.source, first)
+
     def test_commit_requires_review(self):
         batch = self.create_batch()
         with self.assertRaisesMessage(TextbookImportError, 'непроверенных'):
@@ -127,6 +137,27 @@ class TextbookImportTests(TestCase):
         commit_batch(second, user=self.teacher)
         self.assertEqual(Task.objects.count(), 2)
         self.assertEqual(TaskSource.objects.count(), 2)
+
+    def test_reimport_rejects_changed_subitem_text(self):
+        topic = Topic.objects.create(name='Тема подпунктов')
+        first_payload = bundle(subitems=[{
+            'label': 'а', 'text_latex': '$1+1$',
+            'author_answer_latex': '2',
+        }])
+        first = self.create_batch(first_payload)
+        first.drafts.update(
+            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        commit_batch(first, user=self.teacher)
+
+        second_payload = bundle(subitems=[{
+            'label': 'а', 'text_latex': '$2+2$',
+            'author_answer_latex': '4',
+        }])
+        second = self.create_batch(second_payload)
+        second.drafts.update(
+            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        with self.assertRaisesMessage(TextbookImportError, 'условие подпункта'):
+            commit_batch(second, user=self.teacher)
 
     def test_review_pages_render(self):
         batch = self.create_batch()
