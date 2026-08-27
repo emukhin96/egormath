@@ -282,7 +282,7 @@
       <tr>
         <td>
           <div class="math-content task-text">{{ task.text_latex|web_text_preview:180 }}</div>
-          <span class="task-meta"><a href="{% url 'task_detail' task.pk %}" title="Открыть задачу">#{{ task.pk }}</a>{% if task.grade_level %} · {{ task.grade_level }} класс{% endif %}</span>
+          <span class="task-meta"><a href="{% url 'task_detail' task.pk %}" title="Открыть задачу">#{{ task.pk }}</a>{% if task.grade_display %} · {{ task.grade_display }} класс{% endif %}</span>
         </td>
         <td style="white-space:nowrap">
           <form method="post" action="{% url 'worksheet_add_task' worksheet.pk %}" class="inline-form">
@@ -399,10 +399,7 @@
     <p>
       <label for="copy-grade">Класс</label>
       <select id="copy-grade" name="grade">
-        <option value="">—</option>
-        {% for g, label in grade_choices %}
-        <option value="{{ g }}" {% if worksheet.grade == g %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
+        {% include 'includes/grade_options.html' with selected=worksheet.grade_option %}
       </select>
     </p>
     <p>

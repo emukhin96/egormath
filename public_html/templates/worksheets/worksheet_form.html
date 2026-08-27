@@ -9,7 +9,39 @@
 <div class="card">
   <form method="post">
     {% csrf_token %}
-    {{ form.as_p }}
+    {{ form.non_field_errors }}
+    <p>
+      <label for="{{ form.title.id_for_label }}">{{ form.title.label }}</label>
+      {{ form.title.errors }}{{ form.title }}
+    </p>
+    <p>
+      <label>Рубрикатор</label>
+      {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=True selected_json=selected_json %}
+    </p>
+    <p>
+      <label for="{{ form.grade_label.id_for_label }}">{{ form.grade_label.label }}</label>
+      {{ form.grade_label.errors }}{{ form.grade_label }}
+      <span class="helptext">{{ form.grade_label.help_text }}</span>
+    </p>
+    <p>
+      <label for="{{ form.subtitle.id_for_label }}">{{ form.subtitle.label }}</label>
+      {{ form.subtitle.errors }}{{ form.subtitle }}
+    </p>
+    <p>
+      <label for="{{ form.author_name.id_for_label }}">{{ form.author_name.label }}</label>
+      {{ form.author_name.errors }}{{ form.author_name }}
+      <span class="helptext">{{ form.author_name.help_text }}</span>
+    </p>
+    <p>
+      <label for="{{ form.pdf_basename.id_for_label }}">{{ form.pdf_basename.label }}</label>
+      {{ form.pdf_basename.errors }}{{ form.pdf_basename }}
+      <span class="helptext">{{ form.pdf_basename.help_text }}</span>
+    </p>
+    <p>
+      <label for="{{ form.comment.id_for_label }}">{{ form.comment.label }}</label>
+      {{ form.comment.errors }}{{ form.comment }}
+      <span class="helptext">{{ form.comment.help_text }}</span>
+    </p>
     <button type="submit" class="btn">Сохранить</button>
     <a class="btn btn-secondary" href="{% if worksheet %}{% url 'worksheet_detail' worksheet.pk %}{% else %}{% url 'worksheet_list' %}{% endif %}">Отмена</a>
   </form>

@@ -181,7 +181,7 @@ class TaskModelTests(TestCase):
         self.assertNotIn('\\emph', task.text_plain)
 
     def test_topic_descendants(self):
-        root = Topic.objects.create(name='Алгебра')
+        root = Topic.objects.create(name='Тестовая алгебра')
         child = Topic.objects.create(name='Уравнения', parent=root)
         grandchild = Topic.objects.create(name='Квадратные', parent=child)
         ids = root.descendants_ids()
@@ -234,6 +234,21 @@ class CatalogViewTests(TestCase):
                                    {'topic': self.topic.pk, 'grade': 6,
                                     'tag': 'ОГЭ'})
         self.assertContains(response, 'Сократите')
+
+    def test_catalog_grade_column_matches_bands(self):
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('task_list'))
+        self.assertContains(response, 'col-grade')
+        self.assertEqual(
+            [g for g, _ in response.context['grade_choices']],
+            [5, 6, 7, 8, 9, 10])
+        self.assertContains(response, '10–11')
+        self.assertContains(response, 'class="col-select"')
+        self.assertContains(response, '<colgroup>')
+        self.assertContains(response, 'tax-picker-compact')
+        self.assertContains(response, 'Тема: код или название')
+        self.assertNotContains(response, 'class="stars"')
+        self.assertNotContains(response, 'name="stars"')
 
     def test_task_create(self):
         self.client.login(username='teacher1', password='pass12345')
@@ -341,8 +356,7 @@ class QuickEntryTests(TestCase):
             reverse('task_create'), {'from': task.pk})
         self.assertEqual(response.context['form'].initial['stars'], 2)
         self.assertEqual(response.context['form'].initial['grade_level'], 7)
-        self.assertIn(self.topic.pk,
-                      response.context['form'].initial['topics'])
+        self.assertIn(str(self.topic.pk), response.context['selected_json'])
         self.assertContains(response, '5.18а')
 
     def test_bulk_answers(self):
@@ -456,6 +470,18 @@ class QuickUpdateTests(TestCase):
         self.xhr_post({'grade_level': ''})
         self.task.refresh_from_db()
         self.assertIsNone(self.task.grade_level)
+
+    def test_invalid_stars_do_not_write_grade_bands(self):
+        from problems.rubricator import seed_rubricator, set_grade_bands
+        seed_rubricator()
+        set_grade_bands(self.task, ['GRADE_8'])
+        response = self.xhr_post({'grade_level': '7', 'stars': '9'})
+        self.assertEqual(response.status_code, 400)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.grade_level, 8)
+        self.assertEqual(
+            list(self.task.grade_bands.values_list('code', flat=True)),
+            ['GRADE_8'])
 
     def test_partial_save_does_not_touch_other_fields(self):
         # Параллельные autosave-формы: запрос с одними звёздами не должен
@@ -624,6 +650,8 @@ class TemplateHygieneTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, '{#')
         self.assertNotContains(response, 'Тумблер')
+        self.assertContains(response, 'data-compact="0"')
+        self.assertContains(response, 'Код или название темы')
 
 
 class TaskImagePdfTests(TestCase):
@@ -730,6 +758,14 @@ class LocalVariantTests(TestCase):
         self.assertEqual(variant.variant_of_id, self.task.pk)
         self.assertEqual(variant.text_latex, 'Изменённый текст')
 
+    def test_save_local_copies_tags(self):
+        tag = Tag.objects.create(name='ОГЭ-копия')
+        self.task.tags.add(tag)
+        self.client.post(self.edit_url(), self.post_data(save_local=''))
+        self.item.refresh_from_db()
+        self.assertIn(tag, self.item.task.tags.all())
+        self.assertIn(tag, self.task.tags.all())
+
     def test_save_local_keeps_subitem_solutions(self):
         sub = self.task.subitems.create(
             order=10, text_latex='$1+1$', answer_latex='2',
@@ -752,3 +788,178 @@ class LocalVariantTests(TestCase):
         # Оригинал не тронут
         sub.refresh_from_db()
         self.assertEqual(sub.solution_latex, 'Сложение')
+
+
+class RubricatorTests(TestCase):
+    """Сид, основная тема и фильтры нового рубрикатора."""
+
+    def test_seed_creates_codes(self):
+        from problems.models import ExamItem, GradeBand
+        from problems.rubricator import seed_rubricator
+        seed_rubricator()
+        self.assertTrue(Topic.objects.filter(code='ARI.01.01').exists())
+        self.assertTrue(Topic.objects.filter(code='ALG.07.03').exists())
+        self.assertTrue(ExamItem.objects.filter(code='OGE_2026_09').exists())
+        self.assertTrue(GradeBand.objects.filter(code='GRADE_8').exists())
+        first = Topic.objects.filter(code='ALG.07.03').count()
+        seed_rubricator()
+        self.assertEqual(Topic.objects.filter(code='ALG.07.03').count(), first)
+
+    def test_seed_keeps_legacy_topic_tree(self):
+        from problems.rubricator import seed_rubricator, set_task_topics
+        teacher = make_teacher()
+        algebra = Topic.objects.create(name='Старая алгебра')
+        equations = Topic.objects.create(name='Уравнения', parent=algebra)
+        quadratic = Topic.objects.create(name='Квадратные', parent=equations)
+        unused = Topic.objects.create(name='Заготовка без задач')
+        task = Task.objects.create(text_latex='x', created_by=teacher)
+        set_task_topics(task, [quadratic.pk], quadratic.pk)
+        seed_rubricator()
+        holder = Topic.objects.get(code='_LEGACY')
+        algebra.refresh_from_db()
+        equations.refresh_from_db()
+        quadratic.refresh_from_db()
+        unused.refresh_from_db()
+        self.assertEqual(algebra.parent, holder)
+        self.assertEqual(equations.parent, algebra)
+        self.assertEqual(quadratic.parent, equations)
+        self.assertEqual(unused.parent, holder)
+        self.assertIn(quadratic, task.topics.all())
+
+    def test_seed_keeps_custom_coded_topic(self):
+        from problems.rubricator import seed_rubricator
+        custom = Topic.objects.create(code='CUSTOM.01', name='Своя тема')
+        seed_rubricator()
+        self.assertTrue(Topic.objects.filter(pk=custom.pk, code='CUSTOM.01').exists())
+
+    def test_invalid_create_keeps_taxonomy_selection(self):
+        from problems.rubricator import seed_rubricator
+        seed_rubricator()
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        topic = Topic.objects.get(code='ALG.07.03')
+        response = self.client.post(reverse('task_create'), {
+            'text_latex': '', 'columns': 0, 'stars': 0,
+            'answer_type': 'number',
+            'topics': [str(topic.pk)],
+            'primary_topic': str(topic.pk),
+            'grade_bands': ['GRADE_8'],
+            **formset_management('source_refs', total=0),
+            **formset_management('subitems', total=0),
+            **formset_management('images', total=0),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(str(topic.pk), response.context['selected_json'])
+        self.assertIn('GRADE_8', response.context['selected_json'])
+        self.assertFalse(Task.objects.filter(created_by=teacher).exists())
+
+    def test_duplicate_warning_keeps_taxonomy_selection(self):
+        from problems.rubricator import seed_rubricator
+        seed_rubricator()
+        teacher = make_teacher()
+        existing = Task.objects.create(
+            text_latex='Один и тот же текст xyz', created_by=teacher)
+        topic = Topic.objects.get(code='GEO.01.01')
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(reverse('task_create'), {
+            'text_latex': existing.text_latex, 'columns': 0, 'stars': 0,
+            'answer_type': 'number',
+            'topics': [str(topic.pk)],
+            'primary_topic': str(topic.pk),
+            **formset_management('source_refs', total=0),
+            **formset_management('subitems', total=0),
+            **formset_management('images', total=0),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'уже есть в базе')
+        self.assertIn(str(topic.pk), response.context['selected_json'])
+
+    def test_one_primary_topic_optional(self):
+        from problems.models import TaskTopic
+        from problems.rubricator import set_task_topics
+        teacher = make_teacher()
+        task = Task.objects.create(text_latex='x', created_by=teacher)
+        a = Topic.objects.create(name='Тема A')
+        b = Topic.objects.create(name='Тема B')
+        set_task_topics(task, [a.pk, b.pk], a.pk)
+        self.assertEqual(
+            task.topic_links.filter(role=TaskTopic.ROLE_PRIMARY).count(), 1)
+        self.assertEqual(task.topic_links.get(role=TaskTopic.ROLE_PRIMARY).topic, a)
+        set_task_topics(task, [a.pk, b.pk], '')
+        self.assertEqual(
+            task.topic_links.filter(role=TaskTopic.ROLE_PRIMARY).count(), 0)
+        self.assertEqual(task.topic_links.count(), 2)
+        set_task_topics(task, [])
+        self.assertEqual(task.topic_links.count(), 0)
+
+    def test_filter_block_finds_leaf(self):
+        from problems.rubricator import seed_rubricator, set_task_topics
+        seed_rubricator()
+        teacher = make_teacher()
+        leaf = Topic.objects.get(code='ALG.07.03')
+        block = Topic.objects.get(code='ALG')
+        other = Topic.objects.get(code='GEO.01.01')
+        hit = Task.objects.create(text_latex='Касательная к графику', created_by=teacher)
+        miss = Task.objects.create(text_latex='Уникальный куб xyz', created_by=teacher)
+        set_task_topics(hit, [leaf.pk], leaf.pk)
+        set_task_topics(miss, [other.pk], other.pk)
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('task_list'), {'topic': block.pk})
+        self.assertContains(response, 'Касательная к графику')
+        self.assertNotContains(response, 'Уникальный куб xyz')
+
+    def test_variant_copies_taxonomy(self):
+        from problems.rubricator import set_grade_bands, set_task_topics
+        teacher = make_teacher()
+        task = Task.objects.create(text_latex='Оригинал', created_by=teacher)
+        topic = Topic.objects.create(name='Копия темы')
+        set_task_topics(task, [topic.pk], topic.pk)
+        set_grade_bands(task, ['GRADE_8'])
+        variant = task.make_variant()
+        self.assertEqual(list(variant.topics.all()), [topic])
+        self.assertEqual(
+            list(variant.grade_bands.values_list('code', flat=True)),
+            ['GRADE_8'])
+        self.assertEqual(variant.topic_links.get().role, 'PRIMARY')
+
+    def test_grade_10_11_is_one_label(self):
+        from problems.models import GradeBand
+        from problems.rubricator import (parse_grade_choice, seed_rubricator,
+                                         set_grade_bands)
+        seed_rubricator()
+        teacher = make_teacher()
+        task = Task.objects.create(
+            text_latex='Старшая школа xyz', created_by=teacher)
+        set_grade_bands(task, ['GRADE_10_11'])
+        task.refresh_from_db()
+        self.assertEqual(task.grade_level, 10)
+        self.assertEqual(task.grade_display, '10–11')
+        self.assertEqual(task.grade_option, 10)
+        self.assertEqual(parse_grade_choice('11'), (10, True))
+        self.assertEqual(parse_grade_choice('10'), (10, True))
+        band = GradeBand.objects.get(code='GRADE_10_11')
+        self.assertIn('10–11', band.name)
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('task_list'), {'grade': 10})
+        self.assertContains(response, 'Старшая школа xyz')
+        legacy = Task.objects.create(
+            text_latex='Старый одиннадцатый xyz', grade_level=11,
+            created_by=teacher)
+        self.assertEqual(legacy.grade_option, 10)
+        response = self.client.get(reverse('task_list'), {'grade': 11})
+        self.assertContains(response, 'Старшая школа xyz')
+
+    def test_legacy_grade_1_4_still_saves(self):
+        # В селекте 1–4 нет, но старое значение поля не должно ломать форму
+        from problems.forms import TaskForm
+        teacher = make_teacher()
+        task = Task.objects.create(
+            text_latex='Младшие классы', grade_level=3, created_by=teacher)
+        form = TaskForm({
+            'text_latex': task.text_latex, 'columns': 0, 'stars': 0,
+            'answer_type': 'text', 'grade_level': '3',
+        }, instance=task)
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        task.refresh_from_db()
+        self.assertEqual(task.grade_level, 3)

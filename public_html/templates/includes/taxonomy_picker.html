@@ -1,0 +1,28 @@
+{# Виджет рубрикатора. Параметры: mode=assign|filter, primary, facets, grades, compact, selected_json. #}
+<div class="tax-picker{% if compact %} tax-picker-compact{% endif %}"
+     data-tax-picker
+     data-mode="{{ mode|default:'assign' }}"
+     data-primary="{{ primary|yesno:'1,0' }}"
+     data-facets="{{ facets|yesno:'1,0' }}"
+     data-grades="{{ grades|yesno:'1,0' }}"
+     data-compact="{{ compact|yesno:'1,0' }}"
+     data-state="{{ selected_json }}">
+  <div class="tax-chips" data-tax-chips></div>
+  {% if grades %}
+  <div class="tax-grades" data-tax-grades></div>
+  {% endif %}
+  <div class="tax-search-row">
+    <input type="search" class="tax-search" data-tax-search
+           placeholder="{% if compact %}Тема: код или название{% else %}Код или название темы{% endif %}"
+           autocomplete="off">
+  </div>
+  <div class="tax-panel" data-tax-panel {% if compact %}hidden{% endif %}>
+    <div class="tax-tree" data-tax-tree></div>
+    {% if facets %}
+    <div class="tax-extra" data-tax-extra>
+      <button type="button" class="tax-more" data-tax-more>Ещё метки</button>
+      <div class="tax-facets" data-tax-facets hidden></div>
+    </div>
+    {% endif %}
+  </div>
+</div>

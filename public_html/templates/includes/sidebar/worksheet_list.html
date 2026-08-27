@@ -12,7 +12,7 @@
   <p class="sidebar-kicker">Темы</p>
   <ul class="sidebar-list">
     {% for topic in topics %}
-    <li><a href="?topic={{ topic.pk }}">{{ topic.name }}</a></li>
+    <li><a href="?topic={{ topic.pk }}">{% if topic.code %}{{ topic.code }} {% endif %}{{ topic.name }}</a></li>
     {% empty %}<li>Темы не добавлены</li>{% endfor %}
   </ul>
 </section>

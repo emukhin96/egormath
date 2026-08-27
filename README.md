@@ -40,7 +40,7 @@ python3.10 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 cd public_html
 ../venv/bin/python manage.py migrate
-../venv/bin/python manage.py seed_topics       # стартовый рубрикатор тем
+../venv/bin/python manage.py seed_rubricator   # рубрикатор 5–11 (темы, классы, экзамены)
 ../venv/bin/python manage.py createsuperuser
 ../venv/bin/python manage.py runserver
 ```

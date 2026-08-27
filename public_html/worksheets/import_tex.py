@@ -9,6 +9,8 @@ import re
 
 from problems.latex_utils import split_items
 from problems.models import Task, TaskSubitem
+from problems.rubricator import (GRADE_LEVEL_TO_CODE, set_grade_bands,
+                                 set_task_topics)
 
 from .models import Worksheet, WorksheetItem
 
@@ -401,8 +403,11 @@ def create_worksheet(parsed, owner, title='', overrides=None):
                     solution_latex=extra.get('solution', data['solution']),
                     grade_level=extra.get('grade_level'),
                     created_by=owner)
+                grade_code = GRADE_LEVEL_TO_CODE.get(extra.get('grade_level'))
+                if grade_code:
+                    set_grade_bands(task, [grade_code], sync_legacy=False)
                 if extra.get('topic_id'):
-                    task.topics.add(extra['topic_id'])
+                    set_task_topics(task, [extra['topic_id']])
                 for j, chunk in enumerate(data['subitems']):
                     TaskSubitem.objects.create(
                         task=task, order=(j + 1) * 10, text_latex=chunk,

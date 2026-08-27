@@ -16,12 +16,13 @@
   <form method="get" class="filters">
     <div>
       <label for="f_grade">Класс</label>
-      <select name="grade" id="f_grade">
-        <option value="">Любой</option>
-        {% for g, label in grade_choices %}
-        <option value="{{ g }}" {% if params.grade == g|stringformat:'s' %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
+      <select name="grade" id="f_grade" class="quick-select" onchange="this.form.submit()">
+        {% include 'includes/grade_options.html' with selected=params.grade empty_label='Любой' %}
       </select>
+    </div>
+    <div class="tax-filter">
+      <label>Тема</label>
+      {% include 'includes/taxonomy_picker.html' with mode='filter' primary=False facets=False grades=False compact=True selected_json=selected_json %}
     </div>
     <div>
       <label for="f_cf">Создан с</label>
@@ -50,7 +51,6 @@
         <option value="-title" {% if order == '-title' %}selected{% endif %}>Название Я–А</option>
       </select>
     </div>
-    {% if params.topic %}<input type="hidden" name="topic" value="{{ params.topic }}">{% endif %}
     <div><button type="submit" class="btn">Применить</button></div>
     <div><a class="btn btn-secondary" href="{% url 'worksheet_list' %}">Сбросить</a></div>
   </form>
@@ -64,8 +64,7 @@
   <strong data-bulk-count>Выбрано: 0</strong>
   <label class="inline-label">класс
     <select name="grade" class="quick-select">
-      <option value="">—</option>
-      {% for g, label in grade_choices %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+      {% include 'includes/grade_options.html' %}
     </select>
   </label>
   <label class="inline-label">тема
@@ -101,32 +100,16 @@
             data-autosave="change" class="inline-form">
         {% csrf_token %}
         <select name="grade" class="quick-select" aria-label="Класс листка">
-          <option value="">—</option>
-          {% for g, label in grade_choices %}
-          <option value="{{ g }}" {% if w.grade == g %}selected{% endif %}>{{ g }}</option>
-          {% endfor %}
+          {% include 'includes/grade_options.html' with selected=w.grade_option %}
         </select>
       </form>
     </td>
-    <td class="task-meta">
-      <span>{% for t in w.topics.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</span>
-      <button type="button" class="linklike" data-dialog-open="topics-dialog-{{ w.pk }}"
-              title="Изменить темы листка">✎</button>
-      <dialog id="topics-dialog-{{ w.pk }}" class="dialog">
-        <form method="post" action="{% url 'worksheet_quick_update' w.pk %}">
-          {% csrf_token %}
-          <input type="hidden" name="topics_submitted" value="1">
-          <h3>Темы: {{ w.title|truncatechars:40 }}</h3>
-          <div class="dialog-topics">
-            {% include 'includes/topic_checkboxes.html' with topics=topics selected=w.topics.all %}
-          </div>
-          <div class="form-buttons">
-            <button type="submit" class="btn btn-small">Сохранить</button>
-            <button type="button" class="btn btn-small btn-secondary"
-                    data-dialog-close>Отмена</button>
-          </div>
-        </form>
-      </dialog>
+    <td>
+      <form method="post" action="{% url 'worksheet_quick_update' w.pk %}"
+            data-autosave="change" class="inline-form">
+        {% csrf_token %}
+        {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=False compact=True selected_json=w.taxonomy_json %}
+      </form>
     </td>
     <td>{{ w.items_total }}</td>
     <td>{{ w.created_at|date:'d.m.Y' }}</td>
