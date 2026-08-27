@@ -61,3 +61,16 @@ class CollectionTests(TestCase):
             'collection_edit', args=[self.collection.pk]), follow=True)
         self.assertContains(editor, 'Конструктор подборки')
         self.assertContains(editor, 'Текст между задачами')
+
+    def test_empty_group_cannot_be_copied(self):
+        group_sheet = Worksheet.objects.create(
+            title='Группа', owner=self.owner)
+        group = Collection.objects.create(
+            worksheet=group_sheet, source=self.source,
+            locator='group', source_path=['Группа'])
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(
+            reverse('collection_use', args=[group.pk]), follow=True)
+        self.assertContains(response, 'не содержит элементов')
+        self.assertEqual(Worksheet.objects.filter(
+            owner=self.owner, title='Группа').count(), 1)

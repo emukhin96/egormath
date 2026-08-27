@@ -66,6 +66,10 @@ class TextbookImportTests(TestCase):
             source_title='Повтор', source_author='Автор', source_year=2000)
         self.assertEqual(batch.source, first)
 
+    def test_non_finite_confidence_does_not_crash_upload(self):
+        batch = self.create_batch(bundle(confidence='NaN'))
+        self.assertEqual(batch.drafts.get().confidence, 0)
+
     def test_commit_requires_review(self):
         batch = self.create_batch()
         with self.assertRaisesMessage(TextbookImportError, 'непроверенных'):
@@ -102,6 +106,8 @@ class TextbookImportTests(TestCase):
         leaf = Collection.objects.get(
             source_path=['Алгебра', 'Квадратные уравнения'])
         self.assertTrue(leaf.is_published)
+        parent = Collection.objects.get(source_path=['Алгебра'])
+        self.assertFalse(parent.is_published)
         self.assertTrue(WorksheetItem.objects.filter(
             worksheet=leaf.worksheet, task=task).exists())
         self.assertEqual(list(task.topics.all()), [topic])

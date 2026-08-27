@@ -403,6 +403,7 @@ def collection_detail(request, pk):
         'collection': collection,
         'worksheet': collection.worksheet,
         'rows': rows,
+        'can_use': bool(items),
         'can_edit': collection.worksheet.owner_id == request.user.pk,
     })
 
@@ -411,6 +412,10 @@ def collection_detail(request, pk):
 @require_POST
 def collection_use(request, pk):
     collection = _visible_collection(request, pk)
+    if not collection.worksheet.items.filter(
+            deleted_at__isnull=True).exists():
+        messages.error(request, 'Организационная группа не содержит элементов.')
+        return redirect('collection_detail', pk=collection.pk)
     worksheet = collection.worksheet.duplicate(owner=request.user)
     worksheet.title = collection.worksheet.title
     worksheet.save(update_fields=['title', 'updated_at'])

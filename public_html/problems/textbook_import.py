@@ -74,6 +74,8 @@ def _confidence(value):
         number = Decimal(str(value if value is not None else 0))
     except (InvalidOperation, ValueError):
         number = Decimal('0')
+    if not number.is_finite():
+        return Decimal('0')
     return max(Decimal('0'), min(Decimal('1'), number))
 
 
@@ -191,8 +193,8 @@ def _collection_for_path(batch, path, cache):
             collection = Collection.objects.create(
                 worksheet=worksheet, source=batch.source, parent=parent,
                 locator=locator, source_path=prefix, order=depth * 10,
-                is_published=True)
-        elif not collection.is_published:
+                is_published=(depth == len(path)))
+        elif depth == len(path) and not collection.is_published:
             collection.is_published = True
             collection.save(update_fields=['is_published'])
         cache[locator] = collection

@@ -5,7 +5,7 @@
   <p class="page-subtitle">Готовые последовательности задач по структуре задачников.</p></div></div>
 <div class="card">
 {% if collections %}<table class="list"><tr><th>Подборка</th><th>Источник</th><th>Раздел</th><th>Элементов</th><th></th></tr>
-{% for c in collections %}<tr><td><a href="{% url 'collection_detail' c.pk %}">{{ c.worksheet.title }}</a>{% if not c.is_published %} <span class="badge badge-returned">черновик</span>{% endif %}</td><td>{{ c.source }}</td><td>{{ c.source_path|join:' › ' }}</td><td>{{ c.items_total }}</td><td><form method="post" action="{% url 'collection_use' c.pk %}">{% csrf_token %}<button class="btn btn-small" type="submit">В мои листки</button></form></td></tr>{% endfor %}
+{% for c in collections %}<tr><td><a href="{% url 'collection_detail' c.pk %}">{{ c.worksheet.title }}</a>{% if not c.is_published %} <span class="badge badge-returned">группа</span>{% endif %}</td><td>{{ c.source }}</td><td>{{ c.source_path|join:' › ' }}</td><td>{{ c.items_total }}</td><td>{% if c.items_total %}<form method="post" action="{% url 'collection_use' c.pk %}">{% csrf_token %}<button class="btn btn-small" type="submit">В мои листки</button></form>{% else %}<span class="muted">—</span>{% endif %}</td></tr>{% endfor %}
 </table>{% else %}<p class="muted">Подборок пока нет.</p>{% endif %}
 </div>
 {% endblock %}
