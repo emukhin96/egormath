@@ -15,6 +15,7 @@
     <p><label for="{{ form.text_latex.id_for_label }}">Условие</label>{{ form.text_latex.errors }}{{ form.text_latex }}</p>
     <div class="math-content task-text">{{ draft.text_latex|web_text|linebreaksbr }}</div>
     <p><label for="{{ form.subitems.id_for_label }}">Подпункты (структурированный JSON)</label>{{ form.subitems.errors }}{{ form.subitems }}<span class="helptext">Каждый объект содержит label, text_latex и при наличии авторские ответ/решение.</span></p>
+    {% if draft.images %}<div class="msg msg-warning"><strong>Изображения требуют отдельной загрузки:</strong> {{ draft.images|join:', ' }}. До загрузки ресурсов commit партии заблокирован.</div>{% endif %}
     <p><label for="{{ form.topic.id_for_label }}">Тема рубрикатора</label>{{ form.topic.errors }}{{ form.topic }}</p>
   </section>
   <section class="card">

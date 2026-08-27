@@ -70,6 +70,20 @@ class TextbookImportTests(TestCase):
         batch = self.create_batch(bundle(confidence='NaN'))
         self.assertEqual(batch.drafts.get().confidence, 0)
 
+    def test_images_are_recorded_and_block_commit_without_assets(self):
+        topic = Topic.objects.create(name='Тема с рисунком')
+        batch = self.create_batch(bundle(images=['figure-1.png']))
+        draft = batch.drafts.get()
+        self.assertEqual(draft.images, ['figure-1.png'])
+        self.assertIn('figure-1.png', ' '.join(draft.warnings))
+        draft.status = TextbookTaskDraft.STATUS_APPROVED
+        draft.topic = topic
+        draft.save()
+        with self.assertRaisesMessage(TextbookImportError,
+                                      'не загружены изображения'):
+            commit_batch(batch, user=self.teacher)
+        self.assertEqual(Task.objects.count(), 0)
+
     def test_commit_requires_review(self):
         batch = self.create_batch()
         with self.assertRaisesMessage(TextbookImportError, 'непроверенных'):

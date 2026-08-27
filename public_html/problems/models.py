@@ -644,6 +644,7 @@ class TextbookTaskDraft(models.Model):
         related_name='textbook_drafts', verbose_name='Тема рубрикатора')
     text_latex = models.TextField('Условие (LaTeX)')
     subitems = models.JSONField('Подпункты', default=list, blank=True)
+    images = models.JSONField('Изображения', default=list, blank=True)
     author_answer_latex = models.TextField('Авторский ответ', blank=True)
     author_solution_latex = models.TextField('Авторское решение', blank=True)
     solution_source_external_id = models.CharField(

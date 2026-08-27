@@ -129,6 +129,11 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             status = TextbookTaskDraft.STATUS_REVIEW
         path = _string_list(row.get('source_path'), 'source_path')
         warnings = _string_list(row.get('warnings'), 'warnings')
+        images = _string_list(row.get('images'), 'images')
+        if images:
+            warnings.append(
+                'Требуется загрузить файлы изображений: '
+                + ', '.join(images))
         drafts.append(TextbookTaskDraft(
             batch=batch,
             external_id=external_id,
@@ -141,6 +146,7 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             topic_original=str(row.get('topic_original') or '')[:255],
             text_latex=_required_string(row, 'text_latex'),
             subitems=normalize_subitems(row.get('subitems')),
+            images=images,
             author_answer_latex=str(
                 row.get('author_answer_latex') or '').strip(),
             author_solution_latex=str(
@@ -273,6 +279,12 @@ def commit_batch(batch, *, user):
         raise TextbookImportError(
             f'У одобренных задач не выбрана тема рубрикатора: '
             f'{missing_topics}.')
+    missing_assets = batch.drafts.filter(
+        status=TextbookTaskDraft.STATUS_APPROVED).exclude(images=[]).count()
+    if missing_assets:
+        raise TextbookImportError(
+            f'У одобренных задач не загружены изображения: '
+            f'{missing_assets}.')
 
     created = 0
     reused = 0
