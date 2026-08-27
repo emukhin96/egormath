@@ -16,30 +16,21 @@
 </div>
 
 <div class="card filter-card">
-  <form method="get" class="filters">
+  <form method="get" class="filters" id="task-filters">
     <div>
       <label for="f_q">Поиск</label>
       <input type="text" name="q" id="f_q" value="{{ params.q|default:'' }}" placeholder="ключевые слова">
     </div>
     <div>
       <label for="f_grade">Класс</label>
-      <select name="grade" id="f_grade">
-        <option value="">Любой</option>
-        {% for g, label in grade_choices %}
-        <option value="{{ g }}" {% if params.grade == g|stringformat:'s' %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
+      <select name="grade" id="f_grade" class="quick-select" onchange="this.form.submit()">
+        {% include 'includes/grade_options.html' with selected=params.grade empty_label='Любой' %}
       </select>
     </div>
-    <div>
-      <label for="f_tag">Тег</label>
-      <select name="tag" id="f_tag">
-        <option value="">Любой</option>
-        {% for t in tags %}
-        <option value="{{ t.name }}" {% if params.tag == t.name %}selected{% endif %}>{{ t.name }}</option>
-        {% endfor %}
-      </select>
+    <div class="tax-filter">
+      <label>Тема</label>
+      {% include 'includes/taxonomy_picker.html' with mode='filter' primary=False facets=False grades=False compact=True selected_json=selected_json %}
     </div>
-    {% if params.topic %}<input type="hidden" name="topic" value="{{ params.topic }}">{% endif %}
     <div><button type="submit" class="btn">Найти</button></div>
     <div><a class="btn btn-secondary" href="{% url 'task_list' %}">Сбросить</a></div>
   </form>
@@ -53,23 +44,13 @@
   <strong data-bulk-count>Выбрано: 0</strong>
   <label class="inline-label">класс
     <select name="grade_level" class="quick-select">
-      <option value="">—</option>
-      {% for g, label in grade_choices %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+      {% include 'includes/grade_options.html' %}
     </select>
   </label>
   <label class="inline-label">тема
     <select name="topic_id" class="quick-select">
       <option value="">—</option>
       {% include 'includes/topic_options.html' with topics=topics_flat selected=None %}
-    </select>
-  </label>
-  <label class="inline-label">звёзды
-    <select name="stars" class="quick-select">
-      <option value="">—</option>
-      <option value="0">без звёзд</option>
-      <option value="1">★</option>
-      <option value="2">★★</option>
-      <option value="3">★★★</option>
     </select>
   </label>
   <button type="submit" name="apply" value="1" class="btn btn-small">Применить к выбранным</button>
@@ -79,10 +60,19 @@
 <div class="card task-catalog">
 <div class="table-summary"><strong>Найдено: {{ page.paginator.count }}</strong><span>Изменения сохраняются автоматически</span></div>
 <table class="list">
+  <colgroup>
+    <col class="col-select">
+    <col>
+    <col class="col-grade">
+    <col class="col-answer">
+    <col class="col-source">
+    <col class="col-topics">
+  </colgroup>
   <tr>
     <th class="col-select"><input type="checkbox" data-bulk-all="task-bulk-form"
         title="Выбрать все задачи на странице"></th>
-    <th>Задача</th><th>Класс</th><th>Ответ</th><th>Источник</th><th>Темы</th><th>Теги</th>
+    <th>Задача</th><th class="col-grade">Класс</th>
+    <th class="col-answer">Ответ</th><th class="col-source">Источник</th><th>Темы</th>
   </tr>
   {% for task in page %}
   {% with ref=task.source_refs.all|first %}
@@ -95,26 +85,22 @@
       <div class="task-line">
         <a class="task-id" href="{% url 'task_detail' task.pk %}"
            title="Открыть задачу">#{{ task.pk }}</a>
-        <span class="stars">{% if task.stars %}{{ task.get_stars_display }}{% endif %}</span>
         <div class="task-main">
           <span class="math-content task-text">{{ task.text_latex|web_text_preview:220 }}</span>
           {% include 'problems/_subitems.html' with subitems=task.subitems.all %}
         </div>
       </div>
     </td>
-    <td>
+    <td class="col-grade">
       <form method="post" action="{% url 'task_quick_update' task.pk %}"
             data-autosave="change" class="inline-form">
         {% csrf_token %}
         <select name="grade_level" class="quick-select" title="Класс — сохраняется сразу">
-          <option value="">—</option>
-          {% for g, label in grade_choices %}
-          <option value="{{ g }}" {% if task.grade_level == g %}selected{% endif %}>{{ g }}</option>
-          {% endfor %}
+          {% include 'includes/grade_options.html' with selected=task.grade_option %}
         </select>
       </form>
     </td>
-    <td>
+    <td class="col-answer">
       <form method="post" action="{% url 'task_quick_update' task.pk %}"
             data-autosave="debounce">
         {% csrf_token %}
@@ -122,7 +108,7 @@
                   title="Ответ (LaTeX) — сохраняется сам">{{ task.answer_latex }}</textarea>
       </form>
     </td>
-    <td>
+    <td class="col-source">
       <form method="post" action="{% url 'task_quick_update' task.pk %}"
             data-autosave="debounce" class="quick-source">
         {% csrf_token %}
@@ -139,8 +125,13 @@
         {% endif %}
       </form>
     </td>
-    <td class="task-meta">{% for t in task.topics.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
-    <td class="task-meta">{% for t in task.tags.all %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+    <td>
+      <form method="post" action="{% url 'task_quick_update' task.pk %}"
+            data-autosave="change" class="inline-form">
+        {% csrf_token %}
+        {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True selected_json=task.taxonomy_json %}
+      </form>
+    </td>
   </tr>
   {% endwith %}
   {% endfor %}

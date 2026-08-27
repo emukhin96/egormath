@@ -4,7 +4,8 @@ import secrets
 from django.conf import settings
 from django.db import models
 
-from problems.models import Task, TaskSubitem, Topic
+from problems.models import (GradeBand, Task, TaskSubitem, Topic,
+                             normalize_grade_level)
 
 
 def _new_token():
@@ -33,12 +34,15 @@ class Worksheet(models.Model):
         help_text='Второй аргумент \\bighead, например «8 класс»')
     subtitle = models.CharField('Подзаголовок', max_length=190, blank=True)
     grade = models.PositiveSmallIntegerField(
-        'Класс', choices=Task.GRADE_CHOICES, null=True, blank=True,
+        'Класс', choices=Task.GRADE_FIELD_CHOICES, null=True, blank=True,
         help_text='Для фильтров в каталоге; в PDF не выводится')
     topics = models.ManyToManyField(
         Topic, blank=True, related_name='worksheets', verbose_name='Темы',
         help_text='Для фильтров в каталоге (темы задач учитываются '
                   'автоматически)')
+    grade_bands = models.ManyToManyField(
+        GradeBand, blank=True, related_name='worksheets',
+        verbose_name='Классы')
     comment = models.TextField(
         'Комментарий', blank=True,
         help_text='Виден только вам в списке листков; '
@@ -63,6 +67,11 @@ class Worksheet(models.Model):
 
     def __str__(self):
         return self.title
+
+    @property
+    def grade_option(self):
+        """Значение селекта класса: 11 из старых данных = 10–11."""
+        return normalize_grade_level(self.grade)
 
     @property
     def display_author(self):
@@ -95,6 +104,8 @@ class Worksheet(models.Model):
         copy.pk = None
         copy.title = f'{self.title} (копия)'
         copy.save()
+        copy.topics.set(self.topics.all())
+        copy.grade_bands.set(self.grade_bands.all())
         for item in self.items.filter(deleted_at__isnull=True):
             selected = list(item.subitems.all())
             item.pk = None

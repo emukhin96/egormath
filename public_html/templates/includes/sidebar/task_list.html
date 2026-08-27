@@ -5,12 +5,13 @@
     <div class="sidebar-stat"><strong>{{ page.paginator.count }}</strong><span>найдено</span></div>
     <div class="sidebar-stat"><strong>{{ page.number }}</strong><span>страница</span></div>
   </div>
-  {% if params.q or params.grade or params.tag or params.topic %}
+  {% if params.q or params.grade or params.topic or params.level or params.exam %}
   <ul class="sidebar-list">
     {% if params.q %}<li><strong>Поиск:</strong> {{ params.q|truncatechars:24 }}</li>{% endif %}
     {% if params.grade %}<li><strong>Класс:</strong> {{ params.grade }}</li>{% endif %}
-    {% if params.tag %}<li><strong>Тег:</strong> {{ params.tag }}</li>{% endif %}
-    {% if current_topic %}<li><strong>Тема:</strong> {{ current_topic.name }}</li>{% endif %}
+    {% if params.topic %}<li><strong>Темы:</strong> выбраны</li>{% endif %}
+    {% if params.level %}<li><strong>Уровень:</strong> {{ params.level }}</li>{% endif %}
+    {% if params.exam %}<li><strong>Экзамен:</strong> {{ params.exam }}</li>{% endif %}
   </ul>
   <div class="sidebar-actions">
     <a class="sidebar-action" href="{% url 'task_list' %}">Сбросить фильтры</a>

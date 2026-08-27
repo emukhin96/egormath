@@ -17,6 +17,11 @@ from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
                     TaskSubitemFormSet)
 from .models import (Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
                      Topic, topic_tree)
+from .rubricator import (GRADE_LEVEL_TO_CODE, apply_task_taxonomy,
+                         dumps_state, filter_by_taxonomy,
+                         filter_state_from_params, parse_grade_choice,
+                         set_grade_bands, set_task_topics,
+                         taxonomy_page_context, task_taxonomy_state)
 
 
 def filter_tasks(params):
@@ -26,23 +31,15 @@ def filter_tasks(params):
     в каталоге не показываются.
     """
     tasks = (Task.objects.filter(variant_of__isnull=True)
-             .prefetch_related('topics', 'tags', 'source_refs__source',
-                               'subitems')
+             .prefetch_related('topics', 'topic_links', 'grade_bands',
+                               'facet_values', 'exam_items', 'tags',
+                               'source_refs__source', 'subitems')
              .select_related('created_by'))
     q = params.get('q', '').strip()
     if q:
         tasks = tasks.filter(
             Q(text_plain__icontains=q) | Q(text_latex__icontains=q))
-    topic_id = params.get('topic')
-    if topic_id:
-        try:
-            topic = Topic.objects.get(pk=topic_id)
-            tasks = tasks.filter(topics__in=topic.descendants_ids()).distinct()
-        except (Topic.DoesNotExist, ValueError):
-            pass
-    grade = params.get('grade')
-    if grade:
-        tasks = tasks.filter(grade_level=grade)
+    tasks = filter_by_taxonomy(tasks, params, topics_lookups=('topics',))
     tag = params.get('tag')
     if tag:
         tasks = tasks.filter(tags__name=tag)
@@ -54,20 +51,19 @@ def task_list(request):
     tasks = filter_tasks(request.GET)
     paginator = Paginator(tasks, 25)
     page = paginator.get_page(request.GET.get('page'))
-    topics = Topic.objects.filter(parent=None).prefetch_related('children')
-    current_topic = None
-    if request.GET.get('topic'):
-        current_topic = Topic.objects.filter(pk=request.GET['topic']).first()
-    return render(request, 'problems/task_list.html', {
+    blocks = Topic.objects.filter(parent=None)
+    ctx = taxonomy_page_context(filter_state_from_params(request.GET))
+    ctx.update({
         'page': page,
-        'topics': topics,
+        'topics': blocks,
         'topics_flat': topic_tree(),
-        'tags': Tag.objects.all(),
         'sources': Source.objects.all(),
-        'current_topic': current_topic,
         'params': request.GET,
         'grade_choices': Task.GRADE_CHOICES,
     })
+    for task in page:
+        task.taxonomy_json = dumps_state(task_taxonomy_state(task))
+    return render(request, 'problems/task_list.html', ctx)
 
 
 @teacher_required
@@ -96,12 +92,12 @@ def task_bulk_update(request):
             messages.error(request, 'Не выбрано ни одной задачи.')
         return redirect(_safe_next(request))
     fields = {}
-    grade = request.POST.get('grade_level', '').strip()
-    if grade:
-        if grade not in {str(g) for g, _ in Task.GRADE_CHOICES}:
-            messages.error(request, 'Недопустимый класс.')
-            return redirect(_safe_next(request))
-        fields['grade_level'] = int(grade)
+    grade, grade_ok = parse_grade_choice(request.POST.get('grade_level', ''))
+    if request.POST.get('grade_level', '').strip() and not grade_ok:
+        messages.error(request, 'Недопустимый класс.')
+        return redirect(_safe_next(request))
+    if grade is not None:
+        fields['grade_level'] = grade
     stars = request.POST.get('stars', '').strip()
     if stars:
         if stars not in {'0', '1', '2', '3'}:
@@ -118,9 +114,16 @@ def task_bulk_update(request):
         return redirect(_safe_next(request))
     if fields:
         tasks.update(**fields)
+        if 'grade_level' in fields:
+            code = GRADE_LEVEL_TO_CODE.get(fields['grade_level'])
+            for task in tasks:
+                set_grade_bands(task, [code] if code else [], sync_legacy=False)
     if topic is not None:
         for task in tasks:
-            task.topics.add(topic)
+            if not task.topic_links.exists():
+                set_task_topics(task, [topic.pk], topic.pk)
+            else:
+                task.topics.add(topic)
     messages.success(request, f'Обновлено задач: {tasks.count()}.')
     return redirect(_safe_next(request))
 
@@ -149,12 +152,14 @@ def task_quick_update(request, pk):
     # изменённые соседним запросом, устаревшими значениями
     updated = []
     if 'grade_level' in request.POST:
-        value = request.POST['grade_level'].strip()
-        if value and value not in {str(g) for g, _ in Task.GRADE_CHOICES}:
+        value, ok = parse_grade_choice(request.POST['grade_level'])
+        if request.POST['grade_level'].strip() and not ok:
             return JsonResponse(
                 {'ok': False, 'message': 'Недопустимый класс'}, status=400)
-        task.grade_level = int(value) if value else None
+        task.grade_level = value
         updated.append('grade_level')
+        code = GRADE_LEVEL_TO_CODE.get(task.grade_level)
+        set_grade_bands(task, [code] if code else [], sync_legacy=False)
     if 'stars' in request.POST:
         value = request.POST['stars'].strip()
         if value not in {str(s) for s, _ in Task.STARS_CHOICES}:
@@ -178,9 +183,14 @@ def task_quick_update(request, pk):
         updated.append('solution_latex')
     if updated:
         task.save(update_fields=updated)
-    if request.POST.get('topics_submitted'):
-        ids = [t for t in request.POST.getlist('topics') if t.isdigit()]
-        task.topics.set(Topic.objects.filter(pk__in=ids))
+    if (request.POST.get('topics_submitted') or 'topics' in request.POST
+            or 'primary_topic' in request.POST
+            or request.POST.get('grades_submitted')
+            or 'grade_bands' in request.POST
+            or request.POST.get('facets_submitted')
+            or request.POST.get('exams_submitted')
+            or 'difficulty' in request.POST):
+        apply_task_taxonomy(task, request.POST)
     if request.POST.get('tags_submitted'):
         # Запятая — разделитель, поэтому имена тегов без запятых
         names = [n.strip()
@@ -294,13 +304,15 @@ def task_detail(request, pk):
     task = get_object_or_404(
         Task.objects.prefetch_related('topics', 'tags', 'source_refs__source'),
         pk=pk)
-    return render(request, 'problems/task_detail.html', {
+    ctx = taxonomy_page_context(task_taxonomy_state(task))
+    ctx.update({
         'task': task,
         'grade_choices': Task.GRADE_CHOICES,
         'stars_choices': Task.STARS_CHOICES,
         'topics': topic_tree(),
         'tags_value': ', '.join(t.name for t in task.tags.all()),
     })
+    return render(request, 'problems/task_detail.html', ctx)
 
 
 @teacher_required
@@ -332,7 +344,7 @@ def _worksheet_context(request):
     return worksheet, item
 
 
-def _save_local_variant(user, original, form, source_fs, subitem_fs):
+def _save_local_variant(user, original, form, source_fs, subitem_fs, post):
     """Создаёт скрытую копию задачи с данными из провалидированных форм.
 
     Оригинал в базе не меняется; копия помечена variant_of и не видна
@@ -343,12 +355,9 @@ def _save_local_variant(user, original, form, source_fs, subitem_fs):
     variant.variant_of = original.variant_of or original
     variant.created_by = user
     for name, value in form.cleaned_data.items():
-        if name in ('topics', 'tags'):
-            continue
         setattr(variant, name, value)
     variant.save()
-    variant.topics.set(form.cleaned_data['topics'])
-    variant.tags.set(form.cleaned_data['tags'])
+    apply_task_taxonomy(variant, post)
     for data in subitem_fs.cleaned_data:
         if not data or data.get('DELETE') or not data.get('text_latex'):
             continue
@@ -467,10 +476,9 @@ def _quick_entry_initials(request):
     form_initial = {
         'grade_level': prev.grade_level,
         'stars': prev.stars,
+        'difficulty': prev.difficulty,
         'answer_type': prev.answer_type,
         'columns': prev.columns,
-        'topics': list(prev.topics.values_list('pk', flat=True)),
-        'tags': list(prev.tags.values_list('pk', flat=True)),
     }
     source_initial = [
         {'source': ref.source_id, 'number': _next_number(ref.number)}
@@ -516,7 +524,8 @@ def _task_form(request, task):
                         warning += (' Выбранные файлы картинок при этом '
                                     'нужно указать заново.')
                     messages.warning(request, warning)
-                    return render(request, 'problems/task_form.html', {
+                    ctx = taxonomy_page_context()
+                    ctx.update({
                         'form': form,
                         'formset': source_fs,
                         'subitem_formset': subitem_fs,
@@ -527,9 +536,11 @@ def _task_form(request, task):
                         'can_save_local': False,
                         'duplicate_pk': duplicate_pk,
                     })
+                    return render(request, 'problems/task_form.html', ctx)
             if save_local:
                 variant = _save_local_variant(
-                    request.user, task, form, source_fs, subitem_fs)
+                    request.user, task, form, source_fs, subitem_fs,
+                    request.POST)
                 item.task = variant
                 # Выбор подпунктов ссылался на подпункты оригинала — сброс
                 item.all_subitems = True
@@ -546,6 +557,7 @@ def _task_form(request, task):
                 obj.created_by = request.user
             obj.save()
             form.save_m2m()
+            apply_task_taxonomy(obj, request.POST)
             source_fs.instance = obj
             subitem_fs.instance = obj
             image_fs.instance = obj
@@ -576,7 +588,15 @@ def _task_form(request, task):
         source_fs = TaskSourceFormSet(instance=task, initial=source_initial)
         subitem_fs = TaskSubitemFormSet(instance=task)
         image_fs = TaskImageFormSet(instance=task)
-    return render(request, 'problems/task_form.html', {
+    if task is not None:
+        tax_state = task_taxonomy_state(task)
+    elif request.GET.get('from'):
+        prev = Task.objects.filter(pk=request.GET.get('from') or 0).first()
+        tax_state = task_taxonomy_state(prev) if prev else None
+    else:
+        tax_state = None
+    ctx = taxonomy_page_context(tax_state)
+    ctx.update({
         'form': form,
         'formset': source_fs,
         'subitem_formset': subitem_fs,
@@ -588,3 +608,4 @@ def _task_form(request, task):
                            and item.task_id == task.pk
                            and task.variant_of_id is None),
     })
+    return render(request, 'problems/task_form.html', ctx)

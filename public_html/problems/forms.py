@@ -9,13 +9,12 @@ class TaskForm(forms.ModelForm):
         model = Task
         fields = ['text_latex', 'columns',
                   'answer_latex', 'solution_latex',
-                  'grade_level', 'stars', 'answer_type', 'topics', 'tags']
+                  'grade_level', 'stars', 'difficulty', 'answer_type']
         widgets = {
             'text_latex': forms.Textarea(attrs={'rows': 5}),
             'answer_latex': forms.Textarea(attrs={'rows': 2}),
             'solution_latex': forms.Textarea(attrs={'rows': 4}),
-            'topics': forms.SelectMultiple(attrs={'size': 6}),
-            'tags': forms.CheckboxSelectMultiple(),
+            'grade_level': forms.HiddenInput(),
         }
 
 

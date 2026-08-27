@@ -11,7 +11,10 @@ from .latex_utils import strip_latex
 
 
 class Topic(models.Model):
-    name = models.CharField('Название', max_length=150)
+    name = models.CharField('Название', max_length=255)
+    code = models.CharField(
+        'Код', max_length=24, unique=True, null=True, blank=True,
+        help_text='ARI, ARI.02, ARI.02.03')
     parent = models.ForeignKey(
         'self', on_delete=models.CASCADE, null=True, blank=True,
         related_name='children', verbose_name='Родительская тема')
@@ -27,6 +30,8 @@ class Topic(models.Model):
         ]
 
     def __str__(self):
+        if self.code:
+            return f'{self.code} {self.name}'
         if self.parent:
             return f'{self.parent} / {self.name}'
         return self.name
@@ -57,6 +62,127 @@ def topic_tree():
             yield from walk(topic.pk, depth + 1)
 
     return list(walk(None, 0))
+
+
+def normalize_grade_level(value):
+    """11 и 10 — одна метка 10–11; иное без изменений."""
+    if value == 11:
+        return 10
+    return value
+
+
+class GradeBand(models.Model):
+    """Дискретная метка класса: 5, 6, …, 10–11. Не диапазон."""
+
+    code = models.CharField('Код', max_length=16, unique=True)
+    name = models.CharField('Название', max_length=32)
+    order = models.PositiveSmallIntegerField('Порядок', default=0)
+
+    class Meta:
+        verbose_name = 'Класс (метка)'
+        verbose_name_plural = 'Классы (метки)'
+        ordering = ['order', 'name']
+
+    def __str__(self):
+        return self.name
+
+
+class FacetType(models.Model):
+    MODE_SINGLE = 'SINGLE'
+    MODE_MULTIPLE = 'MULTIPLE'
+    MODE_CHOICES = [
+        (MODE_SINGLE, 'Один'),
+        (MODE_MULTIPLE, 'Несколько'),
+    ]
+
+    code = models.CharField('Код', max_length=32, unique=True)
+    name = models.CharField('Название', max_length=100)
+    selection_mode = models.CharField(
+        'Режим выбора', max_length=10,
+        choices=MODE_CHOICES, default=MODE_MULTIPLE)
+    order = models.PositiveSmallIntegerField('Порядок', default=0)
+
+    class Meta:
+        verbose_name = 'Тип фасета'
+        verbose_name_plural = 'Типы фасетов'
+        ordering = ['order', 'name']
+
+    def __str__(self):
+        return self.name
+
+
+class FacetValue(models.Model):
+    facet_type = models.ForeignKey(
+        FacetType, on_delete=models.PROTECT,
+        related_name='values', verbose_name='Тип')
+    code = models.CharField('Код', max_length=64)
+    name = models.CharField('Название', max_length=160)
+    order = models.PositiveSmallIntegerField('Порядок', default=0)
+
+    class Meta:
+        verbose_name = 'Значение фасета'
+        verbose_name_plural = 'Значения фасетов'
+        ordering = ['facet_type', 'order', 'name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['facet_type', 'code'], name='unique_facet_value_code'),
+        ]
+
+    def __str__(self):
+        return f'{self.facet_type.code}:{self.name}'
+
+
+class ExamModel(models.Model):
+    TYPE_OGE = 'OGE'
+    TYPE_EGE_BASE = 'EGE_BASE'
+    TYPE_EGE_PROFILE = 'EGE_PROFILE'
+    TYPE_CHOICES = [
+        (TYPE_OGE, 'ОГЭ'),
+        (TYPE_EGE_BASE, 'ЕГЭ база'),
+        (TYPE_EGE_PROFILE, 'ЕГЭ профиль'),
+    ]
+
+    code = models.CharField('Код', max_length=40, unique=True)
+    exam_type = models.CharField(
+        'Экзамен', max_length=16, choices=TYPE_CHOICES)
+    exam_year = models.PositiveSmallIntegerField('Год модели')
+    name = models.CharField('Название', max_length=160)
+
+    class Meta:
+        verbose_name = 'Модель экзамена'
+        verbose_name_plural = 'Модели экзаменов'
+        ordering = ['exam_type', '-exam_year']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['exam_type', 'exam_year'],
+                name='unique_exam_type_year'),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class ExamItem(models.Model):
+    exam_model = models.ForeignKey(
+        ExamModel, on_delete=models.PROTECT,
+        related_name='items', verbose_name='Модель')
+    item_number = models.PositiveSmallIntegerField('Номер задания')
+    code = models.CharField('Код', max_length=48, unique=True)
+    name = models.CharField('Название', max_length=255)
+    order = models.PositiveSmallIntegerField('Порядок', default=0)
+
+    class Meta:
+        verbose_name = 'Задание экзамена'
+        verbose_name_plural = 'Задания экзаменов'
+        ordering = ['exam_model', 'order', 'item_number']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['exam_model', 'item_number'],
+                name='unique_exam_item_number'),
+        ]
+
+    def __str__(self):
+        return f'{self.code} {self.name}'
 
 
 class Tag(models.Model):
@@ -97,8 +223,13 @@ class Task(models.Model):
         (ANSWER_INTERVAL, 'Числовой промежуток'),
     ]
 
-    GRADE_CHOICES = [(g, f'{g} класс') for g in range(1, 12)]
+    # 10 и 11 — одна метка. GRADE_CHOICES — для селектов; в поле 11 остаётся валидным.
+    GRADE_CHOICES = [
+        (5, '5'), (6, '6'), (7, '7'), (8, '8'), (9, '9'), (10, '10–11'),
+    ]
+    GRADE_FIELD_CHOICES = GRADE_CHOICES + [(11, '10–11')]
     STARS_CHOICES = [(i, '★' * i if i else 'без звёзд') for i in range(4)]
+    DIFFICULTY_CHOICES = [(i, str(i)) for i in range(1, 6)]
 
     text_latex = models.TextField(
         'Условие (LaTeX)',
@@ -112,14 +243,25 @@ class Task(models.Model):
         'Текст для поиска', blank=True, editable=False,
         help_text='Автоматически: условие без LaTeX-команд')
     grade_level = models.PositiveSmallIntegerField(
-        'Класс изучения', choices=GRADE_CHOICES, null=True, blank=True)
+        'Класс изучения', choices=GRADE_FIELD_CHOICES, null=True, blank=True)
     stars = models.PositiveSmallIntegerField(
         'Сложность (звёзды)', choices=STARS_CHOICES, default=0)
+    difficulty = models.PositiveSmallIntegerField(
+        'Техническая сложность', choices=DIFFICULTY_CHOICES,
+        null=True, blank=True)
     answer_type = models.CharField(
         'Тип ответа ученика', max_length=10,
         choices=ANSWER_TYPE_CHOICES, default=ANSWER_TEXT)
     topics = models.ManyToManyField(
-        Topic, blank=True, related_name='tasks', verbose_name='Темы')
+        Topic, through='TaskTopic', blank=True,
+        related_name='tasks', verbose_name='Темы')
+    grade_bands = models.ManyToManyField(
+        GradeBand, blank=True, related_name='tasks', verbose_name='Классы')
+    facet_values = models.ManyToManyField(
+        FacetValue, blank=True, related_name='tasks', verbose_name='Фасеты')
+    exam_items = models.ManyToManyField(
+        ExamItem, blank=True, related_name='tasks',
+        verbose_name='Задания экзамена')
     tags = models.ManyToManyField(
         Tag, blank=True, related_name='tasks', verbose_name='Теги')
     sources = models.ManyToManyField(
@@ -146,6 +288,18 @@ class Task(models.Model):
         short = self.text_plain or strip_latex(self.text_latex)
         return f'#{self.pk}: {short[:80]}'
 
+    @property
+    def grade_option(self):
+        """Значение селекта класса: 11 из старых данных = 10–11."""
+        return normalize_grade_level(self.grade_level)
+
+    @property
+    def grade_display(self):
+        opt = self.grade_option
+        if opt is None:
+            return ''
+        return dict(self.GRADE_CHOICES).get(opt, str(opt))
+
     def save(self, *args, **kwargs):
         self.text_plain = strip_latex(self.text_latex)
         # При частичном сохранении text_plain едет вместе с text_latex
@@ -167,7 +321,7 @@ class Task(models.Model):
         if user is not None:
             copy.created_by = user
         copy.save()
-        copy.topics.set(original.topics.all())
+        copy_task_taxonomy(original, copy)
         copy.tags.set(original.tags.all())
         for ref in original.source_refs.all():
             TaskSource.objects.create(
@@ -182,6 +336,57 @@ class Task(models.Model):
             # Копия строки ссылается на тот же файл в storage
             copy.images.create(image=img.image.name, order=img.order)
         return copy
+
+
+class TaskTopic(models.Model):
+    """Связь задачи с темой: одна основная и любое число дополнительных."""
+
+    ROLE_PRIMARY = 'PRIMARY'
+    ROLE_SECONDARY = 'SECONDARY'
+    ROLE_CHOICES = [
+        (ROLE_PRIMARY, 'Основная'),
+        (ROLE_SECONDARY, 'Дополнительная'),
+    ]
+
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, related_name='topic_links',
+        verbose_name='Задача')
+    topic = models.ForeignKey(
+        Topic, on_delete=models.PROTECT, related_name='task_links',
+        verbose_name='Тема')
+    role = models.CharField(
+        'Роль', max_length=10, choices=ROLE_CHOICES, default=ROLE_SECONDARY)
+    relevance = models.DecimalField(
+        'Вес', max_digits=3, decimal_places=2, default=0.50)
+
+    class Meta:
+        verbose_name = 'Тема задачи'
+        verbose_name_plural = 'Темы задач'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['task', 'topic'], name='unique_task_topic'),
+            models.UniqueConstraint(
+                fields=['task'],
+                condition=models.Q(role='PRIMARY'),
+                name='unique_task_one_primary_topic'),
+        ]
+
+    def __str__(self):
+        return f'{self.task_id} → {self.topic} ({self.role})'
+
+
+def copy_task_taxonomy(original, copy):
+    """Копирует темы (с ролью), классы, фасеты и экзамены на другую задачу."""
+    for link in original.topic_links.all():
+        TaskTopic.objects.create(
+            task=copy, topic=link.topic, role=link.role,
+            relevance=link.relevance)
+    copy.grade_bands.set(original.grade_bands.all())
+    copy.facet_values.set(original.facet_values.all())
+    copy.exam_items.set(original.exam_items.all())
+    if copy.difficulty != original.difficulty:
+        copy.difficulty = original.difficulty
+        copy.save(update_fields=['difficulty'])
 
 
 class TaskImage(models.Model):

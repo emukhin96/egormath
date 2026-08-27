@@ -1,3 +1,4 @@
+import json
 from unittest import mock
 
 from django.test import TestCase
@@ -145,6 +146,18 @@ class LatexGenerationTests(TestCase):
             'Общий план. \\mbox{}\\\\ Сначала оценки. \\mbox{}\\\\ '
             'а)~Складываем', tex)
         self.assertIn('\\end{minipage}', tex)
+
+    def test_array_bidi_shim(self):
+        # Заглушка после \usepackage{egor}: иначе array в \plaintext
+        # (и tabular/cases) падают на TeX Live 2025 + bidi/xelatex
+        from .latex import ARRAY_BIDI_SHIM
+        worksheet = make_worksheet(self.teacher)
+        tex = worksheet_to_tex(worksheet, 'student')
+        pos_pkg = tex.index('\\usepackage{egor}')
+        pos_shim = tex.index(ARRAY_BIDI_SHIM)
+        pos_begin = tex.index('\\begin{document}')
+        self.assertLess(pos_pkg, pos_shim)
+        self.assertLess(pos_shim, pos_begin)
 
     def test_worksheet_variants(self):
         worksheet = make_worksheet(self.teacher)
@@ -462,7 +475,7 @@ class WorksheetViewTests(TestCase):
         self.worksheet.grade = 8
         self.worksheet.title = 'Квадратные уравнения'
         self.worksheet.save()
-        self.worksheet.topics.add(Topic.objects.create(name='Алгебра'))
+        self.worksheet.topics.add(Topic.objects.get(code='ALG'))
         self.assertEqual(self.worksheet.pdf_filename('student'), 'alg8-kv_ur.pdf')
         self.assertEqual(
             self.worksheet.pdf_filename('answers'), 'alg8-kv_ur-otvety.pdf')
@@ -566,17 +579,17 @@ class WorksheetViewTests(TestCase):
         self.assertEqual(self.worksheet.topics.count(), 0)
 
     def test_topics_dialog_shows_deep_tree(self):
-        # Тема-«внук» должна попадать в диалог выбора тем
+        # Тема-«внук» попадает в JSON каталога виджета
         from problems.models import Topic
-        root = Topic.objects.create(name='Алгебра')
-        child = Topic.objects.create(name='Уравнения', parent=root)
-        grand = Topic.objects.create(name='Квадратные', parent=child)
+        root = Topic.objects.create(name='Тестовое дерево')
+        child = Topic.objects.create(name='Ветвь уравнений', parent=root)
+        grand = Topic.objects.create(name='Квадратные тест', parent=child)
         self.worksheet.topics.add(grand)
         self.login_teacher()
         response = self.client.get(reverse('worksheet_list'))
-        self.assertContains(response, 'Квадратные')
-        self.assertRegex(
-            response.content.decode(), rf'value="{grand.pk}"\s+checked')
+        ws = response.context['worksheets']
+        self.assertTrue(any(grand.pk in json.loads(w.taxonomy_json)['topics']
+                            for w in ws))
 
     def test_remove_item_soft_delete_and_undo(self):
         self.login_teacher()

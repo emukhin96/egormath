@@ -1,0 +1,5 @@
+{# Опции класса: 5–9 и 10–11. selected — число или строка; 11 = 10–11. #}
+<option value="">{{ empty_label|default:'—' }}</option>
+{% for g, label in grade_choices %}
+<option value="{{ g }}"{% if selected|stringformat:'s' == g|stringformat:'s' or selected|stringformat:'s' == '11' and g == 10 %} selected{% endif %}>{{ label }}</option>
+{% endfor %}

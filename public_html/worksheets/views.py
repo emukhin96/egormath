@@ -16,6 +16,11 @@ from django.utils.dateparse import parse_date
 from accounts.decorators import get_role, teacher_required
 from accounts.models import Profile
 from problems.models import Task, Topic, topic_tree
+from problems.rubricator import (GRADE_LEVEL_TO_CODE, apply_worksheet_taxonomy,
+                                 dumps_state, filter_by_taxonomy,
+                                 filter_state_from_params, parse_grade_choice,
+                                 set_grade_bands, taxonomy_page_context,
+                                 worksheet_taxonomy_state)
 from problems.views import filter_tasks
 
 from .forms import WorksheetForm
@@ -53,22 +58,16 @@ def worksheet_list(request):
     """Каталог листков: фильтры по классу/теме/датам и сортировка."""
     params = request.GET
     worksheets = (Worksheet.objects.filter(owner=request.user)
-                  .prefetch_related('topics')
+                  .prefetch_related('topics', 'grade_bands')
                   .annotate(items_total=models.Count('items', distinct=True)))
 
-    grade = params.get('grade')
-    if grade and grade.isdigit():
-        worksheets = worksheets.filter(grade=grade)
-
+    worksheets = filter_by_taxonomy(
+        worksheets, params,
+        topics_lookups=('topics', 'items__task__topics'))
     current_topic = None
-    if params.get('topic'):
-        current_topic = Topic.objects.filter(pk=params['topic']).first()
-    if current_topic:
-        # Тема указана у листка ИЛИ у любой его задачи
-        ids = current_topic.descendants_ids()
-        worksheets = worksheets.filter(
-            models.Q(topics__in=ids)
-            | models.Q(items__task__topics__in=ids)).distinct()
+    topic_ids = params.getlist('topic')
+    if len(topic_ids) == 1:
+        current_topic = Topic.objects.filter(pk=topic_ids[0]).first()
 
     for param, lookup in (('created_from', 'created_at__date__gte'),
                           ('created_to', 'created_at__date__lte'),
@@ -83,14 +82,18 @@ def worksheet_list(request):
         order = '-updated_at'
     worksheets = worksheets.order_by(order)
 
-    return render(request, 'worksheets/worksheet_list.html', {
+    ctx = taxonomy_page_context(filter_state_from_params(params))
+    ctx.update({
         'worksheets': worksheets,
         'params': params,
         'order': order,
         'grade_choices': Task.GRADE_CHOICES,
-        'topics': topic_tree(),
+        'topics': Topic.objects.filter(parent=None),
         'current_topic': current_topic,
     })
+    for w in worksheets:
+        w.taxonomy_json = dumps_state(worksheet_taxonomy_state(w))
+    return render(request, 'worksheets/worksheet_list.html', ctx)
 
 
 def _import_overrides(post, parsed):
@@ -101,7 +104,6 @@ def _import_overrides(post, parsed):
     из импорта».
     """
     overrides = {}
-    valid_grades = {str(g) for g, _ in Task.GRADE_CHOICES}
     # Только реально существующие темы: поддельный или устаревший id
     # иначе уронит task.topics.add() уже после создания части объектов
     valid_topics = set(Topic.objects.values_list('pk', flat=True))
@@ -112,9 +114,9 @@ def _import_overrides(post, parsed):
         if post.get(f'skip_{i}'):
             overrides[i] = {'skip': True}
             continue
-        grade = post.get(f'grade_{i}', '').strip()
-        if grade in valid_grades:
-            extra['grade_level'] = int(grade)
+        grade, grade_ok = parse_grade_choice(post.get(f'grade_{i}', ''))
+        if grade_ok and grade is not None:
+            extra['grade_level'] = grade
         topic = post.get(f'topic_{i}', '').strip()
         if topic.isdigit() and int(topic) in valid_topics:
             extra['topic_id'] = int(topic)
@@ -149,6 +151,7 @@ def worksheet_import(request):
         'grade_choices': Task.GRADE_CHOICES,
         'topics': topic_tree(),
     }
+    context.update(taxonomy_page_context())
     if request.method == 'POST':
         tex = request.POST.get('tex', '')
         upload = request.FILES.get('file')
@@ -225,11 +228,14 @@ def worksheet_create(request):
             worksheet = form.save(commit=False)
             worksheet.owner = request.user
             worksheet.save()
+            apply_worksheet_taxonomy(worksheet, request.POST)
             messages.success(request, 'Листок создан. Добавьте в него задачи.')
             return redirect('worksheet_detail', pk=worksheet.pk)
     else:
         form = WorksheetForm()
-    return render(request, 'worksheets/worksheet_form.html', {'form': form})
+    ctx = taxonomy_page_context()
+    ctx.update({'form': form})
+    return render(request, 'worksheets/worksheet_form.html', ctx)
 
 
 @teacher_required
@@ -239,13 +245,14 @@ def worksheet_edit(request, pk):
         form = WorksheetForm(request.POST, instance=worksheet)
         if form.is_valid():
             form.save()
+            apply_worksheet_taxonomy(worksheet, request.POST)
             messages.success(request, 'Листок сохранён.')
             return redirect('worksheet_detail', pk=worksheet.pk)
     else:
         form = WorksheetForm(instance=worksheet)
-    return render(request, 'worksheets/worksheet_form.html', {
-        'form': form, 'worksheet': worksheet,
-    })
+    ctx = taxonomy_page_context(worksheet_taxonomy_state(worksheet))
+    ctx.update({'form': form, 'worksheet': worksheet})
+    return render(request, 'worksheets/worksheet_form.html', ctx)
 
 
 @teacher_required
@@ -351,13 +358,12 @@ def worksheet_copy(request, pk):
     if 'pdf_basename' in request.POST:
         copy.pdf_basename = request.POST['pdf_basename'].strip()[:80]
     if 'grade' in request.POST:
-        grade = request.POST['grade'].strip()
-        if grade in {str(g) for g, _ in Task.GRADE_CHOICES}:
-            copy.grade = int(grade)
-        elif not grade:
-            copy.grade = None
+        grade, ok = parse_grade_choice(request.POST['grade'])
+        if ok:
+            copy.grade = grade
     copy.save()
     copy.topics.set(worksheet.topics.all())
+    copy.grade_bands.set(worksheet.grade_bands.all())
     messages.success(
         request, f'Создана копия «{copy.title}» — можно редактировать.')
     return redirect('worksheet_detail', pk=copy.pk)
@@ -395,12 +401,12 @@ def worksheet_bulk_update(request):
     ids = request.POST.getlist('ids')
     worksheets = Worksheet.objects.filter(owner=request.user, pk__in=ids)
     fields = {}
-    grade = request.POST.get('grade', '').strip()
-    if grade:
-        if grade not in {str(g) for g, _ in Task.GRADE_CHOICES}:
-            messages.error(request, 'Недопустимый класс.')
-            return redirect('worksheet_list')
-        fields['grade'] = int(grade)
+    grade, grade_ok = parse_grade_choice(request.POST.get('grade', ''))
+    if request.POST.get('grade', '').strip() and not grade_ok:
+        messages.error(request, 'Недопустимый класс.')
+        return redirect('worksheet_list')
+    if grade is not None:
+        fields['grade'] = grade
     topic = None
     topic_id = request.POST.get('topic_id', '').strip()
     if topic_id:
@@ -412,6 +418,11 @@ def worksheet_bulk_update(request):
     if fields:
         fields['updated_at'] = now
         worksheets.update(**fields)
+        if 'grade' in fields:
+            code = GRADE_LEVEL_TO_CODE.get(fields['grade'])
+            for worksheet in worksheets:
+                set_grade_bands(
+                    worksheet, [code] if code else [], sync_legacy=False)
     if topic is not None:
         for worksheet in worksheets:
             worksheet.topics.add(topic)
@@ -431,20 +442,21 @@ def worksheet_quick_update(request, pk):
     """
     worksheet = _own_worksheet(request, pk)
     if 'grade' in request.POST:
-        value = request.POST['grade'].strip()
-        if value and value not in {str(g) for g, _ in Task.GRADE_CHOICES}:
+        value, ok = parse_grade_choice(request.POST['grade'])
+        if request.POST['grade'].strip() and not ok:
             return _builder_response(
                 request, pk, ok=False, message='Недопустимый класс')
-        worksheet.grade = int(value) if value else None
+        worksheet.grade = value
         worksheet.save(update_fields=['grade', 'updated_at'])
+        code = GRADE_LEVEL_TO_CODE.get(worksheet.grade)
+        set_grade_bands(worksheet, [code] if code else [], sync_legacy=False)
     if 'grade_label' in request.POST:
         worksheet.grade_label = request.POST['grade_label'].strip()[:100]
         worksheet.save(update_fields=['grade_label', 'updated_at'])
-    if request.POST.get('topics_submitted'):
-        ids = [t for t in request.POST.getlist('topics') if t.isdigit()]
-        worksheet.topics.set(Topic.objects.filter(pk__in=ids))
-        # M2M-операции не трогают auto_now — обновляем дату явно
-        worksheet.save(update_fields=['updated_at'])
+    if (request.POST.get('topics_submitted') or 'topics' in request.POST
+            or request.POST.get('grades_submitted')
+            or 'grade_bands' in request.POST):
+        apply_worksheet_taxonomy(worksheet, request.POST)
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         return JsonResponse({'ok': True})
     messages.success(request, f'Листок «{worksheet.title}» обновлён.')
