@@ -1,3 +1,4 @@
+import json
 import re
 
 from django.contrib import messages
@@ -621,3 +622,98 @@ def _task_form(request, task):
                            and task.variant_of_id is None),
     })
     return render(request, 'problems/task_form.html', ctx)
+
+
+def _neuro_flag(payload, key):
+    """JSON-булево: нет ключа / null → False; иначе только true/false."""
+    if key not in payload or payload[key] is None:
+        return False
+    value = payload[key]
+    if not isinstance(value, bool):
+        raise ValueError(key)
+    return value
+
+
+@teacher_required
+@require_POST
+def task_neuro_solve(request):
+    """Нейрогенерация черновика ответа/решения.
+
+    JSON {text, subitems} и/или {task_id, apply, overwrite, answers_only}.
+    Без apply ничего не пишет в базу — черновик уходит в поля формы.
+    С apply=true записывает в задачу (конструктор листка).
+    """
+    from .neuro import (MAX_TASK_CHARS, NeuroError, NeuroQuotaError,
+                        acquire_quota, apply_result, release_quota,
+                        solve_task)
+    try:
+        payload = json.loads(request.body)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+
+    task = None
+    task_id = payload.get('task_id')
+    if task_id not in (None, ''):
+        # data-task-id в DOM — строка; bool не принимаем (это subclass int).
+        if isinstance(task_id, bool) or not isinstance(task_id, (int, str)):
+            return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+        if isinstance(task_id, str) and not task_id.isdigit():
+            return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+        pk = int(task_id)
+        if pk < 1:
+            return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+        task = get_object_or_404(Task, pk=pk)
+
+    # Поля формы, если ключ передан; база — только запасной вариант.
+    # Пустой массив subitems тоже считается переданным (не подменяем).
+    if 'text' in payload:
+        text = payload['text']
+        if not isinstance(text, str):
+            return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+    elif task is not None:
+        text = task.text_latex or ''
+    else:
+        text = ''
+
+    if 'subitems' in payload:
+        raw_subs = payload['subitems']
+        if (not isinstance(raw_subs, list)
+                or any(not isinstance(s, str) for s in raw_subs)):
+            return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+        subitems = raw_subs
+    elif task is not None:
+        subitems = [s.text_latex for s in task.subitems.order_by('order', 'pk')]
+    else:
+        subitems = []
+    if len(text) + sum(len(s) for s in subitems) > MAX_TASK_CHARS:
+        return JsonResponse(
+            {'error': 'Задача слишком длинная для нейрогенерации.'},
+            status=400)
+    try:
+        apply = _neuro_flag(payload, 'apply')
+        overwrite = _neuro_flag(payload, 'overwrite')
+        answers_only = _neuro_flag(payload, 'answers_only')
+    except ValueError:
+        return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+    acquired_at = None
+    try:
+        acquired_at = acquire_quota(request.user)
+        result = solve_task(text, subitems)
+        # Пишем, пока квота ещё занята: иначе второй запрос успеет
+        # записаться раньше, и первый с overwrite затрёт его устаревшим.
+        if task is not None and apply:
+            apply_result(
+                task, result,
+                overwrite=overwrite,
+                answers_only=answers_only,
+            )
+    except NeuroQuotaError as exc:
+        return JsonResponse({'error': str(exc)}, status=429)
+    except NeuroError as exc:
+        return JsonResponse({'error': str(exc)}, status=502)
+    finally:
+        if acquired_at is not None:
+            release_quota(request.user, acquired_at)
+    return JsonResponse(result)

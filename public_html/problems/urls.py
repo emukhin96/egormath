@@ -7,6 +7,7 @@ urlpatterns = [
     path('new/', views.task_create, name='task_create'),
     path('bulk-answers/', views.bulk_answers, name='bulk_answers'),
     path('bulk-update/', views.task_bulk_update, name='task_bulk_update'),
+    path('solve/', views.task_neuro_solve, name='task_neuro_solve'),
     path('<int:pk>/', views.task_detail, name='task_detail'),
     path('<int:pk>/edit/', views.task_edit, name='task_edit'),
     path('<int:pk>/quick/', views.task_quick_update,

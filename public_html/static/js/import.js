@@ -66,5 +66,89 @@
         form.classList.toggle('show-answers', toggle.checked);
       });
     }
+
+    function showAnswers() {
+      if (toggle && !toggle.checked) {
+        toggle.checked = true;
+        form.classList.add('show-answers');
+      }
+    }
+
+    /* --- Нейрогенерация: общий EgorNeuro.solve, поля остаются в форме --- */
+    var solveDataEl = document.getElementById('import-solve-data');
+    var solveData = solveDataEl ? JSON.parse(solveDataEl.textContent) : {};
+    var neuroLabel = (window.EgorNeuro && EgorNeuro.label) || 'Добавить AI-решение';
+
+    function setField(name, value) {
+      // Как apply_result / setValue: пустое от модели не затирает
+      // уже заполненный ответ найденной в базе задачи.
+      if (value == null || !String(value).trim()) return;
+      var field = form.querySelector('[name="' + name + '"]');
+      if (field) field.value = value;
+    }
+
+    function solveRow(index) {
+      var data = solveData[index];
+      if (!data || !window.EgorNeuro) return Promise.resolve();
+      return EgorNeuro.solve(data).then(function (result) {
+        setField('answer_' + index, result.answer);
+        setField('solution_' + index, result.solution);
+        (result.subitem_answers || []).forEach(function (value, j) {
+          setField('answer_' + index + '_' + j, value);
+        });
+        (result.subitem_solutions || []).forEach(function (value, j) {
+          setField('solution_' + index + '_' + j, value);
+        });
+        showAnswers();
+      });
+    }
+
+    document.querySelectorAll('.neuro-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        btn.disabled = true;
+        btn.textContent = 'Генерация…';
+        solveRow(btn.dataset.index).then(function () {
+          btn.textContent = neuroLabel;
+        }).catch(function (err) {
+          btn.textContent = neuroLabel;
+          alert(err.message);
+        }).finally(function () {
+          btn.disabled = false;
+        });
+      });
+    });
+
+    var bulkSolve = document.getElementById('bulk-solve');
+    if (bulkSolve) {
+      bulkSolve.addEventListener('click', function () {
+        var queue = selected().map(function (box) {
+          return box.dataset.index;
+        });
+        if (!queue.length) return;
+        var label = bulkSolve.textContent;
+        var done = 0;
+        var failed = 0;
+        bulkSolve.disabled = true;
+        // Последовательно, по одной задаче — без параллельной пачки запросов
+        queue.reduce(function (chain, index) {
+          return chain.then(function () {
+            bulkSolve.textContent =
+              'Генерация ' + (done + 1) + '/' + queue.length + '…';
+            return solveRow(index).then(function () {
+              done += 1;
+            }).catch(function () {
+              failed += 1;
+            });
+          });
+        }, Promise.resolve()).then(function () {
+          bulkSolve.textContent = label;
+          bulkSolve.disabled = false;
+          if (failed) {
+            alert('Не удалось сгенерировать: ' + failed + ' из ' +
+                  queue.length + '. Проверьте настройку GEMINI_API_KEY.');
+          }
+        });
+      });
+    }
   });
 })();

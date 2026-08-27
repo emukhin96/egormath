@@ -1,15 +1,38 @@
+import json
 import re
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils.html import escape
 
 from accounts.models import Profile
 
-from .latex_utils import escape_latex, split_items, strip_latex
+from .latex_utils import (escape_latex, loads_neuro_json,
+                          restore_json_eaten_latex, split_items, strip_latex,
+                          wrap_bare_math)
 from .models import Tag, Task, Topic
+
+
+class ReadSecretTests(SimpleTestCase):
+    """Кавычки вокруг секрета — только парная обёртка, не край пароля."""
+
+    def test_unwraps_matching_quotes_keeps_unmatched(self):
+        import os
+        from unittest import mock
+
+        from core.settings import read_secret
+        cases = (
+            ('"abc"', 'abc'),
+            ("'abc'", 'abc'),
+            ("abc'", "abc'"),
+            ('"abc\'', '"abc\''),
+            ('  xyz  ', 'xyz'),
+        )
+        for raw, expected in cases:
+            with mock.patch.dict(os.environ, {'TEST_SECRET': raw}):
+                self.assertEqual(read_secret('TEST_SECRET'), expected, raw)
 
 
 def make_teacher(username='teacher1'):
@@ -57,6 +80,625 @@ class LatexUtilsTests(TestCase):
             '$x>0$?',
             '$2+2$',
         ])
+
+    def test_wrap_bare_math_task9_style(self):
+        # Ответ целиком — формула без долларов
+        self.assertEqual(
+            wrap_bare_math(r'a = \pm \frac{4}{5}'),
+            r'$a = \pm \frac{4}{5}$')
+        # Уже обёрнутое не трогаем
+        self.assertEqual(
+            wrap_bare_math(r'$a = \pm \frac{4}{5}$'),
+            r'$a = \pm \frac{4}{5}$')
+        self.assertEqual(wrap_bare_math('нет корней'), 'нет корней')
+        self.assertEqual(wrap_bare_math('42'), '42')
+        solution = (
+            'Дискриминант D = (-5a)^2 - 4 \\cdot 1 \\cdot 4 = 25a^2 - 16. '
+            'Приравняем дискриминант к нулю: 25a^2 - 16 = 0, откуда '
+            'a^2 = \\frac{16}{25}, следовательно a = \\pm \\frac{4}{5}.')
+        wrapped = wrap_bare_math(solution)
+        self.assertIn(r'$D = (-5a)^2 - 4 \cdot 1 \cdot 4 = 25a^2 - 16$',
+                      wrapped)
+        self.assertIn(r'$25a^2 - 16 = 0$', wrapped)
+        self.assertIn(r'$a^2 = \frac{16}{25}$', wrapped)
+        self.assertIn(r'$a = \pm \frac{4}{5}$', wrapped)
+        self.assertEqual(wrap_bare_math(wrapped), wrapped)
+
+    def test_restore_json_eaten_latex(self):
+        # json.loads съедает \f и \t: form feed + "rac", tab + "imes"
+        self.assertEqual(restore_json_eaten_latex('-\x0crac{1}{2}'),
+                         r'-\frac{1}{2}')
+        eaten_times = 'a \times b'  # обычная строка: \t → tab
+        self.assertIn('\t', eaten_times)
+        self.assertEqual(restore_json_eaten_latex(eaten_times),
+                         r'a \times b')
+        self.assertEqual(restore_json_eaten_latex(r'a \times b'),
+                         r'a \times b')
+        self.assertEqual(
+            restore_json_eaten_latex('шаг.\nПриведем'),
+            'шаг.\nПриведем')
+        self.assertEqual(restore_json_eaten_latex(r'-\frac{1}{2}'),
+                         r'-\frac{1}{2}')
+
+    def test_loads_neuro_json_keeps_tex_commands(self):
+        sloppy = (
+            '{"answer": "$-\\frac{1}{2}$",'
+            ' "solution": "a \\times b \\right) $x \\neq 0$"}')
+        data = loads_neuro_json(sloppy)
+        self.assertEqual(data['answer'], r'$-\frac{1}{2}$')
+        self.assertEqual(data['solution'], r'a \times b \right) $x \neq 0$')
+        # Корректно экранированный json.dumps (\frac → \\frac)
+        clean = json.dumps({'answer': r'$-\frac{1}{2}$'})
+        self.assertEqual(loads_neuro_json(clean)['answer'], r'$-\frac{1}{2}$')
+        under = '{"x": "\\underline{A}"}'
+        self.assertEqual(loads_neuro_json(under)['x'], r'\underline{A}')
+        thin = '{"x": "a\\,b \\{1\\}"}'
+        with self.assertRaises(ValueError):
+            json.loads(thin)
+        self.assertEqual(loads_neuro_json(thin)['x'], r'a\,b \{1\}')
+        # Настоящий перевод строки внутри кавычек (как печатает модель)
+        nl = '{"x": "шаг 1.\nшаг 2."}'
+        self.assertEqual(loads_neuro_json(nl)['x'], 'шаг 1.\nшаг 2.')
+        # Корректный JSON-эскейп \n — перевод строки, не буквальный \\n
+        escaped = '{"x": "шаг 1.\\nшаг 2."}'
+        self.assertEqual(loads_neuro_json(escaped)['x'], 'шаг 1.\nшаг 2.')
+        escaped_en = '{"x": "line 1.\\nline 2."}'
+        self.assertEqual(loads_neuro_json(escaped_en)['x'], 'line 1.\nline 2.')
+        fenced = '```json\n{"answer": "1", "solution": "", "subitem_answers": [], "subitem_solutions": []}\n```'
+        self.assertEqual(loads_neuro_json(fenced)['answer'], '1')
+        # Хвост как у задачи 75: подпункты и \neq / \frac без удвоения
+        raw75 = (
+            '{\n  "answer": "",\n  "solution": "",\n'
+            '  "subitem_answers": ["$x = -2$"],\n'
+            '  "subitem_solutions": ["$x \\neq 1$, $t = \\frac{1}{x}$"]\n}')
+        parsed = loads_neuro_json(raw75)
+        self.assertEqual(parsed['subitem_answers'], ['$x = -2$'])
+        self.assertEqual(parsed['subitem_solutions'][0],
+                         r'$x \neq 1$, $t = \frac{1}{x}$')
+        dumped = json.dumps({'x': 'a\nb'})
+        self.assertEqual(loads_neuro_json(dumped)['x'], 'a\nb')
+
+
+class NeuroTests(TestCase):
+    """Сервис нейрогенерации ответов/решений (Gemini, REST)."""
+
+    def _response(self, data, status=200):
+        from unittest import mock
+        response = mock.Mock()
+        response.status_code = status
+        response.text = 'raw'
+        response.json.return_value = {
+            'candidates': [{'content': {'parts': [{
+                'text': json.dumps(data)}]}}],
+        }
+        return response
+
+    def test_no_key_raises(self):
+        from django.test import override_settings
+
+        from .neuro import NeuroError, solve_task
+        with override_settings(GEMINI_API_KEY='', GOOGLE_API_KEY=''):
+            with self.assertRaises(NeuroError):
+                solve_task('Задача')
+
+    def test_solve_task_parses_and_normalizes(self):
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from . import neuro
+        payload = {
+            'answer': ' 42 ', 'solution': 'Очевидно.',
+            # Лишний элемент отрезается, недостающий добивается пустым
+            'subitem_answers': ['1', '2', '3'],
+            'subitem_solutions': ['a'],
+        }
+        with override_settings(GEMINI_API_KEY='k', GEMINI_MODEL='m',
+                               GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=self._response(payload)) as post:
+                result = neuro.solve_task('Задача', ['$x$', '$y$'])
+        self.assertEqual(result['answer'], '42')
+        self.assertEqual(result['solution'], 'Очевидно.')
+        self.assertEqual(result['subitem_answers'], ['1', '2'])
+        self.assertEqual(result['subitem_solutions'], ['a', ''])
+        body = post.call_args.kwargs['json']
+        self.assertIn('Задача', body['contents'][0]['parts'][0]['text'])
+        self.assertEqual(
+            body['generationConfig']['response_mime_type'],
+            'application/json')
+        self.assertEqual(body['generationConfig']['maxOutputTokens'], 4096)
+
+    def test_invented_subitems_fold_into_answer(self):
+        """Параметр без подпунктов модель часто кладёт в массивы — не теряем."""
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from . import neuro
+        payload = {
+            'answer': '', 'solution': '',
+            'subitem_answers': ['$x=3/a$', 'нет корней'],
+            'subitem_solutions': ['при $a\\neq 0$', 'при $a=0$'],
+        }
+        with override_settings(GEMINI_API_KEY='k', GEMINI_MODEL='m',
+                               GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=self._response(payload)):
+                result = neuro.solve_task('Решите $2ax=6$')
+        self.assertEqual(result['answer'], '$x=3/a$; нет корней')
+        self.assertIn('при $a\\neq 0$', result['solution'])
+        self.assertIn('при $a=0$', result['solution'])
+        self.assertEqual(result['subitem_answers'], [])
+        self.assertEqual(result['subitem_solutions'], [])
+
+    def test_solve_task_wraps_bare_math(self):
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from . import neuro
+        payload = {
+            'answer': r'a = \pm \frac{4}{5}',
+            'solution': r'Дискриминант D = 25a^2 - 16.',
+            'subitem_answers': [], 'subitem_solutions': [],
+        }
+        with override_settings(GEMINI_API_KEY='k', GEMINI_MODEL='m',
+                               GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=self._response(payload)):
+                result = neuro.solve_task('При каких a...')
+        self.assertEqual(result['answer'], r'$a = \pm \frac{4}{5}$')
+        self.assertIn(r'$D = 25a^2 - 16$', result['solution'])
+
+    def test_solve_task_restores_json_eaten_commands(self):
+        """Gemini пишет \\frac без экранирования — json.loads даёт form feed."""
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from . import neuro
+        # Как Gemini: в JSON один слэш перед f/t, не два
+        raw = (
+            '{"answer": "$-\\frac{1}{2}$",'
+            ' "solution": "a \\times b",'
+            ' "subitem_answers": [], "subitem_solutions": []}')
+        self.assertIn('\x0c', json.loads(raw)['answer'])
+        response = mock.Mock(status_code=200, text='ok')
+        response.json.return_value = {
+            'candidates': [{'content': {'parts': [{'text': raw}]}}],
+        }
+        with override_settings(GEMINI_API_KEY='k', GEMINI_MODEL='m',
+                               GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=response):
+                result = neuro.solve_task('Упростите')
+        self.assertIn(r'\frac', result['answer'])
+        self.assertNotIn('\x0c', result['answer'])
+        self.assertIn(r'\times', result['solution'])
+
+    def test_empty_draft_raises(self):
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from .neuro import NeuroError, solve_task
+        payload = {
+            'answer': '', 'solution': '',
+            'subitem_answers': [], 'subitem_solutions': [],
+        }
+        with override_settings(GEMINI_API_KEY='k'):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=self._response(payload)):
+                with self.assertRaises(NeuroError) as ctx:
+                    solve_task('Задача')
+        self.assertIn('не вернула ответ', str(ctx.exception))
+
+    def test_http_error_raises(self):
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from .neuro import NeuroError, solve_task
+        response = mock.Mock(status_code=503, text='oops')
+        with override_settings(GEMINI_API_KEY='k'):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=response):
+                with self.assertLogs('problems.neuro', level='WARNING'):
+                    with self.assertRaises(NeuroError):
+                        solve_task('Задача')
+
+    def test_retired_model_shows_api_message(self):
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from .neuro import NeuroError, solve_task
+        response = mock.Mock(status_code=404, text='not found')
+        response.json.return_value = {
+            'error': {
+                'message': (
+                    'This model models/gemini-2.5-flash-lite '
+                    'is no longer available'),
+            },
+        }
+        with override_settings(GEMINI_API_KEY='k'):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=response):
+                with self.assertLogs('problems.neuro', level='WARNING'):
+                    with self.assertRaises(NeuroError) as ctx:
+                        solve_task('Задача')
+        self.assertIn('недоступна', str(ctx.exception))
+        self.assertIn('gemini-2.5-flash-lite', str(ctx.exception))
+
+    def test_quota_parallel_and_rate(self):
+        from django.test import override_settings
+
+        from .neuro import NeuroQuotaError, acquire_quota, release_quota
+        user = make_teacher('neuro-user')
+        with override_settings(GEMINI_RATE_PER_MINUTE=1, GEMINI_TIMEOUT=60):
+            started = acquire_quota(user)
+            with self.assertRaises(NeuroQuotaError):
+                acquire_quota(user)
+            release_quota(user, started)
+            with self.assertRaises(NeuroQuotaError):
+                acquire_quota(user)
+
+    def test_quota_429_keeps_inflight(self):
+        """Чужой 429 не снимает блокировку текущего запроса."""
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from .models import NeuroSolveQuota
+        from .neuro import acquire_quota
+        teacher = make_teacher()
+        self.client.login(username=teacher.username, password='pass12345')
+        with override_settings(GEMINI_RATE_PER_MINUTE=20, GEMINI_TIMEOUT=60):
+            started = acquire_quota(teacher)
+            with mock.patch('problems.neuro.solve_task') as solve:
+                response = self.client.post(
+                    reverse('task_neuro_solve'),
+                    {'text': 'Задача'},
+                    content_type='application/json')
+            self.assertEqual(response.status_code, 429)
+            solve.assert_not_called()
+            quota = NeuroSolveQuota.objects.get(user=teacher)
+            self.assertEqual(quota.in_flight_at, started)
+
+    def test_quota_lock_covers_schema_retry(self):
+        """Блокировка живёт на обе попытки solve_task, не на один таймаут."""
+        from datetime import timedelta
+        from unittest import mock
+
+        from django.test import override_settings
+        from django.utils import timezone
+
+        from .neuro import NeuroQuotaError, acquire_quota
+        user = make_teacher('neuro-lock')
+        now = timezone.now()
+        with override_settings(GEMINI_RATE_PER_MINUTE=20, GEMINI_TIMEOUT=60):
+            with mock.patch('problems.neuro.timezone.now', return_value=now):
+                acquire_quota(user)
+            # Старый lock_sec = timeout+15; повтор без schema ещё мог бы идти.
+            still_held = now + timedelta(seconds=75)
+            with mock.patch('problems.neuro.timezone.now',
+                            return_value=still_held):
+                with self.assertRaises(NeuroQuotaError):
+                    acquire_quota(user)
+            stale = now + timedelta(seconds=136)
+            with mock.patch('problems.neuro.timezone.now', return_value=stale):
+                acquire_quota(user)
+
+    def test_too_long_raises(self):
+        from django.test import override_settings
+
+        from .neuro import MAX_TASK_CHARS, NeuroError, solve_task
+        with override_settings(GEMINI_API_KEY='k'):
+            with self.assertRaises(NeuroError):
+                solve_task('x' * (MAX_TASK_CHARS + 1))
+
+    def test_apply_result_skips_filled_unless_overwrite(self):
+        from .neuro import apply_result
+        task = Task.objects.create(
+            text_latex='Задача', answer_latex='старый', created_by=make_teacher())
+        apply_result(task, {'answer': 'новый', 'solution': 'Шаг'},
+                     overwrite=False)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, 'старый')
+        self.assertEqual(task.solution_latex, 'Шаг')
+        apply_result(task, {'answer': 'новый', 'solution': 'Другое'},
+                     overwrite=True)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, 'новый')
+        self.assertEqual(task.solution_latex, 'Другое')
+
+    def test_apply_result_answers_only_skips_solution(self):
+        from .neuro import apply_result
+        task = Task.objects.create(
+            text_latex='Задача', solution_latex='старое',
+            created_by=make_teacher())
+        apply_result(
+            task,
+            {'answer': '4', 'solution': 'новое'},
+            answers_only=True)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, '4')
+        self.assertEqual(task.solution_latex, 'старое')
+
+    def test_has_blank_answer(self):
+        teacher = make_teacher()
+        empty = Task.objects.create(text_latex='Пустая', created_by=teacher)
+        self.assertTrue(empty.has_blank_answer)
+        answer_only = Task.objects.create(
+            text_latex='Есть ответ', answer_latex='4', created_by=teacher)
+        self.assertFalse(answer_only.has_blank_answer)
+        solution_only = Task.objects.create(
+            text_latex='Есть решение', solution_latex='Шаг', created_by=teacher)
+        self.assertTrue(solution_only.has_blank_answer)
+        full = Task.objects.create(
+            text_latex='Полная', answer_latex='4', solution_latex='Шаг',
+            created_by=teacher)
+        self.assertFalse(full.has_blank_answer)
+        mixed = Task.objects.create(text_latex='Подпункты', created_by=teacher)
+        mixed.subitems.create(order=10, text_latex='а', answer_latex='1')
+        mixed.subitems.create(order=20, text_latex='б')
+        self.assertTrue(mixed.has_blank_answer)
+
+    def test_apply_holds_quota_until_write(self):
+        """apply_result идёт при занятой квоте, иначе гонка overwrite."""
+        from unittest import mock
+
+        from .models import NeuroSolveQuota
+        teacher = make_teacher()
+        self.client.login(username=teacher.username, password='pass12345')
+        task = Task.objects.create(text_latex='Задача', created_by=teacher)
+        drafts = {'answer': '4', 'solution': 'Шаг',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        seen = {}
+
+        def fake_apply(task_obj, result, **kwargs):
+            quota = NeuroSolveQuota.objects.get(user=teacher)
+            seen['held'] = quota.in_flight_at is not None
+
+        with mock.patch('problems.neuro.solve_task', return_value=drafts):
+            with mock.patch('problems.neuro.apply_result',
+                            side_effect=fake_apply) as apply_mock:
+                response = self.client.post(
+                    reverse('task_neuro_solve'),
+                    {'task_id': task.pk, 'apply': True},
+                    content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        apply_mock.assert_called_once()
+        self.assertTrue(seen.get('held'))
+        quota = NeuroSolveQuota.objects.get(user=teacher)
+        self.assertIsNone(quota.in_flight_at)
+
+    def test_solve_endpoint_apply_and_form_only(self):
+        from unittest import mock
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        task = Task.objects.create(text_latex='$2+2$', created_by=teacher)
+        drafts = {'answer': '4', 'solution': 'Сложение.',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        url = reverse('task_neuro_solve')
+        with mock.patch('problems.neuro.solve_task', return_value=drafts):
+            response = self.client.post(
+                url, {'text': '$2+2$', 'subitems': []},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, '')
+        with mock.patch('problems.neuro.solve_task', return_value=drafts):
+            response = self.client.post(
+                url, {'task_id': task.pk, 'apply': True},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, '4')
+        self.assertEqual(task.solution_latex, 'Сложение.')
+
+    def test_solve_endpoint_rejects_string_flags(self):
+        """«false» как строка не должна включать apply/overwrite."""
+        from unittest import mock
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        task = Task.objects.create(
+            text_latex='Задача', answer_latex='старый', created_by=teacher)
+        drafts = {'answer': 'новый', 'solution': 'Шаг',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        with mock.patch('problems.neuro.solve_task', return_value=drafts) as solve:
+            response = self.client.post(
+                reverse('task_neuro_solve'),
+                {'task_id': task.pk, 'apply': 'false', 'overwrite': 'false'},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        solve.assert_not_called()
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, 'старый')
+
+    def test_solve_endpoint_apply_false_skips_write(self):
+        from unittest import mock
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        task = Task.objects.create(text_latex='Задача', created_by=teacher)
+        drafts = {'answer': '4', 'solution': 'Шаг',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        with mock.patch('problems.neuro.solve_task', return_value=drafts):
+            response = self.client.post(
+                reverse('task_neuro_solve'),
+                {'task_id': task.pk, 'apply': False},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, '')
+
+    def test_solve_endpoint_uses_task_from_db_when_fields_omitted(self):
+        """Без text/subitems в теле — условие и подпункты с базы."""
+        from unittest import mock
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        task = Task.objects.create(
+            text_latex='Решите уравнение:', created_by=teacher)
+        task.subitems.create(order=10, text_latex=r'$\frac{x}{2}=0$')
+        drafts = {'answer': '', 'solution': '',
+                  'subitem_answers': ['$x=0$'],
+                  'subitem_solutions': ['Шаг']}
+        with mock.patch('problems.neuro.solve_task', return_value=drafts) as solve:
+            response = self.client.post(
+                reverse('task_neuro_solve'),
+                {'task_id': task.pk, 'apply': True},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        solve.assert_called_once_with('Решите уравнение:', [r'$\frac{x}{2}=0$'])
+        task.subitems.get().refresh_from_db()
+        self.assertEqual(task.subitems.get().answer_latex, '$x=0$')
+
+    def test_solve_endpoint_prefers_request_fields(self):
+        """Переданные text/subitems важнее базы — даже пустой массив."""
+        from unittest import mock
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        task = Task.objects.create(
+            text_latex='Старое условие', created_by=teacher)
+        task.subitems.create(order=10, text_latex=r'$x=1$')
+        drafts = {'answer': '8', 'solution': 'Сложение.',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        with mock.patch('problems.neuro.solve_task', return_value=drafts) as solve:
+            response = self.client.post(
+                reverse('task_neuro_solve'),
+                {'task_id': task.pk, 'text': 'Найдите $3+5$',
+                 'subitems': []},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        solve.assert_called_once_with('Найдите $3+5$', [])
+
+    def test_solve_endpoint_rejects_bad_subitems(self):
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('task_neuro_solve')
+        for bad in (1, 'abc', [1], [None], {'a': 'b'}):
+            response = self.client.post(
+                url, {'text': 'Задача', 'subitems': bad},
+                content_type='application/json')
+            self.assertEqual(response.status_code, 400, msg=bad)
+
+    def test_solve_endpoint_rejects_bad_task_id(self):
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('task_neuro_solve')
+        for bad in ('abc', True, False, 1.5, [], {}, -1, 0):
+            response = self.client.post(
+                url, {'task_id': bad, 'text': 'Задача'},
+                content_type='application/json')
+            self.assertEqual(response.status_code, 400, msg=bad)
+
+    def test_solve_endpoint_accepts_string_task_id(self):
+        """Кнопки шлют data-task-id строкой, не числом."""
+        from unittest import mock
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        task = Task.objects.create(text_latex='$2+2$', created_by=teacher)
+        drafts = {'answer': '4', 'solution': 'Сложение.',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        with mock.patch('problems.neuro.solve_task', return_value=drafts):
+            response = self.client.post(
+                reverse('task_neuro_solve'),
+                {'task_id': str(task.pk)},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['answer'], '4')
+
+    def test_solve_task_keeps_empty_subitem_slots(self):
+        """Пустой подпункт не сдвигает ответы следующих строк."""
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from . import neuro
+        payload = {
+            'answer': '', 'solution': '',
+            'subitem_answers': ['A', '', 'C'],
+            'subitem_solutions': ['sa', '', 'sc'],
+        }
+        with override_settings(GEMINI_API_KEY='k', GEMINI_MODEL='m',
+                               GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            return_value=self._response(payload)) as post:
+                result = neuro.solve_task('Задача', ['a', '', 'c'])
+        self.assertEqual(result['subitem_answers'], ['A', '', 'C'])
+        prompt = post.call_args.kwargs['json']['contents'][0]['parts'][0]['text']
+        self.assertIn('1) a', prompt)
+        self.assertIn('3) c', prompt)
+
+    def test_solve_task_retries_timeout(self):
+        from unittest import mock
+
+        import requests
+        from django.test import override_settings
+
+        from . import neuro
+        payload = {
+            'answer': '8', 'solution': 'Сложение.',
+            'subitem_answers': [], 'subitem_solutions': [],
+        }
+        timed_out = requests.Timeout('read timed out')
+        with override_settings(GEMINI_API_KEY='k', GEMINI_MODEL='m',
+                               GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            side_effect=[timed_out,
+                                         self._response(payload)]) as post:
+                result = neuro.solve_task('3+5')
+        self.assertEqual(result['answer'], '8')
+        self.assertEqual(post.call_count, 2)
+        first = post.call_args_list[0].kwargs['json']['generationConfig']
+        second = post.call_args_list[1].kwargs['json']['generationConfig']
+        self.assertIn('response_schema', first)
+        self.assertNotIn('response_schema', second)
+
+    def test_solve_task_timeout_message(self):
+        from unittest import mock
+
+        import requests
+        from django.test import override_settings
+
+        from .neuro import NeuroError, solve_task
+        with override_settings(GEMINI_API_KEY='k', GEMINI_TIMEOUT=5):
+            with mock.patch('problems.neuro.requests.post',
+                            side_effect=requests.Timeout('read timed out')):
+                with self.assertLogs('problems.neuro', level='WARNING'):
+                    with self.assertRaises(NeuroError) as ctx:
+                        solve_task('Задача')
+        self.assertIn('не успела ответить', str(ctx.exception))
+
+    def test_superuser_without_profile_gets_neuro_js(self):
+        """Суперпользователь без профиля — учитель по get_role, скрипт должен грузиться."""
+        admin = User.objects.create_superuser('admin', 'a@b.c', 'pass12345')
+        task = Task.objects.create(text_latex='$2+2$', created_by=admin)
+        self.client.login(username='admin', password='pass12345')
+        response = self.client.get(reverse('task_detail', args=[task.pk]))
+        self.assertContains(response, 'js/neuro.js')
+        self.assertContains(response, 'NEURO_SOLVE_URL')
+
+    def test_neuro_js_skips_empty_formset_extra_row(self):
+        """Пустая extra=1 строка formset не считается подпунктом."""
+        from pathlib import Path
+
+        from django.conf import settings
+
+        js = (Path(settings.BASE_DIR) / 'static/js/neuro.js').read_text()
+        self.assertIn('function formSubitemRows()', js)
+        self.assertIn('if (!field.value.trim()) return;', js)
+        self.assertNotIn('payload.apply = true', js)
+        self.assertIn('if (!silent)', js)
+        self.assertIn('if (!id || seen[id]) return;', js)
+        self.assertIn('function saveFilledForms(forms)', js)
+        self.assertIn('EgorAutosave.autosave(form)', js)
+        self.assertIn('!String(value).trim()', js)
+        teacher = make_teacher('neuro-form')
+        self.client.login(username=teacher.username, password='pass12345')
+        response = self.client.get(reverse('task_create'))
+        self.assertContains(response, 'id_subitems-0-text_latex')
 
 
 class WebTexTests(TestCase):
@@ -589,6 +1231,12 @@ class QuickUpdateTests(TestCase):
         self.assertContains(response, '>Ответ<')
         self.assertContains(response, 'icon-btn')
         self.assertContains(response, 'class="btn">Добавить')
+        self.assertContains(response, 'data-neuro="task-detail-answer"')
+        self.assertContains(response, 'data-neuro="task-detail"')
+        self.assertContains(response, 'data-task-id="%s"' % self.task.pk)
+        self.assertContains(response, 'Дописать AI-ответ')
+        self.assertContains(response, 'Добавить AI-решение')
+        self.assertContains(response, 'js/neuro.js')
         self.assertNotContains(response, 'qa_answer')
         self.assertNotContains(response, 'устаревшие')
         self.assertNotContains(response, 'legacy')

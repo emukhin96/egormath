@@ -15,14 +15,22 @@ SITE_ROOT = BASE_DIR.parent                        # корень репозит
 SECRETS_DIR = SITE_ROOT / '.secrets'
 
 
+def _unwrap_quotes(value):
+    """Снять только парную обёртку кавычек, не резать край пароля."""
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
+        return value[1:-1]
+    return value
+
+
 def read_secret(name, default=None):
     """Секрет из переменной окружения или файла .secrets/<name>."""
     value = os.environ.get(name)
     if value:
-        return value.strip()
+        return _unwrap_quotes(value)
     path = SECRETS_DIR / name
     if path.exists():
-        return path.read_text().strip()
+        return _unwrap_quotes(path.read_text(encoding='utf-8-sig'))
     return default
 
 
@@ -140,6 +148,15 @@ SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
 LATEX_API_URL = read_secret('LATEX_API_URL', 'http://81.200.147.78:8000')
 LATEX_API_KEY = read_secret('LATEX_API_KEY', '')
 LATEX_API_TIMEOUT = int(read_secret('LATEX_API_TIMEOUT', '120'))
+
+# Нейрогенерация ответов/решений (Gemini API). Без ключа кнопки на
+# импорте вернут понятную ошибку. Более сильная модель — одной
+# настройкой GEMINI_MODEL (например gemini-3.5-flash).
+GEMINI_API_KEY = (read_secret('GEMINI_API_KEY', '')
+                  or read_secret('GOOGLE_API_KEY', ''))
+GEMINI_MODEL = read_secret('GEMINI_MODEL', 'gemini-3.5-flash-lite')
+GEMINI_TIMEOUT = int(read_secret('GEMINI_TIMEOUT', '60'))
+GEMINI_RATE_PER_MINUTE = int(read_secret('GEMINI_RATE_PER_MINUTE', '20'))
 
 # Профили шрифтов, доступные в PDF-редакторе (опция font= пакета egor).
 # school и palatino требуют подготовленного LaTeX API: xelatex + mathspec

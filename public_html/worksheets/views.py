@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 
 from django.conf import settings
@@ -151,6 +152,7 @@ def worksheet_import(request):
         'tex': '', 'preview': None,
         'grade_choices': Task.GRADE_CHOICES,
         'topics': topic_tree(),
+        'gemini_ready': bool(settings.GEMINI_API_KEY),
     }
     context.update(taxonomy_page_context())
     if request.method == 'POST':
@@ -218,7 +220,22 @@ def worksheet_import(request):
             'new_tasks': sum(1 for r in rows
                              if r['kind'] == 'task' and not r['existing_id']),
         }
+        # Исходные тексты задач для кнопок нейрогенерации (json_script):
+        # из KaTeX-рендера LaTeX обратно не достать
+        context['solve_payloads'] = {
+            str(i): {'text': data['text'], 'subitems': data['subitems']}
+            for i, (kind, data) in enumerate(parsed['elements'])
+            if kind == 'task'
+        }
     return render(request, 'worksheets/import.html', context)
+
+
+@teacher_required
+@require_POST
+def worksheet_import_solve(request):
+    """Тот же эндпоинт, что /problems/solve/: черновик для предпросмотра."""
+    from problems.views import task_neuro_solve
+    return task_neuro_solve(request)
 
 
 @teacher_required

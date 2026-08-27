@@ -6,6 +6,8 @@ urlpatterns = [
     path('', views.worksheet_list, name='worksheet_list'),
     path('new/', views.worksheet_create, name='worksheet_create'),
     path('import/', views.worksheet_import, name='worksheet_import'),
+    path('import/solve/', views.worksheet_import_solve,
+         name='worksheet_import_solve'),
     path('<int:pk>/', views.worksheet_detail, name='worksheet_detail'),
     path('<int:pk>/edit/', views.worksheet_edit, name='worksheet_edit'),
     path('<int:pk>/copy/', views.worksheet_copy, name='worksheet_copy'),

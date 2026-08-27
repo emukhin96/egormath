@@ -315,6 +315,18 @@ class Task(models.Model):
     def has_subitem_answers(self):
         return any(s.answer_latex.strip() for s in self.subitems.all())
 
+    @property
+    def has_blank_answer(self):
+        """Нет ответа: «Дописать AI-ответ» берёт только такие задачи.
+
+        Решение без ответа — ответ ещё нужно дописать. Ответ без решения —
+        ответ уже есть, пакет эту задачу пропускает.
+        """
+        subs = list(self.subitems.all())
+        if subs:
+            return any(not s.answer_latex.strip() for s in subs)
+        return not (self.answer_latex or '').strip()
+
     def make_variant(self, user=None):
         """Скрытая копия задачи для «локальной» правки в одном листке."""
         original = self
@@ -498,3 +510,24 @@ class TaskSource(models.Model):
 
     def __str__(self):
         return f'{self.source} № {self.number}'
+
+
+class NeuroSolveQuota(models.Model):
+    """Квота нейрогенерации: не больше N запросов в минуту и один in-flight.
+
+    Платный внешний API и синхронный вызов до минуты — без серверного
+    лимита любой учитель мог бы исчерпать баланс и воркеры.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        verbose_name='Пользователь', related_name='neuro_quota')
+    in_flight_at = models.DateTimeField('Занят с', null=True, blank=True)
+    window_started = models.DateTimeField('Начало окна')
+    window_count = models.PositiveIntegerField('Запросов в окне', default=0)
+
+    class Meta:
+        verbose_name = 'Квота нейрогенерации'
+        verbose_name_plural = 'Квоты нейрогенерации'
+
+    def __str__(self):
+        return f'Квота нейросети: {self.user}'

@@ -37,6 +37,10 @@
   {# Одна кнопка PDF: варианты (ученик/ответы/учитель) выбираются на странице сборки #}
   <a class="btn" href="{% url 'worksheet_pdf_editor' worksheet.pk %}">PDF</a>
   <a class="btn btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}">.tex</a>
+  <button type="button" class="btn btn-secondary" data-neuro="apply-answers"
+          title="Ответы в пустые поля — существующие ответы и решения не трогаем">Дописать AI-ответ к решениям</button>
+  <button type="button" class="btn btn-secondary" data-neuro="apply-all"
+          title="Ответ и решение для всех задач листка — проверьте после записи">Добавить AI-решения и ответ</button>
 </div>
 
 <div class="card worksheet-items-card">
@@ -62,7 +66,7 @@
   <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}">
     {% for row in rows %}
     {% with item=row.item %}
-    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" data-id="{{ item.pk }}">
+    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" data-id="{{ item.pk }}"{% if item.task_id %} data-task-id="{{ item.task.pk }}" data-has-answer="{% if item.task.answer_latex or item.task.solution_latex or item.task.has_subitem_answers %}1{% endif %}" data-no-answer="{% if item.task.has_blank_answer %}1{% endif %}"{% endif %}>
       <div class="ws-body">
         <span class="drag-handle" title="Перетащите, чтобы изменить порядок">⠿</span>
 
