@@ -548,6 +548,32 @@ class NeuroTests(TestCase):
                 content_type='application/json')
             self.assertEqual(response.status_code, 400, msg=bad)
 
+    def test_solve_endpoint_rejects_bad_task_id(self):
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('task_neuro_solve')
+        for bad in ('abc', True, False, 1.5, [], {}, -1, 0):
+            response = self.client.post(
+                url, {'task_id': bad, 'text': 'Задача'},
+                content_type='application/json')
+            self.assertEqual(response.status_code, 400, msg=bad)
+
+    def test_solve_endpoint_accepts_string_task_id(self):
+        """Кнопки шлют data-task-id строкой, не числом."""
+        from unittest import mock
+        teacher = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        task = Task.objects.create(text_latex='$2+2$', created_by=teacher)
+        drafts = {'answer': '4', 'solution': 'Сложение.',
+                  'subitem_answers': [], 'subitem_solutions': []}
+        with mock.patch('problems.neuro.solve_task', return_value=drafts):
+            response = self.client.post(
+                reverse('task_neuro_solve'),
+                {'task_id': str(task.pk)},
+                content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['answer'], '4')
+
     def test_solve_task_keeps_empty_subitem_slots(self):
         """Пустой подпункт не сдвигает ответы следующих строк."""
         from unittest import mock

@@ -646,7 +646,15 @@ def task_neuro_solve(request):
     task = None
     task_id = payload.get('task_id')
     if task_id not in (None, ''):
-        task = get_object_or_404(Task, pk=task_id)
+        # data-task-id в DOM — строка; bool не принимаем (это subclass int).
+        if isinstance(task_id, bool) or not isinstance(task_id, (int, str)):
+            return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+        if isinstance(task_id, str) and not task_id.isdigit():
+            return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+        pk = int(task_id)
+        if pk < 1:
+            return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+        task = get_object_or_404(Task, pk=pk)
 
     # Поля формы, если ключ передан; база — только запасной вариант.
     # Пустой массив subitems тоже считается переданным (не подменяем).
