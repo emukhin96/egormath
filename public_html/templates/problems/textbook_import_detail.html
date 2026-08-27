@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}{{ batch.title }} — EgorMath{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><span class="page-eyebrow">Партия импорта</span><h1>{{ batch.title }}</h1>
+    <p class="page-subtitle">{{ batch.source }} · {{ batch.get_status_display }} · {{ page.paginator.count }} задач</p></div>
+  <a class="btn btn-secondary" href="{% url 'textbook_import_list' %}">Все партии</a>
+</div>
+<div class="card">
+  <div class="form-buttons">
+    <a class="btn btn-secondary" href="?">Все</a>
+    {% for tab in status_tabs %}<a class="btn btn-secondary" href="?status={{ tab.value }}">{{ tab.label }} ({{ tab.count }})</a>{% endfor %}
+  </div>
+  {% if batch.status != 'imported' %}
+  <div class="form-buttons">
+    <form method="post" action="{% url 'textbook_import_approve_clean' batch.pk %}">{% csrf_token %}<button class="btn btn-secondary" type="submit">Одобрить безошибочные</button></form>
+    <form method="post" action="{% url 'textbook_import_commit' batch.pk %}" onsubmit="return confirm('Загрузить все одобренные задачи и создать подборки?');">{% csrf_token %}<button class="btn" type="submit">Загрузить в каталог</button></form>
+  </div>
+  {% endif %}
+  <table class="list">
+    <tr><th>Ключ</th><th>№</th><th>Раздел</th><th>Тема</th><th>Уверенность</th><th>Замечания</th><th>Статус</th></tr>
+    {% for draft in page %}<tr>
+      <td><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.external_id }}</a></td>
+      <td>{{ draft.source_number }}</td><td>{{ draft.source_path|join:' › ' }}</td>
+      <td>{{ draft.topic|default:draft.topic_original|default:'—' }}</td><td>{{ draft.confidence }}</td>
+      <td>{% if draft.warnings %}{{ draft.warnings|join:'; ' }}{% else %}—{% endif %}</td><td>{{ draft.get_status_display }}</td>
+    </tr>{% endfor %}
+  </table>
+  {% if page.has_other_pages %}<p class="form-buttons">{% if page.has_previous %}<a class="btn btn-secondary" href="?status={{ status }}&page={{ page.previous_page_number }}">←</a>{% endif %}<span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a class="btn btn-secondary" href="?status={{ status }}&page={{ page.next_page_number }}">→</a>{% endif %}</p>{% endif %}
+</div>
+{% endblock %}

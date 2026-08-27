@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Импорт задачников — EgorMath{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><span class="page-eyebrow">База задач</span><h1>Импорт задачников</h1>
+    <p class="page-subtitle">Проверяемые партии из JSON, до публикации в каталоге.</p></div>
+  <a class="btn" href="{% url 'textbook_import_upload' %}">Новая партия</a>
+</div>
+<div class="card">
+{% if batches %}
+<table class="list">
+  <tr><th>Партия</th><th>Источник</th><th>Профиль</th><th>Задач</th><th>Статус</th><th>Создана</th></tr>
+  {% for batch in batches %}
+  <tr>
+    <td><a href="{% url 'textbook_import_detail' batch.pk %}">{{ batch.title }}</a></td>
+    <td>{{ batch.source }}</td><td>{{ batch.profile }}</td><td>{{ batch.total }}</td>
+    <td>{{ batch.get_status_display }}</td><td>{{ batch.created_at|date:'d.m.Y H:i' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">Партий пока нет.</p>{% endif %}
+</div>
+{% endblock %}

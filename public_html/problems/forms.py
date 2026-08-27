@@ -1,7 +1,8 @@
 from django import forms
 from django.forms import inlineformset_factory
 
-from .models import Task, TaskImage, TaskSource, TaskSubitem
+from .models import (Task, TaskImage, TaskSource, TaskSubitem,
+                     TextbookTaskDraft)
 
 
 class TaskForm(forms.ModelForm):
@@ -56,3 +57,34 @@ class TaskFilterForm(forms.Form):
         label='Класс', required=False, coerce=int,
         choices=[('', 'Любой')] + Task.GRADE_CHOICES)
     tag = forms.CharField(required=False)
+
+
+class TextbookBundleUploadForm(forms.Form):
+    title = forms.CharField(label='Название партии', max_length=190)
+    source_title = forms.CharField(label='Название задачника', max_length=190)
+    source_author = forms.CharField(
+        label='Автор(ы)', max_length=190, required=False)
+    source_year = forms.IntegerField(
+        label='Год издания', required=False, min_value=1000, max_value=9999)
+    bundle = forms.FileField(
+        label='import.json', help_text='Результат tools/textbook_parser.py')
+
+
+class TextbookDraftReviewForm(forms.ModelForm):
+    copy_solution_from = forms.CharField(
+        label='Взять решение у ключа', max_length=190, required=False,
+        help_text='Оставьте пустым, чтобы править текущий текст вручную')
+
+    class Meta:
+        model = TextbookTaskDraft
+        fields = [
+            'external_id', 'source_number', 'text_latex',
+            'subitems', 'author_answer_latex', 'author_solution_latex', 'topic',
+            'status',
+        ]
+        widgets = {
+            'text_latex': forms.Textarea(attrs={'rows': 8}),
+            'subitems': forms.Textarea(attrs={'rows': 8}),
+            'author_answer_latex': forms.Textarea(attrs={'rows': 3}),
+            'author_solution_latex': forms.Textarea(attrs={'rows': 12}),
+        }

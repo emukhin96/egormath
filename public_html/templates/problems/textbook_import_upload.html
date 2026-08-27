@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}Новая партия импорта — EgorMath{% endblock %}
+{% block content %}
+<div class="page-head"><div><span class="page-eyebrow">Импорт задачника</span><h1>Новая партия</h1>
+  <p class="page-subtitle">Загрузка создаёт только черновики: база задач не меняется до подтверждения.</p></div></div>
+<div class="card">
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}{{ form.non_field_errors }}
+    {% for field in form %}<p><label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field.errors }}{{ field }}{% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}</p>{% endfor %}
+    <div class="form-buttons"><button class="btn" type="submit">Создать черновики</button>
+      <a class="btn btn-secondary" href="{% url 'textbook_import_list' %}">Отмена</a></div>
+  </form>
+</div>
+{% endblock %}

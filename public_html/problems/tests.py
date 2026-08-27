@@ -426,6 +426,22 @@ class NeuroTests(TestCase):
         self.assertEqual(task.answer_latex, '4')
         self.assertEqual(task.solution_latex, 'старое')
 
+    def test_apply_result_never_changes_author_fields(self):
+        """AI пишет только в редакторские поля, авторский текст неизменяем."""
+        from .neuro import apply_result
+        task = Task.objects.create(
+            text_latex='Задача', author_answer_latex='автор: 4',
+            author_solution_latex='авторское решение',
+            created_by=make_teacher())
+        apply_result(
+            task, {'answer': 'AI: 4', 'solution': 'AI-решение'},
+            overwrite=True)
+        task.refresh_from_db()
+        self.assertEqual(task.answer_latex, 'AI: 4')
+        self.assertEqual(task.solution_latex, 'AI-решение')
+        self.assertEqual(task.author_answer_latex, 'автор: 4')
+        self.assertEqual(task.author_solution_latex, 'авторское решение')
+
     def test_has_blank_answer(self):
         teacher = make_teacher()
         empty = Task.objects.create(text_latex='Пустая', created_by=teacher)
@@ -844,6 +860,18 @@ class TaskModelTests(TestCase):
         # Оригинал не тронут
         original = task.subitems.get()
         self.assertEqual(original.solution_latex, 'Сложение')
+
+    def test_make_variant_does_not_claim_import_locator(self):
+        from problems.models import Source, TaskSource
+        source = Source.objects.create(title='Задачник вариантов')
+        task = Task.objects.create(text_latex='Исходная задача')
+        TaskSource.objects.create(
+            task=task, source=source, number='12', locator='chapter/12',
+            source_path=['Глава'])
+        variant = task.make_variant()
+        copied = variant.source_refs.get()
+        self.assertIsNone(copied.locator)
+        self.assertEqual(copied.source_path, ['Глава'])
 
 
 class CatalogViewTests(TestCase):

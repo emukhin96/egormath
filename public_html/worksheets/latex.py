@@ -76,11 +76,12 @@ def _join_labeled(parts, wrapper='stack'):
 def _combined_answer(task, subitems):
     """Общий ответ задачи + ответы выбранных подпунктов (каждый с новой строки)."""
     parts = []
-    if task.answer_latex.strip():
-        parts.append(_for_task_opt(task.answer_latex))
+    if task.effective_answer_latex:
+        parts.append(_for_task_opt(task.effective_answer_latex))
     parts.extend(
-        '%s)~%s' % (subitem_label(i), _for_task_opt(s.answer_latex))
-        for i, s in enumerate(subitems) if s.answer_latex.strip()
+        '%s)~%s' % (subitem_label(i),
+                    _for_task_opt(s.effective_answer_latex))
+        for i, s in enumerate(subitems) if s.effective_answer_latex
     )
     return _join_labeled(parts, 'stack')
 
@@ -88,11 +89,12 @@ def _combined_answer(task, subitems):
 def _combined_solution(task, subitems):
     """Общее решение задачи + решения подпунктов (каждый с новой строки)."""
     parts = []
-    if task.solution_latex.strip():
-        parts.append(_for_task_opt(task.solution_latex))
+    if task.effective_solution_latex:
+        parts.append(_for_task_opt(task.effective_solution_latex))
     parts.extend(
-        '%s)~%s' % (subitem_label(i), _for_task_opt(s.solution_latex))
-        for i, s in enumerate(subitems) if s.solution_latex.strip()
+        '%s)~%s' % (subitem_label(i),
+                    _for_task_opt(s.effective_solution_latex))
+        for i, s in enumerate(subitems) if s.effective_solution_latex
     )
     text = _join_labeled(parts, 'mini')
     if not text:
