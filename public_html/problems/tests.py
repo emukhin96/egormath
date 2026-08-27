@@ -471,6 +471,18 @@ class QuickUpdateTests(TestCase):
         self.task.refresh_from_db()
         self.assertIsNone(self.task.grade_level)
 
+    def test_invalid_stars_do_not_write_grade_bands(self):
+        from problems.rubricator import seed_rubricator, set_grade_bands
+        seed_rubricator()
+        set_grade_bands(self.task, ['GRADE_8'])
+        response = self.xhr_post({'grade_level': '7', 'stars': '9'})
+        self.assertEqual(response.status_code, 400)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.grade_level, 8)
+        self.assertEqual(
+            list(self.task.grade_bands.values_list('code', flat=True)),
+            ['GRADE_8'])
+
     def test_partial_save_does_not_touch_other_fields(self):
         # Параллельные autosave-формы: запрос с одними звёздами не должен
         # затирать ответ, изменённый соседним запросом (update_fields)
@@ -745,6 +757,14 @@ class LocalVariantTests(TestCase):
         self.assertNotEqual(variant.pk, self.task.pk)
         self.assertEqual(variant.variant_of_id, self.task.pk)
         self.assertEqual(variant.text_latex, 'Изменённый текст')
+
+    def test_save_local_copies_tags(self):
+        tag = Tag.objects.create(name='ОГЭ-копия')
+        self.task.tags.add(tag)
+        self.client.post(self.edit_url(), self.post_data(save_local=''))
+        self.item.refresh_from_db()
+        self.assertIn(tag, self.item.task.tags.all())
+        self.assertIn(tag, self.task.tags.all())
 
     def test_save_local_keeps_subitem_solutions(self):
         sub = self.task.subitems.create(

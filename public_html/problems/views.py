@@ -152,6 +152,8 @@ def task_quick_update(request, pk):
     # автосохраняются параллельно, и полный task.save() затирал бы поля,
     # изменённые соседним запросом, устаревшими значениями
     updated = []
+    sync_bands = False
+    band_code = None
     if 'grade_level' in request.POST:
         value, ok = parse_grade_choice(request.POST['grade_level'])
         if request.POST['grade_level'].strip() and not ok:
@@ -159,8 +161,8 @@ def task_quick_update(request, pk):
                 {'ok': False, 'message': 'Недопустимый класс'}, status=400)
         task.grade_level = value
         updated.append('grade_level')
-        code = GRADE_LEVEL_TO_CODE.get(task.grade_level)
-        set_grade_bands(task, [code] if code else [], sync_legacy=False)
+        sync_bands = True
+        band_code = GRADE_LEVEL_TO_CODE.get(value)
     if 'stars' in request.POST:
         value = request.POST['stars'].strip()
         if value not in {str(s) for s, _ in Task.STARS_CHOICES}:
@@ -176,6 +178,19 @@ def task_quick_update(request, pk):
                 status=400)
         task.text_latex = value
         updated.append('text_latex')
+    tag_names = None
+    if request.POST.get('tags_submitted'):
+        tag_names = [n.strip()
+                     for n in request.POST.get('tags', '').split(',')
+                     if n.strip()]
+        max_len = Tag._meta.get_field('name').max_length
+        too_long = [n for n in tag_names if len(n) > max_len]
+        if too_long:
+            return JsonResponse(
+                {'ok': False,
+                 'message': f'Тег длиннее {max_len} символов: '
+                            f'{too_long[0][:40]}…'},
+                status=400)
     if 'answer_latex' in request.POST:
         task.answer_latex = request.POST['answer_latex'].strip()
         updated.append('answer_latex')
@@ -184,6 +199,9 @@ def task_quick_update(request, pk):
         updated.append('solution_latex')
     if updated:
         task.save(update_fields=updated)
+    if sync_bands:
+        set_grade_bands(
+            task, [band_code] if band_code else [], sync_legacy=False)
     if (request.POST.get('topics_submitted') or 'topics' in request.POST
             or 'primary_topic' in request.POST
             or request.POST.get('grades_submitted')
@@ -192,19 +210,8 @@ def task_quick_update(request, pk):
             or request.POST.get('exams_submitted')
             or 'difficulty' in request.POST):
         apply_task_taxonomy(task, request.POST)
-    if request.POST.get('tags_submitted'):
-        # Запятая — разделитель, поэтому имена тегов без запятых
-        names = [n.strip()
-                 for n in request.POST.get('tags', '').split(',') if n.strip()]
-        max_len = Tag._meta.get_field('name').max_length
-        too_long = [n for n in names if len(n) > max_len]
-        if too_long:
-            return JsonResponse(
-                {'ok': False,
-                 'message': f'Тег длиннее {max_len} символов: '
-                            f'{too_long[0][:40]}…'},
-                status=400)
-        tags = [Tag.objects.get_or_create(name=name)[0] for name in names]
+    if tag_names is not None:
+        tags = [Tag.objects.get_or_create(name=name)[0] for name in tag_names]
         # Тег с запятой в имени через это поле не выразить — не теряем его
         tags += [t for t in task.tags.all() if ',' in t.name]
         task.tags.set(tags)
@@ -358,6 +365,7 @@ def _save_local_variant(user, original, form, source_fs, subitem_fs, post):
     for name, value in form.cleaned_data.items():
         setattr(variant, name, value)
     variant.save()
+    variant.tags.set(original.tags.all())
     apply_task_taxonomy(variant, post)
     for data in subitem_fs.cleaned_data:
         if not data or data.get('DELETE') or not data.get('text_latex'):
