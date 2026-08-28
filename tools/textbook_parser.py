@@ -30,6 +30,11 @@ ALPHA_ITEM_RE = re.compile(r"\\item\[\s*(?P<label>[a-zа-яё0-9]+)\s*\)\s*\]", 
 PLAIN_ALPHA_ITEM_RE = re.compile(
     r"(?im)(?:^|(?<=\\\\)|(?<=\n))[ \t]*"
     r"(?P<label>[a-zа-яё0-9]+)\)\s*")
+# В решебниках подпункты часто идут в одну строку: ``а) ...; б) ...``.
+# Разрешаем только границу после точки с запятой, чтобы не принимать части
+# формул вроде ``a)`` за новую задачу.
+INLINE_ALPHA_ITEM_RE = re.compile(
+    r"(?i)(?<=[;])[ \t]*(?P<label>[a-zа-яё])\)\s*")
 BLOCK_WRAPPER_RE = re.compile(
     r"\\(?:begin|end)\{(?:itemize|enumerate|document)\}")
 LIST_ENV_RE = re.compile(
@@ -225,6 +230,8 @@ def _subitem_marker_data(body: str) -> list[tuple[int, int, str, int]]:
         if body[max(0, start - 2):start] == r"\\":
             start -= 2
         markers.append((start, match.end(), match.group("label")))
+    for match in INLINE_ALPHA_ITEM_RE.finditer(body):
+        markers.append((match.start(), match.end(), match.group("label")))
     markers.sort(key=lambda item: item[0])
     events = list(LIST_ENV_RE.finditer(body))
     event_index = 0
@@ -270,15 +277,18 @@ def split_subitems(
                 marker for marker in letter_markers
                 if marker[3] == letter_depth + 1
             ]
+            pair_by_position = sorted(
+                shallow_letters + deeper_letters,
+                key=lambda marker: marker[0])
             can_promote_pair = (
                 len(shallow_letters) == 1
                 and len(deeper_letters) == 1
-                and shallow_letters[0][2].lower() in {"a", "а"}
-                and deeper_letters[0][2].lower() in {"b", "б", "6"}
+                and pair_by_position[0][2].lower() in {"a", "а"}
+                and pair_by_position[1][2].lower() in {"b", "б", "6"}
             )
             chosen_letters = (
                 shallow_letters if len(shallow_letters) >= 2
-                else shallow_letters + deeper_letters
+                else pair_by_position
                 if can_promote_pair else []
             )
             if letter_depth == min_depth and len(chosen_letters) >= 2:
@@ -777,6 +787,12 @@ def merge_solutions(
                 task.warnings.append(
                     "Не совпали подпункты условия и решения")
                 task.confidence = max(0.0, task.confidence - 0.25)
+        if task.subitems:
+            # У задачи с подпунктами авторские материалы принадлежат только
+            # подпунктам. Родительские поля иначе дублируются в интерфейсе и
+            # PDF и скрывают ошибку автоматического сопоставления.
+            task.author_answer_latex = ""
+            task.author_solution_latex = ""
         task.images.extend(
             image for image in solution_images if image not in task.images)
         image_numbers = {

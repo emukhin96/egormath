@@ -1045,6 +1045,12 @@ def textbook_import_review(request, batch_pk, pk):
                                     'copy_solution_from',
                                     'Подпункты источника решения не совпадают '
                                     'с подпунктами этой задачи.')
+                            elif updated.subitems and not \
+                                    has_distributed_material:
+                                form.add_error(
+                                    'copy_solution_from',
+                                    'У источника нет решений, распределённых '
+                                    'по подпунктам.')
                             elif has_distributed_material:
                                 for target, source in zip(
                                         updated.subitems,
@@ -1055,15 +1061,22 @@ def textbook_import_review(request, batch_pk, pk):
                                     target['author_solution_latex'] = str(
                                         source.get(
                                             'author_solution_latex') or '')
-                            updated.author_answer_latex = \
-                                candidate.author_answer_latex
-                            updated.author_solution_latex = \
-                                candidate.author_solution_latex
+                            if updated.subitems:
+                                updated.author_answer_latex = ''
+                                updated.author_solution_latex = ''
+                            else:
+                                updated.author_answer_latex = \
+                                    candidate.author_answer_latex
+                                updated.author_solution_latex = \
+                                    candidate.author_solution_latex
                             if not form.errors:
                                 updated.solution_source_external_id = source_key
                 else:
                     updated.solution_source_external_id = ''
             if not form.errors:
+                if updated.subitems:
+                    updated.author_answer_latex = ''
+                    updated.author_solution_latex = ''
                 updated.reviewed_by = request.user
                 updated.reviewed_at = timezone.now()
                 updated.save()

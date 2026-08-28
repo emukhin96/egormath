@@ -140,6 +140,13 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
         if not text_latex and not subitems:
             raise TextbookImportError(
                 f'Задача {external_id} не содержит условия или подпунктов.')
+        author_answer_latex = str(
+            row.get('author_answer_latex') or '').strip()
+        author_solution_latex = str(
+            row.get('author_solution_latex') or '').strip()
+        if subitems:
+            author_answer_latex = ''
+            author_solution_latex = ''
         drafts.append(TextbookTaskDraft(
             batch=batch,
             external_id=external_id,
@@ -153,13 +160,15 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             text_latex=text_latex,
             subitems=subitems,
             images=images,
-            author_answer_latex=str(
-                row.get('author_answer_latex') or '').strip(),
-            author_solution_latex=str(
-                row.get('author_solution_latex') or '').strip(),
+            author_answer_latex=author_answer_latex,
+            author_solution_latex=author_solution_latex,
             solution_source_external_id=(
-                external_id if (row.get('author_answer_latex')
-                                or row.get('author_solution_latex')) else ''),
+                external_id if (author_answer_latex
+                                or author_solution_latex
+                                or any(
+                                    item['author_answer_latex']
+                                    or item['author_solution_latex']
+                                    for item in subitems)) else ''),
             confidence=_confidence(row.get('confidence')),
             warnings=warnings,
             status=status,
@@ -250,6 +259,8 @@ def _collection_for_path(batch, path, cache, collection_key=''):
 
 
 def _merge_author_fields(task, draft):
+    if draft.subitems:
+        return
     updates = []
     for field in ('author_answer_latex', 'author_solution_latex'):
         incoming = getattr(draft, field).strip()
@@ -346,8 +357,10 @@ def commit_batch(batch, *, user):
             # рецензента, но не безопасное основание автоматически слить задачи.
             task = Task.objects.create(
                 text_latex=draft.text_latex,
-                author_answer_latex=draft.author_answer_latex,
-                author_solution_latex=draft.author_solution_latex,
+                author_answer_latex=(
+                    '' if draft.subitems else draft.author_answer_latex),
+                author_solution_latex=(
+                    '' if draft.subitems else draft.author_solution_latex),
                 stars=0, columns=0, created_by=batch.created_by)
             for index, item in enumerate(draft.subitems, start=1):
                 TaskSubitem.objects.create(

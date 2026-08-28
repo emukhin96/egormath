@@ -402,6 +402,48 @@ class TextbookParserTests(unittest.TestCase):
                 item.author_solution_latex, r"^(?:a|а|б|6)\)~?")
             self.assertNotIn(r"\item", item.author_solution_latex)
 
+    def test_subitem_pair_survives_early_list_end(self):
+        task_text = "\n".join([
+            "1.1.A01 Сравните:",
+            r"\begin{itemize}",
+            r"\item[а)] первое выражение;",
+            r"\end{itemize}",
+            r"б) второе выражение.",
+        ])
+        solution_text = (
+            r"1.1.A01 \item[a)] Первое решение; б) Второе решение.")
+
+        tasks, _ = parse_shestakov(task_text, solution_text)
+
+        task = tasks[0]
+        self.assertEqual(
+            [item.text_latex for item in task.subitems],
+            ["первое выражение", "второе выражение"],
+        )
+        self.assertEqual(
+            [item.author_solution_latex for item in task.subitems],
+            ["Первое решение", "Второе решение."],
+        )
+
+    def test_inline_solution_subitems_are_split_after_semicolon(self):
+        task_text = "\n".join([
+            "1.1.A01 Вычислите:",
+            r"\item[а)] $1+1$;",
+            r"\item[б)] $2+2$.",
+        ])
+        solution_text = (
+            r"1.1.A01 \item[a)] $1+1=2$; б) $2+2=4$.")
+
+        tasks, _ = parse_shestakov(task_text, solution_text)
+
+        task = tasks[0]
+        self.assertEqual(task.author_answer_latex, "")
+        self.assertEqual(task.author_solution_latex, "")
+        self.assertEqual(
+            [item.author_solution_latex for item in task.subitems],
+            ["$1+1=2$", "$2+2=4$"],
+        )
+
     def test_solution_images_are_numbered_in_task_and_subitem_answers(self):
         task_text = "\n".join([
             "1.1.A01 Выберите рисунок:",
@@ -543,7 +585,7 @@ class TextbookParserTests(unittest.TestCase):
         tasks, _ = parse_shestakov(task_text, solution_text)
 
         task = tasks[0]
-        self.assertTrue(task.author_solution_latex)
+        self.assertEqual(task.author_solution_latex, "")
         self.assertTrue(all(
             not item.author_solution_latex for item in task.subitems))
         self.assertIn(
@@ -564,7 +606,7 @@ class TextbookParserTests(unittest.TestCase):
         tasks, _ = parse_shestakov(task_text, solution_text)
 
         task = tasks[0]
-        self.assertTrue(task.author_solution_latex)
+        self.assertEqual(task.author_solution_latex, "")
         self.assertTrue(all(
             not item.author_solution_latex for item in task.subitems))
         self.assertIn(
