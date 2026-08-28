@@ -451,6 +451,19 @@ class TextbookImportTests(TestCase):
         self.assertIsNone(
             batch.drafts.get(collection_key='geometry.triangles').topic_id)
 
+        replacement = Topic.objects.create(name='Другая тема')
+        batch.status = TextbookImportBatch.STATUS_IMPORTED
+        batch.save(update_fields=['status'])
+        response = self.client.post(reverse(
+            'textbook_import_assign_section_topic', args=[batch.pk]), {
+                'section': algebra['token'],
+                'topic': str(replacement.pk),
+            })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            batch.drafts.filter(
+                collection_key='alg.quadratic', topic=topic).count(), 2)
+
     def test_user_guide_explains_statuses_and_commit_boundary(self):
         self.client.login(username='teacher1', password='pass12345')
 

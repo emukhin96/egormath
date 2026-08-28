@@ -5,7 +5,7 @@ import re
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -865,9 +865,11 @@ def textbook_import_detail(request, pk):
 
 @teacher_required
 @require_POST
+@transaction.atomic
 def textbook_import_assign_section_topic(request, pk):
     """Назначает одну тему всем черновикам будущей подборки."""
     batch = _own_import_batch(request, pk)
+    batch = TextbookImportBatch.objects.select_for_update().get(pk=batch.pk)
     section_token = request.POST.get('section', '')
     group = next((item for item in _textbook_collection_groups(batch)
                   if item['token'] == section_token), None)
