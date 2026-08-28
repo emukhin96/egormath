@@ -939,7 +939,8 @@ def textbook_import_assign_section_topic(request, pk):
             f"{reverse('textbook_import_detail', args=[batch.pk])}"
             f"?section={section_token}")
     topic_id = request.POST.get('topic', '').strip()
-    topic = Topic.objects.filter(pk=topic_id).first() if topic_id else None
+    topic = (Topic.objects.filter(pk=int(topic_id)).first()
+             if topic_id.isdigit() else None)
     if topic is None:
         messages.error(request, 'Выберите тему рубрикатора.')
         return redirect(
