@@ -173,6 +173,25 @@ def strip_outer_lists(value: str, *, flatten_items: bool = True) -> str:
     return clean(value)
 
 
+def strip_subitem_punct(value: str) -> str:
+    """Нормализует хвостовую пунктуацию как импорт листка из ``.tex``.
+
+    Законченное предложение с заглавной буквы сохраняет точку, а вопрос —
+    вопросительный знак. У фрагментов перечисления служебные ``;`` и ``.``
+    удаляются: порядок подпунктов и последний элемент позже могут меняться.
+    """
+    value = clean(value)
+    if not value:
+        return value
+    if value.endswith('?'):
+        return value
+    if value[0].isupper() and value.endswith('.'):
+        return value
+    if value.endswith((';', '.')):
+        return value[:-1].rstrip()
+    return value
+
+
 def path_at(all_sections: Sequence[Section], pos: int) -> list[str]:
     """Возвращает стек смысловых заголовков по уровням LaTeX."""
     ignored = {
@@ -225,7 +244,9 @@ def _subitem_marker_data(body: str) -> list[tuple[int, int, str, int]]:
     return markers_with_depth
 
 
-def split_subitems(body: str) -> tuple[str, list[SubitemDraft]]:
+def split_subitems(
+        body: str, *, normalize_punctuation: bool = True,
+) -> tuple[str, list[SubitemDraft]]:
     marker_data = _subitem_marker_data(body)
     markers = []
     if marker_data:
@@ -270,6 +291,8 @@ def split_subitems(body: str) -> tuple[str, list[SubitemDraft]]:
     for i, (start, marker_end, label) in enumerate(markers):
         end = markers[i + 1][0] if i + 1 < len(markers) else len(body)
         text = strip_outer_lists(body[marker_end:end])
+        if normalize_punctuation:
+            text = strip_subitem_punct(text)
         if text:
             items.append(SubitemDraft(label, text))
     return parent, items
@@ -645,14 +668,15 @@ def split_full_solution(
         lambda match: rf"\taskpic{{{match.group('path')}}}", solution)
     solution = solution.lstrip("} \t\n")
     flattened_solution = _flatten_solution_items(solution)
-    parent, subitems = split_subitems(solution)
+    parent, subitems = split_subitems(
+        solution, normalize_punctuation=False)
     if subitems:
         parent = _flatten_solution_items(parent)
         for subitem in subitems:
             subitem_text = _flatten_solution_items(subitem.text_latex)
             subitem.author_answer_latex = "\n".join(
                 _explicit_answers(subitem_text))
-            subitem.author_solution_latex = subitem_text
+            subitem.author_solution_latex = strip_subitem_punct(subitem_text)
             subitem.text_latex = ""
         return (
             "\n".join(_explicit_answers(parent)), parent, subitems,

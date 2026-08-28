@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 
@@ -730,6 +731,47 @@ def _own_import_batch(request, pk):
     return batch
 
 
+def _textbook_collection_groups(batch):
+    """Группирует черновики так же, как будущие листовые подборки."""
+    grouped = {}
+    drafts = (batch.drafts.select_related('topic')
+              .order_by('external_id', 'pk'))
+    for draft in drafts:
+        path = tuple(
+            str(part).strip() for part in draft.source_path
+            if str(part).strip())
+        if not path:
+            path = (draft.collection_title.strip() or batch.title,)
+        identity = (draft.collection_key.strip(), path)
+        group = grouped.setdefault(identity, {
+            'collection_key': identity[0],
+            'path': list(path),
+            'title': draft.collection_title.strip() or path[-1],
+            'drafts': [],
+        })
+        group['drafts'].append(draft)
+
+    result = []
+    for identity, group in sorted(
+            grouped.items(), key=lambda item: (item[0][1], item[0][0])):
+        raw = json.dumps(identity, ensure_ascii=False, separators=(',', ':'))
+        group['token'] = hashlib.sha256(raw.encode('utf-8')).hexdigest()[:20]
+        group['count'] = len(group['drafts'])
+        topic_counts = {}
+        for draft in group['drafts']:
+            label = str(draft.topic) if draft.topic_id else 'Тема не выбрана'
+            topic_counts[label] = topic_counts.get(label, 0) + 1
+        group['topic_counts'] = [
+            {'label': label, 'count': count}
+            for label, count in topic_counts.items()
+        ]
+        topic_ids = {draft.topic_id for draft in group['drafts']}
+        group['common_topic_id'] = (
+            topic_ids.pop() if len(topic_ids) == 1 else None)
+        result.append(group)
+    return result
+
+
 @teacher_required
 def textbook_import_list(request):
     batches = TextbookImportBatch.objects.all()
@@ -794,13 +836,66 @@ def textbook_import_detail(request, pk):
         {'value': value, 'label': label, 'count': counts.get(value, 0)}
         for value, label in TextbookTaskDraft.STATUS_CHOICES
     ]
-    return render(request, 'problems/textbook_import_detail.html', {
+    collection_groups = _textbook_collection_groups(batch)
+    groups_by_token = {group['token']: group for group in collection_groups}
+    selected_token = request.GET.get('section', '')
+    selected_group = groups_by_token.get(selected_token)
+    if selected_group is None and collection_groups:
+        selected_group = collection_groups[0]
+        selected_token = selected_group['token']
+    selected_topic = (
+        selected_group['common_topic_id'] if selected_group else None)
+    context = taxonomy_page_context({
+        'topics': [selected_topic] if selected_topic else [],
+        'primary': selected_topic,
+        'grades': [], 'facets': [], 'exams': [], 'difficulty': None,
+    })
+    context.update({
         'batch': batch,
         'page': page,
         'counts': counts,
         'status': status,
         'status_tabs': status_tabs,
+        'collection_groups': collection_groups,
+        'selected_group': selected_group,
+        'selected_section': selected_token,
     })
+    return render(request, 'problems/textbook_import_detail.html', context)
+
+
+@teacher_required
+@require_POST
+def textbook_import_assign_section_topic(request, pk):
+    """Назначает одну тему всем черновикам будущей подборки."""
+    batch = _own_import_batch(request, pk)
+    section_token = request.POST.get('section', '')
+    group = next((item for item in _textbook_collection_groups(batch)
+                  if item['token'] == section_token), None)
+    if group is None:
+        messages.error(request, 'Выбранный раздел задачника не найден.')
+        return redirect('textbook_import_detail', pk=batch.pk)
+    if batch.status == TextbookImportBatch.STATUS_IMPORTED:
+        messages.error(
+            request, 'Загруженную партию нельзя изменять через предпросмотр.')
+        return redirect(
+            f"{reverse('textbook_import_detail', args=[batch.pk])}"
+            f"?section={section_token}")
+    topic_id = request.POST.get('topic', '').strip()
+    topic = Topic.objects.filter(pk=topic_id).first() if topic_id else None
+    if topic is None:
+        messages.error(request, 'Выберите тему рубрикатора.')
+        return redirect(
+            f"{reverse('textbook_import_detail', args=[batch.pk])}"
+            f"?section={section_token}")
+    draft_ids = [draft.pk for draft in group['drafts']]
+    updated = batch.drafts.filter(pk__in=draft_ids).update(topic=topic)
+    messages.success(
+        request,
+        f'Тема «{topic}» назначена задачам раздела '
+        f'«{group["title"]}»: {updated}.')
+    return redirect(
+        f"{reverse('textbook_import_detail', args=[batch.pk])}"
+        f"?section={section_token}")
 
 
 @teacher_required
@@ -813,6 +908,15 @@ def textbook_import_review(request, batch_pk, pk):
         form = TextbookDraftReviewForm(request.POST, instance=draft)
         if form.is_valid():
             updated = form.save(commit=False)
+            for index, subitem in enumerate(updated.subitems):
+                answer_key = f'subitem_author_answer_{index}'
+                solution_key = f'subitem_author_solution_{index}'
+                if answer_key in request.POST:
+                    subitem['author_answer_latex'] = request.POST[
+                        answer_key].strip()
+                if solution_key in request.POST:
+                    subitem['author_solution_latex'] = request.POST[
+                        solution_key].strip()
             source_key = form.cleaned_data.get('copy_solution_from', '').strip()
             if source_key:
                 candidate = batch.drafts.filter(external_id=source_key).first()
@@ -864,14 +968,32 @@ def textbook_import_review(request, batch_pk, pk):
     candidates = (batch.drafts.exclude(pk=draft.pk)
                   .exclude(author_solution_latex='')
                   .order_by('external_id')[:12])
-    return render(request, 'problems/textbook_import_review.html', {
+    review_subitems = [dict(item) for item in draft.subitems]
+    if request.method == 'POST':
+        for index, subitem in enumerate(review_subitems):
+            answer_key = f'subitem_author_answer_{index}'
+            solution_key = f'subitem_author_solution_{index}'
+            if answer_key in request.POST:
+                subitem['author_answer_latex'] = request.POST[answer_key]
+            if solution_key in request.POST:
+                subitem['author_solution_latex'] = request.POST[solution_key]
+    topic_ids = request.POST.getlist('topic') if request.method == 'POST' else (
+        [draft.topic_id] if draft.topic_id else [])
+    context = taxonomy_page_context({
+        'topics': [int(value) for value in topic_ids if str(value).isdigit()],
+        'primary': None,
+        'grades': [], 'facets': [], 'exams': [], 'difficulty': None,
+    })
+    context.update({
         'batch': batch,
         'draft': draft,
         'form': form,
+        'review_subitems': review_subitems,
         'previous': previous,
         'following': following,
         'candidates': candidates,
     })
+    return render(request, 'problems/textbook_import_review.html', context)
 
 
 @teacher_required

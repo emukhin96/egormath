@@ -2683,6 +2683,23 @@
     color: var(--muted);
   }
 
+  .import-subitem-editors {
+    display: grid;
+    gap: var(--space-3);
+    margin: var(--space-3) 0;
+  }
+
+  .import-subitem-editor {
+    padding: var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #fff;
+  }
+
+  .import-subitem-editor h3 {
+    margin-bottom: var(--space-2);
+  }
+
   .import-status-buttons {
     display: flex;
     flex-wrap: wrap;

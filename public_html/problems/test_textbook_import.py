@@ -288,6 +288,97 @@ class TextbookImportTests(TestCase):
         self.assertContains(review, 'Сохранить и дальше')
         self.assertContains(detail, '>Импорт<')
 
+    def test_review_edits_subitem_author_materials_and_uses_topic_picker(self):
+        first_topic = Topic.objects.create(name='Первая тема')
+        second_topic = Topic.objects.create(name='Вторая тема')
+        batch = self.create_batch(bundle(
+            subitems=[{
+                'label': 'а',
+                'text_latex': 'Первый подпункт.',
+                'author_answer_latex': 'Старый ответ.',
+                'author_solution_latex': 'Старое решение.',
+            }],
+            author_answer_latex='', author_solution_latex='',
+        ))
+        draft = batch.drafts.get()
+        draft.topic = first_topic
+        draft.save(update_fields=['topic'])
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse(
+            'textbook_import_review', args=[batch.pk, draft.pk])
+
+        response = self.client.get(url)
+
+        self.assertContains(response, 'name="subitem_author_answer_0"')
+        self.assertContains(response, 'Старый ответ.')
+        self.assertContains(response, 'name="subitem_author_solution_0"')
+        self.assertContains(response, 'Старое решение.')
+        self.assertContains(response, 'data-tax-picker')
+        self.assertContains(response, 'data-single="1"')
+        self.assertContains(response, 'Тема: код или название')
+        self.assertIn(str(first_topic.pk), response.context['selected_json'])
+
+        response = self.client.post(url, {
+            'external_id': draft.external_id,
+            'source_number': draft.source_number,
+            'text_latex': draft.text_latex,
+            'subitems': json.dumps(draft.subitems),
+            'subitem_author_answer_0': 'Новый ответ.',
+            'subitem_author_solution_0': 'Новое решение.',
+            'author_answer_latex': '',
+            'author_solution_latex': '',
+            'topic': str(second_topic.pk),
+            'status': TextbookTaskDraft.STATUS_REVIEW,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        draft.refresh_from_db()
+        self.assertEqual(draft.topic, second_topic)
+        self.assertEqual(
+            draft.subitems[0]['author_answer_latex'], 'Новый ответ.')
+        self.assertEqual(
+            draft.subitems[0]['author_solution_latex'], 'Новое решение.')
+
+    def test_collection_preview_assigns_topic_to_one_source_section(self):
+        payload = bundle()
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='1.2.38', source_number='38',
+            text_latex='Вторая задача раздела.'))
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='2.1.1', source_number='1',
+            source_path=['Геометрия', 'Треугольники'],
+            collection_key='geometry.triangles',
+            collection_title='Треугольники',
+            text_latex='Задача другого раздела.'))
+        batch = self.create_batch(payload)
+        topic = Topic.objects.create(name='Квадратные уравнения')
+        self.client.login(username='teacher1', password='pass12345')
+
+        response = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]))
+
+        groups = response.context['collection_groups']
+        algebra = next(
+            group for group in groups
+            if group['collection_key'] == 'alg.quadratic')
+        self.assertEqual(algebra['count'], 2)
+        self.assertContains(response, 'Предпросмотр подборок и массовая тема')
+        self.assertContains(response, 'Состав будущей подборки')
+        self.assertContains(response, 'data-single="1"')
+
+        response = self.client.post(reverse(
+            'textbook_import_assign_section_topic', args=[batch.pk]), {
+                'section': algebra['token'],
+                'topic': str(topic.pk),
+            })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            batch.drafts.filter(
+                collection_key='alg.quadratic', topic=topic).count(), 2)
+        self.assertIsNone(
+            batch.drafts.get(collection_key='geometry.triangles').topic_id)
+
     def test_user_guide_explains_statuses_and_commit_boundary(self):
         self.client.login(username='teacher1', password='pass12345')
 

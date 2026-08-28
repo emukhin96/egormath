@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load task_extras %}
 {% block title %}{{ batch.title }} — EgorMath{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -9,6 +10,47 @@
     <a class="btn btn-secondary" href="{% url 'textbook_import_list' %}">Все партии</a>
   </div>
 </div>
+{% if collection_groups %}
+<section class="card" id="collection-preview">
+  <h2>Предпросмотр подборок и массовая тема</h2>
+  <p class="muted">Каждый раздел ниже станет отдельной подборкой при загрузке в каталог. Назначение темы изменяет только черновики; задачи в рабочей базе пока не создаются.</p>
+  <form method="get" class="form-buttons">
+    {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+    <label>Раздел задачника
+      <select name="section">
+        {% for group in collection_groups %}<option value="{{ group.token }}"{% if group.token == selected_section %} selected{% endif %}>{{ group.path|join:' › ' }} — {{ group.count }} задач</option>{% endfor %}
+      </select>
+    </label>
+    <button class="btn btn-secondary" type="submit">Показать подборку</button>
+  </form>
+  {% if selected_group %}
+  <h3>{{ selected_group.title }}</h3>
+  <p><strong>Путь:</strong> {{ selected_group.path|join:' › ' }} · <strong>Задач:</strong> {{ selected_group.count }}</p>
+  <p><strong>Текущие темы:</strong> {% for item in selected_group.topic_counts %}{{ item.label }} — {{ item.count }}{% if not forloop.last %}; {% endif %}{% endfor %}</p>
+  {% if batch.status != 'imported' %}
+  <form method="post" action="{% url 'textbook_import_assign_section_topic' batch.pk %}" onsubmit="return confirm('Назначить выбранную тему всем задачам этой будущей подборки?');">
+    {% csrf_token %}
+    <input type="hidden" name="section" value="{{ selected_group.token }}">
+    <input type="hidden" name="topic" value="{% if selected_group.common_topic_id %}{{ selected_group.common_topic_id }}{% endif %}">
+    {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=False compact=True single=True field_name='topic' selected_json=selected_json %}
+    <div class="form-buttons"><button class="btn" type="submit">Назначить тему всему разделу</button></div>
+  </form>
+  {% endif %}
+  <details open>
+    <summary>Состав будущей подборки</summary>
+    <table class="list">
+      <tr><th>№</th><th>Условие</th><th>Тема</th><th>Статус</th></tr>
+      {% for draft in selected_group.drafts %}<tr>
+        <td><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.source_number }}</a></td>
+        <td><span class="math-content task-text">{{ draft.text_latex|web_text_preview:180 }}</span>{% if not draft.text_latex and draft.subitems %}<span class="muted">Условие задано подпунктами ({{ draft.subitems|length }})</span>{% endif %}</td>
+        <td>{{ draft.topic|default:'—' }}</td>
+        <td>{{ draft.get_status_display }}</td>
+      </tr>{% endfor %}
+    </table>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
 <div class="card">
   <div class="form-buttons">
     <a class="btn btn-secondary" href="?">Все</a>

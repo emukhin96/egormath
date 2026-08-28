@@ -200,7 +200,47 @@ class TextbookParserTests(unittest.TestCase):
         self.assertEqual(tasks[0].text_latex, "Найдите:")
         self.assertEqual(
             [(item.label, item.text_latex) for item in tasks[0].subitems],
-            [("а", "$1+1$;"), ("б", "$2+2$.")],
+            [("а", "$1+1$"), ("б", "$2+2$")],
+        )
+
+    def test_subitem_punctuation_matches_tex_import_rules(self):
+        task_text = "\n".join([
+            "1.1.A01 Выполните:",
+            r"\\ а) Докажите неравенство.",
+            r"\\ б) Верно ли обратное?",
+            r"\\ в) найдите значение;",
+            r"\\ г) $2+2$.",
+        ])
+
+        tasks, _ = parse_shestakov(task_text, "")
+
+        self.assertEqual(
+            [item.text_latex for item in tasks[0].subitems],
+            [
+                "Докажите неравенство.",
+                "Верно ли обратное?",
+                "найдите значение",
+                "$2+2$",
+            ],
+        )
+
+    def test_solution_subitems_use_the_same_punctuation_rules(self):
+        task_text = "\n".join([
+            "1.1.A01 Выполните:",
+            r"\\ а) первый пункт;",
+            r"\\ б) второй пункт.",
+        ])
+        solution_text = "\n".join([
+            r"\subsection*{1.1.A01}",
+            r"\\ а) Получаем результат.",
+            r"\\ б) подставляем значение;",
+        ])
+
+        tasks, _ = parse_shestakov(task_text, solution_text)
+
+        self.assertEqual(
+            [item.author_solution_latex for item in tasks[0].subitems],
+            ["Получаем результат.", "подставляем значение"],
         )
 
     def test_nested_numbered_list_stays_inside_letter_subitem(self):
@@ -347,7 +387,7 @@ class TextbookParserTests(unittest.TestCase):
         )
         self.assertEqual(
             [item.author_solution_latex for item in task.subitems],
-            ["$1+1=2$. Ответ: 2.", "$2+2=4$. Ответ: 4."],
+            ["$1+1=2$. Ответ: 2", "$2+2=4$. Ответ: 4"],
         )
         for item in task.subitems:
             self.assertNotRegex(
