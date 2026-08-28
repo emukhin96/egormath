@@ -904,43 +904,75 @@ def textbook_import_review(request, batch_pk, pk):
     draft = get_object_or_404(
         TextbookTaskDraft.objects.select_related('topic'),
         batch=batch, pk=pk)
+    original_subitems = [dict(item) for item in draft.subitems]
+    subitem_structure_conflict = False
     if request.method == 'POST':
         form = TextbookDraftReviewForm(request.POST, instance=draft)
         if form.is_valid():
             updated = form.save(commit=False)
-            for index, subitem in enumerate(updated.subitems):
-                answer_key = f'subitem_author_answer_{index}'
-                solution_key = f'subitem_author_solution_{index}'
-                if answer_key in request.POST:
-                    subitem['author_answer_latex'] = request.POST[
-                        answer_key].strip()
-                if solution_key in request.POST:
-                    subitem['author_solution_latex'] = request.POST[
-                        solution_key].strip()
-            source_key = form.cleaned_data.get('copy_solution_from', '').strip()
-            if source_key:
-                candidate = batch.drafts.filter(external_id=source_key).first()
-                if candidate is None:
-                    form.add_error(
-                        'copy_solution_from', 'В этой партии такого ключа нет.')
-                else:
-                    used = (batch.drafts
-                            .exclude(pk=draft.pk)
-                            .filter(solution_source_external_id=source_key,
-                                    status=TextbookTaskDraft.STATUS_APPROVED)
-                            .first())
-                    if used:
+            old_structure = [
+                (str(item.get('label') or ''),
+                 str(item.get('text_latex') or ''))
+                for item in original_subitems]
+            new_structure = [
+                (str(item.get('label') or ''),
+                 str(item.get('text_latex') or ''))
+                for item in updated.subitems]
+            author_fields_changed = any(
+                request.POST.get(f'subitem_author_{field}_{index}', '').strip()
+                != str(item.get(f'author_{field}_latex') or '').strip()
+                for index, item in enumerate(original_subitems)
+                for field in ('answer', 'solution')
+                if f'subitem_author_{field}_{index}' in request.POST
+            )
+            if old_structure != new_structure and author_fields_changed:
+                form.add_error(
+                    'subitems',
+                    'Нельзя одновременно менять структуру JSON и авторские '
+                    'поля подпунктов. Сохраните сначала одно изменение, '
+                    'затем второе.')
+                subitem_structure_conflict = True
+            elif old_structure == new_structure:
+                for index, subitem in enumerate(updated.subitems):
+                    answer_key = f'subitem_author_answer_{index}'
+                    solution_key = f'subitem_author_solution_{index}'
+                    if answer_key in request.POST:
+                        subitem['author_answer_latex'] = request.POST[
+                            answer_key].strip()
+                    if solution_key in request.POST:
+                        subitem['author_solution_latex'] = request.POST[
+                            solution_key].strip()
+            if not form.errors:
+                source_key = form.cleaned_data.get(
+                    'copy_solution_from', '').strip()
+                if source_key:
+                    candidate = batch.drafts.filter(
+                        external_id=source_key).first()
+                    if candidate is None:
                         form.add_error(
                             'copy_solution_from',
-                            f'Решение уже одобрено для {used.external_id}.')
+                            'В этой партии такого ключа нет.')
                     else:
-                        updated.author_answer_latex = \
-                            candidate.author_answer_latex
-                        updated.author_solution_latex = \
-                            candidate.author_solution_latex
-                        updated.solution_source_external_id = source_key
-            else:
-                updated.solution_source_external_id = ''
+                        used = (batch.drafts
+                                .exclude(pk=draft.pk)
+                                .filter(
+                                    solution_source_external_id=source_key,
+                                    status=(
+                                        TextbookTaskDraft.STATUS_APPROVED))
+                                .first())
+                        if used:
+                            form.add_error(
+                                'copy_solution_from',
+                                f'Решение уже одобрено для '
+                                f'{used.external_id}.')
+                        else:
+                            updated.author_answer_latex = \
+                                candidate.author_answer_latex
+                            updated.author_solution_latex = \
+                                candidate.author_solution_latex
+                            updated.solution_source_external_id = source_key
+                else:
+                    updated.solution_source_external_id = ''
             if not form.errors:
                 updated.reviewed_by = request.user
                 updated.reviewed_at = timezone.now()
@@ -968,7 +1000,8 @@ def textbook_import_review(request, batch_pk, pk):
     candidates = (batch.drafts.exclude(pk=draft.pk)
                   .exclude(author_solution_latex='')
                   .order_by('external_id')[:12])
-    review_subitems = [dict(item) for item in draft.subitems]
+    review_subitems = [dict(item) for item in (
+        original_subitems if subitem_structure_conflict else draft.subitems)]
     if request.method == 'POST':
         for index, subitem in enumerate(review_subitems):
             answer_key = f'subitem_author_answer_{index}'

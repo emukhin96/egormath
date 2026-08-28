@@ -339,6 +339,78 @@ class TextbookImportTests(TestCase):
         self.assertEqual(
             draft.subitems[0]['author_solution_latex'], 'Новое решение.')
 
+    def test_review_rejects_structure_and_author_edits_in_one_request(self):
+        batch = self.create_batch(bundle(subitems=[
+            {
+                'label': 'а', 'text_latex': 'Первый подпункт.',
+                'author_solution_latex': 'Первое решение.',
+            },
+            {
+                'label': 'б', 'text_latex': 'Второй подпункт.',
+                'author_solution_latex': 'Второе решение.',
+            },
+        ]))
+        draft = batch.drafts.get()
+        original = [dict(item) for item in draft.subitems]
+        self.client.login(username='teacher1', password='pass12345')
+
+        response = self.client.post(reverse(
+            'textbook_import_review', args=[batch.pk, draft.pk]), {
+                'external_id': draft.external_id,
+                'source_number': draft.source_number,
+                'text_latex': draft.text_latex,
+                'subitems': json.dumps(list(reversed(original))),
+                'subitem_author_answer_0': '',
+                'subitem_author_solution_0': 'Изменённое первое решение.',
+                'subitem_author_answer_1': '',
+                'subitem_author_solution_1': 'Второе решение.',
+                'author_answer_latex': draft.author_answer_latex,
+                'author_solution_latex': draft.author_solution_latex,
+                'status': TextbookTaskDraft.STATUS_REVIEW,
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, 'Нельзя одновременно менять структуру JSON')
+        self.assertContains(response, 'Изменённое первое решение.')
+        draft.refresh_from_db()
+        self.assertEqual(draft.subitems, original)
+
+    def test_review_allows_structure_edit_when_author_fields_unchanged(self):
+        batch = self.create_batch(bundle(subitems=[
+            {
+                'label': 'а', 'text_latex': 'Первый подпункт.',
+                'author_solution_latex': 'Первое решение.',
+            },
+            {
+                'label': 'б', 'text_latex': 'Второй подпункт.',
+                'author_solution_latex': 'Второе решение.',
+            },
+        ]))
+        draft = batch.drafts.get()
+        original = [dict(item) for item in draft.subitems]
+        reordered = list(reversed(original))
+        self.client.login(username='teacher1', password='pass12345')
+
+        response = self.client.post(reverse(
+            'textbook_import_review', args=[batch.pk, draft.pk]), {
+                'external_id': draft.external_id,
+                'source_number': draft.source_number,
+                'text_latex': draft.text_latex,
+                'subitems': json.dumps(reordered),
+                'subitem_author_answer_0': '',
+                'subitem_author_solution_0': 'Первое решение.',
+                'subitem_author_answer_1': '',
+                'subitem_author_solution_1': 'Второе решение.',
+                'author_answer_latex': draft.author_answer_latex,
+                'author_solution_latex': draft.author_solution_latex,
+                'status': TextbookTaskDraft.STATUS_REVIEW,
+            })
+
+        self.assertEqual(response.status_code, 302)
+        draft.refresh_from_db()
+        self.assertEqual(draft.subitems, reordered)
+
     def test_collection_preview_assigns_topic_to_one_source_section(self):
         payload = bundle()
         payload['tasks'].append(dict(
