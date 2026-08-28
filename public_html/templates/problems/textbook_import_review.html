@@ -1,10 +1,14 @@
 {% extends 'base.html' %}
-{% load task_extras %}
+{% load static task_extras %}
+{% block extra_head %}<script defer src="{% static 'js/textbook_import_review.js' %}?v=3"></script>{% endblock %}
 {% block title %}Сверка {{ draft.external_id }} — EgorMath{% endblock %}
 {% block content %}
 <div class="page-head"><div><span class="page-eyebrow">Ручная сверка</span><h1>{{ draft.external_id }}</h1>
   <p class="page-subtitle">{{ batch.source }} · {{ draft.source_path|join:' › ' }}</p></div>
-  <a class="btn btn-secondary" href="{% url 'textbook_import_detail' batch.pk %}">К партии</a>
+  <div class="form-buttons">
+    <a class="btn btn-secondary" href="{% url 'textbook_import_help' %}#review-result">Инструкция</a>
+    <a class="btn btn-secondary" href="{% url 'textbook_import_detail' batch.pk %}">К партии</a>
+  </div>
 </div>
 {% if draft.warnings %}<div class="msg msg-warning"><strong>Требует внимания:</strong> {{ draft.warnings|join:'; ' }}</div>{% endif %}
 <form method="post" class="import-review-grid">{% csrf_token %}
@@ -13,8 +17,9 @@
     <p><label for="{{ form.external_id.id_for_label }}">Ключ источника</label>{{ form.external_id.errors }}{{ form.external_id }}</p>
     <p><label for="{{ form.source_number.id_for_label }}">Номер</label>{{ form.source_number.errors }}{{ form.source_number }}</p>
     <p><label for="{{ form.text_latex.id_for_label }}">Условие</label>{{ form.text_latex.errors }}{{ form.text_latex }}</p>
-    <div class="math-content task-text">{{ draft.text_latex|web_text|linebreaksbr }}</div>
+    <div class="import-preview-block"><strong>Предпросмотр условия</strong>{% if draft.text_latex %}<div class="math-content task-text">{{ draft.text_latex|web_text|linebreaksbr }}</div>{% else %}<span class="muted">Общее условие отсутствует: ниже используются подпункты.</span>{% endif %}</div>
     <p><label for="{{ form.subitems.id_for_label }}">Подпункты (структурированный JSON)</label>{{ form.subitems.errors }}{{ form.subitems }}<span class="helptext">Каждый объект содержит label, text_latex и при наличии авторские ответ/решение.</span></p>
+    {% if draft.subitems %}<div class="import-preview-block"><strong>Предпросмотр подпунктов</strong><ol class="subitems">{% for subitem in draft.subitems %}<li><div class="math-content">{{ subitem.text_latex|web_text }}</div>{% if subitem.author_answer_latex %}<div><span class="muted">Авторский ответ:</span> <span class="math-content">{{ subitem.author_answer_latex|web_text }}</span></div>{% endif %}{% if subitem.author_solution_latex %}<div><span class="muted">Авторское решение:</span> <span class="math-content">{{ subitem.author_solution_latex|web_text|linebreaksbr }}</span></div>{% endif %}</li>{% endfor %}</ol></div>{% endif %}
     {% if draft.images %}<div class="msg msg-warning"><strong>Изображения требуют отдельной загрузки:</strong> {{ draft.images|join:', ' }}. До загрузки ресурсов commit партии заблокирован.</div>{% endif %}
     <p><label for="{{ form.topic.id_for_label }}">Тема рубрикатора</label>{{ form.topic.errors }}{{ form.topic }}</p>
   </section>
@@ -23,8 +28,10 @@
     <p><label for="{{ form.copy_solution_from.id_for_label }}">{{ form.copy_solution_from.label }}</label>{{ form.copy_solution_from.errors }}{{ form.copy_solution_from }}<span class="helptext">{{ form.copy_solution_from.help_text }}</span></p>
     {% if candidates %}<details><summary>Кандидаты с решениями</summary><ul>{% for item in candidates %}<li><button class="link-btn" type="button" onclick="document.getElementById('{{ form.copy_solution_from.id_for_label }}').value='{{ item.external_id|escapejs }}'">{{ item.external_id }}</button> — {{ item.text_latex|truncatechars:90 }}</li>{% endfor %}</ul></details>{% endif %}
     <p><label for="{{ form.author_answer_latex.id_for_label }}">Авторский ответ</label>{{ form.author_answer_latex.errors }}{{ form.author_answer_latex }}</p>
+    {% if draft.author_answer_latex %}<div class="import-preview-block"><strong>Предпросмотр авторского ответа</strong><div class="math-content">{{ draft.author_answer_latex|web_text }}</div></div>{% endif %}
     <p><label for="{{ form.author_solution_latex.id_for_label }}">Авторское решение (включая редкое указание)</label>{{ form.author_solution_latex.errors }}{{ form.author_solution_latex }}</p>
-    <p><label for="{{ form.status.id_for_label }}">Решение проверки</label>{{ form.status.errors }}{{ form.status }}</p>
+    {% if draft.author_solution_latex %}<div class="import-preview-block"><strong>Предпросмотр авторского решения</strong><div class="math-content">{{ draft.author_solution_latex|web_text|linebreaksbr }}</div></div>{% endif %}
+    <div class="import-status-field"><span class="field-label">Результат проверки</span>{{ form.status.errors }}<div class="import-status-buttons" role="radiogroup" aria-label="Результат проверки">{% for value, label in form.status.field.choices %}<input class="import-status-radio" type="radio" name="status" id="id_status_{{ forloop.counter0 }}" value="{{ value }}"{% if form.status.value == value or not form.status.value and draft.status == value %} checked{% endif %}><button type="button" class="btn btn-secondary import-status-button{% if form.status.value == value or not form.status.value and draft.status == value %} is-active{% endif %}" data-status="{{ value }}" data-radio-id="id_status_{{ forloop.counter0 }}" aria-pressed="{% if form.status.value == value or not form.status.value and draft.status == value %}true{% else %}false{% endif %}">{{ label }}</button>{% endfor %}</div><span class="import-status-feedback" aria-live="polite">Выбрано: {{ draft.get_status_display }}</span><span class="helptext">Подробное действие каждого статуса описано в <a href="{% url 'textbook_import_help' %}#review-result">инструкции</a>.</span></div>
   </section>
   <div class="form-buttons import-review-actions">
     {% if previous %}<a class="btn btn-secondary" href="{% url 'textbook_import_review' batch.pk previous.pk %}">← Предыдущая</a>{% endif %}

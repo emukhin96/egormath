@@ -4,7 +4,10 @@
 <div class="page-head">
   <div><span class="page-eyebrow">Партия импорта</span><h1>{{ batch.title }}</h1>
     <p class="page-subtitle">{{ batch.source }} · {{ batch.get_status_display }} · {{ page.paginator.count }} задач</p></div>
-  <a class="btn btn-secondary" href="{% url 'textbook_import_list' %}">Все партии</a>
+  <div class="form-buttons">
+    <a class="btn btn-secondary" href="{% url 'textbook_import_help' %}">Инструкция</a>
+    <a class="btn btn-secondary" href="{% url 'textbook_import_list' %}">Все партии</a>
+  </div>
 </div>
 <div class="card">
   <div class="form-buttons">

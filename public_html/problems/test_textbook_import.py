@@ -280,7 +280,26 @@ class TextbookImportTests(TestCase):
         review = self.client.get(reverse(
             'textbook_import_review', args=[batch.pk, batch.drafts.get().pk]))
         self.assertContains(review, 'Авторский ответ')
+        self.assertContains(review, 'Предпросмотр авторского ответа')
+        self.assertContains(review, 'Предпросмотр авторского решения')
+        self.assertContains(review, 'import-status-button')
+        self.assertContains(review, 'Результат проверки')
+        self.assertContains(review, 'value="needs_review" checked')
         self.assertContains(review, 'Сохранить и дальше')
+        self.assertContains(detail, '>Импорт<')
+
+    def test_user_guide_explains_statuses_and_commit_boundary(self):
+        self.client.login(username='teacher1', password='pass12345')
+
+        response = self.client.get(reverse('textbook_import_help'))
+
+        self.assertContains(response, 'Когда задачи попадают в базу')
+        self.assertContains(response, 'Не проверена')
+        self.assertContains(response, 'Одобрена')
+        self.assertContains(response, 'Конфликт')
+        self.assertContains(response, 'Пропущена')
+        self.assertContains(response, 'Подборки')
+        self.assertContains(response, 'одной транзакции')
 
     def test_batch_detail_counts_all_drafts_by_status(self):
         payload = bundle()

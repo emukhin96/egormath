@@ -12,12 +12,19 @@ from tools.textbook_parser import (
     parse_shestakov,
     sections,
     shestakov_markers,
+    split_answer_solution,
     task_from_block,
     write_bundle,
 )
 
 
 class TextbookParserTests(unittest.TestCase):
+    def test_explicit_answer_stops_before_solution_after_cleanup(self):
+        answer, solution = split_answer_solution(
+            "Ответ: 2.\n\nРешение: сложим слагаемые.")
+        self.assertEqual(answer, "2.")
+        self.assertEqual(solution, "Решение: сложим слагаемые.")
+
     def test_shestakov_expected_number_grid_has_1220_tasks(self):
         expected = expected_shestakov_ids()
         self.assertEqual(len(expected), 1220)
@@ -315,6 +322,125 @@ class TextbookParserTests(unittest.TestCase):
         self.assertIn("$1+1=2$", tasks[0].author_solution_latex)
         self.assertIn("Ответ: 2.", tasks[0].author_solution_latex)
         self.assertEqual(diagnostics["matched_solutions"], 1)
+
+    def test_solution_subitems_are_matched_without_top_level_labels(self):
+        task_text = "\n".join([
+            "1.1.A01 Вычислите:",
+            r"\item[а)] $1+1$;",
+            r"\item[б)] $2+2$.",
+        ])
+        solution_text = "\n".join([
+            "1.1.A01",
+            r"\begin{itemize}",
+            r"\item[a)] $1+1=2$. Ответ: 2.",
+            r"\item[6)] $2+2=4$. Ответ: 4.",
+            r"\end{itemize}",
+        ])
+
+        tasks, diagnostics = parse_shestakov(task_text, solution_text)
+
+        task = tasks[0]
+        self.assertEqual(task.author_solution_latex, "")
+        self.assertEqual(
+            [item.author_answer_latex for item in task.subitems],
+            ["2.", "4."],
+        )
+        self.assertEqual(
+            [item.author_solution_latex for item in task.subitems],
+            ["$1+1=2$. Ответ: 2.", "$2+2=4$. Ответ: 4."],
+        )
+        for item in task.subitems:
+            self.assertNotRegex(
+                item.author_solution_latex, r"^(?:a|а|б|6)\)~?")
+            self.assertNotIn(r"\item", item.author_solution_latex)
+
+    def test_nested_solution_numbering_stays_inside_subitem(self):
+        task_text = "\n".join([
+            "1.1.A01 Исследуйте:",
+            r"\item[а)] первый график;",
+            r"\item[б)] второй график.",
+        ])
+        solution_text = "\n".join([
+            "1.1.A01",
+            r"\item[а)] Для первого:",
+            r"\begin{itemize}",
+            r"\item[1)] найдём нули;",
+            r"\item[2)] найдём минимум.",
+            r"\end{itemize}",
+            r"\item[б)] Для второго графика решение отдельно.",
+        ])
+
+        tasks, _ = parse_shestakov(task_text, solution_text)
+
+        first = tasks[0].subitems[0].author_solution_latex
+        self.assertFalse(first.startswith("а)"))
+        self.assertIn("1)~найдём нули", first)
+        self.assertIn("2)~найдём минимум", first)
+
+    def test_solution_subitems_drop_bare_linebreaks_at_edges(self):
+        task_text = "\n".join([
+            "1.1.A01 Вычислите:",
+            r"\item[а)] первое;",
+            r"\item[б)] второе.",
+        ])
+        solution_text = "\n".join([
+            "1.1.A01",
+            r"\\",
+            r"\item[а)] \\ Первое решение. \\",
+            r"\item[б)] Второе решение. \\",
+        ])
+
+        tasks, _ = parse_shestakov(task_text, solution_text)
+
+        task = tasks[0]
+        self.assertEqual(task.author_solution_latex, "")
+        self.assertEqual(
+            [item.author_solution_latex for item in task.subitems],
+            ["Первое решение.", "Второе решение."],
+        )
+
+    def test_solution_subitem_count_mismatch_is_not_distributed(self):
+        task_text = "\n".join([
+            "1.1.A01 Вычислите:",
+            r"\item[а)] первое;",
+            r"\item[б)] второе.",
+        ])
+        solution_text = "\n".join([
+            "1.1.A01",
+            r"\item[а)] Решение первого.",
+            r"\item[б)] Решение второго.",
+            r"\item[в)] Лишний распознанный пункт.",
+        ])
+
+        tasks, _ = parse_shestakov(task_text, solution_text)
+
+        task = tasks[0]
+        self.assertTrue(task.author_solution_latex)
+        self.assertTrue(all(
+            not item.author_solution_latex for item in task.subitems))
+        self.assertIn(
+            "Не совпали подпункты условия и решения", task.warnings)
+
+    def test_solution_with_different_label_family_is_not_distributed(self):
+        task_text = "\n".join([
+            "1.1.A01 Докажите:",
+            r"\item[а)] первое утверждение;",
+            r"\item[б)] второе утверждение.",
+        ])
+        solution_text = "\n".join([
+            "1.1.A01",
+            r"\item[1)] Первый шаг общего доказательства.",
+            r"\item[2)] Второй шаг общего доказательства.",
+        ])
+
+        tasks, _ = parse_shestakov(task_text, solution_text)
+
+        task = tasks[0]
+        self.assertTrue(task.author_solution_latex)
+        self.assertTrue(all(
+            not item.author_solution_latex for item in task.subitems))
+        self.assertIn(
+            "Не совпали подпункты условия и решения", task.warnings)
 
     def test_solution_section_and_list_markup_does_not_leak(self):
         task_text = "\n".join([

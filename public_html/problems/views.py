@@ -743,6 +743,12 @@ def textbook_import_list(request):
 
 
 @teacher_required
+def textbook_import_help(request):
+    """Инструкция редактора по сверке и загрузке задачника."""
+    return render(request, 'problems/textbook_import_help.html')
+
+
+@teacher_required
 def textbook_import_upload(request):
     from .textbook_import import (TextbookImportError,
                                   create_batch_from_bundle, read_bundle)

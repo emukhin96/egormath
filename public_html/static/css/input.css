@@ -2667,6 +2667,49 @@
     grid-column: 1 / -1;
   }
 
+  .import-preview-block {
+    margin: var(--space-2) 0 var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #f8fafc;
+  }
+
+  .import-preview-block > strong,
+  .field-label {
+    display: block;
+    margin-bottom: var(--space-1);
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+
+  .import-status-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .import-status-radio {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .import-status-button.is-active {
+    color: #fff;
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .import-status-feedback {
+    display: block;
+    margin-top: var(--space-1);
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+
   @media (max-width: 900px) {
     .import-review-grid {
       grid-template-columns: 1fr;

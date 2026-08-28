@@ -563,22 +563,30 @@ def split_answer_solution(body: str) -> tuple[str, str]:
     answer_end = min(cut_points) if cut_points else len(body)
     answer = clean(body[:answer_end])
     solution = clean(body[min(cut_points) :]) if cut_points else ""
-    explicit = re.search(r"(?is)\bОтвет\s*:\s*(.+?)(?:\n\s*\n|$)", body)
+    # clean() убирает пустые строки ради совместимости с optional-аргументом
+    # \task, поэтому заголовок решения тоже обязан завершать явный ответ.
+    explicit = re.search(
+        r"(?is)\bОтвет\s*:\s*(.+?)(?="
+        r"(?:Решени[ея]|Доказательство)\s*[:.]|"
+        r"У\s*к\s*а\s*з\s*а\s*н\s*и\s*[ея]\s*[:.]|$)",
+        body,
+    )
     if explicit:
         answer = clean(explicit.group(1))
     return answer, solution
 
 
-def split_full_solution(body: str) -> tuple[str, str]:
-    """Для отдельного решебника сохраняет весь блок как авторское решение."""
-    solution = strip_outer_lists(body, flatten_items=False)
-    solution = STRUCTURAL_HEADING_RE.sub("", solution)
-    solution = FLOAT_WRAPPER_RE.sub("", solution)
-    solution = OCR_FIGURE_WRAPPER_RE.sub("", solution)
-    solution = remove_group_commands(solution, FLOAT_META_COMMAND_RE)
-    solution = RAW_IMAGE_RE.sub(
-        lambda match: rf"\taskpic{{{match.group('path')}}}", solution)
-    solution = solution.lstrip("} \t\n")
+def _explicit_answers(solution: str) -> list[str]:
+    return [
+        clean(match.group(1))
+        for match in re.finditer(
+            r"(?im)\bОтвет\s*:\s*(.+?)(?:\\\\)?\s*$", solution)
+        if clean(match.group(1))
+    ]
+
+
+def _flatten_solution_items(solution: str) -> str:
+    """Делает непарные ``\\item`` безопасным обычным текстом."""
     item_number = 0
 
     def replace_item(match: re.Match) -> str:
@@ -588,19 +596,74 @@ def split_full_solution(body: str) -> tuple[str, str]:
         prefix = "" if item_number == 1 else r" \mbox{}\\ "
         return prefix + (label + "~" if label else "")
 
-    # \\item вне itemize ломает PDF; метки оставляем как
-    # обычный текст с явным переносом между пунктами.
     solution = clean(ANY_ITEM_RE.sub(replace_item, solution))
     # Голые \\ по краям minipage дают `no line here to end`.
     solution = re.sub(r"^(?:\\\\\s*)+", "", solution)
-    solution = re.sub(r"(?:\s*\\\\)+$", "", solution)
-    answers = [
-        clean(match.group(1))
-        for match in re.finditer(
-            r"(?im)\bОтвет\s*:\s*(.+?)(?:\\\\)?\s*$", solution)
-        if clean(match.group(1))
-    ]
-    return "\n".join(answers), solution
+    return re.sub(r"(?:\s*\\\\)+$", "", solution)
+
+
+def _normalized_subitem_label(label: str) -> str:
+    value = clean(label).lower()
+    aliases = {
+        "а": "a", "a": "a",
+        "б": "b", "b": "b", "6": "b",
+        "в": "c", "c": "c",
+        "г": "d", "d": "d",
+        "д": "e", "e": "e",
+    }
+    return aliases.get(value, value)
+
+
+def _solution_subitems_match(
+        task_subitems: Sequence[SubitemDraft],
+        solution_subitems: Sequence[SubitemDraft]) -> bool:
+    return (
+        len(task_subitems) == len(solution_subitems)
+        and all(
+            _normalized_subitem_label(task_item.label)
+            == _normalized_subitem_label(solution_item.label)
+            for task_item, solution_item in zip(
+                task_subitems, solution_subitems)
+        )
+    )
+
+
+def split_full_solution(
+        body: str) -> tuple[str, str, list[SubitemDraft], str]:
+    """Сохраняет решение и отдельно выделяет его верхние подпункты.
+
+    Метки верхнего уровня нужны только как границы. В текст подпункта они не
+    попадают: интерфейс и PDF нумеруют подпункты по их позиции. Вложенные
+    числовые списки остаются частью соответствующего решения.
+    """
+    solution = strip_outer_lists(body, flatten_items=False)
+    solution = STRUCTURAL_HEADING_RE.sub("", solution)
+    solution = FLOAT_WRAPPER_RE.sub("", solution)
+    solution = OCR_FIGURE_WRAPPER_RE.sub("", solution)
+    solution = remove_group_commands(solution, FLOAT_META_COMMAND_RE)
+    solution = RAW_IMAGE_RE.sub(
+        lambda match: rf"\taskpic{{{match.group('path')}}}", solution)
+    solution = solution.lstrip("} \t\n")
+    flattened_solution = _flatten_solution_items(solution)
+    parent, subitems = split_subitems(solution)
+    if subitems:
+        parent = _flatten_solution_items(parent)
+        for subitem in subitems:
+            subitem_text = _flatten_solution_items(subitem.text_latex)
+            subitem.author_answer_latex = "\n".join(
+                _explicit_answers(subitem_text))
+            subitem.author_solution_latex = subitem_text
+            subitem.text_latex = ""
+        return (
+            "\n".join(_explicit_answers(parent)), parent, subitems,
+            flattened_solution,
+        )
+    return (
+        "\n".join(_explicit_answers(flattened_solution)),
+        flattened_solution,
+        [],
+        flattened_solution,
+    )
 
 
 def merge_solutions(
@@ -631,14 +694,22 @@ def merge_solutions(
     # Повторный маркер всё равно участвует в границах блока: иначе его текст
     # будет ошибочно приклеен к предыдущему решению. Для самого ключа
     # консервативно сохраняем первое вхождение и отправляем дубль на проверку.
-    splitter = split_full_solution if full_solutions else split_answer_solution
     for marker, body in blocks(solution_text, all_solution_markers):
         if marker.external_id not in task_ids:
             continue
         images = extract_images(body) if full_solutions else []
-        answer, solution = splitter(body)
+        if full_solutions:
+            (answer, solution, solution_subitems,
+             flattened_solution) = split_full_solution(body)
+        else:
+            answer, solution = split_answer_solution(body)
+            solution_subitems = []
+            flattened_solution = solution
         solution_map.setdefault(
-            marker.external_id, (answer, solution, images))
+            marker.external_id,
+            (answer, solution, images, solution_subitems,
+             flattened_solution),
+        )
     matched = 0
     for task in tasks:
         found = solution_map.get(task.external_id)
@@ -647,14 +718,40 @@ def merge_solutions(
             task.confidence = max(0.0, task.confidence - 0.15)
             continue
         (task.author_answer_latex, task.author_solution_latex,
-         solution_images) = found
+         solution_images, solution_subitems, flattened_solution) = found
+        if solution_subitems:
+            if _solution_subitems_match(task.subitems, solution_subitems):
+                for task_subitem, solution_subitem in zip(
+                        task.subitems, solution_subitems):
+                    task_subitem.author_answer_latex = (
+                        solution_subitem.author_answer_latex)
+                    task_subitem.author_solution_latex = (
+                        solution_subitem.author_solution_latex)
+            elif not task.subitems:
+                # Нумерованные шаги доказательства у задачи без подпунктов —
+                # содержательная часть общего решения, а не подпункты задачи.
+                task.author_solution_latex = flattened_solution
+                task.author_answer_latex = "\n".join(
+                    _explicit_answers(task.author_solution_latex))
+            else:
+                # При несовпадении границ ничего не распределяем наугад:
+                # сохраняем исходный блок целиком и отправляем его редактору.
+                task.author_solution_latex = flattened_solution
+                task.author_answer_latex = "\n".join(
+                    _explicit_answers(task.author_solution_latex))
+                task.warnings.append(
+                    "Не совпали подпункты условия и решения")
+                task.confidence = max(0.0, task.confidence - 0.25)
         task.images.extend(
             image for image in solution_images if image not in task.images)
         for image in solution_images:
-            task.author_solution_latex = task.author_solution_latex.replace(
-                rf"\taskpic{{{image}}}",
-                rf"\taskpic{{{task.images.index(image) + 1}}}",
-            )
+            old = rf"\taskpic{{{image}}}"
+            new = rf"\taskpic{{{task.images.index(image) + 1}}}"
+            task.author_solution_latex = (
+                task.author_solution_latex.replace(old, new))
+            for subitem in task.subitems:
+                subitem.author_solution_latex = (
+                    subitem.author_solution_latex.replace(old, new))
         matched += 1
     return {
         "solution_marker_occurrences": len(allowed_markers),
@@ -873,8 +970,16 @@ def bundle_for(profile: str, tasks_path: Path, solutions_path: Path | None) -> I
     diagnostics["review_counts"] = dict(review_counts)
     diagnostics["tasks_with_subitems"] = sum(bool(task.subitems) for task in tasks)
     diagnostics["tasks_with_images"] = sum(bool(task.images) for task in tasks)
-    diagnostics["tasks_with_author_answer"] = sum(bool(task.author_answer_latex) for task in tasks)
-    diagnostics["tasks_with_author_solution"] = sum(bool(task.author_solution_latex) for task in tasks)
+    diagnostics["tasks_with_author_answer"] = sum(
+        bool(task.author_answer_latex)
+        or any(item.author_answer_latex for item in task.subitems)
+        for task in tasks
+    )
+    diagnostics["tasks_with_author_solution"] = sum(
+        bool(task.author_solution_latex)
+        or any(item.author_solution_latex for item in task.subitems)
+        for task in tasks
+    )
     return ImportBundle(
         schema_version=SCHEMA_VERSION,
         profile=profile,

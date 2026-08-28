@@ -10,6 +10,8 @@ urlpatterns = [
     path('solve/', views.task_neuro_solve, name='task_neuro_solve'),
     path('imports/', views.textbook_import_list,
          name='textbook_import_list'),
+    path('imports/help/', views.textbook_import_help,
+         name='textbook_import_help'),
     path('imports/new/', views.textbook_import_upload,
          name='textbook_import_upload'),
     path('imports/<int:pk>/', views.textbook_import_detail,
