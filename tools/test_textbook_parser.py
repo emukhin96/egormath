@@ -435,6 +435,26 @@ class TextbookParserTests(unittest.TestCase):
         self.assertNotIn("answer-b.png", combined_answers)
         self.assertNotIn("answer-all.png", combined_answers)
 
+    def test_solution_image_numbers_are_replaced_in_one_pass(self):
+        task_text = "\n".join([
+            "1.1.A01 Выберите рисунок:",
+            r"\item[а)] первый;",
+            r"\item[б)] второй.",
+        ])
+        solution_text = "\n".join([
+            "1.1.A01",
+            r"\item[а)] Ответ: \includegraphics{2}",
+            r"\item[б)] Ответ: \includegraphics{1}",
+        ])
+
+        tasks, _ = parse_shestakov(task_text, solution_text)
+
+        self.assertEqual(tasks[0].images, ["2", "1"])
+        self.assertEqual(
+            [item.author_answer_latex for item in tasks[0].subitems],
+            [r"\taskpic{1}", r"\taskpic{2}"],
+        )
+
     def test_nested_solution_numbering_stays_inside_subitem(self):
         task_text = "\n".join([
             "1.1.A01 Исследуйте:",

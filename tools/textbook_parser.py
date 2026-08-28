@@ -779,18 +779,27 @@ def merge_solutions(
                 task.confidence = max(0.0, task.confidence - 0.25)
         task.images.extend(
             image for image in solution_images if image not in task.images)
-        for image in solution_images:
-            old = rf"\taskpic{{{image}}}"
-            new = rf"\taskpic{{{task.images.index(image) + 1}}}"
-            task.author_answer_latex = (
-                task.author_answer_latex.replace(old, new))
-            task.author_solution_latex = (
-                task.author_solution_latex.replace(old, new))
-            for subitem in task.subitems:
-                subitem.author_answer_latex = (
-                    subitem.author_answer_latex.replace(old, new))
-                subitem.author_solution_latex = (
-                    subitem.author_solution_latex.replace(old, new))
+        image_numbers = {
+            image: task.images.index(image) + 1 for image in solution_images}
+
+        def renumber_taskpics(value: str) -> str:
+            return re.sub(
+                r"\\taskpic\{([^{}]+)\}",
+                lambda match: (
+                    rf"\taskpic{{{image_numbers[match.group(1)]}}}"
+                    if match.group(1) in image_numbers else match.group(0)),
+                value,
+            )
+
+        task.author_answer_latex = renumber_taskpics(
+            task.author_answer_latex)
+        task.author_solution_latex = renumber_taskpics(
+            task.author_solution_latex)
+        for subitem in task.subitems:
+            subitem.author_answer_latex = renumber_taskpics(
+                subitem.author_answer_latex)
+            subitem.author_solution_latex = renumber_taskpics(
+                subitem.author_solution_latex)
         matched += 1
     return {
         "solution_marker_occurrences": len(allowed_markers),
