@@ -354,6 +354,39 @@ class TextbookParserTests(unittest.TestCase):
                 item.author_solution_latex, r"^(?:a|а|б|6)\)~?")
             self.assertNotIn(r"\item", item.author_solution_latex)
 
+    def test_solution_images_are_numbered_in_task_and_subitem_answers(self):
+        task_text = "\n".join([
+            "1.1.A01 Выберите рисунок:",
+            r"\item[а)] первый;",
+            r"\item[б)] второй.",
+            "1.1.A02 Выберите общий рисунок.",
+        ])
+        solution_text = "\n".join([
+            "1.1.A01",
+            r"\item[а)] Ответ: \includegraphics{answer-a.png}",
+            r"\item[б)] Ответ: \includegraphics{answer-b.png}",
+            "1.1.A02",
+            r"Ответ: \includegraphics{answer-all.png}",
+        ])
+
+        tasks, _ = parse_shestakov(task_text, solution_text)
+
+        first, second = tasks
+        self.assertEqual(first.images, ["answer-a.png", "answer-b.png"])
+        self.assertEqual(
+            [item.author_answer_latex for item in first.subitems],
+            [r"\taskpic{1}", r"\taskpic{2}"],
+        )
+        self.assertEqual(second.images, ["answer-all.png"])
+        self.assertEqual(second.author_answer_latex, r"\taskpic{1}")
+        combined_answers = "\n".join(
+            [first.author_answer_latex, second.author_answer_latex]
+            + [item.author_answer_latex for item in first.subitems]
+        )
+        self.assertNotIn("answer-a.png", combined_answers)
+        self.assertNotIn("answer-b.png", combined_answers)
+        self.assertNotIn("answer-all.png", combined_answers)
+
     def test_nested_solution_numbering_stays_inside_subitem(self):
         task_text = "\n".join([
             "1.1.A01 Исследуйте:",

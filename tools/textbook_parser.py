@@ -747,9 +747,13 @@ def merge_solutions(
         for image in solution_images:
             old = rf"\taskpic{{{image}}}"
             new = rf"\taskpic{{{task.images.index(image) + 1}}}"
+            task.author_answer_latex = (
+                task.author_answer_latex.replace(old, new))
             task.author_solution_latex = (
                 task.author_solution_latex.replace(old, new))
             for subitem in task.subitems:
+                subitem.author_answer_latex = (
+                    subitem.author_answer_latex.replace(old, new))
                 subitem.author_solution_latex = (
                     subitem.author_solution_latex.replace(old, new))
         matched += 1
