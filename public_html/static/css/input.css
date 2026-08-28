@@ -2727,6 +2727,22 @@
     font-size: 0.82rem;
   }
 
+  .import-asset-list {
+    display: grid;
+    gap: var(--space-2);
+    margin: 0;
+    padding-left: 1.2em;
+  }
+
+  .import-asset-thumb {
+    display: block;
+    max-width: 220px;
+    max-height: 140px;
+    margin-top: var(--space-1);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+
   @media (max-width: 900px) {
     .import-review-grid {
       grid-template-columns: 1fr;

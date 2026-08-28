@@ -5,12 +5,15 @@ from pathlib import Path
 from tools.textbook_parser import (
     Marker,
     ImportBundle,
+    bundle_from_text,
     expected_shestakov_ids,
     numeric_markers,
     path_at,
     parse_galitsky,
     parse_shestakov,
+    parse_ziv,
     sections,
+    shestakov_source_path,
     shestakov_markers,
     split_answer_solution,
     task_from_block,
@@ -31,6 +34,16 @@ class TextbookParserTests(unittest.TestCase):
         self.assertIn("1.1.A01", expected)
         self.assertIn("10.3.D15", expected)
         self.assertIn("11.1.D10", expected)
+
+    def test_shestakov_source_path_has_chapter_and_paragraph(self):
+        self.assertEqual(shestakov_source_path("4.2.B03"), [
+            "Глава 4. Неравенства",
+            "§2. Дробно-рациональные неравенства",
+        ])
+        self.assertEqual(shestakov_source_path("10.3.D15"), [
+            "Приложение 1. Задачи по геометрии",
+            "§3. Окружности",
+        ])
 
     def test_section_path_replaces_sibling_at_same_level(self):
         text = (
@@ -338,6 +351,48 @@ class TextbookParserTests(unittest.TestCase):
         self.assertIn("Решение", tasks[1].author_solution_latex)
         self.assertEqual(diagnostics["matched_solutions"], 2)
 
+    def test_galitsky_distributes_partial_answers_by_subitem_label(self):
+        source = r"""
+\section*{§ 1. ДРОБИ}
+\item[1.1.] Вычислите:
+\begin{itemize}
+  \item[а)] $1+1$;
+  \item[б)] $2+2$;
+  \item[в)] $3+3$.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+1.1. б) 4; в) 6.
+"""
+        tasks, diagnostics = parse_galitsky(source)
+
+        self.assertEqual(diagnostics["matched_solutions"], 1)
+        self.assertEqual(tasks[0].author_answer_latex, "")
+        self.assertEqual(
+            [item.author_answer_latex for item in tasks[0].subitems],
+            ["", "4", "6"],
+        )
+        self.assertFalse(any(
+            "не удалось распределить" in warning
+            for warning in tasks[0].warnings))
+
+    def test_galitsky_spaced_ocr_markers_bound_neighboring_answers(self):
+        source = r"""
+\section*{§ 2. ВЫРАЖЕНИЯ}
+\item[2.21.] Найдите минимум.
+\item[2.22.] Найдите максимум.
+\item[2.23.] Найдите значение.
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+2.21. -1.2 .22 .4 .2 .23 .1.
+"""
+        tasks, diagnostics = parse_galitsky(source)
+
+        self.assertEqual(diagnostics["matched_solutions"], 3)
+        self.assertEqual(
+            [task.author_answer_latex for task in tasks], ["-1.", "4 .", "1."])
+        self.assertTrue(all(
+            "Не найден авторский ответ/решение" not in task.warnings
+            for task in tasks))
+
     def test_hint_is_kept_inside_solution(self):
         source = r"""
 \section*{§ 1. ДРОБИ}
@@ -370,6 +425,22 @@ class TextbookParserTests(unittest.TestCase):
         self.assertIn("$1+1=2$", tasks[0].author_solution_latex)
         self.assertIn("Ответ: 2.", tasks[0].author_solution_latex)
         self.assertEqual(diagnostics["matched_solutions"], 1)
+
+    def test_bundle_from_text_supports_web_upload_without_temp_files(self):
+        bundle = bundle_from_text(
+            "shestakov",
+            "1.1.A01 Найдите $1+1$.",
+            "1.1.A01 Ответ: 2.",
+            tasks_file="book.tex",
+            solutions_file="solutions.tex",
+        )
+
+        self.assertEqual(len(bundle.tasks), 1)
+        self.assertEqual(bundle.tasks[0].author_answer_latex, "2.")
+        self.assertEqual(bundle.source, {
+            "tasks_file": "book.tex",
+            "solutions_file": "solutions.tex",
+        })
 
     def test_solution_subitems_are_matched_without_top_level_labels(self):
         task_text = "\n".join([
@@ -787,6 +858,113 @@ class TextbookParserTests(unittest.TestCase):
             diagnostics["tasks_truncated_before_exam_variants"])
         self.assertTrue(
             diagnostics["solutions_truncated_before_exam_variants"])
+
+    def test_ziv_locator_includes_work_topic_and_variant(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{1. Числовые неравенства}
+Вариант 1
+\begin{itemize}
+  \item[1.] Сравните дроби.
+  \item[2.] Сравните числа.
+\end{itemize}
+Вариант 2
+\begin{itemize}
+  \item[1.] Другое сравнение.
+\end{itemize}
+\section*{Контрольные работы}
+\section*{1. Неравенства}
+Вариант 1
+\begin{itemize}
+  \item[1.] Решите неравенство.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{1. Числовые неравенства}
+Вариант 1
+\begin{itemize}
+  \item[1.] $\frac{2}{3}<\frac{4}{5}$.
+  \item[2.] $x<y$.
+\end{itemize}
+Вариант 2
+\begin{itemize}
+  \item[1.] $\frac{1}{2}<\frac{2}{3}$.
+\end{itemize}
+\section*{Контрольные работы}
+\section*{1. Неравенства}
+Вариант 1
+\begin{itemize}
+  \item[1.] $x>0$.
+\end{itemize}
+"""
+        tasks, diagnostics = parse_ziv(source)
+        self.assertEqual(
+            [task.external_id for task in tasks],
+            ["sr/01/v1/1", "sr/01/v1/2", "sr/01/v2/1", "kr/01/v1/1"],
+        )
+        self.assertEqual(tasks[0].source_path, [
+            "Самостоятельные работы", "Числовые неравенства", "Вариант 1",
+        ])
+        self.assertEqual(tasks[0].collection_key, "sr/01/v1")
+        self.assertEqual(tasks[0].author_answer_latex, r"$\frac{2}{3}<\frac{4}{5}$.")
+        self.assertEqual(tasks[2].author_answer_latex, r"$\frac{1}{2}<\frac{2}{3}$.")
+        self.assertEqual(tasks[3].author_answer_latex, r"$x>0$.")
+        self.assertEqual(diagnostics["matched_solutions"], 4)
+
+    def test_ziv_second_work_heading_starts_answers(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{1. Числовые неравенства}
+Вариант 1
+\begin{itemize}
+  \item[1.] Сравните дроби.
+\end{itemize}
+\section*{Контрольные работы}
+\section*{1. Неравенства}
+Вариант 1
+\begin{itemize}
+  \item[1.] Решите неравенство.
+\end{itemize}
+\section*{Самостоятельные работы}
+\begin{itemize}
+  \item[1.] Числовые неравенства
+\end{itemize}
+Вариант 1
+\begin{itemize}
+  \item[1.] $1<2$.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Контрольные работы}
+\section*{1. Неравенства}
+Вариант 1
+\begin{itemize}
+  \item[1.] $x>0$.
+\end{itemize}
+"""
+        tasks, diagnostics = parse_ziv(source)
+        self.assertEqual(
+            [task.external_id for task in tasks],
+            ["sr/01/v1/1", "kr/01/v1/1"])
+        self.assertEqual(tasks[0].author_answer_latex, "$1<2$.")
+        self.assertEqual(tasks[1].author_answer_latex, "$x>0$.")
+        self.assertEqual(diagnostics["matched_solutions"], 2)
+        self.assertEqual(diagnostics["duplicate_task_ids"], [])
+
+    def test_galitsky_missing_answer_is_not_a_warning(self):
+        source = r"""
+\section*{§ 1. ДРОБИ}
+\item[1.1.] Вычислите $1+1$.
+\item[1.2.] Докажите тождество.
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+1.1. 2.
+"""
+        tasks, diagnostics = parse_galitsky(source)
+        self.assertEqual(diagnostics["matched_solutions"], 1)
+        self.assertEqual(tasks[0].author_answer_latex, "2.")
+        self.assertEqual(tasks[1].author_answer_latex, "")
+        self.assertFalse(any(
+            "Не найден авторский ответ/решение" in warning
+            for warning in tasks[1].warnings))
 
     def test_writer_creates_three_review_artifacts(self):
         bundle = ImportBundle(1, "test", {}, [], {

@@ -19,10 +19,10 @@ from accounts.decorators import teacher_required
 
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
                     TaskSubitemFormSet, TextbookBundleUploadForm,
-                    TextbookDraftReviewForm)
+                    TextbookDraftReviewForm, TextbookImageArchiveForm)
 from .models import (Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
-                     TextbookImportBatch, TextbookTaskDraft, Topic,
-                     topic_tree)
+                     TextbookImportAsset, TextbookImportBatch,
+                     TextbookTaskDraft, Topic, topic_tree)
 from .rubricator import (GRADE_LEVEL_TO_CODE, apply_task_taxonomy,
                          dumps_state, filter_by_taxonomy,
                          filter_state_from_params, parse_grade_choice,
@@ -732,7 +732,7 @@ def _own_import_batch(request, pk):
 
 
 def _textbook_collection_groups(batch):
-    """Группирует черновики так же, как будущие листовые подборки."""
+    """Даёт агрегаты по главам и по будущим листовым подборкам."""
     rows = (batch.drafts.order_by()
             .values('collection_key', 'source_path')
             .annotate(count=Count('pk'), title=Max('collection_title')))
@@ -750,16 +750,64 @@ def _textbook_collection_groups(batch):
             'title': (row['title'] or '').strip() or path[-1],
             'selectors': [],
             'count': 0,
+            'is_leaf': True,
+            'level_label': 'Подраздел',
         })
         group['selectors'].append((
             row['collection_key'], row['source_path']))
         group['count'] += row['count']
+    leaf_groups = list(grouped.values())
+    for leaf in leaf_groups:
+        for depth in range(1, len(leaf['path'])):
+            prefix = tuple(leaf['path'][:depth])
+            identity = ('__prefix__', prefix)
+            group = grouped.setdefault(identity, {
+                'collection_key': '',
+                'path': list(prefix),
+                'title': prefix[-1],
+                'selectors': [],
+                'count': 0,
+                'is_leaf': False,
+                'level_label': ('Глава целиком'
+                                if depth == 1 else 'Раздел целиком'),
+            })
+            group['selectors'].extend(leaf['selectors'])
+            group['count'] += leaf['count']
     for identity, group in grouped.items():
         raw = json.dumps(identity, ensure_ascii=False, separators=(',', ':'))
         group['token'] = hashlib.sha256(
             raw.encode('utf-8')).hexdigest()[:20]
+        if not group['is_leaf'] and len(group['path']) == 1:
+            group['optgroup'] = 'Главы целиком'
+        elif not group['is_leaf']:
+            group['optgroup'] = 'Разделы целиком'
+        else:
+            group['optgroup'] = (
+                group['path'][0] if len(group['path']) > 1
+                else 'Подразделы')
     return sorted(grouped.values(), key=lambda group: (
-        tuple(group['path']), group['collection_key']))
+        tuple(group['path']), group['is_leaf'], group['collection_key']))
+
+
+def _textbook_detail_query(request=None, **overrides):
+    params = request.GET.copy() if request is not None else {}
+    if not hasattr(params, 'urlencode'):
+        from django.http import QueryDict
+        params = QueryDict('', mutable=True)
+    else:
+        params = params.copy()
+    for key, value in overrides.items():
+        if value in (None, ''):
+            params.pop(key, None)
+        else:
+            params[key] = value
+    return params.urlencode()
+
+
+def _textbook_detail_url(batch, request=None, **overrides):
+    query = _textbook_detail_query(request, **overrides)
+    url = reverse('textbook_import_detail', args=[batch.pk])
+    return f'{url}?{query}' if query else url
 
 
 def _textbook_group_drafts(batch, group):
@@ -827,20 +875,39 @@ def textbook_import_help(request):
 @teacher_required
 def textbook_import_upload(request):
     from .textbook_import import (TextbookImportError,
-                                  create_batch_from_bundle, read_bundle)
+                                  attach_image_archive,
+                                  create_batch_from_bundle,
+                                  parse_tex_uploads, read_bundle)
     if request.method == 'POST':
         form = TextbookBundleUploadForm(request.POST, request.FILES)
         if form.is_valid():
             try:
-                payload = read_bundle(form.cleaned_data['bundle'])
+                input_kind = form.cleaned_data['input_kind']
+                if input_kind == TextbookBundleUploadForm.INPUT_JSON:
+                    payload = read_bundle(form.cleaned_data['bundle'])
+                else:
+                    payload = parse_tex_uploads(
+                        form.cleaned_data['tasks_tex'],
+                        profile=form.cleaned_data['resolved_profile'],
+                        solutions_upload=form.cleaned_data.get(
+                            'solutions_tex'))
                 batch = create_batch_from_bundle(
                     payload, user=request.user,
                     title=form.cleaned_data['title'],
                     source_title=form.cleaned_data['source_title'],
                     source_author=form.cleaned_data['source_author'],
                     source_year=form.cleaned_data['source_year'])
+                images_zip = form.cleaned_data.get('images_zip')
+                if images_zip:
+                    stored = attach_image_archive(batch, images_zip)
+                    messages.success(
+                        request,
+                        f'Сопоставлено рисунков: {stored}.')
             except TextbookImportError as exc:
-                form.add_error('bundle', str(exc))
+                error_field = ('bundle' if form.cleaned_data.get('input_kind')
+                               == TextbookBundleUploadForm.INPUT_JSON
+                               else 'tasks_tex')
+                form.add_error(error_field, str(exc))
             else:
                 messages.success(
                     request,
@@ -895,6 +962,23 @@ def textbook_import_detail(request, pk):
         } for row in topic_rows]
         if len(topic_rows) == 1:
             selected_topic = topic_rows[0]['topic_id']
+        candidate_rows = (
+            group_drafts.exclude(topic_candidates=[])
+            .values_list('topic_candidates', flat=True)[:8])
+        shown = []
+        seen = set()
+        for payload in candidate_rows:
+            for item in payload or []:
+                key = item.get('id') or item.get('code')
+                if key in seen:
+                    continue
+                seen.add(key)
+                shown.append(item)
+                if len(shown) == 5:
+                    break
+            if len(shown) == 5:
+                break
+        selected_group['topic_candidates'] = shown
         collection_page = Paginator(
             group_drafts.select_related('topic')
             .order_by('external_id', 'pk'), 50,
@@ -904,6 +988,13 @@ def textbook_import_detail(request, pk):
         'primary': selected_topic,
         'grades': [], 'facets': [], 'exams': [], 'difficulty': None,
     })
+    section_groups = []
+    for group in collection_groups:
+        if (not section_groups
+                or section_groups[-1]['label'] != group['optgroup']):
+            section_groups.append(
+                {'label': group['optgroup'], 'groups': []})
+        section_groups[-1]['groups'].append(group)
     context.update({
         'batch': batch,
         'page': page,
@@ -911,10 +1002,16 @@ def textbook_import_detail(request, pk):
         'status': status,
         'status_tabs': status_tabs,
         'collection_groups': collection_groups,
+        'section_groups': section_groups,
         'selected_group': selected_group,
         'selected_section': selected_token,
         'selected_topic': selected_topic,
         'collection_page': collection_page,
+        'image_form': TextbookImageArchiveForm(),
+        'list_query': _textbook_detail_query(
+            request, section=selected_token or None),
+        'collection_query': _textbook_detail_query(
+            request, section=selected_token or None, page=None),
     })
     return render(request, 'problems/textbook_import_detail.html', context)
 
@@ -931,29 +1028,23 @@ def textbook_import_assign_section_topic(request, pk):
                   if item['token'] == section_token), None)
     if group is None:
         messages.error(request, 'Выбранный раздел задачника не найден.')
-        return redirect('textbook_import_detail', pk=batch.pk)
+        return redirect(_textbook_detail_url(batch, section=section_token))
     if batch.status == TextbookImportBatch.STATUS_IMPORTED:
         messages.error(
             request, 'Загруженную партию нельзя изменять через предпросмотр.')
-        return redirect(
-            f"{reverse('textbook_import_detail', args=[batch.pk])}"
-            f"?section={section_token}")
+        return redirect(_textbook_detail_url(batch, section=section_token))
     topic_id = request.POST.get('topic', '').strip()
     topic = (Topic.objects.filter(pk=int(topic_id)).first()
              if topic_id.isdigit() else None)
     if topic is None:
         messages.error(request, 'Выберите тему рубрикатора.')
-        return redirect(
-            f"{reverse('textbook_import_detail', args=[batch.pk])}"
-            f"?section={section_token}")
+        return redirect(_textbook_detail_url(batch, section=section_token))
     updated = _textbook_group_drafts(batch, group).update(topic=topic)
     messages.success(
         request,
         f'Тема «{topic}» назначена задачам раздела '
         f'«{group["title"]}»: {updated}.')
-    return redirect(
-        f"{reverse('textbook_import_detail', args=[batch.pk])}"
-        f"?section={section_token}")
+    return redirect(_textbook_detail_url(batch, section=section_token))
 
 
 @teacher_required
@@ -1118,6 +1209,18 @@ def textbook_import_review(request, batch_pk, pk):
         'primary': None,
         'grades': [], 'facets': [], 'exams': [], 'difficulty': None,
     })
+    from .textbook_import import normalize_image_stem
+    assets = {
+        asset.stem: asset
+        for asset in batch.assets.all()
+    }
+    draft_images = []
+    for name in draft.images:
+        stem = normalize_image_stem(name)
+        draft_images.append({
+            'name': name,
+            'asset': assets.get(stem),
+        })
     context.update({
         'batch': batch,
         'draft': draft,
@@ -1126,8 +1229,39 @@ def textbook_import_review(request, batch_pk, pk):
         'previous': previous,
         'following': following,
         'candidates': candidates,
+        'draft_images': draft_images,
+        'topic_candidates': draft.topic_candidates or [],
     })
     return render(request, 'problems/textbook_import_review.html', context)
+
+
+@teacher_required
+@require_POST
+def textbook_import_attach_images(request, pk):
+    from .textbook_import import TextbookImportError, attach_image_archive
+    batch = _own_import_batch(request, pk)
+    form = TextbookImageArchiveForm(request.POST, request.FILES)
+    if batch.status == TextbookImportBatch.STATUS_IMPORTED:
+        messages.error(request, 'Загруженную партию нельзя дополнять рисунками.')
+        return redirect(_textbook_detail_url(batch))
+    if not form.is_valid():
+        messages.error(request, 'Выберите ZIP с рисунками.')
+        return redirect(_textbook_detail_url(batch))
+    try:
+        stored = attach_image_archive(batch, form.cleaned_data['images_zip'])
+    except TextbookImportError as exc:
+        messages.error(request, str(exc))
+        return redirect(_textbook_detail_url(batch))
+    messages.success(request, f'Сопоставлено рисунков: {stored}.')
+    return redirect(_textbook_detail_url(batch))
+
+
+@teacher_required
+@xframe_options_sameorigin
+def textbook_import_asset_file(request, batch_pk, pk):
+    batch = _own_import_batch(request, batch_pk)
+    asset = get_object_or_404(TextbookImportAsset, batch=batch, pk=pk)
+    return FileResponse(asset.file.open('rb'), filename=asset.original_name)
 
 
 @teacher_required

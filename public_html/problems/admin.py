@@ -2,7 +2,8 @@ from django.contrib import admin
 
 from .models import (ExamItem, ExamModel, FacetType, FacetValue, GradeBand,
                      Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
-                     TextbookImportBatch, TextbookTaskDraft, Topic)
+                     TextbookImportAsset, TextbookImportBatch,
+                     TextbookTaskDraft, Topic)
 
 
 @admin.register(Topic)
@@ -101,3 +102,9 @@ class TextbookTaskDraftAdmin(admin.ModelAdmin):
     list_display = ('external_id', 'batch', 'status', 'confidence', 'topic')
     list_filter = ('status', 'batch')
     search_fields = ('external_id', 'source_number', 'text_latex')
+
+
+@admin.register(TextbookImportAsset)
+class TextbookImportAssetAdmin(admin.ModelAdmin):
+    list_display = ('original_name', 'stem', 'batch')
+    search_fields = ('original_name', 'stem')

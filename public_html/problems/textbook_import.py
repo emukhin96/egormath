@@ -7,19 +7,33 @@ answer_latex/solution_latex не меняются: ими продолжает �
 """
 
 import hashlib
+import io
 import json
+import zipfile
+from dataclasses import asdict
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.db.models import Max
 from django.utils.text import slugify
 
-from .models import (Source, Task, TaskSource, TaskSubitem, TextbookImportBatch,
+from .models import (Source, Task, TaskImage, TaskSource, TaskSubitem,
+                     TextbookImportAsset, TextbookImportBatch,
                      TextbookTaskDraft)
 from .rubricator import set_task_topics
+from .textbook_topics import apply_topic_suggestions
 
 
 MAX_BUNDLE_TASKS = 10000
+IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.pdf'}
+IMAGE_WARNING_PREFIX = 'Требуется загрузить файлы изображений:'
+
+
+def normalize_image_stem(name):
+    path = Path(str(name or '').replace('\\', '/'))
+    return path.stem.lower().strip()
 
 
 class TextbookImportError(ValueError):
@@ -130,10 +144,6 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
         path = _string_list(row.get('source_path'), 'source_path')
         warnings = _string_list(row.get('warnings'), 'warnings')
         images = _string_list(row.get('images'), 'images')
-        if images:
-            warnings.append(
-                'Требуется загрузить файлы изображений: '
-                + ', '.join(images))
         subitems = normalize_subitems(row.get('subitems'))
         text_latex = _required_string(
             row, 'text_latex', allow_blank=True)
@@ -173,7 +183,9 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             warnings=warnings,
             status=status,
         ))
+    apply_topic_suggestions(drafts)
     TextbookTaskDraft.objects.bulk_create(drafts, batch_size=500)
+    refresh_image_warnings(batch)
     return batch
 
 
@@ -185,6 +197,101 @@ def read_bundle(upload, max_bytes=50 * 1024 * 1024):
         return json.loads(raw.decode('utf-8'))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise TextbookImportError(f'Некорректный UTF-8 JSON: {exc}') from exc
+
+
+def _read_tex(upload, max_bytes=50 * 1024 * 1024):
+    raw = upload.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise TextbookImportError(
+            f'Файл {Path(upload.name).name} больше 50 МБ.')
+    try:
+        return raw.decode('utf-8-sig')
+    except UnicodeDecodeError as exc:
+        raise TextbookImportError(
+            f'Файл {Path(upload.name).name} не является UTF-8 TEX.') from exc
+
+
+def parse_tex_uploads(tasks_upload, *, profile, solutions_upload=None):
+    """Преобразует загруженные TEX в тот же JSON-контракт, что CLI."""
+    from .textbook_parser import bundle_from_text
+
+    try:
+        bundle = bundle_from_text(
+            profile,
+            _read_tex(tasks_upload),
+            (_read_tex(solutions_upload) if solutions_upload else ''),
+            tasks_file=Path(tasks_upload.name).name,
+            solutions_file=(Path(solutions_upload.name).name
+                            if solutions_upload else ''),
+        )
+    except ValueError as exc:
+        raise TextbookImportError(str(exc)) from exc
+    return asdict(bundle)
+
+
+def refresh_image_warnings(batch):
+    """Оставляет блокирующее предупреждение только у несопоставленных рисунков."""
+    resolved = set(batch.assets.values_list('stem', flat=True))
+    drafts = list(batch.drafts.all())
+    for draft in drafts:
+        warnings = [
+            item for item in draft.warnings
+            if not str(item).startswith(IMAGE_WARNING_PREFIX)]
+        missing = [
+            name for name in draft.images
+            if normalize_image_stem(name) not in resolved]
+        if missing:
+            warnings.append(
+                IMAGE_WARNING_PREFIX + ' ' + ', '.join(missing))
+        draft.warnings = warnings
+    if drafts:
+        TextbookTaskDraft.objects.bulk_update(drafts, ['warnings'])
+    return batch
+
+
+def attach_image_archive(batch, upload, max_bytes=80 * 1024 * 1024):
+    """Распаковывает ZIP и сопоставляет файлы с именами из черновиков."""
+    raw = upload.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise TextbookImportError('Архив изображений больше 80 МБ.')
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile as exc:
+        raise TextbookImportError(
+            'Нужен ZIP с PNG, JPEG или PDF рисунками.') from exc
+    stored = 0
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        path = Path(info.filename)
+        if path.suffix.lower() not in IMAGE_SUFFIXES:
+            continue
+        stem = normalize_image_stem(path.name)
+        if not stem:
+            continue
+        try:
+            payload = archive.read(info)
+        except Exception as exc:
+            raise TextbookImportError(
+                f'Не удалось прочитать {path.name}: {exc}') from exc
+        asset, created = TextbookImportAsset.objects.update_or_create(
+            batch=batch, stem=stem,
+            defaults={'original_name': path.name})
+        asset.file.save(path.name, ContentFile(payload), save=True)
+        stored += 1
+    if not stored:
+        raise TextbookImportError(
+            'В архиве нет файлов PNG, JPEG или PDF.')
+    refresh_image_warnings(batch)
+    return stored
+
+
+def unmatched_image_names(draft, resolved_stems=None):
+    resolved = resolved_stems
+    if resolved is None:
+        resolved = set(draft.batch.assets.values_list('stem', flat=True))
+    return [name for name in draft.images
+            if normalize_image_stem(name) not in resolved]
 
 
 def _collection_locator(path):
@@ -303,6 +410,23 @@ def _merge_subitem_author_fields(task, draft):
             sub.save(update_fields=updates)
 
 
+def _attach_task_images(task, draft, batch):
+    if not draft.images or task.images.exists():
+        return
+    assets = {
+        asset.stem: asset
+        for asset in batch.assets.filter(
+            stem__in=[normalize_image_stem(name) for name in draft.images])
+    }
+    for index, name in enumerate(draft.images, start=1):
+        asset = assets.get(normalize_image_stem(name))
+        if asset is None:
+            continue
+        image = TaskImage(task=task, order=index * 10)
+        image.image.save(
+            Path(asset.original_name).name, asset.file, save=True)
+
+
 @transaction.atomic
 def commit_batch(batch, *, user):
     """Загружает полностью проверенную партию; повторный вызов безопасен."""
@@ -327,8 +451,11 @@ def commit_batch(batch, *, user):
         raise TextbookImportError(
             f'У одобренных задач не выбрана тема рубрикатора: '
             f'{missing_topics}.')
-    missing_assets = batch.drafts.filter(
-        status=TextbookTaskDraft.STATUS_APPROVED).exclude(images=[]).count()
+    resolved_stems = set(batch.assets.values_list('stem', flat=True))
+    missing_assets = sum(
+        1 for draft in batch.drafts.filter(
+            status=TextbookTaskDraft.STATUS_APPROVED).only('images')
+        if unmatched_image_names(draft, resolved_stems))
     if missing_assets:
         raise TextbookImportError(
             f'У одобренных задач не загружены изображения: '
@@ -376,6 +503,7 @@ def commit_batch(batch, *, user):
                 number=draft.source_number,
                 locator=draft.external_id,
                 source_path=draft.source_path)
+            _attach_task_images(task, draft, batch)
 
         _merge_author_fields(task, draft)
         if draft.topic_id:

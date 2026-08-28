@@ -1,13 +1,21 @@
 {% extends 'base.html' %}
+{% load static %}
+{% block extra_head %}<script defer src="{% static 'js/textbook_import_upload.js' %}"></script>{% endblock %}
 {% block title %}Новая партия импорта — EgorMath{% endblock %}
 {% block content %}
 <div class="page-head"><div><span class="page-eyebrow">Импорт задачника</span><h1>Новая партия</h1>
   <p class="page-subtitle">Загрузка создаёт только черновики: база задач не меняется до подтверждения.</p></div></div>
 <div class="card">
-  <form method="post" enctype="multipart/form-data">
+  <h2>Исходные данные</h2>
+  <p class="muted">Выберите компоновку книги и, если нужно, явный профиль парсера. Один TEX с ответами в конце подходит Галицкому и Зиву; два TEX — задачник и решебник — профилю Шестакова. ZIP с рисунками сопоставляется по имени файла. Сначала создаются только проверяемые черновики.</p>
+  <form method="post" enctype="multipart/form-data" data-textbook-upload>
     {% csrf_token %}{{ form.non_field_errors }}
-    {% for field in form %}<p><label for="{{ field.id_for_label }}">{{ field.label }}</label>
-      {{ field.errors }}{{ field }}{% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}</p>{% endfor %}
+    {% for field in form %}{% if field.name != 'bundle' and field.name != 'tasks_tex' and field.name != 'solutions_tex' and field.name != 'images_zip' %}<p><label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field.errors }}{{ field }}{% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}</p>{% endif %}{% endfor %}
+    <div data-input-panel="json"><p><label for="{{ form.bundle.id_for_label }}">{{ form.bundle.label }}</label>{{ form.bundle.errors }}{{ form.bundle }}<span class="helptext">{{ form.bundle.help_text }}</span></p></div>
+    <div data-input-panel="answers_end separate_solutions"><p><label for="{{ form.tasks_tex.id_for_label }}">{{ form.tasks_tex.label }}</label>{{ form.tasks_tex.errors }}{{ form.tasks_tex }}<span class="helptext">{{ form.tasks_tex.help_text }}</span></p></div>
+    <div data-input-panel="separate_solutions"><p><label for="{{ form.solutions_tex.id_for_label }}">{{ form.solutions_tex.label }}</label>{{ form.solutions_tex.errors }}{{ form.solutions_tex }}<span class="helptext">{{ form.solutions_tex.help_text }}</span></p></div>
+    <p><label for="{{ form.images_zip.id_for_label }}">{{ form.images_zip.label }}</label>{{ form.images_zip.errors }}{{ form.images_zip }}<span class="helptext">{{ form.images_zip.help_text }}</span></p>
     <div class="form-buttons"><button class="btn" type="submit">Создать черновики</button>
       <a class="btn btn-secondary" href="{% url 'textbook_import_list' %}">Отмена</a></div>
   </form>

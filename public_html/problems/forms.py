@@ -1,4 +1,5 @@
 from django import forms
+from django.core.validators import FileExtensionValidator
 from django.forms import inlineformset_factory
 
 from .models import (Task, TaskImage, TaskSource, TaskSubitem,
@@ -60,14 +61,89 @@ class TaskFilterForm(forms.Form):
 
 
 class TextbookBundleUploadForm(forms.Form):
+    INPUT_JSON = 'json'
+    INPUT_ANSWERS_END = 'answers_end'
+    INPUT_SEPARATE_SOLUTIONS = 'separate_solutions'
+    INPUT_CHOICES = [
+        (INPUT_JSON, 'Готовый import.json'),
+        (INPUT_ANSWERS_END,
+         'Один TEX: задачи и авторские ответы в конце'),
+        (INPUT_SEPARATE_SOLUTIONS,
+         'Два TEX: задачник и отдельная книга решений'),
+    ]
+    PROFILE_CHOICES = [
+        ('', 'По компоновке: Галицкий / Шестаков'),
+        ('galitsky', 'Галицкий: глобальные номера, ответы в конце'),
+        ('ziv', 'Зив: работа / тема / вариант / номер'),
+        ('shestakov', 'Шестаков: задачник и отдельный решебник'),
+    ]
+
     title = forms.CharField(label='Название партии', max_length=190)
     source_title = forms.CharField(label='Название задачника', max_length=190)
     source_author = forms.CharField(
         label='Автор(ы)', max_length=190, required=False)
     source_year = forms.IntegerField(
         label='Год издания', required=False, min_value=1000, max_value=9999)
+    input_kind = forms.ChoiceField(
+        label='Компоновка исходных файлов', choices=INPUT_CHOICES,
+        initial=INPUT_JSON, widget=forms.RadioSelect)
+    profile = forms.ChoiceField(
+        label='Профиль парсера', choices=PROFILE_CHOICES, required=False,
+        help_text='Если оставить «По компоновке», один TEX разбирается как '
+                  'Галицкий, два TEX — как Шестаков.')
     bundle = forms.FileField(
-        label='import.json', help_text='Результат tools/textbook_parser.py')
+        label='Готовый import.json', required=False,
+        validators=[FileExtensionValidator(['json'])],
+        help_text='Используйте, если JSON уже сформирован CLI-парсером.')
+    tasks_tex = forms.FileField(
+        label='TEX с текстами задач', required=False,
+        validators=[FileExtensionValidator(['tex'])],
+        help_text='Для одного TEX этот же файл должен содержать '
+                  'раздел авторских ответов в конце.')
+    solutions_tex = forms.FileField(
+        label='TEX с авторскими решениями', required=False,
+        validators=[FileExtensionValidator(['tex'])],
+        help_text='Нужен только при выборе отдельной книги решений.')
+    images_zip = forms.FileField(
+        label='ZIP с рисунками', required=False,
+        validators=[FileExtensionValidator(['zip'])],
+        help_text='Необязательно. Имена файлов должны совпадать со '
+                  'ссылками \\includegraphics / \\taskpic.')
+
+    def clean(self):
+        cleaned = super().clean()
+        kind = cleaned.get('input_kind')
+        profile = (cleaned.get('profile') or '').strip()
+        if kind == self.INPUT_JSON and not cleaned.get('bundle'):
+            self.add_error('bundle', 'Выберите файл import.json.')
+        if kind in {self.INPUT_ANSWERS_END,
+                    self.INPUT_SEPARATE_SOLUTIONS}:
+            if not cleaned.get('tasks_tex'):
+                self.add_error('tasks_tex', 'Выберите TEX с задачами.')
+        if (kind == self.INPUT_SEPARATE_SOLUTIONS
+                and not cleaned.get('solutions_tex')):
+            self.add_error(
+                'solutions_tex', 'Выберите TEX с авторскими решениями.')
+        if profile == 'shestakov' and kind == self.INPUT_ANSWERS_END:
+            self.add_error(
+                'profile',
+                'Профиль Шестакова требует отдельный TEX с решениями.')
+        if profile == 'ziv' and kind == self.INPUT_SEPARATE_SOLUTIONS:
+            self.add_error(
+                'profile',
+                'Профиль Зива сейчас разбирает один TEX с ответами в конце.')
+        cleaned['resolved_profile'] = (
+            profile or (
+                'shestakov' if kind == self.INPUT_SEPARATE_SOLUTIONS
+                else 'galitsky'))
+        return cleaned
+
+
+class TextbookImageArchiveForm(forms.Form):
+    images_zip = forms.FileField(
+        label='ZIP с рисунками',
+        validators=[FileExtensionValidator(['zip'])],
+        help_text='Сопоставление идёт по имени файла без расширения.')
 
 
 class TextbookDraftReviewForm(forms.ModelForm):

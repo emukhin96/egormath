@@ -13,49 +13,66 @@
 {% if collection_groups %}
 <section class="card" id="collection-preview">
   <h2>Предпросмотр подборок и массовая тема</h2>
-  <p class="muted">Каждый раздел ниже станет отдельной подборкой при загрузке в каталог. Назначение темы изменяет только черновики; задачи в рабочей базе пока не создаются.</p>
+  <p class="muted">Можно выбрать всю главу или углубиться до подраздела. Листовые подразделы станут отдельными подборками при загрузке в каталог. Назначение темы изменяет только черновики; задачи в рабочей базе пока не создаются.</p>
   <form method="get" class="form-buttons">
     {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
     <label>Раздел задачника
       <select name="section">
-        {% for group in collection_groups %}<option value="{{ group.token }}"{% if group.token == selected_section %} selected{% endif %}>{{ group.path|join:' › ' }} — {{ group.count }} задач</option>{% endfor %}
+        {% for optgroup in section_groups %}
+        <optgroup label="{{ optgroup.label }}">
+          {% for group in optgroup.groups %}<option value="{{ group.token }}"{% if group.token == selected_section %} selected{% endif %}>{{ group.level_label }}: {{ group.path|join:' › ' }} — {{ group.count }} задач</option>{% endfor %}
+        </optgroup>
+        {% endfor %}
       </select>
     </label>
     <button class="btn btn-secondary" type="submit">Показать подборку</button>
   </form>
   {% if selected_group %}
   <h3>{{ selected_group.title }}</h3>
-  <p><strong>Путь:</strong> {{ selected_group.path|join:' › ' }} · <strong>Задач:</strong> {{ selected_group.count }}</p>
+  <p><strong>Уровень:</strong> {{ selected_group.level_label }} · <strong>Путь:</strong> {{ selected_group.path|join:' › ' }} · <strong>Задач:</strong> {{ selected_group.count }}</p>
   <p><strong>Текущие темы:</strong> {% for item in selected_group.topic_counts %}{{ item.label }} — {{ item.count }}{% if not forloop.last %}; {% endif %}{% endfor %}</p>
+  {% if selected_group.topic_candidates %}<p class="helptext">Кандидаты рубрикатора: {% for item in selected_group.topic_candidates %}{{ item.code }} {{ item.name }} ({{ item.reason }}){% if not forloop.last %}; {% endif %}{% endfor %}. Автоматически назначается только точное совпадение; fuzzy остаётся подсказкой.</p>{% endif %}
   {% if batch.status != 'imported' %}
-  <form method="post" action="{% url 'textbook_import_assign_section_topic' batch.pk %}" onsubmit="return confirm('Назначить выбранную тему всем задачам этой будущей подборки?');">
+  <form method="post" action="{% url 'textbook_import_assign_section_topic' batch.pk %}" onsubmit="return confirm('Назначить выбранную тему всем задачам выбранного уровня?');">
     {% csrf_token %}
     <input type="hidden" name="section" value="{{ selected_group.token }}">
-    <input type="hidden" name="topic" value="{% if selected_topic %}{{ selected_topic }}{% endif %}">
     {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=False compact=True single=True field_name='topic' selected_json=selected_json %}
-    <div class="form-buttons"><button class="btn" type="submit">Назначить тему всему разделу</button></div>
+    <div class="form-buttons"><button class="btn" type="submit">Назначить тему: {{ selected_group.title }}</button></div>
   </form>
   {% endif %}
   <details open>
     <summary>Состав будущей подборки</summary>
     <table class="list">
-      <tr><th>№</th><th>Условие</th><th>Тема</th><th>Статус</th></tr>
+      <tr><th>№</th><th>Задание и подпункты</th><th>Авторский ответ</th><th>Авторское решение</th><th>Тема</th><th>Статус</th></tr>
       {% for draft in collection_page %}<tr>
         <td><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.source_number }}</a></td>
-        <td><span class="math-content task-text">{{ draft.text_latex|web_text_preview:180 }}</span>{% if not draft.text_latex and draft.subitems %}<span class="muted">Условие задано подпунктами ({{ draft.subitems|length }})</span>{% endif %}</td>
+        <td>{% include 'problems/_textbook_draft_preview.html' with draft=draft expanded=True %}</td>
+        <td>{% if draft.has_author_answer_material %}<span class="badge">есть{% if draft.subitems %}: {{ draft.author_answer_subitem_count }}/{{ draft.subitems|length }}{% endif %}</span>{% else %}<span class="muted">нет</span>{% endif %}</td>
+        <td>{% if draft.has_author_solution_material %}<span class="badge">есть{% if draft.subitems %}: {{ draft.author_solution_subitem_count }}/{{ draft.subitems|length }}{% endif %}</span>{% else %}<span class="muted">нет</span>{% endif %}</td>
         <td>{{ draft.topic|default:'—' }}</td>
         <td>{{ draft.get_status_display }}</td>
       </tr>{% endfor %}
     </table>
-    {% if collection_page.has_other_pages %}<p class="form-buttons">{% if collection_page.has_previous %}<a class="btn btn-secondary" href="?section={{ selected_group.token }}&collection_page={{ collection_page.previous_page_number }}{% if status %}&status={{ status }}{% endif %}">←</a>{% endif %}<span>Страница подборки {{ collection_page.number }} из {{ collection_page.paginator.num_pages }}</span>{% if collection_page.has_next %}<a class="btn btn-secondary" href="?section={{ selected_group.token }}&collection_page={{ collection_page.next_page_number }}{% if status %}&status={{ status }}{% endif %}">→</a>{% endif %}</p>{% endif %}
+    {% if collection_page.has_other_pages %}<p class="form-buttons">{% if collection_page.has_previous %}<a class="btn btn-secondary" href="?{{ collection_query }}&collection_page={{ collection_page.previous_page_number }}">←</a>{% endif %}<span>Страница подборки {{ collection_page.number }} из {{ collection_page.paginator.num_pages }}</span>{% if collection_page.has_next %}<a class="btn btn-secondary" href="?{{ collection_query }}&collection_page={{ collection_page.next_page_number }}">→</a>{% endif %}</p>{% endif %}
   </details>
   {% endif %}
 </section>
 {% endif %}
+{% if batch.status != 'imported' %}
+<section class="card">
+  <h2>Рисунки партии</h2>
+  <p class="muted">ZIP сопоставляется по имени файла без расширения со ссылками <code>\includegraphics</code> и <code>\taskpic</code>. Можно загрузить несколько архивов подряд.</p>
+  <form method="post" action="{% url 'textbook_import_attach_images' batch.pk %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <p><label for="{{ image_form.images_zip.id_for_label }}">{{ image_form.images_zip.label }}</label>{{ image_form.images_zip }}<span class="helptext">{{ image_form.images_zip.help_text }}</span></p>
+    <div class="form-buttons"><button class="btn btn-secondary" type="submit">Сопоставить рисунки</button></div>
+  </form>
+</section>
+{% endif %}
 <div class="card">
   <div class="form-buttons">
-    <a class="btn btn-secondary" href="?">Все</a>
-    {% for tab in status_tabs %}<a class="btn btn-secondary" href="?status={{ tab.value }}">{{ tab.label }} ({{ tab.count }})</a>{% endfor %}
+    <a class="btn btn-secondary" href="?{% if selected_section %}section={{ selected_section }}{% endif %}">Все</a>
+    {% for tab in status_tabs %}<a class="btn btn-secondary" href="?status={{ tab.value }}{% if selected_section %}&section={{ selected_section }}{% endif %}">{{ tab.label }} ({{ tab.count }})</a>{% endfor %}
   </div>
   {% if batch.status != 'imported' %}
   <div class="form-buttons">
@@ -64,14 +81,18 @@
   </div>
   {% endif %}
   <table class="list">
-    <tr><th>Ключ</th><th>№</th><th>Раздел</th><th>Тема</th><th>Уверенность</th><th>Замечания</th><th>Статус</th></tr>
+    <tr><th>Ключ</th><th>№</th><th>Задание и подпункты</th><th>Авторский ответ</th><th>Авторское решение</th><th>Раздел</th><th>Тема</th><th>Уверенность</th><th>Замечания</th><th>Статус</th></tr>
     {% for draft in page %}<tr>
       <td><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.external_id }}</a></td>
-      <td>{{ draft.source_number }}</td><td>{{ draft.source_path|join:' › ' }}</td>
+      <td>{{ draft.source_number }}</td>
+      <td>{% include 'problems/_textbook_draft_preview.html' with draft=draft %}{% if draft.subitems %}<span class="muted"> {{ draft.subitems|length }} подп.</span>{% endif %}</td>
+      <td>{% if draft.has_author_answer_material %}<span class="badge">есть{% if draft.subitems %}: {{ draft.author_answer_subitem_count }}/{{ draft.subitems|length }}{% endif %}</span>{% else %}<span class="muted">нет</span>{% endif %}</td>
+      <td>{% if draft.has_author_solution_material %}<span class="badge">есть{% if draft.subitems %}: {{ draft.author_solution_subitem_count }}/{{ draft.subitems|length }}{% endif %}</span>{% else %}<span class="muted">нет</span>{% endif %}</td>
+      <td>{{ draft.source_path|join:' › ' }}</td>
       <td>{{ draft.topic|default:draft.topic_original|default:'—' }}</td><td>{{ draft.confidence }}</td>
       <td>{% if draft.warnings %}{{ draft.warnings|join:'; ' }}{% else %}—{% endif %}</td><td>{{ draft.get_status_display }}</td>
     </tr>{% endfor %}
   </table>
-  {% if page.has_other_pages %}<p class="form-buttons">{% if page.has_previous %}<a class="btn btn-secondary" href="?status={{ status }}&page={{ page.previous_page_number }}">←</a>{% endif %}<span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a class="btn btn-secondary" href="?status={{ status }}&page={{ page.next_page_number }}">→</a>{% endif %}</p>{% endif %}
+  {% if page.has_other_pages %}<p class="form-buttons">{% if page.has_previous %}<a class="btn btn-secondary" href="?{{ list_query }}&page={{ page.previous_page_number }}">←</a>{% endif %}<span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a class="btn btn-secondary" href="?{{ list_query }}&page={{ page.next_page_number }}">→</a>{% endif %}</p>{% endif %}
 </div>
 {% endblock %}

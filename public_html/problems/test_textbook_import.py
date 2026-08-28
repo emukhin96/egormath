@@ -1,15 +1,25 @@
+import io
 import json
+import zipfile
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 
-from problems.models import (Task, TaskSource, TextbookImportBatch,
-                             TextbookTaskDraft, Topic)
+from problems.models import (Task, TaskImage, TaskSource,
+                             TextbookImportBatch, TextbookTaskDraft, Topic)
 from problems.tests import make_teacher
-from problems.textbook_import import (TextbookImportError, commit_batch,
-                                      create_batch_from_bundle)
+from problems.textbook_import import (TextbookImportError, attach_image_archive,
+                                      commit_batch, create_batch_from_bundle)
+from problems.textbook_topics import match_topic_candidates
 from worksheets.models import Collection, WorksheetItem
+
+
+TINY_PNG = (
+    b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01'
+    b'\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00'
+    b'\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82'
+)
 
 
 def bundle(**task_overrides):
@@ -49,12 +59,74 @@ class TextbookImportTests(TestCase):
             content_type='application/json')
         response = self.client.post(reverse('textbook_import_upload'), {
             'title': 'Партия', 'source_title': 'Задачник',
-            'source_author': 'Автор', 'bundle': upload,
+            'source_author': 'Автор',
+            'input_kind': 'json', 'bundle': upload,
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(TextbookImportBatch.objects.count(), 1)
         self.assertEqual(TextbookTaskDraft.objects.count(), 1)
         self.assertEqual(Task.objects.count(), 0)
+
+    def test_upload_parses_tex_with_answers_at_end(self):
+        self.client.login(username='teacher1', password='pass12345')
+        source = r"""
+\section*{Тема}
+\item[1.1.] Найдите $1+1$.
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+1.1. 2.
+"""
+        upload = SimpleUploadedFile(
+            'book.tex', source.encode(), content_type='text/plain')
+
+        response = self.client.post(reverse('textbook_import_upload'), {
+            'title': 'TEX с ответами', 'source_title': 'Задачник',
+            'input_kind': 'answers_end', 'tasks_tex': upload,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        draft = TextbookTaskDraft.objects.get()
+        self.assertEqual(draft.author_answer_latex, '2.')
+        self.assertEqual(draft.batch.profile, 'galitsky')
+        self.assertEqual(Task.objects.count(), 0)
+
+    def test_upload_parses_separate_solution_tex(self):
+        self.client.login(username='teacher1', password='pass12345')
+        tasks = SimpleUploadedFile(
+            'tasks.tex', b'1.1.A01 Find $1+1$.',
+            content_type='text/plain')
+        solutions = SimpleUploadedFile(
+            'solutions.tex', b'1.1.A01 Answer: 2.',
+            content_type='text/plain')
+
+        response = self.client.post(reverse('textbook_import_upload'), {
+            'title': 'Два TEX', 'source_title': 'Задачник',
+            'input_kind': 'separate_solutions',
+            'tasks_tex': tasks, 'solutions_tex': solutions,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        draft = TextbookTaskDraft.objects.get()
+        self.assertEqual(draft.batch.profile, 'shestakov')
+        self.assertEqual(draft.source_path, [
+            'Глава 1. Числовые выражения',
+            '§1. Действия с целыми числами',
+        ])
+        self.assertEqual(Task.objects.count(), 0)
+
+    def test_separate_solution_layout_requires_second_tex(self):
+        self.client.login(username='teacher1', password='pass12345')
+        tasks = SimpleUploadedFile(
+            'tasks.tex', b'1.1.A01 Find $1+1$.',
+            content_type='text/plain')
+
+        response = self.client.post(reverse('textbook_import_upload'), {
+            'title': 'Без решебника', 'source_title': 'Задачник',
+            'input_kind': 'separate_solutions', 'tasks_tex': tasks,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Выберите TEX с авторскими решениями')
+        self.assertEqual(TextbookImportBatch.objects.count(), 0)
 
     def test_duplicate_legacy_sources_choose_first(self):
         from problems.models import Source
@@ -124,8 +196,11 @@ class TextbookImportTests(TestCase):
         self.assertEqual(Task.objects.count(), 0)
 
     def test_commit_requires_rubricator_topic(self):
-        batch = self.create_batch()
-        batch.drafts.update(status=TextbookTaskDraft.STATUS_APPROVED)
+        batch = self.create_batch(bundle(
+            source_path=['Несуществующий раздел задачника'],
+            topic_original='Несуществующий раздел задачника',
+            collection_key='unknown.section'))
+        batch.drafts.update(topic=None, status=TextbookTaskDraft.STATUS_APPROVED)
         with self.assertRaisesMessage(TextbookImportError, 'тема рубрикатора'):
             commit_batch(batch, user=self.teacher)
         self.assertEqual(Task.objects.count(), 0)
@@ -542,8 +617,10 @@ class TextbookImportTests(TestCase):
         self.assertEqual(
             batch.drafts.filter(
                 collection_key='alg.quadratic', topic=topic).count(), 2)
-        self.assertIsNone(
-            batch.drafts.get(collection_key='geometry.triangles').topic_id)
+
+        self.assertNotEqual(
+            batch.drafts.get(collection_key='geometry.triangles').topic_id,
+            topic.pk)
 
         response = self.client.post(reverse(
             'textbook_import_assign_section_topic', args=[batch.pk]), {
@@ -566,6 +643,77 @@ class TextbookImportTests(TestCase):
         self.assertEqual(
             batch.drafts.filter(
                 collection_key='alg.quadratic', topic=topic).count(), 2)
+
+    def test_collection_preview_can_assign_topic_to_chapter_or_subsection(self):
+        payload = bundle()
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='2.1.1', source_number='1',
+            source_path=['Алгебра', 'Линейные уравнения'],
+            collection_key='alg.linear',
+            collection_title='Линейные уравнения',
+            text_latex='Решите линейное уравнение.'))
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='3.1.1', source_number='1',
+            source_path=['Геометрия', 'Треугольники'],
+            collection_key='geometry.triangles',
+            collection_title='Треугольники',
+            text_latex='Задача о треугольнике.'))
+        batch = self.create_batch(payload)
+        topic = Topic.objects.create(name='Тема главы')
+        self.client.login(username='teacher1', password='pass12345')
+
+        response = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]))
+        groups = response.context['collection_groups']
+        chapter = next(
+            group for group in groups
+            if group['path'] == ['Алгебра'] and not group['is_leaf'])
+        subsection = next(
+            group for group in groups
+            if group['collection_key'] == 'alg.quadratic')
+        self.assertEqual(chapter['count'], 2)
+        self.assertEqual(chapter['level_label'], 'Глава целиком')
+        self.assertTrue(subsection['is_leaf'])
+        self.assertContains(response, 'Глава целиком: Алгебра — 2 задач')
+        self.assertContains(
+            response,
+            'Подраздел: Алгебра › Квадратные уравнения — 1 задач')
+
+        response = self.client.post(reverse(
+            'textbook_import_assign_section_topic', args=[batch.pk]), {
+                'section': chapter['token'], 'topic': str(topic.pk),
+            })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            batch.drafts.filter(source_path__0='Алгебра', topic=topic).count(),
+            2)
+        self.assertNotEqual(
+            batch.drafts.get(collection_key='geometry.triangles').topic_id,
+            topic.pk)
+
+    def test_import_list_previews_subitems_and_author_material_presence(self):
+        batch = self.create_batch(bundle(
+            text_latex='Вычислите:',
+            subitems=[{
+                'label': 'а', 'text_latex': '$1+1$',
+                'author_answer_latex': '2',
+                'author_solution_latex': '$1+1=2$.',
+            }, {
+                'label': 'б', 'text_latex': '$2+2$',
+            }],
+            author_answer_latex='', author_solution_latex='',
+        ))
+        self.client.login(username='teacher1', password='pass12345')
+
+        response = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]))
+
+        self.assertContains(response, 'Задание и подпункты')
+        self.assertContains(response, 'Авторский ответ')
+        self.assertContains(response, 'Авторское решение')
+        self.assertContains(response, '$1+1$', html=False)
+        self.assertContains(response, 'есть: 1/2')
 
     def test_collection_preview_is_paginated_separately(self):
         payload = bundle()
@@ -693,3 +841,85 @@ class TextbookImportTests(TestCase):
         self.assertEqual(draft.solution_source_external_id, '')
         self.assertEqual(
             draft.author_solution_latex, 'Решение исправлено вручную.')
+
+    def test_image_zip_unblocks_commit_and_creates_task_image(self):
+        topic = Topic.objects.create(name='Тема с рисунком')
+        batch = self.create_batch(bundle(images=['figure-1.png']))
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, 'w') as zf:
+            zf.writestr('folder/figure-1.png', TINY_PNG)
+        archive.seek(0)
+        stored = attach_image_archive(
+            batch, SimpleUploadedFile('pics.zip', archive.read()))
+        self.assertEqual(stored, 1)
+        draft = batch.drafts.get()
+        self.assertEqual(draft.images, ['figure-1.png'])
+        self.assertFalse(any(
+            'Требуется загрузить' in item for item in draft.warnings))
+        draft.status = TextbookTaskDraft.STATUS_APPROVED
+        draft.topic = topic
+        draft.save()
+        commit_batch(batch, user=self.teacher)
+        self.assertEqual(TaskImage.objects.count(), 1)
+        self.assertIn('figure-1', TaskImage.objects.get().filename)
+
+    def test_exact_topic_alias_is_assigned_automatically(self):
+        topic = Topic.objects.get(code='ALG.03.03')
+        batch = self.create_batch()
+        draft = batch.drafts.get()
+        self.assertEqual(draft.topic_id, topic.pk)
+        self.assertEqual(draft.topic_candidates[0]['reason'], 'exact-alias')
+
+    def test_fuzzy_topic_candidate_is_not_auto_assigned(self):
+        Topic.objects.create(
+            code='ALG.09.99', name='Текстовые задачи на пароходы')
+        candidates = match_topic_candidates(
+            ['Текстовые задачи на пароход'])
+        self.assertTrue(candidates)
+        self.assertEqual(candidates[0]['reason'], 'fuzzy-name')
+        batch = self.create_batch(bundle(
+            source_path=['Текстовые задачи на пароход'],
+            topic_original='Текстовые задачи на пароход',
+            collection_key='other',
+        ))
+        self.assertIsNone(batch.drafts.get().topic_id)
+
+    def test_upload_parses_ziv_profile_explicitly(self):
+        self.client.login(username='teacher1', password='pass12345')
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{1. Числовые неравенства}
+Вариант 1
+\begin{itemize}
+  \item[1.] Сравните дроби.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{1. Числовые неравенства}
+Вариант 1
+\begin{itemize}
+  \item[1.] $1<2$.
+\end{itemize}
+"""
+        upload = SimpleUploadedFile(
+            'ziv.tex', source.encode(), content_type='text/plain')
+        response = self.client.post(reverse('textbook_import_upload'), {
+            'title': 'Зив', 'source_title': 'Зив-8',
+            'input_kind': 'answers_end', 'profile': 'ziv',
+            'tasks_tex': upload,
+        })
+        self.assertEqual(response.status_code, 302)
+        draft = TextbookTaskDraft.objects.get()
+        self.assertEqual(draft.batch.profile, 'ziv')
+        self.assertEqual(draft.external_id, 'sr/01/v1/1')
+        self.assertEqual(draft.author_answer_latex, '$1<2$.')
+
+    def test_status_filter_keeps_selected_section(self):
+        batch = self.create_batch()
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]))
+        token = response.context['selected_section']
+        self.assertContains(response, f'status=needs_review')
+        self.assertContains(response, f'section={token}')
+        self.assertContains(response, '<optgroup label="Главы целиком">')
