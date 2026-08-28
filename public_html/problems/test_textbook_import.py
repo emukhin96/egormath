@@ -464,6 +464,31 @@ class TextbookImportTests(TestCase):
             batch.drafts.filter(
                 collection_key='alg.quadratic', topic=topic).count(), 2)
 
+    def test_collection_preview_is_paginated_separately(self):
+        payload = bundle()
+        payload['tasks'] = [dict(
+            payload['tasks'][0], external_id=f'1.2.{number}',
+            source_number=str(number), text_latex=f'Задача {number}.')
+            for number in range(1, 52)]
+        batch = self.create_batch(payload)
+        self.client.login(username='teacher1', password='pass12345')
+
+        response = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]))
+
+        group = response.context['selected_group']
+        page = response.context['collection_page']
+        self.assertEqual(group['count'], 51)
+        self.assertEqual(len(page.object_list), 50)
+        self.assertEqual(page.paginator.num_pages, 2)
+
+        response = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]), {
+                'section': group['token'], 'collection_page': 2,
+        })
+        self.assertEqual(
+            len(response.context['collection_page'].object_list), 1)
+
     def test_user_guide_explains_statuses_and_commit_boundary(self):
         self.client.login(username='teacher1', password='pass12345')
 

@@ -31,7 +31,7 @@
   <form method="post" action="{% url 'textbook_import_assign_section_topic' batch.pk %}" onsubmit="return confirm('Назначить выбранную тему всем задачам этой будущей подборки?');">
     {% csrf_token %}
     <input type="hidden" name="section" value="{{ selected_group.token }}">
-    <input type="hidden" name="topic" value="{% if selected_group.common_topic_id %}{{ selected_group.common_topic_id }}{% endif %}">
+    <input type="hidden" name="topic" value="{% if selected_topic %}{{ selected_topic }}{% endif %}">
     {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=False compact=True single=True field_name='topic' selected_json=selected_json %}
     <div class="form-buttons"><button class="btn" type="submit">Назначить тему всему разделу</button></div>
   </form>
@@ -40,13 +40,14 @@
     <summary>Состав будущей подборки</summary>
     <table class="list">
       <tr><th>№</th><th>Условие</th><th>Тема</th><th>Статус</th></tr>
-      {% for draft in selected_group.drafts %}<tr>
+      {% for draft in collection_page %}<tr>
         <td><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.source_number }}</a></td>
         <td><span class="math-content task-text">{{ draft.text_latex|web_text_preview:180 }}</span>{% if not draft.text_latex and draft.subitems %}<span class="muted">Условие задано подпунктами ({{ draft.subitems|length }})</span>{% endif %}</td>
         <td>{{ draft.topic|default:'—' }}</td>
         <td>{{ draft.get_status_display }}</td>
       </tr>{% endfor %}
     </table>
+    {% if collection_page.has_other_pages %}<p class="form-buttons">{% if collection_page.has_previous %}<a class="btn btn-secondary" href="?section={{ selected_group.token }}&collection_page={{ collection_page.previous_page_number }}{% if status %}&status={{ status }}{% endif %}">←</a>{% endif %}<span>Страница подборки {{ collection_page.number }} из {{ collection_page.paginator.num_pages }}</span>{% if collection_page.has_next %}<a class="btn btn-secondary" href="?section={{ selected_group.token }}&collection_page={{ collection_page.next_page_number }}{% if status %}&status={{ status }}{% endif %}">→</a>{% endif %}</p>{% endif %}
   </details>
   {% endif %}
 </section>

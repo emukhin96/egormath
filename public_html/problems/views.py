@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Max, Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -733,43 +733,41 @@ def _own_import_batch(request, pk):
 
 def _textbook_collection_groups(batch):
     """Группирует черновики так же, как будущие листовые подборки."""
+    rows = (batch.drafts.order_by()
+            .values('collection_key', 'source_path')
+            .annotate(count=Count('pk'), title=Max('collection_title')))
     grouped = {}
-    drafts = (batch.drafts.select_related('topic')
-              .order_by('external_id', 'pk'))
-    for draft in drafts:
+    for row in rows:
         path = tuple(
-            str(part).strip() for part in draft.source_path
+            str(part).strip() for part in row['source_path']
             if str(part).strip())
         if not path:
-            path = (draft.collection_title.strip() or batch.title,)
-        identity = (draft.collection_key.strip(), path)
+            path = ((row['title'] or '').strip() or batch.title,)
+        identity = ((row['collection_key'] or '').strip(), path)
         group = grouped.setdefault(identity, {
             'collection_key': identity[0],
             'path': list(path),
-            'title': draft.collection_title.strip() or path[-1],
-            'drafts': [],
+            'title': (row['title'] or '').strip() or path[-1],
+            'selectors': [],
+            'count': 0,
         })
-        group['drafts'].append(draft)
-
-    result = []
-    for identity, group in sorted(
-            grouped.items(), key=lambda item: (item[0][1], item[0][0])):
+        group['selectors'].append((
+            row['collection_key'], row['source_path']))
+        group['count'] += row['count']
+    for identity, group in grouped.items():
         raw = json.dumps(identity, ensure_ascii=False, separators=(',', ':'))
-        group['token'] = hashlib.sha256(raw.encode('utf-8')).hexdigest()[:20]
-        group['count'] = len(group['drafts'])
-        topic_counts = {}
-        for draft in group['drafts']:
-            label = str(draft.topic) if draft.topic_id else 'Тема не выбрана'
-            topic_counts[label] = topic_counts.get(label, 0) + 1
-        group['topic_counts'] = [
-            {'label': label, 'count': count}
-            for label, count in topic_counts.items()
-        ]
-        topic_ids = {draft.topic_id for draft in group['drafts']}
-        group['common_topic_id'] = (
-            topic_ids.pop() if len(topic_ids) == 1 else None)
-        result.append(group)
-    return result
+        group['token'] = hashlib.sha256(
+            raw.encode('utf-8')).hexdigest()[:20]
+    return sorted(grouped.values(), key=lambda group: (
+        tuple(group['path']), group['collection_key']))
+
+
+def _textbook_group_drafts(batch, group):
+    selector = Q()
+    for collection_key, source_path in group['selectors']:
+        selector |= Q(
+            collection_key=collection_key, source_path=source_path)
+    return batch.drafts.filter(selector)
 
 
 @teacher_required
@@ -843,8 +841,28 @@ def textbook_import_detail(request, pk):
     if selected_group is None and collection_groups:
         selected_group = collection_groups[0]
         selected_token = selected_group['token']
-    selected_topic = (
-        selected_group['common_topic_id'] if selected_group else None)
+    collection_page = None
+    selected_topic = None
+    if selected_group:
+        group_drafts = _textbook_group_drafts(batch, selected_group)
+        topic_rows = list(
+            group_drafts.order_by()
+            .values('topic_id', 'topic__code', 'topic__name')
+            .annotate(count=Count('pk'))
+            .order_by('topic__code', 'topic__name'))
+        selected_group['topic_counts'] = [{
+            'label': (
+                ' '.join(filter(None, [row['topic__code'],
+                                      row['topic__name']]))
+                if row['topic_id'] else 'Тема не выбрана'),
+            'count': row['count'],
+        } for row in topic_rows]
+        if len(topic_rows) == 1:
+            selected_topic = topic_rows[0]['topic_id']
+        collection_page = Paginator(
+            group_drafts.select_related('topic')
+            .order_by('external_id', 'pk'), 50,
+        ).get_page(request.GET.get('collection_page'))
     context = taxonomy_page_context({
         'topics': [selected_topic] if selected_topic else [],
         'primary': selected_topic,
@@ -859,6 +877,8 @@ def textbook_import_detail(request, pk):
         'collection_groups': collection_groups,
         'selected_group': selected_group,
         'selected_section': selected_token,
+        'selected_topic': selected_topic,
+        'collection_page': collection_page,
     })
     return render(request, 'problems/textbook_import_detail.html', context)
 
@@ -889,8 +909,7 @@ def textbook_import_assign_section_topic(request, pk):
         return redirect(
             f"{reverse('textbook_import_detail', args=[batch.pk])}"
             f"?section={section_token}")
-    draft_ids = [draft.pk for draft in group['drafts']]
-    updated = batch.drafts.filter(pk__in=draft_ids).update(topic=topic)
+    updated = _textbook_group_drafts(batch, group).update(topic=topic)
     messages.success(
         request,
         f'Тема «{topic}» назначена задачам раздела '
