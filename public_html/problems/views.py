@@ -830,6 +830,56 @@ def _subitem_label_key(value):
     return aliases.get(value, value)
 
 
+def _review_subitem_post_count(post):
+    count = 0
+    while any(
+            f'{prefix}{count}' in post
+            for prefix in (
+                'subitem_text_', 'subitem_label_',
+                'subitem_author_answer_', 'subitem_author_solution_')):
+        count += 1
+    return count
+
+
+def _subitems_from_review_editors(post):
+    """Собирает подпункты из отдельных полей сверки; JSON не нужен."""
+    from .textbook_import import normalize_subitems
+    items = []
+    for index in range(_review_subitem_post_count(post)):
+        items.append({
+            'label': post.get(f'subitem_label_{index}', '') or str(index + 1),
+            'text_latex': post.get(f'subitem_text_{index}', ''),
+            'author_answer_latex': post.get(
+                f'subitem_author_answer_{index}', ''),
+            'author_solution_latex': post.get(
+                f'subitem_author_solution_{index}', ''),
+        })
+    return normalize_subitems(items)
+
+
+def _overlay_review_author_fields(subitems, original, post):
+    """Авторские поля привязываются к метке пункта, а не к позиции JSON."""
+    by_label = {}
+    for index, item in enumerate(original):
+        answer_key = f'subitem_author_answer_{index}'
+        solution_key = f'subitem_author_solution_{index}'
+        if answer_key not in post and solution_key not in post:
+            continue
+        by_label[_subitem_label_key(item.get('label'))] = {
+            'author_answer_latex': post.get(answer_key, '').strip(),
+            'author_solution_latex': post.get(solution_key, '').strip(),
+        }
+    if not by_label:
+        return subitems
+    used = set()
+    for subitem in subitems:
+        key = _subitem_label_key(subitem.get('label'))
+        if key in by_label and key not in used:
+            subitem.update(by_label[key])
+            used.add(key)
+    return subitems
+
+
 def _draft_has_author_material(draft):
     return bool(
         draft.author_answer_latex.strip()
@@ -1055,43 +1105,23 @@ def textbook_import_review(request, batch_pk, pk):
         TextbookTaskDraft.objects.select_related('topic'),
         batch=batch, pk=pk)
     original_subitems = [dict(item) for item in draft.subitems]
-    subitem_structure_conflict = False
     if request.method == 'POST':
         form = TextbookDraftReviewForm(request.POST, instance=draft)
         if form.is_valid():
             updated = form.save(commit=False)
-            old_structure = [
-                (str(item.get('label') or ''),
-                 str(item.get('text_latex') or ''))
-                for item in original_subitems]
-            new_structure = [
-                (str(item.get('label') or ''),
-                 str(item.get('text_latex') or ''))
-                for item in updated.subitems]
-            author_fields_changed = any(
-                request.POST.get(f'subitem_author_{field}_{index}', '').strip()
-                != str(item.get(f'author_{field}_latex') or '').strip()
-                for index, item in enumerate(original_subitems)
-                for field in ('answer', 'solution')
-                if f'subitem_author_{field}_{index}' in request.POST
-            )
-            if old_structure != new_structure and author_fields_changed:
-                form.add_error(
-                    'subitems',
-                    'Нельзя одновременно менять структуру JSON и авторские '
-                    'поля подпунктов. Сохраните сначала одно изменение, '
-                    'затем второе.')
-                subitem_structure_conflict = True
-            elif old_structure == new_structure:
-                for index, subitem in enumerate(updated.subitems):
-                    answer_key = f'subitem_author_answer_{index}'
-                    solution_key = f'subitem_author_solution_{index}'
-                    if answer_key in request.POST:
-                        subitem['author_answer_latex'] = request.POST[
-                            answer_key].strip()
-                    if solution_key in request.POST:
-                        subitem['author_solution_latex'] = request.POST[
-                            solution_key].strip()
+            if any(f'subitem_text_{index}' in request.POST
+                   for index in range(_review_subitem_post_count(request.POST))):
+                from .textbook_import import TextbookImportError
+                try:
+                    structured = _subitems_from_review_editors(request.POST)
+                except TextbookImportError as exc:
+                    form.add_error('subitems', str(exc))
+                else:
+                    extras = updated.subitems[len(structured):]
+                    updated.subitems = structured + extras
+            else:
+                updated.subitems = _overlay_review_author_fields(
+                    updated.subitems, original_subitems, request.POST)
             if not form.errors:
                 source_key = form.cleaned_data.get(
                     'copy_solution_from', '').strip()
@@ -1193,10 +1223,13 @@ def textbook_import_review(request, batch_pk, pk):
     following = (batch.drafts.filter(external_id__gt=draft.external_id)
                  .order_by('external_id', 'pk').first())
     candidates = _textbook_solution_candidates(batch, draft)
-    review_subitems = [dict(item) for item in (
-        original_subitems if subitem_structure_conflict else draft.subitems)]
+    review_subitems = [dict(item) for item in draft.subitems]
     if request.method == 'POST':
         for index, subitem in enumerate(review_subitems):
+            if f'subitem_label_{index}' in request.POST:
+                subitem['label'] = request.POST[f'subitem_label_{index}']
+            if f'subitem_text_{index}' in request.POST:
+                subitem['text_latex'] = request.POST[f'subitem_text_{index}']
             answer_key = f'subitem_author_answer_{index}'
             solution_key = f'subitem_author_solution_{index}'
             if answer_key in request.POST:

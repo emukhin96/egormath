@@ -392,6 +392,8 @@ class TextbookImportTests(TestCase):
         response = self.client.get(url)
 
         self.assertContains(response, 'name="subitem_author_answer_0"')
+        self.assertContains(response, 'name="subitem_text_0"')
+        self.assertContains(response, 'name="subitem_label_0"')
         self.assertContains(response, 'Старый ответ.')
         self.assertContains(response, 'name="subitem_author_solution_0"')
         self.assertContains(response, 'Старое решение.')
@@ -451,7 +453,50 @@ class TextbookImportTests(TestCase):
         self.assertEqual(subitem.author_answer_latex, 'Ответ подпункта.')
         self.assertEqual(subitem.author_solution_latex, 'Решение подпункта.')
 
-    def test_review_rejects_structure_and_author_edits_in_one_request(self):
+    def test_review_saves_subitem_text_and_author_in_one_request(self):
+        batch = self.create_batch(bundle(subitems=[
+            {
+                'label': 'а', 'text_latex': 'Первый подпункт.',
+                'author_solution_latex': 'Первое решение.',
+            },
+            {
+                'label': 'б', 'text_latex': 'Второй подпункт.',
+                'author_solution_latex': 'Второе решение.',
+            },
+        ]))
+        draft = batch.drafts.get()
+        original = [dict(item) for item in draft.subitems]
+        self.client.login(username='teacher1', password='pass12345')
+
+        response = self.client.post(reverse(
+            'textbook_import_review', args=[batch.pk, draft.pk]), {
+                'external_id': draft.external_id,
+                'source_number': draft.source_number,
+                'text_latex': 'Общее условие.',
+                'subitems': json.dumps(list(reversed(original))),
+                'subitem_label_0': 'а',
+                'subitem_text_0': 'Новый первый подпункт.',
+                'subitem_author_answer_0': '',
+                'subitem_author_solution_0': 'Изменённое первое решение.',
+                'subitem_label_1': 'б',
+                'subitem_text_1': 'Второй подпункт.',
+                'subitem_author_answer_1': '',
+                'subitem_author_solution_1': 'Второе решение.',
+                'author_answer_latex': draft.author_answer_latex,
+                'author_solution_latex': draft.author_solution_latex,
+                'status': TextbookTaskDraft.STATUS_REVIEW,
+            })
+
+        self.assertEqual(response.status_code, 302)
+        draft.refresh_from_db()
+        self.assertEqual(draft.text_latex, 'Общее условие.')
+        self.assertEqual(draft.subitems[0]['text_latex'], 'Новый первый подпункт.')
+        self.assertEqual(
+            draft.subitems[0]['author_solution_latex'],
+            'Изменённое первое решение.')
+        self.assertEqual(draft.subitems[1]['label'], 'б')
+
+    def test_review_keeps_author_fields_on_json_reorder_by_label(self):
         batch = self.create_batch(bundle(subitems=[
             {
                 'label': 'а', 'text_latex': 'Первый подпункт.',
@@ -481,12 +526,14 @@ class TextbookImportTests(TestCase):
                 'status': TextbookTaskDraft.STATUS_REVIEW,
             })
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response, 'Нельзя одновременно менять структуру JSON')
-        self.assertContains(response, 'Изменённое первое решение.')
+        self.assertEqual(response.status_code, 302)
         draft.refresh_from_db()
-        self.assertEqual(draft.subitems, original)
+        by_label = {item['label']: item for item in draft.subitems}
+        self.assertEqual(by_label['а']['text_latex'], 'Первый подпункт.')
+        self.assertEqual(
+            by_label['а']['author_solution_latex'],
+            'Изменённое первое решение.')
+        self.assertEqual(by_label['б']['text_latex'], 'Второй подпункт.')
 
     def test_review_allows_structure_edit_when_author_fields_unchanged(self):
         batch = self.create_batch(bundle(subitems=[

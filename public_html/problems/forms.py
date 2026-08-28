@@ -167,6 +167,12 @@ class TextbookDraftReviewForm(forms.ModelForm):
             'author_solution_latex': forms.Textarea(attrs={'rows': 12}),
         }
 
+    def clean_text_latex(self):
+        from .textbook_parser import (collapse_repeated_lead,
+                                      normalize_imported_text)
+        return collapse_repeated_lead(normalize_imported_text(
+            self.cleaned_data.get('text_latex') or ''))
+
     def clean_subitems(self):
         from .textbook_import import TextbookImportError, normalize_subitems
         try:

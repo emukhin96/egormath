@@ -227,6 +227,35 @@ class TextbookParserTests(unittest.TestCase):
             [("а", "$1+1$"), ("б", "$2+2$")],
         )
 
+    def test_tilde_and_same_line_subitem_markers_are_split(self):
+        tilde_text = "\n".join([
+            r"4.3.D10 Найдите все пары \((x ; y)\) целых чисел \(x\) и \(y\), для которых:",
+            r"а)~\(5 \sqrt{3 x-2 y-4}+3 \sqrt{2 x+3 y-7} \leqslant 2\);",
+            r"б)~\(4 \sqrt{3 x-2 y+1}+7 \sqrt{2 x-3 y+4} \leqslant 3\).",
+            r"§1. Системы целых алгебраических уравнений Уровень А",
+        ])
+        inline_text = (
+            "1.1.D04 a) Найдите наименьшее натуральное число, большее 2. "
+            "б) Найдите наименьшее натуральное число, большее 6."
+        )
+
+        tilde_tasks, _ = parse_shestakov(tilde_text, "")
+        inline_tasks, _ = parse_shestakov(inline_text, "")
+
+        self.assertEqual(
+            tilde_tasks[0].text_latex,
+            r"Найдите все пары \((x ; y)\) целых чисел \(x\) и \(y\), для которых:")
+        self.assertEqual(
+            [item.label for item in tilde_tasks[0].subitems], ['а', 'б'])
+        self.assertTrue(all(
+            not item.text_latex.startswith(('а)', 'б)', 'а)~', 'б)~'))
+            for item in tilde_tasks[0].subitems))
+        self.assertNotIn("§1", tilde_tasks[0].subitems[-1].text_latex)
+        self.assertNotIn("Уровень", tilde_tasks[0].subitems[-1].text_latex)
+        self.assertEqual(len(inline_tasks[0].subitems), 2)
+        self.assertIn("большее 2", inline_tasks[0].subitems[0].text_latex)
+        self.assertIn("большее 6", inline_tasks[0].subitems[1].text_latex)
+
     def test_imported_text_drops_trailing_space_before_punctuation(self):
         self.assertEqual(
             normalize_imported_text(

@@ -80,12 +80,15 @@ SECTION_COMMAND_RE = re.compile(r"\\(?P<level>section|subsection|subsubsection)\
 ALPHA_ITEM_RE = re.compile(r"\\item\[\s*(?P<label>[a-zа-яё0-9]+)\s*\)\s*\]", re.I)
 PLAIN_ALPHA_ITEM_RE = re.compile(
     r"(?im)(?:^|(?<=\\\\)|(?<=\n))[ \t]*"
-    r"(?P<label>[a-zа-яё0-9]+)\)\s*")
+    r"(?P<label>[a-zа-яё0-9]+)\)[\s~]*")
 # В решебниках подпункты часто идут в одну строку: ``а) ...; б) ...``.
-# Разрешаем только границу после точки с запятой, чтобы не принимать части
-# формул вроде ``a)`` за новую задачу.
+# Граница — конец предыдущего пункта (``; . ? :``), а не голая ``a)``
+# внутри формулы.
 INLINE_ALPHA_ITEM_RE = re.compile(
-    r"(?i)(?<=[;])[ \t]*(?P<label>[a-zа-яё])\)\s*")
+    r"(?i)(?<=[;.?:])[ \t]*(?P<label>а|б|в|г|д|е|ж|з|a|b|c|d|6)\)[\s~]*")
+LEAKED_BOOK_TAIL_RE = re.compile(
+    r"(?:\\\\|\s)*§\d+\.[\s\S]*?(?:Уровень\s+[A-DА-Г]\s*)?$",
+    re.I)
 BLOCK_WRAPPER_RE = re.compile(
     r"\\(?:begin|end)\{(?:itemize|enumerate|document)\}")
 LIST_ENV_RE = re.compile(
@@ -403,6 +406,11 @@ def split_subitems(
         if text:
             items.append(SubitemDraft(label, text))
     parent = collapse_repeated_lead(parent)
+    if items:
+        items[-1].text_latex = normalize_imported_text(
+            LEAKED_BOOK_TAIL_RE.sub("", items[-1].text_latex))
+    else:
+        parent = normalize_imported_text(LEAKED_BOOK_TAIL_RE.sub("", parent))
     return parent, items
 
 
