@@ -659,7 +659,10 @@ def split_full_solution(
     попадают: интерфейс и PDF нумеруют подпункты по их позиции. Вложенные
     числовые списки остаются частью соответствующего решения.
     """
-    solution = strip_outer_lists(body, flatten_items=False)
+    # Окружения списков пока сохраняем: split_subitems использует их для
+    # определения глубины и не должен принять вложенный буквенный список за
+    # верхнеуровневые подпункты решения.
+    solution = clean(EMPTY_ITEM_RE.sub("", body))
     solution = STRUCTURAL_HEADING_RE.sub("", solution)
     solution = FLOAT_WRAPPER_RE.sub("", solution)
     solution = OCR_FIGURE_WRAPPER_RE.sub("", solution)
@@ -667,9 +670,10 @@ def split_full_solution(
     solution = RAW_IMAGE_RE.sub(
         lambda match: rf"\taskpic{{{match.group('path')}}}", solution)
     solution = solution.lstrip("} \t\n")
-    flattened_solution = _flatten_solution_items(solution)
     parent, subitems = split_subitems(
         solution, normalize_punctuation=False)
+    flattened_solution = _flatten_solution_items(
+        strip_outer_lists(solution, flatten_items=False))
     if subitems:
         parent = _flatten_solution_items(parent)
         for subitem in subitems:

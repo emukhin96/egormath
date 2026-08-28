@@ -458,6 +458,33 @@ class TextbookParserTests(unittest.TestCase):
         self.assertIn("1)~найдём нули", first)
         self.assertIn("2)~найдём минимум", first)
 
+    def test_nested_letter_list_stays_inside_solution_subitem(self):
+        task_text = "\n".join([
+            "1.1.A01 Выполните:",
+            r"\\ а) первый пункт;",
+            r"\\ б) второй пункт.",
+        ])
+        solution_text = "\n".join([
+            r"\subsection*{1.1.A01}",
+            r"\begin{itemize}",
+            r"\item[а)] Первое решение:",
+            r"\begin{itemize}",
+            r"\item[в)] вложенный случай.",
+            r"\end{itemize}",
+            r"\item[б)] Второе решение.",
+            r"\end{itemize}",
+        ])
+
+        tasks, _ = parse_shestakov(task_text, solution_text)
+
+        self.assertEqual(len(tasks[0].subitems), 2)
+        self.assertIn(
+            "в)~вложенный случай",
+            tasks[0].subitems[0].author_solution_latex)
+        self.assertEqual(
+            tasks[0].subitems[1].author_solution_latex,
+            "Второе решение.")
+
     def test_solution_subitems_drop_bare_linebreaks_at_edges(self):
         task_text = "\n".join([
             "1.1.A01 Вычислите:",

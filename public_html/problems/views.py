@@ -770,6 +770,42 @@ def _textbook_group_drafts(batch, group):
     return batch.drafts.filter(selector)
 
 
+def _subitem_label_key(value):
+    value = str(value or '').strip().lower()
+    aliases = {
+        'а': 'a', 'a': 'a',
+        'б': 'b', 'b': 'b', '6': 'b',
+        'в': 'c', 'c': 'c',
+        'г': 'd', 'd': 'd',
+        'д': 'e', 'e': 'e',
+    }
+    return aliases.get(value, value)
+
+
+def _draft_has_author_material(draft):
+    return bool(
+        draft.author_answer_latex.strip()
+        or draft.author_solution_latex.strip()
+        or any(
+            str(item.get('author_answer_latex') or '').strip()
+            or str(item.get('author_solution_latex') or '').strip()
+            for item in draft.subitems))
+
+
+def _textbook_solution_candidates(batch, draft, limit=12):
+    candidates = []
+    rows = (batch.drafts.exclude(pk=draft.pk)
+            .only('external_id', 'text_latex', 'author_answer_latex',
+                  'author_solution_latex', 'subitems')
+            .order_by('external_id', 'pk').iterator(chunk_size=100))
+    for item in rows:
+        if _draft_has_author_material(item):
+            candidates.append(item)
+            if len(candidates) == limit:
+                break
+    return candidates
+
+
 @teacher_required
 def textbook_import_list(request):
     batches = TextbookImportBatch.objects.all()
@@ -987,11 +1023,43 @@ def textbook_import_review(request, batch_pk, pk):
                                 f'Решение уже одобрено для '
                                 f'{used.external_id}.')
                         else:
+                            candidate_subitems = candidate.subitems
+                            has_distributed_material = any(
+                                str(item.get('author_answer_latex') or '')
+                                .strip()
+                                or str(item.get(
+                                    'author_solution_latex') or '').strip()
+                                for item in candidate_subitems)
+                            labels_match = (
+                                len(candidate_subitems)
+                                == len(updated.subitems)
+                                and all(
+                                    _subitem_label_key(source.get('label'))
+                                    == _subitem_label_key(target.get('label'))
+                                    for source, target in zip(
+                                        candidate_subitems,
+                                        updated.subitems)))
+                            if has_distributed_material and not labels_match:
+                                form.add_error(
+                                    'copy_solution_from',
+                                    'Подпункты источника решения не совпадают '
+                                    'с подпунктами этой задачи.')
+                            elif has_distributed_material:
+                                for target, source in zip(
+                                        updated.subitems,
+                                        candidate_subitems):
+                                    target['author_answer_latex'] = str(
+                                        source.get(
+                                            'author_answer_latex') or '')
+                                    target['author_solution_latex'] = str(
+                                        source.get(
+                                            'author_solution_latex') or '')
                             updated.author_answer_latex = \
                                 candidate.author_answer_latex
                             updated.author_solution_latex = \
                                 candidate.author_solution_latex
-                            updated.solution_source_external_id = source_key
+                            if not form.errors:
+                                updated.solution_source_external_id = source_key
                 else:
                     updated.solution_source_external_id = ''
             if not form.errors:
@@ -1018,9 +1086,7 @@ def textbook_import_review(request, batch_pk, pk):
                 .order_by('-external_id', '-pk').first())
     following = (batch.drafts.filter(external_id__gt=draft.external_id)
                  .order_by('external_id', 'pk').first())
-    candidates = (batch.drafts.exclude(pk=draft.pk)
-                  .exclude(author_solution_latex='')
-                  .order_by('external_id')[:12])
+    candidates = _textbook_solution_candidates(batch, draft)
     review_subitems = [dict(item) for item in (
         original_subitems if subitem_structure_conflict else draft.subitems)]
     if request.method == 'POST':

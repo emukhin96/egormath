@@ -411,6 +411,63 @@ class TextbookImportTests(TestCase):
         draft.refresh_from_db()
         self.assertEqual(draft.subitems, reordered)
 
+    def test_review_copies_author_materials_from_candidate_subitems(self):
+        payload = bundle(
+            subitems=[
+                {'label': 'а', 'text_latex': 'Первый подпункт.'},
+                {'label': 'б', 'text_latex': 'Второй подпункт.'},
+            ],
+            author_answer_latex='', author_solution_latex='',
+        )
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='1.2.38', source_number='38',
+            subitems=[
+                {
+                    'label': 'а', 'text_latex': 'Другой первый подпункт.',
+                    'author_answer_latex': 'Ответ а.',
+                    'author_solution_latex': 'Решение а.',
+                },
+                {
+                    'label': 'б', 'text_latex': 'Другой второй подпункт.',
+                    'author_answer_latex': 'Ответ б.',
+                    'author_solution_latex': 'Решение б.',
+                },
+            ],
+        ))
+        batch = self.create_batch(payload)
+        target = batch.drafts.get(external_id='1.2.37')
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse(
+            'textbook_import_review', args=[batch.pk, target.pk])
+
+        response = self.client.get(url)
+        self.assertContains(response, '1.2.38')
+
+        response = self.client.post(url, {
+            'external_id': target.external_id,
+            'source_number': target.source_number,
+            'text_latex': target.text_latex,
+            'subitems': json.dumps(target.subitems),
+            'subitem_author_answer_0': '',
+            'subitem_author_solution_0': '',
+            'subitem_author_answer_1': '',
+            'subitem_author_solution_1': '',
+            'author_answer_latex': '',
+            'author_solution_latex': '',
+            'copy_solution_from': '1.2.38',
+            'status': TextbookTaskDraft.STATUS_REVIEW,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        target.refresh_from_db()
+        self.assertEqual(target.solution_source_external_id, '1.2.38')
+        self.assertEqual(
+            [item['author_solution_latex'] for item in target.subitems],
+            ['Решение а.', 'Решение б.'])
+        self.assertEqual(
+            [item['author_answer_latex'] for item in target.subitems],
+            ['Ответ а.', 'Ответ б.'])
+
     def test_collection_preview_assigns_topic_to_one_source_section(self):
         payload = bundle()
         payload['tasks'].append(dict(
