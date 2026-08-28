@@ -486,6 +486,10 @@ class TextbookParserTests(unittest.TestCase):
             diagnostics["ignored_solution_code_refs"],
             ["8.1.D05", "8.1.D06"],
         )
+        self.assertEqual(
+            diagnostics["unmatched_solution_ids"],
+            ["8.1.D05", "8.1.D06"],
+        )
 
     def test_missing_solution_boundary_warns_previous_task(self):
         task_text = "\n".join([

@@ -759,7 +759,9 @@ def merge_solutions(
         "solution_markers": len(solution_map),
         "duplicate_solution_ids": sorted(duplicate_solutions),
         "matched_solutions": matched,
-        "unmatched_solution_ids": sorted(set(solution_map) - task_ids),
+        # Старое поле сохраняем для потребителей отчёта; более точное имя
+        # ignored_solution_code_refs объясняет, почему эти коды не смержены.
+        "unmatched_solution_ids": ignored_solution_code_refs,
         "ignored_solution_code_refs": ignored_solution_code_refs,
         "tasks_without_solution_ids": sorted(task_ids - set(solution_map)),
     }
