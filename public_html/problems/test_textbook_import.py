@@ -714,6 +714,11 @@ class TextbookImportTests(TestCase):
         self.assertContains(response, 'Авторское решение')
         self.assertContains(response, '$1+1$', html=False)
         self.assertContains(response, 'есть: 1/2')
+        html = response.content.decode()
+        self.assertGreaterEqual(html.count('Вычислите:'), 2)
+        self.assertGreaterEqual(html.count('$1+1$'), 2)
+        self.assertNotIn('class="ws-num"', html)
+        self.assertNotIn('а) а)', html)
 
     def test_collection_preview_is_paginated_separately(self):
         payload = bundle()
@@ -862,6 +867,35 @@ class TextbookImportTests(TestCase):
         commit_batch(batch, user=self.teacher)
         self.assertEqual(TaskImage.objects.count(), 1)
         self.assertIn('figure-1', TaskImage.objects.get().filename)
+
+    def test_import_strips_subitem_marker_and_trailing_space(self):
+        batch = self.create_batch(bundle(
+            text_latex='Найдите значение выражения: Найдите значение выражения:\\\\',
+            subitems=[{
+                'label': 'а',
+                'text_latex': r'а) $564\cdot645$ ?\\',
+            }],
+        ))
+        draft = batch.drafts.get()
+        self.assertEqual(draft.text_latex, 'Найдите значение выражения:')
+        self.assertEqual(draft.subitems[0]['text_latex'], r'$564\cdot645$?')
+
+    def test_bad_image_zip_rolls_back_new_batch(self):
+        self.client.login(username='teacher1', password='pass12345')
+        upload = SimpleUploadedFile(
+            'import.json', json.dumps(bundle()).encode(),
+            content_type='application/json')
+        response = self.client.post(reverse('textbook_import_upload'), {
+            'title': 'Партия с плохим ZIP', 'source_title': 'Задачник',
+            'source_author': 'Автор',
+            'input_kind': 'json', 'bundle': upload,
+            'images_zip': SimpleUploadedFile(
+                'pics.zip', b'not-a-zip', content_type='application/zip'),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Нужен ZIP')
+        self.assertEqual(TextbookImportBatch.objects.count(), 0)
+        self.assertEqual(TextbookTaskDraft.objects.count(), 0)
 
     def test_exact_topic_alias_is_assigned_automatically(self):
         topic = Topic.objects.get(code='ALG.03.03')

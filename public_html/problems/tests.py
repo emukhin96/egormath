@@ -750,6 +750,16 @@ class WebTexTests(TestCase):
         self.assertEqual(self.render('на 5~см больше'),
                          'на 5&nbsp;см больше')
         self.assertEqual(self.render('на 33\\%'), 'на 33%')
+        self.assertEqual(
+            self.render(r'Между какими числами \(\sqrt{170}\) ?\\'),
+            r'Между какими числами \(\sqrt{170}\)?')
+
+    def test_subitem_tail_ignores_trailing_linebreak_before_punct(self):
+        from problems.templatetags.task_extras import subitem_tail
+        self.assertEqual(subitem_tail(r'$1+1$;\\', False), '')
+        self.assertEqual(subitem_tail(r'\(\sqrt{168}\) ?\\', False), '')
+        self.assertEqual(subitem_tail(r'$1+1$', False), ';')
+        self.assertEqual(subitem_tail(r'$1+1$', True), '.')
 
     def test_math_is_untouched(self):
         # Внутри $…$ команды не трогаем — их рендерит KaTeX

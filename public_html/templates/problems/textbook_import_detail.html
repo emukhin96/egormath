@@ -46,7 +46,7 @@
       <tr><th>№</th><th>Задание и подпункты</th><th>Авторский ответ</th><th>Авторское решение</th><th>Тема</th><th>Статус</th></tr>
       {% for draft in collection_page %}<tr>
         <td><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.source_number }}</a></td>
-        <td>{% include 'problems/_textbook_draft_preview.html' with draft=draft expanded=True %}</td>
+        <td>{% include 'problems/_textbook_draft_preview.html' with draft=draft %}</td>
         <td>{% if draft.has_author_answer_material %}<span class="badge">есть{% if draft.subitems %}: {{ draft.author_answer_subitem_count }}/{{ draft.subitems|length }}{% endif %}</span>{% else %}<span class="muted">нет</span>{% endif %}</td>
         <td>{% if draft.has_author_solution_material %}<span class="badge">есть{% if draft.subitems %}: {{ draft.author_solution_subitem_count }}/{{ draft.subitems|length }}{% endif %}</span>{% else %}<span class="muted">нет</span>{% endif %}</td>
         <td>{{ draft.topic|default:'—' }}</td>
@@ -85,7 +85,7 @@
     {% for draft in page %}<tr>
       <td><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.external_id }}</a></td>
       <td>{{ draft.source_number }}</td>
-      <td>{% include 'problems/_textbook_draft_preview.html' with draft=draft %}{% if draft.subitems %}<span class="muted"> {{ draft.subitems|length }} подп.</span>{% endif %}</td>
+      <td>{% include 'problems/_textbook_draft_preview.html' with draft=draft %}</td>
       <td>{% if draft.has_author_answer_material %}<span class="badge">есть{% if draft.subitems %}: {{ draft.author_answer_subitem_count }}/{{ draft.subitems|length }}{% endif %}</span>{% else %}<span class="muted">нет</span>{% endif %}</td>
       <td>{% if draft.has_author_solution_material %}<span class="badge">есть{% if draft.subitems %}: {{ draft.author_solution_subitem_count }}/{{ draft.subitems|length }}{% endif %}</span>{% else %}<span class="muted">нет</span>{% endif %}</td>
       <td>{{ draft.source_path|join:' › ' }}</td>

@@ -213,7 +213,49 @@ def clean(value: str) -> str:
     # \\task пакета egor имеет не-long опциональные
     # аргументы: пустая строка в подпункте обрывает сборку PDF.
     value = re.sub(r"\n\s*\n+", "\n", value)
-    return value.strip()
+    return normalize_imported_text(value.strip())
+
+
+def normalize_imported_text(value: str) -> str:
+    """Убирает хвостовые переносы OCR и пробел перед конечной пунктуацией."""
+    value = str(value or '')
+    value = re.sub(r'(?:\\\\\s*)+$', '', value).rstrip()
+    return re.sub(r'\s+([?!,.;:])\s*$', r'\1', value)
+
+
+def strip_leading_subitem_label(text: str, label: str) -> str:
+    """Не оставляет метку подпункта внутри его текста: она хранится отдельно."""
+    text = str(text or '')
+    if not label:
+        return text
+    match = re.match(
+        r'(?is)^(?:\\item\[\s*)?(?P<label>[a-zа-яё0-9]+)\s*\)\s*',
+        text)
+    if not match:
+        return text
+    if _normalized_subitem_label(match.group('label')) != \
+            _normalized_subitem_label(label):
+        return text
+    return text[match.end():]
+
+
+def collapse_repeated_lead(value: str) -> str:
+    """Склеивает OCR-повтор начала фразы: «Найдите …: Найдите …:»."""
+    text = str(value or '').strip()
+    changed = True
+    while changed:
+        changed = False
+        for sep in (':', '.'):
+            left, found, rest = text.partition(sep)
+            if not found or not left.strip() or not rest.strip():
+                continue
+            right, found_again, tail = rest.lstrip().partition(sep)
+            if found_again and left.strip() == right.strip():
+                suffix = tail.strip()
+                text = f'{left.strip()}{sep}' + (f' {suffix}' if suffix else '')
+                changed = True
+                break
+    return text
 
 
 def strip_outer_lists(value: str, *, flatten_items: bool = True) -> str:
@@ -353,10 +395,14 @@ def split_subitems(
     for i, (start, marker_end, label) in enumerate(markers):
         end = markers[i + 1][0] if i + 1 < len(markers) else len(body)
         text = strip_outer_lists(body[marker_end:end])
+        text = strip_leading_subitem_label(text, label)
         if normalize_punctuation:
             text = strip_subitem_punct(text)
+        else:
+            text = normalize_imported_text(text)
         if text:
             items.append(SubitemDraft(label, text))
+    parent = collapse_repeated_lead(parent)
     return parent, items
 
 

@@ -1,5 +1,6 @@
 from django import template
 
+from problems.textbook_parser import normalize_imported_text
 from problems.web_tex import tex_preview_html, tex_to_web_html
 from worksheets.latex import subitem_label as _subitem_label
 
@@ -34,7 +35,7 @@ def subitem_tail(text, is_last):
     Подпункты-предложения хранятся со своим знаком («Приведите пример.») —
     таким ничего не добавляется.
     """
-    text = (text or '').rstrip()
+    text = normalize_imported_text(text or '')
     if text and text[-1] in ';.!?:':
         return ''
     return '.' if is_last else ';'

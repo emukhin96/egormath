@@ -891,18 +891,19 @@ def textbook_import_upload(request):
                         profile=form.cleaned_data['resolved_profile'],
                         solutions_upload=form.cleaned_data.get(
                             'solutions_tex'))
-                batch = create_batch_from_bundle(
-                    payload, user=request.user,
-                    title=form.cleaned_data['title'],
-                    source_title=form.cleaned_data['source_title'],
-                    source_author=form.cleaned_data['source_author'],
-                    source_year=form.cleaned_data['source_year'])
-                images_zip = form.cleaned_data.get('images_zip')
-                if images_zip:
-                    stored = attach_image_archive(batch, images_zip)
-                    messages.success(
-                        request,
-                        f'Сопоставлено рисунков: {stored}.')
+                with transaction.atomic():
+                    batch = create_batch_from_bundle(
+                        payload, user=request.user,
+                        title=form.cleaned_data['title'],
+                        source_title=form.cleaned_data['source_title'],
+                        source_author=form.cleaned_data['source_author'],
+                        source_year=form.cleaned_data['source_year'])
+                    images_zip = form.cleaned_data.get('images_zip')
+                    if images_zip:
+                        stored = attach_image_archive(batch, images_zip)
+                        messages.success(
+                            request,
+                            f'Сопоставлено рисунков: {stored}.')
             except TextbookImportError as exc:
                 error_field = ('bundle' if form.cleaned_data.get('input_kind')
                                == TextbookBundleUploadForm.INPUT_JSON

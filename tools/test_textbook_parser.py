@@ -6,7 +6,9 @@ from tools.textbook_parser import (
     Marker,
     ImportBundle,
     bundle_from_text,
+    collapse_repeated_lead,
     expected_shestakov_ids,
+    normalize_imported_text,
     numeric_markers,
     path_at,
     parse_galitsky,
@@ -16,6 +18,7 @@ from tools.textbook_parser import (
     shestakov_source_path,
     shestakov_markers,
     split_answer_solution,
+    strip_leading_subitem_label,
     task_from_block,
     write_bundle,
 )
@@ -224,6 +227,37 @@ class TextbookParserTests(unittest.TestCase):
             [("а", "$1+1$"), ("б", "$2+2$")],
         )
 
+    def test_imported_text_drops_trailing_space_before_punctuation(self):
+        self.assertEqual(
+            normalize_imported_text(
+                r'Между какими числами заключено \(\sqrt{170}\) ?\\'),
+            r'Между какими числами заключено \(\sqrt{170}\)?')
+        self.assertEqual(
+            strip_leading_subitem_label(r'а) $564\cdot645$', 'а'),
+            r'$564\cdot645$')
+        self.assertEqual(
+            strip_leading_subitem_label(r'б) второй пункт', 'а'),
+            r'б) второй пункт')
+        self.assertEqual(
+            collapse_repeated_lead(
+                'Найдите значение выражения: Найдите значение выражения:'),
+            'Найдите значение выражения:')
+
+    def test_subitem_body_does_not_keep_its_own_marker(self):
+        task_text = "\n".join([
+            r"1.3.A02 Найдите значение выражения:",
+            r"\\ а) а) $564\cdot645-563\cdot645$",
+            r"\\ б) $1+1$",
+        ])
+
+        tasks, _ = parse_shestakov(task_text, "")
+
+        self.assertEqual(tasks[0].text_latex, "Найдите значение выражения:")
+        self.assertEqual(
+            [item.text_latex for item in tasks[0].subitems],
+            [r"$564\cdot645-563\cdot645$", r"$1+1$"],
+        )
+
     def test_subitem_punctuation_matches_tex_import_rules(self):
         task_text = "\n".join([
             "1.1.A01 Выполните:",
@@ -388,7 +422,7 @@ class TextbookParserTests(unittest.TestCase):
 
         self.assertEqual(diagnostics["matched_solutions"], 3)
         self.assertEqual(
-            [task.author_answer_latex for task in tasks], ["-1.", "4 .", "1."])
+            [task.author_answer_latex for task in tasks], ["-1.", "4.", "1."])
         self.assertTrue(all(
             "Не найден авторский ответ/решение" not in task.warnings
             for task in tasks))

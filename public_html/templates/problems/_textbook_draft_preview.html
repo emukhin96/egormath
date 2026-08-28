@@ -1,12 +1,11 @@
 {% load task_extras %}
-<details{% if expanded %} open{% endif %}>
-  <summary>{% if draft.text_latex %}<span class="math-content task-text">{{ draft.text_latex|web_text_preview:180 }}</span>{% else %}<span class="muted">Условие задано подпунктами ({{ draft.subitems|length }})</span>{% endif %}</summary>
-  {% if expanded %}
-    {% if draft.text_latex %}<div class="math-content task-text">{{ draft.text_latex|web_text|linebreaksbr }}</div>{% endif %}
-    {% if draft.subitems %}
-    <ol class="subitems">
-      {% for subitem in draft.subitems %}<li><span class="ws-num">{{ subitem.label|default:forloop.counter }})</span> <span class="math-content">{{ subitem.text_latex|web_text }}</span></li>{% endfor %}
-    </ol>
-    {% endif %}
+<div class="textbook-draft-preview">
+  {% if draft.text_latex %}<div class="math-content task-text">{{ draft.text_latex|web_text|linebreaksbr }}</div>{% endif %}
+  {% if draft.subitems %}
+  <ol class="subitems">
+    {% for subitem in draft.subitems %}<li><span class="math-content">{{ subitem.text_latex|web_text }}</span>{{ subitem.text_latex|subitem_tail:forloop.last }}</li>{% endfor %}
+  </ol>
+  {% elif not draft.text_latex %}
+  <span class="muted">Нет текста условия</span>
   {% endif %}
-</details>
+</div>

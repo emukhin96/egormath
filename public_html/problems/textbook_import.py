@@ -23,6 +23,8 @@ from .models import (Source, Task, TaskImage, TaskSource, TaskSubitem,
                      TextbookImportAsset, TextbookImportBatch,
                      TextbookTaskDraft)
 from .rubricator import set_task_topics
+from .textbook_parser import (collapse_repeated_lead, normalize_imported_text,
+                              strip_leading_subitem_label)
 from .textbook_topics import apply_topic_suggestions
 
 
@@ -71,9 +73,12 @@ def normalize_subitems(value):
         if not isinstance(item, dict):
             raise TextbookImportError(
                 f'Подпункт {index} должен быть объектом.')
-        text = _required_string(item, 'text_latex')
+        label = str(item.get('label') or index)[:16]
+        text = strip_leading_subitem_label(
+            normalize_imported_text(_required_string(item, 'text_latex')),
+            label)
         result.append({
-            'label': str(item.get('label') or index)[:16],
+            'label': label,
             'text_latex': text,
             'author_answer_latex': str(
                 item.get('author_answer_latex') or '').strip(),
@@ -145,8 +150,8 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
         warnings = _string_list(row.get('warnings'), 'warnings')
         images = _string_list(row.get('images'), 'images')
         subitems = normalize_subitems(row.get('subitems'))
-        text_latex = _required_string(
-            row, 'text_latex', allow_blank=True)
+        text_latex = collapse_repeated_lead(normalize_imported_text(
+            _required_string(row, 'text_latex', allow_blank=True)))
         if not text_latex and not subitems:
             raise TextbookImportError(
                 f'Задача {external_id} не содержит условия или подпунктов.')
