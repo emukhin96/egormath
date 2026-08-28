@@ -160,8 +160,12 @@ class TextbookParserTests(unittest.TestCase):
         ])
         tasks, diagnostics = parse_shestakov(task_text, "")
         self.assertEqual(diagnostics["duplicate_task_ids"], ["1.1.A01"])
-        self.assertEqual(tasks[0].text_latex, "Первое условие.")
-        self.assertNotIn("Дубль OCR", tasks[0].text_latex)
+        self.assertIn("Первое условие.", tasks[0].text_latex)
+        self.assertIn("Дубль OCR.", tasks[0].text_latex)
+        self.assertTrue(any(
+            "Повторный маркер условия" in warning
+            for warning in tasks[0].warnings))
+        self.assertLess(tasks[0].confidence, 1)
 
     def test_duplicate_direct_solution_marker_is_still_a_boundary(self):
         task_text = "\n".join([
@@ -178,6 +182,10 @@ class TextbookParserTests(unittest.TestCase):
             tasks[0].author_solution_latex, "Первое решение.")
         self.assertNotIn("Дубль OCR", tasks[0].author_solution_latex)
         self.assertEqual(diagnostics["duplicate_solution_ids"], ["1.1.A01"])
+        self.assertTrue(any(
+            "Повторный маркер авторского ответа/решения" in warning
+            for warning in tasks[0].warnings))
+        self.assertLess(tasks[0].confidence, 1)
 
     def test_outer_list_does_not_trigger_environment_warning(self):
         task = task_from_block(

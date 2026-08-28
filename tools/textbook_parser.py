@@ -701,10 +701,6 @@ def merge_solutions(
     })
     allowed_markers = [marker for marker in raw_solution_markers
                        if marker.external_id in task_ids]
-    counts = Counter(marker.external_id for marker in allowed_markers)
-    duplicate_solutions = {
-        key for key, count in counts.items() if count > 1
-    }
     all_solution_markers = []
     for marker in raw_solution_markers:
         if (all_solution_markers
@@ -714,6 +710,12 @@ def merge_solutions(
             # Повтор caption с тем же кодом — продолжение того же решения.
             continue
         all_solution_markers.append(marker)
+    counts = Counter(
+        marker.external_id for marker in all_solution_markers
+        if marker.external_id in task_ids)
+    duplicate_solutions = {
+        key for key, count in counts.items() if count > 1
+    }
     solution_map = {}
     # Повторный маркер всё равно участвует в границах блока: иначе его текст
     # будет ошибочно приклеен к предыдущему решению. Для самого ключа
@@ -736,6 +738,11 @@ def merge_solutions(
         )
     matched = 0
     for task in tasks:
+        if task.external_id in duplicate_solutions:
+            task.warnings.append(
+                "Повторный маркер авторского ответа/решения: "
+                "проверить полноту сопоставления")
+            task.confidence = max(0.0, task.confidence - 0.35)
         found = solution_map.get(task.external_id)
         if not found:
             task.warnings.append("Не найден авторский ответ/решение")
@@ -825,14 +832,25 @@ def parse_shestakov(tasks_text: str, solutions_text: str) -> tuple[list[TaskDraf
             "from": marker.external_id,
             "to": previous_marker.external_id,
         })
-    tasks = []
-    seen = set()
+    merged_blocks = []
+    block_by_id = {}
     for marker, body in raw_blocks:
-        if marker.external_id in seen:
+        if marker.external_id in block_by_id:
+            block_by_id[marker.external_id][1] += "\n" + body
             continue
-        seen.add(marker.external_id)
-        tasks.append(task_from_block(
-            marker, body, path_at(headings, marker.start)))
+        merged = [marker, body]
+        block_by_id[marker.external_id] = merged
+        merged_blocks.append(merged)
+    tasks = []
+    for marker, body in merged_blocks:
+        task = task_from_block(
+            marker, body, path_at(headings, marker.start))
+        if marker.external_id in duplicate_tasks:
+            task.warnings.append(
+                "Повторный маркер условия: объединённые OCR-фрагменты "
+                "нужно сверить вручную")
+            task.confidence = max(0.0, task.confidence - 0.35)
+        tasks.append(task)
     # Падение номера в линейном потоке часто означает склейку двух колонок OCR.
     previous = None
     previous_task = None
