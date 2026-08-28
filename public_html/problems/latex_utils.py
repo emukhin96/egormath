@@ -45,7 +45,7 @@ def strip_subitem_punct(text):
     «.») сохраняет точку: «Приведите пример.» — законченная фраза.
     Вопросительный знак сохраняем всегда: «чему равен $x$?» и «$x>0$?»
     меняют смысл, если заменить «?» на «;»/«.». Фрагменты перечисления
-    хранятся без служебных «;»/«.» — система расставляет их при выводе.
+    хранятся без служебных «;»/«,»/«.» — система расставляет их при выводе.
     """
     text = text.strip()
     if not text:
@@ -54,7 +54,7 @@ def strip_subitem_punct(text):
         return text
     if text[0].isupper() and text.endswith('.'):
         return text
-    if text.endswith((';', '.')):
+    if text.endswith((';', '.', ',')):
         text = text[:-1].rstrip()
     return text
 

@@ -223,7 +223,8 @@ def normalize_imported_text(value: str) -> str:
     """Убирает хвостовые переносы OCR и пробел перед конечной пунктуацией."""
     value = str(value or '')
     value = re.sub(r'(?:\\\\\s*)+$', '', value).rstrip()
-    return re.sub(r'\s+([?!,.;:])\s*$', r'\1', value)
+    value = re.sub(r'\s+([?!,.;:])\s*$', r'\1', value)
+    return re.sub(r'[,;]+$', '', value).rstrip()
 
 
 def strip_leading_subitem_label(text: str, label: str) -> str:
@@ -278,8 +279,9 @@ def strip_subitem_punct(value: str) -> str:
     """Нормализует хвостовую пунктуацию как импорт листка из ``.tex``.
 
     Законченное предложение с заглавной буквы сохраняет точку, а вопрос —
-    вопросительный знак. У фрагментов перечисления служебные ``;`` и ``.``
-    удаляются: порядок подпунктов и последний элемент позже могут меняться.
+    вопросительный знак. У фрагментов перечисления служебные ``;``, ``,``
+    и ``.`` удаляются: порядок подпунктов и последний элемент позже могут
+    меняться.
     """
     value = clean(value)
     if not value:
@@ -288,7 +290,7 @@ def strip_subitem_punct(value: str) -> str:
         return value
     if value[0].isupper() and value.endswith('.'):
         return value
-    if value.endswith((';', '.')):
+    if value.endswith((';', '.', ',')):
         return value[:-1].rstrip()
     return value
 
@@ -1241,13 +1243,13 @@ def _ziv_split_task_and_answer(text: str) -> tuple[str, str]:
     return text[:answer_start], text[answer_start:]
 
 
-def _ziv_walk(text: str, *, items_only: bool = True) -> list[tuple[Marker, list[str], str]]:
+def _ziv_walk(text: str, *, items_only: bool = True) -> list[tuple[Marker, list[str], str, str]]:
     """Строит маркеры Зива с ключом работа/тема/вариант/номер."""
     work, work_title = "xx", "Раздел"
     topic_num, topic_title = 0, "Тема"
     variant = 0
     seen: set[tuple[int, str]] = set()
-    result: list[tuple[Marker, list[str], str]] = []
+    result: list[tuple[Marker, list[str], str, str]] = []
     events = _ziv_state_events(text)
     for index, (pos, kind, payload) in enumerate(events):
         if kind == "section":
@@ -1261,13 +1263,13 @@ def _ziv_walk(text: str, *, items_only: bool = True) -> list[tuple[Marker, list[
                 variant = 0
             if not items_only:
                 result.append((
-                    Marker(pos, pos, "__ziv_boundary__"), [], ""))
+                    Marker(pos, pos, "__ziv_boundary__"), [], "", ""))
             continue
         if kind == "variant":
             variant = payload
             if not items_only:
                 result.append((
-                    Marker(pos, pos, "__ziv_boundary__"), [], ""))
+                    Marker(pos, pos, "__ziv_boundary__"), [], "", ""))
             continue
         if items_only and kind != "item":
             continue
@@ -1290,6 +1292,7 @@ def _ziv_walk(text: str, *, items_only: bool = True) -> list[tuple[Marker, list[
             Marker(marker.start, marker.end, locator),
             path,
             f"{work}/{topic_num:02d}/v{variant}",
+            body,
         ))
     return result
 
@@ -1301,11 +1304,20 @@ def parse_ziv(text: str) -> tuple[list[TaskDraft], dict]:
     raw_count = len(walked)
     markers = [item[0] for item in walked]
     unique, duplicates = unique_markers(markers)
-    path_by_id = {marker.external_id: path for marker, path, _key in walked}
-    key_by_id = {marker.external_id: key for marker, _path, key in walked}
+    path_by_id = {}
+    key_by_id = {}
+    body_by_id = {}
+    for marker, path, key, body in walked:
+        if marker.external_id in body_by_id:
+            continue
+        path_by_id[marker.external_id] = path
+        key_by_id[marker.external_id] = key
+        body_by_id[marker.external_id] = body
     tasks = [
-        task_from_block(marker, body, path_by_id.get(marker.external_id, []))
-        for marker, body in blocks(task_text, unique)
+        task_from_block(
+            marker, body_by_id.get(marker.external_id, ''),
+            path_by_id.get(marker.external_id, []))
+        for marker in unique
     ]
     for task in tasks:
         task.collection_key = key_by_id.get(task.external_id, task.collection_key)
@@ -1318,7 +1330,7 @@ def parse_ziv(text: str) -> tuple[list[TaskDraft], dict]:
             task.confidence = max(0.0, task.confidence - 0.35)
     allowed = {task.external_id for task in tasks}
     answer_markers = [
-        marker for marker, _path, _key in _ziv_walk(
+        marker for marker, _path, _key, _body in _ziv_walk(
             answer_text, items_only=False)
         if marker.external_id in allowed
         or marker.external_id == "__ziv_boundary__"

@@ -61,8 +61,9 @@ class LatexUtilsTests(TestCase):
         self.assertNotIn('\\textbf', s)
 
     def test_split_items_strips_punctuation(self):
-        chunks = split_items('\\item $1+1$; \\item $2+2$ ; \\item $3+3$.')
-        self.assertEqual(chunks, ['$1+1$', '$2+2$', '$3+3$'])
+        chunks = split_items(
+            '\\item $1+1$; \\item $2+2$ ; \\item $3+3$, \\item $4+4$.')
+        self.assertEqual(chunks, ['$1+1$', '$2+2$', '$3+3$', '$4+4$'])
 
     def test_split_items_keeps_sentence_punctuation(self):
         # Предложение с «.» и любой «?» сохраняются; служебные «;»/«.»
@@ -753,10 +754,16 @@ class WebTexTests(TestCase):
         self.assertEqual(
             self.render(r'Между какими числами \(\sqrt{170}\) ?\\'),
             r'Между какими числами \(\sqrt{170}\)?')
+        html = self.render('Выполните действия\n\\[\na+b\n\\]\n\\section*{3. Тема}\nВариант 1')
+        self.assertIn('Выполните действия<br>', html)
+        self.assertIn('\\[ a+b \\]', html)
+        self.assertNotIn('\\[<br>', html)
+        self.assertNotIn('\\section', html)
+        self.assertNotIn('Вариант 1', html)
 
     def test_subitem_tail_ignores_trailing_linebreak_before_punct(self):
         from problems.templatetags.task_extras import subitem_tail
-        self.assertEqual(subitem_tail(r'$1+1$;\\', False), '')
+        self.assertEqual(subitem_tail(r'$1+1$;\\', False), ';')
         self.assertEqual(subitem_tail(r'\(\sqrt{168}\) ?\\', False), '')
         self.assertEqual(subitem_tail(r'$1+1$', False), ';')
         self.assertEqual(subitem_tail(r'$1+1$', True), '.')

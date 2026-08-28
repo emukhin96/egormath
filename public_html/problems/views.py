@@ -1099,6 +1099,45 @@ def textbook_import_assign_section_topic(request, pk):
 
 
 @teacher_required
+@require_POST
+@transaction.atomic
+def textbook_import_bulk(request, pk):
+    """Массовые действия над выбранными черновиками партии."""
+    batch = _own_import_batch(request, pk)
+    batch = TextbookImportBatch.objects.select_for_update().get(pk=batch.pk)
+    next_url = request.POST.get('next', '')
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts=None):
+        next_url = _textbook_detail_url(batch, request)
+    if batch.status == TextbookImportBatch.STATUS_IMPORTED:
+        messages.error(request, 'Загруженную партию нельзя изменять.')
+        return redirect(next_url)
+    ids = request.POST.getlist('ids')
+    drafts = batch.drafts.filter(pk__in=ids)
+    if not drafts.exists():
+        messages.error(request, 'Не выбрано ни одной задачи.')
+        return redirect(next_url)
+    if request.POST.get('delete'):
+        deleted = drafts.count()
+        drafts.delete()
+        messages.success(request, f'Удалено задач: {deleted}.')
+        return redirect(next_url)
+    if request.POST.get('skip'):
+        updated = drafts.update(status=TextbookTaskDraft.STATUS_SKIPPED)
+        messages.success(request, f'Пропущено задач: {updated}.')
+        return redirect(next_url)
+    topic_id = request.POST.get('topic', '').strip()
+    topic = (Topic.objects.filter(pk=int(topic_id)).first()
+             if topic_id.isdigit() else None)
+    if topic is None:
+        messages.error(request, 'Выберите тему рубрикатора.')
+        return redirect(next_url)
+    updated = drafts.update(topic=topic)
+    messages.success(
+        request, f'Тема «{topic}» назначена выбранным задачам: {updated}.')
+    return redirect(next_url)
+
+
+@teacher_required
 def textbook_import_review(request, batch_pk, pk):
     batch = _own_import_batch(request, batch_pk)
     draft = get_object_or_404(
@@ -1210,7 +1249,8 @@ def textbook_import_review(request, batch_pk, pk):
                     return redirect(
                         'textbook_import_review', batch_pk=batch.pk,
                         pk=next_draft.pk)
-                return redirect('textbook_import_detail', pk=batch.pk)
+                return redirect(
+                    'textbook_import_review', batch_pk=batch.pk, pk=updated.pk)
     else:
         solution_key = draft.solution_source_external_id
         if solution_key == draft.external_id:

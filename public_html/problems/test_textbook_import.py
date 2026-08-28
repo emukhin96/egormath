@@ -420,7 +420,8 @@ class TextbookImportTests(TestCase):
             'status': TextbookTaskDraft.STATUS_REVIEW,
         })
 
-        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse(
+            'textbook_import_review', args=[batch.pk, draft.pk]))
         draft.refresh_from_db()
         self.assertEqual(draft.topic, second_topic)
         self.assertEqual(
@@ -915,6 +916,40 @@ class TextbookImportTests(TestCase):
         self.assertEqual(TaskImage.objects.count(), 1)
         self.assertIn('figure-1', TaskImage.objects.get().filename)
 
+    def test_reimport_attaches_missing_images_to_reused_task(self):
+        topic = Topic.objects.create(name='Тема повторного рисунка')
+        first = self.create_batch()
+        first.drafts.update(
+            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        commit_batch(first, user=self.teacher)
+        task = Task.objects.get()
+        self.assertEqual(task.images.count(), 0)
+
+        second = create_batch_from_bundle(
+            bundle(images=['figure-1.png', 'figure-2.png']),
+            user=self.teacher, title='Повтор с рисунками',
+            source_title='Тестовый задачник', source_author='Автор')
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, 'w') as zf:
+            zf.writestr('figure-1.png', TINY_PNG)
+            zf.writestr('figure-2.png', TINY_PNG)
+        archive.seek(0)
+        attach_image_archive(
+            second, SimpleUploadedFile('pics.zip', archive.read()))
+        second.drafts.update(
+            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        result = commit_batch(second, user=self.teacher)
+        self.assertEqual(result['reused'], 1)
+        names = ' '.join(image.filename for image in task.images.all())
+        self.assertIn('figure-1', names)
+        self.assertIn('figure-2', names)
+        self.assertEqual(task.images.count(), 2)
+
+        result = commit_batch(second, user=self.teacher)
+        self.assertEqual(result, {
+            'created': 0, 'reused': 0, 'collections': 0})
+        self.assertEqual(task.images.count(), 2)
+
     def test_import_strips_subitem_marker_and_trailing_space(self):
         batch = self.create_batch(bundle(
             text_latex='Найдите значение выражения: Найдите значение выражения:\\\\',
@@ -1004,3 +1039,69 @@ class TextbookImportTests(TestCase):
         self.assertContains(response, f'status=needs_review')
         self.assertContains(response, f'section={token}')
         self.assertContains(response, '<optgroup label="Главы целиком">')
+        self.assertContains(response, 'import-bulk-form')
+        self.assertContains(response, 'name="ids"')
+
+    def test_bulk_skips_and_deletes_selected_drafts(self):
+        payload = bundle()
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='1.2.38', source_number='38',
+            text_latex='Вторая задача.'))
+        batch = self.create_batch(payload)
+        first, second = list(batch.drafts.order_by('external_id'))
+        topic = Topic.objects.create(name='Массовая тема')
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('textbook_import_bulk', args=[batch.pk])
+
+        response = self.client.post(url, {
+            'ids': [str(first.pk)],
+            'skip': '1',
+            'next': reverse('textbook_import_detail', args=[batch.pk]),
+        })
+        self.assertEqual(response.status_code, 302)
+        first.refresh_from_db()
+        self.assertEqual(first.status, TextbookTaskDraft.STATUS_SKIPPED)
+
+        response = self.client.post(url, {
+            'ids': [str(second.pk)],
+            'topic': str(topic.pk),
+            'next': reverse('textbook_import_detail', args=[batch.pk]),
+        })
+        self.assertEqual(response.status_code, 302)
+        second.refresh_from_db()
+        self.assertEqual(second.topic, topic)
+
+        response = self.client.post(url, {
+            'ids': [str(second.pk)],
+            'delete': '1',
+            'next': reverse('textbook_import_detail', args=[batch.pk]),
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(batch.drafts.filter(pk=second.pk).exists())
+        self.assertTrue(batch.drafts.filter(pk=first.pk).exists())
+
+    def test_review_save_stays_and_save_next_advances(self):
+        payload = bundle()
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='1.2.38', source_number='38'))
+        batch = self.create_batch(payload)
+        first, second = list(batch.drafts.order_by('external_id'))
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('textbook_import_review', args=[batch.pk, first.pk])
+        form = {
+            'external_id': first.external_id,
+            'source_number': first.source_number,
+            'text_latex': first.text_latex,
+            'subitems': '[]',
+            'author_answer_latex': first.author_answer_latex,
+            'author_solution_latex': first.author_solution_latex,
+            'status': TextbookTaskDraft.STATUS_REVIEW,
+        }
+
+        response = self.client.post(url, form)
+        self.assertRedirects(response, reverse(
+            'textbook_import_review', args=[batch.pk, first.pk]))
+
+        response = self.client.post(url, {**form, 'save_next': '1'})
+        self.assertRedirects(response, reverse(
+            'textbook_import_review', args=[batch.pk, second.pk]))

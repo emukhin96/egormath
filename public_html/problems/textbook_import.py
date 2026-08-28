@@ -416,20 +416,34 @@ def _merge_subitem_author_fields(task, draft):
 
 
 def _attach_task_images(task, draft, batch):
-    if not draft.images or task.images.exists():
+    """Дописывает недостающие рисунки, в том числе к повторно используемой задаче."""
+    if not draft.images:
         return
+    existing = {
+        normalize_image_stem(image.filename): image
+        for image in task.images.all()
+    }
+    used_orders = set(task.images.values_list('order', flat=True))
     assets = {
         asset.stem: asset
         for asset in batch.assets.filter(
             stem__in=[normalize_image_stem(name) for name in draft.images])
     }
     for index, name in enumerate(draft.images, start=1):
-        asset = assets.get(normalize_image_stem(name))
+        stem = normalize_image_stem(name)
+        if stem in existing:
+            continue
+        asset = assets.get(stem)
         if asset is None:
             continue
-        image = TaskImage(task=task, order=index * 10)
+        order = index * 10
+        while order in used_orders:
+            order += 10
+        used_orders.add(order)
+        image = TaskImage(task=task, order=order)
         image.image.save(
             Path(asset.original_name).name, asset.file, save=True)
+        existing[stem] = image
 
 
 @transaction.atomic
@@ -508,8 +522,8 @@ def commit_batch(batch, *, user):
                 number=draft.source_number,
                 locator=draft.external_id,
                 source_path=draft.source_path)
-            _attach_task_images(task, draft, batch)
 
+        _attach_task_images(task, draft, batch)
         _merge_author_fields(task, draft)
         if draft.topic_id:
             if task.topic_links.exists():

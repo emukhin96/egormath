@@ -9,8 +9,9 @@
       var boxes = Array.prototype.slice.call(
         document.querySelectorAll(
           'input.row-select[form="' + form.id + '"]'));
-      var all = document.querySelector(
-        'input[data-bulk-all="' + form.id + '"]');
+      var allBoxes = Array.prototype.slice.call(
+        document.querySelectorAll(
+          'input[data-bulk-all="' + form.id + '"]'));
       var count = form.querySelector('[data-bulk-count]');
       if (!boxes.length) return;
 
@@ -18,18 +19,21 @@
         var checked = boxes.filter(function (b) { return b.checked; });
         form.hidden = checked.length === 0;
         if (count) count.textContent = 'Выбрано: ' + checked.length;
-        if (all) all.checked = checked.length === boxes.length;
+        allBoxes.forEach(function (all) {
+          all.checked = boxes.length > 0 && checked.length === boxes.length;
+        });
       }
 
       boxes.forEach(function (box) {
         box.addEventListener('change', refresh);
       });
-      if (all) {
+      allBoxes.forEach(function (all) {
         all.addEventListener('change', function () {
           boxes.forEach(function (box) { box.checked = all.checked; });
+          allBoxes.forEach(function (other) { other.checked = all.checked; });
           refresh();
         });
-      }
+      });
       refresh();
     });
   });

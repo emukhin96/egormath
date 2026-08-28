@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
-{% load task_extras %}
+{% load static task_extras %}
+{% block extra_head %}<script defer src="{% static 'js/bulk.js' %}"></script>{% endblock %}
 {% block title %}{{ batch.title }} — EgorMath{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -43,8 +44,9 @@
   <details open>
     <summary>Состав будущей подборки</summary>
     <table class="list">
-      <tr><th>№</th><th>Задание и подпункты</th><th>Авторский ответ</th><th>Авторское решение</th><th>Тема</th><th>Статус</th></tr>
+      <tr>{% if batch.status != 'imported' %}<th class="col-select"><input type="checkbox" data-bulk-all="import-bulk-form" title="Выбрать все задачи на странице"></th>{% endif %}<th>№</th><th>Задание и подпункты</th><th>Авторский ответ</th><th>Авторское решение</th><th>Тема</th><th>Статус</th></tr>
       {% for draft in collection_page %}<tr>
+        {% if batch.status != 'imported' %}<td class="col-select"><input type="checkbox" class="row-select" name="ids" value="{{ draft.pk }}" form="import-bulk-form" title="Выбрать задачу"></td>{% endif %}
         <td><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.source_number }}</a></td>
         <td>{% include 'problems/_textbook_draft_preview.html' with draft=draft %}</td>
         <td>{% if draft.has_author_answer_material %}<span class="badge">есть{% if draft.subitems %}: {{ draft.author_answer_subitem_count }}/{{ draft.subitems|length }}{% endif %}</span>{% else %}<span class="muted">нет</span>{% endif %}</td>
@@ -79,10 +81,20 @@
     <form method="post" action="{% url 'textbook_import_approve_clean' batch.pk %}">{% csrf_token %}<button class="btn btn-secondary" type="submit">Одобрить безошибочные</button></form>
     <form method="post" action="{% url 'textbook_import_commit' batch.pk %}" onsubmit="return confirm('Загрузить все одобренные задачи и создать подборки?');">{% csrf_token %}<button class="btn" type="submit">Загрузить в каталог</button></form>
   </div>
+  <form id="import-bulk-form" method="post" action="{% url 'textbook_import_bulk' batch.pk %}" class="bulk-bar" data-bulk hidden>
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <strong data-bulk-count>Выбрано: 0</strong>
+    {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=False compact=True single=True field_name='topic' selected_json='{"topics":[],"primary":null,"grades":[],"facets":[],"exams":[],"difficulty":null}' %}
+    <button type="submit" name="apply" value="1" class="btn btn-small">Назначить тему</button>
+    <button type="submit" name="skip" value="1" class="btn btn-small btn-secondary">Пропустить выбранные</button>
+    <button type="submit" name="delete" value="1" class="btn btn-small btn-danger" onclick="return confirm('Удалить выбранные черновики из партии?');">Удалить выбранные</button>
+  </form>
   {% endif %}
   <table class="list">
-    <tr><th>Ключ</th><th>№</th><th>Задание и подпункты</th><th>Авторский ответ</th><th>Авторское решение</th><th>Раздел</th><th>Тема</th><th>Уверенность</th><th>Замечания</th><th>Статус</th></tr>
+    <tr>{% if batch.status != 'imported' %}<th class="col-select"><input type="checkbox" data-bulk-all="import-bulk-form" title="Выбрать все задачи на странице"></th>{% endif %}<th>Ключ</th><th>№</th><th>Задание и подпункты</th><th>Авторский ответ</th><th>Авторское решение</th><th>Раздел</th><th>Тема</th><th>Уверенность</th><th>Замечания</th><th>Статус</th></tr>
     {% for draft in page %}<tr>
+      {% if batch.status != 'imported' %}<td class="col-select"><input type="checkbox" class="row-select" name="ids" value="{{ draft.pk }}" form="import-bulk-form" title="Выбрать задачу"></td>{% endif %}
       <td><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.external_id }}</a></td>
       <td>{{ draft.source_number }}</td>
       <td>{% include 'problems/_textbook_draft_preview.html' with draft=draft %}</td>

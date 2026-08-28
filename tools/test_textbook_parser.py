@@ -294,6 +294,7 @@ class TextbookParserTests(unittest.TestCase):
             r"\\ б) Верно ли обратное?",
             r"\\ в) найдите значение;",
             r"\\ г) $2+2$.",
+            r"\\ д) $3+3$,",
         ])
 
         tasks, _ = parse_shestakov(task_text, "")
@@ -305,6 +306,7 @@ class TextbookParserTests(unittest.TestCase):
                 "Верно ли обратное?",
                 "найдите значение",
                 "$2+2$",
+                "$3+3$",
             ],
         )
 
@@ -973,6 +975,36 @@ class TextbookParserTests(unittest.TestCase):
         self.assertEqual(tasks[2].author_answer_latex, r"$\frac{1}{2}<\frac{2}{3}$.")
         self.assertEqual(tasks[3].author_answer_latex, r"$x>0$.")
         self.assertEqual(diagnostics["matched_solutions"], 4)
+
+    def test_ziv_task_body_stops_before_next_section(self):
+        source = r"""
+\section*{Контрольные работы}
+\section*{2. Корни}
+Вариант 4
+\begin{itemize}
+  \item[6.] Выполните действия
+\[
+a+b
+\]
+\end{itemize}
+\section*{3. Степенная функция}
+Вариант 1
+\begin{itemize}
+  \item[1.] Следующая задача.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Контрольные работы}
+\section*{2. Корни}
+Вариант 4
+\begin{itemize}
+  \item[6.] 1.
+\end{itemize}
+"""
+        tasks, _ = parse_ziv(source)
+        first = next(task for task in tasks if task.external_id.endswith('/6'))
+        self.assertIn("Выполните действия", first.text_latex)
+        self.assertNotIn("Степенная функция", first.text_latex)
+        self.assertNotIn("Следующая задача", first.text_latex)
 
     def test_ziv_second_work_heading_starts_answers(self):
         source = r"""

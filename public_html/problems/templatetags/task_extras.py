@@ -36,6 +36,6 @@ def subitem_tail(text, is_last):
     таким ничего не добавляется.
     """
     text = normalize_imported_text(text or '')
-    if text and text[-1] in ';.!?:':
+    if text and text[-1] in ';,.!?:':
         return ''
     return '.' if is_last else ';'
