@@ -293,6 +293,34 @@ class TextbookImportTests(TestCase):
         self.assertContains(response, reverse('task_detail', args=[task.pk]))
         self.assertContains(response, 'target="_blank"')
 
+    def test_imported_draft_review_does_not_save_edits(self):
+        topic = Topic.objects.create(name='Тема уже загруженной')
+        batch = self.create_batch()
+        batch.drafts.update(
+            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        commit_batch(batch, user=self.teacher)
+        draft = batch.drafts.get()
+        draft.refresh_from_db()
+        original = draft.text_latex
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('textbook_import_review', args=[batch.pk, draft.pk])
+        response = self.client.get(url)
+        self.assertContains(response, 'только для просмотра')
+        self.assertNotContains(response, 'Сохранить и дальше')
+        response = self.client.post(url, {
+            'external_id': draft.external_id,
+            'source_number': draft.source_number,
+            'text_latex': 'Подменённое условие $x=0$.',
+            'subitems': json.dumps(draft.subitems),
+            'author_answer_latex': draft.author_answer_latex,
+            'author_solution_latex': draft.author_solution_latex,
+            'status': TextbookTaskDraft.STATUS_REVIEW,
+        })
+        self.assertEqual(response.status_code, 302)
+        draft.refresh_from_db()
+        self.assertEqual(draft.text_latex, original)
+        self.assertEqual(draft.status, TextbookTaskDraft.STATUS_IMPORTED)
+
     def test_another_editor_cannot_extend_owned_collection(self):
         topic = Topic.objects.create(name='Тема владельца')
         first = self.create_batch()

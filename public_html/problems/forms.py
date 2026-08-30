@@ -155,6 +155,8 @@ class TextbookDraftReviewForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if self.instance.pk and (
                 self.instance.status == TextbookTaskDraft.STATUS_IMPORTED):
+            for field in self.fields.values():
+                field.disabled = True
             return
         self.fields['status'].choices = [
             choice for choice in TextbookTaskDraft.STATUS_CHOICES

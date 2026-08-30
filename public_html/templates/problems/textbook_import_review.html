@@ -11,6 +11,7 @@
   </div>
 </div>
 {% if draft.imported_task %}<p class="msg">Эта задача уже в базе: <a href="{% url 'task_detail' draft.imported_task_id %}" target="_blank" rel="noopener">открыть сохранённую версию</a>.</p>{% endif %}
+{% if review_locked %}<p class="helptext">Черновик только для просмотра: после загрузки в каталог сверка его не меняет. Исправления — в карточке задачи.</p>{% endif %}
 {% if draft.warnings %}<div class="msg msg-warning"><strong>Требует внимания:</strong> {{ draft.warnings|join:'; ' }}</div>{% endif %}
 <form method="post" class="import-review-grid">{% csrf_token %}
   <section class="card">
@@ -93,12 +94,14 @@
       <span class="field-label">Результат проверки</span>
       {{ form.status.errors }}
       <div class="import-status-buttons" role="radiogroup" aria-label="Результат проверки">{% for value, label in form.status.field.choices %}<input class="import-status-radio" type="radio" name="status" id="id_status_{{ forloop.counter0 }}" value="{{ value }}"{% if form.status.value == value or not form.status.value and draft.status == value %} checked{% endif %}><button type="button" class="btn btn-secondary import-status-button{% if form.status.value == value or not form.status.value and draft.status == value %} is-active{% endif %}" data-status="{{ value }}" data-radio-id="id_status_{{ forloop.counter0 }}" aria-pressed="{% if form.status.value == value or not form.status.value and draft.status == value %}true{% else %}false{% endif %}">{{ label }}</button>{% endfor %}</div>
-      <p class="helptext import-review-status-hint">«Одобрена», «Конфликт» и «Пропущена» только выбирают статус. Запись — после «Сохранить» или «Сохранить и дальше».</p>
+      <p class="helptext import-review-status-hint">{% if review_locked %}Статус «Импортировано» зафиксирован. {% else %}«Одобрена», «Конфликт» и «Пропущена» только выбирают статус. Запись — после «Сохранить» или «Сохранить и дальше».{% endif %}</p>
     </div>
     <div class="form-buttons">
       {% if previous %}<a class="btn btn-secondary" href="{% url 'textbook_import_review' batch.pk previous.pk %}">← Предыдущая</a>{% endif %}
+      {% if not review_locked %}
       <button class="btn btn-secondary" type="submit">Сохранить</button>
       <button class="btn" type="submit" name="save_next" value="1">Сохранить и дальше</button>
+      {% endif %}
       {% if following %}<a class="btn btn-secondary" href="{% url 'textbook_import_review' batch.pk following.pk %}">Следующая →</a>{% endif %}
     </div>
   </div>

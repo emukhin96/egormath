@@ -1200,7 +1200,8 @@ def textbook_import_quick_topic(request, batch_pk, pk):
     """Горячее назначение темы одной строке партии — как в базе задач."""
     batch = _own_import_batch(request, batch_pk)
     draft = get_object_or_404(TextbookTaskDraft, batch=batch, pk=pk)
-    if batch.status == TextbookImportBatch.STATUS_IMPORTED:
+    if (batch.status == TextbookImportBatch.STATUS_IMPORTED
+            or draft.status == TextbookTaskDraft.STATUS_IMPORTED):
         return JsonResponse(
             {'ok': False, 'message': 'Загруженную партию нельзя изменять.'},
             status=400)
@@ -1256,6 +1257,14 @@ def textbook_import_review(request, batch_pk, pk):
         TextbookTaskDraft.objects.select_related('topic', 'imported_task'),
         batch=batch, pk=pk)
     original_subitems = [dict(item) for item in draft.subitems]
+    if (request.method == 'POST'
+            and draft.status == TextbookTaskDraft.STATUS_IMPORTED):
+        messages.error(
+            request,
+            'Импортированную задачу нельзя изменять в сверке. '
+            'Правки — в карточке задачи.')
+        return redirect(
+            'textbook_import_review', batch_pk=batch.pk, pk=draft.pk)
     if request.method == 'POST':
         form = TextbookDraftReviewForm(request.POST, instance=draft)
         if form.is_valid():
@@ -1342,6 +1351,7 @@ def textbook_import_review(request, batch_pk, pk):
         'review_subitems': review_subitems,
         'previous': previous,
         'following': following,
+        'review_locked': draft.status == TextbookTaskDraft.STATUS_IMPORTED,
         'draft_images': draft_images,
         'topic_candidates': [
             {**item, 'reason_label': candidate_reason_label(item.get('reason'))}
