@@ -10,8 +10,10 @@ from problems.models import (Task, TaskImage, TaskSource,
                              TextbookImportBatch, TextbookTaskDraft, Topic)
 from problems.tests import make_teacher
 from problems.textbook_import import (TextbookImportError, attach_image_archive,
-                                      commit_batch, create_batch_from_bundle)
-from problems.textbook_topics import match_topic_candidates
+                                      commit_batch, create_batch_from_bundle,
+                                      repair_ziv_batch_leaks)
+from problems.textbook_topics import (match_topic_candidates,
+                                      suggested_topic_for_drafts)
 from worksheets.models import Collection, WorksheetItem
 
 
@@ -266,26 +268,30 @@ class TextbookImportTests(TestCase):
         self.assertEqual(Task.objects.count(), 2)
         self.assertEqual(TaskSource.objects.count(), 2)
 
-    def test_reimport_rejects_changed_subitem_text(self):
-        topic = Topic.objects.create(name='Тема подпунктов')
-        first_payload = bundle(subitems=[{
-            'label': 'а', 'text_latex': '$1+1$',
-            'author_answer_latex': '2',
-        }])
-        first = self.create_batch(first_payload)
+    def test_reimport_marks_same_key_as_imported(self):
+        topic = Topic.objects.create(name='Тема повторного ключа')
+        first = self.create_batch()
         first.drafts.update(
             status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
         commit_batch(first, user=self.teacher)
+        task = Task.objects.get()
+        first.drafts.get().refresh_from_db()
+        self.assertEqual(
+            first.drafts.get().status, TextbookTaskDraft.STATUS_IMPORTED)
 
-        second_payload = bundle(subitems=[{
-            'label': 'а', 'text_latex': '$2+2$',
-            'author_answer_latex': '4',
-        }])
-        second = self.create_batch(second_payload)
-        second.drafts.update(
-            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
-        with self.assertRaisesMessage(TextbookImportError, 'условие подпункта'):
-            commit_batch(second, user=self.teacher)
+        second = self.create_batch(bundle(text_latex='Другое условие $x=0$.'))
+        draft = second.drafts.get()
+        self.assertEqual(draft.status, TextbookTaskDraft.STATUS_IMPORTED)
+        self.assertEqual(draft.imported_task_id, task.pk)
+        self.assertTrue(any('уже есть в базе' in item for item in draft.warnings))
+        self.assertEqual(Task.objects.count(), 1)
+
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse(
+            'textbook_import_detail', args=[second.pk]))
+        self.assertContains(response, 'Импортировано')
+        self.assertContains(response, reverse('task_detail', args=[task.pk]))
+        self.assertContains(response, 'target="_blank"')
 
     def test_another_editor_cannot_extend_owned_collection(self):
         topic = Topic.objects.create(name='Тема владельца')
@@ -368,7 +374,50 @@ class TextbookImportTests(TestCase):
         self.assertContains(review, 'Результат проверки')
         self.assertContains(review, 'value="needs_review" checked')
         self.assertContains(review, 'Сохранить и дальше')
+        self.assertContains(review, 'import-source-edit')
+        self.assertContains(review, 'Править исходник ответа')
+        self.assertContains(
+            review,
+            'только выбирают статус. Запись — после «Сохранить»')
+        self.assertContains(review, 'import-review-actions')
+        self.assertContains(review, 'import-wrap-math')
+        self.assertContains(review, '$…$')
+        self.assertNotContains(review, 'Взять решение у ключа')
+        self.assertNotContains(review, 'Кандидаты с решениями')
         self.assertContains(detail, '>Импорт<')
+
+    def test_review_shows_two_column_subitems_in_letter_order(self):
+        batch = self.create_batch(bundle(
+            text_latex='Сравните значения выражений:',
+            subitems=[
+                {'label': 'а', 'text_latex': r'$\sqrt{47}$ и $\sqrt{7}$'},
+                {'label': 'в', 'text_latex': r'$0,8^{-2}$ и $0,8^{-1}$'},
+                {'label': 'б', 'text_latex': r'$2^{1/2}$ и $4^{1/4}$'},
+                {'label': 'г', 'text_latex': r'$(1,06)^{-5}$ и 1'},
+            ],
+            author_answer_latex='', author_solution_latex='',
+        ))
+        draft = batch.drafts.get()
+        draft.subitems = [
+            {'label': 'а', 'text_latex': r'$\sqrt{47}$ и $\sqrt{7}$',
+             'author_answer_latex': '', 'author_solution_latex': ''},
+            {'label': 'в', 'text_latex': r'$0,8^{-2}$ и $0,8^{-1}$',
+             'author_answer_latex': '', 'author_solution_latex': ''},
+            {'label': 'б', 'text_latex': r'$2^{1/2}$ и $4^{1/4}$',
+             'author_answer_latex': '', 'author_solution_latex': ''},
+            {'label': 'г', 'text_latex': r'$(1,06)^{-5}$ и 1',
+             'author_answer_latex': '', 'author_solution_latex': ''},
+        ]
+        draft.save(update_fields=['subitems'])
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse(
+            'textbook_import_review', args=[batch.pk, draft.pk]))
+        labels = [
+            item['label'] for item in response.context['review_subitems']]
+        self.assertEqual(labels, ['а', 'б', 'в', 'г'])
+        html = response.content.decode()
+        self.assertLess(html.index('Подпункт а'), html.index('Подпункт б'))
+        self.assertLess(html.index('Подпункт б'), html.index('Подпункт в'))
 
     def test_review_edits_subitem_author_materials_and_uses_topic_picker(self):
         first_topic = Topic.objects.create(name='Первая тема')
@@ -397,11 +446,11 @@ class TextbookImportTests(TestCase):
         self.assertContains(response, 'Старый ответ.')
         self.assertContains(response, 'name="subitem_author_solution_0"')
         self.assertContains(response, 'Старое решение.')
+        self.assertContains(response, 'Править исходник условия')
+        self.assertContains(response, 'Править исходник ответа')
+        self.assertContains(response, 'Править исходник решения')
         self.assertNotContains(response, 'name="author_answer_latex"')
         self.assertNotContains(response, 'name="author_solution_latex"')
-        self.assertContains(
-            response,
-            'Ответ и решение редактируются отдельно внутри каждого подпункта')
         self.assertContains(response, 'data-tax-picker')
         self.assertContains(response, 'data-single="1"')
         self.assertContains(response, 'Тема: код или название')
@@ -569,64 +618,11 @@ class TextbookImportTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         draft.refresh_from_db()
-        self.assertEqual(draft.subitems, reordered)
-
-    def test_review_copies_author_materials_from_candidate_subitems(self):
-        payload = bundle(
-            subitems=[
-                {'label': 'а', 'text_latex': 'Первый подпункт.'},
-                {'label': 'б', 'text_latex': 'Второй подпункт.'},
-            ],
-            author_answer_latex='', author_solution_latex='',
-        )
-        payload['tasks'].append(dict(
-            payload['tasks'][0], external_id='1.2.38', source_number='38',
-            subitems=[
-                {
-                    'label': 'а', 'text_latex': 'Другой первый подпункт.',
-                    'author_answer_latex': 'Ответ а.',
-                    'author_solution_latex': 'Решение а.',
-                },
-                {
-                    'label': 'б', 'text_latex': 'Другой второй подпункт.',
-                    'author_answer_latex': 'Ответ б.',
-                    'author_solution_latex': 'Решение б.',
-                },
-            ],
-        ))
-        batch = self.create_batch(payload)
-        target = batch.drafts.get(external_id='1.2.37')
-        self.client.login(username='teacher1', password='pass12345')
-        url = reverse(
-            'textbook_import_review', args=[batch.pk, target.pk])
-
-        response = self.client.get(url)
-        self.assertContains(response, '1.2.38')
-
-        response = self.client.post(url, {
-            'external_id': target.external_id,
-            'source_number': target.source_number,
-            'text_latex': target.text_latex,
-            'subitems': json.dumps(target.subitems),
-            'subitem_author_answer_0': '',
-            'subitem_author_solution_0': '',
-            'subitem_author_answer_1': '',
-            'subitem_author_solution_1': '',
-            'author_answer_latex': '',
-            'author_solution_latex': '',
-            'copy_solution_from': '1.2.38',
-            'status': TextbookTaskDraft.STATUS_REVIEW,
-        })
-
-        self.assertEqual(response.status_code, 302)
-        target.refresh_from_db()
-        self.assertEqual(target.solution_source_external_id, '1.2.38')
         self.assertEqual(
-            [item['author_solution_latex'] for item in target.subitems],
-            ['Решение а.', 'Решение б.'])
-        self.assertEqual(
-            [item['author_answer_latex'] for item in target.subitems],
-            ['Ответ а.', 'Ответ б.'])
+            [item['label'] for item in draft.subitems], ['а', 'б'])
+        by_label = {item['label']: item for item in draft.subitems}
+        self.assertEqual(by_label['а']['author_solution_latex'], 'Первое решение.')
+        self.assertEqual(by_label['б']['author_solution_latex'], 'Второе решение.')
 
     def test_collection_preview_assigns_topic_to_one_source_section(self):
         payload = bundle()
@@ -722,10 +718,12 @@ class TextbookImportTests(TestCase):
         self.assertEqual(chapter['count'], 2)
         self.assertEqual(chapter['level_label'], 'Глава целиком')
         self.assertTrue(subsection['is_leaf'])
-        self.assertContains(response, 'Глава целиком: Алгебра — 2 задач')
-        self.assertContains(
-            response,
-            'Подраздел: Алгебра › Квадратные уравнения — 1 задач')
+        self.assertContains(response, f'section={chapter["token"]}')
+        self.assertContains(response, f'section={subsection["token"]}')
+        self.assertContains(response, 'Алгебра')
+        self.assertContains(response, 'Квадратные уравнения')
+        self.assertNotContains(response, 'Показать подборку')
+        self.assertNotContains(response, '<optgroup')
 
         response = self.client.post(reverse(
             'textbook_import_assign_section_topic', args=[batch.pk]), {
@@ -758,8 +756,10 @@ class TextbookImportTests(TestCase):
             'textbook_import_detail', args=[batch.pk]))
 
         self.assertContains(response, 'Задание и подпункты')
-        self.assertContains(response, 'Авторский ответ')
-        self.assertContains(response, 'Авторское решение')
+        self.assertContains(response, '>Ответ<')
+        self.assertContains(response, '>Решение<')
+        self.assertContains(response, 'import-status-review')
+        self.assertContains(response, 'title="Не проверена"')
         self.assertContains(response, '$1+1$', html=False)
         self.assertContains(response, 'есть: 1/2')
         html = response.content.decode()
@@ -803,6 +803,7 @@ class TextbookImportTests(TestCase):
         self.assertContains(response, 'Одобрена')
         self.assertContains(response, 'Конфликт')
         self.assertContains(response, 'Пропущена')
+        self.assertContains(response, 'Импортировано')
         self.assertContains(response, 'Подборки')
         self.assertContains(response, 'одной транзакции')
 
@@ -859,39 +860,23 @@ class TextbookImportTests(TestCase):
         second.refresh_from_db()
         self.assertEqual(second.external_id, '1.2.38')
 
-    def test_review_clears_previous_solution_match(self):
-        payload = bundle(author_solution_latex='')
-        payload['tasks'].append(dict(
-            payload['tasks'][0], external_id='solution-37',
-            source_number='решение 37',
-            author_solution_latex='Полное решение.'))
-        batch = self.create_batch(payload)
-        draft = batch.drafts.get(external_id='1.2.37')
+    def test_review_saves_manual_solution_without_copy_key(self):
+        batch = self.create_batch(bundle(author_solution_latex=''))
+        draft = batch.drafts.get()
         self.client.login(username='teacher1', password='pass12345')
         url = reverse(
             'textbook_import_review', args=[batch.pk, draft.pk])
-        base_form = {
+        response = self.client.post(url, {
             'external_id': draft.external_id,
             'source_number': draft.source_number,
             'text_latex': draft.text_latex,
             'subitems': '[]',
             'author_answer_latex': draft.author_answer_latex,
-            'author_solution_latex': '',
+            'author_solution_latex': 'Решение исправлено вручную.',
             'status': TextbookTaskDraft.STATUS_REVIEW,
-        }
-
-        response = self.client.post(
-            url, {**base_form, 'copy_solution_from': 'solution-37'})
+        })
         self.assertEqual(response.status_code, 302)
         draft.refresh_from_db()
-        self.assertEqual(draft.solution_source_external_id, 'solution-37')
-
-        response = self.client.post(
-            url, {**base_form, 'copy_solution_from': '',
-                  'author_solution_latex': 'Решение исправлено вручную.'})
-        self.assertEqual(response.status_code, 302)
-        draft.refresh_from_db()
-        self.assertEqual(draft.solution_source_external_id, '')
         self.assertEqual(
             draft.author_solution_latex, 'Решение исправлено вручную.')
 
@@ -916,39 +901,54 @@ class TextbookImportTests(TestCase):
         self.assertEqual(TaskImage.objects.count(), 1)
         self.assertIn('figure-1', TaskImage.objects.get().filename)
 
-    def test_reimport_attaches_missing_images_to_reused_task(self):
-        topic = Topic.objects.create(name='Тема повторного рисунка')
-        first = self.create_batch()
-        first.drafts.update(
-            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
-        commit_batch(first, user=self.teacher)
-        task = Task.objects.get()
-        self.assertEqual(task.images.count(), 0)
+    def test_commit_section_imports_only_approved_topic(self):
+        topic_a = Topic.objects.create(name='Тема раздела A')
+        payload = bundle(
+            source_path=['Глава', 'Тема A'],
+            collection_key='sec.a',
+            collection_title='Тема A',
+            topic_original='Тема A')
+        payload['tasks'].append(dict(
+            payload['tasks'][0],
+            external_id='1.2.38',
+            source_number='38',
+            text_latex='Задача другого раздела.',
+            source_path=['Глава', 'Тема B'],
+            collection_key='sec.b',
+            collection_title='Тема B',
+            topic_original='Тема B'))
+        batch = self.create_batch(payload)
+        first = batch.drafts.get(external_id='1.2.37')
+        second = batch.drafts.get(external_id='1.2.38')
+        first.status = TextbookTaskDraft.STATUS_APPROVED
+        first.topic = topic_a
+        first.save()
 
-        second = create_batch_from_bundle(
-            bundle(images=['figure-1.png', 'figure-2.png']),
-            user=self.teacher, title='Повтор с рисунками',
-            source_title='Тестовый задачник', source_author='Автор')
-        archive = io.BytesIO()
-        with zipfile.ZipFile(archive, 'w') as zf:
-            zf.writestr('figure-1.png', TINY_PNG)
-            zf.writestr('figure-2.png', TINY_PNG)
-        archive.seek(0)
-        attach_image_archive(
-            second, SimpleUploadedFile('pics.zip', archive.read()))
-        second.drafts.update(
-            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
-        result = commit_batch(second, user=self.teacher)
-        self.assertEqual(result['reused'], 1)
-        names = ' '.join(image.filename for image in task.images.all())
-        self.assertIn('figure-1', names)
-        self.assertIn('figure-2', names)
-        self.assertEqual(task.images.count(), 2)
+        self.client.login(username='teacher1', password='pass12345')
+        detail = self.client.get(
+            reverse('textbook_import_detail', args=[batch.pk]))
+        groups = detail.context['collection_groups']
+        section = next(
+            group for group in groups
+            if group['is_leaf'] and group['path'][-1] == 'Тема A')
+        response = self.client.get(
+            reverse('textbook_import_detail', args=[batch.pk]),
+            {'section': section['token']})
+        self.assertTrue(response.context['selected_group']['can_commit'])
+        self.assertContains(response, 'Загрузить тему в каталог')
 
-        result = commit_batch(second, user=self.teacher)
-        self.assertEqual(result, {
-            'created': 0, 'reused': 0, 'collections': 0})
-        self.assertEqual(task.images.count(), 2)
+        response = self.client.post(
+            reverse('textbook_import_commit_section', args=[batch.pk]),
+            {'section': section['token']})
+        self.assertEqual(response.status_code, 302)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        batch.refresh_from_db()
+        self.assertEqual(first.status, TextbookTaskDraft.STATUS_IMPORTED)
+        self.assertEqual(second.status, TextbookTaskDraft.STATUS_REVIEW)
+        self.assertEqual(batch.status, TextbookImportBatch.STATUS_REVIEW)
+        self.assertEqual(Task.objects.count(), 1)
+        self.assertEqual(first.imported_task_id, Task.objects.get().pk)
 
     def test_import_strips_subitem_marker_and_trailing_space(self):
         batch = self.create_batch(bundle(
@@ -961,6 +961,22 @@ class TextbookImportTests(TestCase):
         draft = batch.drafts.get()
         self.assertEqual(draft.text_latex, 'Найдите значение выражения:')
         self.assertEqual(draft.subitems[0]['text_latex'], r'$564\cdot645$?')
+
+    def test_import_heals_ocr_linebreak_and_spaced_hyphen(self):
+        batch = self.create_batch(bundle(
+            text_latex=(
+                r'Последовательность задана формулой '
+                r'\(c_{n}=-3 n^{2}+\) \(+7 n+4\). '
+                r'\(a_{n}\) - арифметическая прогрессия.'
+            ),
+        ))
+        draft = batch.drafts.get()
+        self.assertEqual(
+            draft.text_latex,
+            r'Последовательность задана формулой '
+            r'\(c_{n}=-3 n^{2}+7 n+4\). '
+            r'\(a_{n}\) — арифметическая прогрессия.',
+        )
 
     def test_bad_image_zip_rolls_back_new_batch(self):
         self.client.login(username='teacher1', password='pass12345')
@@ -1000,6 +1016,113 @@ class TextbookImportTests(TestCase):
         ))
         self.assertIsNone(batch.drafts.get().topic_id)
 
+    def test_ziv_v12_headings_auto_assign_new_topics(self):
+        cases = [
+            (['Контрольные работы', 'Основные тригонометрические тождества',
+              'Вариант 1'], 'ALG.02.18'),
+            (['Самостоятельные работы', 'Степень с рациональным показателем',
+              'Вариант 2'], 'ALG.02.16'),
+            (['Контрольные работы', 'Радианная мера угла', 'Вариант 1'],
+             'ALG.05.17'),
+            (['Самостоятельные работы',
+              'Область определения функции. Возрастание и убывание функции',
+              'Вариант 3'], 'ALG.05.01'),
+            (['Контрольные работы', 'Неравенства, содержащие степень',
+              'Вариант 1'], 'ALG.04.11'),
+            (['Контрольные работы', 'Системы уравнений второй степени',
+              'Вариант 1'], 'ALG.03.15'),
+        ]
+        for source_path, code in cases:
+            topic = Topic.objects.get(code=code)
+            batch = self.create_batch(bundle(
+                external_id=code,
+                source_path=source_path,
+                topic_original=source_path[-1],
+                collection_key=code.lower(),
+                collection_title=source_path[1],
+            ))
+            draft = batch.drafts.get()
+            self.assertEqual(draft.topic_id, topic.pk, source_path)
+            self.assertIn(
+                draft.topic_candidates[0]['reason'],
+                {'exact-alias', 'exact-name'})
+
+    def test_ziv_variant_path_auto_assigns_section_topic(self):
+        topic = Topic.objects.get(code='ALG.06.02')
+        batch = self.create_batch(bundle(
+            source_path=[
+                'Контрольные работы', 'Арифметическая прогрессия',
+                'Вариант 1',
+            ],
+            topic_original='Вариант 1',
+            collection_key='kr/04/v1',
+            collection_title='Арифметическая прогрессия',
+            text_latex='Найдите сумму первых десяти членов.',
+        ))
+        draft = batch.drafts.get()
+        self.assertEqual(draft.topic_id, topic.pk)
+        self.assertIn(
+            draft.topic_candidates[0]['reason'],
+            {'exact-alias', 'exact-name'})
+
+    def test_section_button_assigns_suggested_topic_without_picker(self):
+        topic = Topic.objects.get(code='ALG.06.02')
+        batch = self.create_batch(bundle(
+            source_path=[
+                'Контрольные работы', 'Арифметическая прогрессия',
+                'Вариант 1',
+            ],
+            topic_original='Вариант 1',
+            collection_key='kr/04/v1',
+            collection_title='Арифметическая прогрессия',
+            text_latex='Найдите сумму первых десяти членов.',
+        ))
+        draft = batch.drafts.get()
+        draft.topic = None
+        draft.save(update_fields=['topic'])
+        self.assertEqual(suggested_topic_for_drafts(batch.drafts.all()), topic)
+
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]))
+        token = response.context['selected_section']
+        self.assertEqual(response.context['suggested_topic'], topic)
+        self.assertContains(response, f'Назначить тему: {topic}')
+        self.assertContains(response, 'tax-picker-compact')
+        self.assertContains(response, reverse(
+            'textbook_import_quick_topic', args=[batch.pk, draft.pk]))
+
+        response = self.client.post(reverse(
+            'textbook_import_assign_section_topic', args=[batch.pk]), {
+                'section': token,
+            })
+        self.assertEqual(response.status_code, 302)
+        draft.refresh_from_db()
+        self.assertEqual(draft.topic_id, topic.pk)
+
+    def test_quick_topic_updates_one_draft(self):
+        batch = self.create_batch(bundle(
+            source_path=['Геометрия', 'Треугольники'],
+            topic_original='Треугольники',
+            collection_key='geometry.triangles',
+            collection_title='Треугольники',
+            text_latex='Найдите сторону треугольника.',
+        ))
+        draft = batch.drafts.get()
+        draft.topic = None
+        draft.save(update_fields=['topic'])
+        topic = Topic.objects.get(code='GEO.02')
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(
+            reverse('textbook_import_quick_topic',
+                    args=[batch.pk, draft.pk]),
+            {'topic': str(topic.pk)},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        draft.refresh_from_db()
+        self.assertEqual(draft.topic_id, topic.pk)
+
     def test_upload_parses_ziv_profile_explicitly(self):
         self.client.login(username='teacher1', password='pass12345')
         source = r"""
@@ -1038,7 +1161,7 @@ class TextbookImportTests(TestCase):
         token = response.context['selected_section']
         self.assertContains(response, f'status=needs_review')
         self.assertContains(response, f'section={token}')
-        self.assertContains(response, '<optgroup label="Главы целиком">')
+        self.assertNotContains(response, '<optgroup')
         self.assertContains(response, 'import-bulk-form')
         self.assertContains(response, 'name="ids"')
 
@@ -1105,3 +1228,218 @@ class TextbookImportTests(TestCase):
         response = self.client.post(url, {**form, 'save_next': '1'})
         self.assertRedirects(response, reverse(
             'textbook_import_review', args=[batch.pk, second.pk]))
+
+    def test_repair_ziv_batch_splits_merged_variant_and_trims_heading(self):
+        payload = {
+            'schema_version': 1,
+            'profile': 'ziv',
+            'diagnostics': {},
+            'tasks': [
+                {
+                    'external_id': 'kr/03/v3/1',
+                    'source_number': '1',
+                    'source_path': [
+                        'Контрольные работы', 'Степенная функция', 'Вариант 3',
+                    ],
+                    'collection_key': 'kr/03/v3',
+                    'collection_title': 'Степенная функция',
+                    'topic_original': 'Степенная функция',
+                    'text_latex': (
+                        'Исследуйте функции на четность и нечетность:'),
+                    'subitems': [
+                        {'label': 'а',
+                         'text_latex': r'\(f(x)=x^{4}-3 x^{2}+1\)'},
+                        {'label': 'б', 'text_latex': '\n'.join([
+                            r'\(f(x)=-2 x|x|+4 x^{3}\).',
+                            r'\setcounter{enumi}{1}',
+                            'Найдите области определения функций:',
+                            r'а) \(f(x)=\sqrt{x}\).',
+                            r'Вариант 4',
+                            'Исследуйте функции на четность и нечетность:',
+                            r'а) \(f(x)=3 x^{3}\).',
+                        ])},
+                    ],
+                    'author_answer_latex': '',
+                    'author_solution_latex': '',
+                    'confidence': 1,
+                    'warnings': [],
+                },
+                {
+                    'external_id': 'kr/03/v2/1',
+                    'source_number': '1',
+                    'source_path': [
+                        'Контрольные работы', 'Степенная функция', 'Вариант 2',
+                    ],
+                    'collection_key': 'kr/03/v2',
+                    'collection_title': 'Степенная функция',
+                    'topic_original': 'Степенная функция',
+                    'text_latex': 'Уже существующая задача варианта 2.',
+                    'subitems': [],
+                    'author_answer_latex': '',
+                    'author_solution_latex': '',
+                    'confidence': 1,
+                    'warnings': [],
+                },
+                {
+                    'external_id': 'sr/02/v0/5',
+                    'source_number': '5',
+                    'source_path': [
+                        'Самостоятельные работы',
+                        'Уравнения, сводящиеся к апгебраическим',
+                        'Вариант 0',
+                    ],
+                    'collection_key': 'sr/02/v0',
+                    'collection_title': 'Уравнения, сводящиеся к апгебраическим',
+                    'topic_original': 'Уравнения, сводящиеся к апгебраическим',
+                    'text_latex': '\n'.join([
+                        r'\(x^{2}=1\).',
+                        r'Вариант 2\\',
+                        r'Решите уравнения 1-5:',
+                        r'1.~\(x^{2}=4\).',
+                    ]),
+                    'subitems': [],
+                    'author_answer_latex': '',
+                    'author_solution_latex': '',
+                    'confidence': 1,
+                    'warnings': [],
+                },
+                {
+                    'external_id': 'kr/03/v1/4',
+                    'source_number': '4',
+                    'source_path': [
+                        'Контрольные работы', 'Степенная функция', 'Вариант 1',
+                    ],
+                    'collection_key': 'kr/03/v1',
+                    'collection_title': 'Степенная функция',
+                    'topic_original': 'Степенная функция',
+                    'text_latex': (
+                        r'Решите уравнение \(x=1\).' '\nВариант 2'),
+                    'subitems': [],
+                    'author_answer_latex': '',
+                    'author_solution_latex': '',
+                    'confidence': 1,
+                    'warnings': [],
+                },
+            ],
+        }
+        batch = self.create_batch(payload)
+        stats = batch.diagnostics.get('ziv_leak_repair') or {}
+        first = batch.drafts.get(external_id='kr/03/v3/1')
+        joined = first.text_latex + ''.join(
+            item['text_latex'] for item in first.subitems)
+        self.assertIn('четность', first.text_latex)
+        self.assertNotIn('Вариант 4', joined)
+        self.assertNotIn('Найдите области', joined)
+        self.assertTrue(batch.drafts.filter(external_id='kr/03/v3/2').exists())
+        self.assertTrue(batch.drafts.filter(external_id='kr/03/v4/1').exists())
+        existing = batch.drafts.get(external_id='kr/03/v2/1')
+        self.assertEqual(
+            existing.text_latex, 'Уже существующая задача варианта 2.')
+        trimmed = batch.drafts.get(external_id='kr/03/v1/4')
+        self.assertEqual(trimmed.text_latex, r'Решите уравнение \(x=1\).')
+        self.assertIn('kr/03/v3/2', stats['created'])
+        self.assertIn('kr/03/v1/4', stats['trimmed'])
+        unlabeled = batch.drafts.get(external_id='sr/02/v0/5')
+        self.assertIn(r'x^{2}=1', unlabeled.text_latex)
+        self.assertNotIn('Вариант 2', unlabeled.text_latex)
+        self.assertFalse(batch.drafts.filter(external_id='sr/02/v1/5').exists())
+        self.assertTrue(batch.drafts.filter(external_id='sr/02/v2/1').exists())
+        batch.refresh_from_db()
+        self.assertIn('ziv_uneven_variant_topics', batch.diagnostics)
+        again = repair_ziv_batch_leaks(batch)
+        self.assertEqual(again['created'], [])
+
+    def test_repair_ziv_batch_splits_solve_stem_stuck_to_graph(self):
+        payload = {
+            'schema_version': 1,
+            'profile': 'ziv',
+            'diagnostics': {},
+            'tasks': [{
+                'external_id': 'kr/03/v3/3',
+                'source_number': '3',
+                'source_path': [
+                    'Контрольные работы', 'Степенная функция', 'Вариант 3',
+                ],
+                'collection_key': 'kr/03/v3',
+                'collection_title': 'Степенная функция',
+                'topic_original': 'Степенная функция',
+                'text_latex': 'item Постройте графики функций:',
+                'subitems': [
+                    {'label': 'а', 'text_latex': r'\(y=\sqrt{x-1}\)'},
+                    {'label': 'б', 'text_latex': '\n'.join([
+                        r'\(y=\sqrt{x+1}-2\).',
+                        r'Найдите промежутки, на которых \(y(x)>0\).',
+                        r'Решите уравнения:',
+                        r'а) \(\sqrt{x+2}=x\).',
+                    ])},
+                ],
+                'author_answer_latex': '',
+                'author_solution_latex': '',
+                'confidence': 1,
+                'warnings': [],
+            }],
+        }
+        batch = self.create_batch(payload)
+        stats = batch.diagnostics.get('ziv_leak_repair') or {}
+        graph = batch.drafts.get(external_id='kr/03/v3/3')
+        joined = graph.text_latex + ''.join(
+            item['text_latex'] for item in graph.subitems)
+        self.assertTrue(graph.text_latex.startswith('Постройте'))
+        self.assertNotIn('Решите уравнения', joined)
+        self.assertIn('kr/03/v3/4', stats['created'])
+        solve = batch.drafts.get(external_id='kr/03/v3/4')
+        self.assertIn('Решите уравнения', solve.text_latex)
+
+    def test_ziv_detail_shows_variant_length_summary(self):
+        tasks = []
+        for variant, n in ((1, 4), (2, 4), (3, 3), (4, 2)):
+            for number in range(1, n + 1):
+                tasks.append({
+                    'external_id': f'kr/03/v{variant}/{number}',
+                    'source_number': str(number),
+                    'source_path': [
+                        'Контрольные работы', 'Степенная функция',
+                        f'Вариант {variant}',
+                    ],
+                    'collection_key': f'kr/03/v{variant}',
+                    'collection_title': 'Степенная функция',
+                    'topic_original': 'Степенная функция',
+                    'text_latex': f'Задача {variant}.{number}.',
+                    'subitems': [],
+                    'author_answer_latex': '',
+                    'author_solution_latex': '',
+                    'confidence': 1,
+                    'warnings': [],
+                })
+        batch = self.create_batch({
+            'schema_version': 1,
+            'profile': 'ziv',
+            'diagnostics': {},
+            'tasks': tasks,
+        })
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(
+            reverse('textbook_import_detail', args=[batch.pk]))
+        self.assertContains(response, 'Число задач по вариантам')
+        self.assertContains(response, 'Степенная функция')
+        self.assertContains(response, '4 / 4 / 3 / 2')
+        self.assertContains(response, 'import-ziv-parity-uneven')
+        groups = response.context['collection_groups']
+        chapter = next(
+            group for group in groups
+            if group['path'] == ['Контрольные работы'] and not group['is_leaf'])
+        topic = next(
+            group for group in groups
+            if group['path'] == [
+                'Контрольные работы', 'Степенная функция']
+            and not group['is_leaf'])
+        self.assertContains(response, f'section={chapter["token"]}')
+        self.assertContains(response, f'section={topic["token"]}')
+        self.assertNotContains(response, 'Показать подборку')
+        response = self.client.get(
+            reverse('textbook_import_detail', args=[batch.pk]),
+            {'section': topic['token']})
+        self.assertEqual(response.context['selected_section'], topic['token'])
+        self.assertEqual(
+            response.context['selected_group']['path'],
+            ['Контрольные работы', 'Степенная функция'])

@@ -18,6 +18,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterable, Iterator, Sequence
 
+from .latex_utils import wrap_bare_math
+
 
 SCHEMA_VERSION = 1
 SHESTAKOV_STRUCTURE = {
@@ -85,10 +87,20 @@ PLAIN_ALPHA_ITEM_RE = re.compile(
 # Граница — конец предыдущего пункта (``; . ? :``), а не голая ``a)``
 # внутри формулы.
 INLINE_ALPHA_ITEM_RE = re.compile(
-    r"(?i)(?<=[;.?:])[ \t]*(?P<label>а|б|в|г|д|е|ж|з|a|b|c|d|6)\)[\s~]*")
+    r"(?i)(?<=[;.?:,])[ \t]*(?P<label>а|б|в|г|д|е|ж|з|a|b|c|d|6)\)[\s~]*")
 LEAKED_BOOK_TAIL_RE = re.compile(
     r"(?:\\\\|\s)*§\d+\.[\s\S]*?(?:Уровень\s+[A-DА-Г]\s*)?$",
     re.I)
+# Заголовок следующего варианта, темы или типа работ, прилипший
+# к хвосту условия. Не берём голые «самостоятельную работу» внутри фразы.
+LEAKED_STRUCTURAL_TAIL_RE = re.compile(
+    r"(?im)"
+    r"(?:^|\\\\|\n|(?<=[.!?\)])[ \t]+)"
+    r"(?:"
+    r"\\(?:sub)*section\*?\{[^{}]*\}"
+    r"|Вариант\s+\d+"
+    r"|(?:Самостоятельн|Контрольн|Проверочн)\w*\s+работ"
+    r")")
 BLOCK_WRAPPER_RE = re.compile(
     r"\\(?:begin|end)\{(?:itemize|enumerate|document)\}")
 LIST_ENV_RE = re.compile(
@@ -219,12 +231,178 @@ def clean(value: str) -> str:
     return normalize_imported_text(value.strip())
 
 
-def normalize_imported_text(value: str) -> str:
+# Формулы, которые уже в разделителях KaTeX. Тот же набор, что в latex_utils.
+_MATH_SPAN_RE = re.compile(
+    r'\$\$.*?\$\$|\\\[.*?\\\]|\$.*?\$|\\\(.*?\\\)', re.S)
+# Бинарные операторы и отношения, которые OCR дублирует на переносе строки.
+_OCR_LINEBREAK_OP_RE = re.compile(
+    r'\\(?:leqslant|geqslant|subseteq|subset|cdot|times|neq|leq|geq|'
+    r'cup|cap|in|pm|mp)\b|[+\-=]')
+_OCR_GAP_RE = re.compile(r'(?:\\\\|\\newline|\\par|\\,|~|\s|-)*')
+_MATH_ATOM_RE = re.compile(
+    r'\\[a-zA-Z]+\*?(?:\s*\[[^]]*\])?(?:\s*\{[^{}]*\})*'
+    r'|\d+(?:[.,]\d+)?'
+    r'|[A-Za-z](?:_\{?[A-Za-z0-9]+\})?')
+
+
+def _strip_imported_text(value: str) -> str:
     """Убирает хвостовые переносы OCR и пробел перед конечной пунктуацией."""
     value = str(value or '')
+    value = re.sub(r'(?i)^item\s+', '', value)
     value = re.sub(r'(?:\\\\\s*)+$', '', value).rstrip()
     value = re.sub(r'\s+([?!,.;:])\s*$', r'\1', value)
     return re.sub(r'[,;]+$', '', value).rstrip()
+
+
+def normalize_imported_text(value: str) -> str:
+    """Чистит OCR-текст: переносы, разорванные формулы, тире вне математики."""
+    value = _heal_ocr_linebreak_math(_strip_imported_text(value))
+    return _replace_spaced_hyphen_with_emdash(value)
+
+
+def apply_imported_math(value: str) -> str:
+    """Нормализует импортированный TeX и оборачивает голые формулы в ``$…$``."""
+    # Сначала склеиваем уже обёрнутые `\(…\)`, затем wrap, затем ещё раз:
+    # wrap может обернуть хвост `+1` в `$+1$`, и его тоже надо влить в формулу.
+    # Em dash — только после wrap, иначе минус в голом TeX станет тире.
+    value = _heal_ocr_linebreak_math(_strip_imported_text(value))
+    value = wrap_bare_math(value)
+    value = _heal_ocr_linebreak_math(value)
+    return _replace_spaced_hyphen_with_emdash(value)
+
+
+def _unwrap_math_span(raw: str) -> tuple[str, str, str]:
+    if raw.startswith('$$') and raw.endswith('$$') and len(raw) >= 4:
+        return '$$', raw[2:-2], '$$'
+    if raw.startswith('\\[') and raw.endswith('\\]') and len(raw) >= 4:
+        return '\\[', raw[2:-2], '\\]'
+    if raw.startswith('\\(') and raw.endswith('\\)') and len(raw) >= 4:
+        return '\\(', raw[2:-2], '\\)'
+    if raw.startswith('$') and raw.endswith('$') and len(raw) >= 2:
+        return '$', raw[1:-1], '$'
+    return '', raw, ''
+
+
+def _trailing_linebreak_op(inner: str) -> str:
+    stripped = inner.rstrip()
+    match = None
+    for match in _OCR_LINEBREAK_OP_RE.finditer(stripped):
+        pass
+    if match is None or match.end() != len(stripped):
+        return ''
+    return match.group(0)
+
+
+def _split_leading_linebreak_op(inner: str) -> tuple[str, str]:
+    match = _OCR_LINEBREAK_OP_RE.match(inner.lstrip())
+    if not match:
+        return '', inner
+    leading = len(inner) - len(inner.lstrip())
+    return match.group(0), inner[leading + match.end():]
+
+
+def _is_ocr_formula_gap(gap: str) -> bool:
+    return _OCR_GAP_RE.fullmatch(gap or '') is not None
+
+
+def _is_hyphen_formula_gap(gap: str) -> bool:
+    return '-' in (gap or '') and _is_ocr_formula_gap(gap)
+
+
+def _try_merge_split_math(open_d: str, inner: str, close_d: str,
+                          gap: str, right_raw: str) -> str | None:
+    if not _is_ocr_formula_gap(gap):
+        return None
+    _, right_inner, _ = _unwrap_math_span(right_raw)
+    left_op = _trailing_linebreak_op(inner)
+    right_op, right_rest = _split_leading_linebreak_op(right_inner)
+    if left_op and right_op and left_op == right_op:
+        return open_d + inner.rstrip() + right_rest.lstrip() + close_d
+    if _is_hyphen_formula_gap(gap) and right_op == '-':
+        return open_d + inner.rstrip() + '-' + right_rest.lstrip() + close_d
+    if _is_hyphen_formula_gap(gap):
+        return open_d + inner.rstrip() + ' - ' + right_inner.lstrip() + close_d
+    return None
+
+
+def _try_absorb_operator_tail(inner: str, after: str) -> tuple[str, str] | None:
+    left_op = _trailing_linebreak_op(inner)
+    if not left_op:
+        return None
+    match = re.match(
+        r'((?:\\\\|\\newline|\\par|\\,|~|\s|-)*)'
+        + re.escape(left_op)
+        + r'\s*('
+        + _MATH_ATOM_RE.pattern
+        + r')',
+        after,
+    )
+    if not match:
+        return None
+    return inner.rstrip() + match.group(2), after[match.end():]
+
+
+def _heal_ocr_linebreak_math(text: str) -> str:
+    """Склеивает формулу, разорванную OCR на бинарном операторе.
+
+    Типичные следы переноса в книге: ``\\(…+\\) +1``, ``\\(…+\\) \\(+…\\)``,
+    ``\\(…=\\) \\(=…\\)``, ``\\(…\\) - \\(-…\\)``.
+    """
+    if not text or not _MATH_SPAN_RE.search(text):
+        return text
+    for _ in range(16):
+        pieces = []
+        last = 0
+        matches = list(_MATH_SPAN_RE.finditer(text))
+        changed = False
+        index = 0
+        while index < len(matches):
+            match = matches[index]
+            if match.start() > last:
+                pieces.append(text[last:match.start()])
+            open_d, inner, close_d = _unwrap_math_span(match.group(0))
+            nxt = matches[index + 1] if index + 1 < len(matches) else None
+            gap = text[match.end():nxt.start()] if nxt else text[match.end():]
+            if nxt is not None:
+                merged = _try_merge_split_math(
+                    open_d, inner, close_d, gap, nxt.group(0))
+                if merged is not None:
+                    pieces.append(merged)
+                    last = nxt.end()
+                    index += 2
+                    changed = True
+                    continue
+            absorbed = _try_absorb_operator_tail(inner, gap)
+            if absorbed is not None:
+                new_inner, rest = absorbed
+                pieces.append(open_d + new_inner + close_d + rest)
+                last = nxt.start() if nxt is not None else len(text)
+                index += 1
+                changed = True
+                continue
+            pieces.append(match.group(0))
+            last = match.end()
+            index += 1
+        if last < len(text):
+            pieces.append(text[last:])
+        text = ''.join(pieces)
+        if not changed:
+            break
+    return text
+
+
+def _replace_spaced_hyphen_with_emdash(text: str) -> str:
+    """Вне математики заменяет `` - `` на типографское тире."""
+    if ' - ' not in text:
+        return text
+    parts = []
+    last = 0
+    for match in _MATH_SPAN_RE.finditer(text):
+        parts.append(text[last:match.start()].replace(' - ', ' — '))
+        parts.append(match.group(0))
+        last = match.end()
+    parts.append(text[last:].replace(' - ', ' — '))
+    return ''.join(parts)
 
 
 def strip_leading_subitem_label(text: str, label: str) -> str:
@@ -349,6 +527,63 @@ def _subitem_marker_data(body: str) -> list[tuple[int, int, str, int]]:
     return markers_with_depth
 
 
+def split_leaked_structural_tail(text: str) -> tuple[str, str]:
+    """Отрезает прилипший заголовок следующего варианта, темы или §."""
+    text = str(text or "")
+    if not text:
+        return text, ""
+    matches = [
+        match for match in (
+            LEAKED_BOOK_TAIL_RE.search(text),
+            LEAKED_STRUCTURAL_TAIL_RE.search(text),
+        ) if match
+    ]
+    if not matches:
+        return text, ""
+    start = min(match.start() for match in matches)
+    return text[:start], text[start:]
+
+
+def reconstruct_imported_body(text_latex: str, subitems) -> str:
+    """Собирает условие и подпункты обратно в один блок для повторного разбора."""
+    parts = []
+    lead = str(text_latex or "").strip()
+    if lead:
+        parts.append(lead)
+    for item in subitems or []:
+        if isinstance(item, dict):
+            label = str(item.get("label") or "").strip()
+            text = str(item.get("text_latex") or "")
+        else:
+            label = str(getattr(item, "label", "") or "").strip()
+            text = str(getattr(item, "text_latex", "") or "")
+        if not text.strip():
+            continue
+        parts.append(f"{label}) {text}" if label else text)
+    return "\n".join(parts)
+
+
+def _ziv_embedded_stem(body: str):
+    """Вторая формулировка («Решите уравнения:») внутри уже собранного условия."""
+    for match in ZIV_BARE_STEM_RE.finditer(body):
+        prefix = re.sub(r'(?i)^item\s+', '', body[:match.start()]).strip()
+        if prefix:
+            return match
+    return None
+
+
+def draft_has_ziv_leak(text_latex: str, subitems) -> bool:
+    """Есть ли в черновике хвост другого варианта, setcounter или вторая задача."""
+    if re.match(r'(?i)^item\s+', str(text_latex or '').lstrip()):
+        return True
+    body = reconstruct_imported_body(text_latex, subitems)
+    if split_leaked_structural_tail(body)[1].strip():
+        return True
+    if ZIV_ENUMI_RE.search(body):
+        return True
+    return _ziv_embedded_stem(body) is not None
+
+
 def split_subitems(
         body: str, *, normalize_punctuation: bool = True,
         minimum_items: int = 2,
@@ -410,9 +645,13 @@ def split_subitems(
     parent = collapse_repeated_lead(parent)
     if items:
         items[-1].text_latex = normalize_imported_text(
-            LEAKED_BOOK_TAIL_RE.sub("", items[-1].text_latex))
+            split_leaked_structural_tail(items[-1].text_latex)[0])
+        if not items[-1].text_latex:
+            items = items[:-1]
+        items = order_letter_subitems(items)
     else:
-        parent = normalize_imported_text(LEAKED_BOOK_TAIL_RE.sub("", parent))
+        parent = normalize_imported_text(
+            split_leaked_structural_tail(parent)[0])
     return parent, items
 
 
@@ -468,6 +707,9 @@ def normalize_task_images(body: str) -> tuple[str, list[str]]:
 def task_from_block(marker: Marker, body: str, source_path: list[str]) -> TaskDraft:
     body, images = normalize_task_images(body)
     text, subitems = split_subitems(body)
+    text = apply_imported_math(text)
+    for item in subitems:
+        item.text_latex = apply_imported_math(item.text_latex)
     topic = source_path[-1] if source_path else ""
     warnings = []
     confidence = 1.0
@@ -800,6 +1042,31 @@ def _normalized_subitem_label(label: str) -> str:
     return aliases.get(value, value)
 
 
+_LETTER_ORDER = tuple("abcdefgh")
+
+
+def order_letter_subitems(items, *, get_label=None):
+    """Если метки — перестановка алфавитного префикса, вернуть канонический порядок.
+
+    Двухколоночный OCR Зива часто отдаёт ``а, в, б, г`` (сначала левая
+    колонка). Для неполного или числового набора меток порядок не меняем.
+    """
+    if not items or len(items) < 2:
+        return items
+    if get_label is None:
+        def get_label(item):
+            return item.get("label") if isinstance(item, dict) else item.label
+    keys = [_normalized_subitem_label(get_label(item)) for item in items]
+    if len(set(keys)) != len(keys):
+        return items
+    expected = set(_LETTER_ORDER[:len(items)])
+    if set(keys) != expected:
+        return items
+    ranked = sorted(
+        zip(items, keys), key=lambda pair: _LETTER_ORDER.index(pair[1]))
+    return [item for item, _key in ranked]
+
+
 def _solution_subitem_pairs(
         task_subitems: Sequence[SubitemDraft],
         solution_subitems: Sequence[SubitemDraft],
@@ -882,6 +1149,20 @@ def split_full_solution(
         [],
         flattened_solution,
     )
+
+
+def _positional_answer_chunks(text: str, count: int) -> list[str] | None:
+    """Режет компактный ответ без меток, если фрагментов ровно столько, сколько пунктов."""
+    if not text or count < 2:
+        return None
+    parts = [
+        strip_subitem_punct(part)
+        for part in re.split(r"\s*;\s*", text)
+        if part.strip()
+    ]
+    if len(parts) != count:
+        return None
+    return parts
 
 
 def merge_solutions(
@@ -970,16 +1251,27 @@ def merge_solutions(
                 task.warnings.append(
                     "Не совпали подпункты условия и решения")
                 task.confidence = max(0.0, task.confidence - 0.25)
-        if task.subitems:
+        if (task.subitems and found and not distributed_to_subitems):
+            compact = (task.author_answer_latex or flattened_solution or "")
+            chunks = _positional_answer_chunks(compact, len(task.subitems))
+            if chunks:
+                for subitem, chunk in zip(task.subitems, chunks):
+                    if not subitem.author_answer_latex:
+                        subitem.author_answer_latex = chunk
+                distributed_to_subitems = True
+        if task.subitems and distributed_to_subitems:
             # У задачи с подпунктами авторские материалы принадлежат только
             # подпунктам. Родительские поля иначе дублируются в интерфейсе и
-            # PDF и скрывают ошибку автоматического сопоставления.
+            # PDF.
             task.author_answer_latex = ""
             task.author_solution_latex = ""
-            if found and not distributed_to_subitems:
-                task.warnings.append(
-                    "Авторский материал не удалось распределить по подпунктам")
-                task.confidence = max(0.0, task.confidence - 0.25)
+        elif (task.subitems and found and not any(
+                "Не совпали подпункты" in warning
+                for warning in task.warnings)):
+            # Компактный ответ оставляем у родителя, чтобы редактор его видел.
+            task.warnings.append(
+                "Авторский материал не удалось распределить по подпунктам")
+            task.confidence = max(0.0, task.confidence - 0.25)
         task.images.extend(
             image for image in solution_images if image not in task.images)
         image_numbers = {
@@ -994,15 +1286,15 @@ def merge_solutions(
                 value,
             )
 
-        task.author_answer_latex = renumber_taskpics(
-            task.author_answer_latex)
-        task.author_solution_latex = renumber_taskpics(
-            task.author_solution_latex)
+        task.author_answer_latex = apply_imported_math(renumber_taskpics(
+            task.author_answer_latex))
+        task.author_solution_latex = apply_imported_math(renumber_taskpics(
+            task.author_solution_latex))
         for subitem in task.subitems:
-            subitem.author_answer_latex = renumber_taskpics(
-                subitem.author_answer_latex)
-            subitem.author_solution_latex = renumber_taskpics(
-                subitem.author_solution_latex)
+            subitem.author_answer_latex = apply_imported_math(
+                renumber_taskpics(subitem.author_answer_latex))
+            subitem.author_solution_latex = apply_imported_math(
+                renumber_taskpics(subitem.author_solution_latex))
         matched += 1
     return {
         "solution_marker_occurrences": len(allowed_markers),
@@ -1171,46 +1463,192 @@ def parse_galitsky(text: str) -> tuple[list[TaskDraft], dict]:
 
 
 ZIV_VARIANT_RE = re.compile(
-    r"(?im)^\s*(?:\\section\*?\{\s*)?Вариант\s+(\d+)\s*\}?\s*$"
+    r"(?im)(?:^|(?<=\\\\)|(?<=\}))\s*(?:\\section\*?\{\s*)?"
+    r"Вариант\s+(\d+)\s*\}?\.?\s*(?:\\\\)?"
+)
+ZIV_INLINE_VARIANT_RE = re.compile(
+    r"(?im)Вариант\s+(\d+)\s*\.\s+(?=\d{1,2}\.[~\s])"
 )
 ZIV_TOPIC_RE = re.compile(r"^(?P<num>\d+)\.\s+(?P<title>.+)$")
 ZIV_INLINE_NUM_RE = re.compile(
-    r"(?:^|(?<=[\n.\\\\;])|(?<=\)))\s*(?P<number>\d{1,2})\.\s+"
+    r"(?:^|(?<=[\n.\\\\;])|(?<=\)))\s*(?P<number>\d{1,2})\.[~\s]+"
 )
+ZIV_ENUMI_RE = re.compile(r"\\setcounter\{enumi\}\{(\d+)\}")
+# OCR теряет \item, но оставляет формулировку с двоеточием.
+# «Найдите промежутки, на которых …» — продолжение, не новая задача.
+ZIV_BARE_STEM_RE = re.compile(
+    r"(?:(?m)^[ \t]*|(?<=[.!?;])[ \t]+|(?<=\\\\)\s*|(?<=\))[ \t]+"
+    r"|(?<=Вариант \d)[ \t\\]+|(?<=Вариант \d\d)[ \t\\]+)"
+    r"(?P<stem>"
+    r"(?:Исследуйте|Выясните|Определите|Сравните|Упростите|Вычислите|"
+    r"Выполните|Постройте|Решите|Разложите|Докажите|"
+    r"Не строя графиков|"
+    r"Найдите области|Найдите значение|Найдите корень|"
+    r"Принадлежит ли"
+    r")[^\n.]{0,70}:)"
+)
+ZIV_TASK_BOUNDARY_KINDS = frozenset(
+    {"section", "variant", "item", "inline", "enumi", "stem", "bare"}
+)
+ZIV_SECTION_VARIANT_RE = re.compile(r"(?i)^вариант\s+(\d+)\s*$")
+ZIV_BARE_ITEM_RE = re.compile(r"\\item(?!\[)")
+ZIV_WORK_NUM_RE = re.compile(r"№\s*(?P<num>\d+)")
 
 
 def _ziv_work_code(title: str) -> str | None:
-    if re.search(r"(?i)самостоятельн", title):
+    """Тип работ. Нумерованная тема («7. Итоговая контрольная») — не глава."""
+    cleaned = re.sub(r"\s+", " ", title).strip()
+    if re.match(r"\d+\.", cleaned) or ZIV_WORK_NUM_RE.search(cleaned):
+        return None
+    if re.search(r"(?i)самостоятельн", cleaned):
         return "sr"
-    if re.search(r"(?i)контрольн", title):
+    if re.search(r"(?i)контрольн", cleaned):
         return "kr"
+    if re.search(r"(?i)проверочн", cleaned):
+        return "pr"
     return None
 
 
 def _ziv_topic_parts(title: str) -> tuple[int, str]:
-    match = ZIV_TOPIC_RE.match(re.sub(r"\s+", " ", title).strip())
+    cleaned = re.sub(r"\s+", " ", title).strip()
+    if ZIV_SECTION_VARIANT_RE.match(cleaned):
+        return 0, ""
+    match = ZIV_TOPIC_RE.match(cleaned)
     if match:
         return int(match.group("num")), clean(match.group("title"))
+    numbered = ZIV_WORK_NUM_RE.search(cleaned)
+    if numbered:
+        return int(numbered.group("num")), clean(cleaned)
+    if cleaned.isdigit():
+        return int(cleaned), "Тема"
     return 0, clean(title)
+
+
+def _ziv_item_topic_heading(number: str, body: str) -> tuple[int, str] | None:
+    """OCR часто пишет «\\item[10.] Четность…» вместо \\section темы."""
+    if not str(number).isdigit():
+        return None
+    topic_num = int(number)
+    # Обычные задачи Зива — номера 1–7; 8+ в OCR — это заголовок следующей темы.
+    if topic_num < 8 or topic_num > 30:
+        return None
+    first = re.split(r"(?:\\\\|\n)", str(body or ""), 1)[0]
+    first = re.sub(r"\\item\[[^\]]*\]", "", first)
+    if not _ziv_looks_like_topic_title(first):
+        return None
+    return topic_num, clean(first)
+
+
+def _ziv_effective_variant(topic_num: int, variant: int) -> int:
+    if variant > 0:
+        return variant
+    return 1 if topic_num > 0 else 0
 
 
 def _ziv_locator(work: str, topic_num: int, variant: int, number: str) -> str:
     return f"{work}/{topic_num:02d}/v{variant}/{number}"
 
 
+def _ziv_known_topics(walked) -> list[tuple[str, int, str]]:
+    known = []
+    seen: set[tuple[str, int]] = set()
+    for marker, path, _key, _body in walked:
+        parts = marker.external_id.split("/")
+        if len(parts) < 3:
+            continue
+        work, topic = parts[0], parts[1]
+        try:
+            topic_num = int(topic)
+        except ValueError:
+            continue
+        if topic_num <= 0:
+            continue
+        identity = (work, topic_num)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        title = path[1] if len(path) > 1 else ""
+        known.append((work, topic_num, title))
+    return known
+
+
+def _ziv_match_known_topic(title: str, work: str, known) -> tuple[int, str] | None:
+    cleaned = re.sub(r"\s+", " ", title).strip().lower()
+    if not cleaned or cleaned == "тема":
+        return None
+    for kwork, knum, ktitle in known:
+        if kwork != work:
+            continue
+        other = ktitle.lower()
+        if other and (other == cleaned or other in cleaned or cleaned in other):
+            return knum, ktitle
+    return None
+
+
+def _ziv_follows_marker(text: str, pos: int, spans: list[tuple[int, int]]) -> bool:
+    """Формулировка сразу после \\item / номера / setcounter — не новая задача."""
+    return any(
+        end <= pos and not re.search(r"\S", text[end:pos])
+        for _start, end in spans
+    )
+
+
 def _ziv_state_events(text: str) -> list[tuple[int, str, object]]:
     events: list[tuple[int, str, object]] = []
     for section in sections(text):
         events.append((section.start, "section", section))
+    variant_spans: list[tuple[int, int]] = []
     for match in ZIV_VARIANT_RE.finditer(text):
         events.append((match.start(), "variant", int(match.group(1))))
+        variant_spans.append((match.start(), match.end()))
+    for match in ZIV_INLINE_VARIANT_RE.finditer(text):
+        start, end = match.start(), match.end()
+        if any(start >= lo and start < hi for lo, hi in variant_spans):
+            continue
+        events.append((start, "variant", int(match.group(1))))
+    task_spans: list[tuple[int, int]] = []
     for marker in item_markers(text):
         events.append((marker.start, "item", marker))
+        task_spans.append((marker.start, marker.end))
     for match in ZIV_INLINE_NUM_RE.finditer(text):
-        events.append((
-            match.start(), "inline",
-            Marker(match.start(), match.end(), match.group("number")),
-        ))
+        start = match.start()
+        if any(lo <= start < hi for lo, hi in task_spans):
+            continue
+        prefix = text[max(0, start - 12):start]
+        if re.search(r"(?i)рис\.?\s*$", prefix):
+            continue
+        marker = Marker(start, match.end(), match.group("number"))
+        events.append((start, "inline", marker))
+        task_spans.append((start, match.end()))
+    for match in ZIV_ENUMI_RE.finditer(text):
+        skip = re.match(r"[\s\\]+", text[match.end():])
+        start = match.end() + (skip.end() if skip else 0)
+        marker = Marker(start, start, str(int(match.group(1)) + 1))
+        events.append((match.start(), "enumi", marker))
+        task_spans.append((match.start(), start))
+    for match in ZIV_BARE_STEM_RE.finditer(text):
+        start = match.start("stem")
+        if _ziv_follows_marker(text, start, task_spans):
+            continue
+        # «Решите уравнения 1-5:» / «Решите системы 1-5:» — общая формулировка.
+        after = text[match.end():]
+        if re.match(r"(?:\s|\\\\)*1\.[~\s]", after) or re.match(
+                r"(?:\s|\\\\)*\\item\[1\.", after) or re.match(
+                r"(?:\s|\\\\)*\\begin\{(?:enumerate|itemize)\}", after):
+            continue
+        marker = Marker(start, start, "")
+        events.append((start, "stem", marker))
+        task_spans.append((start, match.end()))
+    for match in ZIV_BARE_ITEM_RE.finditer(text):
+        start = match.start()
+        if any(lo <= start < hi for lo, hi in task_spans):
+            continue
+        prefix = text[max(0, start - 80):start]
+        if re.search(r"\\setcounter\{enumi\}\{\d+\}\s*$", prefix):
+            continue
+        marker = Marker(start, match.end(), "")
+        events.append((start, "bare", marker))
+        task_spans.append((start, match.end()))
     events.sort(key=lambda item: (item[0], item[1] != "item"))
     return events
 
@@ -1219,7 +1657,13 @@ def _ziv_looks_like_topic_title(body: str) -> bool:
     cleaned = clean(body)
     if not cleaned or len(cleaned) > 160:
         return False
-    if "$" in cleaned or r"\(" in cleaned or r"\begin" in cleaned:
+    if "$" in cleaned or r"\(" in cleaned or r"\[" in cleaned or r"\begin" in cleaned:
+        return False
+    if re.match(
+            r"(?i)(?:решите|найдите|постройте|упростите|вычислите|"
+            r"докажите|сравните|выполните|установите|две |два |"
+            r"имеется|лыжник|сколько|дано:|при каких|между )",
+            cleaned):
         return False
     return True
 
@@ -1243,64 +1687,284 @@ def _ziv_split_task_and_answer(text: str) -> tuple[str, str]:
     return text[:answer_start], text[answer_start:]
 
 
-def _ziv_walk(text: str, *, items_only: bool = True) -> list[tuple[Marker, list[str], str, str]]:
+def _ziv_trim_next_variant(body: str) -> str:
+    """Не оставляет следующий вариант, тему или тип работ в теле задачи."""
+    return split_leaked_structural_tail(body)[0]
+
+
+def _ziv_walk(
+        text: str, *, items_only: bool = True,
+        include_inline: bool | None = None,
+        known_topics=None) -> list[tuple[Marker, list[str], str, str]]:
     """Строит маркеры Зива с ключом работа/тема/вариант/номер."""
+    emit_inline = (not items_only) if include_inline is None else include_inline
+    emit_boundaries = not items_only
     work, work_title = "xx", "Раздел"
     topic_num, topic_title = 0, "Тема"
     variant = 0
+    last_num = 0
     seen: set[tuple[int, str]] = set()
     result: list[tuple[Marker, list[str], str, str]] = []
     events = _ziv_state_events(text)
     for index, (pos, kind, payload) in enumerate(events):
         if kind == "section":
+            variant_title = ZIV_SECTION_VARIANT_RE.match(
+                re.sub(r"\s+", " ", payload.title).strip())
+            if variant_title:
+                variant = int(variant_title.group(1))
+                last_num = 0
+                if emit_boundaries:
+                    result.append((
+                        Marker(pos, pos, "__ziv_boundary__"), [], "", ""))
+                continue
             code = _ziv_work_code(payload.title)
             if code:
                 work, work_title = code, clean(payload.title)
                 topic_num, topic_title = 0, "Тема"
                 variant = 0
+                last_num = 0
             else:
                 topic_num, topic_title = _ziv_topic_parts(payload.title)
+                if topic_num == 0 and known_topics:
+                    matched = _ziv_match_known_topic(
+                        topic_title, work, known_topics)
+                    if matched:
+                        topic_num, topic_title = matched
                 variant = 0
-            if not items_only:
+                last_num = 0
+            if emit_boundaries:
                 result.append((
                     Marker(pos, pos, "__ziv_boundary__"), [], "", ""))
             continue
         if kind == "variant":
             variant = payload
-            if not items_only:
+            last_num = 0
+            if emit_boundaries:
                 result.append((
                     Marker(pos, pos, "__ziv_boundary__"), [], "", ""))
             continue
-        if items_only and kind != "item":
+        if kind in {"inline", "enumi", "stem", "bare"} and not emit_inline:
             continue
-        if kind not in {"item", "inline"}:
+        if kind not in {"item", "inline", "enumi", "stem", "bare"}:
             continue
         marker: Marker = payload
-        next_pos = events[index + 1][0] if index + 1 < len(events) else len(text)
-        body = text[marker.end:next_pos]
-        if kind == "item" and variant == 0 and _ziv_looks_like_topic_title(body):
-            topic_num = int(marker.external_id)
-            topic_title = clean(body)
+        if kind in {"stem", "bare"}:
+            last_num += 1
+            marker = Marker(marker.start, marker.end, str(last_num))
+        elif marker.external_id.isdigit():
+            last_num = int(marker.external_id)
+        next_pos = len(text)
+        for later_pos, later_kind, _later in events[index + 1:]:
+            if later_kind in ZIV_TASK_BOUNDARY_KINDS and (
+                    later_kind != "inline" or emit_inline):
+                next_pos = later_pos
+                break
+        body = _ziv_trim_next_variant(text[marker.end:next_pos])
+        heading = _ziv_item_topic_heading(marker.external_id, body)
+        if (heading is None and variant == 0 and marker.external_id.isdigit()
+                and _ziv_looks_like_topic_title(body)):
+            heading = (int(marker.external_id), clean(body))
+        if heading is not None:
+            next_variant = None
+            next_real_section = False
+            for _later_pos, later_kind, later in events[index + 1:]:
+                if later_kind == "variant":
+                    next_variant = later
+                    break
+                if later_kind == "section":
+                    later_title = re.sub(r"\s+", " ", later.title).strip()
+                    variant_title = ZIV_SECTION_VARIANT_RE.match(later_title)
+                    if variant_title:
+                        next_variant = int(variant_title.group(1))
+                        break
+                    if (_ziv_work_code(later.title)
+                            or _ziv_topic_parts(later.title)[0]):
+                        next_real_section = True
+                        break
+                    break
+                if later_kind in ZIV_TASK_BOUNDARY_KINDS:
+                    break
+            if next_variant == 1 or next_real_section:
+                topic_num, topic_title = heading
+                variant = 0
+                last_num = 0
             continue
         identity = (marker.start, kind)
         if identity in seen:
             continue
         seen.add(identity)
-        locator = _ziv_locator(work, topic_num, variant, marker.external_id)
-        path = [work_title, topic_title, f"Вариант {variant}"]
+        effective_variant = _ziv_effective_variant(topic_num, variant)
+        locator = _ziv_locator(
+            work, topic_num, effective_variant, marker.external_id)
+        path = [work_title, topic_title, f"Вариант {effective_variant}"]
         result.append((
             Marker(marker.start, marker.end, locator),
             path,
-            f"{work}/{topic_num:02d}/v{variant}",
+            f"{work}/{topic_num:02d}/v{effective_variant}",
             body,
         ))
     return result
 
 
+ZIV_UNEVEN_VARIANT_WARNING = (
+    "Нечётное число вариантов с одинаковым числом задач: "
+    "возможно, задачи разных вариантов слиплись"
+)
+ZIV_LEAKED_HEADING_WARNING = (
+    "С условия срезан прилипший заголовок варианта, темы или типа работ"
+)
+ZIV_LOOKS_LIKE_HEADING_WARNING = (
+    "Похоже на заголовок темы, а не на задачу"
+)
+ZIV_SPLIT_FROM_WARNING = (
+    "Выделено из слипшегося условия соседней задачи"
+)
+
+
+def _ziv_topic_variant(external_id: str) -> tuple[str, str] | None:
+    """Разбирает ключ Зива ``sr/09/v1/3`` → (``sr/09``, ``v1``)."""
+    parts = str(external_id or "").split("/")
+    if len(parts) < 4:
+        return None
+    work, topic, variant = parts[0], parts[1], parts[2]
+    if not variant.startswith("v") or not variant[1:].isdigit():
+        return None
+    return f"{work}/{topic}", variant
+
+
+def _ziv_variant_counts(tasks: Sequence[TaskDraft]) -> dict[str, dict[str, int]]:
+    groups: dict[str, dict[str, int]] = {}
+    for task in tasks:
+        parsed = _ziv_topic_variant(task.external_id)
+        if parsed is None:
+            continue
+        topic_key, variant = parsed
+        groups.setdefault(topic_key, {})
+        groups[topic_key][variant] = groups[topic_key].get(variant, 0) + 1
+    return groups
+
+
+def _ziv_apply_variant_parity(tasks: Sequence[TaskDraft]) -> list[dict]:
+    """В Зиве пары 1–2, 3–4, 5–6, 7–8 одинаковы: число вариантов
+    с одним и тем же количеством задач должно быть чётным."""
+    uneven = []
+    counts = _ziv_variant_counts(tasks)
+    flagged: set[str] = set()
+    for topic_key, by_variant in counts.items():
+        if len(by_variant) < 2:
+            continue
+        freq = Counter(by_variant.values())
+        if all(n % 2 == 0 for n in freq.values()):
+            continue
+        flagged.add(topic_key)
+        uneven.append({
+            "topic": topic_key,
+            "variants": dict(sorted(by_variant.items())),
+        })
+    if not flagged:
+        return []
+    for task in tasks:
+        parsed = _ziv_topic_variant(task.external_id)
+        if parsed is None or parsed[0] not in flagged:
+            continue
+        if ZIV_UNEVEN_VARIANT_WARNING not in task.warnings:
+            task.warnings.append(ZIV_UNEVEN_VARIANT_WARNING)
+    return uneven
+
+
+def _ziv_heading_like_title(value: str) -> bool:
+    cleaned = re.sub(r"\s+", " ", str(value or "")).strip()
+    return bool(cleaned) and bool(re.match(r"(?i)вариант\s+\d+$", cleaned))
+
+
+def _ziv_draft_work_title(source_path, work_code: str) -> str:
+    if source_path:
+        title = str(source_path[0]).strip()
+        if _ziv_work_code(title):
+            return title
+    if work_code == "kr":
+        return "Контрольные работы"
+    if work_code == "pr":
+        return "Проверочные работы"
+    return "Самостоятельные работы"
+
+
+def _ziv_draft_topic_title(
+        source_path, collection_title: str = "",
+        topic_original: str = "") -> str:
+    candidates = []
+    if source_path and len(source_path) > 1:
+        candidates.append(source_path[1])
+    candidates.extend([collection_title, topic_original])
+    for title in candidates:
+        cleaned = re.sub(r"\s+", " ", str(title or "")).strip()
+        if cleaned and not _ziv_heading_like_title(cleaned):
+            return cleaned
+    return "Тема"
+
+
+def wrap_ziv_draft_for_rewalk(
+        external_id: str, source_path, body: str, *,
+        collection_title: str = "", topic_original: str = "") -> str:
+    """Оборачивает уже сохранённый черновик, чтобы снова прогнать _ziv_walk."""
+    parts = str(external_id or "").split("/")
+    work_code = parts[0] if parts else "sr"
+    try:
+        topic_num = int(parts[1]) if len(parts) > 1 else 0
+    except ValueError:
+        topic_num = 0
+    variant = 1
+    if len(parts) > 2 and parts[2].startswith("v") and parts[2][1:].isdigit():
+        variant = int(parts[2][1:])
+    number = parts[3] if len(parts) > 3 else "1"
+    work_title = _ziv_draft_work_title(source_path, work_code)
+    topic_title = _ziv_draft_topic_title(
+        source_path, collection_title, topic_original)
+    heading = f"{topic_num}. {topic_title}" if topic_num else topic_title
+    return (
+        f"\\section*{{{work_title}}}\n"
+        f"\\section*{{{heading}}}\n"
+        f"Вариант {variant}\n"
+        f"\\begin{{itemize}}\n"
+        f"  \\item[{number}.] {body}\n"
+        f"\\end{{itemize}}\n"
+    )
+
+
+def rewalk_ziv_merged_body(
+        external_id: str, source_path, text_latex: str, subitems, *,
+        collection_title: str = "", topic_original: str = "",
+        known_topics=None) -> list[TaskDraft]:
+    """Повторно режет слипшийся черновик Зива на отдельные задачи."""
+    body = reconstruct_imported_body(text_latex, subitems)
+    wrapped = wrap_ziv_draft_for_rewalk(
+        external_id, source_path, body,
+        collection_title=collection_title,
+        topic_original=topic_original)
+    walked = _ziv_walk(
+        wrapped, items_only=True, include_inline=True,
+        known_topics=known_topics)
+    results = []
+    seen: set[str] = set()
+    for marker, path, key, task_body in walked:
+        if marker.external_id in seen:
+            continue
+        seen.add(marker.external_id)
+        task = task_from_block(marker, task_body, path)
+        task.collection_key = key
+        task.collection_title = (
+            path[1] if len(path) > 1 else task.collection_title)
+        if len(path) > 1:
+            task.topic_original = path[1]
+        task.source_number = marker.external_id.rsplit("/", 1)[-1]
+        results.append(task)
+    return results
+
+
 def parse_ziv(text: str) -> tuple[list[TaskDraft], dict]:
     """Профиль Зива: ключ = тип работы / тема / вариант / локальный номер."""
     task_text, answer_text = _ziv_split_task_and_answer(text)
-    walked = _ziv_walk(task_text, items_only=True)
+    walked = _ziv_walk(task_text, items_only=True, include_inline=True)
     raw_count = len(walked)
     markers = [item[0] for item in walked]
     unique, duplicates = unique_markers(markers)
@@ -1324,14 +1988,18 @@ def parse_ziv(text: str) -> tuple[list[TaskDraft], dict]:
         task.collection_title = (
             task.source_path[1] if len(task.source_path) > 1
             else task.collection_title)
+        if len(task.source_path) > 1:
+            task.topic_original = task.source_path[1]
         task.source_number = task.external_id.rsplit("/", 1)[-1]
         if task.external_id in duplicates:
             task.warnings.append("Неоднозначный локальный номер Зива")
             task.confidence = max(0.0, task.confidence - 0.35)
+    uneven = _ziv_apply_variant_parity(tasks)
     allowed = {task.external_id for task in tasks}
     answer_markers = [
         marker for marker, _path, _key, _body in _ziv_walk(
-            answer_text, items_only=False)
+            answer_text, items_only=False,
+            known_topics=_ziv_known_topics(walked))
         if marker.external_id in allowed
         or marker.external_id == "__ziv_boundary__"
     ]
@@ -1339,6 +2007,7 @@ def parse_ziv(text: str) -> tuple[list[TaskDraft], dict]:
         "task_marker_occurrences": raw_count,
         "unique_tasks": len(tasks),
         "duplicate_task_ids": sorted(duplicates),
+        "ziv_uneven_variant_topics": uneven,
     }
     diagnostics.update(merge_solutions(
         tasks, answer_text,

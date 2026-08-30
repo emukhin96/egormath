@@ -620,11 +620,13 @@ class TextbookTaskDraft(models.Model):
     STATUS_APPROVED = 'approved'
     STATUS_CONFLICT = 'conflict'
     STATUS_SKIPPED = 'skipped'
+    STATUS_IMPORTED = 'imported'
     STATUS_CHOICES = [
         (STATUS_REVIEW, 'Не проверена'),
         (STATUS_APPROVED, 'Одобрена'),
         (STATUS_CONFLICT, 'Конфликт'),
         (STATUS_SKIPPED, 'Пропущена'),
+        (STATUS_IMPORTED, 'Импортировано'),
     ]
 
     batch = models.ForeignKey(

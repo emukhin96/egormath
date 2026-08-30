@@ -3,7 +3,7 @@
   {% if draft.text_latex %}<div class="math-content task-text">{{ draft.text_latex|web_text|linebreaksbr }}</div>{% endif %}
   {% if draft.subitems %}
   <ol class="subitems">
-    {% for subitem in draft.subitems %}<li><span class="math-content">{{ subitem.text_latex|web_text }}</span>{{ subitem.text_latex|subitem_tail:forloop.last }}</li>{% endfor %}
+    {% for subitem in draft.subitems|ordered_subitems %}<li><span class="math-content">{{ subitem.text_latex|web_text }}</span>{{ subitem.text_latex|subitem_tail:forloop.last }}</li>{% endfor %}
   </ol>
   {% elif not draft.text_latex %}
   <span class="muted">Нет текста условия</span>

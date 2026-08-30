@@ -23,8 +23,19 @@ from .models import (Source, Task, TaskImage, TaskSource, TaskSubitem,
                      TextbookImportAsset, TextbookImportBatch,
                      TextbookTaskDraft)
 from .rubricator import set_task_topics
-from .textbook_parser import (collapse_repeated_lead, normalize_imported_text,
-                              strip_leading_subitem_label)
+from .textbook_parser import (ZIV_LEAKED_HEADING_WARNING,
+                              ZIV_LOOKS_LIKE_HEADING_WARNING,
+                              ZIV_SPLIT_FROM_WARNING,
+                              ZIV_UNEVEN_VARIANT_WARNING, Marker,
+                              apply_imported_math, collapse_repeated_lead,
+                              draft_has_ziv_leak, _ziv_apply_variant_parity,
+                              _ziv_draft_topic_title,
+                              _ziv_looks_like_topic_title,
+                              _ziv_topic_variant, order_letter_subitems,
+                              reconstruct_imported_body,
+                              rewalk_ziv_merged_body,
+                              split_leaked_structural_tail,
+                              strip_leading_subitem_label, task_from_block)
 from .textbook_topics import apply_topic_suggestions
 
 
@@ -75,17 +86,17 @@ def normalize_subitems(value):
                 f'Подпункт {index} должен быть объектом.')
         label = str(item.get('label') or index)[:16]
         text = strip_leading_subitem_label(
-            normalize_imported_text(_required_string(item, 'text_latex')),
+            apply_imported_math(_required_string(item, 'text_latex')),
             label)
         result.append({
             'label': label,
             'text_latex': text,
-            'author_answer_latex': str(
-                item.get('author_answer_latex') or '').strip(),
-            'author_solution_latex': str(
-                item.get('author_solution_latex') or '').strip(),
+            'author_answer_latex': apply_imported_math(
+                item.get('author_answer_latex') or ''),
+            'author_solution_latex': apply_imported_math(
+                item.get('author_solution_latex') or ''),
         })
-    return result
+    return order_letter_subitems(result)
 
 
 def _confidence(value):
@@ -143,22 +154,24 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
         status = row.get('review_status', TextbookTaskDraft.STATUS_REVIEW)
         if status not in valid_statuses:
             status = TextbookTaskDraft.STATUS_REVIEW
-        # Парсер не может сам одобрить строку: решение принимает человек.
-        if status == TextbookTaskDraft.STATUS_APPROVED:
+        # Парсер не может сам одобрить или закрыть строку.
+        if status in {
+                TextbookTaskDraft.STATUS_APPROVED,
+                TextbookTaskDraft.STATUS_IMPORTED}:
             status = TextbookTaskDraft.STATUS_REVIEW
         path = _string_list(row.get('source_path'), 'source_path')
         warnings = _string_list(row.get('warnings'), 'warnings')
         images = _string_list(row.get('images'), 'images')
         subitems = normalize_subitems(row.get('subitems'))
-        text_latex = collapse_repeated_lead(normalize_imported_text(
+        text_latex = collapse_repeated_lead(apply_imported_math(
             _required_string(row, 'text_latex', allow_blank=True)))
         if not text_latex and not subitems:
             raise TextbookImportError(
                 f'Задача {external_id} не содержит условия или подпунктов.')
-        author_answer_latex = str(
-            row.get('author_answer_latex') or '').strip()
-        author_solution_latex = str(
-            row.get('author_solution_latex') or '').strip()
+        author_answer_latex = apply_imported_math(
+            row.get('author_answer_latex') or '')
+        author_solution_latex = apply_imported_math(
+            row.get('author_solution_latex') or '')
         if subitems:
             author_answer_latex = ''
             author_solution_latex = ''
@@ -189,8 +202,12 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             status=status,
         ))
     apply_topic_suggestions(drafts)
+    mark_already_imported_drafts(drafts, source)
     TextbookTaskDraft.objects.bulk_create(drafts, batch_size=500)
     refresh_image_warnings(batch)
+    if batch.profile == 'ziv':
+        repair_ziv_batch_leaks(batch)
+        batch.refresh_from_db()
     return batch
 
 
@@ -234,6 +251,34 @@ def parse_tex_uploads(tasks_upload, *, profile, solutions_upload=None):
     return asdict(bundle)
 
 
+ALREADY_IMPORTED_WARNING = (
+    'Ключ уже есть в базе; повторно не загружается.')
+ALREADY_IMPORTED_TEXT_WARNING = (
+    'Ключ уже есть в базе, условие отличается от сохранённого.')
+
+
+def mark_already_imported_drafts(drafts, source):
+    """Помечает строки с тем же ключом источника как уже импортированные."""
+    locators = [draft.external_id for draft in drafts]
+    refs = {
+        ref.locator: ref
+        for ref in TaskSource.objects.select_related('task').filter(
+            source=source, locator__in=locators)
+    }
+    for draft in drafts:
+        ref = refs.get(draft.external_id)
+        if ref is None:
+            continue
+        draft.imported_task = ref.task
+        draft.status = TextbookTaskDraft.STATUS_IMPORTED
+        warning = (
+            ALREADY_IMPORTED_TEXT_WARNING
+            if draft.text_latex.strip() != ref.task.text_latex.strip()
+            else ALREADY_IMPORTED_WARNING)
+        if warning not in draft.warnings:
+            draft.warnings = list(draft.warnings) + [warning]
+
+
 def refresh_image_warnings(batch):
     """Оставляет блокирующее предупреждение только у несопоставленных рисунков."""
     resolved = set(batch.assets.values_list('stem', flat=True))
@@ -252,6 +297,316 @@ def refresh_image_warnings(batch):
     if drafts:
         TextbookTaskDraft.objects.bulk_update(drafts, ['warnings'])
     return batch
+
+
+def _ziv_known_topics_from_drafts(drafts):
+    known = []
+    seen = set()
+    for draft in drafts:
+        parsed = _ziv_topic_variant(draft.external_id)
+        if parsed is None:
+            continue
+        work, topic = parsed[0].split('/', 1)
+        try:
+            topic_num = int(topic)
+        except ValueError:
+            continue
+        identity = (work, topic_num)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        title = _ziv_draft_topic_title(
+            draft.source_path, draft.collection_title, draft.topic_original)
+        known.append((work, topic_num, title))
+    return known
+
+
+def _copy_subitem_author_fields(old_subitems, new_subitems):
+    old_by_label = {
+        str(item.get('label') or ''): item
+        for item in (old_subitems or [])
+        if isinstance(item, dict)
+    }
+    for item in new_subitems:
+        prev = old_by_label.get(str(item.get('label') or ''))
+        if not prev:
+            continue
+        if not item.get('author_answer_latex') and prev.get(
+                'author_answer_latex'):
+            item['author_answer_latex'] = prev['author_answer_latex']
+        if not item.get('author_solution_latex') and prev.get(
+                'author_solution_latex'):
+            item['author_solution_latex'] = prev['author_solution_latex']
+    return new_subitems
+
+
+def _warnings_without(warnings, *removed):
+    drop = set(removed)
+    return [item for item in (warnings or []) if item not in drop]
+
+
+def _append_warning(warnings, warning):
+    items = list(warnings or [])
+    if warning not in items:
+        items.append(warning)
+    return items
+
+
+def refresh_ziv_variant_parity(batch):
+    """Пересчитывает предупреждение о нечётных вариантах Зива по текущим строкам."""
+    drafts = list(
+        batch.drafts.exclude(status=TextbookTaskDraft.STATUS_SKIPPED))
+    fakes = []
+    for draft in drafts:
+        fake = type('DraftParity', (), {})()
+        fake.external_id = draft.external_id
+        fake.warnings = _warnings_without(
+            draft.warnings, ZIV_UNEVEN_VARIANT_WARNING)
+        fakes.append(fake)
+    uneven = _ziv_apply_variant_parity(fakes)
+    by_id = {fake.external_id: fake.warnings for fake in fakes}
+    updates = []
+    for draft in drafts:
+        warnings = by_id.get(draft.external_id, _warnings_without(
+            draft.warnings, ZIV_UNEVEN_VARIANT_WARNING))
+        if warnings != list(draft.warnings or []):
+            draft.warnings = warnings
+            updates.append(draft)
+    if updates:
+        TextbookTaskDraft.objects.bulk_update(updates, ['warnings'])
+    diagnostics = dict(batch.diagnostics or {})
+    diagnostics['ziv_uneven_variant_topics'] = uneven
+    batch.diagnostics = diagnostics
+    batch.save(update_fields=['diagnostics', 'updated_at'])
+    return uneven
+
+
+def ziv_variant_summary(batch):
+    """Сводка длин вариантов по темам Зива для страницы партии."""
+    if str(batch.profile or '') != 'ziv':
+        return []
+    rows = {}
+    uneven_keys = {
+        item.get('topic')
+        for item in (batch.diagnostics or {}).get(
+            'ziv_uneven_variant_topics') or []
+        if isinstance(item, dict) and item.get('topic')
+    }
+    drafts = (batch.drafts.exclude(status=TextbookTaskDraft.STATUS_SKIPPED)
+              .only('external_id', 'collection_title', 'source_path',
+                    'topic_original'))
+    for draft in drafts:
+        parsed = _ziv_topic_variant(draft.external_id)
+        if parsed is None:
+            continue
+        topic_key, variant = parsed
+        work = ''
+        if draft.source_path:
+            work = str(draft.source_path[0]).strip()
+        if not work:
+            if topic_key.startswith('kr/'):
+                work = 'Контрольные работы'
+            elif topic_key.startswith('pr/'):
+                work = 'Проверочные работы'
+            else:
+                work = 'Самостоятельные работы'
+        row = rows.setdefault(topic_key, {
+            'key': topic_key,
+            'title': '',
+            'work': work,
+            'variants': {},
+        })
+        row['variants'][variant] = row['variants'].get(variant, 0) + 1
+        title = (draft.collection_title or '').strip()
+        if not title and draft.source_path and len(draft.source_path) > 1:
+            title = str(draft.source_path[1]).strip()
+        if not title:
+            title = (draft.topic_original or '').strip()
+        if title:
+            row['title'] = title
+        if work:
+            row['work'] = work
+    summary = []
+    for key, row in sorted(rows.items()):
+        counts = [row['variants'][name]
+                  for name in sorted(row['variants'])]
+        summary.append({
+            'key': key,
+            'work': row['work'],
+            'title': row['title'] or key,
+            'counts_label': ' / '.join(str(n) for n in counts),
+            'total': sum(counts),
+            'uneven': key in uneven_keys,
+        })
+    return summary
+
+
+@transaction.atomic
+def repair_ziv_batch_leaks(batch):
+    """Срезает прилипшие заголовки и выделяет слипшиеся задачи уже залитой партии."""
+    if str(batch.profile or '') != 'ziv':
+        raise TextbookImportError('Пересчёт слипаний есть только у профиля ziv.')
+    drafts = list(batch.drafts.order_by('external_id', 'pk'))
+    existing = {draft.external_id: draft for draft in drafts}
+    known_topics = _ziv_known_topics_from_drafts(drafts)
+    topic_by_key = {}
+    for draft in drafts:
+        parsed = _ziv_topic_variant(draft.external_id)
+        if parsed and draft.topic_id:
+            topic_by_key.setdefault(parsed[0], draft.topic_id)
+    trimmed_ids = []
+    created_ids = []
+    collision_ids = []
+    skipped_heading_ids = []
+    to_update = []
+    to_create = []
+
+    for draft in drafts:
+        if not draft_has_ziv_leak(draft.text_latex, draft.subitems):
+            continue
+        parsed = _ziv_topic_variant(draft.external_id)
+        source_topic = parsed[0] if parsed else None
+        source_number = draft.external_id.rsplit('/', 1)[-1]
+        old_subitems = list(draft.subitems or [])
+        old_text = draft.text_latex
+        extracted = rewalk_ziv_merged_body(
+            draft.external_id, draft.source_path, draft.text_latex,
+            draft.subitems, collection_title=draft.collection_title,
+            topic_original=draft.topic_original,
+            known_topics=known_topics)
+        same = next(
+            (task for task in extracted
+             if task.external_id == draft.external_id),
+            None)
+        if same is None and source_topic:
+            same = next(
+                (task for task in extracted
+                 if task.external_id.rsplit('/', 1)[-1] == source_number
+                 and _ziv_topic_variant(task.external_id)
+                 and _ziv_topic_variant(task.external_id)[0] == source_topic),
+                None)
+        if same is None:
+            kept, tail = split_leaked_structural_tail(
+                reconstruct_imported_body(draft.text_latex, draft.subitems))
+            if not tail.strip():
+                continue
+            same = task_from_block(
+                Marker(0, 0, draft.external_id), kept, draft.source_path)
+            extracted = [same]
+
+        new_subitems = _copy_subitem_author_fields(
+            old_subitems,
+            normalize_subitems([asdict(item) for item in same.subitems]))
+        new_text = same.text_latex
+        if not new_text and not new_subitems:
+            continue
+        structure_changed = (
+            new_text != old_text or new_subitems != old_subitems)
+        if structure_changed:
+            draft.text_latex = new_text
+            draft.subitems = new_subitems
+            if new_subitems:
+                draft.author_answer_latex = ''
+                draft.author_solution_latex = ''
+            draft.warnings = _append_warning(
+                draft.warnings, ZIV_LEAKED_HEADING_WARNING)
+            if (not new_subitems
+                    and _ziv_looks_like_topic_title(new_text)):
+                draft.status = TextbookTaskDraft.STATUS_SKIPPED
+                draft.warnings = _append_warning(
+                    draft.warnings, ZIV_LOOKS_LIKE_HEADING_WARNING)
+                skipped_heading_ids.append(draft.external_id)
+            elif (draft.status == TextbookTaskDraft.STATUS_APPROVED
+                    and len(new_subitems) != len(old_subitems)):
+                draft.status = TextbookTaskDraft.STATUS_REVIEW
+            to_update.append(draft)
+            trimmed_ids.append(draft.external_id)
+
+        for task in extracted:
+            if same is not None and task.external_id == same.external_id:
+                continue
+            if task.external_id == draft.external_id:
+                continue
+            other = _ziv_topic_variant(task.external_id)
+            if source_topic and (other is None or other[0] != source_topic):
+                continue
+            try:
+                task_number = int(task.external_id.rsplit('/', 1)[-1])
+            except ValueError:
+                continue
+            if task_number > 8:
+                continue
+            if (not task.subitems
+                    and _ziv_looks_like_topic_title(task.text_latex)):
+                continue
+            if task.external_id in existing:
+                collision_ids.append(task.external_id)
+                continue
+            if not task.text_latex and not task.subitems:
+                continue
+            warnings = list(task.warnings)
+            if ZIV_SPLIT_FROM_WARNING not in warnings:
+                warnings.append(ZIV_SPLIT_FROM_WARNING)
+            created = TextbookTaskDraft(
+                batch=batch,
+                external_id=task.external_id,
+                source_number=task.source_number or task.external_id,
+                source_path=task.source_path,
+                collection_key=task.collection_key,
+                collection_title=task.collection_title,
+                topic_original=task.topic_original,
+                topic_id=topic_by_key.get(other[0] if other else ''),
+                text_latex=task.text_latex,
+                subitems=normalize_subitems(
+                    [asdict(item) for item in task.subitems]),
+                images=list(task.images or []),
+                author_answer_latex='',
+                author_solution_latex='',
+                confidence=_confidence(task.confidence),
+                warnings=warnings,
+                status=TextbookTaskDraft.STATUS_REVIEW,
+            )
+            existing[task.external_id] = created
+            to_create.append(created)
+            created_ids.append(task.external_id)
+
+    if to_update:
+        TextbookTaskDraft.objects.bulk_update(to_update, [
+            'text_latex', 'subitems', 'author_answer_latex',
+            'author_solution_latex', 'warnings', 'status',
+        ])
+    if to_create:
+        apply_topic_suggestions(to_create)
+        TextbookTaskDraft.objects.bulk_create(to_create, batch_size=500)
+    leftover = []
+    for draft in batch.drafts.exclude(status=TextbookTaskDraft.STATUS_SKIPPED):
+        try:
+            number = int(str(draft.external_id).rsplit('/', 1)[-1])
+        except ValueError:
+            number = 0
+        if number <= 8:
+            continue
+        draft.status = TextbookTaskDraft.STATUS_SKIPPED
+        draft.warnings = _append_warning(
+            draft.warnings, ZIV_LOOKS_LIKE_HEADING_WARNING)
+        leftover.append(draft)
+        skipped_heading_ids.append(draft.external_id)
+    if leftover:
+        TextbookTaskDraft.objects.bulk_update(
+            leftover, ['status', 'warnings'])
+    uneven = refresh_ziv_variant_parity(batch)
+    batch.refresh_from_db()
+    diagnostics = dict(batch.diagnostics or {})
+    diagnostics['ziv_leak_repair'] = {
+        'trimmed': trimmed_ids,
+        'created': created_ids,
+        'collisions': sorted(set(collision_ids)),
+        'skipped_headings': skipped_heading_ids,
+    }
+    diagnostics['ziv_uneven_variant_topics'] = uneven
+    batch.diagnostics = diagnostics
+    batch.save(update_fields=['diagnostics', 'updated_at'])
+    return diagnostics['ziv_leak_repair']
 
 
 def attach_image_archive(batch, upload, max_bytes=80 * 1024 * 1024):
@@ -447,8 +802,13 @@ def _attach_task_images(task, draft, batch):
 
 
 @transaction.atomic
-def commit_batch(batch, *, user):
-    """Загружает полностью проверенную партию; повторный вызов безопасен."""
+def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
+    """Загружает одобренные черновики; повторный вызов безопасен.
+
+    draft_ids — только эти одобренные строки (загрузка одной темы).
+    require_complete — вся партия должна быть проверена; иначе достаточно
+    выбранных строк, и партия остаётся на проверке.
+    """
     from worksheets.models import WorksheetItem
 
     batch = (TextbookImportBatch.objects.select_for_update()
@@ -457,23 +817,27 @@ def commit_batch(batch, *, user):
         raise TextbookImportError('Эту партию может загрузить только редактор.')
     if batch.status == TextbookImportBatch.STATUS_IMPORTED:
         return {'created': 0, 'reused': 0, 'collections': 0}
-    blockers = batch.drafts.filter(status__in=[
-        TextbookTaskDraft.STATUS_REVIEW,
-        TextbookTaskDraft.STATUS_CONFLICT,
-    ]).count()
-    if blockers:
-        raise TextbookImportError(
-            f'Осталось непроверенных или конфликтных строк: {blockers}.')
-    missing_topics = batch.drafts.filter(
-        status=TextbookTaskDraft.STATUS_APPROVED, topic__isnull=True).count()
+    if require_complete:
+        blockers = batch.drafts.filter(status__in=[
+            TextbookTaskDraft.STATUS_REVIEW,
+            TextbookTaskDraft.STATUS_CONFLICT,
+        ]).count()
+        if blockers:
+            raise TextbookImportError(
+                f'Осталось непроверенных или конфликтных строк: {blockers}.')
+    approved = batch.drafts.filter(status=TextbookTaskDraft.STATUS_APPROVED)
+    if draft_ids is not None:
+        approved = approved.filter(pk__in=draft_ids)
+    if not require_complete and not approved.exists():
+        raise TextbookImportError('Нет одобренных задач для загрузки.')
+    missing_topics = approved.filter(topic__isnull=True).count()
     if missing_topics:
         raise TextbookImportError(
             f'У одобренных задач не выбрана тема рубрикатора: '
             f'{missing_topics}.')
     resolved_stems = set(batch.assets.values_list('stem', flat=True))
     missing_assets = sum(
-        1 for draft in batch.drafts.filter(
-            status=TextbookTaskDraft.STATUS_APPROVED).only('images')
+        1 for draft in approved.only('images')
         if unmatched_image_names(draft, resolved_stems))
     if missing_assets:
         raise TextbookImportError(
@@ -487,8 +851,7 @@ def commit_batch(batch, *, user):
     initial_collection_count = Collection.objects.filter(
         source=batch.source).count()
 
-    for draft in batch.drafts.filter(
-            status=TextbookTaskDraft.STATUS_APPROVED).select_related('topic'):
+    for draft in approved.select_related('topic'):
         ref = (TaskSource.objects.select_related('task')
                .filter(source=batch.source, locator=draft.external_id).first())
         if ref:
@@ -548,10 +911,17 @@ def commit_batch(batch, *, user):
                     worksheet=worksheet, task=task, order=order)
 
         draft.imported_task = task
-        draft.save(update_fields=['imported_task'])
+        draft.status = TextbookTaskDraft.STATUS_IMPORTED
+        draft.save(update_fields=['imported_task', 'status'])
 
-    batch.status = TextbookImportBatch.STATUS_IMPORTED
-    batch.save(update_fields=['status', 'updated_at'])
+    leftover = batch.drafts.filter(status__in=[
+        TextbookTaskDraft.STATUS_REVIEW,
+        TextbookTaskDraft.STATUS_CONFLICT,
+        TextbookTaskDraft.STATUS_APPROVED,
+    ])
+    if require_complete or not leftover.exists():
+        batch.status = TextbookImportBatch.STATUS_IMPORTED
+        batch.save(update_fields=['status', 'updated_at'])
     collection_count = (Collection.objects.filter(source=batch.source).count()
                         - initial_collection_count)
     return {

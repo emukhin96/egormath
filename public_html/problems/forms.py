@@ -150,9 +150,15 @@ class TextbookDraftReviewForm(forms.ModelForm):
     text_latex = forms.CharField(
         label='Условие (LaTeX)', required=False,
         widget=forms.Textarea(attrs={'rows': 8}))
-    copy_solution_from = forms.CharField(
-        label='Взять решение у ключа', max_length=190, required=False,
-        help_text='Оставьте пустым, чтобы править текущий текст вручную')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk and (
+                self.instance.status == TextbookTaskDraft.STATUS_IMPORTED):
+            return
+        self.fields['status'].choices = [
+            choice for choice in TextbookTaskDraft.STATUS_CHOICES
+            if choice[0] != TextbookTaskDraft.STATUS_IMPORTED]
 
     class Meta:
         model = TextbookTaskDraft
@@ -168,10 +174,19 @@ class TextbookDraftReviewForm(forms.ModelForm):
         }
 
     def clean_text_latex(self):
-        from .textbook_parser import (collapse_repeated_lead,
-                                      normalize_imported_text)
-        return collapse_repeated_lead(normalize_imported_text(
+        from .textbook_parser import apply_imported_math, collapse_repeated_lead
+        return collapse_repeated_lead(apply_imported_math(
             self.cleaned_data.get('text_latex') or ''))
+
+    def clean_author_answer_latex(self):
+        from .textbook_parser import apply_imported_math
+        return apply_imported_math(
+            self.cleaned_data.get('author_answer_latex') or '')
+
+    def clean_author_solution_latex(self):
+        from .textbook_parser import apply_imported_math
+        return apply_imported_math(
+            self.cleaned_data.get('author_solution_latex') or '')
 
     def clean_subitems(self):
         from .textbook_import import TextbookImportError, normalize_subitems

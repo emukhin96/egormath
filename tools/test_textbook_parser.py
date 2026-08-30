@@ -14,14 +14,19 @@ from tools.textbook_parser import (
     parse_galitsky,
     parse_shestakov,
     parse_ziv,
+    ZIV_UNEVEN_VARIANT_WARNING,
+    rewalk_ziv_merged_body,
+    split_leaked_structural_tail,
     sections,
     shestakov_source_path,
     shestakov_markers,
     split_answer_solution,
+    split_subitems,
     strip_leading_subitem_label,
     task_from_block,
     write_bundle,
 )
+from problems.textbook_parser import _ziv_looks_like_topic_title  # noqa: E402
 
 
 class TextbookParserTests(unittest.TestCase):
@@ -271,6 +276,44 @@ class TextbookParserTests(unittest.TestCase):
             collapse_repeated_lead(
                 'Найдите значение выражения: Найдите значение выражения:'),
             'Найдите значение выражения:')
+
+    def test_imported_text_heals_ocr_linebreak_and_emdash(self):
+        from problems.textbook_parser import apply_imported_math
+
+        self.assertEqual(
+            normalize_imported_text(
+                r'Последовательность задана формулой \(c_{n}=2 n^{2}-5 n+\) +1.'),
+            r'Последовательность задана формулой \(c_{n}=2 n^{2}-5 n+1\).')
+        self.assertEqual(
+            normalize_imported_text(
+                r'формулой \(c_{n}=-3 n^{2}+\) \(+7 n+4\).'),
+            r'формулой \(c_{n}=-3 n^{2}+7 n+4\).')
+        self.assertEqual(
+            normalize_imported_text(
+                r'\(a_{2} a_{4}=\) \(=160\). Найдите \(S_{6}\)'),
+            r'\(a_{2} a_{4}=160\). Найдите \(S_{6}\)')
+        self.assertEqual(
+            normalize_imported_text(
+                r'графика функции \(y=x^{2}\) - \(-7 x-9\)'),
+            r'графика функции \(y=x^{2}-7 x-9\)')
+        self.assertEqual(
+            normalize_imported_text(
+                r'при \(x \in\) \(\in(-\infty ;-3]\)'),
+            r'при \(x \in(-\infty ;-3]\)')
+        self.assertEqual(
+            normalize_imported_text(
+                r'у которой \(b_{1}\) - \(b_{4}=0,6\)'),
+            r'у которой \(b_{1} - b_{4}=0,6\)')
+        self.assertEqual(
+            normalize_imported_text(
+                r'\(a_{n}\) - арифметическая прогрессия. \(a\) и \(b\) - рациональные числа.'),
+            r'\(a_{n}\) — арифметическая прогрессия. \(a\) и \(b\) — рациональные числа.')
+        self.assertEqual(
+            normalize_imported_text(r'\(x - y\) и слово - слово'),
+            r'\(x - y\) и слово — слово')
+        self.assertEqual(
+            apply_imported_math(r'D = (-5a)^2 - 4 \cdot 1 \cdot 4'),
+            r'$D = (-5a)^2 - 4 \cdot 1 \cdot 4$')
 
     def test_subitem_body_does_not_keep_its_own_marker(self):
         task_text = "\n".join([
@@ -721,7 +764,7 @@ class TextbookParserTests(unittest.TestCase):
         tasks, _ = parse_shestakov(task_text, solution_text)
 
         task = tasks[0]
-        self.assertEqual(task.author_solution_latex, "")
+        self.assertTrue(task.author_solution_latex)
         self.assertTrue(all(
             not item.author_solution_latex for item in task.subitems))
         self.assertIn(
@@ -742,7 +785,7 @@ class TextbookParserTests(unittest.TestCase):
         tasks, _ = parse_shestakov(task_text, solution_text)
 
         task = tasks[0]
-        self.assertEqual(task.author_solution_latex, "")
+        self.assertTrue(task.author_solution_latex)
         self.assertTrue(all(
             not item.author_solution_latex for item in task.subitems))
         self.assertIn(
@@ -936,6 +979,7 @@ class TextbookParserTests(unittest.TestCase):
 Вариант 2
 \begin{itemize}
   \item[1.] Другое сравнение.
+  \item[2.] Ещё одно сравнение.
 \end{itemize}
 \section*{Контрольные работы}
 \section*{1. Неравенства}
@@ -954,6 +998,7 @@ class TextbookParserTests(unittest.TestCase):
 Вариант 2
 \begin{itemize}
   \item[1.] $\frac{1}{2}<\frac{2}{3}$.
+  \item[2.] $a<b$.
 \end{itemize}
 \section*{Контрольные работы}
 \section*{1. Неравенства}
@@ -965,7 +1010,8 @@ class TextbookParserTests(unittest.TestCase):
         tasks, diagnostics = parse_ziv(source)
         self.assertEqual(
             [task.external_id for task in tasks],
-            ["sr/01/v1/1", "sr/01/v1/2", "sr/01/v2/1", "kr/01/v1/1"],
+            ["sr/01/v1/1", "sr/01/v1/2", "sr/01/v2/1", "sr/01/v2/2",
+             "kr/01/v1/1"],
         )
         self.assertEqual(tasks[0].source_path, [
             "Самостоятельные работы", "Числовые неравенства", "Вариант 1",
@@ -973,8 +1019,10 @@ class TextbookParserTests(unittest.TestCase):
         self.assertEqual(tasks[0].collection_key, "sr/01/v1")
         self.assertEqual(tasks[0].author_answer_latex, r"$\frac{2}{3}<\frac{4}{5}$.")
         self.assertEqual(tasks[2].author_answer_latex, r"$\frac{1}{2}<\frac{2}{3}$.")
-        self.assertEqual(tasks[3].author_answer_latex, r"$x>0$.")
-        self.assertEqual(diagnostics["matched_solutions"], 4)
+        self.assertEqual(tasks[3].author_answer_latex, r"$a<b$.")
+        self.assertEqual(tasks[4].author_answer_latex, r"$x>0$.")
+        self.assertEqual(diagnostics["matched_solutions"], 5)
+        self.assertEqual(diagnostics["ziv_uneven_variant_topics"], [])
 
     def test_ziv_task_body_stops_before_next_section(self):
         source = r"""
@@ -1044,6 +1092,720 @@ a+b
         self.assertEqual(tasks[1].author_answer_latex, "$x>0$.")
         self.assertEqual(diagnostics["matched_solutions"], 2)
         self.assertEqual(diagnostics["duplicate_task_ids"], [])
+
+    def test_two_column_letter_subitems_are_sorted(self):
+        _parent, items = split_subitems("\n".join([
+            "Сравните значения выражений:",
+            r"а) $\sqrt[6]{47}$ и $\sqrt[3]{7}$",
+            r"в) $0,8^{-2,7}$ и $0,8^{-1,4}$",
+            r"б) $2^{\frac{1}{2}}$ и $4^{\frac{1}{4}}$",
+            r"г) $(1,06)^{-5}$ и 1",
+        ]))
+        self.assertEqual([item.label for item in items], ["а", "б", "в", "г"])
+
+    def test_imported_task_wraps_bare_math(self):
+        task = task_from_block(
+            Marker(0, 0, "1"), r"Найдите (-1)^{18}+32", [])
+        self.assertIn("$(-1)^{18}+32$", task.text_latex)
+
+    def test_ziv_inline_variant_matches_compact_answers(self):
+        source = r"""
+\section*{Контрольные работы}
+\section*{2. Степень с рациональным показателем}
+Вариант 1
+\begin{itemize}
+  \item[1.] Решите неравенство.
+  \item[2.] Найдите значение.
+  \item[3.] Сравните значения выражений:
+а) $\sqrt[6]{47}$ и $\sqrt[3]{7}$
+в) $0,8^{-2,7}$ и $0,8^{-1,4}$
+б) $2^{\frac{1}{2}}$ и $4^{\frac{1}{4}}$
+г) $(1,06)^{-5}$ и 1
+  \item[4.] Упростите.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Контрольные работы}
+\section*{2. Степень с рациональным показателем}
+Вариант 1. 1. $-2\leqslant x<4$. 2. 4. 3. а) $>$; б) $<$; в) $=$; г) $>$. 4. $x=2$.
+"""
+        tasks, diagnostics = parse_ziv(source)
+        by_id = {task.external_id: task for task in tasks}
+        self.assertEqual(sorted(by_id), [
+            "kr/02/v1/1", "kr/02/v1/2", "kr/02/v1/3", "kr/02/v1/4",
+        ])
+        self.assertEqual(by_id["kr/02/v1/1"].author_answer_latex, r"$-2\leqslant x<4$.")
+        self.assertEqual(by_id["kr/02/v1/2"].author_answer_latex, "4.")
+        self.assertEqual(
+            [item.label for item in by_id["kr/02/v1/3"].subitems],
+            ["а", "б", "в", "г"])
+        self.assertEqual(
+            [item.author_answer_latex for item in by_id["kr/02/v1/3"].subitems],
+            [r"$>$", r"$<$", r"$=$", r"$>$"])
+        self.assertEqual(by_id["kr/02/v1/4"].author_answer_latex, r"$x=2$.")
+        self.assertEqual(diagnostics["matched_solutions"], 4)
+
+    def test_ziv_inline_variant_and_tilde_numbers_do_not_leak(self):
+        # OCR Зива часто пишет «Вариант 2\\» и «1.~» без \item: иначе
+        # последний пункт варианта 1 захватывает чужие варианты в подпункт.
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{9. Область определения функции. Возрастание и убывание функции}
+Вариант 1
+\begin{itemize}
+  \item[1.] Выясните, является ли функция четной или нечетной:
+а) \(f(x)=3 x^{4}-1\),
+б) \(f(x)=5 x^{3}-2 x\).
+  \item[2.] Не строя графиков функций, найдите точки их пересечения \(y=-\frac{12}{x}\) и \(y=x-7\).
+  \item[3.] Постройте графики функций:
+а) \(y=\frac{4}{x}+1\),
+б) \(y=-\frac{1}{x-2}+2\).
+\end{itemize}
+Вариант 2\\
+1.~Выясните, является ли функция четной или нечетной:\\
+а) \(f(x)=7 x^{3}\),\\
+б) \(f(x)=17 x^{2}-5 x^{4}\).
+2.~Не строя графиков функций, найдите точки их пересечения \(y=\frac{8}{x}\) и \(y=x+2\).
+3.~Постройте графики функций:\\
+а) \(y=-\frac{x}{4}-1\),\\
+б) \(y=\frac{2}{x+2}-1\).
+Вариант 3\\
+1.~Исследуйте функции на четность:\\
+а) \(f(x)=\frac{1}{7 x-5}\).
+Вариант 4\\
+1.~Определите четность:\\
+а) \(f(x)=x^{3}\).
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{9. Область определения функции. Возрастание и убывание функции}
+Вариант 1
+\begin{itemize}
+  \item[1.] четная.
+  \item[2.] $(-3;4)$.
+  \item[3.] графики.
+\end{itemize}
+Вариант 2. 1. нечетная. 2. $(-2; -4)$. 3. графики.
+Вариант 3. 1. ни четная, ни нечетная.
+Вариант 4. 1. нечетная.
+"""
+        tasks, diagnostics = parse_ziv(source)
+        by_id = {task.external_id: task for task in tasks}
+        self.assertEqual(sorted(by_id), [
+            "sr/09/v1/1", "sr/09/v1/2", "sr/09/v1/3",
+            "sr/09/v2/1", "sr/09/v2/2", "sr/09/v2/3",
+            "sr/09/v3/1", "sr/09/v4/1",
+        ])
+        leaked = by_id["sr/09/v1/3"]
+        self.assertIn(r"y=\frac{4}{x}+1", leaked.text_latex + "".join(
+            item.text_latex for item in leaked.subitems))
+        joined = "\n".join(
+            [leaked.text_latex] + [item.text_latex for item in leaked.subitems])
+        self.assertNotIn("Вариант 2", joined)
+        self.assertNotIn("Выясните", joined)
+        self.assertNotIn("Исследуйте", joined)
+        self.assertIn("четной или нечетной", by_id["sr/09/v2/1"].text_latex)
+        self.assertIn(r"y=\frac{8}{x}", by_id["sr/09/v2/2"].text_latex)
+        self.assertEqual(
+            [item.label for item in by_id["sr/09/v2/3"].subitems],
+            ["а", "б"])
+        self.assertEqual(by_id["sr/09/v1/3"].author_answer_latex, "графики.")
+        self.assertEqual(by_id["sr/09/v2/1"].author_answer_latex, "нечетная.")
+        self.assertEqual(diagnostics["matched_solutions"], 8)
+        self.assertEqual(diagnostics["ziv_uneven_variant_topics"], [])
+
+    def test_ziv_setcounter_and_bare_stems_split_tasks(self):
+        # После \item[1.] OCR Зива часто теряет номера и пишет
+        # \setcounter{enumi}{N} плюс новую формулировку с «:».
+        source = r"""
+\section*{Контрольные работы}
+\section*{3. Степенная функция}
+Вариант 1
+\begin{itemize}
+  \item[4.] Решите уравнение $x=1$.
+\end{itemize}
+Вариант 2
+\begin{itemize}
+  \item[4.] Решите уравнения:
+а) \(\sqrt{x^{2}-9}=4\),
+б) \(\sqrt{8-2 x-x^{2}}+x=-4\).
+\end{itemize}
+Вариант 3
+\begin{itemize}
+  \item[1.] Исследуйте функции на четность и нечетность:
+а) \(f(x)=x^{4}-3 x^{2}+1\),
+б) \(f(x)=-2 x|x|+4 x^{3}\).
+\setcounter{enumi}{1}
+Найдите области определения функций:
+а) \(f(x)=\sqrt[3]{\frac{x^{2}}{5-3 x-2 x^{2}}}\),
+б) \(f(x)=\sqrt{\frac{x^{2}-5 x+4}{x^{2}+2 x+1}}\).
+\setcounter{enumi}{2}
+Постройте графики функций:
+а) \(y=\sqrt{x-1}\),
+б) \(y=\sqrt{x+1}-2\),\\
+Найдите промежутки, на которых \(y(x)>0 ; y(x)<0\).
+Решите уравнения:
+а) \(\sqrt{x+2}=x\),
+б) \(\sqrt{4 x-3}=\frac{3 x-1}{\sqrt{3 x-5}}\).
+\end{itemize}
+Вариант 4
+Исследуйте функции на четность и нечетность:
+а) \(f(x)=3 x^{3}-x^{7}\),
+б) \(f(x)=-x^{2}|x|-3 x^{6}\).
+\setcounter{enumi}{1}
+Найдите области определения функций:
+а) \(f(x)=\sqrt[7]{\frac{x^{6}}{2 x^{2}+7 x+5}}\),
+б) \(f(x)=\sqrt{\frac{4 x^{2}+12 x+9}{-x^{2}+6 x-5}}\).
+\setcounter{enumi}{2}
+Постройте графики функций:
+а) \(y=\sqrt{x+1}\),
+б) \(y=\sqrt{x-1}+2\),\\
+Найдите промежутки, на которых \(y(x)>0 ; y(x)<0\).
+Решите уравнения:
+а) \(\sqrt{x-1}=x-3\),
+б) \(\sqrt{4 x-11}=\frac{2 x-2}{\sqrt{3 x+7}}\).
+\section*{4. Основные тригонометрические тождества}
+Вариант 1
+\begin{itemize}
+  \item[1.] Упростите выражение.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Контрольные работы}
+\section*{3. Степенная функция}
+Вариант 1
+\begin{itemize}
+  \item[4.] $1$.
+\end{itemize}
+Вариант 2
+\begin{itemize}
+  \item[4.] $4$.
+\end{itemize}
+Вариант 3
+\begin{itemize}
+  \item[1.] четная.
+  \item[2.] $x\geqslant 0$.
+  \item[3.] графики.
+  \item[4.] $x=2$.
+\end{itemize}
+Вариант 4
+\begin{itemize}
+  \item[1.] нечетная.
+  \item[2.] $x>0$.
+  \item[3.] графики.
+  \item[4.] $x=4$.
+\end{itemize}
+\section*{4. Основные тригонометрические тождества}
+Вариант 1
+\begin{itemize}
+  \item[1.] $1$.
+\end{itemize}
+"""
+        tasks, diagnostics = parse_ziv(source)
+        by_id = {task.external_id: task for task in tasks}
+        self.assertEqual(sorted(by_id), [
+            "kr/03/v1/4", "kr/03/v2/4",
+            "kr/03/v3/1", "kr/03/v3/2", "kr/03/v3/3", "kr/03/v3/4",
+            "kr/03/v4/1", "kr/03/v4/2", "kr/03/v4/3", "kr/03/v4/4",
+            "kr/04/v1/1",
+        ])
+        first = by_id["kr/03/v3/1"]
+        joined = "\n".join(
+            [first.text_latex] + [item.text_latex for item in first.subitems])
+        self.assertIn("четность", first.text_latex)
+        self.assertNotIn("Вариант 4", joined)
+        self.assertNotIn("Найдите области", joined)
+        self.assertNotIn("Решите уравнения", joined)
+        self.assertNotIn("тригонометрические", joined)
+        self.assertIn("области определения", by_id["kr/03/v3/2"].text_latex)
+        self.assertIn("Постройте графики", by_id["kr/03/v3/3"].text_latex)
+        self.assertIn("промежутки", "\n".join(
+            item.text_latex for item in by_id["kr/03/v3/3"].subitems))
+        self.assertNotIn("setcounter", "\n".join(
+            [by_id["kr/03/v3/1"].text_latex]
+            + [item.text_latex for item in by_id["kr/03/v3/1"].subitems]))
+        self.assertIn("Решите уравнения", by_id["kr/03/v3/4"].text_latex)
+        self.assertIn("четность", by_id["kr/03/v4/1"].text_latex)
+        self.assertIn("Решите уравнения", by_id["kr/03/v4/4"].text_latex)
+        self.assertNotIn("тригонометрические", by_id["kr/03/v4/4"].text_latex)
+        self.assertEqual(by_id["kr/03/v2/4"].author_answer_latex, "$4$.")
+        self.assertEqual(by_id["kr/03/v3/4"].author_answer_latex, "$x=2$.")
+        self.assertEqual(by_id["kr/03/v4/1"].author_answer_latex, "нечетная.")
+        self.assertEqual(diagnostics["matched_solutions"], 11)
+        self.assertEqual(diagnostics["ziv_uneven_variant_topics"], [])
+
+    def test_ziv_solve_stem_after_graph_prompt_is_a_new_task(self):
+        source = r"""
+\section*{Контрольные работы}
+\section*{3. Степенная функция}
+Вариант 3
+\begin{itemize}
+  \item[3.] Постройте графики функций:
+а) \(y=\sqrt{x-1}\),
+б) \(y=\sqrt{x+1}-2\),\\
+Найдите промежутки, на которых \(y(x)>0 ; y(x)<0\). Решите уравнения:
+а) \(\sqrt{x+2}=x\),
+б) \(\sqrt{4 x-3}=1\).
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Контрольные работы}
+\section*{3. Степенная функция}
+Вариант 3
+\begin{itemize}
+  \item[3.] графики.
+  \item[4.] $x=2$.
+\end{itemize}
+"""
+        tasks, _diagnostics = parse_ziv(source)
+        by_id = {task.external_id: task for task in tasks}
+        self.assertEqual(sorted(by_id), ["kr/03/v3/3", "kr/03/v3/4"])
+        joined = "\n".join(
+            [by_id["kr/03/v3/3"].text_latex]
+            + [item.text_latex for item in by_id["kr/03/v3/3"].subitems])
+        self.assertIn("Постройте", by_id["kr/03/v3/3"].text_latex)
+        self.assertNotIn("Решите уравнения", joined)
+        self.assertIn("Решите уравнения", by_id["kr/03/v3/4"].text_latex)
+        self.assertEqual(
+            [item.label for item in by_id["kr/03/v3/4"].subitems],
+            ["а", "б"])
+
+    def test_ziv_uneven_variant_counts_warn_about_merged_tasks(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{9. Функции}
+Вариант 1
+\begin{itemize}
+  \item[1.] Первая.
+  \item[2.] Вторая.
+  \item[3.] Третья и хвост следующих вариантов.
+\end{itemize}
+Вариант 2
+\begin{itemize}
+  \item[1.] Только одна задача.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{9. Функции}
+Вариант 1
+\begin{itemize}
+  \item[1.] 1.
+  \item[2.] 2.
+  \item[3.] 3.
+\end{itemize}
+Вариант 2
+\begin{itemize}
+  \item[1.] 1.
+\end{itemize}
+"""
+        tasks, diagnostics = parse_ziv(source)
+        self.assertEqual(
+            [task.external_id for task in tasks],
+            ["sr/09/v1/1", "sr/09/v1/2", "sr/09/v1/3", "sr/09/v2/1"])
+        self.assertEqual(diagnostics["ziv_uneven_variant_topics"], [{
+            "topic": "sr/09",
+            "variants": {"v1": 3, "v2": 1},
+        }])
+        self.assertTrue(all(
+            ZIV_UNEVEN_VARIANT_WARNING in task.warnings for task in tasks))
+
+    def test_ziv_paired_variant_counts_are_accepted(self):
+        source = r"""
+\section*{Контрольные работы}
+\section*{2. Степени}
+Вариант 1
+\begin{itemize}
+  \item[1.] A.
+  \item[2.] B.
+\end{itemize}
+Вариант 2
+\begin{itemize}
+  \item[1.] C.
+  \item[2.] D.
+\end{itemize}
+Вариант 3
+\begin{itemize}
+  \item[1.] E.
+\end{itemize}
+Вариант 4
+\begin{itemize}
+  \item[1.] F.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Контрольные работы}
+\section*{2. Степени}
+Вариант 1
+\begin{itemize}
+  \item[1.] 1.
+  \item[2.] 2.
+\end{itemize}
+Вариант 2
+\begin{itemize}
+  \item[1.] 3.
+  \item[2.] 4.
+\end{itemize}
+Вариант 3
+\begin{itemize}
+  \item[1.] 5.
+\end{itemize}
+Вариант 4
+\begin{itemize}
+  \item[1.] 6.
+\end{itemize}
+"""
+        tasks, diagnostics = parse_ziv(source)
+        self.assertEqual(diagnostics["ziv_uneven_variant_topics"], [])
+        self.assertFalse(any(
+            ZIV_UNEVEN_VARIANT_WARNING in task.warnings for task in tasks))
+
+    def test_ziv_answers_default_variant_and_title_match(self):
+        source = r"""
+\section*{Контрольные работы}
+\section*{2. Корни}
+Вариант 1
+\begin{itemize}
+  \item[1.] Найдите корень.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Контрольные работы}
+\section*{Корни}
+1. $3$.
+"""
+        tasks, diagnostics = parse_ziv(source)
+        self.assertEqual(tasks[0].external_id, "kr/02/v1/1")
+        self.assertEqual(tasks[0].author_answer_latex, "$3$.")
+        self.assertEqual(diagnostics["matched_solutions"], 1)
+
+    def test_ziv_trims_section_and_work_heading_from_last_task(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{1. Неравенства}
+Вариант 1
+\begin{itemize}
+  \item[1.] Сравните числа.
+  \item[2.] Решите неравенство $x>0$.
+\end{itemize}
+\section*{Контрольные работы}
+\section*{1. Уравнения}
+Вариант 1
+\begin{itemize}
+  \item[1.] Решите уравнение.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{1. Неравенства}
+Вариант 1
+\begin{itemize}
+  \item[1.] $1<2$.
+  \item[2.] $x>0$.
+\end{itemize}
+\section*{Контрольные работы}
+\section*{1. Уравнения}
+Вариант 1
+\begin{itemize}
+  \item[1.] $x=1$.
+\end{itemize}
+"""
+        tasks, _diagnostics = parse_ziv(source)
+        by_id = {task.external_id: task for task in tasks}
+        last = by_id["sr/01/v1/2"]
+        joined = "\n".join(
+            [last.text_latex] + [item.text_latex for item in last.subitems])
+        self.assertIn("неравенство", last.text_latex)
+        self.assertNotIn("Контрольн", joined)
+        self.assertNotIn("Уравнения", joined)
+        self.assertNotIn("Вариант", joined)
+        self.assertEqual(by_id["kr/01/v1/1"].text_latex, "Решите уравнение.")
+
+    def test_split_subitems_trims_variant_heading_from_last_item(self):
+        parent, items = split_subitems("\n".join([
+            "Постройте графики функций:",
+            r"а) \(y=\frac{4}{x}+1\)",
+            r"б) \(y=-\frac{1}{x-2}+2\).",
+            r"Вариант 2",
+            r"1.~Выясните, является ли функция четной.",
+        ]))
+        self.assertEqual(parent, "Постройте графики функций:")
+        self.assertEqual([item.label for item in items], ["а", "б"])
+        self.assertIn(r"x-2", items[-1].text_latex)
+        self.assertNotIn("Вариант", items[-1].text_latex)
+        self.assertNotIn("Выясните", items[-1].text_latex)
+
+    def test_display_math_is_not_a_topic_heading(self):
+        self.assertFalse(_ziv_looks_like_topic_title(
+            "Постройте график функции\n\\[\ny=\\sin x.\n\\]"))
+        self.assertTrue(_ziv_looks_like_topic_title(
+            "Неравенства и уравнения, содержащие степень"))
+
+    def test_leaked_heading_ignores_work_word_inside_sentence(self):
+        kept, tail = split_leaked_structural_tail(
+            "Напишите самостоятельную работу по теме.")
+        self.assertEqual(tail, "")
+        self.assertIn("самостоятельную работу", kept)
+
+    def test_rewalk_splits_setcounter_and_next_variant(self):
+        tasks = rewalk_ziv_merged_body(
+            "kr/03/v3/1",
+            ["Контрольные работы", "Степенная функция", "Вариант 3"],
+            "Исследуйте функции на четность и нечетность:",
+            [
+                {"label": "а", "text_latex": r"\(f(x)=x^{4}-3 x^{2}+1\)"},
+                {"label": "б", "text_latex": "\n".join([
+                    r"\(f(x)=-2 x|x|+4 x^{3}\).",
+                    r"\setcounter{enumi}{1}",
+                    "Найдите области определения функций:",
+                    r"а) \(f(x)=\sqrt{x}\),",
+                    r"б) \(f(x)=\sqrt{x+1}\).",
+                    r"Вариант 4",
+                    "Исследуйте функции на четность и нечетность:",
+                    r"а) \(f(x)=3 x^{3}\).",
+                ])},
+            ],
+            collection_title="Степенная функция",
+        )
+        by_id = {task.external_id: task for task in tasks}
+        self.assertIn("kr/03/v3/1", by_id)
+        self.assertIn("kr/03/v3/2", by_id)
+        self.assertIn("kr/03/v4/1", by_id)
+        first = by_id["kr/03/v3/1"]
+        joined = "\n".join(
+            [first.text_latex] + [item.text_latex for item in first.subitems])
+        self.assertIn("четность", first.text_latex)
+        self.assertNotIn("Вариант 4", joined)
+        self.assertNotIn("Найдите области", joined)
+        self.assertIn("области определения", by_id["kr/03/v3/2"].text_latex)
+        self.assertIn("четность", by_id["kr/03/v4/1"].text_latex)
+
+    def test_ziv_shared_prompt_before_numbered_list_is_not_a_task(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{2. Уравнения}
+Вариант 1
+\begin{itemize}
+  \item[5.] \(x^{2}=1\).
+\end{itemize}
+Вариант 2\\
+Решите уравнения 1-5:
+1.~\(x^{2}=4\).
+2.~\(x^{2}=9\).
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{2. Уравнения}
+Вариант 1
+\begin{itemize}
+  \item[5.] $1$.
+\end{itemize}
+Вариант 2. 1. $\pm2$. 2. $\pm3$.
+"""
+        tasks, _diagnostics = parse_ziv(source)
+        self.assertEqual(
+            [task.external_id for task in tasks],
+            ["sr/02/v1/5", "sr/02/v2/1", "sr/02/v2/2"])
+        self.assertIn(r"x^{2}=4", tasks[1].text_latex)
+        self.assertNotIn("Решите уравнения 1-5", tasks[1].text_latex)
+
+    def test_ziv_section_variant_keeps_current_topic(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{4. Решение задач с помощью уравнений}
+Вариант 1
+\begin{itemize}
+  \item[1.] Поезд опоздал.
+\end{itemize}
+\section*{Вариант 2}
+\begin{itemize}
+  \item[1.] Лыжник опоздал.
+  \item[2.] Найдите два числа.
+\end{itemize}
+\section*{16. Формулы приведения}
+\section*{Вариант 1}
+\begin{itemize}
+  \item[1.] Приведите \(\sin 304^{\circ}\).
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{4. Решение задач с помощью уравнений}
+Вариант 1
+\begin{itemize}
+  \item[1.] 80.
+\end{itemize}
+\section*{Вариант 2}
+\begin{itemize}
+  \item[1.] 10.
+  \item[2.] 1 и 6.
+\end{itemize}
+\section*{16. Формулы приведения}
+\section*{Вариант 1}
+\begin{itemize}
+  \item[1.] \(\sin 56^{\circ}\).
+\end{itemize}
+"""
+        tasks, diagnostics = parse_ziv(source)
+        by_id = {task.external_id: task for task in tasks}
+        self.assertEqual(
+            sorted(by_id),
+            ["sr/04/v1/1", "sr/04/v2/1", "sr/04/v2/2", "sr/16/v1/1"])
+        self.assertIn("Лыжник", by_id["sr/04/v2/1"].text_latex)
+        self.assertEqual(
+            by_id["sr/16/v1/1"].source_path[1], "Формулы приведения")
+
+    def test_ziv_item_heading_starts_next_topic(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{9. Область определения функции}
+Вариант 8
+\begin{itemize}
+  \item[1.] Найдите область определения \(f(x)=\sqrt{x}\).
+  \item[10.] Четность и нечетность функции.\\
+Функция \(y=\frac{k}{x}\)
+\end{itemize}
+Вариант 1
+\begin{itemize}
+  \item[1.] Выясните, является ли функция четной.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{9. Область определения функции}
+Вариант 8
+\begin{itemize}
+  \item[1.] \(x\geqslant 0\).
+\end{itemize}
+\section*{10. Четность и нечетность функции}
+Вариант 1
+\begin{itemize}
+  \item[1.] четная.
+\end{itemize}
+"""
+        tasks, _diagnostics = parse_ziv(source)
+        by_id = {task.external_id: task for task in tasks}
+        self.assertEqual(sorted(by_id), ["sr/09/v8/1", "sr/10/v1/1"])
+        self.assertIn("область", by_id["sr/09/v8/1"].text_latex)
+        self.assertIn("четной", by_id["sr/10/v1/1"].text_latex)
+
+    def test_ziv_mid_variant_topic_leak_does_not_steal_next_variant(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{8. Упражнения на радикалы}
+Вариант 7
+\begin{enumerate}
+  \item Выполните действия: \(a+b\).
+\end{enumerate}
+\begin{enumerate}
+  \setcounter{enumi}{8}
+  \item Область определения функции. Возрастание и убывание функции
+\end{enumerate}
+\begin{enumerate}
+  \setcounter{enumi}{1}
+  \item Решите уравнения: \(2^{x}=4\).
+\end{enumerate}
+Вариант 8
+\begin{enumerate}
+  \item Выполните действия: \(c+d\).
+  \setcounter{enumi}{1}
+  \item Решите уравнения: \(3^{x}=9\).
+\end{enumerate}
+\section*{9. Область определения функции}
+Вариант 1
+\begin{itemize}
+  \item[1.] Найдите область определения \(f(x)=\sqrt{x}\).
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{8. Упражнения на радикалы}
+Вариант 7
+\begin{itemize}
+  \item[1.] \(1\).
+  \item[2.] \(2\).
+\end{itemize}
+Вариант 8
+\begin{itemize}
+  \item[1.] \(1\).
+  \item[2.] \(3\).
+\end{itemize}
+\section*{9. Область определения функции}
+Вариант 1
+\begin{itemize}
+  \item[1.] \(x\geqslant 0\).
+\end{itemize}
+"""
+        tasks, _diagnostics = parse_ziv(source)
+        self.assertEqual(
+            [task.external_id for task in tasks],
+            ["sr/08/v7/1", "sr/08/v7/2", "sr/08/v8/1", "sr/08/v8/2",
+             "sr/09/v1/1"])
+        self.assertIn("Выполните", tasks[2].text_latex)
+        self.assertIn("область", tasks[4].text_latex)
+
+    def test_ziv_enumerate_items_and_check_work_are_tasks(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{3. Системы нелинейных уравнений}
+Вариант 1\\
+Решите системы 1-5:
+\begin{enumerate}
+  \item \(x+y=1\)
+  \item \(x-y=2\)
+\end{enumerate}
+\section*{Проверочные работы на повторение}
+\section*{Проверочная работа № 1}
+Вариант 1
+\begin{itemize}
+  \item[1.] Вычислите \(1+1\).
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{3. Системы нелинейных уравнений}
+Вариант 1
+\begin{enumerate}
+  \item \(1\).
+  \item \(2\).
+\end{enumerate}
+\section*{Проверочные работы на повторение}
+\section*{Проверочная работа № 1}
+Вариант 1
+\begin{itemize}
+  \item[1.] \(2\).
+\end{itemize}
+"""
+        tasks, _diagnostics = parse_ziv(source)
+        by_id = {task.external_id: task for task in tasks}
+        self.assertEqual(sorted(by_id), ["pr/01/v1/1", "sr/03/v1/1", "sr/03/v1/2"])
+        self.assertIn("x+y", by_id["sr/03/v1/1"].text_latex)
+        self.assertNotIn("Решите системы", by_id["sr/03/v1/1"].text_latex)
+        self.assertEqual(
+            by_id["pr/01/v1/1"].source_path[0], "Проверочные работы на повторение")
+        self.assertIn("Вычислите", by_id["pr/01/v1/1"].text_latex)
+
+    def test_ziv_bare_enumerate_after_setcounter_continues_numbering(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{13. Тригонометрические тождества}
+Вариант 3
+\begin{itemize}
+  \item[1.] Дано: \(\operatorname{tg} \alpha=1\). Найдите \(\sin \alpha\).
+\end{itemize}
+\begin{enumerate}
+  \setcounter{enumi}{1}
+  \item Упростите \(\sin \alpha\).
+  \item Дано: \(\sin \alpha+\cos \alpha=1\).
+  \item Найдите \(\operatorname{tg} \alpha\).
+  \item Решите уравнения: \(x=0\).
+\end{enumerate}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{13. Тригонометрические тождества}
+Вариант 3
+\begin{itemize}
+  \item[1.] \(1\).
+  \item[2.] \(\sin\).
+  \item[3.] \(1\).
+  \item[4.] \(1\).
+  \item[5.] \(0\).
+\end{itemize}
+"""
+        tasks, _diagnostics = parse_ziv(source)
+        self.assertEqual(
+            [task.external_id for task in tasks],
+            ["sr/13/v3/1", "sr/13/v3/2", "sr/13/v3/3",
+             "sr/13/v3/4", "sr/13/v3/5"])
+        self.assertIn("Упростите", tasks[1].text_latex)
+        self.assertIn("Найдите", tasks[3].text_latex)
 
     def test_galitsky_missing_answer_is_not_a_warning(self):
         source = r"""

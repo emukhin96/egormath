@@ -1,0 +1,11 @@
+{% if draft.status == 'approved' %}
+  {% include 'problems/_textbook_draft_status_badge.html' with short='ок' kind='approved' %}
+{% elif draft.status == 'conflict' %}
+  {% include 'problems/_textbook_draft_status_badge.html' with short='конфл.' kind='conflict' %}
+{% elif draft.status == 'skipped' %}
+  {% include 'problems/_textbook_draft_status_badge.html' with short='проп.' kind='skipped' %}
+{% elif draft.status == 'imported' %}
+  {% include 'problems/_textbook_draft_status_badge.html' with short='база' kind='imported' %}
+{% else %}
+  {% include 'problems/_textbook_draft_status_badge.html' with short='новая' kind='review' %}
+{% endif %}

@@ -1,10 +1,16 @@
 from django import template
 
-from problems.textbook_parser import normalize_imported_text
+from problems.textbook_parser import normalize_imported_text, order_letter_subitems
 from problems.web_tex import tex_preview_html, tex_to_web_html
 from worksheets.latex import subitem_label as _subitem_label
 
 register = template.Library()
+
+
+@register.filter
+def ordered_subitems(items):
+    """Канонический порядок буквенных подпунктов для предпросмотра."""
+    return order_letter_subitems(list(items or []))
 
 
 @register.filter

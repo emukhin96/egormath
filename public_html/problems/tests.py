@@ -1513,13 +1513,26 @@ class RubricatorTests(TestCase):
     """Сид, основная тема и фильтры нового рубрикатора."""
 
     def test_seed_creates_codes(self):
-        from problems.models import ExamItem, GradeBand
+        from problems.models import ExamItem, FacetValue, GradeBand
         from problems.rubricator import seed_rubricator
         seed_rubricator()
         self.assertTrue(Topic.objects.filter(code='ARI.01.01').exists())
         self.assertTrue(Topic.objects.filter(code='ALG.07.03').exists())
+        self.assertTrue(Topic.objects.filter(code='ALG.02.11').exists())
+        self.assertTrue(Topic.objects.filter(code='ALG.05.17').exists())
+        self.assertTrue(Topic.objects.filter(code='ALG.07.10').exists())
+        from problems.rubricator_data import VERSION_12_TOPICS, iter_leaf_topics
+        leaves = dict(iter_leaf_topics())
+        self.assertEqual(len(leaves), 271)
+        self.assertEqual(len(VERSION_12_TOPICS), 20)
+        for code, name in VERSION_12_TOPICS:
+            self.assertEqual(leaves[code], name)
+            topic = Topic.objects.get(code=code)
+            self.assertEqual(topic.name, name)
         self.assertTrue(ExamItem.objects.filter(code='OGE_2026_09').exists())
         self.assertTrue(GradeBand.objects.filter(code='GRADE_8').exists())
+        self.assertTrue(FacetValue.objects.filter(
+            code='SYSTEM_SUBSTITUTION').exists())
         first = Topic.objects.filter(code='ALG.07.03').count()
         seed_rubricator()
         self.assertEqual(Topic.objects.filter(code='ALG.07.03').count(), first)

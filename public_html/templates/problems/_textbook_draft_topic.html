@@ -1,0 +1,10 @@
+{% if draft.topic %}<div class="import-topic-name">{{ draft.topic }}</div>{% endif %}
+{% if batch.status != 'imported' %}
+<form method="post" action="{% url 'textbook_import_quick_topic' batch.pk draft.pk %}"
+      data-autosave="change" class="inline-form">
+  {% csrf_token %}
+  {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=False compact=True single=True field_name='topic' selected_json=draft.taxonomy_json %}
+</form>
+{% else %}
+{% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=False compact=True single=True field_name='topic' selected_json=draft.taxonomy_json %}
+{% endif %}

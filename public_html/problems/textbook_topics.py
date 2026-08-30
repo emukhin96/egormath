@@ -6,14 +6,14 @@ from difflib import SequenceMatcher
 from .models import Topic
 
 
-TOPIC_ALIASES = {
+_RAW_TOPIC_ALIASES = {
     'действия с целыми числами': 'ARI.02.06',
     'действия с дробями': 'ARI.03.04',
     'действия с корнями': 'ARI.05.01',
     'числовые выражения': 'ARI.01.06',
     'буквенные выражения': 'ALG.02.01',
     'действия с многочленами': 'ALG.02.02',
-    'действия с алгебраическими дробями': 'ALG.02.05',
+    'действия с алгебраическими дробями': 'ALG.02.14',
     'действия с иррациональными выражениями': 'ALG.02.06',
     'уравнения': 'ALG.03',
     'целые алгебраические уравнения': 'ALG.03.03',
@@ -36,6 +36,8 @@ TOPIC_ALIASES = {
     'задачи на движение и работу': 'ALG.09.02',
     'задачи на проценты, части, доли': 'ARI.04.04',
     'прогрессии': 'ALG.06',
+    'арифметическая прогрессия': 'ALG.06.02',
+    'геометрическая прогрессия': 'ALG.06.03',
     'отрезки, углы, треугольники': 'GEO.02',
     'многоугольники': 'GEO.03',
     'окружности': 'GEO.04',
@@ -44,6 +46,49 @@ TOPIC_ALIASES = {
     'линейные уравнения': 'ALG.03.01',
     'теория вероятностей и статистика': 'STA',
     'задачи по теории вероятностей и статистике': 'STA',
+    # Заголовки Зива / Гольдича → темы версии 1.2 (старые коды не менялись).
+    'одночлены': 'ALG.02.11',
+    'деление многочленов': 'ALG.02.09',
+    'деление многочленов. решение алгебраических уравнений': 'ALG.02.09',
+    'квадратный трехчлен': 'ALG.02.15',
+    'степень с целым показателем': 'ALG.02.16',
+    'степень с рациональным показателем': 'ALG.02.16',
+    'степень с целым и рациональным показателем': 'ALG.02.16',
+    'корень натуральной степени': 'ALG.02.17',
+    'корень n-й степени': 'ALG.02.17',
+    'тригонометрические тождества': 'ALG.02.18',
+    'основные тригонометрические тождества': 'ALG.02.18',
+    'формулы сложения': 'ALG.02.19',
+    'формулы приведения': 'ALG.02.19',
+    'формулы сложения. формулы приведения': 'ALG.02.19',
+    'синус и косинус двойного угла': 'ALG.02.19',
+    'формулы двойного угла': 'ALG.02.19',
+    'неполные квадратные уравнения': 'ALG.03.13',
+    'алгебраические уравнения': 'ALG.03.14',
+    'алгебраические уравнения. системы алгебраических уравнений': 'ALG.03.14',
+    'уравнения, сводящиеся к алгебраическим': 'ALG.03.14',
+    'уравнения, сводящиеся к апгебраическим': 'ALG.03.14',
+    'системы алгебраических уравнений': 'ALG.03.15',
+    'системы уравнений второй степени': 'ALG.03.15',
+    'системы нелинейных уравнений': 'ALG.03.11',
+    'неравенства, содержащие степени': 'ALG.04.11',
+    'неравенства, содержащие степень': 'ALG.04.11',
+    'неравенства и уравнения, содержащие степень': 'ALG.04.11',
+    'прямая пропорциональность': 'ALG.05.15',
+    'функция y = kx': 'ALG.05.15',
+    'четные и нечетные функции': 'ALG.05.16',
+    'четность и нечетность функции': 'ALG.05.16',
+    'четность и нечетность': 'ALG.05.16',
+    'радианная мера угла': 'ALG.05.17',
+    'числовая окружность': 'ALG.05.17',
+    'степенная функция': 'ALG.05.07',
+    'область определения функции': 'ALG.05.01',
+    'возрастание и убывание функции': 'ALG.05.14',
+    'область определения функции. возрастание и убывание функции': 'ALG.05.01',
+    'обратные тригонометрические функции': 'ALG.05.18',
+    'решение задач с помощью уравнений': 'ALG.09.01',
+    'производная степенной и сложной функции': 'ALG.07.09',
+    'связь графиков функции, производной и первообразной': 'ALG.07.10',
 }
 
 _SERVICE_RE = re.compile(
@@ -51,6 +96,22 @@ _SERVICE_RE = re.compile(
     r'тема\s+\d+[.\)]?\s*|приложение\s+\d+[.\)]?\s*)'
 )
 _PUNCT_RE = re.compile(r'[«»"“”„()[\],:;]+')
+# В Зиве хвост пути — «Вариант N», а тип работы не тема рубрикатора.
+_SERVICE_LABEL_RE = re.compile(
+    r'(?iu)^(вариант\s+\d+|'
+    r'контрольные(?:\s+работы)?|'
+    r'самостоятельные(?:\s+работы)?|'
+    r'проверочн(?:ая|ые)\s+работ(?:а|ы)?(?:\s*№?\s*\d+)?|'
+    r'ответы.*|указания.*|решения.*)$'
+)
+CANDIDATE_REASON_LABELS = {
+    'exact-alias': 'точное совпадение',
+    'exact-name': 'точное совпадение',
+    'exact-path': 'точное совпадение',
+    'parent-alias': 'по разделу',
+    'parent-name': 'по разделу',
+    'fuzzy-name': 'похожее название',
+}
 
 
 def normalize_topic_label(value):
@@ -59,6 +120,36 @@ def normalize_topic_label(value):
     text = _PUNCT_RE.sub(' ', text)
     text = re.sub(r'\s+', ' ', text).strip().lower()
     return text
+
+
+TOPIC_ALIASES = {
+    normalize_topic_label(key): code
+    for key, code in _RAW_TOPIC_ALIASES.items()
+}
+
+
+def _label_variants(label):
+    """Полный заголовок и части после точки/точки с запятой."""
+    variants = [label]
+    for part in re.split(r'[.;]', label):
+        fragment = normalize_topic_label(part)
+        if fragment and fragment not in variants:
+            variants.append(fragment)
+    return variants
+
+
+def is_service_topic_label(value):
+    """«Вариант 1» и тип работы Зива не считаются темой рубрикатора."""
+    return bool(_SERVICE_LABEL_RE.match(normalize_topic_label(value)))
+
+
+def _meaningful_topic_labels(parts):
+    labels = []
+    for part in parts:
+        label = normalize_topic_label(part)
+        if label and not is_service_topic_label(label) and label not in labels:
+            labels.append(label)
+    return labels
 
 
 def _topic_index():
@@ -80,43 +171,41 @@ def match_topic_candidates(source_path, topic_original='', limit=3,
                            index=None):
     """До трёх кандидатов; exact-alias/имя можно назначать автоматически."""
     by_code, by_name, topics = index or _topic_index()
-    labels = []
-    for part in list(source_path or []) + [topic_original]:
-        label = normalize_topic_label(part)
-        if label and label not in labels:
-            labels.append(label)
+    raw_parts = list(source_path or []) + [topic_original]
+    labels = _meaningful_topic_labels(raw_parts)
     if not labels:
         return []
     leaf_labels = set()
-    if source_path:
-        leaf = normalize_topic_label(source_path[-1])
-        if leaf:
-            leaf_labels.add(leaf)
-    original = normalize_topic_label(topic_original)
-    if original:
-        leaf_labels.add(original)
+    for part in reversed(raw_parts):
+        label = normalize_topic_label(part)
+        if label and not is_service_topic_label(label):
+            leaf_labels.add(label)
+            break
 
     ranked = {}
     for label in labels:
         is_leaf = label in leaf_labels
-        alias_code = TOPIC_ALIASES.get(label)
-        if alias_code and alias_code in by_code:
-            topic = by_code[alias_code]
-            ranked[topic.pk] = {
-                'id': topic.pk,
-                'code': topic.code,
-                'name': str(topic),
-                'score': 1.0 if is_leaf else 0.92,
-                'reason': 'exact-alias' if is_leaf else 'parent-alias',
-            }
-        for topic in by_name.get(label, []):
-            ranked.setdefault(topic.pk, {
-                'id': topic.pk,
-                'code': topic.code,
-                'name': str(topic),
-                'score': 1.0 if is_leaf else 0.9,
-                'reason': 'exact-name' if is_leaf else 'parent-name',
-            })
+        for variant in _label_variants(label):
+            full_match = variant == label
+            use_leaf = is_leaf and full_match
+            alias_code = TOPIC_ALIASES.get(variant)
+            if alias_code and alias_code in by_code:
+                topic = by_code[alias_code]
+                ranked.setdefault(topic.pk, {
+                    'id': topic.pk,
+                    'code': topic.code,
+                    'name': str(topic),
+                    'score': 1.0 if use_leaf else 0.92,
+                    'reason': 'exact-alias' if use_leaf else 'parent-alias',
+                })
+            for topic in by_name.get(variant, []):
+                ranked.setdefault(topic.pk, {
+                    'id': topic.pk,
+                    'code': topic.code,
+                    'name': str(topic),
+                    'score': 1.0 if use_leaf else 0.9,
+                    'reason': 'exact-name' if use_leaf else 'parent-name',
+                })
         if is_leaf and len(labels) >= 2:
             compound = f'{labels[-2]} / {label}'
             for topic in by_name.get(compound, []):
@@ -169,3 +258,32 @@ def apply_topic_suggestions(drafts):
         if exact and not draft.topic_id:
             draft.topic_id = exact['id']
     return drafts
+
+
+def suggested_topic_for_drafts(drafts):
+    """Одна тема раздела: уже у всех, либо единственный не-fuzzy кандидат."""
+    rows = list(drafts)
+    if not rows:
+        return None
+    assigned = {draft.topic_id for draft in rows if draft.topic_id}
+    if len(assigned) == 1 and all(draft.topic_id for draft in rows):
+        return Topic.objects.filter(pk=next(iter(assigned))).first()
+    found = {}
+    for draft in rows:
+        candidates = draft.topic_candidates
+        if not candidates:
+            candidates = match_topic_candidates(
+                draft.source_path, draft.topic_original)
+        for item in candidates:
+            if item.get('reason') == 'fuzzy-name':
+                continue
+            topic_id = item.get('id')
+            if topic_id:
+                found[topic_id] = found.get(topic_id, 0) + 1
+    if len(found) == 1:
+        return Topic.objects.filter(pk=next(iter(found))).first()
+    return None
+
+
+def candidate_reason_label(reason):
+    return CANDIDATE_REASON_LABELS.get(reason, reason or '')
