@@ -1364,6 +1364,48 @@ class TextbookImportTests(TestCase):
         self.assertFalse(batch.drafts.filter(pk=second.pk).exists())
         self.assertTrue(batch.drafts.filter(pk=first.pk).exists())
 
+    def test_bulk_ignores_already_imported_drafts(self):
+        payload = bundle()
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='1.2.38', source_number='38',
+            text_latex='Вторая задача.'))
+        batch = self.create_batch(payload)
+        imported, open_draft = list(batch.drafts.order_by('external_id'))
+        imported.status = TextbookTaskDraft.STATUS_IMPORTED
+        imported.save(update_fields=['status'])
+        topic = Topic.objects.create(name='После импорта')
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('textbook_import_bulk', args=[batch.pk])
+        next_url = reverse('textbook_import_detail', args=[batch.pk])
+
+        response = self.client.get(next_url)
+        self.assertNotContains(
+            response, f'name="ids" value="{imported.pk}"')
+        self.assertContains(
+            response, f'name="ids" value="{open_draft.pk}"')
+
+        self.client.post(url, {
+            'ids': [str(imported.pk), str(open_draft.pk)],
+            'skip': '1', 'next': next_url,
+        })
+        imported.refresh_from_db()
+        open_draft.refresh_from_db()
+        self.assertEqual(imported.status, TextbookTaskDraft.STATUS_IMPORTED)
+        self.assertEqual(open_draft.status, TextbookTaskDraft.STATUS_SKIPPED)
+
+        self.client.post(url, {
+            'ids': [str(imported.pk)],
+            'topic': str(topic.pk), 'next': next_url,
+        })
+        imported.refresh_from_db()
+        self.assertNotEqual(imported.topic_id, topic.pk)
+
+        self.client.post(url, {
+            'ids': [str(imported.pk)],
+            'delete': '1', 'next': next_url,
+        })
+        self.assertTrue(batch.drafts.filter(pk=imported.pk).exists())
+
     def test_review_save_stays_and_save_next_advances(self):
         payload = bundle()
         payload['tasks'].append(dict(

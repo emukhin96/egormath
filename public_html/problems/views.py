@@ -1208,7 +1208,9 @@ def textbook_import_assign_section_topic(request, pk):
     if topic is None:
         messages.error(request, 'Выберите тему рубрикатора.')
         return redirect(_textbook_detail_url(batch, section=section_token))
-    updated = _textbook_group_drafts(batch, group).update(topic=topic)
+    updated = (_textbook_group_drafts(batch, group)
+               .exclude(status=TextbookTaskDraft.STATUS_IMPORTED)
+               .update(topic=topic))
     messages.success(
         request,
         f'Тема «{topic}» назначена задачам раздела '
@@ -1249,7 +1251,8 @@ def textbook_import_bulk(request, pk):
         messages.error(request, 'Загруженную партию нельзя изменять.')
         return redirect(next_url)
     ids = request.POST.getlist('ids')
-    drafts = batch.drafts.filter(pk__in=ids)
+    drafts = batch.drafts.filter(pk__in=ids).exclude(
+        status=TextbookTaskDraft.STATUS_IMPORTED)
     if not drafts.exists():
         messages.error(request, 'Не выбрано ни одной задачи.')
         return redirect(next_url)

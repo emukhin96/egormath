@@ -104,7 +104,7 @@
   <table class="list import-drafts">
       <tr>{% if batch.status != 'imported' %}<th class="col-select"><input type="checkbox" data-bulk-all="import-bulk-form" title="Выбрать все задачи на странице"></th>{% endif %}<th>Ключ</th><th>№</th><th>Задание и подпункты</th><th class="col-answer">Ответ</th><th class="col-solution">Решение</th><th>Раздел</th><th class="col-topics">Тема</th><th>Уверенность</th><th>Замечания</th><th class="col-status">Статус</th></tr>
     {% for draft in page %}<tr>
-      {% if batch.status != 'imported' %}<td class="col-select"><input type="checkbox" class="row-select" name="ids" value="{{ draft.pk }}" form="import-bulk-form" title="Выбрать задачу"></td>{% endif %}
+      {% if batch.status != 'imported' %}<td class="col-select">{% if draft.status != 'imported' %}<input type="checkbox" class="row-select" name="ids" value="{{ draft.pk }}" form="import-bulk-form" title="Выбрать задачу">{% endif %}</td>{% endif %}
       <td><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.external_id }}</a></td>
       <td><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.source_number }}</a></td>
       <td>{% include 'problems/_textbook_draft_preview.html' with draft=draft %}</td>
