@@ -370,15 +370,23 @@ class BeamerGenerationTests(TestCase):
             text_latex='Вспомните правило.', text_style='memo')
         tex = worksheet_to_beamer(self.worksheet)
         self.assertIn('\\egorsection{Разминка}[Устно]', tex)
-        self.assertIn('\\begin{frame}[t]{1.\\ \\egorstars{2}}', tex)
+        self.assertIn('\\begin{frame}[fragile,t]{1.\\ \\egorstars{2}}', tex)
         self.assertIn('Вычислите $1+1$.', tex)
         self.assertIn('\\egoranswer{%', tex)
         self.assertIn('\\egorsolution{%', tex)
-        self.assertIn('\\begin{frame}[t]{Памятка}', tex)
+        self.assertIn('\\begin{frame}[fragile,t]{Памятка}', tex)
         self.assertIn('\\begin{exampleblock}{Памятка}', tex)
         self.assertEqual(tex.count('\\begin{frame}'), 2)
         self.assertEqual(tex.count('\\egortitle'), 1)
         self.assertEqual(tex.count('\\egorsection'), 1)
+
+    def test_task_frame_is_fragile_for_verbatim(self):
+        task = Task.objects.create(
+            text_latex=r'Команда \verb|\frac|.', created_by=self.teacher)
+        make_item(self.worksheet, task)
+        tex = worksheet_to_beamer(self.worksheet)
+        self.assertIn('\\begin{frame}[fragile,t]{1.}', tex)
+        self.assertIn(r'\verb|\frac|', tex)
 
     def test_subitems_and_taskpic(self):
         task = Task.objects.create(text_latex='См. \\taskpic{1}', columns=2)

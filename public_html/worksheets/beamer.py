@@ -89,6 +89,13 @@ def _rubric_slide(item):
     return tex
 
 
+def _content_frame(body, title=''):
+    """Кадр с пользовательским LaTeX: fragile первым (verbatim, \\verb)."""
+    if title:
+        return '\\begin{frame}[fragile,t]{%s}\n%s\n\\end{frame}' % (title, body)
+    return '\\begin{frame}[fragile,t]\n%s\n\\end{frame}' % body
+
+
 def _text_slide(item):
     body = item.text_latex.strip()
     style = item.text_style
@@ -101,9 +108,7 @@ def _text_slide(item):
     else:
         inner = body
         title = ''
-    if title:
-        return '\\begin{frame}[t]{%s}\n%s\n\\end{frame}' % (title, inner)
-    return '\\begin{frame}[t]\n%s\n\\end{frame}' % inner
+    return _content_frame(inner, title)
 
 
 def _subitem_lines(item, filenames, used, deferred):
@@ -180,8 +185,7 @@ def _task_slide(item, number):
         chunks.append(_wrap_cmd('egoranswer', answer))
     if solution:
         chunks.append(_wrap_cmd('egorsolution', solution))
-    return '\\begin{frame}[t]{%s}\n%s\n\\end{frame}' % (
-        frametitle, '\n\n'.join(chunks))
+    return _content_frame('\n\n'.join(chunks), frametitle)
 
 
 def worksheet_to_beamer(worksheet, exclude_ids=None, **kwargs):
