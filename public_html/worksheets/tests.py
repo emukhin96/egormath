@@ -8,6 +8,7 @@ from django.utils import timezone
 from problems.models import Task, TaskSubitem
 from problems.tests import make_student, make_teacher
 
+from .beamer import normalize_beamer_options, worksheet_to_beamer
 from .latex import task_to_tex, worksheet_to_tex
 from .models import ShareLink, Worksheet, WorksheetItem, WorksheetPdf
 from .services import LatexCompileError
@@ -326,6 +327,100 @@ class LatexGenerationTests(TestCase):
         self.assertIn(r'7\_класс', tex)
 
 
+class BeamerGenerationTests(TestCase):
+    def setUp(self):
+        self.teacher = make_teacher()
+        self.worksheet = Worksheet.objects.create(
+            title='Дроби & проценты', grade_label='8 класс',
+            subtitle='Осень', author_name='И. Иванов', owner=self.teacher)
+
+    def test_preamble_defaults(self):
+        tex = worksheet_to_beamer(self.worksheet)
+        self.assertIn(
+            '\\documentclass[aspectratio=169,12pt]{beamer}', tex)
+        self.assertIn(
+            '\\usepackage[theme=light,content=problems,reveal=click,'
+            'stars,footer]{egorbeamer}', tex)
+        self.assertIn(
+            '\\egortitle{Дроби \\& проценты}{8 класс}{И. Иванов}[Осень]',
+            tex)
+        self.assertTrue(tex.strip().endswith('\\end{document}'))
+
+    def test_option_overrides_and_unknowns(self):
+        tex = worksheet_to_beamer(
+            self.worksheet, theme='night', aspect='43', size='14pt',
+            content='solutions', reveal='show', stars=False, footer=False)
+        self.assertIn('\\documentclass[aspectratio=43,14pt]{beamer}', tex)
+        self.assertIn(
+            '\\usepackage[theme=night,content=solutions,reveal=show,'
+            'nostars,nofooter]{egorbeamer}', tex)
+        opts = normalize_beamer_options(theme='neon', size='20pt')
+        self.assertEqual(opts['theme'], 'light')
+        self.assertEqual(opts['size'], '12pt')
+
+    def test_rubric_task_text_and_numbering(self):
+        make_rubric(self.worksheet, 'Разминка', order=5, note='Устно')
+        task = Task.objects.create(
+            text_latex='Вычислите $1+1$.', answer_latex='2',
+            solution_latex='Складываем.', stars=2, created_by=self.teacher)
+        WorksheetItem.objects.create(
+            worksheet=self.worksheet, task=task, order=10)
+        WorksheetItem.objects.create(
+            worksheet=self.worksheet, order=15,
+            text_latex='Вспомните правило.', text_style='memo')
+        tex = worksheet_to_beamer(self.worksheet)
+        self.assertIn('\\egorsection{Разминка}[Устно]', tex)
+        self.assertIn('\\begin{frame}[t]{1.\\ \\egorstars{2}}', tex)
+        self.assertIn('Вычислите $1+1$.', tex)
+        self.assertIn('\\egoranswer{%', tex)
+        self.assertIn('\\egorsolution{%', tex)
+        self.assertIn('\\begin{frame}[t]{Памятка}', tex)
+        self.assertIn('\\begin{exampleblock}{Памятка}', tex)
+        self.assertEqual(tex.count('\\begin{frame}'), 2)
+        self.assertEqual(tex.count('\\egortitle'), 1)
+        self.assertEqual(tex.count('\\egorsection'), 1)
+
+    def test_subitems_and_taskpic(self):
+        task = Task.objects.create(text_latex='См. \\taskpic{1}', columns=2)
+        TaskSubitem.objects.create(
+            task=task, order=10, text_latex='$1+1$', answer_latex='2')
+        TaskSubitem.objects.create(
+            task=task, order=20, text_latex='$2+2$', answer_latex='4')
+        task.images.create(image='task_images/pic.png', order=10)
+        make_item(self.worksheet, task)
+        tex = worksheet_to_beamer(self.worksheet)
+        self.assertIn('\\taskpic{pic.png}', tex)
+        self.assertNotIn('\\taskpic{1}', tex)
+        self.assertIn('\\item[а)] $1+1$;', tex)
+        self.assertIn('\\item[б)] $2+2$.', tex)
+        self.assertIn('\\begin{multicols}{2}', tex)
+        self.assertIn('а)~2', tex)
+        self.assertIn('б)~4', tex)
+
+    def test_empty_rubric_dropped_and_hidden_items(self):
+        make_rubric(self.worksheet, 'Пустая', order=1)
+        task = Task.objects.create(text_latex='Задача', created_by=self.teacher)
+        item = WorksheetItem.objects.create(
+            worksheet=self.worksheet, task=task, order=10)
+        tex = worksheet_to_beamer(self.worksheet, exclude_ids={item.pk})
+        self.assertNotIn('\\egorsection{Пустая}', tex)
+        self.assertNotIn('Задача', tex)
+        self.assertIn('\\egortitle', tex)
+
+    def test_collect_beamer_assets_includes_sty(self):
+        from .services import EGORBEAMER_STY, collect_beamer_assets
+        assets = collect_beamer_assets(self.worksheet)
+        self.assertEqual(assets[0]['filename'], 'egorbeamer.sty')
+        self.assertTrue(assets[0]['content_base64'])
+        self.assertTrue(EGORBEAMER_STY.is_file())
+
+    def test_beamer_filename(self):
+        self.worksheet.pdf_basename = 'alg8-drobi'
+        self.worksheet.save()
+        self.assertEqual(
+            self.worksheet.beamer_filename(), 'alg8-drobi-prezentaciya.pdf')
+
+
 class WorksheetViewTests(TestCase):
     def setUp(self):
         self.teacher = make_teacher()
@@ -361,6 +456,10 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'data-neuro="apply-all"')
         self.assertContains(response, 'data-no-answer="1"')
         self.assertContains(response, 'Дописать AI-ответ к решениям')
+        self.assertContains(response, 'Презентация')
+        self.assertContains(response, 'Собрать презентацию')
+        self.assertContains(response, reverse(
+            'worksheet_beamer_editor', args=[self.worksheet.pk]))
         self.assertContains(response, 'Добавить AI-решения и ответ')
         self.assertNotContains(response, 'без ответа')
         self.assertContains(response, 'js/neuro.js')
@@ -854,6 +953,38 @@ class WorksheetViewTests(TestCase):
         self.assertEqual(PdfCompileLock.objects.count(), 0)
         response = self.client.post(url, {'tex': r'\documentclass{article}'})
         self.assertEqual(response.status_code, 200)
+
+    def test_beamer_editor_page(self):
+        self.login_teacher()
+        response = self.client.get(
+            reverse('worksheet_beamer_editor', args=[self.worksheet.pk]))
+        self.assertContains(response, 'id="tex-source"')
+        self.assertContains(response, '\\documentclass[aspectratio=169,12pt]{beamer}')
+        self.assertContains(response, 'data-switch="theme"')
+        self.assertContains(response, 'data-switch="reveal"')
+        self.assertContains(response, 'beamer_editor.js')
+        self.assertContains(response, self.worksheet.beamer_filename())
+        self.client.login(username='teacher2', password='pass12345')
+        response = self.client.get(
+            reverse('worksheet_beamer_editor', args=[self.worksheet.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    @mock.patch('worksheets.views.compile_latex',
+                return_value=b'%PDF-1.5 fake')
+    def test_beamer_editor_compile(self, mocked):
+        self.login_teacher()
+        url = reverse('worksheet_beamer_compile', args=[self.worksheet.pk])
+        response = self.client.post(url, {'tex': r'\documentclass{beamer}'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(
+            mocked.call_args.args[0], r'\documentclass{beamer}')
+        assets = mocked.call_args.kwargs.get('assets') or []
+        self.assertTrue(any(a['filename'] == 'egorbeamer.sty' for a in assets))
+        self.assertEqual(
+            WorksheetPdf.objects.filter(worksheet=self.worksheet).count(), 0)
+        response = self.client.post(url, {'tex': '  '})
+        self.assertEqual(response.status_code, 400)
 
     @mock.patch('worksheets.views.compile_latex',
                 side_effect=LatexCompileError(

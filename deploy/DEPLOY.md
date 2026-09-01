@@ -38,6 +38,8 @@
 | CMU Serif/Sans/Typewriter (`.otf`) | `~/Library/Fonts/cmun*.otf` **или** TeX Live `cm-unicode` | системные шрифты + luaotfload       | **Обязательно** (профиль `font=cm`, дефолт сайта) |
 | SchoolBookC + TextBookC (`.ttf`)   | `~/Library/Fonts/SchoolBookC*.ttf`, `TextBookC*.ttf`      | `/usr/local/share/fonts/egor/`      | Опционально (`font=school` / `font=palatino`)     |
 | `chem.sty`                         | `LaTEX/egormath/chem.sty`                                 | рядом с `egor.sty`                  | Опционально (опция `[chem]`)                      |
+| TeX Live `beamer`                  | коллекция `collection-latexextra` / пакет `beamer`        | дерево TeX Live на VPS              | **Обязательно для презентаций** (`beamer.cls`)    |
+| `egorbeamer.sty`                   | `public_html/worksheets/tex/egorbeamer.sty`               | asset каждой сборки; опционально TEXMFLOCAL | Сайт шлёт sty сам; на TEXMFLOCAL — чтобы не занимать слот assets |
 | `home.jpeg`, `kolba-round.png`     | если есть у вас                                           | `/opt/latex-api/compile/` или TEXMF | Опционально (`\home`, `\kolba`)                   |
 
 
@@ -91,6 +93,33 @@ env['TEXINPUTS'] = '/opt/latex-api/texmf//' + os.pathsep + env.get('TEXINPUTS', 
 
 Обновление пакета позже: снова `scp` + `cp` + `mktexlsr`. Рестарт
 `latex-api` не обязателен (пакет читается с диска при каждой компиляции).
+
+### 1.1a. Beamer для презентаций листков
+
+Сайт собирает презентации через `\documentclass{beamer}` и пакет
+`egorbeamer.sty` (лежит в репозитории, уходит asset'ом в каталог сборки).
+На API должен быть класс Beamer — иначе все сборки падают с
+`File beamer.cls not found`.
+
+```bash
+# на VPS (TeX Live)
+sudo tlmgr install beamer pgf translator
+kpsewhich beamer.cls
+# ожидается: .../texmf-dist/tex/latex/beamer/beamer.cls
+```
+
+`egorbeamer.sty` ставить в TEXMFLOCAL не обязательно: сайт прикладывает
+его к каждому запросу. Когда тема устаканится:
+
+```bash
+# с Mac
+scp public_html/worksheets/tex/egorbeamer.sty "$VPS:/tmp/egorbeamer.sty"
+# на VPS
+sudo mkdir -p /usr/local/texlive/texmf-local/tex/latex/egor
+sudo cp /tmp/egorbeamer.sty /usr/local/texlive/texmf-local/tex/latex/egor/
+sudo mktexlsr
+kpsewhich egorbeamer.sty
+```
 
 ### 1.2. Шрифты CMU (обязательно для дефолтного `font=cm`)
 
@@ -448,6 +477,7 @@ sudo nano /opt/latex-api/app.py   # или vim
 
 | Симптом                          | Решение                                                                                                       |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `File beamer.cls not found`      | на API нет Beamer: `tlmgr install beamer` (и зависимости: `pgf`, `translator`, `etoolbox`) + `mktexlsr`       |
 | `File egor.sty not found`        | `mktexlsr` не сделан; проверить `kpsewhich egor.sty`                                                          |
 | `CMU Serif cannot be found`      | шрифты не в fontconfig или не обновлён luaotfload **под API_USER**                                            |
 | `no writeable cache path`        | нет прав на `TEXMFVAR` у API_USER; создать домашний кэш, не ломать TEXMFVAR                                   |

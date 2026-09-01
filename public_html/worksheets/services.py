@@ -8,6 +8,7 @@ JSON {"api_key": ..., "tex_files": [{"team_id": ..., "tex_content": ...}]},
 import base64
 import hashlib
 import logging
+from pathlib import Path
 
 import requests
 from django.conf import settings
@@ -91,6 +92,24 @@ def collect_assets(worksheet, exclude_ids=None):
                     'filename': name,
                     'content_base64': base64.b64encode(f.read()).decode(),
                 })
+    return assets
+
+
+# Пакет презентаций лежит в репозитории и уходит asset'ом в каталог сборки
+# (API не ищет TEXMFLOCAL для неизвестных sty). Лимит API — 20 файлов.
+EGORBEAMER_STY = Path(__file__).resolve().parent / 'tex' / 'egorbeamer.sty'
+BEAMER_IMAGE_ASSET_LIMIT = 19
+
+
+def collect_beamer_assets(worksheet, exclude_ids=None):
+    """Картинки листка + egorbeamer.sty для компиляции презентации."""
+    sty = EGORBEAMER_STY.read_bytes()
+    assets = [{
+        'filename': 'egorbeamer.sty',
+        'content_base64': base64.b64encode(sty).decode(),
+    }]
+    assets.extend(collect_assets(worksheet, exclude_ids=exclude_ids)[
+        :BEAMER_IMAGE_ASSET_LIMIT])
     return assets
 
 
