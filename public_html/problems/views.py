@@ -957,6 +957,29 @@ def _subitems_from_review_editors(post):
     return normalize_subitems(items)
 
 
+def _merge_review_subitems(from_editors, from_json):
+    """JSON задаёт состав и порядок; редакторы перекрывают пункт с той же меткой.
+
+    Иначе удаление или перестановка в служебном JSON молча игнорировались бы
+    полями подпунктов, которые страница всё равно присылает целиком.
+    """
+    by_label = {}
+    for item in from_editors:
+        key = _subitem_label_key(item.get('label'))
+        if key not in by_label:
+            by_label[key] = item
+    merged = []
+    used = set()
+    for item in from_json:
+        key = _subitem_label_key(item.get('label'))
+        if key in by_label and key not in used:
+            merged.append(by_label[key])
+            used.add(key)
+        else:
+            merged.append(item)
+    return merged
+
+
 def _overlay_review_author_fields(subitems, original, post):
     """Авторские поля привязываются к метке пункта, а не к позиции JSON."""
     by_label = {}
@@ -1276,8 +1299,8 @@ def textbook_import_review(request, batch_pk, pk):
                 except TextbookImportError as exc:
                     form.add_error('subitems', str(exc))
                 else:
-                    extras = updated.subitems[len(structured):]
-                    updated.subitems = structured + extras
+                    updated.subitems = _merge_review_subitems(
+                        structured, updated.subitems)
             else:
                 updated.subitems = _overlay_review_author_fields(
                     updated.subitems, original_subitems, request.POST)
