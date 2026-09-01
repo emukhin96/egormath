@@ -619,7 +619,9 @@ def attach_image_archive(batch, upload, max_bytes=80 * 1024 * 1024):
     except zipfile.BadZipFile as exc:
         raise TextbookImportError(
             'Нужен ZIP с PNG, JPEG или PDF рисунками.') from exc
-    stored = 0
+    entries = []
+    seen = {}
+    collisions = {}
     for info in archive.infolist():
         if info.is_dir():
             continue
@@ -629,19 +631,33 @@ def attach_image_archive(batch, upload, max_bytes=80 * 1024 * 1024):
         stem = normalize_image_stem(path.name)
         if not stem:
             continue
+        if stem in seen:
+            collisions.setdefault(stem, [seen[stem]]).append(info.filename)
+        else:
+            seen[stem] = info.filename
+        entries.append((stem, path, info))
+    if collisions:
+        details = '; '.join(
+            f'{stem} ({", ".join(names)})'
+            for stem, names in sorted(collisions.items()))
+        raise TextbookImportError(
+            'В архиве несколько рисунков с одним именем файла: '
+            f'{details}. Оставьте один файл на имя или переименуйте.')
+    if not entries:
+        raise TextbookImportError(
+            'В архиве нет файлов PNG, JPEG или PDF.')
+    stored = 0
+    for stem, path, info in entries:
         try:
             payload = archive.read(info)
         except Exception as exc:
             raise TextbookImportError(
                 f'Не удалось прочитать {path.name}: {exc}') from exc
-        asset, created = TextbookImportAsset.objects.update_or_create(
+        asset, _created = TextbookImportAsset.objects.update_or_create(
             batch=batch, stem=stem,
             defaults={'original_name': path.name})
         asset.file.save(path.name, ContentFile(payload), save=True)
         stored += 1
-    if not stored:
-        raise TextbookImportError(
-            'В архиве нет файлов PNG, JPEG или PDF.')
     refresh_image_warnings(batch)
     return stored
 

@@ -995,6 +995,22 @@ class TextbookImportTests(TestCase):
         self.assertEqual(TaskImage.objects.count(), 1)
         self.assertIn('figure-1', TaskImage.objects.get().filename)
 
+    def test_image_zip_rejects_duplicate_stems(self):
+        batch = self.create_batch(bundle(images=['plot.png']))
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, 'w') as zf:
+            zf.writestr('chapter1/plot.png', TINY_PNG)
+            zf.writestr('chapter2/plot.jpg', TINY_PNG)
+        archive.seek(0)
+        with self.assertRaises(TextbookImportError) as ctx:
+            attach_image_archive(
+                batch, SimpleUploadedFile('pics.zip', archive.read()))
+        self.assertIn('plot', str(ctx.exception))
+        self.assertEqual(batch.assets.count(), 0)
+        draft = batch.drafts.get()
+        self.assertTrue(any(
+            'Требуется загрузить' in item for item in draft.warnings))
+
     def test_commit_section_imports_only_approved_topic(self):
         topic_a = Topic.objects.create(name='Тема раздела A')
         payload = bundle(
