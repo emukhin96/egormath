@@ -2108,7 +2108,8 @@
   }
 
   .import-ziv-parity-table a.is-current,
-  .import-section-nav a.is-current {
+  .import-section-nav a.is-current,
+  .form-buttons a.btn.is-current {
     font-weight: 700;
     text-decoration: underline;
   }

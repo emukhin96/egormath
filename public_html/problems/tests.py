@@ -772,6 +772,17 @@ class WebTexTests(TestCase):
         # Внутри $…$ команды не трогаем — их рендерит KaTeX
         self.assertEqual(self.render('$a~b \\\\ c$'), '$a~b \\\\ c$')
 
+    def test_decimal_comma_is_ordinary_for_katex(self):
+        # Русская десятичная запятая без пробела: KaTeX иначе раздвигает цифры
+        self.assertEqual(self.render('$0,6$'), '$0{,}6$')
+        self.assertEqual(
+            self.render(r'$0,8^{-2,7}$ и $(1,06)^{-5}$'),
+            r'$0{,}8^{-2{,}7}$ и $(1{,}06)^{-5}$')
+        # Список с пробелом после запятой — не десятичная дробь
+        self.assertEqual(self.render('$1, 2, 3$'), '$1, 2, 3$')
+        # Повторная защита не двоит скобки
+        self.assertEqual(self.render('$0{,}6$'), '$0{,}6$')
+
     def test_bracket_math_is_untouched(self):
         # KaTeX рендерит и \(…\)/\[…\] — внутри них \\ не превращаем в <br>
         matrix = '\\[\\begin{matrix}a\\\\b\\end{matrix}\\]'

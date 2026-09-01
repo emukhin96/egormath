@@ -676,7 +676,7 @@ class TextbookImportTests(TestCase):
             if group['collection_key'] == 'alg.quadratic')
         self.assertEqual(algebra['count'], 2)
         self.assertContains(response, 'Предпросмотр подборок и массовая тема')
-        self.assertContains(response, 'Состав будущей подборки')
+        self.assertContains(response, 'Все разделы')
         self.assertContains(response, 'data-single="1"')
 
         response = self.client.post(reverse(
@@ -791,8 +791,8 @@ class TextbookImportTests(TestCase):
         self.assertContains(response, '$1+1$', html=False)
         self.assertContains(response, 'есть: 1/2')
         html = response.content.decode()
-        self.assertGreaterEqual(html.count('Вычислите:'), 2)
-        self.assertGreaterEqual(html.count('$1+1$'), 2)
+        self.assertEqual(html.count('Вычислите:'), 1)
+        self.assertEqual(html.count('$1+1$'), 1)
         self.assertNotIn('class="ws-num"', html)
         self.assertNotIn('а) а)', html)
 
@@ -808,18 +808,20 @@ class TextbookImportTests(TestCase):
         response = self.client.get(reverse(
             'textbook_import_detail', args=[batch.pk]))
 
-        group = response.context['selected_group']
-        page = response.context['collection_page']
-        self.assertEqual(group['count'], 51)
+        self.assertIsNone(response.context['selected_group'])
+        page = response.context['page']
+        self.assertEqual(page.paginator.count, 51)
         self.assertEqual(len(page.object_list), 50)
         self.assertEqual(page.paginator.num_pages, 2)
 
+        group = next(
+            item for item in response.context['collection_groups']
+            if item['is_leaf'])
         response = self.client.get(reverse(
             'textbook_import_detail', args=[batch.pk]), {
-                'section': group['token'], 'collection_page': 2,
+                'section': group['token'], 'page': 2,
         })
-        self.assertEqual(
-            len(response.context['collection_page'].object_list), 1)
+        self.assertEqual(len(response.context['page'].object_list), 1)
 
     def test_user_guide_explains_statuses_and_commit_boundary(self):
         self.client.login(username='teacher1', password='pass12345')
@@ -1113,7 +1115,13 @@ class TextbookImportTests(TestCase):
         self.client.login(username='teacher1', password='pass12345')
         response = self.client.get(reverse(
             'textbook_import_detail', args=[batch.pk]))
-        token = response.context['selected_section']
+        token = next(
+            item['token'] for item in response.context['collection_groups']
+            if item['is_leaf'])
+        response = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]), {
+                'section': token,
+        })
         self.assertEqual(response.context['suggested_topic'], topic)
         self.assertContains(response, f'Назначить тему: {topic}')
         self.assertContains(response, 'tax-picker-compact')
@@ -1186,12 +1194,73 @@ class TextbookImportTests(TestCase):
         self.client.login(username='teacher1', password='pass12345')
         response = self.client.get(reverse(
             'textbook_import_detail', args=[batch.pk]))
-        token = response.context['selected_section']
+        self.assertFalse(response.context['selected_section'])
+        self.assertIsNone(response.context['selected_group'])
+        token = next(
+            item['token'] for item in response.context['collection_groups']
+            if item['is_leaf'])
+        response = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]), {
+                'section': token,
+        })
         self.assertContains(response, f'status=needs_review')
         self.assertContains(response, f'section={token}')
         self.assertNotContains(response, '<optgroup')
         self.assertContains(response, 'import-bulk-form')
         self.assertContains(response, 'name="ids"')
+
+    def test_section_and_status_filter_one_table(self):
+        payload = bundle()
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='1.2.38', source_number='38',
+            text_latex='Вторая задача раздела.'))
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='2.1.1', source_number='1',
+            source_path=['Геометрия', 'Треугольники'],
+            collection_key='geometry.triangles',
+            collection_title='Треугольники',
+            text_latex='Задача другого раздела.'))
+        batch = self.create_batch(payload)
+        first = batch.drafts.get(external_id='1.2.37')
+        first.status = TextbookTaskDraft.STATUS_APPROVED
+        first.save(update_fields=['status'])
+        self.client.login(username='teacher1', password='pass12345')
+
+        landing = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]))
+        self.assertEqual(landing.context['page'].paginator.count, 3)
+        self.assertContains(landing, 'Все разделы')
+        algebra = next(
+            group for group in landing.context['collection_groups']
+            if group['collection_key'] == 'alg.quadratic')
+
+        section = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]), {
+                'section': algebra['token'],
+        })
+        ids = {draft.external_id for draft in section.context['page']}
+        self.assertEqual(ids, {'1.2.37', '1.2.38'})
+        self.assertContains(section, f'status=approved&section={algebra["token"]}')
+
+        filtered = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]), {
+                'section': algebra['token'],
+                'status': TextbookTaskDraft.STATUS_APPROVED,
+        })
+        self.assertEqual(
+            [draft.external_id for draft in filtered.context['page']],
+            ['1.2.37'])
+        self.assertNotIn('section=', filtered.context['all_sections_href'])
+        self.assertIn('status=', filtered.context['all_sections_href'])
+
+        cleared = self.client.get(reverse(
+            'textbook_import_detail', args=[batch.pk]), {
+                'status': TextbookTaskDraft.STATUS_APPROVED,
+        })
+        self.assertFalse(cleared.context['selected_section'])
+        self.assertEqual(
+            [draft.external_id for draft in cleared.context['page']],
+            ['1.2.37'])
 
     def test_bulk_skips_and_deletes_selected_drafts(self):
         payload = bundle()

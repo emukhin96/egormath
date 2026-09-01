@@ -107,9 +107,23 @@ def _split_outside_math(text, pattern):
 _SECTION_RE = re.compile(r'\\(?:sub)*section\*?\{[^{}]*\}')
 
 
+# Десятичная запятая в формуле: KaTeX иначе ставит пробел после запятой.
+_DECIMAL_COMMA_RE = re.compile(r'(?<!\{)(\d),(\d)')
+
+
+def _protect_decimal_commas(value):
+    """Цифра,цифра → цифра{,}цифра; уже защищённые и списки с пробелом не трогаем."""
+    return _DECIMAL_COMMA_RE.sub(r'\1{,}\2', value)
+
+
 def _math_for_web(value):
-    """KaTeX не переносит формулу по \\n; linebreaksbr тоже не должен."""
-    return re.sub(r'\s+', ' ', value).strip()
+    """KaTeX не переносит формулу по \\n; linebreaksbr тоже не должен.
+
+    Десятичную запятую делаем ординарной ({,}): иначе KaTeX считает её
+    разделителем списка и добавляет тонкий пробел. Исходник в базе
+    не меняем — только показ.
+    """
+    return _protect_decimal_commas(re.sub(r'\s+', ' ', value).strip())
 
 
 def _plain(text):

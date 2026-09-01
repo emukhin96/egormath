@@ -810,6 +810,13 @@ def _section_filter_href(request, token):
     return f'?{query}#collection-preview'
 
 
+def _all_sections_href(request):
+    """Сбрасывает раздел, сохраняет вкладку статуса."""
+    query = _textbook_detail_query(
+        request, section=None, page=None, collection_page=None)
+    return f'?{query}#collection-preview' if query else '#collection-preview'
+
+
 def _annotate_section_nav_row(row, request, selected_token,
                               work_group, title_group):
     work_token = work_group['token'] if work_group else ''
@@ -1044,7 +1051,14 @@ def textbook_import_upload(request):
 def textbook_import_detail(request, pk):
     batch = _own_import_batch(request, pk)
     status = request.GET.get('status', '')
+    collection_groups = _textbook_collection_groups(batch)
+    groups_by_token = {group['token']: group for group in collection_groups}
+    selected_token = request.GET.get('section', '')
+    selected_group = groups_by_token.get(selected_token)
     drafts = batch.drafts.select_related('topic', 'imported_task')
+    if selected_group:
+        drafts = _textbook_group_drafts(batch, selected_group).select_related(
+            'topic', 'imported_task')
     if status in dict(TextbookTaskDraft.STATUS_CHOICES):
         drafts = drafts.filter(status=status)
     paginator = Paginator(drafts, 50)
@@ -1057,14 +1071,6 @@ def textbook_import_detail(request, pk):
         {'value': value, 'label': label, 'count': counts.get(value, 0)}
         for value, label in TextbookTaskDraft.STATUS_CHOICES
     ]
-    collection_groups = _textbook_collection_groups(batch)
-    groups_by_token = {group['token']: group for group in collection_groups}
-    selected_token = request.GET.get('section', '')
-    selected_group = groups_by_token.get(selected_token)
-    if selected_group is None and collection_groups:
-        selected_group = collection_groups[0]
-        selected_token = selected_group['token']
-    collection_page = None
     selected_topic = None
     suggested_topic = None
     if selected_group:
@@ -1109,11 +1115,6 @@ def textbook_import_detail(request, pk):
             if len(shown) == 5:
                 break
         selected_group['topic_candidates'] = shown
-        collection_page = Paginator(
-            group_drafts.select_related('topic', 'imported_task')
-            .order_by('external_id', 'pk'), 50,
-        ).get_page(request.GET.get('collection_page'))
-        _attach_draft_taxonomy(collection_page.object_list)
         section_statuses = list(group_drafts.values_list('status', flat=True))
         selected_group['approved_count'] = sum(
             status == TextbookTaskDraft.STATUS_APPROVED
@@ -1144,19 +1145,17 @@ def textbook_import_detail(request, pk):
         'status_tabs': status_tabs,
         'collection_groups': collection_groups,
         'selected_group': selected_group,
-        'selected_section': selected_token,
+        'selected_section': selected_token if selected_group else '',
         'selected_topic': selected_topic,
         'suggested_topic': suggested_topic,
         'ziv_variant_summary': ziv_summary,
         'section_nav': (
             [] if ziv_summary else _section_nav_rows(
                 collection_groups, request, selected_token)),
-        'collection_page': collection_page,
         'image_form': TextbookImageArchiveForm(),
         'list_query': _textbook_detail_query(
-            request, section=selected_token or None),
-        'collection_query': _textbook_detail_query(
-            request, section=selected_token or None, page=None),
+            request, section=selected_token if selected_group else None),
+        'all_sections_href': _all_sections_href(request),
     })
     return render(request, 'problems/textbook_import_detail.html', context)
 
