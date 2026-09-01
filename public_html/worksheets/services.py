@@ -102,15 +102,22 @@ BEAMER_IMAGE_ASSET_LIMIT = 19
 
 
 def collect_beamer_assets(worksheet, exclude_ids=None):
-    """Картинки листка + egorbeamer.sty для компиляции презентации."""
+    """Картинки листка + egorbeamer.sty для компиляции презентации.
+
+    Sty занимает один слот из 20 на стороне API. Если картинок больше
+    лимита — ошибка до сборки, без молчаливого отбрасывания файлов
+    (иначе TeX ссылается на отсутствующие изображения).
+    """
+    images = collect_assets(worksheet, exclude_ids=exclude_ids)
+    if len(images) > BEAMER_IMAGE_ASSET_LIMIT:
+        raise LatexCompileError(
+            'Слишком много картинок для презентации '
+            f'(лимит {BEAMER_IMAGE_ASSET_LIMIT} вместе со стилевым файлом).')
     sty = EGORBEAMER_STY.read_bytes()
-    assets = [{
+    return [{
         'filename': 'egorbeamer.sty',
         'content_base64': base64.b64encode(sty).decode(),
-    }]
-    assets.extend(collect_assets(worksheet, exclude_ids=exclude_ids)[
-        :BEAMER_IMAGE_ASSET_LIMIT])
-    return assets
+    }] + images
 
 
 def _pdf_filter_key(exclude_ids):

@@ -414,6 +414,15 @@ class BeamerGenerationTests(TestCase):
         self.assertTrue(assets[0]['content_base64'])
         self.assertTrue(EGORBEAMER_STY.is_file())
 
+    def test_collect_beamer_assets_rejects_too_many_images(self):
+        from .services import (BEAMER_IMAGE_ASSET_LIMIT, collect_beamer_assets)
+        fake = [{'filename': f'p{i}.png', 'content_base64': 'eA=='}
+                for i in range(BEAMER_IMAGE_ASSET_LIMIT + 1)]
+        with mock.patch('worksheets.services.collect_assets', return_value=fake):
+            with self.assertRaises(LatexCompileError) as ctx:
+                collect_beamer_assets(self.worksheet)
+        self.assertIn('картинок', str(ctx.exception))
+
     def test_beamer_filename(self):
         self.worksheet.pdf_basename = 'alg8-drobi'
         self.worksheet.save()
@@ -985,6 +994,18 @@ class WorksheetViewTests(TestCase):
             WorksheetPdf.objects.filter(worksheet=self.worksheet).count(), 0)
         response = self.client.post(url, {'tex': '  '})
         self.assertEqual(response.status_code, 400)
+
+    @mock.patch('worksheets.views.collect_beamer_assets',
+                side_effect=LatexCompileError('Слишком много картинок'))
+    @mock.patch('worksheets.views.compile_latex', return_value=b'%PDF-1.5')
+    def test_beamer_editor_compile_too_many_images(self, mocked_compile, _assets):
+        self.login_teacher()
+        response = self.client.post(
+            reverse('worksheet_beamer_compile', args=[self.worksheet.pk]),
+            {'tex': r'\documentclass{beamer}'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('картинок', response.json()['message'])
+        mocked_compile.assert_not_called()
 
     @mock.patch('worksheets.views.compile_latex',
                 side_effect=LatexCompileError(

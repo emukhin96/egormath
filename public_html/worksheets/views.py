@@ -995,10 +995,15 @@ def worksheet_beamer_editor(request, pk):
 def worksheet_beamer_compile(request, pk):
     """Черновая сборка презентации; кэш WorksheetPdf не трогает."""
     worksheet = _own_worksheet(request, pk)
+    try:
+        assets = collect_beamer_assets(worksheet)
+    except LatexCompileError as exc:
+        return JsonResponse(
+            {'ok': False, 'message': str(exc), 'log': exc.log}, status=400)
     return _editor_compile(
         request, worksheet, request.POST.get('tex', ''),
         doc_id=f'ws{worksheet.pk}-beamer',
-        assets=collect_beamer_assets(worksheet),
+        assets=assets,
         filename=worksheet.beamer_filename())
 
 
