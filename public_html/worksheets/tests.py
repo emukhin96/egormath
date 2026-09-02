@@ -342,7 +342,7 @@ class BeamerGenerationTests(TestCase):
             '\\usepackage[theme=light,content=problems,reveal=click,'
             'items=all,itemflow=stack,font=school,stars,footer]{egorbeamer}', tex)
         self.assertIn(
-            '\\egortitle{Дроби \\& проценты}{8 класс}{И. Иванов}[Осень]',
+            '\\egortitle{Дроби \\& проценты}{8 класс}{И. Иванов}[{Осень}]',
             tex)
         self.assertTrue(tex.strip().endswith('\\end{document}'))
 
@@ -381,7 +381,7 @@ class BeamerGenerationTests(TestCase):
             worksheet=self.worksheet, order=15,
             text_latex='Вспомните правило.', text_style='memo')
         tex = worksheet_to_beamer(self.worksheet)
-        self.assertIn('\\egorsection{Разминка}[Устно]', tex)
+        self.assertIn('\\egorsection{Разминка}[{Устно}]', tex)
         self.assertIn(
             '\\begin{frame}[fragile,t,label=egortask-1]{1.\\ \\egorstars{2}}',
             tex)
@@ -398,6 +398,17 @@ class BeamerGenerationTests(TestCase):
         self.assertEqual(tex.count('\\begin{frame}'), 2)
         self.assertEqual(tex.count('\\egortitle'), 1)
         self.assertEqual(tex.count('\\egorsection'), 1)
+
+    def test_optional_args_protect_brackets(self):
+        self.worksheet.subtitle = 'Тема [часть 1]'
+        self.worksheet.save(update_fields=['subtitle'])
+        make_rubric(self.worksheet, 'Раздел', order=1, note='см. [стр. 4]')
+        task = Task.objects.create(text_latex='Вычислите.', created_by=self.teacher)
+        make_item(self.worksheet, task)
+        tex = worksheet_to_beamer(self.worksheet)
+        self.assertIn('\\egortitle{Дроби \\& проценты}{8 класс}{И. Иванов}'
+                      '[{Тема [часть 1]}]', tex)
+        self.assertIn('\\egorsection{Раздел}[{см. [стр. 4]}]', tex)
 
     def test_task_frame_is_fragile_for_verbatim(self):
         task = Task.objects.create(

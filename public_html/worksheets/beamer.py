@@ -8,7 +8,7 @@ import re
 
 from problems.latex_utils import escape_latex
 
-from .latex import (_drop_empty_rubrics, _resolve_taskpics, subitem_label)
+from .latex import (_drop_empty_rubrics, _opt, _resolve_taskpics, subitem_label)
 
 THEMES = ('light', 'night', 'grid')
 ASPECTS = ('169', '43')
@@ -92,7 +92,7 @@ def _title_slide(worksheet):
     author = escape_latex(worksheet.display_author)
     tex = '\\egortitle{%s}{%s}{%s}' % (title, grade, author)
     if worksheet.subtitle:
-        tex += '[%s]' % escape_latex(worksheet.subtitle)
+        tex += _opt(escape_latex(worksheet.subtitle))
     return tex
 
 
@@ -100,7 +100,7 @@ def _rubric_slide(item):
     name = escape_latex(item.rubric.strip())
     tex = '\\egorsection{%s}' % name
     if item.rubric_note.strip():
-        tex += '[%s]' % escape_latex(item.rubric_note.strip())
+        tex += _opt(escape_latex(item.rubric_note.strip()))
     return tex
 
 
