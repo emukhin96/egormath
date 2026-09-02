@@ -193,6 +193,11 @@
       });
     });
 
+    source.addEventListener('input', function () {
+      state = readState();
+      markActive();
+    });
+
     document.getElementById('compile-btn').addEventListener('click', compile);
     var sidebarCompile = document.getElementById('sidebar-compile-btn');
     if (sidebarCompile) {

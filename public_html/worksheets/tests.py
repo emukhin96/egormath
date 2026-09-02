@@ -996,8 +996,9 @@ class WorksheetViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(mocked.call_count, calls_before)
 
+    @mock.patch('worksheets.views.collect_assets')
     @mock.patch('worksheets.views.compile_latex', return_value=b'%PDF-1.5')
-    def test_pdf_editor_compile_locked(self, mocked):
+    def test_pdf_editor_compile_locked(self, mocked, mocked_assets):
         # Пока идёт сборка пользователя, вторая параллельная — 429.
         # Lock хранится в БД (PdfCompileLock) — общий для всех процессов
         from worksheets.models import PdfCompileLock
@@ -1007,6 +1008,7 @@ class WorksheetViewTests(TestCase):
         response = self.client.post(url, {'tex': r'\documentclass{article}'})
         self.assertEqual(response.status_code, 429)
         mocked.assert_not_called()
+        mocked_assets.assert_not_called()
         # Протухший lock (упавший процесс) снимается автоматически
         from worksheets.views import PDF_EDITOR_LOCK_TIMEOUT
         PdfCompileLock.objects.update(

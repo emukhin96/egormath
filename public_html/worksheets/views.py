@@ -932,8 +932,8 @@ def _acquire_compile_lock(user):
         return False
 
 
-def _editor_compile(request, worksheet, tex, doc_id, assets, filename):
-    """Черновая сборка из редактора: lock → API → PDF или JSON с логом."""
+def _editor_compile(request, worksheet, tex, doc_id, filename, collect):
+    """Черновая сборка: проверка tex → lock → assets → API."""
     if not tex.strip():
         return JsonResponse(
             {'ok': False, 'message': 'Пустой документ', 'log': ''},
@@ -952,6 +952,11 @@ def _editor_compile(request, worksheet, tex, doc_id, assets, filename):
                         'завершения', 'log': ''},
             status=429)
     try:
+        try:
+            assets = collect()
+        except LatexCompileError as exc:
+            return JsonResponse(
+                {'ok': False, 'message': str(exc), 'log': exc.log}, status=400)
         pdf_bytes = compile_latex(tex, doc_id=doc_id, assets=assets)
     except LatexCompileError as exc:
         return JsonResponse(
@@ -975,8 +980,8 @@ def worksheet_pdf_compile(request, pk):
     return _editor_compile(
         request, worksheet, request.POST.get('tex', ''),
         doc_id=f'ws{worksheet.pk}-editor',
-        assets=collect_assets(worksheet),
-        filename=worksheet.pdf_filename())
+        filename=worksheet.pdf_filename(),
+        collect=lambda: collect_assets(worksheet))
 
 
 @teacher_required
@@ -995,16 +1000,11 @@ def worksheet_beamer_editor(request, pk):
 def worksheet_beamer_compile(request, pk):
     """Черновая сборка презентации; кэш WorksheetPdf не трогает."""
     worksheet = _own_worksheet(request, pk)
-    try:
-        assets = collect_beamer_assets(worksheet)
-    except LatexCompileError as exc:
-        return JsonResponse(
-            {'ok': False, 'message': str(exc), 'log': exc.log}, status=400)
     return _editor_compile(
         request, worksheet, request.POST.get('tex', ''),
         doc_id=f'ws{worksheet.pk}-beamer',
-        assets=assets,
-        filename=worksheet.beamer_filename())
+        filename=worksheet.beamer_filename(),
+        collect=lambda: collect_beamer_assets(worksheet))
 
 
 @teacher_required
