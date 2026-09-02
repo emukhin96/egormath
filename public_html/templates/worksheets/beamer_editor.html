@@ -5,14 +5,14 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Оформление</p>
   <h2>Быстрые настройки</h2>
-  <p class="sidebar-copy">Типовые правки кода — в один клик. После
-    переключения PDF пересобирается сам.</p>
+  <p class="sidebar-copy">Выберите оформление — выбор запоминается.
+    PDF собирается кнопкой ниже, не при каждом переключении.</p>
   <div class="sidebar-switches" id="beamer-switches">
     <p class="sidebar-kicker">Тема</p>
     <div class="switch-group" data-switch="theme">
+      <button type="button" data-value="grid">Сетка</button>
       <button type="button" data-value="light">Светлая</button>
       <button type="button" data-value="night">Тёмная</button>
-      <button type="button" data-value="paper">Тетрадь</button>
     </div>
     <p class="sidebar-kicker">Формат</p>
     <div class="switch-group" data-switch="aspect">
@@ -25,6 +25,11 @@
       <button type="button" data-value="12pt">12</button>
       <button type="button" data-value="14pt">14</button>
     </div>
+    <p class="sidebar-kicker">Шрифт</p>
+    <div class="switch-group" data-switch="font">
+      <button type="button" data-value="school">Schoolbook</button>
+      <button type="button" data-value="cm">Computer Modern</button>
+    </div>
     <p class="sidebar-kicker">Содержание</p>
     <div class="switch-group" data-switch="content">
       <button type="button" data-value="problems">Условия</button>
@@ -36,6 +41,17 @@
       <button type="button" data-value="click">По клику</button>
       <button type="button" data-value="show">Сразу</button>
       <button type="button" data-value="hidden">Скрыты</button>
+      <button type="button" data-value="end">В конце</button>
+    </div>
+    <p class="sidebar-kicker">Подпункты</p>
+    <div class="switch-group" data-switch="items">
+      <button type="button" data-value="all">Сразу</button>
+      <button type="button" data-value="click">По клику</button>
+    </div>
+    <p class="sidebar-kicker">Показ подпунктов</p>
+    <div class="switch-group" data-switch="itemflow">
+      <button type="button" data-value="stack">Накопление</button>
+      <button type="button" data-value="solo">По одному</button>
     </div>
     <p class="sidebar-kicker">Звёзды</p>
     <div class="switch-group" data-switch="stars">
@@ -46,6 +62,9 @@
     <div class="switch-group" data-switch="footer">
       <button type="button" data-value="on">Да</button>
       <button type="button" data-value="off">Нет</button>
+    </div>
+    <div class="sidebar-actions sidebar-compile">
+      <button type="button" class="btn" id="sidebar-compile-btn">Собрать PDF</button>
     </div>
   </div>
 </section>

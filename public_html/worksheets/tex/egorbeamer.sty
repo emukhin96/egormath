@@ -1,8 +1,9 @@
-% egorbeamer — оформление презентаций EgorMath (Beamer + XeLaTeX).
-% Три темы: light (сайт), night (тёмный класс), paper (тетрадь).
+% egorbeamer — оформление презентаций (Beamer + XeLaTeX).
+% Темы: light, night, grid. Хром общий (egorbeamer-grid.sty);
+% grid дополнительно рисует клетку ниже условия.
 % Не зависит от egor.sty (тот заточен под article).
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{egorbeamer}[2026/09/01 v1.0 EgorMath Beamer]
+\ProvidesPackage{egorbeamer}[2026/09/02 v1.1 Beamer]
 
 \newif\ifegorbmr@stars
 \newif\ifegorbmr@footer
@@ -10,11 +11,22 @@
 \newif\ifegorbmr@showsolution
 \newif\ifegorbmr@overlay
 \newif\ifegorbmr@hadanswer
+\newif\ifegorbmr@endplace
+\newif\ifegorbmr@itemclick
+\newif\ifegorbmr@itemsolo
+\newif\ifegorbmr@incols
 \egorbmr@starstrue
 \egorbmr@footertrue
 \def\egorbmr@theme{light}
 \def\egorbmr@content{problems}
 \def\egorbmr@reveal{click}
+\def\egorbmr@font{school}
+\def\egorbmr@items{all}
+\def\egorbmr@itemflow{stack}
+\def\egorbmr@no{0}
+\def\egorbmr@lastitemov{1}
+\def\egorbmr@afteritems{1}
+\gdef\egorbmr@appendix{}
 
 \DeclareOption{stars}{\egorbmr@starstrue}
 \DeclareOption{nostars}{\egorbmr@starsfalse}
@@ -22,13 +34,21 @@
 \DeclareOption{nofooter}{\egorbmr@footerfalse}
 \DeclareOption{theme=light}{\def\egorbmr@theme{light}}
 \DeclareOption{theme=night}{\def\egorbmr@theme{night}}
-\DeclareOption{theme=paper}{\def\egorbmr@theme{paper}}
+\DeclareOption{theme=grid}{\def\egorbmr@theme{grid}}
+\DeclareOption{theme=paper}{\def\egorbmr@theme{light}}
 \DeclareOption{content=problems}{\def\egorbmr@content{problems}}
 \DeclareOption{content=answers}{\def\egorbmr@content{answers}}
 \DeclareOption{content=solutions}{\def\egorbmr@content{solutions}}
 \DeclareOption{reveal=click}{\def\egorbmr@reveal{click}}
 \DeclareOption{reveal=show}{\def\egorbmr@reveal{show}}
 \DeclareOption{reveal=hidden}{\def\egorbmr@reveal{hidden}}
+\DeclareOption{reveal=end}{\def\egorbmr@reveal{end}}
+\DeclareOption{items=all}{\def\egorbmr@items{all}}
+\DeclareOption{items=click}{\def\egorbmr@items{click}}
+\DeclareOption{itemflow=stack}{\def\egorbmr@itemflow{stack}\egorbmr@itemsolofalse}
+\DeclareOption{itemflow=solo}{\def\egorbmr@itemflow{solo}\egorbmr@itemsolotrue}
+\DeclareOption{font=cm}{\def\egorbmr@font{cm}}
+\DeclareOption{font=school}{\def\egorbmr@font{school}}
 \ProcessOptions\relax
 
 \RequirePackage{fontspec}
@@ -52,12 +72,25 @@
 }
 \IfFontExistsTF{CMU Sans Serif}{%
   \setsansfont{CMU Sans Serif}%
+  \newfontfamily\egorbmrnavfont{CMU Sans Serif}%
 }{%
   \setsansfont{cmunss.otf}[
     BoldFont=cmunsx.otf,
     ItalicFont=cmunsi.otf,
     BoldItalicFont=cmunso.otf]%
+  \newfontfamily\egorbmrnavfont{cmunss.otf}%
 }
+% Два текстовых профиля: CMU (как листки font=cm) и SchoolBookC (тема).
+\def\egorbmr@val@school{school}
+\ifx\egorbmr@font\egorbmr@val@school
+  \IfFontExistsTF{SchoolBookC.ttf}{%
+    \setmainfont{SchoolBookC.ttf}[
+      BoldFont=SchoolBookC-Bold.ttf,
+      ItalicFont=SchoolBookC-Italic.ttf,
+      BoldItalicFont=SchoolBookC-BoldItalic.ttf]%
+  }{%
+    \IfFontExistsTF{SchoolBookC}{\setmainfont{SchoolBookC}}{}}%
+\fi
 \setbeamerfont{title}{family=\rmfamily,series=\bfseries}
 \setbeamerfont{frametitle}{family=\rmfamily,series=\bfseries,size*={13}{16}}
 \setbeamerfont{framesubtitle}{family=\rmfamily}
@@ -74,13 +107,16 @@
 \definecolor{egor@star}{HTML}{E8A819}
 \definecolor{egor@paper}{HTML}{F7F3E8}
 \definecolor{egor@nightblock}{HTML}{16345F}
+\definecolor{egor@nightcard}{HTML}{1A4A8A}
 
 \def\egorbmr@val@answers{answers}
 \def\egorbmr@val@solutions{solutions}
 \def\egorbmr@val@click{click}
 \def\egorbmr@val@hidden{hidden}
+\def\egorbmr@val@end{end}
+\def\egorbmr@val@clickitems{click}
 \def\egorbmr@val@night{night}
-\def\egorbmr@val@paper{paper}
+\def\egorbmr@val@grid{grid}
 
 \ifx\egorbmr@content\egorbmr@val@answers
   \egorbmr@showanswertrue
@@ -93,133 +129,26 @@
   \egorbmr@showanswerfalse
   \egorbmr@showsolutionfalse
 \fi
+\ifx\egorbmr@reveal\egorbmr@val@end
+  \egorbmr@endplacetrue
+\fi
 \ifx\egorbmr@reveal\egorbmr@val@click
   \ifegorbmr@showanswer\egorbmr@overlaytrue\fi
   \ifegorbmr@showsolution\egorbmr@overlaytrue\fi
 \fi
-
-\setbeamertemplate{navigation symbols}{}
-\setbeamersize{text margin left=1.1em,text margin right=1.1em}
-\setbeamertemplate{blocks}[rounded][shadow=false]
-
-% --- Темы ----------------------------------------------------------
-\newcommand{\egorbmr@setup@light}{%
-  \setbeamercolor{normal text}{fg=egor@text,bg=white}%
-  \setbeamercolor{background canvas}{bg=white}%
-  \setbeamercolor{structure}{fg=egor@accent}%
-  \setbeamercolor{title}{fg=egor@navy}%
-  \setbeamercolor{subtitle}{fg=egor@muted}%
-  \setbeamercolor{frametitle}{fg=white,bg=egor@navy}%
-  \setbeamercolor{egoraccent}{bg=egor@accent}%
-  \setbeamercolor{footline}{fg=egor@muted,bg=egor@bg}%
-  \setbeamercolor{egormuted}{fg=egor@muted}%
-  \setbeamercolor{block title}{fg=white,bg=egor@accent}%
-  \setbeamercolor{block body}{fg=egor@text,bg=egor@bg}%
-  \setbeamercolor{block title example}{fg=white,bg=egor@navy}%
-  \setbeamercolor{block body example}{fg=egor@text,bg=egor@bg}%
-  \setbeamercolor{egorsep}{fg=white,bg=egor@navy}%
-  \setbeamercolor{math text}{fg=egor@text}%
-}
-
-\newcommand{\egorbmr@setup@night}{%
-  \setbeamercolor{normal text}{fg=egor@bg,bg=egor@navy}%
-  \setbeamercolor{background canvas}{bg=egor@navy}%
-  \setbeamercolor{structure}{fg=egor@soft}%
-  \setbeamercolor{title}{fg=white}%
-  \setbeamercolor{subtitle}{fg=egor@soft}%
-  \setbeamercolor{frametitle}{fg=white,bg=egor@navy}%
-  \setbeamercolor{egoraccent}{bg=egor@soft}%
-  \setbeamercolor{footline}{fg=egor@soft,bg=egor@navy}%
-  \setbeamercolor{egormuted}{fg=egor@soft}%
-  \setbeamercolor{block title}{fg=egor@navy,bg=egor@soft}%
-  \setbeamercolor{block body}{fg=egor@bg,bg=egor@nightblock}%
-  \setbeamercolor{block title example}{fg=white,bg=egor@math}%
-  \setbeamercolor{block body example}{fg=egor@bg,bg=egor@nightblock}%
-  \setbeamercolor{egorsep}{fg=egor@bg,bg=egor@navy}%
-  \setbeamercolor{math text}{fg=egor@bg}%
-  \setbeamercolor{math text displayed}{fg=egor@bg}%
-  \setbeamercolor{math text inlined}{fg=egor@bg}%
-  \AtBeginDocument{%
-    \everymath{\color{egor@bg}}%
-    \everydisplay{\color{egor@bg}}%
-  }%
-}
-
-\newcommand{\egorbmr@setup@paper}{%
-  \setbeamercolor{normal text}{fg=egor@navy,bg=egor@paper}%
-  \setbeamercolor{background canvas}{bg=egor@paper}%
-  \setbeamercolor{structure}{fg=egor@accent}%
-  \setbeamercolor{title}{fg=egor@navy}%
-  \setbeamercolor{subtitle}{fg=egor@muted}%
-  \setbeamercolor{frametitle}{fg=egor@navy,bg=egor@paper}%
-  \setbeamercolor{egoraccent}{bg=egor@accent}%
-  \setbeamercolor{footline}{fg=egor@muted,bg=egor@paper}%
-  \setbeamercolor{egormuted}{fg=egor@muted}%
-  \setbeamercolor{block title}{fg=white,bg=egor@accent}%
-  \setbeamercolor{block body}{fg=egor@navy,bg=white}%
-  \setbeamercolor{block title example}{fg=white,bg=egor@navy}%
-  \setbeamercolor{block body example}{fg=egor@navy,bg=white}%
-  \setbeamercolor{egorsep}{fg=white,bg=egor@navy}%
-  \setbeamercolor{math text}{fg=egor@navy}%
-}
-
-\ifx\egorbmr@theme\egorbmr@val@night
-  \egorbmr@setup@night
-\else
-  \ifx\egorbmr@theme\egorbmr@val@paper
-    \egorbmr@setup@paper
-  \else
-    \egorbmr@setup@light
-  \fi
+\ifx\egorbmr@items\egorbmr@val@clickitems
+  \egorbmr@itemclicktrue
 \fi
 
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{frametitle continuation}[from second][(продолжение)]
+\setbeamersize{text margin left=1.1em,text margin right=1.1em}
+\setbeamertemplate{blocks}[rounded][shadow=false]
 \usebeamercolor[fg]{normal text}
-
-% --- Шапка / подвал ------------------------------------------------
-\defbeamertemplate*{headline}{egor}{%
-  \begin{beamercolorbox}[wd=\paperwidth,ht=2.8pt,dp=0pt]{egoraccent}%
-  \end{beamercolorbox}%
-}
-
-\defbeamertemplate*{frametitle}{egor}{%
-  \nointerlineskip
-  \ifx\egorbmr@theme\egorbmr@val@paper
-    \vspace{0.55em}%
-    {\usebeamerfont{frametitle}\usebeamercolor[fg]{frametitle}%
-      \hspace{0.4em}\insertframetitle\par}%
-    \vspace{0.28em}%
-    {\color{egor@accent}\hrule height 1.15pt}%
-    \vspace{0.55em}%
-  \else
-    \begin{beamercolorbox}[%
-        wd=\paperwidth,ht=3.5ex,dp=1.5ex,leftskip=0.9em,rightskip=0.9em]{frametitle}%
-      \usebeamerfont{frametitle}\insertframetitle
-    \end{beamercolorbox}%
-    \vspace{0.7em}%
-  \fi
-}
-
-\defbeamertemplate*{footline}{egor}{%
-  \ifegorbmr@footer
-    \leavevmode
-    \hbox{%
-      \begin{beamercolorbox}[%
-          wd=.64\paperwidth,ht=2.5ex,dp=1.1ex,leftskip=0.9em]{footline}%
-        \small EgorMath\ \textperiodcentered\ \insertshorttitle
-      \end{beamercolorbox}%
-      \begin{beamercolorbox}[%
-          wd=.36\paperwidth,ht=2.5ex,dp=1.1ex,rightskip=0.9em]{footline}%
-        \hfill\small\insertframenumber/\inserttotalframenumber
-      \end{beamercolorbox}}%
-  \fi
-}
-
-\setbeamertemplate{headline}[egor]
-\setbeamertemplate{frametitle}[egor]
-\setbeamertemplate{footline}[egor]
 
 % --- Макросы содержимого ------------------------------------------
 % Звёзды сложности; при nostars команда пустая.
+% (Сетка переопределяет на \bigstar.)
 \NewDocumentCommand{\egorstars}{m}{%
   \ifegorbmr@stars
     \ifnum#1>0\relax
@@ -240,32 +169,156 @@
 
 \newcommand{\egorbmr@maybeuncover}[2]{%
   \ifegorbmr@overlay
-    \uncover<#1->{#2}%
+    \ifegorbmr@itemclick
+      \edef\egorbmr@ov{\the\numexpr\egorbmr@lastitemov+#1-1\relax-}%
+      \expandafter\only\expandafter<\egorbmr@ov>{#2}%
+    \else
+      \only<#1->{#2}%
+    \fi
   \else
     #2%
   \fi
 }
 
-\BeforeBeginEnvironment{frame}{\egorbmr@hadanswerfalse}
+% Подпункты: items=all — все сразу; items=click — по оверлеям.
+% itemflow=stack — накапливаются; itemflow=solo — по одному.
+% Колонки при показе по клику отключаем: multicols ломает оверлеи.
+% «only@» должно быть с catcode @=12, как в документе. В sty @ — буква,
+% и Beamer не узнаёт действие only@ (пункты пропадают без оверлеев).
+\begingroup
+\catcode`\@=12
+\gdef\egorbmrTEMPSTACK{\begin{enumerate}[<only@+->]}
+\gdef\egorbmrTEMPSOLO{\begin{enumerate}[<only@+>]}
+\endgroup
+\let\egorbmr@enumstack\egorbmrTEMPSTACK
+\let\egorbmr@enumsolo\egorbmrTEMPSOLO
+
+\newenvironment{egoritems}[1][1]{%
+  \egorbmr@incolsfalse
+  \ifegorbmr@itemclick
+  \else
+    \ifnum#1>1\relax\egorbmr@incolstrue\fi
+  \fi
+  \ifegorbmr@incols\begin{multicols}{#1}\fi
+  \ifegorbmr@itemclick
+    \ifegorbmr@itemsolo
+      \large
+      \setlength{\itemsep}{1.05em}%
+      \setlength{\parsep}{0.35em}%
+      \setbeamertemplate{enumerate item}{%
+        \usebeamercolor[fg]{structure}\insertenumlabel}%
+      \egorbmr@enumsolo
+      \let\egorbmr@saveditem\item
+      \def\item{\@ifnextchar[{\egorbmr@itemlbl}{\egorbmr@saveditem}}%
+      \def\egorbmr@itemlbl[##1]{\egorbmr@saveditem[{##1}]}%
+    \else
+      \egorbmr@enumstack
+    \fi
+  \else
+    \begin{enumerate}%
+  \fi
+}{%
+  \end{enumerate}%
+  \ifegorbmr@incols\end{multicols}\fi
+  \ifegorbmr@itemclick
+    \ifnum\value{beamerpauses}>1\relax
+      \xdef\egorbmr@lastitemov{\the\numexpr\value{beamerpauses}-1\relax}%
+      \xdef\egorbmr@afteritems{\the\value{beamerpauses}}%
+    \fi
+  \fi
+}
+
+% Заглушка: сетка рисует клетку в оставшемся месте кадра задачи.
+\newcommand{\egorbmr@drawworkarea}{}
+\NewDocumentCommand{\egorworkarea}{O{}}{}
+
+\BeforeBeginEnvironment{frame}{%
+  \egorbmr@hadanswerfalse
+  \gdef\egorbmr@lastitemov{1}%
+  \gdef\egorbmr@afteritems{1}%
+}
+
+% Номер задачи на кадре — для label/ссылок (генератор всегда ставит).
+\NewDocumentCommand{\egortask}{m}{\gdef\egorbmr@no{#1}}
+
+\NewDocumentCommand{\egorjumpto}{mm}{%
+  \hyperlink{#1}{\usebeamercolor[fg]{structure}#2}%
+}
+
+\long\def\egorbmr@defer@ii#1#2#3#4{%
+  \g@addto@macro\egorbmr@appendix{\egorbmr@appframe{#2}{#1}{#3}{#4}}%
+}
+\NewDocumentCommand{\egorbmr@defer}{mm+m}{%
+  \edef\egorbmr@tmpn{\egorbmr@no}%
+  \expandafter\egorbmr@defer@ii\expandafter{\egorbmr@tmpn}{#1}{#2}{#3}%
+}
+
+% Решение — абзацы, не beamercolorbox: allowframebreaks не режет vbox.
+\newcommand{\egorbmr@solutionbody}[1]{%
+  \par\vspace{0.45em}%
+  {\usebeamerfont{block title}\usebeamercolor[fg]{block title}%
+    \textbf{Решение}\par}%
+  \vspace{0.28em}%
+  #1\par
+}
+
+% Кадры приложения не fragile: тело уже прошло через +m (как \egoranswer).
+\long\def\egorbmr@appframe#1#2#3#4{%
+  \begin{frame}[t,label=egor#1-#2]
+    \frametitle{#2.\ #3}
+    \begin{block}{#3}#4\end{block}
+    \vspace{0.55em}%
+    \egorjumpto{egortask-#2}{К задаче}
+  \end{frame}%
+}
+
+\newcommand{\egorappendix}{%
+  \ifegorbmr@endplace
+    \ifx\egorbmr@appendix\@empty
+    \else
+      \ifegorbmr@showsolution
+        \egorsection{Ответы и решения}%
+      \else
+        \egorsection{Ответы}%
+      \fi
+      \egorbmr@appendix
+    \fi
+  \fi
+}
 
 % Видимость ответа/решения задаёт пара content= / reveal=;
 % генератор всегда кладёт блоки, если текст есть.
+% reveal=end: на кадре задачи — ссылка, сами блоки уходят в \egorappendix.
 \NewDocumentCommand{\egoranswer}{+m}{%
   \ifegorbmr@showanswer
-    \egorbmr@maybeuncover{2}{%
-      \begin{block}{Ответ}#1\end{block}}%
+    \ifegorbmr@endplace
+      \egorbmr@defer{ans}{Ответ}{#1}%
+      \par\vspace{0.45em}%
+      {\small\egorjumpto{egorans-\egorbmr@no}{Ответ}}%
+    \else
+      \egorbmr@maybeuncover{2}{%
+        \begin{block}{Ответ}#1\end{block}}%
+    \fi
     \global\egorbmr@hadanswertrue
   \fi
 }
 
 \NewDocumentCommand{\egorsolution}{+m}{%
   \ifegorbmr@showsolution
-    \ifegorbmr@hadanswer
-      \egorbmr@maybeuncover{3}{%
-        \begin{block}{Решение}#1\end{block}}%
+    \ifegorbmr@endplace
+      \egorbmr@defer{sol}{Решение}{#1}%
+      \ifegorbmr@hadanswer
+        {\small\quad\egorjumpto{egorsol-\egorbmr@no}{Решение}}%
+      \else
+        \par\vspace{0.45em}%
+        {\small\egorjumpto{egorsol-\egorbmr@no}{Решение}}%
+      \fi
     \else
-      \egorbmr@maybeuncover{2}{%
-        \begin{block}{Решение}#1\end{block}}%
+      \ifegorbmr@hadanswer
+        \egorbmr@maybeuncover{3}{\egorbmr@solutionbody{#1}}%
+      \else
+        \egorbmr@maybeuncover{2}{\egorbmr@solutionbody{#1}}%
+      \fi
     \fi
   \fi
 }
@@ -285,11 +338,6 @@
       \makebox[0.40\paperwidth][l]{\egorbmr@t@grade}%
       \makebox[0.40\paperwidth][r]{\egorbmr@t@author}\par}%
   \end{center}
-  \vfill
-  \begin{center}
-    {\usebeamercolor[fg]{egormuted}\small EgorMath\par}%
-  \end{center}
-  \vspace{0.7cm}%
 }
 
 \newcommand{\egorbmr@paint@section}{%
@@ -329,3 +377,6 @@
     \end{frame}%
   \endgroup
 }
+
+% Хром (шапка, футер, блоки, титул) — всегда; клетка — только theme=grid.
+\RequirePackage{egorbeamer-grid}

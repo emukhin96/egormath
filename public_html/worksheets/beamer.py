@@ -10,11 +10,14 @@ from problems.latex_utils import escape_latex
 
 from .latex import (_drop_empty_rubrics, _resolve_taskpics, subitem_label)
 
-THEMES = ('light', 'night', 'paper')
+THEMES = ('light', 'night', 'grid')
 ASPECTS = ('169', '43')
 SIZES = ('11pt', '12pt', '14pt')
 CONTENTS = ('problems', 'answers', 'solutions')
-REVEALS = ('click', 'show', 'hidden')
+REVEALS = ('click', 'show', 'hidden', 'end')
+ITEMS = ('all', 'click')
+ITEMFLOWS = ('stack', 'solo')
+FONTS = ('cm', 'school')
 
 DEFAULTS = {
     'theme': 'light',
@@ -22,6 +25,9 @@ DEFAULTS = {
     'size': '12pt',
     'content': 'problems',
     'reveal': 'click',
+    'items': 'all',
+    'itemflow': 'stack',
+    'font': 'school',
     'stars': True,
     'footer': True,
 }
@@ -46,6 +52,12 @@ def normalize_beamer_options(**kwargs):
         opts['content'] = DEFAULTS['content']
     if opts['reveal'] not in REVEALS:
         opts['reveal'] = DEFAULTS['reveal']
+    if opts['items'] not in ITEMS:
+        opts['items'] = DEFAULTS['items']
+    if opts['itemflow'] not in ITEMFLOWS:
+        opts['itemflow'] = DEFAULTS['itemflow']
+    if opts['font'] not in FONTS:
+        opts['font'] = DEFAULTS['font']
     opts['stars'] = bool(opts['stars'])
     opts['footer'] = bool(opts['footer'])
     return opts
@@ -56,6 +68,9 @@ def _pkg_options(opts):
         'theme=%s' % opts['theme'],
         'content=%s' % opts['content'],
         'reveal=%s' % opts['reveal'],
+        'items=%s' % opts['items'],
+        'itemflow=%s' % opts['itemflow'],
+        'font=%s' % opts['font'],
         'stars' if opts['stars'] else 'nostars',
         'footer' if opts['footer'] else 'nofooter',
     ]
@@ -89,26 +104,38 @@ def _rubric_slide(item):
     return tex
 
 
-def _content_frame(body, title=''):
+def _content_frame(body, title='', label='', valign='t', breaks=False):
     """Кадр с пользовательским LaTeX: fragile первым (verbatim, \\verb)."""
+    opts = 'fragile,%s' % valign
+    if breaks:
+        opts += ',allowframebreaks'
+    if label:
+        opts += ',label=%s' % label
     if title:
-        return '\\begin{frame}[fragile,t]{%s}\n%s\n\\end{frame}' % (title, body)
-    return '\\begin{frame}[fragile,t]\n%s\n\\end{frame}' % body
+        return '\\begin{frame}[%s]{%s}\n%s\n\\end{frame}' % (opts, title, body)
+    return '\\begin{frame}[%s]\n%s\n\\end{frame}' % (opts, body)
 
 
 def _text_slide(item):
     body = item.text_latex.strip()
     style = item.text_style
     if style == 'rule':
-        inner = '\\begin{block}{Правило}\n%s\n\\end{block}' % body
-        title = 'Правило'
+        heading = 'Правило'
     elif style == 'memo':
-        inner = '\\begin{exampleblock}{Памятка}\n%s\n\\end{exampleblock}' % body
-        title = 'Памятка'
+        heading = 'Памятка'
+    else:
+        heading = ''
+    # Без block/exampleblock: vmode-плашка сетки растягивается на кадр.
+    if heading:
+        inner = (
+            '{\\usebeamercolor[fg]{frametitle}\\Large\\bfseries %s\\par}\n'
+            '\\vspace{0.75em}\n%s' % (heading, body))
     else:
         inner = body
-        title = ''
-    return _content_frame(inner, title)
+    inner = (
+        '\\noindent\\parbox[c][\\textheight][c]{\\linewidth}{%%\n%s%%\n}'
+        % inner)
+    return _content_frame(inner, valign='t')
 
 
 def _subitem_lines(item, filenames, used, deferred):
@@ -125,7 +152,7 @@ def _subitem_lines(item, filenames, used, deferred):
         punct = '.' if i == len(subitem_objs) - 1 else ';'
         if text and text[-1] not in ';.!?:':
             text += punct
-        lines.append('\\item[%s)] %s' % (subitem_label(i), text))
+        lines.append('\\item[{%s)}] %s' % (subitem_label(i), text))
     return lines, subitem_objs
 
 
@@ -140,7 +167,7 @@ def _labeled_parts(task_text, subitems, attr):
     return _join_parts(parts)
 
 
-def _task_slide(item, number):
+def _task_slide(item, number, frame_breaks=False):
     task = item.task
     filenames = [image.filename for image in task.images.all()]
     body_used = set()
@@ -173,19 +200,24 @@ def _task_slide(item, number):
     else:
         frametitle = '%d.' % number
 
-    chunks = [body]
+    chunks = ['\\egortask{%d}' % number, body]
     if sub_lines:
-        enum = '\\begin{enumerate}\n%s\n\\end{enumerate}' % '\n'.join(sub_lines)
         columns = item.effective_columns
         if columns >= 2:
-            enum = '\\begin{multicols}{%d}\n%s\n\\end{multicols}' % (
-                columns, enum)
+            enum = '\\begin{egoritems}[%d]\n%s\n\\end{egoritems}' % (
+                columns, '\n'.join(sub_lines))
+        else:
+            enum = '\\begin{egoritems}\n%s\n\\end{egoritems}' % (
+                '\n'.join(sub_lines))
         chunks.append(enum)
+    chunks.append('\\egorworkarea')
     if answer:
         chunks.append(_wrap_cmd('egoranswer', answer))
     if solution:
         chunks.append(_wrap_cmd('egorsolution', solution))
-    return _content_frame('\n\n'.join(chunks), frametitle)
+    return _content_frame(
+        '\n\n'.join(chunks), frametitle, label='egortask-%d' % number,
+        breaks=frame_breaks)
 
 
 def worksheet_to_beamer(worksheet, exclude_ids=None, **kwargs):
@@ -217,7 +249,15 @@ def worksheet_to_beamer(worksheet, exclude_ids=None, **kwargs):
             lines.append('')
             continue
         number += 1
-        lines.append(_task_slide(item, number))
+        # allowframebreaks несовместим с оверлеями (reveal=click / items=click).
+        frame_breaks = (
+            opts['content'] == 'solutions'
+            and opts['reveal'] == 'show'
+            and opts['items'] == 'all'
+        )
+        lines.append(_task_slide(item, number, frame_breaks=frame_breaks))
         lines.append('')
+    lines.append('\\egorappendix')
+    lines.append('')
     lines.append('\\end{document}')
     return '\n'.join(lines)

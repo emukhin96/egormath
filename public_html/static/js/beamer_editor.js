@@ -1,5 +1,5 @@
 /* Split-редактор презентации: слева Beamer-tex, справа собранный PDF.
-   Переключатели правят опции documentclass / egorbeamer и пересобирают. */
+   Переключатели только запоминают выбор; сборка — отдельной кнопкой. */
 (function () {
   'use strict';
 
@@ -87,7 +87,42 @@
     var csrf = root.querySelector('input[name=csrfmiddlewaretoken]').value;
     var currentUrl = null;
     var inFlight = false;
-    var pending = false;
+    var pendingCompile = false;
+    var state = readState();
+
+    function readState() {
+      var doc = docOptions(source.value);
+      var pkg = pkgOptions(source.value);
+      var theme = getKeyed(pkg, 'theme', 'light');
+      return {
+        theme: theme === 'paper' ? 'light' : theme,
+        aspect: getKeyed(doc, 'aspectratio', '169'),
+        size: getSize(doc),
+        content: getKeyed(pkg, 'content', 'problems'),
+        reveal: getKeyed(pkg, 'reveal', 'click'),
+        items: getKeyed(pkg, 'items', 'all'),
+        itemflow: getKeyed(pkg, 'itemflow', 'stack'),
+        font: getKeyed(pkg, 'font', 'school'),
+        stars: getFlag(pkg, 'stars'),
+        footer: getFlag(pkg, 'footer'),
+      };
+    }
+
+    function writeState() {
+      var tex = source.value;
+      var doc = setKeyed(setSize(docOptions(tex), state.size),
+                         'aspectratio', state.aspect);
+      var pkg = pkgOptions(tex);
+      pkg = setKeyed(pkg, 'theme', state.theme);
+      pkg = setKeyed(pkg, 'content', state.content);
+      pkg = setKeyed(pkg, 'reveal', state.reveal);
+      pkg = setKeyed(pkg, 'items', state.items);
+      pkg = setKeyed(pkg, 'itemflow', state.itemflow);
+      pkg = setKeyed(pkg, 'font', state.font);
+      pkg = setFlag(pkg, 'stars', 'nostars', state.stars === 'on');
+      pkg = setFlag(pkg, 'footer', 'nofooter', state.footer === 'on');
+      source.value = withPkgOptions(withDocOptions(tex, doc), pkg);
+    }
 
     function clearResult() {
       if (currentUrl) URL.revokeObjectURL(currentUrl);
@@ -98,8 +133,9 @@
     }
 
     function compile() {
+      writeState();
       if (inFlight) {
-        pending = true;
+        pendingCompile = true;
         status.textContent = 'Сборка…';
         return;
       }
@@ -115,7 +151,7 @@
                   'Content-Type': 'application/x-www-form-urlencoded'},
         body: body.toString(),
       }).then(function (r) {
-        if (pending) return null;
+        if (pendingCompile) return null;
         if (r.ok) return r.blob().then(function (blob) {
           currentUrl = URL.createObjectURL(blob);
           frame.src = currentUrl + '#navpanes=0&view=Fit';
@@ -131,75 +167,43 @@
           }
         });
       }).catch(function () {
-        if (!pending) status.textContent = 'Нет связи с сервером';
+        if (!pendingCompile) status.textContent = 'Нет связи с сервером';
       }).finally(function () {
         inFlight = false;
-        if (pending) {
-          pending = false;
+        if (pendingCompile) {
+          pendingCompile = false;
           compile();
         }
       });
     }
 
-    function applySwitch(kind, value) {
-      var tex = source.value;
-      var doc = docOptions(tex);
-      var pkg = pkgOptions(tex);
-      if (kind === 'size') {
-        tex = withDocOptions(tex, setSize(doc, value));
-      } else if (kind === 'aspect') {
-        tex = withDocOptions(tex, setKeyed(doc, 'aspectratio', value));
-      } else if (kind === 'theme') {
-        tex = withPkgOptions(tex, setKeyed(pkg, 'theme', value));
-      } else if (kind === 'content') {
-        tex = withPkgOptions(tex, setKeyed(pkg, 'content', value));
-      } else if (kind === 'reveal') {
-        tex = withPkgOptions(tex, setKeyed(pkg, 'reveal', value));
-      } else if (kind === 'stars') {
-        tex = withPkgOptions(tex, setFlag(pkg, 'stars', 'nostars', value === 'on'));
-      } else if (kind === 'footer') {
-        tex = withPkgOptions(tex, setFlag(pkg, 'footer', 'nofooter', value === 'on'));
-      }
-      source.value = tex;
-      markActive();
-      compile();
-    }
-
     function markActive() {
-      var doc = docOptions(source.value);
-      var pkg = pkgOptions(source.value);
-      var current = {
-        theme: getKeyed(pkg, 'theme', 'light'),
-        aspect: getKeyed(doc, 'aspectratio', '169'),
-        size: getSize(doc),
-        content: getKeyed(pkg, 'content', 'problems'),
-        reveal: getKeyed(pkg, 'reveal', 'click'),
-        stars: getFlag(pkg, 'stars'),
-        footer: getFlag(pkg, 'footer'),
-      };
       document.querySelectorAll('.switch-group').forEach(function (group) {
         group.querySelectorAll('button').forEach(function (btn) {
           btn.classList.toggle(
-            'is-active', btn.dataset.value === current[group.dataset.switch]);
+            'is-active', btn.dataset.value === state[group.dataset.switch]);
         });
       });
     }
 
     document.querySelectorAll('.switch-group button').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        applySwitch(btn.closest('.switch-group').dataset.switch,
-                    btn.dataset.value);
+        state[btn.closest('.switch-group').dataset.switch] = btn.dataset.value;
+        markActive();
       });
     });
 
     document.getElementById('compile-btn').addEventListener('click', compile);
+    var sidebarCompile = document.getElementById('sidebar-compile-btn');
+    if (sidebarCompile) {
+      sidebarCompile.addEventListener('click', compile);
+    }
     document.getElementById('reset-btn').addEventListener('click', function () {
       source.value = original.value;
+      state = readState();
       markActive();
-      compile();
     });
 
     markActive();
-    compile();
   });
 })();

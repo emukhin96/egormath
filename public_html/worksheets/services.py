@@ -95,16 +95,26 @@ def collect_assets(worksheet, exclude_ids=None):
     return assets
 
 
-# Пакет презентаций лежит в репозитории и уходит asset'ом в каталог сборки
+# Пакеты презентаций лежат в репозитории и уходят asset'ами в каталог сборки
 # (API не ищет TEXMFLOCAL для неизвестных sty). Лимит API — 20 файлов.
-EGORBEAMER_STY = Path(__file__).resolve().parent / 'tex' / 'egorbeamer.sty'
-BEAMER_IMAGE_ASSET_LIMIT = 19
+_BEAMER_TEX_DIR = Path(__file__).resolve().parent / 'tex'
+EGORBEAMER_STY = _BEAMER_TEX_DIR / 'egorbeamer.sty'
+EGORBEAMER_GRID_STY = _BEAMER_TEX_DIR / 'egorbeamer-grid.sty'
+BEAMER_STY_ASSETS = (EGORBEAMER_STY, EGORBEAMER_GRID_STY)
+BEAMER_IMAGE_ASSET_LIMIT = 20 - len(BEAMER_STY_ASSETS)
+
+
+def _sty_asset(path):
+    return {
+        'filename': path.name,
+        'content_base64': base64.b64encode(path.read_bytes()).decode(),
+    }
 
 
 def collect_beamer_assets(worksheet, exclude_ids=None):
-    """Картинки листка + egorbeamer.sty для компиляции презентации.
+    """Картинки листка + sty презентаций для компиляции.
 
-    Sty занимает один слот из 20 на стороне API. Если картинок больше
+    Два sty занимают слоты из 20 на стороне API. Если картинок больше
     лимита — ошибка до сборки, без молчаливого отбрасывания файлов
     (иначе TeX ссылается на отсутствующие изображения).
     """
@@ -112,12 +122,8 @@ def collect_beamer_assets(worksheet, exclude_ids=None):
     if len(images) > BEAMER_IMAGE_ASSET_LIMIT:
         raise LatexCompileError(
             'Слишком много картинок для презентации '
-            f'(лимит {BEAMER_IMAGE_ASSET_LIMIT} вместе со стилевым файлом).')
-    sty = EGORBEAMER_STY.read_bytes()
-    return [{
-        'filename': 'egorbeamer.sty',
-        'content_base64': base64.b64encode(sty).decode(),
-    }] + images
+            f'(лимит {BEAMER_IMAGE_ASSET_LIMIT} вместе со стилевыми файлами).')
+    return [_sty_asset(path) for path in BEAMER_STY_ASSETS] + images
 
 
 def _pdf_filter_key(exclude_ids):

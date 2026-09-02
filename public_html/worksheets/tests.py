@@ -340,7 +340,7 @@ class BeamerGenerationTests(TestCase):
             '\\documentclass[aspectratio=169,12pt]{beamer}', tex)
         self.assertIn(
             '\\usepackage[theme=light,content=problems,reveal=click,'
-            'stars,footer]{egorbeamer}', tex)
+            'items=all,itemflow=stack,font=school,stars,footer]{egorbeamer}', tex)
         self.assertIn(
             '\\egortitle{Дроби \\& проценты}{8 класс}{И. Иванов}[Осень]',
             tex)
@@ -353,10 +353,22 @@ class BeamerGenerationTests(TestCase):
         self.assertIn('\\documentclass[aspectratio=43,14pt]{beamer}', tex)
         self.assertIn(
             '\\usepackage[theme=night,content=solutions,reveal=show,'
-            'nostars,nofooter]{egorbeamer}', tex)
-        opts = normalize_beamer_options(theme='neon', size='20pt')
+            'items=all,itemflow=stack,font=school,nostars,nofooter]{egorbeamer}', tex)
+        tex = worksheet_to_beamer(
+            self.worksheet, theme='grid', content='solutions', reveal='end',
+            items='click', itemflow='solo', font='cm')
+        self.assertIn(
+            '\\usepackage[theme=grid,content=solutions,reveal=end,'
+            'items=click,itemflow=solo,font=cm,stars,footer]{egorbeamer}', tex)
+        opts = normalize_beamer_options(
+            theme='paper', size='20pt', reveal='end', items='maybe',
+            itemflow='bounce', font='comic')
         self.assertEqual(opts['theme'], 'light')
         self.assertEqual(opts['size'], '12pt')
+        self.assertEqual(opts['reveal'], 'end')
+        self.assertEqual(opts['items'], 'all')
+        self.assertEqual(opts['itemflow'], 'stack')
+        self.assertEqual(opts['font'], 'school')
 
     def test_rubric_task_text_and_numbering(self):
         make_rubric(self.worksheet, 'Разминка', order=5, note='Устно')
@@ -370,12 +382,19 @@ class BeamerGenerationTests(TestCase):
             text_latex='Вспомните правило.', text_style='memo')
         tex = worksheet_to_beamer(self.worksheet)
         self.assertIn('\\egorsection{Разминка}[Устно]', tex)
-        self.assertIn('\\begin{frame}[fragile,t]{1.\\ \\egorstars{2}}', tex)
+        self.assertIn(
+            '\\begin{frame}[fragile,t,label=egortask-1]{1.\\ \\egorstars{2}}',
+            tex)
+        self.assertIn('\\egortask{1}', tex)
         self.assertIn('Вычислите $1+1$.', tex)
         self.assertIn('\\egoranswer{%', tex)
         self.assertIn('\\egorsolution{%', tex)
-        self.assertIn('\\begin{frame}[fragile,t]{Памятка}', tex)
-        self.assertIn('\\begin{exampleblock}{Памятка}', tex)
+        self.assertIn('\\egorappendix', tex)
+        self.assertIn('\\egorworkarea', tex)
+        self.assertLess(tex.find('\\egorworkarea'), tex.find('\\egoranswer'))
+        self.assertIn('\\begin{frame}[fragile,t]', tex)
+        self.assertIn('\\parbox[c][\\textheight][c]', tex)
+        self.assertIn('Памятка', tex)
         self.assertEqual(tex.count('\\begin{frame}'), 2)
         self.assertEqual(tex.count('\\egortitle'), 1)
         self.assertEqual(tex.count('\\egorsection'), 1)
@@ -385,8 +404,22 @@ class BeamerGenerationTests(TestCase):
             text_latex=r'Команда \verb|\frac|.', created_by=self.teacher)
         make_item(self.worksheet, task)
         tex = worksheet_to_beamer(self.worksheet)
-        self.assertIn('\\begin{frame}[fragile,t]{1.}', tex)
+        self.assertIn('\\begin{frame}[fragile,t,label=egortask-1]{1.}', tex)
         self.assertIn(r'\verb|\frac|', tex)
+
+    def test_solution_frame_can_break(self):
+        task = Task.objects.create(
+            text_latex='Вычислите.', solution_latex='Длинное решение.',
+            created_by=self.teacher)
+        make_item(self.worksheet, task)
+        tex = worksheet_to_beamer(
+            self.worksheet, content='solutions', reveal='show')
+        self.assertIn(
+            '\\begin{frame}[fragile,t,allowframebreaks,label=egortask-1]',
+            tex)
+        tex_click = worksheet_to_beamer(
+            self.worksheet, content='solutions', reveal='click')
+        self.assertNotIn('allowframebreaks', tex_click)
 
     def test_subitems_and_taskpic(self):
         task = Task.objects.create(text_latex='См. \\taskpic{1}', columns=2)
@@ -399,9 +432,9 @@ class BeamerGenerationTests(TestCase):
         tex = worksheet_to_beamer(self.worksheet)
         self.assertIn('\\taskpic{pic.png}', tex)
         self.assertNotIn('\\taskpic{1}', tex)
-        self.assertIn('\\item[а)] $1+1$;', tex)
-        self.assertIn('\\item[б)] $2+2$.', tex)
-        self.assertIn('\\begin{multicols}{2}', tex)
+        self.assertIn('\\item[{а)}] $1+1$;', tex)
+        self.assertIn('\\item[{б)}] $2+2$.', tex)
+        self.assertIn('\\begin{egoritems}[2]', tex)
         self.assertIn('а)~2', tex)
         self.assertIn('б)~4', tex)
 
@@ -416,11 +449,14 @@ class BeamerGenerationTests(TestCase):
         self.assertIn('\\egortitle', tex)
 
     def test_collect_beamer_assets_includes_sty(self):
-        from .services import EGORBEAMER_STY, collect_beamer_assets
+        from .services import (EGORBEAMER_GRID_STY, EGORBEAMER_STY,
+                               collect_beamer_assets)
         assets = collect_beamer_assets(self.worksheet)
         self.assertEqual(assets[0]['filename'], 'egorbeamer.sty')
+        self.assertEqual(assets[1]['filename'], 'egorbeamer-grid.sty')
         self.assertTrue(assets[0]['content_base64'])
         self.assertTrue(EGORBEAMER_STY.is_file())
+        self.assertTrue(EGORBEAMER_GRID_STY.is_file())
 
     def test_collect_beamer_assets_rejects_too_many_images(self):
         from .services import (BEAMER_IMAGE_ASSET_LIMIT, collect_beamer_assets)
@@ -978,7 +1014,17 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'id="tex-source"')
         self.assertContains(response, '\\documentclass[aspectratio=169,12pt]{beamer}')
         self.assertContains(response, 'data-switch="theme"')
+        self.assertContains(response, 'data-value="grid"')
         self.assertContains(response, 'data-switch="reveal"')
+        self.assertContains(response, 'data-value="end"')
+        self.assertContains(response, 'data-switch="items"')
+        self.assertContains(response, 'data-switch="itemflow"')
+        self.assertContains(response, 'data-value="stack"')
+        self.assertContains(response, 'data-switch="font"')
+        self.assertContains(response, 'data-value="school"')
+        self.assertContains(response, 'id="sidebar-compile-btn"')
+        self.assertNotContains(response, 'data-value="paper"')
+        self.assertNotContains(response, 'Тетрадь')
         self.assertContains(response, 'beamer_editor.js')
         self.assertContains(response, self.worksheet.beamer_filename())
         self.client.login(username='teacher2', password='pass12345')
@@ -998,6 +1044,8 @@ class WorksheetViewTests(TestCase):
             mocked.call_args.args[0], r'\documentclass{beamer}')
         assets = mocked.call_args.kwargs.get('assets') or []
         self.assertTrue(any(a['filename'] == 'egorbeamer.sty' for a in assets))
+        self.assertTrue(
+            any(a['filename'] == 'egorbeamer-grid.sty' for a in assets))
         self.assertEqual(
             WorksheetPdf.objects.filter(worksheet=self.worksheet).count(), 0)
         response = self.client.post(url, {'tex': '  '})

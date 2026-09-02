@@ -108,8 +108,10 @@ kpsewhich beamer.cls
 # ожидается: .../texmf-dist/tex/latex/beamer/beamer.cls
 ```
 
-`egorbeamer.sty` ставить в TEXMFLOCAL не обязательно: сайт прикладывает
-его к каждому запросу. Когда тема устаканится:
+`egorbeamer.sty` и `egorbeamer-grid.sty` ставить в TEXMFLOCAL не
+обязательно: сайт прикладывает оба файла к каждому запросу. Хром
+презентации (и клетка темы `grid`) подключает TikZ (идёт вместе с
+`pgf`). Когда тема устаканится:
 
 ```bash
 # с Mac
