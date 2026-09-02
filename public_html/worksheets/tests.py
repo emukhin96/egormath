@@ -393,7 +393,8 @@ class BeamerGenerationTests(TestCase):
         self.assertIn('\\egorworkarea', tex)
         self.assertLess(tex.find('\\egorworkarea'), tex.find('\\egoranswer'))
         self.assertIn('\\begin{frame}[fragile,t]', tex)
-        self.assertIn('\\parbox[c][\\textheight][c]', tex)
+        self.assertIn('\\vspace*{\\fill}', tex)
+        self.assertNotIn('\\parbox', tex)
         self.assertIn('Памятка', tex)
         self.assertEqual(tex.count('\\begin{frame}'), 2)
         self.assertEqual(tex.count('\\egortitle'), 1)
@@ -417,6 +418,15 @@ class BeamerGenerationTests(TestCase):
         tex = worksheet_to_beamer(self.worksheet)
         self.assertIn('\\begin{frame}[fragile,t,label=egortask-1]{1.}', tex)
         self.assertIn(r'\verb|\frac|', tex)
+
+    def test_text_slide_verb_is_not_in_macro_arg(self):
+        WorksheetItem.objects.create(
+            worksheet=self.worksheet, order=10,
+            text_latex=r'Команда \verb|\frac|.', text_style='memo')
+        tex = worksheet_to_beamer(self.worksheet)
+        self.assertIn(r'\verb|\frac|', tex)
+        self.assertNotIn(r'\parbox', tex)
+        self.assertLess(tex.find(r'\vspace*{\fill}'), tex.find(r'\verb|\frac|'))
 
     def test_solution_frame_can_break(self):
         task = Task.objects.create(

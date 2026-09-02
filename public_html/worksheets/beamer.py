@@ -132,9 +132,8 @@ def _text_slide(item):
             '\\vspace{0.75em}\n%s' % (heading, body))
     else:
         inner = body
-    inner = (
-        '\\noindent\\parbox[c][\\textheight][c]{\\linewidth}{%%\n%s%%\n}'
-        % inner)
+    # Не parbox: аргумент макроса ломает \\verb / verbatim даже в fragile.
+    inner = '\\vspace*{\\fill}\n%s\n\\vspace*{\\fill}' % inner
     return _content_frame(inner, valign='t')
 
 
