@@ -9,6 +9,7 @@ answer_latex/solution_latex не меняются: ими продолжает �
 import hashlib
 import io
 import json
+import re
 import zipfile
 from dataclasses import asdict
 from decimal import Decimal, InvalidOperation
@@ -21,14 +22,17 @@ from django.utils.text import slugify
 
 from .models import (Source, Task, TaskImage, TaskSource, TaskSubitem,
                      TextbookImportAsset, TextbookImportBatch,
-                     TextbookTaskDraft)
+                     TextbookTaskDraft, Topic)
 from .rubricator import set_task_topics
 from .textbook_parser import (ZIV_LEAKED_HEADING_WARNING,
                               ZIV_LOOKS_LIKE_HEADING_WARNING,
                               ZIV_SPLIT_FROM_WARNING,
                               ZIV_UNEVEN_VARIANT_WARNING, Marker,
-                              apply_imported_math, collapse_repeated_lead,
-                              draft_has_ziv_leak, _ziv_apply_variant_parity,
+                              apply_imported_answer, apply_imported_math,
+                              collapse_repeated_lead, strip_heading_dot,
+                              draft_has_ziv_leak, finalize_draft_images,
+                              reattach_leaked_following_answers,
+                              _ziv_apply_variant_parity,
                               _ziv_draft_topic_title,
                               _ziv_looks_like_topic_title,
                               _ziv_topic_variant, order_letter_subitems,
@@ -36,7 +40,7 @@ from .textbook_parser import (ZIV_LEAKED_HEADING_WARNING,
                               rewalk_ziv_merged_body,
                               split_leaked_structural_tail,
                               strip_leading_subitem_label, task_from_block)
-from .textbook_topics import apply_topic_suggestions
+from .textbook_topics import apply_topic_suggestions, draft_topic_ids
 
 
 MAX_BUNDLE_TASKS = 10000
@@ -47,6 +51,15 @@ IMAGE_WARNING_PREFIX = 'Требуется загрузить файлы изо�
 def normalize_image_stem(name):
     path = Path(str(name or '').replace('\\', '/'))
     return path.stem.lower().strip()
+
+
+def _is_junk_image_path(path):
+    """AppleDouble / __MACOSX / скрытые файлы из ZIP с macOS."""
+    parts = Path(str(path or '').replace('\\', '/')).parts
+    if '__MACOSX' in parts:
+        return True
+    name = Path(parts[-1] if parts else '').name
+    return name.startswith('.')
 
 
 class TextbookImportError(ValueError):
@@ -91,7 +104,7 @@ def normalize_subitems(value):
         result.append({
             'label': label,
             'text_latex': text,
-            'author_answer_latex': apply_imported_math(
+            'author_answer_latex': apply_imported_answer(
                 item.get('author_answer_latex') or ''),
             'author_solution_latex': apply_imported_math(
                 item.get('author_solution_latex') or ''),
@@ -159,7 +172,10 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
                 TextbookTaskDraft.STATUS_APPROVED,
                 TextbookTaskDraft.STATUS_IMPORTED}:
             status = TextbookTaskDraft.STATUS_REVIEW
-        path = _string_list(row.get('source_path'), 'source_path')
+        path = [
+            strip_heading_dot(part)
+            for part in _string_list(row.get('source_path'), 'source_path')]
+        path = [part for part in path if part]
         warnings = _string_list(row.get('warnings'), 'warnings')
         images = _string_list(row.get('images'), 'images')
         subitems = normalize_subitems(row.get('subitems'))
@@ -168,7 +184,7 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
         if not text_latex and not subitems:
             raise TextbookImportError(
                 f'Задача {external_id} не содержит условия или подпунктов.')
-        author_answer_latex = apply_imported_math(
+        author_answer_latex = apply_imported_answer(
             row.get('author_answer_latex') or '')
         author_solution_latex = apply_imported_math(
             row.get('author_solution_latex') or '')
@@ -183,8 +199,10 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
                 or external_id,
             source_path=path,
             collection_key=str(row.get('collection_key') or '')[:500],
-            collection_title=str(row.get('collection_title') or '')[:190],
-            topic_original=str(row.get('topic_original') or '')[:255],
+            collection_title=strip_heading_dot(
+                str(row.get('collection_title') or ''))[:190],
+            topic_original=strip_heading_dot(
+                str(row.get('topic_original') or ''))[:255],
             text_latex=text_latex,
             subitems=subitems,
             images=images,
@@ -204,10 +222,10 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
     apply_topic_suggestions(drafts)
     mark_already_imported_drafts(drafts, source)
     TextbookTaskDraft.objects.bulk_create(drafts, batch_size=500)
-    refresh_image_warnings(batch)
     if batch.profile == 'ziv':
         repair_ziv_batch_leaks(batch)
         batch.refresh_from_db()
+    sync_batch_draft_images(batch)
     return batch
 
 
@@ -277,6 +295,43 @@ def mark_already_imported_drafts(drafts, source):
             else ALREADY_IMPORTED_WARNING)
         if warning not in draft.warnings:
             draft.warnings = list(draft.warnings) + [warning]
+
+
+def cleanup_junk_image_assets(batch):
+    """Удаляет служебные файлы macOS, попавшие в партию как рисунки."""
+    removed = 0
+    for asset in list(batch.assets.all()):
+        if not (
+                _is_junk_image_path(asset.original_name)
+                or _is_junk_image_path(asset.stem)):
+            continue
+        if asset.file:
+            asset.file.delete(save=False)
+        asset.delete()
+        removed += 1
+    return removed
+
+
+def sync_batch_draft_images(batch):
+    """Достаёт рисунки из LaTeX уже сохранённых черновиков."""
+    drafts = list(
+        batch.drafts.exclude(status=TextbookTaskDraft.STATUS_IMPORTED))
+    dirty = {}
+    if str(batch.profile or '') == 'ziv':
+        for draft in reattach_leaked_following_answers(drafts):
+            dirty[draft.pk] = draft
+    for draft in drafts:
+        if finalize_draft_images(draft):
+            dirty[draft.pk] = draft
+    dirty = list(dirty.values())
+    if dirty:
+        TextbookTaskDraft.objects.bulk_update(dirty, [
+            'text_latex', 'author_answer_latex', 'author_solution_latex',
+            'subitems', 'images',
+        ])
+    cleanup_junk_image_assets(batch)
+    refresh_image_warnings(batch)
+    return len(dirty)
 
 
 def refresh_image_warnings(batch):
@@ -556,6 +611,8 @@ def repair_ziv_batch_leaks(batch):
                 collection_title=task.collection_title,
                 topic_original=task.topic_original,
                 topic_id=topic_by_key.get(other[0] if other else ''),
+                topic_ids=([topic_by_key[other[0]]]
+                           if other and topic_by_key.get(other[0]) else []),
                 text_latex=task.text_latex,
                 subitems=normalize_subitems(
                     [asdict(item) for item in task.subitems]),
@@ -606,6 +663,7 @@ def repair_ziv_batch_leaks(batch):
     diagnostics['ziv_uneven_variant_topics'] = uneven
     batch.diagnostics = diagnostics
     batch.save(update_fields=['diagnostics', 'updated_at'])
+    sync_batch_draft_images(batch)
     return diagnostics['ziv_leak_repair']
 
 
@@ -626,6 +684,8 @@ def attach_image_archive(batch, upload, max_bytes=80 * 1024 * 1024):
         if info.is_dir():
             continue
         path = Path(info.filename)
+        if _is_junk_image_path(path):
+            continue
         if path.suffix.lower() not in IMAGE_SUFFIXES:
             continue
         stem = normalize_image_stem(path.name)
@@ -658,7 +718,7 @@ def attach_image_archive(batch, upload, max_bytes=80 * 1024 * 1024):
             defaults={'original_name': path.name})
         asset.file.save(path.name, ContentFile(payload), save=True)
         stored += 1
-    refresh_image_warnings(batch)
+    sync_batch_draft_images(batch)
     return stored
 
 
@@ -686,6 +746,74 @@ def _leaf_collection_locator(collection_key, path):
         digest = hashlib.sha256(collection_key.encode('utf-8')).hexdigest()
         return f'key-sha256:{digest}'
     return _collection_locator(path)
+
+
+_VARIANT_TAIL_RE = re.compile(r'(?i)^вариант\s+\d+')
+_CHAPTER_HEAD_RE = re.compile(r'(?i)^глава\s+\d+')
+
+
+def _collection_layout(path, collection_key):
+    """Лист подборки + рубрики: варианты и параграфы внутри главы."""
+    original = [str(part).strip() for part in path if str(part).strip()]
+    path = list(original)
+    headings = []
+    key = (collection_key or '').strip()
+
+    if path and _VARIANT_TAIL_RE.match(path[-1]):
+        headings.append(path[-1])
+        path = path[:-1]
+        key = re.sub(r'(?i)/v\d+$', '', key)
+
+    if len(path) >= 2 and _CHAPTER_HEAD_RE.match(path[0]):
+        headings = path[1:] + headings
+        path = path[:1]
+        joined = '/'.join(original)
+        if not key or key == joined:
+            key = path[0]
+        elif key.startswith(path[0] + '/'):
+            key = path[0]
+
+    return path, headings, key
+
+
+def _rubrics_to_append(current, headings):
+    """Какие заголовки дописать, чтобы контекст листа стал headings."""
+    headings = list(headings)
+    if not headings:
+        return []
+    if current[-len(headings):] == headings:
+        return []
+    if not current:
+        return headings
+    if current[-1] == headings[-1] and (
+            len(headings) == 1 or headings[0] in current):
+        return []
+    if headings[0] in current:
+        return [headings[-1]] if len(headings) > 1 else []
+    return headings
+
+
+def _next_worksheet_order(worksheet):
+    return (worksheet.items.aggregate(
+        max_order=Max('order'))['max_order'] or 0) + 10
+
+
+def _ensure_import_rubrics(worksheet, headings):
+    """Добавляет хвостовые рубрики, не дублируя уже стоящий контекст."""
+    from worksheets.models import WorksheetItem
+
+    current = list(
+        worksheet.items.filter(deleted_at=None, task=None)
+        .exclude(rubric='')
+        .order_by('order', 'pk')
+        .values_list('rubric', flat=True))
+    to_add = _rubrics_to_append(current, headings)
+    order = _next_worksheet_order(worksheet)
+    for title in to_add:
+        WorksheetItem.objects.create(
+            worksheet=worksheet, rubric=title[:190], order=order)
+        order += 10
+    return order
 
 
 def _collection_for_path(batch, path, cache, collection_key=''):
@@ -867,7 +995,7 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
     initial_collection_count = Collection.objects.filter(
         source=batch.source).count()
 
-    for draft in approved.select_related('topic'):
+    for draft in approved.select_related('topic').order_by('pk'):
         ref = (TaskSource.objects.select_related('task')
                .filter(source=batch.source, locator=draft.external_id).first())
         if ref:
@@ -904,25 +1032,32 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
 
         _attach_task_images(task, draft, batch)
         _merge_author_fields(task, draft)
-        if draft.topic_id:
+        topic_ids = draft_topic_ids(draft)
+        if topic_ids:
             if task.topic_links.exists():
-                task.topics.add(draft.topic)
+                existing = set(task.topics.values_list('pk', flat=True))
+                for topic in Topic.objects.filter(pk__in=topic_ids):
+                    if topic.pk not in existing:
+                        task.topics.add(topic)
             else:
-                set_task_topics(task, [draft.topic_id], draft.topic_id)
+                set_task_topics(task, topic_ids, draft.topic_id)
 
         path = [str(x).strip() for x in draft.source_path if str(x).strip()]
         if not path:
             path = [draft.collection_title.strip() or batch.title]
+        path, headings, leaf_key = _collection_layout(
+            path, draft.collection_key.strip())
+        if not path:
+            path = [draft.collection_title.strip() or batch.title]
         collection = _collection_for_path(
-            batch, path, collection_cache,
-            collection_key=draft.collection_key.strip())
+            batch, path, collection_cache, collection_key=leaf_key)
         if collection:
             worksheet = collection.worksheet
-            if draft.topic_id:
-                worksheet.topics.add(draft.topic)
+            if topic_ids:
+                worksheet.topics.add(
+                    *Topic.objects.filter(pk__in=topic_ids))
             if not worksheet.items.filter(task=task, deleted_at=None).exists():
-                order = (worksheet.items.aggregate(
-                    max_order=Max('order'))['max_order'] or 0) + 10
+                order = _ensure_import_rubrics(worksheet, headings)
                 WorksheetItem.objects.create(
                     worksheet=worksheet, task=task, order=order)
 

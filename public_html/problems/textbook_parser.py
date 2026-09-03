@@ -18,7 +18,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterable, Iterator, Sequence
 
-from .latex_utils import wrap_bare_math
+from .latex_utils import ensure_displaystyle_fractions, wrap_bare_math
 
 
 SCHEMA_VERSION = 1
@@ -108,11 +108,14 @@ LIST_ENV_RE = re.compile(
 EMPTY_ITEM_RE = re.compile(r"\\item\[\s*\]")
 ANY_ITEM_RE = re.compile(
     r"\\item(?:\[\s*(?P<label>[^]]+?)\s*\])?[ \t]*")
+# OCR Mathpix часто оставляет незакрытую {uuid и ломает optional-аргумент
+# вроде [alt={}$,$max width=\textwidth]. Путь — до пробела/скобки/команды.
 RAW_IMAGE_RE = re.compile(
-    r"\\includegraphics\s*(?:\[[^]]*\])?\s*\{(?P<path>[^{}]+)\}")
+    r"\\includegraphics\s*(?:\[[^]]*\])?\s*\{(?P<path>[^{}\s\\]+)\}?")
 TASK_IMAGE_RE = re.compile(
-    r"\\(?:includegraphics|taskpic)\s*(?:\[[^]]*\])?\s*"
-    r"\{(?P<path>[^{}]+)\}")
+    r"\\(?P<command>includegraphics|taskpic)\s*(?:\[[^]]*\])?\s*"
+    r"\{(?P<path>[^{}\s\\]+)\}?")
+ORPHAN_MATH_TASKPIC_RE = re.compile(r"\$\\taskpic\{")
 FLOAT_WRAPPER_RE = re.compile(
     r"\\(?:begin|end)\{(?:figure|center)\}(?:\[[^]]*\])?")
 FLOAT_META_COMMAND_RE = re.compile(
@@ -217,7 +220,7 @@ def sections(text: str) -> list[Section]:
             title, end = read_group(text, match.end() - 1)
         except ValueError:
             continue
-        result.append(Section(match.start(), end, match.group("level"), clean(title)))
+        result.append(Section(match.start(), end, match.group("level"), clean_heading(title)))
     return result
 
 
@@ -229,6 +232,38 @@ def clean(value: str) -> str:
     # аргументы: пустая строка в подпункте обрывает сборку PDF.
     value = re.sub(r"\n\s*\n+", "\n", value)
     return normalize_imported_text(value.strip())
+
+
+def strip_heading_dot(value: str) -> str:
+    """Убирает точку в конце названия раздела или темы."""
+    value = str(value or '').strip()
+    if value.endswith(('...', '…')):
+        return value
+    return value.rstrip('.').rstrip()
+
+
+def strip_imported_answer_punct(value: str) -> str:
+    """Точка в конце ответа только у законченного предложения."""
+    value = str(value or '').rstrip()
+    if not value:
+        return value
+    if value.endswith(('?', '!')):
+        return value
+    if not value.endswith('.'):
+        return value
+    if value[0].isupper():
+        return value
+    return value[:-1].rstrip()
+
+
+def apply_imported_answer(value: str) -> str:
+    """Нормализует импортированный ответ и срезает служебную точку."""
+    return strip_imported_answer_punct(apply_imported_math(value))
+
+
+def clean_heading(value: str) -> str:
+    """Как ``clean``, плюс точка в конце названия раздела."""
+    return strip_heading_dot(clean(value))
 
 
 # Формулы, которые уже в разделителях KaTeX. Тот же набор, что в latex_utils.
@@ -268,7 +303,8 @@ def apply_imported_math(value: str) -> str:
     value = _heal_ocr_linebreak_math(_strip_imported_text(value))
     value = wrap_bare_math(value)
     value = _heal_ocr_linebreak_math(value)
-    return _replace_spaced_hyphen_with_emdash(value)
+    value = _replace_spaced_hyphen_with_emdash(value)
+    return ensure_displaystyle_fractions(value)
 
 
 def _unwrap_math_span(raw: str) -> tuple[str, str, str]:
@@ -684,24 +720,392 @@ def detach_column_tail(body: str) -> tuple[str, str]:
     return body, ""
 
 
+def _is_numbered_taskpic(match: re.Match) -> bool:
+    """\\taskpic{N} — уже нумерованная ссылка, а не имя файла."""
+    return (
+        match.groupdict().get("command") == "taskpic"
+        and match.group("path").isdigit()
+    )
+
+
 def extract_images(body: str) -> list[str]:
-    return list(dict.fromkeys(re.findall(
-        r"\\(?:includegraphics|taskpic)\s*(?:\[[^]]*\])?\s*\{([^{}]+)\}", body
-    )))
+    found: list[str] = []
+    for match in TASK_IMAGE_RE.finditer(body or ""):
+        if _is_numbered_taskpic(match):
+            continue
+        path = match.group("path")
+        if path not in found:
+            found.append(path)
+    return found
+
+
+def normalize_imported_graphics(body: str) -> str:
+    """Оставляет \\taskpic{имя}, убирает OCR-обёртки figure/caption."""
+    if not body:
+        return body
+    body = FLOAT_WRAPPER_RE.sub("", body)
+    body = OCR_FIGURE_WRAPPER_RE.sub("", body)
+    body = remove_group_commands(body, FLOAT_META_COMMAND_RE)
+    body = RAW_IMAGE_RE.sub(
+        lambda match: rf"\taskpic{{{match.group('path')}}}", body)
+    body = ORPHAN_MATH_TASKPIC_RE.sub(r"\\taskpic{", body)
+    return re.sub(r"\n{3,}", "\n\n", body)
 
 
 def normalize_task_images(body: str) -> tuple[str, list[str]]:
     """Заменяет OCR-float на штатные \\taskpic{N}."""
-    images = list(dict.fromkeys(
-        match.group("path") for match in TASK_IMAGE_RE.finditer(body)))
+    images = extract_images(body)
     positions = {path: index + 1 for index, path in enumerate(images)}
-    body = TASK_IMAGE_RE.sub(
-        lambda match: rf"\taskpic{{{positions[match.group('path')]}}}",
-        body,
-    )
+
+    def replace(match: re.Match) -> str:
+        if _is_numbered_taskpic(match):
+            return match.group(0)
+        return rf"\taskpic{{{positions[match.group('path')]}}}"
+
+    body = TASK_IMAGE_RE.sub(replace, body)
     body = FLOAT_WRAPPER_RE.sub("", body)
+    body = OCR_FIGURE_WRAPPER_RE.sub("", body)
     body = remove_group_commands(body, FLOAT_META_COMMAND_RE)
+    body = ORPHAN_MATH_TASKPIC_RE.sub(r"\\taskpic{", body)
     return body, images
+
+
+def _subitem_get(item, key: str) -> str:
+    if isinstance(item, dict):
+        return str(item.get(key) or "")
+    return str(getattr(item, key, "") or "")
+
+
+def _subitem_set(item, key: str, value: str) -> None:
+    if isinstance(item, dict):
+        item[key] = value
+    else:
+        setattr(item, key, value)
+
+
+_DRAFT_LATEX_KEYS = (
+    "text_latex", "author_answer_latex", "author_solution_latex")
+
+
+def finalize_draft_images(task) -> bool:
+    """Собирает рисунки из всех полей и ставит \\taskpic{N}.
+
+    Принимает и dataclass парсера, и сохранённый TextbookTaskDraft.
+    """
+    changed = False
+    images = list(getattr(task, "images", None) or [])
+    subitems = list(getattr(task, "subitems", None) or [])
+    blobs = [
+        getattr(task, "text_latex", "") or "",
+        getattr(task, "author_answer_latex", "") or "",
+        getattr(task, "author_solution_latex", "") or "",
+    ]
+    for item in subitems:
+        blobs.extend(_subitem_get(item, key) for key in _DRAFT_LATEX_KEYS)
+    for blob in blobs:
+        for path in extract_images(blob):
+            if path not in images:
+                images.append(path)
+    positions = {path: index + 1 for index, path in enumerate(images)}
+
+    def rewrite(value: str) -> str:
+        if not value:
+            return value
+
+        def replace(match: re.Match) -> str:
+            if _is_numbered_taskpic(match):
+                return match.group(0)
+            path = match.group("path")
+            if path in positions:
+                return rf"\taskpic{{{positions[path]}}}"
+            return match.group(0)
+
+        value = TASK_IMAGE_RE.sub(replace, value)
+        return normalize_imported_graphics(value)
+
+    new_values = {
+        "text_latex": rewrite(getattr(task, "text_latex", "") or ""),
+        "author_answer_latex": rewrite(
+            getattr(task, "author_answer_latex", "") or ""),
+        "author_solution_latex": rewrite(
+            getattr(task, "author_solution_latex", "") or ""),
+    }
+    new_subitems = []
+    for item in subitems:
+        row = dict(item) if isinstance(item, dict) else item
+        for key in _DRAFT_LATEX_KEYS:
+            _subitem_set(row, key, rewrite(_subitem_get(row, key)))
+        new_subitems.append(row)
+
+    def _assign(name: str, value) -> None:
+        nonlocal changed
+        current = getattr(task, name, None)
+        if current != value:
+            setattr(task, name, value)
+            changed = True
+
+    for name, value in new_values.items():
+        _assign(name, value)
+    _assign("subitems", new_subitems)
+    _assign("images", images)
+    if _rejoin_false_solution_nouns(task):
+        changed = True
+    if _place_see_fig_pictures(task):
+        changed = True
+    return changed
+
+
+SEE_FIG_NUM_RE = re.compile(
+    r"(?i)(?P<head>см\.\s*рис\.?)\s*(?P<num>\d+)\.?"
+)
+TASKPIC_TOKEN_RE = re.compile(r"\\taskpic\{([^{}]+)\}")
+FALSE_SOLUTION_NOUN_RE = re.compile(
+    r"(?is)^(?P<noun>решения)\.\s*(?P<rest>.*)$"
+)
+LEAKED_TASK_NUM_RE = re.compile(r"(?P<num>\d{1,2})\.\s+")
+
+
+def _strip_taskpic_tokens(text: str) -> tuple[str, list[str]]:
+    found: list[str] = []
+    for match in TASKPIC_TOKEN_RE.finditer(text or ""):
+        token = match.group(1)
+        if token not in found:
+            found.append(token)
+    cleaned = TASKPIC_TOKEN_RE.sub("", text or "")
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned, found
+
+
+def _append_taskpics(text: str, tokens: list[str]) -> str:
+    body = (text or "").rstrip()
+    extras = []
+    for token in tokens:
+        marker = rf"\taskpic{{{token}}}"
+        if marker not in body:
+            extras.append(marker)
+    if not extras:
+        return body
+    return (body + "\n" + "\n".join(extras)).strip()
+
+
+def _normalize_see_fig_refs(text: str) -> str:
+    if not text:
+        return text
+    return SEE_FIG_NUM_RE.sub(r"\g<head>", text)
+
+
+def _rejoin_false_solution_nouns(task) -> bool:
+    """Склеивает «то 2» + «решения.», если заголовок решения сработал ложно."""
+    changed = False
+
+    def rejoin(answer: str, solution: str) -> tuple[str, str]:
+        match = FALSE_SOLUTION_NOUN_RE.match(solution or "")
+        if not match or not (answer or "").strip():
+            return answer, solution
+        rest = match.group("rest")
+        rest_text, _pics = _strip_taskpic_tokens(rest)
+        if rest_text.strip():
+            return answer, solution
+        if not re.search(r"\d\s*$", answer.strip()):
+            return answer, solution
+        joined = f"{answer.rstrip()} {match.group('noun')}."
+        return joined, rest
+
+    new_answer, new_solution = rejoin(
+        getattr(task, "author_answer_latex", "") or "",
+        getattr(task, "author_solution_latex", "") or "")
+    if (new_answer != (getattr(task, "author_answer_latex", "") or "")
+            or new_solution != (getattr(task, "author_solution_latex", "") or "")):
+        task.author_answer_latex = new_answer
+        task.author_solution_latex = new_solution
+        changed = True
+    items = list(getattr(task, "subitems", None) or [])
+    new_items = []
+    for item in items:
+        row = dict(item) if isinstance(item, dict) else item
+        answer, solution = rejoin(
+            _subitem_get(row, "author_answer_latex"),
+            _subitem_get(row, "author_solution_latex"))
+        if (answer != _subitem_get(row, "author_answer_latex")
+                or solution != _subitem_get(row, "author_solution_latex")):
+            _subitem_set(row, "author_answer_latex", answer)
+            _subitem_set(row, "author_solution_latex", solution)
+            changed = True
+        new_items.append(row)
+    if new_items != items:
+        task.subitems = new_items
+    return changed
+
+
+def _place_see_fig_pictures(task) -> bool:
+    """Вешает \\taskpic на ответ с «см. рис. N» и убирает номер рисунка."""
+    slots: list[tuple[str, object, str, str]] = []
+    slots.append((
+        "parent", None,
+        getattr(task, "author_answer_latex", "") or "",
+        getattr(task, "author_solution_latex", "") or "",
+    ))
+    items = list(getattr(task, "subitems", None) or [])
+    for item in items:
+        row = dict(item) if isinstance(item, dict) else item
+        slots.append((
+            "sub", row,
+            _subitem_get(row, "author_answer_latex"),
+            _subitem_get(row, "author_solution_latex"),
+        ))
+
+    refs: list[tuple[int, int]] = []
+    pics: list[str] = []
+    cleaned_slots = []
+    for index, (kind, handle, answer, solution) in enumerate(slots):
+        for match in SEE_FIG_NUM_RE.finditer(answer or ""):
+            refs.append((index, int(match.group("num"))))
+        answer, answer_pics = _strip_taskpic_tokens(answer)
+        solution, solution_pics = _strip_taskpic_tokens(solution)
+        for token in answer_pics + solution_pics:
+            if token not in pics:
+                pics.append(token)
+        cleaned_slots.append((kind, handle, answer, solution))
+
+    if not refs:
+        return False
+
+    assignment: dict[int, list[str]] = {index: [] for index, *_ in enumerate(cleaned_slots)}
+    if pics:
+        ordered_refs = sorted(refs, key=lambda item: item[1])
+        for (slot_index, _fig_num), token in zip(ordered_refs, pics):
+            assignment[slot_index].append(token)
+        leftover = pics[len(ordered_refs):]
+        if leftover:
+            assignment[ordered_refs[-1][0]].extend(leftover)
+
+    changed = False
+    new_items = []
+    for index, (kind, handle, answer, solution) in enumerate(cleaned_slots):
+        answer = _normalize_see_fig_refs(answer)
+        solution = _normalize_see_fig_refs(solution)
+        answer = _append_taskpics(answer, assignment.get(index) or [])
+        if kind == "parent":
+            if (answer != (getattr(task, "author_answer_latex", "") or "")
+                    or solution != (
+                        getattr(task, "author_solution_latex", "") or "")):
+                task.author_answer_latex = answer
+                task.author_solution_latex = solution
+                changed = True
+        else:
+            if (answer != _subitem_get(handle, "author_answer_latex")
+                    or solution != _subitem_get(handle, "author_solution_latex")):
+                changed = True
+            _subitem_set(handle, "author_answer_latex", answer)
+            _subitem_set(handle, "author_solution_latex", solution)
+            new_items.append(handle)
+    if new_items:
+        task.subitems = new_items
+    return changed
+
+
+def _task_source_number(external_id: str) -> int | None:
+    try:
+        return int(str(external_id).rsplit("/", 1)[-1])
+    except ValueError:
+        return None
+
+
+def _has_author_material(task) -> bool:
+    if (getattr(task, "author_answer_latex", "") or "").strip():
+        return True
+    if (getattr(task, "author_solution_latex", "") or "").strip():
+        return True
+    for item in getattr(task, "subitems", None) or []:
+        if (_subitem_get(item, "author_answer_latex").strip()
+                or _subitem_get(item, "author_solution_latex").strip()):
+            return True
+    return False
+
+
+def _find_leaked_following_task(text: str, next_number: int) -> int | None:
+    """Граница «26. 4. Если…»: 4 — номер следующей задачи, не рисунка."""
+    for match in LEAKED_TASK_NUM_RE.finditer(text or ""):
+        if int(match.group("num")) != next_number:
+            continue
+        before = text[:match.start()]
+        if re.search(r"(?i)рис\.?\s*$", before[-16:]):
+            continue
+        if not re.search(r"[.!?]\s*$", before):
+            continue
+        return match.start()
+    return None
+
+
+def reattach_leaked_following_answers(tasks) -> list:
+    """Забирает «N. …» из предыдущего ответа, если задача N пуста.
+
+    В ответах Зива OCR часто пишет «см. рис. 26. 4. Если…», а рисунки
+    стоят уже после хвоста. Резать по «4.» на этапе обхода нельзя: тогда
+    графики уедут в задачу 4. Отрезаем только авторский текст после merge.
+    """
+    groups: dict[tuple[str, str], list] = {}
+    for task in tasks:
+        parsed = _ziv_topic_variant(getattr(task, "external_id", "") or "")
+        if parsed is None:
+            continue
+        groups.setdefault(parsed, []).append(task)
+    changed = []
+
+    def mark(*rows):
+        for row in rows:
+            if row not in changed:
+                changed.append(row)
+
+    for group in groups.values():
+        group.sort(key=lambda item: (
+            _task_source_number(item.external_id) or 0, item.external_id))
+        for index, task in enumerate(group[:-1]):
+            following = group[index + 1]
+            next_number = _task_source_number(following.external_id)
+            if next_number is None or _has_author_material(following):
+                continue
+            _rejoin_false_solution_nouns(task)
+            parent_answer = getattr(task, "author_answer_latex", "") or ""
+            parent_cut = _find_leaked_following_task(parent_answer, next_number)
+            if parent_cut is not None:
+                kept, tail = parent_answer[:parent_cut], parent_answer[parent_cut:]
+                tail_text, pics = _strip_taskpic_tokens(tail)
+                tail_text = re.sub(r"^\d{1,2}\.\s+", "", tail_text).strip()
+                if not tail_text:
+                    continue
+                task.author_answer_latex = _append_taskpics(kept.rstrip(), pics)
+                following.author_answer_latex = tail_text
+                mark(task, following)
+                continue
+            rows = [
+                dict(item) if isinstance(item, dict) else item
+                for item in (getattr(task, "subitems", None) or [])
+            ]
+            cut_index = None
+            found = None
+            for pos in range(len(rows) - 1, -1, -1):
+                found = _find_leaked_following_task(
+                    _subitem_get(rows[pos], "author_answer_latex"),
+                    next_number)
+                if found is not None:
+                    cut_index = pos
+                    break
+            if cut_index is None or found is None:
+                continue
+            answer = _subitem_get(rows[cut_index], "author_answer_latex")
+            kept, tail = answer[:found], answer[found:]
+            tail_text, pics = _strip_taskpic_tokens(tail)
+            tail_text = re.sub(r"^\d{1,2}\.\s+", "", tail_text).strip()
+            if not tail_text:
+                continue
+            _subitem_set(
+                rows[cut_index], "author_answer_latex",
+                _append_taskpics(kept.rstrip(), pics))
+            task.subitems = rows
+            following.author_answer_latex = tail_text
+            mark(task, following)
+    return changed
 
 
 def task_from_block(marker: Marker, body: str, source_path: list[str]) -> TaskDraft:
@@ -710,6 +1114,7 @@ def task_from_block(marker: Marker, body: str, source_path: list[str]) -> TaskDr
     text = apply_imported_math(text)
     for item in subitems:
         item.text_latex = apply_imported_math(item.text_latex)
+    source_path = [strip_heading_dot(part) for part in source_path if str(part).strip()]
     topic = source_path[-1] if source_path else ""
     warnings = []
     confidence = 1.0
@@ -980,7 +1385,9 @@ def split_answer_solution(body: str) -> tuple[str, str]:
     них нет, а порядок «Указание … Решение …» сохраняется как в источнике.
     """
     body = strip_outer_lists(body)
-    solution_match = re.search(r"(?i)(?:Решени[ея]|Доказательство)\s*[:.]", body)
+    solution_match = re.search(
+        r"(?i)(?<![0-9]\s)(?<![0-9])(?:Решени[ея]|Доказательство)\s*[:.]",
+        body)
     hint_match = re.search(r"(?i)У\s*к\s*а\s*з\s*а\s*н\s*и\s*[ея]\s*[:.]", body)
     cut_points = [m.start() for m in (solution_match, hint_match) if m]
     answer_end = min(cut_points) if cut_points else len(body)
@@ -1094,6 +1501,7 @@ def _solution_subitem_pairs(
 def split_compact_author_material(
         body: str) -> tuple[str, str, list[SubitemDraft], str]:
     """Делит компактный ответ Галицкого и сохраняет частичные подпункты."""
+    body = normalize_imported_graphics(body)
     parent, subitems = split_subitems(
         body, normalize_punctuation=False, minimum_items=1)
     parent_answer, parent_solution = split_answer_solution(parent)
@@ -1121,11 +1529,7 @@ def split_full_solution(
     # верхнеуровневые подпункты решения.
     solution = clean(EMPTY_ITEM_RE.sub("", body))
     solution = STRUCTURAL_HEADING_RE.sub("", solution)
-    solution = FLOAT_WRAPPER_RE.sub("", solution)
-    solution = OCR_FIGURE_WRAPPER_RE.sub("", solution)
-    solution = remove_group_commands(solution, FLOAT_META_COMMAND_RE)
-    solution = RAW_IMAGE_RE.sub(
-        lambda match: rf"\taskpic{{{match.group('path')}}}", solution)
+    solution = normalize_imported_graphics(solution)
     solution = solution.lstrip("} \t\n")
     parent, subitems = split_subitems(
         solution, normalize_punctuation=False)
@@ -1198,7 +1602,8 @@ def merge_solutions(
     for marker, body in blocks(solution_text, all_solution_markers):
         if marker.external_id not in task_ids:
             continue
-        images = extract_images(body) if full_solutions else []
+        images = extract_images(body)
+        body = normalize_imported_graphics(body)
         if full_solutions:
             (answer, solution, solution_subitems,
              flattened_solution) = split_full_solution(body)
@@ -1286,12 +1691,12 @@ def merge_solutions(
                 value,
             )
 
-        task.author_answer_latex = apply_imported_math(renumber_taskpics(
+        task.author_answer_latex = apply_imported_answer(renumber_taskpics(
             task.author_answer_latex))
         task.author_solution_latex = apply_imported_math(renumber_taskpics(
             task.author_solution_latex))
         for subitem in task.subitems:
-            subitem.author_answer_latex = apply_imported_math(
+            subitem.author_answer_latex = apply_imported_answer(
                 renumber_taskpics(subitem.author_answer_latex))
             subitem.author_solution_latex = apply_imported_math(
                 renumber_taskpics(subitem.author_solution_latex))
@@ -1432,6 +1837,8 @@ def parse_shestakov(tasks_text: str, solutions_text: str) -> tuple[list[TaskDraf
             suspicious_predecessors.items(),
             key=lambda item: shestakov_sort_key(item[0]))
     }
+    for task in tasks:
+        finalize_draft_images(task)
     return tasks, diagnostics
 
 
@@ -1459,6 +1866,8 @@ def parse_galitsky(text: str) -> tuple[list[TaskDraft], dict]:
         lambda value: inline_numeric_markers(value, allowed),
         missing_ok=True,
     ))
+    for task in tasks:
+        finalize_draft_images(task)
     return tasks, diagnostics
 
 
@@ -1515,13 +1924,13 @@ def _ziv_topic_parts(title: str) -> tuple[int, str]:
         return 0, ""
     match = ZIV_TOPIC_RE.match(cleaned)
     if match:
-        return int(match.group("num")), clean(match.group("title"))
+        return int(match.group("num")), clean_heading(match.group("title"))
     numbered = ZIV_WORK_NUM_RE.search(cleaned)
     if numbered:
-        return int(numbered.group("num")), clean(cleaned)
+        return int(numbered.group("num")), clean_heading(cleaned)
     if cleaned.isdigit():
         return int(cleaned), "Тема"
-    return 0, clean(title)
+    return 0, clean_heading(title)
 
 
 def _ziv_item_topic_heading(number: str, body: str) -> tuple[int, str] | None:
@@ -1536,7 +1945,7 @@ def _ziv_item_topic_heading(number: str, body: str) -> tuple[int, str] | None:
     first = re.sub(r"\\item\[[^\]]*\]", "", first)
     if not _ziv_looks_like_topic_title(first):
         return None
-    return topic_num, clean(first)
+    return topic_num, clean_heading(first)
 
 
 def _ziv_effective_variant(topic_num: int, variant: int) -> int:
@@ -1719,7 +2128,7 @@ def _ziv_walk(
                 continue
             code = _ziv_work_code(payload.title)
             if code:
-                work, work_title = code, clean(payload.title)
+                work, work_title = code, clean_heading(payload.title)
                 topic_num, topic_title = 0, "Тема"
                 variant = 0
                 last_num = 0
@@ -1763,7 +2172,7 @@ def _ziv_walk(
         heading = _ziv_item_topic_heading(marker.external_id, body)
         if (heading is None and variant == 0 and marker.external_id.isdigit()
                 and _ziv_looks_like_topic_title(body)):
-            heading = (int(marker.external_id), clean(body))
+            heading = (int(marker.external_id), clean_heading(body))
         if heading is not None:
             next_variant = None
             next_real_section = False
@@ -2014,6 +2423,9 @@ def parse_ziv(text: str) -> tuple[list[TaskDraft], dict]:
         lambda _value: answer_markers,
         missing_ok=True,
     ))
+    reattach_leaked_following_answers(tasks)
+    for task in tasks:
+        finalize_draft_images(task)
     return tasks, diagnostics
 
 

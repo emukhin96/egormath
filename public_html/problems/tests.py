@@ -3,16 +3,27 @@ import re
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.paginator import Paginator
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils.html import escape
 
 from accounts.models import Profile
 
-from .latex_utils import (escape_latex, loads_neuro_json,
-                          restore_json_eaten_latex, split_items, strip_latex,
-                          wrap_bare_math)
+from .latex_utils import (ensure_displaystyle_fractions, escape_latex,
+                          loads_neuro_json, restore_json_eaten_latex,
+                          split_items, strip_latex, wrap_bare_math)
 from .models import Tag, Task, Topic
+
+
+class PaginationHelperTests(SimpleTestCase):
+    def test_page_numbers_window_and_ellipsis(self):
+        from problems.templatetags.task_extras import page_numbers, without_page
+        page = Paginator(list(range(200)), 10).get_page(10)
+        self.assertEqual(
+            page_numbers(page), [1, None, 8, 9, 10, 11, 12, None, 20])
+        self.assertEqual(without_page('q=abc&page=3&grade=7'), 'q=abc&grade=7')
+        self.assertEqual(page_numbers(Paginator([1], 10).get_page(1)), [1])
 
 
 class ReadSecretTests(SimpleTestCase):
@@ -104,6 +115,21 @@ class LatexUtilsTests(TestCase):
         self.assertIn(r'$a^2 = \frac{16}{25}$', wrapped)
         self.assertIn(r'$a = \pm \frac{4}{5}$', wrapped)
         self.assertEqual(wrap_bare_math(wrapped), wrapped)
+
+    def test_ensure_displaystyle_fractions(self):
+        self.assertEqual(
+            ensure_displaystyle_fractions(r'$\frac{1}{2}$'),
+            r'$\displaystyle \frac{1}{2}$')
+        self.assertEqual(
+            ensure_displaystyle_fractions(r'\(\frac{a}{b}\)'),
+            r'\(\displaystyle \frac{a}{b}\)')
+        self.assertEqual(
+            ensure_displaystyle_fractions(r'\[\frac{1}{2}\]'),
+            r'\[\frac{1}{2}\]')
+        self.assertEqual(
+            ensure_displaystyle_fractions(r'$\displaystyle \frac{1}{2}$'),
+            r'$\displaystyle \frac{1}{2}$')
+        self.assertEqual(ensure_displaystyle_fractions('без дроби'), 'без дроби')
 
     def test_restore_json_eaten_latex(self):
         # json.loads съедает \f и \t: form feed + "rac", tab + "imes"
@@ -944,6 +970,19 @@ class CatalogViewTests(TestCase):
         self.client.login(username='student1', password='pass12345')
         response = self.client.get(reverse('task_list'))
         self.assertEqual(response.status_code, 403)
+
+    def test_catalog_pagination_uses_page_numbers(self):
+        for index in range(26):
+            Task.objects.create(
+                text_latex=f'Каталожная задача {index}',
+                created_by=self.teacher)
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('task_list'))
+        self.assertContains(response, 'class="pagination"')
+        self.assertContains(response, 'page=2')
+        self.assertNotContains(response, 'Вперёд')
+        page_two = self.client.get(reverse('task_list'), {'page': 2, 'q': ''})
+        self.assertContains(page_two, 'aria-current="page"')
 
     def test_catalog_search(self):
         self.client.login(username='teacher1', password='pass12345')

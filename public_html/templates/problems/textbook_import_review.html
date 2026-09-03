@@ -87,7 +87,7 @@
       <ul class="import-asset-list">{% for item in draft_images %}<li>{% if item.asset %}<a href="{% url 'textbook_import_asset_file' batch.pk item.asset.pk %}">{{ item.name }}</a>{% if not item.asset.is_pdf %} <img class="import-asset-thumb" src="{% url 'textbook_import_asset_file' batch.pk item.asset.pk %}" alt="{{ item.name }}">{% endif %}{% else %}<span class="muted">{{ item.name }} — файл не сопоставлен</span>{% endif %}</li>{% endfor %}</ul>
     </div>{% endif %}
     {% if topic_candidates %}<p class="helptext">Кандидаты рубрикатора: {% for item in topic_candidates %}{{ item.name }} ({{ item.reason_label }}){% if not forloop.last %}; {% endif %}{% endfor %}. Точное совпадение ставится при импорте, похожее название остаётся подсказкой.</p>{% endif %}
-    <div><label>Тема рубрикатора</label>{{ form.topic.errors }}{{ form.topic.as_hidden }}{% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=False compact=True single=True field_name='topic' selected_json=selected_json %}<span class="helptext">Поиск по коду или названию; ветви раскрываются до конкретной темы.</span></div>
+    <div><label>Темы рубрикатора</label>{% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True selected_json=selected_json %}<span class="helptext">Можно выбрать несколько тем, как в базе задач. Звезда отмечает основную. Поиск по коду или названию; ветви раскрываются до конкретной темы.</span></div>
   </section>
   <div class="import-review-actions">
     <div class="import-status-field">

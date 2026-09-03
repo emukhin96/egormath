@@ -643,7 +643,9 @@ class TextbookTaskDraft(models.Model):
         'Тема в задачнике', max_length=255, blank=True)
     topic = models.ForeignKey(
         Topic, on_delete=models.PROTECT, null=True, blank=True,
-        related_name='textbook_drafts', verbose_name='Тема рубрикатора')
+        related_name='textbook_drafts', verbose_name='Основная тема')
+    topic_ids = models.JSONField(
+        'Темы рубрикатора', default=list, blank=True)
     text_latex = models.TextField('Условие (LaTeX)')
     subitems = models.JSONField('Подпункты', default=list, blank=True)
     images = models.JSONField('Изображения', default=list, blank=True)

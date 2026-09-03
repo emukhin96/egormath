@@ -169,7 +169,7 @@
     font-size: 0.92rem;
   }
 
-  /* Preflight обнуляет кнопку выбора файла — возвращаем ей вид кнопки */
+  /* Preflight обнуляет кнопку выбора файла — та же геометрия, что у .btn */
   input[type="file"] {
     max-width: 640px;
     color: var(--muted);
@@ -177,7 +177,8 @@
 
   ::file-selector-button {
     margin-right: var(--space-2);
-    padding: 6px 12px;
+    min-height: 36px;
+    padding: 7px 14px;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: #fff;
@@ -1854,6 +1855,62 @@
     gap: var(--space-2);
     flex-wrap: wrap;
     align-items: center;
+    margin-block: var(--space-2);
+  }
+
+  p.form-buttons {
+    margin-block: var(--space-2);
+  }
+
+  .page-head .form-buttons,
+  .card-head .form-buttons {
+    margin-block: 0;
+  }
+
+  .form-buttons input[type="file"] {
+    width: auto;
+    max-width: 100%;
+    margin: 0;
+  }
+
+  .form-buttons + .helptext {
+    margin-top: 0;
+  }
+
+  .pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-block: var(--space-2);
+  }
+
+  .pagination-ellipsis {
+    color: var(--muted);
+    min-width: 1.25rem;
+    text-align: center;
+  }
+
+  .btn:disabled,
+  .btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  .import-toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .import-toolbar > * {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .import-toolbar form {
+    display: inline-flex;
+    margin: 0;
   }
 
   table.formset textarea,
@@ -2115,11 +2172,66 @@
     background: #fff6e5;
   }
 
+  .import-ziv-parity-table a,
+  .import-section-nav a {
+    display: inline-block;
+    max-width: 100%;
+    box-sizing: border-box;
+    text-decoration: none;
+    border-radius: 6px;
+    padding: 2px 8px;
+    text-indent: 0;
+    overflow-wrap: break-word;
+  }
+
+  .import-ziv-parity-table a:hover,
+  .import-section-nav a:hover {
+    background: #e4eef9;
+  }
+
   .import-ziv-parity-table a.is-current,
-  .import-section-nav a.is-current,
+  .import-section-nav a.is-current {
+    color: var(--accent);
+    background: #e4eef9;
+    font-weight: 650;
+  }
+
+  .pagination .btn.is-current,
   .form-buttons a.btn.is-current {
-    font-weight: 700;
-    text-decoration: underline;
+    color: var(--accent);
+    background: #e4eef9;
+    font-weight: 650;
+    text-decoration: none;
+  }
+
+  .import-section-current {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-3) 0 var(--space-2);
+  }
+
+  .import-drafts-wrap {
+    overflow-x: auto;
+    margin-inline: calc(var(--space-4) * -1);
+    width: calc(100% + var(--space-4) * 2);
+  }
+
+  .import-drafts-wrap > table.list {
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+  }
+
+  .import-drafts-wrap > table.list th:first-child,
+  .import-drafts-wrap > table.list td:first-child {
+    padding-left: var(--space-4);
+  }
+
+  .import-drafts-wrap > table.list th:last-child,
+  .import-drafts-wrap > table.list td:last-child {
+    padding-right: var(--space-4);
   }
 
   table.list th.col-answer,
@@ -2131,6 +2243,15 @@
     text-align: center;
   }
 
+  table.import-drafts th.col-answer,
+  table.import-drafts td.col-answer,
+  table.import-drafts th.col-solution,
+  table.import-drafts td.col-solution {
+    width: 2.75rem;
+    max-width: 3.25rem;
+    padding-inline: 4px;
+  }
+
   table.list th.col-status,
   table.list td.col-status {
     width: 1%;
@@ -2140,8 +2261,80 @@
   }
 
   table.list td.col-topics {
-    min-width: 16rem;
-    width: 20rem;
+    min-width: 10rem;
+    width: 12rem;
+  }
+
+  table.import-drafts th.col-select,
+  table.import-drafts td.col-select {
+    width: 2rem;
+  }
+
+  table.import-drafts th.col-key,
+  table.import-drafts td.col-key {
+    width: 7.25rem;
+    overflow-wrap: anywhere;
+  }
+
+  .import-key-status {
+    margin-top: 4px;
+  }
+
+  table.import-drafts th.col-meta,
+  table.import-drafts td.col-meta {
+    width: 28%;
+    overflow-wrap: break-word;
+    word-break: normal;
+    text-indent: 0;
+    text-align: left;
+  }
+
+  .import-section-path {
+    font-size: 0.75rem;
+    line-height: 1.3;
+    color: var(--muted);
+    margin-bottom: var(--space-1);
+  }
+
+  .import-section-part {
+    display: block;
+    margin: 0;
+    padding: 0;
+    text-indent: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  .import-section-part + .import-section-part {
+    margin-top: 2px;
+  }
+
+  table.import-drafts th.col-text,
+  table.import-drafts td.col-text {
+    min-width: 0;
+    width: 40%;
+    overflow-wrap: break-word;
+  }
+
+  table.import-drafts th.col-confidence,
+  table.import-drafts td.col-confidence {
+    width: 1%;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  table.import-drafts td.col-meta .tax-chip {
+    align-items: flex-start;
+  }
+
+  table.import-drafts td.col-meta .tax-picker-compact .tax-chip-label {
+    max-width: none;
+    overflow: visible;
+    text-overflow: unset;
+    white-space: normal;
+    text-indent: 0;
+    text-align: left;
   }
 
   .import-topic-name {

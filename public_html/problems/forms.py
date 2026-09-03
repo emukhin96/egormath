@@ -166,7 +166,7 @@ class TextbookDraftReviewForm(forms.ModelForm):
         model = TextbookTaskDraft
         fields = [
             'external_id', 'source_number', 'text_latex',
-            'subitems', 'author_answer_latex', 'author_solution_latex', 'topic',
+            'subitems', 'author_answer_latex', 'author_solution_latex',
             'status',
         ]
         widgets = {
@@ -181,8 +181,8 @@ class TextbookDraftReviewForm(forms.ModelForm):
             self.cleaned_data.get('text_latex') or ''))
 
     def clean_author_answer_latex(self):
-        from .textbook_parser import apply_imported_math
-        return apply_imported_math(
+        from .textbook_parser import apply_imported_answer
+        return apply_imported_answer(
             self.cleaned_data.get('author_answer_latex') or '')
 
     def clean_author_solution_latex(self):

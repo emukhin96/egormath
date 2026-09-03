@@ -1,0 +1,16 @@
+{% load task_extras %}
+{% if page.has_other_pages %}
+{% with q=query|without_page %}
+<nav class="pagination" aria-label="Страницы">
+  {% for num in page|page_numbers %}
+    {% if num is None %}
+      <span class="pagination-ellipsis" aria-hidden="true">…</span>
+    {% elif num == page.number %}
+      <span class="btn btn-secondary is-current" aria-current="page">{{ num }}</span>
+    {% else %}
+      <a class="btn btn-secondary" href="?{% if q %}{{ q }}&{% endif %}page={{ num }}">{{ num }}</a>
+    {% endif %}
+  {% endfor %}
+</nav>
+{% endwith %}
+{% endif %}

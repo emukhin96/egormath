@@ -323,6 +323,30 @@ _SEED_RE = re.compile(
 _MATHY_RE = re.compile(r"[A-Za-z0-9\\{}\(\)\[\]\^_+\-=<>|/*']")
 
 
+def ensure_displaystyle_fractions(text):
+    """В инлайн-формулах с ``\\frac`` добавляет ``\\displaystyle``.
+
+    Display-математика (``$$`` / ``\\[``) уже крупная. Повторный вызов
+    не дублирует команду.
+    """
+    if not text or '\\frac' not in text:
+        return text
+
+    def repl(match):
+        span = match.group(0)
+        if span.startswith('$$') or span.startswith('\\['):
+            return span
+        if '\\frac' not in span or '\\displaystyle' in span:
+            return span
+        if span.startswith('$'):
+            return r'$\displaystyle ' + span[1:]
+        if span.startswith('\\('):
+            return r'\(\displaystyle ' + span[2:]
+        return span
+
+    return _MATH_SPAN_RE.sub(repl, text)
+
+
 def wrap_bare_math(text):
     """Оборачивает голый TeX в $…$, уже обёрнутые формулы не трогает.
 

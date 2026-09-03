@@ -111,6 +111,7 @@
     this.useGrades = root.dataset.grades === '1';
     this.compact = root.dataset.compact === '1';
     this.single = root.dataset.single === '1';
+    this.chipFull = root.dataset.chipFull === '1';
     this.topicFieldName = root.dataset.topicField || '';
     this.isFilter = this.mode === 'filter';
     this.state = parseState(root.dataset.state);
@@ -515,7 +516,7 @@
       var topic = topicById(id);
       if (!topic) return;
       var full = (topic.code ? topic.code + ' ' : '') + topic.name;
-      var label = (self.compact && topic.code) ? topic.code : full;
+      var label = (!self.chipFull && self.compact && topic.code) ? topic.code : full;
       var isPrimary = self.usePrimary && self.state.primary === id;
       html += '<span class="tax-chip' + (isPrimary ? ' is-primary' : '') + '"'
         + ' title="' + escapeHtml(full) + '">';

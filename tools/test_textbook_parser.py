@@ -8,6 +8,7 @@ from tools.textbook_parser import (
     bundle_from_text,
     collapse_repeated_lead,
     expected_shestakov_ids,
+    extract_images,
     normalize_imported_text,
     numeric_markers,
     path_at,
@@ -35,6 +36,12 @@ class TextbookParserTests(unittest.TestCase):
             "Ответ: 2.\n\nРешение: сложим слагаемые.")
         self.assertEqual(answer, "2.")
         self.assertEqual(solution, "Решение: сложим слагаемые.")
+
+    def test_noun_resheniya_is_not_a_solution_heading(self):
+        answer, solution = split_answer_solution(
+            r"если \(a<-2\), то 2 решения.")
+        self.assertIn("2 решения", answer)
+        self.assertEqual(solution, "")
 
     def test_shestakov_expected_number_grid_has_1220_tasks(self):
         expected = expected_shestakov_ids()
@@ -101,7 +108,7 @@ class TextbookParserTests(unittest.TestCase):
         ])
         tasks, diagnostics = parse_shestakov(task_text, solution_text)
         self.assertEqual(
-            [task.author_answer_latex for task in tasks], ["1.", "2."])
+            [task.author_answer_latex for task in tasks], ["1", "2"])
         self.assertEqual(diagnostics["matched_solutions"], 2)
 
     def test_immediate_next_code_caption_stays_with_current_solution(self):
@@ -314,6 +321,35 @@ class TextbookParserTests(unittest.TestCase):
         self.assertEqual(
             apply_imported_math(r'D = (-5a)^2 - 4 \cdot 1 \cdot 4'),
             r'$D = (-5a)^2 - 4 \cdot 1 \cdot 4$')
+        self.assertEqual(
+            apply_imported_math(r'$\frac{2}{3}<\frac{4}{5}$'),
+            r'$\displaystyle \frac{2}{3}<\frac{4}{5}$')
+        self.assertEqual(
+            apply_imported_math(r'\(\frac{1}{2}\)'),
+            r'\(\displaystyle \frac{1}{2}\)')
+        self.assertEqual(
+            apply_imported_math(r'\[\frac{1}{2}\]'),
+            r'\[\frac{1}{2}\]')
+        self.assertEqual(
+            apply_imported_math(r'$\displaystyle \frac{1}{2}$'),
+            r'$\displaystyle \frac{1}{2}$')
+        from problems.textbook_parser import (
+            apply_imported_answer, clean_heading, strip_heading_dot,
+            strip_imported_answer_punct)
+        self.assertEqual(
+            strip_heading_dot('Чётные и нечётные функции.'),
+            'Чётные и нечётные функции')
+        self.assertEqual(
+            clean_heading('10. Чётные и нечётные функции.'),
+            '10. Чётные и нечётные функции')
+        self.assertEqual(
+            apply_imported_answer(r'$\frac{2}{3}<\frac{4}{5}$.'),
+            r'$\displaystyle \frac{2}{3}<\frac{4}{5}$')
+        self.assertEqual(apply_imported_answer('2.'), '2')
+        self.assertEqual(
+            apply_imported_answer('Нет корней.'), 'Нет корней.')
+        self.assertEqual(
+            strip_imported_answer_punct('см. рис.'), 'см. рис')
 
     def test_subitem_body_does_not_keep_its_own_marker(self):
         task_text = "\n".join([
@@ -455,7 +491,7 @@ class TextbookParserTests(unittest.TestCase):
 """
         tasks, diagnostics = parse_galitsky(source)
         self.assertEqual([task.external_id for task in tasks], ["1.1", "1.2"])
-        self.assertEqual(tasks[0].author_answer_latex, "2.")
+        self.assertEqual(tasks[0].author_answer_latex, "2")
         self.assertIn("Решение", tasks[1].author_solution_latex)
         self.assertEqual(diagnostics["matched_solutions"], 2)
 
@@ -496,7 +532,7 @@ class TextbookParserTests(unittest.TestCase):
 
         self.assertEqual(diagnostics["matched_solutions"], 3)
         self.assertEqual(
-            [task.author_answer_latex for task in tasks], ["-1.", "4.", "1."])
+            [task.author_answer_latex for task in tasks], ["-1", "4", "1"])
         self.assertTrue(all(
             "Не найден авторский ответ/решение" not in task.warnings
             for task in tasks))
@@ -529,7 +565,7 @@ class TextbookParserTests(unittest.TestCase):
         ])
         solution_text = r"1.1.A01 $1+1=2$. Ответ: 2."
         tasks, diagnostics = parse_shestakov(task_text, solution_text)
-        self.assertEqual(tasks[0].author_answer_latex, "2.")
+        self.assertEqual(tasks[0].author_answer_latex, "2")
         self.assertIn("$1+1=2$", tasks[0].author_solution_latex)
         self.assertIn("Ответ: 2.", tasks[0].author_solution_latex)
         self.assertEqual(diagnostics["matched_solutions"], 1)
@@ -544,7 +580,7 @@ class TextbookParserTests(unittest.TestCase):
         )
 
         self.assertEqual(len(bundle.tasks), 1)
-        self.assertEqual(bundle.tasks[0].author_answer_latex, "2.")
+        self.assertEqual(bundle.tasks[0].author_answer_latex, "2")
         self.assertEqual(bundle.source, {
             "tasks_file": "book.tex",
             "solutions_file": "solutions.tex",
@@ -570,7 +606,7 @@ class TextbookParserTests(unittest.TestCase):
         self.assertEqual(task.author_solution_latex, "")
         self.assertEqual(
             [item.author_answer_latex for item in task.subitems],
-            ["2.", "4."],
+            ["2", "4"],
         )
         self.assertEqual(
             [item.author_solution_latex for item in task.subitems],
@@ -902,6 +938,118 @@ class TextbookParserTests(unittest.TestCase):
         self.assertNotIn(r"\begin{figure}", combined)
         self.assertNotIn("\n\n", combined)
 
+    def test_ocr_includegraphics_without_closing_brace_is_extracted(self):
+        body = (
+            r"$\includegraphics[alt={}$,$max width=\textwidth]"
+            r"{8cbf1c7f-38c0-42a9-b381-acfbab07c546-119_484_486_484_100"
+            "\n"
+            r"\caption{$Рис. 25.}"
+        )
+        self.assertEqual(extract_images(body), [
+            "8cbf1c7f-38c0-42a9-b381-acfbab07c546-119_484_486_484_100",
+        ])
+
+    def test_ziv_ocr_figure_in_answer_becomes_taskpic(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{10. Графики}
+Вариант 7
+\begin{itemize}
+  \item[3.] Постройте графики функций:
+  \item[а)] \(y=x\)
+  \item[б)] \(y=|x|\)
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{10. Графики}
+Вариант 7
+\begin{itemize}
+  \item[3.]
+  \item[а)] см. рис. 25
+  \item[б)] см. рис. 26
+\begin{figure}[h]
+\begin{center}
+$\includegraphics[alt={}$,$max width=\textwidth]{uuid-fig-25
+\captionsetup{labelformat=empty}
+\caption{$Рис. 25.}
+\end{center}
+\end{figure}
+\begin{figure}[h]
+\begin{center}
+$\includegraphics[alt={}$,$max width=\textwidth]{uuid-fig-26
+\captionsetup{labelformat=empty}
+\caption{$Рис. 26.}
+\end{center}
+\end{figure}
+\end{itemize}
+"""
+        tasks, _ = parse_ziv(source)
+        task = next(item for item in tasks if item.external_id == "sr/10/v7/3")
+        self.assertEqual(task.images, ["uuid-fig-25", "uuid-fig-26"])
+        self.assertEqual(
+            [item.author_answer_latex for item in task.subitems],
+            [r"см. рис." + "\n" + r"\taskpic{1}",
+             r"см. рис." + "\n" + r"\taskpic{2}"],
+        )
+        combined = "\n".join(
+            [task.author_answer_latex, task.author_solution_latex]
+            + [item.author_answer_latex for item in task.subitems]
+            + [item.author_solution_latex for item in task.subitems]
+        )
+        self.assertNotIn(r"\includegraphics", combined)
+        self.assertNotIn(r"\begin{figure}", combined)
+        self.assertNotIn("uuid-fig-25", combined)
+        self.assertNotIn("рис. 25", combined)
+        self.assertNotIn("рис. 26", combined)
+
+    def test_ziv_see_fig_answer_does_not_keep_next_task(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{10. Графики}
+Вариант 7
+\begin{itemize}
+  \item[3.] Постройте графики функций:
+  \item[а)] \(y=x\)
+  \item[б)] \(y=|x|\)
+  \item[4.] Сколько решений в зависимости от параметра \(a\)?
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{10. Графики}
+Вариант 7
+\begin{itemize}
+  \item[3.]
+  \item[а)] см. рис. 25
+  \item[б)] см. рис. 26. 4. Если \(a \geqslant 2\), то решений нет; если \(-2 \leqslant a<2\), то 1 решение; если \(a<-2\), то 2 решения.
+\begin{figure}[h]
+\begin{center}
+$\includegraphics[alt={}$,$max width=\textwidth]{uuid-fig-25
+\caption{$Рис. 25.}
+\end{center}
+\end{figure}
+\begin{figure}[h]
+\begin{center}
+$\includegraphics[alt={}$,$max width=\textwidth]{uuid-fig-26
+\caption{$Рис. 26.}
+\end{center}
+\end{figure}
+\end{itemize}
+"""
+        tasks, _ = parse_ziv(source)
+        by_id = {task.external_id: task for task in tasks}
+        graph = by_id["sr/10/v7/3"]
+        following = by_id["sr/10/v7/4"]
+        self.assertEqual(graph.images, ["uuid-fig-25", "uuid-fig-26"])
+        self.assertIn(r"\taskpic{1}", graph.subitems[0].author_answer_latex)
+        self.assertIn(r"\taskpic{2}", graph.subitems[1].author_answer_latex)
+        self.assertEqual(
+            graph.subitems[0].author_answer_latex.split("\n", 1)[0],
+            "см. рис.")
+        self.assertNotIn("Если", graph.subitems[1].author_answer_latex)
+        self.assertIn("Если", following.author_answer_latex)
+        self.assertIn("2 решения", following.author_answer_latex)
+        self.assertNotIn(r"\taskpic", following.author_answer_latex)
+
     def test_existing_taskpic_is_included_in_assets_and_renumbered(self):
         task_text = "\n".join([
             "7.1.D03 Задача с рисунками.",
@@ -1017,10 +1165,14 @@ class TextbookParserTests(unittest.TestCase):
             "Самостоятельные работы", "Числовые неравенства", "Вариант 1",
         ])
         self.assertEqual(tasks[0].collection_key, "sr/01/v1")
-        self.assertEqual(tasks[0].author_answer_latex, r"$\frac{2}{3}<\frac{4}{5}$.")
-        self.assertEqual(tasks[2].author_answer_latex, r"$\frac{1}{2}<\frac{2}{3}$.")
-        self.assertEqual(tasks[3].author_answer_latex, r"$a<b$.")
-        self.assertEqual(tasks[4].author_answer_latex, r"$x>0$.")
+        self.assertEqual(
+            tasks[0].author_answer_latex,
+            r"$\displaystyle \frac{2}{3}<\frac{4}{5}$")
+        self.assertEqual(
+            tasks[2].author_answer_latex,
+            r"$\displaystyle \frac{1}{2}<\frac{2}{3}$")
+        self.assertEqual(tasks[3].author_answer_latex, r"$a<b$")
+        self.assertEqual(tasks[4].author_answer_latex, r"$x>0$")
         self.assertEqual(diagnostics["matched_solutions"], 5)
         self.assertEqual(diagnostics["ziv_uneven_variant_topics"], [])
 
@@ -1088,8 +1240,8 @@ a+b
         self.assertEqual(
             [task.external_id for task in tasks],
             ["sr/01/v1/1", "kr/01/v1/1"])
-        self.assertEqual(tasks[0].author_answer_latex, "$1<2$.")
-        self.assertEqual(tasks[1].author_answer_latex, "$x>0$.")
+        self.assertEqual(tasks[0].author_answer_latex, "$1<2$")
+        self.assertEqual(tasks[1].author_answer_latex, "$x>0$")
         self.assertEqual(diagnostics["matched_solutions"], 2)
         self.assertEqual(diagnostics["duplicate_task_ids"], [])
 
@@ -1133,15 +1285,15 @@ a+b
         self.assertEqual(sorted(by_id), [
             "kr/02/v1/1", "kr/02/v1/2", "kr/02/v1/3", "kr/02/v1/4",
         ])
-        self.assertEqual(by_id["kr/02/v1/1"].author_answer_latex, r"$-2\leqslant x<4$.")
-        self.assertEqual(by_id["kr/02/v1/2"].author_answer_latex, "4.")
+        self.assertEqual(by_id["kr/02/v1/1"].author_answer_latex, r"$-2\leqslant x<4$")
+        self.assertEqual(by_id["kr/02/v1/2"].author_answer_latex, "4")
         self.assertEqual(
             [item.label for item in by_id["kr/02/v1/3"].subitems],
             ["а", "б", "в", "г"])
         self.assertEqual(
             [item.author_answer_latex for item in by_id["kr/02/v1/3"].subitems],
             [r"$>$", r"$<$", r"$=$", r"$>$"])
-        self.assertEqual(by_id["kr/02/v1/4"].author_answer_latex, r"$x=2$.")
+        self.assertEqual(by_id["kr/02/v1/4"].author_answer_latex, r"$x=2$")
         self.assertEqual(diagnostics["matched_solutions"], 4)
 
     def test_ziv_inline_variant_and_tilde_numbers_do_not_leak(self):
@@ -1207,8 +1359,8 @@ a+b
         self.assertEqual(
             [item.label for item in by_id["sr/09/v2/3"].subitems],
             ["а", "б"])
-        self.assertEqual(by_id["sr/09/v1/3"].author_answer_latex, "графики.")
-        self.assertEqual(by_id["sr/09/v2/1"].author_answer_latex, "нечетная.")
+        self.assertEqual(by_id["sr/09/v1/3"].author_answer_latex, "графики")
+        self.assertEqual(by_id["sr/09/v2/1"].author_answer_latex, "нечетная")
         self.assertEqual(diagnostics["matched_solutions"], 8)
         self.assertEqual(diagnostics["ziv_uneven_variant_topics"], [])
 
@@ -1325,9 +1477,9 @@ a+b
         self.assertIn("четность", by_id["kr/03/v4/1"].text_latex)
         self.assertIn("Решите уравнения", by_id["kr/03/v4/4"].text_latex)
         self.assertNotIn("тригонометрические", by_id["kr/03/v4/4"].text_latex)
-        self.assertEqual(by_id["kr/03/v2/4"].author_answer_latex, "$4$.")
-        self.assertEqual(by_id["kr/03/v3/4"].author_answer_latex, "$x=2$.")
-        self.assertEqual(by_id["kr/03/v4/1"].author_answer_latex, "нечетная.")
+        self.assertEqual(by_id["kr/03/v2/4"].author_answer_latex, "$4$")
+        self.assertEqual(by_id["kr/03/v3/4"].author_answer_latex, "$x=2$")
+        self.assertEqual(by_id["kr/03/v4/1"].author_answer_latex, "нечетная")
         self.assertEqual(diagnostics["matched_solutions"], 11)
         self.assertEqual(diagnostics["ziv_uneven_variant_topics"], [])
 
@@ -1469,7 +1621,7 @@ a+b
 """
         tasks, diagnostics = parse_ziv(source)
         self.assertEqual(tasks[0].external_id, "kr/02/v1/1")
-        self.assertEqual(tasks[0].author_answer_latex, "$3$.")
+        self.assertEqual(tasks[0].author_answer_latex, "$3$")
         self.assertEqual(diagnostics["matched_solutions"], 1)
 
     def test_ziv_trims_section_and_work_heading_from_last_task(self):
@@ -1772,6 +1924,27 @@ a+b
             by_id["pr/01/v1/1"].source_path[0], "Проверочные работы на повторение")
         self.assertIn("Вычислите", by_id["pr/01/v1/1"].text_latex)
 
+    def test_ziv_strips_trailing_dot_from_section_title(self):
+        source = r"""
+\section*{Самостоятельные работы}
+\section*{11. Чётные и нечётные функции.}
+Вариант 1
+\begin{itemize}
+  \item[1.] Является ли функция четной.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Самостоятельные работы}
+\section*{11. Чётные и нечётные функции.}
+Вариант 1
+\begin{itemize}
+  \item[1.] четная.
+\end{itemize}
+"""
+        tasks, _diagnostics = parse_ziv(source)
+        self.assertEqual(
+            tasks[0].source_path[1], 'Чётные и нечётные функции')
+        self.assertEqual(tasks[0].author_answer_latex, 'четная')
+
     def test_ziv_bare_enumerate_after_setcounter_continues_numbering(self):
         source = r"""
 \section*{Самостоятельные работы}
@@ -1817,7 +1990,7 @@ a+b
 """
         tasks, diagnostics = parse_galitsky(source)
         self.assertEqual(diagnostics["matched_solutions"], 1)
-        self.assertEqual(tasks[0].author_answer_latex, "2.")
+        self.assertEqual(tasks[0].author_answer_latex, "2")
         self.assertEqual(tasks[1].author_answer_latex, "")
         self.assertFalse(any(
             "Не найден авторский ответ/решение" in warning

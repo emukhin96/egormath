@@ -6,13 +6,14 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 
-from problems.models import (Task, TaskImage, TaskSource,
+from problems.models import (Task, TaskImage, TaskSource, TaskTopic,
                              TextbookImportBatch, TextbookTaskDraft, Topic)
 from problems.tests import make_teacher
 from problems.textbook_import import (TextbookImportError, attach_image_archive,
                                       commit_batch, create_batch_from_bundle,
-                                      repair_ziv_batch_leaks)
-from problems.textbook_topics import (match_topic_candidates,
+                                      repair_ziv_batch_leaks,
+                                      sync_batch_draft_images)
+from problems.textbook_topics import (match_topic_candidates, set_draft_topics,
                                       suggested_topic_for_drafts)
 from worksheets.models import Collection, WorksheetItem
 
@@ -87,7 +88,7 @@ class TextbookImportTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         draft = TextbookTaskDraft.objects.get()
-        self.assertEqual(draft.author_answer_latex, '2.')
+        self.assertEqual(draft.author_answer_latex, '2')
         self.assertEqual(draft.batch.profile, 'galitsky')
         self.assertEqual(Task.objects.count(), 0)
 
@@ -194,8 +195,41 @@ class TextbookImportTests(TestCase):
     def test_commit_requires_review(self):
         batch = self.create_batch()
         with self.assertRaisesMessage(TextbookImportError, 'непроверенных'):
-            commit_batch(batch, user=self.teacher)
+            commit_batch(batch, user=self.teacher, require_complete=True)
         self.assertEqual(Task.objects.count(), 0)
+
+    def test_commit_imports_approved_and_leaves_the_rest(self):
+        topic = Topic.objects.create(name='Частичная тема')
+        payload = bundle()
+        payload['tasks'].append(dict(
+            payload['tasks'][0],
+            external_id='1.2.38',
+            source_number='38',
+            text_latex='Ещё не проверенная задача.'))
+        batch = self.create_batch(payload)
+        first = batch.drafts.get(external_id='1.2.37')
+        first.status = TextbookTaskDraft.STATUS_APPROVED
+        first.topic = topic
+        first.save()
+
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(
+            reverse('textbook_import_detail', args=[batch.pk]))
+        self.assertEqual(response.context['approved_count'], 1)
+        self.assertContains(
+            response, 'Непроверенные и конфликтные строки останутся')
+        response = self.client.post(
+            reverse('textbook_import_commit', args=[batch.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url, reverse('textbook_import_detail', args=[batch.pk]))
+        first.refresh_from_db()
+        second = batch.drafts.get(external_id='1.2.38')
+        batch.refresh_from_db()
+        self.assertEqual(first.status, TextbookTaskDraft.STATUS_IMPORTED)
+        self.assertEqual(second.status, TextbookTaskDraft.STATUS_REVIEW)
+        self.assertEqual(batch.status, TextbookImportBatch.STATUS_REVIEW)
+        self.assertEqual(Task.objects.count(), 1)
 
     def test_commit_requires_rubricator_topic(self):
         batch = self.create_batch(bundle(
@@ -212,8 +246,8 @@ class TextbookImportTests(TestCase):
         batch = self.create_batch()
         draft = batch.drafts.get()
         draft.status = TextbookTaskDraft.STATUS_APPROVED
-        draft.topic = topic
-        draft.save()
+        set_draft_topics(draft, [topic.pk], topic.pk)
+        draft.save(update_fields=['status'])
 
         result = commit_batch(batch, user=self.teacher)
         task = Task.objects.get()
@@ -235,10 +269,94 @@ class TextbookImportTests(TestCase):
         self.assertTrue(WorksheetItem.objects.filter(
             worksheet=leaf.worksheet, task=task).exists())
         self.assertEqual(list(task.topics.all()), [topic])
+        self.assertFalse(WorksheetItem.objects.filter(
+            worksheet=leaf.worksheet, rubric__gt='').exists())
 
         self.assertEqual(commit_batch(batch, user=self.teacher), {
             'created': 0, 'reused': 0, 'collections': 0})
         self.assertEqual(Task.objects.count(), 1)
+
+    def test_commit_adds_variant_rubrics_inside_topic_collection(self):
+        topic = Topic.objects.create(name='Тема вариантов')
+        payload = bundle(
+            source_path=[
+                'Самостоятельные работы',
+                'Числовые неравенства',
+                'Вариант 1',
+            ],
+            collection_key='sr/10/v1',
+            collection_title='Числовые неравенства',
+            source_number='1',
+            external_id='sr/10/v1/1',
+        )
+        payload['tasks'].append(dict(
+            payload['tasks'][0],
+            external_id='sr/10/v2/1',
+            source_number='1',
+            collection_key='sr/10/v2',
+            collection_title='Числовые неравенства',
+            source_path=[
+                'Самостоятельные работы',
+                'Числовые неравенства',
+                'Вариант 2',
+            ],
+            text_latex='Вторая задача варианта.',
+        ))
+        batch = self.create_batch(payload)
+        batch.drafts.update(
+            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        commit_batch(batch, user=self.teacher)
+
+        leaf = Collection.objects.get(is_published=True)
+        self.assertEqual(
+            leaf.source_path,
+            ['Самостоятельные работы', 'Числовые неравенства'])
+        self.assertEqual(leaf.locator, 'key:sr/10')
+        self.assertEqual(leaf.worksheet.title, 'Числовые неравенства')
+        items = list(leaf.worksheet.items.order_by('order', 'pk'))
+        self.assertEqual(
+            [item.rubric for item in items if item.is_rubric],
+            ['Вариант 1', 'Вариант 2'])
+        self.assertEqual(sum(1 for item in items if item.task_id), 2)
+
+    def test_commit_chapter_uses_section_rubrics(self):
+        topic = Topic.objects.create(name='Тема главы')
+        payload = bundle(
+            source_path=[
+                'Глава 1. Числовые выражения',
+                '§1. Действия с целыми',
+            ],
+            collection_key=(
+                'Глава 1. Числовые выражения/§1. Действия с целыми'),
+            collection_title='§1. Действия с целыми',
+        )
+        payload['tasks'].append(dict(
+            payload['tasks'][0],
+            external_id='1.2.38',
+            source_number='38',
+            source_path=[
+                'Глава 1. Числовые выражения',
+                '§2. Действия с дробями',
+            ],
+            collection_key=(
+                'Глава 1. Числовые выражения/§2. Действия с дробями'),
+            collection_title='§2. Действия с дробями',
+            text_latex='Вторая задача главы.',
+        ))
+        batch = self.create_batch(payload)
+        batch.drafts.update(
+            status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        commit_batch(batch, user=self.teacher)
+
+        leaf = Collection.objects.get(is_published=True)
+        self.assertEqual(
+            leaf.source_path, ['Глава 1. Числовые выражения'])
+        self.assertEqual(leaf.worksheet.title, 'Глава 1. Числовые выражения')
+        items = list(leaf.worksheet.items.order_by('order', 'pk'))
+        self.assertEqual(
+            [item.rubric for item in items if item.is_rubric],
+            ['§1. Действия с целыми', '§2. Действия с дробями'])
+        self.assertEqual(sum(1 for item in items if item.task_id), 2)
 
     def test_same_text_twice_in_one_source_stays_two_tasks(self):
         payload = bundle()
@@ -480,7 +598,8 @@ class TextbookImportTests(TestCase):
         self.assertNotContains(response, 'name="author_answer_latex"')
         self.assertNotContains(response, 'name="author_solution_latex"')
         self.assertContains(response, 'data-tax-picker')
-        self.assertContains(response, 'data-single="1"')
+        self.assertContains(response, 'data-single="0"')
+        self.assertContains(response, 'data-primary="1"')
         self.assertContains(response, 'Тема: код или название')
         self.assertIn(str(first_topic.pk), response.context['selected_json'])
 
@@ -501,6 +620,7 @@ class TextbookImportTests(TestCase):
             'textbook_import_review', args=[batch.pk, draft.pk]))
         draft.refresh_from_db()
         self.assertEqual(draft.topic, second_topic)
+        self.assertEqual(draft.topic_ids, [second_topic.pk])
         self.assertEqual(
             draft.subitems[0]['author_answer_latex'], 'Новый ответ.')
         self.assertEqual(
@@ -740,8 +860,9 @@ class TextbookImportTests(TestCase):
             if group['collection_key'] == 'alg.quadratic')
         self.assertEqual(algebra['count'], 2)
         self.assertContains(response, 'Предпросмотр подборок и массовая тема')
-        self.assertContains(response, 'Все разделы')
-        self.assertContains(response, 'data-single="1"')
+        self.assertContains(response, 'Все задачи')
+        self.assertContains(response, 'data-single="0"')
+        self.assertContains(response, 'data-primary="1"')
 
         response = self.client.post(reverse(
             'textbook_import_assign_section_topic', args=[batch.pk]), {
@@ -848,12 +969,12 @@ class TextbookImportTests(TestCase):
             'textbook_import_detail', args=[batch.pk]))
 
         self.assertContains(response, 'Задание и подпункты')
-        self.assertContains(response, '>Ответ<')
-        self.assertContains(response, '>Решение<')
+        self.assertContains(response, '>Отв.<')
+        self.assertContains(response, '>Реш.<')
         self.assertContains(response, 'import-status-review')
         self.assertContains(response, 'title="Не проверена"')
         self.assertContains(response, '$1+1$', html=False)
-        self.assertContains(response, 'есть: 1/2')
+        self.assertContains(response, 'title="1/2"')
         html = response.content.decode()
         self.assertEqual(html.count('Вычислите:'), 1)
         self.assertEqual(html.count('$1+1$'), 1)
@@ -877,6 +998,9 @@ class TextbookImportTests(TestCase):
         self.assertEqual(page.paginator.count, 51)
         self.assertEqual(len(page.object_list), 50)
         self.assertEqual(page.paginator.num_pages, 2)
+        self.assertContains(response, 'class="pagination"')
+        self.assertContains(response, 'page=2')
+        self.assertNotContains(response, '→')
 
         group = next(
             item for item in response.context['collection_groups']
@@ -995,6 +1119,131 @@ class TextbookImportTests(TestCase):
         self.assertEqual(TaskImage.objects.count(), 1)
         self.assertIn('figure-1', TaskImage.objects.get().filename)
 
+    def test_create_batch_collects_ocr_images_from_subitem_solution(self):
+        payload = bundle(
+            images=[],
+            author_answer_latex='',
+            author_solution_latex='',
+            subitems=[{
+                'label': 'а',
+                'text_latex': r'\(y=x\)',
+                'author_answer_latex': 'см. рис. 25',
+                'author_solution_latex': (
+                    r'$\includegraphics[alt={}$,$max width=\textwidth]{fig-25'
+                    '\n'
+                    r'\caption{$Рис. 25.}'
+                ),
+            }],
+        )
+        batch = self.create_batch(payload)
+        draft = batch.drafts.get()
+        self.assertEqual(draft.images, ['fig-25'])
+        self.assertIn(r'\taskpic{1}', draft.subitems[0]['author_answer_latex'])
+        self.assertIn('см. рис.', draft.subitems[0]['author_answer_latex'])
+        self.assertNotIn('рис. 25', draft.subitems[0]['author_answer_latex'])
+        self.assertNotIn(
+            'includegraphics', draft.subitems[0]['author_solution_latex'])
+        self.assertTrue(any(
+            'Требуется загрузить' in item for item in draft.warnings))
+
+    def test_image_zip_skips_macos_appledouble_and_matches_ocr_stem(self):
+        payload = bundle(
+            images=[],
+            author_answer_latex='',
+            author_solution_latex='',
+            subitems=[{
+                'label': 'а',
+                'text_latex': 'график',
+                'author_answer_latex': '',
+                'author_solution_latex': (
+                    r'$\includegraphics[alt={}$,$max width=\textwidth]{fig-25'),
+            }],
+        )
+        batch = self.create_batch(payload)
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, 'w') as zf:
+            zf.writestr('fig-25.jpg', TINY_PNG)
+            zf.writestr('._fig-25.jpg', TINY_PNG)
+            zf.writestr('__MACOSX/._fig-25.jpg', TINY_PNG)
+        archive.seek(0)
+        stored = attach_image_archive(
+            batch, SimpleUploadedFile('pics.zip', archive.read()))
+        self.assertEqual(stored, 1)
+        self.assertEqual(batch.assets.count(), 1)
+        self.assertEqual(batch.assets.get().stem, 'fig-25')
+        draft = batch.drafts.get()
+        self.assertEqual(draft.images, ['fig-25'])
+        self.assertFalse(any(
+            'Требуется загрузить' in item for item in draft.warnings))
+
+    def test_sync_recovers_images_on_already_saved_draft(self):
+        batch = self.create_batch(bundle(images=[]))
+        draft = batch.drafts.get()
+        draft.subitems = [{
+            'label': 'б',
+            'text_latex': r'\(y=|x|\)',
+            'author_answer_latex': 'см. рис. 26',
+            'author_solution_latex': (
+                r'\begin{figure}[h]'
+                r'$\includegraphics[alt={}$,$max width=\textwidth]{uuid-fig-26'
+                r'\caption{$Рис. 26.}'
+                r'\end{figure}'
+            ),
+        }]
+        draft.author_answer_latex = ''
+        draft.author_solution_latex = ''
+        draft.save()
+        self.assertEqual(sync_batch_draft_images(batch), 1)
+        draft.refresh_from_db()
+        self.assertEqual(draft.images, ['uuid-fig-26'])
+        self.assertIn(r'\taskpic{1}', draft.subitems[0]['author_answer_latex'])
+        self.assertIn('см. рис.', draft.subitems[0]['author_answer_latex'])
+        self.assertNotIn(r'\begin{figure}', draft.subitems[0]['author_solution_latex'])
+
+    def test_sync_splits_ziv_answer_leak_and_places_each_figure(self):
+        payload = bundle(
+            external_id='sr/10/v7/3',
+            source_number='3',
+            images=[],
+            author_answer_latex='',
+            author_solution_latex='',
+            subitems=[
+                {
+                    'label': 'а',
+                    'text_latex': r'\(y=x\)',
+                    'author_answer_latex': 'см. рис. 25',
+                    'author_solution_latex': '',
+                },
+                {
+                    'label': 'б',
+                    'text_latex': r'\(y=|x|\)',
+                    'author_answer_latex': (
+                        r'см. рис. 26. 4. Если \(a>0\), то 2 решения.'),
+                    'author_solution_latex': (
+                        r'\taskpic{fig-25}' + '\n' + r'\taskpic{fig-26}'),
+                },
+            ])
+        payload['profile'] = 'ziv'
+        payload['tasks'].append(dict(
+            payload['tasks'][0],
+            external_id='sr/10/v7/4',
+            source_number='4',
+            text_latex=r'Сколько решений?',
+            subitems=[],
+            author_answer_latex='',
+            author_solution_latex='',
+            images=[]))
+        batch = self.create_batch(payload)
+        graph = batch.drafts.get(external_id='sr/10/v7/3')
+        following = batch.drafts.get(external_id='sr/10/v7/4')
+        self.assertEqual(graph.images, ['fig-25', 'fig-26'])
+        self.assertIn(r'\taskpic{1}', graph.subitems[0]['author_answer_latex'])
+        self.assertIn(r'\taskpic{2}', graph.subitems[1]['author_answer_latex'])
+        self.assertNotIn('Если', graph.subitems[1]['author_answer_latex'])
+        self.assertIn('Если', following.author_answer_latex)
+        self.assertIn('2 решения', following.author_answer_latex)
+        self.assertNotIn(r'\taskpic', following.author_answer_latex)
+
     def test_image_zip_rejects_duplicate_stems(self):
         batch = self.create_batch(bundle(images=['plot.png']))
         archive = io.BytesIO()
@@ -1059,6 +1308,51 @@ class TextbookImportTests(TestCase):
         self.assertEqual(batch.status, TextbookImportBatch.STATUS_REVIEW)
         self.assertEqual(Task.objects.count(), 1)
         self.assertEqual(first.imported_task_id, Task.objects.get().pk)
+
+    def test_commit_section_imports_approved_while_siblings_wait(self):
+        topic = Topic.objects.create(name='Тема раздела')
+        payload = bundle(
+            source_path=['Глава', 'Тема A'],
+            collection_key='sec.a',
+            collection_title='Тема A')
+        payload['tasks'].append(dict(
+            payload['tasks'][0],
+            external_id='1.2.38',
+            source_number='38',
+            text_latex='Сосед по тому же разделу.',
+            source_path=['Глава', 'Тема A'],
+            collection_key='sec.a',
+            collection_title='Тема A'))
+        batch = self.create_batch(payload)
+        first = batch.drafts.get(external_id='1.2.37')
+        first.status = TextbookTaskDraft.STATUS_APPROVED
+        first.topic = topic
+        first.save()
+
+        self.client.login(username='teacher1', password='pass12345')
+        detail = self.client.get(
+            reverse('textbook_import_detail', args=[batch.pk]))
+        section = next(
+            group for group in detail.context['collection_groups']
+            if group['is_leaf'] and group['path'][-1] == 'Тема A')
+        response = self.client.get(
+            reverse('textbook_import_detail', args=[batch.pk]),
+            {'section': section['token']})
+        self.assertTrue(response.context['selected_group']['can_commit'])
+        self.assertEqual(response.context['selected_group']['open_count'], 1)
+        self.assertContains(response, 'Загрузить тему в каталог')
+
+        response = self.client.post(
+            reverse('textbook_import_commit_section', args=[batch.pk]),
+            {'section': section['token']})
+        self.assertEqual(response.status_code, 302)
+        first.refresh_from_db()
+        second = batch.drafts.get(external_id='1.2.38')
+        batch.refresh_from_db()
+        self.assertEqual(first.status, TextbookTaskDraft.STATUS_IMPORTED)
+        self.assertEqual(second.status, TextbookTaskDraft.STATUS_REVIEW)
+        self.assertEqual(batch.status, TextbookImportBatch.STATUS_REVIEW)
+        self.assertEqual(Task.objects.count(), 1)
 
     def test_import_strips_subitem_marker_and_trailing_space(self):
         batch = self.create_batch(bundle(
@@ -1238,6 +1532,61 @@ class TextbookImportTests(TestCase):
         self.assertTrue(response.json()['ok'])
         draft.refresh_from_db()
         self.assertEqual(draft.topic_id, topic.pk)
+        self.assertEqual(draft.topic_ids, [topic.pk])
+
+    def test_quick_topic_saves_multiple_topics(self):
+        batch = self.create_batch(bundle(
+            source_path=['Геометрия', 'Треугольники'],
+            topic_original='Треугольники',
+            collection_key='geometry.triangles',
+            collection_title='Треугольники',
+            text_latex='Найдите сторону треугольника.',
+        ))
+        draft = batch.drafts.get()
+        first = Topic.objects.create(name='Первая тема импорта')
+        second = Topic.objects.create(name='Вторая тема импорта')
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(
+            reverse('textbook_import_quick_topic',
+                    args=[batch.pk, draft.pk]),
+            {'topics': [str(first.pk), str(second.pk)],
+             'primary_topic': str(second.pk),
+             'topics_submitted': '1'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        draft.refresh_from_db()
+        self.assertEqual(draft.topic_id, second.pk)
+        self.assertEqual(draft.topic_ids, [second.pk, first.pk])
+
+        page = self.client.get(
+            reverse('textbook_import_detail', args=[batch.pk]))
+        self.assertIn(str(first.pk), page.context['page'][0].taxonomy_json)
+        self.assertIn(str(second.pk), page.context['page'][0].taxonomy_json)
+        self.assertContains(page, 'data-chip-full="1"')
+        self.assertContains(page, 'Увер.')
+        self.assertNotContains(page, '>Замечания<')
+
+    def test_commit_writes_all_draft_topics(self):
+        primary = Topic.objects.create(name='Основная импорта')
+        extra = Topic.objects.create(name='Дополнительная импорта')
+        batch = self.create_batch()
+        draft = batch.drafts.get()
+        draft.status = TextbookTaskDraft.STATUS_APPROVED
+        set_draft_topics(draft, [primary.pk, extra.pk], primary.pk)
+        draft.save(update_fields=['status'])
+        commit_batch(batch, user=self.teacher)
+        task = Task.objects.get()
+        self.assertEqual(
+            set(task.topics.values_list('pk', flat=True)),
+            {primary.pk, extra.pk})
+        self.assertEqual(
+            task.topic_links.get(role=TaskTopic.ROLE_PRIMARY).topic_id,
+            primary.pk)
+        leaf = Collection.objects.get(
+            source_path=['Алгебра', 'Квадратные уравнения'])
+        self.assertEqual(
+            set(leaf.worksheet.topics.values_list('pk', flat=True)),
+            {primary.pk, extra.pk})
 
     def test_upload_parses_ziv_profile_explicitly(self):
         self.client.login(username='teacher1', password='pass12345')
@@ -1267,7 +1616,25 @@ class TextbookImportTests(TestCase):
         draft = TextbookTaskDraft.objects.get()
         self.assertEqual(draft.batch.profile, 'ziv')
         self.assertEqual(draft.external_id, 'sr/01/v1/1')
-        self.assertEqual(draft.author_answer_latex, '$1<2$.')
+        self.assertEqual(draft.author_answer_latex, '$1<2$')
+
+    def test_import_strips_section_and_answer_dots(self):
+        batch = self.create_batch(bundle(
+            source_path=['Чётные и нечётные функции.'],
+            collection_title='Чётные и нечётные функции.',
+            author_answer_latex='четная.',
+        ))
+        draft = batch.drafts.get()
+        self.assertEqual(draft.source_path, ['Чётные и нечётные функции'])
+        self.assertEqual(draft.collection_title, 'Чётные и нечётные функции')
+        self.assertEqual(draft.author_answer_latex, 'четная')
+
+        sentence = self.create_batch(bundle(
+            external_id='1.2.38',
+            author_answer_latex='Нет корней.',
+        ))
+        self.assertEqual(
+            sentence.drafts.get().author_answer_latex, 'Нет корней.')
 
     def test_status_filter_keeps_selected_section(self):
         batch = self.create_batch()
@@ -1309,7 +1676,15 @@ class TextbookImportTests(TestCase):
         landing = self.client.get(reverse(
             'textbook_import_detail', args=[batch.pk]))
         self.assertEqual(landing.context['page'].paginator.count, 3)
-        self.assertContains(landing, 'Все разделы')
+        self.assertContains(landing, 'Все задачи')
+        self.assertContains(landing, 'import-drafts-wrap')
+        self.assertContains(landing, 'import-toolbar')
+        self.assertContains(landing, 'import-section-part')
+        self.assertContains(landing, 'import-section-path')
+        self.assertContains(landing, 'Раздел + темы')
+        self.assertContains(landing, 'col-meta')
+        self.assertNotContains(landing, '>№<')
+        self.assertContains(landing, 'import-key-status')
         algebra = next(
             group for group in landing.context['collection_groups']
             if group['collection_key'] == 'alg.quadratic')
@@ -1320,6 +1695,8 @@ class TextbookImportTests(TestCase):
         })
         ids = {draft.external_id for draft in section.context['page']}
         self.assertEqual(ids, {'1.2.37', '1.2.38'})
+        self.assertContains(section, 'import-section-current')
+        self.assertContains(section, 'Все задачи')
         self.assertContains(section, f'status=approved&section={algebra["token"]}')
 
         filtered = self.client.get(reverse(
@@ -1332,6 +1709,8 @@ class TextbookImportTests(TestCase):
             ['1.2.37'])
         self.assertNotIn('section=', filtered.context['all_sections_href'])
         self.assertIn('status=', filtered.context['all_sections_href'])
+        self.assertTrue(filtered.context['all_sections_href'].startswith('?'))
+        self.assertTrue(landing.context['all_sections_href'].startswith('?'))
 
         cleared = self.client.get(reverse(
             'textbook_import_detail', args=[batch.pk]), {
@@ -1369,7 +1748,22 @@ class TextbookImportTests(TestCase):
         })
         self.assertEqual(response.status_code, 302)
         second.refresh_from_db()
-        self.assertEqual(second.topic, topic)
+        self.assertIn(topic.pk, second.topic_ids)
+        kept_primary = second.topic_id
+        self.assertIsNotNone(kept_primary)
+
+        extra = Topic.objects.create(name='Вторая массовая тема')
+        response = self.client.post(url, {
+            'ids': [str(second.pk)],
+            'topics': [str(extra.pk)],
+            'next': reverse('textbook_import_detail', args=[batch.pk]),
+        })
+        self.assertEqual(response.status_code, 302)
+        second.refresh_from_db()
+        self.assertEqual(second.topic_id, kept_primary)
+        self.assertEqual(
+            set(second.topic_ids),
+            {kept_primary, topic.pk, extra.pk})
 
         response = self.client.post(url, {
             'ids': [str(second.pk)],
@@ -1379,6 +1773,48 @@ class TextbookImportTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(batch.drafts.filter(pk=second.pk).exists())
         self.assertTrue(batch.drafts.filter(pk=first.pk).exists())
+
+    def test_bulk_updates_status_of_selected_drafts(self):
+        payload = bundle()
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='1.2.38', source_number='38',
+            text_latex='Вторая задача.'))
+        batch = self.create_batch(payload)
+        first, second = list(batch.drafts.order_by('external_id'))
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('textbook_import_bulk', args=[batch.pk])
+        next_url = reverse('textbook_import_detail', args=[batch.pk])
+
+        response = self.client.get(next_url)
+        self.assertContains(response, 'name="status" value="approved"')
+        self.assertContains(response, 'name="status" value="conflict"')
+
+        response = self.client.post(url, {
+            'ids': [str(first.pk), str(second.pk)],
+            'status': TextbookTaskDraft.STATUS_APPROVED,
+            'next': next_url,
+        })
+        self.assertEqual(response.status_code, 302)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.status, TextbookTaskDraft.STATUS_APPROVED)
+        self.assertEqual(second.status, TextbookTaskDraft.STATUS_APPROVED)
+
+        self.client.post(url, {
+            'ids': [str(second.pk)],
+            'status': TextbookTaskDraft.STATUS_CONFLICT,
+            'next': next_url,
+        })
+        second.refresh_from_db()
+        self.assertEqual(second.status, TextbookTaskDraft.STATUS_CONFLICT)
+
+        self.client.post(url, {
+            'ids': [str(first.pk)],
+            'status': TextbookTaskDraft.STATUS_REVIEW,
+            'next': next_url,
+        })
+        first.refresh_from_db()
+        self.assertEqual(first.status, TextbookTaskDraft.STATUS_REVIEW)
 
     def test_bulk_ignores_already_imported_drafts(self):
         payload = bundle()

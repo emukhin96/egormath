@@ -814,7 +814,8 @@ def _all_sections_href(request):
     """Сбрасывает раздел, сохраняет вкладку статуса."""
     query = _textbook_detail_query(
         request, section=None, page=None, collection_page=None)
-    return f'?{query}#collection-preview' if query else '#collection-preview'
+    # Всегда оставляем «?», иначе «#якорь» не сбрасывает ?section=…
+    return f'?{query}#collection-preview'
 
 
 def _annotate_section_nav_row(row, request, selected_token,
@@ -898,24 +899,48 @@ def _textbook_group_drafts(batch, group):
     return batch.drafts.filter(selector)
 
 
-def _draft_taxonomy_json(topic_id):
+def _draft_taxonomy_json(draft):
+    from .textbook_topics import draft_topic_ids
+    ids = draft_topic_ids(draft)
     return dumps_state({
-        'topics': [topic_id] if topic_id else [],
-        'primary': topic_id,
+        'topics': ids,
+        'primary': draft.topic_id,
         'grades': [], 'facets': [], 'exams': [], 'difficulty': None,
     })
 
 
 def _attach_draft_taxonomy(drafts):
     for draft in drafts:
-        draft.taxonomy_json = _draft_taxonomy_json(draft.topic_id)
+        draft.taxonomy_json = _draft_taxonomy_json(draft)
 
 
-def _topic_from_request(request):
-    topic_id = request.POST.get('topic', '').strip()
-    if topic_id.isdigit():
-        return Topic.objects.filter(pk=int(topic_id)).first()
-    return None
+def _group_topic_counts(drafts):
+    from collections import Counter
+    from .textbook_topics import draft_topic_ids
+    counter = Counter()
+    for draft in drafts:
+        ids = draft_topic_ids(draft)
+        if not ids:
+            counter[None] += 1
+        else:
+            for pk in ids:
+                counter[pk] += 1
+    topics = {
+        topic.pk: topic
+        for topic in Topic.objects.filter(
+            pk__in=[pk for pk in counter if pk])
+    }
+    rows = []
+    for pk, count in counter.most_common():
+        if pk is None:
+            rows.append({'label': 'Тема не выбрана', 'count': count})
+            continue
+        topic = topics.get(pk)
+        rows.append({
+            'label': str(topic) if topic else f'Тема #{pk}',
+            'count': count,
+        })
+    return rows
 
 
 def _subitem_label_key(value):
@@ -1095,29 +1120,27 @@ def textbook_import_detail(request, pk):
         for value, label in TextbookTaskDraft.STATUS_CHOICES
     ]
     selected_topic = None
+    selected_topics = []
     suggested_topic = None
     if selected_group:
         from .textbook_topics import (candidate_reason_label,
+                                      draft_topic_ids,
                                       suggested_topic_for_drafts)
         group_drafts = _textbook_group_drafts(batch, selected_group)
-        topic_rows = list(
-            group_drafts.order_by()
-            .values('topic_id', 'topic__code', 'topic__name')
-            .annotate(count=Count('pk'))
-            .order_by('topic__code', 'topic__name'))
-        selected_group['topic_counts'] = [{
-            'label': (
-                ' '.join(filter(None, [row['topic__code'],
-                                      row['topic__name']]))
-                if row['topic_id'] else 'Тема не выбрана'),
-            'count': row['count'],
-        } for row in topic_rows]
+        selected_group['topic_counts'] = _group_topic_counts(
+            group_drafts.only('topic_id', 'topic_ids'))
         suggested_topic = suggested_topic_for_drafts(
             group_drafts.select_related('topic'))
-        if suggested_topic:
+        assigned_sets = [
+            tuple(draft_topic_ids(draft))
+            for draft in group_drafts.only('topic_id', 'topic_ids')
+        ]
+        if assigned_sets and len(set(assigned_sets)) == 1 and assigned_sets[0]:
+            selected_topics = list(assigned_sets[0])
+            selected_topic = selected_topics[0]
+        elif suggested_topic:
             selected_topic = suggested_topic.pk
-        elif len(topic_rows) == 1:
-            selected_topic = topic_rows[0]['topic_id']
+            selected_topics = [selected_topic]
         candidate_rows = (
             group_drafts.exclude(topic_candidates=[])
             .values_list('topic_candidates', flat=True)[:8])
@@ -1148,11 +1171,10 @@ def textbook_import_detail(request, pk):
             for status in section_statuses)
         selected_group['can_commit'] = (
             selected_group['approved_count'] > 0
-            and selected_group['open_count'] == 0
             and batch.status != TextbookImportBatch.STATUS_IMPORTED)
     _attach_draft_taxonomy(page.object_list)
     context = taxonomy_page_context({
-        'topics': [selected_topic] if selected_topic else [],
+        'topics': selected_topics,
         'primary': selected_topic,
         'grades': [], 'facets': [], 'exams': [], 'difficulty': None,
     })
@@ -1177,8 +1199,10 @@ def textbook_import_detail(request, pk):
                 collection_groups, request, selected_token)),
         'image_form': TextbookImageArchiveForm(),
         'list_query': _textbook_detail_query(
-            request, section=selected_token if selected_group else None),
+            request, section=selected_token if selected_group else None,
+            page=None),
         'all_sections_href': _all_sections_href(request),
+        'approved_count': counts.get(TextbookTaskDraft.STATUS_APPROVED, 0),
     })
     return render(request, 'problems/textbook_import_detail.html', context)
 
@@ -1200,21 +1224,28 @@ def textbook_import_assign_section_topic(request, pk):
         messages.error(
             request, 'Загруженную партию нельзя изменять через предпросмотр.')
         return redirect(_textbook_detail_url(batch, section=section_token))
-    topic = _topic_from_request(request)
-    if topic is None:
-        from .textbook_topics import suggested_topic_for_drafts
-        topic = suggested_topic_for_drafts(
+    from .textbook_topics import (set_draft_topics, suggested_topic_for_drafts,
+                                 topics_from_post)
+    topic_ids, primary_id = topics_from_post(request.POST)
+    if not topic_ids:
+        suggested = suggested_topic_for_drafts(
             _textbook_group_drafts(batch, group).select_related('topic'))
-    if topic is None:
+        if suggested:
+            topic_ids, primary_id = [suggested.pk], suggested.pk
+    if not topic_ids:
         messages.error(request, 'Выберите тему рубрикатора.')
         return redirect(_textbook_detail_url(batch, section=section_token))
-    updated = (_textbook_group_drafts(batch, group)
-               .exclude(status=TextbookTaskDraft.STATUS_IMPORTED)
-               .update(topic=topic))
+    drafts = list(
+        _textbook_group_drafts(batch, group)
+        .exclude(status=TextbookTaskDraft.STATUS_IMPORTED))
+    for draft in drafts:
+        set_draft_topics(draft, topic_ids, primary_id)
+    labels = ', '.join(
+        str(topic) for topic in Topic.objects.filter(pk__in=topic_ids))
     messages.success(
         request,
-        f'Тема «{topic}» назначена задачам раздела '
-        f'«{group["title"]}»: {updated}.')
+        f'Темы ({labels}) назначены задачам раздела '
+        f'«{group["title"]}»: {len(drafts)}.')
     return redirect(_textbook_detail_url(batch, section=section_token))
 
 
@@ -1229,9 +1260,9 @@ def textbook_import_quick_topic(request, batch_pk, pk):
         return JsonResponse(
             {'ok': False, 'message': 'Загруженную партию нельзя изменять.'},
             status=400)
-    topic = _topic_from_request(request)
-    draft.topic = topic
-    draft.save(update_fields=['topic'])
+    from .textbook_topics import set_draft_topics, topics_from_post
+    topic_ids, primary_id = topics_from_post(request.POST)
+    set_draft_topics(draft, topic_ids, primary_id)
     if request.headers.get('x-requested-with') != 'XMLHttpRequest':
         return redirect(_textbook_detail_url(batch, request))
     return JsonResponse({'ok': True})
@@ -1261,17 +1292,43 @@ def textbook_import_bulk(request, pk):
         drafts.delete()
         messages.success(request, f'Удалено задач: {deleted}.')
         return redirect(next_url)
+    status = request.POST.get('status')
     if request.POST.get('skip'):
-        updated = drafts.update(status=TextbookTaskDraft.STATUS_SKIPPED)
-        messages.success(request, f'Пропущено задач: {updated}.')
+        status = TextbookTaskDraft.STATUS_SKIPPED
+    allowed_statuses = {
+        TextbookTaskDraft.STATUS_APPROVED,
+        TextbookTaskDraft.STATUS_REVIEW,
+        TextbookTaskDraft.STATUS_CONFLICT,
+        TextbookTaskDraft.STATUS_SKIPPED,
+    }
+    if status in allowed_statuses:
+        now = timezone.now()
+        updated = drafts.update(
+            status=status,
+            reviewed_by=request.user,
+            reviewed_at=now,
+        )
+        labels = {
+            TextbookTaskDraft.STATUS_APPROVED: 'Одобрено задач',
+            TextbookTaskDraft.STATUS_REVIEW: 'Возвращено на проверку',
+            TextbookTaskDraft.STATUS_CONFLICT: 'Отмечено конфликтными',
+            TextbookTaskDraft.STATUS_SKIPPED: 'Пропущено задач',
+        }
+        messages.success(request, f'{labels[status]}: {updated}.')
         return redirect(next_url)
-    topic = _topic_from_request(request)
-    if topic is None:
+    from .textbook_topics import merge_draft_topics, topics_from_post
+    topic_ids, primary_id = topics_from_post(request.POST)
+    if not topic_ids:
         messages.error(request, 'Выберите тему рубрикатора.')
         return redirect(next_url)
-    updated = drafts.update(topic=topic)
+    updated = 0
+    for draft in drafts:
+        merge_draft_topics(draft, topic_ids, primary_id)
+        updated += 1
+    labels = ', '.join(
+        str(topic) for topic in Topic.objects.filter(pk__in=topic_ids))
     messages.success(
-        request, f'Тема «{topic}» назначена выбранным задачам: {updated}.')
+        request, f'Темы ({labels}) добавлены выбранным задачам: {updated}.')
     return redirect(next_url)
 
 
@@ -1314,9 +1371,21 @@ def textbook_import_review(request, batch_pk, pk):
                         for item in updated.subitems):
                     updated.author_answer_latex = ''
                     updated.author_solution_latex = ''
+                if (request.POST.get('topics_submitted')
+                        or 'topics' in request.POST
+                        or 'topic' in request.POST
+                        or 'primary_topic' in request.POST):
+                    from .textbook_topics import set_draft_topics, topics_from_post
+                    topic_ids, primary_id = topics_from_post(request.POST)
+                    set_draft_topics(
+                        updated, topic_ids, primary_id, save=False)
+                from .textbook_import import refresh_image_warnings
+                from .textbook_parser import finalize_draft_images
+                finalize_draft_images(updated)
                 updated.reviewed_by = request.user
                 updated.reviewed_at = timezone.now()
                 updated.save()
+                refresh_image_warnings(batch)
                 messages.success(request, f'{updated.external_id}: сохранено.')
                 next_draft = (batch.drafts
                               .filter(external_id__gt=updated.external_id)
@@ -1349,11 +1418,21 @@ def textbook_import_review(request, batch_pk, pk):
                 subitem['author_solution_latex'] = request.POST[solution_key]
     else:
         review_subitems = order_letter_subitems(review_subitems)
-    topic_ids = request.POST.getlist('topic') if request.method == 'POST' else (
-        [draft.topic_id] if draft.topic_id else [])
+    from .textbook_topics import draft_topic_ids, topics_from_post
+    if request.method == 'POST':
+        review_topic_ids, review_primary = topics_from_post(request.POST)
+        if (not review_topic_ids
+                and not request.POST.get('topics_submitted')
+                and 'topics' not in request.POST
+                and 'topic' not in request.POST):
+            review_topic_ids = draft_topic_ids(draft)
+            review_primary = draft.topic_id
+    else:
+        review_topic_ids = draft_topic_ids(draft)
+        review_primary = draft.topic_id
     context = taxonomy_page_context({
-        'topics': [int(value) for value in topic_ids if str(value).isdigit()],
-        'primary': None,
+        'topics': review_topic_ids,
+        'primary': review_primary,
         'grades': [], 'facets': [], 'exams': [], 'difficulty': None,
     })
     from .textbook_import import normalize_image_stem
@@ -1441,7 +1520,8 @@ def textbook_import_commit(request, pk):
     from .textbook_import import TextbookImportError, commit_batch
     batch = _own_import_batch(request, pk)
     try:
-        result = commit_batch(batch, user=request.user)
+        result = commit_batch(
+            batch, user=request.user, require_complete=False)
     except TextbookImportError as exc:
         messages.error(request, str(exc))
         return redirect('textbook_import_detail', pk=batch.pk)
@@ -1450,7 +1530,10 @@ def textbook_import_commit(request, pk):
         'Импорт завершён: создано задач — %(created)s, '
         'переиспользовано — %(reused)s, новых подборок — %(collections)s.'
         % result)
-    return redirect('collection_list')
+    batch.refresh_from_db()
+    if batch.status == TextbookImportBatch.STATUS_IMPORTED:
+        return redirect('collection_list')
+    return redirect('textbook_import_detail', pk=batch.pk)
 
 
 @teacher_required
@@ -1466,15 +1549,6 @@ def textbook_import_commit_section(request, pk):
         messages.error(request, 'Выбранный раздел задачника не найден.')
         return redirect(_textbook_detail_url(batch, section=section_token))
     group_drafts = _textbook_group_drafts(batch, group)
-    if group_drafts.filter(status__in=[
-            TextbookTaskDraft.STATUS_REVIEW,
-            TextbookTaskDraft.STATUS_CONFLICT,
-    ]).exists():
-        messages.error(
-            request,
-            'Сначала одобрите или пропустите все задачи раздела '
-            f'«{group["title"]}».')
-        return redirect(_textbook_detail_url(batch, section=section_token))
     draft_ids = list(group_drafts.filter(
         status=TextbookTaskDraft.STATUS_APPROVED).values_list('pk', flat=True))
     try:

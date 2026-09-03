@@ -4,6 +4,7 @@ import re
 from difflib import SequenceMatcher
 
 from .models import Topic
+from .rubricator import getlist, parse_int_ids
 
 
 _RAW_TOPIC_ALIASES = {
@@ -257,7 +258,79 @@ def apply_topic_suggestions(drafts):
         ), None)
         if exact and not draft.topic_id:
             draft.topic_id = exact['id']
+        stored = parse_int_ids(draft.topic_ids or [])
+        if draft.topic_id and draft.topic_id not in stored:
+            draft.topic_ids = [draft.topic_id] + stored
     return drafts
+
+
+def draft_topic_ids(draft):
+    """Все темы черновика: JSON плюс основная, если её ещё нет в списке."""
+    ids = []
+    seen = set()
+    for pk in parse_int_ids(draft.topic_ids or []):
+        if pk not in seen:
+            seen.add(pk)
+            ids.append(pk)
+    if draft.topic_id and draft.topic_id not in seen:
+        ids.insert(0, draft.topic_id)
+    return ids
+
+
+def set_draft_topics(draft, topic_ids, primary_id=None, save=True):
+    """Пишет список тем и основную; пустой список снимает назначение."""
+    ids = []
+    seen = set()
+    for pk in parse_int_ids(topic_ids):
+        if pk not in seen:
+            seen.add(pk)
+            ids.append(pk)
+    existing = set(
+        Topic.objects.filter(pk__in=ids).values_list('pk', flat=True))
+    ids = [pk for pk in ids if pk in existing]
+    if primary_id not in (None, ''):
+        try:
+            primary_id = int(primary_id)
+        except (TypeError, ValueError):
+            primary_id = None
+    else:
+        primary_id = None
+    if primary_id not in existing:
+        primary_id = ids[0] if ids else None
+    if primary_id:
+        ids = [primary_id] + [pk for pk in ids if pk != primary_id]
+    draft.topic_id = primary_id
+    draft.topic_ids = ids
+    if save and draft.pk:
+        draft.save(update_fields=['topic', 'topic_ids'])
+    return draft
+
+
+def merge_draft_topics(draft, topic_ids, primary_id=None, save=True):
+    """Добавляет темы к уже выбранным, не затирая основную."""
+    current = draft_topic_ids(draft)
+    incoming = parse_int_ids(topic_ids)
+    combined = current + [pk for pk in incoming if pk not in current]
+    keep_primary = draft.topic_id if draft.topic_id in combined else primary_id
+    return set_draft_topics(draft, combined, keep_primary, save=save)
+
+
+def topics_from_post(post):
+    """Темы и основная из POST виджета; одиночное topic= — совместимость."""
+    ids = parse_int_ids(getlist(post, 'topics'))
+    if not ids:
+        ids = parse_int_ids(getlist(post, 'topic'))
+    primary = post.get('primary_topic')
+    if primary in (None, ''):
+        primary = ids[0] if ids else None
+    else:
+        try:
+            primary = int(primary)
+        except (TypeError, ValueError):
+            primary = ids[0] if ids else None
+        if primary not in ids:
+            primary = ids[0] if ids else None
+    return ids, primary
 
 
 def suggested_topic_for_drafts(drafts):
