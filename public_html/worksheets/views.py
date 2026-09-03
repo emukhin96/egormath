@@ -28,11 +28,12 @@ from problems.views import filter_tasks
 from .forms import WorksheetForm
 from .import_tex import (TexImportError, create_worksheet,
                          match_existing_tasks, parse_tex)
+from .beamer import worksheet_to_beamer
 from .latex import worksheet_to_tex
 from .models import (Collection, PdfCompileLock, ShareLink, Worksheet,
                      WorksheetItem, WorksheetPdf)
-from .services import (LatexCompileError, collect_assets, compile_latex,
-                       get_worksheet_pdf)
+from .services import (LatexCompileError, collect_assets, collect_beamer_assets,
+                       compile_latex, get_worksheet_pdf)
 
 
 def _own_worksheet(request, pk):
@@ -931,16 +932,8 @@ def _acquire_compile_lock(user):
         return False
 
 
-@teacher_required
-@require_POST
-def worksheet_pdf_compile(request, pk):
-    """Компиляция tex из редактора (в т.ч. с ручными правками учителя).
-
-    Возвращает PDF-байты либо JSON с логом ошибки компиляции. Кэш PDF
-    листка не трогает — это «черновая» сборка именно присланного кода.
-    """
-    worksheet = _own_worksheet(request, pk)
-    tex = request.POST.get('tex', '')
+def _editor_compile(request, worksheet, tex, doc_id, filename, collect):
+    """Черновая сборка: проверка tex → lock → assets → API."""
     if not tex.strip():
         return JsonResponse(
             {'ok': False, 'message': 'Пустой документ', 'log': ''},
@@ -959,18 +952,59 @@ def worksheet_pdf_compile(request, pk):
                         'завершения', 'log': ''},
             status=429)
     try:
-        pdf_bytes = compile_latex(
-            tex, doc_id=f'ws{worksheet.pk}-editor',
-            assets=collect_assets(worksheet))
+        try:
+            assets = collect()
+        except LatexCompileError as exc:
+            return JsonResponse(
+                {'ok': False, 'message': str(exc), 'log': exc.log}, status=400)
+        pdf_bytes = compile_latex(tex, doc_id=doc_id, assets=assets)
     except LatexCompileError as exc:
         return JsonResponse(
             {'ok': False, 'message': str(exc), 'log': exc.log}, status=502)
     finally:
         PdfCompileLock.objects.filter(user=request.user).delete()
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
-    response['Content-Disposition'] = (
-        f'inline; filename="{worksheet.pdf_filename()}"')
+    response['Content-Disposition'] = f'inline; filename="{filename}"'
     return response
+
+
+@teacher_required
+@require_POST
+def worksheet_pdf_compile(request, pk):
+    """Компиляция tex из редактора (в т.ч. с ручными правками учителя).
+
+    Возвращает PDF-байты либо JSON с логом ошибки компиляции. Кэш PDF
+    листка не трогает — это «черновая» сборка именно присланного кода.
+    """
+    worksheet = _own_worksheet(request, pk)
+    return _editor_compile(
+        request, worksheet, request.POST.get('tex', ''),
+        doc_id=f'ws{worksheet.pk}-editor',
+        filename=worksheet.pdf_filename(),
+        collect=lambda: collect_assets(worksheet))
+
+
+@teacher_required
+def worksheet_beamer_editor(request, pk):
+    """Split-редактор презентации: слева Beamer-tex, справа предпросмотр."""
+    worksheet = _own_worksheet(request, pk)
+    return render(request, 'worksheets/beamer_editor.html', {
+        'worksheet': worksheet,
+        'tex': worksheet_to_beamer(worksheet),
+        'pdf_filename': worksheet.beamer_filename(),
+    })
+
+
+@teacher_required
+@require_POST
+def worksheet_beamer_compile(request, pk):
+    """Черновая сборка презентации; кэш WorksheetPdf не трогает."""
+    worksheet = _own_worksheet(request, pk)
+    return _editor_compile(
+        request, worksheet, request.POST.get('tex', ''),
+        doc_id=f'ws{worksheet.pk}-beamer',
+        filename=worksheet.beamer_filename(),
+        collect=lambda: collect_beamer_assets(worksheet))
 
 
 @teacher_required

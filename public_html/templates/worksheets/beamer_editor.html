@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Презентация: {{ worksheet.title }} — EgorMath{% endblock %}
+{% block sidebar %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Оформление</p>
+  <h2>Быстрые настройки</h2>
+  <p class="sidebar-copy">Выберите оформление — выбор запоминается.
+    PDF собирается кнопкой ниже, не при каждом переключении.</p>
+  <div class="sidebar-switches" id="beamer-switches">
+    <p class="sidebar-kicker">Тема</p>
+    <div class="switch-group" data-switch="theme">
+      <button type="button" data-value="grid">Сетка</button>
+      <button type="button" data-value="light">Светлая</button>
+      <button type="button" data-value="night">Тёмная</button>
+    </div>
+    <p class="sidebar-kicker">Формат</p>
+    <div class="switch-group" data-switch="aspect">
+      <button type="button" data-value="169">16:9</button>
+      <button type="button" data-value="43">4:3</button>
+    </div>
+    <p class="sidebar-kicker">Размер текста</p>
+    <div class="switch-group" data-switch="size">
+      <button type="button" data-value="11pt">11</button>
+      <button type="button" data-value="12pt">12</button>
+      <button type="button" data-value="14pt">14</button>
+    </div>
+    <p class="sidebar-kicker">Шрифт</p>
+    <div class="switch-group" data-switch="font">
+      <button type="button" data-value="school">Schoolbook</button>
+      <button type="button" data-value="cm">Computer Modern</button>
+    </div>
+    <p class="sidebar-kicker">Содержание</p>
+    <div class="switch-group" data-switch="content">
+      <button type="button" data-value="problems">Условия</button>
+      <button type="button" data-value="answers">+ ответы</button>
+      <button type="button" data-value="solutions">+ решения</button>
+    </div>
+    <p class="sidebar-kicker">Ответы</p>
+    <div class="switch-group" data-switch="reveal">
+      <button type="button" data-value="click">По клику</button>
+      <button type="button" data-value="show">Сразу</button>
+      <button type="button" data-value="hidden">Скрыты</button>
+      <button type="button" data-value="end">В конце</button>
+    </div>
+    <p class="sidebar-kicker">Подпункты</p>
+    <div class="switch-group" data-switch="items">
+      <button type="button" data-value="all">Сразу</button>
+      <button type="button" data-value="click">По клику</button>
+    </div>
+    <p class="sidebar-kicker">Показ подпунктов</p>
+    <div class="switch-group" data-switch="itemflow">
+      <button type="button" data-value="stack">Накопление</button>
+      <button type="button" data-value="solo">По одному</button>
+    </div>
+    <p class="sidebar-kicker">Звёзды</p>
+    <div class="switch-group" data-switch="stars">
+      <button type="button" data-value="on">Да</button>
+      <button type="button" data-value="off">Нет</button>
+    </div>
+    <p class="sidebar-kicker">Колонтитул</p>
+    <div class="switch-group" data-switch="footer">
+      <button type="button" data-value="on">Да</button>
+      <button type="button" data-value="off">Нет</button>
+    </div>
+    <div class="sidebar-actions sidebar-compile">
+      <button type="button" class="btn" id="sidebar-compile-btn">Собрать PDF</button>
+    </div>
+  </div>
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Листок</p>
+  <div class="sidebar-actions">
+    <a class="sidebar-action" href="{% url 'worksheet_detail' worksheet.pk %}">← Конструктор листка</a>
+    <a class="sidebar-action" href="{% url 'worksheet_pdf_editor' worksheet.pk %}">Собрать PDF листка</a>
+  </div>
+</section>
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><span class="page-eyebrow">Презентация</span>
+    <h1>{{ worksheet.title }}</h1>
+    <p class="page-subtitle">Правьте tex-код слева и собирайте PDF вручную.
+      Изменения кода не сохраняются в листок — это разовая сборка.</p>
+  </div>
+</div>
+
+<div class="pdf-editor"
+     data-compile-url="{% url 'worksheet_beamer_compile' worksheet.pk %}"
+     data-filename="{{ pdf_filename }}">
+  <div class="pdf-editor-pane">
+    <div class="form-buttons pdf-editor-toolbar">
+      <button type="button" class="btn" id="compile-btn">Собрать PDF</button>
+      <a class="btn btn-secondary" id="download-btn" download="{{ pdf_filename }}"
+         hidden>Скачать PDF</a>
+      <button type="button" class="btn btn-secondary" id="reset-btn"
+              title="Вернуть код, сгенерированный из текущего листка">Сбросить код</button>
+      <span class="muted" id="compile-status"></span>
+    </div>
+    {% csrf_token %}
+    <textarea id="tex-source" class="pdf-editor-source mono"
+              spellcheck="false">{{ tex }}</textarea>
+    <textarea id="tex-original" hidden>{{ tex }}</textarea>
+    <pre class="log" id="compile-log" hidden></pre>
+  </div>
+  <div class="pdf-editor-pane">
+    <iframe id="pdf-frame" class="pdf-editor-frame"
+            title="Предпросмотр презентации"></iframe>
+  </div>
+</div>
+
+<script defer src="{% static 'js/beamer_editor.js' %}"></script>
+{% endblock %}

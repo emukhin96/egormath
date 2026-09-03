@@ -8,6 +8,7 @@ from django.utils import timezone
 from problems.models import Task, TaskSubitem
 from problems.tests import make_student, make_teacher
 
+from .beamer import normalize_beamer_options, worksheet_to_beamer
 from .latex import task_to_tex, worksheet_to_tex
 from .models import ShareLink, Worksheet, WorksheetItem, WorksheetPdf
 from .services import LatexCompileError
@@ -326,6 +327,174 @@ class LatexGenerationTests(TestCase):
         self.assertIn(r'7\_класс', tex)
 
 
+class BeamerGenerationTests(TestCase):
+    def setUp(self):
+        self.teacher = make_teacher()
+        self.worksheet = Worksheet.objects.create(
+            title='Дроби & проценты', grade_label='8 класс',
+            subtitle='Осень', author_name='И. Иванов', owner=self.teacher)
+
+    def test_preamble_defaults(self):
+        tex = worksheet_to_beamer(self.worksheet)
+        self.assertIn(
+            '\\documentclass[aspectratio=169,12pt]{beamer}', tex)
+        self.assertIn(
+            '\\usepackage[theme=light,content=problems,reveal=click,'
+            'items=all,itemflow=stack,font=school,stars,footer]{egorbeamer}', tex)
+        self.assertIn(
+            '\\egortitle{Дроби \\& проценты}{8 класс}{И. Иванов}[{Осень}]',
+            tex)
+        self.assertTrue(tex.strip().endswith('\\end{document}'))
+
+    def test_option_overrides_and_unknowns(self):
+        tex = worksheet_to_beamer(
+            self.worksheet, theme='night', aspect='43', size='14pt',
+            content='solutions', reveal='show', stars=False, footer=False)
+        self.assertIn('\\documentclass[aspectratio=43,14pt]{beamer}', tex)
+        self.assertIn(
+            '\\usepackage[theme=night,content=solutions,reveal=show,'
+            'items=all,itemflow=stack,font=school,nostars,nofooter]{egorbeamer}', tex)
+        tex = worksheet_to_beamer(
+            self.worksheet, theme='grid', content='solutions', reveal='end',
+            items='click', itemflow='solo', font='cm')
+        self.assertIn(
+            '\\usepackage[theme=grid,content=solutions,reveal=end,'
+            'items=click,itemflow=solo,font=cm,stars,footer]{egorbeamer}', tex)
+        opts = normalize_beamer_options(
+            theme='paper', size='20pt', reveal='end', items='maybe',
+            itemflow='bounce', font='comic')
+        self.assertEqual(opts['theme'], 'light')
+        self.assertEqual(opts['size'], '12pt')
+        self.assertEqual(opts['reveal'], 'end')
+        self.assertEqual(opts['items'], 'all')
+        self.assertEqual(opts['itemflow'], 'stack')
+        self.assertEqual(opts['font'], 'school')
+
+    def test_rubric_task_text_and_numbering(self):
+        make_rubric(self.worksheet, 'Разминка', order=5, note='Устно')
+        task = Task.objects.create(
+            text_latex='Вычислите $1+1$.', answer_latex='2',
+            solution_latex='Складываем.', stars=2, created_by=self.teacher)
+        WorksheetItem.objects.create(
+            worksheet=self.worksheet, task=task, order=10)
+        WorksheetItem.objects.create(
+            worksheet=self.worksheet, order=15,
+            text_latex='Вспомните правило.', text_style='memo')
+        tex = worksheet_to_beamer(self.worksheet)
+        self.assertIn('\\egorsection{Разминка}[{Устно}]', tex)
+        self.assertIn(
+            '\\begin{frame}[fragile,t,label=egortask-1]{1.\\ \\egorstars{2}}',
+            tex)
+        self.assertIn('\\egortask{1}', tex)
+        self.assertIn('Вычислите $1+1$.', tex)
+        self.assertIn('\\egoranswer{%', tex)
+        self.assertIn('\\egorsolution{%', tex)
+        self.assertIn('\\egorappendix', tex)
+        self.assertIn('\\egorworkarea', tex)
+        self.assertLess(tex.find('\\egorworkarea'), tex.find('\\egoranswer'))
+        self.assertIn('\\begin{frame}[fragile,t]', tex)
+        self.assertIn('\\vspace*{\\fill}', tex)
+        self.assertNotIn('\\parbox', tex)
+        self.assertIn('Памятка', tex)
+        self.assertEqual(tex.count('\\begin{frame}'), 2)
+        self.assertEqual(tex.count('\\egortitle'), 1)
+        self.assertEqual(tex.count('\\egorsection'), 1)
+
+    def test_optional_args_protect_brackets(self):
+        self.worksheet.subtitle = 'Тема [часть 1]'
+        self.worksheet.save(update_fields=['subtitle'])
+        make_rubric(self.worksheet, 'Раздел', order=1, note='см. [стр. 4]')
+        task = Task.objects.create(text_latex='Вычислите.', created_by=self.teacher)
+        make_item(self.worksheet, task)
+        tex = worksheet_to_beamer(self.worksheet)
+        self.assertIn('\\egortitle{Дроби \\& проценты}{8 класс}{И. Иванов}'
+                      '[{Тема [часть 1]}]', tex)
+        self.assertIn('\\egorsection{Раздел}[{см. [стр. 4]}]', tex)
+
+    def test_task_frame_is_fragile_for_verbatim(self):
+        task = Task.objects.create(
+            text_latex=r'Команда \verb|\frac|.', created_by=self.teacher)
+        make_item(self.worksheet, task)
+        tex = worksheet_to_beamer(self.worksheet)
+        self.assertIn('\\begin{frame}[fragile,t,label=egortask-1]{1.}', tex)
+        self.assertIn(r'\verb|\frac|', tex)
+
+    def test_text_slide_verb_is_not_in_macro_arg(self):
+        WorksheetItem.objects.create(
+            worksheet=self.worksheet, order=10,
+            text_latex=r'Команда \verb|\frac|.', text_style='memo')
+        tex = worksheet_to_beamer(self.worksheet)
+        self.assertIn(r'\verb|\frac|', tex)
+        self.assertNotIn(r'\parbox', tex)
+        self.assertLess(tex.find(r'\vspace*{\fill}'), tex.find(r'\verb|\frac|'))
+
+    def test_solution_frame_can_break(self):
+        task = Task.objects.create(
+            text_latex='Вычислите.', solution_latex='Длинное решение.',
+            created_by=self.teacher)
+        make_item(self.worksheet, task)
+        tex = worksheet_to_beamer(
+            self.worksheet, content='solutions', reveal='show')
+        self.assertIn(
+            '\\begin{frame}[fragile,t,allowframebreaks,label=egortask-1]',
+            tex)
+        tex_click = worksheet_to_beamer(
+            self.worksheet, content='solutions', reveal='click')
+        self.assertNotIn('allowframebreaks', tex_click)
+
+    def test_subitems_and_taskpic(self):
+        task = Task.objects.create(text_latex='См. \\taskpic{1}', columns=2)
+        TaskSubitem.objects.create(
+            task=task, order=10, text_latex='$1+1$', answer_latex='2')
+        TaskSubitem.objects.create(
+            task=task, order=20, text_latex='$2+2$', answer_latex='4')
+        task.images.create(image='task_images/pic.png', order=10)
+        make_item(self.worksheet, task)
+        tex = worksheet_to_beamer(self.worksheet)
+        self.assertIn('\\taskpic{pic.png}', tex)
+        self.assertNotIn('\\taskpic{1}', tex)
+        self.assertIn('\\item[{а)}] $1+1$;', tex)
+        self.assertIn('\\item[{б)}] $2+2$.', tex)
+        self.assertIn('\\begin{egoritems}[2]', tex)
+        self.assertIn('а)~2', tex)
+        self.assertIn('б)~4', tex)
+
+    def test_empty_rubric_dropped_and_hidden_items(self):
+        make_rubric(self.worksheet, 'Пустая', order=1)
+        task = Task.objects.create(text_latex='Задача', created_by=self.teacher)
+        item = WorksheetItem.objects.create(
+            worksheet=self.worksheet, task=task, order=10)
+        tex = worksheet_to_beamer(self.worksheet, exclude_ids={item.pk})
+        self.assertNotIn('\\egorsection{Пустая}', tex)
+        self.assertNotIn('Задача', tex)
+        self.assertIn('\\egortitle', tex)
+
+    def test_collect_beamer_assets_includes_sty(self):
+        from .services import (EGORBEAMER_GRID_STY, EGORBEAMER_STY,
+                               collect_beamer_assets)
+        assets = collect_beamer_assets(self.worksheet)
+        self.assertEqual(assets[0]['filename'], 'egorbeamer.sty')
+        self.assertEqual(assets[1]['filename'], 'egorbeamer-grid.sty')
+        self.assertTrue(assets[0]['content_base64'])
+        self.assertTrue(EGORBEAMER_STY.is_file())
+        self.assertTrue(EGORBEAMER_GRID_STY.is_file())
+
+    def test_collect_beamer_assets_rejects_too_many_images(self):
+        from .services import (BEAMER_IMAGE_ASSET_LIMIT, collect_beamer_assets)
+        fake = [{'filename': f'p{i}.png', 'content_base64': 'eA=='}
+                for i in range(BEAMER_IMAGE_ASSET_LIMIT + 1)]
+        with mock.patch('worksheets.services.collect_assets', return_value=fake):
+            with self.assertRaises(LatexCompileError) as ctx:
+                collect_beamer_assets(self.worksheet)
+        self.assertIn('картинок', str(ctx.exception))
+
+    def test_beamer_filename(self):
+        self.worksheet.pdf_basename = 'alg8-drobi'
+        self.worksheet.save()
+        self.assertEqual(
+            self.worksheet.beamer_filename(), 'alg8-drobi-prezentaciya.pdf')
+
+
 class WorksheetViewTests(TestCase):
     def setUp(self):
         self.teacher = make_teacher()
@@ -361,6 +530,10 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'data-neuro="apply-all"')
         self.assertContains(response, 'data-no-answer="1"')
         self.assertContains(response, 'Дописать AI-ответ к решениям')
+        self.assertContains(response, 'Презентация')
+        self.assertContains(response, 'Собрать презентацию')
+        self.assertContains(response, reverse(
+            'worksheet_beamer_editor', args=[self.worksheet.pk]))
         self.assertContains(response, 'Добавить AI-решения и ответ')
         self.assertNotContains(response, 'без ответа')
         self.assertContains(response, 'js/neuro.js')
@@ -833,8 +1006,9 @@ class WorksheetViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(mocked.call_count, calls_before)
 
+    @mock.patch('worksheets.views.collect_assets')
     @mock.patch('worksheets.views.compile_latex', return_value=b'%PDF-1.5')
-    def test_pdf_editor_compile_locked(self, mocked):
+    def test_pdf_editor_compile_locked(self, mocked, mocked_assets):
         # Пока идёт сборка пользователя, вторая параллельная — 429.
         # Lock хранится в БД (PdfCompileLock) — общий для всех процессов
         from worksheets.models import PdfCompileLock
@@ -844,6 +1018,7 @@ class WorksheetViewTests(TestCase):
         response = self.client.post(url, {'tex': r'\documentclass{article}'})
         self.assertEqual(response.status_code, 429)
         mocked.assert_not_called()
+        mocked_assets.assert_not_called()
         # Протухший lock (упавший процесс) снимается автоматически
         from worksheets.views import PDF_EDITOR_LOCK_TIMEOUT
         PdfCompileLock.objects.update(
@@ -854,6 +1029,62 @@ class WorksheetViewTests(TestCase):
         self.assertEqual(PdfCompileLock.objects.count(), 0)
         response = self.client.post(url, {'tex': r'\documentclass{article}'})
         self.assertEqual(response.status_code, 200)
+
+    def test_beamer_editor_page(self):
+        self.login_teacher()
+        response = self.client.get(
+            reverse('worksheet_beamer_editor', args=[self.worksheet.pk]))
+        self.assertContains(response, 'id="tex-source"')
+        self.assertContains(response, '\\documentclass[aspectratio=169,12pt]{beamer}')
+        self.assertContains(response, 'data-switch="theme"')
+        self.assertContains(response, 'data-value="grid"')
+        self.assertContains(response, 'data-switch="reveal"')
+        self.assertContains(response, 'data-value="end"')
+        self.assertContains(response, 'data-switch="items"')
+        self.assertContains(response, 'data-switch="itemflow"')
+        self.assertContains(response, 'data-value="stack"')
+        self.assertContains(response, 'data-switch="font"')
+        self.assertContains(response, 'data-value="school"')
+        self.assertContains(response, 'id="sidebar-compile-btn"')
+        self.assertNotContains(response, 'data-value="paper"')
+        self.assertNotContains(response, 'Тетрадь')
+        self.assertContains(response, 'beamer_editor.js')
+        self.assertContains(response, self.worksheet.beamer_filename())
+        self.client.login(username='teacher2', password='pass12345')
+        response = self.client.get(
+            reverse('worksheet_beamer_editor', args=[self.worksheet.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    @mock.patch('worksheets.views.compile_latex',
+                return_value=b'%PDF-1.5 fake')
+    def test_beamer_editor_compile(self, mocked):
+        self.login_teacher()
+        url = reverse('worksheet_beamer_compile', args=[self.worksheet.pk])
+        response = self.client.post(url, {'tex': r'\documentclass{beamer}'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(
+            mocked.call_args.args[0], r'\documentclass{beamer}')
+        assets = mocked.call_args.kwargs.get('assets') or []
+        self.assertTrue(any(a['filename'] == 'egorbeamer.sty' for a in assets))
+        self.assertTrue(
+            any(a['filename'] == 'egorbeamer-grid.sty' for a in assets))
+        self.assertEqual(
+            WorksheetPdf.objects.filter(worksheet=self.worksheet).count(), 0)
+        response = self.client.post(url, {'tex': '  '})
+        self.assertEqual(response.status_code, 400)
+
+    @mock.patch('worksheets.views.collect_beamer_assets',
+                side_effect=LatexCompileError('Слишком много картинок'))
+    @mock.patch('worksheets.views.compile_latex', return_value=b'%PDF-1.5')
+    def test_beamer_editor_compile_too_many_images(self, mocked_compile, _assets):
+        self.login_teacher()
+        response = self.client.post(
+            reverse('worksheet_beamer_compile', args=[self.worksheet.pk]),
+            {'tex': r'\documentclass{beamer}'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('картинок', response.json()['message'])
+        mocked_compile.assert_not_called()
 
     @mock.patch('worksheets.views.compile_latex',
                 side_effect=LatexCompileError(
