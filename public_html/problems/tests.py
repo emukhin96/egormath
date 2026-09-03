@@ -779,7 +779,7 @@ class WebTexTests(TestCase):
         self.assertEqual(self.render('на 33\\%'), 'на 33%')
         self.assertEqual(
             self.render(r'Между какими числами \(\sqrt{170}\) ?\\'),
-            r'Между какими числами \(\sqrt{170}\)?')
+            r'Между какими числами \(\sqrt{170}\) ?<br>')
         html = self.render('Выполните действия\n\\[\na+b\n\\]\n\\section*{3. Тема}\nВариант 1')
         self.assertIn('Выполните действия<br>', html)
         self.assertIn('\\[ a+b \\]', html)
@@ -793,6 +793,11 @@ class WebTexTests(TestCase):
         self.assertEqual(subitem_tail(r'\(\sqrt{168}\) ?\\', False), '')
         self.assertEqual(subitem_tail(r'$1+1$', False), ';')
         self.assertEqual(subitem_tail(r'$1+1$', True), '.')
+
+    def test_manual_text_keeps_trailing_punct_and_item_word(self):
+        self.assertEqual(
+            self.render('Перечислите варианты;'), 'Перечислите варианты;')
+        self.assertEqual(self.render('item список'), 'item список')
 
     def test_math_is_untouched(self):
         # Внутри $…$ команды не трогаем — их рендерит KaTeX

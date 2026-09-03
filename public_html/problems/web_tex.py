@@ -13,8 +13,6 @@ import re
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
-from .textbook_parser import normalize_imported_text
-
 # Служебные маркеры: подставляются до HTML-экранирования, а после него
 # заменяются на разметку. В текстах задач эти символы не встречаются.
 _BR = '\x01'
@@ -192,7 +190,7 @@ def tex_to_web_html(source):
     нетронутыми. Комментарии режутся первыми: в TeX % — комментарий
     и в тексте, и в математике.
     """
-    text = normalize_imported_text(_COMMENT_RE.sub('', source or '').strip())
+    text = _COMMENT_RE.sub('', source or '').strip()
     text = _SECTION_RE.sub('', text)
     text = re.sub(r'(?:\n|\\\\)*Вариант\s+\d+\s*$', '', text)
 
