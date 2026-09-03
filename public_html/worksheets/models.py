@@ -98,6 +98,11 @@ class Worksheet(models.Model):
         suffix = {'answers': '-otvety', 'teacher': '-uchitel'}.get(variant, '')
         return f'{base}{suffix}.pdf'
 
+    def beamer_filename(self):
+        """Имя PDF презентации — тот же базис, что у листка."""
+        base = self.pdf_basename.strip() or self._auto_pdf_basename()
+        return f'{base}-prezentaciya.pdf'
+
     def duplicate(self, owner=None):
         """Полная копия листка со всеми элементами и настройками."""
         copy = Worksheet.objects.get(pk=self.pk)

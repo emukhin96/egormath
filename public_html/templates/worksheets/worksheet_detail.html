@@ -43,6 +43,8 @@
   <button type="button" class="btn btn-secondary" data-dialog-open="copy-dialog">Дублировать</button>
   {# Одна кнопка PDF: варианты (ученик/ответы/учитель) выбираются на странице сборки #}
   <a class="btn" href="{% url 'worksheet_pdf_editor' worksheet.pk %}">PDF</a>
+  <a class="btn btn-secondary" href="{% url 'worksheet_beamer_editor' worksheet.pk %}"
+     target="_blank" rel="noopener">Презентация</a>
   <a class="btn btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}">.tex</a>
   <button type="button" class="btn btn-secondary" data-neuro="apply-answers"
           title="Ответы в пустые поля — существующие ответы и решения не трогаем">Дописать AI-ответ к решениям</button>

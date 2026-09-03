@@ -2083,6 +2083,14 @@
     font-weight: 600;
   }
 
+  .sidebar-compile {
+    margin-top: var(--space-3);
+  }
+
+  .sidebar-compile .btn {
+    width: 100%;
+  }
+
   /* Предпросмотр импорта: панель массового назначения и поля строк */
   .import-bulk {
     display: flex;

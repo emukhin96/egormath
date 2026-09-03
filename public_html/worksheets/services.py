@@ -8,6 +8,7 @@ JSON {"api_key": ..., "tex_files": [{"team_id": ..., "tex_content": ...}]},
 import base64
 import hashlib
 import logging
+from pathlib import Path
 
 import requests
 from django.conf import settings
@@ -92,6 +93,37 @@ def collect_assets(worksheet, exclude_ids=None):
                     'content_base64': base64.b64encode(f.read()).decode(),
                 })
     return assets
+
+
+# Пакеты презентаций лежат в репозитории и уходят asset'ами в каталог сборки
+# (API не ищет TEXMFLOCAL для неизвестных sty). Лимит API — 20 файлов.
+_BEAMER_TEX_DIR = Path(__file__).resolve().parent / 'tex'
+EGORBEAMER_STY = _BEAMER_TEX_DIR / 'egorbeamer.sty'
+EGORBEAMER_GRID_STY = _BEAMER_TEX_DIR / 'egorbeamer-grid.sty'
+BEAMER_STY_ASSETS = (EGORBEAMER_STY, EGORBEAMER_GRID_STY)
+BEAMER_IMAGE_ASSET_LIMIT = 20 - len(BEAMER_STY_ASSETS)
+
+
+def _sty_asset(path):
+    return {
+        'filename': path.name,
+        'content_base64': base64.b64encode(path.read_bytes()).decode(),
+    }
+
+
+def collect_beamer_assets(worksheet, exclude_ids=None):
+    """Картинки листка + sty презентаций для компиляции.
+
+    Два sty занимают слоты из 20 на стороне API. Если картинок больше
+    лимита — ошибка до сборки, без молчаливого отбрасывания файлов
+    (иначе TeX ссылается на отсутствующие изображения).
+    """
+    images = collect_assets(worksheet, exclude_ids=exclude_ids)
+    if len(images) > BEAMER_IMAGE_ASSET_LIMIT:
+        raise LatexCompileError(
+            'Слишком много картинок для презентации '
+            f'(лимит {BEAMER_IMAGE_ASSET_LIMIT} вместе со стилевыми файлами).')
+    return [_sty_asset(path) for path in BEAMER_STY_ASSETS] + images
 
 
 def _pdf_filter_key(exclude_ids):

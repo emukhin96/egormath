@@ -1,0 +1,296 @@
+% Общий хром презентаций. Подключается из egorbeamer всегда.
+% theme=grid дополнительно рисует клетку ниже условия.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{egorbeamer-grid}[2026/09/02 v1.2 Beamer chrome]
+\RequirePackage{tikz}
+
+% Шрифты задаёт egorbeamer (font=cm|school): SchoolBookC + CMU Sans.
+
+\definecolor{egor@gridline}{HTML}{D2E2F4}
+\definecolor{egor@gridmajor}{HTML}{B4CDE8}
+\definecolor{egor@hint}{HTML}{E5F0FC}
+\definecolor{egor@progressstart}{HTML}{8CB9F4}
+\definecolor{egor@progressend}{HTML}{1765B5}
+
+\newcommand{\egorbmr@setup@chrome@light}{%
+  \setbeamercolor{normal text}{fg=egor@text,bg=white}%
+  \setbeamercolor{background canvas}{bg=white}%
+  \setbeamercolor{structure}{fg=egor@accent}%
+  \setbeamercolor{title}{fg=egor@navy}%
+  \setbeamercolor{subtitle}{fg=egor@muted}%
+  \setbeamercolor{frametitle}{fg=egor@navy,bg=white}%
+  \setbeamercolor{egoraccent}{bg=egor@accent}%
+  \setbeamercolor{footline}{fg=egor@muted,bg=white}%
+  \setbeamercolor{egormuted}{fg=egor@muted}%
+  \setbeamercolor{block title}{fg=white,bg=egor@accent}%
+  \setbeamercolor{block body}{fg=egor@text,bg=white}%
+  \setbeamercolor{block title example}{fg=white,bg=egor@navy}%
+  \setbeamercolor{block body example}{fg=egor@text,bg=white}%
+  \setbeamercolor{block title alerted}{fg=egor@navy,bg=egor@soft}%
+  \setbeamercolor{block body alerted}{fg=egor@text,bg=egor@hint}%
+  \setbeamercolor{egorsep}{fg=white,bg=egor@navy}%
+  \setbeamercolor{math text}{fg=egor@text}%
+  \setbeamercolor{egor grid section}{fg=white,bg=egor@navy}%
+  \setbeamercolor{egor grid progress}{fg=egor@accent,bg=egor@gridmajor}%
+}
+
+\newcommand{\egorbmr@setup@chrome@night}{%
+  \setbeamercolor{normal text}{fg=egor@bg,bg=egor@navy}%
+  \setbeamercolor{background canvas}{bg=egor@navy}%
+  \setbeamercolor{structure}{fg=egor@soft}%
+  \setbeamercolor{title}{fg=white}%
+  \setbeamercolor{subtitle}{fg=egor@soft}%
+  \setbeamercolor{frametitle}{fg=white,bg=egor@navy}%
+  \setbeamercolor{egoraccent}{bg=egor@soft}%
+  \setbeamercolor{footline}{fg=egor@soft,bg=egor@navy}%
+  \setbeamercolor{egormuted}{fg=egor@soft}%
+  \setbeamercolor{block title}{fg=egor@navy,bg=egor@soft}%
+  \setbeamercolor{block body}{fg=egor@bg,bg=egor@nightblock}%
+  \setbeamercolor{block title example}{fg=white,bg=egor@math}%
+  \setbeamercolor{block body example}{fg=egor@bg,bg=egor@nightblock}%
+  \setbeamercolor{block title alerted}{fg=egor@navy,bg=egor@soft}%
+  \setbeamercolor{block body alerted}{fg=egor@bg,bg=egor@nightblock}%
+  \setbeamercolor{egorsep}{fg=egor@bg,bg=egor@navy}%
+  \setbeamercolor{math text}{fg=egor@bg}%
+  \setbeamercolor{math text displayed}{fg=egor@bg}%
+  \setbeamercolor{math text inlined}{fg=egor@bg}%
+  \setbeamercolor{egor grid section}{fg=white,bg=egor@nightcard}%
+  \setbeamercolor{egor grid progress}{fg=egor@soft,bg=egor@nightblock}%
+  \AtBeginDocument{%
+    \everymath{\color{egor@bg}}%
+    \everydisplay{\color{egor@bg}}%
+  }%
+}
+
+\ifx\egorbmr@theme\egorbmr@val@night
+  \egorbmr@setup@chrome@night
+\else
+  \egorbmr@setup@chrome@light
+\fi
+
+% Единая вертикаль набора для заголовка, основного текста, блоков и футера.
+% Фон блоков выходит наружу на padding, а сам текст остаётся на этой вертикали.
+\newdimen\egorbmr@grid@inset
+\newdimen\egorbmr@grid@padding
+\newdimen\egorbmr@grid@progress
+\egorbmr@grid@inset=1.05em
+\egorbmr@grid@padding=.55em
+\setbeamersize{text margin left=\egorbmr@grid@inset,
+  text margin right=\egorbmr@grid@inset}
+
+\setbeamerfont{block title}{family=\rmfamily,size=\small,
+  series=\mdseries,shape=\itshape}
+\setbeamerfont{block title example}{parent=block title}
+\setbeamerfont{block title alerted}{parent=block title}
+\setbeamerfont{frametitle}{family=\rmfamily,series=\bfseries,size*={15.5}{18}}
+
+% Собственная геометрия блока: плашка занимает всю ширину страницы,
+% а заголовок и тело начинаются ровно там же, где обычный текст кадра.
+\newcommand{\egorbmr@grid@blockbegin}[2]{%
+  \hfuzz=\dimexpr\egorbmr@grid@inset+.1pt\relax
+  \par\vskip.35em%
+  \noindent
+  \begin{beamercolorbox}[wd=\dimexpr\linewidth+2\egorbmr@grid@inset\relax,
+      ht=1.90ex,dp=.58ex,leftskip=\egorbmr@grid@inset,
+      rightskip=\egorbmr@grid@inset]{#1}%
+    \usebeamerfont*{#1}\insertblocktitle
+  \end{beamercolorbox}%
+  \par\nointerlineskip
+  \noindent
+  \begin{beamercolorbox}[wd=\dimexpr\linewidth+2\egorbmr@grid@inset\relax,
+      leftskip=\egorbmr@grid@inset,
+      rightskip=\egorbmr@grid@inset plus 1fil]{#2}%
+    \vspace{.22em}\usebeamerfont{#2}%
+}
+
+\newcommand{\egorbmr@grid@blockend}{%
+    \vspace{.25em}%
+  \end{beamercolorbox}%
+  \vskip.10em%
+}
+
+\setbeamertemplate{block begin}{%
+  \egorbmr@grid@blockbegin{block title}{block body}}
+\setbeamertemplate{block end}{\egorbmr@grid@blockend}
+\setbeamertemplate{block example begin}{%
+  \egorbmr@grid@blockbegin{block title example}{block body example}}
+\setbeamertemplate{block example end}{\egorbmr@grid@blockend}
+\setbeamertemplate{block alerted begin}{%
+  \egorbmr@grid@blockbegin{block title alerted}{block body alerted}}
+\setbeamertemplate{block alerted end}{\egorbmr@grid@blockend}
+
+\defbeamertemplate*{background}{egor grid}{%
+  \begin{tikzpicture}[remember picture,overlay]
+    \usebeamercolor[bg]{background canvas}%
+    \fill[bg] (current page.south west) rectangle (current page.north east);
+  \end{tikzpicture}%
+}
+
+\defbeamertemplate*{headline}{egor grid}{}
+
+\defbeamertemplate*{frametitle}{egor grid}{%
+  \nointerlineskip
+  \vspace{0.42em}%
+  \begin{beamercolorbox}[wd=\paperwidth,ht=3.3ex,dp=1.1ex,
+      leftskip=\egorbmr@grid@inset,rightskip=\egorbmr@grid@inset]{frametitle}%
+    \usebeamerfont{frametitle}\strut\insertframetitle
+  \end{beamercolorbox}%
+  \vspace{0.42em}%
+}
+
+% Прогресс с мягким синим градиентом: заметен с проектора, но не спорит с футером.
+\defbeamertemplate*{egor grid progress}{default}{%
+  \pgfmathsetlength{\egorbmr@grid@progress}{%
+    \paperwidth*min(1,\insertframenumber/max(1,\inserttotalframenumber))}%
+  \begin{tikzpicture}[baseline]
+    \usebeamercolor{egor grid progress}%
+    \fill[bg] (0,0) rectangle (\paperwidth,1.8pt);
+    \shade[left color=egor@progressstart,right color=egor@progressend]
+      (0,0) rectangle (\egorbmr@grid@progress,1.8pt);
+    \useasboundingbox (0,0) rectangle (\paperwidth,1.8pt);
+  \end{tikzpicture}%
+}
+
+\defbeamertemplate*{footline}{egor grid}{%
+  \ifegorbmr@footer
+    \leavevmode
+    \vbox{\offinterlineskip
+    \hbox{\usebeamertemplate*{egor grid progress}}%
+    \hbox{%
+      \begin{beamercolorbox}[wd=.49\paperwidth,ht=3.1ex,dp=1.35ex,
+          leftskip=\egorbmr@grid@inset]{footline}%
+        \fontsize{6.8}{7.5}\selectfont\insertshorttitle
+      \end{beamercolorbox}%
+      \begin{beamercolorbox}[wd=.29\paperwidth,ht=3.1ex,dp=1.35ex]{footline}%
+        \fontsize{6.8}{7.5}\selectfont\insertsectionhead
+      \end{beamercolorbox}%
+      \begin{beamercolorbox}[wd=.22\paperwidth,ht=3.1ex,dp=1.35ex,
+          rightskip=\egorbmr@grid@inset]{footline}%
+        \hfill\fontsize{6.8}{7.5}\selectfont
+        \insertframenumber/\inserttotalframenumber\quad
+        \hyperlinkframeendprev{\textcolor{egor@accent}{\egorbmrnavfont←}}\quad
+        \hyperlinkframestartnext{\textcolor{egor@accent}{\egorbmrnavfont→}}
+      \end{beamercolorbox}}}%
+  \fi
+}
+
+% Учебные примитивы. Подсказку можно показывать сразу или, например,
+% \egorhint<2->{...}; рабочая область оставляет видимой клетчатую бумагу.
+\NewDocumentCommand{\egorhint}{d<> +m}{%
+  \IfNoValueTF{#1}{%
+    \begin{alertblock}{Подсказка}#2\end{alertblock}%
+  }{%
+    \uncover<#1>{\begin{alertblock}{Подсказка}#2\end{alertblock}}%
+  }%
+}
+
+% Клетка от метки под условием до низа страницы на всю ширину.
+% Рисуем в overlay по current page: иначе кадр обрезает выход
+% за текстовое поле, и слева остаётся щель. API гоняет два прогона.
+\renewcommand{\egorbmr@drawworkarea}{%
+  \ifx\egorbmr@theme\egorbmr@val@grid
+    \par\nobreak\vspace*{1\baselineskip}%
+    \noindent
+    % Метка в текстовом поле; клетка — overlay по current page, иначе
+    % кадр обрезает всё левее левого поля и слева остаётся щель.
+    \tikz[remember picture,inner sep=0]\coordinate(egorwa-\thepage);%
+    \begin{tikzpicture}[remember picture,overlay]
+      \usebeamercolor[bg]{background canvas}%
+      \fill[bg]
+        (current page.west |- egorwa-\thepage)
+        rectangle (current page.south east);
+      \clip
+        (current page.west |- egorwa-\thepage)
+        rectangle (current page.south east);
+      \draw[egor@gridline,line width=.22pt,step=.40cm]
+        ([xshift=0.4pt]current page.west |- egorwa-\thepage)
+        grid (current page.south east);
+      \draw[egor@gridmajor,line width=.32pt,step=2.00cm]
+        ([xshift=0.4pt]current page.west |- egorwa-\thepage)
+        grid (current page.south east);
+    \end{tikzpicture}%
+    \par
+  \fi
+}
+
+% Сетка только на кадре с одним условием: нет видимого ответа/решения.
+\RenewDocumentCommand{\egorworkarea}{O{}}{%
+  \ifegorbmr@showanswer
+    \ifegorbmr@endplace
+      \egorbmr@drawworkarea
+    \else
+      \ifegorbmr@overlay
+        \edef\egorbmr@gridov{-\egorbmr@lastitemov}%
+        \expandafter\only\expandafter<\egorbmr@gridov>{\egorbmr@drawworkarea}%
+      \fi
+    \fi
+  \else
+    \egorbmr@drawworkarea
+  \fi
+}
+
+% В общем хроме номер задания — главный маркер кадра.
+\RenewDocumentCommand{\egorstars}{m}{%
+  \ifegorbmr@stars
+    \ifnum#1>0\relax
+      {\Large
+        \ensuremath{\textcolor{egor@star}{\bigstar}}%
+        \ifnum#1>1\relax\ensuremath{\textcolor{egor@star}{\bigstar}}\fi
+        \ifnum#1>2\relax\ensuremath{\textcolor{egor@star}{\bigstar}}\fi}%
+    \fi
+  \fi
+}
+
+\renewcommand{\egorbmr@paint@title}{%
+  \vspace*{0.72cm}%
+  \noindent
+    \begin{beamercolorbox}[wd=\dimexpr\linewidth+2\egorbmr@grid@inset\relax,
+        sep=.58cm,
+        center]{block body}%
+      {\usebeamercolor[fg]{title}\fontsize{27}{31}\selectfont\bfseries
+        \egorbmr@t@title\par}%
+      \ifx\egorbmr@t@sub\empty\else
+        \vspace{0.5em}{\usebeamercolor[fg]{subtitle}\Large\egorbmr@t@sub\par}%
+      \fi
+      \vspace{0.68cm}%
+      {\large\egorbmr@t@grade\quad\textcolor{egor@border}{|}\quad
+        \egorbmr@t@author\par}%
+    \end{beamercolorbox}
+}
+
+\renewcommand{\egorbmr@paint@section}{%
+  \vspace*{1.15cm}%
+  \noindent
+    \begin{beamercolorbox}[wd=\dimexpr\linewidth+2\egorbmr@grid@inset\relax,
+        sep=.62cm,center]
+        {egor grid section}%
+      {\color{white}\fontsize{27}{31}\selectfont\bfseries\egorbmr@s@name\par}%
+      \ifx\egorbmr@s@note\empty\else
+        \vspace{0.55em}{\color{egor@soft}\large\egorbmr@s@note\par}%
+      \fi
+    \end{beamercolorbox}%
+}
+
+% Рубрика: карточка на фоне темы, без сплошного холста.
+\RenewDocumentCommand{\egorsection}{mO{}}{%
+  \section{#1}%
+  \gdef\egorbmr@s@name{#1}%
+  \gdef\egorbmr@s@note{#2}%
+  \begin{frame}[plain]
+    \egorbmr@paint@section
+  \end{frame}%
+}
+
+% Ссылки «Ответ» / «Решение» / «К задаче» — в тон футерных стрелок.
+\@ifundefined{egorjumpto}{%
+  \NewDocumentCommand{\egorjumpto}{mm}{%
+    \hyperlink{#1}{\textcolor{egor@accent}{\egorbmrnavfont\bfseries#2}}}%
+}{%
+  \RenewDocumentCommand{\egorjumpto}{mm}{%
+    \hyperlink{#1}{\textcolor{egor@accent}{\egorbmrnavfont\bfseries#2}}}%
+}
+
+\setbeamertemplate{background}[egor grid]
+\setbeamertemplate{headline}[egor grid]
+\setbeamertemplate{frametitle}[egor grid]
+\setbeamertemplate{footline}[egor grid]

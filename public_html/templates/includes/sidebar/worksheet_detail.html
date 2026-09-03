@@ -15,6 +15,9 @@
     <a class="sidebar-action" href="{% url 'worksheet_edit' worksheet.pk %}">Свойства листка</a>
     <a class="sidebar-action"
        href="{% url 'worksheet_pdf_editor' worksheet.pk %}">Собрать PDF</a>
+    <a class="sidebar-action"
+       href="{% url 'worksheet_beamer_editor' worksheet.pk %}"
+       target="_blank" rel="noopener">Собрать презентацию</a>
     <a class="sidebar-action" href="#add-tasks">Добавить задачи</a>
     <a class="sidebar-action" href="#assign-students">Назначить ученикам</a>
   </div>
