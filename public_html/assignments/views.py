@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -132,28 +132,42 @@ def _get_or_create_submission(assignment, task_id):
     return submission
 
 
+_ANSWER_FIELD_SUFFIXES = {
+    Task.ANSWER_NUMBER: (('answer_number', 'number'),),
+    Task.ANSWER_INTERVAL: (('interval_low', 'low'), ('interval_high', 'high')),
+    Task.ANSWER_TEXT: (('answer_text', 'text'),),
+}
+
+
 def _answer_fields(answer_type, post, prefix):
-    """Поля ответа по типу задачи из POST с данным префиксом."""
-    if answer_type == Task.ANSWER_NUMBER:
-        return {'answer_number': post.get(f'{prefix}_number', '').strip()}
-    if answer_type == Task.ANSWER_INTERVAL:
-        return {'interval_low': post.get(f'{prefix}_low', '').strip(),
-                'interval_high': post.get(f'{prefix}_high', '').strip()}
-    return {'answer_text': post.get(f'{prefix}_text', '').strip()}
+    """Поля ответа по типу задачи из POST с данным префиксом.
 
-
-@student_required
-@require_POST
-def save_answers(request, pk):
-    """Сохраняет все текстовые/числовые ответы одной формой.
-
-    У задач с подпунктами — отдельный ответ на каждый подпункт
-    (SubmissionPart), у остальных — ответ на задачу целиком.
+    Возвращаются только поля, реально присланные формой: тогда POST без
+    полей ответов (например, форма загрузки фото) не затирает
+    сохранённое пустыми строками.
     """
-    assignment = _student_assignment(request, pk)
-    if not assignment.is_editable_by_student:
-        raise PermissionDenied('Работа уже отправлена на проверку.')
+    suffixes = _ANSWER_FIELD_SUFFIXES.get(
+        answer_type, _ANSWER_FIELD_SUFFIXES[Task.ANSWER_TEXT])
+    return {
+        field: post[f'{prefix}_{suffix}'].strip()
+        for field, suffix in suffixes
+        if f'{prefix}_{suffix}' in post
+    }
+
+
+def _persist_answers(assignment, post):
+    """Записывает присланные поля ответов по всем видимым задачам.
+
+    Единая точка для сохранения черновика, отправки на проверку и действий
+    с фото: любой POST со страницы задания сначала сохраняет введённое,
+    иначе ответы теряются при уходе со страницы. У задач с подпунктами —
+    отдельный ответ на каждый подпункт (SubmissionPart), у остальных —
+    ответ на задачу целиком. Возвращает число задач, у которых что-то
+    записано.
+    """
     hidden = set(assignment.hidden_items.values_list('pk', flat=True))
+    existing = {s.task_id: s for s in assignment.submissions.all()}
+    touched = 0
     for item in assignment.worksheet.ordered_items():
         if item.task_id is None or item.pk in hidden:
             continue
@@ -162,31 +176,76 @@ def save_answers(request, pk):
         subitems = item.selected_subitems()
         if subitems:
             part_fields = {
-                s: _answer_fields(task.answer_type, request.POST,
-                                  f'{prefix}_sub{s.pk}')
+                s: _answer_fields(task.answer_type, post, f'{prefix}_sub{s.pk}')
                 for s in subitems
             }
+            part_fields = {s: f for s, f in part_fields.items() if f}
+            if not part_fields:
+                continue
             has_values = any(
                 any(f.values()) for f in part_fields.values())
-            if not (has_values or assignment.submissions
-                    .filter(task=task).exists()):
+            if not (has_values or task.pk in existing):
                 continue
-            submission, _ = Submission.objects.get_or_create(
-                assignment=assignment, task=task)
+            submission = existing.get(task.pk)
+            if submission is None:
+                submission, _ = Submission.objects.get_or_create(
+                    assignment=assignment, task=task)
+                existing[task.pk] = submission
             for subitem, fields in part_fields.items():
                 part, _ = SubmissionPart.objects.get_or_create(
                     submission=submission, subitem=subitem)
                 for name, value in fields.items():
                     setattr(part, name, value)
                 part.save()
+            touched += 1
             continue
-        fields = _answer_fields(task.answer_type, request.POST, prefix)
-        if any(fields.values()) or assignment.submissions.filter(task=task).exists():
-            submission, _ = Submission.objects.get_or_create(
-                assignment=assignment, task=task)
+        fields = _answer_fields(task.answer_type, post, prefix)
+        if not fields:
+            continue
+        if any(fields.values()) or task.pk in existing:
+            submission = existing.get(task.pk)
+            if submission is None:
+                submission, _ = Submission.objects.get_or_create(
+                    assignment=assignment, task=task)
+                existing[task.pk] = submission
             for name, value in fields.items():
                 setattr(submission, name, value)
             submission.save()
+            touched += 1
+    return touched
+
+
+def _is_xhr(request):
+    return request.headers.get('x-requested-with') == 'XMLHttpRequest'
+
+
+def _editable_or_deny(request, assignment):
+    """Проверка «работу ещё можно менять» с JSON-ответом для автосохранения."""
+    if assignment.is_editable_by_student:
+        return None
+    if _is_xhr(request):
+        return JsonResponse(
+            {'ok': False,
+             'message': 'Работа уже отправлена — изменения не сохранены'},
+            status=403)
+    raise PermissionDenied('Работа уже отправлена на проверку.')
+
+
+@student_required
+@require_POST
+def save_answers(request, pk):
+    """Сохраняет все текстовые/числовые ответы одной формой.
+
+    Для fetch-автосохранения (X-Requested-With) отвечает JSON, как
+    конструктор листка; обычная отправка формы — redirect с сообщением.
+    """
+    assignment = _student_assignment(request, pk)
+    denied = _editable_or_deny(request, assignment)
+    if denied:
+        return denied
+    _persist_answers(assignment, request.POST)
+    if _is_xhr(request):
+        return JsonResponse({'ok': True, 'message': 'Сохранено ✓'})
     messages.success(request, 'Ответы сохранены (черновик).')
     return redirect('assignment_detail', pk=pk)
 
@@ -197,6 +256,8 @@ def upload_photo(request, pk, task_id):
     assignment = _student_assignment(request, pk)
     if not assignment.is_editable_by_student:
         raise PermissionDenied('Работа уже отправлена на проверку.')
+    # Несохранённый текст из формы ответов не должен пропасть из-за фото
+    _persist_answers(assignment, request.POST)
     submission = _get_or_create_submission(assignment, task_id)
 
     from django.conf import settings
@@ -233,6 +294,7 @@ def delete_photo(request, pk, photo_id):
     assignment = _student_assignment(request, pk)
     if not assignment.is_editable_by_student:
         raise PermissionDenied('Работа уже отправлена на проверку.')
+    _persist_answers(assignment, request.POST)
     photo = get_object_or_404(
         SubmissionPhoto, pk=photo_id, submission__assignment=assignment)
     photo.image.delete(save=False)
@@ -247,6 +309,9 @@ def submit_assignment(request, pk):
     assignment = _student_assignment(request, pk)
     if not assignment.is_editable_by_student:
         raise PermissionDenied('Работа уже отправлена на проверку.')
+    # Кнопка «Отправить» шлёт ту же форму, что и «Сохранить черновик»:
+    # сначала записываем введённое, иначе учитель увидит пустую работу
+    _persist_answers(assignment, request.POST)
     # Строки-ответы для видимых задач: скрытые не создаём
     hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     for item in assignment.worksheet.ordered_items():

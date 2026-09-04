@@ -17,11 +17,15 @@
     badgeTimer = setTimeout(function () { badge.hidden = true; }, ok ? 1500 : 4000);
   }
 
+  /* keepalive: запрос доживает до ответа, даже если страница уже уходит
+     (нажали submit другой кнопкой, закрыли вкладку) — иначе последнее
+     изменение поля пропадает. Лимит тела для keepalive — 64 КБ. */
   function send(form, body) {
     return fetch(form.action, {
       method: 'POST',
       headers: {'X-Requested-With': 'XMLHttpRequest'},
       body: body,
+      keepalive: true,
     }).then(function (r) {
       return r.json().catch(function () { return {ok: r.ok, message: ''}; });
     }).then(function (data) {

@@ -21,7 +21,9 @@
 </div>
 {% endif %}
 
-<form method="post" action="{% url 'save_answers' assignment.pk %}">
+{# Режим change, не debounce: debounce перехватывает submit, а в форме есть кнопки с formaction. #}
+<form method="post" action="{% url 'save_answers' assignment.pk %}" id="answers-form"
+      {% if editable %}data-autosave="change"{% endif %}>
   {% csrf_token %}
   {% for row in rows %}
   {% if row.task == None %}
