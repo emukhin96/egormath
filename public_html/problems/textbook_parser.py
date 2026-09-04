@@ -83,14 +83,23 @@ SECTION_COMMAND_RE = re.compile(r"\\(?P<level>section|subsection|subsubsection)\
 ALPHA_ITEM_RE = re.compile(r"\\item\[\s*(?P<label>[a-zа-яё0-9]+)\s*\)\s*\]", re.I)
 PLAIN_ALPHA_ITEM_RE = re.compile(
     r"(?im)(?:^|(?<=\\\\)|(?<=\n))[ \t]*"
-    r"(?P<label>[a-zа-яё0-9]+)\)[\s~]*")
+    r"(?P<label>[a-zа-яё0-9]+)\)(?![\^_])[\s~]*")
 # В решебниках подпункты часто идут в одну строку: ``а) ...; б) ...``.
 # Граница — конец предыдущего пункта. OCR часто ставит ``;`` внутри
 # формулы и закрывает её перед следующей меткой: ``...;\) б)`` / ``...;$ б)``.
 # Lookbehind фиксированной ширины: в 3.10 нельзя смешивать 1 и 2 символа.
+# «6)» — OCR «б)», но не десятичная «(0,6)».
 INLINE_ALPHA_ITEM_RE = re.compile(
     r"(?i)(?:(?<=[;.?:,$])|(?<=\\\))|(?<=\\\]))"
-    r"[ \t]*(?P<label>а|б|в|г|д|е|ж|з|a|b|c|d|6)\)[\s~]*")
+    r"(?<![0-9],)[ \t]*(?P<label>а|б|в|г|д|е|ж|з|a|b|c|d|6)\)[\s~]*")
+# Mathpix часто рисует «б)» как жирную шестёрку: «\boldsymbol{6})»,
+# «\mathbf{6}\right)». Не трогаем голую «(0 ; 6)» — это конец интервала.
+_OCR_BOLD_SIX_ITEM_RE = re.compile(
+    r"(?i)(?P<lead>(?:^|[;.?:,$]|\\\)|\\\]|\n)[ \t]*)"
+    r"(?:\\(?:boldsymbol|mathbf|textbf|boldsymbol)\s*\{6\}"
+    r"|\\(?:boldsymbol|mathbf|textbf|boldsymbol)\s+6)"
+    r"(?:\\right)?\)"
+)
 LEAKED_BOOK_TAIL_RE = re.compile(
     r"(?:\\\\|\s)*§\d+\.[\s\S]*?(?:Уровень\s+[A-DА-Г]\s*)?$",
     re.I)
@@ -254,6 +263,9 @@ def strip_imported_answer_punct(value: str) -> str:
         return value
     if not value.endswith('.'):
         return value
+    # «0. 2.» / «n=7. 7.» — точка держит номер следующей задачи.
+    if re.search(r'\d{1,2}\s*\.\s*\d{1,2}\.$', value):
+        return value
     if value[0].isupper():
         return value
     return value[:-1].rstrip()
@@ -283,10 +295,130 @@ def _close_unbalanced_inline_math(value: str) -> str:
     return value
 
 
+def heal_ocr_six_item_labels(value: str) -> str:
+    """Пишет «б)» вместо OCR-метки «\\boldsymbol{6})» / «\\mathbf{6})»."""
+    return _OCR_BOLD_SIX_ITEM_RE.sub(r"\g<lead>б)", str(value or ""))
+
+
+# OCR Зива: «\mathbf{3 .}», «\boldsymbol{3$ .$}» вместо номера следующей задачи.
+_OCR_BOLD_TASK_NUM_RE = re.compile(
+    r'(?:\$\s*)?(?:\\(?:mathbf|boldsymbol|textbf|boldsymbol)\s*\{?\s*)'
+    r'(?P<num>\d{1,2})\s*\}?\s*(?:\$\s*)?\.\s*(?:\$\s*)?'
+)
+# «n=7.7 .-1» / «0.2 . \frac» / «1.4 .2 км» — ответ и номер задачи слиплись.
+# Не берём «5.1. Решение»: там 5 — номер задачи, 1 — начало ответа.
+_OCR_GLUED_INT_TASK_RE = re.compile(
+    r'(?<=\d)\.(?P<num>[1-8])\s*\.\s*(?=[\\$+\-(]|\d)'
+)
+# «4. 0. 5.1. Решение» / «4.0 \leqslant» — после номера сразу цифра ответа.
+_OCR_TASK_THEN_ANSWER_DIGIT_RE = re.compile(
+    r'(?<![0-9.,])(?P<num>[1-9]\d?)\.(?P<lead>\d)'
+    r'(?:[.~\s]+|(?=\s*\\(?:leqslant|geqslant|leq|geq|neq)))'
+    r'(?=[A-ZА-Я\\<≤≥])'
+)
+# «5 .(2;3)» — пробел между номером и точкой перед скобкой.
+_OCR_SPACED_DOT_TASK_RE = re.compile(
+    r'(?<![0-9.,])(?P<num>[1-9]\d?)\s+\.\s*(?=[(\[\\$])'
+)
+# «2$ км/ч$» — wrap отрезал число от единиц.
+_BROKEN_UNIT_DOLLAR_RE = re.compile(
+    r'(?P<num>\d+)\$\s*(?P<unit>(?:км|м|см|мм)(?:/ч|/с|/мин)?)\s*\$'
+)
+_EMPTY_MATH_TAIL_RE = re.compile(
+    r'(?:\s*\$\\displaystyle\$|\s*\$\s*\$|\s*\\\(\s*\\\)?)\s*$'
+)
+# OCR рвёт заголовок: «Решени е», «P е шени е».
+_SOLUTION_HEADING_RE = (
+    r"(?:Решени\s*[ея]|[PР]\s*е\s*ш\s*е\s*н\s*и\s*[ея]|Доказательство)"
+)
+# «\cdot 5 \cdot(-3 ;-1)» — OCR поставил точки умножения вместо «5.»
+_OCR_CDOT_TASK_NUM_RE = re.compile(
+    r'(?:\\cdot|\\times)\s*(?P<num>[1-8])\s*(?:\\cdot|\\times)'
+)
+# «m<0.6$. (-3;9)» — доллар между номером задачи и точкой.
+_OCR_DOLLAR_TASK_NUM_RE = re.compile(
+    r'(?<=\d)\.(?P<num>[1-8])\s*\$\s*\.'
+)
+# «5$. (-3;1)» — номер после wrap оказался перед «$.»
+_OCR_BARE_DOLLAR_TASK_RE = re.compile(
+    r'(?<![0-9.,])(?P<num>[1-8])\s*\$\s*\.\s*(?=\s*[(\-\\$])'
+)
+# «$\displaystyle 6 . \cos» — номер задачи внутри той же формулы.
+_OCR_MATH_CMD_TASK_RE = re.compile(
+    r'(?<![0-9.,])(?P<num>[1-8])\s*\.\s*(?=\\(?:cos|sin|tan|tg|ctg|operatorname|frac|left))'
+)
+
+
+def heal_ocr_task_number_labels(value: str) -> str:
+    """Отделяет номер следующей задачи от ответа и жирного OCR."""
+    value = _OCR_BOLD_TASK_NUM_RE.sub(r' \g<num>. ', str(value or ''))
+    value = _OCR_CDOT_TASK_NUM_RE.sub(r' \g<num>. ', value)
+    value = _OCR_DOLLAR_TASK_NUM_RE.sub(r'. \g<num>. ', value)
+    value = _OCR_BARE_DOLLAR_TASK_RE.sub(r' \g<num>. ', value)
+    value = _OCR_MATH_CMD_TASK_RE.sub(r' \g<num>. ', value)
+    value = _OCR_SPACED_DOT_TASK_RE.sub(r' \g<num>. ', value)
+    value = _OCR_TASK_THEN_ANSWER_DIGIT_RE.sub(r' \g<num>. \g<lead>. ', value)
+    value = _OCR_GLUED_INT_TASK_RE.sub(r'. \g<num>. ', value)
+    return re.sub(r'[ \t]{2,}', ' ', value)
+
+
+def _strip_empty_math_tail(value: str) -> str:
+    """Срезает пустой ``$\\displaystyle$`` / ``\\(`` после разреза номера."""
+    return _EMPTY_MATH_TAIL_RE.sub('', str(value or '')).rstrip()
+
+
+def _heal_broken_unit_dollars(value: str) -> str:
+    """Собирает ``2$ км/ч$`` обратно в ``$2$ км/ч``."""
+    return _BROKEN_UNIT_DOLLAR_RE.sub(r'$\g<num>$ \g<unit>', str(value or ''))
+
+
+def _balance_odd_dollars(value: str) -> str:
+    """Закрывает осколок ``$…`` после разреза по метке пункта."""
+    value = str(value or "")
+    if value.count("$") % 2 == 0:
+        return value
+    if value.startswith("$"):
+        return value + "$"
+    if value.endswith("$"):
+        return "$" + value
+    return value + "$"
+
+
+def canonicalize_answer_math(value: str) -> str:
+    """Сводит смешанные ``$`` / ``\\(`` к одному контуру для KaTeX.
+
+    Типичный брак OCR+wrap: ``$\\(\\{-2\\pm\\sqrt{2}\\}$\\)`` и хвостовая
+    ``\\)`` после уже закрытого ``$...$``. Сначала снимаем вложенность,
+    потом непарные ``\\)``, затем ``\\(…\\)`` превращаем в ``$…$``.
+    """
+    value = str(value or '')
+    value = value.replace(r'$\(', '$').replace(r'$\)', '$')
+    while value.count(r'\)') > value.count(r'\('):
+        stripped = re.sub(r'\\\)(\$?)\s*$', r'\1', value).rstrip()
+        if stripped == value:
+            break
+        value = stripped
+    value = _close_unbalanced_inline_math(value)
+
+    def to_dollar(match):
+        raw = match.group(0)
+        if raw.startswith(r'\(') and raw.endswith(r'\)') and len(raw) >= 4:
+            return '$%s$' % raw[2:-2]
+        return raw
+
+    return _MATH_SPAN_RE.sub(to_dollar, value)
+
+
 def apply_imported_answer(value: str) -> str:
     """Нормализует импортированный ответ и срезает служебную точку."""
+    value = heal_ocr_task_number_labels(heal_ocr_six_item_labels(value))
+    value = re.sub(r'\\setcounter\{enum[ivxl]+\}\{\d+\}', '', value)
+    value = _heal_broken_unit_dollars(value)
+    value = _strip_empty_math_tail(value)
+    value = _balance_odd_dollars(canonicalize_answer_math(value))
     value = _strip_trailing_orphan_paren(heal_split_math_dollars(value))
     value = _close_unbalanced_inline_math(value)
+    value = _heal_broken_unit_dollars(value)
     return strip_imported_answer_punct(apply_imported_math(value))
 
 
@@ -650,10 +782,145 @@ def draft_has_ziv_leak(text_latex: str, subitems) -> bool:
     return _ziv_embedded_stem(body) is not None
 
 
+_LEAD_STAR_RE = re.compile(r"^\s*(?:\*{1,3}|\\star(?:s)?)\s+")
+_NUMBERED_PART_RE = re.compile(
+    re.escape(r'\item[') + r'\s*(?P<item>\d{1,2})\s*\)\s*' + re.escape(']')
+    + r'|(?:(?:^|\\\\|\n)[ \t]*(?P<plain>[1-9]\d?)\s*\))'
+)
+
+
+def _strip_leading_difficulty_star(text: str) -> tuple[int, str]:
+    """Зив помечает сложную задачу ведущей ``*``, это не часть условия."""
+    match = _LEAD_STAR_RE.match(text or "")
+    if not match:
+        return 0, text or ""
+    raw = match.group(0)
+    stars = min(3, raw.count("*") or 1)
+    return stars, (text or "")[match.end():]
+
+
+_NUMBERED_ANSWER_SPLIT_RE = re.compile(
+    r'(?:^|\\\\|\n|;)\s*(?:\\item\[\s*)?(?P<num>[1-9]\d?)\s*\)\s*\]?'
+)
+
+
+def _numbered_answer_chunks(body: str) -> list[tuple[str, str]]:
+    """Режет «а) … 2) а) … 3) …» на ответы нумерованных частей."""
+    body = str(body or "")
+    matches = list(_NUMBERED_ANSWER_SPLIT_RE.finditer(body))
+    if not matches:
+        return []
+    chunks: list[tuple[str, str]] = []
+    first_num = int(matches[0].group("num"))
+    lead = body[:matches[0].start()]
+    if first_num >= 2 and re.search(r"(?i)[aа]\)", lead):
+        chunks.append(("1", lead))
+    expected = int(chunks[-1][0]) + 1 if chunks else first_num
+    for index, match in enumerate(matches):
+        number = match.group("num")
+        if int(number) != expected:
+            break
+        stop = matches[index + 1].start() if index + 1 < len(matches) else len(body)
+        chunks.append((number, body[match.end():stop]))
+        expected += 1
+    return chunks if len(chunks) >= 2 else []
+
+
+def distribute_numbered_part_answers(task) -> bool:
+    """Раскладывает компактный «а) … 2) а)» по подпунктам 1/2/3."""
+    items = list(getattr(task, "subitems", None) or [])
+    if len(items) < 2:
+        return False
+    labels = [_subitem_get(item, "label").strip() for item in items]
+    if labels != [str(index) for index in range(1, len(items) + 1)]:
+        return False
+    blob = (
+        getattr(task, "author_answer_latex", "")
+        or getattr(task, "author_solution_latex", "")
+        or ""
+    )
+    if not blob.strip():
+        blob = _subitem_get(items[0], "author_answer_latex")
+    chunks = _numbered_answer_chunks(blob)
+    if not chunks:
+        return False
+    by_num = {number: text for number, text in chunks}
+    changed = False
+    rows = [dict(item) if isinstance(item, dict) else item for item in items]
+    for row in rows:
+        label = _subitem_get(row, "label").strip()
+        text = (by_num.get(label) or "").strip()
+        if text and not _subitem_get(row, "author_answer_latex").strip():
+            _subitem_set(row, "author_answer_latex", apply_imported_answer(text))
+            changed = True
+    if changed:
+        task.subitems = rows
+        task.author_answer_latex = ""
+        if getattr(task, "author_solution_latex", "") and blob == (
+                getattr(task, "author_solution_latex", "") or ""):
+            task.author_solution_latex = ""
+    return changed
+
+
+def _numbered_part_chunks(body: str) -> list[tuple[str, str]]:
+    """Режет ``1) … \\item[2)] …`` на нумерованные части одной задачи."""
+    matches = []
+    for match in _NUMBERED_PART_RE.finditer(body or ""):
+        number = match.group("item") or match.group("plain")
+        matches.append((match.start(), match.end(), number))
+    if len(matches) < 2 or matches[0][2] != "1":
+        return []
+    lead = BLOCK_WRAPPER_RE.sub("", body[:matches[0][0]])
+    # «1)» / «\item[1)]» внутри а) — шаги решения, не части задачи.
+    if re.search(r"\S", lead):
+        return []
+    expected = 1
+    kept = []
+    for start, end, number in matches:
+        if not number.isdigit() or int(number) != expected:
+            break
+        kept.append((start, end, number))
+        expected += 1
+    if len(kept) < 2:
+        return []
+    chunks = []
+    for index, (start, end, number) in enumerate(kept):
+        stop = kept[index + 1][0] if index + 1 < len(kept) else len(body)
+        chunks.append((number, body[end:stop]))
+    return chunks
+
+
 def split_subitems(
         body: str, *, normalize_punctuation: bool = True,
-        minimum_items: int = 2,
+        minimum_items: int = 2, allow_numbered_parts: bool = True,
 ) -> tuple[str, list[SubitemDraft]]:
+    body = heal_ocr_six_item_labels(body)
+    if allow_numbered_parts:
+        parts = _numbered_part_chunks(body)
+        if parts:
+            items = []
+            for number, chunk in parts:
+                _parent, subs = split_subitems(
+                    chunk, normalize_punctuation=normalize_punctuation,
+                    minimum_items=minimum_items, allow_numbered_parts=False)
+                if subs:
+                    inner = []
+                    if _parent.strip():
+                        inner.append(_parent.strip())
+                    inner.extend(
+                        f"{cyrillic_item_label(item.label)}) {item.text_latex}"
+                        for item in subs)
+                    items.append(SubitemDraft(number, "\n".join(inner)))
+                else:
+                    text = strip_outer_lists(chunk)
+                    if normalize_punctuation:
+                        text = strip_subitem_punct(text)
+                    else:
+                        text = normalize_imported_text(text)
+                    if text:
+                        items.append(SubitemDraft(number, text))
+            if len(items) >= 2:
+                return "", items
     marker_data = _subitem_marker_data(body)
     markers = []
     if marker_data:
@@ -691,7 +958,17 @@ def split_subitems(
                 else pair_by_position
                 if can_promote_pair else []
             )
-            if letter_depth == min_depth and len(chosen_letters) >= 2:
+            if chosen_letters and len(shallow_letters) >= 2:
+                orphans = [
+                    marker for marker in letter_markers
+                    if marker[3] > letter_depth
+                    and marker[0] < shallow_letters[0][0]
+                ]
+                if orphans and orphans[0][2].lower() in {"a", "а"}:
+                    chosen_letters = [orphans[0]] + chosen_letters
+            if len(chosen_letters) >= 2 and (
+                    letter_depth == min_depth
+                    or chosen_letters[0][3] != letter_depth):
                 markers = [marker[:3] for marker in chosen_letters]
     # Один item часто является оболочкой OCR, а не настоящим подпунктом.
     if len(markers) < minimum_items:
@@ -892,11 +1169,13 @@ TASKPIC_TOKEN_RE = re.compile(r"\\taskpic\{([^{}]+)\}")
 FALSE_SOLUTION_NOUN_RE = re.compile(
     r"(?is)^(?P<noun>решения)\.\s*(?P<rest>.*)$"
 )
-# OCR Зива часто пишет номер как ``2 .``, ``.2 .`` или ``.2 .$`` без пробела.
+# OCR Зива часто пишет номер как ``2 .``, ``.2 .``, ``.2 .$``, ``4)[`` или ``5 .(``.
 LEAKED_TASK_NUM_RE = re.compile(
-    r"(?P<num>\d{1,2})\s*\.(?:\s+|(?=[\\$])|$)")
+    r"(?P<num>\d{1,2})\s*"
+    r"(?:\.(?:\s+|(?=[\\$(])|(?=\d)|$)|\)(?=\s*[\[(]))")
 LEAKED_TASK_NUM_LEAD_RE = re.compile(
-    r"^\d{1,2}\s*\.(?:\s+|(?=[\\$])|$)")
+    r"^\d{1,2}\s*"
+    r"(?:\.(?:\s+|(?=[\\$(])|(?=\d)|$)|\)(?=\s*[\[(]))")
 
 
 def _strip_taskpic_tokens(text: str) -> tuple[str, list[str]]:
@@ -1059,19 +1338,139 @@ def _has_author_material(task) -> bool:
 
 def _find_leaked_following_task(text: str, next_number: int) -> int | None:
     """Граница «26. 4. Если…»: 4 — номер следующей задачи, не рисунка."""
-    for match in LEAKED_TASK_NUM_RE.finditer(text or ""):
+    text = heal_ocr_task_number_labels(text or "")
+    for match in LEAKED_TASK_NUM_RE.finditer(text):
         if int(match.group("num")) != next_number:
             continue
         before = text[:match.start()]
+        after = text[match.end():]
         if re.search(r"(?i)рис\.?\s*$", before[-16:]):
             continue
-        # Десятичное ``-1.2 .``: цифра сразу перед точкой, это не номер задачи.
-        if before.endswith('.') and len(before) >= 2 and before[-2].isdigit():
+        # «рис. 31. 4.» — 31 номер рисунка, 4 номер следующей задачи.
+        fig_numbered = re.search(r"(?i)рис\.?\s*\d+\.\s*$", before)
+        # «-1.2 .» без хвоста — десятичное. «0.2 . \frac» / «n=7.7 .-1» —
+        # номер следующей задачи, если после него есть ответ.
+        looks_decimal = (
+            not fig_numbered
+            and before.endswith('.')
+            and len(before) >= 2
+            and before[-2].isdigit())
+        if looks_decimal and not re.search(r"\S", after):
             continue
-        if not re.search(r"[.!?]\s*$", before):
+        if not looks_decimal and not fig_numbered:
+            if not re.search(r"(?:[.!?)\];$]|\\\()\s*$", before):
+                # «4. 0 \leqslant» — ответ начинается с цифры.
+                if not re.match(r"\s*(?:\\|\(|\d)", after):
+                    continue
+        # «n=7. 7. -1» — первая семёрка это значение, вторая номер.
+        # Не путать с «4. 0. \leqslant», где 0 — сам ответ.
+        if re.match(r"\s*\d{1,2}\s*\.\s*[-+\d(]", after):
             continue
         return match.start()
+    bare = re.search(
+        r'(?<=[\s.;])(?P<num>%d)\s*$' % next_number, text)
+    if bare and re.search(r'\S', text[:bare.start()]):
+        return bare.start()
     return None
+
+
+def _earliest_leaked_following(text: str, numbers: list[int]) -> tuple[int, int] | None:
+    """Самый левый номер следующей задачи в тексте."""
+    best = None
+    for number in numbers:
+        cut = _find_leaked_following_task(text, number)
+        if cut is not None and (best is None or cut < best[0]):
+            best = (cut, number)
+    return best
+
+
+def _assign_peeled_author_text(task, text: str) -> None:
+    """Кладёт отрезанный хвост в ответ и, если есть, в решение."""
+    answer, solution = split_answer_solution(text)
+    task.author_answer_latex = apply_imported_answer(answer or text)
+    if solution and not (getattr(task, "author_solution_latex", "") or "").strip():
+        task.author_solution_latex = apply_imported_math(solution)
+
+
+def _split_stuck_solutions(task) -> bool:
+    """Если «Решени е» осталось в ответе, отрезает его в решение."""
+    changed = False
+    answer = getattr(task, "author_answer_latex", "") or ""
+    if answer:
+        split_answer, split_solution = split_answer_solution(answer)
+        if split_solution and split_answer != answer:
+            task.author_answer_latex = apply_imported_answer(split_answer)
+            if not (getattr(task, "author_solution_latex", "") or "").strip():
+                task.author_solution_latex = apply_imported_math(split_solution)
+            changed = True
+    items = list(getattr(task, "subitems", None) or [])
+    new_items = []
+    for item in items:
+        row = dict(item) if isinstance(item, dict) else item
+        blob = _subitem_get(row, "author_answer_latex")
+        if blob:
+            split_answer, split_solution = split_answer_solution(blob)
+            if split_solution and split_answer != blob:
+                _subitem_set(row, "author_answer_latex",
+                             apply_imported_answer(split_answer))
+                if not _subitem_get(row, "author_solution_latex").strip():
+                    _subitem_set(row, "author_solution_latex",
+                                 apply_imported_math(split_solution))
+                changed = True
+        new_items.append(row)
+    if new_items != items:
+        task.subitems = new_items
+    return changed
+
+
+def _copy_author_fields(source, dest) -> None:
+    dest.author_answer_latex = getattr(source, "author_answer_latex", "") or ""
+    dest.author_solution_latex = getattr(source, "author_solution_latex", "") or ""
+
+
+def _clear_author_fields(task) -> None:
+    task.author_answer_latex = ""
+    task.author_solution_latex = ""
+
+
+def _looks_like_skipped_first_compute(task) -> bool:
+    """Первая «Вычислите» без букв, а ответ уже с переменными — ответ от 2."""
+    text = getattr(task, "text_latex", "") or ""
+    if not re.match(r"(?i)вычислите", text):
+        return False
+    body = re.sub(r"(?i)^вычислите\s*", "", text)
+    body = re.sub(r"\\[a-zA-Z]+", "", body)
+    if re.search(r"[A-Za-zА-Яа-яЁё]", body):
+        return False
+    answer = getattr(task, "author_answer_latex", "") or ""
+    return bool(re.search(r"(?<![A-Za-z])[abcxyzm](?![A-Za-z])", answer))
+
+
+def shift_skipped_leading_compute_answers(tasks) -> list:
+    """Сдвигает ответы на +1, если ключ пропустил первую «Вычислите»."""
+    groups: dict[tuple[str, str], list] = {}
+    for task in tasks:
+        parsed = _ziv_topic_variant(getattr(task, "external_id", "") or "")
+        if parsed is None:
+            continue
+        groups.setdefault(parsed, []).append(task)
+    changed = []
+    for group in groups.values():
+        group.sort(key=lambda item: (
+            _task_source_number(item.external_id) or 0, item.external_id))
+        if len(group) < 3 or not _looks_like_skipped_first_compute(group[0]):
+            continue
+        hole = next(
+            (i for i, item in enumerate(group[1:], 1)
+             if not _has_author_material(item)),
+            None)
+        if hole is None:
+            continue
+        for index in range(hole, 0, -1):
+            _copy_author_fields(group[index - 1], group[index])
+        _clear_author_fields(group[0])
+        changed.extend(group[: hole + 1])
+    return changed
 
 
 def reattach_leaked_following_answers(tasks) -> list:
@@ -1098,28 +1497,50 @@ def reattach_leaked_following_answers(tasks) -> list:
         group.sort(key=lambda item: (
             _task_source_number(item.external_id) or 0, item.external_id))
         for index, task in enumerate(group[:-1]):
-            following = group[index + 1]
-            next_number = _task_source_number(following.external_id)
-            if next_number is None:
+            later_rows = [
+                (item, number) for item, number in (
+                    (item, _task_source_number(item.external_id))
+                    for item in group[index + 1:]
+                ) if number is not None
+            ]
+            if not later_rows:
                 continue
-            following_has_material = _has_author_material(following)
+            later_by_num = {number: item for item, number in later_rows}
+            later_nums = [number for _item, number in later_rows]
             _rejoin_false_solution_nouns(task)
-            parent_answer = getattr(task, "author_answer_latex", "") or ""
-            parent_cut = _find_leaked_following_task(parent_answer, next_number)
-            if parent_cut is not None:
-                kept, tail = parent_answer[:parent_cut], parent_answer[parent_cut:]
+            parent_fields = (
+                ("author_answer_latex",
+                 getattr(task, "author_answer_latex", "") or ""),
+                ("author_solution_latex",
+                 getattr(task, "author_solution_latex", "") or ""),
+            )
+            peeled = False
+            for field, raw in parent_fields:
+                healed = heal_ocr_task_number_labels(raw)
+                parent_hit = _earliest_leaked_following(healed, later_nums)
+                if parent_hit is None:
+                    continue
+                parent_cut, next_number = parent_hit
+                following = later_by_num[next_number]
+                following_has_material = _has_author_material(following)
+                kept, tail = healed[:parent_cut], healed[parent_cut:]
                 tail_text, pics = _strip_taskpic_tokens(tail)
                 tail_text = LEAKED_TASK_NUM_LEAD_RE.sub("", tail_text).strip()
                 if not tail_text:
                     continue
-                task.author_answer_latex = apply_imported_answer(
-                    _append_taskpics(kept.rstrip(), pics))
+                kept = _strip_empty_math_tail(_append_taskpics(kept.rstrip(), pics))
+                if field == "author_answer_latex":
+                    task.author_answer_latex = apply_imported_answer(kept)
+                else:
+                    task.author_solution_latex = apply_imported_math(kept)
                 if not following_has_material:
-                    following.author_answer_latex = apply_imported_answer(
-                        tail_text)
+                    _assign_peeled_author_text(following, tail_text)
                     mark(task, following)
                 else:
                     mark(task)
+                peeled = True
+                break
+            if peeled:
                 continue
             rows = [
                 dict(item) if isinstance(item, dict) else item
@@ -1127,15 +1548,21 @@ def reattach_leaked_following_answers(tasks) -> list:
             ]
             cut_index = None
             found = None
+            found_number = None
             for pos in range(len(rows) - 1, -1, -1):
-                found = _find_leaked_following_task(
-                    _subitem_get(rows[pos], "author_answer_latex"),
-                    next_number)
-                if found is not None:
+                healed = heal_ocr_task_number_labels(
+                    _subitem_get(rows[pos], "author_answer_latex"))
+                if healed != _subitem_get(rows[pos], "author_answer_latex"):
+                    _subitem_set(rows[pos], "author_answer_latex", healed)
+                hit = _earliest_leaked_following(healed, later_nums)
+                if hit is not None:
+                    found, found_number = hit
                     cut_index = pos
                     break
-            if cut_index is None or found is None:
+            if cut_index is None or found is None or found_number is None:
                 continue
+            following = later_by_num[found_number]
+            following_has_material = _has_author_material(following)
             answer = _subitem_get(rows[cut_index], "author_answer_latex")
             kept, tail = answer[:found], answer[found:]
             tail_text, pics = _strip_taskpic_tokens(tail)
@@ -1144,10 +1571,11 @@ def reattach_leaked_following_answers(tasks) -> list:
                 continue
             _subitem_set(
                 rows[cut_index], "author_answer_latex",
-                apply_imported_answer(_append_taskpics(kept.rstrip(), pics)))
+                apply_imported_answer(_strip_empty_math_tail(
+                    _append_taskpics(kept.rstrip(), pics))))
             task.subitems = rows
             if not following_has_material:
-                following.author_answer_latex = apply_imported_answer(tail_text)
+                _assign_peeled_author_text(following, tail_text)
                 mark(task, following)
             else:
                 mark(task)
@@ -1157,6 +1585,7 @@ def reattach_leaked_following_answers(tasks) -> list:
 def task_from_block(marker: Marker, body: str, source_path: list[str]) -> TaskDraft:
     body, images = normalize_task_images(body)
     text, subitems = split_subitems(body)
+    star_count, text = _strip_leading_difficulty_star(text)
     text = apply_imported_math(text)
     for item in subitems:
         item.text_latex = apply_imported_math(item.text_latex)
@@ -1187,6 +1616,7 @@ def task_from_block(marker: Marker, body: str, source_path: list[str]) -> TaskDr
         subitems=subitems,
         images=images,
         confidence=max(0.0, confidence),
+        stars=star_count,
         warnings=warnings,
     )
 
@@ -1432,7 +1862,7 @@ def split_answer_solution(body: str) -> tuple[str, str]:
     """
     body = strip_outer_lists(body)
     solution_match = re.search(
-        r"(?i)(?<![0-9]\s)(?<![0-9])(?:Решени[ея]|Доказательство)\s*[:.]",
+        r"(?i)(?<![0-9]\s)(?<![0-9])" + _SOLUTION_HEADING_RE + r"\s*[:.]",
         body)
     hint_match = re.search(r"(?i)У\s*к\s*а\s*з\s*а\s*н\s*и\s*[ея]\s*[:.]", body)
     cut_points = [m.start() for m in (solution_match, hint_match) if m]
@@ -1443,7 +1873,7 @@ def split_answer_solution(body: str) -> tuple[str, str]:
     # \task, поэтому заголовок решения тоже обязан завершать явный ответ.
     explicit = re.search(
         r"(?is)\bОтвет\s*:\s*(.+?)(?="
-        r"(?:Решени[ея]|Доказательство)\s*[:.]|"
+        + _SOLUTION_HEADING_RE + r"\s*[:.]|"
         r"У\s*к\s*а\s*з\s*а\s*н\s*и\s*[ея]\s*[:.]|$)",
         body,
     )
@@ -1459,6 +1889,18 @@ def _explicit_answers(solution: str) -> list[str]:
             r"(?im)\bОтвет\s*:\s*(.+?)(?:\\\\)?\s*$", solution)
         if clean(match.group(1))
     ]
+
+
+def _compact_labeled_answers(items: Sequence[SubitemDraft]) -> str:
+    """Склеивает компактный ответ «а) …; б) …» из размеченных кусков."""
+    parts = []
+    for item in items:
+        answer = clean(getattr(item, "author_answer_latex", "") or "")
+        if not answer:
+            continue
+        label = cyrillic_item_label(getattr(item, "label", "") or "")
+        parts.append(f"{label}) {answer}" if label else answer)
+    return "; ".join(parts)
 
 
 def _flatten_solution_items(solution: str) -> str:
@@ -1560,6 +2002,11 @@ def split_compact_author_material(
         body: str) -> tuple[str, str, list[SubitemDraft], str]:
     """Делит компактный ответ Галицкого и сохраняет частичные подпункты."""
     body = normalize_imported_graphics(body)
+    # «рис. 31. 4. а)» — не режем по «а)» до reattach, иначе «4.»
+    # останется без точки и следующая задача не заберёт хвост.
+    if re.search(r"(?i)рис\.?\s*\d+\.\s*\d+\.", body):
+        answer, solution = split_answer_solution(body)
+        return answer, solution, [], solution
     parent, subitems = split_subitems(
         body, normalize_punctuation=False, minimum_items=1)
     parent_answer, parent_solution = split_answer_solution(parent)
@@ -1682,22 +2129,30 @@ def redistribute_glued_subitem_answers(task) -> bool:
     def split_blob(text: str):
         if not str(text or "").strip():
             return "", []
+        # «рис. 31. 4. а)» режет reattach; иначе «4.» потеряет точку.
+        if re.search(r"(?i)рис\.?\s*\d+\.\s*\d+\.", text):
+            return text, []
         return split_subitems(
             text, normalize_punctuation=False, minimum_items=1)
 
     def distribute(keep: str, pieces, field: str, start: int) -> bool:
         moved = False
         for piece in pieces:
-            # Цифра 6 в OCR — алиас «б», но в уже сохранённом ответе
-            # ``(0 ; 6)`` — граница интервала, а не метка пункта.
-            if str(piece.label).isdigit():
-                continue
+            # Цифра 6 в OCR — алиас «б». Голый хвост ``$`` после
+            # «(0 ; 6)» — закрывающая скобка интервала, не пункт.
             key = _normalized_subitem_label(piece.label)
+            piece_text = (piece.text_latex or "").strip()
+            if str(piece.label).isdigit():
+                if key != "b" or not piece_text or re.fullmatch(
+                        r"[.$]+", piece_text):
+                    continue
             for later in rows[start:]:
                 if _subitem_label_key(later) != key:
                     continue
                 if _fill_empty_author_field(
-                        later, field, _author_field_chunk(piece.text_latex, field)):
+                        later, field,
+                        apply_imported_answer(
+                            _author_field_chunk(piece.text_latex, field))):
                     moved = True
                 break
         return moved
@@ -1712,7 +2167,8 @@ def redistribute_glued_subitem_answers(task) -> bool:
             keep, rest = found[0].text_latex, found[1:]
         moved = distribute(keep, rest, field, 0)
         if keep and _fill_empty_author_field(
-                rows[0], field, _author_field_chunk(keep, field)):
+                rows[0], field,
+                apply_imported_answer(_author_field_chunk(keep, field))):
             moved = True
         if moved:
             setattr(task, field, "")
@@ -1729,7 +2185,10 @@ def redistribute_glued_subitem_answers(task) -> bool:
                 keep, rest = found[0].text_latex, found[1:]
             if not distribute(keep, rest, field, index + 1):
                 continue
-            _subitem_set(row, field, _author_field_chunk(keep, field) if keep else "")
+            _subitem_set(
+                row, field,
+                apply_imported_answer(
+                    _author_field_chunk(keep, field) if keep else ""))
             changed = True
 
     if changed:
@@ -1813,21 +2272,36 @@ def merge_solutions(
                 _give_leftover_parent_to_unmatched_subitems(task, assigned)
                 distributed_to_subitems = True
             elif not task.subitems:
-                # Нумерованные шаги доказательства у задачи без подпунктов —
-                # содержательная часть общего решения, а не подпункты задачи.
-                task.author_solution_latex = flattened_solution
-                task.author_answer_latex = "\n".join(
-                    _explicit_answers(task.author_solution_latex))
+                if full_solutions:
+                    # Нумерованные шаги доказательства у задачи без
+                    # подпунктов — часть общего решения, не подпункты.
+                    task.author_solution_latex = flattened_solution
+                    task.author_answer_latex = "\n".join(
+                        _explicit_answers(task.author_solution_latex))
+                else:
+                    # Компактный ответ Зива: «а) 1; б) -1» при условии без
+                    # подпунктов. Нельзя звать _explicit_answers — там нет
+                    # строки «Ответ:», и поле обнулялось.
+                    task.author_answer_latex = (
+                        task.author_answer_latex
+                        or _compact_labeled_answers(solution_subitems))
             else:
-                # При несовпадении границ ничего не распределяем наугад:
-                # сохраняем исходный блок целиком и отправляем его редактору.
+                # При несовпадении границ не обнуляем ответ: у Зива часто
+                # «1) а) … 2) а)» против нумерованных частей условия.
+                compact = (
+                    task.author_answer_latex
+                    or _compact_labeled_answers(solution_subitems))
+                explicit = "\n".join(
+                    _explicit_answers(flattened_solution))
+                task.author_answer_latex = explicit or compact
                 task.author_solution_latex = flattened_solution
-                task.author_answer_latex = "\n".join(
-                    _explicit_answers(task.author_solution_latex))
                 task.warnings.append(
                     "Не совпали подпункты условия и решения")
                 task.confidence = max(0.0, task.confidence - 0.25)
-        if (task.subitems and found and not distributed_to_subitems):
+        if (task.subitems and found and not distributed_to_subitems
+                and not any(
+                    "Не совпали подпункты" in warning
+                    for warning in task.warnings)):
             compact = (task.author_answer_latex or flattened_solution or "")
             chunks = _positional_answer_chunks(compact, len(task.subitems))
             if chunks:
@@ -1835,7 +2309,10 @@ def merge_solutions(
                     if not subitem.author_answer_latex:
                         subitem.author_answer_latex = chunk
                 distributed_to_subitems = True
-        if redistribute_glued_subitem_answers(task):
+        if (not any(
+                "Не совпали подпункты" in warning
+                for warning in task.warnings)
+                and redistribute_glued_subitem_answers(task)):
             distributed_to_subitems = True
         if task.subitems and distributed_to_subitems:
             # У задачи с подпунктами авторские материалы принадлежат только
@@ -2053,9 +2530,17 @@ ZIV_INLINE_VARIANT_RE = re.compile(
 )
 ZIV_TOPIC_RE = re.compile(r"^(?P<num>\d+)\.\s+(?P<title>.+)$")
 ZIV_INLINE_NUM_RE = re.compile(
-    r"(?:^|(?<=[\n.\\\\;])|(?<=\)))\s*(?P<number>\d{1,2})\.[~\s]+"
+    r"(?:^|(?<=[\n.\\\\;])|(?<=\()|(?<=\))|(?<=ldots)|(?<=\.\.\.)|(?<=…))"
+    r"\s*(?P<number>\d{1,2})\s*\.(?:"
+    r"[~\s]+"
+    r"|(?=\d\.(?:\s*(?:Решен|Указан|[А-ЯA-Z\\])))"
+    r"|(?=\s*[(\[\\$])"
+    r")"
 )
-ZIV_ENUMI_RE = re.compile(r"\\setcounter\{enumi\}\{(\d+)\}")
+ZIV_ENUMI_RE = re.compile(r"\\setcounter\{enum[ivxl]+\}\{(\d+)\}")
+ZIV_PR_TOPIC_RE = re.compile(
+    r"(?im)(?:^|(?<=\n)|(?<=\\\\))\s*Проверочная работа\s*№\s*(?P<num>\d+)"
+)
 # OCR теряет \item, но оставляет формулировку с двоеточием.
 # «Найдите промежутки, на которых …» — продолжение, не новая задача.
 ZIV_BARE_STEM_RE = re.compile(
@@ -2070,7 +2555,8 @@ ZIV_BARE_STEM_RE = re.compile(
     r")[^\n.]{0,70}:)"
 )
 ZIV_TASK_BOUNDARY_KINDS = frozenset(
-    {"section", "variant", "item", "inline", "enumi", "stem", "bare"}
+    {"section", "variant", "pr_topic", "item", "inline", "enumi", "stem",
+     "bare", "group_stem"}
 )
 ZIV_SECTION_VARIANT_RE = re.compile(r"(?i)^вариант\s+(\d+)\s*$")
 ZIV_BARE_ITEM_RE = re.compile(r"\\item(?!\[)")
@@ -2158,13 +2644,21 @@ def _ziv_match_known_topic(title: str, work: str, known) -> tuple[int, str] | No
     cleaned = re.sub(r"\s+", " ", title).strip().lower()
     if not cleaned or cleaned == "тема":
         return None
+    best = None
+    best_len = -1
     for kwork, knum, ktitle in known:
         if kwork != work:
             continue
         other = ktitle.lower()
-        if other and (other == cleaned or other in cleaned or cleaned in other):
-            return knum, ktitle
-    return None
+        if not other:
+            continue
+        if other == cleaned or other in cleaned or (
+                len(cleaned) >= 8 and cleaned in other):
+            score = min(len(other), len(cleaned))
+            if score > best_len:
+                best = (knum, ktitle)
+                best_len = score
+    return best
 
 
 def _ziv_follows_marker(text: str, pos: int, spans: list[tuple[int, int]]) -> bool:
@@ -2192,16 +2686,40 @@ def _ziv_state_events(text: str) -> list[tuple[int, str, object]]:
     for marker in item_markers(text):
         events.append((marker.start, "item", marker))
         task_spans.append((marker.start, marker.end))
-    for match in ZIV_INLINE_NUM_RE.finditer(text):
+    pos = 0
+    while True:
+        match = ZIV_INLINE_NUM_RE.search(text, pos)
+        if match is None:
+            break
         start = match.start()
         if any(lo <= start < hi for lo, hi in task_spans):
+            pos = match.end()
             continue
         prefix = text[max(0, start - 12):start]
         if re.search(r"(?i)рис\.?\s*$", prefix):
+            # Номер рисунка, не задачи. Следующий «4.» режет
+            # reattach_leaked_following_answers — иначе графики уедут в 4.
+            pos = match.end()
             continue
-        marker = Marker(start, match.end(), match.group("number"))
+        number = match.group("number")
+        # «б) 0. 2.» — ноль это ответ, не задача; если съесть «0.»,
+        # у «2.» пропадёт lookbehind.
+        if number == "0":
+            pos = match.start() + 1
+            continue
+        # «5.1. Решение» — единица это ответ, не задача 1.
+        prefix = text[max(0, start - 8):start]
+        after = text[match.end():]
+        if (re.search(r"\d\.\s*$", prefix)
+                and re.match(r"(?:Решен|Указан|[А-ЯA-Z])", after.lstrip())):
+            pos = match.end()
+            continue
+        marker = Marker(start, match.end(), number)
         events.append((start, "inline", marker))
         task_spans.append((start, match.end()))
+        pos = match.end()
+    for match in ZIV_PR_TOPIC_RE.finditer(text):
+        events.append((match.start(), "pr_topic", int(match.group("num"))))
     for match in ZIV_ENUMI_RE.finditer(text):
         skip = re.match(r"[\s\\]+", text[match.end():])
         start = match.end() + (skip.end() if skip else 0)
@@ -2217,6 +2735,7 @@ def _ziv_state_events(text: str) -> list[tuple[int, str, object]]:
         if re.match(r"(?:\s|\\\\)*1\.[~\s]", after) or re.match(
                 r"(?:\s|\\\\)*\\item\[1\.", after) or re.match(
                 r"(?:\s|\\\\)*\\begin\{(?:enumerate|itemize)\}", after):
+            events.append((start, "group_stem", match.group("stem")))
             continue
         marker = Marker(start, start, "")
         events.append((start, "stem", marker))
@@ -2226,7 +2745,12 @@ def _ziv_state_events(text: str) -> list[tuple[int, str, object]]:
         if any(lo <= start < hi for lo, hi in task_spans):
             continue
         prefix = text[max(0, start - 80):start]
-        if re.search(r"\\setcounter\{enumi\}\{\d+\}\s*$", prefix):
+        follows_setcounter = bool(re.search(
+            r"\\setcounter\{enum[ivxl]+\}\{\d+\}\s*$", prefix))
+        if _list_depth_at(text, start) > 1 and not follows_setcounter:
+            # Вложенный \item — подпункт ответа, не новая задача.
+            continue
+        if follows_setcounter:
             continue
         marker = Marker(start, match.end(), "")
         events.append((start, "bare", marker))
@@ -2236,10 +2760,19 @@ def _ziv_state_events(text: str) -> list[tuple[int, str, object]]:
 
 
 def _ziv_looks_like_topic_title(body: str) -> bool:
-    cleaned = clean(body)
+    cleaned = clean(BLOCK_WRAPPER_RE.sub("", body or ""))
+    cleaned = re.sub(r"(?i)^item\s+", "", cleaned).strip()
     if not cleaned or len(cleaned) > 160:
         return False
+    if re.search(r"\.{4,}|…{2,}", cleaned):
+        return False
     if "$" in cleaned or r"\(" in cleaned or r"\[" in cleaned or r"\begin" in cleaned:
+        return False
+    if re.search(r"(?i)см\.\s*рис", cleaned):
+        return False
+    if re.search(
+            r"(?i)(?:^|[\s;])(?:[аa]\)|[бb6]\)|[вc]\)|[гd]\))",
+            cleaned):
         return False
     if re.match(
             r"(?i)(?:решите|найдите|постройте|упростите|вычислите|"
@@ -2269,6 +2802,28 @@ def _ziv_split_task_and_answer(text: str) -> tuple[str, str]:
     return text[:answer_start], text[answer_start:]
 
 
+def _list_depth_at(text: str, pos: int) -> int:
+    """Глубина itemize/enumerate в позиции ``pos``."""
+    depth = 0
+    for match in LIST_ENV_RE.finditer(text[:pos]):
+        if match.group("action") == "begin":
+            depth += 1
+        else:
+            depth = max(0, depth - 1)
+    return depth
+
+
+def _max_leaked_task_number(text: str, floor: int = 0) -> int:
+    """Самый большой номер задачи, торчащий внутри уже начатого пункта."""
+    best = floor
+    healed = heal_ocr_task_number_labels(text or "")
+    for match in LEAKED_TASK_NUM_RE.finditer(healed):
+        number = int(match.group("num"))
+        if floor < number <= 20:
+            best = max(best, number)
+    return best
+
+
 def _ziv_trim_next_variant(body: str) -> str:
     """Не оставляет следующий вариант, тему или тип работ в теле задачи."""
     return split_leaked_structural_tail(body)[0]
@@ -2285,16 +2840,21 @@ def _ziv_walk(
     topic_num, topic_title = 0, "Тема"
     variant = 0
     last_num = 0
+    pending_stem = ""
     seen: set[tuple[int, str]] = set()
     result: list[tuple[Marker, list[str], str, str]] = []
     events = _ziv_state_events(text)
     for index, (pos, kind, payload) in enumerate(events):
+        if kind == "group_stem":
+            pending_stem = str(payload or "").strip()
+            continue
         if kind == "section":
             variant_title = ZIV_SECTION_VARIANT_RE.match(
                 re.sub(r"\s+", " ", payload.title).strip())
             if variant_title:
                 variant = int(variant_title.group(1))
                 last_num = 0
+                pending_stem = ""
                 if emit_boundaries:
                     result.append((
                         Marker(pos, pos, "__ziv_boundary__"), [], "", ""))
@@ -2305,6 +2865,7 @@ def _ziv_walk(
                 topic_num, topic_title = 0, "Тема"
                 variant = 0
                 last_num = 0
+                pending_stem = ""
             else:
                 topic_num, topic_title = _ziv_topic_parts(payload.title)
                 if topic_num == 0 and known_topics:
@@ -2314,6 +2875,7 @@ def _ziv_walk(
                         topic_num, topic_title = matched
                 variant = 0
                 last_num = 0
+                pending_stem = ""
             if emit_boundaries:
                 result.append((
                     Marker(pos, pos, "__ziv_boundary__"), [], "", ""))
@@ -2321,6 +2883,17 @@ def _ziv_walk(
         if kind == "variant":
             variant = payload
             last_num = 0
+            pending_stem = ""
+            if emit_boundaries:
+                result.append((
+                    Marker(pos, pos, "__ziv_boundary__"), [], "", ""))
+            continue
+        if kind == "pr_topic":
+            topic_num = payload
+            topic_title = f"Проверочная работа № {payload}"
+            variant = 0
+            last_num = 0
+            pending_stem = ""
             if emit_boundaries:
                 result.append((
                     Marker(pos, pos, "__ziv_boundary__"), [], "", ""))
@@ -2342,10 +2915,22 @@ def _ziv_walk(
                 next_pos = later_pos
                 break
         body = _ziv_trim_next_variant(text[marker.end:next_pos])
-        heading = _ziv_item_topic_heading(marker.external_id, body)
-        if (heading is None and variant == 0 and marker.external_id.isdigit()
-                and _ziv_looks_like_topic_title(body)):
-            heading = (int(marker.external_id), clean_heading(body))
+        if pending_stem and pending_stem.lower() not in body.lower()[:len(pending_stem) + 8]:
+            body = pending_stem + "\n" + body
+        ocr_heading = _ziv_item_topic_heading(marker.external_id, body)
+        known_heading = None
+        title_heading = None
+        if marker.external_id.isdigit() and _ziv_looks_like_topic_title(body):
+            title = clean_heading(BLOCK_WRAPPER_RE.sub("", body))
+            title = re.sub(r"(?i)^item\s+", "", title).strip()
+            number = int(marker.external_id)
+            if known_topics:
+                matched = _ziv_match_known_topic(title, work, known_topics)
+                if matched:
+                    number, title = matched
+                    known_heading = (number, title)
+            title_heading = (number, title)
+        heading = ocr_heading or known_heading or title_heading
         if heading is not None:
             next_variant = None
             next_real_section = False
@@ -2366,11 +2951,17 @@ def _ziv_walk(
                     break
                 if later_kind in ZIV_TASK_BOUNDARY_KINDS:
                     break
-            if next_variant == 1 or next_real_section:
+            # Известное название темы — заголовок даже перед «Вариант 4»:
+            # в ответах Зива тема 1 часто сразу с последнего варианта.
+            if (known_heading is not None
+                    or next_variant == 1
+                    or (ocr_heading is not None and next_real_section)):
                 topic_num, topic_title = heading
                 variant = 0
                 last_num = 0
-            continue
+                continue
+            if ocr_heading is not None:
+                continue
         identity = (marker.start, kind)
         if identity in seen:
             continue
@@ -2597,7 +3188,12 @@ def parse_ziv(text: str) -> tuple[list[TaskDraft], dict]:
         missing_ok=True,
     ))
     reattach_leaked_following_answers(tasks)
+    reattach_leaked_following_answers(tasks)
+    shift_skipped_leading_compute_answers(tasks)
     for task in tasks:
+        _split_stuck_solutions(task)
+        distribute_numbered_part_answers(task)
+        redistribute_glued_subitem_answers(task)
         finalize_draft_images(task)
     return tasks, diagnostics
 

@@ -108,6 +108,12 @@ class LatexUtilsTests(TestCase):
         self.assertEqual(wrap_bare_math(r'\{-2;1\}'), r'$\{-2;1\}$')
         self.assertEqual(wrap_bare_math(r'$\{-2;1\}$'), r'$\{-2;1\}$')
         self.assertEqual(
+            wrap_bare_math(r'\(\{-2 \pm \sqrt{2}\}'),
+            r'\(\{-2 \pm \sqrt{2}\}')
+        self.assertEqual(
+            wrap_bare_math(r'\(\{-2 \pm \sqrt{2}\)'),
+            r'\(\{-2 \pm \sqrt{2}\)')
+        self.assertEqual(
             heal_split_math_dollars(
                 r'$\displaystyle \left(-\frac{7}{6}$ ;$-2\right)$'),
             r'\displaystyle \left(-\frac{7}{6} ;-2\right)')

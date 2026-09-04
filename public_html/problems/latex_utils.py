@@ -389,6 +389,11 @@ def wrap_bare_math(text):
 
 
 def _wrap_chunk(chunk):
+    # Незакрытая ``\(`` — уже математика: иначе ``\{`` получит ``$`` внутри
+    # и выйдет ``$\(\{…\}$``.
+    opener = chunk.find(r'\(')
+    if opener != -1:
+        return _wrap_chunk(chunk[:opener]) + chunk[opener:]
     if not chunk or not _SEED_RE.search(chunk):
         return chunk
     spans = []

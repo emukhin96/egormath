@@ -891,6 +891,27 @@ def _textbook_detail_url(batch, request=None, **overrides):
     return f'{url}?{query}' if query else url
 
 
+ANSWERS_FILTER_NONE = 'none'
+
+
+def _draft_lacks_author_answer(answer, subitems) -> bool:
+    if str(answer or '').strip():
+        return False
+    return not any(
+        str((item or {}).get('author_answer_latex') or '').strip()
+        for item in (subitems or []))
+
+
+def _filter_drafts_without_answers(qs):
+    """Черновики без ответа у родителя и у всех подпунктов."""
+    empty_pks = [
+        pk for pk, answer, items in qs.values_list(
+            'pk', 'author_answer_latex', 'subitems')
+        if _draft_lacks_author_answer(answer, items)
+    ]
+    return qs.filter(pk__in=empty_pks)
+
+
 def _textbook_group_drafts(batch, group):
     selector = Q()
     for collection_key, source_path in group['selectors']:
@@ -1109,6 +1130,10 @@ def textbook_import_detail(request, pk):
             'topic', 'imported_task')
     if status in dict(TextbookTaskDraft.STATUS_CHOICES):
         drafts = drafts.filter(status=status)
+    answers_filter = request.GET.get('answers', '')
+    missing_answer_count = _filter_drafts_without_answers(drafts).count()
+    if answers_filter == ANSWERS_FILTER_NONE:
+        drafts = _filter_drafts_without_answers(drafts)
     paginator = Paginator(drafts, 50)
     page = paginator.get_page(request.GET.get('page'))
     # Meta.ordering по external_id иначе попадает в GROUP BY: для каждого
@@ -1116,7 +1141,14 @@ def textbook_import_detail(request, pk):
     counts = dict(batch.drafts.order_by().values_list('status')
                   .annotate(n=Count('pk')))
     status_tabs = [
-        {'value': value, 'label': label, 'count': counts.get(value, 0)}
+        {
+            'value': value,
+            'label': label,
+            'count': counts.get(value, 0),
+            'href': '?' + _textbook_detail_query(
+                request, status=value, page=None),
+            'current': status == value,
+        }
         for value, label in TextbookTaskDraft.STATUS_CHOICES
     ]
     selected_topic = None
@@ -1188,6 +1220,16 @@ def textbook_import_detail(request, pk):
         'counts': counts,
         'status': status,
         'status_tabs': status_tabs,
+        'answers_filter': (
+            answers_filter if answers_filter == ANSWERS_FILTER_NONE else ''),
+        'missing_answer_count': missing_answer_count,
+        'all_drafts_href': '?' + _textbook_detail_query(
+            request, status=None, answers=None, page=None),
+        'missing_answers_href': '?' + _textbook_detail_query(
+            request,
+            answers=(None if answers_filter == ANSWERS_FILTER_NONE
+                     else ANSWERS_FILTER_NONE),
+            page=None),
         'collection_groups': collection_groups,
         'selected_group': selected_group,
         'selected_section': selected_token if selected_group else '',

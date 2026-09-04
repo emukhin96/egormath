@@ -98,8 +98,9 @@
     </label>
   </h2>
   <div class="form-buttons import-toolbar">
-    <a class="btn btn-secondary" href="?{% if selected_section %}section={{ selected_section }}{% endif %}">Все</a>
-    {% for tab in status_tabs %}<a class="btn btn-secondary" href="?status={{ tab.value }}{% if selected_section %}&section={{ selected_section }}{% endif %}">{{ tab.label }} ({{ tab.count }})</a>{% endfor %}
+    <a class="btn btn-secondary{% if not status and not answers_filter %} is-current{% endif %}" href="{{ all_drafts_href }}">Все</a>
+    {% for tab in status_tabs %}<a class="btn btn-secondary{% if tab.current %} is-current{% endif %}" href="{{ tab.href }}">{{ tab.label }} ({{ tab.count }})</a>{% endfor %}
+    <a class="btn btn-secondary{% if answers_filter %} is-current{% endif %}" href="{{ missing_answers_href }}">Без ответов ({{ missing_answer_count }})</a>
     {% if batch.status != 'imported' %}
     <form method="post" action="{% url 'textbook_import_approve_clean' batch.pk %}">{% csrf_token %}<button class="btn btn-secondary" type="submit">Одобрить безошибочные</button></form>
     <form method="post" action="{% url 'textbook_import_commit' batch.pk %}" onsubmit="return confirm('Загрузить {{ approved_count }} одобренных задач и создать подборки? Непроверенные и конфликтные строки останутся в партии.');">{% csrf_token %}<button class="btn" type="submit"{% if not approved_count %} disabled{% endif %}>Загрузить в каталог</button></form>

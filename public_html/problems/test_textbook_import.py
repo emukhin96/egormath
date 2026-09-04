@@ -1730,7 +1730,8 @@ class TextbookImportTests(TestCase):
         self.assertEqual(ids, {'1.2.37', '1.2.38'})
         self.assertContains(section, 'import-section-current')
         self.assertContains(section, 'Все задачи')
-        self.assertContains(section, f'status=approved&section={algebra["token"]}')
+        self.assertContains(section, 'status=approved')
+        self.assertContains(section, f'section={algebra["token"]}')
 
         filtered = self.client.get(reverse(
             'textbook_import_detail', args=[batch.pk]), {
@@ -1753,6 +1754,75 @@ class TextbookImportTests(TestCase):
         self.assertEqual(
             [draft.external_id for draft in cleared.context['page']],
             ['1.2.37'])
+
+    def test_answers_none_filter_keeps_section_and_status(self):
+        payload = bundle()
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='1.2.38', source_number='38',
+            author_answer_latex='', text_latex='Без ответа.'))
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='1.2.39', source_number='39',
+            author_answer_latex='',
+            subitems=[{
+                'label': 'а',
+                'text_latex': 'Подпункт',
+                'author_answer_latex': '1',
+            }],
+            text_latex='Ответ только в подпункте.'))
+        payload['tasks'].append(dict(
+            payload['tasks'][0], external_id='2.1.1', source_number='1',
+            source_path=['Геометрия', 'Треугольники'],
+            collection_key='geometry.triangles',
+            collection_title='Треугольники',
+            author_answer_latex='',
+            text_latex='Пустая задача другого раздела.'))
+        batch = self.create_batch(payload)
+        empty = batch.drafts.get(external_id='1.2.38')
+        empty.status = TextbookTaskDraft.STATUS_APPROVED
+        empty.save(update_fields=['status'])
+        self.client.login(username='teacher1', password='pass12345')
+        url = reverse('textbook_import_detail', args=[batch.pk])
+
+        landing = self.client.get(url)
+        self.assertEqual(landing.context['missing_answer_count'], 2)
+        self.assertContains(landing, 'Без ответов (2)')
+        self.assertContains(landing, 'btn btn-secondary')
+        self.assertIn('answers=none', landing.context['missing_answers_href'])
+        self.assertNotIn('answers=', landing.context['all_drafts_href'])
+
+        algebra = next(
+            group for group in landing.context['collection_groups']
+            if group['collection_key'] == 'alg.quadratic')
+        filtered = self.client.get(url, {
+            'section': algebra['token'],
+            'status': TextbookTaskDraft.STATUS_APPROVED,
+            'answers': 'none',
+            'page': '3',
+        })
+        self.assertEqual(filtered.context['answers_filter'], 'none')
+        self.assertEqual(filtered.context['missing_answer_count'], 1)
+        self.assertEqual(
+            [draft.external_id for draft in filtered.context['page']],
+            ['1.2.38'])
+        self.assertContains(filtered, 'Без ответов (1)')
+        self.assertContains(filtered, 'is-current')
+        self.assertNotIn('answers=', filtered.context['missing_answers_href'])
+        self.assertIn('status=approved', filtered.context['missing_answers_href'])
+        self.assertIn(
+            f'section={algebra["token"]}',
+            filtered.context['missing_answers_href'])
+        self.assertNotIn('page=', filtered.context['missing_answers_href'])
+        self.assertIn('answers=none', filtered.context['list_query'])
+        self.assertNotIn('page=', filtered.context['list_query'])
+        self.assertNotIn('answers=', filtered.context['all_drafts_href'])
+        self.assertIn(
+            f'section={algebra["token"]}',
+            filtered.context['all_drafts_href'])
+        approved_tab = next(
+            tab for tab in filtered.context['status_tabs']
+            if tab['value'] == TextbookTaskDraft.STATUS_APPROVED)
+        self.assertIn('answers=none', approved_tab['href'])
+        self.assertTrue(approved_tab['current'])
 
     def test_bulk_skips_and_deletes_selected_drafts(self):
         payload = bundle()

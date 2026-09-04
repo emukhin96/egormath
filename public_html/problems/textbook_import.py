@@ -196,7 +196,10 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             row.get('author_answer_latex') or '')
         author_solution_latex = apply_imported_math(
             row.get('author_solution_latex') or '')
-        if subitems:
+        if subitems and any(
+                item.get('author_answer_latex')
+                or item.get('author_solution_latex')
+                for item in subitems):
             author_answer_latex = ''
             author_solution_latex = ''
         drafts.append(TextbookTaskDraft(
