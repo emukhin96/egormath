@@ -1,5 +1,5 @@
-/* Корзина листка: кнопки «в листок» у задач (формы [data-cart-form]) шлют
-   fetch вместо перезагрузки страницы и обновляют индикатор в шапке.
+/* Корзина задач: кнопки «+» у задач (формы [data-cart-form]) шлют fetch
+   вместо перезагрузки страницы и обновляют счётчик в шапке.
    Без JS формы работают как обычные POST с redirect. */
 (function () {
   'use strict';
@@ -12,32 +12,29 @@
     }
   }
 
-  function truncate(text, limit) {
-    return text.length > limit ? text.slice(0, limit - 1) + '…' : text;
-  }
-
-  function renderButton(form, inCart, title) {
+  function renderButton(form, inCart) {
     var button = form.querySelector('.cart-btn');
     form.dataset.inCart = inCart ? '1' : '0';
     form.action = inCart ? form.dataset.removeUrl : form.dataset.addUrl;
     button.classList.toggle('is-in-cart', inCart);
-    button.textContent = inCart ? '✓ в листке' : '+ в листок';
-    button.title = inCart
-      ? 'Уже в листке «' + title + '» — нажмите, чтобы убрать'
-      : 'Добавить в конец листка «' + title + '»';
+    button.textContent = inCart ? '✓' : '+';
+    button.title = inCart ? 'В корзине — нажмите, чтобы убрать' : 'В корзину — чтобы собрать листок';
+    button.setAttribute('aria-label', inCart ? 'Убрать из корзины' : 'В корзину');
   }
 
-  function renderMenu(data) {
-    var title = document.querySelector('[data-cart-title]');
-    var count = document.querySelector('[data-cart-count]');
-    if (title) title.textContent = truncate(data.worksheet.title, 24);
-    if (count) {
-      count.textContent = data.count;
-      count.hidden = false;
+  function renderMenu(count) {
+    var badge = document.querySelector('[data-cart-count]');
+    if (badge) {
+      badge.textContent = count;
+      badge.hidden = !count;
     }
-    document.querySelectorAll('[data-cart-link]').forEach(function (a) {
-      a.href = data.worksheet.url;
+    var title = document.querySelector('[data-cart-title]');
+    if (title) title.textContent = count ? 'Задач в корзине: ' + count : 'Корзина пуста';
+    document.querySelectorAll('[data-cart-needs-items]').forEach(function (b) {
+      b.disabled = !count;
     });
+    var clear = document.querySelector('[data-cart-clear]');
+    if (clear) clear.hidden = !count;
   }
 
   document.addEventListener('submit', function (e) {
@@ -54,14 +51,14 @@
       return r.json().then(function (data) { return {ok: r.ok && data.ok, data: data}; });
     }).then(function (result) {
       if (!result.ok) {
-        toast(false, result.data.message || 'Не удалось изменить листок');
+        toast(false, result.data.message || 'Не удалось изменить корзину');
         return;
       }
-      renderButton(form, result.data.in_cart, result.data.worksheet.title);
-      renderMenu(result.data);
+      renderButton(form, result.data.in_cart);
+      renderMenu(result.data.count);
       toast(true, result.data.message);
     }).catch(function () {
-      toast(false, 'Нет связи — листок не изменён');
+      toast(false, 'Нет связи — корзина не изменена');
     }).then(function () {
       button.disabled = false;
     });

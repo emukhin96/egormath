@@ -176,6 +176,7 @@
         {% endif %}
 
         <div class="ws-actions">
+          {% if item.task_id and not item.task.variant_of_id %}{% include 'includes/cart_button.html' with task=item.task %}{% endif %}
           {% if item.task_id and share_links or item.task_id and assignments %}
           {% if row.hidden_links or row.hidden_assignments %}
           <button type="button"
@@ -431,4 +432,5 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <script defer src="{% static 'js/builder.js' %}"></script>
+<script defer src="{% static 'js/cart.js' %}"></script>
 {% endblock %}

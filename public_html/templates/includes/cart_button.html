@@ -1,22 +1,20 @@
-{# Кнопка «в листок» у задачи; task — Task, cart — из контекст-процессора. Без JS работает как обычная форма. #}
+{# Кнопка «+» (в корзину) у задачи; task — Task, cart — из контекст-процессора. Без JS работает как обычная форма. #}
 {% if cart %}
 {% if task.pk in cart.task_ids %}
-<form method="post" action="{% url 'cart_remove' %}" class="inline-form" data-cart-form data-in-cart="1"
+<form method="post" action="{% url 'cart_remove' %}" class="inline-form cart-form-btn" data-cart-form data-in-cart="1"
       data-add-url="{% url 'cart_add' %}" data-remove-url="{% url 'cart_remove' %}">
   {% csrf_token %}
   <input type="hidden" name="task_id" value="{{ task.pk }}">
   <input type="hidden" name="next" value="{{ request.get_full_path }}">
-  <button type="submit" class="btn btn-small btn-secondary cart-btn is-in-cart"
-          title="Уже в листке «{{ cart.worksheet.title }}» — нажмите, чтобы убрать">✓ в листке</button>
+  <button type="submit" class="cart-btn is-in-cart" title="В корзине — нажмите, чтобы убрать" aria-label="Убрать из корзины">✓</button>
 </form>
 {% else %}
-<form method="post" action="{% url 'cart_add' %}" class="inline-form" data-cart-form data-in-cart="0"
+<form method="post" action="{% url 'cart_add' %}" class="inline-form cart-form-btn" data-cart-form data-in-cart="0"
       data-add-url="{% url 'cart_add' %}" data-remove-url="{% url 'cart_remove' %}">
   {% csrf_token %}
   <input type="hidden" name="task_id" value="{{ task.pk }}">
   <input type="hidden" name="next" value="{{ request.get_full_path }}">
-  <button type="submit" class="btn btn-small btn-secondary cart-btn"
-          title="{% if cart.worksheet %}Добавить в конец листка «{{ cart.worksheet.title }}»{% else %}Начать новый листок с этой задачи{% endif %}">+ в листок</button>
+  <button type="submit" class="cart-btn" title="В корзину — чтобы собрать листок" aria-label="В корзину">+</button>
 </form>
 {% endif %}
 {% endif %}
