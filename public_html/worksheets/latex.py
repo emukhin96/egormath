@@ -157,8 +157,11 @@ def task_to_tex(item, variant='teacher'):
         sub_lines.append('\\item %s' % text)
     # Без подпунктов колонки обнуляются: \columned{0} печатает только
     # условие, а columns>=1 с пустым списком падают на «missing \item»
-    # (пустой [{}] всё равно передаётся, когда дальше идёт ответ)
-    columns = item.effective_columns if sub_lines else 0
+    # (пустой [{}] всё равно передаётся, когда дальше идёт ответ).
+    # С подпунктами наоборот: columns=0 (значение по умолчанию у задачи,
+    # в т.ч. у всех импортированных) заставил бы egor молча выбросить
+    # подпункты из PDF — печатаем их хотя бы одной колонкой.
+    columns = max(item.effective_columns, 1) if sub_lines else 0
     subitems = '\n'.join(sub_lines)
     answer = _combined_answer(task, subitem_objs)
     answer_used = set()

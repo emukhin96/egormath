@@ -75,6 +75,19 @@ class LatexGenerationTests(TestCase):
         tex = task_to_tex(item)
         self.assertIn('\\task{3}{2}{%', tex)
 
+    def test_subitems_with_zero_columns_get_one_column(self):
+        # \task{…}{0} печатает только условие: подпункты задачи с
+        # columns=0 (импорт, значение по умолчанию) пропадали из PDF
+        task = Task.objects.create(text_latex='Постройте графики:', columns=0)
+        TaskSubitem.objects.create(task=task, order=10, text_latex='$y=x$')
+        TaskSubitem.objects.create(task=task, order=20, text_latex='$y=2x$')
+        tex = task_to_tex(make_item(self.worksheet, task))
+        self.assertIn('\\task{0}{1}{%', tex)
+        self.assertIn('[{\\item $y=x$;\n\\item $y=2x$.}]', tex)
+        # Явное переопределение колонок в листке уважается
+        tex = task_to_tex(make_item(self.worksheet, task, columns_override=3))
+        self.assertIn('\\task{0}{3}{%', tex)
+
     def test_columns_zeroed_without_subitems(self):
         # columns>=1 без подпунктов дают пустой список и «missing \item»
         # при компиляции; без подпунктов колонки принудительно 0
