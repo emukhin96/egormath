@@ -3,15 +3,24 @@
   <h2>{{ assignment.worksheet.title|truncatechars:34 }}</h2>
   <ul class="sidebar-list">
     <li><strong>Статус:</strong> {{ assignment.get_status_display }}</li>
-    <li><strong>Срок:</strong> {% if assignment.due_at %}{{ assignment.due_at|date:"d.m.Y H:i" }}{% else %}не задан{% endif %}</li>
+    <li><strong>Срок:</strong> {% if assignment.due_at %}{{ assignment.due_at|date:"d.m.Y H:i" }}{% if assignment.is_overdue %} — просрочено{% endif %}{% else %}не задан{% endif %}</li>
     <li><strong>Учитель:</strong> {{ assignment.worksheet.owner.get_full_name|default:assignment.worksheet.owner.username }}</li>
-    <li><strong>Элементов:</strong> {{ rows|length }}</li>
+  </ul>
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Прогресс</p>
+  <div class="sidebar-stat"><strong>{{ answered_count }} из {{ task_count }}</strong><span>задач с ответом</span></div>
+  <ul class="sidebar-list">
+    {% for row in task_rows %}
+    <li><a href="#task-{{ row.number }}">№ {{ row.number }}</a>
+      — {% if row.answered %}есть ответ{% else %}нет ответа{% endif %}{% if row.has_comment %}, комментарий учителя{% endif %}</li>
+    {% endfor %}
   </ul>
 </section>
 <section class="sidebar-section">
   <p class="sidebar-kicker">Состояние</p>
   {% if editable %}
-  <p class="sidebar-copy">Ответы можно сохранять как черновик до отправки.</p>
+  <p class="sidebar-copy">Ответы сохраняются автоматически при уходе из поля; «Отправить на проверку» закрывает работу для правок.</p>
   {% else %}
   <p class="sidebar-copy">Редактирование закрыто. Дождитесь проверки или возврата работы.</p>
   {% endif %}

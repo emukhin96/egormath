@@ -26,7 +26,7 @@
     {% endif %}
   </div>
   {% else %}
-  <div class="card ws-view">
+  <div class="card ws-view" id="task-{{ row.number }}">
     {% include 'includes/task_row.html' with number=row.number stars=row.item.effective_stars text=row.task.text_latex %}
     {% include 'problems/_task_images.html' with task=row.task %}
     {% if row.subrows %}
@@ -36,10 +36,10 @@
         <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}
         — <strong>ответ ученика:</strong>
         {% if sr.part and sr.part.display_answer %}
-          <span class="math-content">{{ sr.part.display_answer }}</span>
+          <span class="math-content">{{ sr.part.display_answer|web_answer }}</span>
         {% else %}<span class="muted">нет</span>{% endif %}
         {% if sr.subitem.effective_answer_latex %}
-          <span class="muted">(эталон: <span class="math-content">{{ sr.subitem.effective_answer_latex }}</span>)</span>
+          <span class="muted">(эталон: <span class="math-content">{{ sr.subitem.effective_answer_latex|web_answer }}</span>)</span>
         {% endif %}
       </li>
       {% endfor %}
@@ -47,7 +47,7 @@
     {% endif %}
 
     {% if row.task.effective_answer_latex %}
-    <div class="answer-box math-content"><strong>Эталонный ответ:</strong> {{ row.task.effective_answer_latex }}</div>
+    <div class="answer-box math-content"><strong>Эталонный ответ:</strong> {{ row.task.effective_answer_latex|web_answer }}</div>
     {% endif %}
     {% if row.task.effective_solution_latex %}
     <details><summary class="muted">Эталонное решение</summary>
@@ -59,7 +59,7 @@
       {% if not row.subrows %}
       <p><strong>Ответ ученика:</strong>
         {% if row.submission.display_answer %}
-          <span class="math-content">{{ row.submission.display_answer }}</span>
+          <span class="math-content">{{ row.submission.display_answer|web_answer }}</span>
         {% else %}
           <span class="muted">нет ответа</span>
         {% endif %}

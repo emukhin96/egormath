@@ -68,10 +68,20 @@ def student_dashboard(request):
                        .order_by('-assigned_at'))
     current = next(
         (a for a in assignments if a.is_editable_by_student), None)
+    # Группы по статусу: сначала то, что требует действия ученика
+    todo = [a for a in assignments if a.is_editable_by_student]
+    submitted = [a for a in assignments
+                 if a.status == Assignment.STATUS_SUBMITTED]
+    reviewed = [a for a in assignments
+                if a.status == Assignment.STATUS_REVIEWED]
     return render(request, 'accounts/dashboard_student.html', {
         'assignments': assignments,
         'current': current,
         'rest': [a for a in assignments if a != current],
+        'todo': todo,
+        'submitted': submitted,
+        'reviewed': reviewed,
+        'overdue_total': sum(1 for a in todo if a.is_overdue),
     })
 
 

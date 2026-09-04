@@ -6,7 +6,7 @@
   <div>
     <span class="page-eyebrow">Кабинет ученика</span>
     <h1>Мои задания</h1>
-    <p class="page-subtitle">Текущие, возвращённые и завершённые работы.</p>
+    <p class="page-subtitle">Сначала то, что нужно сдать, ниже — работы на проверке и проверенные.</p>
   </div>
   {% if assignments %}
   <p class="muted">Всего заданий: {{ assignments|length }}</p>
@@ -21,6 +21,7 @@
       <span>Учитель: {{ current.worksheet.owner.get_full_name|default:current.worksheet.owner.username }}</span>
       <span>·</span>
       <span>Срок: {% if current.due_at %}{{ current.due_at|date:'d.m.Y H:i' }}{% else %}не задан{% endif %}</span>
+      {% if current.is_overdue %}<span class="badge badge-returned">просрочено</span>{% endif %}
       <span class="badge badge-{{ current.status }}">{{ current.get_status_display }}</span>
     </p>
   </div>
@@ -28,24 +29,28 @@
 </div>
 {% endif %}
 
-{% if rest %}
-<div class="card">
-  <h2>{% if current %}Остальные задания{% else %}Все задания{% endif %}</h2>
-  <table class="list">
-    <tr><th>Листок</th><th>Учитель</th><th>Выдано</th><th>Срок</th><th>Статус</th><th></th></tr>
-    {% for a in rest %}
-    <tr>
-      <td>{{ a.worksheet.title }}</td>
-      <td>{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>
-      <td>{{ a.assigned_at|date:'d.m.Y' }}</td>
-      <td>{% if a.due_at %}{{ a.due_at|date:'d.m.Y H:i' }}{% else %}—{% endif %}</td>
-      <td><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span></td>
-      <td><a class="btn btn-small btn-secondary" href="{% url 'assignment_detail' a.pk %}">Открыть</a></td>
-    </tr>
-    {% endfor %}
-  </table>
-</div>
-{% elif not current %}
+{% if not assignments %}
 <div class="card"><p class="muted">Вам пока не назначено ни одного задания.</p></div>
+{% endif %}
+
+{% if todo|length > 1 %}
+<div class="card">
+  <h2>Нужно сдать</h2>
+  {% include 'accounts/_student_assignment_table.html' with items=todo skip=current %}
+</div>
+{% endif %}
+
+{% if submitted %}
+<div class="card">
+  <h2>На проверке</h2>
+  {% include 'accounts/_student_assignment_table.html' with items=submitted %}
+</div>
+{% endif %}
+
+{% if reviewed %}
+<div class="card">
+  <h2>Проверено</h2>
+  {% include 'accounts/_student_assignment_table.html' with items=reviewed %}
+</div>
 {% endif %}
 {% endblock %}
