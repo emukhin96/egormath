@@ -616,6 +616,25 @@ class AutoCheckFlowTests(TestCase):
         self.assertContains(response, '✗ не совпало')
         self.assertContains(response, f'data-check="task{self.task.pk}"')
 
+    def test_pages_survive_rubric_and_text_items(self):
+        # Рубрики и текстовые вставки — строки без задачи и ответа;
+        # пересчёт сверки не должен на них падать ни у ученика, ни у учителя
+        WorksheetItem.objects.create(
+            worksheet=self.assignment.worksheet, rubric='Разминка', order=5)
+        WorksheetItem.objects.create(
+            worksheet=self.assignment.worksheet, text_latex='Подсказка',
+            order=15)
+        self.assignment.check_visibility = Assignment.CHECK_LIVE
+        self.assignment.save()
+        self._save('0; 2')
+        self.assertEqual(self.client.get(self.detail).status_code, 200)
+        self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(
+            reverse('review_assignment', args=[self.assignment.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Разминка')
+
     def test_review_shows_badge_and_recomputes_after_reference_change(self):
         self._save('0; 2')
         self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
