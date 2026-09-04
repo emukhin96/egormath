@@ -13,6 +13,36 @@
     return !!card.querySelector('[data-photos] img');
   }
 
+  /* Режим самопроверки: сервер возвращает результат сверки в ответе
+     автосохранения, бейджи обновляются без перезагрузки. Разметка бейджа —
+     как в _check_badge.html. */
+  var BADGES = {
+    ok: ['badge-reviewed', '✓ совпало', 'Совпало с эталоном'],
+    wrong: ['badge-returned', '✗ не совпало', 'Не совпало с эталоном — проверьте запись'],
+    unknown: ['badge-assigned', '? не разобрано', 'Автосверка не смогла разобрать ответ; учитель проверит вручную'],
+  };
+
+  function renderBadge(holder, status) {
+    holder.dataset.status = status || '';
+    holder.textContent = '';
+    var spec = BADGES[status];
+    if (!spec) return;
+    var badge = document.createElement('span');
+    badge.className = 'badge ' + spec[0];
+    badge.textContent = spec[1];
+    badge.title = spec[2];
+    holder.appendChild(badge);
+  }
+
+  document.addEventListener('autosave:done', function (e) {
+    var checks = e.detail && e.detail.checks;
+    if (!checks) return;
+    Object.keys(checks).forEach(function (prefix) {
+      var holder = document.querySelector('[data-check="' + prefix + '"]');
+      if (holder) renderBadge(holder, checks[prefix]);
+    });
+  });
+
   document.addEventListener('DOMContentLoaded', function () {
     var button = document.getElementById('submit-assignment');
     if (!button) return;

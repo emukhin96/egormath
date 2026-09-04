@@ -30,6 +30,15 @@ class Assignment(models.Model):
         (SCALE_POINTS, 'Числовая шкала (баллы)'),
     ]
 
+    CHECK_TEACHER = 'teacher'
+    CHECK_AFTER_SUBMIT = 'after_submit'
+    CHECK_LIVE = 'live'
+    CHECK_CHOICES = [
+        (CHECK_TEACHER, 'Только учителю'),
+        (CHECK_AFTER_SUBMIT, 'Ученику — после отправки работы'),
+        (CHECK_LIVE, 'Ученику — сразу при вводе (самопроверка)'),
+    ]
+
     worksheet = models.ForeignKey(
         Worksheet, on_delete=models.CASCADE, related_name='assignments',
         verbose_name='Листок')
@@ -45,6 +54,11 @@ class Assignment(models.Model):
     grade_scale = models.CharField(
         'Шкала оценивания', max_length=10, choices=SCALE_CHOICES,
         default=SCALE_WORDS)
+    check_visibility = models.CharField(
+        'Кому видна автосверка', max_length=12, choices=CHECK_CHOICES,
+        default=CHECK_TEACHER,
+        help_text='Учитель видит результат всегда; эталон ученику не '
+                  'показывается ни в одном режиме')
     assigned_at = models.DateTimeField('Выдано', auto_now_add=True)
     due_at = models.DateTimeField('Срок сдачи', null=True, blank=True)
     submitted_at = models.DateTimeField('Отправлено', null=True, blank=True)
@@ -80,6 +94,15 @@ class Assignment(models.Model):
         return bool(self.due_at) and self.is_editable_by_student \
             and self.due_at < timezone.now()
 
+    @property
+    def student_sees_checks(self):
+        """Показывать ли ученику результат автосверки в текущем состоянии."""
+        if self.check_visibility == self.CHECK_LIVE:
+            return True
+        if self.check_visibility == self.CHECK_AFTER_SUBMIT:
+            return self.status != self.STATUS_ASSIGNED
+        return False
+
 
 def strip_math_delimiters(text):
     """``$…$`` → ``…``: тело формулы для редактора без обрамления."""
@@ -105,14 +128,44 @@ class AnswerFields(models.Model):
     ``answer_text`` как ``$…$`` — та же конвенция, что ``Task.answer_latex``.
     """
 
+    CHECK_OK = 'ok'
+    CHECK_WRONG = 'wrong'
+    CHECK_UNKNOWN = 'unknown'
+    CHECK_CHOICES = [
+        ('', 'не сверялось'),
+        (CHECK_OK, 'совпало'),
+        (CHECK_WRONG, 'не совпало'),
+        (CHECK_UNKNOWN, 'не разобрано'),
+    ]
+
     answer_text = models.TextField('Ответ (текст)', blank=True)
     answer_number = models.TextField('Ответ (число)', blank=True)
     interval_low = models.TextField('Промежуток: от', blank=True)
     interval_high = models.TextField('Промежуток: до', blank=True)
+    auto_check = models.CharField(
+        'Автосверка', max_length=8, blank=True, default='',
+        choices=CHECK_CHOICES,
+        help_text='Результат сравнения с эталоном; отметку ставит учитель')
+    checked_at = models.DateTimeField('Сверено', null=True, blank=True)
     updated_at = models.DateTimeField('Изменён', auto_now=True)
 
     class Meta:
         abstract = True
+
+    def run_check(self, reference):
+        """Пересчитать auto_check по эталону; возвращает True, если изменился."""
+        from django.utils import timezone
+
+        from .check_answer import check_fields
+        result = check_fields(self.answer_type, self, reference or '')
+        changed = result != self.auto_check
+        self.auto_check = result
+        self.checked_at = timezone.now()
+        return changed
+
+    def check_is_stale(self, task):
+        """Эталон могли поправить после сверки — тогда пересчёт."""
+        return self.checked_at is None or task.updated_at > self.checked_at
 
     @property
     def answer_type(self):
@@ -144,6 +197,9 @@ class Submission(AnswerFields):
     task = models.ForeignKey(
         Task, on_delete=models.CASCADE, related_name='submissions',
         verbose_name='Задача')
+    check_attempts = models.PositiveIntegerField(
+        'Попыток ответа', default=0,
+        help_text='Сколько раз ученик менял ответ; заметно при самопроверке')
 
     class Meta:
         verbose_name = 'Ответ ученика'

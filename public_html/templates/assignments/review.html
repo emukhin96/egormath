@@ -37,6 +37,7 @@
         — <strong>ответ ученика:</strong>
         {% if sr.part and sr.part.display_answer %}
           <span class="math-content">{{ sr.part.display_answer|web_answer }}</span>
+          {% include 'assignments/_check_badge.html' with prefix=sr.prefix status=sr.part.auto_check %}
         {% else %}<span class="muted">нет</span>{% endif %}
         {% if sr.subitem.effective_answer_latex %}
           <span class="muted">(эталон: <span class="math-content">{{ sr.subitem.effective_answer_latex|web_answer }}</span>)</span>
@@ -60,10 +61,14 @@
       <p><strong>Ответ ученика:</strong>
         {% if row.submission.display_answer %}
           <span class="math-content">{{ row.submission.display_answer|web_answer }}</span>
+          {% include 'assignments/_check_badge.html' with prefix=row.prefix status=row.submission.auto_check %}
         {% else %}
           <span class="muted">нет ответа</span>
         {% endif %}
       </p>
+      {% endif %}
+      {% if row.submission.check_attempts > 1 %}
+      <p class="helptext">Ученик менял ответ: попыток — {{ row.submission.check_attempts }}.</p>
       {% endif %}
       {% if row.submission.photos.all %}
       <div class="photo-grid">
@@ -101,6 +106,15 @@
   {% endfor %}
 
   <div class="card">
+    <p>
+      <label for="r_check">Кому видна автосверка</label>
+      <select name="check_visibility" id="r_check" style="max-width:340px">
+        {% for value, label in check_choices %}
+        <option value="{{ value }}" {% if assignment.check_visibility == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <span class="helptext">Бейджи «совпало / не совпало» рядом с ответами — подсказка; отметку ставите вы. Эталон ученику не показывается.</span>
+    </p>
     <button type="submit" name="action" value="save" class="btn btn-secondary">Сохранить черновик</button>
     <button type="submit" name="action" value="complete" class="btn">Завершить проверку</button>
     <button type="submit" name="action" value="return" class="btn btn-danger"

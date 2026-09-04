@@ -30,6 +30,9 @@
       return r.json().catch(function () { return {ok: r.ok, message: ''}; });
     }).then(function (data) {
       showSaved(data.ok, data.message);
+      /* Страница может дорисовать что-то по ответу сервера (например,
+         результат сверки) — отдаём ей данные событием на форме */
+      form.dispatchEvent(new CustomEvent('autosave:done', {detail: data, bubbles: true}));
     }).catch(function () {
       showSaved(false, 'Нет связи — изменение не сохранено');
     });
