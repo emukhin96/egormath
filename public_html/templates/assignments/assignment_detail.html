@@ -68,7 +68,7 @@
     </ol>
     {% else %}
     <p>
-      <label>Ответ{% if row.task.answer_type == 'number' %} (число){% elif row.task.answer_type == 'interval' %} (промежуток){% endif %}</label>
+      <label>Ответ{% if row.task.answer_type == 'number' %} (число){% elif row.task.answer_type == 'interval' %} (промежуток){% elif row.task.answer_type == 'formula' %} (формула){% endif %}</label>
       {% include 'assignments/_answer_fields.html' with prefix=row.prefix answer_type=row.task.answer_type obj=sub editable=editable %}
     </p>
     {% endif %}
@@ -113,6 +113,16 @@
 </form>
 
 {% if editable %}
+<dialog class="dialog" id="formula-dialog">
+  <h3>Формула</h3>
+  <p class="helptext">Наберите формулу — на телефоне появится математическая клавиатура. «Вставить» добавит её в ответ как $…$.</p>
+  <math-field id="formula-dialog-field" smart-fence></math-field>
+  <div class="form-buttons">
+    <button type="button" class="btn" data-formula-confirm>Вставить</button>
+    <button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button>
+  </div>
+</dialog>
+
 <div class="card">
   <h2>Фото решений</h2>
   <p class="helptext">К каждой задаче можно приложить фото рукописного решения
@@ -131,4 +141,10 @@
 </div>
 {% endif %}
 {% endblock %}
-{% block extra_js %}<script defer src="{% static 'js/assignment.js' %}"></script>{% endblock %}
+{% block extra_js %}
+<script defer src="{% static 'js/assignment.js' %}"></script>
+{% if editable %}
+<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script>
+<script defer src="{% static 'js/formula.js' %}"></script>
+{% endif %}
+{% endblock %}

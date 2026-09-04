@@ -217,10 +217,12 @@ class Task(models.Model):
     ANSWER_TEXT = 'text'
     ANSWER_NUMBER = 'number'
     ANSWER_INTERVAL = 'interval'
+    ANSWER_FORMULA = 'formula'
     ANSWER_TYPE_CHOICES = [
         (ANSWER_TEXT, 'Текст'),
         (ANSWER_NUMBER, 'Число'),
         (ANSWER_INTERVAL, 'Числовой промежуток'),
+        (ANSWER_FORMULA, 'Формула'),
     ]
 
     # 10 и 11 — одна метка. GRADE_CHOICES — для селектов 5–11.

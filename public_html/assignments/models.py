@@ -81,7 +81,61 @@ class Assignment(models.Model):
             and self.due_at < timezone.now()
 
 
-class Submission(models.Model):
+def strip_math_delimiters(text):
+    """``$…$`` → ``…``: тело формулы для редактора без обрамления."""
+    text = (text or '').strip()
+    if len(text) >= 2 and text.startswith('$') and text.endswith('$'):
+        return text[1:-1].strip()
+    return text
+
+
+def wrap_math(text):
+    """Голый LaTeX из редактора формул → ``$…$`` в конвенции answer_latex."""
+    text = (text or '').strip()
+    if not text or (text.startswith('$') and text.endswith('$')):
+        return text
+    return f'${text}$'
+
+
+class AnswerFields(models.Model):
+    """Общие поля и представление ответа для задачи и подпункта.
+
+    Поля — TextField: LaTeX из редактора формул (``\\left(-\\infty;\\ 3\\right]``)
+    в 64 символа не влезал. Формула (тип ``formula``) хранится в
+    ``answer_text`` как ``$…$`` — та же конвенция, что ``Task.answer_latex``.
+    """
+
+    answer_text = models.TextField('Ответ (текст)', blank=True)
+    answer_number = models.TextField('Ответ (число)', blank=True)
+    interval_low = models.TextField('Промежуток: от', blank=True)
+    interval_high = models.TextField('Промежуток: до', blank=True)
+    updated_at = models.DateTimeField('Изменён', auto_now=True)
+
+    class Meta:
+        abstract = True
+
+    @property
+    def answer_type(self):
+        raise NotImplementedError
+
+    @property
+    def display_answer(self):
+        t = self.answer_type
+        if t == Task.ANSWER_NUMBER:
+            return self.answer_number
+        if t == Task.ANSWER_INTERVAL:
+            if self.interval_low or self.interval_high:
+                return f'от {self.interval_low or "−∞"} до {self.interval_high or "+∞"}'
+            return ''
+        return self.answer_text
+
+    @property
+    def formula_latex(self):
+        """Начальное значение для <math-field>: формула без ``$``."""
+        return strip_math_delimiters(self.answer_text)
+
+
+class Submission(AnswerFields):
     """Ответ ученика на одну задачу назначения."""
 
     assignment = models.ForeignKey(
@@ -90,14 +144,6 @@ class Submission(models.Model):
     task = models.ForeignKey(
         Task, on_delete=models.CASCADE, related_name='submissions',
         verbose_name='Задача')
-    answer_text = models.TextField('Ответ (текст)', blank=True)
-    answer_number = models.CharField(
-        'Ответ (число)', max_length=64, blank=True)
-    interval_low = models.CharField(
-        'Промежуток: от', max_length=64, blank=True)
-    interval_high = models.CharField(
-        'Промежуток: до', max_length=64, blank=True)
-    updated_at = models.DateTimeField('Изменён', auto_now=True)
 
     class Meta:
         verbose_name = 'Ответ ученика'
@@ -112,15 +158,8 @@ class Submission(models.Model):
         return f'{self.assignment} / задача #{self.task_id}'
 
     @property
-    def display_answer(self):
-        t = self.task.answer_type
-        if t == Task.ANSWER_NUMBER:
-            return self.answer_number
-        if t == Task.ANSWER_INTERVAL:
-            if self.interval_low or self.interval_high:
-                return f'от {self.interval_low or "−∞"} до {self.interval_high or "+∞"}'
-            return ''
-        return self.answer_text
+    def answer_type(self):
+        return self.task.answer_type
 
     @property
     def is_empty(self):
@@ -128,7 +167,7 @@ class Submission(models.Model):
                     or any(not p.is_empty for p in self.parts.all()))
 
 
-class SubmissionPart(models.Model):
+class SubmissionPart(AnswerFields):
     """Ответ ученика на один подпункт задачи. Тип ответа — как у задачи."""
 
     submission = models.ForeignKey(
@@ -137,14 +176,6 @@ class SubmissionPart(models.Model):
     subitem = models.ForeignKey(
         TaskSubitem, on_delete=models.CASCADE, related_name='submission_parts',
         verbose_name='Подпункт')
-    answer_text = models.TextField('Ответ (текст)', blank=True)
-    answer_number = models.CharField(
-        'Ответ (число)', max_length=64, blank=True)
-    interval_low = models.CharField(
-        'Промежуток: от', max_length=64, blank=True)
-    interval_high = models.CharField(
-        'Промежуток: до', max_length=64, blank=True)
-    updated_at = models.DateTimeField('Изменён', auto_now=True)
 
     class Meta:
         verbose_name = 'Ответ на подпункт'
@@ -160,15 +191,8 @@ class SubmissionPart(models.Model):
         return f'{self.submission} / подпункт #{self.subitem_id}'
 
     @property
-    def display_answer(self):
-        t = self.submission.task.answer_type
-        if t == Task.ANSWER_NUMBER:
-            return self.answer_number
-        if t == Task.ANSWER_INTERVAL:
-            if self.interval_low or self.interval_high:
-                return f'от {self.interval_low or "−∞"} до {self.interval_high or "+∞"}'
-            return ''
-        return self.answer_text
+    def answer_type(self):
+        return self.submission.task.answer_type
 
     @property
     def is_empty(self):
