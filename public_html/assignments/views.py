@@ -271,8 +271,10 @@ def _persist_answers(assignment, post):
 def _refresh_stale_checks(rows):
     """На экране проверки: пересчёт сверки, если эталон правили после неё."""
     for row in rows:
-        submission, task = row['submission'], row['task']
-        if submission is None or task is None:
+        # У рубрик и текстовых вставок нет ни задачи, ни ответа
+        task = row.get('task')
+        submission = row.get('submission')
+        if task is None or submission is None:
             continue
         if row['subrows']:
             for sr in row['subrows']:
