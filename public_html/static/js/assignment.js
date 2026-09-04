@@ -5,7 +5,8 @@
   'use strict';
 
   function cardAnswered(card) {
-    var controls = card.querySelectorAll('input:not([type=hidden]), textarea');
+    /* math-field не участвует в форме сам — его значение читаем напрямую */
+    var controls = card.querySelectorAll('input:not([type=hidden]), textarea, math-field');
     for (var i = 0; i < controls.length; i++) {
       if ((controls[i].value || '').trim()) return true;
     }
