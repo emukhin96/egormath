@@ -120,6 +120,87 @@ class StudentAnswerTests(TestCase):
             {f'task{task.pk}_text': 'меняю ответ'})
         self.assertEqual(response.status_code, 403)
 
+    def test_submit_without_draft_keeps_answers(self):
+        """«Отправить» без предварительного «Сохранить» — ответы не теряются."""
+        task = self.tasks[0]
+        self.client.post(
+            reverse('submit_assignment', args=[self.assignment.pk]),
+            {f'task{task.pk}_text': 'ответ без черновика'})
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.status, Assignment.STATUS_SUBMITTED)
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=task)
+        self.assertEqual(submission.answer_text, 'ответ без черновика')
+
+    def test_submit_without_draft_keeps_subitem_answers(self):
+        item = self.assignment.worksheet.ordered_items()[0]
+        task = item.task
+        s1 = TaskSubitem.objects.create(task=task, order=10, text_latex='$1+1$')
+        self.client.post(
+            reverse('submit_assignment', args=[self.assignment.pk]),
+            {f'task{task.pk}_sub{s1.pk}_text': 'два'})
+        part = SubmissionPart.objects.get(subitem=s1)
+        self.assertEqual(part.answer_text, 'два')
+
+    def test_photo_actions_keep_unsaved_text(self):
+        """Загрузка и удаление фото сохраняют присланные поля ответов."""
+        task = self.tasks[0]
+        self.client.post(
+            reverse('upload_photo', args=[self.assignment.pk, task.pk]),
+            {'photos': fake_photo(), f'task{task.pk}_text': 'с фото'})
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=task)
+        self.assertEqual(submission.answer_text, 'с фото')
+        photo = SubmissionPhoto.objects.get()
+        self.client.post(
+            reverse('delete_photo', args=[self.assignment.pk, photo.pk]),
+            {f'task{task.pk}_text': 'после удаления фото'})
+        submission.refresh_from_db()
+        self.assertEqual(submission.answer_text, 'после удаления фото')
+        self.assertFalse(SubmissionPhoto.objects.exists())
+
+    def test_post_without_answer_fields_does_not_clear(self):
+        """POST без полей ответа (форма фото) не затирает сохранённое."""
+        task = self.tasks[0]
+        Submission.objects.create(
+            assignment=self.assignment, task=task, answer_text='было')
+        self.client.post(
+            reverse('upload_photo', args=[self.assignment.pk, task.pk]),
+            {'photos': fake_photo()})
+        self.assertEqual(
+            Submission.objects.get(task=task).answer_text, 'было')
+        # А явно присланная пустая строка — это осознанная очистка
+        self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{task.pk}_text': ''})
+        self.assertEqual(Submission.objects.get(task=task).answer_text, '')
+
+    def test_save_answers_xhr_returns_json(self):
+        task = self.tasks[0]
+        response = self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{task.pk}_text': 'x = 3'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        self.assertEqual(
+            Submission.objects.get(task=task).answer_text, 'x = 3')
+        # После отправки автосохранение получает JSON-отказ, а не HTML 403
+        self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
+        response = self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{task.pk}_text': 'поздно'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(response.json()['ok'])
+        self.assertEqual(
+            Submission.objects.get(task=task).answer_text, 'x = 3')
+
+    def test_assignment_form_has_autosave(self):
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(response, 'data-autosave="change"')
+
     def test_save_subitem_answers(self):
         """У задачи с подпунктами ответы сохраняются отдельно (SubmissionPart)."""
         item = self.assignment.worksheet.ordered_items()[0]
