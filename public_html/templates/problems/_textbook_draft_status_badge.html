@@ -1,0 +1,5 @@
+{% if draft.imported_task %}
+<a class="import-status-link" href="{% url 'task_detail' draft.imported_task_id %}" target="_blank" rel="noopener" title="{{ draft.get_status_display }}"><span class="import-status import-status-{{ kind }}">{{ short }}</span></a>
+{% else %}
+<span class="import-status import-status-{{ kind }}" title="{{ draft.get_status_display }}">{{ short }}</span>
+{% endif %}

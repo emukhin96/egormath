@@ -1,0 +1,26 @@
+{% load task_extras %}
+{% if page.has_other_pages %}
+{% with q=query|without_page %}
+<nav class="pagination" aria-label="Страницы">
+  {% if page.has_previous %}
+    <a class="btn btn-secondary" href="?{% if q %}{{ q }}&{% endif %}page={{ page.previous_page_number }}">Назад</a>
+  {% else %}
+    <span class="btn btn-secondary" aria-disabled="true">Назад</span>
+  {% endif %}
+  {% for num in page|page_numbers %}
+    {% if num is None %}
+      <span class="pagination-ellipsis" aria-hidden="true">…</span>
+    {% elif num == page.number %}
+      <span class="btn btn-secondary is-current" aria-current="page">{{ num }}</span>
+    {% else %}
+      <a class="btn btn-secondary" href="?{% if q %}{{ q }}&{% endif %}page={{ num }}">{{ num }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if page.has_next %}
+    <a class="btn btn-secondary" href="?{% if q %}{{ q }}&{% endif %}page={{ page.next_page_number }}">Следующая</a>
+  {% else %}
+    <span class="btn btn-secondary" aria-disabled="true">Следующая</span>
+  {% endif %}
+</nav>
+{% endwith %}
+{% endif %}

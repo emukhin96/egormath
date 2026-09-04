@@ -45,7 +45,7 @@ def strip_subitem_punct(text):
     «.») сохраняет точку: «Приведите пример.» — законченная фраза.
     Вопросительный знак сохраняем всегда: «чему равен $x$?» и «$x>0$?»
     меняют смысл, если заменить «?» на «;»/«.». Фрагменты перечисления
-    хранятся без служебных «;»/«.» — система расставляет их при выводе.
+    хранятся без служебных «;»/«,»/«.» — система расставляет их при выводе.
     """
     text = text.strip()
     if not text:
@@ -54,7 +54,7 @@ def strip_subitem_punct(text):
         return text
     if text[0].isupper() and text.endswith('.'):
         return text
-    if text.endswith((';', '.')):
+    if text.endswith((';', '.', ',')):
         text = text[:-1].rstrip()
     return text
 
@@ -317,10 +317,54 @@ _TEXT_CMD = (
 )
 _SEED_RE = re.compile(
     r'\\(?!(?:' + _TEXT_CMD + r')\b)[a-zA-Z]+\*?'
+    r'|\\\{'
     r'|[A-Za-z0-9)]\s*[\^_]'
     r'|[A-Za-z0-9]\s*=\s*(?:[A-Za-z0-9\\(+\-]|\\)'
 )
 _MATHY_RE = re.compile(r"[A-Za-z0-9\\{}\(\)\[\]\^_+\-=<>|/*']")
+
+
+def ensure_displaystyle_fractions(text):
+    """В инлайн-формулах с ``\\frac`` добавляет ``\\displaystyle``.
+
+    Display-математика (``$$`` / ``\\[``) уже крупная. Повторный вызов
+    не дублирует команду.
+    """
+    if not text or '\\frac' not in text:
+        return text
+
+    def repl(match):
+        span = match.group(0)
+        if span.startswith('$$') or span.startswith('\\['):
+            return span
+        if '\\frac' not in span or '\\displaystyle' in span:
+            return span
+        if span.startswith('$'):
+            return r'$\displaystyle ' + span[1:]
+        if span.startswith('\\('):
+            return r'\(\displaystyle ' + span[2:]
+        return span
+
+    return _MATH_SPAN_RE.sub(repl, text)
+
+
+_BROKEN_LEFT_DOLLAR_RE = re.compile(r'\\left[^$]*\$')
+_BROKEN_SET_DOLLAR_RE = re.compile(r'\\\{[^$}]*\$')
+
+
+def heal_split_math_dollars(text):
+    """Убирает ``$``, которые разорвали ``\\left…\\right`` или ``\\{…\\}``.
+
+    Старый wrap останавливался на ``;`` внутри формулы и вставлял доллары
+    посередине. После вырезания хвоста такие осколки снова склеиваем.
+    """
+    text = str(text or '')
+    if '$' not in text:
+        return text
+    if not (_BROKEN_LEFT_DOLLAR_RE.search(text)
+            or _BROKEN_SET_DOLLAR_RE.search(text)):
+        return text
+    return text.replace('$', '')
 
 
 def wrap_bare_math(text):
@@ -345,6 +389,11 @@ def wrap_bare_math(text):
 
 
 def _wrap_chunk(chunk):
+    # Незакрытая ``\(`` — уже математика: иначе ``\{`` получит ``$`` внутри
+    # и выйдет ``$\(\{…\}$``.
+    opener = chunk.find(r'\(')
+    if opener != -1:
+        return _wrap_chunk(chunk[:opener]) + chunk[opener:]
     if not chunk or not _SEED_RE.search(chunk):
         return chunk
     spans = []
@@ -391,6 +440,17 @@ def _can_extend(text, index):
         return False
     if char.isspace():
         return True
+    if char in ',;':
+        # Координаты и множества: ``\{-2;1\}``, ``(2 ; 3)``.
+        # Запятая перед русским словом («0, откуда») — не математика.
+        nxt_index = index + 1
+        length = len(text)
+        while nxt_index < length and text[nxt_index].isspace():
+            nxt_index += 1
+        if nxt_index >= length:
+            return False
+        nxt = text[nxt_index]
+        return nxt.isdigit() or nxt in '\\({[+-.'
     if _MATHY_RE.match(char):
         return True
     if char == '.':

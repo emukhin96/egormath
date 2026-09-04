@@ -1,36 +1,109 @@
 {% extends 'base.html' %}
-{% load task_extras %}
+{% load static task_extras %}
+{% block extra_head %}<script defer src="{% static 'js/textbook_import_review.js' %}?v=5"></script>{% endblock %}
 {% block title %}Сверка {{ draft.external_id }} — EgorMath{% endblock %}
 {% block content %}
 <div class="page-head"><div><span class="page-eyebrow">Ручная сверка</span><h1>{{ draft.external_id }}</h1>
   <p class="page-subtitle">{{ batch.source }} · {{ draft.source_path|join:' › ' }}</p></div>
-  <a class="btn btn-secondary" href="{% url 'textbook_import_detail' batch.pk %}">К партии</a>
+  <div class="form-buttons">
+    <a class="btn btn-secondary" href="{% url 'textbook_import_help' %}#review-result">Инструкция</a>
+    <a class="btn btn-secondary" href="{% url 'textbook_import_detail' batch.pk %}">К партии</a>
+  </div>
 </div>
+{% if draft.imported_task %}<p class="msg">Эта задача уже в базе: <a href="{% url 'task_detail' draft.imported_task_id %}" target="_blank" rel="noopener">открыть сохранённую версию</a>.</p>{% endif %}
+{% if review_locked %}<p class="helptext">Черновик только для просмотра: после загрузки в каталог сверка его не меняет. Исправления — в карточке задачи.</p>{% endif %}
 {% if draft.warnings %}<div class="msg msg-warning"><strong>Требует внимания:</strong> {{ draft.warnings|join:'; ' }}</div>{% endif %}
 <form method="post" class="import-review-grid">{% csrf_token %}
   <section class="card">
     <h2>Задача и привязка</h2>
-    <p><label for="{{ form.external_id.id_for_label }}">Ключ источника</label>{{ form.external_id.errors }}{{ form.external_id }}</p>
-    <p><label for="{{ form.source_number.id_for_label }}">Номер</label>{{ form.source_number.errors }}{{ form.source_number }}</p>
-    <p><label for="{{ form.text_latex.id_for_label }}">Условие</label>{{ form.text_latex.errors }}{{ form.text_latex }}</p>
-    <div class="math-content task-text">{{ draft.text_latex|web_text|linebreaksbr }}</div>
-    <p><label for="{{ form.subitems.id_for_label }}">Подпункты (структурированный JSON)</label>{{ form.subitems.errors }}{{ form.subitems }}<span class="helptext">Каждый объект содержит label, text_latex и при наличии авторские ответ/решение.</span></p>
-    {% if draft.images %}<div class="msg msg-warning"><strong>Изображения требуют отдельной загрузки:</strong> {{ draft.images|join:', ' }}. До загрузки ресурсов commit партии заблокирован.</div>{% endif %}
-    <p><label for="{{ form.topic.id_for_label }}">Тема рубрикатора</label>{{ form.topic.errors }}{{ form.topic }}</p>
+    <div class="import-review-meta">
+      <p><label for="{{ form.external_id.id_for_label }}">Ключ источника</label>{{ form.external_id.errors }}{{ form.external_id }}</p>
+      <p><label for="{{ form.source_number.id_for_label }}">Номер</label>{{ form.source_number.errors }}{{ form.source_number }}</p>
+    </div>
+    <div class="import-preview-block"><strong>Предпросмотр условия</strong>{% if draft.text_latex %}<div class="math-content task-text">{{ draft.text_latex|web_text|linebreaksbr }}</div>{% else %}<span class="muted">Общее условие отсутствует: ниже используются подпункты.</span>{% endif %}</div>
+    <details class="import-source-edit"{% if form.text_latex.errors %} open{% endif %}>
+      <summary>Править исходник условия</summary>
+      <p>
+        <span class="import-field-toolbar"><label for="{{ form.text_latex.id_for_label }}">Условие</label>{% include 'problems/_wrap_math_button.html' with field_id=form.text_latex.id_for_label %}</span>
+        {{ form.text_latex.errors }}{{ form.text_latex }}
+      </p>
+    </details>
+    <details{% if form.subitems.errors %} open{% endif %}><summary>Структурированный JSON подпунктов</summary><p>{{ form.subitems.errors }}{{ form.subitems }}<span class="helptext">Служебное поле: при сохранении его заполняют поля подпунктов ниже. Добавить или удалить пункт можно здесь.</span></p></details>
+    {% if review_subitems %}
+    <div class="import-subitem-editors">
+      <strong>Подпункты и авторские материалы</strong>
+      {% for subitem in review_subitems %}
+      <section class="import-subitem-editor">
+        <h3>Подпункт {{ subitem.label|default:forloop.counter }}</h3>
+        {% if subitem.text_latex %}<div class="import-preview-block"><strong>Предпросмотр условия</strong><div class="math-content">{{ subitem.text_latex|web_text }}</div></div>{% endif %}
+        <details class="import-source-edit"{% if form.subitems.errors %} open{% endif %}>
+          <summary>Править исходник условия</summary>
+          <p><label for="subitem_label_{{ forloop.counter0 }}">Метка</label><input id="subitem_label_{{ forloop.counter0 }}" name="subitem_label_{{ forloop.counter0 }}" type="text" value="{{ subitem.label }}"></p>
+          <p>
+            <span class="import-field-toolbar"><label for="subitem_text_{{ forloop.counter0 }}">Условие подпункта</label><button type="button" class="btn btn-small btn-secondary import-wrap-math" data-wrap-math="subitem_text_{{ forloop.counter0 }}" title="Обернуть выделение или всё поле в $…$">$…$</button></span>
+            <textarea id="subitem_text_{{ forloop.counter0 }}" name="subitem_text_{{ forloop.counter0 }}" rows="3">{{ subitem.text_latex }}</textarea>
+          </p>
+        </details>
+        {% if subitem.author_answer_latex %}<div class="import-preview-block"><strong>Предпросмотр ответа</strong><div class="math-content">{{ subitem.author_answer_latex|web_answer }}</div></div>{% endif %}
+        <details class="import-source-edit">
+          <summary>{% if subitem.author_answer_latex %}Править исходник ответа{% else %}Добавить ответ{% endif %}</summary>
+          <p>
+            <span class="import-field-toolbar"><label for="subitem_author_answer_{{ forloop.counter0 }}">Авторский ответ подпункта</label><button type="button" class="btn btn-small btn-secondary import-wrap-math" data-wrap-math="subitem_author_answer_{{ forloop.counter0 }}" title="Обернуть выделение или всё поле в $…$">$…$</button></span>
+            <textarea id="subitem_author_answer_{{ forloop.counter0 }}" name="subitem_author_answer_{{ forloop.counter0 }}" rows="2">{{ subitem.author_answer_latex }}</textarea>
+          </p>
+        </details>
+        {% if subitem.author_solution_latex %}<div class="import-preview-block"><strong>Предпросмотр решения</strong><div class="math-content">{{ subitem.author_solution_latex|web_text|linebreaksbr }}</div></div>{% endif %}
+        <details class="import-source-edit">
+          <summary>{% if subitem.author_solution_latex %}Править исходник решения{% else %}Добавить решение{% endif %}</summary>
+          <p>
+            <span class="import-field-toolbar"><label for="subitem_author_solution_{{ forloop.counter0 }}">Авторское решение подпункта</label><button type="button" class="btn btn-small btn-secondary import-wrap-math" data-wrap-math="subitem_author_solution_{{ forloop.counter0 }}" title="Обернуть выделение или всё поле в $…$">$…$</button></span>
+            <textarea id="subitem_author_solution_{{ forloop.counter0 }}" name="subitem_author_solution_{{ forloop.counter0 }}" rows="5">{{ subitem.author_solution_latex }}</textarea>
+          </p>
+        </details>
+      </section>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if draft.author_answer_latex or draft.author_solution_latex or not review_subitems %}
+    {% if review_subitems %}<p class="helptext">Ниже — ответ или решение, которые парсер не разложил по подпунктам. После переноса в пункты родительские поля очистятся.</p>{% endif %}
+    {% if draft.author_answer_latex %}<div class="import-preview-block"><strong>Предпросмотр авторского ответа</strong><div class="math-content">{{ draft.author_answer_latex|web_answer }}</div></div>{% endif %}
+    <details class="import-source-edit"{% if form.author_answer_latex.errors %} open{% endif %}>
+      <summary>{% if draft.author_answer_latex %}Править исходник ответа{% else %}Добавить ответ{% endif %}</summary>
+      <p>
+        <span class="import-field-toolbar"><label for="{{ form.author_answer_latex.id_for_label }}">Авторский ответ</label>{% include 'problems/_wrap_math_button.html' with field_id=form.author_answer_latex.id_for_label %}</span>
+        {{ form.author_answer_latex.errors }}{{ form.author_answer_latex }}
+      </p>
+    </details>
+    {% if draft.author_solution_latex %}<div class="import-preview-block"><strong>Предпросмотр авторского решения</strong><div class="math-content">{{ draft.author_solution_latex|web_text|linebreaksbr }}</div></div>{% endif %}
+    <details class="import-source-edit"{% if form.author_solution_latex.errors %} open{% endif %}>
+      <summary>{% if draft.author_solution_latex %}Править исходник решения{% else %}Добавить решение{% endif %}</summary>
+      <p>
+        <span class="import-field-toolbar"><label for="{{ form.author_solution_latex.id_for_label }}">Авторское решение (включая редкое указание)</label>{% include 'problems/_wrap_math_button.html' with field_id=form.author_solution_latex.id_for_label %}</span>
+        {{ form.author_solution_latex.errors }}{{ form.author_solution_latex }}
+      </p>
+    </details>
+    {% endif %}
+    {% if draft_images %}<div class="import-preview-block"><strong>Рисунки</strong>
+      <ul class="import-asset-list">{% for item in draft_images %}<li>{% if item.asset %}<a href="{% url 'textbook_import_asset_file' batch.pk item.asset.pk %}">{{ item.name }}</a>{% if not item.asset.is_pdf %} <img class="import-asset-thumb" src="{% url 'textbook_import_asset_file' batch.pk item.asset.pk %}" alt="{{ item.name }}">{% endif %}{% else %}<span class="muted">{{ item.name }} — файл не сопоставлен</span>{% endif %}</li>{% endfor %}</ul>
+    </div>{% endif %}
+    {% if topic_candidates %}<p class="helptext">Кандидаты рубрикатора: {% for item in topic_candidates %}{{ item.name }} ({{ item.reason_label }}){% if not forloop.last %}; {% endif %}{% endfor %}. Точное совпадение ставится при импорте, похожее название остаётся подсказкой.</p>{% endif %}
+    <div><label>Темы рубрикатора</label>{% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True selected_json=selected_json %}<span class="helptext">Можно выбрать несколько тем, как в базе задач. Звезда отмечает основную. Поиск по коду или названию; ветви раскрываются до конкретной темы.</span></div>
   </section>
-  <section class="card">
-    <h2>Авторский ответ и решение</h2>
-    <p><label for="{{ form.copy_solution_from.id_for_label }}">{{ form.copy_solution_from.label }}</label>{{ form.copy_solution_from.errors }}{{ form.copy_solution_from }}<span class="helptext">{{ form.copy_solution_from.help_text }}</span></p>
-    {% if candidates %}<details><summary>Кандидаты с решениями</summary><ul>{% for item in candidates %}<li><button class="link-btn" type="button" onclick="document.getElementById('{{ form.copy_solution_from.id_for_label }}').value='{{ item.external_id|escapejs }}'">{{ item.external_id }}</button> — {{ item.text_latex|truncatechars:90 }}</li>{% endfor %}</ul></details>{% endif %}
-    <p><label for="{{ form.author_answer_latex.id_for_label }}">Авторский ответ</label>{{ form.author_answer_latex.errors }}{{ form.author_answer_latex }}</p>
-    <p><label for="{{ form.author_solution_latex.id_for_label }}">Авторское решение (включая редкое указание)</label>{{ form.author_solution_latex.errors }}{{ form.author_solution_latex }}</p>
-    <p><label for="{{ form.status.id_for_label }}">Решение проверки</label>{{ form.status.errors }}{{ form.status }}</p>
-  </section>
-  <div class="form-buttons import-review-actions">
-    {% if previous %}<a class="btn btn-secondary" href="{% url 'textbook_import_review' batch.pk previous.pk %}">← Предыдущая</a>{% endif %}
-    <button class="btn btn-secondary" type="submit">Сохранить</button>
-    <button class="btn" type="submit" name="save_next" value="1">Сохранить и дальше</button>
-    {% if following %}<a class="btn btn-secondary" href="{% url 'textbook_import_review' batch.pk following.pk %}">Следующая →</a>{% endif %}
+  <div class="import-review-actions">
+    <div class="import-status-field">
+      <span class="field-label">Результат проверки</span>
+      {{ form.status.errors }}
+      <div class="import-status-buttons" role="radiogroup" aria-label="Результат проверки">{% for value, label in form.status.field.choices %}<input class="import-status-radio" type="radio" name="status" id="id_status_{{ forloop.counter0 }}" value="{{ value }}"{% if form.status.value == value or not form.status.value and draft.status == value %} checked{% endif %}><button type="button" class="btn btn-secondary import-status-button{% if form.status.value == value or not form.status.value and draft.status == value %} is-active{% endif %}" data-status="{{ value }}" data-radio-id="id_status_{{ forloop.counter0 }}" aria-pressed="{% if form.status.value == value or not form.status.value and draft.status == value %}true{% else %}false{% endif %}">{{ label }}</button>{% endfor %}</div>
+      <p class="helptext import-review-status-hint">{% if review_locked %}Статус «Импортировано» зафиксирован. {% else %}«Одобрена», «Конфликт» и «Пропущена» только выбирают статус. Запись — после «Сохранить» или «Сохранить и дальше».{% endif %}</p>
+    </div>
+    <div class="form-buttons">
+      {% if previous %}<a class="btn btn-secondary" href="{% url 'textbook_import_review' batch.pk previous.pk %}">← Предыдущая</a>{% endif %}
+      {% if not review_locked %}
+      <button class="btn btn-secondary" type="submit">Сохранить</button>
+      <button class="btn" type="submit" name="save_next" value="1">Сохранить и дальше</button>
+      {% endif %}
+      {% if following %}<a class="btn btn-secondary" href="{% url 'textbook_import_review' batch.pk following.pk %}">Следующая →</a>{% endif %}
+    </div>
   </div>
 </form>
 {% endblock %}

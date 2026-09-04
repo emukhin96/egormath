@@ -1,31 +1,142 @@
 {% extends 'base.html' %}
+{% load static task_extras %}
+{% block extra_head %}<script defer src="{% static 'js/bulk.js' %}"></script><script defer src="{% static 'js/textbook_import_detail.js' %}"></script>{% endblock %}
 {% block title %}{{ batch.title }} — EgorMath{% endblock %}
 {% block content %}
 <div class="page-head">
   <div><span class="page-eyebrow">Партия импорта</span><h1>{{ batch.title }}</h1>
-    <p class="page-subtitle">{{ batch.source }} · {{ batch.get_status_display }} · {{ page.paginator.count }} задач</p></div>
-  <a class="btn btn-secondary" href="{% url 'textbook_import_list' %}">Все партии</a>
-</div>
-<div class="card">
+    <p class="page-subtitle">{{ batch.source }} · {{ batch.get_status_display }} · {{ batch.drafts.count }} задач</p></div>
   <div class="form-buttons">
-    <a class="btn btn-secondary" href="?">Все</a>
-    {% for tab in status_tabs %}<a class="btn btn-secondary" href="?status={{ tab.value }}">{{ tab.label }} ({{ tab.count }})</a>{% endfor %}
+    <a class="btn btn-secondary" href="{% url 'textbook_import_help' %}">Инструкция</a>
+    <a class="btn btn-secondary" href="{% url 'textbook_import_list' %}">Все партии</a>
+  </div>
+</div>
+{% if collection_groups %}
+<section class="card" id="collection-preview">
+  <h2>Предпросмотр подборок и массовая тема</h2>
+  <p class="muted">Нажмите название раздела или темы в сводке — таблица ниже покажет только эту подборку. «Все задачи» снова показывает партию по порядку. При загрузке в каталог глава или тема станет подборкой, а разделы и варианты — заголовками рубрик. Назначение темы изменяет только черновики; задачи в рабочей базе пока не создаются.</p>
+  <p class="form-buttons"><a class="btn btn-secondary{% if not selected_group %} is-current{% endif %}" href="{{ all_sections_href }}">Все задачи</a></p>
+  {% if ziv_variant_summary %}
+  <details class="import-ziv-parity" open>
+    <summary>Число задач по вариантам</summary>
+    <table class="list import-ziv-parity-table">
+      <tr><th>Раздел</th><th>Тема</th><th>Задач в вариантах</th><th>Всего</th></tr>
+      {% for row in ziv_variant_summary %}
+      <tr{% if row.uneven %} class="import-ziv-parity-uneven"{% endif %}>
+        <td>{% if row.work_href %}<a href="{{ row.work_href }}"{% if row.work_current %} class="is-current"{% endif %}>{{ row.work|heading_dot }}</a>{% else %}{{ row.work|heading_dot }}{% endif %}</td>
+        <td>{% if row.title_href %}<a href="{{ row.title_href }}"{% if row.title_current %} class="is-current"{% endif %}>{{ row.title|heading_dot }}</a>{% else %}{{ row.title|heading_dot }}{% endif %}</td>
+        <td>{{ row.counts_label }}</td>
+        <td>{{ row.total }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    <p class="helptext">Подсвечены темы, где длины вариантов не сходятся парами 1–2, 3–4, 5–6, 7–8. Это та сводка, по которой видно слипание задач.</p>
+  </details>
+  {% elif section_nav %}
+  <table class="list import-section-nav">
+    <tr><th>Раздел</th><th>Тема</th><th>Задач</th></tr>
+    {% for row in section_nav %}
+    <tr>
+      <td>{% if row.work_href %}<a href="{{ row.work_href }}"{% if row.work_current %} class="is-current"{% endif %}>{{ row.work|heading_dot }}</a>{% else %}{{ row.work|heading_dot }}{% endif %}</td>
+      <td>{% if row.title_href %}<a href="{{ row.title_href }}"{% if row.title_current %} class="is-current"{% endif %}>{{ row.title|heading_dot }}</a>{% else %}{{ row.title|heading_dot }}{% endif %}</td>
+      <td>{{ row.count }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+  {% if selected_group %}
+  <div class="import-section-current">
+    <span class="badge badge-assigned">{{ selected_group.title }}</span>
+    <span class="muted">{{ selected_group.level_label }}</span>
+    <a class="btn btn-secondary btn-small" href="{{ all_sections_href }}">Все задачи</a>
+  </div>
+  <p class="muted">Путь: {{ selected_group.path|join:' › ' }} · Задач: {{ selected_group.count }}</p>
+  <p><strong>Текущие темы:</strong> {% for item in selected_group.topic_counts %}{{ item.label }} — {{ item.count }}{% if not forloop.last %}; {% endif %}{% endfor %}</p>
+  {% if selected_group.topic_candidates %}<p class="helptext">Кандидаты рубрикатора: {% for item in selected_group.topic_candidates %}{{ item.name }} ({{ item.reason_label }}){% if not forloop.last %}; {% endif %}{% endfor %}. Точное совпадение ставится при импорте. Кнопка ниже назначит выбранные или единственную предложенную тему всему разделу.</p>{% endif %}
+  {% if batch.diagnostics.ziv_uneven_variant_topics %}<p class="msg msg-warning">Жёлтые строки в сводке выше — темы, где число задач в парных вариантах не совпадает. Откройте такой раздел и проверьте, не слиплись ли формулировки.</p>{% endif %}
+  {% if selected_group.can_commit %}
+  <form method="post" action="{% url 'textbook_import_commit_section' batch.pk %}" onsubmit="return confirm('Загрузить в каталог {{ selected_group.approved_count }} одобренных задач раздела «{{ selected_group.title }}»? Непроверенные строки этого и других разделов останутся в партии.');">
+    {% csrf_token %}
+    <input type="hidden" name="section" value="{{ selected_group.token }}">
+    <div class="form-buttons"><button class="btn" type="submit">Загрузить тему в каталог</button></div>
+  </form>
+  {% elif batch.status != 'imported' and selected_group.open_count %}
+  <p class="helptext">Одобрите хотя бы одну задачу этого раздела — появится кнопка загрузки только её одобренных строк.</p>
+  {% endif %}
+  {% if batch.status != 'imported' %}
+  <form method="post" action="{% url 'textbook_import_assign_section_topic' batch.pk %}" onsubmit="return confirm('Назначить выбранные темы всем задачам раздела «{{ selected_group.title }}»?');">
+    {% csrf_token %}
+    <input type="hidden" name="section" value="{{ selected_group.token }}">
+    {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True selected_json=selected_json %}
+    <div class="form-buttons"><button class="btn" type="submit">{% if suggested_topic %}Назначить тему: {{ suggested_topic }}{% else %}Назначить выбранные темы разделу{% endif %}</button></div>
+  </form>
+  {% endif %}
+  {% endif %}
+</section>
+{% endif %}
+{% if batch.status != 'imported' %}
+<section class="card">
+  <h2>Рисунки партии</h2>
+  <p class="muted">ZIP сопоставляется по имени файла без расширения со ссылками <code>\includegraphics</code> и <code>\taskpic</code>. Можно загрузить несколько архивов подряд.</p>
+  <form method="post" action="{% url 'textbook_import_attach_images' batch.pk %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <label for="{{ image_form.images_zip.id_for_label }}">{{ image_form.images_zip.label }}</label>
+    <div class="form-buttons">
+      {{ image_form.images_zip }}
+      <button class="btn btn-secondary" type="submit">Сопоставить рисунки</button>
+    </div>
+    <p class="helptext">{{ image_form.images_zip.help_text }}</p>
+  </form>
+</section>
+{% endif %}
+<div class="card" id="import-drafts">
+  <h2>Задачи партии
+    <label class="ws-toggle" title="Показывать ответы и решения задач">
+      <input type="checkbox" id="toggle-import-draft-answers">
+      <span class="ws-toggle-slider"></span>
+      <span class="ws-toggle-text">ответы и решения</span>
+    </label>
+  </h2>
+  <div class="form-buttons import-toolbar">
+    <a class="btn btn-secondary{% if not status and not answers_filter %} is-current{% endif %}" href="{{ all_drafts_href }}">Все</a>
+    {% for tab in status_tabs %}<a class="btn btn-secondary{% if tab.current %} is-current{% endif %}" href="{{ tab.href }}">{{ tab.label }} ({{ tab.count }})</a>{% endfor %}
+    <a class="btn btn-secondary{% if answers_filter %} is-current{% endif %}" href="{{ missing_answers_href }}">Без ответов ({{ missing_answer_count }})</a>
+    {% if batch.status != 'imported' %}
+    <form method="post" action="{% url 'textbook_import_approve_clean' batch.pk %}">{% csrf_token %}<button class="btn btn-secondary" type="submit">Одобрить безошибочные</button></form>
+    <form method="post" action="{% url 'textbook_import_commit' batch.pk %}" onsubmit="return confirm('Загрузить {{ approved_count }} одобренных задач и создать подборки? Непроверенные и конфликтные строки останутся в партии.');">{% csrf_token %}<button class="btn" type="submit"{% if not approved_count %} disabled{% endif %}>Загрузить в каталог</button></form>
+    {% endif %}
   </div>
   {% if batch.status != 'imported' %}
-  <div class="form-buttons">
-    <form method="post" action="{% url 'textbook_import_approve_clean' batch.pk %}">{% csrf_token %}<button class="btn btn-secondary" type="submit">Одобрить безошибочные</button></form>
-    <form method="post" action="{% url 'textbook_import_commit' batch.pk %}" onsubmit="return confirm('Загрузить все одобренные задачи и создать подборки?');">{% csrf_token %}<button class="btn" type="submit">Загрузить в каталог</button></form>
-  </div>
+  <form id="import-bulk-form" method="post" action="{% url 'textbook_import_bulk' batch.pk %}" class="bulk-bar" data-bulk hidden>
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <strong data-bulk-count>Выбрано: 0</strong>
+    {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True selected_json='{"topics":[],"primary":null,"grades":[],"facets":[],"exams":[],"difficulty":null}' %}
+    <button type="submit" name="apply" value="1" class="btn btn-small">Добавить темы</button>
+    <button type="submit" name="status" value="approved" class="btn btn-small">Одобрить</button>
+    <button type="submit" name="status" value="needs_review" class="btn btn-small btn-secondary">На проверку</button>
+    <button type="submit" name="status" value="conflict" class="btn btn-small btn-secondary">Конфликт</button>
+    <button type="submit" name="skip" value="1" class="btn btn-small btn-secondary">Пропустить</button>
+    <button type="submit" name="delete" value="1" class="btn btn-small btn-danger" onclick="return confirm('Удалить выбранные черновики из партии?');">Удалить</button>
+  </form>
   {% endif %}
-  <table class="list">
-    <tr><th>Ключ</th><th>№</th><th>Раздел</th><th>Тема</th><th>Уверенность</th><th>Замечания</th><th>Статус</th></tr>
+  <div class="import-drafts-wrap">
+  <table class="list import-drafts">
+      <tr>{% if batch.status != 'imported' %}<th class="col-select"><input type="checkbox" data-bulk-all="import-bulk-form" title="Выбрать все задачи на странице"></th>{% endif %}<th class="col-key">Ключ</th><th class="col-text">Задание и подпункты</th><th class="col-answer">Отв.</th><th class="col-solution">Реш.</th><th class="col-meta">Раздел + темы</th><th class="col-confidence" title="Уверенность">Увер.</th></tr>
     {% for draft in page %}<tr>
-      <td><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.external_id }}</a></td>
-      <td>{{ draft.source_number }}</td><td>{{ draft.source_path|join:' › ' }}</td>
-      <td>{{ draft.topic|default:draft.topic_original|default:'—' }}</td><td>{{ draft.confidence }}</td>
-      <td>{% if draft.warnings %}{{ draft.warnings|join:'; ' }}{% else %}—{% endif %}</td><td>{{ draft.get_status_display }}</td>
+      {% if batch.status != 'imported' %}<td class="col-select">{% if draft.status != 'imported' %}<input type="checkbox" class="row-select" name="ids" value="{{ draft.pk }}" form="import-bulk-form" title="Выбрать задачу">{% endif %}</td>{% endif %}
+      <td class="col-key"><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.external_id }}</a><div class="import-key-status">{% include 'problems/_textbook_draft_status.html' with draft=draft %}</div></td>
+      <td class="col-text">{% include 'problems/_textbook_draft_preview.html' with draft=draft %}</td>
+      <td class="col-answer">{% if draft.has_author_answer_material %}<span class="badge" title="{% if draft.subitems %}{{ draft.author_answer_subitem_count }}/{{ draft.subitems|length }}{% else %}есть{% endif %}">да</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="col-solution">{% if draft.has_author_solution_material %}<span class="badge" title="{% if draft.subitems %}{{ draft.author_solution_subitem_count }}/{{ draft.subitems|length }}{% else %}есть{% endif %}">да</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="col-meta">
+        <div class="import-section-path">{% for part in draft.source_path %}<div class="import-section-part">{{ part|heading_dot }}</div>{% endfor %}</div>
+        <div class="import-section-topics">{% include 'problems/_textbook_draft_topic.html' with draft=draft %}</div>
+      </td>
+      <td class="col-confidence">{{ draft.confidence }}</td>
     </tr>{% endfor %}
   </table>
-  {% if page.has_other_pages %}<p class="form-buttons">{% if page.has_previous %}<a class="btn btn-secondary" href="?status={{ status }}&page={{ page.previous_page_number }}">←</a>{% endif %}<span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a class="btn btn-secondary" href="?status={{ status }}&page={{ page.next_page_number }}">→</a>{% endif %}</p>{% endif %}
+  </div>
+  {% include 'includes/pagination.html' with page=page query=list_query %}
 </div>
 {% endblock %}

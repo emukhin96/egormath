@@ -102,10 +102,33 @@ def _split_outside_math(text, pattern):
     return parts
 
 
+_SECTION_RE = re.compile(r'\\(?:sub)*section\*?\{[^{}]*\}')
+
+
+# Десятичная запятая в формуле: KaTeX иначе ставит пробел после запятой.
+_DECIMAL_COMMA_RE = re.compile(r'(?<!\{)(\d),(\d)')
+
+
+def _protect_decimal_commas(value):
+    """Цифра,цифра → цифра{,}цифра; уже защищённые и списки с пробелом не трогаем."""
+    return _DECIMAL_COMMA_RE.sub(r'\1{,}\2', value)
+
+
+def _math_for_web(value):
+    """KaTeX не переносит формулу по \\n; linebreaksbr тоже не должен.
+
+    Десятичную запятую делаем ординарной ({,}): иначе KaTeX считает её
+    разделителем списка и добавляет тонкий пробел. Исходник в базе
+    не меняем — только показ.
+    """
+    return _protect_decimal_commas(re.sub(r'\s+', ' ', value).strip())
+
+
 def _plain(text):
     """Замены в фрагменте вне формул: переносы, ~, экранированные символы."""
     text = re.sub(r'\\par\b', _BR + _BR, text)
     text = text.replace('\\\\', _BR)
+    text = text.replace('\n', _BR)
     text = re.sub(r'(?<!\\)~', _NBSP, text)
     for src, dst in _UNESCAPE:
         text = text.replace(src, dst)
@@ -134,7 +157,7 @@ def _fragment_html(text):
     pos = 0
     for m in _MATH_RE.finditer(text):
         parts.append(_plain(text[pos:m.start()]))
-        parts.append(m.group(0))
+        parts.append(_math_for_web(m.group(0)))
         pos = m.end()
     parts.append(_plain(text[pos:]))
     return _markers_to_html(escape(''.join(parts)))
@@ -168,6 +191,8 @@ def tex_to_web_html(source):
     и в тексте, и в математике.
     """
     text = _COMMENT_RE.sub('', source or '').strip()
+    text = _SECTION_RE.sub('', text)
+    text = re.sub(r'(?:\n|\\\\)*Вариант\s+\d+\s*$', '', text)
 
     tables = []
 
@@ -184,7 +209,7 @@ def tex_to_web_html(source):
     pos = 0
     for m in _MATH_RE.finditer(text):
         parts.append(_plain(text[pos:m.start()]))
-        parts.append(m.group(0))
+        parts.append(_math_for_web(m.group(0)))
         pos = m.end()
     parts.append(_plain(text[pos:]))
 

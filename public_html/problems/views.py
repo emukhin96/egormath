@@ -1,11 +1,12 @@
+import hashlib
 import json
 import re
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db import IntegrityError
-from django.db.models import Count, Q
+from django.db import IntegrityError, transaction
+from django.db.models import Count, Max, Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -18,10 +19,10 @@ from accounts.decorators import teacher_required
 
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
                     TaskSubitemFormSet, TextbookBundleUploadForm,
-                    TextbookDraftReviewForm)
+                    TextbookDraftReviewForm, TextbookImageArchiveForm)
 from .models import (Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
-                     TextbookImportBatch, TextbookTaskDraft, Topic,
-                     topic_tree)
+                     TextbookImportAsset, TextbookImportBatch,
+                     TextbookTaskDraft, Topic, topic_tree)
 from .rubricator import (GRADE_LEVEL_TO_CODE, apply_task_taxonomy,
                          dumps_state, filter_by_taxonomy,
                          filter_state_from_params, parse_grade_choice,
@@ -730,6 +731,324 @@ def _own_import_batch(request, pk):
     return batch
 
 
+def _textbook_collection_groups(batch):
+    """Даёт агрегаты по главам и по будущим листовым подборкам."""
+    rows = (batch.drafts.exclude(status=TextbookTaskDraft.STATUS_SKIPPED)
+            .order_by()
+            .values('collection_key', 'source_path')
+            .annotate(count=Count('pk'), title=Max('collection_title')))
+    grouped = {}
+    for row in rows:
+        path = tuple(
+            str(part).strip() for part in row['source_path']
+            if str(part).strip())
+        if not path:
+            path = ((row['title'] or '').strip() or batch.title,)
+        identity = ((row['collection_key'] or '').strip(), path)
+        group = grouped.setdefault(identity, {
+            'collection_key': identity[0],
+            'path': list(path),
+            'title': (row['title'] or '').strip() or path[-1],
+            'selectors': [],
+            'count': 0,
+            'is_leaf': True,
+            'level_label': 'Подраздел',
+        })
+        group['selectors'].append((
+            row['collection_key'], row['source_path']))
+        group['count'] += row['count']
+    leaf_groups = list(grouped.values())
+    for leaf in leaf_groups:
+        for depth in range(1, len(leaf['path'])):
+            prefix = tuple(leaf['path'][:depth])
+            identity = ('__prefix__', prefix)
+            group = grouped.setdefault(identity, {
+                'collection_key': '',
+                'path': list(prefix),
+                'title': prefix[-1],
+                'selectors': [],
+                'count': 0,
+                'is_leaf': False,
+                'level_label': ('Глава целиком'
+                                if depth == 1 else 'Раздел целиком'),
+            })
+            group['selectors'].extend(leaf['selectors'])
+            group['count'] += leaf['count']
+    for identity, group in grouped.items():
+        raw = json.dumps(identity, ensure_ascii=False, separators=(',', ':'))
+        group['token'] = hashlib.sha256(
+            raw.encode('utf-8')).hexdigest()[:20]
+        if not group['is_leaf'] and len(group['path']) == 1:
+            group['optgroup'] = 'Главы целиком'
+        elif not group['is_leaf']:
+            group['optgroup'] = 'Разделы целиком'
+        else:
+            group['optgroup'] = (
+                group['path'][0] if len(group['path']) > 1
+                else 'Подразделы')
+    return sorted(grouped.values(), key=lambda group: (
+        tuple(group['path']), group['is_leaf'], group['collection_key']))
+
+
+def _group_for_path(groups, path):
+    """Находит группу предпросмотра по пути: сначала главу/раздел, потом лист."""
+    path = tuple(path)
+    prefix = [group for group in groups
+              if tuple(group['path']) == path and not group['is_leaf']]
+    if prefix:
+        return prefix[0]
+    exact = [group for group in groups if tuple(group['path']) == path]
+    return exact[0] if exact else None
+
+
+def _section_filter_href(request, token):
+    """Тот же GET, что раньше отправляла форма «Показать подборку»."""
+    if not token:
+        return ''
+    query = _textbook_detail_query(
+        request, section=token, page=None, collection_page=None)
+    return f'?{query}#collection-preview'
+
+
+def _all_sections_href(request):
+    """Сбрасывает раздел, сохраняет вкладку статуса."""
+    query = _textbook_detail_query(
+        request, section=None, page=None, collection_page=None)
+    # Всегда оставляем «?», иначе «#якорь» не сбрасывает ?section=…
+    return f'?{query}#collection-preview'
+
+
+def _annotate_section_nav_row(row, request, selected_token,
+                              work_group, title_group):
+    work_token = work_group['token'] if work_group else ''
+    title_token = title_group['token'] if title_group else ''
+    row['work_href'] = _section_filter_href(request, work_token)
+    row['title_href'] = _section_filter_href(request, title_token)
+    row['work_current'] = bool(work_token and work_token == selected_token)
+    row['title_current'] = bool(title_token and title_token == selected_token)
+    return row
+
+
+def _link_ziv_variant_summary(summary, collection_groups, request,
+                              selected_token):
+    for row in summary:
+        work_group = _group_for_path(collection_groups, [row['work']])
+        title_path = [row['work'], row['title']] if row.get('title') else [
+            row['work']]
+        title_group = _group_for_path(collection_groups, title_path)
+        if title_group is None:
+            title_group = next(
+                (group for group in collection_groups
+                 if len(group['path']) >= 2
+                 and group['path'][0] == row['work']
+                 and group['path'][1] == row['title']
+                 and not group['is_leaf']),
+                None)
+        _annotate_section_nav_row(
+            row, request, selected_token, work_group, title_group)
+    return summary
+
+
+def _section_nav_rows(collection_groups, request, selected_token):
+    """Ссылки на главы и листовые подборки, если нет сводки Зива."""
+    rows = []
+    for leaf in collection_groups:
+        if not leaf['is_leaf']:
+            continue
+        work = leaf['path'][0]
+        title = leaf['path'][-1] if len(leaf['path']) > 1 else leaf['title']
+        row = {
+            'work': work,
+            'title': title,
+            'count': leaf['count'],
+        }
+        _annotate_section_nav_row(
+            row, request, selected_token,
+            _group_for_path(collection_groups, [work]),
+            leaf)
+        rows.append(row)
+    return rows
+
+
+def _textbook_detail_query(request=None, **overrides):
+    params = request.GET.copy() if request is not None else {}
+    if not hasattr(params, 'urlencode'):
+        from django.http import QueryDict
+        params = QueryDict('', mutable=True)
+    else:
+        params = params.copy()
+    for key, value in overrides.items():
+        if value in (None, ''):
+            params.pop(key, None)
+        else:
+            params[key] = value
+    return params.urlencode()
+
+
+def _textbook_detail_url(batch, request=None, **overrides):
+    query = _textbook_detail_query(request, **overrides)
+    url = reverse('textbook_import_detail', args=[batch.pk])
+    return f'{url}?{query}' if query else url
+
+
+ANSWERS_FILTER_NONE = 'none'
+
+
+def _draft_lacks_author_answer(answer, subitems) -> bool:
+    if str(answer or '').strip():
+        return False
+    return not any(
+        str((item or {}).get('author_answer_latex') or '').strip()
+        for item in (subitems or []))
+
+
+def _filter_drafts_without_answers(qs):
+    """Черновики без ответа у родителя и у всех подпунктов."""
+    empty_pks = [
+        pk for pk, answer, items in qs.values_list(
+            'pk', 'author_answer_latex', 'subitems')
+        if _draft_lacks_author_answer(answer, items)
+    ]
+    return qs.filter(pk__in=empty_pks)
+
+
+def _textbook_group_drafts(batch, group):
+    selector = Q()
+    for collection_key, source_path in group['selectors']:
+        selector |= Q(
+            collection_key=collection_key, source_path=source_path)
+    return batch.drafts.filter(selector)
+
+
+def _draft_taxonomy_json(draft):
+    from .textbook_topics import draft_topic_ids
+    ids = draft_topic_ids(draft)
+    return dumps_state({
+        'topics': ids,
+        'primary': draft.topic_id,
+        'grades': [], 'facets': [], 'exams': [], 'difficulty': None,
+    })
+
+
+def _attach_draft_taxonomy(drafts):
+    for draft in drafts:
+        draft.taxonomy_json = _draft_taxonomy_json(draft)
+
+
+def _group_topic_counts(drafts):
+    from collections import Counter
+    from .textbook_topics import draft_topic_ids
+    counter = Counter()
+    for draft in drafts:
+        ids = draft_topic_ids(draft)
+        if not ids:
+            counter[None] += 1
+        else:
+            for pk in ids:
+                counter[pk] += 1
+    topics = {
+        topic.pk: topic
+        for topic in Topic.objects.filter(
+            pk__in=[pk for pk in counter if pk])
+    }
+    rows = []
+    for pk, count in counter.most_common():
+        if pk is None:
+            rows.append({'label': 'Тема не выбрана', 'count': count})
+            continue
+        topic = topics.get(pk)
+        rows.append({
+            'label': str(topic) if topic else f'Тема #{pk}',
+            'count': count,
+        })
+    return rows
+
+
+def _subitem_label_key(value):
+    value = str(value or '').strip().lower()
+    aliases = {
+        'а': 'a', 'a': 'a',
+        'б': 'b', 'b': 'b', '6': 'b',
+        'в': 'c', 'c': 'c',
+        'г': 'd', 'd': 'd',
+        'д': 'e', 'e': 'e',
+    }
+    return aliases.get(value, value)
+
+
+def _review_subitem_post_count(post):
+    count = 0
+    while any(
+            f'{prefix}{count}' in post
+            for prefix in (
+                'subitem_text_', 'subitem_label_',
+                'subitem_author_answer_', 'subitem_author_solution_')):
+        count += 1
+    return count
+
+
+def _subitems_from_review_editors(post):
+    """Собирает подпункты из отдельных полей сверки; JSON не нужен."""
+    from .textbook_import import normalize_subitems
+    items = []
+    for index in range(_review_subitem_post_count(post)):
+        items.append({
+            'label': post.get(f'subitem_label_{index}', '') or str(index + 1),
+            'text_latex': post.get(f'subitem_text_{index}', ''),
+            'author_answer_latex': post.get(
+                f'subitem_author_answer_{index}', ''),
+            'author_solution_latex': post.get(
+                f'subitem_author_solution_{index}', ''),
+        })
+    return normalize_subitems(items)
+
+
+def _merge_review_subitems(from_editors, from_json):
+    """JSON задаёт состав и порядок; редакторы перекрывают пункт с той же меткой.
+
+    Иначе удаление или перестановка в служебном JSON молча игнорировались бы
+    полями подпунктов, которые страница всё равно присылает целиком.
+    """
+    by_label = {}
+    for item in from_editors:
+        key = _subitem_label_key(item.get('label'))
+        if key not in by_label:
+            by_label[key] = item
+    merged = []
+    used = set()
+    for item in from_json:
+        key = _subitem_label_key(item.get('label'))
+        if key in by_label and key not in used:
+            merged.append(by_label[key])
+            used.add(key)
+        else:
+            merged.append(item)
+    return merged
+
+
+def _overlay_review_author_fields(subitems, original, post):
+    """Авторские поля привязываются к метке пункта, а не к позиции JSON."""
+    by_label = {}
+    for index, item in enumerate(original):
+        answer_key = f'subitem_author_answer_{index}'
+        solution_key = f'subitem_author_solution_{index}'
+        if answer_key not in post and solution_key not in post:
+            continue
+        by_label[_subitem_label_key(item.get('label'))] = {
+            'author_answer_latex': post.get(answer_key, '').strip(),
+            'author_solution_latex': post.get(solution_key, '').strip(),
+        }
+    if not by_label:
+        return subitems
+    used = set()
+    for subitem in subitems:
+        key = _subitem_label_key(subitem.get('label'))
+        if key in by_label and key not in used:
+            subitem.update(by_label[key])
+            used.add(key)
+    return subitems
+
+
 @teacher_required
 def textbook_import_list(request):
     batches = TextbookImportBatch.objects.all()
@@ -743,22 +1062,48 @@ def textbook_import_list(request):
 
 
 @teacher_required
+def textbook_import_help(request):
+    """Инструкция редактора по сверке и загрузке задачника."""
+    return render(request, 'problems/textbook_import_help.html')
+
+
+@teacher_required
 def textbook_import_upload(request):
     from .textbook_import import (TextbookImportError,
-                                  create_batch_from_bundle, read_bundle)
+                                  attach_image_archive,
+                                  create_batch_from_bundle,
+                                  parse_tex_uploads, read_bundle)
     if request.method == 'POST':
         form = TextbookBundleUploadForm(request.POST, request.FILES)
         if form.is_valid():
             try:
-                payload = read_bundle(form.cleaned_data['bundle'])
-                batch = create_batch_from_bundle(
-                    payload, user=request.user,
-                    title=form.cleaned_data['title'],
-                    source_title=form.cleaned_data['source_title'],
-                    source_author=form.cleaned_data['source_author'],
-                    source_year=form.cleaned_data['source_year'])
+                input_kind = form.cleaned_data['input_kind']
+                if input_kind == TextbookBundleUploadForm.INPUT_JSON:
+                    payload = read_bundle(form.cleaned_data['bundle'])
+                else:
+                    payload = parse_tex_uploads(
+                        form.cleaned_data['tasks_tex'],
+                        profile=form.cleaned_data['resolved_profile'],
+                        solutions_upload=form.cleaned_data.get(
+                            'solutions_tex'))
+                with transaction.atomic():
+                    batch = create_batch_from_bundle(
+                        payload, user=request.user,
+                        title=form.cleaned_data['title'],
+                        source_title=form.cleaned_data['source_title'],
+                        source_author=form.cleaned_data['source_author'],
+                        source_year=form.cleaned_data['source_year'])
+                    images_zip = form.cleaned_data.get('images_zip')
+                    if images_zip:
+                        stored = attach_image_archive(batch, images_zip)
+                        messages.success(
+                            request,
+                            f'Сопоставлено рисунков: {stored}.')
             except TextbookImportError as exc:
-                form.add_error('bundle', str(exc))
+                error_field = ('bundle' if form.cleaned_data.get('input_kind')
+                               == TextbookBundleUploadForm.INPUT_JSON
+                               else 'tasks_tex')
+                form.add_error(error_field, str(exc))
             else:
                 messages.success(
                     request,
@@ -775,63 +1120,314 @@ def textbook_import_upload(request):
 def textbook_import_detail(request, pk):
     batch = _own_import_batch(request, pk)
     status = request.GET.get('status', '')
+    collection_groups = _textbook_collection_groups(batch)
+    groups_by_token = {group['token']: group for group in collection_groups}
+    selected_token = request.GET.get('section', '')
+    selected_group = groups_by_token.get(selected_token)
     drafts = batch.drafts.select_related('topic', 'imported_task')
+    if selected_group:
+        drafts = _textbook_group_drafts(batch, selected_group).select_related(
+            'topic', 'imported_task')
     if status in dict(TextbookTaskDraft.STATUS_CHOICES):
         drafts = drafts.filter(status=status)
+    answers_filter = request.GET.get('answers', '')
+    missing_answer_count = _filter_drafts_without_answers(drafts).count()
+    if answers_filter == ANSWERS_FILTER_NONE:
+        drafts = _filter_drafts_without_answers(drafts)
     paginator = Paginator(drafts, 50)
     page = paginator.get_page(request.GET.get('page'))
-    counts = dict(batch.drafts.values_list('status').annotate(n=Count('pk')))
+    # Meta.ordering по external_id иначе попадает в GROUP BY: для каждого
+    # статуса получаем много строк с единицей, а dict оставляет последнюю.
+    counts = dict(batch.drafts.order_by().values_list('status')
+                  .annotate(n=Count('pk')))
     status_tabs = [
-        {'value': value, 'label': label, 'count': counts.get(value, 0)}
+        {
+            'value': value,
+            'label': label,
+            'count': counts.get(value, 0),
+            'href': '?' + _textbook_detail_query(
+                request, status=value, page=None),
+            'current': status == value,
+        }
         for value, label in TextbookTaskDraft.STATUS_CHOICES
     ]
-    return render(request, 'problems/textbook_import_detail.html', {
+    selected_topic = None
+    selected_topics = []
+    suggested_topic = None
+    if selected_group:
+        from .textbook_topics import (candidate_reason_label,
+                                      draft_topic_ids,
+                                      suggested_topic_for_drafts)
+        group_drafts = _textbook_group_drafts(batch, selected_group)
+        selected_group['topic_counts'] = _group_topic_counts(
+            group_drafts.only('topic_id', 'topic_ids'))
+        suggested_topic = suggested_topic_for_drafts(
+            group_drafts.select_related('topic'))
+        assigned_sets = [
+            tuple(draft_topic_ids(draft))
+            for draft in group_drafts.only('topic_id', 'topic_ids')
+        ]
+        if assigned_sets and len(set(assigned_sets)) == 1 and assigned_sets[0]:
+            selected_topics = list(assigned_sets[0])
+            selected_topic = selected_topics[0]
+        elif suggested_topic:
+            selected_topic = suggested_topic.pk
+            selected_topics = [selected_topic]
+        candidate_rows = (
+            group_drafts.exclude(topic_candidates=[])
+            .values_list('topic_candidates', flat=True)[:8])
+        shown = []
+        seen = set()
+        for payload in candidate_rows:
+            for item in payload or []:
+                key = item.get('id') or item.get('code')
+                if key in seen:
+                    continue
+                seen.add(key)
+                shown.append({
+                    **item,
+                    'reason_label': candidate_reason_label(item.get('reason')),
+                })
+                if len(shown) == 5:
+                    break
+            if len(shown) == 5:
+                break
+        selected_group['topic_candidates'] = shown
+        section_statuses = list(group_drafts.values_list('status', flat=True))
+        selected_group['approved_count'] = sum(
+            status == TextbookTaskDraft.STATUS_APPROVED
+            for status in section_statuses)
+        selected_group['open_count'] = sum(
+            status in {TextbookTaskDraft.STATUS_REVIEW,
+                       TextbookTaskDraft.STATUS_CONFLICT}
+            for status in section_statuses)
+        selected_group['can_commit'] = (
+            selected_group['approved_count'] > 0
+            and batch.status != TextbookImportBatch.STATUS_IMPORTED)
+    _attach_draft_taxonomy(page.object_list)
+    context = taxonomy_page_context({
+        'topics': selected_topics,
+        'primary': selected_topic,
+        'grades': [], 'facets': [], 'exams': [], 'difficulty': None,
+    })
+    from .textbook_import import ziv_variant_summary
+    ziv_summary = _link_ziv_variant_summary(
+        ziv_variant_summary(batch), collection_groups, request,
+        selected_token)
+    context.update({
         'batch': batch,
         'page': page,
         'counts': counts,
         'status': status,
         'status_tabs': status_tabs,
+        'answers_filter': (
+            answers_filter if answers_filter == ANSWERS_FILTER_NONE else ''),
+        'missing_answer_count': missing_answer_count,
+        'all_drafts_href': '?' + _textbook_detail_query(
+            request, status=None, answers=None, page=None),
+        'missing_answers_href': '?' + _textbook_detail_query(
+            request,
+            answers=(None if answers_filter == ANSWERS_FILTER_NONE
+                     else ANSWERS_FILTER_NONE),
+            page=None),
+        'collection_groups': collection_groups,
+        'selected_group': selected_group,
+        'selected_section': selected_token if selected_group else '',
+        'selected_topic': selected_topic,
+        'suggested_topic': suggested_topic,
+        'ziv_variant_summary': ziv_summary,
+        'section_nav': (
+            [] if ziv_summary else _section_nav_rows(
+                collection_groups, request, selected_token)),
+        'image_form': TextbookImageArchiveForm(),
+        'list_query': _textbook_detail_query(
+            request, section=selected_token if selected_group else None,
+            page=None),
+        'all_sections_href': _all_sections_href(request),
+        'approved_count': counts.get(TextbookTaskDraft.STATUS_APPROVED, 0),
     })
+    return render(request, 'problems/textbook_import_detail.html', context)
+
+
+@teacher_required
+@require_POST
+@transaction.atomic
+def textbook_import_assign_section_topic(request, pk):
+    """Назначает одну тему всем черновикам будущей подборки."""
+    batch = _own_import_batch(request, pk)
+    batch = TextbookImportBatch.objects.select_for_update().get(pk=batch.pk)
+    section_token = request.POST.get('section', '')
+    group = next((item for item in _textbook_collection_groups(batch)
+                  if item['token'] == section_token), None)
+    if group is None:
+        messages.error(request, 'Выбранный раздел задачника не найден.')
+        return redirect(_textbook_detail_url(batch, section=section_token))
+    if batch.status == TextbookImportBatch.STATUS_IMPORTED:
+        messages.error(
+            request, 'Загруженную партию нельзя изменять через предпросмотр.')
+        return redirect(_textbook_detail_url(batch, section=section_token))
+    from .textbook_topics import (set_draft_topics, suggested_topic_for_drafts,
+                                 topics_from_post)
+    topic_ids, primary_id = topics_from_post(request.POST)
+    if not topic_ids:
+        suggested = suggested_topic_for_drafts(
+            _textbook_group_drafts(batch, group).select_related('topic'))
+        if suggested:
+            topic_ids, primary_id = [suggested.pk], suggested.pk
+    if not topic_ids:
+        messages.error(request, 'Выберите тему рубрикатора.')
+        return redirect(_textbook_detail_url(batch, section=section_token))
+    drafts = list(
+        _textbook_group_drafts(batch, group)
+        .exclude(status=TextbookTaskDraft.STATUS_IMPORTED))
+    for draft in drafts:
+        set_draft_topics(draft, topic_ids, primary_id)
+    labels = ', '.join(
+        str(topic) for topic in Topic.objects.filter(pk__in=topic_ids))
+    messages.success(
+        request,
+        f'Темы ({labels}) назначены задачам раздела '
+        f'«{group["title"]}»: {len(drafts)}.')
+    return redirect(_textbook_detail_url(batch, section=section_token))
+
+
+@teacher_required
+@require_POST
+def textbook_import_quick_topic(request, batch_pk, pk):
+    """Горячее назначение темы одной строке партии — как в базе задач."""
+    batch = _own_import_batch(request, batch_pk)
+    draft = get_object_or_404(TextbookTaskDraft, batch=batch, pk=pk)
+    if (batch.status == TextbookImportBatch.STATUS_IMPORTED
+            or draft.status == TextbookTaskDraft.STATUS_IMPORTED):
+        return JsonResponse(
+            {'ok': False, 'message': 'Загруженную партию нельзя изменять.'},
+            status=400)
+    from .textbook_topics import set_draft_topics, topics_from_post
+    topic_ids, primary_id = topics_from_post(request.POST)
+    set_draft_topics(draft, topic_ids, primary_id)
+    if request.headers.get('x-requested-with') != 'XMLHttpRequest':
+        return redirect(_textbook_detail_url(batch, request))
+    return JsonResponse({'ok': True})
+
+
+@teacher_required
+@require_POST
+@transaction.atomic
+def textbook_import_bulk(request, pk):
+    """Массовые действия над выбранными черновиками партии."""
+    batch = _own_import_batch(request, pk)
+    batch = TextbookImportBatch.objects.select_for_update().get(pk=batch.pk)
+    next_url = request.POST.get('next', '')
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts=None):
+        next_url = _textbook_detail_url(batch, request)
+    if batch.status == TextbookImportBatch.STATUS_IMPORTED:
+        messages.error(request, 'Загруженную партию нельзя изменять.')
+        return redirect(next_url)
+    ids = request.POST.getlist('ids')
+    drafts = batch.drafts.filter(pk__in=ids).exclude(
+        status=TextbookTaskDraft.STATUS_IMPORTED)
+    if not drafts.exists():
+        messages.error(request, 'Не выбрано ни одной задачи.')
+        return redirect(next_url)
+    if request.POST.get('delete'):
+        deleted = drafts.count()
+        drafts.delete()
+        messages.success(request, f'Удалено задач: {deleted}.')
+        return redirect(next_url)
+    status = request.POST.get('status')
+    if request.POST.get('skip'):
+        status = TextbookTaskDraft.STATUS_SKIPPED
+    allowed_statuses = {
+        TextbookTaskDraft.STATUS_APPROVED,
+        TextbookTaskDraft.STATUS_REVIEW,
+        TextbookTaskDraft.STATUS_CONFLICT,
+        TextbookTaskDraft.STATUS_SKIPPED,
+    }
+    if status in allowed_statuses:
+        now = timezone.now()
+        updated = drafts.update(
+            status=status,
+            reviewed_by=request.user,
+            reviewed_at=now,
+        )
+        labels = {
+            TextbookTaskDraft.STATUS_APPROVED: 'Одобрено задач',
+            TextbookTaskDraft.STATUS_REVIEW: 'Возвращено на проверку',
+            TextbookTaskDraft.STATUS_CONFLICT: 'Отмечено конфликтными',
+            TextbookTaskDraft.STATUS_SKIPPED: 'Пропущено задач',
+        }
+        messages.success(request, f'{labels[status]}: {updated}.')
+        return redirect(next_url)
+    from .textbook_topics import merge_draft_topics, topics_from_post
+    topic_ids, primary_id = topics_from_post(request.POST)
+    if not topic_ids:
+        messages.error(request, 'Выберите тему рубрикатора.')
+        return redirect(next_url)
+    updated = 0
+    for draft in drafts:
+        merge_draft_topics(draft, topic_ids, primary_id)
+        updated += 1
+    labels = ', '.join(
+        str(topic) for topic in Topic.objects.filter(pk__in=topic_ids))
+    messages.success(
+        request, f'Темы ({labels}) добавлены выбранным задачам: {updated}.')
+    return redirect(next_url)
 
 
 @teacher_required
 def textbook_import_review(request, batch_pk, pk):
     batch = _own_import_batch(request, batch_pk)
     draft = get_object_or_404(
-        TextbookTaskDraft.objects.select_related('topic'),
+        TextbookTaskDraft.objects.select_related('topic', 'imported_task'),
         batch=batch, pk=pk)
+    original_subitems = [dict(item) for item in draft.subitems]
+    if (request.method == 'POST'
+            and draft.status == TextbookTaskDraft.STATUS_IMPORTED):
+        messages.error(
+            request,
+            'Импортированную задачу нельзя изменять в сверке. '
+            'Правки — в карточке задачи.')
+        return redirect(
+            'textbook_import_review', batch_pk=batch.pk, pk=draft.pk)
     if request.method == 'POST':
         form = TextbookDraftReviewForm(request.POST, instance=draft)
         if form.is_valid():
             updated = form.save(commit=False)
-            source_key = form.cleaned_data.get('copy_solution_from', '').strip()
-            if source_key:
-                candidate = batch.drafts.filter(external_id=source_key).first()
-                if candidate is None:
-                    form.add_error(
-                        'copy_solution_from', 'В этой партии такого ключа нет.')
+            if any(f'subitem_text_{index}' in request.POST
+                   for index in range(_review_subitem_post_count(request.POST))):
+                from .textbook_import import TextbookImportError
+                try:
+                    structured = _subitems_from_review_editors(request.POST)
+                except TextbookImportError as exc:
+                    form.add_error('subitems', str(exc))
                 else:
-                    used = (batch.drafts
-                            .exclude(pk=draft.pk)
-                            .filter(solution_source_external_id=source_key,
-                                    status=TextbookTaskDraft.STATUS_APPROVED)
-                            .first())
-                    if used:
-                        form.add_error(
-                            'copy_solution_from',
-                            f'Решение уже одобрено для {used.external_id}.')
-                    else:
-                        updated.author_answer_latex = \
-                            candidate.author_answer_latex
-                        updated.author_solution_latex = \
-                            candidate.author_solution_latex
-                        updated.solution_source_external_id = source_key
+                    updated.subitems = _merge_review_subitems(
+                        structured, updated.subitems)
             else:
-                updated.solution_source_external_id = ''
+                updated.subitems = _overlay_review_author_fields(
+                    updated.subitems, original_subitems, request.POST)
             if not form.errors:
+                if updated.subitems and any(
+                        str(item.get('author_answer_latex') or '').strip()
+                        or str(item.get('author_solution_latex') or '').strip()
+                        for item in updated.subitems):
+                    updated.author_answer_latex = ''
+                    updated.author_solution_latex = ''
+                if (request.POST.get('topics_submitted')
+                        or 'topics' in request.POST
+                        or 'topic' in request.POST
+                        or 'primary_topic' in request.POST):
+                    from .textbook_topics import set_draft_topics, topics_from_post
+                    topic_ids, primary_id = topics_from_post(request.POST)
+                    set_draft_topics(
+                        updated, topic_ids, primary_id, save=False)
+                from .textbook_import import refresh_image_warnings
+                from .textbook_parser import finalize_draft_images
+                finalize_draft_images(updated)
                 updated.reviewed_by = request.user
                 updated.reviewed_at = timezone.now()
                 updated.save()
+                refresh_image_warnings(batch)
                 messages.success(request, f'{updated.external_id}: сохранено.')
                 next_draft = (batch.drafts
                               .filter(external_id__gt=updated.external_id)
@@ -840,29 +1436,104 @@ def textbook_import_review(request, batch_pk, pk):
                     return redirect(
                         'textbook_import_review', batch_pk=batch.pk,
                         pk=next_draft.pk)
-                return redirect('textbook_import_detail', pk=batch.pk)
+                return redirect(
+                    'textbook_import_review', batch_pk=batch.pk, pk=updated.pk)
     else:
-        solution_key = draft.solution_source_external_id
-        if solution_key == draft.external_id:
-            solution_key = ''
-        form = TextbookDraftReviewForm(
-            instance=draft,
-            initial={'copy_solution_from': solution_key})
+        form = TextbookDraftReviewForm(instance=draft)
     previous = (batch.drafts.filter(external_id__lt=draft.external_id)
                 .order_by('-external_id', '-pk').first())
     following = (batch.drafts.filter(external_id__gt=draft.external_id)
                  .order_by('external_id', 'pk').first())
-    candidates = (batch.drafts.exclude(pk=draft.pk)
-                  .exclude(author_solution_latex='')
-                  .order_by('external_id')[:12])
-    return render(request, 'problems/textbook_import_review.html', {
+    from .textbook_parser import order_letter_subitems
+    review_subitems = [dict(item) for item in draft.subitems]
+    if request.method == 'POST':
+        for index, subitem in enumerate(review_subitems):
+            if f'subitem_label_{index}' in request.POST:
+                subitem['label'] = request.POST[f'subitem_label_{index}']
+            if f'subitem_text_{index}' in request.POST:
+                subitem['text_latex'] = request.POST[f'subitem_text_{index}']
+            answer_key = f'subitem_author_answer_{index}'
+            solution_key = f'subitem_author_solution_{index}'
+            if answer_key in request.POST:
+                subitem['author_answer_latex'] = request.POST[answer_key]
+            if solution_key in request.POST:
+                subitem['author_solution_latex'] = request.POST[solution_key]
+    else:
+        review_subitems = order_letter_subitems(review_subitems)
+    from .textbook_topics import draft_topic_ids, topics_from_post
+    if request.method == 'POST':
+        review_topic_ids, review_primary = topics_from_post(request.POST)
+        if (not review_topic_ids
+                and not request.POST.get('topics_submitted')
+                and 'topics' not in request.POST
+                and 'topic' not in request.POST):
+            review_topic_ids = draft_topic_ids(draft)
+            review_primary = draft.topic_id
+    else:
+        review_topic_ids = draft_topic_ids(draft)
+        review_primary = draft.topic_id
+    context = taxonomy_page_context({
+        'topics': review_topic_ids,
+        'primary': review_primary,
+        'grades': [], 'facets': [], 'exams': [], 'difficulty': None,
+    })
+    from .textbook_import import normalize_image_stem
+    assets = {
+        asset.stem: asset
+        for asset in batch.assets.all()
+    }
+    draft_images = []
+    for name in draft.images:
+        stem = normalize_image_stem(name)
+        draft_images.append({
+            'name': name,
+            'asset': assets.get(stem),
+        })
+    from .textbook_topics import candidate_reason_label
+    context.update({
         'batch': batch,
         'draft': draft,
         'form': form,
+        'review_subitems': review_subitems,
         'previous': previous,
         'following': following,
-        'candidates': candidates,
+        'review_locked': draft.status == TextbookTaskDraft.STATUS_IMPORTED,
+        'draft_images': draft_images,
+        'topic_candidates': [
+            {**item, 'reason_label': candidate_reason_label(item.get('reason'))}
+            for item in (draft.topic_candidates or [])
+        ],
     })
+    return render(request, 'problems/textbook_import_review.html', context)
+
+
+@teacher_required
+@require_POST
+def textbook_import_attach_images(request, pk):
+    from .textbook_import import TextbookImportError, attach_image_archive
+    batch = _own_import_batch(request, pk)
+    form = TextbookImageArchiveForm(request.POST, request.FILES)
+    if batch.status == TextbookImportBatch.STATUS_IMPORTED:
+        messages.error(request, 'Загруженную партию нельзя дополнять рисунками.')
+        return redirect(_textbook_detail_url(batch))
+    if not form.is_valid():
+        messages.error(request, 'Выберите ZIP с рисунками.')
+        return redirect(_textbook_detail_url(batch))
+    try:
+        stored = attach_image_archive(batch, form.cleaned_data['images_zip'])
+    except TextbookImportError as exc:
+        messages.error(request, str(exc))
+        return redirect(_textbook_detail_url(batch))
+    messages.success(request, f'Сопоставлено рисунков: {stored}.')
+    return redirect(_textbook_detail_url(batch))
+
+
+@teacher_required
+@xframe_options_sameorigin
+def textbook_import_asset_file(request, batch_pk, pk):
+    batch = _own_import_batch(request, batch_pk)
+    asset = get_object_or_404(TextbookImportAsset, batch=batch, pk=pk)
+    return FileResponse(asset.file.open('rb'), filename=asset.original_name)
 
 
 @teacher_required
@@ -891,7 +1562,8 @@ def textbook_import_commit(request, pk):
     from .textbook_import import TextbookImportError, commit_batch
     batch = _own_import_batch(request, pk)
     try:
-        result = commit_batch(batch, user=request.user)
+        result = commit_batch(
+            batch, user=request.user, require_complete=False)
     except TextbookImportError as exc:
         messages.error(request, str(exc))
         return redirect('textbook_import_detail', pk=batch.pk)
@@ -900,4 +1572,40 @@ def textbook_import_commit(request, pk):
         'Импорт завершён: создано задач — %(created)s, '
         'переиспользовано — %(reused)s, новых подборок — %(collections)s.'
         % result)
-    return redirect('collection_list')
+    batch.refresh_from_db()
+    if batch.status == TextbookImportBatch.STATUS_IMPORTED:
+        return redirect('collection_list')
+    return redirect('textbook_import_detail', pk=batch.pk)
+
+
+@teacher_required
+@require_POST
+def textbook_import_commit_section(request, pk):
+    """Загружает в каталог только одобренные задачи выбранного раздела."""
+    from .textbook_import import TextbookImportError, commit_batch
+    batch = _own_import_batch(request, pk)
+    section_token = request.POST.get('section', '')
+    group = next((item for item in _textbook_collection_groups(batch)
+                  if item['token'] == section_token), None)
+    if group is None:
+        messages.error(request, 'Выбранный раздел задачника не найден.')
+        return redirect(_textbook_detail_url(batch, section=section_token))
+    group_drafts = _textbook_group_drafts(batch, group)
+    draft_ids = list(group_drafts.filter(
+        status=TextbookTaskDraft.STATUS_APPROVED).values_list('pk', flat=True))
+    try:
+        result = commit_batch(
+            batch, user=request.user, draft_ids=draft_ids,
+            require_complete=False)
+    except TextbookImportError as exc:
+        messages.error(request, str(exc))
+        return redirect(_textbook_detail_url(batch, section=section_token))
+    messages.success(
+        request,
+        'Раздел «%(title)s» загружен: создано задач — %(created)s, '
+        'переиспользовано — %(reused)s, новых подборок — %(collections)s.'
+        % {'title': group['title'], **result})
+    batch.refresh_from_db()
+    if batch.status == TextbookImportBatch.STATUS_IMPORTED:
+        return redirect('collection_list')
+    return redirect(_textbook_detail_url(batch, section=section_token))

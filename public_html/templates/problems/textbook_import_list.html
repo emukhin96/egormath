@@ -4,7 +4,10 @@
 <div class="page-head">
   <div><span class="page-eyebrow">База задач</span><h1>Импорт задачников</h1>
     <p class="page-subtitle">Проверяемые партии из JSON, до публикации в каталоге.</p></div>
-  <a class="btn" href="{% url 'textbook_import_upload' %}">Новая партия</a>
+  <div class="form-buttons">
+    <a class="btn btn-secondary" href="{% url 'textbook_import_help' %}">Инструкция</a>
+    <a class="btn" href="{% url 'textbook_import_upload' %}">Новая партия</a>
+  </div>
 </div>
 <div class="card">
 {% if batches %}

@@ -3,16 +3,28 @@ import re
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.paginator import Paginator
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils.html import escape
 
 from accounts.models import Profile
 
-from .latex_utils import (escape_latex, loads_neuro_json,
+from .latex_utils import (ensure_displaystyle_fractions, escape_latex,
+                          heal_split_math_dollars, loads_neuro_json,
                           restore_json_eaten_latex, split_items, strip_latex,
                           wrap_bare_math)
 from .models import Tag, Task, Topic
+
+
+class PaginationHelperTests(SimpleTestCase):
+    def test_page_numbers_window_and_ellipsis(self):
+        from problems.templatetags.task_extras import page_numbers, without_page
+        page = Paginator(list(range(200)), 10).get_page(10)
+        self.assertEqual(
+            page_numbers(page), [1, None, 8, 9, 10, 11, 12, None, 20])
+        self.assertEqual(without_page('q=abc&page=3&grade=7'), 'q=abc&grade=7')
+        self.assertEqual(page_numbers(Paginator([1], 10).get_page(1)), [1])
 
 
 class ReadSecretTests(SimpleTestCase):
@@ -61,8 +73,9 @@ class LatexUtilsTests(TestCase):
         self.assertNotIn('\\textbf', s)
 
     def test_split_items_strips_punctuation(self):
-        chunks = split_items('\\item $1+1$; \\item $2+2$ ; \\item $3+3$.')
-        self.assertEqual(chunks, ['$1+1$', '$2+2$', '$3+3$'])
+        chunks = split_items(
+            '\\item $1+1$; \\item $2+2$ ; \\item $3+3$, \\item $4+4$.')
+        self.assertEqual(chunks, ['$1+1$', '$2+2$', '$3+3$', '$4+4$'])
 
     def test_split_items_keeps_sentence_punctuation(self):
         # Предложение с «.» и любой «?» сохраняются; служебные «;»/«.»
@@ -92,17 +105,48 @@ class LatexUtilsTests(TestCase):
             r'$a = \pm \frac{4}{5}$')
         self.assertEqual(wrap_bare_math('нет корней'), 'нет корней')
         self.assertEqual(wrap_bare_math('42'), '42')
+        self.assertEqual(wrap_bare_math(r'\{-2;1\}'), r'$\{-2;1\}$')
+        self.assertEqual(wrap_bare_math(r'$\{-2;1\}$'), r'$\{-2;1\}$')
+        self.assertEqual(
+            wrap_bare_math(r'\(\{-2 \pm \sqrt{2}\}'),
+            r'\(\{-2 \pm \sqrt{2}\}')
+        self.assertEqual(
+            wrap_bare_math(r'\(\{-2 \pm \sqrt{2}\)'),
+            r'\(\{-2 \pm \sqrt{2}\)')
+        self.assertEqual(
+            heal_split_math_dollars(
+                r'$\displaystyle \left(-\frac{7}{6}$ ;$-2\right)$'),
+            r'\displaystyle \left(-\frac{7}{6} ;-2\right)')
+        self.assertEqual(heal_split_math_dollars(r'$\{-2;1\}$'), r'$\{-2;1\}$')
+        self.assertEqual(heal_split_math_dollars(r'$(2;3)$'), r'$(2;3)$')
         solution = (
             'Дискриминант D = (-5a)^2 - 4 \\cdot 1 \\cdot 4 = 25a^2 - 16. '
             'Приравняем дискриминант к нулю: 25a^2 - 16 = 0, откуда '
             'a^2 = \\frac{16}{25}, следовательно a = \\pm \\frac{4}{5}.')
         wrapped = wrap_bare_math(solution)
+        self.assertIn('откуда', wrapped)
+        self.assertNotIn('$откуда', wrapped)
         self.assertIn(r'$D = (-5a)^2 - 4 \cdot 1 \cdot 4 = 25a^2 - 16$',
                       wrapped)
         self.assertIn(r'$25a^2 - 16 = 0$', wrapped)
         self.assertIn(r'$a^2 = \frac{16}{25}$', wrapped)
         self.assertIn(r'$a = \pm \frac{4}{5}$', wrapped)
         self.assertEqual(wrap_bare_math(wrapped), wrapped)
+
+    def test_ensure_displaystyle_fractions(self):
+        self.assertEqual(
+            ensure_displaystyle_fractions(r'$\frac{1}{2}$'),
+            r'$\displaystyle \frac{1}{2}$')
+        self.assertEqual(
+            ensure_displaystyle_fractions(r'\(\frac{a}{b}\)'),
+            r'\(\displaystyle \frac{a}{b}\)')
+        self.assertEqual(
+            ensure_displaystyle_fractions(r'\[\frac{1}{2}\]'),
+            r'\[\frac{1}{2}\]')
+        self.assertEqual(
+            ensure_displaystyle_fractions(r'$\displaystyle \frac{1}{2}$'),
+            r'$\displaystyle \frac{1}{2}$')
+        self.assertEqual(ensure_displaystyle_fractions('без дроби'), 'без дроби')
 
     def test_restore_json_eaten_latex(self):
         # json.loads съедает \f и \t: form feed + "rac", tab + "imes"
@@ -750,10 +794,42 @@ class WebTexTests(TestCase):
         self.assertEqual(self.render('на 5~см больше'),
                          'на 5&nbsp;см больше')
         self.assertEqual(self.render('на 33\\%'), 'на 33%')
+        self.assertEqual(
+            self.render(r'Между какими числами \(\sqrt{170}\) ?\\'),
+            r'Между какими числами \(\sqrt{170}\) ?<br>')
+        html = self.render('Выполните действия\n\\[\na+b\n\\]\n\\section*{3. Тема}\nВариант 1')
+        self.assertIn('Выполните действия<br>', html)
+        self.assertIn('\\[ a+b \\]', html)
+        self.assertNotIn('\\[<br>', html)
+        self.assertNotIn('\\section', html)
+        self.assertNotIn('Вариант 1', html)
+
+    def test_subitem_tail_ignores_trailing_linebreak_before_punct(self):
+        from problems.templatetags.task_extras import subitem_tail
+        self.assertEqual(subitem_tail(r'$1+1$;\\', False), ';')
+        self.assertEqual(subitem_tail(r'\(\sqrt{168}\) ?\\', False), '')
+        self.assertEqual(subitem_tail(r'$1+1$', False), ';')
+        self.assertEqual(subitem_tail(r'$1+1$', True), '.')
+
+    def test_manual_text_keeps_trailing_punct_and_item_word(self):
+        self.assertEqual(
+            self.render('Перечислите варианты;'), 'Перечислите варианты;')
+        self.assertEqual(self.render('item список'), 'item список')
 
     def test_math_is_untouched(self):
         # Внутри $…$ команды не трогаем — их рендерит KaTeX
         self.assertEqual(self.render('$a~b \\\\ c$'), '$a~b \\\\ c$')
+
+    def test_decimal_comma_is_ordinary_for_katex(self):
+        # Русская десятичная запятая без пробела: KaTeX иначе раздвигает цифры
+        self.assertEqual(self.render('$0,6$'), '$0{,}6$')
+        self.assertEqual(
+            self.render(r'$0,8^{-2,7}$ и $(1,06)^{-5}$'),
+            r'$0{,}8^{-2{,}7}$ и $(1{,}06)^{-5}$')
+        # Список с пробелом после запятой — не десятичная дробь
+        self.assertEqual(self.render('$1, 2, 3$'), '$1, 2, 3$')
+        # Повторная защита не двоит скобки
+        self.assertEqual(self.render('$0{,}6$'), '$0{,}6$')
 
     def test_bracket_math_is_untouched(self):
         # KaTeX рендерит и \(…\)/\[…\] — внутри них \\ не превращаем в <br>
@@ -916,6 +992,22 @@ class CatalogViewTests(TestCase):
         self.client.login(username='student1', password='pass12345')
         response = self.client.get(reverse('task_list'))
         self.assertEqual(response.status_code, 403)
+
+    def test_catalog_pagination_uses_page_numbers(self):
+        for index in range(26):
+            Task.objects.create(
+                text_latex=f'Каталожная задача {index}',
+                created_by=self.teacher)
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('task_list'))
+        self.assertContains(response, 'class="pagination"')
+        self.assertContains(response, 'page=2')
+        self.assertContains(response, 'Назад')
+        self.assertContains(response, 'Следующая')
+        self.assertNotContains(response, 'Вперёд')
+        page_two = self.client.get(reverse('task_list'), {'page': 2, 'q': ''})
+        self.assertContains(page_two, 'aria-current="page"')
+        self.assertContains(page_two, 'page=1')
 
     def test_catalog_search(self):
         self.client.login(username='teacher1', password='pass12345')
@@ -1496,13 +1588,26 @@ class RubricatorTests(TestCase):
     """Сид, основная тема и фильтры нового рубрикатора."""
 
     def test_seed_creates_codes(self):
-        from problems.models import ExamItem, GradeBand
+        from problems.models import ExamItem, FacetValue, GradeBand
         from problems.rubricator import seed_rubricator
         seed_rubricator()
         self.assertTrue(Topic.objects.filter(code='ARI.01.01').exists())
         self.assertTrue(Topic.objects.filter(code='ALG.07.03').exists())
+        self.assertTrue(Topic.objects.filter(code='ALG.02.11').exists())
+        self.assertTrue(Topic.objects.filter(code='ALG.05.17').exists())
+        self.assertTrue(Topic.objects.filter(code='ALG.07.10').exists())
+        from problems.rubricator_data import VERSION_12_TOPICS, iter_leaf_topics
+        leaves = dict(iter_leaf_topics())
+        self.assertEqual(len(leaves), 271)
+        self.assertEqual(len(VERSION_12_TOPICS), 20)
+        for code, name in VERSION_12_TOPICS:
+            self.assertEqual(leaves[code], name)
+            topic = Topic.objects.get(code=code)
+            self.assertEqual(topic.name, name)
         self.assertTrue(ExamItem.objects.filter(code='OGE_2026_09').exists())
         self.assertTrue(GradeBand.objects.filter(code='GRADE_8').exists())
+        self.assertTrue(FacetValue.objects.filter(
+            code='SYSTEM_SUBSTITUTION').exists())
         first = Topic.objects.filter(code='ALG.07.03').count()
         seed_rubricator()
         self.assertEqual(Topic.objects.filter(code='ALG.07.03').count(), first)

@@ -110,6 +110,9 @@
     this.useFacets = root.dataset.facets === '1';
     this.useGrades = root.dataset.grades === '1';
     this.compact = root.dataset.compact === '1';
+    this.single = root.dataset.single === '1';
+    this.chipFull = root.dataset.chipFull === '1';
+    this.topicFieldName = root.dataset.topicField || '';
     this.isFilter = this.mode === 'filter';
     this.state = parseState(root.dataset.state);
     this.query = '';
@@ -128,7 +131,7 @@
   }
 
   Picker.prototype.topicField = function () {
-    return this.isFilter ? 'topic' : 'topics';
+    return this.topicFieldName || (this.isFilter ? 'topic' : 'topics');
   };
 
   Picker.prototype.gradeField = function () {
@@ -299,6 +302,12 @@
 
   Picker.prototype.toggleTopic = function (id, forceOff) {
     var idx = this.state.topics.indexOf(id);
+    if (this.single) {
+      this.state.topics = (idx !== -1 || forceOff) ? [] : [id];
+      this.state.primary = this.state.topics[0] || null;
+      this.afterChange();
+      return;
+    }
     if (idx !== -1) {
       this.state.topics.splice(idx, 1);
       if (this.state.primary === id) {
@@ -352,8 +361,13 @@
       ensureHidden(this.form, 'topics_submitted', false);
       setHiddenValue(this.form, 'topics_submitted', '1');
     }
-    ensureHidden(this.form, this.topicField(), true);
-    setSelectValues(this.form, this.topicField(), this.state.topics);
+    ensureHidden(this.form, this.topicField(), !this.single);
+    if (this.single) {
+      setHiddenValue(
+        this.form, this.topicField(), this.state.topics[0] || '');
+    } else {
+      setSelectValues(this.form, this.topicField(), this.state.topics);
+    }
     if (this.usePrimary && !this.isFilter) {
       setHiddenValue(this.form, 'primary_topic', this.state.primary);
     }
@@ -502,7 +516,7 @@
       var topic = topicById(id);
       if (!topic) return;
       var full = (topic.code ? topic.code + ' ' : '') + topic.name;
-      var label = (self.compact && topic.code) ? topic.code : full;
+      var label = (!self.chipFull && self.compact && topic.code) ? topic.code : full;
       var isPrimary = self.usePrimary && self.state.primary === id;
       html += '<span class="tax-chip' + (isPrimary ? ' is-primary' : '') + '"'
         + ' title="' + escapeHtml(full) + '">';

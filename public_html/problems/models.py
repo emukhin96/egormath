@@ -620,11 +620,13 @@ class TextbookTaskDraft(models.Model):
     STATUS_APPROVED = 'approved'
     STATUS_CONFLICT = 'conflict'
     STATUS_SKIPPED = 'skipped'
+    STATUS_IMPORTED = 'imported'
     STATUS_CHOICES = [
         (STATUS_REVIEW, 'Не проверена'),
         (STATUS_APPROVED, 'Одобрена'),
         (STATUS_CONFLICT, 'Конфликт'),
         (STATUS_SKIPPED, 'Пропущена'),
+        (STATUS_IMPORTED, 'Импортировано'),
     ]
 
     batch = models.ForeignKey(
@@ -641,10 +643,14 @@ class TextbookTaskDraft(models.Model):
         'Тема в задачнике', max_length=255, blank=True)
     topic = models.ForeignKey(
         Topic, on_delete=models.PROTECT, null=True, blank=True,
-        related_name='textbook_drafts', verbose_name='Тема рубрикатора')
+        related_name='textbook_drafts', verbose_name='Основная тема')
+    topic_ids = models.JSONField(
+        'Темы рубрикатора', default=list, blank=True)
     text_latex = models.TextField('Условие (LaTeX)')
     subitems = models.JSONField('Подпункты', default=list, blank=True)
     images = models.JSONField('Изображения', default=list, blank=True)
+    topic_candidates = models.JSONField(
+        'Кандидаты рубрикатора', default=list, blank=True)
     author_answer_latex = models.TextField('Авторский ответ', blank=True)
     author_solution_latex = models.TextField('Авторское решение', blank=True)
     solution_source_external_id = models.CharField(
@@ -676,6 +682,64 @@ class TextbookTaskDraft(models.Model):
 
     def __str__(self):
         return f'{self.batch}: {self.external_id}'
+
+    @property
+    def author_answer_subitem_count(self):
+        return sum(bool(str(item.get('author_answer_latex') or '').strip())
+                   for item in self.subitems)
+
+    @property
+    def author_solution_subitem_count(self):
+        return sum(bool(str(item.get('author_solution_latex') or '').strip())
+                   for item in self.subitems)
+
+    @property
+    def has_author_answer_material(self):
+        return bool(self.author_answer_latex.strip()
+                    or self.author_answer_subitem_count)
+
+    @property
+    def has_author_solution_material(self):
+        return bool(self.author_solution_latex.strip()
+                    or self.author_solution_subitem_count)
+
+    def unmatched_images(self):
+        resolved = {
+            asset.stem for asset in self.batch.assets.all()
+        } if self.batch_id else set()
+        return [name for name in self.images
+                if os.path.splitext(os.path.basename(
+                    str(name).replace('\\', '/')))[0].lower()
+                not in resolved]
+
+
+class TextbookImportAsset(models.Model):
+    """Файл рисунка, сопоставленный черновикам партии по имени."""
+
+    batch = models.ForeignKey(
+        TextbookImportBatch, on_delete=models.CASCADE, related_name='assets',
+        verbose_name='Партия')
+    stem = models.CharField('Нормализованное имя', max_length=255)
+    original_name = models.CharField('Исходное имя файла', max_length=255)
+    file = models.FileField(
+        'Файл', upload_to='textbook_import_assets/',
+        validators=[FileExtensionValidator(['png', 'jpg', 'jpeg', 'pdf'])])
+
+    class Meta:
+        verbose_name = 'Рисунок партии импорта'
+        verbose_name_plural = 'Рисунки партий импорта'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['batch', 'stem'], name='unique_batch_image_stem'),
+        ]
+        ordering = ['original_name', 'pk']
+
+    def __str__(self):
+        return f'{self.batch}: {self.original_name}'
+
+    @property
+    def is_pdf(self):
+        return self.original_name.lower().endswith('.pdf')
 
 
 class NeuroSolveQuota(models.Model):

@@ -291,6 +291,56 @@ class LatexGenerationTests(TestCase):
         tex = task_to_tex(make_item(self.worksheet, task))
         # Ссылка из подпункта учтена — в конец условия не дублируется
         self.assertEqual(tex.count('\\taskpic{a.png}'), 1)
+        self.assertLess(
+            tex.index(r"\taskpic{a.png}"), tex.index(r"[{\item"))
+
+    def test_taskpic_ref_in_solution_moves_to_task_body(self):
+        task = Task.objects.create(
+            text_latex='Задача',
+            author_solution_latex=r'Чертеж: \taskpic{1}.')
+        task.images.create(image='task_images/solution.png', order=10)
+        tex = task_to_tex(make_item(self.worksheet, task))
+        self.assertEqual(tex.count(r'\taskpic{solution.png}'), 1)
+        self.assertNotIn(r'\taskpic{1}', tex)
+        self.assertIn('Чертеж:', tex)
+        self.assertLess(
+            tex.index(r'\taskpic{solution.png}'),
+            tex.index(r'[{\mbox{}\\ \begin{minipage}'))
+
+    def test_taskpic_ref_in_ai_answer_moves_to_task_body(self):
+        task = Task.objects.create(
+            text_latex=r'Задача с рисунком \taskpic{1}',
+            answer_latex=r'Ответ по рисунку \taskpic{1}.')
+        task.images.create(image='task_images/answer.png', order=10)
+        tex = task_to_tex(make_item(self.worksheet, task))
+        self.assertEqual(tex.count(r'\taskpic{answer.png}'), 1)
+        self.assertNotIn(r'\taskpic{1}', tex)
+        self.assertIn('Ответ по рисунку', tex)
+        # Одна и та же ссылка в body и answer не дублируется.
+        self.assertLess(
+            tex.index(r'\taskpic{answer.png}'),
+            tex.index(r'[{Ответ по рисунку'))
+
+    def test_answer_and_solution_pictures_follow_pdf_variant(self):
+        task = Task.objects.create(
+            text_latex='Задача без рисунка в условии',
+            answer_latex=r'Ответ с рисунком \taskpic{1}.',
+            author_solution_latex=r'Решение с рисунком \taskpic{2}.')
+        task.images.create(image='task_images/answer.png', order=10)
+        task.images.create(image='task_images/solution.png', order=20)
+        make_item(self.worksheet, task)
+
+        student_tex = worksheet_to_tex(self.worksheet, 'student')
+        self.assertNotIn(r'\taskpic{answer.png}', student_tex)
+        self.assertNotIn(r'\taskpic{solution.png}', student_tex)
+
+        answers_tex = worksheet_to_tex(self.worksheet, 'answers')
+        self.assertEqual(answers_tex.count(r'\taskpic{answer.png}'), 1)
+        self.assertNotIn(r'\taskpic{solution.png}', answers_tex)
+
+        teacher_tex = worksheet_to_tex(self.worksheet, 'teacher')
+        self.assertEqual(teacher_tex.count(r'\taskpic{answer.png}'), 1)
+        self.assertEqual(teacher_tex.count(r'\taskpic{solution.png}'), 1)
 
     def test_collect_assets(self):
         import io

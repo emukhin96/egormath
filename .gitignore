@@ -9,6 +9,7 @@ venv/
 # Django
 db.sqlite3
 public_html/staticfiles/
+var/imports/
 media/
 local_settings.py
 public_html/core/local_settings.py
