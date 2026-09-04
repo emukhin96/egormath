@@ -348,6 +348,15 @@
       </select>
     </p>
     <p>
+      <label for="a_check">Автосверка ответов с эталоном</label>
+      <select name="check_visibility" id="a_check" style="max-width:340px">
+        <option value="teacher">Результат видит только учитель</option>
+        <option value="after_submit">Ученик видит после отправки работы</option>
+        <option value="live">Ученик видит сразу при вводе (самопроверка)</option>
+      </select>
+      <span class="helptext">Можно изменить позже на экране проверки. При самопроверке вы увидите число попыток.</span>
+    </p>
+    <p>
       <label for="a_due">Срок сдачи (необязательно)</label>
       <input type="datetime-local" name="due_at" id="a_due" style="max-width:250px">
     </p>

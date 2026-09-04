@@ -25,6 +25,9 @@
   Работа возвращена на доработку. Задачи с комментарием учителя отмечены в списке справа — исправьте их и отправьте снова.
 </div>
 {% endif %}
+{% if show_checks and editable %}
+<p class="helptext">Рядом с ответом — результат автоматической сверки с эталоном. Итоговую отметку ставит учитель.</p>
+{% endif %}
 
 {# Режим change, не debounce: debounce перехватывает submit, а в форме есть кнопки с formaction. #}
 <form method="post" action="{% url 'save_answers' assignment.pk %}" id="answers-form"
@@ -62,6 +65,7 @@
         <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}
         <div class="subitem-answer">
           {% include 'assignments/_answer_fields.html' with prefix=sr.prefix answer_type=row.task.answer_type obj=sr.part editable=editable %}
+          {% if show_checks %}{% include 'assignments/_check_badge.html' with prefix=sr.prefix status=sr.part.auto_check|default:'' %}{% endif %}
         </div>
       </li>
       {% endfor %}
@@ -70,6 +74,7 @@
     <p>
       <label>Ответ{% if row.task.answer_type == 'number' %} (число){% elif row.task.answer_type == 'interval' %} (промежуток){% elif row.task.answer_type == 'formula' %} (формула){% endif %}</label>
       {% include 'assignments/_answer_fields.html' with prefix=row.prefix answer_type=row.task.answer_type obj=sub editable=editable %}
+      {% if show_checks %}{% include 'assignments/_check_badge.html' with prefix=row.prefix status=sub.auto_check|default:'' %}{% endif %}
     </p>
     {% endif %}
 

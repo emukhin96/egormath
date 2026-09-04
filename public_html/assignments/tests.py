@@ -1,7 +1,7 @@
 import io
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from PIL import Image
 
@@ -10,6 +10,7 @@ from problems.tests import make_student, make_teacher
 from worksheets.models import WorksheetItem
 from worksheets.tests import make_worksheet
 
+from .check_answer import check_answer, check_interval_fields
 from .models import (Assignment, Review, Submission, SubmissionPart,
                      SubmissionPhoto)
 
@@ -494,3 +495,177 @@ class ReviewFlowTests(TestCase):
         response = self.client.get(
             reverse('review_assignment', args=[self.assignment.pk]))
         self.assertEqual(response.status_code, 404)
+
+
+class AnswerCheckTests(SimpleTestCase):
+    """Сверка ответов: школьная запись, промежутки, множества, sympy."""
+
+    def assertCheck(self, student, reference, expected):
+        self.assertEqual(check_answer(student, reference), expected,
+                         f'{student!r} vs {reference!r}')
+
+    def test_numbers_in_any_notation(self):
+        self.assertCheck('0,5', '1/2', 'ok')
+        self.assertCheck(r'\frac12', '0.5', 'ok')
+        self.assertCheck(r'$\frac{1}{2}$', '$0{,}5$', 'ok')
+        self.assertCheck('3', '3.0', 'ok')
+        self.assertCheck('0.75', r'-\frac34', 'wrong')
+
+    def test_sets_and_roots(self):
+        self.assertCheck('2; 3', '3; 2', 'ok')
+        self.assertCheck('{1;2}', r'\{2;1\}', 'ok')
+        self.assertCheck('x=2; x=3', '2; 3', 'ok')
+        self.assertCheck(r'\pm 2', '2; -2', 'ok')
+        self.assertCheck('2', r'\pm 2', 'wrong')
+        self.assertCheck('x=2', '2', 'ok')
+
+    def test_intervals(self):
+        self.assertCheck('(1;3]', '(1; 3]', 'ok')
+        self.assertCheck('(1;3)', '(1;3]', 'wrong')
+        self.assertCheck(r'(-\infty; 3]', '(−∞;3]', 'ok')
+        self.assertCheck(r'(-3;3)', r'$\left(-3;\ 3\right)$', 'ok')
+        self.assertCheck(r'(-\infty;-3)\cup(3;+\infty)',
+                         r'(3;+\infty)\cup(-\infty;-3)', 'ok')
+        # Два поля «от/до» без скобок: сравниваются только концы
+        self.assertEqual(check_interval_fields('-3', '3', '(-3;3]'), 'ok')
+        self.assertEqual(check_interval_fields('', '3', r'(-\infty;3]'), 'ok')
+        self.assertEqual(check_interval_fields('1', '4', '(1;3]'), 'wrong')
+        self.assertEqual(check_interval_fields('', '', '(1;3]'), '')
+
+    def test_expressions_via_sympy(self):
+        self.assertCheck('x^2-1', '(x-1)(x+1)', 'ok')
+        self.assertCheck(r'\frac{x}{2}', '0.5x', 'ok')
+        self.assertCheck(r'2\sqrt{2}', r'\sqrt{8}', 'ok')
+        self.assertCheck('y=2x+1', 'y = 1 + 2x', 'ok')
+        self.assertCheck('x+1', 'x+2', 'wrong')
+        self.assertCheck(r'\sqrt{2}', '1,41', 'wrong')
+
+    def test_words_and_unparsable(self):
+        self.assertCheck('нет решений', 'Нет решений', 'ok')
+        self.assertCheck('нет решений', '2', 'wrong')
+        # Что не разобралось — не «неверно», а «не разобрано»
+        self.assertCheck(r'\taskpic{x}', '5', 'unknown')
+        self.assertCheck('корней нет при a<0', 'нет корней', 'unknown')
+        self.assertCheck('', '5', '')
+        self.assertCheck('5', '', '')
+        self.assertCheck('x' * 400, 'x', 'unknown')
+
+    def test_no_eval_of_student_input(self):
+        # parse_expr/sympify исполняли бы это через eval — здесь только грамматика
+        self.assertCheck("__import__('os').system('true')", '5', 'unknown')
+
+
+class AutoCheckFlowTests(TestCase):
+    def setUp(self):
+        self.teacher = make_teacher()
+        self.student = make_student(self.teacher)
+        self.assignment = make_assignment(self.teacher, self.student)
+        self.task = self.assignment.worksheet.ordered_items()[0].task
+        # Эталон задачи из make_worksheet — «0; 2»
+        self.url = reverse('save_answers', args=[self.assignment.pk])
+        self.detail = reverse('assignment_detail', args=[self.assignment.pk])
+        self.client.login(username='student1', password='pass12345')
+
+    def _save(self, value, xhr=True):
+        extra = {'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'} if xhr else {}
+        return self.client.post(
+            self.url, {f'task{self.task.pk}_text': value}, **extra)
+
+    def test_check_stored_and_attempts_counted(self):
+        self._save('x=2; x=0')
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.auto_check, 'ok')
+        self.assertIsNotNone(submission.checked_at)
+        self.assertEqual(submission.check_attempts, 1)
+        self._save('x=2; x=0')  # то же значение — не попытка
+        self._save('1; 2')
+        submission.refresh_from_db()
+        self.assertEqual(submission.auto_check, 'wrong')
+        self.assertEqual(submission.check_attempts, 2)
+
+    def test_teacher_only_mode_hides_result_from_student(self):
+        response = self._save('0; 2')
+        self.assertNotIn('checks', response.json())
+        response = self.client.get(self.detail)
+        self.assertFalse(response.context['show_checks'])
+        self.assertNotContains(response, 'совпало')
+        self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
+        response = self.client.get(self.detail)
+        self.assertNotContains(response, 'совпало')
+
+    def test_after_submit_mode(self):
+        self.assignment.check_visibility = Assignment.CHECK_AFTER_SUBMIT
+        self.assignment.save()
+        response = self._save('0; 2')
+        self.assertNotIn('checks', response.json())
+        self.assertNotContains(self.client.get(self.detail), '✓ совпало')
+        self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
+        response = self.client.get(self.detail)
+        self.assertContains(response, '✓ совпало')
+        # Эталон ученику не показывается ни в одном режиме
+        self.assertNotContains(response, 'Эталон')
+
+    def test_live_mode_returns_checks_in_json(self):
+        self.assignment.check_visibility = Assignment.CHECK_LIVE
+        self.assignment.save()
+        response = self._save('7')
+        self.assertEqual(response.json()['checks'],
+                         {f'task{self.task.pk}': 'wrong'})
+        response = self.client.get(self.detail)
+        self.assertContains(response, '✗ не совпало')
+        self.assertContains(response, f'data-check="task{self.task.pk}"')
+
+    def test_review_shows_badge_and_recomputes_after_reference_change(self):
+        self._save('0; 2')
+        self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
+        self.client.login(username='teacher1', password='pass12345')
+        review_url = reverse('review_assignment', args=[self.assignment.pk])
+        self.assertContains(self.client.get(review_url), '✓ совпало')
+        # Учитель исправил эталон — сверка пересчитывается при открытии проверки
+        self.task.answer_latex = '1; 3'
+        self.task.save()
+        response = self.client.get(review_url)
+        self.assertContains(response, '✗ не совпало')
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.auto_check, 'wrong')
+
+    def test_teacher_sets_visibility_on_assign_and_review(self):
+        self.client.login(username='teacher1', password='pass12345')
+        worksheet = make_worksheet(self.teacher, title='Другой')
+        self.client.post(
+            reverse('assign_worksheet', args=[worksheet.pk]),
+            {'students': [self.student.pk], 'grade_scale': 'words',
+             'check_visibility': 'live'})
+        created = Assignment.objects.get(worksheet=worksheet)
+        self.assertEqual(created.check_visibility, Assignment.CHECK_LIVE)
+        # Мусорное значение → режим по умолчанию
+        self.client.post(
+            reverse('save_review', args=[self.assignment.pk]),
+            {'action': 'save', 'check_visibility': 'everyone'})
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.check_visibility,
+                         Assignment.CHECK_TEACHER)
+        self.client.post(
+            reverse('save_review', args=[self.assignment.pk]),
+            {'action': 'save', 'check_visibility': 'after_submit'})
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.check_visibility,
+                         Assignment.CHECK_AFTER_SUBMIT)
+
+    def test_interval_and_number_types_checked(self):
+        self.task.answer_type = Task.ANSWER_INTERVAL
+        self.task.answer_latex = r'(-\infty; 3]'
+        self.task.save()
+        self.client.post(self.url, {f'task{self.task.pk}_low': '',
+                                    f'task{self.task.pk}_high': '3'})
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.auto_check, 'ok')
+        self.task.answer_type = Task.ANSWER_NUMBER
+        self.task.answer_latex = r'\frac{1}{4}'
+        self.task.save()
+        self.client.post(self.url, {f'task{self.task.pk}_number': '0,25'})
+        submission.refresh_from_db()
+        self.assertEqual(submission.auto_check, 'ok')

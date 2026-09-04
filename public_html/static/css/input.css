@@ -1709,6 +1709,16 @@
     padding: 4px 0;
   }
 
+  /* Бейдж автосверки рядом с полем ответа; пустой держатель не занимает место */
+  .check-badge {
+    display: inline-block;
+    margin-left: var(--space-2);
+    vertical-align: middle;
+  }
+  .check-badge:empty {
+    display: none;
+  }
+
   .pic-snippet {
     font-size: 0.8rem;
     color: var(--muted);
