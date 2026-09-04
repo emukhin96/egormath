@@ -19,9 +19,13 @@
     <input type="hidden" name="{{ prefix }}_text" value="{{ obj.formula_latex|default:'' }}">
   </span>
 {% else %}
-  <span class="text-answer">
-    <textarea name="{{ prefix }}_text" rows="2" placeholder="ответ">{{ obj.answer_text|default:'' }}</textarea>
-    <button type="button" class="btn btn-small btn-secondary" data-formula-insert
-            title="Вставить формулу в позицию курсора">Формула</button>
-  </span>
+  {# Текст с формулами: под полем — живой превью (KaTeX), ученику LaTeX-код не показываем #}
+  <div class="text-answer">
+    <div class="text-answer-row">
+      <textarea name="{{ prefix }}_text" rows="2" placeholder="ответ">{{ obj.answer_text|default:'' }}</textarea>
+      <button type="button" class="btn btn-small btn-secondary" data-formula-insert
+              title="Вставить формулу в позицию курсора">Формула</button>
+    </div>
+    <div class="answer-preview math-content" data-answer-preview hidden></div>
+  </div>
 {% endif %}

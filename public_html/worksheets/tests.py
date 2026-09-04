@@ -1177,6 +1177,23 @@ class WorksheetViewTests(TestCase):
         response = self.client.get(url, {'variant': 'teacher'})
         self.assertEqual(response.status_code, 403)
 
+    @mock.patch('worksheets.services.compile_latex',
+                side_effect=LatexCompileError(
+                    'Ошибка компиляции LaTeX.', log='! Undefined control'))
+    def test_student_pdf_compile_error_is_not_404(self, mocked):
+        """Ученику — понятная страница без лога, а не «страница не найдена»."""
+        from assignments.models import Assignment
+        Assignment.objects.create(
+            worksheet=self.worksheet, student=self.student,
+            assigned_by=self.teacher)
+        self.client.login(username='student1', password='pass12345')
+        response = self.client.get(
+            reverse('worksheet_pdf', args=[self.worksheet.pk]),
+            {'variant': 'student'})
+        self.assertEqual(response.status_code, 502)
+        self.assertContains(response, 'PDF пока недоступен', status_code=502)
+        self.assertNotContains(response, 'Undefined control', status_code=502)
+
 
 SAMPLE_TEX = r'''\documentclass[a5paper,10pt]{article}
 \usepackage{egor}

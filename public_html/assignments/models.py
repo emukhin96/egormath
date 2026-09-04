@@ -23,20 +23,13 @@ class Assignment(models.Model):
         (STATUS_REVIEWED, 'Проверено'),
     ]
 
-    SCALE_WORDS = 'words'
-    SCALE_POINTS = 'points'
-    SCALE_CHOICES = [
-        (SCALE_WORDS, 'Отметки: отлично/хорошо/средне/плохо'),
-        (SCALE_POINTS, 'Числовая шкала (баллы)'),
-    ]
-
     CHECK_TEACHER = 'teacher'
     CHECK_AFTER_SUBMIT = 'after_submit'
     CHECK_LIVE = 'live'
     CHECK_CHOICES = [
         (CHECK_TEACHER, 'Только учителю'),
         (CHECK_AFTER_SUBMIT, 'Ученику — после отправки работы'),
-        (CHECK_LIVE, 'Ученику — сразу при вводе (самопроверка)'),
+        (CHECK_LIVE, 'Ученику — по кнопке «Проверить» (самопроверка)'),
     ]
 
     worksheet = models.ForeignKey(
@@ -51,14 +44,14 @@ class Assignment(models.Model):
     status = models.CharField(
         'Статус', max_length=10, choices=STATUS_CHOICES,
         default=STATUS_ASSIGNED)
-    grade_scale = models.CharField(
-        'Шкала оценивания', max_length=10, choices=SCALE_CHOICES,
-        default=SCALE_WORDS)
     check_visibility = models.CharField(
         'Кому видна автосверка', max_length=12, choices=CHECK_CHOICES,
         default=CHECK_TEACHER,
         help_text='Учитель видит результат всегда; эталон ученику не '
-                  'показывается ни в одном режиме')
+                  'показывается ни в одном режиме. После выдачи не меняется')
+    allow_photos = models.BooleanField(
+        'Принимать фото решений', default=True,
+        help_text='Кнопка загрузки фото у каждой задачи на странице ученика')
     assigned_at = models.DateTimeField('Выдано', auto_now_add=True)
     due_at = models.DateTimeField('Срок сдачи', null=True, blank=True)
     submitted_at = models.DateTimeField('Отправлено', null=True, blank=True)
@@ -103,6 +96,32 @@ class Assignment(models.Model):
             return self.status != self.STATUS_ASSIGNED
         return False
 
+    def visible_task_count(self):
+        """Сколько задач листка видит этот ученик (без скрытых и удалённых)."""
+        return (self.worksheet.items
+                .filter(task__isnull=False, deleted_at__isnull=True)
+                .exclude(pk__in=self.hidden_items.values('pk'))
+                .count())
+
+    def result(self):
+        """Итог проверки: (выполнено, всего, процент). Шкалы нет —
+        учитель отмечает каждую задачу «выполнено» или нет."""
+        total = self.visible_task_count()
+        done = self.submissions.filter(review__done=True).count()
+        percent = round(100 * done / total) if total else 0
+        return {'done': done, 'total': total, 'percent': percent}
+
+
+def locked_check_visibility(worksheet):
+    """Режим сверки листка, если он уже кому-то выдан, иначе None.
+
+    Все назначения одного листка живут в одном режиме: иначе ученики
+    одного класса оказались бы в неравных условиях, а учитель терял бы
+    из виду, кто что видит. После первой выдачи режим не меняется.
+    """
+    first = worksheet.assignments.order_by('assigned_at').first()
+    return first.check_visibility if first else None
+
 
 def strip_math_delimiters(text):
     """``$…$`` → ``…``: тело формулы для редактора без обрамления."""
@@ -133,8 +152,8 @@ class AnswerFields(models.Model):
     CHECK_UNKNOWN = 'unknown'
     CHECK_CHOICES = [
         ('', 'не сверялось'),
-        (CHECK_OK, 'совпало'),
-        (CHECK_WRONG, 'не совпало'),
+        (CHECK_OK, 'верно'),
+        (CHECK_WRONG, 'неверно'),
         (CHECK_UNKNOWN, 'не разобрано'),
     ]
 
@@ -147,6 +166,10 @@ class AnswerFields(models.Model):
         choices=CHECK_CHOICES,
         help_text='Результат сравнения с эталоном; отметку ставит учитель')
     checked_at = models.DateTimeField('Сверено', null=True, blank=True)
+    check_revealed = models.BooleanField(
+        'Результат показан ученику', default=False,
+        help_text='Ученик нажал «Проверить» для этого ответа; '
+                  'сбрасывается при смене ответа')
     updated_at = models.DateTimeField('Изменён', auto_now=True)
 
     class Meta:
@@ -166,6 +189,23 @@ class AnswerFields(models.Model):
     def check_is_stale(self, task):
         """Эталон могли поправить после сверки — тогда пересчёт."""
         return self.checked_at is None or task.updated_at > self.checked_at
+
+    @property
+    def assignment_of(self):
+        raise NotImplementedError
+
+    @property
+    def student_check(self):
+        """Результат сверки, который можно показать ученику.
+
+        Пока работа редактируется — только раскрытый кнопкой «Проверить»
+        (иначе ученик подбирал бы ответ по бейджу автосохранения); после
+        отправки — как есть. Кому вообще показывать, решает
+        Assignment.student_sees_checks.
+        """
+        if self.check_revealed or not self.assignment_of.is_editable_by_student:
+            return self.auto_check
+        return ''
 
     @property
     def answer_type(self):
@@ -198,8 +238,8 @@ class Submission(AnswerFields):
         Task, on_delete=models.CASCADE, related_name='submissions',
         verbose_name='Задача')
     check_attempts = models.PositiveIntegerField(
-        'Попыток ответа', default=0,
-        help_text='Сколько раз ученик менял ответ; заметно при самопроверке')
+        'Проверок', default=0,
+        help_text='Сколько раз ученик нажимал «Проверить» (самопроверка)')
 
     class Meta:
         verbose_name = 'Ответ ученика'
@@ -212,6 +252,10 @@ class Submission(AnswerFields):
 
     def __str__(self):
         return f'{self.assignment} / задача #{self.task_id}'
+
+    @property
+    def assignment_of(self):
+        return self.assignment
 
     @property
     def answer_type(self):
@@ -245,6 +289,10 @@ class SubmissionPart(AnswerFields):
 
     def __str__(self):
         return f'{self.submission} / подпункт #{self.subitem_id}'
+
+    @property
+    def assignment_of(self):
+        return self.submission.assignment
 
     @property
     def answer_type(self):
@@ -296,24 +344,16 @@ class SubmissionPhoto(models.Model):
 
 
 class Review(models.Model):
-    GRADE_EXCELLENT = 'excellent'
-    GRADE_GOOD = 'good'
-    GRADE_MEDIUM = 'medium'
-    GRADE_POOR = 'poor'
-    GRADE_CHOICES = [
-        (GRADE_EXCELLENT, 'Отлично'),
-        (GRADE_GOOD, 'Хорошо'),
-        (GRADE_MEDIUM, 'Средне'),
-        (GRADE_POOR, 'Плохо'),
-    ]
+    """Отметка учителя по одной задаче: выполнена или нет, плюс комментарий.
+
+    Шкал (баллы, «отлично/хорошо») нет: итог работы — число выполненных
+    задач и процент (Assignment.result).
+    """
 
     submission = models.OneToOneField(
         Submission, on_delete=models.CASCADE, related_name='review',
         verbose_name='Ответ')
-    grade_word = models.CharField(
-        'Отметка', max_length=10, choices=GRADE_CHOICES, blank=True)
-    grade_points = models.DecimalField(
-        'Баллы', max_digits=6, decimal_places=2, null=True, blank=True)
+    done = models.BooleanField('Выполнено', default=False)
     comment = models.TextField('Комментарий', blank=True)
     reviewer = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
@@ -326,12 +366,3 @@ class Review(models.Model):
 
     def __str__(self):
         return f'Проверка: {self.submission}'
-
-    @property
-    def display_grade(self):
-        if self.submission.assignment.grade_scale == Assignment.SCALE_POINTS:
-            if self.grade_points is not None:
-                # без хвостовых нулей
-                return f'{self.grade_points.normalize():f}'.rstrip('.') or '0'
-            return ''
-        return self.get_grade_word_display() if self.grade_word else ''

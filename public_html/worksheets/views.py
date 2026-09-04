@@ -16,6 +16,7 @@ from django.utils.dateparse import parse_date
 
 from accounts.decorators import get_role, teacher_required
 from accounts.models import Profile
+from assignments.models import Assignment, locked_check_visibility
 from problems.models import Task, Topic, topic_tree
 from problems.rubricator import (GRADE_LEVEL_TO_CODE, apply_worksheet_taxonomy,
                                  dumps_state, filter_by_taxonomy,
@@ -336,6 +337,8 @@ def worksheet_detail(request, pk):
     assigned_ids = set(
         worksheet.assignments.values_list('student_id', flat=True))
     groups = request.user.owned_groups.prefetch_related('students')
+    # Листок уже выдан — режим сверки зафиксирован первым назначением
+    locked_check = locked_check_visibility(worksheet) if assignments else None
 
     collection = Collection.objects.filter(worksheet=worksheet).first()
     return render(request, 'worksheets/worksheet_detail.html', {
@@ -348,6 +351,8 @@ def worksheet_detail(request, pk):
         'params': request.GET,
         'student_profiles': student_profiles,
         'assigned_ids': assigned_ids,
+        'check_choices': Assignment.CHECK_CHOICES,
+        'locked_check': locked_check,
         'groups': groups,
         'stars_choices': Task.STARS_CHOICES,
         'grade_choices': Task.GRADE_CHOICES,
@@ -884,7 +889,12 @@ def worksheet_pdf(request, pk):
                                        exclude_ids=exclude_ids)
     except LatexCompileError as exc:
         if not is_owner:
-            raise Http404
+            # Ученику — без лога и .tex: он ничего с ними не сделает,
+            # а «404» выглядел бы как пропавший листок
+            return render(request, 'worksheets/latex_error.html', {
+                'worksheet': worksheet,
+                'for_student': True,
+            }, status=502)
         return render(request, 'worksheets/latex_error.html', {
             'worksheet': worksheet,
             'error': exc,

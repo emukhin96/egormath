@@ -15,18 +15,20 @@
   <a class="btn btn-secondary" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' assignment.worksheet.pk %}?variant=student">Скачать PDF</a>
 </div>
 
-{% if not editable %}
-<div class="msg msg-warning">
-  Работа отправлена на проверку — редактирование закрыто.
-  {% if assignment.status == 'reviewed' %}Ниже отметки и комментарии учителя.{% endif %}
+{% if assignment.status == 'reviewed' %}
+<div class="msg msg-success">
+  Проверено: выполнено <strong>{{ result.done }} из {{ result.total }}</strong> задач ({{ result.percent }}%).
+  Ниже — отметки и комментарии учителя.
 </div>
+{% elif not editable %}
+<div class="msg msg-warning">Работа отправлена на проверку — редактирование закрыто.</div>
 {% elif assignment.status == 'returned' %}
 <div class="msg msg-warning">
   Работа возвращена на доработку. Задачи с комментарием учителя отмечены в списке справа — исправьте их и отправьте снова.
 </div>
 {% endif %}
-{% if show_checks and editable %}
-<p class="helptext">Рядом с ответом — результат автоматической сверки с эталоном. Итоговую отметку ставит учитель.</p>
+{% if can_check %}
+<p class="helptext">Кнопка «Проверить» у задачи сверяет ваш ответ с эталоном. Итоговую отметку ставит учитель.</p>
 {% endif %}
 
 {# Режим change, не debounce: debounce перехватывает submit, а в форме есть кнопки с formaction. #}
@@ -53,7 +55,7 @@
     {# На доработке комментарий учителя — перед полями, чтобы было видно, что исправлять #}
     <div class="answer-box">
       <strong>Комментарий учителя:</strong>
-      {% if sub.review.display_grade %}<span class="badge badge-reviewed">{{ sub.review.display_grade }}</span>{% endif %}
+      {% include 'assignments/_done_badge.html' with review=sub.review %}
       {% if sub.review.comment %}<div class="math-content">{{ sub.review.comment|linebreaksbr }}</div>{% endif %}
     </div>
     {% endif %}
@@ -65,17 +67,33 @@
         <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}
         <div class="subitem-answer">
           {% include 'assignments/_answer_fields.html' with prefix=sr.prefix answer_type=row.task.answer_type obj=sr.part editable=editable %}
-          {% if show_checks %}{% include 'assignments/_check_badge.html' with prefix=sr.prefix status=sr.part.auto_check|default:'' %}{% endif %}
+          {% if show_checks %}{% include 'assignments/_check_badge.html' with prefix=sr.prefix status=sr.part.student_check|default:'' %}{% endif %}
         </div>
       </li>
       {% endfor %}
     </ol>
     {% else %}
-    <p>
+    <div class="answer-block">
       <label>Ответ{% if row.task.answer_type == 'number' %} (число){% elif row.task.answer_type == 'interval' %} (промежуток){% elif row.task.answer_type == 'formula' %} (формула){% endif %}</label>
       {% include 'assignments/_answer_fields.html' with prefix=row.prefix answer_type=row.task.answer_type obj=sub editable=editable %}
-      {% if show_checks %}{% include 'assignments/_check_badge.html' with prefix=row.prefix status=sub.auto_check|default:'' %}{% endif %}
-    </p>
+      {% if show_checks %}{% include 'assignments/_check_badge.html' with prefix=row.prefix status=sub.student_check|default:'' %}{% endif %}
+    </div>
+    {% endif %}
+
+    {% if can_check or can_upload %}
+    <div class="task-tools">
+      {% if can_check %}
+      <button type="submit" class="btn btn-small btn-secondary" data-check-task="{{ row.prefix }}"
+              formaction="{% url 'check_task' assignment.pk row.task.pk %}" formmethod="post">Проверить</button>
+      {% endif %}
+      {% if can_upload %}
+      {# Файл привязан к отдельной multipart-форме (атрибут form): формы не вкладываются #}
+      <label class="btn btn-small btn-secondary photo-pick">Фото решения
+        <input type="file" name="photos" form="photo-form-{{ row.task.pk }}" data-photo-input
+               accept="image/jpeg,image/png,image/webp" multiple></label>
+      <button type="submit" class="btn btn-small btn-secondary" form="photo-form-{{ row.task.pk }}" data-photo-submit>Загрузить</button>
+      {% endif %}
+    </div>
     {% endif %}
 
     {% if sub and sub.photos.all %}
@@ -97,7 +115,7 @@
     {% if sub.review and not editable %}
     <div class="answer-box">
       <strong>Проверка:</strong>
-      {% if sub.review.display_grade %}<span class="badge badge-reviewed">{{ sub.review.display_grade }}</span>{% endif %}
+      {% include 'assignments/_done_badge.html' with review=sub.review %}
       {% if sub.review.comment %}<div class="math-content">{{ sub.review.comment|linebreaksbr }}</div>{% endif %}
     </div>
     {% endif %}
@@ -117,32 +135,22 @@
   {% endif %}
 </form>
 
-{% if editable %}
-<dialog class="dialog" id="formula-dialog">
-  <h3>Формула</h3>
-  <p class="helptext">Наберите формулу — на телефоне появится математическая клавиатура. «Вставить» добавит её в ответ как $…$.</p>
-  <math-field id="formula-dialog-field" smart-fence></math-field>
-  <div class="form-buttons">
-    <button type="button" class="btn" data-formula-confirm>Вставить</button>
-    <button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button>
-  </div>
-</dialog>
+{% if can_upload %}
+{% for row in task_rows %}
+<form method="post" action="{% url 'upload_photo' assignment.pk row.task.pk %}"
+      enctype="multipart/form-data" id="photo-form-{{ row.task.pk }}" hidden>{% csrf_token %}</form>
+{% endfor %}
+{% endif %}
 
-<div class="card">
-  <h2>Фото решений</h2>
-  <p class="helptext">К каждой задаче можно приложить фото рукописного решения
-    (jpeg/png/webp, задач в работе: {{ task_count }}, максимум 6 фото на задачу).</p>
-  {% for row in rows %}
-  {% if row.task %}
-  <form method="post" action="{% url 'upload_photo' assignment.pk row.task.pk %}"
-        enctype="multipart/form-data" class="filters" style="margin-bottom:8px">
-    {% csrf_token %}
-    <div style="min-width:70px"><strong>№ {{ row.number }}</strong></div>
-    <div><input type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple></div>
-    <div><button type="submit" class="btn btn-small btn-secondary">Загрузить</button></div>
-  </form>
-  {% endif %}
-  {% endfor %}
+{% if editable %}
+{# Панель вставки формулы: formula.js переносит её под нужное поле. Не <dialog>: клавиатура MathLive рисуется в body и под модальным окном не видна. #}
+<div class="formula-panel" id="formula-panel" hidden>
+  <math-field id="formula-panel-field" smart-fence></math-field>
+  <div class="form-buttons">
+    <button type="button" class="btn btn-small" data-formula-confirm>Вставить</button>
+    <button type="button" class="btn btn-small btn-secondary" data-formula-cancel>Отмена</button>
+    <span class="helptext">Набранная формула попадёт в ответ в позицию курсора.</span>
+  </div>
 </div>
 {% endif %}
 {% endblock %}

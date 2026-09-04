@@ -9,7 +9,11 @@
 </section>
 <section class="sidebar-section">
   <p class="sidebar-kicker">Прогресс</p>
+  {% if assignment.status == 'reviewed' %}
+  <div class="sidebar-stat"><strong>{{ result.done }} из {{ result.total }}</strong><span>задач выполнено ({{ result.percent }}%)</span></div>
+  {% else %}
   <div class="sidebar-stat"><strong>{{ answered_count }} из {{ task_count }}</strong><span>задач с ответом</span></div>
+  {% endif %}
   <ul class="sidebar-list">
     {% for row in task_rows %}
     <li><a href="#task-{{ row.number }}">№ {{ row.number }}</a>
@@ -20,7 +24,7 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Состояние</p>
   {% if editable %}
-  <p class="sidebar-copy">Ответы сохраняются автоматически при уходе из поля; «Отправить на проверку» закрывает работу для правок.</p>
+  <p class="sidebar-copy">Ответы сохраняются автоматически при уходе из поля{% if can_check %}, «Проверить» у задачи сверяет ответ с эталоном{% endif %}; «Отправить на проверку» закрывает работу для правок.</p>
   {% else %}
   <p class="sidebar-copy">Редактирование закрыто. Дождитесь проверки или возврата работы.</p>
   {% endif %}

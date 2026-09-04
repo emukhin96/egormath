@@ -5,9 +5,10 @@
     <li><strong>Листок:</strong> {{ assignment.worksheet.title|truncatechars:28 }}</li>
     <li><strong>Статус:</strong> {{ assignment.get_status_display }}</li>
     <li><strong>Отправлено:</strong> {{ assignment.submitted_at|date:"d.m.Y H:i" }}</li>
-    <li><strong>Шкала:</strong> {% if is_points %}баллы{% else %}словесные отметки{% endif %}</li>
+    <li><strong>Автосверка:</strong> {{ assignment.get_check_visibility_display|lower }}</li>
     <li><strong>С ответом:</strong> {{ answered_count }} из {{ task_count }} задач</li>
   </ul>
+  <div class="sidebar-stat"><strong>{{ result.done }} из {{ result.total }}</strong><span>выполнено ({{ result.percent }}%)</span></div>
   <ul class="sidebar-list">
     {% for row in task_rows %}
     <li><a href="#task-{{ row.number }}">№ {{ row.number }}</a> — {% if row.answered %}есть ответ{% else %}нет ответа{% endif %}</li>

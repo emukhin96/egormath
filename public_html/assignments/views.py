@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -10,7 +11,7 @@ from problems.models import Task
 from worksheets.models import Worksheet
 
 from .models import (Assignment, Review, Submission, SubmissionPart,
-                     SubmissionPhoto, wrap_math)
+                     SubmissionPhoto, locked_check_visibility, wrap_math)
 
 
 # --- Назначение листка ученикам (действие учителя со страницы листка) ---
@@ -35,10 +36,9 @@ def assign_worksheet(request, worksheet_id):
                              .filter(pk__in=group_ids)
                              .values_list('students__id', flat=True))
         student_ids |= {str(pk) for pk in group_student_ids if pk}
-    grade_scale = request.POST.get('grade_scale', Assignment.SCALE_WORDS)
-    if grade_scale not in dict(Assignment.SCALE_CHOICES):
-        grade_scale = Assignment.SCALE_WORDS
-    check_visibility = _check_visibility_or_default(request.POST)
+    check_visibility = (locked_check_visibility(worksheet)
+                        or _check_visibility_or_default(request.POST))
+    allow_photos = 'allow_photos' in request.POST
     due_at = request.POST.get('due_at') or None
 
     my_students = request.user.students.filter(
@@ -49,8 +49,8 @@ def assign_worksheet(request, worksheet_id):
             worksheet=worksheet, student=profile.user,
             defaults={
                 'assigned_by': request.user,
-                'grade_scale': grade_scale,
                 'check_visibility': check_visibility,
+                'allow_photos': allow_photos,
                 'due_at': due_at,
             })
         created += was_created
@@ -103,6 +103,13 @@ def _assignment_rows(assignment, with_review=False):
             or any(sr['part'] and sr['part'].display_answer for sr in subrows)
             or submission.photos.all())
         review = getattr(submission, 'review', None) if submission else None
+        # Все данные ответы сошлись с эталоном — учителю подсказка
+        # «выполнено» по умолчанию, пока он сам не решил иначе
+        checked = ([sr['part'] for sr in subrows if sr['part']]
+                   if subrows else [submission] if submission else [])
+        checked = [c for c in checked if c.display_answer]
+        auto_ok = bool(checked) and all(
+            c.auto_check == Submission.CHECK_OK for c in checked)
         rows.append({
             'item': item,
             'task': item.task,
@@ -111,6 +118,7 @@ def _assignment_rows(assignment, with_review=False):
             'submission': submission,
             'review': review,
             'answered': answered,
+            'auto_ok': auto_ok,
             'has_comment': bool(review and review.comment),
             'subrows': subrows,
         })
@@ -120,12 +128,16 @@ def _assignment_rows(assignment, with_review=False):
 def _progress(rows):
     """Счётчики для сайдбара и подтверждения отправки."""
     task_rows = [r for r in rows if r['task'] is not None]
+    done = sum(1 for r in task_rows if r['review'] and r['review'].done)
+    total = len(task_rows)
     return {
         'task_rows': task_rows,
-        'task_count': len(task_rows),
+        'task_count': total,
         'answered_count': sum(1 for r in task_rows if r['answered']),
         'unanswered_numbers': [
             r['number'] for r in task_rows if not r['answered']],
+        'result': {'done': done, 'total': total,
+                   'percent': round(100 * done / total) if total else 0},
     }
 
 
@@ -136,11 +148,16 @@ def assignment_detail(request, pk):
     show_checks = assignment.student_sees_checks
     if show_checks:
         _refresh_stale_checks(rows)
+    editable = assignment.is_editable_by_student
     context = {
         'assignment': assignment,
         'rows': rows,
-        'editable': assignment.is_editable_by_student,
+        'editable': editable,
         'show_checks': show_checks,
+        # Кнопка «Проверить» — только когда ученик и так вправе видеть
+        # результат до сдачи; в остальных режимах её нет вовсе
+        'can_check': show_checks and editable,
+        'can_upload': editable and assignment.allow_photos,
     }
     context.update(_progress(rows))
     return render(request, 'assignments/assignment_detail.html', context)
@@ -206,20 +223,19 @@ def _persist_answers(assignment, post):
     иначе ответы теряются при уходе со страницы. У задач с подпунктами —
     отдельный ответ на каждый подпункт (SubmissionPart), у остальных —
     ответ на задачу целиком. Сразу же сверяет записанное с эталоном
-    (auto_check) и считает смены ответа (check_attempts). Возвращает
-    словарь «префикс поля → результат сверки» по затронутым полям.
+    (auto_check — учителю), а раскрытый ученику результат (check_revealed)
+    сбрасывает при смене ответа: новый ответ — новая кнопка «Проверить».
     """
     hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     existing = {s.task_id: s for s in assignment.submissions.all()}
-    checks = {}
 
-    def _apply(obj, fields, reference, submission):
+    def _apply(obj, fields, reference):
         before = obj.display_answer
         for name, value in fields.items():
             setattr(obj, name, value)
         obj.run_check(reference)
-        if obj.display_answer and obj.display_answer != before:
-            submission.check_attempts += 1
+        if obj.display_answer != before:
+            obj.check_revealed = False
         obj.save()
 
     for item in assignment.worksheet.ordered_items():
@@ -245,14 +261,10 @@ def _persist_answers(assignment, post):
                 submission, _ = Submission.objects.get_or_create(
                     assignment=assignment, task=task)
                 existing[task.pk] = submission
-            attempts_before = submission.check_attempts
             for subitem, fields in part_fields.items():
                 part, _ = SubmissionPart.objects.get_or_create(
                     submission=submission, subitem=subitem)
-                _apply(part, fields, subitem.effective_answer_latex, submission)
-                checks[f'{prefix}_sub{subitem.pk}'] = part.auto_check
-            if submission.check_attempts != attempts_before:
-                submission.save(update_fields=['check_attempts'])
+                _apply(part, fields, subitem.effective_answer_latex)
             continue
         fields = _answer_fields(task.answer_type, post, prefix)
         if not fields:
@@ -263,9 +275,7 @@ def _persist_answers(assignment, post):
                 submission, _ = Submission.objects.get_or_create(
                     assignment=assignment, task=task)
                 existing[task.pk] = submission
-            _apply(submission, fields, task.effective_answer_latex, submission)
-            checks[prefix] = submission.auto_check
-    return checks
+            _apply(submission, fields, task.effective_answer_latex)
 
 
 def _refresh_stale_checks(rows):
@@ -315,16 +325,77 @@ def save_answers(request, pk):
     denied = _editable_or_deny(request, assignment)
     if denied:
         return denied
-    checks = _persist_answers(assignment, request.POST)
+    _persist_answers(assignment, request.POST)
     if _is_xhr(request):
-        payload = {'ok': True, 'message': 'Сохранено ✓'}
-        # Результаты сверки — только в режиме самопроверки: в остальных
-        # ученик по ответу автосохранения ничего узнать не должен
-        if assignment.student_sees_checks:
-            payload['checks'] = checks
-        return JsonResponse(payload)
+        # Результат сверки в ответ автосохранения не попадает ни в одном
+        # режиме: ученик узнаёт его только кнопкой «Проверить»
+        return JsonResponse({'ok': True, 'message': 'Сохранено ✓'})
     messages.success(request, 'Ответы сохранены (черновик).')
     return redirect('assignment_detail', pk=pk)
+
+
+@student_required
+@require_POST
+def check_task(request, pk, task_id):
+    """Кнопка «Проверить» у задачи: раскрыть ученику результат сверки.
+
+    Сначала сохраняет всю форму (кнопка шлёт её целиком), затем помечает
+    ответ задачи (или все её подпункты) как раскрытые и считает нажатие.
+    Доступно только в режимах, где ученик вправе видеть результат до
+    сдачи; для fetch — JSON «префикс → результат», иначе redirect к задаче.
+    """
+    assignment = _student_assignment(request, pk)
+    denied = _editable_or_deny(request, assignment)
+    if denied:
+        return denied
+    if not assignment.student_sees_checks:
+        raise PermissionDenied('Результат сверки в этом задании не показывается.')
+    _persist_answers(assignment, request.POST)
+    task = get_object_or_404(Task, pk=task_id)
+    item = _visible_task_item(assignment, task)
+    submission, _ = Submission.objects.get_or_create(
+        assignment=assignment, task=task)
+
+    checks = {}
+    subitems = item.selected_subitems()
+    if subitems:
+        parts = {p.subitem_id: p for p in submission.parts.all()}
+        for subitem in subitems:
+            part = parts.get(subitem.pk)
+            if part is None or not part.display_answer:
+                continue
+            part.check_revealed = True
+            part.save(update_fields=['check_revealed'])
+            checks[f'task{task.pk}_sub{subitem.pk}'] = part.auto_check
+    elif submission.display_answer:
+        submission.check_revealed = True
+        submission.save(update_fields=['check_revealed'])
+        checks[f'task{task.pk}'] = submission.auto_check
+    if checks:
+        submission.check_attempts += 1
+        submission.save(update_fields=['check_attempts'])
+        message = 'Проверено'
+    else:
+        message = 'Сначала введите ответ'
+
+    if _is_xhr(request):
+        return JsonResponse({'ok': True, 'message': message, 'checks': checks})
+    messages.info(request, message)
+    number = _visible_task_number(assignment, item)
+    return redirect(f"{reverse('assignment_detail', args=[pk])}#task-{number}")
+
+
+def _visible_task_number(assignment, item):
+    """Номер задачи на странице ученика (без скрытых элементов)."""
+    hidden = set(assignment.hidden_items.values_list('pk', flat=True))
+    number = 0
+    for other in assignment.worksheet.ordered_items():
+        if other.task_id is None or other.pk in hidden:
+            continue
+        number += 1
+        if other.pk == item.pk:
+            return number
+    return number
 
 
 @student_required
@@ -333,6 +404,8 @@ def upload_photo(request, pk, task_id):
     assignment = _student_assignment(request, pk)
     if not assignment.is_editable_by_student:
         raise PermissionDenied('Работа уже отправлена на проверку.')
+    if not assignment.allow_photos:
+        raise PermissionDenied('Учитель не принимает фото решений в этом задании.')
     # Несохранённый текст из формы ответов не должен пропасть из-за фото
     _persist_answers(assignment, request.POST)
     submission = _get_or_create_submission(assignment, task_id)
@@ -419,9 +492,6 @@ def review_assignment(request, pk):
     context = {
         'assignment': assignment,
         'rows': rows,
-        'grade_choices': Review.GRADE_CHOICES,
-        'is_points': assignment.grade_scale == Assignment.SCALE_POINTS,
-        'check_choices': Assignment.CHECK_CHOICES,
     }
     context.update(_progress(rows))
     return render(request, 'assignments/review.html', context)
@@ -432,10 +502,6 @@ def review_assignment(request, pk):
 def save_review(request, pk):
     assignment = _teacher_assignment(request, pk)
     action = request.POST.get('action', 'save')
-    # Режим показа сверки можно сменить прямо на проверке
-    if 'check_visibility' in request.POST:
-        assignment.check_visibility = _check_visibility_or_default(request.POST)
-        assignment.save(update_fields=['check_visibility'])
 
     hidden_item_ids = set(assignment.hidden_items.values_list('pk', flat=True))
     visible_task_ids = set(
@@ -447,32 +513,19 @@ def save_review(request, pk):
         if submission.task_id not in visible_task_ids:
             continue
         prefix = f'sub{submission.pk}'
-        # Полей нет в POST — задачу скрыли или убрали из формы: отзыв не трогаем
-        if (f'{prefix}_grade' not in request.POST
-                and f'{prefix}_points' not in request.POST
-                and f'{prefix}_comment' not in request.POST):
+        # Полей нет в POST — задачу скрыли или убрали из формы: отзыв не
+        # трогаем. Чекбокс в POST не приходит, когда снят, поэтому признак
+        # присутствия строки — поле комментария
+        if f'{prefix}_comment' not in request.POST:
             continue
-        grade_word = request.POST.get(f'{prefix}_grade', '')
-        grade_points_raw = request.POST.get(f'{prefix}_points', '').strip()
+        done = f'{prefix}_done' in request.POST
         comment = request.POST.get(f'{prefix}_comment', '').strip()
 
-        grade_points = None
-        if grade_points_raw:
-            try:
-                grade_points = float(grade_points_raw.replace(',', '.'))
-            except ValueError:
-                messages.warning(
-                    request,
-                    f'Баллы «{grade_points_raw}» не распознаны — пропущено.')
-        if grade_word not in dict(Review.GRADE_CHOICES):
-            grade_word = ''
-
-        if grade_word or grade_points is not None or comment:
+        if done or comment:
             Review.objects.update_or_create(
                 submission=submission,
                 defaults={
-                    'grade_word': grade_word,
-                    'grade_points': grade_points,
+                    'done': done,
                     'comment': comment,
                     'reviewer': request.user,
                 })

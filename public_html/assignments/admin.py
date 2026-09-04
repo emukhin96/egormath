@@ -14,9 +14,9 @@ class SubmissionInline(admin.TabularInline):
 
 @admin.register(Assignment)
 class AssignmentAdmin(admin.ModelAdmin):
-    list_display = ('worksheet', 'student', 'status', 'grade_scale',
-                    'assigned_at', 'due_at')
-    list_filter = ('status', 'grade_scale')
+    list_display = ('worksheet', 'student', 'status', 'check_visibility',
+                    'allow_photos', 'assigned_at', 'due_at')
+    list_filter = ('status', 'check_visibility', 'allow_photos')
     search_fields = ('worksheet__title', 'student__username',
                      'student__last_name')
     inlines = [SubmissionInline]
@@ -40,6 +40,5 @@ class SubmissionAdmin(admin.ModelAdmin):
 
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
-    list_display = ('submission', 'grade_word', 'grade_points',
-                    'reviewer', 'reviewed_at')
-    list_filter = ('grade_word',)
+    list_display = ('submission', 'done', 'reviewer', 'reviewed_at')
+    list_filter = ('done',)
