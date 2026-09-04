@@ -1,0 +1,16 @@
+{# Таблица заданий ученика: items — список Assignment, skip — задание, уже показанное в hero-карточке #}
+<table class="list">
+  <tr><th>Листок</th><th>Учитель</th><th>Выдано</th><th>Срок</th><th>Статус</th><th></th></tr>
+  {% for a in items %}
+  {% if a != skip %}
+  <tr>
+    <td>{{ a.worksheet.title }}</td>
+    <td>{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>
+    <td>{{ a.assigned_at|date:'d.m.Y' }}</td>
+    <td>{% if a.due_at %}{{ a.due_at|date:'d.m.Y H:i' }}{% if a.is_overdue %} <span class="badge badge-returned">просрочено</span>{% endif %}{% else %}—{% endif %}</td>
+    <td><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span></td>
+    <td><a class="btn btn-small btn-secondary" href="{% url 'assignment_detail' a.pk %}">Открыть</a></td>
+  </tr>
+  {% endif %}
+  {% endfor %}
+</table>

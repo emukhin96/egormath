@@ -82,30 +82,55 @@ def _assignment_rows(assignment, with_review=False):
         if submission:
             parts = {p.subitem_id: p for p in submission.parts.all()}
         subitems = item.selected_subitems()
+        subrows = [
+            {'subitem': s, 'part': parts.get(s.pk),
+             'prefix': f'task{item.task_id}_sub{s.pk}'}
+            for s in subitems
+        ]
+        # «Отвечено» — есть текст на задаче/любом подпункте или фото;
+        # только по prefetch-данным, без дополнительных запросов
+        answered = bool(submission) and bool(
+            submission.display_answer
+            or any(sr['part'] and sr['part'].display_answer for sr in subrows)
+            or submission.photos.all())
+        review = getattr(submission, 'review', None) if submission else None
         rows.append({
             'item': item,
             'task': item.task,
             'number': number,
             'prefix': f'task{item.task_id}',
             'submission': submission,
-            'review': getattr(submission, 'review', None) if submission else None,
-            'subrows': [
-                {'subitem': s, 'part': parts.get(s.pk),
-                 'prefix': f'task{item.task_id}_sub{s.pk}'}
-                for s in subitems
-            ],
+            'review': review,
+            'answered': answered,
+            'has_comment': bool(review and review.comment),
+            'subrows': subrows,
         })
     return rows
+
+
+def _progress(rows):
+    """Счётчики для сайдбара и подтверждения отправки."""
+    task_rows = [r for r in rows if r['task'] is not None]
+    return {
+        'task_rows': task_rows,
+        'task_count': len(task_rows),
+        'answered_count': sum(1 for r in task_rows if r['answered']),
+        'unanswered_numbers': [
+            r['number'] for r in task_rows if not r['answered']],
+    }
 
 
 @student_required
 def assignment_detail(request, pk):
     assignment = _student_assignment(request, pk)
-    return render(request, 'assignments/assignment_detail.html', {
+    rows = _assignment_rows(assignment)
+    context = {
         'assignment': assignment,
-        'rows': _assignment_rows(assignment),
+        'rows': rows,
         'editable': assignment.is_editable_by_student,
-    })
+    }
+    context.update(_progress(rows))
+    return render(request, 'assignments/assignment_detail.html', context)
 
 
 def _visible_task_item(assignment, task):
@@ -337,12 +362,15 @@ def _teacher_assignment(request, pk):
 @teacher_required
 def review_assignment(request, pk):
     assignment = _teacher_assignment(request, pk)
-    return render(request, 'assignments/review.html', {
+    rows = _assignment_rows(assignment, with_review=True)
+    context = {
         'assignment': assignment,
-        'rows': _assignment_rows(assignment, with_review=True),
+        'rows': rows,
         'grade_choices': Review.GRADE_CHOICES,
         'is_points': assignment.grade_scale == Assignment.SCALE_POINTS,
-    })
+    }
+    context.update(_progress(rows))
+    return render(request, 'assignments/review.html', context)
 
 
 @teacher_required

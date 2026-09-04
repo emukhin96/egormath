@@ -201,6 +201,55 @@ class StudentAnswerTests(TestCase):
             reverse('assignment_detail', args=[self.assignment.pk]))
         self.assertContains(response, 'data-autosave="change"')
 
+    def test_progress_counts_answers_and_photos(self):
+        """Сайдбар: «отвечено N из M» учитывает текст, подпункты и фото."""
+        t1, t2 = self.tasks
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertEqual(response.context['task_count'], 2)
+        self.assertEqual(response.context['answered_count'], 0)
+        self.assertEqual(response.context['unanswered_numbers'], [1, 2])
+
+        Submission.objects.create(
+            assignment=self.assignment, task=t1, answer_text='x = 1')
+        self.client.post(
+            reverse('upload_photo', args=[self.assignment.pk, t2.pk]),
+            {'photos': fake_photo()})
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertEqual(response.context['answered_count'], 2)
+        self.assertContains(response, '2 из 2')
+
+    def test_overdue_badge(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+        self.assignment.due_at = timezone.now() - timedelta(days=1)
+        self.assignment.save()
+        self.assertTrue(self.assignment.is_overdue)
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(response, 'просрочено')
+        # Просрочка не блокирует сдачу
+        self.client.post(
+            reverse('submit_assignment', args=[self.assignment.pk]))
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.status, Assignment.STATUS_SUBMITTED)
+        self.assertFalse(self.assignment.is_overdue)
+
+    def test_dashboard_groups_by_status(self):
+        submitted = make_assignment(self.teacher, self.student,
+                                    status=Assignment.STATUS_SUBMITTED)
+        reviewed = make_assignment(self.teacher, self.student,
+                                   status=Assignment.STATUS_REVIEWED)
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.context['todo'], [self.assignment])
+        self.assertEqual(response.context['submitted'], [submitted])
+        self.assertEqual(response.context['reviewed'], [reviewed])
+        self.assertEqual(response.context['current'], self.assignment)
+        self.assertContains(response, 'На проверке')
+        self.assertContains(response, 'Проверено')
+
     def test_save_subitem_answers(self):
         """У задачи с подпунктами ответы сохраняются отдельно (SubmissionPart)."""
         item = self.assignment.worksheet.ordered_items()[0]
@@ -298,6 +347,25 @@ class ReviewFlowTests(TestCase):
             reverse('assignment_detail', args=[self.assignment.pk]))
         self.assertContains(response, 'Верно, но оформи решение.')
         self.assertContains(response, 'Хорошо')
+
+    def test_review_renders_student_answer_as_math(self):
+        """Ответ ученика и эталон проходят web_answer: голый TeX — в $…$,
+        HTML — экранирован."""
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        submission.answer_text = r'\{-2;1\}'
+        submission.save()
+        response = self.client.get(
+            reverse('review_assignment', args=[self.assignment.pk]))
+        self.assertContains(response, r'$\{-2;1\}$')
+        self.assertEqual(response.context['answered_count'], 1)
+
+        submission.answer_text = '<b>x</b>'
+        submission.save()
+        response = self.client.get(
+            reverse('review_assignment', args=[self.assignment.pk]))
+        self.assertContains(response, '&lt;b&gt;x&lt;/b&gt;')
+        self.assertNotContains(response, '<b>x</b>')
 
     def test_return_for_rework(self):
         response = self.client.post(

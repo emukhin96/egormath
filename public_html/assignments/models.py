@@ -4,6 +4,7 @@ import os
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import models
+from django.utils import timezone
 from PIL import Image
 
 from problems.models import Task, TaskSubitem
@@ -72,6 +73,12 @@ class Assignment(models.Model):
     def is_editable_by_student(self):
         """Ученик может менять ответы, пока работа не отправлена на проверку."""
         return self.status in (self.STATUS_ASSIGNED, self.STATUS_RETURNED)
+
+    @property
+    def is_overdue(self):
+        """Срок прошёл, а работа ещё не сдана. Только подсказка: сдачу не блокирует."""
+        return bool(self.due_at) and self.is_editable_by_student \
+            and self.due_at < timezone.now()
 
 
 class Submission(models.Model):
