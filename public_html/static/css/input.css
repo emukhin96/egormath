@@ -293,6 +293,98 @@
     gap: var(--space-2);
   }
 
+  /* Корзина листка в шапке (native details) */
+  .cart-menu {
+    position: relative;
+    flex: none;
+  }
+
+  .cart-summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #53647b;
+    user-select: none;
+  }
+
+  .cart-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .cart-summary:hover,
+  .cart-menu[open] .cart-summary {
+    color: var(--accent);
+    background: #e4eef9;
+  }
+
+  .cart-count {
+    min-width: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .cart-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    width: 320px;
+    padding: var(--space-3);
+    display: grid;
+    gap: var(--space-2);
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgb(18 43 85 / 14%);
+    z-index: 70;
+  }
+
+  .cart-panel-title {
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .cart-panel .helptext {
+    margin: 0;
+  }
+
+  .cart-form {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .cart-form .quick-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .task-line .inline-form {
+    margin-left: auto;
+    flex: none;
+    align-self: flex-start;
+  }
+
+  .cart-btn {
+    white-space: nowrap;
+  }
+
+  .cart-btn.is-in-cart {
+    color: var(--ok);
+    border-color: var(--ok);
+  }
+
   .user-avatar {
     width: 32px;
     height: 32px;
@@ -2624,8 +2716,18 @@
     }
 
     .user-avatar,
-    .user-name {
+    .user-name,
+    .cart-title {
       display: none;
+    }
+
+    .cart-panel {
+      position: fixed;
+      left: var(--space-3);
+      right: var(--space-3);
+      top: auto;
+      width: auto;
+      margin-top: 6px;
     }
 
     .linklike {

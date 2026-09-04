@@ -9,6 +9,7 @@
     {% if task.variant_of_id %}<span class="badge badge-returned">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}
   </div>
   <div class="form-buttons">
+    {% if not task.variant_of_id %}{% include 'includes/cart_button.html' with task=task %}{% endif %}
     <button type="button" class="btn btn-secondary" data-neuro="task-detail-answer"
             data-task-id="{{ task.pk }}"
             title="Ответ в пустые поля — существующие ответы и решения не трогаем">Дописать AI-ответ</button>
@@ -177,3 +178,4 @@
     Команды пакета egor (картинки, графики) видны только в PDF.</p>
 </div>
 {% endblock %}
+{% block extra_js %}{% load static %}<script defer src="{% static 'js/cart.js' %}"></script>{% endblock %}

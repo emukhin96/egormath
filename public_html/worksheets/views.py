@@ -566,19 +566,18 @@ def worksheet_quick_update(request, pk):
     return redirect('worksheet_list')
 
 
-def add_task_to_worksheet(request, worksheet_id, task):
-    """Добавляет задачу в конец листка (используется и из создания задачи).
+def append_task(worksheet, task):
+    """Добавляет задачу в конец листка; возвращает (исход, сообщение).
 
-    Повторное добавление задачи из корзины — это восстановление, а не
-    второй элемент: иначе «Отменить» дало бы дубль.
+    Исход: 'exists' — уже есть, 'restored' — возвращён мягко удалённый
+    элемент, 'added' — создан новый. Повторное добавление задачи из корзины —
+    это восстановление, а не второй элемент: иначе «Отменить» дало бы дубль.
+    Общая точка для конструктора, создания задачи и корзины.
     """
-    worksheet = get_object_or_404(
-        Worksheet, pk=worksheet_id, owner=request.user)
     with transaction.atomic():
         Worksheet.objects.select_for_update().get(pk=worksheet.pk)
         if worksheet.items.filter(task=task, deleted_at__isnull=True).exists():
-            messages.info(request, f'Задача #{task.pk} уже есть в листке.')
-            return redirect('worksheet_detail', pk=worksheet.pk)
+            return 'exists', f'Задача #{task.pk} уже есть в листке.'
         trashed = worksheet.items.filter(
             task=task, deleted_at__isnull=False).first()
         if trashed:
@@ -586,12 +585,30 @@ def add_task_to_worksheet(request, worksheet_id, task):
                 pk=trashed.pk).delete()
             trashed.deleted_at = None
             trashed.save(update_fields=['deleted_at'])
-            messages.success(request, f'Задача #{task.pk} возвращена в листок.')
-            return redirect('worksheet_detail', pk=worksheet.pk)
+            return 'restored', f'Задача #{task.pk} возвращена в листок.'
         last = worksheet.items.aggregate(m=models.Max('order'))['m'] or 0
         WorksheetItem.objects.create(
             worksheet=worksheet, task=task, order=last + 10)
-    messages.success(request, f'Задача #{task.pk} добавлена в «{worksheet.title}».')
+    return 'added', f'Задача #{task.pk} добавлена в «{worksheet.title}».'
+
+
+def soft_remove_item(worksheet, item):
+    """Мягкое удаление элемента с одноуровневым «Отменить»: прежний
+    «мусор» листка вычищается насовсем."""
+    with transaction.atomic():
+        Worksheet.objects.select_for_update().get(pk=worksheet.pk)
+        worksheet.items.filter(deleted_at__isnull=False).delete()
+        item.deleted_at = timezone.now()
+        item.save(update_fields=['deleted_at'])
+
+
+def add_task_to_worksheet(request, worksheet_id, task):
+    """Добавляет задачу в конец листка (используется и из создания задачи)."""
+    worksheet = get_object_or_404(
+        Worksheet, pk=worksheet_id, owner=request.user)
+    outcome, message = append_task(worksheet, task)
+    (messages.info if outcome == 'exists' else messages.success)(
+        request, message)
     return redirect('worksheet_detail', pk=worksheet.pk)
 
 
@@ -611,20 +628,16 @@ def worksheet_remove_item(request, pk, item_id):
     вычищается насовсем.
     """
     worksheet = _own_worksheet(request, pk)
-    with transaction.atomic():
-        Worksheet.objects.select_for_update().get(pk=worksheet.pk)
-        item = get_object_or_404(
-            WorksheetItem, pk=item_id, worksheet=worksheet,
-            deleted_at__isnull=True)
-        worksheet.items.filter(deleted_at__isnull=False).delete()
-        item.deleted_at = timezone.now()
-        item.save(update_fields=['deleted_at'])
-        if item.task_id:
-            msg = 'Задача удалена из листка.'
-        elif item.is_rubric:
-            msg = 'Рубрика удалена из листка.'
-        else:
-            msg = 'Текст удалён из листка.'
+    item = get_object_or_404(
+        WorksheetItem, pk=item_id, worksheet=worksheet,
+        deleted_at__isnull=True)
+    soft_remove_item(worksheet, item)
+    if item.task_id:
+        msg = 'Задача удалена из листка.'
+    elif item.is_rubric:
+        msg = 'Рубрика удалена из листка.'
+    else:
+        msg = 'Текст удалён из листка.'
     return _builder_response(request, pk, message=msg)
 
 

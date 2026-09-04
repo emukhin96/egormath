@@ -31,7 +31,7 @@
     {% if user.is_authenticated %}
       <nav class="topbar-nav" aria-label="Основные разделы">
         <a href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} class="is-active"{% endif %}>Главная</a>
-        {% if user.profile.is_teacher or user.is_superuser %}
+        {% if is_teacher %}
           <a href="{% url 'task_list' %}"{% if 'task' in request.resolver_match.url_name or request.resolver_match.url_name == 'bulk_answers' %} class="is-active"{% endif %}>База задач</a>
           <a href="{% url 'textbook_import_list' %}"{% if 'textbook_import' in request.resolver_match.url_name %} class="is-active"{% endif %}>Импорт</a>
           <a href="{% url 'worksheet_list' %}"{% if 'worksheet' in request.resolver_match.url_name %} class="is-active"{% endif %}>Листки</a>
@@ -40,6 +40,7 @@
         {% endif %}
       </nav>
       <div class="topbar-user">
+        {% if is_teacher and not minimal_page %}{% include 'includes/cart_menu.html' %}{% endif %}
         {% if not minimal_page %}
         <button type="button" class="context-toggle" id="context-toggle"
                 aria-controls="context-sidebar" aria-expanded="false">

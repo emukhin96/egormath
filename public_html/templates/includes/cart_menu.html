@@ -1,0 +1,36 @@
+{# Индикатор корзины в шапке: текущий листок и счётчик; данные — из accounts.context_processors.shell #}
+<details class="cart-menu" id="cart-menu" data-cart-menu>
+  <summary class="cart-summary" title="Листок, в который добавляются задачи из базы">
+    <span class="cart-icon" aria-hidden="true">▤</span>
+    <span class="cart-title" data-cart-title>{% if cart.worksheet %}{{ cart.worksheet.title|truncatechars:24 }}{% else %}Собрать листок{% endif %}</span>
+    <span class="cart-count" data-cart-count {% if not cart.worksheet %}hidden{% endif %}>{{ cart.count }}</span>
+  </summary>
+  <div class="cart-panel">
+    {% if cart.worksheet %}
+    <p class="cart-panel-title">Собираем: <a data-cart-link href="{% url 'worksheet_detail' cart.worksheet.pk %}">{{ cart.worksheet.title }}</a></p>
+    <p class="helptext">Кнопка «в листок» у задачи добавляет её в конец этого листка.</p>
+    <a class="btn btn-small" data-cart-link href="{% url 'worksheet_detail' cart.worksheet.pk %}">Открыть листок</a>
+    {% else %}
+    <p class="cart-panel-title">Листок для сборки не выбран</p>
+    <p class="helptext">Первое нажатие «в листок» у задачи создаст новый листок. Или выберите существующий:</p>
+    {% endif %}
+    <form method="post" action="{% url 'cart_select' %}" class="cart-form">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <select name="worksheet" class="quick-select" aria-label="Листок для сборки">
+        <option value="new">— новый листок —</option>
+        {% for pk, title in cart.choices %}
+        <option value="{{ pk }}" {% if cart.worksheet and cart.worksheet.pk == pk %}selected{% endif %}>{{ title|truncatechars:48 }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-small btn-secondary">Выбрать</button>
+    </form>
+    {% if cart.worksheet %}
+    <form method="post" action="{% url 'cart_clear' %}" class="cart-form">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <button type="submit" class="linklike">Закончить сборку</button>
+    </form>
+    {% endif %}
+  </div>
+</details>

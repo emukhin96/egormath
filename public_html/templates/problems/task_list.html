@@ -89,6 +89,7 @@
           <span class="math-content task-text">{{ task.text_latex|web_text_preview:220 }}</span>
           {% include 'problems/_subitems.html' with subitems=task.subitems.all %}
         </div>
+        {% include 'includes/cart_button.html' with task=task %}
       </div>
     </td>
     <td class="col-grade">
@@ -143,4 +144,5 @@
 <div class="card"><p class="muted">Задачи не найдены. Попробуйте изменить фильтры или <a href="{% url 'task_create' %}">создайте новую</a>.</p></div>
 {% endif %}
 <script defer src="{% static 'js/bulk.js' %}"></script>
+<script defer src="{% static 'js/cart.js' %}"></script>
 {% endblock %}

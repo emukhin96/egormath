@@ -10,6 +10,7 @@ urlpatterns = [
     path('dashboard/', accounts_views.dashboard, name='dashboard'),
     path('accounts/', include('accounts.urls')),
     path('problems/', include('problems.urls')),
+    path('worksheets/cart/', include('worksheets.cart_urls')),
     path('worksheets/', include('worksheets.urls')),
     path('assignments/', include('assignments.urls')),
     path('s/<str:token>/', worksheets_views.public_worksheet, name='public_worksheet'),
