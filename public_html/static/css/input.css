@@ -1669,6 +1669,46 @@
     font-size: 0.9rem;
   }
 
+  /* Ответы ученика: textarea + кнопка «Формула», поле формулы MathLive */
+  .text-answer {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    max-width: 640px;
+  }
+
+  .text-answer textarea {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .formula-field {
+    display: block;
+    max-width: 640px;
+  }
+
+  math-field {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    font-size: 1.1rem;
+  }
+
+  math-field:focus-within {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 3px rgb(36 86 166 / 20%);
+  }
+
+  .answer-readonly {
+    display: inline-block;
+    padding: 4px 0;
+  }
+
   .pic-snippet {
     font-size: 0.8rem;
     color: var(--muted);

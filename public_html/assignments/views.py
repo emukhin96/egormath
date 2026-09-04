@@ -10,7 +10,7 @@ from problems.models import Task
 from worksheets.models import Worksheet
 
 from .models import (Assignment, Review, Submission, SubmissionPart,
-                     SubmissionPhoto)
+                     SubmissionPhoto, wrap_math)
 
 
 # --- Назначение листка ученикам (действие учителя со страницы листка) ---
@@ -161,6 +161,7 @@ _ANSWER_FIELD_SUFFIXES = {
     Task.ANSWER_NUMBER: (('answer_number', 'number'),),
     Task.ANSWER_INTERVAL: (('interval_low', 'low'), ('interval_high', 'high')),
     Task.ANSWER_TEXT: (('answer_text', 'text'),),
+    Task.ANSWER_FORMULA: (('answer_text', 'text'),),
 }
 
 
@@ -169,15 +170,19 @@ def _answer_fields(answer_type, post, prefix):
 
     Возвращаются только поля, реально присланные формой: тогда POST без
     полей ответов (например, форма загрузки фото) не затирает
-    сохранённое пустыми строками.
+    сохранённое пустыми строками. Формула из <math-field> приходит голым
+    LaTeX и хранится как ``$…$`` (конвенция answer_latex).
     """
     suffixes = _ANSWER_FIELD_SUFFIXES.get(
         answer_type, _ANSWER_FIELD_SUFFIXES[Task.ANSWER_TEXT])
-    return {
+    fields = {
         field: post[f'{prefix}_{suffix}'].strip()
         for field, suffix in suffixes
         if f'{prefix}_{suffix}' in post
     }
+    if answer_type == Task.ANSWER_FORMULA and 'answer_text' in fields:
+        fields['answer_text'] = wrap_math(fields['answer_text'])
+    return fields
 
 
 def _persist_answers(assignment, post):

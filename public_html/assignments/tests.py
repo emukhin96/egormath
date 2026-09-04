@@ -250,6 +250,62 @@ class StudentAnswerTests(TestCase):
         self.assertContains(response, 'На проверке')
         self.assertContains(response, 'Проверено')
 
+    def test_formula_answer_wrapped_and_rendered(self):
+        """Тип «формула»: голый LaTeX из math-field хранится как $…$,
+        редактору отдаётся без $, учителю рендерится, длина не ограничена."""
+        task = self.tasks[0]
+        task.answer_type = Task.ANSWER_FORMULA
+        task.save()
+        long_latex = r'\left(-\infty;\ 3\right]\cup\left[5;\ +\infty\right)' * 3
+        self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{task.pk}_text': long_latex})
+        submission = Submission.objects.get(task=task)
+        self.assertEqual(submission.answer_text, f'${long_latex}$')
+        self.assertEqual(submission.formula_latex, long_latex)
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(response, '<math-field')
+        self.assertContains(response, f'name="task{task.pk}_text"')
+        self.assertContains(response, 'formula-dialog')
+        # Уже обёрнутое не оборачивается второй раз
+        self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{task.pk}_text': '$x=1$'})
+        self.assertEqual(Submission.objects.get(task=task).answer_text, '$x=1$')
+        # Пустая формула — пустой ответ
+        self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{task.pk}_text': ''})
+        self.assertEqual(Submission.objects.get(task=task).answer_text, '')
+
+    def test_long_number_and_interval_fit(self):
+        task = self.tasks[0]
+        task.answer_type = Task.ANSWER_INTERVAL
+        task.save()
+        long_value = r'\left(-\infty;\ 3\right]' * 4
+        self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{task.pk}_low': long_value, f'task{task.pk}_high': long_value})
+        submission = Submission.objects.get(task=task)
+        self.assertEqual(submission.interval_low, long_value)
+        self.assertGreater(len(submission.interval_high), 64)
+
+    def test_text_answer_has_formula_button_and_readonly_render(self):
+        task = self.tasks[0]
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(response, 'data-formula-insert')
+        self.assertContains(response, 'mathlive')
+        Submission.objects.create(
+            assignment=self.assignment, task=task, answer_text=r'нет решений при $a<0$')
+        self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertNotContains(response, 'mathlive')
+        self.assertContains(response, 'answer-readonly')
+        self.assertContains(response, 'нет решений при $a&lt;0$')
+
     def test_save_subitem_answers(self):
         """У задачи с подпунктами ответы сохраняются отдельно (SubmissionPart)."""
         item = self.assignment.worksheet.ordered_items()[0]
