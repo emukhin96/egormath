@@ -1,14 +1,17 @@
-"""«Корзина»: сборка личного листка прямо из базы задач.
+"""«Корзина»: отбор задач из базы, подборок и чужих листков в новый или
+существующий личный листок.
 
-Черновик — обычный ``Worksheet``; в сессии хранится только его id
-(``cart_worksheet``). Новых моделей нет: добавление и удаление идут через
-те же helpers, что и конструктор (``append_task`` / ``soft_remove_item``).
-Подборочные листки (с ``collection``) в корзину не попадают.
+Корзина виртуальная — упорядоченный список id задач в сессии
+(``cart_tasks``). Листок не создаётся, пока учитель не нажмёт «в новый
+листок» или «в существующий»: иначе от каждого клика оставались бы пустые
+черновики. Запись в листок идёт через ``append_task`` — тот же helper, что
+и у конструктора, поэтому дублей нет, а мягко удалённый элемент
+восстанавливается. Подборочные листки (с ``collection``) корзина не
+трогает.
 """
 from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -16,9 +19,9 @@ from accounts.decorators import teacher_required
 from problems.models import Task
 
 from .models import Worksheet
-from .views import append_task, soft_remove_item
+from .views import append_task
 
-SESSION_KEY = 'cart_worksheet'
+SESSION_KEY = 'cart_tasks'
 NEW_TITLE = 'Новый листок'
 
 
@@ -27,29 +30,26 @@ def personal_worksheets(user):
     return Worksheet.objects.filter(owner=user, collection__isnull=True)
 
 
-def current_worksheet(request):
-    """Текущий листок корзины; чужой/удалённый/ставший подборкой — сброс."""
-    pk = request.session.get(SESSION_KEY)
-    if not pk:
-        return None
-    worksheet = personal_worksheets(request.user).filter(pk=pk).first()
-    if worksheet is None:
+def cart_ids(request):
+    """Задачи в корзине в порядке добавления (только целые id)."""
+    raw = request.session.get(SESSION_KEY) or []
+    return [pk for pk in raw if isinstance(pk, int)]
+
+
+def _store(request, ids):
+    if ids:
+        request.session[SESSION_KEY] = ids
+    else:
         request.session.pop(SESSION_KEY, None)
-    return worksheet
 
 
 def cart_context(request):
-    """Данные индикатора в шапке и кнопок каталога (один запрос по элементам)."""
-    worksheet = current_worksheet(request)
-    task_ids = []
-    if worksheet is not None:
-        task_ids = list(worksheet.items.filter(
-            deleted_at__isnull=True, task__isnull=False)
-            .values_list('task_id', flat=True))
+    """Данные индикатора в шапке и кнопок «+» у задач."""
+    ids = cart_ids(request)
     return {
-        'worksheet': worksheet,
-        'task_ids': set(task_ids),
-        'count': len(task_ids),
+        'ids': ids,
+        'task_ids': set(ids),
+        'count': len(ids),
         'choices': list(personal_worksheets(request.user)
                         .order_by('-updated_at')
                         .values_list('pk', 'title')[:30]),
@@ -69,20 +69,13 @@ def _back(request, fallback):
     return redirect(fallback)
 
 
-def _respond(request, worksheet, ok, message, in_cart, fallback='task_list'):
+def _respond(request, ok, message, in_cart, fallback='task_list'):
     if _is_xhr(request):
-        count = worksheet.items.filter(
-            deleted_at__isnull=True, task__isnull=False).count()
         return JsonResponse({
             'ok': ok,
             'message': message,
             'in_cart': in_cart,
-            'count': count,
-            'worksheet': {
-                'id': worksheet.pk,
-                'title': worksheet.title,
-                'url': reverse('worksheet_detail', args=[worksheet.pk]),
-            },
+            'count': len(cart_ids(request)),
         }, status=200 if ok else 400)
     (messages.success if ok else messages.error)(request, message)
     return _back(request, fallback)
@@ -91,60 +84,81 @@ def _respond(request, worksheet, ok, message, in_cart, fallback='task_list'):
 @teacher_required
 @require_POST
 def cart_add(request):
-    """Положить задачу в текущий листок; если его нет — создать новый."""
+    """Положить задачу в корзину (повтор — без дубля)."""
     task = get_object_or_404(
         Task, pk=request.POST.get('task_id'), variant_of__isnull=True)
-    worksheet = current_worksheet(request)
-    if worksheet is None:
-        worksheet = Worksheet.objects.create(
-            title=NEW_TITLE, owner=request.user)
-        request.session[SESSION_KEY] = worksheet.pk
-    outcome, message = append_task(worksheet, task)
-    if outcome == 'restored':
-        message = f'Задача #{task.pk} возвращена в «{worksheet.title}».'
-    return _respond(request, worksheet, True, message, True)
+    ids = cart_ids(request)
+    if task.pk in ids:
+        message = f'Задача #{task.pk} уже в корзине.'
+    else:
+        ids.append(task.pk)
+        _store(request, ids)
+        message = f'Задача #{task.pk} — в корзине.'
+    return _respond(request, True, message, True)
 
 
 @teacher_required
 @require_POST
 def cart_remove(request):
-    """Убрать задачу из текущего листка (мягко, как в конструкторе)."""
-    worksheet = current_worksheet(request)
-    if worksheet is None:
-        if _is_xhr(request):
-            return JsonResponse(
-                {'ok': False, 'message': 'Листок для сборки не выбран.'},
-                status=400)
-        messages.error(request, 'Листок для сборки не выбран.')
-        return _back(request, 'task_list')
-    item = worksheet.items.filter(
-        task_id=request.POST.get('task_id'), deleted_at__isnull=True).first()
-    if item is not None:
-        soft_remove_item(worksheet, item)
-    return _respond(request, worksheet, True,
-                    f'Задача убрана из «{worksheet.title}».', False)
+    """Убрать задачу из корзины."""
+    try:
+        task_id = int(request.POST.get('task_id', ''))
+    except ValueError:
+        return _respond(request, False, 'Задача не указана.', False)
+    _store(request, [pk for pk in cart_ids(request) if pk != task_id])
+    return _respond(request, True, f'Задача #{task_id} убрана из корзины.',
+                    False)
+
+
+def _pour(request, worksheet):
+    """Переложить корзину в листок; возвращает число новых элементов."""
+    tasks = Task.objects.in_bulk(cart_ids(request))
+    added = 0
+    for pk in cart_ids(request):
+        task = tasks.get(pk)
+        if task is None:
+            continue
+        outcome, _ = append_task(worksheet, task)
+        added += outcome != 'exists'
+    _store(request, [])
+    return added
 
 
 @teacher_required
 @require_POST
-def cart_select(request):
-    """Сменить текущий листок: id своего листка или «new»."""
-    choice = request.POST.get('worksheet', '')
-    if choice == 'new':
-        worksheet = Worksheet.objects.create(
-            title=NEW_TITLE, owner=request.user)
-    else:
-        worksheet = get_object_or_404(
-            personal_worksheets(request.user), pk=choice or None)
-    request.session[SESSION_KEY] = worksheet.pk
-    messages.success(request, f'Собираем «{worksheet.title}».')
-    return _back(request, 'task_list')
+def cart_create(request):
+    """Новый личный листок из корзины; корзина очищается."""
+    if not cart_ids(request):
+        messages.error(request, 'Корзина пуста — нечего собирать.')
+        return _back(request, 'task_list')
+    worksheet = Worksheet.objects.create(
+        title=(request.POST.get('title') or '').strip() or NEW_TITLE,
+        owner=request.user)
+    added = _pour(request, worksheet)
+    messages.success(request, f'Листок создан, задач: {added}.')
+    return redirect('worksheet_detail', pk=worksheet.pk)
+
+
+@teacher_required
+@require_POST
+def cart_append(request):
+    """Добавить корзину в конец существующего личного листка."""
+    if not cart_ids(request):
+        messages.error(request, 'Корзина пуста — нечего добавлять.')
+        return _back(request, 'task_list')
+    worksheet = get_object_or_404(
+        personal_worksheets(request.user),
+        pk=request.POST.get('worksheet') or None)
+    added = _pour(request, worksheet)
+    messages.success(
+        request, f'В «{worksheet.title}» добавлено задач: {added}.')
+    return redirect('worksheet_detail', pk=worksheet.pk)
 
 
 @teacher_required
 @require_POST
 def cart_clear(request):
-    """«Закончить сборку»: листок остаётся, забывается только выбор."""
-    request.session.pop(SESSION_KEY, None)
-    messages.success(request, 'Сборка завершена.')
+    """Очистить корзину, ничего не создавая."""
+    _store(request, [])
+    messages.success(request, 'Корзина очищена.')
     return _back(request, 'task_list')

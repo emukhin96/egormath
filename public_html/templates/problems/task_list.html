@@ -67,12 +67,14 @@
     <col class="col-answer">
     <col class="col-source">
     <col class="col-topics">
+    {% if cart %}<col class="col-cart">{% endif %}
   </colgroup>
   <tr>
     <th class="col-select"><input type="checkbox" data-bulk-all="task-bulk-form"
         title="Выбрать все задачи на странице"></th>
     <th>Задача</th><th class="col-grade">Класс</th>
     <th class="col-answer">Ответ</th><th class="col-source">Источник</th><th>Темы</th>
+    {% if cart %}<th class="col-cart" title="В корзину"></th>{% endif %}
   </tr>
   {% for task in page %}
   {% with ref=task.source_refs.all|first %}
@@ -89,7 +91,6 @@
           <span class="math-content task-text">{{ task.text_latex|web_text_preview:220 }}</span>
           {% include 'problems/_subitems.html' with subitems=task.subitems.all %}
         </div>
-        {% include 'includes/cart_button.html' with task=task %}
       </div>
     </td>
     <td class="col-grade">
@@ -133,6 +134,7 @@
         {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True selected_json=task.taxonomy_json %}
       </form>
     </td>
+    {% if cart %}<td class="col-cart">{% include 'includes/cart_button.html' with task=task %}</td>{% endif %}
   </tr>
   {% endwith %}
   {% endfor %}

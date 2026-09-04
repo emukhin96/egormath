@@ -293,24 +293,18 @@
     gap: var(--space-2);
   }
 
-  /* Корзина листка в шапке (native details) */
+  /* Корзина задач в шапке (native details). Кнопка-summary — обычная
+     .btn.btn-secondary из гайдлайна, поэтому геометрию не переопределяем. */
   .cart-menu {
     position: relative;
     flex: none;
+    display: flex;
+    align-items: center;
   }
 
   .cart-summary {
     list-style: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: #53647b;
+    gap: var(--space-2);
     user-select: none;
   }
 
@@ -318,10 +312,12 @@
     display: none;
   }
 
-  .cart-summary:hover,
   .cart-menu[open] .cart-summary {
-    color: var(--accent);
-    background: #e4eef9;
+    background: #edf3f9;
+  }
+
+  .cart-icon {
+    flex: none;
   }
 
   .cart-count {
@@ -332,6 +328,7 @@
     color: #fff;
     font-size: 0.75rem;
     font-weight: 600;
+    line-height: 20px;
     text-align: center;
   }
 
@@ -370,19 +367,55 @@
     min-width: 0;
   }
 
-  .task-line .inline-form {
-    margin-left: auto;
+  /* «+» у задачи: квадрат в размер .btn-small, крупный знак */
+  .cart-form-btn {
     flex: none;
-    align-self: flex-start;
   }
 
   .cart-btn {
-    white-space: nowrap;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 1.35rem;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .cart-btn:hover {
+    background: #edf3f9;
+  }
+
+  .cart-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgb(36 86 166 / 35%);
   }
 
   .cart-btn.is-in-cart {
     color: var(--ok);
     border-color: var(--ok);
+    background: #e6f4e7;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  .task-catalog col.col-cart {
+    width: 2.75rem;
+  }
+
+  .task-catalog td.col-cart {
+    padding-left: var(--space-1);
+    padding-right: var(--space-2);
+    text-align: right;
+    vertical-align: top;
   }
 
   .user-avatar {
@@ -2717,7 +2750,7 @@
 
     .user-avatar,
     .user-name,
-    .cart-title {
+    .cart-label {
       display: none;
     }
 
