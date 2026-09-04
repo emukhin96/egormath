@@ -119,10 +119,19 @@ def _assignment_rows(assignment, with_review=False):
             'review': review,
             'answered': answered,
             'auto_ok': auto_ok,
+            'has_reference': _has_reference(item.task, subitems),
             'has_comment': bool(review and review.comment),
             'subrows': subrows,
         })
     return rows
+
+
+def _has_reference(task, subitems):
+    """Есть ли эталон, с которым вообще можно сверять: у задачи или хотя бы
+    у одного выбранного подпункта. Без него сверка даёт лишь «не разобрано»."""
+    if subitems:
+        return any(s.effective_answer_latex for s in subitems)
+    return bool(task.effective_answer_latex)
 
 
 def _progress(rows):
@@ -353,11 +362,20 @@ def check_task(request, pk, task_id):
     _persist_answers(assignment, request.POST)
     task = get_object_or_404(Task, pk=task_id)
     item = _visible_task_item(assignment, task)
+    subitems = item.selected_subitems()
+    if not _has_reference(task, subitems):
+        # Кнопка на странице отключена; прямой запрос — без раскрытия и попытки
+        message = 'У этой задачи нет эталона — ответ проверит учитель'
+        if _is_xhr(request):
+            return JsonResponse({'ok': False, 'message': message, 'checks': {}},
+                                status=400)
+        messages.info(request, message)
+        return redirect(f"{reverse('assignment_detail', args=[pk])}"
+                        f"#task-{_visible_task_number(assignment, item)}")
     submission, _ = Submission.objects.get_or_create(
         assignment=assignment, task=task)
 
     checks = {}
-    subitems = item.selected_subitems()
     if subitems:
         parts = {p.subitem_id: p for p in submission.parts.all()}
         for subitem in subitems:

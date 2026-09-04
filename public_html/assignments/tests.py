@@ -695,6 +695,34 @@ class AutoCheckFlowTests(TestCase):
         self.assertEqual(Submission.objects.get(
             assignment=self.assignment, task=self.task).check_attempts, 0)
 
+    def test_check_button_disabled_without_reference(self):
+        # Без эталона любой ответ — «не разобрано»: кнопка неактивна,
+        # прямой запрос ничего не раскрывает и попыткой не считается
+        self.assignment.check_visibility = Assignment.CHECK_LIVE
+        self.assignment.save()
+        self.task.answer_latex = ''
+        self.task.author_answer_latex = ''
+        self.task.save()
+        response = self.client.get(self.detail)
+        self.assertFalse(response.context['rows'][0]['has_reference'])
+        self.assertRegex(
+            response.content.decode(),
+            rf'data-check-task="task{self.task.pk}"[^>]*\sdisabled\s')
+        response = self._check('7')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('нет эталона', response.json()['message'])
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        self.assertFalse(submission.check_revealed)
+        self.assertEqual(submission.check_attempts, 0)
+        # У задачи с подпунктами хватает эталона хотя бы на одном подпункте
+        TaskSubitem.objects.create(
+            task=self.task, order=1, text_latex='а', answer_latex='')
+        TaskSubitem.objects.create(
+            task=self.task, order=2, text_latex='б', answer_latex='5')
+        response = self.client.get(self.detail)
+        self.assertTrue(response.context['rows'][0]['has_reference'])
+
     def test_check_button_with_subitems(self):
         self.assignment.check_visibility = Assignment.CHECK_LIVE
         self.assignment.save()

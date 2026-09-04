@@ -64,7 +64,7 @@
         var holder = document.querySelector('[data-check="' + prefix + '"]');
         if (holder) renderBadge(holder, checks[prefix]);
       });
-      toast(true, data.message || 'Проверено');
+      toast(data.ok !== false, data.message || 'Проверено');
     }).catch(function () {
       toast(false, 'Не удалось проверить — попробуйте ещё раз');
     }).then(function () { button.disabled = false; });

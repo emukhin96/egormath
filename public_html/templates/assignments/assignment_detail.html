@@ -83,8 +83,10 @@
     {% if can_check or can_upload %}
     <div class="task-tools">
       {% if can_check %}
+      {# Без эталона сверка бессмысленна (любой ответ — «не разобрано»): кнопка неактивна #}
       <button type="submit" class="btn btn-small btn-secondary" data-check-task="{{ row.prefix }}"
-              formaction="{% url 'check_task' assignment.pk row.task.pk %}" formmethod="post">Проверить</button>
+              formaction="{% url 'check_task' assignment.pk row.task.pk %}" formmethod="post"
+              {% if not row.has_reference %}disabled title="У этой задачи нет эталонного ответа — её проверит учитель"{% endif %}>Проверить</button>
       {% endif %}
       {% if can_upload %}
       {# Файл привязан к отдельной multipart-форме (атрибут form): формы не вкладываются #}
