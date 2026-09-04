@@ -1669,17 +1669,67 @@
     font-size: 0.9rem;
   }
 
-  /* Ответы ученика: textarea + кнопка «Формула», поле формулы MathLive */
+  /* Ответы ученика: textarea + кнопка «Формула», под ними превью KaTeX и
+     панель вставки формулы; поле формулы MathLive */
   .text-answer {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
     max-width: 640px;
   }
 
-  .text-answer textarea {
+  .text-answer-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .text-answer-row textarea {
     flex: 1;
     min-width: 0;
+  }
+
+  .answer-preview {
+    margin-top: var(--space-1);
+    padding: 6px 10px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    background: #fafbfd;
+    font-size: 1.05rem;
+  }
+
+  .formula-panel {
+    margin-top: var(--space-2);
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #f6f8fb;
+  }
+
+  .formula-panel .form-buttons {
+    margin-top: var(--space-2);
+  }
+
+  .answer-block {
+    margin: var(--space-3) 0;
+  }
+
+  /* Действия по задаче: «Проверить», выбор фото */
+  .task-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+
+  .photo-pick {
+    cursor: pointer;
+  }
+
+  .photo-pick input[type='file'] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
   }
 
   .formula-field {

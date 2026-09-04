@@ -1,7 +1,19 @@
 {% extends 'base.html' %}
-{% block title %}Ошибка компиляции — EgorMath{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/diagnostic.html' %}{% endblock %}
+{% block title %}{% if for_student %}PDF недоступен{% else %}Ошибка компиляции{% endif %} — EgorMath{% endblock %}
+{% block sidebar %}{% if not for_student %}{% include 'includes/sidebar/diagnostic.html' %}{% endif %}{% endblock %}
 {% block content %}
+{% if for_student %}
+<div class="page-head"><div><span class="page-eyebrow">Задание</span>
+  <h1>PDF пока недоступен</h1><p class="page-subtitle">{{ worksheet.title }}</p>
+</div></div>
+<div class="card">
+  <p>Листок «{{ worksheet.title }}» не удалось собрать в PDF. Задание можно
+     выполнять и без него — все задачи есть на странице задания.</p>
+  <p>Если PDF нужен, сообщите учителю: ошибка на его стороне, у него
+     есть подробности.</p>
+  <p><a class="btn btn-secondary" href="{% url 'dashboard' %}">К моим заданиям</a></p>
+</div>
+{% else %}
 <div class="page-head"><div><span class="page-eyebrow">Диагностика PDF</span>
   <h1>Ошибка компиляции</h1><p class="page-subtitle">{{ worksheet.title }}</p>
 </div></div>
@@ -18,4 +30,5 @@
      листка или соберите его локально.</p>
   <p><a class="btn btn-secondary" href="{% url 'worksheet_detail' worksheet.pk %}">Вернуться к листку</a></p>
 </div>
+{% endif %}
 {% endblock %}

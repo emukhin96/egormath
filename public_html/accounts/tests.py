@@ -129,6 +129,6 @@ class StudentGroupTests(TestCase):
         worksheet = Worksheet.objects.create(title='Тест', owner=self.teacher)
         self.client.post(
             reverse('assign_worksheet', args=[worksheet.pk]),
-            {'groups': [group.pk], 'grade_scale': 'words'})
+            {'groups': [group.pk]})
         self.assertTrue(Assignment.objects.filter(
             worksheet=worksheet, student=self.student).exists())

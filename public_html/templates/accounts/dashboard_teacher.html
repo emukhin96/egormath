@@ -81,12 +81,13 @@
     <h2>Недавно проверенные</h2>
     {% if reviewed %}
     <table class="list">
-      <tr><th>Листок</th><th>Ученик</th><th>Проверено</th><th></th></tr>
+      <tr><th>Листок</th><th>Ученик</th><th>Проверено</th><th>Результат</th><th></th></tr>
       {% for a in reviewed %}
       <tr>
         <td>{{ a.worksheet.title }}</td>
         <td>{{ a.student.get_full_name|default:a.student.username }}</td>
         <td>{{ a.reviewed_at|date:'d.m.Y' }}</td>
+        <td>{% with r=a.result %}{{ r.done }}/{{ r.total }} ({{ r.percent }}%){% endwith %}</td>
         <td><a class="btn btn-small btn-secondary" href="{% url 'review_assignment' a.pk %}">Открыть</a></td>
       </tr>
       {% endfor %}

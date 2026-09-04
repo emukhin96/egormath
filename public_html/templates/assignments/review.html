@@ -13,7 +13,7 @@
 </p>
 </div></div>
 
-<form method="post" action="{% url 'save_review' assignment.pk %}">
+<form method="post" action="{% url 'save_review' assignment.pk %}" id="review-form">
   {% csrf_token %}
   {% for row in rows %}
   {% if row.task == None %}
@@ -67,8 +67,8 @@
         {% endif %}
       </p>
       {% endif %}
-      {% if row.submission.check_attempts > 1 %}
-      <p class="helptext">Ученик менял ответ: попыток — {{ row.submission.check_attempts }}.</p>
+      {% if row.submission.check_attempts %}
+      <p class="helptext">Ученик нажимал «Проверить»: {{ row.submission.check_attempts }} раз.</p>
       {% endif %}
       {% if row.submission.photos.all %}
       <div class="photo-grid">
@@ -79,20 +79,12 @@
       {% endif %}
 
       <p>
-        {% if is_points %}
-          <label>Баллы</label>
-          <input type="text" name="sub{{ row.submission.pk }}_points"
-                 value="{% if row.review.grade_points != None %}{{ row.review.grade_points }}{% endif %}"
-                 style="max-width:120px">
-        {% else %}
-          <label>Отметка</label>
-          <select name="sub{{ row.submission.pk }}_grade" style="max-width:200px">
-            <option value="">—</option>
-            {% for value, label in grade_choices %}
-            <option value="{{ value }}" {% if row.review.grade_word == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        {% endif %}
+        {# Пока отзыва нет, чекбокс подсказывает результат автосверки; решает учитель #}
+        <label class="check-label" style="font-weight:normal">
+          <input type="checkbox" name="sub{{ row.submission.pk }}_done" data-review-done
+                 {% if row.review %}{% if row.review.done %}checked{% endif %}{% elif row.auto_ok %}checked{% endif %}>
+          <strong>Выполнено</strong>
+        </label>
       </p>
       <p>
         <label>Комментарий</label>
@@ -106,14 +98,11 @@
   {% endfor %}
 
   <div class="card">
-    <p>
-      <label for="r_check">Кому видна автосверка</label>
-      <select name="check_visibility" id="r_check" style="max-width:340px">
-        {% for value, label in check_choices %}
-        <option value="{{ value }}" {% if assignment.check_visibility == value %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-      <span class="helptext">Бейджи «совпало / не совпало» рядом с ответами — подсказка; отметку ставите вы. Эталон ученику не показывается.</span>
+    <p class="review-total">Выполнено: <strong><span data-review-total-done>{{ result.done }}</span> из {{ result.total }}</strong>
+      (<span data-review-total-percent>{{ result.percent }}</span>%)</p>
+    <p class="helptext">
+      Автосверка: {{ assignment.get_check_visibility_display|lower }} — режим задан при выдаче и не меняется.
+      Бейджи «верно / неверно» — подсказка; отметку «выполнено» ставите вы. Эталон ученику не показывается.
     </p>
     <button type="submit" name="action" value="save" class="btn btn-secondary">Сохранить черновик</button>
     <button type="submit" name="action" value="complete" class="btn">Завершить проверку</button>
@@ -121,4 +110,23 @@
             onclick="return confirm('Вернуть работу ученику на доработку?')">Вернуть на доработку</button>
   </div>
 </form>
+{% endblock %}
+{% block extra_js %}
+<script>
+/* Итог «выполнено N из M» пересчитывается при щелчке по чекбоксам, до сохранения */
+(function () {
+  var form = document.getElementById('review-form');
+  if (!form) return;
+  var total = {{ result.total }};
+  function update() {
+    var done = form.querySelectorAll('[data-review-done]:checked').length;
+    form.querySelector('[data-review-total-done]').textContent = done;
+    form.querySelector('[data-review-total-percent]').textContent = total ? Math.round(100 * done / total) : 0;
+  }
+  form.addEventListener('change', function (e) {
+    if (e.target.matches('[data-review-done]')) update();
+  });
+  update();
+})();
+</script>
 {% endblock %}

@@ -341,20 +341,24 @@
       {% endfor %}
     </p>
     <p>
-      <label for="a_scale">Шкала оценивания</label>
-      <select name="grade_scale" id="a_scale" style="max-width:340px">
-        <option value="words">Отметки: отлично / хорошо / средне / плохо</option>
-        <option value="points">Числовая шкала (баллы)</option>
+      <label for="a_check">Автосверка ответов с эталоном</label>
+      {# Листок уже выдан — режим общий для всех его назначений и не меняется #}
+      <select name="check_visibility" id="a_check" style="max-width:340px" {% if locked_check %}disabled{% endif %}>
+        {% for value, label in check_choices %}
+        <option value="{{ value }}" {% if value == locked_check %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
       </select>
+      {% if locked_check %}
+      <span class="helptext">Уже задано ученикам — режим сверки для этого листка изменить нельзя.</span>
+      {% else %}
+      <span class="helptext">После первой выдачи режим для листка фиксируется. При самопроверке вы увидите, сколько раз ученик нажимал «Проверить».</span>
+      {% endif %}
     </p>
     <p>
-      <label for="a_check">Автосверка ответов с эталоном</label>
-      <select name="check_visibility" id="a_check" style="max-width:340px">
-        <option value="teacher">Результат видит только учитель</option>
-        <option value="after_submit">Ученик видит после отправки работы</option>
-        <option value="live">Ученик видит сразу при вводе (самопроверка)</option>
-      </select>
-      <span class="helptext">Можно изменить позже на экране проверки. При самопроверке вы увидите число попыток.</span>
+      <label style="font-weight:normal">
+        <input type="checkbox" name="allow_photos" checked>
+        Принимать фото решений <span class="muted">— кнопка загрузки у каждой задачи</span>
+      </label>
     </p>
     <p>
       <label for="a_due">Срок сдачи (необязательно)</label>

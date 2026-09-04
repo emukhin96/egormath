@@ -37,7 +37,7 @@ class AssignFlowTests(TestCase):
         self.client.login(username='teacher1', password='pass12345')
         response = self.client.post(
             reverse('assign_worksheet', args=[self.worksheet.pk]),
-            {'students': [self.student.pk], 'grade_scale': 'words'})
+            {'students': [self.student.pk]})
         self.assertRedirects(
             response, reverse('worksheet_detail', args=[self.worksheet.pk]))
         self.assertTrue(Assignment.objects.filter(
@@ -49,7 +49,7 @@ class AssignFlowTests(TestCase):
         self.client.login(username='teacher1', password='pass12345')
         self.client.post(
             reverse('assign_worksheet', args=[self.worksheet.pk]),
-            {'students': [foreign_student.pk], 'grade_scale': 'words'})
+            {'students': [foreign_student.pk]})
         self.assertFalse(Assignment.objects.filter(
             student=foreign_student).exists())
 
@@ -268,7 +268,10 @@ class StudentAnswerTests(TestCase):
             reverse('assignment_detail', args=[self.assignment.pk]))
         self.assertContains(response, '<math-field')
         self.assertContains(response, f'name="task{task.pk}_text"')
-        self.assertContains(response, 'formula-dialog')
+        # Панель вставки формулы и превью для текстовых ответов — не <dialog>
+        self.assertContains(response, 'id="formula-panel"')
+        self.assertNotContains(response, 'formula-dialog')
+        self.assertContains(response, 'data-answer-preview')
         # Уже обёрнутое не оборачивается второй раз
         self.client.post(
             reverse('save_answers', args=[self.assignment.pk]),
@@ -387,7 +390,7 @@ class ReviewFlowTests(TestCase):
             assignment=self.assignment, task=self.task)
         response = self.client.post(
             reverse('save_review', args=[self.assignment.pk]), {
-                f'sub{submission.pk}_grade': 'good',
+                f'sub{submission.pk}_done': 'on',
                 f'sub{submission.pk}_comment': 'Верно, но оформи решение.',
                 'action': 'complete',
             })
@@ -395,15 +398,48 @@ class ReviewFlowTests(TestCase):
         self.assignment.refresh_from_db()
         self.assertEqual(self.assignment.status, Assignment.STATUS_REVIEWED)
         review = Review.objects.get(submission=submission)
-        self.assertEqual(review.grade_word, 'good')
-        self.assertEqual(review.display_grade, 'Хорошо')
+        self.assertTrue(review.done)
+        # Итог — доля выполненных задач, без шкал
+        self.assertEqual(self.assignment.result(),
+                         {'done': 1, 'total': 2, 'percent': 50})
 
-        # Ученик видит комментарий
+        # Ученик видит комментарий и итог
         self.client.login(username='student1', password='pass12345')
         response = self.client.get(
             reverse('assignment_detail', args=[self.assignment.pk]))
         self.assertContains(response, 'Верно, но оформи решение.')
-        self.assertContains(response, 'Хорошо')
+        self.assertContains(response, 'выполнено')
+        self.assertContains(response, '1 из 2')
+        self.assertContains(response, '(50%)')
+        response = self.client.get(reverse('dashboard'))
+        self.assertContains(response, '1/2 (50%)')
+
+    def test_review_form_has_no_grade_scale(self):
+        response = self.client.get(
+            reverse('review_assignment', args=[self.assignment.pk]))
+        self.assertContains(response, 'Выполнено')
+        self.assertNotContains(response, 'Отметка')
+        self.assertNotContains(response, 'Баллы')
+        self.assertNotContains(response, 'name="check_visibility"')
+        # Режим сверки показан текстом и объявлен неизменяемым
+        self.assertContains(response, 'не меняется')
+
+    def test_done_checkbox_defaults_to_auto_check(self):
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        # Эталон задачи — «0; 2»: ответ ученика «x = 2» не совпадает
+        response = self.client.get(
+            reverse('review_assignment', args=[self.assignment.pk]))
+        self.assertFalse(response.context['rows'][0]['auto_ok'])
+        submission.answer_text = '2; 0'
+        submission.run_check(self.task.effective_answer_latex)
+        submission.save()
+        response = self.client.get(
+            reverse('review_assignment', args=[self.assignment.pk]))
+        self.assertTrue(response.context['rows'][0]['auto_ok'])
+        self.assertRegex(
+            response.content.decode(),
+            rf'name="sub{submission.pk}_done" data-review-done\s+checked')
 
     def test_review_renders_student_answer_as_math(self):
         """Ответ ученика и эталон проходят web_answer: голый TeX — в $…$,
@@ -437,18 +473,17 @@ class ReviewFlowTests(TestCase):
             {f'task{self.task.pk}_text': 'исправленный ответ'})
         self.assertEqual(response.status_code, 302)
 
-    def test_points_scale(self):
-        self.assignment.grade_scale = Assignment.SCALE_POINTS
-        self.assignment.save()
+    def test_unchecked_without_comment_removes_review(self):
         submission = Submission.objects.get(
             assignment=self.assignment, task=self.task)
+        Review.objects.create(
+            submission=submission, done=True, reviewer=self.teacher)
         self.client.post(
             reverse('save_review', args=[self.assignment.pk]), {
-                f'sub{submission.pk}_points': '7,5',
+                f'sub{submission.pk}_comment': '',
                 'action': 'save',
             })
-        review = Review.objects.get(submission=submission)
-        self.assertEqual(float(review.grade_points), 7.5)
+        self.assertFalse(Review.objects.filter(submission=submission).exists())
 
     def test_save_review_keeps_hidden_task_review(self):
         # Скрытая после проверки задача пропадает из формы, но её отзыв
@@ -460,17 +495,18 @@ class ReviewFlowTests(TestCase):
         visible_sub, _ = Submission.objects.get_or_create(
             assignment=self.assignment, task=visible_item.task)
         Review.objects.create(
-            submission=hidden_sub, grade_word='good', reviewer=self.teacher)
+            submission=hidden_sub, done=True, reviewer=self.teacher)
         self.assignment.hidden_items.add(hidden_item)
         self.client.post(
             reverse('save_review', args=[self.assignment.pk]), {
-                f'sub{visible_sub.pk}_grade': 'medium',
+                f'sub{visible_sub.pk}_comment': 'Не дорешано',
                 'action': 'save',
             })
         self.assertTrue(Review.objects.filter(
-            submission=hidden_sub, grade_word='good').exists())
-        self.assertEqual(
-            Review.objects.get(submission=visible_sub).grade_word, 'medium')
+            submission=hidden_sub, done=True).exists())
+        visible_review = Review.objects.get(submission=visible_sub)
+        self.assertFalse(visible_review.done)
+        self.assertEqual(visible_review.comment, 'Не дорешано')
 
     def test_save_review_when_only_one_copy_hidden(self):
         # Одна задача дважды в листке: скрыт только один элемент —
@@ -483,11 +519,11 @@ class ReviewFlowTests(TestCase):
             assignment=self.assignment, task=item.task)
         self.client.post(
             reverse('save_review', args=[self.assignment.pk]), {
-                f'sub{submission.pk}_grade': 'poor',
+                f'sub{submission.pk}_done': 'on',
+                f'sub{submission.pk}_comment': '',
                 'action': 'save',
             })
-        self.assertEqual(
-            Review.objects.get(submission=submission).grade_word, 'poor')
+        self.assertTrue(Review.objects.get(submission=submission).done)
 
     def test_foreign_teacher_cannot_review(self):
         make_teacher('teacher2')
@@ -571,50 +607,127 @@ class AutoCheckFlowTests(TestCase):
         return self.client.post(
             self.url, {f'task{self.task.pk}_text': value}, **extra)
 
-    def test_check_stored_and_attempts_counted(self):
+    def _check(self, value=None, xhr=True):
+        """Кнопка «Проверить»: шлёт всю форму, как и автосохранение."""
+        extra = {'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'} if xhr else {}
+        data = {} if value is None else {f'task{self.task.pk}_text': value}
+        return self.client.post(
+            reverse('check_task', args=[self.assignment.pk, self.task.pk]),
+            data, **extra)
+
+    def test_check_stored_on_save_but_attempts_count_button_presses(self):
         self._save('x=2; x=0')
         submission = Submission.objects.get(
             assignment=self.assignment, task=self.task)
         self.assertEqual(submission.auto_check, 'ok')
         self.assertIsNotNone(submission.checked_at)
-        self.assertEqual(submission.check_attempts, 1)
-        self._save('x=2; x=0')  # то же значение — не попытка
+        self.assertFalse(submission.check_revealed)
+        self.assertEqual(submission.check_attempts, 0)
         self._save('1; 2')
         submission.refresh_from_db()
         self.assertEqual(submission.auto_check, 'wrong')
-        self.assertEqual(submission.check_attempts, 2)
+        self.assertEqual(submission.check_attempts, 0)
 
     def test_teacher_only_mode_hides_result_from_student(self):
         response = self._save('0; 2')
         self.assertNotIn('checks', response.json())
         response = self.client.get(self.detail)
         self.assertFalse(response.context['show_checks'])
-        self.assertNotContains(response, 'совпало')
+        self.assertNotContains(response, 'верно')
+        self.assertNotContains(response, 'Проверить<')
+        # Кнопки нет — и её URL закрыт
+        self.assertEqual(self._check().status_code, 403)
         self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
         response = self.client.get(self.detail)
-        self.assertNotContains(response, 'совпало')
+        self.assertNotContains(response, 'верно')
 
     def test_after_submit_mode(self):
         self.assignment.check_visibility = Assignment.CHECK_AFTER_SUBMIT
         self.assignment.save()
         response = self._save('0; 2')
         self.assertNotIn('checks', response.json())
-        self.assertNotContains(self.client.get(self.detail), '✓ совпало')
+        response = self.client.get(self.detail)
+        self.assertNotContains(response, '✓ верно')
+        self.assertNotContains(response, 'data-check-task')
+        self.assertEqual(self._check().status_code, 403)
         self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
         response = self.client.get(self.detail)
-        self.assertContains(response, '✓ совпало')
+        self.assertContains(response, '✓ верно')
         # Эталон ученику не показывается ни в одном режиме
         self.assertNotContains(response, 'Эталон')
 
-    def test_live_mode_returns_checks_in_json(self):
+    def test_live_mode_reveals_only_by_button(self):
         self.assignment.check_visibility = Assignment.CHECK_LIVE
         self.assignment.save()
+        # Автосохранение результат не выдаёт — иначе ответ подбирался бы по бейджу
         response = self._save('7')
+        self.assertNotIn('checks', response.json())
+        response = self.client.get(self.detail)
+        self.assertContains(response, f'data-check="task{self.task.pk}"')
+        self.assertContains(response, 'data-check-task')
+        self.assertNotContains(response, '✗ неверно')
+        # Кнопка «Проверить» сохраняет присланное и раскрывает результат
+        response = self._check('7')
         self.assertEqual(response.json()['checks'],
                          {f'task{self.task.pk}': 'wrong'})
+        self.assertContains(self.client.get(self.detail), '✗ неверно')
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.check_attempts, 1)
+        # Новый ответ — бейдж прячется до следующего нажатия
+        self._save('0; 2')
+        self.assertNotContains(self.client.get(self.detail), 'верно</span>')
+        self._check()
+        self.assertContains(self.client.get(self.detail), '✓ верно')
+        submission.refresh_from_db()
+        self.assertEqual(submission.check_attempts, 2)
+        # Без JS — redirect обратно к задаче
+        response = self._check(xhr=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response['Location'].endswith('#task-1'))
+
+    def test_check_button_without_answer(self):
+        self.assignment.check_visibility = Assignment.CHECK_LIVE
+        self.assignment.save()
+        response = self._check()
+        self.assertEqual(response.json()['checks'], {})
+        self.assertIn('введите ответ', response.json()['message'])
+        self.assertEqual(Submission.objects.get(
+            assignment=self.assignment, task=self.task).check_attempts, 0)
+
+    def test_check_button_with_subitems(self):
+        self.assignment.check_visibility = Assignment.CHECK_LIVE
+        self.assignment.save()
+        a = TaskSubitem.objects.create(
+            task=self.task, order=1, text_latex='а', answer_latex='1')
+        b = TaskSubitem.objects.create(
+            task=self.task, order=2, text_latex='б', answer_latex='2')
+        response = self.client.post(
+            reverse('check_task', args=[self.assignment.pk, self.task.pk]),
+            {f'task{self.task.pk}_sub{a.pk}_text': '1',
+             f'task{self.task.pk}_sub{b.pk}_text': '3'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.json()['checks'], {
+            f'task{self.task.pk}_sub{a.pk}': 'ok',
+            f'task{self.task.pk}_sub{b.pk}': 'wrong',
+        })
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.check_attempts, 1)
+        self.assertTrue(all(p.check_revealed for p in submission.parts.all()))
+
+    def test_photo_button_per_task_and_teacher_toggle(self):
         response = self.client.get(self.detail)
-        self.assertContains(response, '✗ не совпало')
-        self.assertContains(response, f'data-check="task{self.task.pk}"')
+        self.assertContains(response, f'photo-form-{self.task.pk}')
+        self.assertContains(response, 'Фото решения')
+        self.assignment.allow_photos = False
+        self.assignment.save()
+        response = self.client.get(self.detail)
+        self.assertNotContains(response, 'Фото решения')
+        response = self.client.post(
+            reverse('upload_photo', args=[self.assignment.pk, self.task.pk]),
+            {'photos': fake_photo()})
+        self.assertEqual(response.status_code, 403)
 
     def test_pages_survive_rubric_and_text_items(self):
         # Рубрики и текстовые вставки — строки без задачи и ответа;
@@ -640,38 +753,50 @@ class AutoCheckFlowTests(TestCase):
         self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
         self.client.login(username='teacher1', password='pass12345')
         review_url = reverse('review_assignment', args=[self.assignment.pk])
-        self.assertContains(self.client.get(review_url), '✓ совпало')
+        self.assertContains(self.client.get(review_url), '✓ верно')
         # Учитель исправил эталон — сверка пересчитывается при открытии проверки
         self.task.answer_latex = '1; 3'
         self.task.save()
         response = self.client.get(review_url)
-        self.assertContains(response, '✗ не совпало')
+        self.assertContains(response, '✗ неверно')
         submission = Submission.objects.get(
             assignment=self.assignment, task=self.task)
         self.assertEqual(submission.auto_check, 'wrong')
 
-    def test_teacher_sets_visibility_on_assign_and_review(self):
+    def test_visibility_set_on_assign_and_locked_afterwards(self):
         self.client.login(username='teacher1', password='pass12345')
         worksheet = make_worksheet(self.teacher, title='Другой')
-        self.client.post(
-            reverse('assign_worksheet', args=[worksheet.pk]),
-            {'students': [self.student.pk], 'grade_scale': 'words',
-             'check_visibility': 'live'})
+        student2 = make_student(self.teacher, 'student2')
+        assign_url = reverse('assign_worksheet', args=[worksheet.pk])
+        detail_url = reverse('worksheet_detail', args=[worksheet.pk])
+        # До выдачи режим выбирается свободно
+        response = self.client.get(detail_url)
+        self.assertIsNone(response.context['locked_check'])
+        self.assertNotContains(response, 'Уже задано ученикам')
+        self.client.post(assign_url, {'students': [self.student.pk],
+                                      'check_visibility': 'live',
+                                      'allow_photos': 'on'})
         created = Assignment.objects.get(worksheet=worksheet)
         self.assertEqual(created.check_visibility, Assignment.CHECK_LIVE)
-        # Мусорное значение → режим по умолчанию
-        self.client.post(
-            reverse('save_review', args=[self.assignment.pk]),
-            {'action': 'save', 'check_visibility': 'everyone'})
-        self.assignment.refresh_from_db()
-        self.assertEqual(self.assignment.check_visibility,
-                         Assignment.CHECK_TEACHER)
+        self.assertTrue(created.allow_photos)
+        # Листок выдан: селект заблокирован, а присланное значение игнорируется
+        response = self.client.get(detail_url)
+        self.assertEqual(response.context['locked_check'], Assignment.CHECK_LIVE)
+        self.assertContains(response, 'Уже задано ученикам')
+        self.assertContains(response, 'id="a_check" style="max-width:340px" disabled')
+        self.client.post(assign_url, {'students': [student2.pk],
+                                      'check_visibility': 'teacher'})
+        second = Assignment.objects.get(worksheet=worksheet, student=student2)
+        self.assertEqual(second.check_visibility, Assignment.CHECK_LIVE)
+        # Фото — отдельная настройка каждой выдачи, чекбокс не прислан → выключено
+        self.assertFalse(second.allow_photos)
+        # На экране проверки режим сменить нельзя
         self.client.post(
             reverse('save_review', args=[self.assignment.pk]),
             {'action': 'save', 'check_visibility': 'after_submit'})
         self.assignment.refresh_from_db()
         self.assertEqual(self.assignment.check_visibility,
-                         Assignment.CHECK_AFTER_SUBMIT)
+                         Assignment.CHECK_TEACHER)
 
     def test_interval_and_number_types_checked(self):
         self.task.answer_type = Task.ANSWER_INTERVAL
