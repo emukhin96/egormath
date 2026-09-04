@@ -809,6 +809,11 @@
     margin: var(--space-2) 0;
   }
 
+  .answer-box > div + div,
+  .solution-box > div + div {
+    margin-top: var(--space-1);
+  }
+
   .solution-box {
     background: #f8f5ec;
     border: 1px solid var(--border);
@@ -1699,15 +1704,18 @@
     text-decoration: underline;
   }
 
-  #ws-items .ws-answers {
+  #ws-items .ws-answers,
+  #import-drafts .ws-answers {
     display: none;
   }
 
-  #ws-items.show-answers .ws-answers {
+  #ws-items.show-answers .ws-answers,
+  #import-drafts.show-answers .ws-answers {
     display: block;
   }
 
-  #ws-items.show-answers span.ws-answers {
+  #ws-items.show-answers span.ws-answers,
+  #import-drafts.show-answers span.ws-answers {
     display: inline;
   }
 
@@ -1889,6 +1897,11 @@
     color: var(--muted);
     min-width: 1.25rem;
     text-align: center;
+  }
+
+  .pagination .btn[aria-disabled="true"] {
+    opacity: 0.5;
+    pointer-events: none;
   }
 
   .btn:disabled,
@@ -2270,9 +2283,13 @@
     width: 2rem;
   }
 
+  #import-drafts > h2 {
+    margin-top: 0;
+  }
+
   table.import-drafts th.col-key,
   table.import-drafts td.col-key {
-    width: 7.25rem;
+    width: 5.25rem;
     overflow-wrap: anywhere;
   }
 
@@ -2313,7 +2330,7 @@
   table.import-drafts th.col-text,
   table.import-drafts td.col-text {
     min-width: 0;
-    width: 40%;
+    width: auto;
     overflow-wrap: break-word;
   }
 

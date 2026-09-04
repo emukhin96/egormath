@@ -44,7 +44,7 @@
             <textarea id="subitem_text_{{ forloop.counter0 }}" name="subitem_text_{{ forloop.counter0 }}" rows="3">{{ subitem.text_latex }}</textarea>
           </p>
         </details>
-        {% if subitem.author_answer_latex %}<div class="import-preview-block"><strong>Предпросмотр ответа</strong><div class="math-content">{{ subitem.author_answer_latex|web_text }}</div></div>{% endif %}
+        {% if subitem.author_answer_latex %}<div class="import-preview-block"><strong>Предпросмотр ответа</strong><div class="math-content">{{ subitem.author_answer_latex|web_answer }}</div></div>{% endif %}
         <details class="import-source-edit">
           <summary>{% if subitem.author_answer_latex %}Править исходник ответа{% else %}Добавить ответ{% endif %}</summary>
           <p>
@@ -66,7 +66,7 @@
     {% endif %}
     {% if draft.author_answer_latex or draft.author_solution_latex or not review_subitems %}
     {% if review_subitems %}<p class="helptext">Ниже — ответ или решение, которые парсер не разложил по подпунктам. После переноса в пункты родительские поля очистятся.</p>{% endif %}
-    {% if draft.author_answer_latex %}<div class="import-preview-block"><strong>Предпросмотр авторского ответа</strong><div class="math-content">{{ draft.author_answer_latex|web_text }}</div></div>{% endif %}
+    {% if draft.author_answer_latex %}<div class="import-preview-block"><strong>Предпросмотр авторского ответа</strong><div class="math-content">{{ draft.author_answer_latex|web_answer }}</div></div>{% endif %}
     <details class="import-source-edit"{% if form.author_answer_latex.errors %} open{% endif %}>
       <summary>{% if draft.author_answer_latex %}Править исходник ответа{% else %}Добавить ответ{% endif %}</summary>
       <p>

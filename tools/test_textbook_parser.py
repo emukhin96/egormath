@@ -15,6 +15,8 @@ from tools.textbook_parser import (
     parse_galitsky,
     parse_shestakov,
     parse_ziv,
+    redistribute_glued_subitem_answers,
+    split_compact_author_material,
     ZIV_UNEVEN_VARIANT_WARNING,
     rewalk_ziv_merged_body,
     split_leaked_structural_tail,
@@ -348,6 +350,19 @@ class TextbookParserTests(unittest.TestCase):
         self.assertEqual(apply_imported_answer('2.'), '2')
         self.assertEqual(
             apply_imported_answer('Нет корней.'), 'Нет корней.')
+        self.assertEqual(apply_imported_answer(r'\{-2;1\}'), r'$\{-2;1\}$')
+        self.assertEqual(
+            apply_imported_answer(r'\((2 ; 3) ;(3 ; 2)'),
+            r'\((2 ; 3) ;(3 ; 2)\)')
+        self.assertEqual(
+            apply_imported_answer(
+                r'(-1,75 ;-3) ;$\displaystyle \left(-\frac{7}{6}$ '
+                r';$-2\right)$'),
+            r'$(-1,75 ;-3) ;\displaystyle \left(-\frac{7}{6} ;-2\right)$')
+        self.assertEqual(
+            apply_imported_answer(
+                r'$\displaystyle \left\{\frac{5}{4}$ ; $3\right\}$)$'),
+            r'$\displaystyle \left\{\frac{5}{4} ; 3\right\}$')
         self.assertEqual(
             strip_imported_answer_punct('см. рис.'), 'см. рис')
 
@@ -658,6 +673,71 @@ class TextbookParserTests(unittest.TestCase):
             [item.author_solution_latex for item in task.subitems],
             ["$1+1=2$", "$2+2=4$"],
         )
+
+    def test_inline_subitems_split_after_closed_math(self):
+        parent, items = split_subitems(
+            r"\(\sin\alpha=-\frac{4}{5};\operatorname{tg}\alpha=-\frac{4}{3}\); "
+            r"\(\operatorname{ctg}\alpha=-\frac{3}{4};\) б) "
+            r"\(\cos\alpha=-\frac{4}{5};\sin\alpha=\frac{3}{5}\)",
+            normalize_punctuation=False, minimum_items=1)
+        self.assertIn(r"\sin\alpha", parent)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].label.lower(), "б")
+        self.assertIn(r"\cos\alpha", items[0].text_latex)
+        self.assertNotIn("б)", parent)
+
+    def test_compact_author_material_splits_after_math_close(self):
+        answer, solution, items, _flat = split_compact_author_material(
+            r"\(\displaystyle \sin \alpha=-\frac{4}{5} ; "
+            r"\operatorname{tg} \alpha=-\frac{4}{3}\); "
+            r"\(\displaystyle \operatorname{ctg} \alpha=-\frac{3}{4} ;\) б) "
+            r"\(\displaystyle \cos \alpha=-\frac{4}{5} ; "
+            r"\sin \alpha=\frac{3}{5} ; \operatorname{ctg} \alpha=-\frac{4}{3}\)")
+        self.assertIn(r"\sin \alpha", answer)
+        self.assertNotIn("б)", answer)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].label.lower(), "б")
+        self.assertIn(r"\cos \alpha", items[0].author_answer_latex)
+        self.assertEqual(solution, "")
+
+    def test_redistribute_glued_subitem_answers_repairs_stored_draft(self):
+        from problems.textbook_parser import SubitemDraft
+        task = type("Draft", (), {
+            "author_answer_latex": "",
+            "author_solution_latex": "",
+            "subitems": [
+                SubitemDraft(
+                    "a",
+                    r"\(\cos\alpha=\frac{3}{5}\)",
+                    author_answer_latex=(
+                        r"\(\sin\alpha=-\frac{4}{5};\operatorname{tg}\alpha="
+                        r"-\frac{4}{3}\); \(\operatorname{ctg}\alpha="
+                        r"-\frac{3}{4};\) б) \(\cos\alpha=-\frac{4}{5}\;"
+                        r"\sin\alpha=\frac{3}{5}\)"),
+                ),
+                SubitemDraft("б", r"\(\operatorname{tg}\alpha=-\frac{3}{4}\)"),
+            ],
+        })()
+        self.assertTrue(redistribute_glued_subitem_answers(task))
+        self.assertIn(r"\sin\alpha", task.subitems[0].author_answer_latex)
+        self.assertNotIn("б)", task.subitems[0].author_answer_latex)
+        self.assertIn(r"\cos\alpha", task.subitems[1].author_answer_latex)
+        self.assertEqual(task.author_answer_latex, "")
+
+    def test_redistribute_does_not_split_interval_ending_with_six(self):
+        from problems.textbook_parser import SubitemDraft
+        answer = r"$x\in(0 ; 6)$"
+        task = type("Draft", (), {
+            "author_answer_latex": "",
+            "author_solution_latex": "",
+            "subitems": [
+                SubitemDraft("а", "первый", author_answer_latex=answer),
+                SubitemDraft("б", "второй"),
+            ],
+        })()
+        self.assertFalse(redistribute_glued_subitem_answers(task))
+        self.assertEqual(task.subitems[0].author_answer_latex, answer)
+        self.assertEqual(task.subitems[1].author_answer_latex, "")
 
     def test_solution_images_are_numbered_in_task_and_subitem_answers(self):
         task_text = "\n".join([
@@ -1295,6 +1375,93 @@ a+b
             [r"$>$", r"$<$", r"$=$", r"$>$"])
         self.assertEqual(by_id["kr/02/v1/4"].author_answer_latex, r"$x=2$")
         self.assertEqual(diagnostics["matched_solutions"], 4)
+
+    def test_ziv_compact_answers_split_after_closed_formula(self):
+        source = r"""
+\section*{Контрольные работы}
+\section*{4. Тригонометрические функции}
+Вариант 2
+\begin{itemize}
+  \item[2.] Вычислите значения тригонометрических функций, если:
+а) \(\displaystyle \cos \alpha=\frac{3}{5} ; \frac{3 \pi}{2}<\alpha<2 \pi\)
+б) \(\displaystyle \operatorname{tg} \alpha=-\frac{3}{4} ; \frac{\pi}{2}<\alpha<\pi\)
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Контрольные работы}
+\section*{4. Тригонометрические функции}
+Вариант 2. 2. \(\displaystyle \sin \alpha=-\frac{4}{5} ; \operatorname{tg} \alpha=-\frac{4}{3}\); \(\displaystyle \operatorname{ctg} \alpha=-\frac{3}{4} ;\) б) \(\displaystyle \cos \alpha=-\frac{4}{5} ; \sin \alpha=\frac{3}{5} ; \operatorname{ctg} \alpha=-\frac{4}{3}\)
+"""
+        tasks, _ = parse_ziv(source)
+        task = next(item for item in tasks if item.external_id == "kr/04/v2/2")
+        self.assertEqual([item.label for item in task.subitems], ["а", "б"])
+        answers = [item.author_answer_latex for item in task.subitems]
+        self.assertIn(r"\sin \alpha", answers[0])
+        self.assertNotIn("б)", answers[0])
+        self.assertIn(r"\cos \alpha", answers[1])
+        self.assertEqual(task.author_answer_latex, "")
+
+    def test_ziv_compact_answer_does_not_keep_next_task_number(self):
+        source = r"""
+\section*{Контрольные работы}
+\section*{1. Уравнения}
+Вариант 3
+\begin{itemize}
+  \item[1.] Решите системы:
+а) \(x+y=5\)
+б) \(x-y=1\)
+  \item[2.] Решите уравнение.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Контрольные работы}
+\section*{1. Уравнения}
+Вариант 3. 1. а) $(2;3)$ б) $(-1,75;-3);\left(-\frac{7}{6};-2\right)$.2 .$\left\{\frac{5}{4};3\right\}$.
+"""
+        tasks, _ = parse_ziv(source)
+        by_id = {task.external_id: task for task in tasks}
+        first = by_id["kr/01/v3/1"]
+        second = by_id["kr/01/v3/2"]
+        glued = " ".join(
+            [first.author_answer_latex]
+            + [item.author_answer_latex for item in first.subitems])
+        self.assertNotIn(".2 .", glued)
+        self.assertNotIn("2 .", glued)
+        self.assertTrue(
+            second.author_answer_latex
+            or any(item.author_answer_latex for item in second.subitems))
+        self.assertIn(r"\frac{5}{4}", second.author_answer_latex)
+
+    def test_reattach_cuts_ocr_task_number_before_dollar(self):
+        from problems.textbook_parser import (
+            SubitemDraft, reattach_leaked_following_answers)
+        first = type("Draft", (), {
+            "external_id": "kr/01/v3/1",
+            "author_answer_latex": "",
+            "author_solution_latex": "",
+            "subitems": [
+                SubitemDraft("а", "система", author_answer_latex=r"$(2;3)$"),
+                SubitemDraft(
+                    "б", "система",
+                    author_answer_latex=(
+                        r"(-1,75 ;-3) ;$\displaystyle \left(-\frac{7}{6}$ "
+                        r";$-2\right)$ .2 .$\displaystyle \left\{\frac{5}{4}$ "
+                        r"; $3\right\}$)$"),
+                ),
+            ],
+        })()
+        second = type("Draft", (), {
+            "external_id": "kr/01/v3/2",
+            "author_answer_latex": "",
+            "author_solution_latex": "",
+            "subitems": [],
+        })()
+        changed = reattach_leaked_following_answers([first, second])
+        self.assertTrue(changed)
+        kept = first.subitems[1].author_answer_latex
+        self.assertNotIn(".2 .", kept)
+        self.assertNotIn(r"\left(-\frac{7}{6}$", kept)
+        self.assertIn(r"\left(-\frac{7}{6}", kept)
+        self.assertIn(r"\frac{5}{4}", second.author_answer_latex)
+        self.assertFalse(second.author_answer_latex.endswith(")"))
 
     def test_ziv_inline_variant_and_tilde_numbers_do_not_leak(self):
         # OCR Зива часто пишет «Вариант 2\\» и «1.~» без \item: иначе

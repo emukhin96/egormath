@@ -13,6 +13,7 @@ from problems.textbook_import import (TextbookImportError, attach_image_archive,
                                       commit_batch, create_batch_from_bundle,
                                       repair_ziv_batch_leaks,
                                       sync_batch_draft_images)
+from problems.textbook_parser import parse_ziv
 from problems.textbook_topics import (match_topic_candidates, set_draft_topics,
                                       suggested_topic_for_drafts)
 from worksheets.models import Collection, WorksheetItem
@@ -980,6 +981,36 @@ class TextbookImportTests(TestCase):
         self.assertEqual(html.count('$1+1$'), 1)
         self.assertNotIn('class="ws-num"', html)
         self.assertNotIn('а) а)', html)
+        self.assertContains(response, 'id="toggle-import-draft-answers"')
+        self.assertContains(response, 'ответы и решения')
+        self.assertContains(response, 'answer-box')
+        self.assertContains(response, 'а)&nbsp;')
+        self.assertContains(response, 'Решение:')
+        self.assertNotContains(response, 'class="show-answers"')
+        self.assertNotContains(response, '— ответ:')
+
+    def test_import_repairs_answer_glued_after_closed_math(self):
+        batch = self.create_batch(bundle(
+            text_latex='Вычислите:',
+            subitems=[{
+                'label': 'а',
+                'text_latex': r'\(\cos\alpha=\frac{3}{5}\)',
+                'author_answer_latex': (
+                    r'\(\sin\alpha=-\frac{4}{5};\operatorname{tg}\alpha='
+                    r'-\frac{4}{3}\); \(\operatorname{ctg}\alpha='
+                    r'-\frac{3}{4};\) б) \(\cos\alpha=-\frac{4}{5}\)'),
+                'author_solution_latex': '',
+            }, {
+                'label': 'б',
+                'text_latex': r'\(\operatorname{tg}\alpha=-\frac{3}{4}\)',
+                'author_answer_latex': '',
+                'author_solution_latex': '',
+            }],
+            author_answer_latex='', author_solution_latex='',
+        ))
+        draft = batch.drafts.get()
+        self.assertNotIn('б)', draft.subitems[0]['author_answer_latex'])
+        self.assertIn(r'\cos\alpha', draft.subitems[1]['author_answer_latex'])
 
     def test_collection_preview_is_paginated_separately(self):
         payload = bundle()
@@ -1000,6 +1031,8 @@ class TextbookImportTests(TestCase):
         self.assertEqual(page.paginator.num_pages, 2)
         self.assertContains(response, 'class="pagination"')
         self.assertContains(response, 'page=2')
+        self.assertContains(response, 'Назад')
+        self.assertContains(response, 'Следующая')
         self.assertNotContains(response, '→')
 
         group = next(
@@ -2098,3 +2131,64 @@ class TextbookImportTests(TestCase):
         self.assertEqual(
             response.context['selected_group']['path'],
             ['Контрольные работы', 'Степенная функция'])
+
+    def test_ziv_parser_splits_answer_after_closed_formula(self):
+        source = r"""
+\section*{Контрольные работы}
+\section*{4. Тригонометрические функции}
+Вариант 2
+\begin{itemize}
+  \item[2.] Вычислите значения тригонометрических функций, если:
+а) \(\displaystyle \cos \alpha=\frac{3}{5} ; \frac{3 \pi}{2}<\alpha<2 \pi\)
+б) \(\displaystyle \operatorname{tg} \alpha=-\frac{3}{4} ; \frac{\pi}{2}<\alpha<\pi\)
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Контрольные работы}
+\section*{4. Тригонометрические функции}
+Вариант 2. 2. \(\displaystyle \sin \alpha=-\frac{4}{5} ; \operatorname{tg} \alpha=-\frac{4}{3}\); \(\displaystyle \operatorname{ctg} \alpha=-\frac{3}{4} ;\) б) \(\displaystyle \cos \alpha=-\frac{4}{5} ; \sin \alpha=\frac{3}{5} ; \operatorname{ctg} \alpha=-\frac{4}{3}\)
+"""
+        tasks, _ = parse_ziv(source)
+        task = next(item for item in tasks if item.external_id == 'kr/04/v2/2')
+        answers = [item.author_answer_latex for item in task.subitems]
+        self.assertEqual([item.label for item in task.subitems], ['а', 'б'])
+        self.assertIn(r'\sin \alpha', answers[0])
+        self.assertNotIn('б)', answers[0])
+        self.assertIn(r'\cos \alpha', answers[1])
+        self.assertEqual(task.author_answer_latex, '')
+
+    def test_ziv_parser_moves_leaked_next_task_number(self):
+        source = r"""
+\section*{Контрольные работы}
+\section*{1. Уравнения}
+Вариант 3
+\begin{itemize}
+  \item[1.] Решите системы:
+а) \(x+y=5\)
+б) \(x-y=1\)
+  \item[2.] Решите уравнение.
+\end{itemize}
+\section*{ОТВЕТЫ, УКАЗАНИЯ, РЕШЕНИЯ}
+\section*{Контрольные работы}
+\section*{1. Уравнения}
+Вариант 3. 1. а) $(2;3)$ б) $(-1,75;-3);\left(-\frac{7}{6};-2\right)$.2 .$\left\{\frac{5}{4};3\right\}$.
+"""
+        tasks, _ = parse_ziv(source)
+        first = next(item for item in tasks if item.external_id == 'kr/01/v3/1')
+        second = next(item for item in tasks if item.external_id == 'kr/01/v3/2')
+        glued = ' '.join(
+            [first.author_answer_latex]
+            + [item.author_answer_latex for item in first.subitems])
+        self.assertNotIn('.2 .', glued)
+        self.assertIn(r'\frac{5}{4}', second.author_answer_latex)
+
+    def test_review_wraps_bare_set_answer(self):
+        batch = self.create_batch(bundle(
+            text_latex=r'Решите уравнение \(x^{3}+3 x^{2}-4=0\).',
+            author_answer_latex=r'\{-2;1\}',
+            author_solution_latex='',
+        ))
+        draft = batch.drafts.get()
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse(
+            'textbook_import_review', args=[batch.pk, draft.pk]))
+        self.assertContains(response, r'$\{-2;1\}$', html=False)

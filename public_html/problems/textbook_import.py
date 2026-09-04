@@ -32,6 +32,7 @@ from .textbook_parser import (ZIV_LEAKED_HEADING_WARNING,
                               collapse_repeated_lead, strip_heading_dot,
                               draft_has_ziv_leak, finalize_draft_images,
                               reattach_leaked_following_answers,
+                              redistribute_glued_subitem_answers,
                               _ziv_apply_variant_parity,
                               _ziv_draft_topic_title,
                               _ziv_looks_like_topic_title,
@@ -109,7 +110,14 @@ def normalize_subitems(value):
             'author_solution_latex': apply_imported_math(
                 item.get('author_solution_latex') or ''),
         })
-    return order_letter_subitems(result)
+    result = order_letter_subitems(result)
+    holder = type('Draft', (), {
+        'subitems': result,
+        'author_answer_latex': '',
+        'author_solution_latex': '',
+    })()
+    redistribute_glued_subitem_answers(holder)
+    return holder.subitems
 
 
 def _confidence(value):
@@ -321,6 +329,8 @@ def sync_batch_draft_images(batch):
         for draft in reattach_leaked_following_answers(drafts):
             dirty[draft.pk] = draft
     for draft in drafts:
+        if redistribute_glued_subitem_answers(draft):
+            dirty[draft.pk] = draft
         if finalize_draft_images(draft):
             dirty[draft.pk] = draft
     dirty = list(dirty.values())

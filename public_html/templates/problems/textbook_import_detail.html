@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load static task_extras %}
-{% block extra_head %}<script defer src="{% static 'js/bulk.js' %}"></script>{% endblock %}
+{% block extra_head %}<script defer src="{% static 'js/bulk.js' %}"></script><script defer src="{% static 'js/textbook_import_detail.js' %}"></script>{% endblock %}
 {% block title %}{{ batch.title }} — EgorMath{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -89,7 +89,14 @@
   </form>
 </section>
 {% endif %}
-<div class="card">
+<div class="card" id="import-drafts">
+  <h2>Задачи партии
+    <label class="ws-toggle" title="Показывать ответы и решения задач">
+      <input type="checkbox" id="toggle-import-draft-answers">
+      <span class="ws-toggle-slider"></span>
+      <span class="ws-toggle-text">ответы и решения</span>
+    </label>
+  </h2>
   <div class="form-buttons import-toolbar">
     <a class="btn btn-secondary" href="?{% if selected_section %}section={{ selected_section }}{% endif %}">Все</a>
     {% for tab in status_tabs %}<a class="btn btn-secondary" href="?status={{ tab.value }}{% if selected_section %}&section={{ selected_section }}{% endif %}">{{ tab.label }} ({{ tab.count }})</a>{% endfor %}

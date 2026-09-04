@@ -18,7 +18,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterable, Iterator, Sequence
 
-from .latex_utils import ensure_displaystyle_fractions, wrap_bare_math
+from .latex_utils import (
+    ensure_displaystyle_fractions, heal_split_math_dollars, wrap_bare_math)
 
 
 SCHEMA_VERSION = 1
@@ -84,10 +85,12 @@ PLAIN_ALPHA_ITEM_RE = re.compile(
     r"(?im)(?:^|(?<=\\\\)|(?<=\n))[ \t]*"
     r"(?P<label>[a-zа-яё0-9]+)\)[\s~]*")
 # В решебниках подпункты часто идут в одну строку: ``а) ...; б) ...``.
-# Граница — конец предыдущего пункта (``; . ? :``), а не голая ``a)``
-# внутри формулы.
+# Граница — конец предыдущего пункта. OCR часто ставит ``;`` внутри
+# формулы и закрывает её перед следующей меткой: ``...;\) б)`` / ``...;$ б)``.
+# Lookbehind фиксированной ширины: в 3.10 нельзя смешивать 1 и 2 символа.
 INLINE_ALPHA_ITEM_RE = re.compile(
-    r"(?i)(?<=[;.?:,])[ \t]*(?P<label>а|б|в|г|д|е|ж|з|a|b|c|d|6)\)[\s~]*")
+    r"(?i)(?:(?<=[;.?:,$])|(?<=\\\))|(?<=\\\]))"
+    r"[ \t]*(?P<label>а|б|в|г|д|е|ж|з|a|b|c|d|6)\)[\s~]*")
 LEAKED_BOOK_TAIL_RE = re.compile(
     r"(?:\\\\|\s)*§\d+\.[\s\S]*?(?:Уровень\s+[A-DА-Г]\s*)?$",
     re.I)
@@ -256,8 +259,34 @@ def strip_imported_answer_punct(value: str) -> str:
     return value[:-1].rstrip()
 
 
+_TRAILING_ORPHAN_PAREN_RE = re.compile(
+    r'(?:\\right(?:[.).\]]|\\\}|\\\))|\\\})\s*\\?\)$')
+
+
+def _strip_trailing_orphan_paren(value: str) -> str:
+    """Срезает хвостовую ``)`` после уже закрытого ``\\right`` / ``\\}``.
+
+    OCR Зива часто оставляет ``\\right\\})`` или ``\\}$)$`` от предыдущей
+    формулы, когда номер следующей задачи вклеен в тот же абзац.
+    """
+    value = str(value or '').rstrip()
+    if _TRAILING_ORPHAN_PAREN_RE.search(value):
+        return re.sub(r'\s*\\?\)$', '', value)
+    return value
+
+
+def _close_unbalanced_inline_math(value: str) -> str:
+    """Закрывает одинокую ``\\(``, которую OCR обрезал вместе с хвостом."""
+    value = str(value or '')
+    if value.count('\\(') == value.count('\\)') + 1 and not value.rstrip().endswith('\\)'):
+        return value.rstrip() + '\\)'
+    return value
+
+
 def apply_imported_answer(value: str) -> str:
     """Нормализует импортированный ответ и срезает служебную точку."""
+    value = _strip_trailing_orphan_paren(heal_split_math_dollars(value))
+    value = _close_unbalanced_inline_math(value)
     return strip_imported_answer_punct(apply_imported_math(value))
 
 
@@ -300,6 +329,7 @@ def apply_imported_math(value: str) -> str:
     # Сначала склеиваем уже обёрнутые `\(…\)`, затем wrap, затем ещё раз:
     # wrap может обернуть хвост `+1` в `$+1$`, и его тоже надо влить в формулу.
     # Em dash — только после wrap, иначе минус в голом TeX станет тире.
+    value = heal_split_math_dollars(value)
     value = _heal_ocr_linebreak_math(_strip_imported_text(value))
     value = wrap_bare_math(value)
     value = _heal_ocr_linebreak_math(value)
@@ -862,7 +892,11 @@ TASKPIC_TOKEN_RE = re.compile(r"\\taskpic\{([^{}]+)\}")
 FALSE_SOLUTION_NOUN_RE = re.compile(
     r"(?is)^(?P<noun>решения)\.\s*(?P<rest>.*)$"
 )
-LEAKED_TASK_NUM_RE = re.compile(r"(?P<num>\d{1,2})\.\s+")
+# OCR Зива часто пишет номер как ``2 .``, ``.2 .`` или ``.2 .$`` без пробела.
+LEAKED_TASK_NUM_RE = re.compile(
+    r"(?P<num>\d{1,2})\s*\.(?:\s+|(?=[\\$])|$)")
+LEAKED_TASK_NUM_LEAD_RE = re.compile(
+    r"^\d{1,2}\s*\.(?:\s+|(?=[\\$])|$)")
 
 
 def _strip_taskpic_tokens(text: str) -> tuple[str, list[str]]:
@@ -1031,6 +1065,9 @@ def _find_leaked_following_task(text: str, next_number: int) -> int | None:
         before = text[:match.start()]
         if re.search(r"(?i)рис\.?\s*$", before[-16:]):
             continue
+        # Десятичное ``-1.2 .``: цифра сразу перед точкой, это не номер задачи.
+        if before.endswith('.') and len(before) >= 2 and before[-2].isdigit():
+            continue
         if not re.search(r"[.!?]\s*$", before):
             continue
         return match.start()
@@ -1063,20 +1100,26 @@ def reattach_leaked_following_answers(tasks) -> list:
         for index, task in enumerate(group[:-1]):
             following = group[index + 1]
             next_number = _task_source_number(following.external_id)
-            if next_number is None or _has_author_material(following):
+            if next_number is None:
                 continue
+            following_has_material = _has_author_material(following)
             _rejoin_false_solution_nouns(task)
             parent_answer = getattr(task, "author_answer_latex", "") or ""
             parent_cut = _find_leaked_following_task(parent_answer, next_number)
             if parent_cut is not None:
                 kept, tail = parent_answer[:parent_cut], parent_answer[parent_cut:]
                 tail_text, pics = _strip_taskpic_tokens(tail)
-                tail_text = re.sub(r"^\d{1,2}\.\s+", "", tail_text).strip()
+                tail_text = LEAKED_TASK_NUM_LEAD_RE.sub("", tail_text).strip()
                 if not tail_text:
                     continue
-                task.author_answer_latex = _append_taskpics(kept.rstrip(), pics)
-                following.author_answer_latex = tail_text
-                mark(task, following)
+                task.author_answer_latex = apply_imported_answer(
+                    _append_taskpics(kept.rstrip(), pics))
+                if not following_has_material:
+                    following.author_answer_latex = apply_imported_answer(
+                        tail_text)
+                    mark(task, following)
+                else:
+                    mark(task)
                 continue
             rows = [
                 dict(item) if isinstance(item, dict) else item
@@ -1096,15 +1139,18 @@ def reattach_leaked_following_answers(tasks) -> list:
             answer = _subitem_get(rows[cut_index], "author_answer_latex")
             kept, tail = answer[:found], answer[found:]
             tail_text, pics = _strip_taskpic_tokens(tail)
-            tail_text = re.sub(r"^\d{1,2}\.\s+", "", tail_text).strip()
+            tail_text = LEAKED_TASK_NUM_LEAD_RE.sub("", tail_text).strip()
             if not tail_text:
                 continue
             _subitem_set(
                 rows[cut_index], "author_answer_latex",
-                _append_taskpics(kept.rstrip(), pics))
+                apply_imported_answer(_append_taskpics(kept.rstrip(), pics)))
             task.subitems = rows
-            following.author_answer_latex = tail_text
-            mark(task, following)
+            if not following_has_material:
+                following.author_answer_latex = apply_imported_answer(tail_text)
+                mark(task, following)
+            else:
+                mark(task)
     return changed
 
 
@@ -1449,6 +1495,18 @@ def _normalized_subitem_label(label: str) -> str:
     return aliases.get(value, value)
 
 
+_CYR_ITEM_LABELS = {
+    "a": "а", "b": "б", "c": "в", "d": "г", "e": "д",
+    "f": "е", "g": "ж", "h": "з",
+}
+
+
+def cyrillic_item_label(label: str) -> str:
+    """Латинскую OCR-метку ``a)`` показывает как «а», как в PDF."""
+    raw = clean(label)
+    return _CYR_ITEM_LABELS.get(_normalized_subitem_label(raw), raw)
+
+
 _LETTER_ORDER = tuple("abcdefgh")
 
 
@@ -1569,6 +1627,116 @@ def _positional_answer_chunks(text: str, count: int) -> list[str] | None:
     return parts
 
 
+def _subitem_label_key(item) -> str:
+    return _normalized_subitem_label(_subitem_get(item, "label"))
+
+
+def _author_field_chunk(text: str, field: str) -> str:
+    answer, solution = split_answer_solution(text)
+    if field == "author_answer_latex":
+        return strip_subitem_punct(answer or text)
+    return strip_subitem_punct(solution or text)
+
+
+def _fill_empty_author_field(item, field: str, value: str) -> bool:
+    value = str(value or "").strip()
+    if not value or _subitem_get(item, field).strip():
+        return False
+    _subitem_set(item, field, value)
+    return True
+
+
+def _give_leftover_parent_to_unmatched_subitems(task, assigned_labels) -> None:
+    """Первый пункт часто без метки: его текст остаётся родителем."""
+    leftover_answer = (getattr(task, "author_answer_latex", "") or "").strip()
+    leftover_solution = (getattr(task, "author_solution_latex", "") or "").strip()
+    if not leftover_answer and not leftover_solution:
+        return
+    for item in getattr(task, "subitems", None) or []:
+        if _subitem_label_key(item) in assigned_labels:
+            continue
+        if leftover_answer and _fill_empty_author_field(
+                item, "author_answer_latex", leftover_answer):
+            leftover_answer = ""
+            task.author_answer_latex = ""
+        if leftover_solution and _fill_empty_author_field(
+                item, "author_solution_latex", leftover_solution):
+            leftover_solution = ""
+            task.author_solution_latex = ""
+        if not leftover_answer and not leftover_solution:
+            return
+
+
+def redistribute_glued_subitem_answers(task) -> bool:
+    """Если в ответе пункта торчит ``б)``, отрезает его и отдаёт соседу.
+
+    Нужно и при разборе, и для уже сохранённых черновиков, где метка
+    следующего пункта приклеилась после закрытой формулы.
+    """
+    items = list(getattr(task, "subitems", None) or [])
+    if len(items) < 2:
+        return False
+    rows = [dict(item) if isinstance(item, dict) else item for item in items]
+    changed = False
+
+    def split_blob(text: str):
+        if not str(text or "").strip():
+            return "", []
+        return split_subitems(
+            text, normalize_punctuation=False, minimum_items=1)
+
+    def distribute(keep: str, pieces, field: str, start: int) -> bool:
+        moved = False
+        for piece in pieces:
+            # Цифра 6 в OCR — алиас «б», но в уже сохранённом ответе
+            # ``(0 ; 6)`` — граница интервала, а не метка пункта.
+            if str(piece.label).isdigit():
+                continue
+            key = _normalized_subitem_label(piece.label)
+            for later in rows[start:]:
+                if _subitem_label_key(later) != key:
+                    continue
+                if _fill_empty_author_field(
+                        later, field, _author_field_chunk(piece.text_latex, field)):
+                    moved = True
+                break
+        return moved
+
+    for field in ("author_answer_latex", "author_solution_latex"):
+        blob = getattr(task, field, "") or ""
+        parent, found = split_blob(blob)
+        if not found:
+            continue
+        keep, rest = parent, found
+        if _normalized_subitem_label(found[0].label) == _subitem_label_key(rows[0]):
+            keep, rest = found[0].text_latex, found[1:]
+        moved = distribute(keep, rest, field, 0)
+        if keep and _fill_empty_author_field(
+                rows[0], field, _author_field_chunk(keep, field)):
+            moved = True
+        if moved:
+            setattr(task, field, "")
+            changed = True
+
+    for index, row in enumerate(rows):
+        for field in ("author_answer_latex", "author_solution_latex"):
+            blob = _subitem_get(row, field)
+            parent, found = split_blob(blob)
+            if not found:
+                continue
+            keep, rest = parent, found
+            if _normalized_subitem_label(found[0].label) == _subitem_label_key(row):
+                keep, rest = found[0].text_latex, found[1:]
+            if not distribute(keep, rest, field, index + 1):
+                continue
+            _subitem_set(row, field, _author_field_chunk(keep, field) if keep else "")
+            changed = True
+
+    if changed:
+        task.subitems = rows
+    return changed
+
+
 def merge_solutions(
         tasks: list[TaskDraft], solution_text: str, marker_factory,
         *, full_solutions: bool = False, missing_ok: bool = False) -> dict:
@@ -1635,11 +1803,14 @@ def merge_solutions(
             solution_pairs = _solution_subitem_pairs(
                 task.subitems, solution_subitems)
             if solution_pairs is not None:
+                assigned = set()
                 for task_subitem, solution_subitem in solution_pairs:
                     task_subitem.author_answer_latex = (
                         solution_subitem.author_answer_latex)
                     task_subitem.author_solution_latex = (
                         solution_subitem.author_solution_latex)
+                    assigned.add(_normalized_subitem_label(task_subitem.label))
+                _give_leftover_parent_to_unmatched_subitems(task, assigned)
                 distributed_to_subitems = True
             elif not task.subitems:
                 # Нумерованные шаги доказательства у задачи без подпунктов —
@@ -1664,6 +1835,8 @@ def merge_solutions(
                     if not subitem.author_answer_latex:
                         subitem.author_answer_latex = chunk
                 distributed_to_subitems = True
+        if redistribute_glued_subitem_answers(task):
+            distributed_to_subitems = True
         if task.subitems and distributed_to_subitems:
             # У задачи с подпунктами авторские материалы принадлежат только
             # подпунктам. Родительские поля иначе дублируются в интерфейсе и

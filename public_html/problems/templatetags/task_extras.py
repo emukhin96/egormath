@@ -1,6 +1,7 @@
 from django import template
 
 from problems.textbook_parser import (
+    apply_imported_answer, cyrillic_item_label as _cyrillic_item_label,
     normalize_imported_text, order_letter_subitems, strip_heading_dot)
 from problems.web_tex import tex_preview_html, tex_to_web_html
 from worksheets.latex import subitem_label as _subitem_label
@@ -26,6 +27,18 @@ def web_text(text):
     форматирующие tex-команды (%, \\\\, \\par, \\annot, tabular…) переведены
     в HTML, формулы остаются для KaTeX."""
     return tex_to_web_html(text)
+
+
+@register.filter
+def web_answer(text):
+    """Авторский ответ: голый TeX вроде ``\\{-2;1\\}`` оборачивается для KaTeX."""
+    return tex_to_web_html(apply_imported_answer(text))
+
+
+@register.filter
+def cyr_item_label(label):
+    """Метка подпункта как в PDF: a → а, b → б."""
+    return _cyrillic_item_label(label)
 
 
 @register.filter

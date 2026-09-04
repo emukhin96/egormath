@@ -11,8 +11,9 @@ from django.utils.html import escape
 from accounts.models import Profile
 
 from .latex_utils import (ensure_displaystyle_fractions, escape_latex,
-                          loads_neuro_json, restore_json_eaten_latex,
-                          split_items, strip_latex, wrap_bare_math)
+                          heal_split_math_dollars, loads_neuro_json,
+                          restore_json_eaten_latex, split_items, strip_latex,
+                          wrap_bare_math)
 from .models import Tag, Task, Topic
 
 
@@ -104,11 +105,21 @@ class LatexUtilsTests(TestCase):
             r'$a = \pm \frac{4}{5}$')
         self.assertEqual(wrap_bare_math('нет корней'), 'нет корней')
         self.assertEqual(wrap_bare_math('42'), '42')
+        self.assertEqual(wrap_bare_math(r'\{-2;1\}'), r'$\{-2;1\}$')
+        self.assertEqual(wrap_bare_math(r'$\{-2;1\}$'), r'$\{-2;1\}$')
+        self.assertEqual(
+            heal_split_math_dollars(
+                r'$\displaystyle \left(-\frac{7}{6}$ ;$-2\right)$'),
+            r'\displaystyle \left(-\frac{7}{6} ;-2\right)')
+        self.assertEqual(heal_split_math_dollars(r'$\{-2;1\}$'), r'$\{-2;1\}$')
+        self.assertEqual(heal_split_math_dollars(r'$(2;3)$'), r'$(2;3)$')
         solution = (
             'Дискриминант D = (-5a)^2 - 4 \\cdot 1 \\cdot 4 = 25a^2 - 16. '
             'Приравняем дискриминант к нулю: 25a^2 - 16 = 0, откуда '
             'a^2 = \\frac{16}{25}, следовательно a = \\pm \\frac{4}{5}.')
         wrapped = wrap_bare_math(solution)
+        self.assertIn('откуда', wrapped)
+        self.assertNotIn('$откуда', wrapped)
         self.assertIn(r'$D = (-5a)^2 - 4 \cdot 1 \cdot 4 = 25a^2 - 16$',
                       wrapped)
         self.assertIn(r'$25a^2 - 16 = 0$', wrapped)
@@ -985,9 +996,12 @@ class CatalogViewTests(TestCase):
         response = self.client.get(reverse('task_list'))
         self.assertContains(response, 'class="pagination"')
         self.assertContains(response, 'page=2')
+        self.assertContains(response, 'Назад')
+        self.assertContains(response, 'Следующая')
         self.assertNotContains(response, 'Вперёд')
         page_two = self.client.get(reverse('task_list'), {'page': 2, 'q': ''})
         self.assertContains(page_two, 'aria-current="page"')
+        self.assertContains(page_two, 'page=1')
 
     def test_catalog_search(self):
         self.client.login(username='teacher1', password='pass12345')
