@@ -13,9 +13,11 @@
 
   function cardAnswered(card) {
     /* math-field не участвует в форме сам — его значение читаем напрямую */
-    var controls = card.querySelectorAll('input:not([type=hidden]):not([type=file]), textarea, math-field');
+    var controls = card.querySelectorAll('input:not([type=hidden]):not([type=file]), textarea, select, math-field');
     for (var i = 0; i < controls.length; i++) {
-      if ((controls[i].value || '').trim()) return true;
+      var c = controls[i];
+      if (c.type === 'checkbox') { if (c.checked) return true; continue; }
+      if ((c.value || '').trim()) return true;
     }
     return !!card.querySelector('[data-photos] img');
   }
