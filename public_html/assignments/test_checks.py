@@ -1,7 +1,7 @@
 """Тесты ядра масок ответа: грамматика, слоты, проверки по типам."""
 from fractions import Fraction
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 from .check_answer import OK, UNKNOWN, WRONG, check_answer
 from .checks import (Slot, check_mask, check_slot, filled_text, parse_mask,
@@ -300,3 +300,59 @@ class ExpressionHelpersTests(SimpleTestCase):
         self.assertFalse(sets.numbers_equal(huge, huge + 2, tolerance=1))
         self.assertEqual(check_slot(slot(r'{{number: 10^{999}}}'), r'10^{999}'), OK)
         self.assertEqual(check_slot(slot(r'{{number: 10^{999}}}'), r'10^{998}'), WRONG)
+
+
+class MaskModelTests(TestCase):
+    """answer_json/check_json у ответа: сверка по маске и показ учителю."""
+
+    def setUp(self):
+        from problems.models import Task, TaskSubitem
+        from .tests import make_assignment, make_student, make_teacher
+        self.teacher = make_teacher()
+        self.student = make_student(self.teacher)
+        self.assignment = make_assignment(self.teacher, self.student)
+        self.task = self.assignment.worksheet.ordered_items()[0].task
+        self.task.answer_mask = ('Меньшая сторона {{number: 10}} см, '
+                                 'больше {{choice: мальчиков|*девочек}}')
+        self.task.save()
+        self.sub = TaskSubitem.objects.create(
+            task=self.task, order=10, text_latex='а',
+            answer_mask='{{set: -2; 1}}')
+        self.Task = Task
+
+    def test_run_check_by_mask_and_display(self):
+        from .models import Submission
+        s = Submission(assignment=self.assignment, task=self.task,
+                       answer_json={'s1': '20/2', 's2': 'мальчиков'})
+        changed = s.run_check(spec=self.task.mask_spec)
+        self.assertTrue(changed)
+        self.assertEqual(s.auto_check, WRONG)
+        self.assertEqual(s.check_json, {'s1': OK, 's2': WRONG})
+        self.assertEqual(s.slot_check('s2'), WRONG)
+        self.assertEqual(s.slot_value('s1'), '20/2')
+        self.assertEqual(s.display_answer,
+                         'Меньшая сторона [20/2] см, больше [мальчиков]')
+        # Повтор без изменений — не «changed»
+        self.assertFalse(s.run_check(spec=self.task.mask_spec))
+
+    def test_run_check_without_spec_uses_free_fields(self):
+        from .models import Submission
+        s = Submission(assignment=self.assignment, task=self.task,
+                       answer_text='0; 2')
+        s.run_check(reference=self.task.answer_latex)
+        self.assertEqual(s.auto_check, OK)
+        self.assertEqual(s.check_json, {})
+        self.assertEqual(s.display_answer, '0; 2')
+
+    def test_part_uses_subitem_mask(self):
+        from .models import Submission, SubmissionPart
+        s = Submission.objects.create(assignment=self.assignment, task=self.task)
+        part = SubmissionPart(submission=s, subitem=self.sub,
+                              answer_json={'s1': '1; -2'})
+        self.assertIs(part.mask_owner, self.sub)
+        part.run_check(spec=part.mask_spec)
+        self.assertEqual(part.auto_check, OK)
+        self.assertEqual(part.display_answer, '[1; -2]')
+        # Пустой JSON — старое представление
+        part.answer_json = {}
+        self.assertEqual(part.display_answer, '')

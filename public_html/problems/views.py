@@ -16,6 +16,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 
 from accounts.decorators import teacher_required
+from assignments.checks import HELP as MASK_HELP
 
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
                     TaskSubitemFormSet, TextbookBundleUploadForm,
@@ -340,6 +341,50 @@ def task_edit(request, pk):
     return _task_form(request, task=task)
 
 
+@teacher_required
+@require_POST
+def task_mask_preview(request):
+    """Превью маски «как увидит ученик» и самопроверка для формы задачи.
+
+    POST: ``mask`` — текст маски; поля ``preview_s1``… — пробные значения
+    (если есть, возвращается результат проверки тем же кодом, что у ученика).
+    """
+    from django.template.loader import render_to_string
+
+    from assignments.checks import (check_mask, collect_values, parse_mask,
+                                    render_fragments)
+    spec = parse_mask(request.POST.get('mask', ''))
+    payload = {'ok': spec.is_valid, 'errors': spec.errors,
+               'slots': len(spec.slots)}
+    if not spec.slots:
+        payload['html'] = ''
+        return JsonResponse(payload)
+    values = collect_values(request.POST, 'preview', spec)
+    checks = {}
+    if values:
+        overall, checks = check_mask(spec, values)
+        payload['overall'] = overall
+        payload['checks'] = {f'preview_{k}': v for k, v in checks.items()}
+    payload['html'] = render_to_string('assignments/_mask.html', {
+        'fragments': render_fragments(spec, 'preview', values, checks, seed='preview'),
+        'editable': True,
+        'show_checks': True,
+    })
+    return JsonResponse(payload)
+
+
+@teacher_required
+@require_POST
+def task_mask_draft(request):
+    """Заготовка маски из текстового «Ответа» (только очевидные случаи)."""
+    from assignments.checks import draft_mask
+    mask = draft_mask(request.POST.get('answer', ''))
+    return JsonResponse({
+        'ok': bool(mask), 'mask': mask,
+        'message': '' if mask else
+        'Не удалось угадать тип по ответу — напишите маску вручную'})
+
+
 def _worksheet_context(request):
     """Контекст конструктора: ?worksheet=…[&item=…] (только свои листки)."""
     from worksheets.models import Worksheet, WorksheetItem
@@ -380,7 +425,8 @@ def _save_local_variant(user, original, form, source_fs, subitem_fs, post):
             task=variant, order=data.get('order') or 0,
             text_latex=data['text_latex'],
             answer_latex=data.get('answer_latex') or '',
-            solution_latex=data.get('solution_latex') or '')
+            solution_latex=data.get('solution_latex') or '',
+            answer_mask=data.get('answer_mask') or '')
     for data in source_fs.cleaned_data:
         if not data or data.get('DELETE') or not data.get('source'):
             continue
@@ -551,6 +597,7 @@ def _task_form(request, task):
                         'item': item,
                         'can_save_local': False,
                         'duplicate_pk': duplicate_pk,
+                        'mask_help': MASK_HELP,
                     })
                     return render(request, 'problems/task_form.html', ctx)
             if save_local:
@@ -622,6 +669,7 @@ def _task_form(request, task):
         'task': task,
         'worksheet': worksheet,
         'item': item,
+        'mask_help': MASK_HELP,
         'can_save_local': (task is not None and item is not None
                            and item.task_id == task.pk
                            and task.variant_of_id is None),

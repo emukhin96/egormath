@@ -422,3 +422,85 @@ def reference_text(spec):
         else:
             parts.append(frag)
     return ''.join(parts)
+
+
+def render_fragments(spec, prefix, values=None, checks=None, seed=''):
+    """Данные для шаблона ``assignments/_mask.html``: текст и слоты с именами
+    полей формы ``{prefix}_s1``…, текущими значениями и результатами."""
+    values = values or {}
+    checks = checks or {}
+    out = []
+    for frag in spec.fragments:
+        if not isinstance(frag, Slot):
+            out.append({'text': frag})
+            continue
+        value = values.get(frag.name, '')
+        item = {
+            'slot': frag,
+            'kind': frag.kind,
+            'name': f'{prefix}_{frag.name}',
+            'value': value,
+            'display': slot_display(frag, value),
+            'check': checks.get(frag.name, ''),
+        }
+        if frag.kind == ORDER:
+            chosen = _parse_order_value(value, len(frag.items)) or []
+            item['order_items'] = frag.shuffled(seed or prefix)
+            item['order_positions'] = [
+                {'k': k, 'selected': chosen[k] if k < len(chosen) else None}
+                for k in range(len(frag.items))]
+        out.append(item)
+    return out
+
+
+def collect_values(data, prefix, spec):
+    """Значения слотов из POST: ``{prefix}_s1``…; у ``order`` — по одному
+    полю на позицию ``{prefix}_s1_0``…, у ``set`` — флажок «решений нет»."""
+    values = {}
+    for slot in spec.slots:
+        key = f'{prefix}_{slot.name}'
+        if slot.kind == ORDER:
+            parts = [(data.get(f'{key}_{k}') or '').strip()
+                     for k in range(len(slot.items))]
+            if any(parts):
+                values[slot.name] = '|'.join(parts)
+            elif key in data:
+                values[slot.name] = (data.get(key) or '').strip()
+        elif slot.kind == SET and data.get(f'{key}_none'):
+            values[slot.name] = '∅'
+        elif key in data:
+            values[slot.name] = (data.get(key) or '').strip()
+    return values
+
+
+def draft_mask(answer):
+    """Черновик маски из текстового «Ответа» для тривиальных случаев;
+    '' — не угадали, учитель пишет маску сам."""
+    text = (answer or '').replace('$', ' ').strip()
+    if not text:
+        return ''
+    text = re.sub(r'\s+', ' ', text)
+    low = normalize(text).lower().rstrip('.')
+    for preset, options in PRESETS.items():
+        if low in options or (preset == 'parity' and low in ('четная', 'нечетная')):
+            return f'{{{{{preset}: {low}}}}}'
+    if sets.numeric_value(text) is not None and '=' not in text:
+        return f'{{{{{NUMBER}: {text}}}}}'
+    if '(' in text and sets.parse_pairs(text):
+        return f'{{{{{PAIR}: {text}}}}}'
+    if re.search(r'[<>≤≥\[\]∪]|\\infty|\\le|\\ge|\\cup', text) \
+            and sets.parse_range(text) is not None:
+        return f'{{{{{RANGE}: {text}}}}}'
+    if (';' in text or '\\pm' in text or low in sets.EMPTY_WORDS) \
+            and sets.parse_set(text) is not None:
+        payload = '' if low in sets.EMPTY_WORDS else text.strip('{}\\ ')
+        return f'{{{{{SET}: {payload}}}}}'
+    expr = expressions.parse_expr(text)
+    if expr is None:
+        return ''
+    from sympy import Eq, Expr
+    if isinstance(expr, Eq):
+        return f'{{{{{EQUATION}: {text}}}}}'
+    if isinstance(expr, Expr):
+        return f'{{{{{SIMPLIFY}: {text}}}}}'
+    return ''

@@ -2,5 +2,6 @@
 числовые слоты (``sets``), выражения через sympy (``expressions``).
 Старые свободные ответы по-прежнему сверяет ``assignments.check_answer``."""
 from .mask import (HELP, KINDS, PRESETS, MaskSpec, Slot, check_mask,  # noqa: F401
-                   check_slot, filled_text, has_values, parse_mask,
-                   reference_text, slot_display)
+                   check_slot, collect_values, draft_mask, filled_text,
+                   has_values, parse_mask, reference_text, render_fragments,
+                   slot_display)
