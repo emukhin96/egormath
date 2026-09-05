@@ -337,6 +337,31 @@ class StudentAnswerTests(TestCase):
         self.assertContains(response, 'answer-readonly')
         self.assertContains(response, 'нет решений при $a&lt;0$')
 
+    def test_range_and_order_widgets_markup(self):
+        """У слота range — контейнер числовой прямой, у order — список и
+        селекты позиций (виджеты дорисовывает JS); после сдачи — только текст."""
+        task = self.tasks[0]
+        task.answer_mask = r'{{range: (-\infty; -5) \cup [1; 4)}} и {{order: 1|2|3}}'
+        task.save()
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(response, f'data-numberline="task{task.pk}_s1"')
+        self.assertContains(response, 'js/numberline.js')
+        self.assertContains(response, 'data-mask-order')
+        self.assertContains(response, f'name="task{task.pk}_s2_0"')
+        self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{task.pk}_s1': '(-∞; -5) ∪ [1; 4)',
+             f'task{task.pk}_s2_0': '0', f'task{task.pk}_s2_1': '1',
+             f'task{task.pk}_s2_2': '2'})
+        submission = Submission.objects.get(task=task)
+        self.assertEqual(submission.check_json, {'s1': 'ok', 's2': 'ok'})
+        self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertNotContains(response, 'data-numberline')
+        self.assertContains(response, '(-∞; -5) ∪ [1; 4)')
+
     def test_mask_answers_saved_to_json(self):
         """Значения слотов сохраняются в answer_json, display_answer — маска с подстановкой."""
         task = self.tasks[0]

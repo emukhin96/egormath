@@ -1866,6 +1866,114 @@
     font-size: 0.85rem;
   }
 
+  /* Слот «порядок» с JS (mask.js): перетаскивание и кнопки ▲/▼ */
+  .mask-order-dnd .mask-order-items {
+    margin-left: 0;
+  }
+
+  .mask-order-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    margin-bottom: 4px;
+    cursor: grab;
+    max-width: 420px;
+  }
+
+  .mask-order-item.dragging {
+    opacity: 0.5;
+    border-style: dashed;
+  }
+
+  .mask-order-handle {
+    color: var(--muted);
+    letter-spacing: -2px;
+    user-select: none;
+  }
+
+  .mask-order-tools {
+    margin-left: auto;
+    display: inline-flex;
+    gap: 2px;
+  }
+
+  .mask-order-move {
+    font-size: 0.7rem;
+    width: 22px;
+    height: 22px;
+  }
+
+  .mask-order-move:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  /* Слот «промежуток»: текст сверху, числовая прямая под ним (numberline.js) */
+  .mask-range-wrap {
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  .mask-numberline {
+    display: block;
+    line-height: 1;
+  }
+
+  .mask-numberline:empty {
+    display: none;
+  }
+
+  .numberline-svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    touch-action: none;
+    user-select: none;
+    cursor: crosshair;
+    margin-top: 2px;
+  }
+
+  .nl-axis { stroke: var(--text); stroke-width: 1.5; }
+  .nl-arrow { fill: var(--text); }
+  .nl-tick { stroke: var(--text); stroke-width: 1; }
+  .nl-label { font-size: 11px; fill: var(--muted); }
+  .nl-body { stroke: var(--accent); stroke-width: 6; stroke-linecap: butt; cursor: pointer; }
+  .nl-body.nl-preview { stroke: var(--accent); opacity: 0.4; pointer-events: none; }
+  .nl-hit { stroke: transparent; stroke-width: 18; cursor: pointer; }
+  .nl-end { stroke: var(--accent); stroke-width: 2; cursor: pointer; }
+  .nl-end.nl-closed { fill: var(--accent); }
+  .nl-end.nl-open { fill: #fff; }
+
+  .numberline-tools {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  .numberline-btn {
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 4px;
+    padding: 0 6px;
+    font: inherit;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .numberline-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
   /* Форма задачи: справка и превью маски */
   .mask-help {
     margin: var(--space-2) 0;

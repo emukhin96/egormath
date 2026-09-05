@@ -94,8 +94,10 @@
         if (!withValues) {
           container.innerHTML = res.html || '';
           if (typeof renderMathContent === 'function') {
-            container.querySelectorAll('.mask-text').forEach(renderMathContent);
+            container.querySelectorAll('.mask-text, .mask-order-items li').forEach(renderMathContent);
           }
+          /* Те же виджеты, что у ученика: числовая прямая, перетаскивание */
+          if (res.html && window.EgorMask) EgorMask.enhance(container);
           if (!res.html) {
             container.innerHTML = '<span class="muted">' +
               (textarea.value.trim() ? 'Маска не разобрана' : 'Маска пуста — ученик сможет прислать только фото') +
