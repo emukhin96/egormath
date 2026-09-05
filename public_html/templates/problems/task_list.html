@@ -87,6 +87,7 @@
       <div class="task-line">
         <a class="task-id" href="{% url 'task_detail' task.pk %}"
            title="Открыть задачу">#{{ task.pk }}</a>
+        {% include 'problems/_mask_badge.html' %}
         <div class="task-main">
           <span class="math-content task-text">{{ task.text_latex|web_text_preview:220 }}</span>
           {% include 'problems/_subitems.html' with subitems=task.subitems.all %}

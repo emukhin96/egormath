@@ -306,10 +306,10 @@ def _refresh_stale_checks(rows):
                 part = sr['part']
                 if part and part.display_answer and part.check_is_stale(task):
                     part.run_check(sr['subitem'].effective_answer_latex)
-                    part.save(update_fields=['auto_check', 'checked_at'])
+                    part.save(update_fields=['auto_check', 'check_json', 'checked_at'])
         elif submission.display_answer and submission.check_is_stale(task):
             submission.run_check(task.effective_answer_latex)
-            submission.save(update_fields=['auto_check', 'checked_at'])
+            submission.save(update_fields=['auto_check', 'check_json', 'checked_at'])
 
 
 def _is_xhr(request):

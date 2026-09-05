@@ -20,25 +20,6 @@
     return !!card.querySelector('[data-photos] img');
   }
 
-  /* Разметка бейджа — как в _check_badge.html */
-  var BADGES = {
-    ok: ['badge-reviewed', '✓ верно', 'Ответ совпал с эталоном'],
-    wrong: ['badge-returned', '✗ неверно', 'Ответ не совпал с эталоном — проверьте запись'],
-    unknown: ['badge-assigned', '? не разобрано', 'Автосверка не смогла разобрать ответ; учитель проверит вручную'],
-  };
-
-  function renderBadge(holder, status) {
-    holder.dataset.status = status || '';
-    holder.textContent = '';
-    var spec = BADGES[status];
-    if (!spec) return;
-    var badge = document.createElement('span');
-    badge.className = 'badge ' + spec[0];
-    badge.textContent = spec[1];
-    badge.title = spec[2];
-    holder.appendChild(badge);
-  }
-
   function csrf(form) {
     var input = form.querySelector('input[name=csrfmiddlewaretoken]');
     return input ? input.value : '';
@@ -94,11 +75,8 @@
       headers: {'X-CSRFToken': csrf(form), 'X-Requested-With': 'XMLHttpRequest'},
     }).then(function (r) { return r.json(); }).then(function (data) {
       if (formSnapshot(form) !== before) return;
-      var checks = data.checks || {};
-      Object.keys(checks).forEach(function (prefix) {
-        var holder = document.querySelector('[data-check="' + prefix + '"]');
-        if (holder) renderBadge(holder, checks[prefix]);
-      });
+      /* Бейджи (check_badge.js) — по полям задачи и по слотам маски */
+      if (window.EgorCheckBadge) EgorCheckBadge.apply(document, data.checks || {});
       toast(data.ok !== false, data.message || 'Проверено');
     }).catch(function () {
       toast(false, 'Не удалось проверить — попробуйте ещё раз');

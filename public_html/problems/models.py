@@ -213,6 +213,20 @@ class Source(models.Model):
         return self.title
 
 
+def mask_spec_for(obj):
+    """Разобранная маска задачи/подпункта с кэшем на объекте: маску правят в
+    той же сессии (форма учителя), поэтому кэш привязан к тексту."""
+    text = (obj.answer_mask or '').strip()
+    if not text:
+        return None
+    cached = getattr(obj, '_mask_cache', None)
+    if cached is None or cached[0] != text:
+        from assignments.checks import parse_mask
+        cached = (text, parse_mask(text))
+        obj._mask_cache = cached
+    return cached[1]
+
+
 class Task(models.Model):
     ANSWER_TEXT = 'text'
     ANSWER_NUMBER = 'number'
@@ -223,6 +237,12 @@ class Task(models.Model):
         (ANSWER_NUMBER, 'Число'),
         (ANSWER_INTERVAL, 'Числовой промежуток'),
         (ANSWER_FORMULA, 'Формула'),
+    ]
+    MODE_SHORT = 'short'
+    MODE_EXTENDED = 'extended'
+    ANSWER_MODE_CHOICES = [
+        (MODE_SHORT, 'Краткий ответ по маске'),
+        (MODE_EXTENDED, 'Только развёрнутый ответ (фото решения)'),
     ]
 
     # 10 и 11 — одна метка. GRADE_CHOICES — для селектов 5–11.
@@ -263,6 +283,15 @@ class Task(models.Model):
     answer_type = models.CharField(
         'Тип ответа ученика', max_length=10,
         choices=ANSWER_TYPE_CHOICES, default=ANSWER_TEXT)
+    answer_mask = models.TextField(
+        'Маска ответа для ученика', blank=True,
+        help_text='Шаблон со слотами {{number: 10}}, {{choice: а|*б}} и т.д.; '
+                  'по нему строится форма ученика и проверяется каждый слот')
+    answer_mode = models.CharField(
+        'Формат ответа ученика', max_length=10,
+        choices=ANSWER_MODE_CHOICES, default=MODE_SHORT,
+        help_text='«Только развёрнутый ответ» — краткий ответ не принимается, '
+                  'ученик присылает фото решения')
     topics = models.ManyToManyField(
         Topic, through='TaskTopic', blank=True,
         related_name='tasks', verbose_name='Темы')
@@ -336,6 +365,43 @@ class Task(models.Model):
             (self.author_solution_latex or '').strip()
 
     @property
+    def mask_spec(self):
+        return mask_spec_for(self)
+
+    @property
+    def has_mask(self):
+        """У самой задачи есть рабочая маска (подпункты — отдельно)."""
+        spec = self.mask_spec
+        return spec is not None and spec.is_valid
+
+    @property
+    def extended_only(self):
+        return self.answer_mode == self.MODE_EXTENDED
+
+    def short_answer_available(self, subitems=None):
+        """Может ли ученик дать краткий ответ: режим «по маске» и есть
+        рабочая маска — у задачи или хотя бы у одного из подпунктов
+        (``subitems`` — выбранные в листке; по умолчанию все)."""
+        if self.extended_only:
+            return False
+        if subitems is None:
+            subitems = list(self.subitems.all())
+        if subitems:
+            return any(s.has_mask for s in subitems)
+        return self.has_mask
+
+    @property
+    def mask_status(self):
+        """Метка для каталога/листка: 'photo' — только фото, 'mask' —
+        краткий ответ проверяется, '' — маски пока нет. Без разбора масок
+        (в списках их много): форма сохраняет только рабочие."""
+        if self.extended_only:
+            return 'photo'
+        subs = list(self.subitems.all())
+        texts = [s.answer_mask for s in subs] if subs else [self.answer_mask]
+        return 'mask' if any((t or '').strip() for t in texts) else ''
+
+    @property
     def has_blank_answer(self):
         """Нет ответа: «Дописать AI-ответ» берёт только такие задачи.
 
@@ -370,7 +436,8 @@ class Task(models.Model):
                 answer_latex=sub.answer_latex,
                 solution_latex=sub.solution_latex,
                 author_answer_latex=sub.author_answer_latex,
-                author_solution_latex=sub.author_solution_latex)
+                author_solution_latex=sub.author_solution_latex,
+                answer_mask=sub.answer_mask)
         for img in original.images.all():
             # Копия строки ссылается на тот же файл в storage
             copy.images.create(image=img.image.name, order=img.order)
@@ -506,6 +573,7 @@ class TaskSubitem(models.Model):
         'Авторский ответ (LaTeX)', blank=True)
     author_solution_latex = models.TextField(
         'Авторское решение (LaTeX)', blank=True)
+    answer_mask = models.TextField('Маска ответа для ученика', blank=True)
 
     class Meta:
         verbose_name = 'Подпункт задачи'
@@ -515,6 +583,15 @@ class TaskSubitem(models.Model):
     def __str__(self):
         return f'Задача #{self.task_id}, подпункт {self.order}: ' \
                f'{strip_latex(self.text_latex)[:40]}'
+
+    @property
+    def mask_spec(self):
+        return mask_spec_for(self)
+
+    @property
+    def has_mask(self):
+        spec = self.mask_spec
+        return spec is not None and spec.is_valid
 
     @property
     def effective_answer_latex(self):
