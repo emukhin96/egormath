@@ -397,6 +397,10 @@ def slot_display(slot, value):
         return ', '.join(slot.items[i] for i in order)
     if slot.kind == SET and normalize(value).lower() in sets.EMPTY_WORDS:
         return 'нет решений'
+    if slot.uses_math_field and not value.startswith('$'):
+        # Из math-field приходит голый LaTeX — ученик и учитель должны
+        # видеть формулу, а не код
+        return f'${value}$'
     return value
 
 
@@ -418,7 +422,10 @@ def reference_text(spec):
     parts = []
     for frag in spec.fragments:
         if isinstance(frag, Slot):
-            parts.append(f'[{frag.reference}]')
+            ref = frag.reference
+            if frag.uses_math_field and ref and not ref.startswith('$'):
+                ref = f'${ref}$'
+            parts.append(f'[{ref}]')
         else:
             parts.append(frag)
     return ''.join(parts)

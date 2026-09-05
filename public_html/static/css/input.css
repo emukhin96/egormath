@@ -1778,10 +1778,11 @@
     line-height: 2.2;
   }
 
+  /* web_text режет пробелы по краям фрагментов — отступ от текста даёт сам слот */
   .mask-slot {
     display: inline-block;
     vertical-align: middle;
-    margin: 0 2px;
+    margin: 0 0.3em;
   }
 
   .mask-input {

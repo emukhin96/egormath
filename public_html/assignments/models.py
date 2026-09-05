@@ -207,7 +207,11 @@ class AnswerFields(models.Model):
 
         from .check_answer import check_fields
         from .checks import check_mask
-        if spec is not None and spec.is_valid:
+        # Ответ, сданный до появления маски, живёт в старых полях — его
+        # сверяем по-старому, пока ученик не заполнил слоты
+        by_mask = (spec is not None and spec.is_valid
+                   and (self.has_mask_values or not self.legacy_answer))
+        if by_mask:
             result, per_slot = check_mask(spec, self.answer_json or {})
         else:
             result = check_fields(self.answer_type, self, reference or '')
@@ -237,6 +241,25 @@ class AnswerFields(models.Model):
 
     def slot_value(self, name):
         return (self.answer_json or {}).get(name, '')
+
+    @property
+    def student_slot_checks(self):
+        """Результаты по слотам, которые можно показать ученику, — с тем же
+        правилом раскрытия, что и student_check."""
+        if self.check_revealed or not self.assignment_of.is_editable_by_student:
+            return self.check_json or {}
+        return {}
+
+    def mask_fragments(self, prefix, for_teacher=False):
+        """Данные для ``_mask.html``: слоты со значениями ученика и бейджами
+        (учителю — все, ученику — только раскрытые). None — маски нет."""
+        spec = self.mask_spec
+        if spec is None or not spec.is_valid:
+            return None
+        from .checks import render_fragments
+        checks = (self.check_json or {}) if for_teacher else self.student_slot_checks
+        return render_fragments(spec, prefix, self.answer_json or {}, checks,
+                                seed=prefix)
 
     def check_is_stale(self, task):
         """Эталон могли поправить после сверки — тогда пересчёт."""
@@ -279,6 +302,11 @@ class AnswerFields(models.Model):
             if spec is not None and self.has_mask_values:
                 from .checks import filled_text
                 return filled_text(spec, self.answer_json)
+        return self.legacy_answer
+
+    @property
+    def legacy_answer(self):
+        """Ответ в старых свободных полях (до масок / без маски)."""
         t = self.answer_type
         if t == Task.ANSWER_NUMBER:
             return self.answer_number
