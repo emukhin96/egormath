@@ -3,6 +3,9 @@
 
 @source "../../templates/**/*.html";
 @source "../js/**/*.js";
+/* Автопоиск классов заглядывает и в Python-код: слово `transform` в нём
+   не должно становиться CSS-классом */
+@source not "../../**/*.py";
 
 @theme {
   --color-em-navy: #102b55;
