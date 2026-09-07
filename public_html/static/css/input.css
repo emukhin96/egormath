@@ -1950,6 +1950,7 @@
 
   .numberline-tools {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-1);
     font-size: 0.8rem;
@@ -1972,6 +1973,17 @@
   .numberline-btn:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+
+  .numberline-bound {
+    width: 7.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 6px;
+    font: inherit;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text);
   }
 
   /* Форма задачи: справка и превью маски */
