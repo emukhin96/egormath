@@ -371,19 +371,17 @@ def _product_factors(node, out):
 
 def _factor_ok(node):
     """Множитель — неприводимый многочлен (в целой степени) с содержанием
-    ±1: ``(x-1)``, ``(x+1)^2``, ``x``; ``(2x-4)`` — нет."""
-    from sympy import factor_list
+    ±1: ``(x-1)``, ``(x+1)^2``, ``x``, ``x^2``; ``(2x-4)`` — нет.
+    Основание степени берём из sympy-выражения: у ``x^2`` в сыром дереве
+    переменная — токен, и ``_subtrees()`` её отбрасывает."""
+    from sympy import Pow, factor_list
     node = _unwrap(node)
-    if _is_tree(node) and node.data == 'superscript':
-        subs = _subtrees(node)
-        if len(subs) != 2:
-            return False
-        exponent = _number_value(subs[1])
-        if exponent is None or exponent <= 0 or exponent.denominator != 1:
-            return False
-        node = subs[0]
     expr = evaluate(resolve(node))
-    if expr is None or not expr.free_symbols:
+    if expr is None:
+        return False
+    while isinstance(expr, Pow) and expr.exp.is_integer and expr.exp > 0:
+        expr = expr.base
+    if not expr.free_symbols:
         return False
     try:
         content, factors = factor_list(_rational(expr))

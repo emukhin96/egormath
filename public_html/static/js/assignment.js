@@ -58,11 +58,27 @@
     return parts.join('&');
   }
 
+  function badgeKeys(control) {
+    /* data-check — префикс задачи (task123) или слот (task123_s1);
+       у поля суффикс _number/_text/_low/_high, у слота — _none/_0. */
+    var name = control.name || control.getAttribute('data-mirror') || '';
+    if (!name) return [];
+    var keys = [name];
+    var stripped = name.replace(/_(?:none|number|text|low|high|\d+)$/, '');
+    if (stripped && stripped !== name) keys.push(stripped);
+    return keys;
+  }
+
   function clearBadgeFor(control) {
-    var name = control.name || control.getAttribute('data-mirror');
-    if (!name) return;
-    var holder = document.querySelector('[data-check="' + name + '"]');
-    if (holder) renderBadge(holder, '');
+    badgeKeys(control).forEach(function (key) {
+      var holder = document.querySelector('[data-check="' + key + '"]');
+      if (holder) renderBadge(holder, '');
+    });
+    var slot = control.closest && control.closest('.mask-slot');
+    if (slot) {
+      var holder = slot.querySelector('[data-check]');
+      if (holder) renderBadge(holder, '');
+    }
   }
 
   function checkTask(button) {
