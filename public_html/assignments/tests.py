@@ -473,7 +473,7 @@ class ReviewFlowTests(TestCase):
             {f'task{self.task.pk}_text': 'исправленный ответ'})
         self.assertEqual(response.status_code, 302)
 
-    def test_unchecked_without_comment_removes_review(self):
+    def test_unchecked_without_comment_keeps_explicit_not_done(self):
         submission = Submission.objects.get(
             assignment=self.assignment, task=self.task)
         Review.objects.create(
@@ -483,7 +483,32 @@ class ReviewFlowTests(TestCase):
                 f'sub{submission.pk}_comment': '',
                 'action': 'save',
             })
-        self.assertFalse(Review.objects.filter(submission=submission).exists())
+        review = Review.objects.get(submission=submission)
+        self.assertFalse(review.done)
+        # Повторное открытие не включает флажок через auto_ok
+        response = self.client.get(
+            reverse('review_assignment', args=[self.assignment.pk]))
+        self.assertNotRegex(
+            response.content.decode(),
+            rf'name="sub{submission.pk}_done"[^>]*checked')
+
+    def test_result_ignores_hidden_done_and_counts_duplicate_items(self):
+        items = list(self.assignment.worksheet.items.order_by('order'))
+        first, second = items[0], items[1]
+        first_sub = Submission.objects.get(
+            assignment=self.assignment, task=first.task)
+        Review.objects.create(
+            submission=first_sub, done=True, reviewer=self.teacher)
+        self.assertEqual(self.assignment.result(),
+                         {'done': 1, 'total': 2, 'percent': 50})
+        self.assignment.hidden_items.add(first)
+        self.assertEqual(self.assignment.result(),
+                         {'done': 0, 'total': 1, 'percent': 0})
+        self.assignment.hidden_items.clear()
+        WorksheetItem.objects.create(
+            worksheet=self.assignment.worksheet, task=first.task, order=90)
+        self.assertEqual(self.assignment.result(),
+                         {'done': 2, 'total': 3, 'percent': 67})
 
     def test_save_review_keeps_hidden_task_review(self):
         # Скрытая после проверки задача пропадает из формы, но её отзыв
@@ -655,6 +680,12 @@ class AutoCheckFlowTests(TestCase):
         self.assertContains(response, '✓ верно')
         # Эталон ученику не показывается ни в одном режиме
         self.assertNotContains(response, 'Эталон')
+        # Возврат на доработку не прячет уже показанную сверку
+        self.assignment.status = Assignment.STATUS_RETURNED
+        self.assignment.save()
+        response = self.client.get(self.detail)
+        self.assertTrue(self.assignment.is_editable_by_student)
+        self.assertContains(response, '✓ верно')
 
     def test_live_mode_reveals_only_by_button(self):
         self.assignment.check_visibility = Assignment.CHECK_LIVE
@@ -743,6 +774,28 @@ class AutoCheckFlowTests(TestCase):
             assignment=self.assignment, task=self.task)
         self.assertEqual(submission.check_attempts, 1)
         self.assertTrue(all(p.check_revealed for p in submission.parts.all()))
+
+    def test_auto_ok_requires_every_subitem(self):
+        a = TaskSubitem.objects.create(
+            task=self.task, order=1, text_latex='а', answer_latex='1')
+        b = TaskSubitem.objects.create(
+            task=self.task, order=2, text_latex='б', answer_latex='2')
+        self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{self.task.pk}_sub{a.pk}_text': '1'})
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(
+            reverse('review_assignment', args=[self.assignment.pk]))
+        self.assertFalse(response.context['rows'][0]['auto_ok'])
+        self.client.login(username='student1', password='pass12345')
+        self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{self.task.pk}_sub{a.pk}_text': '1',
+             f'task{self.task.pk}_sub{b.pk}_text': '2'})
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(
+            reverse('review_assignment', args=[self.assignment.pk]))
+        self.assertTrue(response.context['rows'][0]['auto_ok'])
 
     def test_photo_button_per_task_and_teacher_toggle(self):
         response = self.client.get(self.detail)

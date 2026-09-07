@@ -48,10 +48,28 @@
     if (window.EgorAutosave && EgorAutosave.showSaved) EgorAutosave.showSaved(ok, message);
   }
 
+  function formSnapshot(form) {
+    var parts = [];
+    new FormData(form).forEach(function (value, key) {
+      if (value && typeof value === 'object' && value.name) return;
+      parts.push(key + '=' + value);
+    });
+    parts.sort();
+    return parts.join('&');
+  }
+
+  function clearBadgeFor(control) {
+    var name = control.name || control.getAttribute('data-mirror');
+    if (!name) return;
+    var holder = document.querySelector('[data-check="' + name + '"]');
+    if (holder) renderBadge(holder, '');
+  }
+
   function checkTask(button) {
     var form = button.form;
     var url = button.getAttribute('formaction');
     if (!form || !url || typeof fetch !== 'function') return false;
+    var before = formSnapshot(form);
     button.disabled = true;
     fetch(url, {
       method: 'POST',
@@ -59,6 +77,7 @@
       credentials: 'same-origin',
       headers: {'X-CSRFToken': csrf(form), 'X-Requested-With': 'XMLHttpRequest'},
     }).then(function (r) { return r.json(); }).then(function (data) {
+      if (formSnapshot(form) !== before) return;
       var checks = data.checks || {};
       Object.keys(checks).forEach(function (prefix) {
         var holder = document.querySelector('[data-check="' + prefix + '"]');
@@ -78,10 +97,22 @@
       });
     });
 
+    var answers = document.getElementById('answers-form');
+    if (answers) {
+      answers.addEventListener('input', function (e) { clearBadgeFor(e.target); });
+      answers.addEventListener('change', function (e) { clearBadgeFor(e.target); });
+    }
+
     document.querySelectorAll('[data-photo-submit]').forEach(function (b) { b.hidden = true; });
     document.querySelectorAll('[data-photo-input]').forEach(function (input) {
       input.addEventListener('change', function () {
-        if (input.files && input.files.length && input.form) input.form.submit();
+        if (!(input.files && input.files.length && input.form)) return;
+        var go = function () { input.form.submit(); };
+        if (answers && window.EgorAutosave && EgorAutosave.autosave) {
+          Promise.resolve(EgorAutosave.autosave(answers)).then(go).catch(go);
+        } else {
+          go();
+        }
       });
     });
 

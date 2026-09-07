@@ -103,13 +103,19 @@ def _assignment_rows(assignment, with_review=False):
             or any(sr['part'] and sr['part'].display_answer for sr in subrows)
             or submission.photos.all())
         review = getattr(submission, 'review', None) if submission else None
-        # Все данные ответы сошлись с эталоном — учителю подсказка
-        # «выполнено» по умолчанию, пока он сам не решил иначе
-        checked = ([sr['part'] for sr in subrows if sr['part']]
-                   if subrows else [submission] if submission else [])
-        checked = [c for c in checked if c.display_answer]
-        auto_ok = bool(checked) and all(
-            c.auto_check == Submission.CHECK_OK for c in checked)
+        # Все выбранные подпункты (или задача целиком) сошлись с эталоном —
+        # учителю подсказка «выполнено» по умолчанию. Частичный ответ
+        # (верно только один из нескольких подпунктов) флажок не ставит.
+        if subrows:
+            auto_ok = all(
+                sr['part'] is not None
+                and sr['part'].display_answer
+                and sr['part'].auto_check == Submission.CHECK_OK
+                for sr in subrows)
+        else:
+            auto_ok = bool(
+                submission and submission.display_answer
+                and submission.auto_check == Submission.CHECK_OK)
         rows.append({
             'item': item,
             'task': item.task,
@@ -538,17 +544,16 @@ def save_review(request, pk):
             continue
         done = f'{prefix}_done' in request.POST
         comment = request.POST.get(f'{prefix}_comment', '').strip()
-
-        if done or comment:
-            Review.objects.update_or_create(
-                submission=submission,
-                defaults={
-                    'done': done,
-                    'comment': comment,
-                    'reviewer': request.user,
-                })
-        else:
-            Review.objects.filter(submission=submission).delete()
+        # Строка есть в форме — сохраняем явное done=False, даже без
+        # комментария. Иначе снятие автофлажка удаляет Review, и при
+        # следующем открытии auto_ok снова включит «Выполнено».
+        Review.objects.update_or_create(
+            submission=submission,
+            defaults={
+                'done': done,
+                'comment': comment,
+                'reviewer': request.user,
+            })
 
     if action == 'complete':
         assignment.status = Assignment.STATUS_REVIEWED
