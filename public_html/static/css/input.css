@@ -3196,6 +3196,10 @@
     background: #eef5ff;
   }
 
+  .tax-toggle-exam-line {
+    font-weight: 600;
+  }
+
   .import-review-grid {
     display: grid;
     gap: var(--space-3);

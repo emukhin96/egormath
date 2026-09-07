@@ -44,6 +44,56 @@
     return hay.indexOf(q) !== -1;
   }
 
+  function isExamLine(item) {
+    if (!item) return false;
+    if (item.line) return true;
+    return item.item_number === 0;
+  }
+
+  function examModelForItemId(id) {
+    var exams = catalog && catalog.exams || [];
+    var i;
+    var j;
+    for (i = 0; i < exams.length; i += 1) {
+      var items = exams[i].items || [];
+      for (j = 0; j < items.length; j += 1) {
+        if (items[j].id === id) return exams[i];
+      }
+    }
+    return null;
+  }
+
+  function examLineItem(model) {
+    var items = model && model.items || [];
+    var i;
+    for (i = 0; i < items.length; i += 1) {
+      if (isExamLine(items[i])) return items[i];
+    }
+    return null;
+  }
+
+  function ensureExamParentIds(ids) {
+    var result = (ids || []).slice();
+    var have = {};
+    result.forEach(function (id) { have[id] = true; });
+    result.slice().forEach(function (id) {
+      var model = examModelForItemId(id);
+      if (!model) return;
+      var item = null;
+      model.items.forEach(function (it) {
+        if (it.id === id) item = it;
+      });
+      if (item && !isExamLine(item)) {
+        var line = examLineItem(model);
+        if (line && !have[line.id]) {
+          result.push(line.id);
+          have[line.id] = true;
+        }
+      }
+    });
+    return result;
+  }
+
   function matchingIds(q) {
     var ids = {};
     if (!catalog) return ids;
@@ -115,6 +165,9 @@
     this.topicFieldName = root.dataset.topicField || '';
     this.isFilter = this.mode === 'filter';
     this.state = parseState(root.dataset.state);
+    if (!this.isFilter) {
+      this.state.exams = ensureExamParentIds(this.state.exams || []);
+    }
     this.query = '';
     this.open = {};
     this.facetsOpen = this.hasExtraSelection();
@@ -216,7 +269,7 @@
       var exam = e.target.closest('[data-tax-exam]');
       if (exam) {
         e.preventDefault();
-        self.toggleList('exams', Number(exam.dataset.taxExam));
+        self.toggleExam(Number(exam.dataset.taxExam));
         return;
       }
       var more = e.target.closest('[data-tax-more]');
@@ -332,6 +385,46 @@
     if (idx === -1) list.push(value);
     else list.splice(idx, 1);
     this.state[key] = list;
+    this.afterChange();
+  };
+
+  Picker.prototype.toggleExam = function (id) {
+    var list = (this.state.exams || []).slice();
+    if (this.isFilter) {
+      var filterIdx = list.indexOf(id);
+      if (filterIdx === -1) list.push(id);
+      else list.splice(filterIdx, 1);
+      this.state.exams = list;
+      this.afterChange();
+      return;
+    }
+    var model = examModelForItemId(id);
+    var line = examLineItem(model);
+    var item = null;
+    if (model) {
+      model.items.forEach(function (it) {
+        if (it.id === id) item = it;
+      });
+    }
+    var idx = list.indexOf(id);
+    var turningOn = idx === -1;
+    if (item && isExamLine(item)) {
+      if (turningOn) {
+        list.push(id);
+      } else if (model) {
+        var drop = {};
+        model.items.forEach(function (it) { drop[it.id] = true; });
+        list = list.filter(function (x) { return !drop[x]; });
+      } else {
+        list.splice(idx, 1);
+      }
+    } else if (turningOn) {
+      list.push(id);
+      if (line && list.indexOf(line.id) === -1) list.push(line.id);
+    } else {
+      list.splice(idx, 1);
+    }
+    this.state.exams = list;
     this.afterChange();
   };
 
@@ -613,9 +706,13 @@
         + escapeHtml(model.name) + '</span><div class="tax-facet-row">';
       model.items.forEach(function (item) {
         var on = this.state.exams.indexOf(item.id) !== -1;
-        html += '<button type="button" class="tax-toggle' + (on ? ' is-on' : '')
+        var line = isExamLine(item);
+        var label = line ? 'без №' : String(item.item_number);
+        html += '<button type="button" class="tax-toggle'
+          + (line ? ' tax-toggle-exam-line' : '')
+          + (on ? ' is-on' : '')
           + '" data-tax-exam="' + item.id + '" title="'
-          + escapeHtml(item.name) + '">' + item.item_number + '</button>';
+          + escapeHtml(item.name) + '">' + escapeHtml(label) + '</button>';
       }, this);
       html += '</div></div>';
     }, this);
@@ -659,6 +756,9 @@
       this.state.facets = (value || []).map(Number);
     } else if (name === 'exam_items') {
       this.state.exams = (value || []).map(Number);
+      if (!this.isFilter) {
+        this.state.exams = ensureExamParentIds(this.state.exams);
+      }
     } else if (name === 'difficulty') {
       this.state.difficulty = value ? Number(value) : null;
     } else {

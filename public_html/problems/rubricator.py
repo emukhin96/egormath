@@ -245,8 +245,113 @@ def set_task_facets(task, value_ids):
     task.facet_values.set(values)
 
 
+def is_exam_line_item(item, exam_type=None):
+    """Линейная метка экзамена: без номера или «МЦКО без привязки»."""
+    if item.item_number == 0:
+        return True
+    if exam_type is None:
+        exam_type = getattr(getattr(item, 'exam_model', None), 'exam_type', '')
+    name = (item.name or '').lower()
+    return exam_type == 'MCKO' and 'без привязки' in name
+
+
+def exam_line_item_for_model(exam_model_id):
+    items = list(
+        ExamItem.objects.filter(exam_model_id=exam_model_id)
+        .select_related('exam_model').order_by('item_number'))
+    for item in items:
+        if item.item_number == 0:
+            return item
+    for item in items:
+        if is_exam_line_item(item):
+            return item
+    return None
+
+
+def ensure_exam_parent_items(items):
+    """Если выбран номер, добавляет линейную метку той же модели.
+
+    Только линейную метку по-прежнему можно хранить без номеров.
+    """
+    items = list(items)
+    have = {item.pk for item in items}
+    extra = []
+    seen_models = set()
+    for item in items:
+        if is_exam_line_item(item):
+            continue
+        model_id = item.exam_model_id
+        if model_id in seen_models:
+            continue
+        seen_models.add(model_id)
+        line = exam_line_item_for_model(model_id)
+        if line and line.pk not in have:
+            extra.append(line)
+            have.add(line.pk)
+    return items + extra
+
+
+def ensure_exam_parent_ids(item_ids):
+    ids = parse_int_ids(item_ids)
+    if not ids:
+        return []
+    items = list(
+        ExamItem.objects.filter(pk__in=ids).select_related('exam_model'))
+    by_id = {item.pk: item for item in items}
+    ordered = [by_id[i] for i in ids if i in by_id]
+    ensured = ensure_exam_parent_items(ordered)
+    out = []
+    seen = set()
+    for item in ensured:
+        if item.pk not in seen:
+            out.append(item.pk)
+            seen.add(item.pk)
+    return out
+
+
+def ensure_exam_parent_codes(codes):
+    codes = [c for c in codes if c]
+    if not codes:
+        return []
+    items = list(
+        ExamItem.objects.filter(code__in=codes).select_related('exam_model'))
+    by_code = {item.code: item for item in items}
+    ordered = [by_code[c] for c in codes if c in by_code]
+    ensured = ensure_exam_parent_items(ordered)
+    out = []
+    seen = set()
+    for item in ensured:
+        if item.code not in seen:
+            out.append(item.code)
+            seen.add(item.code)
+    for code in codes:
+        if code not in seen:
+            out.append(code)
+            seen.add(code)
+    return out
+
+
+def expand_exam_filter_codes(codes):
+    """Линейный код в фильтре раскрывается во все номера этой модели."""
+    codes = [c for c in codes if c]
+    if not codes:
+        return []
+    items = list(
+        ExamItem.objects.filter(code__in=codes).select_related('exam_model'))
+    result = set(codes)
+    model_ids = {
+        item.exam_model_id for item in items if is_exam_line_item(item)
+    }
+    if model_ids:
+        result.update(
+            ExamItem.objects.filter(exam_model_id__in=model_ids)
+            .values_list('code', flat=True))
+    return list(result)
+
+
 def set_task_exams(task, item_ids):
-    items = ExamItem.objects.filter(pk__in=parse_int_ids(item_ids))
+    ids = ensure_exam_parent_ids(item_ids)
+    items = ExamItem.objects.filter(pk__in=ids)
     task.exam_items.set(items)
 
 
@@ -343,7 +448,7 @@ def filter_by_taxonomy(qs, params, *, topics_lookups):
     if methods and qs.model is Task:
         qs = qs.filter(facet_values__pk__in=methods).distinct()
 
-    exams = [v for v in getlist(params, 'exam') if v]
+    exams = expand_exam_filter_codes(getlist(params, 'exam'))
     if exams and qs.model is Task:
         qs = qs.filter(exam_items__code__in=exams).distinct()
 
@@ -400,12 +505,20 @@ def taxonomy_catalog():
                    .values('id', 'code', 'name'))
     exams = []
     for model in ExamModel.objects.prefetch_related('items'):
+        items = []
+        for item in model.items.all():
+            items.append({
+                'id': item.pk,
+                'code': item.code,
+                'name': item.name,
+                'item_number': item.item_number,
+                'line': is_exam_line_item(item, model.exam_type),
+            })
         exams.append({
             'id': model.pk,
             'code': model.code,
             'name': model.name,
-            'items': list(model.items.values('id', 'code', 'name',
-                                             'item_number')),
+            'items': items,
         })
     return {
         'topics': topics,
@@ -451,7 +564,7 @@ def taxonomy_state_from_post(post):
         'primary': primary,
         'grades': [g for g in getlist(post, 'grade_bands') if g],
         'facets': parse_int_ids(getlist(post, 'facet_values')),
-        'exams': parse_int_ids(getlist(post, 'exam_items')),
+        'exams': ensure_exam_parent_ids(getlist(post, 'exam_items')),
         'difficulty': difficulty,
     }
 
