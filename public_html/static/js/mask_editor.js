@@ -46,6 +46,7 @@
     var result = panel.querySelector('[data-mask-result]');
     var active = null;
     var timer = null;
+    var previewSeq = 0;
 
     function sourceLabel(textarea) {
       if (textarea.dataset.maskSource === 'task') return 'Превью: маска задачи';
@@ -86,7 +87,9 @@
       data.mask = textarea.value;
       panel.hidden = false;
       result.textContent = '';
+      var seq = ++previewSeq;
       post(previewUrl, data).then(function (res) {
+        if (seq !== previewSeq || active !== textarea) return;
         showErrors(res.errors);
         if (!withValues) {
           container.innerHTML = res.html || '';
@@ -113,6 +116,7 @@
 
     function schedule(textarea) {
       clearTimeout(timer);
+      previewSeq += 1;
       timer = setTimeout(function () { preview(textarea, false); }, 400);
     }
 
@@ -121,8 +125,14 @@
     });
     form.addEventListener('focusin', function (e) {
       if (e.target.matches('textarea[data-mask-source]') && e.target !== active) {
-        if (e.target.value.trim()) preview(e.target, false);
-        else { active = e.target; title.textContent = sourceLabel(e.target); }
+        if (e.target.value.trim()) {
+          clearTimeout(timer);
+          preview(e.target, false);
+        } else {
+          active = e.target;
+          previewSeq += 1;
+          title.textContent = sourceLabel(e.target);
+        }
       }
     });
 
