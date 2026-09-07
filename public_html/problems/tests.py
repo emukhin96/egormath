@@ -1859,7 +1859,7 @@ class RubricatorTests(TestCase):
         from django.apps import apps
         from problems.models import ExamItem
         seed_exam_line_items = importlib.import_module(
-            'problems.migrations.0018_exam_line_items').seed_exam_line_items
+            'problems.migrations.0019_exam_line_items').seed_exam_line_items
         ExamItem.objects.filter(item_number=0).delete()
         self.assertFalse(ExamItem.objects.filter(code='OGE_2026').exists())
         seed_exam_line_items(apps, None)
@@ -1909,6 +1909,7 @@ class RubricatorTests(TestCase):
             'stars': 0,
             'columns': 0,
             'answer_type': admin_task.answer_type,
+            'answer_mode': admin_task.answer_mode,
             'exam_items': [child.pk],
         }, instance=admin_task)
         self.assertTrue(form.is_valid(), form.errors)

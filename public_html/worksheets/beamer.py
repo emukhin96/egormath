@@ -17,7 +17,7 @@ CONTENTS = ('problems', 'answers', 'solutions')
 REVEALS = ('click', 'show', 'hidden', 'end')
 ITEMS = ('all', 'click')
 ITEMFLOWS = ('stack', 'solo')
-FONTS = ('cm', 'school')
+FONTS = ('cm', 'school', 'inter')
 
 DEFAULTS = {
     'theme': 'light',
@@ -71,6 +71,7 @@ def _pkg_options(opts):
         'items=%s' % opts['items'],
         'itemflow=%s' % opts['itemflow'],
         'font=%s' % opts['font'],
+        'fontsize=%s' % opts['size'],
         'stars' if opts['stars'] else 'nostars',
         'footer' if opts['footer'] else 'nofooter',
     ]
@@ -224,8 +225,9 @@ def worksheet_to_beamer(worksheet, exclude_ids=None, **kwargs):
     opts = normalize_beamer_options(**kwargs)
     exclude_ids = exclude_ids or set()
     lines = [
-        '\\documentclass[aspectratio=%s,%s]{beamer}' % (
-            opts['aspect'], opts['size']),
+        # Кегль — опция пакета, не класса: [14pt]{beamer} требует
+        # size14.clo (extsizes), которого нет на LaTeX API.
+        '\\documentclass[aspectratio=%s]{beamer}' % opts['aspect'],
         '\\usepackage[%s]{egorbeamer}' % _pkg_options(opts),
         '',
         '\\begin{document}',

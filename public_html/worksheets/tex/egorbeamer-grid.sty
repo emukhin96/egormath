@@ -4,7 +4,8 @@
 \ProvidesPackage{egorbeamer-grid}[2026/09/02 v1.2 Beamer chrome]
 \RequirePackage{tikz}
 
-% Шрифты задаёт egorbeamer (font=cm|school): SchoolBookC + CMU Sans.
+% Тело задач — CMU из egorbeamer. font= задаёт \egorbmrchromefont
+% (заголовки, титул, колонтитул).
 
 \definecolor{egor@gridline}{HTML}{D2E2F4}
 \definecolor{egor@gridmajor}{HTML}{B4CDE8}
@@ -78,11 +79,12 @@
 \setbeamersize{text margin left=\egorbmr@grid@inset,
   text margin right=\egorbmr@grid@inset}
 
-\setbeamerfont{block title}{family=\rmfamily,size=\small,
+\setbeamerfont{block title}{family=\egorbmrchromefont,size=\small,
   series=\mdseries,shape=\itshape}
 \setbeamerfont{block title example}{parent=block title}
 \setbeamerfont{block title alerted}{parent=block title}
-\setbeamerfont{frametitle}{family=\rmfamily,series=\bfseries,size*={15.5}{18}}
+\setbeamerfont{frametitle}{family=\egorbmrchromefont,series=\bfseries,
+  size*={\egorbmr@ftsize}{\egorbmr@ftskip}}
 
 % Собственная геометрия блока: плашка занимает всю ширину страницы,
 % а заголовок и тело начинаются ровно там же, где обычный текст кадра.
@@ -159,14 +161,14 @@
     \hbox{%
       \begin{beamercolorbox}[wd=.49\paperwidth,ht=3.1ex,dp=1.35ex,
           leftskip=\egorbmr@grid@inset]{footline}%
-        \fontsize{6.8}{7.5}\selectfont\insertshorttitle
+        \egorbmrchromefont\fontsize{6.8}{7.5}\selectfont\insertshorttitle
       \end{beamercolorbox}%
       \begin{beamercolorbox}[wd=.29\paperwidth,ht=3.1ex,dp=1.35ex]{footline}%
-        \fontsize{6.8}{7.5}\selectfont\insertsectionhead
+        \egorbmrchromefont\fontsize{6.8}{7.5}\selectfont\insertsectionhead
       \end{beamercolorbox}%
       \begin{beamercolorbox}[wd=.22\paperwidth,ht=3.1ex,dp=1.35ex,
           rightskip=\egorbmr@grid@inset]{footline}%
-        \hfill\fontsize{6.8}{7.5}\selectfont
+        \hfill\egorbmrchromefont\fontsize{6.8}{7.5}\selectfont
         \insertframenumber/\inserttotalframenumber\quad
         \hyperlinkframeendprev{\textcolor{egor@accent}{\egorbmrnavfont←}}\quad
         \hyperlinkframestartnext{\textcolor{egor@accent}{\egorbmrnavfont→}}
@@ -247,13 +249,13 @@
     \begin{beamercolorbox}[wd=\dimexpr\linewidth+2\egorbmr@grid@inset\relax,
         sep=.58cm,
         center]{block body}%
-      {\usebeamercolor[fg]{title}\fontsize{27}{31}\selectfont\bfseries
+      {\usebeamercolor[fg]{title}\egorbmrchromefont\fontsize{27}{31}\selectfont\bfseries
         \egorbmr@t@title\par}%
       \ifx\egorbmr@t@sub\empty\else
-        \vspace{0.5em}{\usebeamercolor[fg]{subtitle}\Large\egorbmr@t@sub\par}%
+        \vspace{0.5em}{\usebeamercolor[fg]{subtitle}\egorbmrchromefont\Large\egorbmr@t@sub\par}%
       \fi
       \vspace{0.68cm}%
-      {\large\egorbmr@t@grade\quad\textcolor{egor@border}{|}\quad
+      {\egorbmrchromefont\large\egorbmr@t@grade\quad\textcolor{egor@border}{|}\quad
         \egorbmr@t@author\par}%
     \end{beamercolorbox}
 }
@@ -264,9 +266,9 @@
     \begin{beamercolorbox}[wd=\dimexpr\linewidth+2\egorbmr@grid@inset\relax,
         sep=.62cm,center]
         {egor grid section}%
-      {\color{white}\fontsize{27}{31}\selectfont\bfseries\egorbmr@s@name\par}%
+      {\color{white}\egorbmrchromefont\fontsize{27}{31}\selectfont\bfseries\egorbmr@s@name\par}%
       \ifx\egorbmr@s@note\empty\else
-        \vspace{0.55em}{\color{egor@soft}\large\egorbmr@s@note\par}%
+        \vspace{0.55em}{\color{egor@soft}\egorbmrchromefont\large\egorbmr@s@note\par}%
       \fi
     \end{beamercolorbox}%
 }

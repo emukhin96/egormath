@@ -105,9 +105,24 @@ class Assignment(models.Model):
 
     def result(self):
         """Итог проверки: (выполнено, всего, процент). Шкалы нет —
-        учитель отмечает каждую задачу «выполнено» или нет."""
-        total = self.visible_task_count()
-        done = self.submissions.filter(review__done=True).count()
+        учитель отмечает каждую задачу «выполнено» или нет.
+
+        Числитель и знаменатель — одни и те же видимые элементы листка:
+        скрытая или удалённая выполненная задача в кабинет не попадает,
+        а повтор одной задачи в листке считается столько раз, сколько
+        элементов видит ученик (один Submission на задачу).
+        """
+        hidden = self.hidden_items.values('pk')
+        task_ids = list(
+            self.worksheet.items
+            .filter(task__isnull=False, deleted_at__isnull=True)
+            .exclude(pk__in=hidden)
+            .values_list('task_id', flat=True))
+        total = len(task_ids)
+        done_tasks = set(
+            self.submissions.filter(review__done=True)
+            .values_list('task_id', flat=True))
+        done = sum(1 for task_id in task_ids if task_id in done_tasks)
         percent = round(100 * done / total) if total else 0
         return {'done': done, 'total': total, 'percent': percent}
 
@@ -161,10 +176,16 @@ class AnswerFields(models.Model):
     answer_number = models.TextField('Ответ (число)', blank=True)
     interval_low = models.TextField('Промежуток: от', blank=True)
     interval_high = models.TextField('Промежуток: до', blank=True)
+    answer_json = models.JSONField(
+        'Ответ по маске', default=dict, blank=True,
+        help_text='Значения слотов маски: {"s1": "10", "s2": "девочек"}')
     auto_check = models.CharField(
         'Автосверка', max_length=8, blank=True, default='',
         choices=CHECK_CHOICES,
         help_text='Результат сравнения с эталоном; отметку ставит учитель')
+    check_json = models.JSONField(
+        'Сверка по слотам', default=dict, blank=True,
+        help_text='Результат по каждому слоту маски: {"s1": "ok", "s2": "wrong"}')
     checked_at = models.DateTimeField('Сверено', null=True, blank=True)
     check_revealed = models.BooleanField(
         'Результат показан ученику', default=False,
@@ -175,16 +196,70 @@ class AnswerFields(models.Model):
     class Meta:
         abstract = True
 
-    def run_check(self, reference):
-        """Пересчитать auto_check по эталону; возвращает True, если изменился."""
+    def run_check(self, reference=None, spec=None):
+        """Пересчитать auto_check; возвращает True, если результат изменился.
+
+        С рабочей маской (``spec``) сверяются слоты ``answer_json`` — итог и
+        результат по каждому слоту (``check_json``); без неё — старые
+        свободные поля по строке-эталону ``reference``.
+        """
         from django.utils import timezone
 
         from .check_answer import check_fields
-        result = check_fields(self.answer_type, self, reference or '')
-        changed = result != self.auto_check
+        from .checks import check_mask
+        # Ответ, сданный до появления маски, живёт в старых полях — его
+        # сверяем по-старому, пока ученик не заполнил слоты
+        by_mask = (spec is not None and spec.is_valid
+                   and (self.has_mask_values or not self.legacy_answer))
+        if by_mask:
+            result, per_slot = check_mask(spec, self.answer_json or {})
+        else:
+            result = check_fields(self.answer_type, self, reference or '')
+            per_slot = {}
+        changed = result != self.auto_check or per_slot != (self.check_json or {})
         self.auto_check = result
+        self.check_json = per_slot
         self.checked_at = timezone.now()
         return changed
+
+    @property
+    def mask_owner(self):
+        """Задача или подпункт, чья маска описывает этот ответ."""
+        raise NotImplementedError
+
+    @property
+    def mask_spec(self):
+        return self.mask_owner.mask_spec
+
+    @property
+    def has_mask_values(self):
+        from .checks import has_values
+        return has_values(self.answer_json)
+
+    def slot_check(self, name):
+        return (self.check_json or {}).get(name, '')
+
+    def slot_value(self, name):
+        return (self.answer_json or {}).get(name, '')
+
+    @property
+    def student_slot_checks(self):
+        """Результаты по слотам, которые можно показать ученику, — с тем же
+        правилом раскрытия, что и student_check."""
+        if self._student_check_visible():
+            return self.check_json or {}
+        return {}
+
+    def mask_fragments(self, prefix, for_teacher=False):
+        """Данные для ``_mask.html``: слоты со значениями ученика и бейджами
+        (учителю — все, ученику — только раскрытые). None — маски нет."""
+        spec = self.mask_spec
+        if spec is None or not spec.is_valid:
+            return None
+        from .checks import render_fragments
+        checks = (self.check_json or {}) if for_teacher else self.student_slot_checks
+        return render_fragments(spec, prefix, self.answer_json or {}, checks,
+                                seed=prefix)
 
     def check_is_stale(self, task):
         """Эталон могли поправить после сверки — тогда пересчёт."""
@@ -194,16 +269,25 @@ class AnswerFields(models.Model):
     def assignment_of(self):
         raise NotImplementedError
 
+    def _student_check_visible(self):
+        """Можно ли отдать ученику auto_check (режим назначения — отдельно).
+
+        В live, пока работа редактируется, — только после «Проверить».
+        В after_submit результат уже был показан после сдачи: при возврате
+        на доработку check_revealed не ставился, и прятать сверку нельзя.
+        """
+        assignment = self.assignment_of
+        if assignment.check_visibility == Assignment.CHECK_LIVE:
+            return self.check_revealed or not assignment.is_editable_by_student
+        return True
+
     @property
     def student_check(self):
         """Результат сверки, который можно показать ученику.
 
-        Пока работа редактируется — только раскрытый кнопкой «Проверить»
-        (иначе ученик подбирал бы ответ по бейджу автосохранения); после
-        отправки — как есть. Кому вообще показывать, решает
-        Assignment.student_sees_checks.
+        Кому вообще показывать, решает Assignment.student_sees_checks.
         """
-        if self.check_revealed or not self.assignment_of.is_editable_by_student:
+        if self._student_check_visible():
             return self.auto_check
         return ''
 
@@ -213,6 +297,16 @@ class AnswerFields(models.Model):
 
     @property
     def display_answer(self):
+        if self.answer_json:
+            spec = self.mask_spec
+            if spec is not None and self.has_mask_values:
+                from .checks import filled_text
+                return filled_text(spec, self.answer_json)
+        return self.legacy_answer
+
+    @property
+    def legacy_answer(self):
+        """Ответ в старых свободных полях (до масок / без маски)."""
         t = self.answer_type
         if t == Task.ANSWER_NUMBER:
             return self.answer_number
@@ -258,6 +352,10 @@ class Submission(AnswerFields):
         return self.assignment
 
     @property
+    def mask_owner(self):
+        return self.task
+
+    @property
     def answer_type(self):
         return self.task.answer_type
 
@@ -293,6 +391,10 @@ class SubmissionPart(AnswerFields):
     @property
     def assignment_of(self):
         return self.submission.assignment
+
+    @property
+    def mask_owner(self):
+        return self.subitem
 
     @property
     def answer_type(self):

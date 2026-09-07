@@ -400,10 +400,11 @@ class BeamerGenerationTests(TestCase):
     def test_preamble_defaults(self):
         tex = worksheet_to_beamer(self.worksheet)
         self.assertIn(
-            '\\documentclass[aspectratio=169,12pt]{beamer}', tex)
+            '\\documentclass[aspectratio=169]{beamer}', tex)
         self.assertIn(
             '\\usepackage[theme=light,content=problems,reveal=click,'
-            'items=all,itemflow=stack,font=school,stars,footer]{egorbeamer}', tex)
+            'items=all,itemflow=stack,font=school,fontsize=12pt,'
+            'stars,footer]{egorbeamer}', tex)
         self.assertIn(
             '\\egortitle{Дроби \\& проценты}{8 класс}{И. Иванов}[{Осень}]',
             tex)
@@ -413,16 +414,20 @@ class BeamerGenerationTests(TestCase):
         tex = worksheet_to_beamer(
             self.worksheet, theme='night', aspect='43', size='14pt',
             content='solutions', reveal='show', stars=False, footer=False)
-        self.assertIn('\\documentclass[aspectratio=43,14pt]{beamer}', tex)
+        self.assertIn('\\documentclass[aspectratio=43]{beamer}', tex)
         self.assertIn(
             '\\usepackage[theme=night,content=solutions,reveal=show,'
-            'items=all,itemflow=stack,font=school,nostars,nofooter]{egorbeamer}', tex)
+            'items=all,itemflow=stack,font=school,fontsize=14pt,'
+            'nostars,nofooter]{egorbeamer}', tex)
         tex = worksheet_to_beamer(
             self.worksheet, theme='grid', content='solutions', reveal='end',
             items='click', itemflow='solo', font='cm')
         self.assertIn(
             '\\usepackage[theme=grid,content=solutions,reveal=end,'
-            'items=click,itemflow=solo,font=cm,stars,footer]{egorbeamer}', tex)
+            'items=click,itemflow=solo,font=cm,fontsize=12pt,'
+            'stars,footer]{egorbeamer}', tex)
+        tex = worksheet_to_beamer(self.worksheet, font='inter')
+        self.assertIn('font=inter', tex)
         opts = normalize_beamer_options(
             theme='paper', size='20pt', reveal='end', items='maybe',
             itemflow='bounce', font='comic')
@@ -541,6 +546,31 @@ class BeamerGenerationTests(TestCase):
         self.assertTrue(assets[0]['content_base64'])
         self.assertTrue(EGORBEAMER_STY.is_file())
         self.assertTrue(EGORBEAMER_GRID_STY.is_file())
+
+    def test_collect_beamer_assets_includes_inter_fonts(self):
+        from .services import collect_beamer_assets, tex_wants_inter
+        self.assertTrue(tex_wants_inter(
+            '\\usepackage[theme=light,font=inter,stars]{egorbeamer}'))
+        self.assertFalse(tex_wants_inter(
+            '\\usepackage[font=school]{egorbeamer}'))
+        assets = collect_beamer_assets(
+            self.worksheet,
+            tex='\\usepackage[font=inter]{egorbeamer}')
+        names = [item['filename'] for item in assets]
+        self.assertEqual(names[:2], ['egorbeamer.sty', 'egorbeamer-grid.sty'])
+        self.assertIn('Inter-Regular.otf', names)
+        self.assertIn('Inter-Bold.otf', names)
+
+    def test_collect_beamer_assets_requires_inter_fonts(self):
+        from pathlib import Path
+        from .services import collect_beamer_assets
+        with mock.patch('worksheets.services.INTER_FONT_DIR',
+                        Path('/tmp/egormath-no-inter-fonts')):
+            with self.assertRaises(LatexCompileError) as ctx:
+                collect_beamer_assets(
+                    self.worksheet,
+                    tex='\\usepackage[font=inter]{egorbeamer}')
+        self.assertIn('Inter', str(ctx.exception))
 
     def test_collect_beamer_assets_rejects_too_many_images(self):
         from .services import (BEAMER_IMAGE_ASSET_LIMIT, collect_beamer_assets)
@@ -1098,7 +1128,8 @@ class WorksheetViewTests(TestCase):
         response = self.client.get(
             reverse('worksheet_beamer_editor', args=[self.worksheet.pk]))
         self.assertContains(response, 'id="tex-source"')
-        self.assertContains(response, '\\documentclass[aspectratio=169,12pt]{beamer}')
+        self.assertContains(response, '\\documentclass[aspectratio=169]{beamer}')
+        self.assertContains(response, 'fontsize=12pt')
         self.assertContains(response, 'data-switch="theme"')
         self.assertContains(response, 'data-value="grid"')
         self.assertContains(response, 'data-switch="reveal"')
@@ -1108,6 +1139,8 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'data-value="stack"')
         self.assertContains(response, 'data-switch="font"')
         self.assertContains(response, 'data-value="school"')
+        self.assertContains(response, 'data-value="inter"')
+        self.assertContains(response, 'Шрифт заголовков')
         self.assertContains(response, 'id="sidebar-compile-btn"')
         self.assertNotContains(response, 'data-value="paper"')
         self.assertNotContains(response, 'Тетрадь')

@@ -160,8 +160,12 @@
   </div>
 
   <p class="task-meta">
-    Тип ответа: {{ task.get_answer_type_display }} (меняется в полной форме)
+    Тип ответа: {{ task.get_answer_type_display }} (меняется в полной форме).
+    Ответ ученика: {% include 'problems/_mask_badge.html' %}{% if not task.mask_status %}маски нет — ученику доступно только фото решения{% endif %}
   </p>
+  {% if task.answer_mask %}
+  <p class="task-meta mono">Маска: {{ task.answer_mask }}</p>
+  {% endif %}
   {% if task.source_refs.all %}
   <p class="task-meta">Источники:
     {% for ref in task.source_refs.all %}{{ ref.source }} — № {{ ref.number }}{% if not forloop.last %}; {% endif %}{% endfor %}

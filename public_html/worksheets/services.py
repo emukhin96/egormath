@@ -70,11 +70,78 @@ def compile_latex(tex_content, doc_id='doc', assets=None):
     return base64.b64decode(data['pdf_base64'])
 
 
-def collect_assets(worksheet, exclude_ids=None):
+# Пакеты презентаций лежат в репозитории и уходят asset'ами в каталог сборки
+# (API не ищет TEXMFLOCAL для неизвестных sty). Лимит API — 20 файлов.
+_BEAMER_TEX_DIR = Path(__file__).resolve().parent / 'tex'
+EGORBEAMER_STY = _BEAMER_TEX_DIR / 'egorbeamer.sty'
+EGORBEAMER_GRID_STY = _BEAMER_TEX_DIR / 'egorbeamer-grid.sty'
+BEAMER_STY_ASSETS = (EGORBEAMER_STY, EGORBEAMER_GRID_STY)
+BEAMER_IMAGE_ASSET_LIMIT = 20 - len(BEAMER_STY_ASSETS)
+INTER_FONT_DIR = _BEAMER_TEX_DIR / 'fonts'
+INTER_FONT_FILES = (
+    'Inter-Regular.otf',
+    'Inter-Bold.otf',
+    'Inter-Italic.otf',
+    'Inter-BoldItalic.otf',
+)
+# Локальная копия пакета листков (вне репозитория) — чтобы font=inter
+# доезжал до API до обновления TEXMFLOCAL.
+_EGOR_STY_CANDIDATES = (
+    _BEAMER_TEX_DIR / 'egor.sty',
+    Path.home() / 'Library/CloudStorage/Dropbox/code/LaTEX/egormath/egor.sty',
+)
+
+
+def _sty_asset(path):
+    return {
+        'filename': path.name,
+        'content_base64': base64.b64encode(path.read_bytes()).decode(),
+    }
+
+
+def tex_wants_inter(tex):
+    """True, если в исходнике выбран профиль font=inter."""
+    return 'font=inter' in (tex or '').replace(' ', '')
+
+
+def collect_inter_font_assets(*, required=False):
+    """OTF Inter из worksheets/tex/fonts/.
+
+    required=True — не молчать, если файлов нет: иначе font=inter
+    уходит на API без шрифтов и sty тихо остаётся на CMU.
+    """
+    assets = []
+    missing = []
+    for name in INTER_FONT_FILES:
+        path = INTER_FONT_DIR / name
+        if path.is_file():
+            assets.append(_sty_asset(path))
+        else:
+            missing.append(name)
+    if required and missing:
+        raise LatexCompileError(
+            'Для шрифта Inter нужны файлы '
+            + ', '.join(INTER_FONT_FILES)
+            + ' в worksheets/tex/fonts/.')
+    return assets
+
+
+def collect_inter_package_assets():
+    """Inter OTF + egor.sty с опцией font=inter."""
+    assets = collect_inter_font_assets()
+    for path in _EGOR_STY_CANDIDATES:
+        if path.is_file():
+            assets.append(_sty_asset(path))
+            break
+    return assets
+
+
+def collect_assets(worksheet, exclude_ids=None, tex=''):
     """Файлы картинок задач листка для передачи в LaTeX API.
 
     exclude_ids — скрытые элементы: их картинки не уходят в сборку,
     чтобы не подменять одноимённые файлы видимых задач и не раздувать запрос.
+    tex — исходник черновой сборки: при font=inter добавляются OTF и egor.sty.
     """
     exclude_ids = set(exclude_ids or ())
     assets = []
@@ -92,38 +159,32 @@ def collect_assets(worksheet, exclude_ids=None):
                     'filename': name,
                     'content_base64': base64.b64encode(f.read()).decode(),
                 })
+    if tex_wants_inter(tex):
+        extra = collect_inter_package_assets()
+        if len(assets) + len(extra) > 20:
+            raise LatexCompileError(
+                'Слишком много картинок для сборки с Inter '
+                f'(лимит {20 - len(extra)} вместе со шрифтами).')
+        assets = extra + assets
     return assets
 
 
-# Пакеты презентаций лежат в репозитории и уходят asset'ами в каталог сборки
-# (API не ищет TEXMFLOCAL для неизвестных sty). Лимит API — 20 файлов.
-_BEAMER_TEX_DIR = Path(__file__).resolve().parent / 'tex'
-EGORBEAMER_STY = _BEAMER_TEX_DIR / 'egorbeamer.sty'
-EGORBEAMER_GRID_STY = _BEAMER_TEX_DIR / 'egorbeamer-grid.sty'
-BEAMER_STY_ASSETS = (EGORBEAMER_STY, EGORBEAMER_GRID_STY)
-BEAMER_IMAGE_ASSET_LIMIT = 20 - len(BEAMER_STY_ASSETS)
-
-
-def _sty_asset(path):
-    return {
-        'filename': path.name,
-        'content_base64': base64.b64encode(path.read_bytes()).decode(),
-    }
-
-
-def collect_beamer_assets(worksheet, exclude_ids=None):
+def collect_beamer_assets(worksheet, exclude_ids=None, tex=''):
     """Картинки листка + sty презентаций для компиляции.
 
     Два sty занимают слоты из 20 на стороне API. Если картинок больше
     лимита — ошибка до сборки, без молчаливого отбрасывания файлов
     (иначе TeX ссылается на отсутствующие изображения).
+    При font=inter дополнительно уходят OTF Inter.
     """
+    extra = collect_inter_font_assets(required=True) if tex_wants_inter(tex) else []
     images = collect_assets(worksheet, exclude_ids=exclude_ids)
-    if len(images) > BEAMER_IMAGE_ASSET_LIMIT:
+    limit = BEAMER_IMAGE_ASSET_LIMIT - len(extra)
+    if len(images) > limit:
         raise LatexCompileError(
             'Слишком много картинок для презентации '
-            f'(лимит {BEAMER_IMAGE_ASSET_LIMIT} вместе со стилевыми файлами).')
-    return [_sty_asset(path) for path in BEAMER_STY_ASSETS] + images
+            f'(лимит {limit} вместе со стилевыми файлами).')
+    return [_sty_asset(path) for path in BEAMER_STY_ASSETS] + extra + images
 
 
 def _pdf_filter_key(exclude_ids):

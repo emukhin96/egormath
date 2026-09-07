@@ -53,6 +53,13 @@
         </div>
         {{ form.columns.errors }}{{ form.columns }}
       </div>
+      <div>
+        <div class="label-row">
+          <label for="{{ form.answer_mode.id_for_label }}">Формат ответа ученика</label>
+          {% include 'problems/_pin.html' with field='answer_mode' %}
+        </div>
+        {{ form.answer_mode.errors }}{{ form.answer_mode }}
+      </div>
     </div>
 
     <div>
@@ -82,6 +89,47 @@
               title="Черновик ответа и решения от нейросети — проверьте перед сохранением">Добавить AI-решение</button>
     </div>
 
+    <h2>Маска ответа для ученика</h2>
+    <p class="helptext">Поля «Ответ» и «Решение» выше — для учителя и PDF. Ученик
+      отвечает по маске: текст со слотами <code>{{ '{{' }}тип: данные}}</code>,
+      каждый слот проверяется по своим правилам. Без рабочей маски (и в режиме
+      «Только развёрнутый ответ») ученик может прислать только фото решения.
+      Единицы измерения пишите в тексте маски, а не в слоте.</p>
+    <p>
+      <label for="{{ form.answer_mask.id_for_label }}">{{ form.answer_mask.label }}</label>
+      {{ form.answer_mask.errors }}{{ form.answer_mask }}
+    </p>
+    <div class="form-buttons">
+      <button type="button" class="btn btn-small btn-secondary" data-mask-draft
+              title="Черновик маски из поля «Ответ» для очевидных случаев: число, промежуток, пары, уравнение">Заготовка из ответа</button>
+    </div>
+    <details class="mask-help">
+      <summary>Справка по слотам маски</summary>
+      <table class="list mask-help-table">
+        {% for example, hint in mask_help %}
+        <tr><td><code>{{ example }}</code></td><td>{{ hint }}</td></tr>
+        {% endfor %}
+      </table>
+      <p class="helptext">Внутри слота можно писать LaTeX с фигурными скобками
+        (<code>{{ '{{' }}simplify: \frac{2}{a+3}}}</code>) — скобки считаются по
+        балансу. Несколько значений — через «;» (запятая занята десятичной
+        дробью), варианты — через «|».</p>
+    </details>
+    <div class="card mask-preview" id="mask-preview" hidden
+         data-preview-url="{% url 'task_mask_preview' %}"
+         data-draft-url="{% url 'task_mask_draft' %}">
+      <div class="label-row">
+        <strong data-mask-title>Превью</strong>
+        <span class="helptext">Заполните поля пробным ответом — проверка пройдёт тем же кодом, что у ученика.</span>
+      </div>
+      <ul class="errorlist" data-mask-errors hidden></ul>
+      <div data-mask-html></div>
+      <div class="form-buttons">
+        <button type="button" class="btn btn-small btn-secondary" data-mask-check>Проверить пробный ответ</button>
+        <span class="helptext" data-mask-result></span>
+      </div>
+    </div>
+
     <h2>Подпункты</h2>
     <p class="helptext">Каждый подпункт — отдельной строкой, без \item и без
       знака препинания в конце: «;» и «.» система расставит сама. При
@@ -89,16 +137,18 @@
     {{ subitem_formset.management_form }}
     {{ subitem_formset.non_form_errors }}
     <table class="list formset" data-formset="{{ subitem_formset.prefix }}">
-      <tr><th style="width:70px">Порядок</th><th>Текст (LaTeX)</th><th>Ответ (LaTeX)</th><th>Решение (LaTeX)</th><th>Удалить</th></tr>
+      <tr><th style="width:70px">Порядок</th><th>Текст (LaTeX)</th><th>Ответ (LaTeX)</th><th>Решение (LaTeX)</th><th>Маска ответа</th><th>Удалить</th></tr>
       {% for f in subitem_formset %}
       <tr class="formset-row">
         <td>{{ f.id }}{{ f.order }}</td>
         <td>{{ f.text_latex.errors }}{{ f.text_latex }}</td>
         <td>{{ f.answer_latex.errors }}{{ f.answer_latex }}</td>
         <td>{{ f.solution_latex.errors }}{{ f.solution_latex }}</td>
+        <td class="mask-cell">{{ f.answer_mask.errors }}<div class="mask-cell-row">{{ f.answer_mask }}
+          <button type="button" class="icon-btn" data-mask-draft title="Заготовка маски из ответа подпункта">⇠</button></div></td>
         <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button>{% endif %}</td>
       </tr>
-      {% for err in f.non_field_errors %}<tr><td colspan="5" class="errorlist">{{ err }}</td></tr>{% endfor %}
+      {% for err in f.non_field_errors %}<tr><td colspan="6" class="errorlist">{{ err }}</td></tr>{% endfor %}
       {% endfor %}
     </table>
     <template data-formset="{{ subitem_formset.prefix }}">
@@ -107,6 +157,8 @@
         <td>{{ subitem_formset.empty_form.text_latex }}</td>
         <td>{{ subitem_formset.empty_form.answer_latex }}</td>
         <td>{{ subitem_formset.empty_form.solution_latex }}</td>
+        <td class="mask-cell"><div class="mask-cell-row">{{ subitem_formset.empty_form.answer_mask }}
+          <button type="button" class="icon-btn" data-mask-draft title="Заготовка маски из ответа подпункта">⇠</button></div></td>
         <td><button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button></td>
       </tr>
     </template>
@@ -187,4 +239,7 @@
   </form>
 </div>
 <script defer src="{% static 'js/task_form.js' %}"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script>
+<script defer src="{% static 'js/check_badge.js' %}"></script>
+<script defer src="{% static 'js/mask_editor.js' %}"></script>
 {% endblock %}

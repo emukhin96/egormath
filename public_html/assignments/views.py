@@ -10,6 +10,7 @@ from accounts.decorators import student_required, teacher_required
 from problems.models import Task
 from worksheets.models import Worksheet
 
+from .checks import reference_text
 from .models import (Assignment, Review, Submission, SubmissionPart,
                      SubmissionPhoto, locked_check_visibility, wrap_math)
 
@@ -91,11 +92,22 @@ def _assignment_rows(assignment, with_review=False):
         if submission:
             parts = {p.subitem_id: p for p in submission.parts.all()}
         subitems = item.selected_subitems()
-        subrows = [
-            {'subitem': s, 'part': parts.get(s.pk),
-             'prefix': f'task{item.task_id}_sub{s.pk}'}
-            for s in subitems
-        ]
+        task = item.task
+        # Краткий ответ — только по рабочей маске; иначе ученику доступно
+        # лишь фото решения. Маска подпункта — своя у каждого подпункта
+        short_answer = task.short_answer_available(subitems)
+        subrows = []
+        for s in subitems:
+            prefix = f'task{item.task_id}_sub{s.pk}'
+            part = parts.get(s.pk)
+            spec = s.mask_spec if short_answer and s.has_mask else None
+            subrows.append({
+                'subitem': s, 'part': part, 'prefix': prefix, 'spec': spec,
+                'fragments': _mask_fragments(spec, part, prefix, with_review),
+                'mask_reference': reference_text(spec) if spec else '',
+            })
+        prefix = f'task{item.task_id}'
+        spec = task.mask_spec if short_answer and not subitems else None
         # «Отвечено» — есть текст на задаче/любом подпункте или фото;
         # только по prefetch-данным, без дополнительных запросов
         answered = bool(submission) and bool(
@@ -103,35 +115,46 @@ def _assignment_rows(assignment, with_review=False):
             or any(sr['part'] and sr['part'].display_answer for sr in subrows)
             or submission.photos.all())
         review = getattr(submission, 'review', None) if submission else None
-        # Все данные ответы сошлись с эталоном — учителю подсказка
-        # «выполнено» по умолчанию, пока он сам не решил иначе
-        checked = ([sr['part'] for sr in subrows if sr['part']]
-                   if subrows else [submission] if submission else [])
-        checked = [c for c in checked if c.display_answer]
-        auto_ok = bool(checked) and all(
-            c.auto_check == Submission.CHECK_OK for c in checked)
+        # Все выбранные подпункты (или задача целиком) сошлись с эталоном —
+        # учителю подсказка «выполнено» по умолчанию. Частичный ответ
+        # (верно только один из нескольких подпунктов) флажок не ставит.
+        if subrows:
+            auto_ok = all(
+                sr['part'] is not None
+                and sr['part'].display_answer
+                and sr['part'].auto_check == Submission.CHECK_OK
+                for sr in subrows)
+        else:
+            auto_ok = bool(
+                submission and submission.display_answer
+                and submission.auto_check == Submission.CHECK_OK)
         rows.append({
             'item': item,
-            'task': item.task,
+            'task': task,
             'number': number,
-            'prefix': f'task{item.task_id}',
+            'prefix': prefix,
             'submission': submission,
             'review': review,
             'answered': answered,
             'auto_ok': auto_ok,
-            'has_reference': _has_reference(item.task, subitems),
+            'short_answer': short_answer,
+            'spec': spec,
+            'fragments': _mask_fragments(spec, submission, prefix, with_review),
+            'mask_reference': reference_text(spec) if spec else '',
             'has_comment': bool(review and review.comment),
             'subrows': subrows,
         })
     return rows
 
 
-def _has_reference(task, subitems):
-    """Есть ли эталон, с которым вообще можно сверять: у задачи или хотя бы
-    у одного выбранного подпункта. Без него сверка даёт лишь «не разобрано»."""
-    if subitems:
-        return any(s.effective_answer_latex for s in subitems)
-    return bool(task.effective_answer_latex)
+def _mask_fragments(spec, obj, prefix, for_teacher):
+    """Слоты маски для шаблона: с ответом ученика, если он есть, иначе пустые."""
+    if spec is None:
+        return None
+    if obj is not None:
+        return obj.mask_fragments(prefix, for_teacher=for_teacher)
+    from .checks import render_fragments
+    return render_fragments(spec, prefix, seed=prefix)
 
 
 def _progress(rows):
@@ -224,6 +247,18 @@ def _answer_fields(answer_type, post, prefix):
     return fields
 
 
+def _answer_payload(owner, answer_type, post, prefix):
+    """Что сохранить для задачи/подпункта ``owner``: слоты маски
+    (``answer_json``) при рабочей маске, иначе старые свободные поля.
+    Пустой словарь — форма этих полей не присылала."""
+    spec = owner.mask_spec
+    if spec is not None and spec.is_valid:
+        from .checks import collect_values
+        values = collect_values(post, prefix, spec)
+        return ({'answer_json': values}, spec) if values else ({}, spec)
+    return _answer_fields(answer_type, post, prefix), None
+
+
 def _persist_answers(assignment, post):
     """Записывает присланные поля ответов по всем видимым задачам.
 
@@ -238,14 +273,23 @@ def _persist_answers(assignment, post):
     hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     existing = {s.task_id: s for s in assignment.submissions.all()}
 
-    def _apply(obj, fields, reference):
+    def _apply(obj, fields, reference, spec):
         before = obj.display_answer
         for name, value in fields.items():
+            if name == 'answer_json':
+                merged = dict(obj.answer_json or {})
+                merged.update(value)
+                value = merged
             setattr(obj, name, value)
-        obj.run_check(reference)
+        obj.run_check(reference, spec=spec)
         if obj.display_answer != before:
             obj.check_revealed = False
         obj.save()
+
+    def _has_value(fields):
+        return any(
+            any(v.values()) if isinstance(v, dict) else v
+            for v in fields.values())
 
     for item in assignment.worksheet.ordered_items():
         if item.task_id is None or item.pk in hidden:
@@ -255,14 +299,13 @@ def _persist_answers(assignment, post):
         subitems = item.selected_subitems()
         if subitems:
             part_fields = {
-                s: _answer_fields(task.answer_type, post, f'{prefix}_sub{s.pk}')
+                s: _answer_payload(s, task.answer_type, post, f'{prefix}_sub{s.pk}')
                 for s in subitems
             }
-            part_fields = {s: f for s, f in part_fields.items() if f}
+            part_fields = {s: fs for s, fs in part_fields.items() if fs[0]}
             if not part_fields:
                 continue
-            has_values = any(
-                any(f.values()) for f in part_fields.values())
+            has_values = any(_has_value(f) for f, _ in part_fields.values())
             if not (has_values or task.pk in existing):
                 continue
             submission = existing.get(task.pk)
@@ -270,24 +313,24 @@ def _persist_answers(assignment, post):
                 submission, _ = Submission.objects.get_or_create(
                     assignment=assignment, task=task)
                 existing[task.pk] = submission
-            for subitem, fields in part_fields.items():
+            for subitem, (fields, spec) in part_fields.items():
                 part, _ = SubmissionPart.objects.get_or_create(
                     submission=submission, subitem=subitem)
-                _apply(part, fields, subitem.effective_answer_latex)
+                _apply(part, fields, subitem.effective_answer_latex, spec)
             continue
-        fields = _answer_fields(task.answer_type, post, prefix)
+        fields, spec = _answer_payload(task, task.answer_type, post, prefix)
         if not fields:
             continue
-        if any(fields.values()) or task.pk in existing:
+        if _has_value(fields) or task.pk in existing:
             submission = existing.get(task.pk)
             if submission is None:
                 submission, _ = Submission.objects.get_or_create(
                     assignment=assignment, task=task)
                 existing[task.pk] = submission
-            _apply(submission, fields, task.effective_answer_latex)
+            _apply(submission, fields, task.effective_answer_latex, spec)
 
 
-def _refresh_stale_checks(rows):
+def _refresh_stale_checks(rows, for_teacher=False):
     """На экране проверки: пересчёт сверки, если эталон правили после неё."""
     for row in rows:
         # У рубрик и текстовых вставок нет ни задачи, ни ответа
@@ -299,11 +342,16 @@ def _refresh_stale_checks(rows):
             for sr in row['subrows']:
                 part = sr['part']
                 if part and part.display_answer and part.check_is_stale(task):
-                    part.run_check(sr['subitem'].effective_answer_latex)
-                    part.save(update_fields=['auto_check', 'checked_at'])
+                    part.run_check(sr['subitem'].effective_answer_latex,
+                                   spec=sr['subitem'].mask_spec)
+                    part.save(update_fields=['auto_check', 'check_json', 'checked_at'])
+                    sr['fragments'] = _mask_fragments(
+                        sr['spec'], part, sr['prefix'], for_teacher)
         elif submission.display_answer and submission.check_is_stale(task):
-            submission.run_check(task.effective_answer_latex)
-            submission.save(update_fields=['auto_check', 'checked_at'])
+            submission.run_check(task.effective_answer_latex, spec=task.mask_spec)
+            submission.save(update_fields=['auto_check', 'check_json', 'checked_at'])
+            row['fragments'] = _mask_fragments(
+                row['spec'], submission, row['prefix'], for_teacher)
 
 
 def _is_xhr(request):
@@ -363,9 +411,9 @@ def check_task(request, pk, task_id):
     task = get_object_or_404(Task, pk=task_id)
     item = _visible_task_item(assignment, task)
     subitems = item.selected_subitems()
-    if not _has_reference(task, subitems):
+    if not task.short_answer_available(subitems):
         # Кнопка на странице отключена; прямой запрос — без раскрытия и попытки
-        message = 'У этой задачи нет эталона — ответ проверит учитель'
+        message = 'У этой задачи нет маски ответа — решение проверит учитель'
         if _is_xhr(request):
             return JsonResponse({'ok': False, 'message': message, 'checks': {}},
                                 status=400)
@@ -375,6 +423,14 @@ def check_task(request, pk, task_id):
     submission, _ = Submission.objects.get_or_create(
         assignment=assignment, task=task)
 
+    def _reveal(obj, prefix):
+        """Раскрыть результат: итог по полю и по каждому слоту маски."""
+        obj.check_revealed = True
+        obj.save(update_fields=['check_revealed'])
+        checks[prefix] = obj.auto_check
+        for slot, status in (obj.check_json or {}).items():
+            checks[f'{prefix}_{slot}'] = status
+
     checks = {}
     if subitems:
         parts = {p.subitem_id: p for p in submission.parts.all()}
@@ -382,13 +438,9 @@ def check_task(request, pk, task_id):
             part = parts.get(subitem.pk)
             if part is None or not part.display_answer:
                 continue
-            part.check_revealed = True
-            part.save(update_fields=['check_revealed'])
-            checks[f'task{task.pk}_sub{subitem.pk}'] = part.auto_check
+            _reveal(part, f'task{task.pk}_sub{subitem.pk}')
     elif submission.display_answer:
-        submission.check_revealed = True
-        submission.save(update_fields=['check_revealed'])
-        checks[f'task{task.pk}'] = submission.auto_check
+        _reveal(submission, f'task{task.pk}')
     if checks:
         submission.check_attempts += 1
         submission.save(update_fields=['check_attempts'])
@@ -506,7 +558,7 @@ def _teacher_assignment(request, pk):
 def review_assignment(request, pk):
     assignment = _teacher_assignment(request, pk)
     rows = _assignment_rows(assignment, with_review=True)
-    _refresh_stale_checks(rows)
+    _refresh_stale_checks(rows, for_teacher=True)
     context = {
         'assignment': assignment,
         'rows': rows,
@@ -538,17 +590,16 @@ def save_review(request, pk):
             continue
         done = f'{prefix}_done' in request.POST
         comment = request.POST.get(f'{prefix}_comment', '').strip()
-
-        if done or comment:
-            Review.objects.update_or_create(
-                submission=submission,
-                defaults={
-                    'done': done,
-                    'comment': comment,
-                    'reviewer': request.user,
-                })
-        else:
-            Review.objects.filter(submission=submission).delete()
+        # Строка есть в форме — сохраняем явное done=False, даже без
+        # комментария. Иначе снятие автофлажка удаляет Review, и при
+        # следующем открытии auto_ok снова включит «Выполнено».
+        Review.objects.update_or_create(
+            submission=submission,
+            defaults={
+                'done': done,
+                'comment': comment,
+                'reviewer': request.user,
+            })
 
     if action == 'complete':
         assignment.status = Assignment.STATUS_REVIEWED

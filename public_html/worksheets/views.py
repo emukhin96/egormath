@@ -1023,11 +1023,12 @@ def worksheet_beamer_editor(request, pk):
 def worksheet_beamer_compile(request, pk):
     """Черновая сборка презентации; кэш WorksheetPdf не трогает."""
     worksheet = _own_worksheet(request, pk)
+    tex = request.POST.get('tex', '')
     return _editor_compile(
-        request, worksheet, request.POST.get('tex', ''),
+        request, worksheet, tex,
         doc_id=f'ws{worksheet.pk}-beamer',
         filename=worksheet.beamer_filename(),
-        collect=lambda: collect_beamer_assets(worksheet))
+        collect=lambda: collect_beamer_assets(worksheet, tex=tex))
 
 
 @teacher_required

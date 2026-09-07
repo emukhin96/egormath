@@ -33,8 +33,10 @@
       /* Страница может дорисовать что-то по ответу сервера (например,
          результат сверки) — отдаём ей данные событием на форме */
       form.dispatchEvent(new CustomEvent('autosave:done', {detail: data, bubbles: true}));
+      return !!data.ok;
     }).catch(function () {
       showSaved(false, 'Нет связи — изменение не сохранено');
+      return false;
     });
   }
 
@@ -49,6 +51,7 @@
       return send(form, body);
     });
     queues.set(form, queued);
+    return queued;
   }
 
   var debounceTimers = new WeakMap();

@@ -35,11 +35,16 @@
       <li>
         <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}
         — <strong>ответ ученика:</strong>
-        {% if sr.part and sr.part.display_answer %}
+        {% if sr.fragments and sr.part.has_mask_values %}
+          {# Заполненная маска с бейджем у каждого слота #}
+          {% include 'assignments/_mask.html' with fragments=sr.fragments editable=False show_checks=True %}
+        {% elif sr.part and sr.part.display_answer %}
           <span class="math-content">{{ sr.part.display_answer|web_answer }}</span>
           {% include 'assignments/_check_badge.html' with prefix=sr.prefix status=sr.part.auto_check %}
         {% else %}<span class="muted">нет</span>{% endif %}
-        {% if sr.subitem.effective_answer_latex %}
+        {% if sr.mask_reference %}
+          <span class="muted">(эталон маски: <span class="math-content">{{ sr.mask_reference|web_answer }}</span>)</span>
+        {% elif sr.subitem.effective_answer_latex %}
           <span class="muted">(эталон: <span class="math-content">{{ sr.subitem.effective_answer_latex|web_answer }}</span>)</span>
         {% endif %}
       </li>
@@ -50,6 +55,11 @@
     {% if row.task.effective_answer_latex %}
     <div class="answer-box math-content"><strong>Эталонный ответ:</strong> {{ row.task.effective_answer_latex|web_answer }}</div>
     {% endif %}
+    {% if row.mask_reference %}
+    <div class="answer-box math-content"><strong>Маска с эталонами:</strong> {{ row.mask_reference|web_answer }}</div>
+    {% elif not row.short_answer %}
+    <p class="helptext">Краткий ответ у задачи не предусмотрен{% if row.task.extended_only %} («только развёрнутый ответ»){% else %} (маски нет){% endif %} — проверяйте по фото решения.</p>
+    {% endif %}
     {% if row.task.effective_solution_latex %}
     <details><summary class="muted">Эталонное решение</summary>
       <div class="solution-box math-content">{{ row.task.effective_solution_latex|linebreaksbr }}</div>
@@ -58,14 +68,16 @@
 
     {% if row.submission %}
       {% if not row.subrows %}
-      <p><strong>Ответ ученика:</strong>
-        {% if row.submission.display_answer %}
+      <div class="answer-block"><strong>Ответ ученика:</strong>
+        {% if row.fragments and row.submission.has_mask_values %}
+          {% include 'assignments/_mask.html' with fragments=row.fragments editable=False show_checks=True %}
+        {% elif row.submission.display_answer %}
           <span class="math-content">{{ row.submission.display_answer|web_answer }}</span>
           {% include 'assignments/_check_badge.html' with prefix=row.prefix status=row.submission.auto_check %}
         {% else %}
           <span class="muted">нет ответа</span>
         {% endif %}
-      </p>
+      </div>
       {% endif %}
       {% if row.submission.check_attempts %}
       <p class="helptext">Ученик нажимал «Проверить»: {{ row.submission.check_attempts }} раз.</p>

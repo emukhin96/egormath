@@ -29,14 +29,16 @@ _REPLACEMENTS = (
     ('~', ' '), ('\u00a0', ' '),
     ('−', '-'), ('–', '-'), ('—', '-'),
     ('∞', '\\infty'),
-    ('\\le ', '<= '), ('\\leq', '<='), ('\\ge ', '>= '), ('\\geq', '>='),
-    ('\\ne ', '!= '), ('\\neq', '!='),
     ('≤', '<='), ('≥', '>='), ('≠', '!='),
     ('\\{', '{'), ('\\}', '}'),
     ('\\cup', '∪'), ('\\varnothing', '∅'), ('\\emptyset', '∅'),
 )
 
 _DECIMAL_COMMA_RE = re.compile(r'(?<=\d),(?=\d)')
+# ``\le5`` без пробела тоже встречается; ``\left`` не трогаем
+_RELATION_RE = re.compile(r'\\(leq|geq|neq|le|ge|ne)(?![a-zA-Z])')
+_RELATIONS = {'leq': '<=', 'le': '<=', 'geq': '>=', 'ge': '>=',
+              'neq': '!=', 'ne': '!='}
 _VAR_EQ_RE = re.compile(r'^[a-zA-Zа-яА-Я](?:_\{?\d+\}?)?\s*=\s*(.+)$')
 _NUMBER_RE = re.compile(r'^[+-]?\d+(?:\.\d+)?$')
 _SIMPLE_FRAC_RE = re.compile(r'^([+-])?\s*(\d+)\s*/\s*(\d+)$')
@@ -51,6 +53,7 @@ def normalize(text):
     """Общая нормализация школьной записи; ``$`` снимаются, запятая в
     десятичной дроби становится точкой, пробелы схлопываются."""
     text = (text or '').replace('$', ' ')
+    text = _RELATION_RE.sub(lambda m: f' {_RELATIONS[m.group(1)]} ', text)
     for old, new in _REPLACEMENTS:
         text = text.replace(old, new)
     text = _DECIMAL_COMMA_RE.sub('.', text)
@@ -154,16 +157,11 @@ def _expand_pm(items):
 
 
 def _sympy_expr(text):
-    """Только lark-парсер LaTeX: это чистая грамматика. ``parse_expr`` /
-    ``sympify`` здесь недопустимы — они исполняют ввод через eval."""
-    text = text.strip()
-    if not text or len(text) > MAX_EXPR_LEN:
-        return None
-    try:
-        from sympy.parsing.latex import parse_latex
-        return parse_latex(text, backend='lark')
-    except Exception:  # noqa: BLE001 — любой сбой парсера = «не разобрано»
-        return None
+    """Только lark-парсер LaTeX (см. ``checks.expressions``): это чистая
+    грамматика. ``sympy.parse_expr`` / ``sympify`` здесь недопустимы — они
+    исполняют ввод через eval."""
+    from .checks.expressions import parse_expr
+    return parse_expr(text)
 
 
 def _sympy_equal(a, b):

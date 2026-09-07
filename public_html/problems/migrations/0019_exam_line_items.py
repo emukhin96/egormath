@@ -33,7 +33,7 @@ def seed_exam_line_items(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('problems', '0017_task_answer_type_formula'),
+        ('problems', '0018_answer_mask'),
     ]
 
     operations = [
