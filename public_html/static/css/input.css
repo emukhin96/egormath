@@ -3755,6 +3755,12 @@
     background: #f2f6fc;
   }
 
+  .choice-item:has(input:disabled) {
+    color: var(--muted);
+    background: #f7f9fc;
+    cursor: default;
+  }
+
   .choice-item input,
   .assignment-photo-option input {
     width: 16px;
@@ -3799,11 +3805,6 @@
     font-weight: 600;
   }
 
-  .assignment-create-summary .btn,
-  .review-actions .btn {
-    width: 100%;
-  }
-
   .review-main {
     min-width: 0;
   }
@@ -3813,8 +3814,6 @@
   }
 
   .review-actions {
-    display: grid;
-    gap: var(--space-2);
     margin-top: var(--space-3);
   }
 

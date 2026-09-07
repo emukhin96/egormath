@@ -115,7 +115,7 @@ def assignment_list(request):
                         Assignment.STATUS_RETURNED),
             due_at__lt=now)
     elif due == 'today':
-        assignments = assignments.filter(due_at__date=now.date())
+        assignments = assignments.filter(due_at__date=timezone.localdate())
     elif due == 'week':
         assignments = assignments.filter(
             due_at__gte=now, due_at__lte=now + timedelta(days=7))
@@ -207,7 +207,6 @@ def assignment_create(request):
         return redirect('assignment_list')
     return render(request, 'assignments/assignment_create.html', {
         'form': form,
-        'selected_worksheet': initial.get('worksheet'),
     })
 
 
@@ -785,20 +784,18 @@ def save_review(request, pk):
         assignment.reviewed_at = timezone.now()
         assignment.save()
         messages.success(request, 'Проверка завершена, ученик увидит результаты.')
-        if action == 'complete_next':
+        if action == 'complete_next' and next_pending:
             return redirect(
-                'review_assignment', pk=next_pending.pk) if next_pending \
-                else redirect('assignment_list')
-        return redirect('dashboard')
+                'review_assignment', pk=next_pending.pk)
+        return redirect('assignment_list')
     if action in ('return', 'return_next'):
         assignment.status = Assignment.STATUS_RETURNED
         assignment.save()
         messages.success(request, 'Работа возвращена ученику на доработку.')
-        if action == 'return_next':
+        if action == 'return_next' and next_pending:
             return redirect(
-                'review_assignment', pk=next_pending.pk) if next_pending \
-                else redirect('assignment_list')
-        return redirect('dashboard')
+                'review_assignment', pk=next_pending.pk)
+        return redirect('assignment_list')
     messages.success(request, 'Проверка сохранена (черновик).')
     return redirect('review_assignment', pk=pk)
 

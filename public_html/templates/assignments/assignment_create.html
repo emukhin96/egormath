@@ -11,7 +11,9 @@
   <a class="btn btn-secondary" href="{% url 'assignment_list' %}">К заданиям</a>
 </div>
 
-<form method="post" class="assignment-create-form" id="assignment-create-form">
+<form method="post" class="assignment-create-form" id="assignment-create-form"
+      data-bound="{{ form.is_bound|yesno:'1,0' }}"
+      data-refresh-url="{% url 'assignment_create' %}">
   {% csrf_token %}
   {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
   <div class="assignment-create-grid">
@@ -52,7 +54,10 @@
         <div class="form-section-head"><span class="form-step">3</span><div><h2>Условия работы</h2><p class="helptext">Срок — ориентир: после него сдача не блокируется.</p></div></div>
         <div class="settings-grid">
           <div>{{ form.due_at.errors }}{{ form.due_at.label_tag }}{{ form.due_at }}</div>
-          <div>{{ form.check_visibility.errors }}{{ form.check_visibility.label_tag }}{{ form.check_visibility }}</div>
+          <div>
+            {{ form.check_visibility.errors }}{{ form.check_visibility.label_tag }}{{ form.check_visibility }}
+            <span class="helptext">{{ form.check_visibility.help_text }}</span>
+          </div>
         </div>
         <label class="check-label assignment-photo-option">{{ form.allow_photos }} <span>{{ form.allow_photos.label }}</span></label>
       </section>
@@ -87,6 +92,12 @@
     form.querySelector('[data-summary-students]').textContent = Array.from(studentBoxes).filter(function (box) { return box.checked; }).length;
   }
   form.addEventListener('change', updateSummary);
+  if (worksheet) worksheet.addEventListener('change', function () {
+    if (form.dataset.bound === '1') return;
+    var target = form.dataset.refreshUrl;
+    if (worksheet.value) target += '?worksheet=' + encodeURIComponent(worksheet.value);
+    window.location.assign(target);
+  });
   var filter = form.querySelector('[data-student-filter]');
   if (filter) filter.addEventListener('input', function () {
     var query = filter.value.trim().toLowerCase();
