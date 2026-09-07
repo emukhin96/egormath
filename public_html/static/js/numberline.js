@@ -10,8 +10,9 @@
      - отпустить там же, где нажали, — одна точка [a; a].
    Каждое изменение записывает текст в поле («(-∞; -5) ∪ [1; 4)» — его же
    разбирает сервер) и шлёт change для автосохранения. Текст, набранный
-   руками, разбирается обратно, если это скобочная запись или простые
-   неравенства (x>5; 1<x<4); иначе прямая просто не меняется.
+   руками, разбирается обратно, если это скобочная запись, неравенства
+   (x>5; 1<x<4), «нет решений» / ∅ или вся прямая (ℝ).
+   Границы √2, π, 7/3 задаются в поле или в «точной границе» + клик по концу.
    Без JS остаётся текстовое поле. */
 (function () {
   'use strict';
@@ -27,16 +28,50 @@
     return s.replace('.', ',');
   }
 
+  function compactWords(text) {
+    return String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  function isEmptyWords(text) {
+    return /^(∅|\{\}|нет(?: решений)?|решений нет|нет корней|корней нет|пустое множество|none)$/.test(compactWords(text));
+  }
+
+  function isAllWords(text) {
+    return /^(r|\\mathbb\{r\}|ℝ|любое(?: число)?|все числа|x - любое|x любое|вся(?: числовая)? прямая|числовая прямая)$/.test(compactWords(text));
+  }
+
+  /* Школьное число → float: дроби, √, π. Бесконечность — отдельно. */
+  function evalSchoolNumber(raw) {
+    var s = String(raw || '').replace(/\s+/g, '');
+    if (!s) return NaN;
+    s = s.replace(/\\pi\b|π/gi, '(PI)');
+    var prev;
+    do {
+      prev = s;
+      s = s.replace(/\\sqrt\{([^{}]+)\}/g, 'sqrt($1)');
+      s = s.replace(/√\{([^{}]+)\}/g, 'sqrt($1)');
+      s = s.replace(/√(\d+(?:\.\d+)?)/g, 'sqrt($1)');
+      s = s.replace(/\\sqrt(\d+)/g, 'sqrt($1)');
+      s = s.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '(($1)/($2))');
+    } while (s !== prev);
+    s = s.replace(/\\cdot|\\times|·|×/g, '*');
+    s = s.replace(/(\d|\))(\(|sqrt|PI)/g, '$1*$2');
+    s = s.replace(/PI(\(|sqrt|\d)/g, 'PI*$1');
+    var check = s.replace(/sqrt/g, 'S').replace(/PI/g, 'P');
+    if (!/^[0-9.+\-*/()SP]+$/.test(check)) return NaN;
+    try {
+      var val = Function('sqrt', 'PI', '"use strict"; return (' + s + ');')(Math.sqrt, Math.PI);
+      return typeof val === 'number' && isFinite(val) ? val : NaN;
+    } catch (e) {
+      return NaN;
+    }
+  }
+
   function num(text) {
-    text = text.trim().replace(',', '.').replace(/\\left|\\right/g, '');
+    text = String(text || '').trim().replace(/\\left|\\right/g, '').replace(/\$/g, '');
     if (/^[-−]\s*(∞|\\infty|inf)$/i.test(text)) return -Infinity;
     if (/^\+?\s*(∞|\\infty|inf)$/i.test(text)) return Infinity;
-    var frac = text.match(/^(-?)\\frac\{(-?\d+(?:\.\d+)?)\}\{(\d+(?:\.\d+)?)\}$/);
-    if (frac) return (frac[1] ? -1 : 1) * parseFloat(frac[2]) / parseFloat(frac[3]);
-    var simple = text.match(/^(-?\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
-    if (simple) return parseFloat(simple[1]) / parseFloat(simple[2]);
-    if (/^-?\d+(?:\.\d+)?$/.test(text)) return parseFloat(text);
-    return NaN;
+    return evalSchoolNumber(text.replace(/,/g, '.'));
   }
 
   /* Текст → список промежутков {lo, hi, lc, rc} или null, если не разобрано */
@@ -95,21 +130,24 @@
         lo: less ? a : b, hi: less ? b : a,
         lc: (less ? chain[2] : chain[3]).length === 2,
         rc: (less ? chain[3] : chain[2]).length === 2,
+        loText: (less ? chain[1] : chain[4]).trim(),
+        hiText: (less ? chain[4] : chain[1]).trim(),
       }];
     }
     var left = piece.match(new RegExp('^' + v + '\\s*(<=|>=|<|>)\\s*(.+)$'));
-    var op, value;
+    var op, value, raw;
     if (left) {
-      op = left[1]; value = num(left[2]);
+      op = left[1]; value = num(left[2]); raw = left[2].trim();
     } else {
       var right = piece.match(new RegExp('^(.+?)\\s*(<=|>=|<|>)\\s*' + v + '$'));
       if (!right) return null;
       value = num(right[1]);
+      raw = right[1].trim();
       op = {'<': '>', '<=': '>=', '>': '<', '>=': '<='}[right[2]];
     }
     if (isNaN(value)) return null;
-    if (op[0] === '>') return [{lo: value, hi: Infinity, lc: op.length === 2, rc: false}];
-    return [{lo: -Infinity, hi: value, lc: false, rc: op.length === 2}];
+    if (op[0] === '>') return [{lo: value, hi: Infinity, lc: op.length === 2, rc: false, loText: raw}];
+    return [{lo: -Infinity, hi: value, lc: false, rc: op.length === 2, hiText: raw}];
   }
 
   /* Убрать пустые, склеить пересекающиеся — как _normalize_intervals на сервере */
@@ -163,6 +201,7 @@
     this.container = container;
     this.input = input;
     this.intervals = [];
+    this.special = '';
     this.step = 1;
     this.drag = null;
     this.build();
@@ -184,10 +223,33 @@
     this.stepLabel.className = 'numberline-step';
     tools.appendChild(this.stepLabel);
     this.zoomIn = this.tool(tools, '+', 'Мельче шаг', function () { self.zoom(-1); });
-    this.tool(tools, 'очистить', 'Убрать все промежутки', function () {
+    this.tool(tools, '∅', 'Нет решений', function () {
+      self.special = 'empty';
       self.intervals = [];
       self.commit();
     });
+    this.tool(tools, 'ℝ', 'Вся числовая прямая', function () {
+      self.special = 'all';
+      self.intervals = [{lo: -Infinity, hi: Infinity, lc: false, rc: false}];
+      self.commit();
+    });
+    this.tool(tools, 'очистить', 'Стереть ответ', function () {
+      self.special = '';
+      self.intervals = [];
+      self.input.value = '';
+      self.input.dispatchEvent(new Event('change', {bubbles: true}));
+      self.render();
+    });
+    this.boundInput = document.createElement('input');
+    this.boundInput.type = 'text';
+    this.boundInput.className = 'numberline-bound';
+    this.boundInput.placeholder = '√2, 7/3, π';
+    this.boundInput.title = 'Точная граница: введите и нажмите на конец промежутка';
+    this.boundInput.setAttribute('autocomplete', 'off');
+    this.boundInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') e.preventDefault();
+    });
+    tools.appendChild(this.boundInput);
     this.container.appendChild(tools);
 
     this.svg.addEventListener('pointerdown', function (e) { self.onDown(e); });
@@ -253,17 +315,62 @@
   };
 
   NumberLine.prototype.fromText = function () {
+    var raw = (this.input.value || '').replace(/\$/g, '').trim();
+    if (!raw) {
+      this.special = '';
+      this.intervals = [];
+      return;
+    }
+    if (isEmptyWords(raw)) {
+      this.special = 'empty';
+      this.intervals = [];
+      return;
+    }
+    if (isAllWords(raw)) {
+      this.special = 'all';
+      this.intervals = [{lo: -Infinity, hi: Infinity, lc: false, rc: false}];
+      this.fitStep();
+      return;
+    }
     var parsed = parse(this.input.value);
     if (parsed === null) return;
+    this.special = '';
     this.intervals = parsed;
     this.fitStep();
   };
 
   NumberLine.prototype.commit = function () {
     this.intervals = normalize(this.intervals);
-    this.input.value = format(this.intervals);
+    if (this.special === 'empty') {
+      this.input.value = 'нет решений';
+    } else {
+      this.special = (this.intervals.length === 1
+        && this.intervals[0].lo === -Infinity
+        && this.intervals[0].hi === Infinity) ? 'all' : '';
+      this.input.value = format(this.intervals);
+    }
     this.input.dispatchEvent(new Event('change', {bubbles: true}));
     this.render();
+  };
+
+  NumberLine.prototype.applyBound = function (iv, which, typed) {
+    var v = num(typed);
+    if (isNaN(v) || !isFinite(v)) {
+      if (window.EgorAutosave && EgorAutosave.showSaved) {
+        EgorAutosave.showSaved(false, 'Границу не разобрал: ' + typed);
+      }
+      return false;
+    }
+    iv[which] = v;
+    if (which === 'lo') iv.loText = typed;
+    else iv.hiText = typed;
+    if (iv.lo > iv.hi) {
+      var tmp = iv.lo; iv.lo = iv.hi; iv.hi = tmp;
+      tmp = iv.loText; iv.loText = iv.hiText; iv.hiText = tmp;
+      tmp = iv.lc; iv.lc = iv.rc; iv.rc = tmp;
+    }
+    this.special = '';
+    return true;
   };
 
   NumberLine.prototype.onDown = function (e) {
@@ -271,8 +378,16 @@
     var target = e.target;
     var px = this.px(e);
     if (target.dataset && target.dataset.end) {
-      /* Клик по концу — включить/исключить точку */
       var iv = this.intervals[parseInt(target.dataset.iv, 10)];
+      var typed = (this.boundInput.value || '').trim();
+      if (typed) {
+        if (this.applyBound(iv, target.dataset.end, typed)) {
+          this.boundInput.value = '';
+          this.commit();
+        }
+        return;
+      }
+      /* Клик по концу — включить/исключить точку */
       if (target.dataset.end === 'lo' && isFinite(iv.lo)) iv.lc = !iv.lc;
       if (target.dataset.end === 'hi' && isFinite(iv.hi)) iv.rc = !iv.rc;
       if (iv.lo === iv.hi && (!iv.lc || !iv.rc)) this.intervals.splice(this.intervals.indexOf(iv), 1);
@@ -299,12 +414,14 @@
     if (!moved && d.body !== null) {
       /* Клик по телу промежутка — убрать */
       this.intervals.splice(d.body, 1);
+      this.special = '';
       this.commit();
       return;
     }
     var a = d.start, b = this.value(this.px(e));
     if (a === -Infinity && b === -Infinity || a === Infinity && b === Infinity) { this.render(); return; }
     var lo = Math.min(a, b), hi = Math.max(a, b);
+    this.special = '';
     this.intervals.push({lo: lo, hi: hi, lc: isFinite(lo), rc: isFinite(hi)});
     this.commit();
   };
@@ -329,6 +446,14 @@
         label.textContent = fmt(v);
         svg.appendChild(label);
       }
+    }
+
+    if (this.special === 'empty' && !this.drag) {
+      var emptyMark = svgEl('text', {
+        x: W / 2, y: AXIS_Y - 12, 'class': 'nl-label', 'text-anchor': 'middle',
+      });
+      emptyMark.textContent = '∅';
+      svg.appendChild(emptyMark);
     }
 
     /* Промежутки: тело, затем концы (концы поверх тела, чтобы ловить клики) */
@@ -381,5 +506,5 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () { init(document); });
-  window.EgorNumberLine = {init: init, parse: parse, format: format};
+  window.EgorNumberLine = {init: init, parse: parse, format: format, num: num};
 })();
