@@ -69,6 +69,8 @@
 
   function num(text) {
     text = String(text || '').trim().replace(/\\left|\\right/g, '').replace(/\$/g, '');
+    /* formatLatex пишет десятичную запятую как 1{,}5 — снимаем до замены запятой */
+    text = text.replace(/\{,\}/g, '.').replace(/\{\.\}/g, '.');
     if (/^[-−]\s*(∞|\\infty|inf)$/i.test(text)) return -Infinity;
     if (/^\+?\s*(∞|\\infty|inf)$/i.test(text)) return Infinity;
     return evalSchoolNumber(text.replace(/,/g, '.'));
@@ -299,6 +301,7 @@
       self.commit();
     });
     this.tool(tools, 'очистить', 'Стереть ответ', function () {
+      self.stale = false;
       self.special = '';
       self.intervals = [];
       self.writeValue('');
@@ -398,16 +401,19 @@
     var source = (this.mathField && this.mathField.value) || this.input.value || '';
     var raw = source.replace(/\$/g, '').trim();
     if (!raw) {
+      this.stale = false;
       this.special = '';
       this.intervals = [];
       return;
     }
     if (isEmptyWords(raw)) {
+      this.stale = false;
       this.special = 'empty';
       this.intervals = [];
       return;
     }
     if (isAllWords(raw)) {
+      this.stale = false;
       this.special = 'all';
       this.intervals = [{lo: -Infinity, hi: Infinity, lc: false, rc: false}];
       this.fitStep();
