@@ -1605,6 +1605,8 @@ class RubricatorTests(TestCase):
             topic = Topic.objects.get(code=code)
             self.assertEqual(topic.name, name)
         self.assertTrue(ExamItem.objects.filter(code='OGE_2026_09').exists())
+        self.assertTrue(ExamItem.objects.filter(
+            code='OGE_2026', item_number=0).exists())
         self.assertTrue(GradeBand.objects.filter(code='GRADE_8').exists())
         self.assertTrue(FacetValue.objects.filter(
             code='SYSTEM_SUBSTITUTION').exists())
@@ -1770,3 +1772,150 @@ class RubricatorTests(TestCase):
         form.save()
         task.refresh_from_db()
         self.assertEqual(task.grade_level, 3)
+
+    def test_exam_number_stores_parent_line(self):
+        from problems.models import ExamItem
+        from problems.rubricator import (
+            ensure_exam_parent_codes, seed_rubricator, set_task_exams)
+        seed_rubricator()
+        teacher = make_teacher()
+        task = Task.objects.create(
+            text_latex='Неравенства профиля xyz', created_by=teacher)
+        child = ExamItem.objects.get(code='EGE_PROFILE_2026_15')
+        parent = ExamItem.objects.get(code='EGE_PROFILE_2026')
+        set_task_exams(task, [child.pk])
+        self.assertEqual(
+            set(task.exam_items.values_list('code', flat=True)),
+            {parent.code, child.code})
+        set_task_exams(task, [parent.pk])
+        self.assertEqual(
+            set(task.exam_items.values_list('code', flat=True)),
+            {parent.code})
+        self.assertEqual(
+            ensure_exam_parent_codes(['EGE_PROFILE_2026_15']),
+            ['EGE_PROFILE_2026_15', 'EGE_PROFILE_2026'])
+        self.assertEqual(
+            ensure_exam_parent_codes(['EGE_PROFILE_2026']),
+            ['EGE_PROFILE_2026'])
+
+    def test_filter_exam_line_matches_numbered_and_legacy(self):
+        from problems.models import ExamItem
+        from problems.rubricator import (
+            filter_by_taxonomy, seed_rubricator, set_task_exams)
+        seed_rubricator()
+        teacher = make_teacher()
+        numbered = Task.objects.create(
+            text_latex='С номером xyz', created_by=teacher)
+        parent_only = Task.objects.create(
+            text_latex='Только линия xyz', created_by=teacher)
+        legacy = Task.objects.create(
+            text_latex='Старый номер xyz', created_by=teacher)
+        other = Task.objects.create(
+            text_latex='Другой экзамен xyz', created_by=teacher)
+        child = ExamItem.objects.get(code='EGE_PROFILE_2026_15')
+        parent = ExamItem.objects.get(code='EGE_PROFILE_2026')
+        oge = ExamItem.objects.get(code='OGE_2026_09')
+        set_task_exams(numbered, [child.pk])
+        set_task_exams(parent_only, [parent.pk])
+        Task.exam_items.through.objects.create(task=legacy, examitem=child)
+        set_task_exams(other, [oge.pk])
+        line_hits = filter_by_taxonomy(
+            Task.objects.all(), {'exam': ['EGE_PROFILE_2026']},
+            topics_lookups=('topics',))
+        texts = set(line_hits.values_list('text_latex', flat=True))
+        self.assertIn('С номером xyz', texts)
+        self.assertIn('Только линия xyz', texts)
+        self.assertIn('Старый номер xyz', texts)
+        self.assertNotIn('Другой экзамен xyz', texts)
+        numbered_hits = filter_by_taxonomy(
+            Task.objects.all(), {'exam': ['EGE_PROFILE_2026_15']},
+            topics_lookups=('topics',))
+        numbered_texts = set(numbered_hits.values_list('text_latex', flat=True))
+        self.assertIn('С номером xyz', numbered_texts)
+        self.assertIn('Старый номер xyz', numbered_texts)
+        self.assertNotIn('Только линия xyz', numbered_texts)
+
+    def test_quick_save_exam_number_adds_parent(self):
+        from problems.models import ExamItem
+        from problems.rubricator import seed_rubricator
+        seed_rubricator()
+        teacher = make_teacher()
+        task = Task.objects.create(
+            text_latex='Сохранение меток xyz', created_by=teacher)
+        child = ExamItem.objects.get(code='OGE_2026_16')
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.post(
+            reverse('task_quick_update', args=[task.pk]),
+            {'exams_submitted': '1', 'exam_items': [str(child.pk)]},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        self.assertEqual(
+            set(task.exam_items.values_list('code', flat=True)),
+            {'OGE_2026_16', 'OGE_2026'})
+
+    def test_exam_line_items_migration_recreates_missing(self):
+        import importlib
+        from django.apps import apps
+        from problems.models import ExamItem
+        seed_exam_line_items = importlib.import_module(
+            'problems.migrations.0019_exam_line_items').seed_exam_line_items
+        ExamItem.objects.filter(item_number=0).delete()
+        self.assertFalse(ExamItem.objects.filter(code='OGE_2026').exists())
+        seed_exam_line_items(apps, None)
+        seed_exam_line_items(apps, None)
+        self.assertEqual(
+            set(ExamItem.objects.filter(item_number=0).values_list(
+                'code', flat=True)),
+            {'OGE_2026', 'EGE_BASE_2026', 'EGE_PROFILE_2026'})
+
+    def test_direct_m2m_and_variant_copy_add_exam_parent(self):
+        from django.contrib.admin.sites import site
+        from django.test import RequestFactory
+        from problems.admin import TaskAdmin
+        from problems.models import ExamItem
+        from problems.rubricator import seed_rubricator
+        seed_rubricator()
+        teacher = make_teacher()
+        child = ExamItem.objects.get(code='EGE_PROFILE_2026_15')
+        parent = ExamItem.objects.get(code='EGE_PROFILE_2026')
+        task = Task.objects.create(
+            text_latex='Прямой M2M xyz', created_by=teacher)
+        task.exam_items.set([child])
+        self.assertEqual(
+            set(task.exam_items.values_list('code', flat=True)),
+            {parent.code, child.code})
+        legacy = Task.objects.create(
+            text_latex='Копия без линии xyz', created_by=teacher)
+        Task.exam_items.through.objects.create(task=legacy, examitem=child)
+        self.assertEqual(
+            set(legacy.exam_items.values_list('code', flat=True)),
+            {child.code})
+        copy = legacy.make_variant()
+        self.assertEqual(
+            set(copy.exam_items.values_list('code', flat=True)),
+            {parent.code, child.code})
+        teacher.is_staff = True
+        teacher.is_superuser = True
+        teacher.save()
+        admin_task = Task.objects.create(
+            text_latex='Админка экзамен xyz', created_by=teacher)
+        request = RequestFactory().post('/admin/')
+        request.user = teacher
+        admin = TaskAdmin(Task, site)
+        ModelForm = admin.get_form(request, admin_task)
+        form = ModelForm({
+            'text_latex': admin_task.text_latex,
+            'stars': 0,
+            'columns': 0,
+            'answer_type': admin_task.answer_type,
+            'answer_mode': admin_task.answer_mode,
+            'exam_items': [child.pk],
+        }, instance=admin_task)
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save(commit=False)
+        admin.save_model(request, admin_task, form, True)
+        admin.save_related(request, form, [], True)
+        self.assertEqual(
+            set(admin_task.exam_items.values_list('code', flat=True)),
+            {parent.code, child.code})

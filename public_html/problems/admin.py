@@ -60,6 +60,13 @@ class TaskAdmin(admin.ModelAdmin):
     readonly_fields = ('text_plain', 'created_at', 'updated_at')
     autocomplete_fields = ('created_by', 'variant_of')
 
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        from .rubricator import set_task_exams
+        set_task_exams(
+            form.instance,
+            form.instance.exam_items.values_list('pk', flat=True))
+
 
 @admin.register(GradeBand)
 class GradeBandAdmin(admin.ModelAdmin):
