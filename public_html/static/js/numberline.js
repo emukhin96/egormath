@@ -29,7 +29,7 @@
 
   function num(text) {
     text = text.trim().replace(',', '.').replace(/\\left|\\right/g, '');
-    if (/^[-−]?\s*(∞|\\infty|inf)$/i.test(text)) return -Infinity;
+    if (/^[-−]\s*(∞|\\infty|inf)$/i.test(text)) return -Infinity;
     if (/^\+?\s*(∞|\\infty|inf)$/i.test(text)) return Infinity;
     var frac = text.match(/^(-?)\\frac\{(-?\d+(?:\.\d+)?)\}\{(\d+(?:\.\d+)?)\}$/);
     if (frac) return (frac[1] ? -1 : 1) * parseFloat(frac[2]) / parseFloat(frac[3]);
@@ -52,7 +52,7 @@
       tokens.push(m);
       return '\u0000' + (tokens.length - 1) + '\u0000';
     });
-    var pieces = rest.split(/\s*(?:∪|,|;|\bили\b|\bor\b|\bи\b)\s*/);
+    var pieces = rest.split(/\s*(?:∪|,|;|\bили\b|\bor\b)\s*/);
     for (var i = 0; i < pieces.length; i++) {
       var piece = pieces[i].trim();
       if (!piece) continue;
@@ -76,7 +76,11 @@
     if (!m) return null;
     var lo = num(m[2]), hi = num(m[3]);
     if (isNaN(lo) || isNaN(hi)) return null;
-    return {lo: lo, hi: hi, lc: m[1] === '[', rc: m[4] === ']'};
+    return {
+      lo: lo, hi: hi, lc: m[1] === '[', rc: m[4] === ']',
+      loText: isFinite(lo) ? m[2].trim() : '',
+      hiText: isFinite(hi) ? m[3].trim() : '',
+    };
   }
 
   function parseInequality(piece) {
@@ -115,7 +119,9 @@
     }).map(function (iv) {
       return {lo: iv.lo, hi: iv.hi,
               lc: iv.lo === -Infinity ? false : iv.lc,
-              rc: iv.hi === Infinity ? false : iv.rc};
+              rc: iv.hi === Infinity ? false : iv.rc,
+              loText: iv.lo === -Infinity ? '' : iv.loText,
+              hiText: iv.hi === Infinity ? '' : iv.hiText};
     });
     cleaned.sort(function (a, b) { return a.lo - b.lo || (b.lc - a.lc) || a.hi - b.hi; });
     var merged = [];
@@ -123,7 +129,7 @@
       var last = merged[merged.length - 1];
       if (last && (cur.lo < last.hi || (cur.lo === last.hi && (last.rc || cur.lc)))) {
         if (cur.hi > last.hi || (cur.hi === last.hi && cur.rc)) {
-          last.hi = cur.hi; last.rc = cur.rc;
+          last.hi = cur.hi; last.rc = cur.rc; last.hiText = cur.hiText;
         }
         return;
       }
@@ -132,9 +138,18 @@
     return merged;
   }
 
+  function endText(iv, which) {
+    var v = iv[which];
+    var raw = which === 'lo' ? iv.loText : iv.hiText;
+    if (v === -Infinity) return '-∞';
+    if (v === Infinity) return '+∞';
+    if (raw) return raw;
+    return fmt(v);
+  }
+
   function format(list) {
     return list.map(function (iv) {
-      return (iv.lc ? '[' : '(') + fmt(iv.lo) + '; ' + fmt(iv.hi) + (iv.rc ? ']' : ')');
+      return (iv.lc ? '[' : '(') + endText(iv, 'lo') + '; ' + endText(iv, 'hi') + (iv.rc ? ']' : ')');
     }).join(' ∪ ');
   }
 
