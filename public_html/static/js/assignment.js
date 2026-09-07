@@ -52,16 +52,18 @@
     return keys;
   }
 
+  function clearHolder(holder) {
+    if (!holder) return;
+    if (window.EgorCheckBadge) EgorCheckBadge.render(holder, '');
+    else { holder.dataset.status = ''; holder.textContent = ''; }
+  }
+
   function clearBadgeFor(control) {
     badgeKeys(control).forEach(function (key) {
-      var holder = document.querySelector('[data-check="' + key + '"]');
-      if (holder) renderBadge(holder, '');
+      clearHolder(document.querySelector('[data-check="' + key + '"]'));
     });
     var slot = control.closest && control.closest('.mask-slot');
-    if (slot) {
-      var holder = slot.querySelector('[data-check]');
-      if (holder) renderBadge(holder, '');
-    }
+    if (slot) clearHolder(slot.querySelector('[data-check]'));
   }
 
   function checkTask(button) {

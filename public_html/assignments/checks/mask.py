@@ -308,14 +308,29 @@ def parse_mask(text):
 
 # --- проверка -----------------------------------------------------------------
 
-def _parse_order_value(value, count):
+def _parse_order_positions(value, count):
+    """Позиции слота order: список длины ``count`` (``None`` — пусто).
+    Неполная перестановка допустима для показа формы; для сверки — нет."""
+    parts = (value or '').split('|')
+    if len(parts) != count:
+        return None
     try:
-        order = [int(p) for p in value.split('|') if p.strip() != '']
+        chosen = [int(p) if p.strip() != '' else None for p in parts]
     except ValueError:
         return None
-    if sorted(order) != list(range(count)):
+    used = [i for i in chosen if i is not None]
+    if any(i < 0 or i >= count for i in used) or len(used) != len(set(used)):
         return None
-    return order
+    return chosen
+
+
+def _parse_order_value(value, count):
+    chosen = _parse_order_positions(value, count)
+    if chosen is None or any(i is None for i in chosen):
+        return None
+    if sorted(chosen) != list(range(count)):
+        return None
+    return chosen
 
 
 def check_slot(slot, value):
@@ -451,10 +466,12 @@ def render_fragments(spec, prefix, values=None, checks=None, seed=''):
             'check': checks.get(frag.name, ''),
         }
         if frag.kind == ORDER:
-            chosen = _parse_order_value(value, len(frag.items)) or []
+            chosen = _parse_order_positions(value, len(frag.items))
+            if chosen is None:
+                chosen = [None] * len(frag.items)
             item['order_items'] = frag.shuffled(seed or prefix)
             item['order_positions'] = [
-                {'k': k, 'selected': chosen[k] if k < len(chosen) else None}
+                {'k': k, 'selected': chosen[k]}
                 for k in range(len(frag.items))]
         out.append(item)
     return out

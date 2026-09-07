@@ -1013,3 +1013,26 @@ class AutoCheckFlowTests(TestCase):
         })
         submission.refresh_from_db()
         self.assertEqual(submission.answer_json.get('s1'), '')
+
+    def test_partial_order_is_restored(self):
+        self.task.answer_mask = '{{order: a|b|c}}'
+        self.task.save()
+        self.client.post(self.url, {
+            f'task{self.task.pk}_s1_0': '0',
+            f'task{self.task.pk}_s1_1': '',
+            f'task{self.task.pk}_s1_2': '',
+        })
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.answer_json, {'s1': '0||'})
+        response = self.client.get(self.detail)
+        self.assertContains(response, f'name="task{self.task.pk}_s1_0"')
+        html = response.content.decode()
+        self.assertRegex(
+            html,
+            rf'name="task{self.task.pk}_s1_0"[^>]*>[\s\S]*?'
+            r'<option value="0" selected')
+        self.assertNotRegex(
+            html,
+            rf'name="task{self.task.pk}_s1_1"[^>]*>[\s\S]*?'
+            r'<option value="\d+" selected')
