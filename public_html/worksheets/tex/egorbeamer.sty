@@ -3,7 +3,7 @@
 % grid дополнительно рисует клетку ниже условия.
 % Не зависит от egor.sty (тот заточен под article).
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{egorbeamer}[2026/09/02 v1.1 Beamer]
+\ProvidesPackage{egorbeamer}[2026/09/07 v1.4 Beamer]
 
 \newif\ifegorbmr@stars
 \newif\ifegorbmr@footer
@@ -21,6 +21,7 @@
 \def\egorbmr@content{problems}
 \def\egorbmr@reveal{click}
 \def\egorbmr@font{school}
+\def\egorbmr@fontsize{12}
 \def\egorbmr@items{all}
 \def\egorbmr@itemflow{stack}
 \def\egorbmr@no{0}
@@ -49,6 +50,11 @@
 \DeclareOption{itemflow=solo}{\def\egorbmr@itemflow{solo}\egorbmr@itemsolotrue}
 \DeclareOption{font=cm}{\def\egorbmr@font{cm}}
 \DeclareOption{font=school}{\def\egorbmr@font{school}}
+\DeclareOption{font=inter}{\def\egorbmr@font{inter}}
+% Не [14pt]{beamer}: класс ищет size14.clo из extsizes, его нет на API.
+\DeclareOption{fontsize=11pt}{\def\egorbmr@fontsize{11}}
+\DeclareOption{fontsize=12pt}{\def\egorbmr@fontsize{12}}
+\DeclareOption{fontsize=14pt}{\def\egorbmr@fontsize{14}}
 \ProcessOptions\relax
 
 \RequirePackage{fontspec}
@@ -59,13 +65,20 @@
 \RequirePackage{etoolbox}
 
 % Кириллица: стандартный sans Beamer (lmsans) не содержит русских букв.
-% serif + CMU Unicode — как у листков; имена через fontconfig, иначе файлы TeX Live.
-\usefonttheme{serif}
+% Условия и подпункты — всегда CMU Serif (Computer Modern).
 \usefonttheme{professionalfonts}
+\usefonttheme{serif}
+\def\egorbmr@val@school{school}
+\def\egorbmr@val@inter{inter}
 \IfFontExistsTF{CMU Serif}{%
   \setmainfont{CMU Serif}%
+  \newfontfamily\egorbmrchromefont{CMU Serif}%
 }{%
   \setmainfont{cmunrm.otf}[
+    BoldFont=cmunbx.otf,
+    ItalicFont=cmunti.otf,
+    BoldItalicFont=cmunbi.otf]%
+  \newfontfamily\egorbmrchromefont{cmunrm.otf}[
     BoldFont=cmunbx.otf,
     ItalicFont=cmunti.otf,
     BoldItalicFont=cmunbi.otf]%
@@ -80,20 +93,89 @@
     BoldItalicFont=cmunso.otf]%
   \newfontfamily\egorbmrnavfont{cmunss.otf}%
 }
-% Два текстовых профиля: CMU (как листки font=cm) и SchoolBookC (тема).
-\def\egorbmr@val@school{school}
+% Тело задач всегда Computer Modern (CMU). font= меняет только хром:
+% заголовки кадров, титул, рубрики, колонтитул.
 \ifx\egorbmr@font\egorbmr@val@school
   \IfFontExistsTF{SchoolBookC.ttf}{%
-    \setmainfont{SchoolBookC.ttf}[
+    \setfontfamily\egorbmrchromefont{SchoolBookC.ttf}[
       BoldFont=SchoolBookC-Bold.ttf,
       ItalicFont=SchoolBookC-Italic.ttf,
       BoldItalicFont=SchoolBookC-BoldItalic.ttf]%
   }{%
-    \IfFontExistsTF{SchoolBookC}{\setmainfont{SchoolBookC}}{}}%
+    \IfFontExistsTF{SchoolBookC}{\setfontfamily\egorbmrchromefont{SchoolBookC}}{}}%
 \fi
-\setbeamerfont{title}{family=\rmfamily,series=\bfseries}
-\setbeamerfont{frametitle}{family=\rmfamily,series=\bfseries,size*={13}{16}}
-\setbeamerfont{framesubtitle}{family=\rmfamily}
+\ifx\egorbmr@font\egorbmr@val@inter
+  \IfFontExistsTF{Inter}{%
+    \setfontfamily\egorbmrchromefont{Inter}[
+      BoldFont={Inter Bold},
+      ItalicFont={Inter Italic},
+      BoldItalicFont={Inter Bold Italic}]%
+    \setfontfamily\egorbmrnavfont{Inter}[
+      BoldFont={Inter Bold},
+      ItalicFont={Inter Italic},
+      BoldItalicFont={Inter Bold Italic}]%
+  }{%
+    \IfFontExistsTF{Inter-Regular.otf}{%
+      \setfontfamily\egorbmrchromefont{Inter-Regular.otf}[
+        BoldFont=Inter-Bold.otf,
+        ItalicFont=Inter-Italic.otf,
+        BoldItalicFont=Inter-BoldItalic.otf]%
+      \setfontfamily\egorbmrnavfont{Inter-Regular.otf}[
+        BoldFont=Inter-Bold.otf,
+        ItalicFont=Inter-Italic.otf,
+        BoldItalicFont=Inter-BoldItalic.otf]%
+    }{}}%
+\fi
+
+% Кегль после fontspec. Тело — \rmfamily (CM); хром — \egorbmrchromefont.
+\newcommand{\egorbmr@usesize}[4]{%
+  \renewcommand{\normalsize}{\fontsize{#1}{#2}\selectfont}%
+  \normalsize
+  \setbeamerfont{normal text}{family=\rmfamily,size=\normalsize}%
+  \def\egorbmr@ftsize{#3}%
+  \def\egorbmr@ftskip{#4}%
+}
+\ifnum\egorbmr@fontsize=11\relax
+  \egorbmr@usesize{11pt}{13.6pt}{12.5}{15}%
+  \renewcommand{\small}{\fontsize{10pt}{12pt}\selectfont}%
+  \renewcommand{\footnotesize}{\fontsize{9pt}{11pt}\selectfont}%
+  \renewcommand{\large}{\fontsize{12pt}{14.5pt}\selectfont}%
+  \renewcommand{\Large}{\fontsize{14pt}{18pt}\selectfont}%
+\else
+  \ifnum\egorbmr@fontsize=14\relax
+    \egorbmr@usesize{14pt}{18pt}{16}{20}%
+    \renewcommand{\small}{\fontsize{12pt}{14.5pt}\selectfont}%
+    \renewcommand{\footnotesize}{\fontsize{11pt}{13.6pt}\selectfont}%
+    \renewcommand{\large}{\fontsize{17pt}{22pt}\selectfont}%
+    \renewcommand{\Large}{\fontsize{20pt}{25pt}\selectfont}%
+  \else
+    \egorbmr@usesize{12pt}{14.5pt}{13}{16}%
+    \renewcommand{\small}{\fontsize{11pt}{13.6pt}\selectfont}%
+    \renewcommand{\footnotesize}{\fontsize{10pt}{12pt}\selectfont}%
+    \renewcommand{\large}{\fontsize{14pt}{18pt}\selectfont}%
+    \renewcommand{\Large}{\fontsize{17pt}{22pt}\selectfont}%
+  \fi
+\fi
+% Математика по умолчанию 10/12pt; иначе при 14pt формулы визуально
+% спорят с текстом условия.
+\DeclareMathSizes{11}{11}{8}{6}
+\DeclareMathSizes{11pt}{11}{8}{6}
+\DeclareMathSizes{12}{12}{9}{7}
+\DeclareMathSizes{12pt}{12}{9}{7}
+\DeclareMathSizes{14}{14}{10}{7}
+\DeclareMathSizes{14.0}{14}{10}{7}
+\DeclareMathSizes{14pt}{14}{10}{7}
+\setbeamerfont{title}{family=\egorbmrchromefont,series=\bfseries}
+\setbeamerfont{frametitle}{family=\egorbmrchromefont,series=\bfseries,
+  size*={\egorbmr@ftsize}{\egorbmr@ftskip}}
+\setbeamerfont{framesubtitle}{family=\egorbmrchromefont}
+% Не parent=structure: иначе метки подпунктов идут sans и выглядят
+% крупнее серифного условия.
+\setbeamerfont{itemize/enumerate body}{family=\rmfamily,size=\normalsize}
+\setbeamerfont{itemize/enumerate subbody}{family=\rmfamily,size=\normalsize}
+\setbeamerfont{itemize/enumerate subsubbody}{family=\rmfamily,size=\normalsize}
+\setbeamerfont{enumerate item}{family=\rmfamily,size=\normalsize}
+\setbeamerfont{itemize item}{family=\rmfamily,size=\normalsize}
 
 % Палитра сайта (input.css: --accent, --accent-dark, --bg, …)
 \definecolor{egor@navy}{HTML}{102B55}
@@ -194,6 +276,7 @@
 \let\egorbmr@enumsolo\egorbmrTEMPSOLO
 
 \newenvironment{egoritems}[1][1]{%
+  \normalsize\rmfamily
   \egorbmr@incolsfalse
   \ifegorbmr@itemclick
   \else
@@ -202,11 +285,10 @@
   \ifegorbmr@incols\begin{multicols}{#1}\fi
   \ifegorbmr@itemclick
     \ifegorbmr@itemsolo
-      \large
       \setlength{\itemsep}{1.05em}%
       \setlength{\parsep}{0.35em}%
       \setbeamertemplate{enumerate item}{%
-        \usebeamercolor[fg]{structure}\insertenumlabel}%
+        \usebeamercolor[fg]{structure}\rmfamily\insertenumlabel}%
       \egorbmr@enumsolo
       \let\egorbmr@saveditem\item
       \def\item{\@ifnextchar[{\egorbmr@itemlbl}{\egorbmr@saveditem}}%
@@ -232,6 +314,7 @@
 \newcommand{\egorbmr@drawworkarea}{}
 \NewDocumentCommand{\egorworkarea}{O{}}{}
 
+\AtBeginEnvironment{frame}{\normalsize\rmfamily}
 \BeforeBeginEnvironment{frame}{%
   \egorbmr@hadanswerfalse
   \gdef\egorbmr@lastitemov{1}%
@@ -239,7 +322,10 @@
 }
 
 % Номер задачи на кадре — для label/ссылок (генератор всегда ставит).
-\NewDocumentCommand{\egortask}{m}{\gdef\egorbmr@no{#1}}
+\NewDocumentCommand{\egortask}{m}{%
+  \gdef\egorbmr@no{#1}%
+  \normalsize\rmfamily
+}
 
 \NewDocumentCommand{\egorjumpto}{mm}{%
   \hyperlink{#1}{\usebeamercolor[fg]{structure}#2}%
@@ -328,7 +414,7 @@
 \newcommand{\egorbmr@paint@title}{%
   \vspace*{1.15cm}%
   \begin{center}
-    {\usebeamercolor[fg]{title}\Huge\bfseries\egorbmr@t@title\par}%
+    {\usebeamercolor[fg]{title}\egorbmrchromefont\Huge\bfseries\egorbmr@t@title\par}%
     \ifx\egorbmr@t@sub\empty\else
       \vspace{0.55em}%
       {\usebeamercolor[fg]{subtitle}\Large\egorbmr@t@sub\par}%
@@ -343,7 +429,7 @@
 \newcommand{\egorbmr@paint@section}{%
   \vspace*{2.1cm}%
   \begin{center}
-    {\usebeamercolor[fg]{egorsep}\Huge\bfseries\egorbmr@s@name\par}%
+    {\usebeamercolor[fg]{egorsep}\egorbmrchromefont\Huge\bfseries\egorbmr@s@name\par}%
     \ifx\egorbmr@s@note\empty\else
       \vspace{0.7em}%
       {\usebeamercolor[fg]{egorsep}\large\egorbmr@s@note\par}%
