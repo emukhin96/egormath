@@ -21,6 +21,19 @@ def make_assignment(teacher, student, **kwargs):
         worksheet=worksheet, student=student, assigned_by=teacher, **kwargs)
 
 
+def order_form(task, *chosen, prefix=None):
+    """POST слота order: исходные индексы → непрозрачные токены формы."""
+    from .checks import parse_mask
+    prefix = prefix or f'task{task.pk}'
+    slot = parse_mask(task.answer_mask).slots[0]
+    tokens = slot.order_tokens(prefix)
+    data = {}
+    for k, idx in enumerate(chosen):
+        data[f'{prefix}_{slot.name}_{k}'] = (
+            tokens[idx] if idx is not None and idx != '' else '')
+    return data
+
+
 def fake_photo(name='photo.png', size=(2400, 1800)):
     buf = io.BytesIO()
     Image.new('RGB', size, color=(200, 100, 50)).save(buf, format='PNG')
@@ -997,42 +1010,56 @@ class AutoCheckFlowTests(TestCase):
         self.assertContains(response, '0,25')
         self.assertContains(response, f'name="task{self.task.pk}_s1"')
 
+    def test_no_mask_without_photos_keeps_text_field(self):
+        """Без маски и без фото остаётся старое поле — иначе сдать нечего."""
+        self.task.answer_mask = ''
+        self.task.answer_type = Task.ANSWER_TEXT
+        self.task.save()
+        self.assignment.allow_photos = False
+        self.assignment.save()
+        field = f'task{self.task.pk}_text'
+        response = self.client.get(self.detail)
+        self.assertContains(response, f'name="{field}"')
+        self.assertNotContains(response, 'mask-photo-note')
+        self.client.post(self.url, {field: 'разбор на бумаге'})
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.answer_text, 'разбор на бумаге')
+
     def test_cleared_order_slot_is_saved(self):
         self.task.answer_mask = '{{order: a|b}}'
         self.task.save()
-        self.client.post(self.url, {
-            f'task{self.task.pk}_s1_0': '0',
-            f'task{self.task.pk}_s1_1': '1',
-        })
+        self.client.post(self.url, order_form(self.task, 0, 1))
         submission = Submission.objects.get(
             assignment=self.assignment, task=self.task)
         self.assertEqual(submission.answer_json, {'s1': '0|1'})
-        self.client.post(self.url, {
-            f'task{self.task.pk}_s1_0': '',
-            f'task{self.task.pk}_s1_1': '',
-        })
+        self.client.post(self.url, order_form(self.task, None, None))
         submission.refresh_from_db()
         self.assertEqual(submission.answer_json.get('s1'), '')
 
     def test_partial_order_is_restored(self):
         self.task.answer_mask = '{{order: a|b|c}}'
         self.task.save()
-        self.client.post(self.url, {
-            f'task{self.task.pk}_s1_0': '0',
-            f'task{self.task.pk}_s1_1': '',
-            f'task{self.task.pk}_s1_2': '',
-        })
+        self.client.post(self.url, order_form(self.task, 0, None, None))
         submission = Submission.objects.get(
             assignment=self.assignment, task=self.task)
         self.assertEqual(submission.answer_json, {'s1': '0||'})
         response = self.client.get(self.detail)
         self.assertContains(response, f'name="task{self.task.pk}_s1_0"')
         html = response.content.decode()
+        from .checks import parse_mask
+        token = parse_mask(self.task.answer_mask).slots[0].order_tokens(
+            f'task{self.task.pk}')[0]
         self.assertRegex(
             html,
             rf'name="task{self.task.pk}_s1_0"[^>]*>[\s\S]*?'
-            r'<option value="0" selected')
-        self.assertNotRegex(
-            html,
-            rf'name="task{self.task.pk}_s1_1"[^>]*>[\s\S]*?'
-            r'<option value="\d+" selected')
+            rf'<option value="{token}" selected')
+        self.assertNotRegex(html, r'data-index="\d+"')
+        self.assertNotRegex(html, r'<option value="\d+"')
+        self.client.post(self.url, {
+            f'task{self.task.pk}_s1_0': '0',
+            f'task{self.task.pk}_s1_1': '1',
+            f'task{self.task.pk}_s1_2': '2',
+        })
+        submission.refresh_from_db()
+        self.assertNotEqual(submission.answer_json.get('s1'), '0|1|2')
