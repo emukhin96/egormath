@@ -1,4 +1,7 @@
 import io
+import shutil
+import subprocess
+from pathlib import Path
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -1094,3 +1097,28 @@ class AutoCheckFlowTests(TestCase):
         })
         submission.refresh_from_db()
         self.assertNotEqual(submission.answer_json.get('s1'), '0|1|2')
+
+
+class NumberLineJsTests(SimpleTestCase):
+    def test_format_latex_decimal_roundtrip(self):
+        """parse(formatLatex([{lo:1.5,...}])) не должен ломаться на 1{,}5."""
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('node не установлен')
+        js = Path(__file__).resolve().parents[1] / 'static/js/numberline.js'
+        script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const ctx = {window: {}, document: {createElementNS: function () { return {}; }, addEventListener: function () {}}};
+vm.runInNewContext(src, ctx);
+const NL = ctx.window.EgorNumberLine;
+const text = NL.formatLatex([{lo: 1.5, hi: 4, lc: true, rc: true}]);
+if (text.indexOf('{,}') < 0) process.exit(2);
+const parsed = NL.parse(text);
+if (!parsed || parsed.length !== 1) process.exit(3);
+if (parsed[0].lo !== 1.5 || parsed[0].hi !== 4 || !parsed[0].lc || !parsed[0].rc)
+  process.exit(4);
+if (NL.num('1{,}5') !== 1.5 || NL.parse('[1.5; 4]') === null) process.exit(5);
+"""
+        subprocess.check_call([node, '-e', script, str(js)])
