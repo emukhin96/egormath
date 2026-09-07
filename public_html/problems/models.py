@@ -422,7 +422,8 @@ def copy_task_taxonomy(original, copy):
             relevance=link.relevance)
     copy.grade_bands.set(original.grade_bands.all())
     copy.facet_values.set(original.facet_values.all())
-    copy.exam_items.set(original.exam_items.all())
+    from .rubricator import set_task_exams
+    set_task_exams(copy, original.exam_items.values_list('pk', flat=True))
     if copy.difficulty != original.difficulty:
         copy.difficulty = original.difficulty
         copy.save(update_fields=['difficulty'])

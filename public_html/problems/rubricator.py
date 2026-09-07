@@ -355,6 +355,35 @@ def set_task_exams(task, item_ids):
     task.exam_items.set(items)
 
 
+def sync_task_exam_parents(task):
+    """Дописывает линейные метки к уже сохранённому M2M, без снятия номеров."""
+    current = list(task.exam_items.values_list('pk', flat=True))
+    needed = ensure_exam_parent_ids(current)
+    missing = [pk for pk in needed if pk not in set(current)]
+    if missing:
+        task.exam_items.add(*missing)
+
+
+def _on_task_exam_items_changed(sender, instance, action, reverse, **kwargs):
+    if reverse or action not in ('post_add', 'post_remove'):
+        return
+    if getattr(instance, '_syncing_exam_parents', False):
+        return
+    instance._syncing_exam_parents = True
+    try:
+        sync_task_exam_parents(instance)
+    finally:
+        instance._syncing_exam_parents = False
+
+
+def connect_exam_parent_signal():
+    from django.db.models.signals import m2m_changed
+    m2m_changed.connect(
+        _on_task_exam_items_changed,
+        sender=Task.exam_items.through,
+        dispatch_uid='problems.keep_exam_line_items')
+
+
 def apply_task_taxonomy(task, post):
     """Читает POST виджета: темы, классы, фасеты, экзамен, сложность."""
     if post.get('topics_submitted') or 'topics' in post or 'primary_topic' in post:
