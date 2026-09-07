@@ -155,6 +155,7 @@ class MaskEndpointTests(TestCase):
             '(-\\infty; -1]': '{{range: (-\\infty; -1]}}',
             'x>5': '{{range: x>5}}',
             '\\{-2;1\\}': '{{set: -2;1}}',
+            r'1; \frac{1}{2}': r'{{set: 1; \frac{1}{2}}}',
             'x=\\pm3': '{{set: x=\\pm3}}',
             'Нет корней': '{{set: }}',
             'y=x+5': '{{equation: y=x+5}}',

@@ -473,6 +473,17 @@ def collect_values(data, prefix, spec):
     return values
 
 
+def _unwrap_set_braces(text):
+    """Снять только внешнюю оболочку множества ``{…}`` / ``\\{…\\}``,
+    не трогая скобки LaTeX-команд вроде ``\\frac{1}{2}``."""
+    text = text.strip()
+    if text.startswith('\\{') and text.endswith('\\}'):
+        return text[2:-2].strip()
+    if text.startswith('{') and text.endswith('}'):
+        return text[1:-1].strip()
+    return text
+
+
 def draft_mask(answer):
     """Черновик маски из текстового «Ответа» для тривиальных случаев;
     '' — не угадали, учитель пишет маску сам."""
@@ -493,8 +504,9 @@ def draft_mask(answer):
         return f'{{{{{RANGE}: {text}}}}}'
     if (';' in text or '\\pm' in text or low in sets.EMPTY_WORDS) \
             and sets.parse_set(text) is not None:
-        payload = '' if low in sets.EMPTY_WORDS else text.strip('{}\\ ')
-        return f'{{{{{SET}: {payload}}}}}'
+        payload = '' if low in sets.EMPTY_WORDS else _unwrap_set_braces(text)
+        draft = f'{{{{{SET}: {payload}}}}}'
+        return draft if parse_mask(draft).is_valid else ''
     expr = expressions.parse_expr(text)
     if expr is None:
         return ''
