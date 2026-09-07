@@ -250,6 +250,10 @@ class MaskCheckTests(SimpleTestCase):
         s = slot('{{factor: x^2+1}}')
         self.assertEqual(check_slot(s, 'x^2+1'), OK,
                          'неприводимый эталон принимается как есть')
+        s = slot('{{factor: x^2}}')
+        self.assertEqual(check_slot(s, 'x^2'), OK,
+                         'степень одиночной переменной — уже разложение')
+        self.assertEqual(check_slot(s, 'x^{2}'), OK)
 
 
 class ExpressionHelpersTests(SimpleTestCase):
