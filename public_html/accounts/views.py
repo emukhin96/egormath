@@ -66,10 +66,15 @@ def student_dashboard(request):
                        .filter(student=request.user)
                        .select_related('worksheet', 'worksheet__owner')
                        .order_by('-assigned_at'))
-    current = next(
-        (a for a in assignments if a.is_editable_by_student), None)
     # Группы по статусу: сначала то, что требует действия ученика
     todo = [a for a in assignments if a.is_editable_by_student]
+    todo.sort(key=lambda a: (
+        0 if a.status == Assignment.STATUS_RETURNED else 1,
+        0 if a.is_overdue else 1,
+        a.due_at.timestamp() if a.due_at else float('inf'),
+        -a.assigned_at.timestamp(),
+    ))
+    current = todo[0] if todo else None
     submitted = [a for a in assignments
                  if a.status == Assignment.STATUS_SUBMITTED]
     reviewed = [a for a in assignments

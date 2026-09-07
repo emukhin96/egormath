@@ -8,7 +8,10 @@
     <h1>Кабинет учителя</h1>
     <p class="page-subtitle">Работы на проверке, листки и последние действия.</p>
   </div>
-  <a class="btn" href="{% url 'worksheet_create' %}">Создать листок</a>
+  <div class="page-actions">
+    <a class="btn btn-secondary" href="{% url 'assignment_list' %}">Все задания</a>
+    <a class="btn" href="{% url 'assignment_create' %}">Выдать задание</a>
+  </div>
 </div>
 
 <div class="stat-grid">
@@ -33,7 +36,10 @@
 <div class="card panel-priority">
   <div class="card-head">
     <div><span class="page-eyebrow">Приоритет</span><h2>Ожидают проверки</h2></div>
-    {% if pending %}<span class="counter">{{ pending|length }}</span>{% endif %}
+    <div class="card-head-actions">
+      <a href="{% url 'assignment_list' %}?status=submitted">Вся очередь</a>
+      {% if pending %}<span class="counter">{{ pending|length }}</span>{% endif %}
+    </div>
   </div>
   {% if pending %}
   <table class="list">

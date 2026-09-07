@@ -20,6 +20,7 @@
        target="_blank" rel="noopener">Собрать презентацию</a>
     <a class="sidebar-action" href="#add-tasks">Добавить задачи</a>
     <a class="sidebar-action" href="#assign-students">Назначить ученикам</a>
+    <a class="sidebar-action" href="{% url 'assignment_create' %}?worksheet={{ worksheet.pk }}">Выдать через мастер</a>
   </div>
 </section>
 {% if assignments %}

@@ -1,0 +1,21 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Сводка</p>
+  <h2>Выданные задания</h2>
+  <div class="sidebar-stats">
+    <div class="sidebar-stat"><strong>{{ stats.submitted }}</strong><span>на проверке</span></div>
+    <div class="sidebar-stat"><strong>{{ stats.overdue }}</strong><span>просрочено</span></div>
+    <div class="sidebar-stat"><strong>{{ stats.returned }}</strong><span>на доработке</span></div>
+    <div class="sidebar-stat"><strong>{{ stats.total }}</strong><span>всего</span></div>
+  </div>
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Действия</p>
+  <div class="sidebar-actions">
+    <a class="sidebar-action" href="{% url 'assignment_create' %}">Выдать задание</a>
+    {% if stats.submitted %}<a class="sidebar-action" href="?status=submitted">Открыть очередь проверки</a>{% endif %}
+  </div>
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Порядок</p>
+  <p class="sidebar-copy">Сверху — отправленные работы, затем возвращённые и ожидающие сдачи. Внутри группы ближе всего ближайший срок.</p>
+</section>

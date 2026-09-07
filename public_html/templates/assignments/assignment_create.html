@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% block title %}Выдать задание — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/assignment_create.html' %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <span class="page-eyebrow">Новая выдача</span>
+    <h1>Выдать задание</h1>
+    <p class="page-subtitle">Один листок — группе, нескольким группам или отдельным ученикам.</p>
+  </div>
+  <a class="btn btn-secondary" href="{% url 'assignment_list' %}">К заданиям</a>
+</div>
+
+<form method="post" class="assignment-create-form" id="assignment-create-form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
+  <div class="assignment-create-grid">
+    <div>
+      <section class="card form-section">
+        <div class="form-section-head"><span class="form-step">1</span><div><h2>Что выдаём</h2><p class="helptext">Можно выбрать только свой листок.</p></div></div>
+        {{ form.worksheet.errors }}
+        {{ form.worksheet.label_tag }}
+        {{ form.worksheet }}
+        <p class="helptext">Если листок уже выдавался, прежний режим автосверки сохранится для всех учеников.</p>
+      </section>
+
+      <section class="card form-section">
+        <div class="form-section-head"><span class="form-step">2</span><div><h2>Кому выдаём</h2><p class="helptext">Ученики из выбранных групп и отдельного списка объединяются без дублей.</p></div></div>
+        <div class="recipient-grid">
+          <div class="choice-list">
+            {{ form.groups.errors }}
+            <h3>{{ form.groups.label }}</h3>
+            <div class="choice-items">
+              {% for checkbox in form.groups %}<label class="choice-item" for="{{ checkbox.id_for_label }}">{{ checkbox.tag }} <span>{{ checkbox.choice_label }}</span></label>
+              {% empty %}<p class="muted">Групп пока нет.</p>{% endfor %}
+            </div>
+          </div>
+          <div class="choice-list" data-student-list>
+            {{ form.students.errors }}
+            <h3>{{ form.students.label }}</h3>
+            <label class="sr-only" for="student-filter">Найти ученика</label>
+            <input type="text" id="student-filter" class="choice-search" placeholder="Найти ученика…" data-student-filter>
+            <div class="choice-items">
+              {% for checkbox in form.students %}<label class="choice-item" for="{{ checkbox.id_for_label }}" data-student-choice>{{ checkbox.tag }} <span>{{ checkbox.choice_label }}</span></label>
+              {% empty %}<p class="muted">Сначала добавьте учеников.</p>{% endfor %}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card form-section">
+        <div class="form-section-head"><span class="form-step">3</span><div><h2>Условия работы</h2><p class="helptext">Срок — ориентир: после него сдача не блокируется.</p></div></div>
+        <div class="settings-grid">
+          <div>{{ form.due_at.errors }}{{ form.due_at.label_tag }}{{ form.due_at }}</div>
+          <div>{{ form.check_visibility.errors }}{{ form.check_visibility.label_tag }}{{ form.check_visibility }}</div>
+        </div>
+        <label class="check-label assignment-photo-option">{{ form.allow_photos }} <span>{{ form.allow_photos.label }}</span></label>
+      </section>
+    </div>
+
+    <aside class="card assignment-create-summary">
+      <span class="page-eyebrow">Перед выдачей</span>
+      <h2>Проверьте параметры</h2>
+      <dl class="summary-list">
+        <div><dt>Листок</dt><dd data-summary-worksheet>Не выбран</dd></div>
+        <div><dt>Групп</dt><dd data-summary-groups>0</dd></div>
+        <div><dt>Учеников отдельно</dt><dd data-summary-students>0</dd></div>
+      </dl>
+      <p class="helptext">Повторная выдача того же листка тому же ученику будет безопасно пропущена.</p>
+      <button class="btn" type="submit">Выдать задание</button>
+    </aside>
+  </div>
+</form>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  var form = document.getElementById('assignment-create-form');
+  if (!form) return;
+  var worksheet = form.querySelector('[name="worksheet"]');
+  var groupBoxes = form.querySelectorAll('[name="groups"]');
+  var studentBoxes = form.querySelectorAll('[name="students"]');
+  function updateSummary() {
+    var option = worksheet && worksheet.options[worksheet.selectedIndex];
+    form.querySelector('[data-summary-worksheet]').textContent = option && option.value ? option.text : 'Не выбран';
+    form.querySelector('[data-summary-groups]').textContent = Array.from(groupBoxes).filter(function (box) { return box.checked; }).length;
+    form.querySelector('[data-summary-students]').textContent = Array.from(studentBoxes).filter(function (box) { return box.checked; }).length;
+  }
+  form.addEventListener('change', updateSummary);
+  var filter = form.querySelector('[data-student-filter]');
+  if (filter) filter.addEventListener('input', function () {
+    var query = filter.value.trim().toLowerCase();
+    form.querySelectorAll('[data-student-choice]').forEach(function (item) {
+      item.hidden = query && !item.textContent.toLowerCase().includes(query);
+    });
+  });
+  updateSummary();
+})();
+</script>
+{% endblock %}

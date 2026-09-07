@@ -9,6 +9,11 @@
     <li><strong>С ответом:</strong> {{ answered_count }} из {{ task_count }} задач</li>
   </ul>
   <div class="sidebar-stat"><strong>{{ result.done }} из {{ result.total }}</strong><span>выполнено ({{ result.percent }}%)</span></div>
+  {% if queue_position %}
+  <div class="sidebar-stat"><strong>{{ queue_position }} из {{ queue_total }}</strong><span>место в очереди проверки</span></div>
+  {% elif queue_total %}
+  <div class="sidebar-stat"><strong>{{ queue_total }}</strong><span>ожидают проверки</span></div>
+  {% endif %}
   <ul class="sidebar-list">
     {% for row in task_rows %}
     <li><a href="#task-{{ row.number }}">№ {{ row.number }}</a> — {% if row.answered %}есть ответ{% else %}нет ответа{% endif %}</li>
@@ -19,6 +24,8 @@
   <p class="sidebar-kicker">Действия</p>
   <p class="sidebar-copy">Черновик сохраняет отметки. Завершение открывает результат ученику, возврат снова разрешает редактирование.</p>
   <div class="sidebar-actions">
+    <a class="sidebar-action" href="{% url 'assignment_list' %}">Все задания</a>
+    {% if next_pending %}<a class="sidebar-action" href="{% url 'review_assignment' next_pending.pk %}">Следующая работа</a>{% endif %}
     <a class="sidebar-action" href="{% url 'worksheet_detail' assignment.worksheet.pk %}">Открыть листок</a>
   </div>
 </section>
