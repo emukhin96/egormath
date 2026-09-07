@@ -4,8 +4,8 @@ from fractions import Fraction
 from django.test import SimpleTestCase, TestCase
 
 from .check_answer import OK, UNKNOWN, WRONG, check_answer
-from .checks import (Slot, check_mask, check_slot, filled_text, parse_mask,
-                     reference_text)
+from .checks import (Slot, check_mask, check_slot, collect_values, filled_text,
+                     parse_mask, reference_text)
 from .checks import expressions, sets
 
 
@@ -101,6 +101,17 @@ class MaskGrammarTests(SimpleTestCase):
         self.assertEqual(first, s.shuffled('seed'))
         self.assertNotEqual([i for i, _ in first], [0, 1, 2])
         self.assertEqual(sorted(i for i, _ in first), [0, 1, 2])
+
+    def test_order_form_tokens_hide_indices(self):
+        spec = parse_mask('{{order: a|b|c}}')
+        slot = spec.slots[0]
+        tokens = slot.order_tokens('p')
+        self.assertEqual(len(set(tokens.values())), 3)
+        self.assertFalse(any(tok in ('0', '1', '2') for tok in tokens.values()))
+        data = {f'p_s1_{k}': tokens[k] for k in range(3)}
+        self.assertEqual(collect_values(data, 'p', spec), {'s1': '0|1|2'})
+        leaked = {f'p_s1_{k}': str(k) for k in range(3)}
+        self.assertEqual(collect_values(leaked, 'p', spec), {'s1': ''})
 
 
 class MaskCheckTests(SimpleTestCase):

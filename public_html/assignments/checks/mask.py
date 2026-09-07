@@ -120,6 +120,16 @@ class Slot:
                 indices = indices[1:] + indices[:1]
         return [(i, self.items[i]) for i in indices]
 
+    def order_tokens(self, seed=''):
+        """Исходный индекс → непрозрачный токен формы. Без SECRET_KEY
+        клиент не восстановит правильную перестановку ``0|1|2|…``."""
+        from django.conf import settings
+        out = {}
+        for i in range(len(self.items)):
+            raw = f'{settings.SECRET_KEY}\0{seed}\0{self.index}\0{i}'.encode()
+            out[i] = hashlib.sha1(raw).hexdigest()[:12]
+        return out
+
 
 @dataclass
 class MaskSpec:
@@ -469,9 +479,13 @@ def render_fragments(spec, prefix, values=None, checks=None, seed=''):
             chosen = _parse_order_positions(value, len(frag.items))
             if chosen is None:
                 chosen = [None] * len(frag.items)
-            item['order_items'] = frag.shuffled(seed or prefix)
+            seed_key = seed or prefix
+            tokens = frag.order_tokens(seed_key)
+            item['order_items'] = [
+                (tokens[i], text) for i, text in frag.shuffled(seed_key)]
             item['order_positions'] = [
-                {'k': k, 'selected': chosen[k]}
+                {'k': k,
+                 'selected': tokens[chosen[k]] if chosen[k] is not None else None}
                 for k in range(len(frag.items))]
         out.append(item)
     return out
@@ -486,10 +500,12 @@ def collect_values(data, prefix, spec):
         if slot.kind == ORDER:
             pos_keys = [f'{key}_{k}' for k in range(len(slot.items))]
             if any(k in data for k in pos_keys):
-                parts = [(data.get(k) or '').strip() for k in pos_keys]
+                rev = {tok: i for i, tok in slot.order_tokens(prefix).items()}
+                parts = []
+                for pos_key in pos_keys:
+                    raw = (data.get(pos_key) or '').strip()
+                    parts.append(str(rev[raw]) if raw in rev else '')
                 values[slot.name] = '|'.join(parts) if any(parts) else ''
-            elif key in data:
-                values[slot.name] = (data.get(key) or '').strip()
         elif slot.kind == SET and data.get(f'{key}_none'):
             values[slot.name] = '∅'
         elif key in data:

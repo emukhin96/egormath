@@ -60,7 +60,7 @@
     </div>
     {% endif %}
 
-    {# Краткий ответ — только по маске учителя; без неё поля ввода нет, ученик присылает фото решения. Старые свободные ответы показываются как есть. #}
+    {# Краткий ответ — по маске; без маски ученик шлёт фото, а если фото выключены — старое текстовое поле. #}
     {% if row.subrows %}
     <ol class="subitems">
       {% for sr in row.subrows %}
@@ -78,6 +78,10 @@
           {% include 'assignments/_mask.html' with fragments=sr.fragments editable=editable show_checks=show_checks %}
         </div>
         {% endif %}
+        {% elif editable and not can_upload %}
+        <div class="subitem-answer">
+          {% include 'assignments/_answer_fields.html' with prefix=sr.prefix answer_type=row.task.answer_type obj=sr.part editable=editable %}
+        </div>
         {% elif sr.part.legacy_answer or not editable %}
         <div class="subitem-answer">
           {% include 'assignments/_answer_fields.html' with prefix=sr.prefix answer_type=row.task.answer_type obj=sr.part editable=False %}
@@ -99,6 +103,9 @@
       <label>Ответ</label>
       {% include 'assignments/_mask.html' with fragments=row.fragments editable=editable show_checks=show_checks %}
       {% endif %}
+      {% elif editable and not can_upload %}
+      <label>Ответ{% if row.task.answer_type == 'number' %} (число){% elif row.task.answer_type == 'interval' %} (промежуток){% elif row.task.answer_type == 'formula' %} (формула){% endif %}</label>
+      {% include 'assignments/_answer_fields.html' with prefix=row.prefix answer_type=row.task.answer_type obj=sub editable=editable %}
       {% elif sub.legacy_answer or not editable %}
       <label>Ответ</label>
       {% include 'assignments/_answer_fields.html' with prefix=row.prefix answer_type=row.task.answer_type obj=sub editable=False %}
@@ -106,9 +113,8 @@
       {% endif %}
     </div>
     {% endif %}
-    {% if editable and not row.short_answer %}
-    <p class="helptext mask-photo-note">Краткий ответ для этой задачи не предусмотрен —
-      {% if can_upload %}пришлите фото решения.{% else %}решение проверит учитель.{% endif %}</p>
+    {% if editable and not row.short_answer and can_upload %}
+    <p class="helptext mask-photo-note">Краткий ответ для этой задачи не предусмотрен — пришлите фото решения.</p>
     {% endif %}
 
     {% if can_check or can_upload %}
