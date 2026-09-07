@@ -1804,7 +1804,9 @@
   }
 
   .mask-range {
-    max-width: 260px;
+    display: block;
+    min-width: 220px;
+    max-width: 360px;
   }
 
   .mask-math {
@@ -1944,9 +1946,11 @@
   .nl-body { stroke: var(--accent); stroke-width: 6; stroke-linecap: butt; cursor: pointer; }
   .nl-body.nl-preview { stroke: var(--accent); opacity: 0.4; pointer-events: none; }
   .nl-hit { stroke: transparent; stroke-width: 18; cursor: pointer; }
-  .nl-end { stroke: var(--accent); stroke-width: 2; cursor: pointer; }
+  .nl-end { stroke: var(--accent); stroke-width: 2; cursor: grab; }
   .nl-end.nl-closed { fill: var(--accent); }
   .nl-end.nl-open { fill: #fff; }
+  .nl-end.nl-drag { cursor: grabbing; }
+  .numberline-svg.nl-dragging-end { cursor: grabbing; }
 
   .numberline-tools {
     display: flex;

@@ -1,19 +1,19 @@
 /* Числовая прямая для слота «промежуток» (range) в маске ответа.
 
-   Разметка серверная (_mask.html): текстовое поле .mask-range и пустой
+   Разметка серверная (_mask.html): math-field + скрытый input и пустой
    контейнер [data-numberline="имя поля"] под ним. Скрипт рисует в контейнере
    SVG-прямую; ученик выделяет промежутки мышью или пальцем:
      - протянуть по прямой — новый промежуток (концы включены, ●);
-     - тянуть за стрелку на краю — бесконечный конец;
-     - клик по концу промежутка — включить/исключить точку (● / ○);
+     - тянуть за конец промежутка — сдвинуть точку (за край оси — ±∞);
+     - тянуть за стрелку на краю оси — бесконечный конец нового промежутка;
+     - клик по концу — включить/исключить точку (● / ○);
      - клик по телу промежутка — убрать его;
      - отпустить там же, где нажали, — одна точка [a; a].
-   Каждое изменение записывает текст в поле («(-∞; -5) ∪ [1; 4)» — его же
-   разбирает сервер) и шлёт change для автосохранения. Текст, набранный
-   руками, разбирается обратно, если это скобочная запись, неравенства
-   (x>5; 1<x<4), «нет решений» / ∅ или вся прямая (ℝ).
+   Каждое изменение пишет LaTeX в math-field («(-\\infty; -5) \\cup [1; 4)»)
+   — его же разбирает сервер — и шлёт change для автосохранения. Текст
+   руками (скобки, неравенства, ∅, ℝ) разбирается обратно.
    Границы √2, π, 7/3 задаются в поле или в «точной границе» + клик по концу.
-   Без JS остаётся текстовое поле. */
+   Без JS остаётся скрытый input с уже сохранённым значением. */
 (function () {
   'use strict';
 
@@ -33,7 +33,7 @@
   }
 
   function isEmptyWords(text) {
-    return /^(∅|\{\}|нет(?: решений)?|решений нет|нет корней|корней нет|пустое множество|none)$/.test(compactWords(text));
+    return /^(∅|\{\}|\\varnothing|\\emptyset|нет(?: решений)?|решений нет|нет корней|корней нет|пустое множество|none)$/.test(compactWords(text));
   }
 
   function isAllWords(text) {
@@ -76,7 +76,8 @@
 
   /* Текст → список промежутков {lo, hi, lc, rc} или null, если не разобрано */
   function parse(text) {
-    text = (text || '').replace(/\$/g, '').replace(/\\cup/g, '∪')
+    text = (text || '').replace(/\$/g, '').replace(/\\left|\\right/g, '')
+      .replace(/\\cup/g, '∪')
       .replace(/\\le(?:q|qslant)?\b/g, '<=').replace(/\\ge(?:q|qslant)?\b/g, '>=')
       .replace(/≤/g, '<=').replace(/≥/g, '>=').replace(/^\s*[a-zA-Zа-яА-Я]\s*(?:\\in|∈)\s*/, '')
       .trim();
@@ -224,15 +225,45 @@
     }).join(' ∪ ');
   }
 
+  function toLatexBound(raw) {
+    raw = String(raw || '').trim();
+    if (!raw) return '';
+    raw = raw.replace(/∞/g, '\\infty').replace(/π/gi, '\\pi');
+    raw = raw.replace(/√\{([^{}]+)\}/g, '\\sqrt{$1}');
+    raw = raw.replace(/√(\d+(?:[.,]\d+)?)/g, '\\sqrt{$1}');
+    var frac = raw.match(/^(-)?\s*(\d+)\s*\/\s*(\d+)$/);
+    if (frac) return (frac[1] || '') + '\\frac{' + frac[2] + '}{' + frac[3] + '}';
+    if (raw.indexOf('\\') !== -1) return raw;
+    return raw.replace(',', '{,}');
+  }
+
+  function latexEnd(iv, which) {
+    var v = iv[which];
+    var raw = which === 'lo' ? iv.loText : iv.hiText;
+    if (v === -Infinity) return '-\\infty';
+    if (v === Infinity) return '+\\infty';
+    if (raw) return toLatexBound(raw);
+    var s = String(Math.round(v * 1000) / 1000);
+    var parts = s.split('.');
+    return parts.length === 2 ? parts[0] + '{,}' + parts[1] : s;
+  }
+
+  function formatLatex(list) {
+    return list.map(function (iv) {
+      return (iv.lc ? '[' : '(') + latexEnd(iv, 'lo') + '; ' + latexEnd(iv, 'hi') + (iv.rc ? ']' : ')');
+    }).join(' \\cup ');
+  }
+
   function svgEl(name, attrs) {
     var el = document.createElementNS('http://www.w3.org/2000/svg', name);
     Object.keys(attrs || {}).forEach(function (k) { el.setAttribute(k, attrs[k]); });
     return el;
   }
 
-  function NumberLine(container, input) {
+  function NumberLine(container, input, mathField) {
     this.container = container;
     this.input = input;
+    this.mathField = mathField || null;
     this.intervals = [];
     this.special = '';
     this.stale = false;
@@ -270,8 +301,7 @@
     this.tool(tools, 'очистить', 'Стереть ответ', function () {
       self.special = '';
       self.intervals = [];
-      self.input.value = '';
-      self.input.dispatchEvent(new Event('change', {bubbles: true}));
+      self.writeValue('');
       self.render();
     });
     this.boundInput = document.createElement('input');
@@ -294,8 +324,19 @@
     this.svg.addEventListener('pointerdown', function (e) { self.onDown(e); });
     this.svg.addEventListener('pointermove', function (e) { self.onMove(e); });
     this.svg.addEventListener('pointerup', function (e) { self.onUp(e); });
-    this.svg.addEventListener('pointercancel', function () { self.drag = null; self.render(); });
+    this.svg.addEventListener('pointercancel', function () {
+      self.drag = null;
+      self.svg.classList.remove('nl-dragging-end');
+      self.render();
+    });
     this.input.addEventListener('input', function () { self.fromText(); self.render(); });
+    if (this.mathField) {
+      this.mathField.addEventListener('input', function () {
+        self.input.value = self.mathField.value;
+        self.fromText();
+        self.render();
+      });
+    }
   };
 
   NumberLine.prototype.tool = function (parent, text, title, onClick) {
@@ -354,7 +395,8 @@
   };
 
   NumberLine.prototype.fromText = function () {
-    var raw = (this.input.value || '').replace(/\$/g, '').trim();
+    var source = (this.mathField && this.mathField.value) || this.input.value || '';
+    var raw = source.replace(/\$/g, '').trim();
     if (!raw) {
       this.special = '';
       this.intervals = [];
@@ -371,7 +413,7 @@
       this.fitStep();
       return;
     }
-    var parsed = parse(this.input.value);
+    var parsed = parse(source);
     if (parsed === null) {
       this.stale = true;
       this.intervals = [];
@@ -383,18 +425,25 @@
     this.fitStep();
   };
 
+  NumberLine.prototype.writeValue = function (text) {
+    this.input.value = text;
+    if (this.mathField) {
+      try { this.mathField.value = text; } catch (err) { /* MathLive ещё не готов */ }
+    }
+    this.input.dispatchEvent(new Event('change', {bubbles: true}));
+  };
+
   NumberLine.prototype.commit = function () {
     this.stale = false;
     this.intervals = normalize(this.intervals);
     if (this.special === 'empty') {
-      this.input.value = 'нет решений';
+      this.writeValue('\\varnothing');
     } else {
       this.special = (this.intervals.length === 1
         && this.intervals[0].lo === -Infinity
         && this.intervals[0].hi === Infinity) ? 'all' : '';
-      this.input.value = format(this.intervals);
+      this.writeValue(this.special === 'all' ? '\\mathbb{R}' : formatLatex(this.intervals));
     }
-    this.input.dispatchEvent(new Event('change', {bubbles: true}));
     this.render();
   };
 
@@ -418,6 +467,23 @@
     return true;
   };
 
+  NumberLine.prototype.moveEnd = function (iv, which, v) {
+    iv[which] = v;
+    if (which === 'lo') iv.loText = '';
+    else iv.hiText = '';
+    if (!isFinite(v)) {
+      if (which === 'lo') iv.lc = false;
+      else iv.rc = false;
+    }
+    if (iv.lo > iv.hi) {
+      var tmp = iv.lo; iv.lo = iv.hi; iv.hi = tmp;
+      tmp = iv.loText; iv.loText = iv.hiText; iv.hiText = tmp;
+      tmp = iv.lc; iv.lc = iv.rc; iv.rc = tmp;
+      return which === 'lo' ? 'hi' : 'lo';
+    }
+    return which;
+  };
+
   NumberLine.prototype.onDown = function (e) {
     if (this.stale) return;
     if (e.button && e.button !== 0) return;
@@ -433,14 +499,13 @@
         }
         return;
       }
-      /* Клик по концу — включить/исключить точку */
-      if (target.dataset.end === 'lo' && isFinite(iv.lo)) iv.lc = !iv.lc;
-      if (target.dataset.end === 'hi' && isFinite(iv.hi)) iv.rc = !iv.rc;
-      if (iv.lo === iv.hi && (!iv.lc || !iv.rc)) this.intervals.splice(this.intervals.indexOf(iv), 1);
-      this.commit();
+      this.drag = {kind: 'end', iv: iv, end: target.dataset.end, startPx: px};
+      this.svg.classList.add('nl-dragging-end');
+      this.svg.setPointerCapture(e.pointerId);
+      this.render();
       return;
     }
-    this.drag = {start: this.value(px), cur: this.value(px), startPx: px,
+    this.drag = {kind: 'draw', start: this.value(px), cur: this.value(px), startPx: px,
                  body: target.dataset && target.dataset.body !== undefined ? parseInt(target.dataset.body, 10) : null};
     this.svg.setPointerCapture(e.pointerId);
     this.render();
@@ -448,6 +513,17 @@
 
   NumberLine.prototype.onMove = function (e) {
     if (!this.drag) return;
+    if (this.drag.kind === 'end') {
+      this.drag.end = this.moveEnd(this.drag.iv, this.drag.end, this.value(this.px(e)));
+      this.special = '';
+      var live = formatLatex(this.intervals);
+      this.input.value = live;
+      if (this.mathField) {
+        try { this.mathField.value = live; } catch (err) { /* MathLive ещё не готов */ }
+      }
+      this.render();
+      return;
+    }
     this.drag.cur = this.value(this.px(e));
     this.render();
   };
@@ -456,7 +532,19 @@
     if (!this.drag) return;
     var d = this.drag;
     this.drag = null;
+    this.svg.classList.remove('nl-dragging-end');
     var moved = Math.abs(this.px(e) - d.startPx) > 4;
+    if (d.kind === 'end') {
+      var iv = d.iv;
+      if (!moved) {
+        if (d.end === 'lo' && isFinite(iv.lo)) iv.lc = !iv.lc;
+        if (d.end === 'hi' && isFinite(iv.hi)) iv.rc = !iv.rc;
+        if (iv.lo === iv.hi && (!iv.lc || !iv.rc)) this.intervals.splice(this.intervals.indexOf(iv), 1);
+      }
+      this.special = '';
+      this.commit();
+      return;
+    }
     if (!moved && d.body !== null) {
       /* Клик по телу промежутка — убрать */
       this.intervals.splice(d.body, 1);
@@ -506,7 +594,7 @@
 
     /* Промежутки: тело, затем концы (концы поверх тела, чтобы ловить клики) */
     var list = this.intervals.slice();
-    if (this.drag) {
+    if (this.drag && this.drag.kind === 'draw') {
       var a = this.drag.start, b = this.drag.cur;
       list.push({lo: Math.min(a, b), hi: Math.max(a, b), lc: true, rc: true, preview: true});
     }
@@ -527,12 +615,16 @@
       if (iv.preview) return;
       [['lo', iv.lo, iv.lc], ['hi', iv.hi, iv.rc]].forEach(function (end) {
         if (!isFinite(end[1])) return;
-        var c = svgEl('circle', {cx: self.x(end[1]), cy: AXIS_Y, r: 6,
-                                 'class': 'nl-end ' + (end[2] ? 'nl-closed' : 'nl-open')});
+        var dragging = self.drag && self.drag.kind === 'end' && self.drag.iv === iv
+          && self.drag.end === end[0];
+        var c = svgEl('circle', {cx: self.x(end[1]), cy: AXIS_Y, r: dragging ? 8 : 7,
+                                 'class': 'nl-end ' + (end[2] ? 'nl-closed' : 'nl-open')
+                                   + (dragging ? ' nl-drag' : '')});
         c.dataset.iv = i;
         c.dataset.end = end[0];
         c.appendChild(svgEl('title')).textContent =
-          fmt(end[1]) + (end[2] ? ' включено — нажмите, чтобы исключить' : ' исключено — нажмите, чтобы включить');
+          fmt(end[1]) + (end[2] ? ' включено' : ' исключено')
+          + ' — перетащите или нажмите, чтобы сменить';
         svg.appendChild(c);
       });
     });
@@ -549,10 +641,13 @@
         || document.querySelector('input[name="' + container.dataset.numberline + '"]');
       if (!input) return;
       container.dataset.ready = '1';
-      new NumberLine(container, input);
+      var mathField = form.querySelector('math-field[data-mirror="' + input.name + '"]')
+        || document.querySelector('math-field[data-mirror="' + input.name + '"]');
+      new NumberLine(container, input, mathField);
     });
   }
 
   document.addEventListener('DOMContentLoaded', function () { init(document); });
-  window.EgorNumberLine = {init: init, parse: parse, format: format, num: num};
+  window.EgorNumberLine = {init: init, parse: parse, format: format,
+                           formatLatex: formatLatex, num: num};
 })();
