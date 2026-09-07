@@ -548,8 +548,7 @@ class BeamerGenerationTests(TestCase):
         self.assertTrue(EGORBEAMER_GRID_STY.is_file())
 
     def test_collect_beamer_assets_includes_inter_fonts(self):
-        from .services import (INTER_FONT_DIR, collect_beamer_assets,
-                               tex_wants_inter)
+        from .services import collect_beamer_assets, tex_wants_inter
         self.assertTrue(tex_wants_inter(
             '\\usepackage[theme=light,font=inter,stars]{egorbeamer}'))
         self.assertFalse(tex_wants_inter(
@@ -559,11 +558,19 @@ class BeamerGenerationTests(TestCase):
             tex='\\usepackage[font=inter]{egorbeamer}')
         names = [item['filename'] for item in assets]
         self.assertEqual(names[:2], ['egorbeamer.sty', 'egorbeamer-grid.sty'])
-        regular = INTER_FONT_DIR / 'Inter-Regular.otf'
-        if regular.is_file():
-            self.assertIn('Inter-Regular.otf', names)
-        else:
-            self.assertNotIn('Inter-Regular.otf', names)
+        self.assertIn('Inter-Regular.otf', names)
+        self.assertIn('Inter-Bold.otf', names)
+
+    def test_collect_beamer_assets_requires_inter_fonts(self):
+        from pathlib import Path
+        from .services import collect_beamer_assets
+        with mock.patch('worksheets.services.INTER_FONT_DIR',
+                        Path('/tmp/egormath-no-inter-fonts')):
+            with self.assertRaises(LatexCompileError) as ctx:
+                collect_beamer_assets(
+                    self.worksheet,
+                    tex='\\usepackage[font=inter]{egorbeamer}')
+        self.assertIn('Inter', str(ctx.exception))
 
     def test_collect_beamer_assets_rejects_too_many_images(self):
         from .services import (BEAMER_IMAGE_ASSET_LIMIT, collect_beamer_assets)

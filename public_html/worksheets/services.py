@@ -104,13 +104,25 @@ def tex_wants_inter(tex):
     return 'font=inter' in (tex or '').replace(' ', '')
 
 
-def collect_inter_font_assets():
-    """Статические OTF Inter из worksheets/tex/fonts/ (если лежат локально)."""
+def collect_inter_font_assets(*, required=False):
+    """OTF Inter из worksheets/tex/fonts/.
+
+    required=True — не молчать, если файлов нет: иначе font=inter
+    уходит на API без шрифтов и sty тихо остаётся на CMU.
+    """
     assets = []
+    missing = []
     for name in INTER_FONT_FILES:
         path = INTER_FONT_DIR / name
         if path.is_file():
             assets.append(_sty_asset(path))
+        else:
+            missing.append(name)
+    if required and missing:
+        raise LatexCompileError(
+            'Для шрифта Inter нужны файлы '
+            + ', '.join(INTER_FONT_FILES)
+            + ' в worksheets/tex/fonts/.')
     return assets
 
 
@@ -165,7 +177,7 @@ def collect_beamer_assets(worksheet, exclude_ids=None, tex=''):
     (иначе TeX ссылается на отсутствующие изображения).
     При font=inter дополнительно уходят OTF Inter.
     """
-    extra = collect_inter_font_assets() if tex_wants_inter(tex) else []
+    extra = collect_inter_font_assets(required=True) if tex_wants_inter(tex) else []
     images = collect_assets(worksheet, exclude_ids=exclude_ids)
     limit = BEAMER_IMAGE_ASSET_LIMIT - len(extra)
     if len(images) > limit:
