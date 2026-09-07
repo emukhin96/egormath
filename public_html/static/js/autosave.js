@@ -49,6 +49,7 @@
       return send(form, body);
     });
     queues.set(form, queued);
+    return queued;
   }
 
   var debounceTimers = new WeakMap();
