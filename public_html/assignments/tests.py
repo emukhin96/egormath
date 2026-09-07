@@ -346,21 +346,27 @@ class StudentAnswerTests(TestCase):
         response = self.client.get(
             reverse('assignment_detail', args=[self.assignment.pk]))
         self.assertContains(response, f'data-numberline="task{task.pk}_s1"')
+        self.assertContains(response, f'data-mirror="task{task.pk}_s1"')
         self.assertContains(response, 'js/numberline.js')
         self.assertContains(response, 'data-mask-order')
         self.assertContains(response, f'name="task{task.pk}_s2_0"')
+        from .checks import parse_mask
+        order_slot = [s for s in parse_mask(task.answer_mask).slots
+                      if s.kind == 'order'][0]
+        tokens = order_slot.order_tokens(f'task{task.pk}')
         self.client.post(
             reverse('save_answers', args=[self.assignment.pk]),
-            {f'task{task.pk}_s1': '(-∞; -5) ∪ [1; 4)',
-             f'task{task.pk}_s2_0': '0', f'task{task.pk}_s2_1': '1',
-             f'task{task.pk}_s2_2': '2'})
+            {f'task{task.pk}_s1': r'(-\infty; -5) \cup [1; 4)',
+             f'task{task.pk}_s2_0': tokens[0],
+             f'task{task.pk}_s2_1': tokens[1],
+             f'task{task.pk}_s2_2': tokens[2]})
         submission = Submission.objects.get(task=task)
         self.assertEqual(submission.check_json, {'s1': 'ok', 's2': 'ok'})
         self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
         response = self.client.get(
             reverse('assignment_detail', args=[self.assignment.pk]))
         self.assertNotContains(response, 'data-numberline')
-        self.assertContains(response, '(-∞; -5) ∪ [1; 4)')
+        self.assertContains(response, r'(-\infty; -5)')
 
     def test_mask_answers_saved_to_json(self):
         """Значения слотов сохраняются в answer_json, display_answer — маска с подстановкой."""
