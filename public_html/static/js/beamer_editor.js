@@ -62,17 +62,17 @@
     return parts.indexOf(onName) !== -1 ? 'on' : 'off';
   }
 
-  function getSize(parts) {
-    for (var i = 0; i < parts.length; i += 1) {
-      if (/^(11|12|14)pt$/.test(parts[i])) return parts[i];
+  function getSize(docParts, pkgParts) {
+    var keyed = getKeyed(pkgParts, 'fontsize', '');
+    if (/^(11|12|14)pt$/.test(keyed)) return keyed;
+    for (var i = 0; i < docParts.length; i += 1) {
+      if (/^(11|12|14)pt$/.test(docParts[i])) return docParts[i];
     }
     return '12pt';
   }
 
-  function setSize(parts, value) {
-    var next = parts.filter(function (s) { return !/^(11|12|14)pt$/.test(s); });
-    next.push(value);
-    return next;
+  function stripClassSize(parts) {
+    return parts.filter(function (s) { return !/^(11|12|14)pt$/.test(s); });
   }
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -97,7 +97,7 @@
       return {
         theme: theme === 'paper' ? 'light' : theme,
         aspect: getKeyed(doc, 'aspectratio', '169'),
-        size: getSize(doc),
+        size: getSize(doc, pkg),
         content: getKeyed(pkg, 'content', 'problems'),
         reveal: getKeyed(pkg, 'reveal', 'click'),
         items: getKeyed(pkg, 'items', 'all'),
@@ -110,7 +110,7 @@
 
     function writeState() {
       var tex = source.value;
-      var doc = setKeyed(setSize(docOptions(tex), state.size),
+      var doc = setKeyed(stripClassSize(docOptions(tex)),
                          'aspectratio', state.aspect);
       var pkg = pkgOptions(tex);
       pkg = setKeyed(pkg, 'theme', state.theme);
@@ -119,6 +119,7 @@
       pkg = setKeyed(pkg, 'items', state.items);
       pkg = setKeyed(pkg, 'itemflow', state.itemflow);
       pkg = setKeyed(pkg, 'font', state.font);
+      pkg = setKeyed(pkg, 'fontsize', state.size);
       pkg = setFlag(pkg, 'stars', 'nostars', state.stars === 'on');
       pkg = setFlag(pkg, 'footer', 'nofooter', state.footer === 'on');
       source.value = withPkgOptions(withDocOptions(tex, doc), pkg);
