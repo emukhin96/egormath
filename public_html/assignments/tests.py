@@ -1,8 +1,9 @@
 import io
 import shutil
 import subprocess
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
+from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -13,7 +14,7 @@ from PIL import Image
 from problems.models import Task, TaskSubitem
 from problems.tests import make_student, make_teacher
 from accounts.models import StudentGroup
-from worksheets.models import WorksheetItem
+from worksheets.models import Worksheet, WorksheetItem
 from worksheets.tests import make_worksheet
 
 from .check_answer import check_answer, check_interval_fields
@@ -150,6 +151,34 @@ class AssignmentWorkspaceTests(TestCase):
             assignments.get(student=self.student).check_visibility,
             Assignment.CHECK_LIVE)
 
+    def test_locked_check_mode_is_visible_and_used_for_new_student(self):
+        Assignment.objects.create(
+            worksheet=self.worksheet, student=self.student,
+            assigned_by=self.teacher,
+            check_visibility=Assignment.CHECK_LIVE)
+        response = self.client.get(
+            reverse('assignment_create'), {'worksheet': self.worksheet.pk})
+        form = response.context['form']
+        self.assertTrue(form.fields['check_visibility'].disabled)
+        self.assertEqual(
+            form.fields['check_visibility'].initial, Assignment.CHECK_LIVE)
+        self.assertContains(response, 'режим сверки для этого листка изменить нельзя')
+        self.assertContains(response, '— уже назначено')
+        self.assertRegex(
+            response.content.decode(),
+            rf'name="students" value="{self.student.pk}"[^>]*disabled')
+
+        # Даже подменённый POST не меняет общий режим для нового ученика.
+        response = self.client.post(reverse('assignment_create'), {
+            'worksheet': self.worksheet.pk,
+            'students': [self.student2.pk],
+            'check_visibility': Assignment.CHECK_TEACHER,
+        })
+        self.assertRedirects(response, reverse('assignment_list'))
+        created = Assignment.objects.get(
+            worksheet=self.worksheet, student=self.student2)
+        self.assertEqual(created.check_visibility, Assignment.CHECK_LIVE)
+
     def test_create_rejects_empty_recipients_and_foreign_objects(self):
         response = self.client.post(reverse('assignment_create'), {
             'worksheet': self.worksheet.pk,
@@ -172,13 +201,70 @@ class AssignmentWorkspaceTests(TestCase):
 
     def test_student_cannot_open_teacher_workspace(self):
         self.client.login(username='student1', password='pass12345')
-        response = self.client.get(reverse('assignment_list'))
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            self.client.get(reverse('assignment_list')).status_code, 403)
+        self.assertEqual(
+            self.client.get(reverse('assignment_create')).status_code, 403)
 
     def test_teacher_navigation_contains_assignments(self):
         response = self.client.get(reverse('assignment_list'))
         self.assertContains(response, '>Задания</a>')
         self.assertContains(response, 'href="/assignments/" class="is-active"')
+
+    @override_settings(TIME_ZONE='Europe/Moscow')
+    def test_due_filters_use_local_date_and_expected_ranges(self):
+        # В Москве уже 1 сентября, в UTC ещё 31 августа.
+        now = datetime(2026, 8, 31, 21, 30, tzinfo=dt_timezone.utc)
+
+        def assignment(title, due_at):
+            worksheet = Worksheet.objects.create(
+                owner=self.teacher, title=title)
+            return Assignment.objects.create(
+                worksheet=worksheet, student=self.student,
+                assigned_by=self.teacher, due_at=due_at)
+
+        today = assignment('Сегодня', now + timedelta(minutes=30))
+        overdue = assignment('Вчера', now - timedelta(hours=2))
+        week = assignment('На неделе', now + timedelta(days=3))
+        assignment('Позже', now + timedelta(days=8))
+
+        with mock.patch('django.utils.timezone.now', return_value=now):
+            response = self.client.get(
+                reverse('assignment_list'), {'due': 'today'})
+            self.assertEqual(list(response.context['assignments']), [today])
+
+            response = self.client.get(
+                reverse('assignment_list'), {'due': 'overdue'})
+            self.assertEqual(list(response.context['assignments']), [overdue])
+
+            response = self.client.get(
+                reverse('assignment_list'), {'due': 'week'})
+            self.assertEqual(
+                set(response.context['assignments']), {today, week})
+
+    def test_search_and_pagination(self):
+        target = Assignment.objects.create(
+            worksheet=Worksheet.objects.create(
+                owner=self.teacher, title='Алгебра: параметры'),
+            student=self.student, assigned_by=self.teacher)
+        Assignment.objects.create(
+            worksheet=Worksheet.objects.create(
+                owner=self.teacher, title='Геометрия'),
+            student=self.student2, assigned_by=self.teacher)
+        response = self.client.get(
+            reverse('assignment_list'), {'q': 'параметры'})
+        self.assertEqual(list(response.context['assignments']), [target])
+
+        for index in range(31):
+            Assignment.objects.create(
+                worksheet=Worksheet.objects.create(
+                    owner=self.teacher, title=f'Листок {index:02}'),
+                student=self.student, assigned_by=self.teacher)
+        response = self.client.get(reverse('assignment_list'))
+        self.assertEqual(response.context['page'].paginator.count, 33)
+        self.assertEqual(len(response.context['assignments']), 30)
+        response = self.client.get(reverse('assignment_list'), {'page': 2})
+        self.assertEqual(len(response.context['assignments']), 3)
 
 
 @override_settings(MEDIA_ROOT='/tmp/egormath-test-media')
@@ -597,7 +683,7 @@ class ReviewFlowTests(TestCase):
                 f'sub{submission.pk}_comment': 'Верно, но оформи решение.',
                 'action': 'complete',
             })
-        self.assertRedirects(response, reverse('dashboard'))
+        self.assertRedirects(response, reverse('assignment_list'))
         self.assignment.refresh_from_db()
         self.assertEqual(self.assignment.status, Assignment.STATUS_REVIEWED)
         review = Review.objects.get(submission=submission)
@@ -638,6 +724,20 @@ class ReviewFlowTests(TestCase):
             response, reverse('review_assignment', args=[next_assignment.pk]))
         self.assignment.refresh_from_db()
         self.assertEqual(self.assignment.status, Assignment.STATUS_REVIEWED)
+
+    def test_return_and_open_next_pending(self):
+        next_assignment = make_assignment(
+            self.teacher, self.student,
+            status=Assignment.STATUS_SUBMITTED,
+            submitted_at=timezone.now() + timedelta(minutes=1))
+        response = self.client.post(
+            reverse('save_review', args=[self.assignment.pk]), {
+                'action': 'return_next',
+            })
+        self.assertRedirects(
+            response, reverse('review_assignment', args=[next_assignment.pk]))
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.status, Assignment.STATUS_RETURNED)
 
     def test_review_form_has_no_grade_scale(self):
         response = self.client.get(
@@ -689,6 +789,7 @@ class ReviewFlowTests(TestCase):
         response = self.client.post(
             reverse('save_review', args=[self.assignment.pk]),
             {'action': 'return'})
+        self.assertRedirects(response, reverse('assignment_list'))
         self.assignment.refresh_from_db()
         self.assertEqual(self.assignment.status, Assignment.STATUS_RETURNED)
         # Ученик снова может редактировать

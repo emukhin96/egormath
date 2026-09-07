@@ -7,6 +7,23 @@ from worksheets.models import Worksheet
 from .models import Assignment, locked_check_visibility
 
 
+class AssignedStudentsWidget(forms.CheckboxSelectMultiple):
+    """Блокирует учеников, которым выбранный листок уже назначен."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.assigned_ids = set()
+
+    def create_option(self, name, value, label, selected, index,
+                      subindex=None, attrs=None):
+        option = super().create_option(
+            name, value, label, selected, index, subindex, attrs)
+        if str(value) in self.assigned_ids:
+            option['attrs']['disabled'] = True
+            option['label'] = f'{option["label"]} — уже назначено'
+        return option
+
+
 class StudentChoiceField(forms.ModelMultipleChoiceField):
     """Ученики с понятной подписью в мастере выдачи."""
 
@@ -28,7 +45,7 @@ class AssignmentCreateForm(forms.Form):
     students = StudentChoiceField(
         label='Отдельные ученики', required=False,
         queryset=User.objects.none(),
-        widget=forms.CheckboxSelectMultiple)
+        widget=AssignedStudentsWidget)
     due_at = forms.DateTimeField(
         label='Срок сдачи', required=False,
         input_formats=['%Y-%m-%dT%H:%M'],
@@ -52,10 +69,40 @@ class AssignmentCreateForm(forms.Form):
                 profile__role=Profile.ROLE_STUDENT)
             .select_related('profile')
             .order_by('last_name', 'first_name', 'username'))
+        self.selected_worksheet = self._selected_worksheet()
+        if self.selected_worksheet:
+            assigned_ids = self.selected_worksheet.assignments.values_list(
+                'student_id', flat=True)
+            self.fields['students'].widget.assigned_ids = {
+                str(pk) for pk in assigned_ids}
+            locked = locked_check_visibility(self.selected_worksheet)
+            if locked:
+                check_field = self.fields['check_visibility']
+                check_field.disabled = True
+                check_field.initial = locked
+                self.initial['check_visibility'] = locked
+                check_field.help_text = (
+                    'Уже задано ученикам — режим сверки для этого листка '
+                    'изменить нельзя.')
+        if not self.fields['check_visibility'].help_text:
+            self.fields['check_visibility'].help_text = (
+                'После первой выдачи режим для листка фиксируется. При '
+                'самопроверке вы увидите, сколько раз ученик нажимал '
+                '«Проверить».')
+
+    def _selected_worksheet(self):
+        """Свой листок из bound-данных или initial, без доверия к GET/POST."""
+        value = (self.data.get(self.add_prefix('worksheet')) if self.is_bound
+                 else self.initial.get('worksheet'))
+        if isinstance(value, Worksheet):
+            return value if value.owner_id == self.teacher.pk else None
+        value = str(value or '')
+        if value.isdigit():
+            return self.fields['worksheet'].queryset.filter(pk=value).first()
+        return None
 
     def clean(self):
         cleaned = super().clean()
-        worksheet = cleaned.get('worksheet')
         groups = cleaned.get('groups')
         students = cleaned.get('students')
 
@@ -74,9 +121,4 @@ class AssignmentCreateForm(forms.Form):
 
         cleaned['recipients'] = self.fields['students'].queryset.filter(
             pk__in=student_ids)
-        if worksheet:
-            locked = locked_check_visibility(worksheet)
-            if locked:
-                cleaned['check_visibility'] = locked
-                cleaned['locked_check_visibility'] = locked
         return cleaned
