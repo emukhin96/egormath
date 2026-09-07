@@ -105,9 +105,24 @@ class Assignment(models.Model):
 
     def result(self):
         """Итог проверки: (выполнено, всего, процент). Шкалы нет —
-        учитель отмечает каждую задачу «выполнено» или нет."""
-        total = self.visible_task_count()
-        done = self.submissions.filter(review__done=True).count()
+        учитель отмечает каждую задачу «выполнено» или нет.
+
+        Числитель и знаменатель — одни и те же видимые элементы листка:
+        скрытая или удалённая выполненная задача в кабинет не попадает,
+        а повтор одной задачи в листке считается столько раз, сколько
+        элементов видит ученик (один Submission на задачу).
+        """
+        hidden = self.hidden_items.values('pk')
+        task_ids = list(
+            self.worksheet.items
+            .filter(task__isnull=False, deleted_at__isnull=True)
+            .exclude(pk__in=hidden)
+            .values_list('task_id', flat=True))
+        total = len(task_ids)
+        done_tasks = set(
+            self.submissions.filter(review__done=True)
+            .values_list('task_id', flat=True))
+        done = sum(1 for task_id in task_ids if task_id in done_tasks)
         percent = round(100 * done / total) if total else 0
         return {'done': done, 'total': total, 'percent': percent}
 
@@ -194,16 +209,25 @@ class AnswerFields(models.Model):
     def assignment_of(self):
         raise NotImplementedError
 
+    def _student_check_visible(self):
+        """Можно ли отдать ученику auto_check (режим назначения — отдельно).
+
+        В live, пока работа редактируется, — только после «Проверить».
+        В after_submit результат уже был показан после сдачи: при возврате
+        на доработку check_revealed не ставился, и прятать сверку нельзя.
+        """
+        assignment = self.assignment_of
+        if assignment.check_visibility == Assignment.CHECK_LIVE:
+            return self.check_revealed or not assignment.is_editable_by_student
+        return True
+
     @property
     def student_check(self):
         """Результат сверки, который можно показать ученику.
 
-        Пока работа редактируется — только раскрытый кнопкой «Проверить»
-        (иначе ученик подбирал бы ответ по бейджу автосохранения); после
-        отправки — как есть. Кому вообще показывать, решает
-        Assignment.student_sees_checks.
+        Кому вообще показывать, решает Assignment.student_sees_checks.
         """
-        if self.check_revealed or not self.assignment_of.is_editable_by_student:
+        if self._student_check_visible():
             return self.auto_check
         return ''
 
