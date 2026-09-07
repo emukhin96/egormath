@@ -91,19 +91,52 @@
     for (var i = 0; i < pieces.length; i++) {
       var piece = pieces[i].trim();
       if (!piece) continue;
-      var ref = piece.match(/^\u0000(\d+)\u0000$/);
-      var iv;
-      if (ref) {
-        iv = parseBracket(tokens[parseInt(ref[1], 10)]);
-        if (!iv) return null;
-        out.push(iv);
-        continue;
+      var andParts = piece.split(/\s+(?:и|and)\s+/i).filter(Boolean);
+      if (!andParts.length) continue;
+      var acc = null;
+      for (var j = 0; j < andParts.length; j++) {
+        var parsed = parseAtom(andParts[j], tokens);
+        if (!parsed) return null;
+        acc = acc ? intersectLists(acc, parsed) : parsed;
       }
-      var ivs = parseInequality(piece);
-      if (!ivs) return null;
-      out = out.concat(ivs);
+      out = out.concat(acc);
     }
     return normalize(out);
+  }
+
+  function parseAtom(piece, tokens) {
+    piece = piece.trim();
+    if (!piece) return null;
+    var ref = piece.match(/^\u0000(\d+)\u0000$/);
+    if (ref) {
+      var iv = parseBracket(tokens[parseInt(ref[1], 10)]);
+      return iv ? [iv] : null;
+    }
+    return parseInequality(piece);
+  }
+
+  function intersectIv(a, b) {
+    var lo = Math.max(a.lo, b.lo), hi = Math.min(a.hi, b.hi);
+    if (lo > hi) return null;
+    var lc = (lo === a.lo ? a.lc : true) && (lo === b.lo ? b.lc : true);
+    var rc = (hi === a.hi ? a.rc : true) && (hi === b.hi ? b.rc : true);
+    if (lo === hi && (!lc || !rc)) return null;
+    return {
+      lo: lo, hi: hi, lc: lc, rc: rc,
+      loText: lo === a.lo ? a.loText : b.loText,
+      hiText: hi === a.hi ? a.hiText : b.hiText,
+    };
+  }
+
+  function intersectLists(left, right) {
+    var out = [];
+    left.forEach(function (a) {
+      right.forEach(function (b) {
+        var one = intersectIv(a, b);
+        if (one) out.push(one);
+      });
+    });
+    return out;
   }
 
   function parseBracket(token) {
@@ -202,6 +235,7 @@
     this.input = input;
     this.intervals = [];
     this.special = '';
+    this.stale = false;
     this.step = 1;
     this.drag = null;
     this.build();
@@ -250,6 +284,11 @@
       if (e.key === 'Enter') e.preventDefault();
     });
     tools.appendChild(this.boundInput);
+    this.staleHint = document.createElement('span');
+    this.staleHint.className = 'numberline-stale';
+    this.staleHint.hidden = true;
+    this.staleHint.textContent = 'Текст не разобран — прямую править нельзя';
+    tools.appendChild(this.staleHint);
     this.container.appendChild(tools);
 
     this.svg.addEventListener('pointerdown', function (e) { self.onDown(e); });
@@ -333,13 +372,19 @@
       return;
     }
     var parsed = parse(this.input.value);
-    if (parsed === null) return;
+    if (parsed === null) {
+      this.stale = true;
+      this.intervals = [];
+      return;
+    }
+    this.stale = false;
     this.special = '';
     this.intervals = parsed;
     this.fitStep();
   };
 
   NumberLine.prototype.commit = function () {
+    this.stale = false;
     this.intervals = normalize(this.intervals);
     if (this.special === 'empty') {
       this.input.value = 'нет решений';
@@ -374,6 +419,7 @@
   };
 
   NumberLine.prototype.onDown = function (e) {
+    if (this.stale) return;
     if (e.button && e.button !== 0) return;
     var target = e.target;
     var px = this.px(e);
@@ -427,6 +473,8 @@
   };
 
   NumberLine.prototype.render = function () {
+    this.svg.classList.toggle('nl-stale', !!this.stale);
+    if (this.staleHint) this.staleHint.hidden = !this.stale;
     var svg = this.svg;
     while (svg.firstChild) svg.removeChild(svg.firstChild);
     var self = this;
