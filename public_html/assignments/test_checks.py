@@ -174,6 +174,18 @@ class MaskCheckTests(SimpleTestCase):
         self.assertEqual(sets.parse_range('x<0 или x>=0'),
                          sets.parse_range('R'))
         self.assertEqual(sets.parse_range('нет решений'), frozenset())
+        self.assertEqual(sets.parse_range('x>1 и x<0'), frozenset())
+        self.assertEqual(check_slot(slot('{{range: нет решений}}'), 'x>1 и x<0'), OK)
+        self.assertEqual(check_slot(slot('{{range: нет решений}}'), 'много'), UNKNOWN)
+        self.assertEqual(sets.parse_range('вся числовая прямая'),
+                         sets.parse_range('R'))
+        s = slot(r'{{range: [\sqrt{2}; +\infty)}}')
+        self.assertEqual(check_slot(s, r'[\sqrt{2}; +\infty)'), OK)
+        self.assertEqual(check_slot(s, r'x \ge \sqrt{2}'), OK)
+        s = slot(r'{{range: [\frac{7}{3}; 5]}}')
+        self.assertEqual(check_slot(s, r'[7/3; 5]'), OK)
+        spec = parse_mask(r'{{number: 1 ~ \infty}}')
+        self.assertFalse(spec.is_valid)
 
     def test_order(self):
         s = slot(r'{{order: \sqrt[6]{5}|\sqrt[5]{4}|2}}')
@@ -245,7 +257,12 @@ class ExpressionHelpersTests(SimpleTestCase):
         self.assertEqual(expressions.prepare('2x(x+1)'), r'2x\cdot (x+1)')
         self.assertEqual(expressions.prepare(r'\sin(x)'), r'\sin(x)')
         self.assertEqual(expressions.prepare(r'2\sqrt{2}x'), r'2\sqrt{2}\cdot x')
+        self.assertEqual(expressions.prepare(r'\log_{2}x'), r'\log_{2}x')
+        self.assertEqual(expressions.prepare(r'\sin^{2}x'), r'\sin^{2}x')
+        self.assertEqual(expressions.prepare(r'\log_{2}(x)'), r'\log_{2}(x)')
         self.assertEqual(check_answer(r'2\sqrt{2}x', r'\sqrt{8}x'), OK)
+        self.assertEqual(check_answer(r'\log_{2}x', r'\frac{\ln x}{\ln 2}'), OK)
+        self.assertEqual(check_answer(r'\sin^{2}x', r'1-\cos^{2}x'), OK)
 
     def test_ambiguous_latex_is_still_an_expression(self):
         self.assertEqual(check_answer('2x/4', 'x/2'), OK)
@@ -259,3 +276,5 @@ class ExpressionHelpersTests(SimpleTestCase):
         self.assertIsNone(sets.numeric_value('x'))
         self.assertIsNone(sets.numeric_value('139°'))
         self.assertAlmostEqual(sets.numeric_value(r'\sqrt{2}'), 2 ** 0.5)
+        self.assertIsNone(sets.numeric_value(r'\infty'))
+        self.assertIsNone(sets.numeric_value('+\\infty'))

@@ -2,6 +2,7 @@
 числовой промежуток. Разбор строится на примитивах ``check_answer``
 (``parse_number``, ``parse_interval``), сравнение — точное для дробей и с
 допуском для иррациональных значений (``\\sqrt{2}`` и т.п.)."""
+import math
 import re
 from fractions import Fraction
 
@@ -11,7 +12,8 @@ from ..check_answer import (_endpoint, _expand_pm, _strip_var, normalize,
 EMPTY_WORDS = ('∅', '{}', 'нет', 'нет решений', 'решений нет', 'нет корней',
                'корней нет', 'пустое множество', 'none')
 ALL_WORDS = ('r', '\\mathbb{r}', 'ℝ', 'любое число', 'любое', 'все числа',
-             'x - любое', 'x любое')
+             'x - любое', 'x любое', 'вся прямая', 'вся числовая прямая',
+             'числовая прямая')
 
 _VAR = r'[a-zA-Zа-яА-Я](?:_\{?\d+\}?)?'
 _IN_RE = re.compile(r'^' + _VAR + r'\s*(?:\\in|∈)\s*')
@@ -50,11 +52,18 @@ def numeric_value(text):
         result = float(expr.evalf())
     except Exception:  # noqa: BLE001
         return None
-    return result if result == result else None  # NaN
+    if not math.isfinite(result):
+        return None
+    return result
 
 
 def numbers_equal(a, b, tolerance=None):
     if a is None or b is None:
+        return False
+    try:
+        if not math.isfinite(float(a)) or not math.isfinite(float(b)):
+            return False
+    except (TypeError, ValueError, OverflowError):
         return False
     if tolerance is None:
         if isinstance(a, Fraction) and isinstance(b, Fraction):
@@ -147,6 +156,31 @@ def pairs_equal(a, b, tolerance=None):
 
 # --- числовые промежутки -------------------------------------------------------
 
+_INTERVAL_PARSE_RE = re.compile(
+    r'^([(\[])\s*(.+?)\s*;\s*(.+?)\s*([)\]])$')
+
+
+def _bound_value(text):
+    """Конец промежутка: Fraction, float (иррациональное) или ±inf; None."""
+    value = _endpoint(text)
+    if value is not None:
+        return value
+    return numeric_value(text)
+
+
+def _parse_interval_token(token):
+    """Скобочная запись с дробями и иррациональными концами."""
+    m = _INTERVAL_PARSE_RE.match(token.strip())
+    if not m:
+        return None
+    lo, hi = _bound_value(m.group(2)), _bound_value(m.group(3))
+    if lo is None or hi is None:
+        return None
+    left = '(' if lo == -INF else m.group(1)
+    right = ')' if hi == INF else m.group(4)
+    return (lo, hi, left, right)
+
+
 def _bound(op, value, is_low):
     """``<``/``<=`` и значение → (граница, скобка)."""
     closed = op.endswith('=')
@@ -163,8 +197,8 @@ def _inequality(piece):
         a, op1, op2, b = m.group(1), m.group(2), m.group(3), m.group(4)
         if op1[0] != op2[0]:
             return None
-        lo, hi = (_endpoint(a), _endpoint(b)) if op1[0] == '<' \
-            else (_endpoint(b), _endpoint(a))
+        lo, hi = (_bound_value(a), _bound_value(b)) if op1[0] == '<' \
+            else (_bound_value(b), _bound_value(a))
         lo_op, hi_op = (op1, op2) if op1[0] == '<' else (op2, op1)
         if lo is None or hi is None:
             return None
@@ -172,12 +206,12 @@ def _inequality(piece):
                  ']' if hi_op.endswith('=') else ')')]
     m = _LEFT_RE.match(piece)
     if m:
-        op, value = m.group(1), _endpoint(m.group(2))
+        op, value = m.group(1), _bound_value(m.group(2))
     else:
         m = _RIGHT_RE.match(piece)
         if not m:
             return None
-        value, op = _endpoint(m.group(1)), m.group(2)
+        value, op = _bound_value(m.group(1)), m.group(2)
         # ``5 < x`` — то же, что ``x > 5``
         op = {'<': '>', '<=': '>=', '>': '<', '>=': '<=', '!=': '!='}[op]
     if value is None:
@@ -244,7 +278,9 @@ def _parse_range_atom(piece, tokens):
         return None
     m = re.fullmatch(r'\x00(\d+)\x00', piece)
     if m:
-        parsed = parse_interval(tokens[int(m.group(1))])
+        parsed = _parse_interval_token(tokens[int(m.group(1))])
+        if parsed is None:
+            parsed = parse_interval(tokens[int(m.group(1))])
         return None if parsed is None else [parsed]
     return _inequality(piece)
 
@@ -270,6 +306,7 @@ def parse_range(text):
 
     rest = _INTERVAL_TOKEN_RE.sub(_stash, text)
     intervals = []
+    saw_atom = False
     for union_part in _UNION_RE.split(rest):
         and_parts = [p for p in _AND_RE.split(union_part) if p.strip()]
         if not and_parts:
@@ -279,9 +316,10 @@ def parse_range(text):
             parsed = _parse_range_atom(part, tokens)
             if parsed is None:
                 return None
+            saw_atom = True
             acc = parsed if acc is None else _intersect_lists(acc, parsed)
-        intervals.extend(acc or [])
-    if not intervals:
+        intervals.extend(acc)
+    if not saw_atom:
         return None
     return _normalize_intervals(intervals)
 
