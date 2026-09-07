@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% block title %}Выданные задания — EgorMath{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/assignment_list.html' %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <span class="page-eyebrow">Работы учеников</span>
+    <h1>Выданные задания</h1>
+    <p class="page-subtitle">Общая очередь: от выдачи до завершённой проверки.</p>
+  </div>
+  <a class="btn" href="{% url 'assignment_create' %}">Выдать задание</a>
+</div>
+
+<div class="stat-grid assignment-stats">
+  <a class="stat" href="?status=submitted">
+    <span class="stat-label">На проверке</span><span class="stat-value">{{ stats.submitted }}</span>
+  </a>
+  <a class="stat" href="?due=overdue">
+    <span class="stat-label">Просрочено</span><span class="stat-value">{{ stats.overdue }}</span>
+  </a>
+  <a class="stat" href="?status=returned">
+    <span class="stat-label">На доработке</span><span class="stat-value">{{ stats.returned }}</span>
+  </a>
+  <a class="stat" href="?status=reviewed">
+    <span class="stat-label">Проверено</span><span class="stat-value">{{ stats.reviewed }}</span>
+  </a>
+</div>
+
+<form method="get" class="card filter-card">
+  <div class="filters assignment-filters">
+    <div class="filter-search">
+      <label for="assignment-q">Поиск</label>
+      <input type="text" name="q" id="assignment-q" value="{{ filters.q }}"
+             placeholder="Листок или ученик">
+    </div>
+    <div>
+      <label for="assignment-status">Статус</label>
+      <select name="status" id="assignment-status">
+        <option value="">Все статусы</option>
+        {% for value, label in status_choices %}
+        <option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="assignment-student">Ученик</label>
+      <select name="student" id="assignment-student">
+        <option value="">Все ученики</option>
+        {% for profile in students %}
+        <option value="{{ profile.user_id }}"{% if filters.student == profile.user_id|stringformat:'s' %} selected{% endif %}>{{ profile.user.get_full_name|default:profile.user.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="assignment-worksheet">Листок</label>
+      <select name="worksheet" id="assignment-worksheet">
+        <option value="">Все листки</option>
+        {% for worksheet in worksheets %}
+        <option value="{{ worksheet.pk }}"{% if filters.worksheet == worksheet.pk|stringformat:'s' %} selected{% endif %}>{{ worksheet.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="assignment-due">Срок</label>
+      <select name="due" id="assignment-due">
+        <option value="">Любой срок</option>
+        {% for value, label in due_choices %}
+        <option value="{{ value }}"{% if filters.due == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button class="btn" type="submit">Применить</button>
+      {% if filters.q or filters.status or filters.student or filters.worksheet or filters.due %}
+      <a class="btn btn-secondary" href="{% url 'assignment_list' %}">Сбросить</a>
+      {% endif %}
+    </div>
+  </div>
+</form>
+
+<div class="card assignment-catalog">
+  <div class="table-summary">
+    <span>Найдено: <strong>{{ page.paginator.count }}</strong></span>
+    <span>Всего выдано: {{ stats.total }}</span>
+  </div>
+  {% if assignments %}
+  <table class="list">
+    <thead><tr><th>Работа</th><th>Ученик</th><th>Срок</th><th>Статус</th><th>Последнее действие</th><th></th></tr></thead>
+    <tbody>
+    {% for assignment in assignments %}
+    <tr{% if assignment.is_overdue %} class="is-overdue"{% endif %}>
+      <td>
+        <a class="assignment-title" href="{% url 'worksheet_detail' assignment.worksheet.pk %}">{{ assignment.worksheet.title }}</a>
+        <div class="task-meta">Выдано {{ assignment.assigned_at|date:'d.m.Y' }}</div>
+      </td>
+      <td>{{ assignment.student.get_full_name|default:assignment.student.username }}</td>
+      <td>
+        {% if assignment.due_at %}{{ assignment.due_at|date:'d.m.Y H:i' }}
+          {% if assignment.is_overdue %}<div><span class="badge badge-returned">просрочено</span></div>{% endif %}
+        {% else %}<span class="muted">Без срока</span>{% endif %}
+      </td>
+      <td><span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span></td>
+      <td>
+        {% if assignment.status == 'submitted' %}{{ assignment.submitted_at|date:'d.m.Y H:i' }}
+        {% elif assignment.status == 'reviewed' %}{{ assignment.reviewed_at|date:'d.m.Y H:i' }}
+        {% elif assignment.status == 'returned' %}Возвращено ученику
+        {% else %}Ожидается сдача{% endif %}
+      </td>
+      <td class="row-actions">
+        {% if assignment.status == 'submitted' %}
+        <a class="btn btn-small" href="{% url 'review_assignment' assignment.pk %}">Проверить</a>
+        {% else %}
+        <a class="btn btn-small btn-secondary" href="{% url 'review_assignment' assignment.pk %}">Открыть</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <h2>Работы не найдены</h2>
+    <p class="muted">Измените фильтры или выдайте новый листок.</p>
+  </div>
+  {% endif %}
+</div>
+{% include 'includes/pagination.html' with page=page query=request.GET %}
+{% endblock %}

@@ -1,5 +1,9 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
+from django.db.models import Case, Count, DateTimeField, IntegerField, Q, When
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -11,6 +15,7 @@ from problems.models import Task
 from worksheets.models import Worksheet
 
 from .checks import reference_text
+from .forms import AssignmentCreateForm
 from .models import (Assignment, Review, Submission, SubmissionPart,
                      SubmissionPhoto, locked_check_visibility, wrap_math)
 
@@ -22,6 +27,23 @@ def _check_visibility_or_default(post):
     if value not in dict(Assignment.CHECK_CHOICES):
         return Assignment.CHECK_TEACHER
     return value
+
+
+def _create_assignments(*, worksheet, teacher, students, check_visibility,
+                        allow_photos, due_at):
+    """Создать назначения без дублей; используется обеими точками выдачи."""
+    created = 0
+    for student in students:
+        _, was_created = Assignment.objects.get_or_create(
+            worksheet=worksheet, student=student,
+            defaults={
+                'assigned_by': teacher,
+                'check_visibility': check_visibility,
+                'allow_photos': allow_photos,
+                'due_at': due_at,
+            })
+        created += was_created
+    return created
 
 
 @teacher_required
@@ -44,22 +66,149 @@ def assign_worksheet(request, worksheet_id):
 
     my_students = request.user.students.filter(
         role='student', user_id__in=student_ids)
-    created = 0
-    for profile in my_students:
-        _, was_created = Assignment.objects.get_or_create(
-            worksheet=worksheet, student=profile.user,
-            defaults={
-                'assigned_by': request.user,
-                'check_visibility': check_visibility,
-                'allow_photos': allow_photos,
-                'due_at': due_at,
-            })
-        created += was_created
+    created = _create_assignments(
+        worksheet=worksheet,
+        teacher=request.user,
+        students=(profile.user for profile in my_students),
+        check_visibility=check_visibility,
+        allow_photos=allow_photos,
+        due_at=due_at,
+    )
     if created:
         messages.success(request, f'Назначено ученикам: {created}.')
     else:
         messages.info(request, 'Новых назначений нет (уже были назначены).')
     return redirect('worksheet_detail', pk=worksheet.pk)
+
+
+# --- Все назначения учителя ---
+
+@teacher_required
+def assignment_list(request):
+    """Единая очередь выданных работ с рабочими фильтрами."""
+    now = timezone.now()
+    assignments = (Assignment.objects
+                   .filter(worksheet__owner=request.user)
+                   .select_related('worksheet', 'student'))
+
+    q = request.GET.get('q', '').strip()
+    status = request.GET.get('status', '').strip()
+    student_id = request.GET.get('student', '').strip()
+    worksheet_id = request.GET.get('worksheet', '').strip()
+    due = request.GET.get('due', '').strip()
+
+    if q:
+        assignments = assignments.filter(
+            Q(worksheet__title__icontains=q)
+            | Q(student__first_name__icontains=q)
+            | Q(student__last_name__icontains=q)
+            | Q(student__username__icontains=q))
+    if status in dict(Assignment.STATUS_CHOICES):
+        assignments = assignments.filter(status=status)
+    if student_id.isdigit():
+        assignments = assignments.filter(student_id=student_id)
+    if worksheet_id.isdigit():
+        assignments = assignments.filter(worksheet_id=worksheet_id)
+    if due == 'overdue':
+        assignments = assignments.filter(
+            status__in=(Assignment.STATUS_ASSIGNED,
+                        Assignment.STATUS_RETURNED),
+            due_at__lt=now)
+    elif due == 'today':
+        assignments = assignments.filter(due_at__date=now.date())
+    elif due == 'week':
+        assignments = assignments.filter(
+            due_at__gte=now, due_at__lte=now + timedelta(days=7))
+    elif due == 'none':
+        assignments = assignments.filter(due_at__isnull=True)
+
+    # Сначала ручная очередь учителя, затем работы, требующие действий ученика.
+    assignments = assignments.annotate(
+        queue_order=Case(
+            When(status=Assignment.STATUS_SUBMITTED, then=0),
+            When(status=Assignment.STATUS_RETURNED, then=1),
+            When(status=Assignment.STATUS_ASSIGNED, then=2),
+            default=3, output_field=IntegerField()),
+        due_order=Case(
+            When(due_at__isnull=True, then=1),
+            default=0, output_field=IntegerField()),
+        # У отправленных работ порядок совпадает с экраном проверки: раньше
+        # прислано — раньше в очереди. Для остальных решает ближайший срок.
+        submitted_order=Case(
+            When(status=Assignment.STATUS_SUBMITTED, then='submitted_at'),
+            default=None, output_field=DateTimeField()),
+    ).order_by(
+        'queue_order', 'submitted_order', 'due_order', 'due_at', '-assigned_at')
+
+    all_assignments = Assignment.objects.filter(worksheet__owner=request.user)
+    stats = all_assignments.aggregate(
+        total=Count('pk'),
+        submitted=Count('pk', filter=Q(status=Assignment.STATUS_SUBMITTED)),
+        returned=Count('pk', filter=Q(status=Assignment.STATUS_RETURNED)),
+        assigned=Count('pk', filter=Q(status=Assignment.STATUS_ASSIGNED)),
+        reviewed=Count('pk', filter=Q(status=Assignment.STATUS_REVIEWED)),
+        overdue=Count('pk', filter=Q(
+            status__in=(Assignment.STATUS_ASSIGNED,
+                        Assignment.STATUS_RETURNED), due_at__lt=now)),
+    )
+    page = Paginator(assignments, 30).get_page(request.GET.get('page'))
+    students = (request.user.students
+                .filter(role='student')
+                .select_related('user')
+                .order_by('user__last_name', 'user__first_name'))
+    worksheets = Worksheet.objects.filter(
+        owner=request.user).order_by('-updated_at')
+    return render(request, 'assignments/assignment_list.html', {
+        'page': page,
+        'assignments': page.object_list,
+        'stats': stats,
+        'students': students,
+        'worksheets': worksheets,
+        'status_choices': Assignment.STATUS_CHOICES,
+        'due_choices': [
+            ('overdue', 'Просроченные'),
+            ('today', 'Срок сегодня'),
+            ('week', 'Срок в ближайшие 7 дней'),
+            ('none', 'Без срока'),
+        ],
+        'filters': {
+            'q': q, 'status': status, 'student': student_id,
+            'worksheet': worksheet_id, 'due': due,
+        },
+    })
+
+
+@teacher_required
+def assignment_create(request):
+    """Выдать один листок нескольким адресатам из отдельного мастера."""
+    initial = {'allow_photos': True}
+    worksheet_id = request.GET.get('worksheet', '')
+    if worksheet_id.isdigit():
+        initial['worksheet'] = Worksheet.objects.filter(
+            owner=request.user, pk=worksheet_id).first()
+    form = AssignmentCreateForm(
+        request.POST or None, teacher=request.user, initial=initial)
+    if request.method == 'POST' and form.is_valid():
+        created = _create_assignments(
+            worksheet=form.cleaned_data['worksheet'],
+            teacher=request.user,
+            students=form.cleaned_data['recipients'],
+            check_visibility=form.cleaned_data['check_visibility'],
+            allow_photos=form.cleaned_data['allow_photos'],
+            due_at=form.cleaned_data['due_at'],
+        )
+        selected = form.cleaned_data['recipients'].count()
+        skipped = selected - created
+        if created:
+            messages.success(request, f'Создано назначений: {created}.')
+        if skipped:
+            messages.info(
+                request, f'Уже были выданы и пропущены: {skipped}.')
+        return redirect('assignment_list')
+    return render(request, 'assignments/assignment_create.html', {
+        'form': form,
+        'selected_worksheet': initial.get('worksheet'),
+    })
 
 
 # --- Кабинет ученика ---
@@ -554,14 +703,43 @@ def _teacher_assignment(request, pk):
         pk=pk, worksheet__owner=request.user)
 
 
+def _pending_review_queue(teacher):
+    return (Assignment.objects
+            .filter(worksheet__owner=teacher,
+                    status=Assignment.STATUS_SUBMITTED)
+            .select_related('worksheet', 'student')
+            .order_by('submitted_at', 'pk'))
+
+
+def _review_queue_state(teacher, assignment):
+    """Размер очереди, позиция текущей работы и следующая после неё."""
+    pending = list(_pending_review_queue(teacher))
+    position = None
+    next_pending = None
+    for index, item in enumerate(pending):
+        if item.pk == assignment.pk:
+            position = index + 1
+            if index + 1 < len(pending):
+                next_pending = pending[index + 1]
+            break
+    if position is None and pending:
+        next_pending = pending[0]
+    return len(pending), position, next_pending
+
+
 @teacher_required
 def review_assignment(request, pk):
     assignment = _teacher_assignment(request, pk)
     rows = _assignment_rows(assignment, with_review=True)
     _refresh_stale_checks(rows, for_teacher=True)
+    queue_total, queue_position, next_pending = _review_queue_state(
+        request.user, assignment)
     context = {
         'assignment': assignment,
         'rows': rows,
+        'queue_total': queue_total,
+        'queue_position': queue_position,
+        'next_pending': next_pending,
     }
     context.update(_progress(rows))
     return render(request, 'assignments/review.html', context)
@@ -572,6 +750,7 @@ def review_assignment(request, pk):
 def save_review(request, pk):
     assignment = _teacher_assignment(request, pk)
     action = request.POST.get('action', 'save')
+    _, _, next_pending = _review_queue_state(request.user, assignment)
 
     hidden_item_ids = set(assignment.hidden_items.values_list('pk', flat=True))
     visible_task_ids = set(
@@ -601,16 +780,24 @@ def save_review(request, pk):
                 'reviewer': request.user,
             })
 
-    if action == 'complete':
+    if action in ('complete', 'complete_next'):
         assignment.status = Assignment.STATUS_REVIEWED
         assignment.reviewed_at = timezone.now()
         assignment.save()
         messages.success(request, 'Проверка завершена, ученик увидит результаты.')
+        if action == 'complete_next':
+            return redirect(
+                'review_assignment', pk=next_pending.pk) if next_pending \
+                else redirect('assignment_list')
         return redirect('dashboard')
-    if action == 'return':
+    if action in ('return', 'return_next'):
         assignment.status = Assignment.STATUS_RETURNED
         assignment.save()
         messages.success(request, 'Работа возвращена ученику на доработку.')
+        if action == 'return_next':
+            return redirect(
+                'review_assignment', pk=next_pending.pk) if next_pending \
+                else redirect('assignment_list')
         return redirect('dashboard')
     messages.success(request, 'Проверка сохранена (черновик).')
     return redirect('review_assignment', pk=pk)

@@ -1,15 +1,18 @@
 import io
 import shutil
 import subprocess
+from datetime import timedelta
 from pathlib import Path
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from PIL import Image
 
 from problems.models import Task, TaskSubitem
 from problems.tests import make_student, make_teacher
+from accounts.models import StudentGroup
 from worksheets.models import WorksheetItem
 from worksheets.tests import make_worksheet
 
@@ -68,6 +71,114 @@ class AssignFlowTests(TestCase):
             {'students': [foreign_student.pk]})
         self.assertFalse(Assignment.objects.filter(
             student=foreign_student).exists())
+
+
+class AssignmentWorkspaceTests(TestCase):
+    def setUp(self):
+        self.teacher = make_teacher()
+        self.student = make_student(self.teacher)
+        self.student2 = make_student(self.teacher, 'student2')
+        self.worksheet = make_worksheet(self.teacher)
+        self.group = StudentGroup.objects.create(
+            teacher=self.teacher, name='8 класс')
+        self.group.students.add(self.student)
+        self.client.login(username='teacher1', password='pass12345')
+
+    def test_list_is_teacher_scoped_and_filterable(self):
+        submitted_at = timezone.now()
+        submitted = Assignment.objects.create(
+            worksheet=self.worksheet, student=self.student,
+            assigned_by=self.teacher, status=Assignment.STATUS_SUBMITTED,
+            submitted_at=submitted_at)
+        older_worksheet = make_worksheet(self.teacher, title='Сдано раньше')
+        older_submitted = Assignment.objects.create(
+            worksheet=older_worksheet, student=self.student,
+            assigned_by=self.teacher, status=Assignment.STATUS_SUBMITTED,
+            submitted_at=submitted_at - timedelta(days=1))
+        Assignment.objects.create(
+            worksheet=self.worksheet, student=self.student2,
+            assigned_by=self.teacher, status=Assignment.STATUS_ASSIGNED,
+            due_at=timezone.now() - timedelta(days=1))
+        other_teacher = make_teacher('teacher2')
+        foreign_student = make_student(other_teacher, 'student3')
+        foreign_worksheet = make_worksheet(
+            other_teacher, title='Чужой листок')
+        foreign = Assignment.objects.create(
+            worksheet=foreign_worksheet, student=foreign_student,
+            assigned_by=other_teacher, status=Assignment.STATUS_SUBMITTED)
+
+        response = self.client.get(reverse('assignment_list'))
+        self.assertEqual(response.context['stats']['total'], 3)
+        self.assertEqual(response.context['stats']['submitted'], 2)
+        self.assertEqual(response.context['stats']['overdue'], 1)
+        self.assertNotContains(response, foreign.worksheet.title)
+        self.assertEqual(response.context['assignments'][0], older_submitted)
+
+        response = self.client.get(
+            reverse('assignment_list'), {'status': Assignment.STATUS_SUBMITTED})
+        self.assertEqual(
+            list(response.context['assignments']),
+            [older_submitted, submitted])
+
+    def test_create_for_group_and_student_without_duplicates(self):
+        response = self.client.post(reverse('assignment_create'), {
+            'worksheet': self.worksheet.pk,
+            'groups': [self.group.pk],
+            'students': [self.student.pk, self.student2.pk],
+            'due_at': '2030-09-14T18:30',
+            'check_visibility': Assignment.CHECK_LIVE,
+            'allow_photos': 'on',
+        })
+        self.assertRedirects(response, reverse('assignment_list'))
+        assignments = Assignment.objects.filter(worksheet=self.worksheet)
+        self.assertEqual(assignments.count(), 2)
+        self.assertEqual(
+            set(assignments.values_list('student_id', flat=True)),
+            {self.student.pk, self.student2.pk})
+        self.assertTrue(all(a.allow_photos for a in assignments))
+        self.assertTrue(all(
+            a.check_visibility == Assignment.CHECK_LIVE for a in assignments))
+
+        # Повторная выдача не создаёт вторую запись и не меняет условия.
+        self.client.post(reverse('assignment_create'), {
+            'worksheet': self.worksheet.pk,
+            'students': [self.student.pk],
+            'check_visibility': Assignment.CHECK_TEACHER,
+        })
+        self.assertEqual(assignments.count(), 2)
+        self.assertEqual(
+            assignments.get(student=self.student).check_visibility,
+            Assignment.CHECK_LIVE)
+
+    def test_create_rejects_empty_recipients_and_foreign_objects(self):
+        response = self.client.post(reverse('assignment_create'), {
+            'worksheet': self.worksheet.pk,
+            'check_visibility': Assignment.CHECK_TEACHER,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Выберите хотя бы одну группу')
+
+        other_teacher = make_teacher('teacher2')
+        foreign_student = make_student(other_teacher, 'student3')
+        foreign_worksheet = make_worksheet(other_teacher, title='Чужой листок')
+        response = self.client.post(reverse('assignment_create'), {
+            'worksheet': foreign_worksheet.pk,
+            'students': [foreign_student.pk],
+            'check_visibility': Assignment.CHECK_TEACHER,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Assignment.objects.filter(
+            worksheet=foreign_worksheet, assigned_by=self.teacher).exists())
+
+    def test_student_cannot_open_teacher_workspace(self):
+        self.client.login(username='student1', password='pass12345')
+        response = self.client.get(reverse('assignment_list'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_teacher_navigation_contains_assignments(self):
+        response = self.client.get(reverse('assignment_list'))
+        self.assertContains(response, '>Задания</a>')
+        self.assertContains(response, 'href="/assignments/" class="is-active"')
 
 
 @override_settings(MEDIA_ROOT='/tmp/egormath-test-media')
@@ -238,9 +349,6 @@ class StudentAnswerTests(TestCase):
         self.assertContains(response, '2 из 2')
 
     def test_overdue_badge(self):
-        from datetime import timedelta
-
-        from django.utils import timezone
         self.assignment.due_at = timezone.now() - timedelta(days=1)
         self.assignment.save()
         self.assertTrue(self.assignment.is_overdue)
@@ -266,6 +374,21 @@ class StudentAnswerTests(TestCase):
         self.assertEqual(response.context['current'], self.assignment)
         self.assertContains(response, 'На проверке')
         self.assertContains(response, 'Проверено')
+
+    def test_dashboard_prioritizes_returned_then_overdue(self):
+        self.assignment.due_at = timezone.now() + timedelta(days=2)
+        self.assignment.save()
+        overdue = make_assignment(
+            self.teacher, self.student,
+            due_at=timezone.now() - timedelta(days=1))
+        returned = make_assignment(
+            self.teacher, self.student, status=Assignment.STATUS_RETURNED)
+
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(
+            response.context['todo'],
+            [returned, overdue, self.assignment])
+        self.assertEqual(response.context['current'], returned)
 
     def test_formula_answer_wrapped_and_rendered(self):
         """Тип «формула»: голый LaTeX из math-field хранится как $…$,
@@ -493,6 +616,28 @@ class ReviewFlowTests(TestCase):
         self.assertContains(response, '(50%)')
         response = self.client.get(reverse('dashboard'))
         self.assertContains(response, '1/2 (50%)')
+
+    def test_complete_and_open_next_pending(self):
+        self.assignment.refresh_from_db()
+        make_assignment(
+            self.teacher, self.student,
+            status=Assignment.STATUS_SUBMITTED,
+            submitted_at=self.assignment.submitted_at - timedelta(minutes=1))
+        next_assignment = make_assignment(
+            self.teacher, self.student,
+            status=Assignment.STATUS_SUBMITTED,
+            submitted_at=timezone.now() + timedelta(minutes=1))
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        response = self.client.post(
+            reverse('save_review', args=[self.assignment.pk]), {
+                f'sub{submission.pk}_comment': '',
+                'action': 'complete_next',
+            })
+        self.assertRedirects(
+            response, reverse('review_assignment', args=[next_assignment.pk]))
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.status, Assignment.STATUS_REVIEWED)
 
     def test_review_form_has_no_grade_scale(self):
         response = self.client.get(

@@ -15,6 +15,8 @@
 
 <form method="post" action="{% url 'save_review' assignment.pk %}" id="review-form">
   {% csrf_token %}
+  <div class="review-layout">
+  <div class="review-main">
   {% for row in rows %}
   {% if row.task == None %}
   <div class="card ws-view">
@@ -108,18 +110,29 @@
   </div>
   {% endif %}
   {% endfor %}
-
-  <div class="card">
+  </div>
+  <aside class="card review-summary">
+    <span class="page-eyebrow">Итог проверки</span>
     <p class="review-total">Выполнено: <strong><span data-review-total-done>{{ result.done }}</span> из {{ result.total }}</strong>
       (<span data-review-total-percent>{{ result.percent }}</span>%)</p>
     <p class="helptext">
       Автосверка: {{ assignment.get_check_visibility_display|lower }} — режим задан при выдаче и не меняется.
       Бейджи «верно / неверно» — подсказка; отметку «выполнено» ставите вы. Эталон ученику не показывается.
     </p>
-    <button type="submit" name="action" value="save" class="btn btn-secondary">Сохранить черновик</button>
-    <button type="submit" name="action" value="complete" class="btn">Завершить проверку</button>
-    <button type="submit" name="action" value="return" class="btn btn-danger"
-            onclick="return confirm('Вернуть работу ученику на доработку?')">Вернуть на доработку</button>
+    <div class="review-actions">
+      <button type="submit" name="action" value="save" class="btn btn-secondary">Сохранить черновик</button>
+      {% if next_pending %}
+      <button type="submit" name="action" value="complete_next" class="btn">Завершить и открыть следующую</button>
+      <button type="submit" name="action" value="return_next" class="btn btn-secondary"
+              onclick="return confirm('Вернуть работу ученику на доработку?')">Вернуть и открыть следующую</button>
+      {% else %}
+      <button type="submit" name="action" value="complete" class="btn">Завершить проверку</button>
+      <button type="submit" name="action" value="return" class="btn btn-secondary"
+              onclick="return confirm('Вернуть работу ученику на доработку?')">Вернуть на доработку</button>
+      {% endif %}
+    </div>
+    <a class="review-back" href="{% url 'assignment_list' %}">Вернуться ко всем заданиям</a>
+  </aside>
   </div>
 </form>
 {% endblock %}
