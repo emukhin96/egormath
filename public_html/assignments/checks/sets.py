@@ -91,6 +91,15 @@ def numbers_equal(a, b, tolerance=None):
         return False
 
 
+def _unique_numbers(values, tolerance=None):
+    """Убрать численно равные повторы: ``±0`` и ``0; 0`` — одно число."""
+    out = []
+    for value in values:
+        if not any(numbers_equal(value, other, tolerance) for other in out):
+            out.append(value)
+    return out
+
+
 def _multiset_equal(items_a, items_b, tolerance=None, equal=numbers_equal):
     if len(items_a) != len(items_b):
         return False
@@ -127,11 +136,12 @@ def parse_set(text):
     values = [numeric_value(i) for i in items]
     if any(v is None for v in values):
         return None
-    return values
+    return _unique_numbers(values)
 
 
 def sets_equal(a, b, tolerance=None):
-    return _multiset_equal(a, b, tolerance)
+    return _multiset_equal(
+        _unique_numbers(a, tolerance), _unique_numbers(b, tolerance), tolerance)
 
 
 def parse_pairs(text):
@@ -343,5 +353,23 @@ def parse_range(text):
     return _normalize_intervals(intervals)
 
 
-def ranges_equal(a, b):
-    return a == b
+def _bound_equal(a, b, tolerance=None):
+    """Конечные границы — через ``numbers_equal`` (Fraction и float √2);
+    бесконечности сравниваются точно."""
+    if a in (-INF, INF) or b in (-INF, INF):
+        return a == b
+    return numbers_equal(a, b, tolerance)
+
+
+def _interval_equal(a, b, tolerance=None):
+    return (a[2] == b[2] and a[3] == b[3]
+            and _bound_equal(a[0], b[0], tolerance)
+            and _bound_equal(a[1], b[1], tolerance))
+
+
+def ranges_equal(a, b, tolerance=None):
+    if a is None or b is None:
+        return False
+    if a == b:
+        return True
+    return _multiset_equal(list(a), list(b), tolerance, equal=_interval_equal)
