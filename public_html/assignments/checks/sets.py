@@ -57,19 +57,38 @@ def numeric_value(text):
     return result
 
 
+def _as_finite_float(value):
+    """float, если значение помещается в double; иначе None (в т.ч. inf)."""
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return result if math.isfinite(result) else None
+
+
 def numbers_equal(a, b, tolerance=None):
     if a is None or b is None:
         return False
-    try:
-        if not math.isfinite(float(a)) or not math.isfinite(float(b)):
+    # Сначала точное сравнение дробей: 10^{999} не влезает в float.
+    if isinstance(a, Fraction) and isinstance(b, Fraction):
+        if tolerance is None:
+            return a == b
+        try:
+            tol = tolerance if isinstance(tolerance, Fraction) else Fraction(tolerance)
+        except (TypeError, ValueError, OverflowError, ZeroDivisionError):
             return False
-    except (TypeError, ValueError, OverflowError):
+        if tol < 0:
+            return False
+        return abs(a - b) <= tol
+    fa, fb = _as_finite_float(a), _as_finite_float(b)
+    if fa is None or fb is None:
         return False
     if tolerance is None:
-        if isinstance(a, Fraction) and isinstance(b, Fraction):
-            return a == b
-        tolerance = 1e-9 * max(1.0, abs(float(b)))
-    return abs(float(a) - float(b)) <= float(tolerance)
+        tolerance = 1e-9 * max(1.0, abs(fb))
+    try:
+        return abs(fa - fb) <= float(tolerance)
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
 def _multiset_equal(items_a, items_b, tolerance=None, equal=numbers_equal):
