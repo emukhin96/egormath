@@ -1,4 +1,7 @@
 import io
+import shutil
+import subprocess
+from pathlib import Path
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -336,6 +339,37 @@ class StudentAnswerTests(TestCase):
         self.assertNotContains(response, 'mathlive')
         self.assertContains(response, 'answer-readonly')
         self.assertContains(response, 'нет решений при $a&lt;0$')
+
+    def test_range_and_order_widgets_markup(self):
+        """У слота range — контейнер числовой прямой, у order — список и
+        селекты позиций (виджеты дорисовывает JS); после сдачи — только текст."""
+        task = self.tasks[0]
+        task.answer_mask = r'{{range: (-\infty; -5) \cup [1; 4)}} и {{order: 1|2|3}}'
+        task.save()
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(response, f'data-numberline="task{task.pk}_s1"')
+        self.assertContains(response, f'data-mirror="task{task.pk}_s1"')
+        self.assertContains(response, 'js/numberline.js')
+        self.assertContains(response, 'data-mask-order')
+        self.assertContains(response, f'name="task{task.pk}_s2_0"')
+        from .checks import parse_mask
+        order_slot = [s for s in parse_mask(task.answer_mask).slots
+                      if s.kind == 'order'][0]
+        tokens = order_slot.order_tokens(f'task{task.pk}')
+        self.client.post(
+            reverse('save_answers', args=[self.assignment.pk]),
+            {f'task{task.pk}_s1': r'(-\infty; -5) \cup [1; 4)',
+             f'task{task.pk}_s2_0': tokens[0],
+             f'task{task.pk}_s2_1': tokens[1],
+             f'task{task.pk}_s2_2': tokens[2]})
+        submission = Submission.objects.get(task=task)
+        self.assertEqual(submission.check_json, {'s1': 'ok', 's2': 'ok'})
+        self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertNotContains(response, 'data-numberline')
+        self.assertContains(response, r'(-\infty; -5)')
 
     def test_mask_answers_saved_to_json(self):
         """Значения слотов сохраняются в answer_json, display_answer — маска с подстановкой."""
@@ -1063,3 +1097,28 @@ class AutoCheckFlowTests(TestCase):
         })
         submission.refresh_from_db()
         self.assertNotEqual(submission.answer_json.get('s1'), '0|1|2')
+
+
+class NumberLineJsTests(SimpleTestCase):
+    def test_format_latex_decimal_roundtrip(self):
+        """parse(formatLatex([{lo:1.5,...}])) не должен ломаться на 1{,}5."""
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('node не установлен')
+        js = Path(__file__).resolve().parents[1] / 'static/js/numberline.js'
+        script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const ctx = {window: {}, document: {createElementNS: function () { return {}; }, addEventListener: function () {}}};
+vm.runInNewContext(src, ctx);
+const NL = ctx.window.EgorNumberLine;
+const text = NL.formatLatex([{lo: 1.5, hi: 4, lc: true, rc: true}]);
+if (text.indexOf('{,}') < 0) process.exit(2);
+const parsed = NL.parse(text);
+if (!parsed || parsed.length !== 1) process.exit(3);
+if (parsed[0].lo !== 1.5 || parsed[0].hi !== 4 || !parsed[0].lc || !parsed[0].rc)
+  process.exit(4);
+if (NL.num('1{,}5') !== 1.5 || NL.parse('[1.5; 4]') === null) process.exit(5);
+"""
+        subprocess.check_call([node, '-e', script, str(js)])

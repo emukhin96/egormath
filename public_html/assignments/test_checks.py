@@ -178,6 +178,9 @@ class MaskCheckTests(SimpleTestCase):
         self.assertEqual(check_slot(s, 'много'), UNKNOWN)
         s = slot('{{range: [1; 4)}}')
         self.assertEqual(check_slot(s, r'1\le x<4'), OK)
+        self.assertEqual(
+            check_slot(slot(r'{{range: [1.5; 4]}}'), r'[1{,}5; 4]'), OK,
+            'виджет прямой пишет десятичную запятую как 1{,}5')
         self.assertEqual(check_slot(s, '1<x<4'), WRONG)
         self.assertEqual(check_slot(s, r'x\ge1, x<4'), WRONG,
                          'два неравенства через запятую — объединение (вся прямая)')
