@@ -246,7 +246,7 @@ class AnswerFields(models.Model):
     def student_slot_checks(self):
         """Результаты по слотам, которые можно показать ученику, — с тем же
         правилом раскрытия, что и student_check."""
-        if self.check_revealed or not self.assignment_of.is_editable_by_student:
+        if self._student_check_visible():
             return self.check_json or {}
         return {}
 
