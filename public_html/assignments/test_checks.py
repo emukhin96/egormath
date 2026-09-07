@@ -164,6 +164,10 @@ class MaskCheckTests(SimpleTestCase):
         self.assertEqual(check_slot(s, '1<x<4'), WRONG)
         self.assertEqual(check_slot(s, r'x\ge1, x<4'), WRONG,
                          'два неравенства через запятую — объединение (вся прямая)')
+        self.assertEqual(check_slot(s, 'x>=1 и x<4'), OK)
+        self.assertEqual(check_slot(slot('{{range: R}}'), 'x>1 и x<4'), WRONG)
+        self.assertIsNone(sets.parse_pairs('2*(3;4)'))
+        self.assertEqual(sets.parse_pairs('(3;4)'), [(3, 4)])
         s = slot('{{range: x>5}}')
         self.assertEqual(check_slot(s, r'(5; +\infty)'), OK)
         self.assertEqual(check_slot(s, '5<x'), OK)

@@ -17,7 +17,8 @@ _VAR = r'[a-zA-Zа-яА-Я](?:_\{?\d+\}?)?'
 _IN_RE = re.compile(r'^' + _VAR + r'\s*(?:\\in|∈)\s*')
 _INTERVAL_TOKEN_RE = re.compile(
     r'[(\[]\s*[^;()\[\]]+?\s*;\s*[^;()\[\]]+?\s*[)\]]')
-_SPLIT_RE = re.compile(r'\s*(?:∪|,|;|\bили\b|\bor\b|\bи\b)\s*')
+_UNION_RE = re.compile(r'\s*(?:∪|,|;|\bили\b|\bor\b)\s*')
+_AND_RE = re.compile(r'\s+(?:\bи\b|\band\b)\s+', re.I)
 _OP = r'(<=|>=|<|>)'
 _CHAIN_RE = re.compile(
     r'^(.+?)\s*' + _OP + r'\s*' + _VAR + r'\s*' + _OP + r'\s*(.+)$')
@@ -112,7 +113,12 @@ def parse_pairs(text):
     if not text:
         return None
     groups = _PAIR_GROUP_RE.findall(text)
-    if not groups:
+    if groups:
+        leftover = _PAIR_GROUP_RE.sub(' ', text)
+        leftover = re.sub(r'[\s,;]+', '', leftover)
+        if leftover:
+            return None
+    else:
         if ';' not in text:
             return None
         groups = [text]
@@ -210,6 +216,39 @@ def _normalize_intervals(intervals):
     return frozenset(merged)
 
 
+def _intersect_one(a, b):
+    """Пересечение двух промежутков или None, если пусто."""
+    lo, hi = max(a[0], b[0]), min(a[1], b[1])
+    if lo > hi:
+        return None
+    left = '(' if ((lo == a[0] and a[2] == '(') or (lo == b[0] and b[2] == '(')) else '['
+    right = ')' if ((hi == a[1] and a[3] == ')') or (hi == b[1] and b[3] == ')')) else ']'
+    if lo == hi and (left == '(' or right == ')'):
+        return None
+    return (lo, hi, left, right)
+
+
+def _intersect_lists(left, right):
+    out = []
+    for a in left:
+        for b in right:
+            one = _intersect_one(a, b)
+            if one:
+                out.append(one)
+    return out
+
+
+def _parse_range_atom(piece, tokens):
+    piece = piece.strip()
+    if not piece:
+        return None
+    m = re.fullmatch(r'\x00(\d+)\x00', piece)
+    if m:
+        parsed = parse_interval(tokens[int(m.group(1))])
+        return None if parsed is None else [parsed]
+    return _inequality(piece)
+
+
 def parse_range(text):
     """Числовое множество: скобочная запись, объединения, неравенства
     (``x>5, x<-5``; ``1<x<4``; ``x \\le -5 или x>5``), «нет решений», R.
@@ -231,21 +270,17 @@ def parse_range(text):
 
     rest = _INTERVAL_TOKEN_RE.sub(_stash, text)
     intervals = []
-    for piece in _SPLIT_RE.split(rest):
-        piece = piece.strip()
-        if not piece:
+    for union_part in _UNION_RE.split(rest):
+        and_parts = [p for p in _AND_RE.split(union_part) if p.strip()]
+        if not and_parts:
             continue
-        m = re.fullmatch(r'\x00(\d+)\x00', piece)
-        if m:
-            parsed = parse_interval(tokens[int(m.group(1))])
+        acc = None
+        for part in and_parts:
+            parsed = _parse_range_atom(part, tokens)
             if parsed is None:
                 return None
-            intervals.append(parsed)
-            continue
-        parsed = _inequality(piece)
-        if parsed is None:
-            return None
-        intervals.extend(parsed)
+            acc = parsed if acc is None else _intersect_lists(acc, parsed)
+        intervals.extend(acc or [])
     if not intervals:
         return None
     return _normalize_intervals(intervals)
