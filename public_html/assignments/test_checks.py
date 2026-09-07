@@ -1,4 +1,6 @@
 """Тесты ядра масок ответа: грамматика, слоты, проверки по типам."""
+from fractions import Fraction
+
 from django.test import SimpleTestCase
 
 from .check_answer import OK, UNKNOWN, WRONG, check_answer
@@ -278,3 +280,10 @@ class ExpressionHelpersTests(SimpleTestCase):
         self.assertAlmostEqual(sets.numeric_value(r'\sqrt{2}'), 2 ** 0.5)
         self.assertIsNone(sets.numeric_value(r'\infty'))
         self.assertIsNone(sets.numeric_value('+\\infty'))
+        huge = Fraction(10 ** 999, 1)
+        self.assertTrue(sets.numbers_equal(huge, huge))
+        self.assertFalse(sets.numbers_equal(huge, huge + 1))
+        self.assertTrue(sets.numbers_equal(huge, huge, tolerance=1))
+        self.assertFalse(sets.numbers_equal(huge, huge + 2, tolerance=1))
+        self.assertEqual(check_slot(slot(r'{{number: 10^{999}}}'), r'10^{999}'), OK)
+        self.assertEqual(check_slot(slot(r'{{number: 10^{999}}}'), r'10^{998}'), WRONG)
