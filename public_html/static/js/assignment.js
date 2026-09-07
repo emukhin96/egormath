@@ -109,7 +109,9 @@
         if (!(input.files && input.files.length && input.form)) return;
         var go = function () { input.form.submit(); };
         if (answers && window.EgorAutosave && EgorAutosave.autosave) {
-          Promise.resolve(EgorAutosave.autosave(answers)).then(go).catch(go);
+          Promise.resolve(EgorAutosave.autosave(answers)).then(function (ok) {
+            if (ok) go();
+          });
         } else {
           go();
         }

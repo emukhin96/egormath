@@ -25,20 +25,61 @@ _PRODUCT_NODES = ('mul', 'adjacent_expressions')
 _QUOTIENT_NODES = ('div', 'fraction')
 _NUMERIC_OPS = ('add', 'sub', 'mul', 'adjacent_expressions', 'superscript')
 
-# lark-грамматика sympy не понимает соседство скобок ``)(``, ``}(``, ``^2(``,
+# lark-грамматика sympy не понимает соседство скобок ``)(``, ``^2(``,
 # ``\sqrt{2}x`` и читает ``x(x+1)`` как вызов функции — ставим явное умножение.
+# После ``}`` — только если это не индекс/степень ``_{…}`` / ``^{…}``
+# (иначе ``\log_{2}x`` и ``\sin^{2}x`` ломаются).
 _IMPLICIT_MUL_RES = (
-    re.compile(r'(?<=[)}])\s*(?=\()'),
-    re.compile(r'(?<=\})\s*(?=[a-zA-Z])'),
+    re.compile(r'(?<=\))\s*(?=\()'),
     re.compile(r'(?<=\))\s*(?=\d)'),
     re.compile(r'(?<=\^\d)\s*(?=\()'),
     re.compile(r'(?<![\\a-zA-Z][a-zA-Z])(?<=[a-zA-Z])\s*(?=\()'),
 )
 
 
+def _closes_script(text, close_idx):
+    """``}`` закрывает ``_{…}`` или ``^{…}`` (индекс/степень), а не ``\\sqrt{…}``."""
+    depth = 0
+    i = close_idx
+    while i >= 0:
+        char = text[i]
+        if char == '}':
+            depth += 1
+        elif char == '{':
+            depth -= 1
+            if depth == 0:
+                j = i - 1
+                while j >= 0 and text[j].isspace():
+                    j -= 1
+                return j >= 0 and text[j] in '_^'
+        i -= 1
+    return False
+
+
+def _insert_cdot_after_group(text):
+    """``}x`` / ``}(`` → ``}\\cdot ``, кроме индексов и степеней."""
+    out = []
+    i = 0
+    n = len(text)
+    while i < n:
+        if text[i] == '}':
+            j = i + 1
+            while j < n and text[j].isspace():
+                j += 1
+            if (j < n and (text[j] == '(' or text[j].isalpha())
+                    and not _closes_script(text, i)):
+                out.append('}\\cdot ')
+                i = j
+                continue
+        out.append(text[i])
+        i += 1
+    return ''.join(out)
+
+
 def prepare(text):
     """Нормализация школьной записи + явное умножение перед скобкой."""
     text = normalize(text)
+    text = _insert_cdot_after_group(text)
     for rx in _IMPLICIT_MUL_RES:
         text = rx.sub(r'\\cdot ', text)
     return text.strip()
