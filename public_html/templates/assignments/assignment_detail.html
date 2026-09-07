@@ -67,9 +67,17 @@
       <li>
         <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}
         {% if sr.fragments %}
+        {% if sr.part.legacy_answer and not sr.part.has_mask_values %}
+        <div class="subitem-answer">
+          {% include 'assignments/_answer_fields.html' with prefix=sr.prefix answer_type=row.task.answer_type obj=sr.part editable=False %}
+          {% if show_checks %}{% include 'assignments/_check_badge.html' with prefix=sr.prefix status=sr.part.student_check|default:'' %}{% endif %}
+        </div>
+        {% endif %}
+        {% if editable or sr.part.has_mask_values or not sr.part.legacy_answer %}
         <div class="subitem-answer">
           {% include 'assignments/_mask.html' with fragments=sr.fragments editable=editable show_checks=show_checks %}
         </div>
+        {% endif %}
         {% elif sr.part.legacy_answer or not editable %}
         <div class="subitem-answer">
           {% include 'assignments/_answer_fields.html' with prefix=sr.prefix answer_type=row.task.answer_type obj=sr.part editable=False %}
@@ -82,8 +90,15 @@
     {% else %}
     <div class="answer-block">
       {% if row.fragments %}
+      {% if sub.legacy_answer and not sub.has_mask_values %}
+      <label>Ответ</label>
+      {% include 'assignments/_answer_fields.html' with prefix=row.prefix answer_type=row.task.answer_type obj=sub editable=False %}
+      {% if show_checks %}{% include 'assignments/_check_badge.html' with prefix=row.prefix status=sub.student_check|default:'' %}{% endif %}
+      {% endif %}
+      {% if editable or sub.has_mask_values or not sub.legacy_answer %}
       <label>Ответ</label>
       {% include 'assignments/_mask.html' with fragments=row.fragments editable=editable show_checks=show_checks %}
+      {% endif %}
       {% elif sub.legacy_answer or not editable %}
       <label>Ответ</label>
       {% include 'assignments/_answer_fields.html' with prefix=row.prefix answer_type=row.task.answer_type obj=sub editable=False %}

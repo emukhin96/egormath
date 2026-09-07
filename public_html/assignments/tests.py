@@ -983,3 +983,33 @@ class AutoCheckFlowTests(TestCase):
         submission.refresh_from_db()
         self.assertEqual(submission.display_answer, '[5]')
         self.assertEqual(submission.check_json, {'s1': 'ok'})
+
+    def test_legacy_answer_still_shown_after_mask_added(self):
+        """Пока слоты пусты, ученик видит старый свободный ответ — и форму маски."""
+        self.task.answer_mask = ''
+        self.task.answer_type = Task.ANSWER_NUMBER
+        self.task.answer_latex = r'\frac{1}{4}'
+        self.task.save()
+        self.client.post(self.url, {f'task{self.task.pk}_number': '0,25'})
+        self.task.answer_mask = '{{number: 5}}'
+        self.task.save()
+        response = self.client.get(self.detail)
+        self.assertContains(response, '0,25')
+        self.assertContains(response, f'name="task{self.task.pk}_s1"')
+
+    def test_cleared_order_slot_is_saved(self):
+        self.task.answer_mask = '{{order: a|b}}'
+        self.task.save()
+        self.client.post(self.url, {
+            f'task{self.task.pk}_s1_0': '0',
+            f'task{self.task.pk}_s1_1': '1',
+        })
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.answer_json, {'s1': '0|1'})
+        self.client.post(self.url, {
+            f'task{self.task.pk}_s1_0': '',
+            f'task{self.task.pk}_s1_1': '',
+        })
+        submission.refresh_from_db()
+        self.assertEqual(submission.answer_json.get('s1'), '')

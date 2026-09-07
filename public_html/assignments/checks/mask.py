@@ -467,10 +467,10 @@ def collect_values(data, prefix, spec):
     for slot in spec.slots:
         key = f'{prefix}_{slot.name}'
         if slot.kind == ORDER:
-            parts = [(data.get(f'{key}_{k}') or '').strip()
-                     for k in range(len(slot.items))]
-            if any(parts):
-                values[slot.name] = '|'.join(parts)
+            pos_keys = [f'{key}_{k}' for k in range(len(slot.items))]
+            if any(k in data for k in pos_keys):
+                parts = [(data.get(k) or '').strip() for k in pos_keys]
+                values[slot.name] = '|'.join(parts) if any(parts) else ''
             elif key in data:
                 values[slot.name] = (data.get(key) or '').strip()
         elif slot.kind == SET and data.get(f'{key}_none'):
