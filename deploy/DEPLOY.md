@@ -523,7 +523,12 @@ git checkout -B main origin/main
 rm -f public_html/index.htm
 rm -rf public_html/cgi-bin
 
-python3.10 -m venv venv
+# stdlib `python3.10 -m venv` на Timeweb падает: нет ensurepip, apt недоступен.
+# Способ из справки Timeweb (virtualenv.pyz для 3.10):
+# https://timeweb.com/ru/docs/virtualnyj-hosting/prilozheniya-i-frejmvorki/python-ustanovka-virtualenv/
+rm -rf venv
+wget -O /tmp/virtualenv.pyz https://bootstrap.pypa.io/virtualenv/3.10/virtualenv.pyz
+python3.10 /tmp/virtualenv.pyz venv
 venv/bin/pip install -r requirements.txt
 
 mkdir -p .secrets && chmod 700 .secrets
