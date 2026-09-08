@@ -466,6 +466,22 @@ class CorpusViewTests(TestCase):
         self.assertFalse(Worksheet.objects.filter(pk=ws.pk).exists())
         self.assertEqual(load_draft(draft['id'])['status'], 'needs_review')
 
+    def test_push_long_rubric_note(self):
+        from worksheet_corpus.store import save_draft
+        from worksheets.models import WorksheetItem
+        draft = _sample_draft('9 класс/math9-course/alg09-func-01')
+        draft['elements'][0]['note'] = 'x' * 430
+        save_draft(draft)
+        push = self.client.post(
+            reverse('worksheet_corpus_push', args=[draft['id']]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(push.status_code, 200)
+        self.assertTrue(push.json()['ok'])
+        note = WorksheetItem.objects.get(
+            worksheet__comment__startswith='corpus:' + draft['id'],
+            rubric='Нахождение процента').rubric_note
+        self.assertEqual(len(note), 430)
+
     def test_tex_export(self):
         from worksheet_corpus.store import save_draft
         draft = _sample_draft()
