@@ -202,6 +202,12 @@
     display: block;
   }
 
+  input + .helptext,
+  select + .helptext,
+  textarea + .helptext {
+    margin-top: var(--space-3);
+  }
+
   /* Preflight снимает маркеры со всех списков — Django рендерит ошибки как ul */
   ul.errorlist {
     color: var(--err);
@@ -3037,13 +3043,24 @@
     flex: none;
     border-top: 1px solid var(--border);
     color: var(--muted);
-    padding: var(--space-4) 0 var(--space-5);
+    padding: var(--space-4) var(--space-4) var(--space-5);
     font-size: 0.85rem;
+    text-align: left;
   }
 
   .login-box {
     max-width: 380px;
     margin: 8vh auto 0;
+  }
+
+  .login-box .form-buttons {
+    width: 100%;
+  }
+
+  .login-box .form-buttons .btn {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
   }
 
   pre.log {
@@ -3105,6 +3122,10 @@
     .topbar-inner {
       flex-wrap: wrap;
       gap: var(--space-2);
+      padding-inline: var(--space-3);
+    }
+
+    .footer {
       padding-inline: var(--space-3);
     }
 

@@ -28,6 +28,8 @@ class StudentRegistrationTests(TestCase):
         self.assertContains(response, 'maxlength="30"')
         self.assertContains(response, 'maxlength="50"', count=2)
         self.assertContains(response, 'maxlength="128"', count=2)
+        self.assertNotContains(
+            response, 'До 50 символов: буквы, пробел, дефис или апостроф.')
 
     def test_student_can_register_and_is_logged_in(self):
         response = self.client.post(
