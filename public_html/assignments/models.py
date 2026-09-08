@@ -208,22 +208,20 @@ class AnswerFields(models.Model):
         """Пересчитать auto_check; возвращает True, если результат изменился.
 
         С рабочей маской (``spec``) сверяются слоты ``answer_json`` — итог и
-        результат по каждому слоту (``check_json``); без неё — старые
-        свободные поля по строке-эталону ``reference``.
+        результат по каждому слоту (``check_json``). Исторические свободные
+        ответы сохраняют прежнюю оценку; reference оставлен для совместимости.
         """
         from django.utils import timezone
 
-        from .check_answer import check_fields
         from .checks import check_mask
-        # Ответ, сданный до появления маски, живёт в старых полях — его
-        # сверяем по-старому, пока ученик не заполнил слоты
+        # Старую оценку не пересчитываем, пока ученик не заполнил слоты.
         by_mask = (spec is not None and spec.is_valid
                    and (self.has_mask_values or not self.legacy_answer))
         if by_mask:
             result, per_slot = check_mask(spec, self.answer_json or {})
         else:
-            result = check_fields(self.answer_type, self, reference or '')
-            per_slot = {}
+            # Исторический свободный ответ сохраняет прежнюю оценку.
+            return False
         changed = result != self.auto_check or per_slot != (self.check_json or {})
         self.auto_check = result
         self.check_json = per_slot
@@ -300,10 +298,6 @@ class AnswerFields(models.Model):
         return ''
 
     @property
-    def answer_type(self):
-        raise NotImplementedError
-
-    @property
     def display_answer(self):
         if self.answer_json:
             spec = self.mask_spec
@@ -315,14 +309,9 @@ class AnswerFields(models.Model):
     @property
     def legacy_answer(self):
         """Ответ в старых свободных полях (до масок / без маски)."""
-        t = self.answer_type
-        if t == Task.ANSWER_NUMBER:
-            return self.answer_number
-        if t == Task.ANSWER_INTERVAL:
-            if self.interval_low or self.interval_high:
-                return f'от {self.interval_low or "−∞"} до {self.interval_high or "+∞"}'
-            return ''
-        return self.answer_text
+        return self.answer_text or self.answer_number or (
+            f'от {self.interval_low or "−∞"} до {self.interval_high or "+∞"}'
+            if self.interval_low or self.interval_high else '')
 
     @property
     def formula_latex(self):
@@ -364,17 +353,13 @@ class Submission(AnswerFields):
         return self.task
 
     @property
-    def answer_type(self):
-        return self.task.answer_type
-
-    @property
     def is_empty(self):
         return not (self.display_answer or self.photos.exists()
                     or any(not p.is_empty for p in self.parts.all()))
 
 
 class SubmissionPart(AnswerFields):
-    """Ответ ученика на один подпункт задачи. Тип ответа — как у задачи."""
+    """Ответ ученика на один подпункт задачи. Маска принадлежит подпункту."""
 
     submission = models.ForeignKey(
         Submission, on_delete=models.CASCADE, related_name='parts',
@@ -403,10 +388,6 @@ class SubmissionPart(AnswerFields):
     @property
     def mask_owner(self):
         return self.subitem
-
-    @property
-    def answer_type(self):
-        return self.submission.task.answer_type
 
     @property
     def is_empty(self):

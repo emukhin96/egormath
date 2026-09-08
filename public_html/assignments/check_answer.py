@@ -36,8 +36,8 @@ _REPLACEMENTS = (
 
 _DECIMAL_COMMA_RE = re.compile(r'(?<=\d),(?=\d)')
 # ``\le5`` без пробела тоже встречается; ``\left`` не трогаем
-_RELATION_RE = re.compile(r'\\(leq|geq|neq|le|ge|ne)(?![a-zA-Z])')
-_RELATIONS = {'leq': '<=', 'le': '<=', 'geq': '>=', 'ge': '>=',
+_RELATION_RE = re.compile(r'\\(leqslant|geqslant|leq|geq|neq|le|ge|ne)(?![a-zA-Z])')
+_RELATIONS = {'leqslant': '<=', 'geqslant': '>=', 'leq': '<=', 'le': '<=', 'geq': '>=', 'ge': '>=',
               'neq': '!=', 'ne': '!='}
 _VAR_EQ_RE = re.compile(r'^[a-zA-Zа-яА-Я](?:_\{?\d+\}?)?\s*=\s*(.+)$')
 _NUMBER_RE = re.compile(r'^[+-]?\d+(?:\.\d+)?$')
@@ -253,14 +253,3 @@ def check_interval_fields(low, high, reference):
     lo = (low or '').strip().lstrip('([').strip() or '-\\infty'
     hi = (high or '').strip().rstrip(')]').strip() or '\\infty'
     return check_answer(f'({lo}; {hi})', reference, strict_brackets=False)
-
-
-def check_fields(answer_type, obj, reference):
-    """Сверка ответа Submission/SubmissionPart по типу задачи."""
-    from problems.models import Task
-    if answer_type == Task.ANSWER_NUMBER:
-        return check_answer(obj.answer_number, reference)
-    if answer_type == Task.ANSWER_INTERVAL:
-        return check_interval_fields(
-            obj.interval_low, obj.interval_high, reference)
-    return check_answer(obj.answer_text, reference)

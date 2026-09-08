@@ -156,6 +156,8 @@
       var textarea = scope.querySelector('textarea[data-mask-source]');
       var answer = row ? row.querySelector('textarea[name$="-answer_latex"]')
         : form.querySelector('textarea[name="answer_latex"]');
+      var author = row ? row.querySelector('textarea[name$="-author_answer_latex"]') : form.querySelector('textarea[name="author_answer_latex"]');
+      if (author && author.value.trim()) answer = author;
       if (!textarea || !answer) return;
       if (!answer.value.trim()) { toast(false, 'Поле «Ответ» пустое — заготовку делать не из чего'); return; }
       post(draftUrl, {answer: answer.value}).then(function (res) {

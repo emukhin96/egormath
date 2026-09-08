@@ -69,7 +69,7 @@
         {% if sr.fragments %}
         {% if sr.part.legacy_answer and not sr.part.has_mask_values %}
         <div class="subitem-answer">
-          {% include 'assignments/_answer_fields.html' with prefix=sr.prefix answer_type=row.task.answer_type obj=sr.part editable=False %}
+          {% include 'assignments/_answer_fields.html' with prefix=sr.prefix obj=sr.part editable=False %}
           {% if show_checks %}{% include 'assignments/_check_badge.html' with prefix=sr.prefix status=sr.part.student_check|default:'' %}{% endif %}
         </div>
         {% endif %}
@@ -78,13 +78,9 @@
           {% include 'assignments/_mask.html' with fragments=sr.fragments editable=editable show_checks=show_checks %}
         </div>
         {% endif %}
-        {% elif editable and not can_upload %}
-        <div class="subitem-answer">
-          {% include 'assignments/_answer_fields.html' with prefix=sr.prefix answer_type=row.task.answer_type obj=sr.part editable=editable %}
-        </div>
         {% elif sr.part.legacy_answer or not editable %}
         <div class="subitem-answer">
-          {% include 'assignments/_answer_fields.html' with prefix=sr.prefix answer_type=row.task.answer_type obj=sr.part editable=False %}
+          {% include 'assignments/_answer_fields.html' with prefix=sr.prefix obj=sr.part editable=False %}
           {% if show_checks %}{% include 'assignments/_check_badge.html' with prefix=sr.prefix status=sr.part.student_check|default:'' %}{% endif %}
         </div>
         {% endif %}
@@ -96,25 +92,23 @@
       {% if row.fragments %}
       {% if sub.legacy_answer and not sub.has_mask_values %}
       <label>Ответ</label>
-      {% include 'assignments/_answer_fields.html' with prefix=row.prefix answer_type=row.task.answer_type obj=sub editable=False %}
+      {% include 'assignments/_answer_fields.html' with prefix=row.prefix obj=sub editable=False %}
       {% if show_checks %}{% include 'assignments/_check_badge.html' with prefix=row.prefix status=sub.student_check|default:'' %}{% endif %}
       {% endif %}
       {% if editable or sub.has_mask_values or not sub.legacy_answer %}
       <label>Ответ</label>
       {% include 'assignments/_mask.html' with fragments=row.fragments editable=editable show_checks=show_checks %}
       {% endif %}
-      {% elif editable and not can_upload %}
-      <label>Ответ{% if row.task.answer_type == 'number' %} (число){% elif row.task.answer_type == 'interval' %} (промежуток){% elif row.task.answer_type == 'formula' %} (формула){% endif %}</label>
-      {% include 'assignments/_answer_fields.html' with prefix=row.prefix answer_type=row.task.answer_type obj=sub editable=editable %}
       {% elif sub.legacy_answer or not editable %}
       <label>Ответ</label>
-      {% include 'assignments/_answer_fields.html' with prefix=row.prefix answer_type=row.task.answer_type obj=sub editable=False %}
+      {% include 'assignments/_answer_fields.html' with prefix=row.prefix obj=sub editable=False %}
       {% if show_checks %}{% include 'assignments/_check_badge.html' with prefix=row.prefix status=sub.student_check|default:'' %}{% endif %}
       {% endif %}
     </div>
     {% endif %}
-    {% if editable and not row.short_answer and can_upload %}
-    <p class="helptext mask-photo-note">Краткий ответ для этой задачи не предусмотрен — пришлите фото решения.</p>
+    {% if editable and not row.short_answer %}
+    {% if can_upload %}<p class="helptext mask-photo-note">Краткий ответ для этой задачи не предусмотрен — пришлите фото решения.</p>
+    {% else %}<p class="helptext">Ввод ответа для этой задачи пока не настроен. Уточните у учителя, как передать решение.</p>{% endif %}
     {% endif %}
 
     {% if can_check or can_upload %}

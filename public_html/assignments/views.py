@@ -20,8 +20,7 @@ from worksheets.models import Worksheet
 from .checks import reference_text, slot_display
 from .forms import AssignmentCreateForm
 from .models import (Assignment, Review, Submission, SubmissionCheckAttempt,
-                     SubmissionPart, SubmissionPhoto, locked_check_visibility,
-                     wrap_math)
+                     SubmissionPart, SubmissionPhoto, locked_check_visibility)
 
 
 # --- Назначение листка ученикам (действие учителя со страницы листка) ---
@@ -389,44 +388,16 @@ def _get_or_create_submission(assignment, task_id):
     return submission
 
 
-_ANSWER_FIELD_SUFFIXES = {
-    Task.ANSWER_NUMBER: (('answer_number', 'number'),),
-    Task.ANSWER_INTERVAL: (('interval_low', 'low'), ('interval_high', 'high')),
-    Task.ANSWER_TEXT: (('answer_text', 'text'),),
-    Task.ANSWER_FORMULA: (('answer_text', 'text'),),
-}
-
-
-def _answer_fields(answer_type, post, prefix):
-    """Поля ответа по типу задачи из POST с данным префиксом.
-
-    Возвращаются только поля, реально присланные формой: тогда POST без
-    полей ответов (например, форма загрузки фото) не затирает
-    сохранённое пустыми строками. Формула из <math-field> приходит голым
-    LaTeX и хранится как ``$…$`` (конвенция answer_latex).
-    """
-    suffixes = _ANSWER_FIELD_SUFFIXES.get(
-        answer_type, _ANSWER_FIELD_SUFFIXES[Task.ANSWER_TEXT])
-    fields = {
-        field: post[f'{prefix}_{suffix}'].strip()
-        for field, suffix in suffixes
-        if f'{prefix}_{suffix}' in post
-    }
-    if answer_type == Task.ANSWER_FORMULA and 'answer_text' in fields:
-        fields['answer_text'] = wrap_math(fields['answer_text'])
-    return fields
-
-
-def _answer_payload(owner, answer_type, post, prefix):
+def _answer_payload(owner, post, prefix):
     """Что сохранить для задачи/подпункта ``owner``: слоты маски
-    (``answer_json``) при рабочей маске, иначе старые свободные поля.
-    Пустой словарь — форма этих полей не присылала."""
+    (``answer_json``) при рабочей маске. Без маски новые ответы не принимаются.
+    Пустой словарь означает, что сохранять нечего."""
     spec = owner.mask_spec
     if spec is not None and spec.is_valid:
         from .checks import collect_values
         values = collect_values(post, prefix, spec)
         return ({'answer_json': values}, spec) if values else ({}, spec)
-    return _answer_fields(answer_type, post, prefix), None
+    return {}, None
 
 
 def _persist_answers(assignment, post):
@@ -469,7 +440,7 @@ def _persist_answers(assignment, post):
         subitems = item.selected_subitems()
         if subitems:
             part_fields = {
-                s: _answer_payload(s, task.answer_type, post, f'{prefix}_sub{s.pk}')
+                s: _answer_payload(s, post, f'{prefix}_sub{s.pk}')
                 for s in subitems
             }
             part_fields = {s: fs for s, fs in part_fields.items() if fs[0]}
@@ -488,7 +459,7 @@ def _persist_answers(assignment, post):
                     submission=submission, subitem=subitem)
                 _apply(part, fields, subitem.effective_answer_latex, spec)
             continue
-        fields, spec = _answer_payload(task, task.answer_type, post, prefix)
+        fields, spec = _answer_payload(task, post, prefix)
         if not fields:
             continue
         if _has_value(fields) or task.pk in existing:

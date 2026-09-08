@@ -39,13 +39,7 @@
         </div>
         {{ form.stars.errors }}{{ form.stars }}
       </div>
-      <div>
-        <div class="label-row">
-          <label for="{{ form.answer_type.id_for_label }}">Тип ответа</label>
-          {% include 'problems/_pin.html' with field='answer_type' %}
-        </div>
-        {{ form.answer_type.errors }}{{ form.answer_type }}
-      </div>
+
       <div>
         <div class="label-row">
           <label for="{{ form.columns.id_for_label }}">Колонки подпунктов</label>
@@ -53,13 +47,7 @@
         </div>
         {{ form.columns.errors }}{{ form.columns }}
       </div>
-      <div>
-        <div class="label-row">
-          <label for="{{ form.answer_mode.id_for_label }}">Формат ответа ученика</label>
-          {% include 'problems/_pin.html' with field='answer_mode' %}
-        </div>
-        {{ form.answer_mode.errors }}{{ form.answer_mode }}
-      </div>
+
     </div>
 
     <div>
@@ -72,6 +60,7 @@
       {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=True grades=True selected_json=selected_json %}
     </div>
 
+    <details class="ws-add-text"><summary>Авторский ответ и решение</summary><p>{{ form.author_answer_latex.label_tag }}{{ form.author_answer_latex }}</p><p>{{ form.author_solution_latex.label_tag }}{{ form.author_solution_latex }}</p></details>
     <p>
       <label for="{{ form.answer_latex.id_for_label }}">{{ form.answer_latex.label }}</label>
       {{ form.answer_latex.errors }}{{ form.answer_latex }}
@@ -92,8 +81,7 @@
     <h2>Маска ответа для ученика</h2>
     <p class="helptext">Поля «Ответ» и «Решение» выше — для учителя и PDF. Ученик
       отвечает по маске: текст со слотами <code>{{ '{{' }}тип: данные}}</code>,
-      каждый слот проверяется по своим правилам. Без рабочей маски (и в режиме
-      «Только развёрнутый ответ») ученик может прислать только фото решения.
+      каждый слот проверяется по своим правилам. Без рабочей маски ученик может прислать только фото решения.
       Единицы измерения пишите в тексте маски, а не в слоте.</p>
     <p>
       <label for="{{ form.answer_mask.id_for_label }}">{{ form.answer_mask.label }}</label>

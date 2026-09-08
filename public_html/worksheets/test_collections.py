@@ -35,8 +35,8 @@ class CollectionTests(TestCase):
         self.task.answer_latex = 'редакторский ответ'
         self.task.save(update_fields=['answer_latex'])
         tex = worksheet_to_tex(self.worksheet, 'answers')
-        self.assertIn('редакторский ответ', tex)
-        self.assertNotIn('[{4}]', tex)
+        self.assertNotIn('редакторский ответ', tex)
+        self.assertIn('[{4}]', tex)
 
     def test_use_collection_copies_all_worksheet_elements(self):
         self.client.login(username='teacher2', password='pass12345')

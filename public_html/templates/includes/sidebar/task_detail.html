@@ -3,7 +3,6 @@
   <h2>Метаданные</h2>
   <ul class="sidebar-list">
     <li><strong>Класс:</strong> {% for g in task.grade_bands.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% empty %}{{ task.grade_display|default:"—" }}{% endfor %}</li>
-    <li><strong>Тип ответа:</strong> {{ task.get_answer_type_display }}</li>
     <li><strong>Создана:</strong> {{ task.created_at|date:"d.m.Y" }}</li>
     {% if task.created_by %}<li><strong>Автор:</strong> {{ task.created_by.get_full_name|default:task.created_by.username }}</li>{% endif %}
   </ul>
@@ -17,8 +16,3 @@
   </ul>
 </section>
 {% endif %}
-<section class="sidebar-section">
-  <div class="sidebar-actions">
-    <a class="sidebar-action" href="{% url 'task_edit' task.pk %}">Редактировать</a>
-  </div>
-</section>

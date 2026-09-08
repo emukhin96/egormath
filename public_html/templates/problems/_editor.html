@@ -1,0 +1,61 @@
+{% load task_extras %}
+<div id="task-form" data-problem-editor data-task-id="{{ task.pk }}" data-manage-url="{% url 'task_manage' task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}">
+  <div class="page-head">
+    <div><span class="page-eyebrow">База задач</span><h1>Задача #{{ task.pk }}</h1>
+      {% if task.variant_of_id %}<span class="badge badge-returned">Локальная копия #{{ task.variant_of_id }}</span>{% endif %}
+      {% if worksheet %}<a href="{% url 'worksheet_detail' worksheet.pk %}">Вернуться в листок «{{ worksheet.title }}»</a>{% endif %}
+    </div>
+    <div class="form-buttons">
+      {% if not task.variant_of_id %}{% include 'includes/cart_button.html' with task=task %}{% endif %}
+      <button type="button" class="btn btn-secondary" data-editor-ai="answer">Дописать AI-ответ</button>
+      <button type="button" class="btn btn-secondary" data-editor-ai="solution">Добавить AI-решение</button>
+    </div>
+  </div>
+  <div class="problem-columns">
+    <div class="card">
+      <section class="problem-section"><h2>Условие</h2>
+        <div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
+        <details class="ws-add-text"><summary>Править условие</summary>
+          {% include 'problems/_editor_form.html' with form=condition_form block='condition' %}
+        </details>
+        {% if subrows %}<ol class="subitems">{% for row in subrows %}<li class="math-content">{{ row.sub.text_latex|web_text }}</li>{% endfor %}</ol>{% endif %}
+        {% task_images task 'all' %}
+      </section>
+      <details class="problem-section"><summary>Подпункты: добавить, изменить порядок</summary>
+        <form method="post" data-editor-form action="{% url 'task_manage' task.pk %}">
+          {% csrf_token %}<input type="hidden" name="block" value="subitems"><div data-editor-errors class="errorlist" role="alert"></div>
+          {{ structure_formset.management_form }}
+          <table class="list formset" data-formset="subitems"><thead><tr><th>Порядок</th><th>Условие</th><th>Удалить</th></tr></thead><tbody>
+            {% for f in structure_formset %}<tr class="formset-row"><td>{{ f.id }}{{ f.order }}</td><td>{{ f.text_latex }}</td><td>{{ f.DELETE }}</td></tr>{% endfor %}
+          </tbody></table>
+          <template data-formset="subitems"><tr class="formset-row"><td>{{ structure_formset.empty_form.id }}{{ structure_formset.empty_form.order }}</td><td>{{ structure_formset.empty_form.text_latex }}</td><td><button type="button" class="icon-btn formset-remove" aria-label="Убрать подпункт">×</button></td></tr></template>
+          <div class="form-buttons"><button type="button" class="btn btn-secondary formset-add" data-formset="subitems">Добавить подпункт</button><button class="btn">Сохранить</button><button type="button" class="btn btn-secondary" data-editor-cancel>Отмена</button></div>
+        </form>
+      </details>
+      <details class="problem-section"><summary>Классификация и печать</summary>
+        <form method="post" action="{% url 'task_manage' task.pk %}" data-editor-form>
+          {% csrf_token %}<input type="hidden" name="block" value="metadata"><div data-editor-errors class="errorlist" role="alert"></div>
+          <div class="form-grid">{{ metadata_form.as_p }}</div>
+          <h3>Темы и метки</h3>
+          {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=True grades=False selected_json=selected_json %}
+          <p><label>Теги<input name="tags" type="text" value="{{ tags_value }}" placeholder="Через запятую"></label></p>
+          <div class="form-buttons"><button class="btn">Сохранить</button><button type="button" class="btn btn-secondary" data-editor-cancel>Отмена</button></div>
+        </form>
+      </details>
+      <details class="problem-section"><summary>Изображения и источники</summary>
+        {% include 'problems/_editor_assets.html' %}
+      </details>
+      <details class="problem-section"><summary>Следующая задача</summary>
+        <p class="helptext">Новая задача с текущей классификацией и источником. Закрепление значений доступно в форме создания.</p>
+        <a class="btn btn-secondary" href="{% url 'task_create' %}?from={{ task.pk }}{% if worksheet %}&worksheet={{ worksheet.pk }}{% endif %}">Добавить следующую</a>
+      </details>
+    </div>
+    <div class="card"><h2>Ответы и ввод ученика</h2>
+      {% if subrows %}{% for row in subrows %}
+        {% include 'problems/_editor_answer.html' with owner=row.sub sub=row.sub answer_form=row.answer_form solution_form=row.solution_form %}
+      {% endfor %}{% else %}
+        {% include 'problems/_editor_answer.html' with owner=task %}
+      {% endif %}
+    </div>
+  </div>
+</div>

@@ -1,0 +1,11 @@
+<form method="post" enctype="multipart/form-data" action="{% url 'task_manage' task.pk %}" data-editor-form data-block="{{ block }}">
+  {% csrf_token %}
+  <input type="hidden" name="block" value="{{ block }}">
+  {% if sub %}<input type="hidden" name="subitem" value="{{ sub.pk }}">{% endif %}
+  <div class="errorlist" data-editor-errors role="alert"></div>
+  {{ form.as_p }}
+  <div class="form-buttons">
+    <button class="btn" type="submit">Сохранить</button>
+    <button class="btn btn-secondary" type="button" data-editor-cancel>Отмена</button>
+  </div>
+</form>

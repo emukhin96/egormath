@@ -1,2 +1,2 @@
-{# Метка формата ответа ученика: ожидает task. 'mask' — краткий ответ проверяется по маске, 'photo' — только фото решения #}
-{% with status=task.mask_status %}{% if status == 'mask' %}<span class="badge badge-reviewed mask-badge" title="Есть маска ответа: ученик отвечает по шаблону, слоты проверяются автоматически">маска</span>{% elif status == 'photo' %}<span class="badge badge-assigned mask-badge" title="Только развёрнутый ответ: ученик присылает фото решения">только фото</span>{% endif %}{% endwith %}
+{# Ожидает task; показывает наличие маски краткого ответа. #}
+{% with status=task.mask_status %}{% if status == 'mask' %}<span class="badge badge-reviewed mask-badge" title="Есть маска ответа: ученик отвечает по шаблону, слоты проверяются автоматически">маска</span>{% endif %}{% endwith %}

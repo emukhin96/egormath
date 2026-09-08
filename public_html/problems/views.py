@@ -316,18 +316,13 @@ def task_image_file(request, pk):
 
 @teacher_required
 def task_detail(request, pk):
-    task = get_object_or_404(
-        Task.objects.prefetch_related('topics', 'tags', 'source_refs__source'),
-        pk=pk)
-    ctx = taxonomy_page_context(task_taxonomy_state(task))
-    ctx.update({
-        'task': task,
-        'grade_choices': Task.GRADE_CHOICES,
-        'stars_choices': Task.STARS_CHOICES,
-        'topics': topic_tree(),
-        'tags_value': ', '.join(t.name for t in task.tags.all()),
-    })
-    return render(request, 'problems/task_detail.html', ctx)
+    if request.method == 'POST':
+        task = get_object_or_404(Task, pk=pk)
+        return _task_form(request, task=task)
+    from .editor import context
+    task = get_object_or_404(Task.objects.prefetch_related(
+        'subitems', 'images', 'topics', 'tags', 'source_refs__source'), pk=pk)
+    return render(request, 'problems/task_detail.html', context(request, task))
 
 
 @teacher_required
@@ -338,7 +333,12 @@ def task_create(request):
 @teacher_required
 def task_edit(request, pk):
     task = get_object_or_404(Task, pk=pk)
-    return _task_form(request, task=task)
+    if request.method == 'POST':
+        return _task_form(request, task=task)
+    url = reverse('task_detail', args=[pk])
+    if request.GET:
+        url += '?' + request.GET.urlencode()
+    return redirect(url)
 
 
 @teacher_required
@@ -353,20 +353,23 @@ def task_mask_preview(request):
 
     from assignments.checks import (check_mask, collect_values, parse_mask,
                                     render_fragments)
+    prefix = request.POST.get('prefix', 'preview')
+    if not re.fullmatch(r'preview(?:_[0-9]+)?', prefix):
+        return JsonResponse({'ok': False, 'message': 'Некорректный префикс'}, status=400)
     spec = parse_mask(request.POST.get('mask', ''))
     payload = {'ok': spec.is_valid, 'errors': spec.errors,
                'slots': len(spec.slots)}
     if not spec.slots:
         payload['html'] = ''
         return JsonResponse(payload)
-    values = collect_values(request.POST, 'preview', spec)
+    values = collect_values(request.POST, prefix, spec)
     checks = {}
     if values:
         overall, checks = check_mask(spec, values)
         payload['overall'] = overall
-        payload['checks'] = {f'preview_{k}': v for k, v in checks.items()}
+        payload['checks'] = {f'{prefix}_{k}': v for k, v in checks.items()}
     payload['html'] = render_to_string('assignments/_mask.html', {
-        'fragments': render_fragments(spec, 'preview', values, checks, seed='preview'),
+        'fragments': render_fragments(spec, prefix, values, checks, seed=prefix),
         'editable': True,
         'show_checks': True,
     })
@@ -382,7 +385,9 @@ def task_mask_draft(request):
     return JsonResponse({
         'ok': bool(mask), 'mask': mask,
         'message': '' if mask else
-        'Не удалось угадать тип по ответу — напишите маску вручную'})
+        ('Ответ не добавлен — выберите другой источник или заполните ответ'
+         if not request.POST.get('answer', '').strip() else
+         'Не удалось определить тип — выберите тип поля и проверьте эталон')})
 
 
 def _worksheet_context(request):
@@ -403,7 +408,7 @@ def _worksheet_context(request):
     return worksheet, item
 
 
-def _save_local_variant(user, original, form, source_fs, subitem_fs, post):
+def _save_local_variant(user, original, form, source_fs, subitem_fs, post, image_fs=None):
     """Создаёт скрытую копию задачи с данными из провалидированных форм.
 
     Оригинал в базе не меняется; копия помечена variant_of и не видна
@@ -418,24 +423,34 @@ def _save_local_variant(user, original, form, source_fs, subitem_fs, post):
     variant.save()
     variant.tags.set(original.tags.all())
     apply_task_taxonomy(variant, post)
+    variant._subitem_mapping = {}
     for data in subitem_fs.cleaned_data:
         if not data or data.get('DELETE') or not data.get('text_latex'):
             continue
-        TaskSubitem.objects.create(
+        new_subitem = TaskSubitem.objects.create(
             task=variant, order=data.get('order') or 0,
             text_latex=data['text_latex'],
             answer_latex=data.get('answer_latex') or '',
             solution_latex=data.get('solution_latex') or '',
-            answer_mask=data.get('answer_mask') or '')
+            answer_mask=data.get('answer_mask') or '',
+            author_answer_latex=data.get('author_answer_latex') or '',
+            author_solution_latex=data.get('author_solution_latex') or '')
+        if data.get('id'):
+            variant._subitem_mapping[data['id'].pk] = new_subitem.pk
     for data in source_fs.cleaned_data:
         if not data or data.get('DELETE') or not data.get('source'):
             continue
         TaskSource.objects.create(
             task=variant, source=data['source'],
             number=data.get('number') or '')
-    # Картинки: копия ссылается на те же файлы, что у оригинала
-    for img in original.images.all():
-        variant.images.create(image=img.image.name, order=img.order)
+    # Сохранённые файлы переиспользуются, новые загрузки берутся из формы.
+    if image_fs is not None:
+        for data in image_fs.cleaned_data:
+            if data and not data.get('DELETE') and data.get('image'):
+                variant.images.create(image=data['image'], order=data.get('order') or 0)
+    else:
+        for img in original.images.all():
+            variant.images.create(image=img.image.name, order=img.order)
     return variant
 
 
@@ -538,7 +553,6 @@ def _quick_entry_initials(request):
         'grade_level': prev.grade_level,
         'stars': prev.stars,
         'difficulty': prev.difficulty,
-        'answer_type': prev.answer_type,
         'columns': prev.columns,
     }
     source_initial = [
@@ -551,11 +565,26 @@ def _quick_entry_initials(request):
 def _task_form(request, task):
     worksheet, item = _worksheet_context(request)
     if request.method == 'POST':
-        form = TaskForm(request.POST, instance=task)
+        # Старые клиенты не присылают авторские поля — не обнуляем их.
+        data = request.POST.copy()
+        if task:
+            for name in ('author_answer_latex', 'author_solution_latex'):
+                if name not in data:
+                    data[name] = getattr(task, name)
+            try:
+                total = min(max(int(data.get('subitems-TOTAL_FORMS', 0)), 0), 2000)
+            except ValueError:
+                total = 0
+            for i in range(total):
+                sub = task.subitems.filter(pk=data.get(f'subitems-{i}-id') or None).first()
+                if sub:
+                    for name in ('author_answer_latex', 'author_solution_latex'):
+                        data.setdefault(f'subitems-{i}-{name}', getattr(sub, name))
+        form = TaskForm(data, instance=task)
         source_fs = TaskSourceFormSet(
             request.POST, instance=task or form.instance)
         subitem_fs = TaskSubitemFormSet(
-            request.POST, instance=task or form.instance)
+            data, instance=task or form.instance)
         image_fs = TaskImageFormSet(
             request.POST, request.FILES, instance=task or form.instance)
         save_local = ('save_local' in request.POST and task is not None
@@ -603,12 +632,12 @@ def _task_form(request, task):
             if save_local:
                 variant = _save_local_variant(
                     request.user, task, form, source_fs, subitem_fs,
-                    request.POST)
+                    request.POST, image_fs=image_fs)
+                selected = list(item.subitems.values_list('pk', flat=True))
                 item.task = variant
-                # Выбор подпунктов ссылался на подпункты оригинала — сброс
-                item.all_subitems = True
                 item.save()
-                item.subitems.clear()
+                item.subitems.set([variant._subitem_mapping[pk] for pk in selected
+                                   if pk in variant._subitem_mapping])
                 messages.success(
                     request,
                     f'Создана локальная копия #{variant.pk} — изменения '

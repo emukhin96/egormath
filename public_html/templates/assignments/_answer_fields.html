@@ -1,31 +1,5 @@
-{# Поля ответа: ожидает prefix, answer_type, obj (Submission/SubmissionPart или None), editable #}
+{# Исторический ответ — только чтение; новый ввод строится по маске. #}
 {% load task_extras %}
-{% if not editable %}
-  {% if obj.display_answer %}
-  <span class="math-content answer-readonly">{{ obj.display_answer|web_answer }}</span>
-  {% else %}<span class="muted">нет ответа</span>{% endif %}
-{% elif answer_type == 'number' %}
-  <input type="text" name="{{ prefix }}_number" placeholder="число"
-         value="{{ obj.answer_number|default:'' }}" style="max-width:200px;display:inline-block">
-{% elif answer_type == 'interval' %}
-  от <input type="text" name="{{ prefix }}_low"
-         value="{{ obj.interval_low|default:'' }}" style="max-width:140px;display:inline-block">
-  до <input type="text" name="{{ prefix }}_high"
-         value="{{ obj.interval_high|default:'' }}" style="max-width:140px;display:inline-block">
-{% elif answer_type == 'formula' %}
-  {# <math-field> не участвует в форме: значение зеркалится в скрытый input (formula.js) #}
-  <span class="formula-field">
-    <math-field data-mirror="{{ prefix }}_text" smart-fence>{{ obj.formula_latex|default:'' }}</math-field>
-    <input type="hidden" name="{{ prefix }}_text" value="{{ obj.formula_latex|default:'' }}">
-  </span>
-{% else %}
-  {# Текст с формулами: под полем — живой превью (KaTeX), ученику LaTeX-код не показываем #}
-  <div class="text-answer">
-    <div class="text-answer-row">
-      <textarea name="{{ prefix }}_text" rows="2" placeholder="ответ">{{ obj.answer_text|default:'' }}</textarea>
-      <button type="button" class="btn btn-small btn-secondary" data-formula-insert
-              title="Вставить формулу в позицию курсора">Формула</button>
-    </div>
-    <div class="answer-preview math-content" data-answer-preview hidden></div>
-  </div>
-{% endif %}
+{% if obj.display_answer %}
+<span class="math-content answer-readonly">{{ obj.display_answer|web_answer }}</span>
+{% else %}<span class="muted">нет ответа</span>{% endif %}

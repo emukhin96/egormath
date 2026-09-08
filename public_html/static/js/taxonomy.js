@@ -779,7 +779,10 @@
 
   function init() {
     if (!loadCatalog()) return;
+    pickers = pickers.filter(function (p) { return p.form && p.form.isConnected; });
     document.querySelectorAll('[data-tax-picker]').forEach(function (el) {
+      if (el.dataset.taxReady) return;
+      el.dataset.taxReady = '1';
       pickers.push(new Picker(el));
     });
   }
@@ -794,6 +797,7 @@
   }
 
   window.EgorTaxonomy = {
+    init: init,
     get: function (form, name) {
       var p = findPicker(form, name);
       return p ? p.getField(name) : null;
