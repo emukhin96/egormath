@@ -62,7 +62,7 @@
     {% if row.mask_reference %}
     <div class="answer-box math-content"><strong>Маска с эталонами:</strong> {{ row.mask_reference|web_answer }}</div>
     {% elif not row.short_answer %}
-    <p class="helptext">Краткий ответ у задачи не предусмотрен{% if row.task.extended_only %} («только развёрнутый ответ»){% else %} (маски нет){% endif %} — проверяйте по фото решения.</p>
+    <p class="helptext">Краткий ответ у задачи не предусмотрен (маски нет) — проверяйте по фото решения.</p>
     {% endif %}
     {% if row.task.effective_solution_latex %}
     <details><summary class="muted">Эталонное решение</summary>

@@ -14,9 +14,16 @@
     try { localStorage.setItem(key, JSON.stringify(obj)); } catch (e) {}
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    var form = document.getElementById('task-form');
-    if (!form) return;
+  function init() {
+    var root = document.getElementById('task-form');
+    if (!root) return;
+    var forms = root.matches('form') ? [root] : root.querySelectorAll('[data-editor-form]');
+    forms.forEach(initForm);
+  }
+
+  function initForm(form) {
+    if (form.dataset.formReady) return;
+    form.dataset.formReady = '1';
     var imagesTable = form.querySelector('table[data-images]');
 
     // --- Динамические строки формсетов ---
@@ -56,6 +63,7 @@
         total.value = String(Number(total.value) + 1);
         table.tBodies[0].insertAdjacentHTML('beforeend', html);
         renumberPics();
+        btn.dispatchEvent(new Event('change', {bubbles: true}));
       });
     });
 
@@ -65,6 +73,7 @@
       var row = btn.closest('tr');
       resetRow(row);
       row.hidden = true;
+      btn.dispatchEvent(new Event('change', {bubbles: true}));
       renumberPics();
     });
 
@@ -94,6 +103,7 @@
     }
 
     document.addEventListener('paste', function (e) {
+      if (!form.isConnected) return;
       var files = e.clipboardData ? e.clipboardData.files : null;
       if (!files || !files.length
           || files[0].type.indexOf('image/') !== 0) return;
@@ -202,5 +212,7 @@
       if (e.target.name) storePinnedValues();
     });
     form.addEventListener('submit', storePinnedValues);
-  });
+  }
+  window.EgorTaskForm = {init: init};
+  document.addEventListener('DOMContentLoaded', init);
 })();

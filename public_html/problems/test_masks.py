@@ -27,11 +27,10 @@ class MaskFormTests(TestCase):
 
     def test_valid_mask_saved(self):
         response = self.client.post(reverse('task_create'), task_form_data(
-            answer_mask='Ответ: {{number: 10}} см', answer_mode='extended'))
+            answer_mask='Ответ: {{number: 10}} см'))
         self.assertEqual(response.status_code, 302)
         task = Task.objects.get()
         self.assertEqual(task.answer_mask, 'Ответ: {{number: 10}} см')
-        self.assertEqual(task.answer_mode, Task.MODE_EXTENDED)
         self.assertTrue(task.has_mask)
 
     def test_invalid_mask_rejected_with_message(self):
@@ -46,7 +45,8 @@ class MaskFormTests(TestCase):
     def test_answer_mode_defaults_when_missing(self):
         form = TaskForm(data=task_form_data())
         self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.cleaned_data['answer_mode'], Task.MODE_SHORT)
+        self.assertNotIn('answer_mode', form.fields)
+        self.assertNotIn('answer_type', form.fields)
 
     def test_subitem_mask_validated(self):
         task = Task.objects.create(text_latex='T', created_by=self.teacher)
@@ -100,12 +100,11 @@ class MaskFormTests(TestCase):
     def test_make_variant_copies_masks(self):
         task = Task.objects.create(
             text_latex='T', answer_mask='{{number: 1}}',
-            answer_mode=Task.MODE_EXTENDED, created_by=self.teacher)
+            created_by=self.teacher)
         TaskSubitem.objects.create(task=task, order=10, text_latex='а',
                                    answer_mask='{{number: 2}}')
         copy = task.make_variant(self.teacher)
         self.assertEqual(copy.answer_mask, '{{number: 1}}')
-        self.assertEqual(copy.answer_mode, Task.MODE_EXTENDED)
         self.assertEqual(copy.subitems.get().answer_mask, '{{number: 2}}')
 
 
@@ -182,17 +181,17 @@ class MaskCatalogTests(TestCase):
             text_latex='С маской', answer_mask='{{number: 1}}',
             created_by=self.teacher)
         photo_only = Task.objects.create(
-            text_latex='Только фото', answer_mode=Task.MODE_EXTENDED,
+            text_latex='Только фото',
             created_by=self.teacher)
         Task.objects.create(text_latex='Без маски', created_by=self.teacher)
         response = self.client.get(reverse('task_list'))
-        self.assertContains(response, 'mask-badge', count=2)
+        self.assertContains(response, 'mask-badge', count=1)
         self.assertContains(response, '>маска<')
-        self.assertContains(response, '>только фото<')
+        self.assertNotContains(response, '>только фото<')
         response = self.client.get(reverse('task_detail', args=[with_mask.pk]))
-        self.assertContains(response, 'Маска: {{number: 1}}')
+        self.assertContains(response, 'Маска готова')
         response = self.client.get(reverse('task_detail', args=[photo_only.pk]))
-        self.assertContains(response, 'только фото')
+        self.assertContains(response, 'фото решения')
 
     def test_short_answer_availability(self):
         task = Task.objects.create(text_latex='T', created_by=self.teacher)
@@ -200,11 +199,7 @@ class MaskCatalogTests(TestCase):
         self.assertEqual(task.mask_status, '')
         task.answer_mask = '{{number: 1}}'
         self.assertTrue(task.short_answer_available())
-        task.answer_mode = Task.MODE_EXTENDED
-        self.assertFalse(task.short_answer_available())
-        self.assertEqual(task.mask_status, 'photo')
         # Подпункты: маска задачи не в счёт, нужна хотя бы одна у подпункта
-        task.answer_mode = Task.MODE_SHORT
         sub = TaskSubitem.objects.create(task=task, order=10, text_latex='а')
         self.assertFalse(task.short_answer_available([sub]))
         sub.answer_mask = '{{number: 2}}'

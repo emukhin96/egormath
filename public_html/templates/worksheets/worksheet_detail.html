@@ -60,6 +60,7 @@
       <span class="ws-toggle-slider"></span>
       <span class="ws-toggle-text">ответы и решения</span>
     </label>
+    <label class="ws-toggle"><input type="checkbox" id="toggle-masks"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Маски ответов</span></label>
   </h2>
   {% if deleted_items %}
   <div class="undo-bar">
@@ -115,9 +116,9 @@
           {% endif %}
           {% task_images item.task %}
           {% include 'problems/_task_answers.html' with task=item.task subitems=item.task.subitems.all %}
+          <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
           <div class="task-meta">
-            <a class="task-id" href="{% url 'task_detail' item.task.pk %}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}
-            · <a href="{% url 'task_edit' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}">править</a>
+            <a class="task-id" href="{% url 'task_detail' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}
             · <button type="button" class="link-btn ws-star-reset"
                       data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
                       {% if item.stars_override == None %}hidden{% endif %}>звёзды как в базе ({{ item.task.stars }})</button>
@@ -457,6 +458,9 @@
 </dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+{% include 'problems/_mask_dialogs.html' %}
+<script defer src="{% static 'js/problem_editor.js' %}"></script>
+{% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}"></script>
 <script defer src="{% static 'js/builder.js' %}"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>

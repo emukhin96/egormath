@@ -415,14 +415,16 @@ class StudentAnswerTests(TestCase):
 
     def test_save_answers_and_submit(self):
         task = self.tasks[0]
+        task.answer_mask = '{{equation: x=2}}'
+        task.save()
         response = self.client.post(
             reverse('save_answers', args=[self.assignment.pk]),
-            {f'task{task.pk}_text': 'x = 2'})
+            {f'task{task.pk}_s1': 'x = 2'})
         self.assertRedirects(
             response, reverse('assignment_detail', args=[self.assignment.pk]))
         submission = Submission.objects.get(
             assignment=self.assignment, task=task)
-        self.assertEqual(submission.answer_text, 'x = 2')
+        self.assertEqual(submission.answer_json['s1'], 'x = 2')
 
         response = self.client.post(
             reverse('submit_assignment', args=[self.assignment.pk]))
@@ -434,84 +436,92 @@ class StudentAnswerTests(TestCase):
         # После отправки редактирование запрещено
         response = self.client.post(
             reverse('save_answers', args=[self.assignment.pk]),
-            {f'task{task.pk}_text': 'меняю ответ'})
+            {f'task{task.pk}_s1': 'меняю ответ'})
         self.assertEqual(response.status_code, 403)
 
     def test_submit_without_draft_keeps_answers(self):
         """«Отправить» без предварительного «Сохранить» — ответы не теряются."""
         task = self.tasks[0]
+        task.answer_mask = '{{equation: x=2}}'
+        task.save()
         self.client.post(
             reverse('submit_assignment', args=[self.assignment.pk]),
-            {f'task{task.pk}_text': 'ответ без черновика'})
+            {f'task{task.pk}_s1': 'ответ без черновика'})
         self.assignment.refresh_from_db()
         self.assertEqual(self.assignment.status, Assignment.STATUS_SUBMITTED)
         submission = Submission.objects.get(
             assignment=self.assignment, task=task)
-        self.assertEqual(submission.answer_text, 'ответ без черновика')
+        self.assertEqual(submission.answer_json['s1'], 'ответ без черновика')
 
     def test_submit_without_draft_keeps_subitem_answers(self):
         item = self.assignment.worksheet.ordered_items()[0]
         task = item.task
-        s1 = TaskSubitem.objects.create(task=task, order=10, text_latex='$1+1$')
+        s1 = TaskSubitem.objects.create(task=task, order=10, text_latex='$1+1$', answer_mask='{{number: 2}}')
         self.client.post(
             reverse('submit_assignment', args=[self.assignment.pk]),
-            {f'task{task.pk}_sub{s1.pk}_text': 'два'})
+            {f'task{task.pk}_sub{s1.pk}_s1': 'два'})
         part = SubmissionPart.objects.get(subitem=s1)
-        self.assertEqual(part.answer_text, 'два')
+        self.assertEqual(part.answer_json['s1'], 'два')
 
     def test_photo_actions_keep_unsaved_text(self):
         """Загрузка и удаление фото сохраняют присланные поля ответов."""
         task = self.tasks[0]
+        task.answer_mask = '{{equation: x=2}}'
+        task.save()
         self.client.post(
             reverse('upload_photo', args=[self.assignment.pk, task.pk]),
-            {'photos': fake_photo(), f'task{task.pk}_text': 'с фото'})
+            {'photos': fake_photo(), f'task{task.pk}_s1': 'с фото'})
         submission = Submission.objects.get(
             assignment=self.assignment, task=task)
-        self.assertEqual(submission.answer_text, 'с фото')
+        self.assertEqual(submission.answer_json['s1'], 'с фото')
         photo = SubmissionPhoto.objects.get()
         self.client.post(
             reverse('delete_photo', args=[self.assignment.pk, photo.pk]),
-            {f'task{task.pk}_text': 'после удаления фото'})
+            {f'task{task.pk}_s1': 'после удаления фото'})
         submission.refresh_from_db()
-        self.assertEqual(submission.answer_text, 'после удаления фото')
+        self.assertEqual(submission.answer_json['s1'], 'после удаления фото')
         self.assertFalse(SubmissionPhoto.objects.exists())
 
     def test_post_without_answer_fields_does_not_clear(self):
         """POST без полей ответа (форма фото) не затирает сохранённое."""
         task = self.tasks[0]
+        task.answer_mask = '{{equation: x=2}}'
+        task.save()
         Submission.objects.create(
-            assignment=self.assignment, task=task, answer_text='было')
+            assignment=self.assignment, task=task, answer_json={'s1': 'было'})
         self.client.post(
             reverse('upload_photo', args=[self.assignment.pk, task.pk]),
             {'photos': fake_photo()})
         self.assertEqual(
-            Submission.objects.get(task=task).answer_text, 'было')
+            Submission.objects.get(task=task).answer_json['s1'], 'было')
         # А явно присланная пустая строка — это осознанная очистка
         self.client.post(
             reverse('save_answers', args=[self.assignment.pk]),
-            {f'task{task.pk}_text': ''})
-        self.assertEqual(Submission.objects.get(task=task).answer_text, '')
+            {f'task{task.pk}_s1': ''})
+        self.assertEqual(Submission.objects.get(task=task).answer_json['s1'], '')
 
     def test_save_answers_xhr_returns_json(self):
         task = self.tasks[0]
+        task.answer_mask = '{{equation: x=2}}'
+        task.save()
         response = self.client.post(
             reverse('save_answers', args=[self.assignment.pk]),
-            {f'task{task.pk}_text': 'x = 3'},
+            {f'task{task.pk}_s1': 'x = 3'},
             HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['ok'])
         self.assertEqual(
-            Submission.objects.get(task=task).answer_text, 'x = 3')
+            Submission.objects.get(task=task).answer_json['s1'], 'x = 3')
         # После отправки автосохранение получает JSON-отказ, а не HTML 403
         self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
         response = self.client.post(
             reverse('save_answers', args=[self.assignment.pk]),
-            {f'task{task.pk}_text': 'поздно'},
+            {f'task{task.pk}_s1': 'поздно'},
             HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 403)
         self.assertFalse(response.json()['ok'])
         self.assertEqual(
-            Submission.objects.get(task=task).answer_text, 'x = 3')
+            Submission.objects.get(task=task).answer_json['s1'], 'x = 3')
 
     def test_assignment_form_has_autosave(self):
         response = self.client.get(
@@ -579,47 +589,28 @@ class StudentAnswerTests(TestCase):
             [returned, overdue, self.assignment])
         self.assertEqual(response.context['current'], returned)
 
-    def test_formula_answer_wrapped_and_rendered(self):
-        """Тип «формула»: голый LaTeX из math-field хранится как $…$,
-        редактору отдаётся без $, учителю рендерится, длина не ограничена."""
+    def test_formula_mask_preserves_long_latex(self):
+        """Формула хранится в слоте без ограничения длины; пустой ввод очищает слот."""
         task = self.tasks[0]
-        task.answer_type = Task.ANSWER_FORMULA
+        task.answer_mask = '{{simplify: x+1}}'
         task.save()
-        long_latex = r'\left(-\infty;\ 3\right]\cup\left[5;\ +\infty\right)' * 3
-        self.client.post(
-            reverse('save_answers', args=[self.assignment.pk]),
-            {f'task{task.pk}_text': long_latex})
-        submission = Submission.objects.get(task=task)
-        self.assertEqual(submission.answer_text, f'${long_latex}$')
-        self.assertEqual(submission.formula_latex, long_latex)
-        # Без маски свободного поля у ученика нет; старый ответ виден как есть
-        response = self.client.get(
-            reverse('assignment_detail', args=[self.assignment.pk]))
-        self.assertNotContains(response, f'name="task{task.pk}_text"')
-        self.assertContains(response, 'answer-readonly')
-        self.assertContains(response, 'Краткий ответ для этой задачи не предусмотрен')
-        # Уже обёрнутое не оборачивается второй раз
-        self.client.post(
-            reverse('save_answers', args=[self.assignment.pk]),
-            {f'task{task.pk}_text': '$x=1$'})
-        self.assertEqual(Submission.objects.get(task=task).answer_text, '$x=1$')
-        # Пустая формула — пустой ответ
-        self.client.post(
-            reverse('save_answers', args=[self.assignment.pk]),
-            {f'task{task.pk}_text': ''})
-        self.assertEqual(Submission.objects.get(task=task).answer_text, '')
+        value = r'\left(x+1\right)' * 20
+        field = f'task{task.pk}_s1'
+        url = reverse('save_answers', args=[self.assignment.pk])
+        self.client.post(url, {field: value})
+        self.assertEqual(Submission.objects.get(task=task).answer_json['s1'], value)
+        response = self.client.get(reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(response, '<math-field')
+        self.client.post(url, {field: ''})
+        self.assertEqual(Submission.objects.get(task=task).answer_json['s1'], '')
 
-    def test_long_number_and_interval_fit(self):
+    def test_long_historical_interval_is_readable(self):
         task = self.tasks[0]
-        task.answer_type = Task.ANSWER_INTERVAL
-        task.save()
-        long_value = r'\left(-\infty;\ 3\right]' * 4
-        self.client.post(
-            reverse('save_answers', args=[self.assignment.pk]),
-            {f'task{task.pk}_low': long_value, f'task{task.pk}_high': long_value})
-        submission = Submission.objects.get(task=task)
-        self.assertEqual(submission.interval_low, long_value)
-        self.assertGreater(len(submission.interval_high), 64)
+        value = r'\left(-\infty; 3\right]' * 20
+        submission = Submission.objects.create(assignment=self.assignment, task=task,
+                                                interval_low=value, interval_high=value)
+        self.assertIn(value, submission.legacy_answer)
+        self.assertGreater(len(submission.legacy_answer), 64)
 
     def test_mask_renders_controls_and_legacy_readonly(self):
         """С маской ученик видит контролы по слотам (simplify — math-field),
@@ -703,7 +694,6 @@ class StudentAnswerTests(TestCase):
         """У задачи с подпунктами ответы сохраняются отдельно (SubmissionPart)."""
         item = self.assignment.worksheet.ordered_items()[0]
         task = item.task
-        task.answer_type = Task.ANSWER_NUMBER
         task.save()
         s1 = TaskSubitem.objects.create(
             task=task, order=10, text_latex='$1+1$', answer_mask='{{number: 2}}')
@@ -859,8 +849,10 @@ class ReviewFlowTests(TestCase):
         response = self.client.get(
             reverse('review_assignment', args=[self.assignment.pk]))
         self.assertFalse(response.context['rows'][0]['auto_ok'])
-        submission.answer_text = '2; 0'
-        submission.run_check(self.task.effective_answer_latex)
+        self.task.answer_mask = '{{set: 0; 2}}'
+        self.task.save()
+        submission.answer_json = {'s1': '2; 0'}
+        submission.run_check(spec=self.task.mask_spec)
         submission.save()
         response = self.client.get(
             reverse('review_assignment', args=[self.assignment.pk]))
@@ -1193,16 +1185,7 @@ class AutoCheckFlowTests(TestCase):
         self.assertFalse(Submission.objects.filter(
             assignment=self.assignment, task=self.task,
             check_revealed=True).exists())
-        # Режим «только развёрнутый ответ» — только фото даже при маске
-        self.task.answer_mask = '{{number: 5}}'
-        self.task.answer_mode = Task.MODE_EXTENDED
-        self.task.save()
-        response = self.client.get(self.detail)
-        self.assertFalse(response.context['rows'][0]['short_answer'])
-        self.assertNotContains(response, 'mask-answer')
-        self.assertContains(response, 'mask-photo-note')
         # У задачи с подпунктами хватает маски хотя бы на одном подпункте
-        self.task.answer_mode = Task.MODE_SHORT
         self.task.answer_mask = ''
         self.task.save()
         TaskSubitem.objects.create(task=self.task, order=1, text_latex='а')
@@ -1275,12 +1258,12 @@ class AutoCheckFlowTests(TestCase):
 
     def test_auto_ok_requires_every_subitem(self):
         a = TaskSubitem.objects.create(
-            task=self.task, order=1, text_latex='а', answer_latex='1')
+            task=self.task, order=1, text_latex='а', answer_latex='1', answer_mask='{{number: 1}}')
         b = TaskSubitem.objects.create(
-            task=self.task, order=2, text_latex='б', answer_latex='2')
+            task=self.task, order=2, text_latex='б', answer_latex='2', answer_mask='{{number: 2}}')
         self.client.post(
             reverse('save_answers', args=[self.assignment.pk]),
-            {f'task{self.task.pk}_sub{a.pk}_text': '1'})
+            {f'task{self.task.pk}_sub{a.pk}_s1': '1'})
         self.client.login(username='teacher1', password='pass12345')
         response = self.client.get(
             reverse('review_assignment', args=[self.assignment.pk]))
@@ -1288,8 +1271,8 @@ class AutoCheckFlowTests(TestCase):
         self.client.login(username='student1', password='pass12345')
         self.client.post(
             reverse('save_answers', args=[self.assignment.pk]),
-            {f'task{self.task.pk}_sub{a.pk}_text': '1',
-             f'task{self.task.pk}_sub{b.pk}_text': '2'})
+            {f'task{self.task.pk}_sub{a.pk}_s1': '1',
+             f'task{self.task.pk}_sub{b.pk}_s1': '2'})
         self.client.login(username='teacher1', password='pass12345')
         response = self.client.get(
             reverse('review_assignment', args=[self.assignment.pk]))
@@ -1411,13 +1394,13 @@ class AutoCheckFlowTests(TestCase):
         self.assertEqual(submission.auto_check, 'ok')
 
     def test_legacy_answer_checked_until_mask_filled(self):
-        """Ответ, сданный до появления маски, сверяется по старым полям и
+        """Ответ, сданный до появления маски, сохраняет старую оценку и
         показывается учителю; заполненные слоты имеют приоритет."""
         self.task.answer_mask = ''
-        self.task.answer_type = Task.ANSWER_NUMBER
         self.task.answer_latex = r'\frac{1}{4}'
         self.task.save()
-        self.client.post(self.url, {f'task{self.task.pk}_number': '0,25'})
+        Submission.objects.create(assignment=self.assignment, task=self.task,
+                                  answer_text='0,25', answer_number='0,25', auto_check='ok')
         submission = Submission.objects.get(
             assignment=self.assignment, task=self.task)
         self.assertEqual(submission.auto_check, 'ok')
@@ -1435,31 +1418,27 @@ class AutoCheckFlowTests(TestCase):
     def test_legacy_answer_still_shown_after_mask_added(self):
         """Пока слоты пусты, ученик видит старый свободный ответ — и форму маски."""
         self.task.answer_mask = ''
-        self.task.answer_type = Task.ANSWER_NUMBER
         self.task.answer_latex = r'\frac{1}{4}'
         self.task.save()
-        self.client.post(self.url, {f'task{self.task.pk}_number': '0,25'})
+        Submission.objects.create(assignment=self.assignment, task=self.task,
+                                  answer_text='0,25', answer_number='0,25', auto_check='ok')
         self.task.answer_mask = '{{number: 5}}'
         self.task.save()
         response = self.client.get(self.detail)
         self.assertContains(response, '0,25')
         self.assertContains(response, f'name="task{self.task.pk}_s1"')
 
-    def test_no_mask_without_photos_keeps_text_field(self):
-        """Без маски и без фото остаётся старое поле — иначе сдать нечего."""
+    def test_no_mask_does_not_accept_old_free_fields(self):
+        """Без маски нельзя обойти новую форму отправкой старых полей."""
         self.task.answer_mask = ''
-        self.task.answer_type = Task.ANSWER_TEXT
         self.task.save()
         self.assignment.allow_photos = False
         self.assignment.save()
         field = f'task{self.task.pk}_text'
         response = self.client.get(self.detail)
-        self.assertContains(response, f'name="{field}"')
-        self.assertNotContains(response, 'mask-photo-note')
+        self.assertNotContains(response, f'name="{field}"')
         self.client.post(self.url, {field: 'разбор на бумаге'})
-        submission = Submission.objects.get(
-            assignment=self.assignment, task=self.task)
-        self.assertEqual(submission.answer_text, 'разбор на бумаге')
+        self.assertFalse(Submission.objects.filter(assignment=self.assignment, task=self.task).exists())
 
     def test_cleared_order_slot_is_saved(self):
         self.task.answer_mask = '{{order: a|b}}'

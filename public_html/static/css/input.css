@@ -218,6 +218,61 @@
 }
 
 @layer components {
+  /* Единая карточка: условие рядом с ответами, формы раскрываются по месту. */
+  .problem-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-5);
+    align-items: start;
+  }
+  .problem-columns > .card { min-width: 0; }
+  .problem-columns h2 { margin-top: 0; }
+  .problem-section, .problem-answer {
+    padding-block: var(--space-4);
+    border-top: 1px solid var(--border);
+  }
+  .problem-section:first-child { padding-top: 0; border-top: 0; }
+  .problem-section > summary, .problem-solution > summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .problem-section[open] > summary, .problem-solution[open] > summary {
+    margin-bottom: var(--space-3);
+  }
+  .problem-solution { margin-top: var(--space-4); }
+  .problem-mask-summary, .problem-mask-tools {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+  .problem-mask-tools > .problem-mask-summary { width: 100%; }
+  .problem-mask-code { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .problem-columns textarea, .problem-dialog textarea { max-width: 100%; }
+  .problem-columns .formset { table-layout: fixed; width: 100%; }
+  .problem-columns .formset th:first-child { width: 80px; }
+  .problem-columns .formset th:last-child { width: 64px; }
+  .problem-columns .formset[data-formset="source_refs"] th:first-child { width: auto; }
+  .problem-columns .formset[data-formset="source_refs"] th:nth-child(2) { width: 80px; }
+  .problem-columns .formset select, .problem-columns .formset input { max-width: 100%; }
+  .problem-columns .formset td { overflow-wrap: anywhere; }
+  .problem-columns input[type=file] { max-width: 100%; }
+  .problem-dialog {
+    max-width: 680px;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: var(--card);
+    color: var(--text);
+  }
+  .problem-preview-section + .problem-preview-section {
+    border-top: 1px solid var(--border);
+    margin-top: var(--space-4);
+    padding-top: var(--space-3);
+  }
+  @media (max-width: 1050px) {
+    .problem-columns { grid-template-columns: minmax(0, 1fr); }
+  }
   /* Workbench shell: horizontal primary nav + contextual sidebar */
   .topbar {
     min-height: var(--topbar-height);

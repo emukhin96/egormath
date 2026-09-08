@@ -24,26 +24,20 @@ class TaskForm(forms.ModelForm):
         model = Task
         fields = ['text_latex', 'columns',
                   'answer_latex', 'solution_latex',
-                  'grade_level', 'stars', 'difficulty', 'answer_type',
-                  'answer_mask', 'answer_mode']
+                  'author_answer_latex', 'author_solution_latex',
+                  'grade_level', 'stars', 'difficulty',
+                  'answer_mask']
         widgets = {
             'text_latex': forms.Textarea(attrs={'rows': 5}),
             'answer_latex': forms.Textarea(attrs={'rows': 2}),
+            'author_answer_latex': forms.Textarea(attrs={'rows': 2}),
+            'author_solution_latex': forms.Textarea(attrs={'rows': 4}),
             'solution_latex': forms.Textarea(attrs={'rows': 4}),
             'grade_level': forms.HiddenInput(),
             'answer_mask': forms.Textarea(attrs={
                 'rows': 2, 'data-mask-source': 'task',
                 'placeholder': 'Например: Меньшая сторона равна {{number: 10}} см'}),
         }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Формы без этого селекта (быстрый ввод, старые сценарии) — режим по
-        # умолчанию, а не ошибка валидации
-        self.fields['answer_mode'].required = False
-
-    def clean_answer_mode(self):
-        return self.cleaned_data.get('answer_mode') or Task.MODE_SHORT
 
     def clean_answer_mask(self):
         return clean_mask_text(self.cleaned_data.get('answer_mask'))
@@ -53,10 +47,13 @@ class TaskSubitemForm(forms.ModelForm):
     class Meta:
         model = TaskSubitem
         fields = ['order', 'text_latex', 'answer_latex', 'solution_latex',
+                  'author_answer_latex', 'author_solution_latex',
                   'answer_mask']
         widgets = {
             'text_latex': forms.Textarea(attrs={'rows': 2}),
             'answer_latex': forms.Textarea(attrs={'rows': 1}),
+            'author_answer_latex': forms.Textarea(attrs={'rows': 2}),
+            'author_solution_latex': forms.Textarea(attrs={'rows': 4}),
             'solution_latex': forms.Textarea(attrs={'rows': 1}),
             'answer_mask': forms.Textarea(attrs={
                 'rows': 1, 'data-mask-source': 'subitem',

@@ -1,3 +1,4 @@
+from assignments.checks import HELP as MASK_HELP
 import json
 from datetime import timedelta
 
@@ -203,7 +204,7 @@ def worksheet_import(request):
                 messages.warning(request, format_html(
                     'Задаче <a href="{}">#{}</a> нужны картинки: {} — '
                     'догрузите файлы на странице задачи (в том же порядке).',
-                    reverse('task_edit', args=[row['task'].pk]),
+                    reverse('task_detail', args=[row['task'].pk]),
                     row['task'].pk, ', '.join(row['files'])))
             return redirect('worksheet_detail', pk=worksheet.pk)
 
@@ -381,6 +382,7 @@ def worksheet_detail(request, pk):
     collection = Collection.objects.filter(worksheet=worksheet).first()
     return render(request, 'worksheets/worksheet_detail.html', {
         'worksheet': worksheet,
+        'mask_help': MASK_HELP,
         'collection': collection,
         'items': items,
         'rows': rows,

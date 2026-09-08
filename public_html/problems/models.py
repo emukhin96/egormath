@@ -228,23 +228,6 @@ def mask_spec_for(obj):
 
 
 class Task(models.Model):
-    ANSWER_TEXT = 'text'
-    ANSWER_NUMBER = 'number'
-    ANSWER_INTERVAL = 'interval'
-    ANSWER_FORMULA = 'formula'
-    ANSWER_TYPE_CHOICES = [
-        (ANSWER_TEXT, 'Текст'),
-        (ANSWER_NUMBER, 'Число'),
-        (ANSWER_INTERVAL, 'Числовой промежуток'),
-        (ANSWER_FORMULA, 'Формула'),
-    ]
-    MODE_SHORT = 'short'
-    MODE_EXTENDED = 'extended'
-    ANSWER_MODE_CHOICES = [
-        (MODE_SHORT, 'Краткий ответ по маске'),
-        (MODE_EXTENDED, 'Только развёрнутый ответ (фото решения)'),
-    ]
-
     # 10 и 11 — одна метка. GRADE_CHOICES — для селектов 5–11.
     # GRADE_FIELD_CHOICES оставляет 1–4 и 11 валидными для старых записей.
     GRADE_CHOICES = [
@@ -280,18 +263,10 @@ class Task(models.Model):
     difficulty = models.PositiveSmallIntegerField(
         'Техническая сложность', choices=DIFFICULTY_CHOICES,
         null=True, blank=True)
-    answer_type = models.CharField(
-        'Тип ответа ученика', max_length=10,
-        choices=ANSWER_TYPE_CHOICES, default=ANSWER_TEXT)
     answer_mask = models.TextField(
         'Маска ответа для ученика', blank=True,
         help_text='Шаблон со слотами {{number: 10}}, {{choice: а|*б}} и т.д.; '
                   'по нему строится форма ученика и проверяется каждый слот')
-    answer_mode = models.CharField(
-        'Формат ответа ученика', max_length=10,
-        choices=ANSWER_MODE_CHOICES, default=MODE_SHORT,
-        help_text='«Только развёрнутый ответ» — краткий ответ не принимается, '
-                  'ученик присылает фото решения')
     topics = models.ManyToManyField(
         Topic, through='TaskTopic', blank=True,
         related_name='tasks', verbose_name='Темы')
@@ -358,13 +333,13 @@ class Task(models.Model):
 
     @property
     def effective_answer_latex(self):
-        """Проверенная редакторская/AI-версия, иначе текст из источника."""
-        return (self.answer_latex or '').strip() or \
-            (self.author_answer_latex or '').strip()
+        """Авторский ответ, иначе редакторская/AI-версия."""
+        return (self.author_answer_latex or '').strip() or \
+            (self.answer_latex or '').strip()
 
     @property
     def effective_solution_latex(self):
-        """Проверенная редакторская/AI-версия, иначе текст из источника."""
+        """Редакторское/AI-решение, иначе авторское."""
         return (self.solution_latex or '').strip() or \
             (self.author_solution_latex or '').strip()
 
@@ -378,16 +353,10 @@ class Task(models.Model):
         spec = self.mask_spec
         return spec is not None and spec.is_valid
 
-    @property
-    def extended_only(self):
-        return self.answer_mode == self.MODE_EXTENDED
-
     def short_answer_available(self, subitems=None):
-        """Может ли ученик дать краткий ответ: режим «по маске» и есть
+        """Может ли ученик дать краткий ответ: есть
         рабочая маска — у задачи или хотя бы у одного из подпунктов
         (``subitems`` — выбранные в листке; по умолчанию все)."""
-        if self.extended_only:
-            return False
         if subitems is None:
             subitems = list(self.subitems.all())
         if subitems:
@@ -396,11 +365,9 @@ class Task(models.Model):
 
     @property
     def mask_status(self):
-        """Метка для каталога/листка: 'photo' — только фото, 'mask' —
+        """Метка для каталога/листка: 'mask' —
         краткий ответ проверяется, '' — маски пока нет. Без разбора масок
         (в списках их много): форма сохраняет только рабочие."""
-        if self.extended_only:
-            return 'photo'
         subs = list(self.subitems.all())
         texts = [s.answer_mask for s in subs] if subs else [self.answer_mask]
         return 'mask' if any((t or '').strip() for t in texts) else ''
@@ -600,8 +567,8 @@ class TaskSubitem(models.Model):
 
     @property
     def effective_answer_latex(self):
-        return (self.answer_latex or '').strip() or \
-            (self.author_answer_latex or '').strip()
+        return (self.author_answer_latex or '').strip() or \
+            (self.answer_latex or '').strip()
 
     @property
     def effective_solution_latex(self):

@@ -1362,29 +1362,18 @@ class QuickUpdateTests(TestCase):
         # Без подпунктов — предпросмотр и общие поля ответа/решения
         response = self.client.get(detail_url)
         self.assertContains(response, 'name="answer_latex"')
-        self.assertContains(response, 'qa_answer')
-        self.assertContains(response, 'править ответ')
-        # С подпунктами общих полей нет даже при непустом legacy-ответе;
-        # у каждого подпункта — предпросмотр и свои поля ответа/решения
-        self.task.subitems.create(
+        self.assertContains(response, f'id_answer_{self.task.pk}_answer_latex')
+        self.assertContains(response, 'Править ответ')
+        sub = self.task.subitems.create(
             order=10, text_latex='$1+1$', answer_latex='2',
             solution_latex='Сложение')
         self.task.answer_latex = 'legacy'
         self.task.save()
         response = self.client.get(detail_url)
-        self.assertContains(response, 'name="solution_latex"')
-        self.assertContains(response, 'править подпункт')
-        self.assertContains(response, '>Ответ<')
-        self.assertContains(response, 'icon-btn')
-        self.assertContains(response, 'class="btn">Добавить')
-        self.assertContains(response, 'data-neuro="task-detail-answer"')
-        self.assertContains(response, 'data-neuro="task-detail"')
-        self.assertContains(response, 'data-task-id="%s"' % self.task.pk)
-        self.assertContains(response, 'Дописать AI-ответ')
-        self.assertContains(response, 'Добавить AI-решение')
-        self.assertContains(response, 'js/neuro.js')
-        self.assertNotContains(response, 'qa_answer')
-        self.assertNotContains(response, 'устаревшие')
+        self.assertContains(response, f'id_answer_{sub.pk}_answer_latex')
+        self.assertContains(response, 'data-editor-ai="answer"')
+        self.assertContains(response, 'data-mask-edit')
+        self.assertContains(response, 'Сложение')
         self.assertNotContains(response, 'legacy')
 
     def test_invalid_grade_rejected(self):
@@ -1944,8 +1933,6 @@ class RubricatorTests(TestCase):
             'text_latex': admin_task.text_latex,
             'stars': 0,
             'columns': 0,
-            'answer_type': admin_task.answer_type,
-            'answer_mode': admin_task.answer_mode,
             'exam_items': [child.pk],
         }, instance=admin_task)
         self.assertTrue(form.is_valid(), form.errors)

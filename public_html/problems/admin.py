@@ -51,9 +51,9 @@ class TaskImageInline(admin.TabularInline):
 
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'grade_level', 'stars', 'answer_type',
+    list_display = ('__str__', 'grade_level', 'stars',
                     'variant_of', 'created_by', 'created_at')
-    list_filter = ('grade_level', 'stars', 'answer_type', 'grade_bands')
+    list_filter = ('grade_level', 'stars',  'grade_bands')
     search_fields = ('text_plain', 'text_latex')
     filter_horizontal = ('grade_bands', 'facet_values', 'exam_items', 'tags')
     inlines = [TaskSubitemInline, TaskImageInline, TaskSourceInline]

@@ -1,0 +1,72 @@
+<form method="post" enctype="multipart/form-data" action="{% url 'task_manage' task.pk %}" data-editor-form>{% csrf_token %}<input type="hidden" name="block" value="images"><div class="errorlist" data-editor-errors role="alert"></div>    <h2>Картинки</h2>
+    <p class="helptext">Иллюстрации к условию: в PDF верстаются внизу страницы
+      с подписью «К задаче N» (\taskpic / \flushpics). Форматы: PNG/JPEG или
+      векторный PDF. Картинку можно вставить прямо из буфера обмена
+      (Ctrl+V / Cmd+V на этой странице).</p>
+    {{ image_formset.management_form }}
+    {{ image_formset.non_form_errors }}
+    <table class="list formset" data-formset="{{ image_formset.prefix }}" data-images="1">
+      <tr><th style="width:70px">Порядок</th><th>Файл</th><th>Ссылка в тексте</th><th>Удалить</th></tr>
+      {% for f in image_formset %}
+      <tr class="formset-row">
+        <td>{{ f.id }}{{ f.order }}</td>
+        <td>
+          {% if f.instance.pk and f.instance.is_pdf %}
+          <a class="task-image-pdf" href="{% url 'task_image_file' f.instance.pk %}"
+             target="_blank" rel="noopener">PDF: {{ f.instance.filename }}</a>
+          <img alt="" class="pic-preview" hidden>
+          {% elif f.instance.pk %}
+          <img src="{% url 'task_image_file' f.instance.pk %}" alt="" class="pic-preview">
+          {% else %}
+          <img alt="" class="pic-preview" hidden>
+          {% endif %}
+          {{ f.image.errors }}{{ f.image }}
+        </td>
+        <td class="pic-snippet mono"></td>
+        <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    <template data-formset="{{ image_formset.prefix }}">
+      <tr class="formset-row">
+        <td>{{ image_formset.empty_form.id }}{{ image_formset.empty_form.order }}</td>
+        <td><img alt="" class="pic-preview" hidden>{{ image_formset.empty_form.image }}</td>
+        <td class="pic-snippet mono"></td>
+        <td><button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button></td>
+      </tr>
+    </template>
+    <p><button type="button" class="btn btn-small btn-secondary formset-add"
+               data-formset="{{ image_formset.prefix }}">+ картинка</button></p>
+
+<div class="form-buttons"><button class="btn">Сохранить</button><button type="button" class="btn btn-secondary" data-editor-cancel>Отмена</button></div></form>
+<form method="post" enctype="multipart/form-data" action="{% url 'task_manage' task.pk %}" data-editor-form>{% csrf_token %}<input type="hidden" name="block" value="sources"><div class="errorlist" data-editor-errors role="alert"></div>    <h2>Источники (учебники/задачники)</h2>
+    {{ source_formset.management_form }}
+    {{ source_formset.non_form_errors }}
+    <table class="list formset" data-formset="{{ source_formset.prefix }}">
+      <tr>
+        <th>Источник
+
+        </th>
+        <th>Номер</th><th>Удалить</th>
+      </tr>
+      {% for f in source_formset %}
+      <tr class="formset-row">
+        <td>{{ f.id }}{{ f.source.errors }}{{ f.source }}</td>
+        <td>{{ f.number.errors }}{{ f.number }}</td>
+        <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button>{% endif %}</td>
+      </tr>
+      {% for err in f.non_field_errors %}<tr><td colspan="3" class="errorlist">{{ err }}</td></tr>{% endfor %}
+      {% endfor %}
+    </table>
+    <template data-formset="{{ source_formset.prefix }}">
+      <tr class="formset-row">
+        <td>{{ source_formset.empty_form.id }}{{ source_formset.empty_form.source }}</td>
+        <td>{{ source_formset.empty_form.number }}</td>
+        <td><button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button></td>
+      </tr>
+    </template>
+    <p><button type="button" class="btn btn-small btn-secondary formset-add"
+               data-formset="{{ source_formset.prefix }}">+ источник</button></p>
+    <p class="helptext">Новые учебники добавляет администратор в админке.</p>
+
+<div class="form-buttons"><button class="btn">Сохранить</button><button type="button" class="btn btn-secondary" data-editor-cancel>Отмена</button></div></form>

@@ -349,10 +349,11 @@ class MaskModelTests(TestCase):
         # Повтор без изменений — не «changed»
         self.assertFalse(s.run_check(spec=self.task.mask_spec))
 
-    def test_run_check_without_spec_uses_free_fields(self):
+    def test_run_check_without_spec_preserves_historical_result(self):
         from .models import Submission
         s = Submission(assignment=self.assignment, task=self.task,
                        answer_text='0; 2')
+        s.auto_check = OK
         s.run_check(reference=self.task.answer_latex)
         self.assertEqual(s.auto_check, OK)
         self.assertEqual(s.check_json, {})
