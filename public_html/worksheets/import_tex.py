@@ -357,6 +357,8 @@ def create_worksheet(parsed, owner, title='', overrides=None):
                 worksheet=worksheet, order=order,
                 rubric=data['rubric'], rubric_note=data['note'])
         elif kind == 'text':
+            if not (data.get('text') or '').strip():
+                continue
             WorksheetItem.objects.create(
                 worksheet=worksheet, order=order, text_latex=data['text'],
                 text_style=data.get('style', 'plain'))

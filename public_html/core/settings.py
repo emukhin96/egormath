@@ -106,7 +106,10 @@ if IS_PRODUCTION:
             'PASSWORD': read_secret('DB_PASSWORD', ''),
             'HOST': read_secret('DB_HOST', '127.0.0.1'),
             'PORT': read_secret('DB_PORT', '3306'),
-            'OPTIONS': {'charset': 'utf8mb4'},
+            'OPTIONS': {
+                'charset': 'utf8mb4',
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            },
         }
     }
 else:

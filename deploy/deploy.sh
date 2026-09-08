@@ -3,7 +3,7 @@
 # Ручной деплой egormath-web на Timeweb.
 #
 # Только по SSH, не из cron и не из GitHub Actions:
-#   ssh cs13661@vh438.timeweb.ru
+#   ssh cs13661@vh426.timeweb.ru
 #   /home/c/cs13661/egormath/deploy/deploy.sh
 #
 # Не копирует себя в $HOME/auto_pull.sh — там cron chgkmsu.

@@ -183,8 +183,8 @@ class WorksheetItem(models.Model):
         'Рубрика', max_length=190, blank=True,
         help_text='Элемент-заголовок (\\rubr): задачи ниже относятся '
                   'к этой рубрике до следующей')
-    rubric_note = models.CharField(
-        'Пояснение к рубрике', max_length=400, blank=True)
+    rubric_note = models.TextField(
+        'Пояснение к рубрике', blank=True)
     stars_override = models.PositiveSmallIntegerField(
         'Сложность в листке', choices=Task.STARS_CHOICES,
         null=True, blank=True,

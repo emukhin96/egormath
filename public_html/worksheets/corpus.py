@@ -197,15 +197,22 @@ def commit_draft(draft, owner, *, force=False):
         order += 10
         kind = el.get('kind')
         if kind == 'rubric':
+            rubric = (el.get('rubric') or '').strip()
+            note = el.get('note') or ''
+            if not rubric and not note.strip():
+                continue
             WorksheetItem.objects.create(
                 worksheet=worksheet, order=order,
-                rubric=el.get('rubric') or '',
-                rubric_note=el.get('note') or '')
+                rubric=rubric or ' ',
+                rubric_note=note)
             continue
         if kind == 'text':
+            text = el.get('text') or ''
+            if not text.strip():
+                continue
             WorksheetItem.objects.create(
                 worksheet=worksheet, order=order,
-                text_latex=el.get('text') or '',
+                text_latex=text,
                 text_style=el.get('style') or 'plain')
             continue
         if kind != 'task' or el.get('skip'):
