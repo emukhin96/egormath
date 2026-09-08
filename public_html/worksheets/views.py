@@ -395,6 +395,7 @@ def _visible_collection(request, pk):
 
 @teacher_required
 def collection_detail(request, pk):
+    """Страница подборки: ответы в рамке после задачи, скрыты тумблером."""
     collection = _visible_collection(request, pk)
     items = list(collection.worksheet.ordered_items())
     rows = []

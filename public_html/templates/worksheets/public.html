@@ -16,7 +16,7 @@
     {% if item.task_id %}
     {% include 'includes/task_row.html' with number=row.number stars=item.effective_stars text=item.task.text_latex %}
     {% include 'problems/_subitems.html' with subitems=row.subitems %}
-    {% include 'problems/_task_images.html' with task=item.task %}
+    {% task_images item.task %}
     {% elif item.is_rubric %}
     <h2>{{ item.rubric }}</h2>
     {% if item.rubric_note %}<p class="muted math-content ws-rubric-note">{{ item.rubric_note }}</p>{% endif %}
