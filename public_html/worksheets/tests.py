@@ -1611,6 +1611,19 @@ class ShareLinkTests(TestCase):
         # Ответы не показываются
         self.assertNotContains(response, 'Ответ')
 
+    def test_public_page_hides_answer_images(self):
+        first = self.worksheet.items.filter(task__isnull=False).order_by(
+            'order').first()
+        first.task.text_latex = 'Условие без рисунка'
+        first.task.answer_latex = 'см. рис. \\taskpic{1}'
+        first.task.save(update_fields=['text_latex', 'answer_latex'])
+        image = first.task.images.create(
+            image='task_images/public-answer.png', order=10)
+        response = self.client.get(
+            reverse('public_worksheet', args=[self.link.token]))
+        self.assertNotContains(
+            response, reverse('task_image_file', args=[image.pk]))
+
     def test_public_subtitle_skips_empty_parts(self):
         # Пустые grade_label/subtitle не оставляют «висячих» разделителей
         self.worksheet.grade_label = ''
@@ -1677,6 +1690,16 @@ class ShareLinkTests(TestCase):
         # Повторный POST без галочки — задача снова видна
         self.client.post(url, {})
         self.assertEqual(self.link.hidden_items.count(), 0)
+
+    def test_visibility_buttons_without_share_links(self):
+        # Кнопки «скрыть» есть и у свежего листка, ещё без ссылок
+        worksheet = make_worksheet(self.teacher)
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(
+            reverse('worksheet_detail', args=[worksheet.pk]))
+        self.assertContains(response, 'vis-btn')
+        self.assertContains(response, 'Сначала создайте публичную ссылку')
+        self.assertNotContains(response, 'hide_links')
 
     def test_visibility_dialog_in_builder(self):
         self.client.login(username='teacher1', password='pass12345')

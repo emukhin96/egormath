@@ -92,21 +92,10 @@
       }
     });
 
-    // --- Тумблер «ответы и решения» ---
-    var toggle = document.getElementById('toggle-answers');
-    var list = document.getElementById('ws-items');
-    if (toggle && list) {
-      var KEY = 'ws-show-answers';
-      function apply() {
-        list.classList.toggle('show-answers', toggle.checked);
-        try { localStorage.setItem(KEY, toggle.checked ? '1' : ''); } catch (e) {}
-      }
-      try { toggle.checked = localStorage.getItem(KEY) === '1'; } catch (e) {}
-      apply();
-      toggle.addEventListener('change', apply);
-    }
+    // Тумблер ответов — answers-toggle.js (тот же #toggle-answers / #ws-items).
 
     // --- Перетаскивание элементов ---
+    var list = document.getElementById('ws-items');
     if (list && typeof Sortable !== 'undefined') {
       var csrf = document.querySelector('#ws-items input[name=csrfmiddlewaretoken]');
       Sortable.create(list, {

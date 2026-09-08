@@ -353,6 +353,10 @@ class Task(models.Model):
         return any(s.effective_answer_latex for s in self.subitems.all())
 
     @property
+    def has_subitem_solutions(self):
+        return any(s.effective_solution_latex for s in self.subitems.all())
+
+    @property
     def effective_answer_latex(self):
         """Проверенная редакторская/AI-версия, иначе текст из источника."""
         return (self.answer_latex or '').strip() or \
