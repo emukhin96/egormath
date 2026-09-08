@@ -499,18 +499,29 @@ ssh cs13661@vh426.timeweb.ru
 ls -la ~/egormath ~/egormath/public_html
 python3.10 --version
 
-# Deploy key (не перезаписать ключ chgkmsu)
-ssh-keygen -t ed25519 -f ~/.ssh/egormath_deploy -N ""
-# Публичный ключ → GitHub → emukhin96/egormath → Deploy keys (read-only)
-# В ~/.ssh/config: Host github.com / IdentityFile ~/.ssh/egormath_deploy
-# либо Host github.com-egormath и remote url git@github.com-egormath:...
+# Deploy key (не трогать ~/.ssh/id_ed25519 — им может ходить chgkmsu)
+ssh-keygen -t ed25519 -f ~/.ssh/egormath_deploy -N "" -C egormath-deploy
+# Публичный ключ → GitHub → emukhin96/egormath → Settings → Deploy keys (read-only)
+# Алиас, чтобы Host github.com у chgkmsu не перебился:
+cat >> ~/.ssh/config <<'EOF'
+Host github.com-egormath
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/egormath_deploy
+  IdentitiesOnly yes
+EOF
+chmod 600 ~/.ssh/config
+ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
 
-# Если панель уже создала ~/egormath — init внутри, не клонировать рядом
+# Панель уже создала ~/egormath — init внутри, не клонировать рядом
 cd /home/c/cs13661/egormath
 git init
-git remote add origin git@github.com:emukhin96/egormath.git
+git remote add origin git@github.com-egormath:emukhin96/egormath.git
 git fetch origin main
 git checkout -B main origin/main
+# Дефолтная заглушка Timeweb перехватит «/» раньше Django:
+rm -f public_html/index.htm
+rm -rf public_html/cgi-bin
 
 python3.10 -m venv venv
 venv/bin/pip install -r requirements.txt
@@ -519,9 +530,9 @@ mkdir -p .secrets && chmod 700 .secrets
 echo "production" > .secrets/DJANGO_ENV
 python3 -c "import secrets; print(secrets.token_urlsafe(50))" > .secrets/DJANGO_SECRET_KEY
 echo "math.emukhin.ru,math.egor.am" > .secrets/ALLOWED_HOSTS
-echo "<имя базы>" > .secrets/DB_NAME
-echo "<пользователь базы>" > .secrets/DB_USER
-echo "<пароль базы>" > .secrets/DB_PASSWORD
+echo "cs13661_egormath" > .secrets/DB_NAME
+echo "cs13661_egormath" > .secrets/DB_USER
+echo "<пароль базы из панели>" > .secrets/DB_PASSWORD
 echo "<ключ LaTeX API из chgkmsu/.secrets/LATEX_API_KEY>" > .secrets/LATEX_API_KEY
 echo "<ключ Gemini с локальной машины>" > .secrets/GEMINI_API_KEY
 chmod 600 .secrets/*
