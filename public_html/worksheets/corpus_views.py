@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from django.contrib import messages
+from django.db import IntegrityError
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -294,7 +295,7 @@ def corpus_detail(request, draft_id):
             save_draft(draft)
             try:
                 worksheet, info = commit_draft(draft, request.user)
-            except ValueError as exc:
+            except (ValueError, IntegrityError) as exc:
                 messages.error(request, str(exc))
                 return redirect('worksheet_corpus_detail', draft_id=draft_id)
             messages.success(
@@ -421,7 +422,7 @@ def corpus_push(request, draft_id):
         return redirect('worksheet_corpus_list')
     try:
         worksheet, info = push_draft(draft, request.user)
-    except ValueError as exc:
+    except (ValueError, IntegrityError) as exc:
         if _is_ajax(request):
             return JsonResponse({'ok': False, 'message': str(exc)}, status=400)
         messages.error(request, str(exc))

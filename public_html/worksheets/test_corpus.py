@@ -482,6 +482,22 @@ class CorpusViewTests(TestCase):
             rubric='Нахождение процента').rubric_note
         self.assertEqual(len(note), 430)
 
+    def test_push_skips_empty_text_block(self):
+        from worksheet_corpus.store import save_draft
+        from worksheets.models import WorksheetItem
+        draft = _sample_draft()
+        draft['elements'].insert(0, {
+            'kind': 'text', 'text': '', 'style': 'rule'})
+        save_draft(draft)
+        push = self.client.post(
+            reverse('worksheet_corpus_push', args=[draft['id']]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(push.status_code, 200)
+        self.assertTrue(push.json()['ok'])
+        ws = WorksheetItem.objects.filter(
+            worksheet__comment__startswith='corpus:' + draft['id'])
+        self.assertFalse(ws.filter(task__isnull=True, rubric='', text_latex='').exists())
+
     def test_tex_export(self):
         from worksheet_corpus.store import save_draft
         draft = _sample_draft()
