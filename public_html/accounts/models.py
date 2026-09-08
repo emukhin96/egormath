@@ -1,5 +1,16 @@
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import models
+
+
+def default_teacher():
+    """Пока сайт рассчитан на одного преподавателя — суперпользователя.
+
+    Когда появится ссылка на регистрацию к конкретному учителю, ученик
+    будет записываться к владельцу ссылки, а не к этому fallback.
+    """
+    User = get_user_model()
+    return User.objects.filter(is_superuser=True).order_by('pk').first()
 
 
 class Profile(models.Model):
@@ -38,6 +49,28 @@ class Profile(models.Model):
     @property
     def is_student(self):
         return self.role == self.ROLE_STUDENT
+
+    @classmethod
+    def students_for(cls, user):
+        """Ученики, доступные учителю для списка, правок и выдачи заданий.
+
+        Обычный учитель видит только тех, кто записан к нему.
+        Суперпользователь видит всех учеников: самостоятельная регистрация
+        пока общая, без персональной ссылки учителя.
+        """
+        qs = cls.objects.filter(role=cls.ROLE_STUDENT)
+        if not getattr(user, 'is_superuser', False):
+            qs = qs.filter(teacher=user)
+        return qs
+
+    @classmethod
+    def student_users_for(cls, user):
+        """Пользователи-ученики, доступные учителю (для форм выдачи)."""
+        User = get_user_model()
+        qs = User.objects.filter(profile__role=cls.ROLE_STUDENT)
+        if not getattr(user, 'is_superuser', False):
+            qs = qs.filter(profile__teacher=user)
+        return qs
 
 
 class StudentGroup(models.Model):

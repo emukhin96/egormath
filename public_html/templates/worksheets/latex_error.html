@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}{% if for_student %}PDF недоступен{% else %}Ошибка компиляции{% endif %} — EgorMath{% endblock %}
+{% block title %}{% if for_student %}PDF недоступен{% else %}Ошибка компиляции{% endif %} — Математика{% endblock %}
 {% block sidebar %}{% if not for_student %}{% include 'includes/sidebar/diagnostic.html' %}{% endif %}{% endblock %}
 {% block content %}
 {% if for_student %}

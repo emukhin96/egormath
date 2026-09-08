@@ -11,6 +11,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.decorators import student_required, teacher_required
+from accounts.models import Profile
 from problems.models import Task
 from worksheets.models import Worksheet
 
@@ -64,8 +65,8 @@ def assign_worksheet(request, worksheet_id):
     allow_photos = 'allow_photos' in request.POST
     due_at = request.POST.get('due_at') or None
 
-    my_students = request.user.students.filter(
-        role='student', user_id__in=student_ids)
+    my_students = Profile.students_for(request.user).filter(
+        user_id__in=student_ids)
     created = _create_assignments(
         worksheet=worksheet,
         teacher=request.user,
@@ -152,8 +153,7 @@ def assignment_list(request):
                         Assignment.STATUS_RETURNED), due_at__lt=now)),
     )
     page = Paginator(assignments, 30).get_page(request.GET.get('page'))
-    students = (request.user.students
-                .filter(role='student')
+    students = (Profile.students_for(request.user)
                 .select_related('user')
                 .order_by('user__last_name', 'user__first_name'))
     worksheets = Worksheet.objects.filter(

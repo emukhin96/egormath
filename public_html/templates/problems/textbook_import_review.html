@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static task_extras %}
 {% block extra_head %}<script defer src="{% static 'js/textbook_import_review.js' %}?v=5"></script>{% endblock %}
-{% block title %}Сверка {{ draft.external_id }} — EgorMath{% endblock %}
+{% block title %}Сверка {{ draft.external_id }} — Математика{% endblock %}
 {% block content %}
 <div class="page-head"><div><span class="page-eyebrow">Ручная сверка</span><h1>{{ draft.external_id }}</h1>
   <p class="page-subtitle">{{ batch.source }} · {{ draft.source_path|join:' › ' }}</p></div>

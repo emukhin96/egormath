@@ -1,12 +1,11 @@
 {% extends 'base.html' %}
-{% block title %}Мои задания — EgorMath{% endblock %}
+{% block title %}Мои задания — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/dashboard_student.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <span class="page-eyebrow">Кабинет ученика</span>
     <h1>Мои задания</h1>
-    <p class="page-subtitle">Сначала то, что нужно сдать, ниже — работы на проверке и проверенные.</p>
   </div>
   {% if assignments %}
   <p class="muted">Всего заданий: {{ assignments|length }}</p>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}EgorMath{% endblock %}</title>
+  <title>{% block title %}Математика{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -27,7 +27,7 @@
 <body class="{% if user.is_authenticated and not minimal_page %}app-body{% else %}minimal-body{% endif %} {% block body_class %}{% endblock %}">
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="{% url 'index' %}">Egor<span>Math</span></a>
+    <a class="brand" href="{% url 'index' %}">Математика</a>
     {% if user.is_authenticated %}
       <nav class="topbar-nav" aria-label="Основные разделы">
         <a href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} class="is-active"{% endif %}>Главная</a>
@@ -98,7 +98,7 @@
 <div id="ws-saved" class="ws-saved" hidden>Сохранено ✓</div>
 
 <footer class="footer">
-  <div class="container">EgorMath — листки с задачами по математике</div>
+  <div class="container">Егор Мухин, 2026</div>
 </footer>
 {% include 'includes/taxonomy_catalog.html' %}
 {% block extra_js %}{% endblock %}
