@@ -5,6 +5,7 @@ from django.contrib.auth import password_validation
 from django.contrib.auth.models import User
 from django.core.validators import RegexValidator
 from django.db import transaction
+from django.db.models import Q
 from django.utils.text import slugify
 
 from .models import Profile, StudentGroup, default_teacher
@@ -179,7 +180,12 @@ class StudentEditForm(forms.Form):
     def __init__(self, *args, teacher=None, **kwargs):
         super().__init__(*args, **kwargs)
         if teacher is not None:
-            self.fields['groups'].queryset = teacher.owned_groups.all()
+            self.fields['groups'].queryset = (
+                StudentGroup.visible_to(teacher).select_related('teacher'))
+            if teacher.is_superuser:
+                self.fields['groups'].label_from_instance = lambda group: (
+                    f'{group.name} — '
+                    f'{group.teacher.get_full_name() or group.teacher.username}')
 
     def save(self, profile):
         user = profile.user
@@ -198,26 +204,52 @@ class StudentEditForm(forms.Form):
 
 
 class StudentGroupForm(forms.ModelForm):
+    teacher = forms.ModelChoiceField(
+        label='Владелец', required=False, queryset=User.objects.none())
+
     class Meta:
         model = StudentGroup
         fields = ['name']
 
     def __init__(self, *args, teacher=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.teacher = teacher
+        self.actor = teacher
+        if teacher and teacher.is_superuser:
+            self.fields['teacher'].queryset = (User.objects.filter(
+                Q(profile__role=Profile.ROLE_TEACHER) | Q(is_superuser=True))
+                .distinct().order_by('last_name', 'first_name', 'username'))
+            if self.instance.pk:
+                self.fields['teacher'].initial = self.instance.teacher
+            else:
+                self.fields['teacher'].required = True
+                self.fields['teacher'].initial = teacher
+
+    def _owner(self):
+        if self.instance.pk:
+            return self.instance.teacher
+        if self.actor and self.actor.is_superuser:
+            return self.cleaned_data.get('teacher')
+        return self.actor
 
     def clean_name(self):
-        name = self.cleaned_data['name'].strip()
-        qs = StudentGroup.objects.filter(teacher=self.teacher, name=name)
-        if self.instance.pk:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise forms.ValidationError('Группа с таким названием уже есть.')
-        return name
+        return self.cleaned_data['name'].strip()
+
+    def clean(self):
+        cleaned = super().clean()
+        name = cleaned.get('name')
+        owner = self._owner()
+        if name and owner:
+            qs = StudentGroup.objects.filter(teacher=owner, name=name)
+            if self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                self.add_error('name', 'Группа с таким названием уже есть.')
+        return cleaned
 
     def save(self, commit=True):
         group = super().save(commit=False)
-        group.teacher = self.teacher
+        if not group.pk:
+            group.teacher = self._owner()
         if commit:
             group.save()
         return group

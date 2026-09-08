@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, models, transaction
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -15,7 +16,7 @@ from django.views.decorators.http import require_POST
 from django.utils.dateparse import parse_date
 
 from accounts.decorators import get_role, teacher_required
-from accounts.models import Profile
+from accounts.models import Profile, StudentGroup
 from assignments.models import Assignment, locked_check_visibility
 from problems.models import Task, Topic, topic_tree
 from problems.rubricator import (GRADE_LEVEL_TO_CODE, apply_worksheet_taxonomy,
@@ -39,7 +40,7 @@ from .services import (LatexCompileError, collect_assets, collect_beamer_assets,
 
 
 def _own_worksheet(request, pk):
-    return get_object_or_404(Worksheet, pk=pk, owner=request.user)
+    return get_object_or_404(Worksheet.visible_to(request.user), pk=pk)
 
 
 def _builder_response(request, pk, ok=True, message=''):
@@ -62,10 +63,17 @@ WORKSHEET_ORDERINGS = {
 def worksheet_list(request):
     """Каталог листков: фильтры по классу/теме/датам и сортировка."""
     params = request.GET
-    worksheets = (Worksheet.objects.filter(
-                      owner=request.user, collection__isnull=True)
+    worksheets = (Worksheet.visible_to(request.user).filter(
+                      collection__isnull=True)
+                  .select_related('owner')
                   .prefetch_related('topics', 'grade_bands')
                   .annotate(items_total=models.Count('items', distinct=True)))
+
+    owner_id = params.get('owner', '').strip()
+    if request.user.is_superuser and owner_id.isdigit():
+        worksheets = worksheets.filter(owner_id=owner_id)
+    elif not request.user.is_superuser:
+        owner_id = ''
 
     worksheets = filter_by_taxonomy(
         worksheets, params,
@@ -96,6 +104,11 @@ def worksheet_list(request):
         'grade_choices': Task.GRADE_CHOICES,
         'topics': Topic.objects.filter(parent=None),
         'current_topic': current_topic,
+        'owner_filter': owner_id,
+        'owners': (get_user_model().objects.filter(
+            worksheets__collection__isnull=True).distinct()
+            .order_by('last_name', 'first_name', 'username')
+            if request.user.is_superuser else []),
     })
     for w in worksheets:
         w.taxonomy_json = dumps_state(worksheet_taxonomy_state(w))
@@ -299,7 +312,8 @@ def worksheet_detail(request, pk):
     share_links = list(worksheet.share_links.order_by('-created_at')
                        .prefetch_related('hidden_items'))
     assignments = list(worksheet.assignments.select_related('student')
-                       .prefetch_related('hidden_items'))
+                       .prefetch_related(
+                           'hidden_items', 'submissions__check_history'))
     link_hidden = {}
     for link in share_links:
         for hidden_item in link.hidden_items.all():
@@ -309,6 +323,29 @@ def worksheet_detail(request, pk):
         for hidden_item in assignment.hidden_items.all():
             assignment_hidden.setdefault(
                 hidden_item.pk, set()).add(assignment.pk)
+
+    task_numbers = {}
+    number = 0
+    for item in items:
+        if item.task_id:
+            number += 1
+            task_numbers.setdefault(item.task_id, []).append(number)
+    for assignment in assignments:
+        assignment.self_check_total = 0
+        assignment.self_check_tasks = []
+        for submission in assignment.submissions.all():
+            if (not submission.check_attempts
+                    or submission.task_id not in task_numbers):
+                continue
+            history = list(submission.check_history.all())
+            assignment.self_check_total += submission.check_attempts
+            assignment.self_check_tasks.append({
+                'numbers': ', '.join(
+                    str(value) for value in task_numbers.get(
+                        submission.task_id, [])),
+                'attempts': submission.check_attempts,
+                'latest': history[-1] if history else None,
+            })
 
     # Строки конструктора: сквозная нумерация только для задач
     rows = []
@@ -337,7 +374,7 @@ def worksheet_detail(request, pk):
                         .order_by('user__last_name'))
     assigned_ids = set(
         worksheet.assignments.values_list('student_id', flat=True))
-    groups = request.user.owned_groups.prefetch_related('students')
+    groups = StudentGroup.visible_to(request.user).prefetch_related('students')
     # Листок уже выдан — режим сверки зафиксирован первым назначением
     locked_check = locked_check_visibility(worksheet) if assignments else None
 
@@ -366,9 +403,11 @@ def worksheet_detail(request, pk):
 @teacher_required
 def collection_list(request):
     """Каталог опубликованных подборок и черновиков текущего редактора."""
+    visible = (models.Q() if request.user.is_superuser
+               else models.Q(is_published=True)
+               | models.Q(worksheet__owner=request.user))
     collections = (Collection.objects
-                   .filter(models.Q(is_published=True)
-                           | models.Q(worksheet__owner=request.user))
+                   .filter(visible)
                    .select_related('worksheet', 'source', 'parent')
                    .prefetch_related('children')
                    .annotate(items_total=models.Count(
@@ -412,7 +451,8 @@ def collection_detail(request, pk):
         'worksheet': collection.worksheet,
         'rows': rows,
         'can_use': bool(items),
-        'can_edit': collection.worksheet.owner_id == request.user.pk,
+        'can_edit': (collection.worksheet.owner_id == request.user.pk
+                     or request.user.is_superuser),
     })
 
 
@@ -435,7 +475,8 @@ def collection_use(request, pk):
 @teacher_required
 def collection_edit(request, pk):
     collection = _visible_collection(request, pk)
-    if collection.worksheet.owner_id != request.user.pk:
+    if (collection.worksheet.owner_id != request.user.pk
+            and not request.user.is_superuser):
         raise PermissionDenied
     return redirect('worksheet_detail', pk=collection.worksheet_id)
 
@@ -495,7 +536,7 @@ def worksheet_delete(request, pk):
 def worksheet_bulk_delete(request):
     """Старый маршрут bulk-delete/: удаление по ids, без поля delete."""
     ids = request.POST.getlist('ids')
-    worksheets = Worksheet.objects.filter(owner=request.user, pk__in=ids)
+    worksheets = Worksheet.visible_to(request.user).filter(pk__in=ids)
     count = worksheets.count()
     worksheets.delete()
     messages.success(request, f'Удалено листков: {count}.')
@@ -509,7 +550,7 @@ def worksheet_bulk_update(request):
     if request.POST.get('delete'):
         return worksheet_bulk_delete(request)
     ids = request.POST.getlist('ids')
-    worksheets = Worksheet.objects.filter(owner=request.user, pk__in=ids)
+    worksheets = Worksheet.visible_to(request.user).filter(pk__in=ids)
     fields = {}
     grade, grade_ok = parse_grade_choice(request.POST.get('grade', ''))
     if request.POST.get('grade', '').strip() and not grade_ok:
@@ -612,7 +653,7 @@ def soft_remove_item(worksheet, item):
 def add_task_to_worksheet(request, worksheet_id, task):
     """Добавляет задачу в конец листка (используется и из создания задачи)."""
     worksheet = get_object_or_404(
-        Worksheet, pk=worksheet_id, owner=request.user)
+        Worksheet.visible_to(request.user), pk=worksheet_id)
     outcome, message = append_task(worksheet, task)
     (messages.info if outcome == 'exists' else messages.success)(
         request, message)
@@ -870,7 +911,8 @@ def worksheet_pdf(request, pk):
         raise Http404
 
     role = get_role(request.user)
-    is_owner = worksheet.owner_id == request.user.pk
+    is_owner = (worksheet.owner_id == request.user.pk
+                or request.user.is_superuser)
     is_assigned_student = (
         role == Profile.ROLE_STUDENT
         and worksheet.assignments.filter(student=request.user).exists())

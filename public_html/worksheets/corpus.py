@@ -76,8 +76,11 @@ def set_draft_topic_selection(draft, topic_pks, primary_id=None):
 
 
 def find_imported_worksheet(owner, key):
-    return Worksheet.objects.filter(
-        owner=owner, comment__startswith=corpus_mark(key)).first()
+    queryset = Worksheet.objects.filter(
+        comment__startswith=corpus_mark(key))
+    if owner is not None:
+        queryset = queryset.filter(owner=owner)
+    return queryset.first()
 
 
 def list_drafts():

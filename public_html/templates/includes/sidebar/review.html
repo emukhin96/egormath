@@ -24,8 +24,8 @@
   <p class="sidebar-kicker">Действия</p>
   <p class="sidebar-copy">Черновик сохраняет отметки. Завершение открывает результат ученику, возврат снова разрешает редактирование.</p>
   <div class="sidebar-actions">
-    <a class="sidebar-action" href="{% url 'assignment_list' %}">Все задания</a>
-    {% if next_pending %}<a class="sidebar-action" href="{% url 'review_assignment' next_pending.pk %}">Следующая работа</a>{% endif %}
+    <a class="sidebar-action" href="{% url 'assignment_list' %}{% if owner_filter %}?owner={{ owner_filter }}{% endif %}">Все задания</a>
+    {% if next_pending %}<a class="sidebar-action" href="{% url 'review_assignment' next_pending.pk %}{% if owner_filter %}?owner={{ owner_filter }}{% endif %}">Следующая работа</a>{% endif %}
     <a class="sidebar-action" href="{% url 'worksheet_detail' assignment.worksheet.pk %}">Открыть листок</a>
   </div>
 </section>

@@ -68,6 +68,14 @@ class Worksheet(models.Model):
     def __str__(self):
         return self.title
 
+    @classmethod
+    def visible_to(cls, user):
+        """Листки, которыми учитель вправе полноценно управлять."""
+        queryset = cls.objects.all()
+        if not getattr(user, 'is_superuser', False):
+            queryset = queryset.filter(owner=user)
+        return queryset
+
     @property
     def grade_option(self):
         """Значение селекта класса: 11 из старых данных = 10–11."""

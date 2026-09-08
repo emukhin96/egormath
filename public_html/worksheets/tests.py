@@ -1,6 +1,8 @@
 import json
 from unittest import mock
 
+from django.contrib.auth.models import User
+from django.http import HttpResponse
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -12,6 +14,51 @@ from .beamer import normalize_beamer_options, worksheet_to_beamer
 from .latex import task_to_tex, worksheet_to_tex
 from .models import ShareLink, Worksheet, WorksheetItem, WorksheetPdf
 from .services import LatexCompileError
+
+
+class SuperuserWorksheetAccessTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            'admin', 'admin@example.com', 'pass12345')
+        self.teacher = make_teacher()
+        self.worksheet = make_worksheet(
+            self.teacher, title='Чужой листок')
+        self.client.login(username='admin', password='pass12345')
+
+    def test_list_filter_and_full_edit_keep_owner(self):
+        own = make_worksheet(self.admin, title='Листок администратора')
+        response = self.client.get(reverse('worksheet_list'))
+        self.assertContains(response, self.worksheet.title)
+        self.assertContains(
+            response, self.teacher.get_full_name() or self.teacher.username)
+        response = self.client.get(
+            reverse('worksheet_list'), {'owner': self.teacher.pk})
+        self.assertEqual(list(response.context['worksheets']),
+                         [self.worksheet])
+
+        response = self.client.post(
+            reverse('worksheet_rename', args=[self.worksheet.pk]),
+            {'title': 'Изменён суперпользователем'})
+        self.assertEqual(response.status_code, 302)
+        self.worksheet.refresh_from_db()
+        self.assertEqual(self.worksheet.title, 'Изменён суперпользователем')
+        self.assertEqual(self.worksheet.owner, self.teacher)
+
+    @mock.patch('worksheets.views._worksheet_pdf_response')
+    def test_superuser_opens_foreign_teacher_pdf(self, pdf_response):
+        pdf_response.return_value = HttpResponse(
+            b'pdf', content_type='application/pdf')
+        response = self.client.get(
+            reverse('worksheet_pdf', args=[self.worksheet.pk]),
+            {'variant': WorksheetPdf.VARIANT_TEACHER})
+        self.assertEqual(response.status_code, 200)
+        pdf_response.assert_called_once()
+
+    def test_superuser_deletes_foreign_worksheet(self):
+        response = self.client.post(
+            reverse('worksheet_delete', args=[self.worksheet.pk]))
+        self.assertRedirects(response, reverse('worksheet_list'))
+        self.assertFalse(Worksheet.objects.filter(pk=self.worksheet.pk).exists())
 
 
 def make_worksheet(owner, title='Квадратные уравнения', n_tasks=2):

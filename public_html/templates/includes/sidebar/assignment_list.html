@@ -12,7 +12,7 @@
   <p class="sidebar-kicker">Действия</p>
   <div class="sidebar-actions">
     <a class="sidebar-action" href="{% url 'assignment_create' %}">Выдать задание</a>
-    {% if stats.submitted %}<a class="sidebar-action" href="?status=submitted">Открыть очередь проверки</a>{% endif %}
+    {% if stats.submitted %}<a class="sidebar-action" href="?status=submitted{% if filters.owner %}&amp;owner={{ filters.owner }}{% endif %}">Открыть очередь проверки</a>{% endif %}
   </div>
 </section>
 <section class="sidebar-section">

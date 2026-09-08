@@ -19,8 +19,8 @@ from worksheets.models import Worksheet, WorksheetItem
 from worksheets.tests import make_worksheet
 
 from .check_answer import check_answer, check_interval_fields
-from .models import (Assignment, Review, Submission, SubmissionPart,
-                     SubmissionPhoto)
+from .models import (Assignment, Review, Submission, SubmissionCheckAttempt,
+                     SubmissionPart, SubmissionPhoto)
 
 
 def make_assignment(teacher, student, **kwargs):
@@ -102,6 +102,69 @@ class SuperuserStudentVisibilityTests(TestCase):
         self.assertRedirects(response, reverse('assignment_list'))
         self.assertTrue(Assignment.objects.filter(
             worksheet=self.worksheet, student=self.student).exists())
+
+
+class SuperuserAssignmentAccessTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            'admin', 'admin@example.com', 'pass12345')
+        self.teacher = make_teacher()
+        self.student = make_student(self.teacher)
+        self.worksheet = make_worksheet(
+            self.teacher, title='Чужой листок')
+        self.assignment = Assignment.objects.create(
+            worksheet=self.worksheet, student=self.student,
+            assigned_by=self.teacher, status=Assignment.STATUS_SUBMITTED,
+            submitted_at=timezone.now())
+        self.client.login(username='admin', password='pass12345')
+
+    def test_global_list_and_owner_filter(self):
+        own_student = make_student(self.admin, 'admin-student')
+        own = make_assignment(
+            self.admin, own_student, status=Assignment.STATUS_SUBMITTED,
+            submitted_at=timezone.now())
+        response = self.client.get(reverse('assignment_list'))
+        self.assertEqual(response.context['stats']['total'], 2)
+        self.assertContains(response, self.worksheet.title)
+        self.assertContains(
+            response, self.teacher.get_full_name() or self.teacher.username)
+
+        response = self.client.get(
+            reverse('assignment_list'), {'owner': self.teacher.pk})
+        self.assertEqual(list(response.context['assignments']),
+                         [self.assignment])
+
+    def test_superuser_reviews_foreign_assignment_and_keeps_queue_filter(self):
+        response = self.client.get(
+            reverse('review_assignment', args=[self.assignment.pk]),
+            {'owner': self.teacher.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['queue_total'], 1)
+        response = self.client.post(
+            reverse('save_review', args=[self.assignment.pk]), {
+                'action': 'complete', 'owner': self.teacher.pk,
+            })
+        self.assertEqual(
+            response.url,
+            f"{reverse('assignment_list')}?owner={self.teacher.pk}")
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.status, Assignment.STATUS_REVIEWED)
+
+    def test_superuser_assigns_foreign_worksheet_via_foreign_group(self):
+        second = make_student(self.teacher, 'student2')
+        group = StudentGroup.objects.create(
+            teacher=self.teacher, name='Чужая группа')
+        group.students.add(second)
+        response = self.client.post(reverse('assignment_create'), {
+            'worksheet': self.worksheet.pk,
+            'groups': [group.pk],
+            'check_visibility': Assignment.CHECK_TEACHER,
+        })
+        self.assertRedirects(response, reverse('assignment_list'))
+        created = Assignment.objects.get(
+            worksheet=self.worksheet, student=second)
+        self.assertEqual(created.assigned_by, self.admin)
+        self.assertEqual(created.worksheet.owner, self.teacher)
 
     def test_superuser_can_assign_from_worksheet_page(self):
         self.client.login(username='admin', password='pass12345')
@@ -1077,6 +1140,14 @@ class AutoCheckFlowTests(TestCase):
         submission = Submission.objects.get(
             assignment=self.assignment, task=self.task)
         self.assertEqual(submission.check_attempts, 1)
+        first_attempt = submission.check_history.get(number=1)
+        self.assertEqual(first_attempt.result, SubmissionCheckAttempt.RESULT_WRONG)
+        self.assertEqual(first_attempt.snapshot['targets'][0]['answer'],
+                         'Корни: [7]')
+        self.assertEqual(first_attempt.snapshot['targets'][0]['slots'], [{
+            'name': 's1', 'label': 'конечное множество чисел',
+            'value': '7', 'result': 'wrong',
+        }])
         # Новый ответ — бейдж прячется до следующего нажатия
         self._save('0; 2')
         self.assertNotContains(self.client.get(self.detail), 'верно</span>')
@@ -1084,6 +1155,10 @@ class AutoCheckFlowTests(TestCase):
         self.assertContains(self.client.get(self.detail), '✓ верно')
         submission.refresh_from_db()
         self.assertEqual(submission.check_attempts, 2)
+        self.assertEqual(submission.check_history.count(), 2)
+        first_attempt.refresh_from_db()
+        self.assertEqual(first_attempt.snapshot['targets'][0]['answer'],
+                         'Корни: [7]')
         # Без JS — redirect обратно к задаче
         response = self._check(xhr=False)
         self.assertEqual(response.status_code, 302)
@@ -1097,6 +1172,7 @@ class AutoCheckFlowTests(TestCase):
         self.assertIn('введите ответ', response.json()['message'])
         self.assertEqual(Submission.objects.get(
             assignment=self.assignment, task=self.task).check_attempts, 0)
+        self.assertFalse(SubmissionCheckAttempt.objects.exists())
 
     def test_check_button_disabled_without_mask(self):
         # Без маски сверять нечего: кнопка неактивна, поля ввода нет,
@@ -1157,6 +1233,45 @@ class AutoCheckFlowTests(TestCase):
             assignment=self.assignment, task=self.task)
         self.assertEqual(submission.check_attempts, 1)
         self.assertTrue(all(p.check_revealed for p in submission.parts.all()))
+        attempt = submission.check_history.get()
+        self.assertEqual(attempt.result, SubmissionCheckAttempt.RESULT_WRONG)
+        self.assertEqual(
+            [target['result'] for target in attempt.snapshot['targets']],
+            ['ok', 'wrong'])
+
+    def test_partial_subitems_are_recorded_as_incomplete(self):
+        self.assignment.check_visibility = Assignment.CHECK_LIVE
+        self.assignment.save()
+        a = TaskSubitem.objects.create(
+            task=self.task, order=1, text_latex='а', answer_mask='{{number: 1}}')
+        TaskSubitem.objects.create(
+            task=self.task, order=2, text_latex='б', answer_mask='{{number: 2}}')
+        self.client.post(
+            reverse('check_task', args=[self.assignment.pk, self.task.pk]),
+            {f'task{self.task.pk}_sub{a.pk}_s1': '1'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        attempt = SubmissionCheckAttempt.objects.get()
+        self.assertEqual(
+            attempt.result, SubmissionCheckAttempt.RESULT_INCOMPLETE)
+        self.assertEqual(len(attempt.snapshot['targets']), 2)
+        self.assertEqual(attempt.snapshot['targets'][1]['answer'], '')
+
+    def test_review_shows_attempt_history_and_legacy_count(self):
+        self.assignment.check_visibility = Assignment.CHECK_LIVE
+        self.assignment.save()
+        self._check('7')
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        submission.check_attempts = 3
+        submission.save(update_fields=['check_attempts'])
+        self.client.login(username='teacher1', password='pass12345')
+
+        response = self.client.get(
+            reverse('review_assignment', args=[self.assignment.pk]))
+        self.assertContains(response, 'Самопроверка — нажатий: 3')
+        self.assertContains(response, 'Попытка 1')
+        self.assertContains(response, 'Ранних попыток без сохранённого ответа: 2')
 
     def test_auto_ok_requires_every_subitem(self):
         a = TaskSubitem.objects.create(

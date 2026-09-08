@@ -43,10 +43,11 @@
   </div>
   {% if pending %}
   <table class="list">
-    <tr><th>Листок</th><th>Ученик</th><th>Отправлено</th><th></th></tr>
+    <tr><th>Листок</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Ученик</th><th>Отправлено</th><th></th></tr>
     {% for a in pending %}
     <tr>
       <td>{{ a.worksheet.title }}</td>
+      {% if request.user.is_superuser %}<td>{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>{% endif %}
       <td>{{ a.student.get_full_name|default:a.student.username }}</td>
       <td>{{ a.submitted_at|date:'d.m.Y H:i' }}</td>
       <td><a class="btn btn-small" href="{% url 'review_assignment' a.pk %}">Проверить</a></td>
@@ -60,16 +61,17 @@
 
 <div class="grid-2">
   <div class="card">
-    <h2>Мои листки</h2>
+    <h2>{% if request.user.is_superuser %}Все листки{% else %}Мои листки{% endif %}</h2>
     {% if worksheets %}
     <table class="list">
-      <tr><th>Название</th><th>Класс</th><th>Задач</th><th></th></tr>
+      <tr><th>Название</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Класс</th><th>Задач</th><th></th></tr>
       {% for w in worksheets %}
       <tr>
         <td>
           <a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a>
           {% if w.comment %}<div class="muted task-meta">{{ w.comment|truncatechars:80 }}</div>{% endif %}
         </td>
+        {% if request.user.is_superuser %}<td>{{ w.owner.get_full_name|default:w.owner.username }}</td>{% endif %}
         <td>{{ w.grade_label }}</td>
         <td>{{ w.items_total }}</td>
         <td><a class="btn btn-small btn-secondary"
@@ -87,10 +89,11 @@
     <h2>Недавно проверенные</h2>
     {% if reviewed %}
     <table class="list">
-      <tr><th>Листок</th><th>Ученик</th><th>Проверено</th><th>Результат</th><th></th></tr>
+      <tr><th>Листок</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Ученик</th><th>Проверено</th><th>Результат</th><th></th></tr>
       {% for a in reviewed %}
       <tr>
         <td>{{ a.worksheet.title }}</td>
+        {% if request.user.is_superuser %}<td>{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>{% endif %}
         <td>{{ a.student.get_full_name|default:a.student.username }}</td>
         <td>{{ a.reviewed_at|date:'d.m.Y' }}</td>
         <td>{% with r=a.result %}{{ r.done }}/{{ r.total }} ({{ r.percent }}%){% endwith %}</td>
