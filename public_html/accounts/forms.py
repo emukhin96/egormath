@@ -1,10 +1,29 @@
 import secrets
 
 from django import forms
+from django.contrib.auth import password_validation
 from django.contrib.auth.models import User
+from django.core.validators import RegexValidator
+from django.db import transaction
 from django.utils.text import slugify
 
 from .models import Profile, StudentGroup
+
+REGISTRATION_USERNAME_MIN_LENGTH = 3
+REGISTRATION_USERNAME_MAX_LENGTH = 30
+REGISTRATION_NAME_MAX_LENGTH = 50
+REGISTRATION_PASSWORD_MAX_LENGTH = 128
+
+registration_username_validator = RegexValidator(
+    regex=r'^[A-Za-z0-9._-]+\Z',
+    message=(
+        'Используйте только латинские буквы, цифры, точку, дефис '
+        'и подчёркивание.'),
+)
+registration_name_validator = RegexValidator(
+    regex=r"^[^\W\d_]+(?:[ '\-’][^\W\d_]+)*\Z",
+    message='Используйте только буквы, пробел, дефис или апостроф.',
+)
 
 # Транслитерация для генерации логина из фамилии
 _TRANSLIT = {
@@ -34,6 +53,94 @@ def generate_password():
     """Короткий читаемый пароль без неоднозначных символов."""
     alphabet = 'abcdefghjkmnpqrstuvwxyz23456789'
     return ''.join(secrets.choice(alphabet) for _ in range(8))
+
+
+class StudentRegistrationForm(forms.Form):
+    """Самостоятельная регистрация ученика."""
+
+    first_name = forms.CharField(
+        label='Имя', max_length=REGISTRATION_NAME_MAX_LENGTH,
+        validators=[registration_name_validator],
+        help_text='До 50 символов: буквы, пробел, дефис или апостроф.',
+        widget=forms.TextInput(attrs={
+            'autocomplete': 'given-name',
+            'autofocus': True,
+            'data-name-field': '',
+        }),
+    )
+    last_name = forms.CharField(
+        label='Фамилия', max_length=REGISTRATION_NAME_MAX_LENGTH,
+        validators=[registration_name_validator],
+        help_text='До 50 символов: буквы, пробел, дефис или апостроф.',
+        widget=forms.TextInput(attrs={
+            'autocomplete': 'family-name',
+            'data-name-field': '',
+        }),
+    )
+    username = forms.CharField(
+        label='Логин', min_length=REGISTRATION_USERNAME_MIN_LENGTH,
+        max_length=REGISTRATION_USERNAME_MAX_LENGTH,
+        validators=[registration_username_validator],
+        help_text=(
+            '3–30 символов: латинские буквы, цифры, точка, дефис '
+            'и подчёркивание.'),
+        widget=forms.TextInput(attrs={
+            'autocomplete': 'username',
+            'autocapitalize': 'none',
+            'spellcheck': 'false',
+            'pattern': r'[A-Za-z0-9._-]{3,30}',
+            'data-username-field': '',
+        }),
+    )
+    password1 = forms.CharField(
+        label='Пароль', max_length=REGISTRATION_PASSWORD_MAX_LENGTH,
+        strip=False,
+        help_text='От 6 до 128 символов. Можно использовать любые символы.',
+        widget=forms.PasswordInput(attrs={
+            'autocomplete': 'new-password',
+            'minlength': 6,
+            'data-password-field': '',
+        }),
+    )
+    password2 = forms.CharField(
+        label='Повторите пароль',
+        max_length=REGISTRATION_PASSWORD_MAX_LENGTH, strip=False,
+        widget=forms.PasswordInput(attrs={
+            'autocomplete': 'new-password',
+            'minlength': 6,
+            'data-password-confirmation': '',
+        }),
+    )
+
+    def clean_username(self):
+        username = self.cleaned_data['username'].lower()
+        if User.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError('Этот логин уже занят.')
+        return username
+
+    def clean_password1(self):
+        password = self.cleaned_data['password1']
+        password_validation.validate_password(password)
+        return password
+
+    def clean(self):
+        cleaned_data = super().clean()
+        password1 = cleaned_data.get('password1')
+        password2 = cleaned_data.get('password2')
+        if password1 and password2 and password1 != password2:
+            self.add_error('password2', 'Пароли не совпадают.')
+        return cleaned_data
+
+    @transaction.atomic
+    def save(self):
+        user = User.objects.create_user(
+            username=self.cleaned_data['username'],
+            password=self.cleaned_data['password1'],
+            first_name=self.cleaned_data['first_name'],
+            last_name=self.cleaned_data['last_name'],
+        )
+        Profile.objects.create(user=user, role=Profile.ROLE_STUDENT)
+        return user
 
 
 class StudentCreateForm(forms.Form):

@@ -1,9 +1,11 @@
 from django.contrib import messages
+from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
+from django.db import IntegrityError
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods, require_POST
 
 from assignments.models import Assignment
 from problems.models import Task
@@ -11,7 +13,7 @@ from worksheets.models import Worksheet
 
 from .decorators import get_role, teacher_required
 from .forms import (StudentCreateForm, StudentEditForm, StudentGroupForm,
-                    generate_password)
+                    StudentRegistrationForm, generate_password)
 from .models import Profile, StudentGroup
 
 
@@ -19,6 +21,26 @@ def index(request):
     if request.user.is_authenticated:
         return redirect('dashboard')
     return redirect('login')
+
+
+@require_http_methods(['GET', 'POST'])
+def register(request):
+    """Самостоятельная регистрация ученика с немедленным входом."""
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+    form = StudentRegistrationForm(
+        request.POST if request.method == 'POST' else None)
+    if request.method == 'POST' and form.is_valid():
+        try:
+            user = form.save()
+        except IntegrityError:
+            # Защита от одновременной регистрации одинакового логина.
+            form.add_error('username', 'Этот логин уже занят.')
+        else:
+            auth_login(request, user)
+            messages.success(request, 'Аккаунт создан. Добро пожаловать!')
+            return redirect('dashboard')
+    return render(request, 'accounts/register.html', {'form': form})
 
 
 @login_required
