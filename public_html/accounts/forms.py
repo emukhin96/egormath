@@ -62,7 +62,6 @@ class StudentRegistrationForm(forms.Form):
     first_name = forms.CharField(
         label='Имя', max_length=REGISTRATION_NAME_MAX_LENGTH,
         validators=[registration_name_validator],
-        help_text='До 50 символов: буквы, пробел, дефис или апостроф.',
         widget=forms.TextInput(attrs={
             'autocomplete': 'given-name',
             'autofocus': True,
@@ -72,7 +71,6 @@ class StudentRegistrationForm(forms.Form):
     last_name = forms.CharField(
         label='Фамилия', max_length=REGISTRATION_NAME_MAX_LENGTH,
         validators=[registration_name_validator],
-        help_text='До 50 символов: буквы, пробел, дефис или апостроф.',
         widget=forms.TextInput(attrs={
             'autocomplete': 'family-name',
             'data-name-field': '',
