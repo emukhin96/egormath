@@ -43,6 +43,59 @@ class StudentRegistrationTests(TestCase):
         self.assertEqual(
             int(self.client.session['_auth_user_id']), student.pk)
 
+    def test_public_pages_use_site_name_and_footer(self):
+        for url_name in ('login', 'register'):
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertContains(response, 'Математика')
+                self.assertContains(response, 'Егор Мухин, 2026')
+                self.assertNotContains(response, 'EgorMath')
+
+    def test_registered_student_attaches_to_superuser(self):
+        admin = User.objects.create_superuser(
+            'admin', 'admin@example.com', 'pass12345')
+        self.client.post(reverse('register'), self.registration_data())
+        student = User.objects.get(username='new.student-7')
+        self.assertEqual(student.profile.teacher, admin)
+
+    def test_superuser_sees_registered_students_in_roster(self):
+        admin = User.objects.create_superuser(
+            'admin', 'admin@example.com', 'pass12345')
+        self.client.post(reverse('register'), self.registration_data())
+        self.client.logout()
+        self.client.login(username='admin', password='pass12345')
+
+        response = self.client.get(reverse('students'))
+        self.assertContains(response, 'Анна-Мария')
+        self.assertContains(response, 'О’Коннор')
+        self.assertEqual(
+            Profile.students_for(admin).count(), 1)
+
+    def test_superuser_sees_students_without_teacher(self):
+        admin = User.objects.create_superuser(
+            'admin', 'admin@example.com', 'pass12345')
+        student = User.objects.create_user(
+            username='free-student', password='pass12345',
+            first_name='Саша', last_name='Саморегистров')
+        Profile.objects.create(user=student, role=Profile.ROLE_STUDENT)
+        self.client.login(username='admin', password='pass12345')
+
+        response = self.client.get(reverse('students'))
+        self.assertContains(response, 'Саморегистров')
+        self.assertEqual(response.context['student_profiles'].count(), 1)
+
+    def test_regular_teacher_does_not_see_unattached_student(self):
+        teacher = User.objects.create_user(
+            username='teacher1', password='pass12345')
+        Profile.objects.create(user=teacher, role=Profile.ROLE_TEACHER)
+        self.client.post(reverse('register'), self.registration_data())
+        self.client.logout()
+        self.client.login(username='teacher1', password='pass12345')
+
+        response = self.client.get(reverse('students'))
+        self.assertNotContains(response, 'Анна-Мария')
+        self.assertFalse(Profile.students_for(teacher).exists())
+
     def test_registration_rejects_invalid_and_too_long_values(self):
         invalid_values = (
             ('username', 'ученик'),
@@ -137,6 +190,18 @@ class StudentManagementTests(TestCase):
         self.client.login(username='teacher1', password='pass12345')
         response = self.client.get(reverse('dashboard'))
         self.assertContains(response, 'Кабинет учителя')
+
+    def test_student_dashboard_has_no_ordering_hint(self):
+        student = User.objects.create_user(
+            username='student1', password='pass12345',
+            first_name='Петя', last_name='Ученик')
+        Profile.objects.create(user=student, role=Profile.ROLE_STUDENT)
+        self.client.login(username='student1', password='pass12345')
+        response = self.client.get(reverse('dashboard'))
+        self.assertContains(response, 'Мои задания')
+        self.assertNotContains(
+            response,
+            'Сначала то, что нужно сдать, ниже — работы на проверке и проверенные.')
 
     def test_login_required(self):
         response = self.client.get(reverse('dashboard'))

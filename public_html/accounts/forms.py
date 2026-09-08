@@ -7,7 +7,7 @@ from django.core.validators import RegexValidator
 from django.db import transaction
 from django.utils.text import slugify
 
-from .models import Profile, StudentGroup
+from .models import Profile, StudentGroup, default_teacher
 
 REGISTRATION_USERNAME_MIN_LENGTH = 3
 REGISTRATION_USERNAME_MAX_LENGTH = 30
@@ -139,7 +139,9 @@ class StudentRegistrationForm(forms.Form):
             first_name=self.cleaned_data['first_name'],
             last_name=self.cleaned_data['last_name'],
         )
-        Profile.objects.create(user=user, role=Profile.ROLE_STUDENT)
+        Profile.objects.create(
+            user=user, role=Profile.ROLE_STUDENT,
+            teacher=default_teacher())
         return user
 
 

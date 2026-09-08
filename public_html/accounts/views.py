@@ -76,8 +76,7 @@ def teacher_dashboard(request):
         'reviewed': reviewed,
         'worksheets_total': Worksheet.objects.filter(
             owner=request.user).count(),
-        'students_total': Profile.objects.filter(
-            teacher=request.user, role=Profile.ROLE_STUDENT).count(),
+        'students_total': Profile.students_for(request.user).count(),
         'tasks_total': Task.objects.filter(
             variant_of__isnull=True).count(),
     })
@@ -136,9 +135,7 @@ def students(request):
                 }
                 messages.success(request, f'Ученик {user.get_full_name()} создан.')
                 return redirect('students')
-    student_profiles = (Profile.objects
-                        .filter(teacher=request.user,
-                                role=Profile.ROLE_STUDENT)
+    student_profiles = (Profile.students_for(request.user)
                         .select_related('user')
                         .prefetch_related('user__member_groups')
                         .order_by('user__last_name', 'user__first_name'))
@@ -164,8 +161,8 @@ def students(request):
 def student_edit(request, user_id):
     """Правка данных ученика через веб-интерфейс."""
     profile = get_object_or_404(
-        Profile.objects.select_related('user'),
-        user_id=user_id, teacher=request.user, role=Profile.ROLE_STUDENT)
+        Profile.students_for(request.user).select_related('user'),
+        user_id=user_id)
     if request.method == 'POST':
         form = StudentEditForm(request.POST, teacher=request.user)
         if form.is_valid():
@@ -216,8 +213,7 @@ def group_rename(request, group_id):
 @teacher_required
 def reset_student_password(request, user_id):
     profile = get_object_or_404(
-        Profile, user_id=user_id, teacher=request.user,
-        role=Profile.ROLE_STUDENT)
+        Profile.students_for(request.user), user_id=user_id)
     if request.method == 'POST':
         password = generate_password()
         profile.user.set_password(password)

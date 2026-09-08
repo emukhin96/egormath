@@ -64,9 +64,7 @@ class AssignmentCreateForm(forms.Form):
             Worksheet.objects.filter(owner=teacher).order_by('-updated_at'))
         self.fields['groups'].queryset = teacher.owned_groups.all()
         self.fields['students'].queryset = (
-            User.objects.filter(
-                profile__teacher=teacher,
-                profile__role=Profile.ROLE_STUDENT)
+            Profile.student_users_for(teacher)
             .select_related('profile')
             .order_by('last_name', 'first_name', 'username'))
         self.selected_worksheet = self._selected_worksheet()
@@ -110,10 +108,8 @@ class AssignmentCreateForm(forms.Form):
             if students is not None else set()
         if groups is not None:
             student_ids.update(
-                User.objects.filter(
-                    member_groups__in=groups,
-                    profile__teacher=self.teacher,
-                    profile__role=Profile.ROLE_STUDENT)
+                Profile.student_users_for(self.teacher)
+                .filter(member_groups__in=groups)
                 .values_list('pk', flat=True))
         if not student_ids:
             raise forms.ValidationError(

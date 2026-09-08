@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 from unittest import mock
 
+from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -13,7 +14,7 @@ from PIL import Image
 
 from problems.models import Task, TaskSubitem
 from problems.tests import make_student, make_teacher
-from accounts.models import StudentGroup
+from accounts.models import Profile, StudentGroup
 from worksheets.models import Worksheet, WorksheetItem
 from worksheets.tests import make_worksheet
 
@@ -72,6 +73,45 @@ class AssignFlowTests(TestCase):
             {'students': [foreign_student.pk]})
         self.assertFalse(Assignment.objects.filter(
             student=foreign_student).exists())
+
+
+class SuperuserStudentVisibilityTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            'admin', 'admin@example.com', 'pass12345')
+        self.student = User.objects.create_user(
+            username='free-student', password='pass12345',
+            first_name='Саша', last_name='Саморегистров')
+        Profile.objects.create(user=self.student, role=Profile.ROLE_STUDENT)
+        self.worksheet = make_worksheet(self.admin)
+
+    def test_unattached_student_is_in_assignment_form(self):
+        self.client.login(username='admin', password='pass12345')
+        response = self.client.get(reverse('assignment_create'))
+        self.assertContains(response, 'Саморегистров')
+        self.assertIn(
+            self.student, response.context['form'].fields['students'].queryset)
+
+    def test_superuser_can_assign_unattached_student(self):
+        self.client.login(username='admin', password='pass12345')
+        response = self.client.post(reverse('assignment_create'), {
+            'worksheet': self.worksheet.pk,
+            'students': [self.student.pk],
+            'check_visibility': Assignment.CHECK_TEACHER,
+        })
+        self.assertRedirects(response, reverse('assignment_list'))
+        self.assertTrue(Assignment.objects.filter(
+            worksheet=self.worksheet, student=self.student).exists())
+
+    def test_superuser_can_assign_from_worksheet_page(self):
+        self.client.login(username='admin', password='pass12345')
+        response = self.client.post(
+            reverse('assign_worksheet', args=[self.worksheet.pk]),
+            {'students': [self.student.pk]})
+        self.assertRedirects(
+            response, reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.assertTrue(Assignment.objects.filter(
+            worksheet=self.worksheet, student=self.student).exists())
 
 
 class AssignmentWorkspaceTests(TestCase):

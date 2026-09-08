@@ -332,8 +332,7 @@ def worksheet_detail(request, pk):
     if search_active:
         found_tasks = filter_tasks(request.GET).exclude(pk__in=task_ids)[:15]
 
-    student_profiles = (Profile.objects
-                        .filter(teacher=request.user, role=Profile.ROLE_STUDENT)
+    student_profiles = (Profile.students_for(request.user)
                         .select_related('user')
                         .order_by('user__last_name'))
     assigned_ids = set(
