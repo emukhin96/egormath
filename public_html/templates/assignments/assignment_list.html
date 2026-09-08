@@ -33,6 +33,17 @@
       <input type="text" name="q" id="assignment-q" value="{{ filters.q }}"
              placeholder="Листок или ученик">
     </div>
+    {% if request.user.is_superuser %}
+    <div>
+      <label for="assignment-owner">Владелец листка</label>
+      <select name="owner" id="assignment-owner">
+        <option value="">Все владельцы</option>
+        {% for owner in owners %}
+        <option value="{{ owner.pk }}"{% if filters.owner == owner.pk|stringformat:'s' %} selected{% endif %}>{{ owner.get_full_name|default:owner.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <div>
       <label for="assignment-status">Статус</label>
       <select name="status" id="assignment-status">
@@ -71,7 +82,7 @@
     </div>
     <div class="filter-actions">
       <button class="btn" type="submit">Применить</button>
-      {% if filters.q or filters.status or filters.student or filters.worksheet or filters.due %}
+      {% if filters.q or filters.status or filters.student or filters.worksheet or filters.due or filters.owner %}
       <a class="btn btn-secondary" href="{% url 'assignment_list' %}">Сбросить</a>
       {% endif %}
     </div>
@@ -85,7 +96,7 @@
   </div>
   {% if assignments %}
   <table class="list">
-    <thead><tr><th>Работа</th><th>Ученик</th><th>Срок</th><th>Статус</th><th>Последнее действие</th><th></th></tr></thead>
+    <thead><tr><th>Работа</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Ученик</th><th>Срок</th><th>Статус</th><th>Последнее действие</th><th></th></tr></thead>
     <tbody>
     {% for assignment in assignments %}
     <tr{% if assignment.is_overdue %} class="is-overdue"{% endif %}>
@@ -93,6 +104,7 @@
         <a class="assignment-title" href="{% url 'worksheet_detail' assignment.worksheet.pk %}">{{ assignment.worksheet.title }}</a>
         <div class="task-meta">Выдано {{ assignment.assigned_at|date:'d.m.Y' }}</div>
       </td>
+      {% if request.user.is_superuser %}<td>{{ assignment.worksheet.owner.get_full_name|default:assignment.worksheet.owner.username }}</td>{% endif %}
       <td>{{ assignment.student.get_full_name|default:assignment.student.username }}</td>
       <td>
         {% if assignment.due_at %}{{ assignment.due_at|date:'d.m.Y H:i' }}
@@ -108,9 +120,9 @@
       </td>
       <td class="row-actions">
         {% if assignment.status == 'submitted' %}
-        <a class="btn btn-small" href="{% url 'review_assignment' assignment.pk %}">Проверить</a>
+        <a class="btn btn-small" href="{% url 'review_assignment' assignment.pk %}{% if filters.owner %}?owner={{ filters.owner }}{% endif %}">Проверить</a>
         {% else %}
-        <a class="btn btn-small btn-secondary" href="{% url 'review_assignment' assignment.pk %}">Открыть</a>
+        <a class="btn btn-small btn-secondary" href="{% url 'review_assignment' assignment.pk %}{% if filters.owner %}?owner={{ filters.owner }}{% endif %}">Открыть</a>
         {% endif %}
       </td>
     </tr>

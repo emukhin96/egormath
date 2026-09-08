@@ -96,3 +96,11 @@ class StudentGroup(models.Model):
 
     def __str__(self):
         return self.name
+
+    @classmethod
+    def visible_to(cls, user):
+        """Группы, которыми учитель вправе управлять."""
+        queryset = cls.objects.all()
+        if not getattr(user, 'is_superuser', False):
+            queryset = queryset.filter(teacher=user)
+        return queryset

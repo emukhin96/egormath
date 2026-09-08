@@ -8,6 +8,7 @@
 <p class="page-subtitle">
   {{ assignment.worksheet.title }} ·
   {{ assignment.student.get_full_name|default:assignment.student.username }}
+  {% if request.user.is_superuser %}· владелец {{ assignment.worksheet.owner.get_full_name|default:assignment.worksheet.owner.username }}{% endif %}
   · отправлено {{ assignment.submitted_at|date:'d.m.Y H:i' }}
   · <span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span>
 </p>
@@ -15,6 +16,7 @@
 
 <form method="post" action="{% url 'save_review' assignment.pk %}" id="review-form">
   {% csrf_token %}
+  {% if owner_filter %}<input type="hidden" name="owner" value="{{ owner_filter }}">{% endif %}
   <div class="review-layout">
   <div class="review-main">
   {% for row in rows %}
@@ -82,7 +84,35 @@
       </div>
       {% endif %}
       {% if row.submission.check_attempts %}
-      <p class="helptext">Ученик нажимал «Проверить»: {{ row.submission.check_attempts }} раз.</p>
+      <details class="check-history">
+        <summary>Самопроверка — нажатий: {{ row.submission.check_attempts }}</summary>
+        {% if row.legacy_attempts %}
+        <p class="helptext">Ранних попыток без сохранённого ответа: {{ row.legacy_attempts }}.</p>
+        {% endif %}
+        {% for attempt in row.attempt_history %}
+        <div class="answer-block">
+          <strong>Попытка {{ attempt.number }}</strong> · {{ attempt.created_at|date:'d.m.Y H:i:s' }} ·
+          {% if attempt.result == 'ok' %}<span class="badge badge-reviewed">✓ верно</span>
+          {% elif attempt.result == 'wrong' %}<span class="badge badge-returned">✗ неверно</span>
+          {% elif attempt.result == 'incomplete' %}<span class="badge badge-assigned">частично</span>
+          {% else %}<span class="badge badge-assigned">? не разобрано</span>{% endif %}
+          {% for target in attempt.snapshot.targets %}
+          <div><span class="muted">{{ target.label }}:</span>
+            {% if target.answer %}<span class="math-content">{{ target.answer|web_answer }}</span>{% else %}<span class="muted">нет ответа</span>{% endif %}
+            {% if target.result == 'ok' %}<span class="badge badge-reviewed">верно</span>{% elif target.result == 'wrong' %}<span class="badge badge-returned">неверно</span>{% elif target.result == 'unknown' %}<span class="badge badge-assigned">не разобрано</span>{% endif %}
+          </div>
+          {% if target.slots %}
+          <ul>
+            {% for slot in target.slots %}
+            <li>{{ slot.label }}: <span class="math-content">{{ slot.value|default:'—'|web_answer }}</span>
+              {% if slot.result == 'ok' %}<span class="badge badge-reviewed">верно</span>{% elif slot.result == 'wrong' %}<span class="badge badge-returned">неверно</span>{% elif slot.result == 'unknown' %}<span class="badge badge-assigned">не разобрано</span>{% endif %}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </details>
       {% endif %}
       {% if row.submission.photos.all %}
       <div class="photo-grid">
@@ -131,7 +161,7 @@
               onclick="return confirm('Вернуть работу ученику на доработку?')">Вернуть на доработку</button>
       {% endif %}
     </div>
-    <a class="review-back" href="{% url 'assignment_list' %}">Вернуться ко всем заданиям</a>
+    <a class="review-back" href="{% url 'assignment_list' %}{% if owner_filter %}?owner={{ owner_filter }}{% endif %}">Вернуться ко всем заданиям</a>
   </aside>
   </div>
 </form>

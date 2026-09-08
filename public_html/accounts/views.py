@@ -1,10 +1,13 @@
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.db import IntegrityError
-from django.db.models import Count
+from django.db import IntegrityError, transaction
+from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
 
 from assignments.models import Assignment
@@ -57,25 +60,21 @@ def dashboard(request):
 
 
 def teacher_dashboard(request):
-    worksheets = (Worksheet.objects
-                  .filter(owner=request.user)
+    worksheets = (Worksheet.visible_to(request.user).select_related('owner')
                   .annotate(items_total=Count('items'))[:15])
-    pending = (Assignment.objects
-               .filter(worksheet__owner=request.user,
-                       status=Assignment.STATUS_SUBMITTED)
-               .select_related('worksheet', 'student')
+    pending = (Assignment.visible_to(request.user)
+               .filter(status=Assignment.STATUS_SUBMITTED)
+               .select_related('worksheet', 'worksheet__owner', 'student')
                .order_by('submitted_at'))
-    reviewed = (Assignment.objects
-                .filter(worksheet__owner=request.user,
-                        status=Assignment.STATUS_REVIEWED)
-                .select_related('worksheet', 'student')
+    reviewed = (Assignment.visible_to(request.user)
+                .filter(status=Assignment.STATUS_REVIEWED)
+                .select_related('worksheet', 'worksheet__owner', 'student')
                 .order_by('-reviewed_at')[:10])
     return render(request, 'accounts/dashboard_teacher.html', {
         'worksheets': worksheets,
         'pending': pending,
         'reviewed': reviewed,
-        'worksheets_total': Worksheet.objects.filter(
-            owner=request.user).count(),
+        'worksheets_total': Worksheet.visible_to(request.user).count(),
         'students_total': Profile.students_for(request.user).count(),
         'tasks_total': Task.objects.filter(
             variant_of__isnull=True).count(),
@@ -113,7 +112,7 @@ def student_dashboard(request):
 
 @teacher_required
 def students(request):
-    """Список учеников учителя: добавление, группы, фильтр по группе."""
+    """Список учеников: компактное добавление, поиск и группы."""
     new_credentials = request.session.pop('new_student_credentials', None)
     form = StudentCreateForm()
     group_form = StudentGroupForm(teacher=request.user)
@@ -135,26 +134,118 @@ def students(request):
                 }
                 messages.success(request, f'Ученик {user.get_full_name()} создан.')
                 return redirect('students')
-    student_profiles = (Profile.students_for(request.user)
-                        .select_related('user')
-                        .prefetch_related('user__member_groups')
-                        .order_by('user__last_name', 'user__first_name'))
-    groups = request.user.owned_groups.prefetch_related('students')
+    q = request.GET.get('q', '').strip()
+    group_id = request.GET.get('group', '').strip()
+    teacher_id = request.GET.get('teacher', '').strip()
+    visible_groups = (StudentGroup.visible_to(request.user)
+                      .select_related('teacher'))
+    student_profiles = Profile.students_for(request.user).select_related('user')
+    if q:
+        student_profiles = student_profiles.filter(
+            Q(user__first_name__icontains=q)
+            | Q(user__last_name__icontains=q)
+            | Q(user__username__icontains=q))
+    if request.user.is_superuser and teacher_id.isdigit():
+        student_profiles = student_profiles.filter(teacher_id=teacher_id)
+        filter_groups = visible_groups.filter(teacher_id=teacher_id)
+    else:
+        teacher_id = ''
+        filter_groups = visible_groups
+
     current_group = None
-    group_id = request.GET.get('group')
-    if group_id:
-        current_group = groups.filter(pk=group_id).first()
+    if group_id == 'ungrouped':
+        visible_group_ids = filter_groups.values('pk')
+        student_profiles = student_profiles.exclude(
+            user__member_groups__in=visible_group_ids)
+    elif group_id.isdigit():
+        current_group = filter_groups.filter(pk=group_id).first()
         if current_group:
             student_profiles = student_profiles.filter(
                 user__member_groups=current_group)
+        else:
+            group_id = ''
+
+    group_order = (('teacher__last_name', 'teacher__first_name', 'name')
+                   if request.user.is_superuser else ('name',))
+    groups = filter_groups.prefetch_related('students').order_by(*group_order)
+    bulk_groups = visible_groups.order_by(*group_order)
+    student_profiles = (student_profiles.prefetch_related(Prefetch(
+        'user__member_groups', queryset=visible_groups.order_by('name'),
+        to_attr='visible_groups'))
+        .distinct().order_by(
+            'user__last_name', 'user__first_name', 'user__username'))
+    teacher_choices = []
+    if request.user.is_superuser:
+        teacher_choices = (User.objects.filter(
+            Q(profile__role=Profile.ROLE_TEACHER) | Q(is_superuser=True))
+            .distinct().order_by('last_name', 'first_name', 'username'))
     return render(request, 'accounts/students.html', {
         'form': form,
         'group_form': group_form,
         'student_profiles': student_profiles,
         'groups': groups,
+        'bulk_groups': bulk_groups,
         'current_group': current_group,
+        'q': q,
+        'group_filter': group_id,
+        'teacher_filter': teacher_id,
+        'teacher_choices': teacher_choices,
         'new_credentials': new_credentials,
     })
+
+
+def _students_redirect(data):
+    params = {
+        key: data.get(key, '').strip()
+        for key in ('q', 'group', 'teacher') if data.get(key, '').strip()
+    }
+    url = reverse('students')
+    return redirect(f'{url}?{urlencode(params)}' if params else url)
+
+
+@teacher_required
+@require_POST
+def students_bulk_groups(request):
+    """Добавить, убрать или переместить выбранных учеников."""
+    ids = {int(value) for value in request.POST.getlist('ids')
+           if value.isdigit()}
+    profiles = list(Profile.students_for(request.user).select_related('user')
+                    .filter(user_id__in=ids))
+    if not ids or len(profiles) != len(ids):
+        messages.error(request, 'Выберите доступных учеников.')
+        return _students_redirect(request.POST)
+
+    groups = StudentGroup.visible_to(request.user)
+    action = request.POST.get('action', '')
+    group_id = request.POST.get('target_group', '')
+    group = groups.filter(pk=group_id).first() if group_id.isdigit() else None
+    source_id = request.POST.get('source_group', '')
+    source = groups.filter(pk=source_id).first() if source_id.isdigit() else None
+    if action not in ('add', 'remove', 'move') or group is None:
+        messages.error(request, 'Выберите действие и группу.')
+        return _students_redirect(request.POST)
+    if action == 'move' and (source is None or source.pk == group.pk):
+        messages.error(request, 'Для перемещения выберите другую группу.')
+        return _students_redirect(request.POST)
+
+    students_to_change = [profile.user for profile in profiles]
+    with transaction.atomic():
+        if action == 'add':
+            group.students.add(*students_to_change)
+            message = f'Ученики добавлены в группу «{group.name}».'
+        elif action == 'remove':
+            group.students.remove(*students_to_change)
+            message = f'Ученики удалены из группы «{group.name}».'
+        else:
+            if source.students.filter(pk__in=ids).count() != len(ids):
+                messages.error(request, (
+                    'Не все выбранные ученики состоят в исходной группе.'))
+                return _students_redirect(request.POST)
+            source.students.remove(*students_to_change)
+            group.students.add(*students_to_change)
+            message = f'Ученики перемещены в группу «{group.name}».'
+    messages.success(request, message)
+    return _students_redirect(request.POST)
 
 
 @teacher_required
@@ -175,7 +266,8 @@ def student_edit(request, user_id):
             'first_name': profile.user.first_name,
             'last_name': profile.user.last_name,
             'grade': profile.grade,
-            'groups': profile.user.member_groups.filter(teacher=request.user),
+            'groups': profile.user.member_groups.filter(
+                pk__in=StudentGroup.visible_to(request.user)),
         })
     return render(request, 'accounts/student_edit.html', {
         'form': form,
@@ -187,7 +279,7 @@ def student_edit(request, user_id):
 @require_POST
 def group_delete(request, group_id):
     group = get_object_or_404(
-        StudentGroup, pk=group_id, teacher=request.user)
+        StudentGroup.visible_to(request.user), pk=group_id)
     name = group.name
     group.delete()
     messages.success(request, f'Группа «{name}» удалена (ученики остались).')
@@ -198,7 +290,7 @@ def group_delete(request, group_id):
 @require_POST
 def group_rename(request, group_id):
     group = get_object_or_404(
-        StudentGroup, pk=group_id, teacher=request.user)
+        StudentGroup.visible_to(request.user), pk=group_id)
     form = StudentGroupForm(request.POST, teacher=request.user, instance=group)
     if form.is_valid():
         form.save()

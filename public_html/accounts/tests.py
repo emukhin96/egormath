@@ -269,6 +269,117 @@ class StudentGroupTests(TestCase):
         self.assertContains(response, 'Ученик')
         self.assertNotContains(response, 'Другов')
 
+    def test_search_and_ungrouped_filter(self):
+        group = StudentGroup.objects.create(teacher=self.teacher, name='8А')
+        group.students.add(self.student)
+        other = User.objects.create_user(
+            username='special.login', password='pass12345',
+            first_name='Вася', last_name='Другов')
+        Profile.objects.create(user=other, role=Profile.ROLE_STUDENT,
+                               teacher=self.teacher)
+
+        response = self.client.get(reverse('students'), {'q': 'special'})
+        self.assertContains(response, 'Другов')
+        self.assertNotContains(response, 'Петя')
+        response = self.client.get(
+            reverse('students'), {'group': 'ungrouped'})
+        self.assertContains(response, 'Другов')
+        self.assertNotContains(response, 'Петя')
+
+    def test_bulk_add_remove_and_move_preserves_other_groups(self):
+        source = StudentGroup.objects.create(
+            teacher=self.teacher, name='Исходная')
+        target = StudentGroup.objects.create(
+            teacher=self.teacher, name='Целевая')
+        extra = StudentGroup.objects.create(
+            teacher=self.teacher, name='Олимпиада')
+        source.students.add(self.student)
+        extra.students.add(self.student)
+
+        url = reverse('students_bulk_groups')
+        response = self.client.post(url, {
+            'ids': [self.student.pk], 'action': 'move',
+            'source_group': source.pk, 'target_group': target.pk,
+            'group': source.pk, 'q': 'Петя',
+        })
+        self.assertEqual(
+            response.url,
+            f"{reverse('students')}?q=%D0%9F%D0%B5%D1%82%D1%8F&group={source.pk}")
+        self.assertNotIn(self.student, source.students.all())
+        self.assertIn(self.student, target.students.all())
+        self.assertIn(self.student, extra.students.all())
+
+        self.client.post(url, {
+            'ids': [self.student.pk], 'action': 'remove',
+            'target_group': target.pk,
+        })
+        self.assertNotIn(self.student, target.students.all())
+        self.client.post(url, {
+            'ids': [self.student.pk], 'action': 'add',
+            'target_group': target.pk,
+        })
+        self.assertIn(self.student, target.students.all())
+
+    def test_bulk_rejects_foreign_student_and_group(self):
+        own = StudentGroup.objects.create(teacher=self.teacher, name='8А')
+        other_teacher = User.objects.create_user(
+            username='teacher2', password='pass12345')
+        Profile.objects.create(user=other_teacher, role=Profile.ROLE_TEACHER)
+        foreign_student = User.objects.create_user(
+            username='student2', password='pass12345')
+        Profile.objects.create(
+            user=foreign_student, role=Profile.ROLE_STUDENT,
+            teacher=other_teacher)
+        foreign_group = StudentGroup.objects.create(
+            teacher=other_teacher, name='Чужая')
+
+        self.client.post(reverse('students_bulk_groups'), {
+            'ids': [self.student.pk, foreign_student.pk], 'action': 'add',
+            'target_group': own.pk,
+        })
+        self.assertFalse(own.students.exists())
+        self.client.post(reverse('students_bulk_groups'), {
+            'ids': [self.student.pk], 'action': 'add',
+            'target_group': foreign_group.pk,
+        })
+        self.assertFalse(foreign_group.students.exists())
+
+    def test_superuser_controls_foreign_groups(self):
+        other_teacher = User.objects.create_user(
+            username='teacher2', password='pass12345',
+            first_name='Мария', last_name='Учитель')
+        Profile.objects.create(user=other_teacher, role=Profile.ROLE_TEACHER)
+        foreign_group = StudentGroup.objects.create(
+            teacher=other_teacher, name='Чужая')
+        admin = User.objects.create_superuser(
+            'admin', 'admin@example.com', 'pass12345')
+        self.client.login(username='admin', password='pass12345')
+
+        response = self.client.get(reverse('students'))
+        self.assertContains(response, 'Чужая')
+        response = self.client.get(
+            reverse('students'), {'teacher': other_teacher.pk})
+        self.assertEqual(list(response.context['groups']), [foreign_group])
+        self.client.post(reverse('students_bulk_groups'), {
+            'ids': [self.student.pk], 'action': 'add',
+            'target_group': foreign_group.pk,
+        })
+        self.assertIn(self.student, foreign_group.students.all())
+        self.client.post(
+            reverse('group_rename', args=[foreign_group.pk]),
+            {'name': 'Общая'})
+        foreign_group.refresh_from_db()
+        self.assertEqual(foreign_group.name, 'Общая')
+        self.client.post(reverse('group_delete', args=[foreign_group.pk]))
+        self.assertFalse(StudentGroup.objects.filter(pk=foreign_group.pk).exists())
+
+        self.client.post(reverse('students'), {
+            'create_group': '1', 'name': 'Новая',
+            'teacher': other_teacher.pk,
+        })
+        self.assertTrue(StudentGroup.objects.filter(
+            teacher=other_teacher, name='Новая').exists())
+
     def test_foreign_teacher_cannot_touch_group(self):
         group = StudentGroup.objects.create(teacher=self.teacher, name='8А')
         other_teacher = User.objects.create_user(

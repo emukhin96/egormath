@@ -1,7 +1,7 @@
 from django.contrib import admin
 
-from .models import (Assignment, Review, Submission, SubmissionPart,
-                     SubmissionPhoto)
+from .models import (Assignment, Review, Submission, SubmissionCheckAttempt,
+                     SubmissionPart, SubmissionPhoto)
 
 
 class SubmissionInline(admin.TabularInline):
@@ -32,10 +32,18 @@ class SubmissionPartInline(admin.TabularInline):
     extra = 0
 
 
+class SubmissionCheckAttemptInline(admin.TabularInline):
+    model = SubmissionCheckAttempt
+    extra = 0
+    readonly_fields = ('number', 'result', 'snapshot', 'created_at')
+    can_delete = False
+
+
 @admin.register(Submission)
 class SubmissionAdmin(admin.ModelAdmin):
     list_display = ('assignment', 'task', 'display_answer', 'updated_at')
-    inlines = [SubmissionPartInline, SubmissionPhotoInline]
+    inlines = [SubmissionPartInline, SubmissionPhotoInline,
+               SubmissionCheckAttemptInline]
 
 
 @admin.register(Review)

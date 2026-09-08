@@ -308,7 +308,8 @@ def corpus_detail(request, draft_id):
             return JsonResponse({'ok': True, 'message': 'Сохранено ✓'})
         messages.success(request, 'Черновик сохранён.')
         return redirect('worksheet_corpus_detail', draft_id=draft_id)
-    imported = find_imported_worksheet(request.user, draft['id'])
+    imported = find_imported_worksheet(
+        None if request.user.is_superuser else request.user, draft['id'])
     attach_subitem_rows(draft)
     ctx = {
         'draft': draft,
@@ -451,7 +452,9 @@ def corpus_push(request, draft_id):
 @teacher_required
 @require_POST
 def corpus_unpush(request, pk):
-    worksheet = imported_worksheets(request.user).filter(pk=pk).first()
+    worksheet = imported_worksheets(
+        None if request.user.is_superuser else request.user).filter(
+            pk=pk).first()
     if worksheet is None:
         if _is_ajax(request):
             return JsonResponse(
@@ -516,7 +519,8 @@ def corpus_assign_topic(request):
 
 @teacher_required
 def corpus_solutions(request):
-    sheets = imported_worksheets(request.user)
+    sheets = imported_worksheets(
+        None if request.user.is_superuser else request.user)
     rows = []
     for ws in sheets:
         missing = tasks_missing_solutions(ws)
@@ -528,7 +532,9 @@ def corpus_solutions(request):
 @teacher_required
 @require_POST
 def corpus_solve_worksheet(request, pk):
-    worksheet = imported_worksheets(request.user).filter(pk=pk).first()
+    worksheet = imported_worksheets(
+        None if request.user.is_superuser else request.user).filter(
+            pk=pk).first()
     if worksheet is None:
         messages.error(request, 'Листок корпуса не найден.')
         return redirect('worksheet_corpus_solutions')

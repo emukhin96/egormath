@@ -25,6 +25,7 @@
 <p class="ws-comment muted">{{ worksheet.comment|linebreaksbr }}</p>
 {% endif %}
 </div>
+{% if request.user.is_superuser %}<p class="page-subtitle">Владелец: {{ worksheet.owner.get_full_name|default:worksheet.owner.username }}</p>{% endif %}
 </div>
 {% if collection %}
 <div class="msg msg-warning">
@@ -322,7 +323,8 @@
       {% for g in groups %}
       <label style="font-weight:normal">
         <input type="checkbox" name="groups" value="{{ g.pk }}">
-        {{ g.name }} <span class="muted">({{ g.students.count }})</span>
+        {{ g.name }}{% if request.user.is_superuser %} — {{ g.teacher.get_full_name|default:g.teacher.username }}{% endif %}
+        <span class="muted">({{ g.students.count }})</span>
       </label>
       {% endfor %}
     </p>
@@ -370,11 +372,25 @@
   {% if assignments %}
   <h2>Назначения</h2>
   <table class="list">
-    <tr><th>Ученик</th><th>Статус</th><th></th></tr>
+    <tr><th>Ученик</th><th>Статус</th><th>Самопроверка</th><th></th></tr>
     {% for a in assignments %}
     <tr>
       <td>{{ a.student.get_full_name|default:a.student.username }}</td>
       <td><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span></td>
+      <td>
+        {% if a.self_check_total %}
+          <strong>{{ a.self_check_total }}</strong>
+          {% for item in a.self_check_tasks %}
+          <span class="check-summary-item">№{{ item.numbers }}: {{ item.attempts }}
+            {% if item.latest.result == 'ok' %}<span class="badge badge-reviewed">верно</span>
+            {% elif item.latest.result == 'wrong' %}<span class="badge badge-returned">неверно</span>
+            {% elif item.latest.result == 'incomplete' %}<span class="badge badge-assigned">частично</span>
+            {% elif item.latest %}<span class="badge badge-assigned">не разобрано</span>
+            {% else %}<span class="muted">без деталей</span>{% endif %}
+          </span>
+          {% endfor %}
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
       <td>{% if a.status == 'submitted' or a.status == 'reviewed' %}
         <a class="btn btn-small btn-secondary" href="{% url 'review_assignment' a.pk %}">
           {% if a.status == 'submitted' %}Проверить{% else %}Открыть{% endif %}</a>

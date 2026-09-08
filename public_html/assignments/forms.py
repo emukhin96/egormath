@@ -61,8 +61,17 @@ class AssignmentCreateForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.teacher = teacher
         self.fields['worksheet'].queryset = (
-            Worksheet.objects.filter(owner=teacher).order_by('-updated_at'))
-        self.fields['groups'].queryset = teacher.owned_groups.all()
+            Worksheet.visible_to(teacher).select_related('owner')
+            .order_by('-updated_at'))
+        self.fields['groups'].queryset = (
+            StudentGroup.visible_to(teacher).select_related('teacher'))
+        if teacher.is_superuser:
+            self.fields['worksheet'].label_from_instance = lambda worksheet: (
+                f'{worksheet.title} — '
+                f'{worksheet.owner.get_full_name() or worksheet.owner.username}')
+            self.fields['groups'].label_from_instance = lambda group: (
+                f'{group.name} — '
+                f'{group.teacher.get_full_name() or group.teacher.username}')
         self.fields['students'].queryset = (
             Profile.student_users_for(teacher)
             .select_related('profile')
@@ -93,7 +102,8 @@ class AssignmentCreateForm(forms.Form):
         value = (self.data.get(self.add_prefix('worksheet')) if self.is_bound
                  else self.initial.get('worksheet'))
         if isinstance(value, Worksheet):
-            return value if value.owner_id == self.teacher.pk else None
+            return self.fields['worksheet'].queryset.filter(
+                pk=value.pk).first()
         value = str(value or '')
         if value.isdigit():
             return self.fields['worksheet'].queryset.filter(pk=value).first()

@@ -76,6 +76,14 @@ class Assignment(models.Model):
     def __str__(self):
         return f'{self.worksheet} → {self.student.get_full_name() or self.student.username}'
 
+    @classmethod
+    def visible_to(cls, user):
+        """Назначения, доступные учителю для просмотра и проверки."""
+        queryset = cls.objects.all()
+        if not getattr(user, 'is_superuser', False):
+            queryset = queryset.filter(worksheet__owner=user)
+        return queryset
+
     @property
     def is_editable_by_student(self):
         """Ученик может менять ответы, пока работа не отправлена на проверку."""
@@ -403,6 +411,43 @@ class SubmissionPart(AnswerFields):
     @property
     def is_empty(self):
         return not self.display_answer
+
+
+class SubmissionCheckAttempt(models.Model):
+    """Неизменяемый снимок одного нажатия «Проверить»."""
+
+    RESULT_OK = 'ok'
+    RESULT_WRONG = 'wrong'
+    RESULT_UNKNOWN = 'unknown'
+    RESULT_INCOMPLETE = 'incomplete'
+    RESULT_CHOICES = [
+        (RESULT_OK, 'Верно'),
+        (RESULT_WRONG, 'Неверно'),
+        (RESULT_UNKNOWN, 'Не удалось проверить'),
+        (RESULT_INCOMPLETE, 'Ответ заполнен частично'),
+    ]
+
+    submission = models.ForeignKey(
+        Submission, on_delete=models.CASCADE, related_name='check_history',
+        verbose_name='Ответ')
+    number = models.PositiveIntegerField('Номер попытки')
+    result = models.CharField(
+        'Результат', max_length=12, choices=RESULT_CHOICES)
+    snapshot = models.JSONField('Снимок ответа', default=dict)
+    created_at = models.DateTimeField('Время попытки', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Попытка самопроверки'
+        verbose_name_plural = 'Попытки самопроверки'
+        ordering = ['number']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['submission', 'number'],
+                name='unique_check_attempt_submission_number'),
+        ]
+
+    def __str__(self):
+        return f'{self.submission} / проверка #{self.number}'
 
 
 def _photo_upload_to(instance, filename):

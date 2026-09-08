@@ -10,6 +10,8 @@ urlpatterns = [
         redirect_authenticated_user=True), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('students/', views.students, name='students'),
+    path('students/bulk-groups/', views.students_bulk_groups,
+         name='students_bulk_groups'),
     path('students/<int:user_id>/edit/', views.student_edit,
          name='student_edit'),
     path('students/<int:user_id>/reset-password/',

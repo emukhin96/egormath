@@ -1,8 +1,10 @@
 from datetime import timedelta
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Case, Count, DateTimeField, IntegerField, Q, When
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -11,14 +13,15 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.decorators import student_required, teacher_required
-from accounts.models import Profile
+from accounts.models import Profile, StudentGroup
 from problems.models import Task
 from worksheets.models import Worksheet
 
-from .checks import reference_text
+from .checks import reference_text, slot_display
 from .forms import AssignmentCreateForm
-from .models import (Assignment, Review, Submission, SubmissionPart,
-                     SubmissionPhoto, locked_check_visibility, wrap_math)
+from .models import (Assignment, Review, Submission, SubmissionCheckAttempt,
+                     SubmissionPart, SubmissionPhoto, locked_check_visibility,
+                     wrap_math)
 
 
 # --- Назначение листка ученикам (действие учителя со страницы листка) ---
@@ -51,12 +54,12 @@ def _create_assignments(*, worksheet, teacher, students, check_visibility,
 @require_POST
 def assign_worksheet(request, worksheet_id):
     worksheet = get_object_or_404(
-        Worksheet, pk=worksheet_id, owner=request.user)
+        Worksheet.visible_to(request.user), pk=worksheet_id)
     student_ids = set(request.POST.getlist('students'))
     # Выбранные группы: назначение всем участникам
     group_ids = request.POST.getlist('groups')
     if group_ids:
-        group_student_ids = (request.user.owned_groups
+        group_student_ids = (StudentGroup.visible_to(request.user)
                              .filter(pk__in=group_ids)
                              .values_list('students__id', flat=True))
         student_ids |= {str(pk) for pk in group_student_ids if pk}
@@ -88,15 +91,17 @@ def assign_worksheet(request, worksheet_id):
 def assignment_list(request):
     """Единая очередь выданных работ с рабочими фильтрами."""
     now = timezone.now()
-    assignments = (Assignment.objects
-                   .filter(worksheet__owner=request.user)
-                   .select_related('worksheet', 'student'))
+    assignments = (Assignment.visible_to(request.user)
+                   .select_related('worksheet', 'worksheet__owner', 'student'))
 
     q = request.GET.get('q', '').strip()
     status = request.GET.get('status', '').strip()
     student_id = request.GET.get('student', '').strip()
     worksheet_id = request.GET.get('worksheet', '').strip()
     due = request.GET.get('due', '').strip()
+    owner_id = request.GET.get('owner', '').strip()
+    if not request.user.is_superuser:
+        owner_id = ''
 
     if q:
         assignments = assignments.filter(
@@ -122,6 +127,8 @@ def assignment_list(request):
             due_at__gte=now, due_at__lte=now + timedelta(days=7))
     elif due == 'none':
         assignments = assignments.filter(due_at__isnull=True)
+    if request.user.is_superuser and owner_id.isdigit():
+        assignments = assignments.filter(worksheet__owner_id=owner_id)
 
     # Сначала ручная очередь учителя, затем работы, требующие действий ученика.
     assignments = assignments.annotate(
@@ -141,7 +148,9 @@ def assignment_list(request):
     ).order_by(
         'queue_order', 'submitted_order', 'due_order', 'due_at', '-assigned_at')
 
-    all_assignments = Assignment.objects.filter(worksheet__owner=request.user)
+    all_assignments = Assignment.visible_to(request.user)
+    if request.user.is_superuser and owner_id.isdigit():
+        all_assignments = all_assignments.filter(worksheet__owner_id=owner_id)
     stats = all_assignments.aggregate(
         total=Count('pk'),
         submitted=Count('pk', filter=Q(status=Assignment.STATUS_SUBMITTED)),
@@ -156,14 +165,17 @@ def assignment_list(request):
     students = (Profile.students_for(request.user)
                 .select_related('user')
                 .order_by('user__last_name', 'user__first_name'))
-    worksheets = Worksheet.objects.filter(
-        owner=request.user).order_by('-updated_at')
+    worksheets = Worksheet.visible_to(request.user).order_by('-updated_at')
     return render(request, 'assignments/assignment_list.html', {
         'page': page,
         'assignments': page.object_list,
         'stats': stats,
         'students': students,
         'worksheets': worksheets,
+        'owners': (get_user_model().objects.filter(
+            worksheets__assignments__isnull=False).distinct()
+            .order_by('last_name', 'first_name', 'username')
+            if request.user.is_superuser else []),
         'status_choices': Assignment.STATUS_CHOICES,
         'due_choices': [
             ('overdue', 'Просроченные'),
@@ -173,7 +185,7 @@ def assignment_list(request):
         ],
         'filters': {
             'q': q, 'status': status, 'student': student_id,
-            'worksheet': worksheet_id, 'due': due,
+            'worksheet': worksheet_id, 'due': due, 'owner': owner_id,
         },
     })
 
@@ -184,8 +196,8 @@ def assignment_create(request):
     initial = {'allow_photos': True}
     worksheet_id = request.GET.get('worksheet', '')
     if worksheet_id.isdigit():
-        initial['worksheet'] = Worksheet.objects.filter(
-            owner=request.user, pk=worksheet_id).first()
+        initial['worksheet'] = Worksheet.visible_to(request.user).filter(
+            pk=worksheet_id).first()
     form = AssignmentCreateForm(
         request.POST or None, teacher=request.user, initial=initial)
     if request.method == 'POST' and form.is_valid():
@@ -222,6 +234,8 @@ def _assignment_rows(assignment, with_review=False):
     """Строки листка для ученика/учителя: задачи с подпунктами и ответами,
     текстовые элементы — только для отображения."""
     qs = assignment.submissions.prefetch_related('photos', 'parts')
+    if with_review:
+        qs = qs.prefetch_related('check_history')
     qs = qs.select_related('review') if with_review \
         else qs.prefetch_related('review')
     submissions = {s.task_id: s for s in qs}
@@ -263,6 +277,12 @@ def _assignment_rows(assignment, with_review=False):
             or any(sr['part'] and sr['part'].display_answer for sr in subrows)
             or submission.photos.all())
         review = getattr(submission, 'review', None) if submission else None
+        attempt_history = []
+        legacy_attempts = 0
+        if with_review and submission:
+            attempt_history = list(submission.check_history.all())[::-1]
+            legacy_attempts = max(
+                submission.check_attempts - len(attempt_history), 0)
         # Все выбранные подпункты (или задача целиком) сошлись с эталоном —
         # учителю подсказка «выполнено» по умолчанию. Частичный ответ
         # (верно только один из нескольких подпунктов) флажок не ставит.
@@ -291,6 +311,8 @@ def _assignment_rows(assignment, with_review=False):
             'mask_reference': reference_text(spec) if spec else '',
             'has_comment': bool(review and review.comment),
             'subrows': subrows,
+            'attempt_history': attempt_history,
+            'legacy_attempts': legacy_attempts,
         })
     return rows
 
@@ -518,6 +540,60 @@ def _editable_or_deny(request, assignment):
     raise PermissionDenied('Работа уже отправлена на проверку.')
 
 
+def _attempt_target(obj, *, kind, object_id, label):
+    """Сериализуем проверенный ответ без эталона и пересчёта в будущем."""
+    spec = obj.mask_spec
+    slots = []
+    complete = bool(obj.display_answer)
+    if spec is not None and spec.is_valid:
+        slots = [{
+            'name': slot.name,
+            'label': slot.label,
+            'value': slot_display(
+                slot, (obj.answer_json or {}).get(slot.name, '')),
+            'result': (obj.check_json or {}).get(slot.name, ''),
+        } for slot in spec.slots]
+        complete = bool(slots) and all(slot['value'] for slot in slots)
+    return {
+        'kind': kind,
+        'id': object_id,
+        'label': label,
+        'answer': obj.display_answer,
+        'result': obj.auto_check,
+        'complete': complete,
+        'slots': slots,
+    }
+
+
+def _attempt_snapshot(submission, task, subitems):
+    """Снимок всей задачи, включая ещё не заполненные подпункты."""
+    if subitems:
+        parts = {part.subitem_id: part for part in submission.parts.all()}
+        targets = []
+        for index, subitem in enumerate(subitems, start=1):
+            part = parts.get(subitem.pk)
+            if part is None:
+                part = SubmissionPart(
+                    submission=submission, subitem=subitem)
+            targets.append(_attempt_target(
+                part, kind='subitem', object_id=subitem.pk,
+                label=f'Подпункт {index}'))
+    else:
+        targets = [_attempt_target(
+            submission, kind='task', object_id=task.pk, label='Ответ')]
+
+    results = [target['result'] for target in targets]
+    if Submission.CHECK_WRONG in results:
+        result = SubmissionCheckAttempt.RESULT_WRONG
+    elif not all(target['complete'] for target in targets):
+        result = SubmissionCheckAttempt.RESULT_INCOMPLETE
+    elif Submission.CHECK_UNKNOWN in results or not all(results):
+        result = SubmissionCheckAttempt.RESULT_UNKNOWN
+    else:
+        result = SubmissionCheckAttempt.RESULT_OK
+    return result, {'task_id': task.pk, 'targets': targets}
+
+
 @student_required
 @require_POST
 def save_answers(request, pk):
@@ -571,30 +647,40 @@ def check_task(request, pk, task_id):
     submission, _ = Submission.objects.get_or_create(
         assignment=assignment, task=task)
 
-    def _reveal(obj, prefix):
-        """Раскрыть результат: итог по полю и по каждому слоту маски."""
-        obj.check_revealed = True
-        obj.save(update_fields=['check_revealed'])
-        checks[prefix] = obj.auto_check
-        for slot, status in (obj.check_json or {}).items():
-            checks[f'{prefix}_{slot}'] = status
+    with transaction.atomic():
+        submission = (Submission.objects.select_for_update()
+                      .prefetch_related('parts').get(pk=submission.pk))
 
-    checks = {}
-    if subitems:
-        parts = {p.subitem_id: p for p in submission.parts.all()}
-        for subitem in subitems:
-            part = parts.get(subitem.pk)
-            if part is None or not part.display_answer:
-                continue
-            _reveal(part, f'task{task.pk}_sub{subitem.pk}')
-    elif submission.display_answer:
-        _reveal(submission, f'task{task.pk}')
-    if checks:
-        submission.check_attempts += 1
-        submission.save(update_fields=['check_attempts'])
-        message = 'Проверено'
-    else:
-        message = 'Сначала введите ответ'
+        def _reveal(obj, prefix):
+            """Раскрыть результат: итог по полю и по слотам маски."""
+            obj.check_revealed = True
+            obj.save(update_fields=['check_revealed'])
+            checks[prefix] = obj.auto_check
+            for slot, status in (obj.check_json or {}).items():
+                checks[f'{prefix}_{slot}'] = status
+
+        checks = {}
+        if subitems:
+            parts = {p.subitem_id: p for p in submission.parts.all()}
+            for subitem in subitems:
+                part = parts.get(subitem.pk)
+                if part is None or not part.display_answer:
+                    continue
+                _reveal(part, f'task{task.pk}_sub{subitem.pk}')
+        elif submission.display_answer:
+            _reveal(submission, f'task{task.pk}')
+        if checks:
+            result, snapshot = _attempt_snapshot(
+                submission, task, subitems)
+            number = submission.check_attempts + 1
+            SubmissionCheckAttempt.objects.create(
+                submission=submission, number=number,
+                result=result, snapshot=snapshot)
+            submission.check_attempts = number
+            submission.save(update_fields=['check_attempts'])
+            message = 'Проверено'
+        else:
+            message = 'Сначала введите ответ'
 
     if _is_xhr(request):
         return JsonResponse({'ok': True, 'message': message, 'checks': checks})
@@ -698,21 +784,23 @@ def submit_assignment(request, pk):
 
 def _teacher_assignment(request, pk):
     return get_object_or_404(
-        Assignment.objects.select_related('worksheet', 'student'),
-        pk=pk, worksheet__owner=request.user)
+        Assignment.visible_to(request.user).select_related(
+            'worksheet', 'worksheet__owner', 'student'), pk=pk)
 
 
-def _pending_review_queue(teacher):
-    return (Assignment.objects
-            .filter(worksheet__owner=teacher,
-                    status=Assignment.STATUS_SUBMITTED)
+def _pending_review_queue(teacher, owner_id=''):
+    queue = (Assignment.visible_to(teacher)
+            .filter(status=Assignment.STATUS_SUBMITTED)
             .select_related('worksheet', 'student')
             .order_by('submitted_at', 'pk'))
+    if teacher.is_superuser and str(owner_id).isdigit():
+        queue = queue.filter(worksheet__owner_id=owner_id)
+    return queue
 
 
-def _review_queue_state(teacher, assignment):
+def _review_queue_state(teacher, assignment, owner_id=''):
     """Размер очереди, позиция текущей работы и следующая после неё."""
-    pending = list(_pending_review_queue(teacher))
+    pending = list(_pending_review_queue(teacher, owner_id))
     position = None
     next_pending = None
     for index, item in enumerate(pending):
@@ -731,14 +819,18 @@ def review_assignment(request, pk):
     assignment = _teacher_assignment(request, pk)
     rows = _assignment_rows(assignment, with_review=True)
     _refresh_stale_checks(rows, for_teacher=True)
+    owner_id = request.GET.get('owner', '').strip()
+    if not request.user.is_superuser or not owner_id.isdigit():
+        owner_id = ''
     queue_total, queue_position, next_pending = _review_queue_state(
-        request.user, assignment)
+        request.user, assignment, owner_id)
     context = {
         'assignment': assignment,
         'rows': rows,
         'queue_total': queue_total,
         'queue_position': queue_position,
         'next_pending': next_pending,
+        'owner_filter': owner_id,
     }
     context.update(_progress(rows))
     return render(request, 'assignments/review.html', context)
@@ -749,7 +841,19 @@ def review_assignment(request, pk):
 def save_review(request, pk):
     assignment = _teacher_assignment(request, pk)
     action = request.POST.get('action', 'save')
-    _, _, next_pending = _review_queue_state(request.user, assignment)
+    owner_id = request.POST.get('owner', '').strip()
+    if not request.user.is_superuser or not owner_id.isdigit():
+        owner_id = ''
+    _, _, next_pending = _review_queue_state(
+        request.user, assignment, owner_id)
+
+    def review_url(target):
+        url = reverse('review_assignment', args=[target.pk])
+        return f'{url}?owner={owner_id}' if owner_id else url
+
+    list_url = reverse('assignment_list')
+    if owner_id:
+        list_url = f'{list_url}?owner={owner_id}'
 
     hidden_item_ids = set(assignment.hidden_items.values_list('pk', flat=True))
     visible_task_ids = set(
@@ -785,19 +889,17 @@ def save_review(request, pk):
         assignment.save()
         messages.success(request, 'Проверка завершена, ученик увидит результаты.')
         if action == 'complete_next' and next_pending:
-            return redirect(
-                'review_assignment', pk=next_pending.pk)
-        return redirect('assignment_list')
+            return redirect(review_url(next_pending))
+        return redirect(list_url)
     if action in ('return', 'return_next'):
         assignment.status = Assignment.STATUS_RETURNED
         assignment.save()
         messages.success(request, 'Работа возвращена ученику на доработку.')
         if action == 'return_next' and next_pending:
-            return redirect(
-                'review_assignment', pk=next_pending.pk)
-        return redirect('assignment_list')
+            return redirect(review_url(next_pending))
+        return redirect(list_url)
     messages.success(request, 'Проверка сохранена (черновик).')
-    return redirect('review_assignment', pk=pk)
+    return redirect(review_url(assignment))
 
 
 # --- Раздача фото решений (приватные файлы) ---

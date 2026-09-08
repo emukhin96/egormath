@@ -1,11 +1,12 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}Ученики — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/students.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <span class="page-eyebrow">Класс</span>
-    <h1>Мои ученики</h1>
+    <h1>{% if request.user.is_superuser %}Все ученики{% else %}Мои ученики{% endif %}</h1>
     <p class="page-subtitle">Учётные данные, классы и учебные группы.</p>
   </div>
 </div>
@@ -21,75 +22,142 @@
 
 <div class="card">
   <h2>Добавить ученика</h2>
-  <form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit" class="btn">Создать ученика</button>
-    <span class="helptext">Логин и пароль будут сгенерированы автоматически.</span>
-  </form>
-</div>
-
-<div class="card">
-  <h2>Группы</h2>
-  {% if groups %}
-  <p>
-    <a class="btn btn-small {% if not current_group %}btn{% else %}btn-secondary{% endif %}" href="{% url 'students' %}">Все ученики</a>
-    {% for g in groups %}
-    <a class="btn btn-small {% if current_group == g %}btn{% else %}btn-secondary{% endif %}"
-       href="{% url 'students' %}?group={{ g.pk }}">{{ g.name }} ({{ g.students.count }})</a>
-    {% endfor %}
-  </p>
-  {% if current_group %}
-  <form method="post" action="{% url 'group_rename' current_group.pk %}" class="filters">
-    {% csrf_token %}
-    <div><input type="text" name="name" value="{{ current_group.name }}" style="max-width:220px"></div>
-    <div><button type="submit" class="btn btn-small btn-secondary">Переименовать</button></div>
-    <div>
-      <button type="submit" class="btn btn-small btn-danger"
-              formaction="{% url 'group_delete' current_group.pk %}"
-              onclick="return confirm('Удалить группу «{{ current_group.name }}»? Ученики останутся.')">
-        Удалить группу</button>
-    </div>
-  </form>
-  {% endif %}
-  {% endif %}
   <form method="post" class="filters">
     {% csrf_token %}
-    <div>
-      <label for="g_name">Новая группа</label>
-      {{ group_form.name }}
-    </div>
-    <div><button type="submit" name="create_group" class="btn btn-small">Создать группу</button></div>
-    {% if group_form.errors %}<div class="errorlist">{{ group_form.name.errors|join:' ' }}</div>{% endif %}
+    <div><label for="{{ form.first_name.id_for_label }}">Имя</label>{{ form.first_name }}</div>
+    <div><label for="{{ form.last_name.id_for_label }}">Фамилия</label>{{ form.last_name }}</div>
+    <div><label for="{{ form.grade.id_for_label }}">Класс</label>{{ form.grade }}</div>
+    <div><button type="submit" class="btn">Создать ученика</button></div>
+    <span class="helptext">Логин и пароль будут сгенерированы автоматически.</span>
   </form>
-  <p class="helptext">Ученик может состоять в нескольких группах.
-    Состав групп меняется на странице ученика («Изменить»).</p>
+  {% if form.errors %}<div class="errorlist">{{ form.errors }}</div>{% endif %}
 </div>
 
+<form method="get" class="card filter-card">
+  <div class="filters">
+    <div class="filter-search">
+      <label for="student-q">Поиск</label>
+      <input type="search" name="q" id="student-q" value="{{ q }}"
+             placeholder="Имя, фамилия или логин">
+    </div>
+    {% if request.user.is_superuser %}
+    <div>
+      <label for="student-teacher">Учитель</label>
+      <select name="teacher" id="student-teacher">
+        <option value="">Все учителя</option>
+        {% for teacher in teacher_choices %}
+        <option value="{{ teacher.pk }}"{% if teacher_filter == teacher.pk|stringformat:'s' %} selected{% endif %}>{{ teacher.get_full_name|default:teacher.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div>
+      <label for="student-group">Группа</label>
+      <select name="group" id="student-group">
+        <option value="">Все группы</option>
+        <option value="ungrouped"{% if group_filter == 'ungrouped' %} selected{% endif %}>Без группы</option>
+        {% for group in groups %}
+        <option value="{{ group.pk }}"{% if current_group == group %} selected{% endif %}>{{ group.name }}{% if request.user.is_superuser %} — {{ group.teacher.get_full_name|default:group.teacher.username }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-actions"><button type="submit" class="btn">Применить</button></div>
+    {% if q or group_filter or teacher_filter %}<div><a class="btn btn-secondary" href="{% url 'students' %}">Сбросить</a></div>{% endif %}
+  </div>
+</form>
+
 <div class="card">
-  <h2>Список{% if current_group %}: {{ current_group.name }}{% endif %}</h2>
+  <div class="card-head">
+    <div><h2>Список{% if current_group %}: {{ current_group.name }}{% elif group_filter == 'ungrouped' %}: без группы{% endif %}</h2></div>
+    <span class="counter">{{ student_profiles|length }}</span>
+  </div>
   {% if student_profiles %}
+  <form id="students-bulk-form" method="post" action="{% url 'students_bulk_groups' %}"
+        class="bulk-bar" data-bulk hidden>
+    {% csrf_token %}
+    <strong data-bulk-count>Выбрано: 0</strong>
+    <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="group" value="{{ group_filter }}">
+    <input type="hidden" name="teacher" value="{{ teacher_filter }}">
+    {% if current_group %}<input type="hidden" name="source_group" value="{{ current_group.pk }}">{% endif %}
+    <label class="inline-label">группа
+      <select name="target_group" required>
+        <option value="">Выберите</option>
+        {% for group in bulk_groups %}
+        <option value="{{ group.pk }}">{{ group.name }}{% if request.user.is_superuser %} — {{ group.teacher.get_full_name|default:group.teacher.username }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" name="action" value="add" class="btn btn-small">Добавить</button>
+    <button type="submit" name="action" value="remove" class="btn btn-small btn-secondary">Убрать</button>
+    {% if current_group %}<button type="submit" name="action" value="move" class="btn btn-small btn-secondary">Переместить из «{{ current_group.name }}»</button>{% endif %}
+  </form>
   <table class="list">
-    <tr><th>Ученик</th><th>Класс</th><th>Группы</th><th>Логин</th><th></th></tr>
-    {% for p in student_profiles %}
+    <thead><tr>
+      <th class="col-select"><input type="checkbox" data-bulk-all="students-bulk-form" title="Выбрать всех учеников"></th>
+      <th>Ученик</th><th>Класс</th><th>Группы</th><th>Логин</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for profile in student_profiles %}
     <tr>
-      <td>{{ p.user.get_full_name }}</td>
-      <td>{{ p.grade|default:'—' }}</td>
-      <td>{% for g in p.user.member_groups.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
-      <td class="mono">{{ p.user.username }}</td>
-      <td>
-        <a class="btn btn-small btn-secondary" href="{% url 'student_edit' p.user_id %}">Изменить</a>
-        <form method="post" action="{% url 'reset_student_password' p.user_id %}" class="inline-form"
-              onsubmit="return confirm('Сбросить пароль ученика {{ p.user.get_full_name }}?');">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-small btn-secondary">Сбросить пароль</button>
+      <td class="col-select"><input type="checkbox" class="row-select" name="ids" value="{{ profile.user_id }}" form="students-bulk-form" title="Выбрать ученика"></td>
+      <td>{{ profile.user.get_full_name|default:profile.user.username }}</td>
+      <td>{{ profile.grade|default:'—' }}</td>
+      <td>{% for group in profile.user.visible_groups %}{{ group.name }}{% if request.user.is_superuser %} <span class="muted">({{ group.teacher.get_full_name|default:group.teacher.username }})</span>{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
+      <td class="mono">{{ profile.user.username }}</td>
+      <td class="row-actions">
+        <a class="btn btn-small btn-secondary" href="{% url 'student_edit' profile.user_id %}">Изменить</a>
+        <form method="post" action="{% url 'reset_student_password' profile.user_id %}" class="inline-form"
+              onsubmit="return confirm('Сбросить пароль ученика {{ profile.user.get_full_name|escapejs }}?');">
+          {% csrf_token %}<button type="submit" class="btn btn-small btn-secondary">Сбросить пароль</button>
         </form>
       </td>
     </tr>
     {% endfor %}
+    </tbody>
   </table>
   {% else %}
-  <p class="muted">{% if current_group %}В этой группе пока нет учеников.{% else %}Учеников пока нет — добавьте первого через форму выше.{% endif %}</p>
+  <p class="muted">Ученики не найдены — измените фильтры или добавьте нового.</p>
   {% endif %}
 </div>
+
+<div class="card">
+  <h2>Группы</h2>
+  <form method="post" class="filters">
+    {% csrf_token %}
+    <input type="hidden" name="create_group" value="1">
+    <div><label for="{{ group_form.name.id_for_label }}">Новая группа</label>{{ group_form.name }}</div>
+    {% if request.user.is_superuser %}<div><label for="{{ group_form.teacher.id_for_label }}">Владелец</label>{{ group_form.teacher }}</div>{% endif %}
+    <div><button type="submit" class="btn btn-small">Создать группу</button></div>
+    {% if group_form.errors %}<div class="errorlist">{{ group_form.errors }}</div>{% endif %}
+  </form>
+  {% if groups %}
+  <table class="list">
+    <thead><tr><th>Название</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Учеников</th><th></th></tr></thead>
+    <tbody>
+    {% for group in groups %}
+    <tr>
+      <td>
+        <form method="post" action="{% url 'group_rename' group.pk %}" class="filters">
+          {% csrf_token %}<input type="text" name="name" value="{{ group.name }}" maxlength="100" required>
+          <button type="submit" class="btn btn-small btn-secondary">Переименовать</button>
+        </form>
+      </td>
+      {% if request.user.is_superuser %}<td>{{ group.teacher.get_full_name|default:group.teacher.username }}</td>{% endif %}
+      <td><a href="{% url 'students' %}?group={{ group.pk }}">{{ group.students.count }}</a></td>
+      <td class="row-actions">
+        <form method="post" action="{% url 'group_delete' group.pk %}" class="inline-form"
+              onsubmit="return confirm('Удалить группу «{{ group.name|escapejs }}»? Ученики останутся.');">
+          {% csrf_token %}<button type="submit" class="icon-btn" title="Удалить группу" aria-label="Удалить группу">×</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">Групп пока нет.</p>{% endif %}
+  <p class="helptext">Ученик может состоять в нескольких группах.</p>
+</div>
+
+<script defer src="{% static 'js/bulk.js' %}"></script>
 {% endblock %}

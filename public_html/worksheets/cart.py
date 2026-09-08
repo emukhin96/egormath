@@ -26,8 +26,8 @@ NEW_TITLE = 'Новый листок'
 
 
 def personal_worksheets(user):
-    """Листки, в которые можно собирать: свои и не подборочные."""
-    return Worksheet.objects.filter(owner=user, collection__isnull=True)
+    """Листки, в которые учитель вправе собирать задачи."""
+    return Worksheet.visible_to(user).filter(collection__isnull=True)
 
 
 def cart_ids(request):

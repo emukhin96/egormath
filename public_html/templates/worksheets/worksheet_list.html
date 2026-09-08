@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block title %}Мои листки — Математика{% endblock %}
+{% block title %}{% if request.user.is_superuser %}Все листки{% else %}Мои листки{% endif %} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/worksheet_list.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><span class="page-eyebrow">Материалы</span><h1>Мои листки</h1>
+  <div><span class="page-eyebrow">Материалы</span><h1>{% if request.user.is_superuser %}Все листки{% else %}Мои листки{% endif %}</h1>
     <p class="page-subtitle">Конструкторы, PDF и назначения ученикам.</p></div>
   <div class="form-buttons">
     <a class="btn" href="{% url 'worksheet_create' %}">Создать листок</a>
@@ -15,6 +15,17 @@
 
 <div class="card filter-card">
   <form method="get" class="filters">
+    {% if request.user.is_superuser %}
+    <div>
+      <label for="f_owner">Владелец</label>
+      <select name="owner" id="f_owner">
+        <option value="">Все владельцы</option>
+        {% for owner in owners %}
+        <option value="{{ owner.pk }}"{% if owner_filter == owner.pk|stringformat:'s' %} selected{% endif %}>{{ owner.get_full_name|default:owner.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <div>
       <label for="f_grade">Класс</label>
       <select name="grade" id="f_grade" class="quick-select" onchange="this.form.submit()">
@@ -84,7 +95,7 @@
   <tr>
     <th class="col-select"><input type="checkbox" data-bulk-all="ws-bulk-form"
         title="Выбрать все листки"></th>
-    <th>Название</th><th>Класс</th><th>Темы</th><th>Задач</th><th>Создан</th><th>Изменён</th><th>PDF</th><th></th>
+    <th>Название</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Класс</th><th>Темы</th><th>Задач</th><th>Создан</th><th>Изменён</th><th>PDF</th><th></th>
   </tr>
   {% for w in worksheets %}
   <tr>
@@ -96,6 +107,7 @@
       <a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a>
       {% if w.comment %}<div class="muted ws-comment" style="font-size:.85rem">{{ w.comment|truncatechars:120 }}</div>{% endif %}
     </td>
+    {% if request.user.is_superuser %}<td>{{ w.owner.get_full_name|default:w.owner.username }}</td>{% endif %}
     <td>
       <form method="post" action="{% url 'worksheet_quick_update' w.pk %}"
             data-autosave="change" class="inline-form">
