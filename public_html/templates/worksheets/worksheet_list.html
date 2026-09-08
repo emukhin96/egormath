@@ -9,6 +9,7 @@
   <div class="form-buttons">
     <a class="btn" href="{% url 'worksheet_create' %}">Создать листок</a>
     <a class="btn btn-secondary" href="{% url 'worksheet_import' %}">Импорт из .tex</a>
+    <a class="btn btn-secondary" href="{% url 'worksheet_corpus_list' %}">Сверка корпуса</a>
   </div>
 </div>
 
@@ -125,6 +126,13 @@
         {% csrf_token %}
         <button type="submit" class="btn btn-small btn-secondary" title="Создать дубликат листка">Дублировать</button>
       </form>
+      {% if w.corpus_key %}
+      <form method="post" action="{% url 'worksheet_corpus_unpush' w.pk %}" class="inline-form"
+            onsubmit="return confirm('Убрать «{{ w.title|escapejs }}» из каталога? Черновик останется в корпусе.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-small btn-secondary" title="Вернуть листок в корпус">Убрать из каталога</button>
+      </form>
+      {% endif %}
       <form method="post" action="{% url 'worksheet_delete' w.pk %}" class="inline-form"
             onsubmit="return confirm('Удалить листок «{{ w.title|escapejs }}»? Будут удалены и его назначения ученикам.');">
         {% csrf_token %}

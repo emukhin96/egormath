@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Корпус листков — EgorMath{% endblock %}
+{% block extra_js %}
+<script defer src="{% static 'js/corpus_list.js' %}"></script>
+{% endblock %}
+{% block sidebar %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Локальный импорт</p>
+  <h2>Авторские листки</h2>
+  <p class="sidebar-copy">Черновики из <code>var/worksheets-import/</code>. В каталог попадают только одобренные.</p>
+  <div class="sidebar-stats">
+    <div class="sidebar-stat"><strong data-corpus-count="needs_review">{{ counts.needs_review }}</strong><span>на проверке</span></div>
+    <div class="sidebar-stat"><strong data-corpus-count="approved">{{ counts.approved }}</strong><span>одобрено</span></div>
+    <div class="sidebar-stat"><strong data-corpus-count="imported">{{ counts.imported }}</strong><span>загружено</span></div>
+    <div class="sidebar-stat"><strong data-corpus-count="skipped">{{ counts.skipped }}</strong><span>пропущено</span></div>
+  </div>
+</section>
+<section class="sidebar-section">
+  <a class="sidebar-action" href="{% url 'worksheet_corpus_solutions' %}">Задачи без решений</a>
+</section>
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><span class="page-eyebrow">Листки</span>
+    <h1>Сверка корпуса</h1>
+    <p class="page-subtitle">Промежуточные JSON после <code>run_worksheet_corpus.py</code>.</p>
+  </div>
+  <div class="form-buttons">
+    <form method="post" action="{% url 'worksheet_corpus_approve_clean' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-secondary">Одобрить все без замечаний</button>
+    </form>
+    <form method="post" action="{% url 'worksheet_corpus_commit_approved' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn">Загрузить одобренные</button>
+    </form>
+  </div>
+</div>
+<form method="get" class="card">
+  <label>статус
+    <select name="status" class="quick-select">
+      <option value=""{% if not filter_status %} selected{% endif %}>кроме пропущенных</option>
+      <option value="needs_review"{% if filter_status == 'needs_review' %} selected{% endif %}>на проверке</option>
+      <option value="approved"{% if filter_status == 'approved' %} selected{% endif %}>одобрены</option>
+      <option value="skipped"{% if filter_status == 'skipped' %} selected{% endif %}>пропущены</option>
+      <option value="imported"{% if filter_status == 'imported' %} selected{% endif %}>загружены</option>
+    </select>
+  </label>
+  <label>класс
+    <input type="number" name="grade" value="{{ filter_grade }}" min="5" max="11" class="quick-select">
+  </label>
+  <button type="submit" class="btn btn-secondary">Фильтр</button>
+</form>
+<form method="post" action="{% url 'worksheet_corpus_assign_topic' %}" class="card">
+  {% csrf_token %}
+  <p>Массовая тема для непроверенных листков</p>
+  {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True single=True field_name='topics' %}
+  <div class="form-buttons">
+    <button type="submit" class="btn btn-secondary">Назначить тему</button>
+  </div>
+</form>
+<div class="card">
+{% if drafts %}
+<table class="list">
+  <tr><th>Листок</th><th>Класс</th><th>Диалект</th><th>Тема</th><th>Экзамен</th><th>Статус</th><th>Пропуск</th><th></th></tr>
+  {% for draft in drafts %}
+  <tr class="corpus-list-row{% if draft.status == 'skipped' %} is-skipped{% endif %}" data-status="{{ draft.status }}">
+    <td><a href="{% url 'worksheet_corpus_detail' draft.id %}">{{ draft.title|default:draft.id }}</a>
+      {% if draft.title_origin == 'proposed' %}<span class="badge badge-submitted corpus-title-flag">заголовок предложен</span>{% elif draft.title_origin == 'filename' %}<span class="badge badge-submitted corpus-title-flag">из имени файла</span>{% endif %}
+      <div class="muted">{{ draft.rel_path }}</div></td>
+    <td>{{ draft.grade|default:'' }}</td>
+    <td>{{ draft.dialect }}</td>
+    <td>{{ draft.topic_label|default:draft.topic_code|default:'—' }}</td>
+    <td>{{ draft.exam_labels|join:', '|default:'—' }}</td>
+    <td class="corpus-row-status">{{ draft.status_label }}</td>
+    <td>
+      {% if draft.status != 'imported' %}
+      <form method="post" action="{% url 'worksheet_corpus_toggle_skip' draft.id %}" class="corpus-skip-form">
+        {% csrf_token %}
+        <label class="ws-toggle corpus-skip-toggle" title="Скрыть нерелевантный листок">
+          <input type="checkbox" name="skip" value="1"{% if draft.status == 'skipped' %} checked{% endif %}>
+          <span class="ws-toggle-slider"></span>
+          <span class="ws-toggle-text">пропустить</span>
+        </label>
+      </form>
+      {% endif %}
+    </td>
+    <td class="row-actions">
+      {% if draft.status == 'imported' %}
+      <span class="muted">в каталоге</span>
+      {% elif draft.status != 'skipped' %}
+      <form method="post" action="{% url 'worksheet_corpus_push' draft.id %}" class="corpus-push-form inline-form">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-small">В каталог</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Черновиков нет. Сначала: <code>python tools/run_worksheet_corpus.py inventory</code> и <code>parse</code>.</p>
+{% endif %}
+</div>
+{% endblock %}

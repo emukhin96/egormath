@@ -1,9 +1,30 @@
 from django.urls import path
 
-from . import views
+from . import corpus_views, views
 
 urlpatterns = [
     path('', views.worksheet_list, name='worksheet_list'),
+    path('corpus/', corpus_views.corpus_list, name='worksheet_corpus_list'),
+    path('corpus/solutions/', corpus_views.corpus_solutions,
+         name='worksheet_corpus_solutions'),
+    path('corpus/commit-approved/', corpus_views.corpus_commit_approved,
+         name='worksheet_corpus_commit_approved'),
+    path('corpus/approve-clean/', corpus_views.corpus_approve_clean,
+         name='worksheet_corpus_approve_clean'),
+    path('corpus/assign-topic/', corpus_views.corpus_assign_topic,
+         name='worksheet_corpus_assign_topic'),
+    path('corpus/<int:pk>/solve/', corpus_views.corpus_solve_worksheet,
+         name='worksheet_corpus_solve'),
+    path('corpus/<path:draft_id>/tex/', corpus_views.corpus_tex,
+         name='worksheet_corpus_tex'),
+    path('corpus/<path:draft_id>/asset/<path:filename>',
+         corpus_views.corpus_asset, name='worksheet_corpus_asset'),
+    path('corpus/<path:draft_id>/skip/', corpus_views.corpus_toggle_skip,
+         name='worksheet_corpus_toggle_skip'),
+    path('corpus/<path:draft_id>/push/', corpus_views.corpus_push,
+         name='worksheet_corpus_push'),
+    path('corpus/<path:draft_id>/', corpus_views.corpus_detail,
+         name='worksheet_corpus_detail'),
     path('collections/', views.collection_list, name='collection_list'),
     path('collections/<int:pk>/', views.collection_detail,
          name='collection_detail'),
@@ -15,6 +36,8 @@ urlpatterns = [
     path('import/', views.worksheet_import, name='worksheet_import'),
     path('import/solve/', views.worksheet_import_solve,
          name='worksheet_import_solve'),
+    path('<int:pk>/unpush/', corpus_views.corpus_unpush,
+         name='worksheet_corpus_unpush'),
     path('<int:pk>/', views.worksheet_detail, name='worksheet_detail'),
     path('<int:pk>/edit/', views.worksheet_edit, name='worksheet_edit'),
     path('<int:pk>/copy/', views.worksheet_copy, name='worksheet_copy'),

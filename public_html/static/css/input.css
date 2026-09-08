@@ -3849,6 +3849,118 @@
       width: 100%;
     }
   }
+
+  .corpus-exam-fieldset {
+    margin-top: var(--space-3);
+  }
+
+  .corpus-exam-summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .corpus-exam-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin: var(--space-2) 0;
+  }
+
+  .corpus-exam-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #e8eef5;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .corpus-exam-groups {
+    display: grid;
+    gap: var(--space-2);
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    margin-top: var(--space-2);
+  }
+
+  .corpus-exam-group {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-2);
+    background: #f7f9fb;
+  }
+
+  .corpus-exam-group h3 {
+    margin: 0 0 var(--space-1);
+    font-size: 0.9rem;
+  }
+
+  .corpus-exam-line {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0 0 var(--space-1);
+    font-weight: 600;
+  }
+
+  .corpus-exam-list {
+    max-height: 9rem;
+    overflow-y: auto;
+    display: grid;
+    gap: 1px;
+    padding-right: var(--space-1);
+  }
+
+  .corpus-exam-list label {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-weight: 400;
+  }
+
+  .corpus-exam-list label:hover {
+    background: #fff;
+  }
+
+  .corpus-skip-form {
+    margin: 0;
+  }
+
+  .corpus-skip-toggle {
+    margin-left: 0;
+  }
+
+  .form-buttons .corpus-skip-toggle {
+    align-self: center;
+  }
+
+  .corpus-choices {
+    margin: var(--space-2) 0 0;
+    padding-left: 1.25rem;
+  }
+
+  .corpus-list-row.is-skipped td {
+    background: #eef1f4;
+    color: var(--muted);
+  }
+
+  .corpus-list-row.is-skipped a,
+  .corpus-list-row.is-skipped .muted {
+    color: var(--muted);
+  }
+
+  .corpus-text-row .import-preview-block {
+    background: #f6f3ea;
+  }
+
+  .corpus-title-flag {
+    margin-left: var(--space-2);
+    vertical-align: middle;
+    font-weight: 600;
+  }
 }
 
 @counter-style cyrillic-lower {

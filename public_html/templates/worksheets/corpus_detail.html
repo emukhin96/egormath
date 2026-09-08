@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+{% load static task_extras %}
+{% block title %}{{ draft.title }} — сверка{% endblock %}
+{% block extra_js %}
+<script defer src="{% static 'js/corpus_list.js' %}"></script>
+{% endblock %}
+{% block sidebar %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Черновик</p>
+  <h2>{{ draft.title|default:draft.id }}</h2>
+  <p class="sidebar-copy">{{ draft.rel_path }} · {{ draft.dialect }}{% if draft.grade %} · {{ draft.grade }} класс{% endif %}</p>
+  <a class="sidebar-action" href="{% url 'worksheet_corpus_list' %}">К списку корпуса</a>
+  <a class="sidebar-action" href="{{ egor_url }}">Нормализованный .egor.tex</a>
+  {% if imported %}
+  <a class="sidebar-action" href="{% url 'worksheet_detail' imported.pk %}">Открыть листок #{{ imported.pk }}</a>
+  {% endif %}
+</section>
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><span class="page-eyebrow">Сверка</span>
+    <h1>{{ draft.title|default:draft.id }}{% if draft.title_origin == 'proposed' %} <span class="badge badge-submitted corpus-title-flag">заголовок предложен</span>{% elif draft.title_origin == 'filename' %} <span class="badge badge-submitted corpus-title-flag">заголовок из имени файла</span>{% endif %}</h1>
+    <p class="page-subtitle">Статус: <span data-corpus-draft-status>{{ status_label }}</span>{% if draft.warnings %} · {{ draft.warnings|join:'; ' }}{% endif %}</p>
+  </div>
+</div>
+{% if draft.warnings %}<div class="msg msg-warning"><strong>Требует внимания:</strong> {{ draft.warnings|join:'; ' }}</div>{% endif %}
+{% if draft.title_origin == 'proposed' %}
+<div class="msg msg-warning"><strong>Заголовок предложен по содержанию.</strong> Проверьте название и при необходимости поправьте.</div>
+{% endif %}
+<form method="post" class="card" data-autosave="change" data-dirty-guard>
+  {% csrf_token %}
+  <p>
+    <label for="id_title">Название</label>
+    <input id="id_title" name="title" value="{{ draft.title }}" class="w-full">
+  </p>
+  <div>
+    <label>Тема листка</label>
+    {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True chip_full=True field_name='topics' %}
+  </div>
+  <fieldset class="corpus-exam-fieldset">
+    <legend>Экзамен</legend>
+    <p class="helptext">Линия или номер задания. Список свёрнут, выбранное — чипами сверху.</p>
+    {% include 'includes/corpus_exam_picker.html' %}
+  </fieldset>
+  <table class="list import-preview">
+    {% for el in draft.elements %}
+    {% if el.kind == 'rubric' %}
+    <tr class="rubric-row"><td colspan="2">{{ el.rubric }}</td></tr>
+    {% elif el.kind == 'text' %}
+    <tr class="corpus-text-row">
+      <td colspan="2">
+        <div class="import-preview-block">
+          <strong>{% if el.style == 'memo' %}Вставка / пример{% else %}Текст{% endif %}</strong>
+          <div class="math-content">{{ el.text|web_text|linebreaksbr }}</div>
+        </div>
+      </td>
+    </tr>
+    {% elif el.kind == 'task' %}
+    <tr{% if el.skip %} class="import-skipped"{% endif %}>
+      <td>
+        {% if el.text %}
+        <div class="import-preview-block">
+          <strong>Предпросмотр условия</strong>
+          <div class="math-content task-text">{{ el.text|web_text|linebreaksbr }}</div>
+        </div>
+        {% endif %}
+        {% if el.subitem_rows %}
+        <div class="import-subitem-editors">
+          <strong>Распознанные подпункты ({{ el.subitem_rows|length }})</strong>
+          {% for row in el.subitem_rows %}
+          <section class="import-subitem-editor">
+            <h3>Подпункт {{ row.label }})</h3>
+            <div class="import-preview-block">
+              <div class="math-content">{{ row.text|web_text }}</div>
+            </div>
+            {% if row.answer %}
+            <div class="import-preview-block">
+              <strong>Ответ {{ row.label }})</strong>
+              <div class="math-content">{{ row.answer|web_answer }}</div>
+            </div>
+            {% endif %}
+            {% if row.solution %}
+            <div class="import-preview-block">
+              <strong>Решение {{ row.label }})</strong>
+              <div class="math-content">{{ row.solution|web_text|linebreaksbr }}</div>
+            </div>
+            {% endif %}
+            <p><label>подпункт {{ row.label }})
+              <input name="sub_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" value="{{ row.text }}" class="w-full">
+            </label></p>
+            <p><label>ответ {{ row.label }})
+              <input name="answer_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" value="{{ row.answer }}" class="w-full">
+            </label></p>
+            <p><label>решение {{ row.label }})
+              <textarea name="solution_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" rows="3" class="mono">{{ row.solution }}</textarea>
+            </label></p>
+          </section>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if el.choices %}
+        <div class="import-subitem-editors">
+          <strong>Варианты ответа</strong>
+          <ol class="corpus-choices">
+            {% for choice in el.choices %}
+            <li class="math-content">{{ choice|web_text }}</li>
+            {% endfor %}
+          </ol>
+        </div>
+        {% endif %}
+        {% if el.image_names %}
+        <div class="task-images">
+          {% for name in el.image_names %}
+          <img src="{% url 'worksheet_corpus_asset' draft.id name %}" alt="{{ name }}">
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if el.answer %}
+        <div class="import-preview-block">
+          <strong>Предпросмотр ответа
+            {% if el.answer_origin == 'neuro' %}(нейросеть)
+            {% elif el.answer_origin == 'parsed' %}(из листка)
+            {% else %}(из листка){% endif %}
+          </strong>
+          <div class="math-content">{{ el.answer|web_answer }}</div>
+        </div>
+        {% endif %}
+        {% if el.solution %}
+        <div class="import-preview-block">
+          <strong>Предпросмотр решения</strong>
+          <div class="math-content">{{ el.solution|web_text|linebreaksbr }}</div>
+        </div>
+        {% endif %}
+        <details class="import-source-edit">
+          <summary>Править условие</summary>
+          <textarea name="text_{{ forloop.counter0 }}" rows="4" class="mono">{{ el.text }}</textarea>
+          {% if not el.subitem_rows %}
+          <p><label>ответ
+            <input name="answer_{{ forloop.counter0 }}" value="{{ el.answer }}" class="w-full">
+          </label></p>
+          <p><label>решение
+            <textarea name="solution_{{ forloop.counter0 }}" rows="3" class="mono">{{ el.solution }}</textarea>
+          </label></p>
+          {% endif %}
+        </details>
+      </td>
+      <td>
+        <label class="ws-toggle corpus-skip-toggle" data-autosave-ignore title="Не загружать эту задачу в каталог">
+          <input type="checkbox" class="corpus-task-skip" value="1"
+                 data-url="{% url 'worksheet_corpus_toggle_skip' draft.id %}"
+                 data-index="{{ forloop.counter0 }}"
+                 {% if el.skip %} checked{% endif %}>
+          <span class="ws-toggle-slider"></span>
+          <span class="ws-toggle-text">пропустить</span>
+        </label>
+      </td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+  </table>
+  <div class="form-buttons">
+    <button type="submit" name="action" value="save" class="btn btn-secondary">Сохранить</button>
+    <button type="submit" name="action" value="approve" class="btn">Одобрить</button>
+    {% if draft.status != 'imported' %}
+    <label class="ws-toggle corpus-skip-toggle" data-autosave-ignore title="Скрыть нерелевантный листок">
+      <input type="checkbox" class="corpus-draft-skip" value="1"
+             data-url="{% url 'worksheet_corpus_toggle_skip' draft.id %}"
+             {% if draft.status == 'skipped' %} checked{% endif %}>
+      <span class="ws-toggle-slider"></span>
+      <span class="ws-toggle-text">пропустить листок</span>
+    </label>
+    {% endif %}
+    <button type="submit" name="action" value="review" class="btn btn-secondary">Вернуть на проверку</button>
+    <button type="submit" name="action" value="commit" class="btn">Загрузить в каталог</button>
+  </div>
+</form>
+{% endblock %}

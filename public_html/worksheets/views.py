@@ -26,6 +26,7 @@ from problems.rubricator import (GRADE_LEVEL_TO_CODE, apply_worksheet_taxonomy,
                                  worksheet_taxonomy_state)
 from problems.views import filter_tasks
 
+from .corpus import corpus_key_from_comment
 from .forms import WorksheetForm
 from .import_tex import (TexImportError, create_worksheet,
                          match_existing_tasks, parse_tex)
@@ -98,6 +99,7 @@ def worksheet_list(request):
     })
     for w in worksheets:
         w.taxonomy_json = dumps_state(worksheet_taxonomy_state(w))
+        w.corpus_key = corpus_key_from_comment(w.comment)
     return render(request, 'worksheets/worksheet_list.html', ctx)
 
 
