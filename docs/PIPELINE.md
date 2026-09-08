@@ -2,8 +2,9 @@
 
 Как сейчас работает проект: разработка идёт локально, изменения уезжают в
 GitHub (`git@github.com:emukhin96/egormath.git`) через ветки и pull request'ы.
-Деплой на Timeweb отложен —
-[deploy/DEPLOY.md](../deploy/DEPLOY.md) держим как справочник на будущее.
+После merge в `main` прод обновляют вручную по SSH:
+`/home/c/cs13661/egormath/deploy/deploy.sh`
+(инструкция — [deploy/DEPLOY.md](../deploy/DEPLOY.md)).
 
 Короткая версия для AI-агентов (команды, конвенции, чеклист) — в
 [AGENTS.md](../AGENTS.md) в корне репозитория.
@@ -217,7 +218,8 @@ make test        # только тесты
 3. Скачивание Tailwind CLI, пересборка CSS и `git diff --exit-code` по
   `app.css` — защита от забытого `make build-css`
 
-CI не деплоит: деплой появится отдельным шагом, когда вернёмся к Timeweb.
+CI не деплоит: на Timeweb входящий SSH из GitHub Actions режется.
+После merge в `main` запустите на сервере `deploy/deploy.sh`.
 
 ## 7. Автоматизация pipeline (кандидаты на будущее)
 
