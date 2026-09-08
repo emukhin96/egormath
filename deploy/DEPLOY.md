@@ -2,7 +2,7 @@
 
 Сайт: `https://math.emukhin.ru` (позже алиас `math.egor.am`).
 Каталог: `/home/c/cs13661/egormath` на том же аккаунте, что chgkmsu
-(`cs13661@vh438.timeweb.ru`). Django через CGI-WSGI
+(`cs13661@vh426.timeweb.ru`). Django через CGI-WSGI
 (`public_html/wsgi.py` + `.htaccess`), MySQL.
 
 Обновления **только вручную по SSH** — `deploy/deploy.sh`.
@@ -495,7 +495,7 @@ sudo nano /opt/latex-api/app.py   # или vim
 ## 2. Первичная установка на shared-хостинге
 
 ```bash
-ssh cs13661@vh438.timeweb.ru
+ssh cs13661@vh426.timeweb.ru
 ls -la ~/egormath ~/egormath/public_html
 python3.10 --version
 
@@ -539,7 +539,7 @@ DJANGO_ENV=production ../venv/bin/python manage.py createsuperuser
 ## 3. Ручной деплой
 
 ```bash
-ssh cs13661@vh438.timeweb.ru
+ssh cs13661@vh426.timeweb.ru
 /home/c/cs13661/egormath/deploy/deploy.sh
 ```
 
@@ -557,7 +557,7 @@ ssh cs13661@vh438.timeweb.ru
 ```bash
 rsync -avz --progress \
   ./var/worksheets-import/ \
-  cs13661@vh438.timeweb.ru:/home/c/cs13661/egormath/var/worksheets-import/
+  cs13661@vh426.timeweb.ru:/home/c/cs13661/egormath/var/worksheets-import/
 ```
 
 Партии Зива и Шестакова (черновики + рисунки). Темы едут **кодами**,
@@ -568,7 +568,7 @@ rsync -avz --progress \
 (cd public_html && ../venv/bin/python manage.py export_textbook_batches \
   ../var/deploy-batches)
 rsync -avz --progress ./var/deploy-batches/ \
-  cs13661@vh438.timeweb.ru:/home/c/cs13661/egormath/var/deploy-batches/
+  cs13661@vh426.timeweb.ru:/home/c/cs13661/egormath/var/deploy-batches/
 
 # на сервере, после createsuperuser
 cd /home/c/cs13661/egormath/public_html
@@ -581,7 +581,9 @@ DJANGO_ENV=production ../venv/bin/python manage.py import_textbook_batches \
 ## 4. HTTPS и безопасность
 
 1. Панель Timeweb → SSL → Let's Encrypt для `math.emukhin.ru`, редирект
-   HTTP→HTTPS. Для `math.egor.am` — когда появится DNS, тот же каталог
+   HTTP→HTTPS. Если сертификат не выпускается, пока сайт не отвечает
+   по HTTP — сначала поднять Django, потом вернуться к SSL.
+   Для `math.egor.am` — когда появится DNS, тот же каталог
    и отдельный сертификат. Имя уже в `ALLOWED_HOSTS`.
 2. В `core/settings.py` при `DJANGO_ENV=production` включены
   `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `CSRF_TRUSTED_ORIGINS`.
