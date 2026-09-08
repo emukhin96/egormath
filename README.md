@@ -56,7 +56,7 @@ cd public_html
 Процесс работы (локальный запуск, ветки, PR-ревью, CI) —
 [docs/PIPELINE.md](docs/PIPELINE.md).
 
-Деплой на Timeweb отложен; инструкция сохранена как справочная:
+Прод: `https://math.emukhin.ru`. Обновления вручную по SSH —
 [deploy/DEPLOY.md](deploy/DEPLOY.md).
 
 ## Структура

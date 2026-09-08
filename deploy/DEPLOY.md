@@ -1,25 +1,24 @@
 # Деплой egormath-web на Timeweb
 
-> **Статус: отложено, документ справочный.** Сейчас работа идёт локально с
-> ревью через GitHub PR — актуальный процесс описан в
-> [docs/PIPELINE.md](../docs/PIPELINE.md). Вернуться к этой инструкции, когда
-> дойдём до публикации на Timeweb.
+Сайт: `https://math.emukhin.ru` (позже алиас `math.egor.am`).
+Каталог: `/home/c/cs13661/egormath` на том же аккаунте, что chgkmsu
+(`cs13661@vh438.timeweb.ru`). Django через CGI-WSGI
+(`public_html/wsgi.py` + `.htaccess`), MySQL.
 
-Схема повторяет проверенную конфигурацию chgkmsu: shared-хостинг Timeweb
-(`vh438.timeweb.ru`, аккаунт `cs13661`), Django через CGI-подобный WSGI
-(`public_html/wsgi.py` + `.htaccess`), MySQL, автодеплой cron + `auto_pull.sh`.
+Обновления **только вручную по SSH** — `deploy/deploy.sh`.
+Cron и `$HOME/auto_pull.sh` не трогаем: там деплой chgkmsu.
+GitHub Actions по SSH на Timeweb не работает.
 
-Ниже `<site>` — имя каталога сайта на сервере (например, `~/egormath`).
+Процесс разработки (ветки, PR, CI) — [docs/PIPELINE.md](../docs/PIPELINE.md).
 
 ## 0. Что нужно подготовить заранее
 
-- [ ] Домен/поддомен, привязанный в панели Timeweb к каталогу `<site>`.
-- [ ] MySQL-база в панели Timeweb: имя, пользователь, пароль.
-- [ ] Ключ LaTeX API (см. раздел 4) — существующий из chgkmsu или отдельный.
-- [ ] Deploy key или доступ к приватному репозиторию GitHub с сервера
-  ```
-  (`ssh-keygen` на сервере → добавить ключ в GitHub → Deploy keys, read-only).
-  ```
+- [ ] `math.emukhin.ru` привязан в панели к `/home/c/cs13661/egormath/public_html`.
+- [ ] MySQL-база в панели Timeweb (`cs13661_<имя>`), пользователь, пароль.
+- [ ] Let's Encrypt для `math.emukhin.ru`, редирект HTTP→HTTPS.
+- [ ] Ключ LaTeX API (тот же, что у chgkmsu) и `GEMINI_API_KEY`.
+- [ ] Deploy key на сервере → GitHub → Deploy keys, read-only.
+      Не перезаписать ключ, которым ходит chgkmsu.
 
 
 
@@ -213,13 +212,15 @@ sudo -u "$API_USER" luaotfload-tool --find="CMU Serif"
 
 
 
-### 1.5. Два прогона lualatex + assets (нумерация и картинки)
+### 1.5. Два прогона xelatex + assets (нумерация и картинки)
+
+Патч `deploy/patch_latex_api_egormath.py` переключает компилятор на
+**xelatex** (нужен для `font=school` / `palatino`) и делает два прогона.
 
 **Диагноз (проверено 2026-08-05).** В egor колонтитул —
 `\thepage/\pageref{LastPage}` (`egor.sty`). После **одного** прогона
-lualatex получается `2/??`; после **двух** — `2/2`. На API в
-`compile_tex` (`/opt/latex-api/app.py`) сейчас **один** вызов
-`subprocess.run(lualatex…)`. Django-кэш PDF (`WorksheetPdf`) не виноват:
+получается `2/??`; после **двух** — `2/2`. Django-кэш PDF (`WorksheetPdf`)
+не виноват:
 он один раз получает уже готовый PDF от API и отдаёт его повторно. Пока API
 отдаёт `??`, кэш только закрепляет ошибку; после патча API нужно
 перегенерировать PDF (изменить листок или удалить записи `WorksheetPdf`).
@@ -495,95 +496,113 @@ sudo nano /opt/latex-api/app.py   # или vim
 
 ```bash
 ssh cs13661@vh438.timeweb.ru
+ls -la ~/egormath ~/egormath/public_html
+python3.10 --version
 
-# 1) Клонируем репозиторий (каталог сайта создаёт панель Timeweb)
-cd ~ && git clone git@github.com:emukhin96/egormath.git <site>
+# Deploy key (не перезаписать ключ chgkmsu)
+ssh-keygen -t ed25519 -f ~/.ssh/egormath_deploy -N ""
+# Публичный ключ → GitHub → emukhin96/egormath → Deploy keys (read-only)
+# В ~/.ssh/config: Host github.com / IdentityFile ~/.ssh/egormath_deploy
+# либо Host github.com-egormath и remote url git@github.com-egormath:...
 
-# 2) Виртуальное окружение (Python 3.10)
-cd <site>
+# Если панель уже создала ~/egormath — init внутри, не клонировать рядом
+cd /home/c/cs13661/egormath
+git init
+git remote add origin git@github.com:emukhin96/egormath.git
+git fetch origin main
+git checkout -B main origin/main
+
 python3.10 -m venv venv
 venv/bin/pip install -r requirements.txt
 
-# 3) Секреты — ДО первого запуска с DEBUG=False
 mkdir -p .secrets && chmod 700 .secrets
-echo "production"                      > .secrets/DJANGO_ENV
+echo "production" > .secrets/DJANGO_ENV
 python3 -c "import secrets; print(secrets.token_urlsafe(50))" > .secrets/DJANGO_SECRET_KEY
-echo "мой-домен.ru,www.мой-домен.ru"   > .secrets/ALLOWED_HOSTS
-echo "<имя базы>"                      > .secrets/DB_NAME
-echo "<пользователь базы>"             > .secrets/DB_USER
-echo "<пароль базы>"                   > .secrets/DB_PASSWORD
-echo "<ключ LaTeX API>"                > .secrets/LATEX_API_KEY
+echo "math.emukhin.ru,math.egor.am" > .secrets/ALLOWED_HOSTS
+echo "<имя базы>" > .secrets/DB_NAME
+echo "<пользователь базы>" > .secrets/DB_USER
+echo "<пароль базы>" > .secrets/DB_PASSWORD
+echo "<ключ LaTeX API из chgkmsu/.secrets/LATEX_API_KEY>" > .secrets/LATEX_API_KEY
+echo "<ключ Gemini с локальной машины>" > .secrets/GEMINI_API_KEY
 chmod 600 .secrets/*
 
-# 4) База и статика
 cd public_html
 DJANGO_ENV=production ../venv/bin/python manage.py migrate
-DJANGO_ENV=production ../venv/bin/python manage.py seed_topics
+DJANGO_ENV=production ../venv/bin/python manage.py seed_rubricator
 DJANGO_ENV=production ../venv/bin/python manage.py collectstatic --noinput
 DJANGO_ENV=production ../venv/bin/python manage.py createsuperuser
 ```
 
-`public_html/wsgi.py` и `public_html/.htaccess` уже в репозитории и сами
-вычисляют пути — править их не нужно. Перезапуск приложения: `touch public_html/wsgi.py`.
+`public_html/wsgi.py` и `.htaccess` уже в репозитории. Перезапуск:
+`touch public_html/wsgi.py`. При 500 смотреть `~/egormath/wsgi_import_error.log`.
 
-Проверка: открыть сайт → страница логина; `/admin/` → войти суперпользователем;
-создать учителя (пользователь + профиль с ролью «учитель»).
-
-## 3. Автодеплой
+## 3. Ручной деплой
 
 ```bash
-cp <site>/deploy/auto_pull.sh ~/auto_pull.sh
-chmod +x ~/auto_pull.sh
-# при необходимости поправить SITE_DIR в начале скрипта
+ssh cs13661@vh438.timeweb.ru
+/home/c/cs13661/egormath/deploy/deploy.sh
 ```
 
-В панели Timeweb → «Планировщик» (crontab -e недоступен) добавить задание
-каждые 5 минут:
+Скрипт: fetch/pull `main`, pip, `check --deploy`, migrate,
+`seed_rubricator`, collectstatic, `touch wsgi.py`. Лог:
+`~/egormath/deploy.log`.
 
+**Не** копировать скрипт в `~/auto_pull.sh` и **не** добавлять задание
+в планировщик Timeweb.
+
+## 3a. Перенос данных с Mac
+
+Корпус (файлы сверки, не БД):
+
+```bash
+rsync -avz --progress \
+  ./var/worksheets-import/ \
+  cs13661@vh438.timeweb.ru:/home/c/cs13661/egormath/var/worksheets-import/
 ```
-/bin/bash /home/c/cs13661/auto_pull.sh
+
+Партии Зива и Шестакова (черновики + рисунки). Темы едут **кодами**,
+владелец на проде — суперпользователь:
+
+```bash
+# локально
+(cd public_html && ../venv/bin/python manage.py export_textbook_batches \
+  ../var/deploy-batches)
+rsync -avz --progress ./var/deploy-batches/ \
+  cs13661@vh438.timeweb.ru:/home/c/cs13661/egormath/var/deploy-batches/
+
+# на сервере, после createsuperuser
+cd /home/c/cs13661/egormath/public_html
+DJANGO_ENV=production ../venv/bin/python manage.py import_textbook_batches \
+  ../var/deploy-batches
 ```
 
-Дальше деплой = `git push origin main`. Скрипт сам чистит известные помехи
-(конфликтные копии Dropbox, `staticfiles/`, залётный `local_settings.py`),
-делает pull, migrate, collectstatic и перезапускает приложение.
-
-ВАЖНО: деплой из GitHub Actions по SSH на Timeweb не работает (соединения
-режутся) — не тратить время, использовать только auto-pull с сервера.
+Учеников, задания и уже запушенные в каталог листки не переносим.
 
 ## 4. HTTPS и безопасность
 
-1. Панель Timeweb → SSL → выпустить Let's Encrypt для домена, включить
-  перенаправление HTTP→HTTPS.
-2. В `core/settings.py` при `DJANGO_ENV=production` уже включены
+1. Панель Timeweb → SSL → Let's Encrypt для `math.emukhin.ru`, редирект
+   HTTP→HTTPS. Для `math.egor.am` — когда появится DNS, тот же каталог
+   и отдельный сертификат. Имя уже в `ALLOWED_HOSTS`.
+2. В `core/settings.py` при `DJANGO_ENV=production` включены
   `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `CSRF_TRUSTED_ORIGINS`.
-3. Медиа (фото решений, PDF) лежат в `<site>/media/` — вне `public_html`,
-  наружу отдаются только через Django с проверкой прав.
-
-
+3. Медиа лежат в `~/egormath/media/` — вне `public_html`.
 
 ## 5. Известные грабли (из опыта chgkmsu)
 
-
 | Проблема                                         | Решение                                                                                       |
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| Холодный старт ~1 с на запрос (CGI-WSGI)         | Норма для тарифа; кэш PDF уже есть; при желании спросить поддержку о Passenger                |
-| `git pull` падает из-за untracked `staticfiles/` | `auto_pull.sh` удаляет их перед pull; каталог в `.gitignore`                                  |
-| Конфликтные копии Dropbox в рабочей папке        | Прод не синхронизировать Dropbox'ом; скрипт чистит `* (Конфликтующая копия*`                  |
-| Сайт 500 при `DEBUG=False` без секретов          | Создавать `.secrets/` до деплоя (шаг 2.3)                                                     |
+| Холодный старт ~1 с на запрос (CGI-WSGI)         | Норма для тарифа                                                                              |
+| `git pull` падает из-за untracked `staticfiles/` | `deploy.sh` удаляет их перед pull                                                             |
+| Конфликтные копии Dropbox                        | Прод не синхронизировать Dropbox'ом                                                           |
+| Сайт 500 при `DEBUG=False` без секретов          | Создавать `.secrets/` до деплоя                                                               |
 | Статика админки 404                              | `collectstatic` + rewrite `/static/` → `staticfiles/` в `.htaccess`                           |
-| 401 от LaTeX API                                 | Сверить ключ в `.secrets/LATEX_API_KEY` и `/opt/latex-api/config.py`, перезапустить сервис    |
-| PDF с `2/??` вместо `2/2`                        | Патч двух прогонов на API (п. 1.5); Django-кэш хранит уже готовый PDF — после патча перегенерировать |
-| Ошибка компиляции листка                         | Страница ошибки показывает лог; `/worksheets/<id>/tex/` отдаёт исходник для локальной отладки |
-| Письма/уведомления                               | Не используются; пароли учеников учитель передаёт лично                                       |
-| Стили «не применились» после правки шаблона      | Локально `make build-css` и закоммитить `public_html/static/css/app.css` (на сервере CSS не собирается) |
-| Забыли `app.css` в коммите                       | На проде нет новых utility-классов; всегда коммитить `input.css` + `app.css` вместе           |
-
+| 401 от LaTeX API                                 | Сверить `.secrets/LATEX_API_KEY` и `/opt/latex-api/config.py`                                 |
+| PDF с `2/??` вместо `2/2`                        | Патч двух прогонов xelatex (п. 1.5)                                                           |
+| Стили «не применились»                           | Локально `make build-css`, коммитить `input.css` + `app.css`                                  |
+| Перезаписали `~/auto_pull.sh`                    | Вернуть скрипт chgkmsu; EgorMath запускать только через `~/egormath/deploy/deploy.sh`         |
 
 ## 6. Стили на сервере
 
-Node на Timeweb **не нужен**: `public_html/static/css/app.css` собирается
-локально и лежит в git, серверу достаточно обычного `collectstatic` в
-`auto_pull.sh`. Как собирать и что коммитить — в
-[docs/PIPELINE.md](../docs/PIPELINE.md).
+Node на Timeweb **не нужен**: `app.css` собирается локально и лежит в git.
+Серверу достаточно `collectstatic` в `deploy.sh`.
 
