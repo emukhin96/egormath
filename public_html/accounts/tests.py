@@ -5,6 +5,99 @@ from django.urls import reverse
 from .models import Profile, StudentGroup
 
 
+class StudentRegistrationTests(TestCase):
+    def registration_data(self, **overrides):
+        data = {
+            'first_name': 'Анна-Мария',
+            'last_name': 'О’Коннор',
+            'username': 'New.Student-7',
+            'password1': 'надёжный пароль 7',
+            'password2': 'надёжный пароль 7',
+        }
+        data.update(overrides)
+        return data
+
+    def test_registration_page_is_linked_from_login(self):
+        response = self.client.get(reverse('login'))
+        self.assertContains(response, reverse('register'))
+
+        response = self.client.get(reverse('register'))
+        self.assertContains(response, 'Регистрация ученика')
+        self.assertContains(response, 'data-registration-form')
+        self.assertContains(response, 'js/registration.js')
+        self.assertContains(response, 'maxlength="30"')
+        self.assertContains(response, 'maxlength="50"', count=2)
+        self.assertContains(response, 'maxlength="128"', count=2)
+
+    def test_student_can_register_and_is_logged_in(self):
+        response = self.client.post(
+            reverse('register'), self.registration_data())
+
+        self.assertRedirects(response, reverse('dashboard'))
+        student = User.objects.get(username='new.student-7')
+        self.assertEqual(student.first_name, 'Анна-Мария')
+        self.assertEqual(student.last_name, 'О’Коннор')
+        self.assertTrue(student.check_password('надёжный пароль 7'))
+        self.assertEqual(student.profile.role, Profile.ROLE_STUDENT)
+        self.assertIsNone(student.profile.teacher)
+        self.assertEqual(
+            int(self.client.session['_auth_user_id']), student.pk)
+
+    def test_registration_rejects_invalid_and_too_long_values(self):
+        invalid_values = (
+            ('username', 'ученик'),
+            ('username', 'a' * 31),
+            ('first_name', 'Анна7'),
+            ('last_name', 'И' * 51),
+            ('password1', 'p' * 129),
+        )
+        for field, value in invalid_values:
+            with self.subTest(field=field, value=value[:10]):
+                data = self.registration_data(**{field: value})
+                if field == 'password1':
+                    data['password2'] = value
+                response = self.client.post(reverse('register'), data)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(field, response.context['form'].errors)
+
+        self.assertFalse(User.objects.exists())
+
+    def test_registration_rejects_duplicate_login_ignoring_case(self):
+        User.objects.create_user(username='new.student-7', password='secret7')
+        response = self.client.post(
+            reverse('register'), self.registration_data())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Этот логин уже занят.')
+        self.assertEqual(User.objects.count(), 1)
+
+    def test_registration_rejects_short_or_mismatched_password(self):
+        response = self.client.post(
+            reverse('register'),
+            self.registration_data(password1='12345', password2='12345'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('password1', response.context['form'].errors)
+
+        response = self.client.post(
+            reverse('register'),
+            self.registration_data(password2='другой пароль'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('password2', response.context['form'].errors)
+        self.assertFalse(User.objects.exists())
+
+    def test_authenticated_user_cannot_open_registration(self):
+        student = User.objects.create_user(
+            username='student', password='secret7')
+        Profile.objects.create(user=student, role=Profile.ROLE_STUDENT)
+        self.client.login(username='student', password='secret7')
+
+        response = self.client.get(reverse('register'))
+
+        self.assertRedirects(response, reverse('dashboard'))
+
+
 class StudentManagementTests(TestCase):
     def setUp(self):
         self.teacher = User.objects.create_user(
