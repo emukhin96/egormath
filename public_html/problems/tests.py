@@ -1448,6 +1448,42 @@ class TemplateHygieneTests(TestCase):
         self.assertContains(response, 'Код или название темы')
 
 
+class TaskImageClassifyTests(TestCase):
+    """На вебе рисунки из ответа не смешиваются с условием."""
+
+    def test_answer_and_unreferenced_images(self):
+        from problems.task_images import classify_task_images, images_for_group
+
+        task = Task.objects.create(
+            text_latex='См. рисунок \\taskpic{1}',
+            answer_latex='Ответ на рисунке \\taskpic{2}.')
+        pic_body = task.images.create(image='task_images/body.png', order=10)
+        pic_answer = task.images.create(
+            image='task_images/answer.png', order=20)
+        pic_orphan = task.images.create(
+            image='task_images/orphan.png', order=30)
+        statement, answers = classify_task_images(task)
+        self.assertEqual(statement, [pic_body, pic_orphan])
+        self.assertEqual(answers, [pic_answer])
+        self.assertEqual(images_for_group(task, 'statement'), statement)
+        self.assertEqual(images_for_group(task, 'answers'), answers)
+        self.assertEqual(images_for_group(task, 'all'),
+                         [pic_body, pic_answer, pic_orphan])
+
+    def test_subitem_answer_image_is_not_in_statement(self):
+        from problems.models import TaskSubitem
+        from problems.task_images import classify_task_images
+
+        task = Task.objects.create(text_latex='Постройте график')
+        TaskSubitem.objects.create(
+            task=task, order=10, text_latex='$y=x$',
+            author_answer_latex='см. рис.\n\\taskpic{1}')
+        pic = task.images.create(image='task_images/graph.png', order=10)
+        statement, answers = classify_task_images(task)
+        self.assertEqual(statement, [])
+        self.assertEqual(answers, [pic])
+
+
 class TaskImagePdfTests(TestCase):
     """PDF-иллюстрации: хранение без сжатия и корректная отдача файла."""
 

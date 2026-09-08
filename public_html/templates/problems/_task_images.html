@@ -1,6 +1,6 @@
-{% if task.images.all %}
+{% if images %}
 <div class="task-images">
-  {% for img in task.images.all %}
+  {% for img in images %}
   {% if img.is_pdf %}
   <object class="task-image-object" type="application/pdf"
           data="{% url 'task_image_file' img.pk %}#toolbar=0&navpanes=0"

@@ -1,0 +1,29 @@
+{% load task_extras %}
+{# Ответы и решения одной рамкой после условия: «а) … б) …», без «— ответ:» у пункта. #}
+{% if task.effective_answer_latex or task.effective_solution_latex or task.has_subitem_answers or task.has_subitem_solutions %}
+<div class="ws-answers"{% if hide_answers %} hidden{% endif %}>
+  {% if task.effective_answer_latex or task.has_subitem_answers %}
+  <div class="answer-box math-content">
+    <strong>Ответ:</strong>
+    {% if task.effective_answer_latex %}<div>{{ task.effective_answer_latex|web_answer }}</div>{% endif %}
+    {% for subitem in subitems %}
+    {% if subitem.effective_answer_latex %}
+    <div>{{ forloop.counter0|subitem_label }})&nbsp;{{ subitem.effective_answer_latex|web_answer }}</div>
+    {% endif %}
+    {% endfor %}
+    {% task_images task 'answers' %}
+  </div>
+  {% endif %}
+  {% if task.effective_solution_latex or task.has_subitem_solutions %}
+  <div class="solution-box math-content">
+    <strong>Решение:</strong>
+    {% if task.effective_solution_latex %}<div>{{ task.effective_solution_latex|web_text|linebreaksbr }}</div>{% endif %}
+    {% for subitem in subitems %}
+    {% if subitem.effective_solution_latex %}
+    <div>{{ forloop.counter0|subitem_label }})&nbsp;{{ subitem.effective_solution_latex|web_text|linebreaksbr }}</div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}

@@ -57,10 +57,50 @@ class CollectionTests(TestCase):
             'collection_detail', args=[self.collection.pk]))
         self.assertContains(detail, 'Использовать подборку')
         self.assertContains(detail, 'Поясните вычисление')
+        self.assertContains(detail, 'toggle-answers')
+        self.assertContains(detail, 'показать ответы и решения')
+        self.assertContains(detail, 'data-answers-key="collection-show-answers"')
+        # Тумблер в шапке страницы — рядом с кнопками, не внутри списка
+        head = detail.content.decode().split('id="ws-items"', 1)[0]
+        self.assertIn('toggle-answers', head)
+        self.assertContains(detail, 'data-cart-form')
         editor = self.client.get(reverse(
             'collection_edit', args=[self.collection.pk]), follow=True)
         self.assertContains(editor, 'Конструктор подборки')
         self.assertContains(editor, 'Текст между задачами')
+
+    def test_collection_hides_answer_images_until_answers_block(self):
+        pictured = Task.objects.create(
+            text_latex='Постройте график', created_by=self.owner)
+        TaskSubitem.objects.create(
+            task=pictured, order=10, text_latex='$y=x$',
+            author_answer_latex='см. рис.\n\\taskpic{1}')
+        image = pictured.images.create(
+            image='task_images/graph-answer.png', order=10)
+        WorksheetItem.objects.create(
+            worksheet=self.worksheet, task=pictured, order=30)
+        self.client.login(username='teacher1', password='pass12345')
+        detail = self.client.get(reverse(
+            'collection_detail', args=[self.collection.pk]))
+        image_url = reverse('task_image_file', args=[image.pk])
+        html = detail.content.decode()
+        chunk = html.split('Постройте график', 1)[1]
+        before_answers, after_answers = chunk.split('div class="ws-answers"', 1)
+        self.assertNotIn(image_url, before_answers)
+        self.assertIn(image_url, after_answers)
+        self.assertIn('hidden', after_answers.split('>', 1)[0])
+        self.assertIn('см. рис.', chunk)
+        self.assertIn('а)&nbsp;', chunk)
+        self.assertNotIn('— ответ:', html)
+
+    def test_copied_worksheet_has_visibility_buttons(self):
+        self.client.login(username='teacher2', password='pass12345')
+        self.client.post(reverse('collection_use', args=[self.collection.pk]))
+        copy = Worksheet.objects.get(owner=self.other)
+        self.assertFalse(copy.share_links.exists())
+        response = self.client.get(reverse('worksheet_detail', args=[copy.pk]))
+        self.assertContains(response, 'vis-btn')
+        self.assertContains(response, 'Сначала создайте публичную ссылку')
 
     def test_empty_group_cannot_be_copied(self):
         group_sheet = Worksheet.objects.create(

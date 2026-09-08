@@ -108,22 +108,12 @@
                        {% if row.selected_ids == None or s.pk in row.selected_ids %}checked{% endif %}>
                 <span class="math-content">{{ s.text_latex|web_text }}</span>{{ s.text_latex|subitem_tail:forloop.last }}
               </label>
-              {% if s.effective_answer_latex %}<span class="ws-answers muted"> — ответ: <span class="math-content">{{ s.effective_answer_latex }}</span></span>{% endif %}
             </li>
             {% endfor %}
           </ol>
           {% endif %}
-          {% include 'problems/_task_images.html' with task=item.task %}
-          {% if item.task.effective_answer_latex or item.task.effective_solution_latex %}
-          <div class="ws-answers">
-            {% if item.task.effective_answer_latex %}
-            <div class="answer-box math-content"><strong>Ответ:</strong> {{ item.task.effective_answer_latex }}</div>
-            {% endif %}
-            {% if item.task.effective_solution_latex %}
-            <div class="solution-box math-content"><strong>Решение:</strong> {{ item.task.effective_solution_latex|linebreaksbr }}</div>
-            {% endif %}
-          </div>
-          {% endif %}
+          {% task_images item.task %}
+          {% include 'problems/_task_answers.html' with task=item.task subitems=item.task.subitems.all %}
           <div class="task-meta">
             <a class="task-id" href="{% url 'task_detail' item.task.pk %}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}
             · <a href="{% url 'task_edit' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}">править</a>
@@ -177,7 +167,7 @@
 
         <div class="ws-actions">
           {% if item.task_id and not item.task.variant_of_id %}{% include 'includes/cart_button.html' with task=item.task %}{% endif %}
-          {% if item.task_id and share_links or item.task_id and assignments %}
+          {% if item.task_id %}
           {% if row.hidden_links or row.hidden_assignments %}
           <button type="button"
                   class="icon-btn vis-btn vis-on"
@@ -198,13 +188,18 @@
         </div>
       </div>
 
-      {% if item.task_id and share_links or item.task_id and assignments %}
+      {% if item.task_id %}
       <dialog id="vis-{{ item.pk }}" class="dialog">
         <form method="post" action="{% url 'worksheet_item_visibility' worksheet.pk item.pk %}">
           {% csrf_token %}
           <h3>Видимость задачи {{ row.number }}</h3>
+          {% if share_links or assignments %}
           <p class="helptext">Отмеченные ссылки и ученики <strong>не увидят</strong>
             задачу — ни на странице, ни в PDF (нумерация пересчитается).</p>
+          {% else %}
+          <p class="helptext">Сначала создайте публичную ссылку или назначьте
+            учеников — затем здесь можно скрыть задачу для них.</p>
+          {% endif %}
           {% if share_links %}
           <p class="task-meta">Публичные ссылки</p>
           <div class="dialog-topics">
@@ -229,7 +224,9 @@
             {% endfor %}
           </div>
           {% endif %}
+          {% if share_links or assignments %}
           <button type="submit" class="btn btn-small">Сохранить</button>
+          {% endif %}
           <button type="button" class="btn btn-small btn-secondary" data-dialog-close>Отмена</button>
         </form>
       </dialog>
@@ -444,6 +441,7 @@
 </dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<script defer src="{% static 'js/answers-toggle.js' %}"></script>
 <script defer src="{% static 'js/builder.js' %}"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
 {% endblock %}

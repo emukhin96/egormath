@@ -97,7 +97,7 @@
     </form>
   </details>
 
-  {% include 'problems/_task_images.html' with task=task %}
+  {% task_images task 'all' %}
 
   {% if not task.subitems.all %}
   <h3>Ответ</h3>

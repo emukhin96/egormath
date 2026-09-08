@@ -1,5 +1,6 @@
 from django import template
 
+from problems.task_images import images_for_group
 from problems.textbook_parser import (
     apply_imported_answer, cyrillic_item_label as _cyrillic_item_label,
     normalize_imported_text, order_letter_subitems, strip_heading_dot)
@@ -7,6 +8,12 @@ from problems.web_tex import tex_preview_html, tex_to_web_html
 from worksheets.latex import subitem_label as _subitem_label
 
 register = template.Library()
+
+
+@register.inclusion_tag('problems/_task_images.html')
+def task_images(task, group='statement'):
+    """Картинки задачи: условие, ответы/решения или все."""
+    return {'images': images_for_group(task, group)}
 
 
 @register.filter
