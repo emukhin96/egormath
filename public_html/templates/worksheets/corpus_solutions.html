@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Решения корпуса — EgorMath{% endblock %}
+{% block sidebar %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">После шлифовки</p>
+  <h2>Дописать решения</h2>
+  <p class="sidebar-copy">Только листки, уже загруженные из корпуса. Проверьте текст на странице листка.</p>
+  <a class="sidebar-action" href="{% url 'worksheet_corpus_list' %}">К сверке</a>
+</section>
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><span class="page-eyebrow">Листки</span>
+    <h1>Задачи без решений</h1>
+    <p class="page-subtitle">Нейросеть заполняет пустые поля; авторские поля не трогает.</p>
+  </div>
+</div>
+<div class="card">
+{% if rows %}
+<table class="list">
+  <tr><th>Листок</th><th>Без решения</th><th></th></tr>
+  {% for row in rows %}
+  <tr>
+    <td><a href="{% url 'worksheet_detail' row.worksheet.pk %}">{{ row.worksheet.title }}</a></td>
+    <td>{{ row.missing_count }}</td>
+    <td>
+      {% if row.missing_count %}
+      <form method="post" action="{% url 'worksheet_corpus_solve' row.worksheet.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-secondary">Дописать AI-решения</button>
+      </form>
+      {% else %}
+      <span class="muted">готово</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Загруженных листков корпуса пока нет.</p>
+{% endif %}
+</div>
+{% endblock %}

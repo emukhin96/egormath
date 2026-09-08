@@ -1,0 +1,43 @@
+<input type="hidden" name="exams_submitted" value="1">
+<div class="corpus-exam-chips" data-corpus-exam-chips>
+  {% for group in exam_groups %}
+    {% if group.line.checked %}
+    <span class="corpus-exam-chip">{{ group.line.label }}</span>
+    {% endif %}
+    {% for exam in group.items %}
+      {% if exam.checked %}
+      <span class="corpus-exam-chip">{{ exam.label }}</span>
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+</div>
+<details class="corpus-exam-details">
+  <summary class="corpus-exam-summary">Выбрать ОГЭ / ЕГЭ / МЦКО</summary>
+  <div class="corpus-exam-groups">
+    {% for group in exam_groups %}
+    <section class="corpus-exam-group" data-exam-group>
+      <h3>{{ group.label }}</h3>
+      {% if group.line %}
+      <label class="corpus-exam-line">
+        <input type="checkbox" name="exam_item_codes" value="{{ group.line.code }}"
+               data-exam-line
+               {% if group.line.checked %}checked{% endif %}>
+        {{ group.line.label }}
+      </label>
+      {% endif %}
+      {% if group.items %}
+      <div class="corpus-exam-list">
+        {% for exam in group.items %}
+        <label>
+          <input type="checkbox" name="exam_item_codes" value="{{ exam.code }}"
+                 data-exam-child
+                 {% if exam.checked %}checked{% endif %}>
+          {{ exam.label }}
+        </label>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+</details>
