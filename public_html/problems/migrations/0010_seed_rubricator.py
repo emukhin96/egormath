@@ -101,11 +101,19 @@ def seed_and_migrate_grades(apps, schema_editor):
 
 
 def drop_legacy_task_topics(apps, schema_editor):
-    # Старый M2M без through: problems_task_topics
+    # Старый M2M без through: problems_task_topics.
+    # На MySQL Django запрещает DDL через schema_editor внутри транзакции.
+    table = 'problems_task_topics'
+    if table not in schema_editor.connection.introspection.table_names():
+        return
     schema_editor.execute('DROP TABLE IF EXISTS problems_task_topics')
 
 
 class Migration(migrations.Migration):
+
+    # MySQL не откатывает DDL — иначе DROP TABLE падает с
+    # TransactionManagementError даже при IF EXISTS.
+    atomic = False
 
     dependencies = [
         ('problems', '0009_rubricator'),
