@@ -26,9 +26,9 @@ from .models import (Assignment, Review, Submission, SubmissionCheckAttempt,
 # --- Назначение листка ученикам (действие учителя со страницы листка) ---
 
 def _check_visibility_or_default(post):
-    value = post.get('check_visibility', Assignment.CHECK_TEACHER)
+    value = post.get('check_visibility', Assignment.CHECK_LIVE)
     if value not in dict(Assignment.CHECK_CHOICES):
-        return Assignment.CHECK_TEACHER
+        return Assignment.CHECK_LIVE
     return value
 
 
@@ -280,6 +280,14 @@ def _assignment_rows(assignment, with_review=False):
         legacy_attempts = 0
         if with_review and submission:
             attempt_history = list(submission.check_history.all())[::-1]
+            for attempt in attempt_history:
+                for target in attempt.snapshot.get('targets', []):
+                    readable = target.get('answer', '')
+                    for slot in target.get('slots', []):
+                        value = slot.get('value', '')
+                        shown = value if '$' in value else (f'${value}$' if value and (value[0].isdigit() or value.startswith(('\\', '-'))) else value)
+                        readable = readable.replace('[' + value + ']', shown)
+                    target['readable_answer'] = readable
             legacy_attempts = max(
                 submission.check_attempts - len(attempt_history), 0)
         # Все выбранные подпункты (или задача целиком) сошлись с эталоном —
@@ -329,7 +337,7 @@ def _mask_fragments(spec, obj, prefix, for_teacher):
 def _progress(rows):
     """Счётчики для сайдбара и подтверждения отправки."""
     task_rows = [r for r in rows if r['task'] is not None]
-    done = sum(1 for r in task_rows if r['review'] and r['review'].done)
+    done = sum(r['review'].credit for r in task_rows if r['review'])
     total = len(task_rows)
     return {
         'task_rows': task_rows,
@@ -802,6 +810,7 @@ def review_assignment(request, pk):
         'queue_position': queue_position,
         'next_pending': next_pending,
         'owner_filter': owner_id,
+        'grade_choices': Review.GRADE_CHOICES,
     }
     context.update(_progress(rows))
     return render(request, 'assignments/review.html', context)
@@ -841,7 +850,8 @@ def save_review(request, pk):
         # присутствия строки — поле комментария
         if f'{prefix}_comment' not in request.POST:
             continue
-        done = f'{prefix}_done' in request.POST
+        existing = getattr(submission, 'review', None)
+        done = existing.done if 'grade_interface' in request.POST and existing else f'{prefix}_done' in request.POST
         comment = request.POST.get(f'{prefix}_comment', '').strip()
         # Строка есть в форме — сохраняем явное done=False, даже без
         # комментария. Иначе снятие автофлажка удаляет Review, и при
@@ -850,6 +860,7 @@ def save_review(request, pk):
             submission=submission,
             defaults={
                 'done': done,
+                'grade': (existing.grade if existing else '') if 'grade_interface' in request.POST else ('+' if done else '-'),
                 'comment': comment,
                 'reviewer': request.user,
             })

@@ -1,0 +1,12 @@
+{% extends 'base.html' %}{% load static %}
+{% block title %}Прогресс · {{ worksheet.title }}{% endblock %}
+{% block content %}
+<h1>{{ worksheet.title }} · прогресс</h1>
+<p><a href="{% url 'worksheet_detail' worksheet.pk %}">Вернуться в листок</a></p>
+<form method="get"><label>Группа<select name="group"><option value="">Все назначенные ученики</option>{% for group in groups %}<option value="{{ group.pk }}" {% if group.pk|stringformat:'s' == group_id %}selected{% endif %}>{{ group.name }}</option>{% endfor %}</select></label><button class="btn btn-secondary">Показать</button></form>
+<p class="helptext" data-live-status role="status">Ответы и попытки обновляются каждые 5 секунд, до отправки работы. Нажмите ячейку для подробностей.</p>
+<div data-progress-table>{% include 'assignments/_progress_table.html' %}</div>
+<dialog class="dialog problem-dialog" id="progress-dialog"><div class="dialog-heading"><h3>Ответы и попытки</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div><div data-progress-detail></div></dialog>
+<form hidden>{% csrf_token %}</form>
+{% endblock %}
+{% block extra_js %}<script defer src="{% static 'js/teacher_progress.js' %}"></script>{% endblock %}

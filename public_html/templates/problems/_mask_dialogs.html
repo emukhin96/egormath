@@ -1,5 +1,5 @@
 <dialog class="dialog problem-dialog" id="answer-mask-dialog" aria-labelledby="answer-mask-title">
-  <div class="label-row"><h3 id="answer-mask-title">Маска ответа</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
+  <div class="dialog-heading"><h3 id="answer-mask-title">Маска ответа</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
   <form id="answer-mask-form">
     {% csrf_token %}
     <p><label>Источник ответа<select name="source"><option value="author">Авторский</option><option value="editor">Редакторский / AI</option></select></label></p>
@@ -39,10 +39,9 @@
   <div data-editor-preview hidden></div>
 </dialog>
 <dialog class="dialog problem-dialog" id="answer-preview-dialog" aria-labelledby="answer-preview-title">
-  <div class="label-row"><h3 id="answer-preview-title">Как увидит ученик</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
+  <div class="dialog-heading"><h3 id="answer-preview-title">Как увидит ученик</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
   <div data-preview-body></div>
   <p class="helptext">Проверка пробного ответа работает тем же кодом, что у ученика.</p>
-  <div class="form-buttons"><button type="button" class="btn btn-secondary" data-dialog-close>Закрыть</button></div>
 </dialog>
 <dialog class="dialog" id="answer-scope-dialog" aria-labelledby="answer-scope-title">
   <h3 id="answer-scope-title">Где сохранить изменения?</h3>

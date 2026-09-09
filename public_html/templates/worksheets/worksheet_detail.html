@@ -345,7 +345,7 @@
       {# Листок уже выдан — режим общий для всех его назначений и не меняется #}
       <select name="check_visibility" id="a_check" style="max-width:340px" {% if locked_check %}disabled{% endif %}>
         {% for value, label in check_choices %}
-        <option value="{{ value }}" {% if value == locked_check %}selected{% endif %}>{{ label }}</option>
+        <option value="{{ value }}" {% if value == locked_check or not locked_check and value == 'live' %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
       {% if locked_check %}
@@ -371,7 +371,7 @@
   {% endif %}
 
   {% if assignments %}
-  <h2>Назначения</h2>
+  <h2>Назначения</h2><p><a class="btn btn-secondary" href="{% url 'worksheet_progress' worksheet.pk %}">Прогресс учеников</a></p>
   <table class="list">
     <tr><th>Ученик</th><th>Статус</th><th>Самопроверка</th><th></th></tr>
     {% for a in assignments %}

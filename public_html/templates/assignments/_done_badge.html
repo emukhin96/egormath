@@ -1,2 +1,1 @@
-{# Отметка учителя по задаче: review — Review или None #}
-{% if review %}{% if review.done %}<span class="badge badge-reviewed">выполнено</span>{% else %}<span class="badge badge-returned">не выполнено</span>{% endif %}{% endif %}
+{% if review.grade %}<span class="badge {% if review.credit %}badge-reviewed{% else %}badge-returned{% endif %}" title="{{ review.get_grade_display }}">{{ review.grade }}</span>{% endif %}

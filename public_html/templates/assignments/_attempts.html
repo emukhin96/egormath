@@ -1,0 +1,9 @@
+{% load task_extras %}
+{% for attempt in row.attempt_history %}
+<div class="attempt-row">
+  <time datetime="{{ attempt.created_at|date:'c' }}" title="Попытка {{ attempt.number }}">{{ attempt.created_at|date:'d.m H:i:s' }}</time>
+  <span class="attempt-answer">{% for target in attempt.snapshot.targets %}{% if target.kind == 'part' %}{{ target.label }}: {% endif %}<span class="math-content">{{ target.readable_answer|default:target.answer|default:'—'|web_answer }}</span>{% if not forloop.last %}; {% endif %}{% endfor %}</span>
+  <span class="badge {% if attempt.result == 'ok' %}badge-reviewed{% elif attempt.result == 'wrong' %}badge-returned{% else %}badge-assigned{% endif %}">{{ attempt.get_result_display }}</span>
+</div>
+{% empty %}<p class="helptext">Проверок пока нет.</p>{% endfor %}
+{% if row.legacy_attempts %}<p class="helptext">Ранних попыток без сохранённого ответа: {{ row.legacy_attempts }}.</p>{% endif %}

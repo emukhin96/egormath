@@ -1,0 +1,4 @@
+<h3>{{ assignment.student.get_full_name|default:assignment.student.username }} · №{{ row.number }}</h3>
+{% include 'assignments/_grade_scale.html' %}
+<div data-detail-answer>{% include 'assignments/_live_answer.html' %}</div>
+<p><a href="{% url 'review_assignment' assignment.pk %}#task-{{ row.number }}">Открыть проверку работы</a></p>

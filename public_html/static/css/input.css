@@ -251,6 +251,16 @@
   .problem-mask-inline .mask-answer { margin: 0; }
   .problem-mask-inline .mask-math { min-width: 120px; max-width: 240px; }
   .problem-mask-inline .mask-math math-field { min-height: 30px; }
+  .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+  .dialog-heading h3 { margin: 0; }
+  .dialog-heading .icon-btn { margin-left: auto; font-size: 28px; min-width: 40px; min-height: 40px; }
+  .grade-scale { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); }
+  .grade-scale [aria-pressed="true"] { background: var(--accent); color: white; }
+  .attempt-row { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+  .attempt-row time { white-space: nowrap; }
+  .attempt-row .attempt-answer { flex: 1; }
+  .progress-table-wrap { overflow-x: auto; }
+  .progress-table td, .progress-table th { white-space: nowrap; }
   .problem-mask-code { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
   .problem-columns textarea, .problem-dialog textarea { max-width: 100%; }
   .problem-columns .formset { table-layout: fixed; width: 100%; }
