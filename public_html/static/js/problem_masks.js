@@ -63,6 +63,7 @@
     target.textContent='Загрузка масок…';
     try{
       var owners=await answers(root,true);target.textContent='';
+      var links=root.closest('.ws-item')?.querySelector('[data-mask-links]');if(links)links.textContent='';
       var actions=document.createElement('div');actions.className='problem-mask-actions';target.appendChild(actions);
       if(owners.filter(o=>!o.mask.trim()).length>1)actions.appendChild(button('Создать недостающие маски','maskMissing','1'));
 
@@ -73,7 +74,8 @@
           var fields=document.createElement('div');fields.className='problem-mask-inline';fields.innerHTML=o.preview_html||'';row.appendChild(fields);
           fields.querySelectorAll('.mask-text,.mask-order-items li').forEach(renderMathContent);
         }
-        row.appendChild(button(o.mask?'Настроить':'Добавить маску','maskEdit',o.id||''));
+        var editButton=button(o.mask?'Настроить':'Добавить маску','maskEdit',o.id||'');
+        if(links){editButton.className='link-btn';editButton.textContent=(o.mask?'настроить маску':'добавить маску')+(o.id?' · '+o.label:'');links.append(' · ',editButton);}else row.appendChild(editButton);
         actions.appendChild(row);
         if(window.EgorMask)window.EgorMask.enhance(row);
       }
@@ -82,7 +84,7 @@
   document.addEventListener('click',async function(e){
     var edit=e.target.closest('[data-mask-edit]'),see=e.target.closest('[data-mask-preview]'),missing=e.target.closest('[data-mask-missing]');
     var trigger=edit||see||missing;if(!trigger||loading)return;
-    var root=trigger.closest('[data-problem-editor],[data-worksheet-mask]');if(!root)return;
+    var root=trigger.closest('[data-problem-editor],[data-worksheet-mask]')||trigger.closest('.ws-item')?.querySelector('[data-worksheet-mask]');if(!root)return;
     loading=true;trigger.disabled=true;
     try{
       var owners=await answers(root);
@@ -144,9 +146,9 @@
   });
   var toggle=document.getElementById('toggle-masks');
   if(toggle){
-    try{toggle.checked=sessionStorage.getItem('worksheet-masks')==='1';}catch(_){}
+    try{toggle.checked=sessionStorage.getItem(toggle.dataset.storageKey||'worksheet-masks')==='1';}catch(_){}
     function display(){
-      try{sessionStorage.setItem('worksheet-masks',toggle.checked?'1':'0');}catch(_){}
+      try{sessionStorage.setItem(toggle.dataset.storageKey||'worksheet-masks',toggle.checked?'1':'0');}catch(_){}
       document.querySelectorAll('[data-worksheet-mask]').forEach(function(root){root.hidden=!toggle.checked;if(toggle.checked)refresh(root);});
     }
     toggle.addEventListener('change',display);display();

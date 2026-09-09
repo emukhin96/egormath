@@ -41,7 +41,7 @@ def filter_tasks(params):
     tasks = (Task.objects.filter(variant_of__isnull=True)
              .prefetch_related('topics', 'topic_links', 'grade_bands',
                                'facet_values', 'exam_items', 'tags',
-                               'source_refs__source', 'subitems')
+                               'source_refs__source', 'subitems', 'images')
              .select_related('created_by'))
     q = params.get('q', '').strip()
     if q:
@@ -68,7 +68,10 @@ def task_list(request):
         'sources': Source.objects.all(),
         'params': request.GET,
         'grade_choices': Task.GRADE_CHOICES,
+        'mask_help': MASK_HELP,
     })
+    from assignments.checks import KINDS, PRESETS
+    ctx['mask_kinds'] = {**KINDS, **{k: k for k in PRESETS}}
     for task in page:
         task.taxonomy_json = dumps_state(task_taxonomy_state(task))
     return render(request, 'problems/task_list.html', ctx)
@@ -323,6 +326,40 @@ def task_detail(request, pk):
     task = get_object_or_404(Task.objects.prefetch_related(
         'subitems', 'images', 'topics', 'tags', 'source_refs__source'), pk=pk)
     return render(request, 'problems/task_detail.html', context(request, task))
+
+
+@teacher_required
+@require_POST
+@transaction.atomic
+def task_duplicate(request, pk):
+    """Самостоятельная копия в базе или локальная — следующей строкой листка."""
+    from .editor import worksheet_context
+    from worksheets.models import Worksheet
+    task = get_object_or_404(Task, pk=pk)
+    item = worksheet_context(request, task)
+    if item and item.deleted_at:
+        raise Http404
+    if item:
+        # Сериализуем вставки в один листок, включая строки с равным order.
+        Worksheet.objects.select_for_update().get(pk=item.worksheet_id)
+    copy, mapping = task.make_variant(request.user, with_mapping=True,
+                                     standalone=item is None)
+    if item:
+        rows = list(item.worksheet.items.order_by('order', 'pk'))
+        for position, row in enumerate(rows, 1):
+            row.order = position * 10
+            row.save(update_fields=['order'])
+            if row.pk == item.pk:
+                insertion = row.order + 5
+        clone = item.worksheet.items.create(task=copy, order=insertion,
+            stars_override=item.stars_override, columns_override=item.columns_override,
+            all_subitems=item.all_subitems)
+        clone.subitems.set([mapping['subitems'][pk]
+                           for pk in item.subitems.values_list('pk', flat=True)])
+        messages.success(request, f'Копия #{copy.pk} добавлена после задачи #{task.pk}.')
+        return redirect('worksheet_detail', pk=item.worksheet_id)
+    messages.success(request, f'Создана независимая копия #{copy.pk} задачи #{task.pk}.')
+    return redirect('task_detail', pk=copy.pk)
 
 
 @teacher_required

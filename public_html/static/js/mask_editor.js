@@ -149,11 +149,18 @@
     /* Заготовка из «Ответа»: у задачи — поле answer_latex формы,
        у подпункта — поле ответа той же строки */
     form.addEventListener('click', function (e) {
+      var preset = e.target.closest('[data-mask-template]');
+      if (preset) {
+        var field = preset.closest('.problem-section').querySelector('textarea[data-mask-source]');
+        var snippet = '{{number: ' + preset.dataset.maskTemplate + '}}';
+        field.setRangeText(snippet, field.selectionStart, field.selectionEnd, 'select');
+        field.dispatchEvent(new Event('input', {bubbles: true})); field.focus(); return;
+      }
       var btn = e.target.closest('[data-mask-draft]');
       if (!btn) return;
       var row = btn.closest('tr');
       var scope = row || form;
-      var textarea = scope.querySelector('textarea[data-mask-source]');
+      var textarea = scope.querySelector(row ? 'textarea[data-mask-source]' : 'textarea[data-mask-source=task]');
       var answer = row ? row.querySelector('textarea[name$="-answer_latex"]')
         : form.querySelector('textarea[name="answer_latex"]');
       var author = row ? row.querySelector('textarea[name$="-author_answer_latex"]') : form.querySelector('textarea[name="author_answer_latex"]');

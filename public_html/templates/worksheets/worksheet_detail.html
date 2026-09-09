@@ -122,6 +122,8 @@
             · <button type="button" class="link-btn ws-star-reset"
                       data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
                       title="Убрать все звёзды только в этом листке">сбросить звёзды</button>
+            <span data-mask-links></span>
+            · <form method="post" class="inline-form" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button class="link-btn" title="Добавить независимую копию следующей строкой">дублировать</button></form>
             {% if item.task.subitems.all %}
             <label class="inline-label">колонки
               <input type="number" name="columns" form="settings-{{ item.pk }}"
