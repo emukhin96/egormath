@@ -384,8 +384,9 @@ class Task(models.Model):
             return any(not s.effective_answer_latex for s in subs)
         return not self.effective_answer_latex
 
-    def make_variant(self, user=None):
+    def make_variant(self, user=None, *, with_mapping=False):
         """Скрытая копия задачи для «локальной» правки в одном листке."""
+        mapping = {'subitems': {}, 'source_refs': {}, 'images': {}}
         original = self
         copy = Task.objects.get(pk=self.pk)
         copy.pk = None
@@ -396,12 +397,13 @@ class Task(models.Model):
         copy_task_taxonomy(original, copy)
         copy.tags.set(original.tags.all())
         for ref in original.source_refs.all():
-            TaskSource.objects.create(
+            cloned = TaskSource.objects.create(
                 task=copy, source=ref.source, number=ref.number,
                 locator=None, source_path=ref.source_path,
                 page=ref.page)
+            mapping['source_refs'][ref.pk] = cloned.pk
         for sub in original.subitems.all():
-            TaskSubitem.objects.create(
+            cloned = TaskSubitem.objects.create(
                 task=copy, order=sub.order,
                 text_latex=sub.text_latex,
                 answer_latex=sub.answer_latex,
@@ -409,10 +411,12 @@ class Task(models.Model):
                 author_answer_latex=sub.author_answer_latex,
                 author_solution_latex=sub.author_solution_latex,
                 answer_mask=sub.answer_mask)
+            mapping['subitems'][sub.pk] = cloned.pk
         for img in original.images.all():
             # Копия строки ссылается на тот же файл в storage
-            copy.images.create(image=img.image.name, order=img.order)
-        return copy
+            cloned = copy.images.create(image=img.image.name, order=img.order)
+            mapping['images'][img.pk] = cloned.pk
+        return (copy, mapping) if with_mapping else copy
 
 
 class TaskTopic(models.Model):

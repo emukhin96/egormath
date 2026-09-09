@@ -18,6 +18,16 @@ def preserve_answers(apps, schema_editor):
                 model.objects.using(alias).filter(pk=obj.pk).update(answer_text=value)
 
 
+def preserve_photo_only(apps, schema_editor):
+    """Отсутствие маски сохраняет прежний контракт «только фото»."""
+    alias = schema_editor.connection.alias
+    task = apps.get_model('problems', 'Task')
+    sub = apps.get_model('problems', 'TaskSubitem')
+    ids = task.objects.using(alias).filter(answer_mode='extended').values('pk')
+    sub.objects.using(alias).filter(task_id__in=ids).update(answer_mask='')
+    task.objects.using(alias).filter(answer_mode='extended').update(answer_mask='')
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ('problems', '0019_exam_line_items'),
@@ -25,6 +35,7 @@ class Migration(migrations.Migration):
     ]
     operations = [
         migrations.RunPython(preserve_answers, migrations.RunPython.noop),
+        migrations.RunPython(preserve_photo_only, migrations.RunPython.noop),
         migrations.RemoveField(model_name='task', name='answer_type'),
         migrations.RemoveField(model_name='task', name='answer_mode'),
     ]

@@ -835,7 +835,7 @@ class ReviewFlowTests(TestCase):
     def test_review_form_has_clickable_grade_scale(self):
         response = self.client.get(
             reverse('review_assignment', args=[self.assignment.pk]))
-        self.assertContains(response, 'data-grade="干"')
+        self.assertContains(response, 'data-grade="="')
         self.assertNotContains(response, 'data-review-done')
         self.assertNotContains(response, 'Отметка')
         self.assertNotContains(response, 'Баллы')

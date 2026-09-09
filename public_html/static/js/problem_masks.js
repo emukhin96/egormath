@@ -7,8 +7,9 @@
   var config=document.getElementById('answer-mask-config').dataset;
   var previewDialog=document.getElementById('answer-preview-dialog');
   function body(data){var f=new FormData();Object.entries(data).forEach(p=>f.set(p[0],p[1]));return f;}
-  async function answers(root){
-    var result=await api.request(api.endpoint(root));
+  async function answers(root, withPreview){
+    var url=new URL(api.endpoint(root),location.href);if(withPreview)url.searchParams.set('preview','1');
+    var result=await api.request(url.toString());
     // На карточке генерация учитывает ещё не сохранённый текст выбранного источника.
     if(root.matches('[data-problem-editor]'))result.answers.forEach(function(o){
       var section=root.querySelector('[data-answer-owner="'+(o.id||'')+'"]');
@@ -61,7 +62,7 @@
     var target=root.querySelector('[data-mask-tools]');if(!target)return;
     target.textContent='Загрузка масок…';
     try{
-      var owners=await answers(root);target.textContent='';
+      var owners=await answers(root,true);target.textContent='';
       var actions=document.createElement('div');actions.className='problem-mask-actions';target.appendChild(actions);
       if(owners.filter(o=>!o.mask.trim()).length>1)actions.appendChild(button('Создать недостающие маски','maskMissing','1'));
 
@@ -69,8 +70,7 @@
         var o=owners[i],row=document.createElement('div');row.className='problem-mask-summary';
         if(o.id){var title=document.createElement('strong');title.textContent=o.label;row.appendChild(title);}
         if(o.mask){
-          var result=await api.request(config.previewUrl,body({mask:o.mask,prefix:'preview_'+(++inlineCounter)}));
-          var fields=document.createElement('div');fields.className='problem-mask-inline';fields.innerHTML=result.html||'';row.appendChild(fields);
+          var fields=document.createElement('div');fields.className='problem-mask-inline';fields.innerHTML=o.preview_html||'';row.appendChild(fields);
           fields.querySelectorAll('.mask-text,.mask-order-items li').forEach(renderMathContent);
         }
         row.appendChild(button(o.mask?'Настроить':'Добавить маску','maskEdit',o.id||''));

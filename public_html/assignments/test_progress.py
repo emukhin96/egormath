@@ -23,7 +23,7 @@ class LiveProgressTests(TestCase):
         return self.client.post(reverse('grade_task', args=[self.assignment.pk, self.task.pk]), {'grade': value})
 
     def test_all_credits_and_unstarted_task(self):
-        for value, score in [('+',1),('.+',1),('+-',.75),('干',.5),('-+',0),('.-',0),('-',0),('0',0)]:
+        for value, score in [('+',1),('.+',1),('+-',.75),('=',.5),('-+',0),('.-',0),('-',0),('0',0)]:
             response = self.grade(value)
             self.assertEqual(response.status_code,200)
             self.assertEqual(response.json()['result']['done'], score)
@@ -49,7 +49,7 @@ class LiveProgressTests(TestCase):
         self.assertContains(response,'Не начато')
         response=self.client.get(reverse('task_attempts',args=[self.assignment.pk,self.task.pk]))
         self.assertContains(response,'Проверок пока нет')
-        self.assertContains(response,'data-grade="干"')
+        self.assertContains(response,'data-grade="="')
 
     def test_default_live_and_group_filter(self):
         self.assertEqual(self.assignment.check_visibility, 'live')
@@ -103,3 +103,47 @@ class LiveProgressTests(TestCase):
         self.assertContains(response,'>.–</button>')
         self.assertContains(response,'>–</button>')
         self.assertContains(response,'class="check-history" open')
+
+    def test_duplicate_live_rows_have_item_keys_and_unchanged_rows_are_omitted(self):
+        import json
+        duplicate=WorksheetItem.objects.create(worksheet=self.worksheet,task=self.task,order=2)
+        url=reverse('assignment_live',args=[self.assignment.pk])
+        result=self.client.get(url).json()
+        self.assertIn(str(self.item.pk),result['rows'])
+        self.assertIn(str(duplicate.pk),result['rows'])
+        self.assertEqual(self.client.get(url,{'versions':json.dumps(result['versions'])}).json()['rows'],{})
+        response=self.client.get(reverse('review_assignment',args=[self.assignment.pk]))
+        self.assertContains(response,f'data-live-answer="{duplicate.pk}"')
+
+    def test_comment_before_first_answer(self):
+        url=reverse('review_assignment',args=[self.assignment.pk])
+        self.assertContains(self.client.get(url),f'name="task{self.task.pk}_comment"')
+        self.client.post(reverse('save_review',args=[self.assignment.pk]),{'grade_interface':'1',f'task{self.task.pk}_comment':'Начни с рисунка'})
+        review=Review.objects.get(submission__assignment=self.assignment,submission__task=self.task)
+        self.assertEqual(review.comment,'Начни с рисунка')
+        self.assertEqual(review.grade,'')
+
+    def test_dialog_uses_item_and_etag(self):
+        duplicate=WorksheetItem.objects.create(worksheet=self.worksheet,task=self.task,order=2)
+        url=reverse('task_attempts',args=[self.assignment.pk,self.task.pk])
+        response=self.client.get(url,{'item':duplicate.pk})
+        self.assertEqual(response.context['row']['item'].pk,duplicate.pk)
+        cached=self.client.get(url,{'item':duplicate.pk},HTTP_IF_NONE_MATCH=response['ETag'])
+        self.assertEqual(cached.status_code,304)
+
+    def test_matrix_etag(self):
+        url=reverse('worksheet_progress',args=[self.worksheet.pk])
+        response=self.client.get(url,{'fragment':'1'})
+        self.assertEqual(self.client.get(url,{'fragment':'1'},HTTP_IF_NONE_MATCH=response['ETag']).status_code,304)
+        self.grade('+')
+        self.assertEqual(self.client.get(url,{'fragment':'1'},HTTP_IF_NONE_MATCH=response['ETag']).status_code,200)
+
+    def test_attempt_keeps_renderable_fragments_without_reference(self):
+        self.task.answer_mask='a = {{number: 1}}, b = {{number: 10}}'
+        self.task.save()
+        self.client.force_login(self.student)
+        self.client.post(reverse('check_task',args=[self.assignment.pk,self.task.pk]),{f'task{self.task.pk}_s1':'1',f'task{self.task.pk}_s2':'10'})
+        from .models import SubmissionCheckAttempt
+        target=SubmissionCheckAttempt.objects.get(submission__task=self.task).snapshot['targets'][0]
+        self.assertEqual([f['display'] for f in target['fragments'] if 'display' in f],['1','10'])
+        self.assertTrue(all('slot' not in f for f in target['fragments']))

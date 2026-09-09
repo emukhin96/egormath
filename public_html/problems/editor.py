@@ -71,29 +71,38 @@ def context(request, task):
     return ctx
 
 
-def mask_data(task, item=None):
+def mask_data(task, item=None, include_preview=False):
     positions = {pk: n + 1 for n, pk in enumerate(task.subitems.values_list('pk', flat=True))}
     subs = list(item.selected_subitems() if item else task.subitems.all())
     owners = subs or ([] if task.subitems.exists() else [task])
-    return [{'id': o.pk if isinstance(o, TaskSubitem) else None,
+    answers = [{'id': o.pk if isinstance(o, TaskSubitem) else None,
              'label': f'Подпункт {positions[o.pk]}' if isinstance(o, TaskSubitem) else 'Ответ',
              'text': o.text_latex,
              'condition': task.text_latex + ('\n' + o.text_latex if isinstance(o, TaskSubitem) else ''),
              'author': o.author_answer_latex,
              'editor': o.answer_latex, 'mask': o.answer_mask}
             for o in owners]
+    if include_preview:
+        from assignments.checks import render_fragments, parse_mask
+        for answer in answers:
+            spec = parse_mask(answer['mask'])
+            answer['preview_html'] = render_to_string('assignments/_mask.html', {
+                'fragments': render_fragments(spec, f'inline_{item.pk if item else 0}_{task.pk}_{answer["id"] or 0}'),
+                'editable': True, 'show_checks': False}) if spec.is_valid else ''
+    return answers
 
 
 def local_copy(task, item, user):
     """Переносит ровно выбранные подпункты на копию, не расширяя листок."""
-    original_ids = list(task.subitems.values_list('pk', flat=True))
     chosen = list(item.subitems.values_list('pk', flat=True))
-    copy = task.make_variant(user)
-    mapping = dict(zip(original_ids, copy.subitems.values_list('pk', flat=True)))
+    copy, mappings = task.make_variant(user, with_mapping=True)
+    mapping = mappings['subitems']
     item.task = copy
     item.save(update_fields=['task'])
-    item.subitems.set([mapping[pk] for pk in chosen if pk in mapping])
-    return copy, mapping
+    if not set(chosen).issubset(mapping):
+        raise forms.ValidationError('Не удалось перенести выбранные подпункты')
+    item.subitems.set([mapping[pk] for pk in chosen])
+    return copy, mappings
 
 
 @teacher_required
@@ -102,7 +111,7 @@ def manage(request, pk):
     item = worksheet_context(request, task)
     selected_only = request.GET.get('view') != 'task'
     if request.method == 'GET':
-        return JsonResponse({'ok': True, 'answers': mask_data(task, item if selected_only else None)})
+        return JsonResponse({'ok': True, 'answers': mask_data(task, item if selected_only else None, include_preview=request.GET.get('preview') == '1')})
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=405)
     with transaction.atomic():
@@ -162,15 +171,22 @@ def manage(request, pk):
                 return JsonResponse({'ok': False, 'errors': {'tags': ['Слишком длинный тег']}}, status=400)
         if scope == 'local':
             # is_valid() меняет instance в памяти: копировать нужно исходник из БД.
-            task, mapping = local_copy(Task.objects.get(pk=pk), item, request.user)
+            try:
+                task, mappings = local_copy(Task.objects.get(pk=pk), item, request.user)
+            except forms.ValidationError as exc:
+                transaction.set_rollback(True)
+                return JsonResponse({'ok': False, 'errors': {'__all__': exc.messages}}, status=400)
+            mapping = mappings['subitems']
             if factory:
                 related = {'subitems': 'subitems', 'images': 'images', 'sources': 'source_refs'}[block]
-                old_ids = list(getattr(Task.objects.get(pk=pk), related).values_list('pk', flat=True))
-                new_ids = list(getattr(task, related).values_list('pk', flat=True))
-                id_map = dict(zip(old_ids, new_ids))
+                id_map = mappings[related]
                 for field in data:
                     if field.startswith(form.prefix + '-') and field.endswith('-id') and data[field]:
-                        data[field] = str(id_map[int(data[field])])
+                        new_id = id_map.get(int(data[field])) if data[field].isdigit() else None
+                        if new_id is None:
+                            transaction.set_rollback(True)
+                            return JsonResponse({'ok': False, 'errors': {'__all__': ['Не удалось перенести строку формы']}}, status=400)
+                        data[field] = str(new_id)
                 form = factory(data, request.FILES, instance=task)
             elif form:
                 owner = task.subitems.get(pk=mapping[int(subid)]) if subid else task

@@ -205,3 +205,27 @@ class EditorTests(TestCase):
         self.task.save()
         response = self.client.get(reverse('task_detail', args=[self.task.pk]))
         self.assertContains(response, '$x =${{range: 4}}')
+
+    def test_local_source_mapping_survives_reverse_queryset_order(self):
+        from unittest.mock import patch
+        from .models import Source, TaskSource
+        source=Source.objects.create(title='Книга')
+        first=TaskSource.objects.create(task=self.task,source=source,number='1')
+        other_source=Source.objects.create(title='Другая книга')
+        second=TaskSource.objects.create(task=self.task,source=other_source,number='2')
+        item,a,b,url=self.worksheet()
+        with patch.object(TaskSource._meta,'ordering',['-pk']):
+            response=self.client.post(url,{'block':'sources','scope':'local',
+                **formset_management('source_refs',total=2,initial=2),
+                'source_refs-0-id':second.pk,'source_refs-0-source':other_source.pk,'source_refs-0-number':'20',
+                'source_refs-1-id':first.pk,'source_refs-1-source':source.pk,'source_refs-1-number':'10'})
+        self.assertEqual(response.status_code,200,response.content)
+        item.refresh_from_db()
+        self.assertEqual(list(item.task.source_refs.order_by('pk').values_list('number',flat=True)),['20','10'])
+        self.assertEqual(set(self.task.source_refs.values_list('number',flat=True)),{'1','2'})
+
+    def test_manage_supplies_inline_preview_in_same_response(self):
+        self.task.answer_mask='{{number: 42}}'
+        self.task.save()
+        response=self.client.get(self.url,{'preview':'1'})
+        self.assertIn('math-field',response.json()['answers'][0]['preview_html'])
