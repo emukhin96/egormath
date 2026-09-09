@@ -48,5 +48,5 @@ class SubmissionAdmin(admin.ModelAdmin):
 
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
-    list_display = ('submission', 'done', 'reviewer', 'reviewed_at')
-    list_filter = ('done',)
+    list_display = ('submission', 'grade', 'reviewer', 'reviewed_at')
+    list_filter = ('grade',)

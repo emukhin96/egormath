@@ -832,10 +832,11 @@ class ReviewFlowTests(TestCase):
         self.assignment.refresh_from_db()
         self.assertEqual(self.assignment.status, Assignment.STATUS_RETURNED)
 
-    def test_review_form_has_no_grade_scale(self):
+    def test_review_form_has_clickable_grade_scale(self):
         response = self.client.get(
             reverse('review_assignment', args=[self.assignment.pk]))
-        self.assertContains(response, 'Выполнено')
+        self.assertContains(response, 'data-grade="干"')
+        self.assertNotContains(response, 'data-review-done')
         self.assertNotContains(response, 'Отметка')
         self.assertNotContains(response, 'Баллы')
         self.assertNotContains(response, 'name="check_visibility"')
@@ -857,9 +858,8 @@ class ReviewFlowTests(TestCase):
         response = self.client.get(
             reverse('review_assignment', args=[self.assignment.pk]))
         self.assertTrue(response.context['rows'][0]['auto_ok'])
-        self.assertRegex(
-            response.content.decode(),
-            rf'name="sub{submission.pk}_done" data-review-done\s+checked')
+        self.assertNotContains(response, 'data-review-done')
+        self.assertContains(response, 'data-grade="+"')
 
     def test_review_renders_student_answer_as_math(self):
         """Ответ ученика и эталон проходят web_answer: голый TeX — в $…$,
@@ -1078,6 +1078,8 @@ class AutoCheckFlowTests(TestCase):
         self.assertEqual(submission.check_attempts, 0)
 
     def test_teacher_only_mode_hides_result_from_student(self):
+        self.assignment.check_visibility = Assignment.CHECK_TEACHER
+        self.assignment.save()
         response = self._save('0; 2')
         self.assertNotIn('checks', response.json())
         response = self.client.get(self.detail)
@@ -1378,7 +1380,7 @@ class AutoCheckFlowTests(TestCase):
             {'action': 'save', 'check_visibility': 'after_submit'})
         self.assignment.refresh_from_db()
         self.assertEqual(self.assignment.check_visibility,
-                         Assignment.CHECK_TEACHER)
+                         Assignment.CHECK_LIVE)
 
     def test_range_and_number_slots_checked(self):
         self.task.answer_mask = r'{{range: (-\infty; 3]}}'

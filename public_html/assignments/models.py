@@ -46,7 +46,7 @@ class Assignment(models.Model):
         default=STATUS_ASSIGNED)
     check_visibility = models.CharField(
         'Кому видна автосверка', max_length=12, choices=CHECK_CHOICES,
-        default=CHECK_TEACHER,
+        default=CHECK_LIVE,
         help_text='Учитель видит результат всегда; эталон ученику не '
                   'показывается ни в одном режиме. После выдачи не меняется')
     allow_photos = models.BooleanField(
@@ -112,8 +112,7 @@ class Assignment(models.Model):
                 .count())
 
     def result(self):
-        """Итог проверки: (выполнено, всего, процент). Шкалы нет —
-        учитель отмечает каждую задачу «выполнено» или нет.
+        """Итог проверки: зачтённые доли задач, всего и процент.
 
         Числитель и знаменатель — одни и те же видимые элементы листка:
         скрытая или удалённая выполненная задача в кабинет не попадает,
@@ -127,10 +126,9 @@ class Assignment(models.Model):
             .exclude(pk__in=hidden)
             .values_list('task_id', flat=True))
         total = len(task_ids)
-        done_tasks = set(
-            self.submissions.filter(review__done=True)
-            .values_list('task_id', flat=True))
-        done = sum(1 for task_id in task_ids if task_id in done_tasks)
+        scores = {r.submission.task_id: r.credit for r in Review.objects.filter(
+            submission__assignment=self).select_related('submission')}
+        done = sum(scores.get(task_id, 0) for task_id in task_ids)
         percent = round(100 * done / total) if total else 0
         return {'done': done, 'total': total, 'percent': percent}
 
@@ -472,16 +470,25 @@ class SubmissionPhoto(models.Model):
 
 
 class Review(models.Model):
-    """Отметка учителя по одной задаче: выполнена или нет, плюс комментарий.
-
-    Шкал (баллы, «отлично/хорошо») нет: итог работы — число выполненных
-    задач и процент (Assignment.result).
+    """Оценка учителя по задаче и комментарий. Итог учитывает доли задач.
     """
 
     submission = models.OneToOneField(
         Submission, on_delete=models.CASCADE, related_name='review',
         verbose_name='Ответ')
+    GRADE_CHOICES = [('+', 'Полностью правильно'), ('.+', 'Верно, мелкие недочёты'),
+                     ('+-', 'Незначительная ошибка'), ('干', 'Половина решения'),
+                     ('-+', 'Существенное продвижение'), ('.-', 'Есть попытка'),
+                     ('-', 'Не решено'), ('0', 'Не приступал')]
+    CREDITS = {'+': 1, '.+': 1, '+-': .75, '干': .5}
+    grade = models.CharField('Оценка', max_length=2, choices=GRADE_CHOICES, blank=True, default='')
+    # Совместимость с прежними сохранёнными проверками.
     done = models.BooleanField('Выполнено', default=False)
+
+    @property
+    def credit(self):
+        return self.CREDITS.get(self.grade, 0) if self.grade else int(self.done)
+
     comment = models.TextField('Комментарий', blank=True)
     reviewer = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,

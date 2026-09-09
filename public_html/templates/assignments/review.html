@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load task_extras %}
+{% load task_extras static %}
 {% block title %}Проверка: {{ assignment.worksheet.title }} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/review.html' %}{% endblock %}
 {% block content %}
@@ -15,7 +15,7 @@
 </div></div>
 
 <form method="post" action="{% url 'save_review' assignment.pk %}" id="review-form">
-  {% csrf_token %}
+  {% csrf_token %}<input type="hidden" name="grade_interface" value="1">
   {% if owner_filter %}<input type="hidden" name="owner" value="{{ owner_filter }}">{% endif %}
   <div class="review-layout">
   <div class="review-main">
@@ -38,14 +38,6 @@
       {% for sr in row.subrows %}
       <li>
         <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}
-        — <strong>ответ ученика:</strong>
-        {% if sr.fragments and sr.part.has_mask_values %}
-          {# Заполненная маска с бейджем у каждого слота #}
-          {% include 'assignments/_mask.html' with fragments=sr.fragments editable=False show_checks=True %}
-        {% elif sr.part and sr.part.display_answer %}
-          <span class="math-content">{{ sr.part.display_answer|web_answer }}</span>
-          {% include 'assignments/_check_badge.html' with prefix=sr.prefix status=sr.part.auto_check %}
-        {% else %}<span class="muted">нет</span>{% endif %}
         {% if sr.mask_reference %}
           <span class="muted">(эталон маски: <span class="math-content">{{ sr.mask_reference|web_answer }}</span>)</span>
         {% elif sr.subitem.effective_answer_latex %}
@@ -70,84 +62,21 @@
     </details>
     {% endif %}
 
-    {% if row.submission %}
-      {% if not row.subrows %}
-      <div class="answer-block"><strong>Ответ ученика:</strong>
-        {% if row.fragments and row.submission.has_mask_values %}
-          {% include 'assignments/_mask.html' with fragments=row.fragments editable=False show_checks=True %}
-        {% elif row.submission.display_answer %}
-          <span class="math-content">{{ row.submission.display_answer|web_answer }}</span>
-          {% include 'assignments/_check_badge.html' with prefix=row.prefix status=row.submission.auto_check %}
-        {% else %}
-          <span class="muted">нет ответа</span>
-        {% endif %}
-      </div>
-      {% endif %}
-      {% if row.submission.check_attempts %}
-      <details class="check-history">
-        <summary>Самопроверка — нажатий: {{ row.submission.check_attempts }}</summary>
-        {% if row.legacy_attempts %}
-        <p class="helptext">Ранних попыток без сохранённого ответа: {{ row.legacy_attempts }}.</p>
-        {% endif %}
-        {% for attempt in row.attempt_history %}
-        <div class="answer-block">
-          <strong>Попытка {{ attempt.number }}</strong> · {{ attempt.created_at|date:'d.m.Y H:i:s' }} ·
-          {% if attempt.result == 'ok' %}<span class="badge badge-reviewed">✓ верно</span>
-          {% elif attempt.result == 'wrong' %}<span class="badge badge-returned">✗ неверно</span>
-          {% elif attempt.result == 'incomplete' %}<span class="badge badge-assigned">частично</span>
-          {% else %}<span class="badge badge-assigned">? не разобрано</span>{% endif %}
-          {% for target in attempt.snapshot.targets %}
-          <div><span class="muted">{{ target.label }}:</span>
-            {% if target.answer %}<span class="math-content">{{ target.answer|web_answer }}</span>{% else %}<span class="muted">нет ответа</span>{% endif %}
-            {% if target.result == 'ok' %}<span class="badge badge-reviewed">верно</span>{% elif target.result == 'wrong' %}<span class="badge badge-returned">неверно</span>{% elif target.result == 'unknown' %}<span class="badge badge-assigned">не разобрано</span>{% endif %}
-          </div>
-          {% if target.slots %}
-          <ul>
-            {% for slot in target.slots %}
-            <li>{{ slot.label }}: <span class="math-content">{{ slot.value|default:'—'|web_answer }}</span>
-              {% if slot.result == 'ok' %}<span class="badge badge-reviewed">верно</span>{% elif slot.result == 'wrong' %}<span class="badge badge-returned">неверно</span>{% elif slot.result == 'unknown' %}<span class="badge badge-assigned">не разобрано</span>{% endif %}</li>
-            {% endfor %}
-          </ul>
-          {% endif %}
-          {% endfor %}
-        </div>
-        {% endfor %}
-      </details>
-      {% endif %}
-      {% if row.submission.photos.all %}
-      <div class="photo-grid">
-        {% for photo in row.submission.photos.all %}
-        <a href="{% url 'photo_file' photo.pk %}" target="_blank"><img src="{% url 'photo_file' photo.pk %}" alt="фото решения"></a>
-        {% endfor %}
-      </div>
-      {% endif %}
+    <div data-live-answer="{{ row.task.pk }}">{% include 'assignments/_live_answer.html' %}</div>
+    <p>{% include 'assignments/_grade_scale.html' %}</p>
+    {% if row.submission %}<p><label>Комментарий<textarea name="sub{{ row.submission.pk }}_comment" rows="2">{{ row.review.comment|default:'' }}</textarea></label></p>{% endif %}
 
-      <p>
-        {# Пока отзыва нет, чекбокс подсказывает результат автосверки; решает учитель #}
-        <label class="check-label" style="font-weight:normal">
-          <input type="checkbox" name="sub{{ row.submission.pk }}_done" data-review-done
-                 {% if row.review %}{% if row.review.done %}checked{% endif %}{% elif row.auto_ok %}checked{% endif %}>
-          <strong>Выполнено</strong>
-        </label>
-      </p>
-      <p>
-        <label>Комментарий</label>
-        <textarea name="sub{{ row.submission.pk }}_comment" rows="2">{{ row.review.comment|default:'' }}</textarea>
-      </p>
-    {% else %}
-      <p class="muted">Ученик не отправлял ответ на эту задачу.</p>
-    {% endif %}
   </div>
   {% endif %}
   {% endfor %}
   </div>
   <aside class="card review-summary">
     <span class="page-eyebrow">Итог проверки</span>
-    <p class="review-total">Выполнено: <strong><span data-review-total-done>{{ result.done }}</span> из {{ result.total }}</strong>
+    <p class="review-total">Зачтено: <strong><span data-review-total-done>{{ result.done }}</span> из {{ result.total }}</strong>
       (<span data-review-total-percent>{{ result.percent }}</span>%)</p>
     <p class="helptext">
       Автосверка: {{ assignment.get_check_visibility_display|lower }} — режим задан при выдаче и не меняется.
-      Бейджи «верно / неверно» — подсказка; отметку «выполнено» ставите вы. Эталон ученику не показывается.
+      Автосверка — подсказка; оценку решения ставите вы. + и .+ дают 100%, +- — 75%, 干 — 50%; остальные — 0%. Эталон ученику не показывается.
     </p>
     <div class="form-buttons review-actions">
       <button type="submit" name="action" value="save" class="btn btn-secondary">Сохранить черновик</button>
@@ -166,22 +95,4 @@
   </div>
 </form>
 {% endblock %}
-{% block extra_js %}
-<script>
-/* Итог «выполнено N из M» пересчитывается при щелчке по чекбоксам, до сохранения */
-(function () {
-  var form = document.getElementById('review-form');
-  if (!form) return;
-  var total = {{ result.total }};
-  function update() {
-    var done = form.querySelectorAll('[data-review-done]:checked').length;
-    form.querySelector('[data-review-total-done]').textContent = done;
-    form.querySelector('[data-review-total-percent]').textContent = total ? Math.round(100 * done / total) : 0;
-  }
-  form.addEventListener('change', function (e) {
-    if (e.target.matches('[data-review-done]')) update();
-  });
-  update();
-})();
-</script>
-{% endblock %}
+{% block extra_js %}<div data-review-live-url="{% url 'assignment_live' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}"></script>{% endblock %}
