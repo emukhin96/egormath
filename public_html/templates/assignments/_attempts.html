@@ -2,7 +2,7 @@
 {% for attempt in row.attempt_history %}
 <div class="attempt-row">
   <time datetime="{{ attempt.created_at|date:'c' }}" title="Попытка {{ attempt.number }}">{{ attempt.created_at|date:'d.m H:i:s' }}</time>
-  <span class="attempt-answer">{% for target in attempt.snapshot.targets %}{% if target.kind == 'part' %}{{ target.label }}: {% endif %}<span class="math-content">{{ target.readable_answer|default:target.answer|default:'—'|web_answer }}</span>{% if not forloop.last %}; {% endif %}{% endfor %}</span>
+  <div class="attempt-answer">{% for target in attempt.snapshot.targets %}{% if target.kind == 'part' %}{{ target.label }}: {% endif %}{% if target.fragments %}{% include 'assignments/_mask.html' with fragments=target.fragments editable=False show_checks=False %}{% else %}<span class="math-content">{{ target.readable_answer|default:target.answer|default:'—'|web_answer }}</span>{% endif %}{% if not forloop.last %}; {% endif %}{% endfor %}</div>
   <span class="badge {% if attempt.result == 'ok' %}badge-reviewed{% elif attempt.result == 'wrong' %}badge-returned{% else %}badge-assigned{% endif %}">{{ attempt.get_result_display }}</span>
 </div>
 {% empty %}<p class="helptext">Проверок пока нет.</p>{% endfor %}

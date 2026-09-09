@@ -1,6 +1,8 @@
 """Живой обзор назначенного листка и оценки по отдельным задачам."""
-from django.http import JsonResponse
-from django.db.models import Prefetch, OuterRef, Subquery
+import hashlib
+import json
+from django.http import JsonResponse, HttpResponseNotModified
+from django.db.models import Prefetch, OuterRef, Subquery, Max
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.views.decorators.http import require_POST
@@ -29,12 +31,42 @@ def grade_task(request, pk, task_id):
     return JsonResponse({'grade': grade, 'result': assignment.result()})
 
 
+def answer_versions(assignment, item_ids=None):
+    """Лёгкие версии строк без загрузки снимков всех попыток."""
+    hidden = set(assignment.hidden_items.values_list('pk', flat=True))
+    values = assignment.submissions.annotate(last_part=Max('parts__updated_at'),
+        last_photo=Max('photos__uploaded_at'), last_attempt=Max('check_history__pk')).values(
+        'task_id', 'updated_at', 'auto_check', 'check_attempts', 'last_part', 'last_photo', 'last_attempt')
+    if item_ids is not None:
+        values = values.filter(task_id__in=assignment.worksheet.items.filter(pk__in=item_ids).values('task_id'))
+    stamps = {v['task_id']: v for v in values}
+    versions = {}
+    items = assignment.worksheet.ordered_items()
+    if item_ids is not None:
+        items = items.filter(pk__in=item_ids)
+    for item in items:
+        if not item.task_id or item.pk in hidden:
+            continue
+        signature = [stamps.get(item.task_id), item.task.updated_at,
+                     [(s.pk, s.answer_mask) for s in item.selected_subitems()]]
+        versions[str(item.pk)] = hashlib.sha256(json.dumps(signature, default=str).encode()).hexdigest()
+    return versions
+
+
 @teacher_required
 @never_cache
 def assignment_live(request, pk):
     assignment = _teacher_assignment(request, pk)
-    rows = _assignment_rows(assignment, with_review=True)
-    return JsonResponse({'rows': {str(row['task'].pk): render_to_string(
+    versions = answer_versions(assignment)
+    try:
+        previous = json.loads(request.GET.get('versions', '{}'))
+        if not isinstance(previous, dict):
+            previous = {}
+    except (ValueError, TypeError):
+        previous = {}
+    changed = {int(key) for key, version in versions.items() if previous.get(key) != version}
+    rows = _assignment_rows(assignment, with_review=True, item_ids=changed) if changed else []
+    return JsonResponse({'versions': versions, 'rows': {str(row['item'].pk): render_to_string(
         'assignments/_live_answer.html', {'row': row}, request=request)
         for row in rows if row['task']}})
 
@@ -43,13 +75,23 @@ def assignment_live(request, pk):
 @never_cache
 def task_attempts(request, pk, task_id):
     assignment = _teacher_assignment(request, pk)
-    row = next((r for r in _assignment_rows(assignment, with_review=True)
-                if r['task'] and r['task'].pk == task_id), None)
+    items = assignment.worksheet.items.filter(task_id=task_id, deleted_at__isnull=True).exclude(pk__in=assignment.hidden_items.values('pk'))
+    if request.GET.get('item'):
+        items = items.filter(pk=request.GET['item'] if request.GET['item'].isdigit() else 0)
+    item = get_object_or_404(items.order_by('order', 'pk')[:1])
+    version = answer_versions(assignment, {item.pk}).get(str(item.pk), '')
+    grade = list(assignment.submissions.filter(task_id=task_id).values_list('review__grade', 'review__comment'))
+    etag = '"' + hashlib.sha256((version + repr(grade)).encode()).hexdigest() + '"'
+    if request.headers.get('If-None-Match') == etag:
+        return HttpResponseNotModified()
+    row = next((r for r in _assignment_rows(assignment, with_review=True, item_ids={item.pk}) if r['task']), None)
     if row is None:
         from django.http import Http404
         raise Http404
-    return render(request, 'assignments/_progress_detail.html', {
+    response = render(request, 'assignments/_progress_detail.html', {
         'assignment': assignment, 'row': row, 'expand_history': True, 'grade_choices': Review.grade_options()})
+    response['ETag'] = etag
+    return response
 
 
 @teacher_required
@@ -67,6 +109,17 @@ def worksheet_progress(request, worksheet_id):
         group = get_object_or_404(StudentGroup.visible_to(request.user), pk=group_id if group_id.isdigit() else 0)
         assignments = assignments.filter(student__in=group.students.all())
     items = list(worksheet.ordered_items().filter(task__isnull=False))
+    etag = None
+    if request.GET.get('fragment'):
+        state = [list(assignments.values('pk', 'status', 'student__first_name', 'student__last_name', 'student__username')),
+                 list(Submission.objects.filter(assignment__in=assignments).annotate(
+                     last_part=Max('parts__updated_at'), last_photo=Max('photos__uploaded_at'), last_attempt=Max('check_history__pk')).values(
+                     'pk', 'updated_at', 'check_attempts', 'last_part', 'last_photo', 'last_attempt', 'review__reviewed_at')),
+                 list(Assignment.hidden_items.through.objects.filter(assignment__in=assignments).values_list('assignment_id', 'worksheetitem_id')),
+                 [(item.pk, item.task_id, item.order) for item in items]]
+        etag = '"' + hashlib.sha256(json.dumps(state, default=str).encode()).hexdigest() + '"'
+        if request.headers.get('If-None-Match') == etag:
+            return HttpResponseNotModified()
     people = []
     for assignment in assignments.order_by('student__last_name', 'student__username'):
         hidden = {i.pk for i in assignment.hidden_items.all()}
@@ -87,4 +140,7 @@ def worksheet_progress(request, worksheet_id):
     context = {'worksheet': worksheet, 'items': items, 'people': people,
                'groups': StudentGroup.visible_to(request.user), 'group_id': group_id}
     template = 'assignments/_progress_table.html' if request.GET.get('fragment') else 'assignments/progress.html'
-    return render(request, template, context)
+    response = render(request, template, context)
+    if etag:
+        response['ETag'] = etag
+    return response

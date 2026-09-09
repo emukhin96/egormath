@@ -62,9 +62,9 @@
     </details>
     {% endif %}
 
-    <div data-live-answer="{{ row.task.pk }}">{% include 'assignments/_live_answer.html' %}</div>
+    <div data-live-answer="{{ row.item.pk }}">{% include 'assignments/_live_answer.html' %}</div>
     <p>{% include 'assignments/_grade_scale.html' %}</p>
-    {% if row.submission %}<p class="review-comment"><label>Комментарий<textarea name="sub{{ row.submission.pk }}_comment" rows="2">{{ row.review.comment|default:'' }}</textarea></label></p>{% endif %}
+    <p class="review-comment"><label>Комментарий<textarea name="task{{ row.task.pk }}_comment" rows="2">{{ row.review.comment|default:'' }}</textarea></label></p>
 
   </div>
   {% endif %}
@@ -95,4 +95,4 @@
   </div>
 </form>
 {% endblock %}
-{% block extra_js %}<div data-review-live-url="{% url 'assignment_live' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=2"></script>{% endblock %}
+{% block extra_js %}<div data-review-live-url="{% url 'assignment_live' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=3"></script>{% endblock %}

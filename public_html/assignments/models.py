@@ -477,10 +477,10 @@ class Review(models.Model):
         Submission, on_delete=models.CASCADE, related_name='review',
         verbose_name='Ответ')
     GRADE_CHOICES = [('+', 'Полностью правильно'), ('.+', 'Верно, мелкие недочёты'),
-                     ('+-', 'Незначительная ошибка'), ('干', 'Половина решения'),
+                     ('+-', 'Незначительная ошибка'), ('=', 'Половина решения'),
                      ('-+', 'Существенное продвижение'), ('.-', 'Есть попытка'),
                      ('-', 'Не решено'), ('0', 'Не приступал')]
-    SYMBOLS = {'+-': '±', '.-': '.–', '-': '–', '-+': '–+'}
+    SYMBOLS = {'=': '干', '+-': '±', '.-': '.–', '-': '–', '-+': '–+'}
 
     @classmethod
     def grade_options(cls):
@@ -490,7 +490,7 @@ class Review(models.Model):
     def grade_symbol(self):
         return self.SYMBOLS.get(self.grade, self.grade)
 
-    CREDITS = {'+': 1, '.+': 1, '+-': .75, '干': .5}
+    CREDITS = {'+': 1, '.+': 1, '+-': .75, '=': .5}
     grade = models.CharField('Оценка', max_length=2, choices=GRADE_CHOICES, blank=True, default='')
     # Совместимость с прежними сохранёнными проверками.
     done = models.BooleanField('Выполнено', default=False)

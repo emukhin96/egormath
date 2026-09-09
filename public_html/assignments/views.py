@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 
 from django.contrib import messages
@@ -229,10 +230,12 @@ def _student_assignment(request, pk):
         pk=pk, student=request.user)
 
 
-def _assignment_rows(assignment, with_review=False):
+def _assignment_rows(assignment, with_review=False, item_ids=None):
     """Строки листка для ученика/учителя: задачи с подпунктами и ответами,
     текстовые элементы — только для отображения."""
     qs = assignment.submissions.prefetch_related('photos', 'parts')
+    if item_ids is not None:
+        qs = qs.filter(task_id__in=assignment.worksheet.items.filter(pk__in=item_ids).values('task_id'))
     if with_review:
         qs = qs.prefetch_related('check_history')
     qs = qs.select_related('review') if with_review \
@@ -241,13 +244,21 @@ def _assignment_rows(assignment, with_review=False):
     hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     rows = []
     number = 0
-    for item in assignment.worksheet.ordered_items():
+    items = assignment.worksheet.ordered_items()
+    numbers = {}
+    if item_ids is not None:
+        visible_ids = [pk for pk, task_id in items.values_list('pk', 'task_id') if task_id and pk not in hidden]
+        numbers = {pk: n + 1 for n, pk in enumerate(visible_ids)}
+        items = items.filter(pk__in=item_ids)
+    for item in items:
         if item.pk in hidden:
             continue
         if item.task_id is None:
             rows.append({'item': item, 'task': None, 'number': None})
             continue
-        number += 1
+        number = numbers[item.pk] if item_ids is not None else number + 1
+        if item_ids is not None and item.pk not in item_ids:
+            continue
         submission = submissions.get(item.task_id)
         parts = {}
         if submission:
@@ -282,14 +293,21 @@ def _assignment_rows(assignment, with_review=False):
             attempt_history = list(submission.check_history.all())[::-1]
             submission.check_attempts = max(submission.check_attempts,
                                             max((a.number for a in attempt_history), default=0))
+            # Старые снимки не содержат фрагментов: заменяем только целые
+            # токены за один проход, не обрабатывая результат замены повторно.
             for attempt in attempt_history:
                 for target in attempt.snapshot.get('targets', []):
-                    readable = target.get('answer', '')
+                    if target.get('fragments'):
+                        continue
+                    tokens = {}
                     for slot in target.get('slots', []):
                         value = slot.get('value', '')
-                        shown = value if '$' in value else (f'${value}$' if value and (value[0].isdigit() or value.startswith(('\\', '-'))) else value)
-                        readable = readable.replace('[' + value + ']', shown)
-                    target['readable_answer'] = readable
+                        if value:
+                            shown = value if '$' in value or not (value[0].isdigit() or value.startswith(('\\', '-'))) else f'${value}$'
+                            tokens['[' + value + ']'] = shown
+                    if tokens:
+                        target['readable_answer'] = re.sub('|'.join(re.escape(t) for t in tokens),
+                            lambda match: tokens[match.group()], target.get('answer', ''))
             legacy_attempts = max(
                 submission.check_attempts - len(attempt_history), 0)
         # Все выбранные подпункты (или задача целиком) сошлись с эталоном —
@@ -544,6 +562,8 @@ def _attempt_target(obj, *, kind, object_id, label):
         'result': obj.auto_check,
         'complete': complete,
         'slots': slots,
+        'fragments': [{k: v for k, v in fragment.items() if k in ('text', 'display', 'kind')}
+                      for fragment in (obj.mask_fragments('history', for_teacher=True) or [])],
     }
 
 
@@ -841,9 +861,14 @@ def save_review(request, pk):
 
     hidden_item_ids = set(assignment.hidden_items.values_list('pk', flat=True))
     visible_task_ids = set(
-        assignment.worksheet.items.filter(task__isnull=False)
+        assignment.worksheet.items.filter(task__isnull=False, deleted_at__isnull=True)
         .exclude(pk__in=hidden_item_ids)
         .values_list('task_id', flat=True))
+    if 'grade_interface' in request.POST:
+        for task_id in visible_task_ids:
+            key = f'task{task_id}_comment'
+            if key in request.POST and request.POST[key].strip():
+                Submission.objects.get_or_create(assignment=assignment, task_id=task_id)
     for submission in assignment.submissions.all():
         # Пропускаем только если у задачи нет ни одного видимого элемента
         if submission.task_id not in visible_task_ids:
@@ -852,11 +877,12 @@ def save_review(request, pk):
         # Полей нет в POST — задачу скрыли или убрали из формы: отзыв не
         # трогаем. Чекбокс в POST не приходит, когда снят, поэтому признак
         # присутствия строки — поле комментария
-        if f'{prefix}_comment' not in request.POST:
+        comment_key = f'task{submission.task_id}_comment' if f'task{submission.task_id}_comment' in request.POST else f'{prefix}_comment'
+        if comment_key not in request.POST:
             continue
         existing = getattr(submission, 'review', None)
         done = existing.done if 'grade_interface' in request.POST and existing else f'{prefix}_done' in request.POST
-        comment = request.POST.get(f'{prefix}_comment', '').strip()
+        comment = request.POST.get(comment_key, '').strip()
         # Строка есть в форме — сохраняем явное done=False, даже без
         # комментария. Иначе снятие автофлажка удаляет Review, и при
         # следующем открытии auto_ok снова включит «Выполнено».

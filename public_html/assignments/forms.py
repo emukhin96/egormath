@@ -53,7 +53,8 @@ class AssignmentCreateForm(forms.Form):
             format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}))
     check_visibility = forms.ChoiceField(
         label='Автосверка ответов', choices=Assignment.CHECK_CHOICES,
-        initial=Assignment.CHECK_LIVE)
+        initial=Assignment.CHECK_LIVE,
+        help_text='По умолчанию ученик проверяет ответ кнопкой. После первой выдачи режим листка изменить нельзя.')
     allow_photos = forms.BooleanField(
         label='Принимать фото решений', required=False, initial=True)
 

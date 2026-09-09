@@ -257,6 +257,7 @@
   .grade-scale { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); }
   .grade-scale [aria-pressed="true"] { background: var(--accent); color: white; }
   .attempt-row { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+  .attempt-answer .mask-answer { display: inline; margin: 0; }
   .attempt-row time { white-space: nowrap; }
   .attempt-row .attempt-answer { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
   .progress-table-wrap { max-width: 100%; overflow-x: auto; }

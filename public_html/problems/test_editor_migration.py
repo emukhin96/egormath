@@ -30,8 +30,14 @@ class LegacyAnswerMigrationTests(TransactionTestCase):
             part = apps.get_model('assignments', 'SubmissionPart').objects.create(
                 submission_id=parent.pk, subitem_id=sub.pk,
                 interval_low='-2', interval_high='3', auto_check='wrong')
+            photo_only = Task.objects.create(text_latex='Только фото', answer_mode='extended', answer_mask='{{number: 4}}')
+            photo_sub = apps.get_model('problems', 'TaskSubitem').objects.create(task=photo_only, text_latex='Подпункт', answer_mask='{{number: 5}}')
             executor = MigrationExecutor(connection)
             executor.migrate(current)
+            from problems.models import Task as NewTask, TaskSubitem as NewSub
+            self.assertEqual(NewTask.objects.get(pk=photo_only.pk).answer_mask, '')
+            self.assertEqual(NewSub.objects.get(pk=photo_sub.pk).answer_mask, '')
+            self.assertFalse(NewTask.objects.get(pk=photo_only.pk).short_answer_available())
             from assignments.models import Submission as NewSubmission, SubmissionPart
             numeric = NewSubmission.objects.get(pk=numeric.pk)
             part = SubmissionPart.objects.get(pk=part.pk)
