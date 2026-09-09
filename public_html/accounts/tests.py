@@ -53,13 +53,24 @@ class StudentRegistrationTests(TestCase):
                 self.assertContains(response, 'Егор Мухин, 2026')
                 self.assertNotContains(response, 'EgorMath')
 
-    def test_pages_include_favicon(self):
+    def test_pages_include_production_favicon(self):
+        # Django гоняет тесты с DEBUG=False, как на проде.
         response = self.client.get(reverse('login'))
-        self.assertContains(response, 'favicon.svg')
+        self.assertContains(response, 'href="/static/favicon.svg"')
         self.assertContains(response, 'apple-touch-icon.png')
+        self.assertNotContains(response, 'favicon-local')
         response = self.client.get('/favicon.ico')
-        self.assertEqual(response.status_code, 301)
-        self.assertIn('favicon.ico', response['Location'])
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], '/static/favicon.ico')
+
+    def test_pages_include_local_favicon(self):
+        with self.settings(DEBUG=True):
+            response = self.client.get(reverse('login'))
+            self.assertContains(response, 'favicon-local.svg')
+            self.assertContains(response, 'apple-touch-icon-local.png')
+            response = self.client.get('/favicon.ico')
+            self.assertEqual(response.status_code, 302)
+            self.assertIn('favicon-local.ico', response['Location'])
 
     def test_registered_student_attaches_to_superuser(self):
         admin = User.objects.create_superuser(
