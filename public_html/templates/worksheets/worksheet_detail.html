@@ -121,7 +121,7 @@
             <a class="task-id" href="{% url 'task_detail' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}
             · <button type="button" class="link-btn ws-star-reset"
                       data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
-                      {% if item.stars_override == None %}hidden{% endif %}>звёзды как в базе ({{ item.task.stars }})</button>
+                      title="Убрать все звёзды только в этом листке">сбросить звёзды</button>
             {% if item.task.subitems.all %}
             <label class="inline-label">колонки
               <input type="number" name="columns" form="settings-{{ item.pk }}"
@@ -462,6 +462,6 @@
 <script defer src="{% static 'js/problem_editor.js' %}"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}"></script>
-<script defer src="{% static 'js/builder.js' %}"></script>
+<script defer src="{% static 'js/builder.js' %}?v=3"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
 {% endblock %}

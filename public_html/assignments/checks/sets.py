@@ -311,7 +311,11 @@ def _parse_range_atom(piece, tokens):
         if parsed is None:
             parsed = parse_interval(tokens[int(m.group(1))])
         return None if parsed is None else [parsed]
-    return _inequality(piece)
+    inequality = _inequality(piece)
+    if inequality is not None:
+        return inequality
+    values = parse_set(piece)
+    return [(v, v, '[', ']') for v in values] if values is not None else None
 
 
 def parse_range(text):
@@ -327,6 +331,9 @@ def parse_range(text):
         return frozenset()
     if low in ALL_WORDS:
         return frozenset({(-INF, INF, '(', ')')})
+    finite = parse_set(text)
+    if finite is not None:
+        return _normalize_intervals([(v, v, '[', ']') for v in finite])
     tokens = []
 
     def _stash(m):

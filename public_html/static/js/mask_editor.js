@@ -160,7 +160,7 @@
       if (author && author.value.trim()) answer = author;
       if (!textarea || !answer) return;
       if (!answer.value.trim()) { toast(false, 'Поле «Ответ» пустое — заготовку делать не из чего'); return; }
-      post(draftUrl, {answer: answer.value}).then(function (res) {
+      post(draftUrl, {answer: answer.value, condition: (form.querySelector('[name=text_latex]')?.value || '') + (row ? '\n' + (row.querySelector('[name$="-text_latex"]')?.value || '') : '')}).then(function (res) {
         if (!res.ok) { toast(false, res.message || 'Не удалось сделать заготовку'); return; }
         if (textarea.value.trim() && !window.confirm('Заменить текущую маску заготовкой?')) return;
         textarea.value = res.mask;

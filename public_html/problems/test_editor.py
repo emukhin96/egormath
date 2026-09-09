@@ -190,3 +190,12 @@ class EditorTests(TestCase):
         self.assertEqual(self.task.difficulty, 3)
         self.assertIn('data-grades="1"', response.json()['html'])
         self.assertNotIn('name="grade_level"', response.json()['html'])
+
+    def test_mask_draft_uses_condition_from_request(self):
+        response = self.client.post(reverse('task_mask_draft'), {
+            'answer': '4', 'condition': 'Решите уравнение x-4=0.'})
+        self.assertEqual(response.json()['mask'], '$x =${{range: 4}}')
+        self.task.answer_mask = '$x =${{range: 4}}'
+        self.task.save()
+        response = self.client.get(reverse('task_detail', args=[self.task.pk]))
+        self.assertContains(response, '$x =${{range: 4}}')

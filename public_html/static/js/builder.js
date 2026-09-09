@@ -75,7 +75,6 @@
       function setStars(value) {
         hidden.value = value === null ? '' : String(value);
         paintStars(widget, value === null ? Number(reset.dataset.base) : value);
-        if (reset) reset.hidden = value === null;
         autosave(form);
       }
 
@@ -88,7 +87,7 @@
         });
       });
       if (reset) {
-        reset.addEventListener('click', function () { setStars(null); });
+        reset.addEventListener('click', function () { setStars(0); });
       }
     });
 

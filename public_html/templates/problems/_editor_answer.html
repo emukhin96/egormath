@@ -15,6 +15,7 @@
     <button type="button" class="btn btn-secondary" data-mask-edit="{{ sub.pk|default:'' }}">{% if owner.answer_mask %}Настроить{% else %}Добавить маску{% endif %}</button>
     <button type="button" class="btn btn-secondary" data-mask-preview="{{ sub.pk|default:'' }}">Предпросмотр</button>
   </div>
+  {% if owner.answer_mask %}<div class="problem-mask-code math-content">{{ owner.answer_mask|web_text }}</div>{% endif %}
   {% if not owner.has_mask %}<p class="helptext">Пока ученик может прислать только фото решения.</p>{% endif %}
   <details class="problem-solution" {% if owner.effective_solution_latex %}open{% endif %}>
     <summary>Решение</summary>
