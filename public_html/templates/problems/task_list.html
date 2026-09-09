@@ -7,7 +7,7 @@
   <div>
     <span class="page-eyebrow">Материалы</span>
     <h1>База задач</h1>
-    <p class="page-subtitle">Поиск и быстрое редактирование задач.</p>
+    <p class="page-subtitle">Поиск, темы и материалы задач.</p>
   </div>
   <div class="form-buttons">
     <a class="btn" href="{% url 'task_create' %}">Новая задача</a>
@@ -58,89 +58,29 @@
           onclick="return confirm('Удалить выбранные задачи? Задачи из листков и с ответами учеников останутся.');">Удалить выбранные</button>
 </form>
 <div class="card task-catalog">
-<div class="table-summary"><strong>Найдено: {{ page.paginator.count }}</strong><span>Изменения сохраняются автоматически</span></div>
-<table class="list">
-  <colgroup>
-    <col class="col-select">
-    <col>
-    <col class="col-grade">
-    <col class="col-answer">
-    <col class="col-source">
-    <col class="col-topics">
-    {% if cart %}<col class="col-cart">{% endif %}
-  </colgroup>
-  <tr>
-    <th class="col-select"><input type="checkbox" data-bulk-all="task-bulk-form"
-        title="Выбрать все задачи на странице"></th>
-    <th>Задача</th><th class="col-grade">Класс</th>
-    <th class="col-answer">Ответ</th><th class="col-source">Источник</th><th>Темы</th>
-    {% if cart %}<th class="col-cart" title="В корзину"></th>{% endif %}
-  </tr>
-  {% for task in page %}
-  {% with ref=task.source_refs.all|first %}
-  <tr>
-    <td class="col-select">
-      <input type="checkbox" class="row-select" name="ids" value="{{ task.pk }}"
-             form="task-bulk-form" title="Выбрать задачу">
-    </td>
-    <td>
-      <div class="task-line">
-        <a class="task-id" href="{% url 'task_detail' task.pk %}"
-           title="Открыть задачу">#{{ task.pk }}</a>
-        {% include 'problems/_mask_badge.html' %}
-        <div class="task-main">
-          <span class="math-content task-text">{{ task.text_latex|web_text_preview:220 }}</span>
-          {% include 'problems/_subitems.html' with subitems=task.subitems.all %}
-        </div>
-      </div>
-    </td>
-    <td class="col-grade">
-      <form method="post" action="{% url 'task_quick_update' task.pk %}"
-            data-autosave="change" class="inline-form">
-        {% csrf_token %}
-        <select name="grade_level" class="quick-select" title="Класс — сохраняется сразу">
-          {% include 'includes/grade_options.html' with selected=task.grade_option %}
-        </select>
-      </form>
-    </td>
-    <td class="col-answer">
-      <form method="post" action="{% url 'task_quick_update' task.pk %}"
-            data-autosave="debounce">
-        {% csrf_token %}
-        <textarea name="answer_latex" rows="1" class="quick-input"
-                  title="Ответ (LaTeX) — сохраняется сам">{{ task.answer_latex }}</textarea>
-      </form>
-    </td>
-    <td class="col-source">
-      <form method="post" action="{% url 'task_quick_update' task.pk %}"
-            data-autosave="debounce" class="quick-source">
-        {% csrf_token %}
-        <select name="source" class="quick-select" title="Источник — сохраняется сам">
-          <option value="">—</option>
-          {% for s in sources %}
-          <option value="{{ s.pk }}" {% if ref.source_id == s.pk %}selected{% endif %}>{{ s|truncatechars:40 }}</option>
-          {% endfor %}
-        </select>
-        <input type="text" name="number" value="{{ ref.number|default:'' }}"
-               placeholder="№" class="quick-number">
-        {% if task.source_refs.all|length > 1 %}
-        <span class="task-meta">и ещё {{ task.source_refs.all|length|add:'-1' }}</span>
-        {% endif %}
-      </form>
-    </td>
-    <td>
-      <form method="post" action="{% url 'task_quick_update' task.pk %}"
-            data-autosave="change" class="inline-form">
-        {% csrf_token %}
-        {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True selected_json=task.taxonomy_json %}
-      </form>
-    </td>
-    {% if cart %}<td class="col-cart">{% include 'includes/cart_button.html' with task=task %}</td>{% endif %}
-  </tr>
-  {% endwith %}
-  {% endfor %}
-</table>
-</div>
+<div class="table-summary"><strong>Найдено: {{ page.paginator.count }}</strong>
+<label class="ws-toggle"><input type="checkbox" id="toggle-catalog-answers"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Ответы и решения</span></label>
+<label class="ws-toggle"><input type="checkbox" id="toggle-masks" data-storage-key="catalog-masks"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Маски ответов</span></label></div>
+<div class="catalog-table-wrap"><table class="list catalog-table">
+<colgroup><col class="col-select"><col class="col-key"><col><col class="col-topics"></colgroup>
+<thead><tr><th><input type="checkbox" data-bulk-all="task-bulk-form" title="Выбрать все задачи на странице"></th><th>№</th><th>Задание и подпункты</th><th>Раздел и темы</th></tr></thead><tbody>
+{% for task in page %}<tr>
+<td><input type="checkbox" class="row-select" name="ids" value="{{ task.pk }}" form="task-bulk-form" title="Выбрать задачу"></td>
+<td><a class="task-id" href="{% url 'task_detail' task.pk %}">#{{ task.pk }}</a></td>
+<td><div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
+{% include 'problems/_subitems.html' with subitems=task.subitems.all %}
+{% task_images task %}
+{% include 'problems/_task_answers.html' with subitems=task.subitems.all hide_answers=True %}
+<div data-worksheet-mask data-task-id="{{ task.pk }}" data-manage-url="{% url 'task_manage' task.pk %}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
+<div class="form-buttons">{% include 'includes/cart_button.html' with task=task %}
+<form method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn">Дублировать</button></form></div>
+</td>
+<td><div class="import-section-path">{% for ref in task.source_refs.all %}<div>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}</div>{% for part in ref.source_path %}<div class="import-section-part">{{ part|heading_dot }}</div>{% endfor %}{% endfor %}</div>
+<form method="post" action="{% url 'task_quick_update' task.pk %}" data-autosave="change">{% csrf_token %}
+<label>Класс<select name="grade_level" class="quick-select">{% include 'includes/grade_options.html' with selected=task.grade_option %}</select></label>
+{% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True chip_full=True selected_json=task.taxonomy_json %}
+</form></td></tr>{% endfor %}
+</tbody></table></div></div>
 
 {% include 'includes/pagination.html' with page=page query=params %}
 {% else %}
@@ -148,4 +88,8 @@
 {% endif %}
 <script defer src="{% static 'js/bulk.js' %}"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
+{% include 'problems/_mask_dialogs.html' %}
+<script defer src="{% static 'js/problem_editor.js' %}"></script>
+{% include 'problems/_mask_scripts.html' %}
+<script defer src="{% static 'js/task_catalog.js' %}"></script>
 {% endblock %}

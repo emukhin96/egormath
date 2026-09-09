@@ -1219,6 +1219,15 @@
   /* Служебные колонки — фиксированная ширина через colgroup; «Задача»
      забирает остаток. Иначе table-layout:fixed отдаёт лишние проценты
      в первую колонку (чекбоксы). */
+  .catalog-table-wrap { overflow-x: auto; }
+  .task-catalog .catalog-table { min-width: 680px; }
+  .task-catalog col.col-key { width: 5rem; }
+  .task-catalog .catalog-table col.col-topics { width: 32%; }
+  .catalog-table td { overflow-wrap: anywhere; vertical-align: top; }
+  .catalog-table .task-text { margin-bottom: var(--space-2); }
+  .catalog-table .import-section-path { margin-bottom: var(--space-3); }
+  .problem-columns label { display: block; }
+  .problem-columns .inline-label, .problem-columns .label-row label { display: inline-flex; }
   .task-catalog table.list {
     table-layout: fixed;
     width: 100%;
@@ -2125,11 +2134,6 @@
   table.formset td.mask-cell .mask-cell-row textarea {
     flex: 1 1 auto;
     min-width: 0;
-  }
-
-  .mask-badge {
-    margin-left: var(--space-1);
-    font-size: 0.72rem;
   }
 
   .pic-snippet {

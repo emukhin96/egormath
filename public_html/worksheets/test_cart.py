@@ -141,7 +141,7 @@ class CartTests(TestCase):
         self._fill(self.task)
         response = self.client.get(reverse('task_list'))
         self.assertContains(response, 'class="cart-btn is-in-cart"')
-        self.assertContains(response, 'col-cart')
+        self.assertContains(response, 'data-cart-form')
         self.assertContains(response, 'data-cart-menu')
         cart = response.context['cart']
         self.assertEqual(cart['count'], 1)

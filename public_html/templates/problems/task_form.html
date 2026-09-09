@@ -14,14 +14,10 @@
 <p class="muted">Из конструктора листка «{{ worksheet.title }}».</p>
 {% endif %}
 
-<div class="card">
-  <form method="post" enctype="multipart/form-data" id="task-form"
-        {% if not task %}data-new-task="1"{% endif %}>
-    {% csrf_token %}
-    {% include 'problems/_task_form_buttons.html' %}
-    {{ form.non_field_errors }}
-
-    <p>
+<form method="post" enctype="multipart/form-data" id="task-form" {% if not task %}data-new-task="1"{% endif %}>
+{% csrf_token %}{{ form.non_field_errors }}
+<div class="problem-columns">
+<div class="card"><section class="problem-section"><h2>Условие</h2>    <p>
       <label for="{{ form.text_latex.id_for_label }}">{{ form.text_latex.label }}</label>
       {{ form.text_latex.errors }}{{ form.text_latex }}
       <span class="helptext">Условие в LaTeX, как для пакета egor; математика — $...$ и \[...\].
@@ -30,7 +26,14 @@
         в конец условия автоматически.</span>
     </p>
 
-    {{ form.grade_level }}
+</section><details class="problem-section" {% if subitem_formset.total_error_count %}open{% endif %}><summary>Подпункты: добавить, изменить порядок</summary>
+<p class="helptext">Каждый подпункт — отдельная строка со своим ответом и маской.</p>
+{{ subitem_formset.management_form }}{{ subitem_formset.non_form_errors }}
+<table class="list formset" data-formset="subitems"><thead><tr><th>Порядок</th><th>Подпункт</th><th>Удалить</th></tr></thead><tbody>
+{% for f in subitem_formset %}<tr class="formset-row"><td>{{ f.id }}{{ f.order.errors }}{{ f.order }}</td><td>{{ f.non_field_errors }}<p>{{ f.text_latex.label_tag }}{{ f.text_latex.errors }}{{ f.text_latex }}</p>{% include 'problems/_task_answer_fields.html' with fields=f %}</td><td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="icon-btn formset-remove" aria-label="Убрать подпункт">×</button>{% endif %}</td></tr>{% endfor %}
+</tbody></table>
+<template data-formset="subitems"><tr class="formset-row"><td>{{ subitem_formset.empty_form.id }}{{ subitem_formset.empty_form.order }}</td><td><p>{{ subitem_formset.empty_form.text_latex.label_tag }}{{ subitem_formset.empty_form.text_latex }}</p>{% include 'problems/_task_answer_fields.html' with fields=subitem_formset.empty_form %}</td><td><button type="button" class="icon-btn formset-remove" aria-label="Убрать подпункт">×</button></td></tr></template>
+<div class="form-buttons"><button type="button" class="btn btn-secondary formset-add" data-formset="subitems">Добавить подпункт</button></div></details><details class="problem-section" {% if form.errors %}open{% endif %}><summary>Классификация и печать</summary>    {{ form.grade_level }}
     <div class="form-grid">
       <div>
         <div class="label-row">
@@ -60,100 +63,7 @@
       {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=True grades=True selected_json=selected_json %}
     </div>
 
-    <details class="ws-add-text"><summary>Авторский ответ и решение</summary><p>{{ form.author_answer_latex.label_tag }}{{ form.author_answer_latex }}</p><p>{{ form.author_solution_latex.label_tag }}{{ form.author_solution_latex }}</p></details>
-    <p>
-      <label for="{{ form.answer_latex.id_for_label }}">{{ form.answer_latex.label }}</label>
-      {{ form.answer_latex.errors }}{{ form.answer_latex }}
-    </p>
-    <p>
-      <label for="{{ form.solution_latex.id_for_label }}">{{ form.solution_latex.label }}</label>
-      {{ form.solution_latex.errors }}{{ form.solution_latex }}
-    </p>
-    <div class="form-buttons">
-      <button type="button" class="btn btn-secondary" data-neuro="task-form-answer"
-              {% if task %}data-task-id="{{ task.pk }}"{% endif %}
-              title="Ответ в пустые поля — существующие ответы и решения не трогаем">Дописать AI-ответ</button>
-      <button type="button" class="btn btn-secondary" data-neuro="task-form"
-              {% if task %}data-task-id="{{ task.pk }}"{% endif %}
-              title="Черновик ответа и решения от нейросети — проверьте перед сохранением">Добавить AI-решение</button>
-    </div>
-
-    <h2>Маска ответа для ученика</h2>
-    <p class="helptext">Поля «Ответ» и «Решение» выше — для учителя и PDF. Ученик
-      отвечает по маске: текст со слотами <code>{{ '{{' }}тип: данные}}</code>,
-      каждый слот проверяется по своим правилам. Без рабочей маски ученик может прислать только фото решения.
-      Единицы измерения пишите в тексте маски, а не в слоте.</p>
-    <p>
-      <label for="{{ form.answer_mask.id_for_label }}">{{ form.answer_mask.label }}</label>
-      {{ form.answer_mask.errors }}{{ form.answer_mask }}
-    </p>
-    <div class="form-buttons">
-      <button type="button" class="btn btn-small btn-secondary" data-mask-draft
-              title="Черновик маски из поля «Ответ» для очевидных случаев: число, промежуток, пары, уравнение">Заготовка из ответа</button>
-    </div>
-    <details class="mask-help">
-      <summary>Справка по слотам маски</summary>
-      <table class="list mask-help-table">
-        {% for example, hint in mask_help %}
-        <tr><td><code>{{ example }}</code></td><td>{{ hint }}</td></tr>
-        {% endfor %}
-      </table>
-      <p class="helptext">Внутри слота можно писать LaTeX с фигурными скобками
-        (<code>{{ '{{' }}simplify: \frac{2}{a+3}}}</code>) — скобки считаются по
-        балансу. Несколько значений — через «;» (запятая занята десятичной
-        дробью), варианты — через «|».</p>
-    </details>
-    <div class="card mask-preview" id="mask-preview" hidden
-         data-preview-url="{% url 'task_mask_preview' %}"
-         data-draft-url="{% url 'task_mask_draft' %}">
-      <div class="label-row">
-        <strong data-mask-title>Превью</strong>
-        <span class="helptext">Заполните поля пробным ответом — проверка пройдёт тем же кодом, что у ученика.</span>
-      </div>
-      <ul class="errorlist" data-mask-errors hidden></ul>
-      <div data-mask-html></div>
-      <div class="form-buttons">
-        <button type="button" class="btn btn-small btn-secondary" data-mask-check>Проверить пробный ответ</button>
-        <span class="helptext" data-mask-result></span>
-      </div>
-    </div>
-
-    <h2>Подпункты</h2>
-    <p class="helptext">Каждый подпункт — отдельной строкой, без \item и без
-      знака препинания в конце: «;» и «.» система расставит сама. При
-      составлении листка подпункты можно включать выборочно.</p>
-    {{ subitem_formset.management_form }}
-    {{ subitem_formset.non_form_errors }}
-    <table class="list formset" data-formset="{{ subitem_formset.prefix }}">
-      <tr><th style="width:70px">Порядок</th><th>Текст (LaTeX)</th><th>Ответ (LaTeX)</th><th>Решение (LaTeX)</th><th>Маска ответа</th><th>Удалить</th></tr>
-      {% for f in subitem_formset %}
-      <tr class="formset-row">
-        <td>{{ f.id }}{{ f.order }}</td>
-        <td>{{ f.text_latex.errors }}{{ f.text_latex }}</td>
-        <td>{{ f.answer_latex.errors }}{{ f.answer_latex }}</td>
-        <td>{{ f.solution_latex.errors }}{{ f.solution_latex }}</td>
-        <td class="mask-cell">{{ f.answer_mask.errors }}<div class="mask-cell-row">{{ f.answer_mask }}
-          <button type="button" class="icon-btn" data-mask-draft title="Заготовка маски из ответа подпункта">⇠</button></div></td>
-        <td>{% if f.instance.pk %}{{ f.DELETE }}{% else %}<button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button>{% endif %}</td>
-      </tr>
-      {% for err in f.non_field_errors %}<tr><td colspan="6" class="errorlist">{{ err }}</td></tr>{% endfor %}
-      {% endfor %}
-    </table>
-    <template data-formset="{{ subitem_formset.prefix }}">
-      <tr class="formset-row">
-        <td>{{ subitem_formset.empty_form.id }}{{ subitem_formset.empty_form.order }}</td>
-        <td>{{ subitem_formset.empty_form.text_latex }}</td>
-        <td>{{ subitem_formset.empty_form.answer_latex }}</td>
-        <td>{{ subitem_formset.empty_form.solution_latex }}</td>
-        <td class="mask-cell"><div class="mask-cell-row">{{ subitem_formset.empty_form.answer_mask }}
-          <button type="button" class="icon-btn" data-mask-draft title="Заготовка маски из ответа подпункта">⇠</button></div></td>
-        <td><button type="button" class="icon-btn formset-remove" title="Убрать строку">×</button></td>
-      </tr>
-    </template>
-    <p><button type="button" class="btn btn-small btn-secondary formset-add"
-               data-formset="{{ subitem_formset.prefix }}">+ подпункт</button></p>
-
-    <h2>Картинки</h2>
+</details><details class="problem-section" {% if image_formset.total_error_count or formset.total_error_count %}open{% endif %}><summary>Изображения и источники</summary>    <h2>Картинки</h2>
     <p class="helptext">Иллюстрации к условию: в PDF верстаются внизу страницы
       с подписью «К задаче N» (\taskpic / \flushpics). Форматы: PNG/JPEG или
       векторный PDF. Картинку можно вставить прямо из буфера обмена
@@ -223,13 +133,32 @@
                data-formset="{{ formset.prefix }}">+ источник</button></p>
     <p class="helptext">Новые учебники добавляет администратор в админке.</p>
 
-    {% include 'problems/_task_form_buttons.html' %}
-  </form>
-</div>
+</details></div>
+<div class="card"><h2>Ответы и ввод ученика</h2>
+{% include 'problems/_task_answer_fields.html' with fields=form %}
+<div class="form-buttons"><button type="button" class="btn btn-secondary" data-neuro="task-form-answer">Дописать AI-ответ</button><button type="button" class="btn btn-secondary" data-neuro="task-form">Добавить AI-решение</button></div>
+    <div class="card mask-preview" id="mask-preview" hidden
+         data-preview-url="{% url 'task_mask_preview' %}"
+         data-draft-url="{% url 'task_mask_draft' %}">
+      <div class="label-row">
+        <strong data-mask-title>Превью</strong>
+        <span class="helptext">Заполните поля пробным ответом — проверка пройдёт тем же кодом, что у ученика.</span>
+      </div>
+      <ul class="errorlist" data-mask-errors hidden></ul>
+      <div data-mask-html></div>
+      <div class="form-buttons">
+        <button type="button" class="btn btn-small btn-secondary" data-mask-check>Проверить пробный ответ</button>
+        <span class="helptext" data-mask-result></span>
+      </div>
+    </div>
+
+</div></div>
+{% include 'problems/_task_form_buttons.html' %}
+</form>
 <script defer src="{% static 'js/task_form.js' %}?v=2"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script>
 <script defer src="{% static 'js/check_badge.js' %}"></script>
 <script defer src="{% static 'js/mask.js' %}?v=4"></script>
 <script defer src="{% static 'js/numberline.js' %}?v=3"></script>
-<script defer src="{% static 'js/mask_editor.js' %}?v=3"></script>
+<script defer src="{% static 'js/mask_editor.js' %}?v=4"></script>
 {% endblock %}

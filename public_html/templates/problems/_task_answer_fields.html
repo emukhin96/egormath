@@ -1,0 +1,12 @@
+<section class="problem-section">
+<p>{{ fields.author_answer_latex.label_tag }}{{ fields.author_answer_latex.errors }}{{ fields.author_answer_latex }}</p>
+<p class="helptext">Авторские ответ и решение имеют приоритет. Редакторские / AI используются при отсутствии авторских.</p>
+<details class="ws-add-text" {% if fields.answer_latex.errors or fields.solution_latex.errors or fields.answer_latex.value or fields.solution_latex.value %}open{% endif %}><summary>Редакторский / AI-ответ и решение</summary>
+<p>{{ fields.answer_latex.label_tag }}{{ fields.answer_latex.errors }}{{ fields.answer_latex }}</p>
+<p>{{ fields.solution_latex.label_tag }}{{ fields.solution_latex.errors }}{{ fields.solution_latex }}</p></details>
+<details class="problem-solution" open><summary>Решение</summary><p>{{ fields.author_solution_latex.label_tag }}{{ fields.author_solution_latex.errors }}{{ fields.author_solution_latex }}</p></details>
+<p>{{ fields.answer_mask.label_tag }}{{ fields.answer_mask.errors }}{{ fields.answer_mask }}</p>
+<div class="form-buttons"><button type="button" class="btn btn-small btn-secondary" data-mask-draft>Добавить автоматически</button></div>
+{% include 'problems/_mask_presets.html' %}
+<details class="mask-help"><summary>Справка по маскам</summary><table class="list mask-help-table">{% for example, hint in mask_help %}<tr><td><code>{{ example }}</code></td><td>{{ hint }}</td></tr>{% endfor %}</table></details>
+</section>

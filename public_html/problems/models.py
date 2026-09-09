@@ -384,13 +384,13 @@ class Task(models.Model):
             return any(not s.effective_answer_latex for s in subs)
         return not self.effective_answer_latex
 
-    def make_variant(self, user=None, *, with_mapping=False):
-        """Скрытая копия задачи для «локальной» правки в одном листке."""
+    def make_variant(self, user=None, *, with_mapping=False, standalone=False):
+        """Копия со всеми материалами: локальная или самостоятельная в базе."""
         mapping = {'subitems': {}, 'source_refs': {}, 'images': {}}
         original = self
         copy = Task.objects.get(pk=self.pk)
         copy.pk = None
-        copy.variant_of = original.variant_of or original
+        copy.variant_of = None if standalone else original.variant_of or original
         if user is not None:
             copy.created_by = user
         copy.save()

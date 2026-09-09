@@ -87,7 +87,9 @@ def mask_data(task, item=None, include_preview=False):
         for answer in answers:
             spec = parse_mask(answer['mask'])
             answer['preview_html'] = render_to_string('assignments/_mask.html', {
-                'fragments': render_fragments(spec, f'inline_{item.pk if item else 0}_{task.pk}_{answer["id"] or 0}'),
+                'fragments': render_fragments(spec, f'inline_{item.pk if item else 0}_{task.pk}_{answer["id"] or 0}',
+                    values={slot.name: ('|'.join(str(i) for i in range(len(slot.items)))
+                            if slot.kind == 'order' else slot.reference) for slot in spec.slots}),
                 'editable': True, 'show_checks': False}) if spec.is_valid else ''
     return answers
 

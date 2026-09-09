@@ -53,6 +53,10 @@
     // Как apply_result: пустое от модели не затирает уже заполненное поле.
     if (!el || value == null || !String(value).trim()) return false;
     el.value = value;
+    // Показываем заполненный черновик даже внутри свёрнутых секций формы.
+    for (var parent = el.parentElement; parent; parent = parent.parentElement) {
+      if (parent.tagName === 'DETAILS') parent.open = true;
+    }
     // Без input автосейв на карточке не запишет черновик до проверки.
     if (!silent) {
       el.dispatchEvent(new Event('input', {bubbles: true}));

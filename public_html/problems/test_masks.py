@@ -176,7 +176,7 @@ class MaskCatalogTests(TestCase):
         self.teacher = make_teacher()
         self.client.login(username='teacher1', password='pass12345')
 
-    def test_badges_in_list_and_detail(self):
+    def test_masks_toggle_in_list_and_status_in_detail(self):
         with_mask = Task.objects.create(
             text_latex='С маской', answer_mask='{{number: 1}}',
             created_by=self.teacher)
@@ -185,8 +185,8 @@ class MaskCatalogTests(TestCase):
             created_by=self.teacher)
         Task.objects.create(text_latex='Без маски', created_by=self.teacher)
         response = self.client.get(reverse('task_list'))
-        self.assertContains(response, 'mask-badge', count=1)
-        self.assertContains(response, '>маска<')
+        self.assertNotContains(response, 'mask-badge')
+        self.assertContains(response, 'toggle-masks')
         self.assertNotContains(response, '>только фото<')
         response = self.client.get(reverse('task_detail', args=[with_mask.pk]))
         self.assertContains(response, 'Маска готова')
