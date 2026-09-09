@@ -4,6 +4,7 @@
   function toast(ok, text) { window.EgorAutosave.showSaved(ok, text); }
   function endpoint(root) {
     var url = new URL(root.dataset.manageUrl, location.href);
+    if(root.matches('[data-problem-editor]'))url.searchParams.set('view', 'task');
     if (root.dataset.item) {
       url.searchParams.set('worksheet', root.dataset.worksheet);
       url.searchParams.set('item', root.dataset.item);

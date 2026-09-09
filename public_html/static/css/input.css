@@ -1,11 +1,10 @@
 /* EgorMath Toolkit — source for Tailwind. Build: make build-css */
-@import "tailwindcss";
+@import "tailwindcss" source(none);
 
 @source "../../templates/**/*.html";
 @source "../js/**/*.js";
-/* Автопоиск классов заглядывает и в Python-код: слово `transform` в нём
-   не должно становиться CSS-классом */
-@source not "../../**/*.py";
+/* Сканируем только шаблоны и JS: локальные макеты и Python-файлы
+   не должны менять собранный CSS относительно чистого checkout в CI. */
 
 @theme {
   --color-em-navy: #102b55;

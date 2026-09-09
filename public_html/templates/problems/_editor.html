@@ -37,7 +37,7 @@
           {% csrf_token %}<input type="hidden" name="block" value="metadata"><div data-editor-errors class="errorlist" role="alert"></div>
           <div class="form-grid">{{ metadata_form.as_p }}</div>
           <h3>Темы и метки</h3>
-          {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=True grades=False selected_json=selected_json %}
+          {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=True grades=True selected_json=selected_json %}
           <p><label>Теги<input name="tags" type="text" value="{{ tags_value }}" placeholder="Через запятую"></label></p>
           <div class="form-buttons"><button class="btn">Сохранить</button><button type="button" class="btn btn-secondary" data-editor-cancel>Отмена</button></div>
         </form>

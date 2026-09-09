@@ -163,3 +163,30 @@ class EditorTests(TestCase):
             'subitems-0-text_latex': 'Изменение'})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Task.objects.count(), 2)
+
+    def test_full_task_editor_can_edit_unselected_subitem(self):
+        item, a, b, url = self.worksheet()
+        full = url + '&view=task'
+        self.assertEqual([row['id'] for row in self.client.get(full).json()['answers']], [a.pk, b.pk])
+        response = self.client.post(full, {'block': 'masks', 'scope': 'local',
+            'masks': json.dumps([{'id': b.pk, 'mask': '{{number: 2}}'}])})
+        self.assertEqual(response.status_code, 200, response.content)
+        item.refresh_from_db()
+        self.assertEqual(item.subitems.get().text_latex, 'а')
+        self.assertEqual(item.task.subitems.get(text_latex='б').answer_mask, '{{number: 2}}')
+        b.refresh_from_db()
+        self.assertEqual(b.answer_mask, '')
+
+    def test_metadata_uses_shared_grade_and_difficulty_controls(self):
+        from .models import GradeBand
+        bands = [GradeBand.objects.get_or_create(code=f'GRADE_{n}', defaults={'name': f'{n} класс'})[0] for n in (7, 8)]
+        response = self.client.post(self.url, {'block': 'metadata', 'stars': '1',
+            'columns': '2', 'grades_submitted': '1',
+            'grade_bands': [b.code for b in bands], 'difficulty': '3'})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.task.refresh_from_db()
+        self.assertEqual(set(self.task.grade_bands.all()), set(bands))
+        self.assertEqual(self.task.grade_level, 7)
+        self.assertEqual(self.task.difficulty, 3)
+        self.assertIn('data-grades="1"', response.json()['html'])
+        self.assertNotIn('name="grade_level"', response.json()['html'])

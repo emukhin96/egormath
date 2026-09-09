@@ -22,7 +22,7 @@ BLOCKS = {
     'condition': ['text_latex'],
     'answer': ['author_answer_latex', 'answer_latex'],
     'solution': ['author_solution_latex', 'solution_latex'],
-    'metadata': ['grade_level', 'stars', 'columns', 'difficulty'],
+    'metadata': ['stars', 'columns'],
     'mask': ['answer_mask'],
 }
 StructureFormSet = inlineformset_factory(
@@ -35,9 +35,6 @@ def block_form(block, obj, data=None):
     cls = forms.modelform_factory(type(obj), form=TaskForm,
                                  fields=BLOCKS[block])
     form = cls(data, instance=obj, auto_id=f'id_{block}_{obj.pk}_%s')
-    if block == 'metadata':
-        form.fields['grade_level'].widget = forms.Select(
-            choices=[('', '—')] + Task.GRADE_CHOICES)
     return form
 
 
@@ -101,8 +98,9 @@ def local_copy(task, item, user):
 def manage(request, pk):
     task = get_object_or_404(Task, pk=pk)
     item = worksheet_context(request, task)
+    selected_only = request.GET.get('view') != 'task'
     if request.method == 'GET':
-        return JsonResponse({'ok': True, 'answers': mask_data(task, item)})
+        return JsonResponse({'ok': True, 'answers': mask_data(task, item if selected_only else None)})
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=405)
     with transaction.atomic():
@@ -142,7 +140,7 @@ def manage(request, pk):
         if block == 'masks':
             try:
                 submitted = json.loads(data.get('masks', '[]'))
-                allowed = {o['id']: o for o in mask_data(task, item)}
+                allowed = {o['id']: o for o in mask_data(task, item if selected_only else None)}
                 if not isinstance(submitted, list) or not submitted:
                     raise ValueError('Нет масок для сохранения')
                 seen = set()
@@ -204,5 +202,5 @@ def manage(request, pk):
             request.GET['item'] = str(item.pk)
         html = render_to_string('problems/_editor.html', context(request, task), request=request)
         return JsonResponse({'ok': True, 'html': html, 'url': url,
-                             'task_id': task.pk, 'answers': mask_data(task, item),
+                             'task_id': task.pk, 'answers': mask_data(task, item if selected_only else None),
                              'sidebar': render_to_string('includes/sidebar/task_detail.html', {'task': task}, request=request)})
