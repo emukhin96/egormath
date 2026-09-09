@@ -4,5 +4,5 @@
 {% elif row.fragments and row.submission.has_mask_values %}{% include 'assignments/_mask.html' with fragments=row.fragments editable=False show_checks=True %}
 {% else %}<span class="math-content">{{ row.submission.display_answer|default:'Ответ пока не введён'|web_answer }}</span>{% endif %}
 </div>
-<details class="check-history" {% if expand_history %}open{% endif %}><summary>Самопроверка — нажатий: {{ row.submission.check_attempts|default:0 }}</summary>{% include 'assignments/_attempts.html' %}</details>
+<details class="check-history" open><summary>Самопроверка — нажатий: {{ row.submission.check_attempts|default:0 }}</summary>{% include 'assignments/_attempts.html' %}</details>
 {% if row.submission.photos.all %}<div class="photo-grid">{% for photo in row.submission.photos.all %}<a href="{% url 'photo_file' photo.pk %}" target="_blank"><img src="{% url 'photo_file' photo.pk %}" alt="Фото решения"></a>{% endfor %}</div>{% endif %}

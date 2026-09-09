@@ -63,3 +63,43 @@ class LiveProgressTests(TestCase):
         sub=Submission.objects.get(assignment=self.assignment,task=self.task)
         self.client.post(reverse('save_review',args=[self.assignment.pk]),{'grade_interface':'1',f'sub{sub.pk}_comment':'Обоснование'})
         self.assertEqual(Review.objects.get(submission=sub).grade,'+-')
+
+    def test_answer_autosave_does_not_overwrite_concurrent_counter(self):
+        from unittest.mock import patch
+        sub = Submission.objects.create(assignment=self.assignment, task=self.task,
+                                        answer_json={'s1':'7'}, check_attempts=2)
+        original = Submission.run_check
+        def concurrent_check(obj, *args, **kwargs):
+            Submission.objects.filter(pk=obj.pk).update(check_attempts=3)
+            return original(obj, *args, **kwargs)
+        self.client.force_login(self.student)
+        with patch.object(Submission, 'run_check', autospec=True, side_effect=concurrent_check):
+            self.client.post(reverse('save_answers',args=[self.assignment.pk]), {f'task{self.task.pk}_s1':'8'})
+        sub.refresh_from_db()
+        self.assertEqual(sub.check_attempts,3)
+        self.assertEqual(sub.answer_json,{'s1':'8'})
+
+    def test_next_attempt_uses_history_when_counter_is_stale(self):
+        from .models import SubmissionCheckAttempt
+        sub=Submission.objects.create(assignment=self.assignment,task=self.task,answer_json={'s1':'8'},check_attempts=2)
+        SubmissionCheckAttempt.objects.create(submission=sub,number=3,result='ok')
+        self.client.force_login(self.student)
+        response=self.client.post(reverse('check_task',args=[self.assignment.pk,self.task.pk]),{f'task{self.task.pk}_s1':'8'})
+        self.assertEqual(response.status_code,302)
+        sub.refresh_from_db()
+        self.assertEqual(sub.check_attempts,4)
+        self.assertTrue(sub.check_history.filter(number=4).exists())
+
+    def test_grade_does_not_hide_check_and_symbols_are_typographic(self):
+        from .models import SubmissionCheckAttempt
+        self.grade('+-')
+        sub=Submission.objects.get(assignment=self.assignment,task=self.task)
+        SubmissionCheckAttempt.objects.create(submission=sub,number=1,result='wrong')
+        response=self.client.get(reverse('worksheet_progress',args=[self.worksheet.pk]))
+        self.assertContains(response,'Неверно')
+        self.assertContains(response,'Оценка ±')
+        response=self.client.get(reverse('task_attempts',args=[self.assignment.pk,self.task.pk]))
+        self.assertContains(response,'>±</button>')
+        self.assertContains(response,'>.–</button>')
+        self.assertContains(response,'>–</button>')
+        self.assertContains(response,'class="check-history" open')

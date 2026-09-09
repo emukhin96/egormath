@@ -1,1 +1,1 @@
-{% if review.grade %}<span class="badge {% if review.credit %}badge-reviewed{% else %}badge-returned{% endif %}" title="{{ review.get_grade_display }}">{{ review.grade }}</span>{% endif %}
+{% if review.grade %}<span class="badge {% if review.credit %}badge-reviewed{% else %}badge-returned{% endif %}" title="{{ review.get_grade_display }}">{{ review.grade_symbol }}</span>{% endif %}
