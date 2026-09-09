@@ -248,6 +248,9 @@
   }
   .problem-mask-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
   .problem-mask-actions > .problem-mask-summary { margin-top: 0; }
+  .problem-mask-inline .mask-answer { margin: 0; }
+  .problem-mask-inline .mask-math { min-width: 120px; max-width: 240px; }
+  .problem-mask-inline .mask-math math-field { min-height: 30px; }
   .problem-mask-code { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
   .problem-columns textarea, .problem-dialog textarea { max-width: 100%; }
   .problem-columns .formset { table-layout: fixed; width: 100%; }

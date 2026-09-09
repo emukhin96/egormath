@@ -46,3 +46,10 @@ class ContextDraftTests(SimpleTestCase):
         mask = draft_mask('(1;2);(3;4)', 'Решите систему x+y=5.')
         self.assertEqual(mask, '$(x; y) =${{pair: (1;2);(3;4)}}')
         self.assertEqual(check_mask(parse_mask(mask), {'s1': '(1;4);(3;2)'})[0], 'wrong')
+
+    def test_trapezoid_other_base(self):
+        self.assertEqual(draft_mask('$8$', 'Прямая делит основание трапеции на отрезки 10 и 8. Найдите другое основание трапеции.'),
+                         'Другое основание равно {{number: 8}}')
+
+    def test_unrecognised_geometry_keeps_scalar(self):
+        self.assertEqual(draft_mask('8', 'Найдите высоту трапеции.'), '{{number: 8}}')
