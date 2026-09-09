@@ -39,6 +39,12 @@ class EditorTests(TestCase):
         self.assertEqual(self.task.author_answer_latex, '42')
         self.assertEqual(self.task.answer_latex, '43')
 
+    def test_number_preview_uses_math_keyboard_and_checks_radical(self):
+        response = self.client.post(reverse('task_mask_preview'), {'mask': r'{{number: \sqrt{2}}}', 'prefix': 'preview'})
+        self.assertContains(response, 'math-field')
+        response = self.client.post(reverse('task_mask_preview'), {'mask': r'{{number: \sqrt{2}}}', 'prefix': 'preview', 'preview_s1': r'\sqrt2'})
+        self.assertEqual(response.json()['overall'], 'ok')
+
     def test_invalid_mask_does_not_change_task(self):
         response = self.client.post(self.url, {'block': 'masks', 'masks': json.dumps([
             {'id': None, 'mask': '{{number: nonsense}}'}])})

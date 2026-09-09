@@ -102,6 +102,11 @@ def _geometry(answer, condition):
         label = symbol + ('_{' + next(iter(names)) + '}' if len(names) == 1 else '')
         suffix = (' ' + unit + (f'$^{power}$' if power > 1 else '')) if unit else ''
         return f'${label} =$' + _slot('number', value) + suffix
+    # Не теряем простой числовой ответ из-за незнакомой формулировки вопроса.
+    if sets.numeric_value(value) is not None:
+        if re.match(r'другое основание\b', question, re.I):
+            return 'Другое основание равно ' + _slot('number', value) + (' ' + unit if unit else '')
+        return _slot('number', value) + (' ' + unit if unit else '')
     return ''
 
 

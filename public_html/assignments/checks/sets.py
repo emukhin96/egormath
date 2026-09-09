@@ -36,7 +36,9 @@ INF = float('inf')
 def numeric_value(text):
     """Строка → Fraction (точно) или float (иррациональное); None — не число.
     Понимает школьные дроби и любое числовое LaTeX-выражение без переменных."""
-    text = normalize(_strip_var(text or ''))
+    # MathLive сокращает односимвольный аргумент: \sqrt8 вместо \sqrt{8}.
+    text = re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text or '')
+    text = normalize(_strip_var(text))
     if not text:
         return None
     value = parse_number(text)

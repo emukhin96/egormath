@@ -144,6 +144,27 @@
     });
   }
 
+  // Клавиатура принадлежит окну с активным полем, иначе native dialog
+  // оставляет её под модальным слоем независимо от z-index.
+  document.addEventListener('focusin', function(e) {
+    if (!e.target.matches('math-field') || !window.mathVirtualKeyboard) return;
+    var modal=e.target.closest('dialog[open]'), keyboard=window.mathVirtualKeyboard;
+    if(modal){
+      var host=modal.querySelector('[data-mask-keyboard]');
+      if(!host){host=document.createElement('div');host.dataset.maskKeyboard='1';host.style.position='relative';modal.appendChild(host);}
+      keyboard.container=host;
+      if(!host.dataset.bound){host.dataset.bound='1';keyboard.addEventListener('geometrychange',function(){
+        host.style.height=modal.open && keyboard.container===host ? keyboard.boundingRect.height+'px' : '0px';
+      });}
+    }else keyboard.container=document.body;
+  });
+  document.addEventListener('close', function(e) {
+    if (e.target.tagName === 'DIALOG' && window.mathVirtualKeyboard) {
+      window.mathVirtualKeyboard.hide();
+      window.mathVirtualKeyboard.container = document.body;
+    }
+  }, true);
+
   function enhance(root) {
     bindSetSlots(root);
     bindOrderSlots(root);

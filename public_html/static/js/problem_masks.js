@@ -1,7 +1,7 @@
 /* Один редактор масок для карточки задачи и конструктора листка. */
 (function(){
   'use strict';
-  var api=window.EgorProblem, active=null, current=null, loading=false;
+  var api=window.EgorProblem, active=null, current=null, loading=false, inlineCounter=1000;
   var dialog=document.getElementById('answer-mask-dialog');if(!dialog)return;
   var form=document.getElementById('answer-mask-form');
   var config=document.getElementById('answer-mask-config').dataset;
@@ -20,7 +20,7 @@
     var out=form.querySelector('[data-mask-answer]');out.textContent=current[form.elements.source.value]||'Ответ не добавлен';renderMathContent(out);
   }
   function open(root,o){
-    active=root;current=o;form.reset();form.elements.mask.value=o.mask;
+    active=root;current=o;dialog.querySelector('[data-editor-preview]').hidden=true;dialog.querySelector('[data-editor-preview]').textContent='';form.reset();form.elements.mask.value=o.mask;
     Array.from(form.elements.source.options).forEach(opt=>opt.disabled=!o[opt.value].trim());
     form.elements.source.value=o.author.trim()?'author':'editor';
     form.querySelector('[data-mask-message]').textContent='';form.querySelector('[data-mask-errors]').textContent='';
@@ -28,13 +28,13 @@
     form.elements.reference.value=o[form.elements.source.value]||'';
     source();dialog.showModal();
   }
-  async function preview(owners){
-    var container=previewDialog.querySelector('[data-preview-body]');container.textContent='';
+  async function preview(owners, container){
+    var embedded=!!container;container=container||previewDialog.querySelector('[data-preview-body]');container.textContent='';container.hidden=false;
     for(var i=0;i<owners.length;i++){
       var owner=owners[i],prefix='preview_'+i;
       var section=document.createElement('section');section.className='problem-preview-section';
-      var heading=document.createElement('h4');heading.textContent=owner.label;section.appendChild(heading);
-      var text=document.createElement('div');text.className='math-content';text.textContent=owner.text;section.appendChild(text);renderMathContent(text);
+      if(owner.id){var heading=document.createElement('h4');heading.textContent=owner.label;section.appendChild(heading);}
+      if(!embedded){var text=document.createElement('div');text.className='math-content';text.textContent=owner.text;section.appendChild(text);renderMathContent(text);}
       if(!owner.mask.trim()){
         var note=document.createElement('p');note.className='helptext';note.textContent='Маски нет — ученик может прислать фото решения.';section.appendChild(note);
       }else{
@@ -54,7 +54,7 @@
       if(window.EgorMask)window.EgorMask.enhance(section);
     }
     if(!owners.length)container.textContent='Подпункты не выбраны.';
-    previewDialog.showModal();
+    if(!embedded)previewDialog.showModal();
   }
   function button(label,key,value){var b=document.createElement('button');b.type='button';b.className='btn btn-small btn-secondary';b.textContent=label;b.dataset[key]=value;return b;}
   async function refresh(root){
@@ -65,16 +65,18 @@
       var actions=document.createElement('div');actions.className='problem-mask-actions';target.appendChild(actions);
       if(owners.filter(o=>!o.mask.trim()).length>1)actions.appendChild(button('Создать недостающие маски','maskMissing','1'));
 
-      owners.forEach(function(o){
-        var row=document.createElement('div');row.className='problem-mask-summary';
-        var title=document.createElement('strong');title.textContent=o.label;row.appendChild(title);
-        var status=document.createElement('span');status.className='helptext';status.textContent=o.mask?'Маска добавлена':'Маски нет';row.appendChild(status);
+      for(var i=0;i<owners.length;i++){
+        var o=owners[i],row=document.createElement('div');row.className='problem-mask-summary';
+        if(o.id){var title=document.createElement('strong');title.textContent=o.label;row.appendChild(title);}
+        if(o.mask){
+          var result=await api.request(config.previewUrl,body({mask:o.mask,prefix:'preview_'+(++inlineCounter)}));
+          var fields=document.createElement('div');fields.className='problem-mask-inline';fields.innerHTML=result.html||'';row.appendChild(fields);
+          fields.querySelectorAll('.mask-text,.mask-order-items li').forEach(renderMathContent);
+        }
         row.appendChild(button(o.mask?'Настроить':'Добавить маску','maskEdit',o.id||''));
         actions.appendChild(row);
-        if(o.mask){var code=document.createElement('code');code.className='problem-mask-code';code.textContent=o.mask;target.appendChild(code);}
-
-      });
-      actions.appendChild(button('Предпросмотр','maskPreview','all'));
+        if(window.EgorMask)window.EgorMask.enhance(row);
+      }
     }catch(error){target.textContent=error.message;}
   }
   document.addEventListener('click',async function(e){
@@ -114,10 +116,15 @@
     }catch(error){form.querySelector('[data-mask-message]').textContent=error.message;form.querySelector('.problem-section').open=true;}
     finally{this.disabled=false;}
   });
+  form.querySelectorAll('[data-mask-template]').forEach(function(b){b.addEventListener('click',function(){
+    var field=form.elements.mask, snippet='{{number: '+b.dataset.maskTemplate+'}}';
+    field.setRangeText(snippet,field.selectionStart,field.selectionEnd,'select');field.focus();
+    form.querySelector('[data-mask-message]').textContent='Вставлен пример. Укажите правильное значение вместо него.';
+  });});
   form.querySelector('[data-mask-insert]').addEventListener('click',function(){
     form.elements.mask.value+=(form.elements.mask.value?' ':'')+form.elements.prefix.value+' {{'+form.elements.kind.value+': '+form.elements.reference.value+'}}';
   });
-  form.querySelector('[data-mask-try]').addEventListener('click',async()=>{try{await preview([{...current,mask:form.elements.mask.value}]);}catch(error){api.toast(false,error.message);}});
+  form.querySelector('[data-mask-try]').addEventListener('click',async()=>{try{await preview([{...current,mask:form.elements.mask.value}],dialog.querySelector('[data-editor-preview]'));}catch(error){api.toast(false,error.message);}});
   form.addEventListener('submit',async function(e){
     e.preventDefault();if(form.dataset.busy)return;form.dataset.busy='1';e.submitter.disabled=true;
     try{

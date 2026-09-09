@@ -6,6 +6,13 @@
     <div class="math-content" data-mask-answer></div>
     <div class="form-buttons"><button type="button" class="btn" data-mask-generate>Создать из ответа</button></div>
     <p class="helptext" data-mask-message role="status"></p>
+    <div class="form-buttons" aria-label="Быстрые шаблоны маски">
+      <button type="button" class="btn btn-small btn-secondary" data-mask-template="8">Целое число</button>
+      <button type="button" class="btn btn-small btn-secondary" data-mask-template="\frac{1}{2}">Дробь</button>
+      <button type="button" class="btn btn-small btn-secondary" data-mask-template="1,5">Десятичное</button>
+      <button type="button" class="btn btn-small btn-secondary" data-mask-template="\sqrt{2}">Корень</button>
+    </div>
+    <p class="helptext">Шаблоны вставляют поле «число» с примером. Замените пример правильным ответом.</p>
     <details class="problem-section"><summary>Собрать поле по типу</summary>
       <p class="helptext">Для составной маски используйте ручной редактор ниже. Добавление поля не удаляет остальные поля.</p>
       <label>Тип поля<select name="kind">
@@ -29,6 +36,7 @@
     <div data-mask-errors class="errorlist" role="alert"></div>
     <div class="form-buttons"><button class="btn">Сохранить маску</button><button type="button" class="btn btn-secondary" data-mask-try>Предпросмотр</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
   </form>
+  <div data-editor-preview hidden></div>
 </dialog>
 <dialog class="dialog problem-dialog" id="answer-preview-dialog" aria-labelledby="answer-preview-title">
   <div class="label-row"><h3 id="answer-preview-title">Как увидит ученик</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
