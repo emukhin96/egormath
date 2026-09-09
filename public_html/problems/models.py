@@ -339,9 +339,9 @@ class Task(models.Model):
 
     @property
     def effective_solution_latex(self):
-        """Редакторское/AI-решение, иначе авторское."""
-        return (self.solution_latex or '').strip() or \
-            (self.author_solution_latex or '').strip()
+        """Авторское решение, иначе редакторская/AI-версия."""
+        return (self.author_solution_latex or '').strip() or \
+            (self.solution_latex or '').strip()
 
     @property
     def mask_spec(self):
@@ -576,8 +576,8 @@ class TaskSubitem(models.Model):
 
     @property
     def effective_solution_latex(self):
-        return (self.solution_latex or '').strip() or \
-            (self.author_solution_latex or '').strip()
+        return (self.author_solution_latex or '').strip() or \
+            (self.solution_latex or '').strip()
 
 
 class TaskSource(models.Model):
