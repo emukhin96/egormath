@@ -258,8 +258,15 @@
   .grade-scale [aria-pressed="true"] { background: var(--accent); color: white; }
   .attempt-row { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
   .attempt-row time { white-space: nowrap; }
-  .attempt-row .attempt-answer { flex: 1; }
-  .progress-table-wrap { overflow-x: auto; }
+  .attempt-row .attempt-answer { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .progress-table-wrap { max-width: 100%; overflow-x: auto; }
+  .progress-table { min-width: 620px; table-layout: auto; }
+  .progress-table .progress-cell { min-width: 140px; }
+  .progress-table tbody th { text-transform: none; font-size: inherit; letter-spacing: normal; }
+  .progress-cell button { display: inline-grid; grid-template-columns: auto auto; width: 154px; white-space: normal; align-items: center; gap: var(--space-1); }
+  .progress-grade { grid-column: 1 / -1; text-align: left; }
+  .review-comment label, .review-comment textarea { display: block; }
+  .review-comment textarea { width: 100%; margin-top: var(--space-1); }
   .progress-table td, .progress-table th { white-space: nowrap; }
   .problem-mask-code { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
   .problem-columns textarea, .problem-dialog textarea { max-width: 100%; }

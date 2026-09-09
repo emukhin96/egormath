@@ -64,7 +64,7 @@
 
     <div data-live-answer="{{ row.task.pk }}">{% include 'assignments/_live_answer.html' %}</div>
     <p>{% include 'assignments/_grade_scale.html' %}</p>
-    {% if row.submission %}<p><label>Комментарий<textarea name="sub{{ row.submission.pk }}_comment" rows="2">{{ row.review.comment|default:'' }}</textarea></label></p>{% endif %}
+    {% if row.submission %}<p class="review-comment"><label>Комментарий<textarea name="sub{{ row.submission.pk }}_comment" rows="2">{{ row.review.comment|default:'' }}</textarea></label></p>{% endif %}
 
   </div>
   {% endif %}
@@ -76,7 +76,7 @@
       (<span data-review-total-percent>{{ result.percent }}</span>%)</p>
     <p class="helptext">
       Автосверка: {{ assignment.get_check_visibility_display|lower }} — режим задан при выдаче и не меняется.
-      Автосверка — подсказка; оценку решения ставите вы. + и .+ дают 100%, +- — 75%, 干 — 50%; остальные — 0%. Эталон ученику не показывается.
+      Автосверка — подсказка; оценку решения ставите вы. + и .+ дают 100%, ± — 75%, 干 — 50%; остальные — 0%. Эталон ученику не показывается.
     </p>
     <div class="form-buttons review-actions">
       <button type="submit" name="action" value="save" class="btn btn-secondary">Сохранить черновик</button>
@@ -95,4 +95,4 @@
   </div>
 </form>
 {% endblock %}
-{% block extra_js %}<div data-review-live-url="{% url 'assignment_live' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}"></script>{% endblock %}
+{% block extra_js %}<div data-review-live-url="{% url 'assignment_live' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=2"></script>{% endblock %}

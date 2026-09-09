@@ -49,7 +49,7 @@ def task_attempts(request, pk, task_id):
         from django.http import Http404
         raise Http404
     return render(request, 'assignments/_progress_detail.html', {
-        'assignment': assignment, 'row': row, 'expand_history': True, 'grade_choices': Review.GRADE_CHOICES})
+        'assignment': assignment, 'row': row, 'expand_history': True, 'grade_choices': Review.grade_options()})
 
 
 @teacher_required
@@ -58,7 +58,8 @@ def worksheet_progress(request, worksheet_id):
     worksheet = get_object_or_404(Worksheet.visible_to(request.user), pk=worksheet_id)
     latest = SubmissionCheckAttempt.objects.filter(submission_id=OuterRef('pk')).order_by('-number')
     submissions_query = Submission.objects.select_related('review').annotate(
-        latest_result=Subquery(latest.values('result')[:1])).prefetch_related('parts', 'photos')
+        latest_result=Subquery(latest.values('result')[:1]),
+        latest_number=Subquery(latest.values('number')[:1])).prefetch_related('parts', 'photos')
     assignments = Assignment.visible_to(request.user).filter(worksheet=worksheet).select_related('student').prefetch_related(
         'hidden_items', Prefetch('submissions', queryset=submissions_query))
     group_id = request.GET.get('group', '')
@@ -74,8 +75,10 @@ def worksheet_progress(request, worksheet_id):
         for item in items:
             sub = submissions.get(item.task_id)
             review = getattr(sub, 'review', None)
-            cells.append({'task': item.task, 'hidden': item.pk in hidden,
+            cells.append({'item': item, 'task': item.task, 'hidden': item.pk in hidden,
                           'submission': sub, 'review': review,
+                          'attempt_count': max(sub.check_attempts, sub.latest_number or 0) if sub else 0,
+                          'latest_result': sub.latest_result if sub else '',
                           'latest_label': dict(SubmissionCheckAttempt.RESULT_CHOICES).get(sub.latest_result, '') if sub else '',
                           'started': bool(sub and (sub.answer_json or sub.legacy_answer or sub.photos.all() or any(p.answer_json or p.legacy_answer for p in sub.parts.all())))})
         visible = [c for c in cells if not c['hidden']]

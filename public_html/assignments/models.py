@@ -480,6 +480,16 @@ class Review(models.Model):
                      ('+-', 'Незначительная ошибка'), ('干', 'Половина решения'),
                      ('-+', 'Существенное продвижение'), ('.-', 'Есть попытка'),
                      ('-', 'Не решено'), ('0', 'Не приступал')]
+    SYMBOLS = {'+-': '±', '.-': '.–', '-': '–', '-+': '–+'}
+
+    @classmethod
+    def grade_options(cls):
+        return [(value, label, cls.SYMBOLS.get(value, value)) for value, label in cls.GRADE_CHOICES]
+
+    @property
+    def grade_symbol(self):
+        return self.SYMBOLS.get(self.grade, self.grade)
+
     CREDITS = {'+': 1, '.+': 1, '+-': .75, '干': .5}
     grade = models.CharField('Оценка', max_length=2, choices=GRADE_CHOICES, blank=True, default='')
     # Совместимость с прежними сохранёнными проверками.

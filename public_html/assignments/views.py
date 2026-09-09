@@ -280,6 +280,8 @@ def _assignment_rows(assignment, with_review=False):
         legacy_attempts = 0
         if with_review and submission:
             attempt_history = list(submission.check_history.all())[::-1]
+            submission.check_attempts = max(submission.check_attempts,
+                                            max((a.number for a in attempt_history), default=0))
             for attempt in attempt_history:
                 for target in attempt.snapshot.get('targets', []):
                     readable = target.get('answer', '')
@@ -433,7 +435,8 @@ def _persist_answers(assignment, post):
         obj.run_check(reference, spec=spec)
         if obj.display_answer != before:
             obj.check_revealed = False
-        obj.save()
+        obj.save(update_fields=[*fields, 'auto_check', 'check_json', 'checked_at',
+                                'check_revealed', 'updated_at'])
 
     def _has_value(fields):
         return any(
@@ -651,7 +654,8 @@ def check_task(request, pk, task_id):
         if checks:
             result, snapshot = _attempt_snapshot(
                 submission, task, subitems)
-            number = submission.check_attempts + 1
+            latest_number = submission.check_history.order_by('-number').values_list('number', flat=True).first() or 0
+            number = max(submission.check_attempts, latest_number) + 1
             SubmissionCheckAttempt.objects.create(
                 submission=submission, number=number,
                 result=result, snapshot=snapshot)
@@ -810,7 +814,7 @@ def review_assignment(request, pk):
         'queue_position': queue_position,
         'next_pending': next_pending,
         'owner_filter': owner_id,
-        'grade_choices': Review.GRADE_CHOICES,
+        'grade_choices': Review.grade_options(),
     }
     context.update(_progress(rows))
     return render(request, 'assignments/review.html', context)

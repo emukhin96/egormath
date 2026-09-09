@@ -10,6 +10,15 @@
     root.innerHTML=html;root.dataset.previous=html;
     root.querySelectorAll('details').forEach((d,i)=>{if(i<opened.length)d.open=opened[i];});math(root);
   }
+  function updateTable(root, html){
+    var parsed=new DOMParser().parseFromString(html,'text/html');
+    var oldCells=Array.from(root.querySelectorAll('[data-progress-cell]'));
+    var newCells=Array.from(parsed.querySelectorAll('[data-progress-cell]'));
+    if(!oldCells.length || oldCells.length!==newCells.length || oldCells.some((c,i)=>c.dataset.progressCell!==newCells[i].dataset.progressCell)){
+      replace(root,html);return;
+    }
+    oldCells.forEach((cell,i)=>{if(cell.innerHTML!==newCells[i].innerHTML)cell.innerHTML=newCells[i].innerHTML;});
+  }
   document.addEventListener('click',async function(e){
     var grade=e.target.closest('[data-grade]'), attempts=e.target.closest('[data-attempt-url]');
     try{
@@ -33,7 +42,7 @@
       var review=document.querySelector('[data-review-live-url]');
       if(review){var data=await(await request(review.dataset.reviewLiveUrl)).json();Object.entries(data.rows).forEach(([id,html])=>{var root=document.querySelector('[data-live-answer="'+id+'"]');if(root)replace(root,html);});}
       var table=document.querySelector('[data-progress-table]');
-      if(table){var url=new URL(location.href);url.searchParams.set('fragment','1');replace(table,await(await request(url)).text());}
+      if(table){var url=new URL(location.href);url.searchParams.set('fragment','1');updateTable(table,await(await request(url)).text());}
       if(dialog&&dialog.open&&detailUrl&&!dialog.querySelector('[data-busy="1"]')){
         // Сохраняем выбор оценки при обновлении снимка.
         replace(dialog.querySelector('[data-progress-detail]'),await(await request(detailUrl)).text());
@@ -42,4 +51,6 @@
     }catch(error){var status=document.querySelector('[data-live-status]');if(status)status.textContent='Связь прервана. Повторим обновление автоматически.';}finally{busy=false;}
   }
   setInterval(poll,5000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)poll();});
+  poll();
 })();
