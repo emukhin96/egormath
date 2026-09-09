@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import admin
 from django.contrib.staticfiles.storage import staticfiles_storage
 from django.urls import include, path
@@ -6,15 +7,19 @@ from django.views.generic.base import RedirectView
 from accounts import views as accounts_views
 from worksheets import views as worksheets_views
 
+
+class FaviconRedirectView(RedirectView):
+    """Синий значок на проде, зелёный на локальной машине (DEBUG)."""
+
+    permanent = False
+
+    def get_redirect_url(self, *args, **kwargs):
+        name = 'favicon-local.ico' if settings.DEBUG else 'favicon.ico'
+        return staticfiles_storage.url(name)
+
+
 urlpatterns = [
-    path(
-        'favicon.ico',
-        RedirectView.as_view(
-            url=staticfiles_storage.url('favicon.ico'),
-            permanent=True,
-        ),
-        name='favicon',
-    ),
+    path('favicon.ico', FaviconRedirectView.as_view(), name='favicon'),
     path('admin/', admin.site.urls),
     path('', accounts_views.index, name='index'),
     path('dashboard/', accounts_views.dashboard, name='dashboard'),
