@@ -36,7 +36,7 @@ KINDS = {
     PAIR: 'упорядоченная пара (пары)',
     SET: 'конечное множество чисел',
     EQUATION: 'уравнение',
-    RANGE: 'числовой промежуток',
+    RANGE: 'числовое множество',
     ORDER: 'расставить в порядке',
 }
 
@@ -65,6 +65,7 @@ HELP = (
     ('{{pair: (2,5; -3); (5; -6)}}', 'упорядоченные пары через ; порядок пар не важен'),
     ('{{set: -2; 1}}', 'множество чисел, порядок не важен; {{set: }} — «нет решений»'),
     ('{{equation: y=x+5}}', 'уравнение в приведённом виде (y-x=5 тоже верно, 2y=2x+10 — нет)'),
+    ('{{range: 1; 4}}', 'корни уравнения: одно поле независимо от количества корней'),
     ('{{range: (-\\infty;-5)\\cup(5;+\\infty)}}', 'числовое множество; неравенства '
                                                '(x<-5, x>5), «и» — пересечение, '
                                                'нет решений / ℝ, границы вроде \\sqrt{2} и 7/3'),
@@ -259,7 +260,7 @@ def _parse_set(slot, payload):
 def _parse_range(slot, payload):
     value = sets.parse_range(payload)
     if value is None:
-        slot.error = 'эталон не разобран как промежуток или неравенство'
+        slot.error = 'эталон не разобран как число, множество чисел, промежуток или неравенство'
         return
     slot.data, slot.reference = value, payload.strip()
 
@@ -525,9 +526,13 @@ def _unwrap_set_braces(text):
     return text
 
 
-def draft_mask(answer):
+def draft_mask(answer, condition=""):
     """Черновик маски из текстового «Ответа» для тривиальных случаев;
     '' — не угадали, учитель пишет маску сам."""
+    from .drafting import contextual_draft
+    contextual = contextual_draft(answer, condition)
+    if contextual is not None:
+        return contextual if contextual and parse_mask(contextual).is_valid else ''
     text = (answer or '').replace('$', ' ').strip()
     if not text:
         return ''

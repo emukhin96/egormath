@@ -84,6 +84,9 @@
       .replace(/≤/g, '<=').replace(/≥/g, '>=').replace(/^\s*[a-zA-Zа-яА-Я]\s*(?:\\in|∈)\s*/, '')
       .trim();
     if (!text) return [];
+    var point = num(text.replace(/^\s*[a-zA-Z]\s*=\s*/, ''));
+    if (isFinite(point)) return [{lo:point,hi:point,lc:true,rc:true}];
+    text = text.replace(/^\\?\{([\s\S]*?)\\?\}$/, '$1');
     var out = [];
     var tokens = [];
     var rest = text.replace(/[(\[]\s*[^;()\[\]]+?\s*;\s*[^;()\[\]]+?\s*[)\]]/g, function (m) {
@@ -108,6 +111,8 @@
   }
 
   function parseAtom(piece, tokens) {
+    var point = num(piece.replace(/^\s*[a-zA-Z]\s*=\s*/, ''));
+    if (isFinite(point)) return [{lo:point,hi:point,lc:true,rc:true}];
     piece = piece.trim();
     if (!piece) return null;
     var ref = piece.match(/^\u0000(\d+)\u0000$/);

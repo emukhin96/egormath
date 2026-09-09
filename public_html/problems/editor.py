@@ -77,7 +77,9 @@ def mask_data(task, item=None):
     owners = subs or ([] if task.subitems.exists() else [task])
     return [{'id': o.pk if isinstance(o, TaskSubitem) else None,
              'label': f'Подпункт {positions[o.pk]}' if isinstance(o, TaskSubitem) else 'Ответ',
-             'text': o.text_latex, 'author': o.author_answer_latex,
+             'text': o.text_latex,
+             'condition': task.text_latex + ('\n' + o.text_latex if isinstance(o, TaskSubitem) else ''),
+             'author': o.author_answer_latex,
              'editor': o.answer_latex, 'mask': o.answer_mask}
             for o in owners]
 

@@ -246,7 +246,8 @@
     gap: var(--space-2);
     margin-top: var(--space-3);
   }
-  .problem-mask-tools > .problem-mask-summary { width: 100%; }
+  .problem-mask-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .problem-mask-actions > .problem-mask-summary { margin-top: 0; }
   .problem-mask-code { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
   .problem-columns textarea, .problem-dialog textarea { max-width: 100%; }
   .problem-columns .formset { table-layout: fixed; width: 100%; }

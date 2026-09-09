@@ -12,7 +12,7 @@
     // На карточке генерация учитывает ещё не сохранённый текст выбранного источника.
     if(root.matches('[data-problem-editor]'))result.answers.forEach(function(o){
       var section=root.querySelector('[data-answer-owner="'+(o.id||'')+'"]');
-      if(section){o.author=section.querySelector('[name=author_answer_latex]').value;o.editor=section.querySelector('[name=answer_latex]').value;}
+      if(section){o.condition=root.querySelector('[name=text_latex]').value+(o.id?'\n'+o.text:'');o.author=section.querySelector('[name=author_answer_latex]').value;o.editor=section.querySelector('[name=answer_latex]').value;}
     });
     return result.answers;
   }
@@ -56,22 +56,25 @@
     if(!owners.length)container.textContent='Подпункты не выбраны.';
     previewDialog.showModal();
   }
-  function button(label,key,value){var b=document.createElement('button');b.type='button';b.className='btn btn-secondary';b.textContent=label;b.dataset[key]=value;return b;}
+  function button(label,key,value){var b=document.createElement('button');b.type='button';b.className='btn btn-small btn-secondary';b.textContent=label;b.dataset[key]=value;return b;}
   async function refresh(root){
     var target=root.querySelector('[data-mask-tools]');if(!target)return;
     target.textContent='Загрузка масок…';
     try{
       var owners=await answers(root);target.textContent='';
-      if(owners.filter(o=>!o.mask.trim()).length>1)target.appendChild(button('Создать недостающие маски','maskMissing','1'));
-      target.appendChild(button('Предпросмотр ввода ученика','maskPreview','all'));
+      var actions=document.createElement('div');actions.className='problem-mask-actions';target.appendChild(actions);
+      if(owners.filter(o=>!o.mask.trim()).length>1)actions.appendChild(button('Создать недостающие маски','maskMissing','1'));
+
       owners.forEach(function(o){
         var row=document.createElement('div');row.className='problem-mask-summary';
         var title=document.createElement('strong');title.textContent=o.label;row.appendChild(title);
         var status=document.createElement('span');status.className='helptext';status.textContent=o.mask?'Маска добавлена':'Маски нет';row.appendChild(status);
         row.appendChild(button(o.mask?'Настроить':'Добавить маску','maskEdit',o.id||''));
-        if(o.mask){var code=document.createElement('code');code.className='problem-mask-code';code.textContent=o.mask;row.appendChild(code);}
-        target.appendChild(row);
+        actions.appendChild(row);
+        if(o.mask){var code=document.createElement('code');code.className='problem-mask-code';code.textContent=o.mask;target.appendChild(code);}
+
       });
+      actions.appendChild(button('Предпросмотр','maskPreview','all'));
     }catch(error){target.textContent=error.message;}
   }
   document.addEventListener('click',async function(e){
@@ -86,7 +89,7 @@
       if(missing){
         var changes=[],unresolved=[];
         for(var o of owners.filter(o=>!o.mask.trim())){
-          var result=await api.request(config.draftUrl,body({answer:o.author.trim()||o.editor.trim()})).catch(()=>({mask:''}));
+          var result=await api.request(config.draftUrl,body({answer:o.author.trim()||o.editor.trim(),condition:o.condition})).catch(()=>({mask:''}));
           if(result.mask)changes.push({id:o.id,mask:result.mask});else unresolved.push(o.label);
         }
         if(unresolved.length)api.toast(false,'Уточните тип вручную: '+unresolved.join(', '));
@@ -105,7 +108,7 @@
   form.querySelector('[data-mask-generate]').addEventListener('click',async function(){
     this.disabled=true;
     try{
-      var result=await api.request(config.draftUrl,body({answer:current[form.elements.source.value]||''}));
+      var result=await api.request(config.draftUrl,body({answer:current[form.elements.source.value]||'',condition:current.condition}));
       if(form.elements.mask.value.trim()&&!confirm('Заменить текущую маску новым черновиком?'))return;
       form.elements.mask.value=result.mask;form.querySelector('[data-mask-message]').textContent='Черновик готов. Проверьте предпросмотр перед сохранением.';
     }catch(error){form.querySelector('[data-mask-message]').textContent=error.message;form.querySelector('.problem-section').open=true;}
