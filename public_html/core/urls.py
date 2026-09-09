@@ -1,10 +1,20 @@
 from django.contrib import admin
+from django.contrib.staticfiles.storage import staticfiles_storage
 from django.urls import include, path
+from django.views.generic.base import RedirectView
 
 from accounts import views as accounts_views
 from worksheets import views as worksheets_views
 
 urlpatterns = [
+    path(
+        'favicon.ico',
+        RedirectView.as_view(
+            url=staticfiles_storage.url('favicon.ico'),
+            permanent=True,
+        ),
+        name='favicon',
+    ),
     path('admin/', admin.site.urls),
     path('', accounts_views.index, name='index'),
     path('dashboard/', accounts_views.dashboard, name='dashboard'),

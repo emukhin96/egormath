@@ -53,6 +53,14 @@ class StudentRegistrationTests(TestCase):
                 self.assertContains(response, 'Егор Мухин, 2026')
                 self.assertNotContains(response, 'EgorMath')
 
+    def test_pages_include_favicon(self):
+        response = self.client.get(reverse('login'))
+        self.assertContains(response, 'favicon.svg')
+        self.assertContains(response, 'apple-touch-icon.png')
+        response = self.client.get('/favicon.ico')
+        self.assertEqual(response.status_code, 301)
+        self.assertIn('favicon.ico', response['Location'])
+
     def test_registered_student_attaches_to_superuser(self):
         admin = User.objects.create_superuser(
             'admin', 'admin@example.com', 'pass12345')
