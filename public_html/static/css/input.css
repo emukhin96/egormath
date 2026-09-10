@@ -787,6 +787,7 @@
   }
 
   .sidebar-action {
+    text-align: left;
     padding: 8px 10px;
     border: 1px solid rgb(255 255 255 / 16%);
     border-radius: 6px;
@@ -1006,7 +1007,10 @@
     font-size: 0.85rem;
   }
 
-  .task-meta a {
+  .worksheet-catalog .task-meta { white-space: nowrap; }
+
+  .task-meta a, .task-meta .link-btn {
+    text-decoration: none;
     color: var(--accent);
   }
 
@@ -1305,7 +1309,7 @@
   }
 
   .task-id:hover {
-    text-decoration: underline;
+    color: var(--accent-dark);
   }
 
   /* Запрещены акцентные рамки с одной стороны (border-top/left/right/bottom
