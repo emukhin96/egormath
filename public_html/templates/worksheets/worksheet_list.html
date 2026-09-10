@@ -99,30 +99,18 @@
     <th>Название</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Класс</th><th>Темы</th><th>Задач</th><th>Создан</th><th>Изменён</th><th>PDF</th><th></th>
   </tr>
   {% for w in worksheets %}
-  <tr>
+  <tr class="worksheet-main-row">
     <td class="col-select">
       <input type="checkbox" class="row-select" name="ids" value="{{ w.pk }}"
              form="ws-bulk-form" title="Выбрать листок">
     </td>
-    <td>
+    <td class="worksheet-title-cell">
       <a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a>
       {% if w.comment %}<div class="muted ws-comment" style="font-size:.85rem">{{ w.comment|truncatechars:120 }}</div>{% endif %}
-      <div class="task-meta">
-      <form method="post" action="{% url 'worksheet_copy' w.pk %}" class="inline-form">
-        {% csrf_token %}
-        <button type="submit" class="link-btn" title="Создать дубликат листка">Дублировать</button>
-      </form>
-      {% if w.corpus_key %} ·
-      <form method="post" action="{% url 'worksheet_corpus_unpush' w.pk %}" class="inline-form"
-            onsubmit="return confirm('Убрать «{{ w.title|escapejs }}» из каталога? Черновик останется в корпусе.');">
-        {% csrf_token %}
-        <button type="submit" class="link-btn" title="Вернуть листок в корпус">Убрать из каталога</button>
-      </form>
-      {% endif %}
-      </div>
+
     </td>
-    {% if request.user.is_superuser %}<td>{{ w.owner.get_full_name|default:w.owner.username }}</td>{% endif %}
-    <td>
+    {% if request.user.is_superuser %}<td class="worksheet-owner-cell">{{ w.owner.get_full_name|default:w.owner.username }}</td>{% endif %}
+    <td class="worksheet-grade-cell">
       <form method="post" action="{% url 'worksheet_quick_update' w.pk %}"
             data-autosave="change" class="inline-form">
         {% csrf_token %}
@@ -131,17 +119,17 @@
         </select>
       </form>
     </td>
-    <td>
+    <td class="worksheet-topics-cell">
       <form method="post" action="{% url 'worksheet_quick_update' w.pk %}"
             data-autosave="change" class="inline-form">
         {% csrf_token %}
         {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=False compact=True selected_json=w.taxonomy_json %}
       </form>
     </td>
-    <td>{{ w.items_total }}</td>
-    <td>{{ w.created_at|date:'d.m.Y' }}</td>
-    <td>{{ w.updated_at|date:'d.m.Y H:i' }}</td>
-    <td>
+    <td class="worksheet-count-cell">Задач: {{ w.items_total }}</td>
+    <td class="worksheet-date-cell">{{ w.created_at|date:'d.m.Y' }}</td>
+    <td class="worksheet-date-cell">{{ w.updated_at|date:'d.m.Y H:i' }}</td>
+    <td class="worksheet-pdf-cell">
       {# Одна кнопка: страница предпросмотра и сборки, вариант выбирается там #}
       <a class="btn btn-small btn-secondary"
          href="{% url 'worksheet_pdf_editor' w.pk %}"
@@ -155,6 +143,21 @@
       </form>
     </td>
   </tr>
+  <tr class="worksheet-action-row"><td></td><td colspan="{% if request.user.is_superuser %}9{% else %}8{% endif %}">
+      <div class="task-meta">
+      <form method="post" action="{% url 'worksheet_copy' w.pk %}" class="inline-form">
+        {% csrf_token %}
+        <button type="submit" class="link-btn" title="Создать дубликат листка">Дублировать</button>
+      </form>
+      {% if w.corpus_key %} ·
+      <form method="post" action="{% url 'worksheet_corpus_unpush' w.pk %}" class="inline-form"
+            onsubmit="return confirm('Убрать «{{ w.title|escapejs }}» из каталога? Черновик останется в корпусе.');">
+        {% csrf_token %}
+        <button type="submit" class="link-btn" title="Вернуть листок в корпус">Убрать из каталога</button>
+      </form>
+      {% endif %}
+       · <a href="{% url 'worksheet_progress' w.pk %}">Прогресс учеников</a></div>
+  </td></tr>
   {% endfor %}
 </table>
 </div>

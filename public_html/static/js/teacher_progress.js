@@ -14,8 +14,10 @@
     var parsed=new DOMParser().parseFromString(html,'text/html');
     var oldCells=Array.from(root.querySelectorAll('[data-progress-cell]'));
     var newCells=Array.from(parsed.querySelectorAll('[data-progress-cell]'));
-    if(!oldCells.length || oldCells.length!==newCells.length || oldCells.some((c,i)=>c.dataset.progressCell!==newCells[i].dataset.progressCell)){
-      replace(root,html);return;
+    var oldStructure=root.querySelector('[data-progress-structure]'), newStructure=parsed.querySelector('[data-progress-structure]');
+    if(oldStructure?.dataset.progressStructure!==newStructure?.dataset.progressStructure || !oldCells.length || oldCells.length!==newCells.length || oldCells.some((c,i)=>c.dataset.progressCell!==newCells[i].dataset.progressCell)){
+      var scroller=root.querySelector('.progress-table-wrap'), left=scroller?.scrollLeft||0, top=scroller?.scrollTop||0;
+      replace(root,html);var next=root.querySelector('.progress-table-wrap');if(next){next.scrollLeft=left;next.scrollTop=top;}return;
     }
     oldCells.forEach((cell,i)=>{if(cell.innerHTML!==newCells[i].innerHTML)cell.innerHTML=newCells[i].innerHTML;});
   }

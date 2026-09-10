@@ -69,7 +69,7 @@
 <div class="card">
   <div class="card-head">
     <div><h2>Список{% if current_group %}: {{ current_group.name }}{% elif group_filter == 'ungrouped' %}: без группы{% endif %}</h2></div>
-    <span class="counter">{{ student_profiles|length }}</span>
+    <a href="{% url 'progress_overview' %}{% if current_group %}?group={{ current_group.pk }}{% endif %}">Прогресс{% if current_group %} группы{% else %} учеников{% endif %} →</a><span class="counter">{{ student_profiles|length }}</span>
   </div>
   {% if student_profiles %}
   <form id="students-bulk-form" method="post" action="{% url 'students_bulk_groups' %}"
@@ -101,7 +101,7 @@
     {% for profile in student_profiles %}
     <tr>
       <td class="col-select"><input type="checkbox" class="row-select" name="ids" value="{{ profile.user_id }}" form="students-bulk-form" title="Выбрать ученика"></td>
-      <td>{{ profile.user.get_full_name|default:profile.user.username }}</td>
+      <td>{{ profile.user.get_full_name|default:profile.user.username }}<div class="task-meta"><a href="{% url 'progress_overview' %}?student={{ profile.user_id }}">Задания и прогресс</a></div></td>
       <td>{{ profile.grade|default:'—' }}</td>
       <td>{% for group in profile.user.visible_groups %}{{ group.name }}{% if request.user.is_superuser %} <span class="muted">({{ group.teacher.get_full_name|default:group.teacher.username }})</span>{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
       <td class="mono">{{ profile.user.username }}</td>
@@ -145,7 +145,7 @@
       </td>
       {% if request.user.is_superuser %}<td>{{ group.teacher.get_full_name|default:group.teacher.username }}</td>{% endif %}
       <td><a href="{% url 'students' %}?group={{ group.pk }}">{{ group.students.count }}</a></td>
-      <td class="row-actions">
+      <td class="row-actions"><a href="{% url 'progress_overview' %}?group={{ group.pk }}">Прогресс группы</a>
         <form method="post" action="{% url 'group_delete' group.pk %}" class="inline-form"
               onsubmit="return confirm('Удалить группу «{{ group.name|escapejs }}»? Ученики останутся.');">
           {% csrf_token %}<button type="submit" class="icon-btn" title="Удалить группу" aria-label="Удалить группу">×</button>

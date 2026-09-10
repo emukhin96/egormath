@@ -1,4 +1,15 @@
-<h3>{{ assignment.student.get_full_name|default:assignment.student.username }} · №{{ row.number }}</h3>
+{% load task_extras %}
+<h3>{{ assignment.student.get_full_name|default:assignment.student.username }} · №{{ point_number }}{% if selected_point %}{% for sr in row.subrows %}{% if sr.subitem.pk == selected_point.pk %}{{ forloop.counter0|subitem_label }}{% endif %}{% endfor %}{% endif %}</h3>
+<div class="progress-condition">
+<div class="math-content">{{ row.task.text_latex|web_text }}</div>
+{% task_images row.task %}
+{% if row.subrows %}<ol class="subitems">{% for sr in row.subrows %}<li {% if sr.subitem.pk == selected_point.pk %}class="progress-selected-part"{% endif %}><span class="math-content">{{ sr.subitem.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
+</div>
+{% if point %}
+<div class="progress-current-answer"><strong>Текущий ввод:</strong> {% if point.fragments %}{% include 'assignments/_mask.html' with fragments=point.fragments editable=False show_checks=False %}{% else %}<span class="math-content">{{ point.answer|default:'—'|web_answer }}</span>{% endif %}{% if point.status == 'draft' %} <span class="helptext">Не проверен</span>{% endif %}</div>
+<details class="check-history" open><summary>Самопроверки · {{ point.attempt_count }}</summary>{% include 'assignments/_attempts.html' %}</details>
+{% if row.submission.photos.all %}<div class="photo-grid">{% for photo in row.submission.photos.all %}<a href="{% url 'photo_file' photo.pk %}" target="_blank"><img src="{% url 'photo_file' photo.pk %}" alt="Фото решения"></a>{% endfor %}</div>{% endif %}
+{% else %}<div data-detail-answer>{% include 'assignments/_live_answer.html' %}</div>{% endif %}
+<p class="helptext">Оценка учителя за всю задачу:</p>
 {% include 'assignments/_grade_scale.html' %}
-<div data-detail-answer>{% include 'assignments/_live_answer.html' %}</div>
 <p><a href="{% url 'review_assignment' assignment.pk %}#task-{{ row.number }}">Открыть проверку работы</a></p>

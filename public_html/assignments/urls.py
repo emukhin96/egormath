@@ -3,6 +3,7 @@ from django.urls import path
 from . import views, progress
 
 urlpatterns = [
+    path('progress/', progress.progress_overview, name='progress_overview'),
     path('progress/<int:worksheet_id>/', progress.worksheet_progress, name='worksheet_progress'),
     path('<int:pk>/live/', progress.assignment_live, name='assignment_live'),
     path('<int:pk>/attempts/<int:task_id>/', progress.task_attempts, name='task_attempts'),
