@@ -72,12 +72,14 @@
     if (!form || !url || typeof fetch !== 'function') return false;
     var before = formSnapshot(form);
     button.disabled = true;
-    fetch(url, {
+    var body = new FormData(form);
+    var enqueue = window.EgorAutosave?.enqueue || function (_, operation) { return operation(); };
+    enqueue(form, function () { return fetch(url, {
       method: 'POST',
-      body: new FormData(form),
+      body: body,
       credentials: 'same-origin',
       headers: {'X-CSRFToken': csrf(form), 'X-Requested-With': 'XMLHttpRequest'},
-    }).then(function (r) { return r.json(); }).then(function (data) {
+    }).then(function (r) { return r.json(); }); }).then(function (data) {
       if (formSnapshot(form) !== before) return;
       /* Бейджи (check_badge.js) — по полям задачи и по слотам маски */
       if (window.EgorCheckBadge) EgorCheckBadge.apply(document, data.checks || {});

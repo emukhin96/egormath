@@ -45,13 +45,15 @@
      значение. Данные снимаются в момент вызова, до постановки в очередь. */
   var queues = new WeakMap();
 
-  function autosave(form) {
-    var body = new FormData(form);
-    var queued = (queues.get(form) || Promise.resolve()).then(function () {
-      return send(form, body);
-    });
+  function enqueue(form, operation) {
+    var queued = (queues.get(form) || Promise.resolve()).catch(function () {}).then(operation);
     queues.set(form, queued);
     return queued;
+  }
+
+  function autosave(form) {
+    var body = new FormData(form);
+    return enqueue(form, function () { return send(form, body); });
   }
 
   var debounceTimers = new WeakMap();
@@ -80,7 +82,7 @@
     });
   });
 
-  window.EgorAutosave = {showSaved: showSaved, autosave: autosave};
+  window.EgorAutosave = {showSaved: showSaved, autosave: autosave, enqueue: enqueue};
 
   /* Flash-сообщения Django (success/info) — тот же тост справа снизу. */
   document.addEventListener('DOMContentLoaded', function () {

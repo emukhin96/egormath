@@ -101,7 +101,7 @@
     {% for profile in student_profiles %}
     <tr>
       <td class="col-select"><input type="checkbox" class="row-select" name="ids" value="{{ profile.user_id }}" form="students-bulk-form" title="Выбрать ученика"></td>
-      <td>{{ profile.user.get_full_name|default:profile.user.username }}<div class="task-meta"><a href="{% url 'progress_overview' %}?student={{ profile.user_id }}">Задания и прогресс</a></div></td>
+      <td><a href="{% url 'progress_overview' %}?student={{ profile.user_id }}">{{ profile.user.get_full_name|default:profile.user.username }}</a></td>
       <td>{{ profile.grade|default:'—' }}</td>
       <td>{% for group in profile.user.visible_groups %}{{ group.name }}{% if request.user.is_superuser %} <span class="muted">({{ group.teacher.get_full_name|default:group.teacher.username }})</span>{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
       <td class="mono">{{ profile.user.username }}</td>

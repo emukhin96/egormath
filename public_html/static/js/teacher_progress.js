@@ -14,10 +14,10 @@
     var parsed=new DOMParser().parseFromString(html,'text/html');
     var oldCells=Array.from(root.querySelectorAll('[data-progress-cell]'));
     var newCells=Array.from(parsed.querySelectorAll('[data-progress-cell]'));
-    var oldStructure=root.querySelector('[data-progress-structure]'), newStructure=parsed.querySelector('[data-progress-structure]');
-    if(oldStructure?.dataset.progressStructure!==newStructure?.dataset.progressStructure || !oldCells.length || oldCells.length!==newCells.length || oldCells.some((c,i)=>c.dataset.progressCell!==newCells[i].dataset.progressCell)){
-      var scroller=root.querySelector('.progress-table-wrap'), left=scroller?.scrollLeft||0, top=scroller?.scrollTop||0;
-      replace(root,html);var next=root.querySelector('.progress-table-wrap');if(next){next.scrollLeft=left;next.scrollTop=top;}return;
+    var oldStructure=Array.from(root.querySelectorAll('[data-progress-structure]')).map(e=>e.dataset.progressStructure).join('|'), newStructure=Array.from(parsed.querySelectorAll('[data-progress-structure]')).map(e=>e.dataset.progressStructure).join('|');
+    if(oldStructure!==newStructure || !oldCells.length || oldCells.length!==newCells.length || oldCells.some((c,i)=>c.dataset.progressCell!==newCells[i].dataset.progressCell)){
+      var positions=Array.from(root.querySelectorAll('.progress-table-wrap')).map(e=>[e.scrollLeft,e.scrollTop]);
+      replace(root,html);root.querySelectorAll('.progress-table-wrap').forEach((e,i)=>{if(positions[i]){e.scrollLeft=positions[i][0];e.scrollTop=positions[i][1];}});return;
     }
     oldCells.forEach((cell,i)=>{if(cell.innerHTML!==newCells[i].innerHTML)cell.innerHTML=newCells[i].innerHTML;});
   }
@@ -44,7 +44,7 @@
     try{
       var review=document.querySelector('[data-review-live-url]');
       if(review){var url=new URL(review.dataset.reviewLiveUrl,location.href);url.searchParams.set('versions',JSON.stringify(versions));var data=await(await request(url)).json();versions=data.versions||{};Object.entries(data.rows).forEach(([id,html])=>{document.querySelectorAll('[data-live-answer="'+id+'"]').forEach(root=>replace(root,html));});}
-      var table=document.querySelector('[data-progress-table]');
+      var table=document.querySelector('[data-progress-overview]')||document.querySelector('[data-progress-table]');
       if(table){var url=new URL(location.href);url.searchParams.set('fragment','1');var key=url.toString();var response=await request(url,{headers:etags[key]?{'If-None-Match':etags[key]}:{}});if(response.status!==304){var html=await response.text();if(!grading&&pollEpoch===gradeEpoch){updateTable(table,html);etags[key]=response.headers.get('ETag');}}}
       if(dialog&&dialog.open&&detailUrl&&!dialog.querySelector('[data-busy="1"]')){
         // Сохраняем выбор оценки при обновлении снимка.

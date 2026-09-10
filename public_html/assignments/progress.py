@@ -2,7 +2,7 @@
 import hashlib
 import json
 from django.http import JsonResponse, HttpResponseNotModified
-from django.db.models import Prefetch, OuterRef, Subquery, Max
+from django.db.models import Prefetch, Max
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.views.decorators.http import require_POST
@@ -112,41 +112,19 @@ def task_attempts(request, pk, task_id):
     return response
 
 
-@teacher_required
-@never_cache
-def worksheet_progress(request, worksheet_id):
-    worksheet = get_object_or_404(Worksheet.visible_to(request.user), pk=worksheet_id)
-    latest = SubmissionCheckAttempt.objects.filter(submission_id=OuterRef('pk')).order_by('-number')
-    submissions_query = Submission.objects.select_related('review').annotate(
-        latest_result=Subquery(latest.values('result')[:1]),
-        latest_number=Subquery(latest.values('number')[:1])).prefetch_related('parts', 'photos', 'check_history')
-    assignments = Assignment.visible_to(request.user).filter(worksheet=worksheet).select_related('student').prefetch_related(
-        'hidden_items', Prefetch('submissions', queryset=submissions_query))
-    group_id = request.GET.get('group', '')
-    if group_id:
-        group = get_object_or_404(StudentGroup.visible_to(request.user), pk=group_id if group_id.isdigit() else 0)
-        assignments = assignments.filter(student__in=group.students.all())
-    items = list(worksheet.ordered_items().filter(task__isnull=False))
+def progress_groups(items):
     groups_of_points = []
     for number, item in enumerate(items, 1):
         parts = item.selected_subitems()
         columns = [{'owner': part, 'is_part': True, 'label': f'{number}{subitem_label(index)}'}
                    for index, part in enumerate(parts)] if parts else [{'owner': item.task, 'is_part': False, 'label': str(number)}]
         groups_of_points.append({'item': item, 'number': number, 'columns': columns})
-    etag = None
-    if request.GET.get('fragment'):
-        state = [list(assignments.values('pk', 'status', 'student__first_name', 'student__last_name', 'student__username')),
-                 list(Submission.objects.filter(assignment__in=assignments).annotate(
-                     last_part=Max('parts__updated_at'), last_photo=Max('photos__uploaded_at'), last_attempt=Max('check_history__pk')).values(
-                     'pk', 'updated_at', 'check_attempts', 'last_part', 'last_photo', 'last_attempt', 'review__reviewed_at')),
-                 list(Assignment.hidden_items.through.objects.filter(assignment__in=assignments).values_list('assignment_id', 'worksheetitem_id')),
-                 [(g['item'].pk, g['item'].task_id, g['item'].order, g['item'].task.updated_at,
-                   [(c['owner'].pk, c['owner'].answer_mask, c['label']) for c in g['columns']]) for g in groups_of_points]]
-        etag = '"' + hashlib.sha256(json.dumps(state, default=str).encode()).hexdigest() + '"'
-        if request.headers.get('If-None-Match') == etag:
-            return HttpResponseNotModified()
+    return groups_of_points
+
+
+def progress_people(groups_of_points, assignments):
     people = []
-    for assignment in assignments.order_by('student__last_name', 'student__username'):
+    for assignment in assignments:
         hidden = {i.pk for i in assignment.hidden_items.all()}
         submissions = {s.task_id: s for s in assignment.submissions.all()}
         cells = []
@@ -162,6 +140,38 @@ def worksheet_progress(request, worksheet_id):
         visible = [c for c in cells if not c['hidden']]
         result = {'done': sum(c['status'] == 'ok' for c in visible), 'total': len(visible)}
         people.append({'assignment': assignment, 'cells': cells, 'result': result})
+    return people
+
+
+def progress_assignments(assignments):
+    return assignments.select_related('student', 'worksheet').prefetch_related(
+        'hidden_items', Prefetch('submissions', queryset=Submission.objects.select_related('review').prefetch_related('parts', 'photos', 'check_history')))
+
+
+@teacher_required
+@never_cache
+def worksheet_progress(request, worksheet_id):
+    worksheet = get_object_or_404(Worksheet.visible_to(request.user), pk=worksheet_id)
+    assignments = progress_assignments(Assignment.visible_to(request.user).filter(worksheet=worksheet))
+    group_id = request.GET.get('group', '')
+    if group_id:
+        group = get_object_or_404(StudentGroup.visible_to(request.user), pk=group_id if group_id.isdigit() else 0)
+        assignments = assignments.filter(student__in=group.students.all())
+    items = list(worksheet.ordered_items().filter(task__isnull=False))
+    groups_of_points = progress_groups(items)
+    etag = None
+    if request.GET.get('fragment'):
+        state = [list(assignments.values('pk', 'status', 'student__first_name', 'student__last_name', 'student__username')),
+                 list(Submission.objects.filter(assignment__in=assignments).annotate(
+                     last_part=Max('parts__updated_at'), last_photo=Max('photos__uploaded_at'), last_attempt=Max('check_history__pk')).values(
+                     'pk', 'updated_at', 'check_attempts', 'last_part', 'last_photo', 'last_attempt', 'review__reviewed_at')),
+                 list(Assignment.hidden_items.through.objects.filter(assignment__in=assignments).values_list('assignment_id', 'worksheetitem_id')),
+                 [(g['item'].pk, g['item'].task_id, g['item'].order, g['item'].task.updated_at,
+                   [(c['owner'].pk, c['owner'].answer_mask, c['label']) for c in g['columns']]) for g in groups_of_points]]
+        etag = '"' + hashlib.sha256(json.dumps(state, default=str).encode()).hexdigest() + '"'
+        if request.headers.get('If-None-Match') == etag:
+            return HttpResponseNotModified()
+    people = progress_people(groups_of_points, assignments.order_by('student__last_name', 'student__username'))
     context = {'worksheet': worksheet, 'items': items, 'point_groups': groups_of_points, 'people': people,
                'groups': StudentGroup.visible_to(request.user), 'group_id': group_id}
     template = 'assignments/_progress_table.html' if request.GET.get('fragment') else 'assignments/progress.html'
@@ -172,6 +182,7 @@ def worksheet_progress(request, worksheet_id):
 
 
 @teacher_required
+@never_cache
 def progress_overview(request):
     """Назначенные листки группы и переходы к живой проверке ученика."""
     from accounts.models import Profile
@@ -188,7 +199,24 @@ def progress_overview(request):
         assignments = assignments.filter(student=student)
     from django.core.paginator import Paginator
     sheets = assignments.values('worksheet_id', 'worksheet__title').annotate(students=Count('student', distinct=True)).order_by('worksheet__title', 'worksheet_id')
-    return render(request, 'assignments/progress_overview.html', {
-        'page': Paginator(assignments.select_related('worksheet').order_by('-assigned_at', '-pk') if student else sheets, 30).get_page(request.GET.get('page')),
+    page = Paginator(progress_assignments(assignments).order_by('-assigned_at', '-pk') if student else sheets, 10 if student else 30).get_page(request.GET.get('page'))
+    mini_tables = []
+    if student:
+        for assignment in page:
+            points = progress_groups(list(assignment.worksheet.ordered_items().filter(task__isnull=False)))
+            mini_tables.append({'assignment': assignment, 'point_groups': points,
+                                'people': progress_people(points, [assignment])})
+    context = {
+        'page': page, 'mini_tables': mini_tables,
         'groups': StudentGroup.visible_to(request.user), 'group': group, 'student': student,
-    })
+    }
+    if request.GET.get('fragment') and student:
+        html = render_to_string('assignments/_student_progress_tables.html', context, request=request)
+        etag = '"' + hashlib.sha256(html.encode()).hexdigest() + '"'
+        if request.headers.get('If-None-Match') == etag:
+            return HttpResponseNotModified()
+        from django.http import HttpResponse
+        response = HttpResponse(html)
+        response['ETag'] = etag
+        return response
+    return render(request, 'assignments/progress_overview.html', context)
