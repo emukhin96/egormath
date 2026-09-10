@@ -58,13 +58,13 @@
           onclick="return confirm('Удалить выбранные задачи? Задачи из листков и с ответами учеников останутся.');">Удалить выбранные</button>
 </form>
 <div class="card task-catalog">
-<div class="table-summary"><strong>Найдено: {{ page.paginator.count }}</strong>
-<label class="ws-toggle"><input type="checkbox" id="toggle-catalog-answers"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Ответы и решения</span></label>
-<label class="ws-toggle"><input type="checkbox" id="toggle-masks" data-storage-key="catalog-masks"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Маски ответов</span></label></div>
+<h2>Задачи <span class="muted">({{ page.paginator.count }})</span>
+<label class="ws-toggle"><input type="checkbox" id="toggle-catalog-answers"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">ответы и решения</span></label>
+<label class="ws-toggle"><input type="checkbox" id="toggle-masks" data-storage-key="catalog-masks"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Маски ответов</span></label></h2>
 <div class="catalog-table-wrap"><table class="list catalog-table">
-<colgroup><col class="col-select"><col class="col-key"><col><col class="col-topics"></colgroup>
-<thead><tr><th><input type="checkbox" data-bulk-all="task-bulk-form" title="Выбрать все задачи на странице"></th><th>№</th><th>Задание и подпункты</th><th>Раздел и темы</th></tr></thead><tbody>
-{% for task in page %}<tr>
+<colgroup><col class="col-select"><col class="col-key"><col><col class="col-topics"><col class="col-cart"></colgroup>
+<thead><tr><th><input type="checkbox" data-bulk-all="task-bulk-form" title="Выбрать все задачи на странице"></th><th>№</th><th>Задание и подпункты</th><th>Раздел и темы</th><th class="col-cart" aria-label="Корзина"></th></tr></thead><tbody>
+{% for task in page %}<tr data-task-row>
 <td><input type="checkbox" class="row-select" name="ids" value="{{ task.pk }}" form="task-bulk-form" title="Выбрать задачу"></td>
 <td><a class="task-id" href="{% url 'task_detail' task.pk %}">#{{ task.pk }}</a></td>
 <td><div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
@@ -72,14 +72,13 @@
 {% task_images task %}
 {% include 'problems/_task_answers.html' with subitems=task.subitems.all hide_answers=True %}
 <div data-worksheet-mask data-task-id="{{ task.pk }}" data-manage-url="{% url 'task_manage' task.pk %}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
-<div class="form-buttons">{% include 'includes/cart_button.html' with task=task %}
-<form method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn">Дублировать</button></form></div>
+<div class="task-meta"><span data-mask-links></span><form class="inline-form" method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn">дублировать</button></form></div>
 </td>
 <td><div class="import-section-path">{% for ref in task.source_refs.all %}<div>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}</div>{% for part in ref.source_path %}<div class="import-section-part">{{ part|heading_dot }}</div>{% endfor %}{% endfor %}</div>
 <form method="post" action="{% url 'task_quick_update' task.pk %}" data-autosave="change">{% csrf_token %}
 <label>Класс<select name="grade_level" class="quick-select">{% include 'includes/grade_options.html' with selected=task.grade_option %}</select></label>
 {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True chip_full=True selected_json=task.taxonomy_json %}
-</form></td></tr>{% endfor %}
+</form></td><td class="col-cart">{% include 'includes/cart_button.html' with task=task %}</td></tr>{% endfor %}
 </tbody></table></div></div>
 
 {% include 'includes/pagination.html' with page=page query=params %}

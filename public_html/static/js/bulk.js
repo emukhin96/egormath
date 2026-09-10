@@ -5,6 +5,14 @@
   'use strict';
 
   document.addEventListener('DOMContentLoaded', function () {
+    var header = document.querySelector('.topbar');
+    function positionBar() {
+      var height = header && getComputedStyle(header).position === 'sticky' ? header.getBoundingClientRect().height : 0;
+      document.documentElement.style.setProperty('--bulk-top', height + 'px');
+    }
+    positionBar();
+    if (header && window.ResizeObserver) new ResizeObserver(positionBar).observe(header);
+    window.addEventListener('resize', positionBar);
     document.querySelectorAll('form[data-bulk]').forEach(function (form) {
       var boxes = Array.prototype.slice.call(
         document.querySelectorAll(
@@ -21,6 +29,7 @@
         if (count) count.textContent = 'Выбрано: ' + checked.length;
         allBoxes.forEach(function (all) {
           all.checked = boxes.length > 0 && checked.length === boxes.length;
+          all.indeterminate = checked.length > 0 && checked.length < boxes.length;
         });
       }
 
