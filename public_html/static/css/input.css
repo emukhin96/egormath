@@ -1983,7 +1983,30 @@
   .mask-value {
     font-weight: 600;
     padding: 0 4px;
-    border-bottom: 2px solid var(--accent);
+    border-bottom: 2px solid var(--muted);
+  }
+
+  .mask-value[data-status='ok'] { border-bottom-color: #218739; }
+  .mask-value[data-status='wrong'] { border-bottom-color: #c53030; }
+
+  .review-answer-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin-block: var(--space-2);
+  }
+
+  .review-reference { color: var(--muted); }
+
+  .review-actions.form-buttons {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .review-actions > .btn {
+    width: 100%;
+    white-space: normal;
   }
 
   .mask-blank {

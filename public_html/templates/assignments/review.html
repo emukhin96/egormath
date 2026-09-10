@@ -38,31 +38,20 @@
       {% for sr in row.subrows %}
       <li>
         <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}
-        {% if sr.mask_reference %}
-          <span class="muted">(эталон маски: <span class="math-content">{{ sr.mask_reference|web_answer }}</span>)</span>
-        {% elif sr.subitem.effective_answer_latex %}
-          <span class="muted">(эталон: <span class="math-content">{{ sr.subitem.effective_answer_latex|web_answer }}</span>)</span>
-        {% endif %}
       </li>
       {% endfor %}
     </ol>
     {% endif %}
 
-    {% if row.task.effective_answer_latex %}
-    <div class="answer-box math-content"><strong>Эталонный ответ:</strong> {{ row.task.effective_answer_latex|web_answer }}</div>
-    {% endif %}
-    {% if row.mask_reference %}
-    <div class="answer-box math-content"><strong>Маска с эталонами:</strong> {{ row.mask_reference|web_answer }}</div>
-    {% elif not row.short_answer %}
-    <p class="helptext">Краткий ответ у задачи не предусмотрен (маски нет) — проверяйте по фото решения.</p>
-    {% endif %}
-    {% if row.task.effective_solution_latex %}
-    <details><summary class="muted">Эталонное решение</summary>
-      <div class="solution-box math-content">{{ row.task.effective_solution_latex|linebreaksbr }}</div>
+    <div data-live-answer="{{ row.item.pk }}">{% include 'assignments/_live_answer.html' %}</div>
+    {% if row.has_solution %}
+    <details class="review-solution"><summary>Эталонное решение</summary>
+      {% if row.task.effective_solution_latex %}<div class="solution-box math-content">{{ row.task.effective_solution_latex|web_text }}</div>{% endif %}
+      {% for sr in row.subrows %}{% if sr.subitem.effective_solution_latex %}
+      <div class="solution-box math-content"><strong>{{ forloop.counter0|subitem_label }})</strong> {{ sr.subitem.effective_solution_latex|web_text }}</div>
+      {% endif %}{% endfor %}
     </details>
     {% endif %}
-
-    <div data-live-answer="{{ row.item.pk }}">{% include 'assignments/_live_answer.html' %}</div>
     <p>{% include 'assignments/_grade_scale.html' %}</p>
     <p class="review-comment"><label>Комментарий<textarea name="task{{ row.task.pk }}_comment" rows="2">{{ row.review.comment|default:'' }}</textarea></label></p>
 

@@ -1327,8 +1327,8 @@ class AutoCheckFlowTests(TestCase):
             assignment=self.assignment, task=self.task)
         self.assertEqual(submission.auto_check, 'wrong')
 
-    def test_review_shows_filled_mask_with_slot_badges_and_reference(self):
-        """Учителю — заполненная маска, бейдж у каждого слота и эталон маски;
+    def test_review_shows_filled_mask_with_result_and_reference(self):
+        """Учителю — заполненная маска, общий бейдж и авторский эталон;
         формула из math-field показывается как $…$, а не кодом."""
         self.task.answer_mask = r'Корни: {{set: 0; 2}}, разложение {{factor: x(x-2)}}'
         self.task.save()
@@ -1339,12 +1339,11 @@ class AutoCheckFlowTests(TestCase):
         response = self.client.get(
             reverse('review_assignment', args=[self.assignment.pk]))
         self.assertContains(response, 'mask-answer')
-        self.assertContains(response, f'data-check="task{self.task.pk}_s1"')
-        self.assertContains(response, f'data-check="task{self.task.pk}_s2"')
-        self.assertContains(response, '✓ верно', count=2)
-        self.assertContains(response, 'Маска с эталонами')
-        self.assertContains(response, '[0; 2]')
-        self.assertContains(response, '$x(x-2)$')
+        self.assertContains(response, f'data-check="task{self.task.pk}"')
+        self.assertContains(response, 'class="mask-value" data-status="ok"', count=2)
+        self.assertContains(response, '✓ верно', count=1)
+        self.assertContains(response, 'Эталон:')
+        self.assertContains(response, '0; 2')
         self.assertContains(response, '$(x-2)x$')
 
     def test_visibility_set_on_assign_and_locked_afterwards(self):
