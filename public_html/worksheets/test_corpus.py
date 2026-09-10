@@ -9,6 +9,7 @@ _TOOLS = Path(__file__).resolve().parents[2] / 'tools'
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -16,7 +17,9 @@ from problems.models import ExamItem, Task, Topic
 from problems.rubricator import seed_rubricator
 from problems.tests import make_teacher
 
-from .corpus import commit_draft
+from problems.test_textbook_import import TINY_PNG
+
+from .corpus import commit_draft, push_draft, reattach_draft_images
 from .corpus_solve import apply_neuro_solution, tasks_missing_solutions
 from .models import Worksheet
 
@@ -235,6 +238,20 @@ class CorpusLoadTests(TestCase):
         self.assertEqual(info['created'], 0)
         self.assertEqual(Task.objects.filter(variant_of__isnull=True).count(), 2)
 
+    def test_find_imported_does_not_match_longer_key(self):
+        from worksheet_corpus.store import save_draft
+        from .corpus import find_imported_worksheet
+        long = _sample_draft(key='8 класс/matvert8-geom-prop_otr_treug')
+        long['header']['title'] = 'В треугольнике'
+        save_draft(long)
+        worksheet, _ = commit_draft(long, self.teacher)
+        self.assertIsNone(find_imported_worksheet(
+            self.teacher, '8 класс/matvert8-geom-prop_otr'))
+        self.assertEqual(
+            find_imported_worksheet(
+                self.teacher, '8 класс/matvert8-geom-prop_otr_treug').pk,
+            worksheet.pk)
+
     def test_skip_element(self):
         from worksheet_corpus.store import save_draft
         draft = _sample_draft(key='b/skip')
@@ -257,6 +274,105 @@ class CorpusLoadTests(TestCase):
         self.assertEqual(subs[1].answer_latex, '16')
         self.assertTrue(subs[0].solution_latex)
         self.assertFalse((task.answer_latex or '').strip())
+
+    def _put_asset(self, key, name):
+        dest = self.out / 'assets' / key.replace('/', '__')
+        dest.mkdir(parents=True, exist_ok=True)
+        path = dest / name
+        path.write_bytes(TINY_PNG)
+        return path
+
+    def test_commit_attaches_images_from_assets_not_host_path(self):
+        from worksheet_corpus.store import save_draft
+        key = '8 класс/matvert8-geom-prop_otr'
+        name = 'matvert8-geom-fales-pic1.png'
+        self._put_asset(key, name)
+        draft = _sample_draft(key=key)
+        draft['elements'][1]['image_names'] = [name]
+        draft['elements'][1]['image_files'] = [
+            '/Users/other/egormath-web/var/worksheets-import/assets/'
+            f'{key.replace("/", "__")}/{name}'
+        ]
+        save_draft(draft)
+        media = Path(self.tmp.name) / 'media'
+        with override_settings(MEDIA_ROOT=str(media)):
+            worksheet, info = commit_draft(draft, self.teacher)
+        self.assertFalse(info.get('skipped'))
+        task = worksheet.items.filter(task__isnull=False).first().task
+        self.assertEqual(task.images.count(), 1)
+        self.assertEqual(task.images.get().filename, name)
+
+    def test_reattach_fills_images_on_existing_worksheet(self):
+        from worksheet_corpus.store import save_draft
+        key = '8 класс/matvert8-geom-prop_otr'
+        name = 'matvert8-geom-prop_otr-pic4.png'
+        draft = _sample_draft(key=key)
+        draft['elements'][1]['image_names'] = [name]
+        draft['elements'][1]['image_files'] = [
+            f'/missing/host/{name}'
+        ]
+        save_draft(draft)
+        media = Path(self.tmp.name) / 'media'
+        with override_settings(MEDIA_ROOT=str(media)):
+            worksheet, _ = commit_draft(draft, self.teacher)
+            self.assertEqual(
+                worksheet.items.filter(task__isnull=False).first()
+                .task.images.count(), 0)
+            self._put_asset(key, name)
+            _, info = reattach_draft_images(draft, self.teacher)
+            self.assertEqual(info['attached'], 1)
+            self.assertEqual(
+                worksheet.items.filter(task__isnull=False).first()
+                .task.images.count(), 1)
+            again, info2 = push_draft(draft, self.teacher)
+            self.assertEqual(again.pk, worksheet.pk)
+            self.assertTrue(info2.get('skipped'))
+            self.assertEqual(info2.get('attached'), 0)
+
+    def test_reattach_command_heals_imported_worksheet(self):
+        from io import StringIO
+
+        from worksheet_corpus.store import save_draft
+        key = '8 класс/matvert8-geom-prop_otr'
+        name = 'matvert8-geom-fales-pic1.png'
+        draft = _sample_draft(key=key)
+        draft['status'] = 'imported'
+        draft['elements'][1]['image_names'] = [name]
+        draft['elements'][1]['image_files'] = [f'/missing/{name}']
+        save_draft(draft)
+        media = Path(self.tmp.name) / 'media'
+        with override_settings(MEDIA_ROOT=str(media)):
+            worksheet, _ = commit_draft(draft, self.teacher, force=True)
+            self._put_asset(key, name)
+            out = StringIO()
+            call_command('reattach_corpus_images', '--key', key, stdout=out)
+            self.assertEqual(
+                worksheet.items.filter(task__isnull=False).first()
+                .task.images.count(), 1)
+            self.assertIn('догружено 1', out.getvalue())
+
+    def test_parse_file_stores_image_names_not_host_paths(self):
+        from worksheet_corpus.parse import parse_file
+        src = Path(self.tmp.name) / 'src'
+        src.mkdir()
+        (src / 'fig.png').write_bytes(TINY_PNG)
+        tex = src / 'sheet.tex'
+        tex.write_text(
+            '\\documentclass{article}\\usepackage{mathneo}\n'
+            '\\begin{document}\n'
+            '\\bighead{Рисунки}{8 класс}{Е.А. Мухин}\n'
+            '\\task{0}{0}{См. \\includegraphics{fig.png}}\n'
+            '\\end{document}\n',
+            encoding='utf-8')
+        draft = parse_file(tex, rel_path='8 класс/sheet.tex', grade=8)
+        task = next(el for el in draft['elements'] if el['kind'] == 'task')
+        self.assertEqual(task['image_names'], ['fig.png'])
+        self.assertEqual(task['image_files'], ['fig.png'])
+        for raw in task['image_files']:
+            self.assertFalse(Path(raw).is_absolute())
+        stored = (
+            self.out / 'assets' / '8 класс__sheet' / 'fig.png')
+        self.assertTrue(stored.is_file())
 
 
 class CorpusViewTests(TestCase):

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.db.models import Q
 
 from problems.models import ExamItem, Source, Task, TaskImage, TaskSource, Topic
 from problems.rubricator import (GRADE_LEVEL_TO_CODE, set_grade_bands,
@@ -19,6 +20,8 @@ TOOLS = Path(__file__).resolve().parents[2] / 'tools'
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 
+from worksheet_corpus.parse import (  # noqa: E402
+    resolve_element_image_paths)
 from worksheet_corpus.store import (  # noqa: E402
     iter_draft_paths, load_json, save_draft)
 from worksheet_corpus.subitems import ensure_subitem_fields  # noqa: E402
@@ -76,8 +79,10 @@ def set_draft_topic_selection(draft, topic_pks, primary_id=None):
 
 
 def find_imported_worksheet(owner, key):
+    """Листок с меткой корпуса. Не путать key с более длинным ключом-префиксом."""
+    mark = corpus_mark(key)
     queryset = Worksheet.objects.filter(
-        comment__startswith=corpus_mark(key))
+        Q(comment=mark) | Q(comment__startswith=mark + '\n'))
     if owner is not None:
         queryset = queryset.filter(owner=owner)
     return queryset.first()
@@ -100,14 +105,79 @@ def ensure_source():
 
 
 def _attach_images(task, stored_paths):
+    """Копирует файлы в TaskImage. stored_paths — существующие пути на этой машине."""
     existing = {img.filename for img in task.images.all()}
+    used_orders = set(task.images.values_list('order', flat=True))
+    attached = 0
     for index, raw in enumerate(stored_paths or [], start=1):
         path = Path(raw)
         if not path.is_file() or path.name in existing:
             continue
-        image = TaskImage(task=task, order=index * 10)
+        order = index * 10
+        while order in used_orders:
+            order += 10
+        used_orders.add(order)
+        image = TaskImage(task=task, order=order)
         image.image.save(path.name, ContentFile(path.read_bytes()), save=True)
         existing.add(path.name)
+        attached += 1
+    return attached
+
+
+def _task_elements_for_commit(draft):
+    for el in draft.get('elements') or []:
+        if el.get('kind') != 'task' or el.get('skip'):
+            continue
+        if el.get('status') == 'skipped':
+            continue
+        yield el
+
+
+def _pair_draft_tasks(draft, worksheet):
+    """Сопоставляет задачи черновика с пунктами уже загруженного листка."""
+    elements = list(_task_elements_for_commit(draft))
+    items = list(
+        worksheet.items.filter(task__isnull=False)
+        .select_related('task').order_by('order', 'pk'))
+    if len(elements) == len(items):
+        return list(zip(elements, items))
+    by_text = {}
+    for item in items:
+        by_text.setdefault((item.task.text_latex or '').strip(), []).append(item)
+    pairs = []
+    used = set()
+    for el in elements:
+        text = (el.get('text') or '').strip()
+        bucket = by_text.get(text) or []
+        item = next((it for it in bucket if it.pk not in used), None)
+        if item is None:
+            continue
+        used.add(item.pk)
+        pairs.append((el, item))
+    return pairs
+
+
+def reattach_draft_images(draft, owner=None):
+    """Дописывает недостающие рисунки к уже загруженному листку корпуса."""
+    worksheet = find_imported_worksheet(owner, draft['id'])
+    if worksheet is None:
+        return None, {
+            'attached': 0, 'missing': [], 'skipped': True,
+            'created': 0, 'reused': 0,
+        }
+    attached = 0
+    missing = []
+    for el, item in _pair_draft_tasks(draft, worksheet):
+        paths, miss = resolve_element_image_paths(draft['id'], el)
+        missing.extend(miss)
+        attached += _attach_images(item.task, paths)
+    return worksheet, {
+        'attached': attached,
+        'missing': missing,
+        'skipped': False,
+        'created': 0,
+        'reused': 0,
+    }
 
 
 def _fill_task_answers(task, answer, solution, sub_answers, sub_solutions):
@@ -194,6 +264,7 @@ def commit_draft(draft, owner, *, force=False):
     source = ensure_source()
     created = 0
     reused = 0
+    missing_images = []
     worksheet_topics = set()
     order = 0
     for el in draft.get('elements') or []:
@@ -256,7 +327,9 @@ def commit_draft(draft, owner, *, force=False):
         applied = _apply_taxonomy(task, draft, grade_opt, el)
         for topic in applied:
             worksheet_topics.add(topic.pk)
-        _attach_images(task, el.get('image_files') or [])
+        paths, missing = resolve_element_image_paths(key, el)
+        missing_images.extend(missing)
+        _attach_images(task, paths)
         locator = f'{key}#{order}'
         if not TaskSource.objects.filter(source=source, locator=locator).exists():
             if not TaskSource.objects.filter(task=task, source=source).exists():
@@ -272,7 +345,10 @@ def commit_draft(draft, owner, *, force=False):
     draft['status'] = 'imported'
     draft['imported_worksheet_id'] = worksheet.pk
     save_draft(draft)
-    return worksheet, {'created': created, 'reused': reused, 'skipped': False}
+    return worksheet, {
+        'created': created, 'reused': reused, 'skipped': False,
+        'missing': missing_images,
+    }
 
 
 def commit_approved(owner, *, force=False):
@@ -314,7 +390,9 @@ def push_draft(draft, owner):
         raise ValueError('Пропущенный листок нельзя загрузить в каталог.')
     existing = find_imported_worksheet(owner, draft['id'])
     if existing:
-        return existing, {'created': 0, 'reused': 0, 'skipped': True}
+        _, info = reattach_draft_images(draft, owner)
+        info['skipped'] = True
+        return existing, info
     return commit_draft(draft, owner, force=True)
 
 

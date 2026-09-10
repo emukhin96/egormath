@@ -48,6 +48,11 @@ def assets_dir():
     return OUTPUT_DIR / 'assets'
 
 
+def draft_assets_root(draft_key: str) -> Path:
+    """Каталог рисунков черновика: assets/<id с / → __>/."""
+    return assets_dir() / draft_key.replace('/', '__')
+
+
 def inventory_json_path():
     return OUTPUT_DIR / 'inventory.json'
 
