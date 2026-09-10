@@ -37,11 +37,12 @@ class ReviewDisplayTests(TestCase):
         self.assertContains(response, 'Авторское решение')
         self.assertNotContains(response, 'Редакторское решение')
         html = response.content.decode()
-        self.assertLess(html.index('✗ неверно'), html.index('Эталон:'))
+        self.assertNotIn('check-badge', html.split('review-answer-row', 1)[1].split('</div>', 1)[0])
+        self.assertContains(response, 'Ответ:')
         self.assertContains(response, 'class="mask-value" data-status="wrong"')
         live = self.client.get(reverse('assignment_live', args=[self.assignment.pk]))
         fragment = next(iter(live.json()['rows'].values()))
-        self.assertIn('Эталон:', fragment)
+        self.assertIn('Ответ:', fragment)
         self.assertIn('review-answer-row', fragment)
 
     def test_no_empty_solution_disclosure(self):
