@@ -260,15 +260,39 @@
   .attempt-answer .mask-answer { display: inline; margin: 0; }
   .attempt-row time { white-space: nowrap; }
   .attempt-row .attempt-answer { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
-  .progress-table-wrap { max-width: 100%; overflow-x: auto; }
-  .progress-table { min-width: 620px; table-layout: auto; }
-  .progress-table .progress-cell { min-width: 140px; }
-  .progress-table tbody th { text-transform: none; font-size: inherit; letter-spacing: normal; }
-  .progress-cell button { display: inline-grid; grid-template-columns: auto auto; width: 154px; white-space: normal; align-items: center; gap: var(--space-1); }
-  .progress-grade { grid-column: 1 / -1; text-align: left; }
+  .progress-table-wrap { max-width: 100%; max-height: 70vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+  table.list.progress-table { width: max-content; min-width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; }
+  table.list.progress-table td, table.list.progress-table th { padding: 6px 10px; text-align: center; }
+  table.list.progress-table thead th { position: sticky; top: 0; background: #f2f6fc; z-index: 2; height: 36px; }
+  table.list.progress-table thead tr:nth-child(2) th { top: 36px; }
+  table.list.progress-table tbody th, table.list.progress-table thead th[rowspan]:first-child { position: sticky; left: 0; min-width: 170px; text-align: left; }
+  table.list.progress-table tbody th { z-index: 1; background: white; text-transform: none; font-size: inherit; letter-spacing: normal; }
+  table.list.progress-table thead th[rowspan]:first-child { z-index: 3; }
+  .progress-group-start { border-left: 1px solid var(--border); }
+  .progress-mark { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 28px; padding: 0; border: 0; border-radius: 6px; font-size: 19px; font-weight: 600; cursor: pointer; }
+  .progress-mark sub { font-size: 10px; position: static; align-self: flex-end; margin-bottom: 3px; line-height: 1; }
+  .progress-mark:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .progress-ok { background: #e5f4e8; color: #287b36; }
+  .progress-wrong { background: #ffeded; color: #a32f2e; }
+  .progress-draft, .progress-unknown { background: #eef3fc; color: #365e92; }
+  .progress-empty { background: transparent; color: var(--muted); }
+  .progress-filters { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-4) 0; }
+  .progress-filters label, .progress-filters .btn { margin: 0; }
+  .progress-filters select { width: 280px; max-width: 100%; margin: 0; }
+  .progress-legend { display: flex; flex-wrap: wrap; gap: var(--space-4); font-size: .85rem; color: var(--muted); }
+  #progress-dialog { width: min(760px, calc(100vw - 32px)); max-width: none; }
+  table.list.progress-table th { text-transform: none; letter-spacing: normal; }
+  .progress-condition { background: #f2f6fc; padding: var(--space-4); border-radius: 8px; margin: var(--space-3) 0 var(--space-4); }
+  .progress-current-answer { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: var(--space-3) 0; }
+  .progress-current-answer .mask-answer { margin: 0; }
+  .progress-selected-part { font-weight: 700; }
+  .progress-grade { text-align: left; }
+  @media (max-width: 600px) {
+    .progress-filters select { flex: 1; min-width: 120px; width: 160px; }
+  }
   .review-comment label, .review-comment textarea { display: block; }
   .review-comment textarea { width: 100%; margin-top: var(--space-1); }
-  .progress-table td, .progress-table th { white-space: nowrap; }
+  table.list.progress-table td, table.list.progress-table th { white-space: nowrap; }
   .problem-mask-code { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
   .problem-columns textarea, .problem-dialog textarea { max-width: 100%; }
   .problem-columns .formset { table-layout: fixed; width: 100%; }
@@ -1007,7 +1031,11 @@
     font-size: 0.85rem;
   }
 
-  .worksheet-catalog .task-meta { white-space: nowrap; }
+  .worksheet-catalog .task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .worksheet-catalog .task-meta a, .worksheet-catalog .task-meta button { white-space: nowrap; }
+  table.list .worksheet-main-row td { border-bottom: 0; }
+  .worksheet-action-row td { padding-top: 0; }
+  .progress-assignment { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
 
   .task-meta a, .task-meta .link-btn {
     text-decoration: none;
@@ -1218,6 +1246,27 @@
     padding: var(--space-3);
   }
 
+  @media (max-width: 600px) {
+    .worksheet-catalog .catalog-table-wrap { overflow: visible; }
+    .worksheet-catalog table, .worksheet-catalog tbody { display: block; width: 100%; }
+    .worksheet-catalog tr:has(> th) { display: block; }
+    .worksheet-catalog th:not(.col-select) { display: none; }
+    .worksheet-catalog th.col-select { display: block; width: auto; text-align: left; }
+    .worksheet-catalog th.col-select::after { content: "Выбрать все"; margin-left: var(--space-2); }
+    .worksheet-main-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; padding-top: var(--space-2); }
+    .worksheet-main-row td { min-width: 0; padding: var(--space-2); }
+    .worksheet-main-row .col-select { grid-column: 1; grid-row: 1; }
+    .worksheet-title-cell { grid-column: 2; grid-row: 1; }
+    .worksheet-main-row .row-actions { grid-column: 3; grid-row: 1; }
+    .worksheet-grade-cell { grid-column: 2; grid-row: 2; }
+    .worksheet-pdf-cell { grid-column: 3; grid-row: 2; }
+    .worksheet-topics-cell { grid-column: 2 / -1; }
+    .worksheet-owner-cell, .worksheet-count-cell { grid-column: 2 / -1; }
+    .worksheet-main-row .worksheet-date-cell { display: none; }
+    .worksheet-action-row { display: block; }
+    .worksheet-action-row td:first-child { display: none; }
+    .worksheet-action-row td:last-child { display: block; padding: var(--space-2); }
+  }
   .task-catalog,
   .worksheet-catalog {
     padding-top: var(--space-4);

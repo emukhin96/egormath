@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block title %}Прогресс учеников — Математика{% endblock %}
+{% block content %}
+<h1>Прогресс{% if student %} · {{ student.get_full_name|default:student.username }}{% elif group %} · {{ group.name }}{% endif %}</h1>
+<p><a href="{% url 'students' %}">К ученикам</a></p>
+{% if not student %}<form method="get" class="progress-filters"><label for="progress-group">Группа</label><select id="progress-group" name="group"><option value="">Все группы</option>{% for g in groups %}<option value="{{ g.pk }}"{% if g == group %} selected{% endif %}>{{ g.name }}</option>{% endfor %}</select><button class="btn btn-secondary">Показать</button></form>{% endif %}
+<p class="helptext">Выберите листок: ответы и самопроверки по каждому пункту обновляются каждые 5 секунд, до отправки работы.</p>
+<div class="card">
+{% if student %}{% for a in page %}<div class="progress-assignment"><strong>{{ a.worksheet.title }}</strong><span class="helptext">{{ a.get_status_display }}</span><div class="task-meta"><a href="{% url 'review_assignment' a.pk %}">Ответы и попытки ученика</a> · <a href="{% url 'worksheet_progress' a.worksheet_id %}">Прогресс всех учеников</a></div></div>{% empty %}<p>Назначений пока нет.</p>{% endfor %}
+{% else %}{% for w in page %}<div class="progress-assignment"><strong>{{ w.worksheet__title }}</strong><span class="helptext">Учеников: {{ w.students }}</span><div class="task-meta"><a href="{% url 'worksheet_progress' w.worksheet_id %}{% if group %}?group={{ group.pk }}{% endif %}">Прогресс по пунктам →</a></div></div>{% empty %}<p>Назначений пока нет.</p>{% endfor %}{% endif %}
+</div>
+{% include 'includes/pagination.html' with query=request.GET %}
+{% endblock %}
