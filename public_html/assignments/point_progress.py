@@ -33,11 +33,11 @@ def point_progress(submission, owner, *, is_part=False, enabled=True, with_fragm
     started = bool(answer or (submission and not is_part and submission.photos.all()))
     checked_answer = latest.snapshot['targets'][0].get('answer', '') if latest else ''
     current = bool(latest and (checked_answer == answer or not checked_answer))
-    status = latest.result if enabled and current and latest else ('draft' if started else 'empty')
+    status = latest.result if enabled and latest else ('draft' if started else 'empty')
     if status not in ('ok', 'wrong', 'draft', 'empty'):
         status = 'unknown'
     labels = {'ok': 'Верно', 'wrong': 'Неверно', 'draft': 'Введено, не проверено',
               'empty': 'Не начато', 'unknown': 'Не удалось проверить'}
     return {'status': status, 'label': labels[status], 'attempt_count': len(history),
-            'history': list(reversed(history)), 'answer': answer, 'obj': obj,
+            'current_changed': bool(latest and not current), 'history': list(reversed(history)), 'answer': answer, 'obj': obj,
             'fragments': obj.mask_fragments('progress', for_teacher=True) if with_fragments and obj and obj.has_mask_values else []}

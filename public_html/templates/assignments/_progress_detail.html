@@ -6,7 +6,7 @@
 {% if row.subrows %}<ol class="subitems">{% for sr in row.subrows %}<li {% if sr.subitem.pk == selected_point.pk %}class="progress-selected-part"{% endif %}><span class="math-content">{{ sr.subitem.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
 </div>
 {% if point %}
-<div class="progress-current-answer"><strong>Текущий ввод:</strong> {% if point.fragments %}{% include 'assignments/_mask.html' with fragments=point.fragments editable=False show_checks=False %}{% else %}<span class="math-content">{{ point.answer|default:'—'|web_answer }}</span>{% endif %}{% if point.status == 'draft' %} <span class="helptext">Не проверен</span>{% endif %}</div>
+<div class="progress-current-answer"><strong>Текущий ввод:</strong> {% if point.fragments %}{% include 'assignments/_mask.html' with fragments=point.fragments editable=False show_checks=False %}{% else %}<span class="math-content">{{ point.answer|default:'—'|web_answer }}</span>{% endif %}{% if point.current_changed %}<span class="helptext">Отличается от последней проверки</span>{% elif point.status == 'draft' %} <span class="helptext">Не проверен</span>{% endif %}</div>
 <details class="check-history" open><summary>Самопроверки · {{ point.attempt_count }}</summary>{% include 'assignments/_attempts.html' %}</details>
 {% if row.submission.photos.all %}<div class="photo-grid">{% for photo in row.submission.photos.all %}<a href="{% url 'photo_file' photo.pk %}" target="_blank"><img src="{% url 'photo_file' photo.pk %}" alt="Фото решения"></a>{% endfor %}</div>{% endif %}
 {% else %}<div data-detail-answer>{% include 'assignments/_live_answer.html' %}</div>{% endif %}

@@ -1,0 +1,4 @@
+{% for table in mini_tables %}<section class="card">
+<div data-progress-cell="heading-{{ table.assignment.pk }}"><h2><a href="{% url 'review_assignment' table.assignment.pk %}">{{ table.assignment.worksheet.title }}</a></h2><p class="helptext">{{ table.assignment.get_status_display }} · <a href="{% url 'worksheet_progress' table.assignment.worksheet_id %}">Прогресс всех учеников</a></p></div>
+{% include 'assignments/_progress_table.html' with point_groups=table.point_groups people=table.people %}
+</section>{% empty %}<div class="card"><p>Назначений пока нет.</p></div>{% endfor %}

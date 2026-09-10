@@ -6,7 +6,7 @@
   <div>
     <span class="page-eyebrow">Работы учеников</span>
     <h1>Выданные задания</h1>
-    <p class="page-subtitle">Общая очередь: от выдачи до завершённой проверки.</p>
+    <p class="page-subtitle">Выданные листки и общий прогресс учеников.</p>
   </div>
   <a class="btn" href="{% url 'assignment_create' %}">Выдать задание</a>
 </div>
@@ -91,44 +91,18 @@
 
 <div class="card assignment-catalog">
   <div class="table-summary">
-    <span>Найдено: <strong>{{ page.paginator.count }}</strong></span>
+    <span>Листков: <strong>{{ page.paginator.count }}</strong></span>
     <span>Всего выдано: {{ stats.total }}</span>
   </div>
-  {% if assignments %}
-  <table class="list">
-    <thead><tr><th>Работа</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Ученик</th><th>Срок</th><th>Статус</th><th>Последнее действие</th><th></th></tr></thead>
-    <tbody>
-    {% for assignment in assignments %}
-    <tr{% if assignment.is_overdue %} class="is-overdue"{% endif %}>
-      <td>
-        <a class="assignment-title" href="{% url 'worksheet_detail' assignment.worksheet.pk %}">{{ assignment.worksheet.title }}</a>
-        <div class="task-meta">Выдано {{ assignment.assigned_at|date:'d.m.Y' }}</div>
-      </td>
-      {% if request.user.is_superuser %}<td>{{ assignment.worksheet.owner.get_full_name|default:assignment.worksheet.owner.username }}</td>{% endif %}
-      <td>{{ assignment.student.get_full_name|default:assignment.student.username }}</td>
-      <td>
-        {% if assignment.due_at %}{{ assignment.due_at|date:'d.m.Y H:i' }}
-          {% if assignment.is_overdue %}<div><span class="badge badge-returned">просрочено</span></div>{% endif %}
-        {% else %}<span class="muted">Без срока</span>{% endif %}
-      </td>
-      <td><span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span></td>
-      <td>
-        {% if assignment.status == 'submitted' %}{{ assignment.submitted_at|date:'d.m.Y H:i' }}
-        {% elif assignment.status == 'reviewed' %}{{ assignment.reviewed_at|date:'d.m.Y H:i' }}
-        {% elif assignment.status == 'returned' %}Возвращено ученику
-        {% else %}Ожидается сдача{% endif %}
-      </td>
-      <td class="row-actions">
-        {% if assignment.status == 'submitted' %}
-        <a class="btn btn-small" href="{% url 'review_assignment' assignment.pk %}{% if filters.owner %}?owner={{ filters.owner }}{% endif %}">Проверить</a>
-        {% else %}
-        <a class="btn btn-small btn-secondary" href="{% url 'review_assignment' assignment.pk %}{% if filters.owner %}?owner={{ filters.owner }}{% endif %}">Открыть</a>
-        {% endif %}
-      </td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  {% if worksheet_groups %}
+  <div class="catalog-table-wrap"><table class="list assignment-sheet-table">
+    <thead><tr><th>Листок</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Учеников</th><th>На проверке</th><th>Проверено</th><th>Последняя выдача</th><th>Ближайший срок</th></tr></thead>
+    <tbody>{% for group in worksheet_groups %}<tr>
+      <td><a class="assignment-title" href="{% url 'worksheet_progress' group.worksheet_id %}">{{ group.worksheet__title }}</a></td>
+      {% if request.user.is_superuser %}<td>{% if group.worksheet__owner__first_name or group.worksheet__owner__last_name %}{{ group.worksheet__owner__first_name }} {{ group.worksheet__owner__last_name }}{% else %}{{ group.worksheet__owner__username }}{% endif %}</td>{% endif %}
+      <td>{{ group.students_total }}</td><td>{{ group.submitted_total }}</td><td>{{ group.reviewed_total }}</td><td>{{ group.last_assigned|date:'d.m.Y' }}</td><td>{{ group.nearest_due|date:'d.m.Y H:i'|default:'—' }}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
   {% else %}
   <div class="empty-state">
     <h2>Работы не найдены</h2>

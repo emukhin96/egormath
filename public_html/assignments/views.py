@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Case, Count, DateTimeField, IntegerField, Q, When
+from django.db.models import Case, Count, DateTimeField, IntegerField, Q, When, Min, Max
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -161,14 +161,23 @@ def assignment_list(request):
             status__in=(Assignment.STATUS_ASSIGNED,
                         Assignment.STATUS_RETURNED), due_at__lt=now)),
     )
-    page = Paginator(assignments, 30).get_page(request.GET.get('page'))
+    grouped = assignments.order_by().values('worksheet_id', 'worksheet__title',
+        'worksheet__owner__first_name', 'worksheet__owner__last_name', 'worksheet__owner__username').annotate(
+        students_total=Count('student', distinct=True), last_assigned=Max('assigned_at'), nearest_due=Min('due_at'),
+        submitted_total=Count('pk', filter=Q(status=Assignment.STATUS_SUBMITTED)),
+        reviewed_total=Count('pk', filter=Q(status=Assignment.STATUS_REVIEWED)),
+        queue_priority=Min('queue_order')).order_by('queue_priority', '-last_assigned', 'worksheet_id')
+    page = Paginator(grouped, 30).get_page(request.GET.get('page'))
+    groups_on_page = list(page.object_list)
+    page.object_list = groups_on_page
     students = (Profile.students_for(request.user)
                 .select_related('user')
                 .order_by('user__last_name', 'user__first_name'))
     worksheets = Worksheet.visible_to(request.user).order_by('-updated_at')
     return render(request, 'assignments/assignment_list.html', {
         'page': page,
-        'assignments': page.object_list,
+        'assignments': assignments.filter(worksheet_id__in=[g['worksheet_id'] for g in groups_on_page]),
+        'worksheet_groups': groups_on_page,
         'stats': stats,
         'students': students,
         'worksheets': worksheets,
