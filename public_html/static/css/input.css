@@ -577,6 +577,10 @@
   }
 
   .bulk-bar {
+    position: sticky;
+    top: calc(var(--bulk-top, var(--topbar-height)) + var(--space-2));
+    z-index: 50;
+    box-shadow: 0 2px 8px rgb(18 43 85 / 12%);
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -2933,11 +2937,13 @@
     text-align: center;
   }
 
-  table.import-drafts td.col-meta .tax-chip {
+  table.import-drafts td.col-meta .tax-chip,
+  .tax-picker[data-chip-full="1"] .tax-chip {
     align-items: flex-start;
   }
 
-  table.import-drafts td.col-meta .tax-picker-compact .tax-chip-label {
+  table.import-drafts td.col-meta .tax-picker-compact .tax-chip-label,
+  .tax-picker[data-chip-full="1"] .tax-chip-label {
     max-width: none;
     overflow: visible;
     text-overflow: unset;

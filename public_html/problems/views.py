@@ -77,6 +77,31 @@ def task_list(request):
     return render(request, 'problems/task_list.html', ctx)
 
 
+def _delete_unused_task(task):
+    """Общее правило удаления из карточки и массовой панели."""
+    from django.db.models.deletion import ProtectedError
+    try:
+        with transaction.atomic():
+            task = Task.objects.select_for_update().get(pk=task.pk)
+            if task.worksheet_items.exists() or task.submissions.exists():
+                return False
+            task.delete()
+        return True
+    except ProtectedError:
+        return False
+
+
+@teacher_required
+@require_POST
+def task_delete(request, pk):
+    task = get_object_or_404(Task, pk=pk)
+    if _delete_unused_task(task):
+        messages.success(request, f'Задача #{pk} удалена.')
+        return redirect('task_list')
+    messages.error(request, 'Задача не удалена: она используется в листке или содержит ответы учеников.')
+    return redirect('task_detail', pk=pk)
+
+
 @teacher_required
 @require_POST
 def task_bulk_update(request):
@@ -87,11 +112,10 @@ def task_bulk_update(request):
         deleted = 0
         blocked = 0
         for task in list(tasks):
-            if task.worksheet_items.exists() or task.submissions.exists():
+            if _delete_unused_task(task):
+                deleted += 1
+            else:
                 blocked += 1
-                continue
-            task.delete()
-            deleted += 1
         if deleted:
             messages.success(request, f'Удалено задач: {deleted}.')
         if blocked:

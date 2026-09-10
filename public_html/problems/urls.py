@@ -43,6 +43,7 @@ urlpatterns = [
     path('imports/<int:batch_pk>/tasks/<int:pk>/',
          views.textbook_import_review, name='textbook_import_review'),
     path('<int:pk>/', views.task_detail, name='task_detail'),
+    path('<int:pk>/delete/', views.task_delete, name='task_delete'),
     path('<int:pk>/duplicate/', views.task_duplicate, name='task_duplicate'),
     path('<int:pk>/manage/', editor.manage, name='task_manage'),
     path('<int:pk>/edit/', views.task_edit, name='task_edit'),
