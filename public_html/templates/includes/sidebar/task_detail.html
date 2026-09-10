@@ -18,7 +18,7 @@
 {% endif %}
 
 <section class="sidebar-section">
-  <form method="post" action="{% url 'task_delete' task.pk %}" onsubmit="return confirm('Удалить задачу #{{ task.pk }}? Это действие нельзя отменить.');">
-    {% csrf_token %}<button class="btn btn-small btn-danger">Удалить задачу</button>
+  <form class="sidebar-actions" method="post" action="{% url 'task_delete' task.pk %}" onsubmit="return confirm('Удалить задачу #{{ task.pk }}? Это действие нельзя отменить.');">
+    {% csrf_token %}<button class="sidebar-action">Удалить задачу</button>
   </form>
 </section>
