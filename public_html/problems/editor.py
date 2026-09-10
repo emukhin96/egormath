@@ -20,6 +20,7 @@ from .rubricator import (apply_task_taxonomy, taxonomy_page_context,
 
 BLOCKS = {
     'condition': ['text_latex'],
+    'answer_policy': ['full_answer_only'],
     'answer': ['author_answer_latex', 'answer_latex'],
     'solution': ['author_solution_latex', 'solution_latex'],
     'metadata': ['stars', 'columns'],
@@ -59,6 +60,7 @@ def context(request, task):
                tags_value=', '.join(task.tags.values_list('name', flat=True)),
                mask_help=HELP, mask_kinds={**KINDS, **{k: k for k in PRESETS}},
                condition_form=block_form('condition', task),
+               answer_policy_form=block_form('answer_policy', task),
                answer_form=block_form('answer', task),
                solution_form=block_form('solution', task),
                metadata_form=block_form('metadata', task),
@@ -80,7 +82,8 @@ def mask_data(task, item=None, include_preview=False):
              'text': o.text_latex,
              'condition': task.text_latex + ('\n' + o.text_latex if isinstance(o, TaskSubitem) else ''),
              'author': o.author_answer_latex,
-             'editor': o.answer_latex, 'mask': o.answer_mask}
+             'editor': o.answer_latex, 'mask': o.answer_mask,
+             'full_answer_only': task.full_answer_only}
             for o in owners]
     if include_preview:
         from assignments.checks import render_fragments, parse_mask

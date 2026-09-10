@@ -1,0 +1,7 @@
+<label class="ws-toggle" for="{{ field.id_for_label }}">
+  <span class="ws-toggle-text">Возможен краткий ответ</span>
+  {{ field }}<span class="ws-toggle-slider"></span>
+  <span class="ws-toggle-text">Только развёрнутый ответ</span>
+</label>
+{{ field.errors }}
+<p class="helptext">Для краткого ответа нужна маска. В режиме развёрнутого ответа маски сохраняются, но ученик ими не пользуется.</p>

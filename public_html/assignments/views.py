@@ -465,6 +465,8 @@ def _persist_answers(assignment, post):
         if item.task_id is None or item.pk in hidden:
             continue
         task = item.task
+        if task.full_answer_only:
+            continue
         prefix = f'task{task.pk}'
         subitems = item.selected_subitems()
         if subitems:
@@ -506,7 +508,7 @@ def _refresh_stale_checks(rows, for_teacher=False):
         # У рубрик и текстовых вставок нет ни задачи, ни ответа
         task = row.get('task')
         submission = row.get('submission')
-        if task is None or submission is None:
+        if task is None or submission is None or task.full_answer_only:
             continue
         if row['subrows']:
             for sr in row['subrows']:
@@ -639,7 +641,9 @@ def check_task(request, pk, task_id):
     subitems = item.selected_subitems()
     if not task.short_answer_available(subitems):
         # Кнопка на странице отключена; прямой запрос — без раскрытия и попытки
-        message = 'У этой задачи нет маски ответа — решение проверит учитель'
+        message = ('Эта задача только с развёрнутым ответом — решение проверит учитель'
+                   if task.full_answer_only else
+                   'У этой задачи нет маски ответа — решение проверит учитель')
         if _is_xhr(request):
             return JsonResponse({'ok': False, 'message': message, 'checks': {}},
                                 status=400)

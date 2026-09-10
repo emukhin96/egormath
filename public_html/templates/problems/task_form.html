@@ -135,6 +135,8 @@
 
 </details></div>
 <div class="card"><h2>Ответы и ввод ученика</h2>
+<input type="hidden" name="answer_policy_submitted" value="1">
+{% include 'problems/_answer_policy.html' with field=form.full_answer_only %}
 {% include 'problems/_task_answer_fields.html' with fields=form %}
 <div class="form-buttons"><button type="button" class="btn btn-secondary" data-neuro="task-form-answer">Дописать AI-ответ</button><button type="button" class="btn btn-secondary" data-neuro="task-form">Добавить AI-решение</button></div>
     <div class="card mask-preview" id="mask-preview" hidden

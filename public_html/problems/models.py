@@ -263,6 +263,8 @@ class Task(models.Model):
     difficulty = models.PositiveSmallIntegerField(
         'Техническая сложность', choices=DIFFICULTY_CHOICES,
         null=True, blank=True)
+    full_answer_only = models.BooleanField(
+        'Только развёрнутый ответ', default=False)
     answer_mask = models.TextField(
         'Маска ответа для ученика', blank=True,
         help_text='Шаблон со слотами {{number: 10}}, {{choice: а|*б}} и т.д.; '
@@ -357,6 +359,8 @@ class Task(models.Model):
         """Может ли ученик дать краткий ответ: есть
         рабочая маска — у задачи или хотя бы у одного из подпунктов
         (``subitems`` — выбранные в листке; по умолчанию все)."""
+        if self.full_answer_only:
+            return False
         if subitems is None:
             subitems = list(self.subitems.all())
         if subitems:

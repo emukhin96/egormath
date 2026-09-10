@@ -51,6 +51,12 @@
       </details>
     </div>
     <div class="card"><h2>Ответы и ввод ученика</h2>
+      <form method="post" action="{% url 'task_manage' task.pk %}" data-editor-form data-editor-auto>
+        {% csrf_token %}<input type="hidden" name="block" value="answer_policy">
+        {% include 'problems/_answer_policy.html' with field=answer_policy_form.full_answer_only %}
+        <div data-editor-errors class="errorlist" role="alert"></div>
+        <noscript><button class="btn">Сохранить</button></noscript>
+      </form>
       {% if subrows %}{% for row in subrows %}
         {% include 'problems/_editor_answer.html' with owner=row.sub sub=row.sub answer_form=row.answer_form solution_form=row.solution_form %}
       {% endfor %}{% else %}

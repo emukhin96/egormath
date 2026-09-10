@@ -11,7 +11,7 @@
   </details>
   <div class="problem-mask-summary">
     <strong>Ответ ученика</strong>
-    <span class="helptext">{% if owner.has_mask %}Маска готова{% else %}Маски нет{% endif %}</span>
+    <span class="helptext">{% if task.full_answer_only %}Только развёрнутый ответ{% elif owner.has_mask %}Маска готова{% else %}Маски нет{% endif %}</span>
     <button type="button" class="btn btn-secondary" data-mask-edit="{{ sub.pk|default:'' }}">{% if owner.answer_mask %}Настроить{% else %}Добавить маску{% endif %}</button>
     <button type="button" class="btn btn-secondary" data-mask-preview="{{ sub.pk|default:'' }}">Предпросмотр</button>
   </div>
