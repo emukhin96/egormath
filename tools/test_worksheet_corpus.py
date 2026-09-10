@@ -797,5 +797,31 @@ class CorpusCleanupTests(unittest.TestCase):
         self.assertEqual(el['answer'], '')
 
 
+class ImagePathTests(unittest.TestCase):
+    TINY_PNG = (
+        b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01'
+        b'\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00'
+        b'\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82')
+
+    def test_resolve_uses_assets_dir_when_host_path_missing(self):
+        from worksheet_corpus.parse import resolve_element_image_paths
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            key = '8 класс/matvert8-geom-prop_otr'
+            name = 'fig.png'
+            dest = out / 'assets' / key.replace('/', '__')
+            dest.mkdir(parents=True)
+            (dest / name).write_bytes(self.TINY_PNG)
+            el = {
+                'image_names': [name],
+                'image_files': [f'/Users/other/missing/{name}'],
+            }
+            with mock.patch('worksheet_corpus.paths.OUTPUT_DIR', out):
+                found, missing = resolve_element_image_paths(key, el)
+            self.assertEqual(missing, [])
+            self.assertEqual([p.name for p in found], [name])
+            self.assertTrue(found[0].is_file())
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -430,10 +430,15 @@ def corpus_push(request, draft_id):
         return redirect('worksheet_corpus_list')
     save_draft(draft)
     already = info.get('skipped')
-    message = (
-        f'Листок «{worksheet.title}» уже в каталоге.'
-        if already else
-        f'Листок «{worksheet.title}» загружен в каталог.')
+    attached = info.get('attached') or 0
+    if already and attached:
+        message = (
+            f'Листок «{worksheet.title}» уже в каталоге, '
+            f'догружено рисунков: {attached}.')
+    elif already:
+        message = f'Листок «{worksheet.title}» уже в каталоге.'
+    else:
+        message = f'Листок «{worksheet.title}» загружен в каталог.'
     if _is_ajax(request):
         return JsonResponse({
             'ok': True,

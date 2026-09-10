@@ -14,7 +14,7 @@ from .latex_scan import (
     find_env_spans,
     is_headerish_title, read_command_args, split_alpha_subitems, split_items,
     split_top_items, title_from_filename)
-from .paths import assets_dir
+from .paths import assets_dir, draft_assets_root
 from .store import draft_id, save_draft
 from .subitems import ensure_subitem_fields, maybe_split_element
 
@@ -507,6 +507,44 @@ def _file_image_names(names):
             if name and not re.fullmatch(r'\d+', Path(name).name)]
 
 
+def element_image_names(el):
+    """Имена файлов рисунка — как на предпросмотре сверки, без путей хоста."""
+    names = []
+    seen = set()
+    for raw in (
+            list(el.get('image_names') or [])
+            + list(el.get('image_files') or [])
+            + list(el.get('images') or [])):
+        name = Path(str(raw)).name
+        if not name or name in seen or re.fullmatch(r'\d+', name):
+            continue
+        seen.add(name)
+        names.append(name)
+    return names
+
+
+def resolve_element_image_paths(draft_key, el):
+    """Ищет файлы в assets/<id>/; абсолютный image_files — только запасной путь."""
+    root = draft_assets_root(draft_key)
+    fallbacks = {}
+    for raw in el.get('image_files') or []:
+        path = Path(raw)
+        fallbacks.setdefault(path.name, []).append(path)
+    found = []
+    missing = []
+    for name in element_image_names(el):
+        cand = root / name
+        if cand.is_file():
+            found.append(cand)
+            continue
+        alt = next((p for p in fallbacks.get(name, []) if p.is_file()), None)
+        if alt is not None:
+            found.append(alt)
+        else:
+            missing.append(name)
+    return found, missing
+
+
 def _apply_stripped_parts(task, parts):
     task['text'] = parts[0] if parts else ''
     n_sub = len(task.get('subitems') or [])
@@ -798,14 +836,15 @@ def parse_file(path: Path, *, rel_path: str, grade: int | None,
     for el in elements:
         if el.get('kind') != 'task':
             continue
-        stored = []
+        stored_names = []
         for name in el.get('images') or []:
             item = by_name.get(Path(name).name) or by_stem.get(
                 Path(name).stem.lower())
             if item:
-                stored.append(item['stored'])
-        el['image_files'] = stored
-        el['image_names'] = [Path(p).name for p in stored]
+                stored_names.append(item['name'])
+        # Только имена: абсолютный путь машины разбора ломает импорт после rsync.
+        el['image_files'] = stored_names
+        el['image_names'] = list(stored_names)
     if missing:
         warnings.append('Не найдены рисунки: ' + ', '.join(missing))
     for el in elements:
