@@ -25,7 +25,7 @@ class TaskForm(forms.ModelForm):
         fields = ['text_latex', 'columns',
                   'answer_latex', 'solution_latex',
                   'author_answer_latex', 'author_solution_latex',
-                  'grade_level', 'stars', 'difficulty',
+                  'grade_level', 'stars', 'difficulty', 'full_answer_only',
                   'answer_mask']
         widgets = {
             'text_latex': forms.Textarea(attrs={'rows': 5}),

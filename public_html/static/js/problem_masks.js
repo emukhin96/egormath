@@ -65,12 +65,13 @@
       var owners=await answers(root,true);target.textContent='';
       var links=root.closest('.ws-item,[data-task-row]')?.querySelector('[data-mask-links]');if(links)links.textContent='';
       var actions=document.createElement('div');actions.className='problem-mask-actions';target.appendChild(actions);
-      if(owners.filter(o=>!o.mask.trim()).length>1)actions.appendChild(button('Создать недостающие маски','maskMissing','1'));
+      if(owners.some(o=>o.full_answer_only)){var policy=document.createElement('span');policy.className='helptext';policy.textContent='Только развёрнутый ответ. Сохранённые маски не используются.';actions.appendChild(policy);}
+      if(!owners.some(o=>o.full_answer_only)&&owners.filter(o=>!o.mask.trim()).length>1)actions.appendChild(button('Создать недостающие маски','maskMissing','1'));
 
       for(var i=0;i<owners.length;i++){
         var o=owners[i],row=document.createElement('div');row.className='problem-mask-summary';
         if(o.id){var title=document.createElement('strong');title.textContent=o.label;row.appendChild(title);}
-        if(o.mask){
+        if(o.mask&&!o.full_answer_only){
           var fields=document.createElement('div');fields.className='problem-mask-inline';fields.innerHTML=o.preview_html||'';row.appendChild(fields);
           fields.querySelectorAll('.mask-text,.mask-order-items li').forEach(renderMathContent);
         }

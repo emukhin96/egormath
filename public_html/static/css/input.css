@@ -1235,6 +1235,7 @@
   .catalog-table .task-text { margin-bottom: var(--space-2); }
   .catalog-table .import-section-path { margin-bottom: var(--space-3); }
   .problem-columns label { display: block; }
+  .problem-columns .ws-toggle { display: inline-flex; margin-left: 0; }
   .problem-columns .inline-label, .problem-columns .label-row label { display: inline-flex; }
   .task-catalog table.list {
     table-layout: fixed;

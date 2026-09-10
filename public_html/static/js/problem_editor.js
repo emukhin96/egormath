@@ -84,16 +84,18 @@
     update(result, form); return result;
   }
   document.addEventListener('input', function (e) { var f=e.target.closest('[data-editor-form]'); if(f)f.dataset.dirty='1'; });
-  document.addEventListener('change', function (e) { var f=e.target.closest('[data-editor-form]'); if(f)f.dataset.dirty='1'; });
+  document.addEventListener('change', function (e) { var f=e.target.closest('[data-editor-form]'); if(f){f.dataset.dirty='1';if(f.hasAttribute('data-editor-auto'))f.requestSubmit();} });
   document.addEventListener('submit', async function (e) {
     var form=e.target.closest('[data-editor-form]'); if(!form)return;
     e.preventDefault();
     if(form.dataset.busy)return;
     form.dataset.busy='1'; var button=e.submitter; if(button)button.disabled=true;
     var box=form.querySelector('[data-editor-errors]');box.textContent='';
-    try { await save(form.closest('[data-problem-editor]'), new FormData(form), form); }
-    catch(error){errors(box,error);}
-    finally { delete form.dataset.busy; if(button)button.disabled=false; }
+    var data=new FormData(form), toggle=form.hasAttribute('data-editor-auto')&&form.querySelector('input[type=checkbox]');
+    if(toggle)toggle.disabled=true;
+    try { var result=await save(form.closest('[data-problem-editor]'), data, form); if(!result&&form.hasAttribute('data-editor-auto')){form.reset();delete form.dataset.dirty;} }
+    catch(error){if(form.hasAttribute('data-editor-auto')){form.reset();delete form.dataset.dirty;}errors(box,error);}
+    finally { delete form.dataset.busy; if(button)button.disabled=false; if(toggle)toggle.disabled=false; }
   });
   document.addEventListener('click', async function(e){
     var cancel=e.target.closest('[data-editor-cancel]');

@@ -629,6 +629,8 @@ def _task_form(request, task):
         # Старые клиенты не присылают авторские поля — не обнуляем их.
         data = request.POST.copy()
         if task:
+            if 'answer_policy_submitted' not in data:
+                data['full_answer_only'] = task.full_answer_only
             for name in ('author_answer_latex', 'author_solution_latex'):
                 if name not in data:
                     data[name] = getattr(task, name)
