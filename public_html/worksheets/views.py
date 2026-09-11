@@ -364,6 +364,9 @@ def worksheet_detail(request, pk):
             'hidden_assignments': assignment_hidden.get(item.pk, set()),
         })
 
+    from .block_presentation import decorate_block_rows
+    decorate_block_rows(rows)
+
     # Поиск задач для добавления (правая часть страницы)
     search_active = any(request.GET.get(k) for k in ('q', 'topic', 'grade', 'tag'))
     found_tasks = []
@@ -448,6 +451,8 @@ def collection_detail(request, pk):
             'number': number if item.task_id else None,
             'subitems': item.selected_subitems() if item.task_id else [],
         })
+    from .block_presentation import decorate_block_rows
+    decorate_block_rows(rows)
     return render(request, 'worksheets/collection_detail.html', {
         'collection': collection,
         'worksheet': collection.worksheet,
@@ -617,6 +622,33 @@ def worksheet_quick_update(request, pk):
 
 
 def append_task(worksheet, task):
+    """Добавляет отдельную задачу либо все вопросы общего блока."""
+    from problems.task_blocks import block_members
+    if not task.block_id:
+        return _append_single_task(worksheet, task)
+    try:
+        members = block_members(task)
+    except ValueError as exc:
+        return 'exists', str(exc)
+    with transaction.atomic():
+        Worksheet.objects.select_for_update().get(pk=worksheet.pk)
+        ids = [t.pk for t in members]
+        active = worksheet.items.filter(task_id__in=ids, deleted_at=None)
+        if active.count() == len(ids):
+            return 'exists', 'Блок уже есть в листке.'
+        last = worksheet.items.aggregate(m=models.Max('order'))['m'] or 0
+        existing = {i.task_id: i for i in worksheet.items.filter(task_id__in=ids)}
+        for pos, member in enumerate(members, 1):
+            item = existing.get(member.pk)
+            if item is None:
+                item = WorksheetItem(worksheet=worksheet, task=member)
+            item.deleted_at = None
+            item.order = last + pos * 10
+            item.save()
+    return 'added', f'Блок из {len(members)} задач добавлен в листок.'
+
+
+def _append_single_task(worksheet, task):
     """Добавляет задачу в конец листка; возвращает (исход, сообщение).
 
     Исход: 'exists' — уже есть, 'restored' — возвращён мягко удалённый
@@ -648,8 +680,12 @@ def soft_remove_item(worksheet, item):
     with transaction.atomic():
         Worksheet.objects.select_for_update().get(pk=worksheet.pk)
         worksheet.items.filter(deleted_at__isnull=False).delete()
-        item.deleted_at = timezone.now()
-        item.save(update_fields=['deleted_at'])
+        if item.task_id and item.task.block_id:
+            worksheet.items.filter(task__block_id=item.task.block_id).update(
+                deleted_at=timezone.now())
+        else:
+            item.deleted_at = timezone.now()
+            item.save(update_fields=['deleted_at'])
 
 
 def add_task_to_worksheet(request, worksheet_id, task):
@@ -729,21 +765,19 @@ def worksheet_restore_item(request, pk):
 def worksheet_move_item(request, pk, item_id, direction):
     worksheet = _own_worksheet(request, pk)
     items = list(worksheet.ordered_items())
-    idx = next((i for i, it in enumerate(items) if it.pk == item_id), None)
-    if idx is None:
+    from .blocks import item_units
+    units = item_units(items)
+    unit_idx = next((i for i, unit in enumerate(units)
+                     if any(it.pk == item_id for it in unit)), None)
+    if unit_idx is None:
         raise Http404
-    other = idx - 1 if direction == 'up' else idx + 1
-    if 0 <= other < len(items):
-        items[idx].order, items[other].order = items[other].order, items[idx].order
-        # Совпадающие order (например, все 0) — перенумеруем целиком
-        if items[idx].order == items[other].order:
-            items[idx], items[other] = items[other], items[idx]
-            for i, it in enumerate(items):
-                it.order = (i + 1) * 10
-            WorksheetItem.objects.bulk_update(items, ['order'])
-        else:
-            WorksheetItem.objects.bulk_update(
-                [items[idx], items[other]], ['order'])
+    other_unit = unit_idx - 1 if direction == 'up' else unit_idx + 1
+    if 0 <= other_unit < len(units):
+        units[unit_idx], units[other_unit] = units[other_unit], units[unit_idx]
+        ordered = [it for unit in units for it in unit]
+        for pos, it in enumerate(ordered, 1):
+            it.order = pos * 10
+        WorksheetItem.objects.bulk_update(ordered, ['order'])
     return redirect('worksheet_detail', pk=pk)
 
 
@@ -773,7 +807,13 @@ def worksheet_reorder(request, pk):
     worksheet = _own_worksheet(request, pk)
     raw = request.POST.get('order', '')
     id_list = [int(x) for x in raw.split(',') if x.strip().isdigit()]
-    items = {i.pk: i for i in worksheet.items.filter(deleted_at__isnull=True)}
+    items = {i.pk: i for i in worksheet.ordered_items()}
+    from .blocks import valid_block_order
+    if any(i.task_id and i.task.block_id for i in items.values()):
+        if (len(id_list) != len(items) or set(id_list) != set(items)
+                or not valid_block_order([items[i] for i in id_list])):
+            return JsonResponse({'ok': False, 'message':
+                'Вопросы общего блока перемещаются вместе в исходном порядке.'}, status=400)
     changed = []
     for pos, item_id in enumerate(id_list):
         item = items.get(item_id)
@@ -842,20 +882,22 @@ def worksheet_item_visibility(request, pk, item_id):
     worksheet = _own_worksheet(request, pk)
     item = get_object_or_404(
         WorksheetItem, pk=item_id, worksheet=worksheet, task__isnull=False)
+    members = (list(worksheet.items.filter(task__block_id=item.task.block_id))
+               if item.task.block_id else [item])
     hide_links = {int(x) for x in request.POST.getlist('hide_links')
                   if x.isdigit()}
     for link in worksheet.share_links.all():
         if link.pk in hide_links:
-            link.hidden_items.add(item)
+            link.hidden_items.add(*members)
         else:
-            link.hidden_items.remove(item)
+            link.hidden_items.remove(*members)
     hide_assignments = {int(x) for x in request.POST.getlist(
         'hide_assignments') if x.isdigit()}
     for assignment in worksheet.assignments.all():
         if assignment.pk in hide_assignments:
-            assignment.hidden_items.add(item)
+            assignment.hidden_items.add(*members)
         else:
-            assignment.hidden_items.remove(item)
+            assignment.hidden_items.remove(*members)
     return _builder_response(request, pk, message='Видимость сохранена.')
 
 
@@ -1135,6 +1177,8 @@ def public_worksheet(request, token):
             'number': number if item.task_id else None,
             'subitems': item.selected_subitems(),
         })
+    from .block_presentation import decorate_block_rows
+    decorate_block_rows(rows)
     # Подзаголовок — только непустые части, без «висячих» разделителей
     subtitle_line = ' · '.join(
         part.strip() for part in (worksheet.grade_label, worksheet.subtitle,

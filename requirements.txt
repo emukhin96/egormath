@@ -2,6 +2,7 @@ Django>=4.2,<5
 pymysql>=1.1
 requests>=2.31
 Pillow>=10.0
+PyMuPDF>=1.28.2,<2
 sympy>=1.13
 lark>=1.1
 python-dotenv>=1.0

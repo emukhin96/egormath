@@ -160,6 +160,9 @@ class TaskDraft:
     author_answer_latex: str = ""
     author_solution_latex: str = ""
     images: list[str] = field(default_factory=list)
+    exam_item_codes: list[str] = field(default_factory=list)
+    grade_band_codes: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     confidence: float = 1.0
     review_status: str = "needs_review"
     warnings: list[str] = field(default_factory=list)
@@ -3200,7 +3203,9 @@ def parse_ziv(text: str) -> tuple[list[TaskDraft], dict]:
 
 def bundle_from_text(
         profile: str, tasks_text: str, solutions_text: str = "", *,
-        tasks_file: str = "tasks.tex", solutions_file: str = "") -> ImportBundle:
+        tasks_file: str = "tasks.tex", solutions_file: str = "",
+        answers: dict | None = None, expected_ids: set | None = None,
+        answers_file: str = "", pdf_task_contexts=None) -> ImportBundle:
     """Разбирает уже прочитанные TEX-файлы для CLI и веб-интерфейса."""
     if profile == "shestakov":
         if not solutions_text:
@@ -3210,6 +3215,11 @@ def bundle_from_text(
         tasks, diagnostics = parse_galitsky(tasks_text)
     elif profile == "ziv":
         tasks, diagnostics = parse_ziv(tasks_text)
+    elif profile == "ostromogilsky":
+        from .ostromogilsky_parser import parse_ostromogilsky
+        tasks, diagnostics = parse_ostromogilsky(
+            tasks_text, answers=answers, expected_ids=expected_ids,
+            pdf_task_contexts=pdf_task_contexts)
     else:
         raise ValueError(f"Неизвестный профиль: {profile}")
     review_counts = Counter(
@@ -3234,6 +3244,7 @@ def bundle_from_text(
         source={
             "tasks_file": tasks_file,
             "solutions_file": solutions_file,
+            "answers_file": answers_file,
         },
         tasks=tasks,
         diagnostics=diagnostics,
@@ -3241,7 +3252,22 @@ def bundle_from_text(
 
 
 def bundle_for(profile: str, tasks_path: Path,
-               solutions_path: Path | None) -> ImportBundle:
+               solutions_path: Path | None,
+               answers_pdf: Path | None = None) -> ImportBundle:
+    answers = None
+    expected_ids = None
+    answers_file = ""
+    pdf_task_contexts = None
+    if profile == "ostromogilsky":
+        if answers_pdf is None:
+            raise ValueError(
+                "Для профиля ostromogilsky обязателен PDF с ключом "
+                "(--answers-pdf)")
+        from .ostromogilsky_parser import extract_pdf_answers
+        answers, expected_ids = extract_pdf_answers(answers_pdf)
+        from .ostromogilsky_splits import extract_pdf_task_contexts
+        pdf_task_contexts = extract_pdf_task_contexts(answers_pdf)
+        answers_file = str(answers_pdf.resolve())
     return bundle_from_text(
         profile,
         tasks_path.read_text(encoding="utf-8"),
@@ -3250,6 +3276,10 @@ def bundle_for(profile: str, tasks_path: Path,
         tasks_file=str(tasks_path.resolve()),
         solutions_file=(str(solutions_path.resolve())
                         if solutions_path else ""),
+        answers=answers,
+        expected_ids=expected_ids,
+        answers_file=answers_file,
+        pdf_task_contexts=pdf_task_contexts,
     )
 
 
@@ -3291,14 +3321,23 @@ def write_bundle(bundle: ImportBundle, output: Path) -> None:
         f"- С предупреждениями: {bundle.diagnostics['review_counts'].get('warning', 0)}",
     ]
     if "missing_task_ids" in bundle.diagnostics:
-        lines.extend([
-            f"- Пропущено ожидаемых номеров: "
-            f"{len(bundle.diagnostics['missing_task_ids'])}",
-            f"- Однозначно сопоставлено решений: "
-            f"{bundle.diagnostics['matched_solutions']}",
-            f"- Затронуто нарушениями порядка колонок: "
-            f"{len(bundle.diagnostics['physical_order_affected_ids'])}",
-        ])
+        lines.append(
+            "- Пропущено ожидаемых номеров: "
+            f"{len(bundle.diagnostics['missing_task_ids'])}")
+        if "matched_solutions" in bundle.diagnostics:
+            lines.extend([
+                f"- Однозначно сопоставлено решений: "
+                f"{bundle.diagnostics['matched_solutions']}",
+                f"- Затронуто нарушениями порядка колонок: "
+                f"{len(bundle.diagnostics['physical_order_affected_ids'])}",
+            ])
+        if "answers_matched" in bundle.diagnostics:
+            lines.extend([
+                f"- Сопоставлено ответов: "
+                f"{bundle.diagnostics['answers_matched']}",
+                f"- Ответов без задачи: "
+                f"{len(bundle.diagnostics.get('answers_without_task') or [])}",
+            ])
     lines.extend([
         "", "## Диагностика", "", "```json",
         json.dumps(bundle.diagnostics, ensure_ascii=False, indent=2), "```",
@@ -3308,16 +3347,66 @@ def write_bundle(bundle: ImportBundle, output: Path) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profile", required=True, choices=("galitsky", "ziv", "shestakov"))
+    parser.add_argument(
+        "--profile", required=True,
+        choices=("galitsky", "ziv", "shestakov", "ostromogilsky"))
     parser.add_argument("--tasks", required=True, type=Path)
     parser.add_argument("--solutions", type=Path)
+    parser.add_argument(
+        "--answers-pdf", type=Path,
+        help="Интерактивный PDF с якорями ans:: (обязателен для ostromogilsky)")
     parser.add_argument("--output", required=True, type=Path)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    bundle = bundle_for(args.profile, args.tasks, args.solutions)
+    if args.profile == "ostromogilsky" and args.answers_pdf is None:
+        raise SystemExit(
+            "Для профиля ostromogilsky укажите --answers-pdf с ключом ответов.")
+    bundle = bundle_for(
+        args.profile, args.tasks, args.solutions,
+        answers_pdf=args.answers_pdf)
+    if args.profile == "ostromogilsky" and args.answers_pdf is not None:
+        from .ostromogilsky_pdf_geometry import extract_pdf_geometry, attach_pdf_geometry
+        from .ostromogilsky_parser import extract_pdf_answers
+        geometry = extract_pdf_geometry(args.answers_pdf)
+        answers, _ = extract_pdf_answers(args.answers_pdf)
+        attach_pdf_geometry(bundle, geometry, answers, args.output / "images")
+        from .ostromogilsky_pdf_inequalities import extract_pdf_systems, attach_pdf_systems
+        systems = extract_pdf_systems(args.answers_pdf)
+        attach_pdf_systems(bundle, systems, answers, args.output / "images")
+        from .ostromogilsky_pdf_linear_graphs import extract_pdf_linear_graphs, attach_pdf_linear_graphs
+        linear_graphs = extract_pdf_linear_graphs(args.answers_pdf)
+        attach_pdf_linear_graphs(bundle, linear_graphs, answers, args.output / "images")
+        from .ostromogilsky_pdf_repairs import extract_pdf_repairs, attach_pdf_repairs
+        repairs = extract_pdf_repairs(args.answers_pdf)
+        attach_pdf_repairs(bundle, repairs, answers, args.output / "images")
+        from .ostromogilsky_shared_repairs import extract_shared_repairs, attach_shared_repairs
+        shared_repairs = extract_shared_repairs(args.answers_pdf)
+        attach_shared_repairs(bundle, shared_repairs, args.output / "images")
+        from .ostromogilsky_graph_repairs import extract_graph_repairs, attach_graph_repairs
+        graph_repairs = extract_graph_repairs(args.answers_pdf)
+        attach_graph_repairs(bundle, graph_repairs, args.output / "images")
+        from .ostromogilsky_inequality_figures import extract_inequality_figures, attach_inequality_figures
+        inequality_figures = extract_inequality_figures(args.answers_pdf)
+        attach_inequality_figures(bundle, inequality_figures, args.output / "images")
+        from .ostromogilsky_final_repairs import apply_final_repairs
+        apply_final_repairs(bundle, args.answers_pdf, args.output / "images")
+        from .ostromogilsky_parser import (
+            attach_grid_figures, extract_grid_figures)
+        figures = extract_grid_figures(args.answers_pdf)
+        attached = attach_grid_figures(
+            bundle.tasks, figures, dest=args.output / "images")
+        bundle.diagnostics["grid_figures"] = len(attached)
+        bundle.diagnostics["tasks_with_images"] = sum(
+            bool(task.images) for task in bundle.tasks)
+        from .ostromogilsky_final_repairs import copy_referenced_images
+        copy_referenced_images(bundle, args.tasks.parent, args.output / "images")
+        bundle.diagnostics['tasks_with_author_answer'] = sum(
+            bool(task.author_answer_latex) for task in bundle.tasks)
+        bundle.diagnostics['review_counts'] = dict(Counter(
+            'warning' if task.warnings else 'clean' for task in bundle.tasks))
     write_bundle(bundle, args.output)
     print(json.dumps(bundle.diagnostics, ensure_ascii=False, indent=2))
     return 0

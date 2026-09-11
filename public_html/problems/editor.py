@@ -102,6 +102,13 @@ def local_copy(task, item, user):
     chosen = list(item.subitems.values_list('pk', flat=True))
     copy, mappings = task.make_variant(user, with_mapping=True)
     mapping = mappings['subitems']
+    if mappings.get('block_tasks'):
+        for sibling in item.worksheet.items.filter(
+                task_id__in=mappings['block_tasks']).exclude(pk=item.pk):
+            selected = list(sibling.subitems.values_list('pk', flat=True))
+            sibling.task_id = mappings['block_tasks'][sibling.task_id]
+            sibling.save(update_fields=['task'])
+            sibling.subitems.set([mapping[pk] for pk in selected])
     item.task = copy
     item.save(update_fields=['task'])
     if not set(chosen).issubset(mapping):

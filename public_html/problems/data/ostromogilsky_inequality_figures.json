@@ -1,0 +1,722 @@
+[
+  {
+    "id": "13.2",
+    "source": "DEMO Аналоги Ответ Укажите решение системы неравенств {︃ x+ 3 ≥−2, x+ 1,1 ≥0. 1) x; −5 2) x; −1, 1 3) x; −5 −1, 1 4) x. −5 −1, 1",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\nx+3 \\geq-2 \\\\\nx+1,1 \\geq 0\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2",
+    "clip": [
+      72,
+      380.43035888671875,
+      523,
+      443.0984191894531
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.4",
+    "source": "Укажите решение неравенства x−x2 ≥0. 1) x; 1 2) x; 0 1 3) x; 0 4) x. 0 1",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $x-x^{2} \\geq 0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-4",
+    "clip": [
+      72,
+      175.9783935546875,
+      523,
+      232.48440551757812
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.6",
+    "source": "Укажите решение неравенства (x+ 1)(x−6) ≤0. 1) x; −1 6 2) x; −1 6 3) x; 6 4) x. −1",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $(x+1)(x-6) \\leq 0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-6",
+    "clip": [
+      72,
+      470.2413330078125,
+      523,
+      528.7474365234375
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.8",
+    "source": "Укажите решение неравенства x2 < 9. 1) x; −3 3 2) x; 3 3) x; −3 3 4) x. −3",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $x^{2}<9$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-8",
+    "clip": [
+      72,
+      146.6583251953125,
+      523,
+      205.16140747070312
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.10",
+    "source": "Укажите неравенство, решение которого изображено на рисунке. x. 0 7 1) x2 −7x< 0; 2) x2 −49 > 0; 3) x2 −7x> 0; 4) x2 −49 < 0.",
+    "end_at_answer": true,
+    "latex": "Укажите неравенство, решение которого изображено на рисунке.\n\n\\taskpic{1}\n\n1) $x^2-7x<0$;\\\\\n2) $x^2-49>0$;\\\\\n3) $x^2-7x>0$;\\\\\n4) $x^2-49<0$.",
+    "image_stem": "oge-inequality-line-13-10",
+    "clip": [
+      170,
+      443.4527893066406,
+      430,
+      470.8023986816406
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.1",
+    "source": "Укажите решение системы неравенств {︃ x+ 1,8 ≤0, x+ 0,5 ≤−0,5. 1) x; −1, 8 2) x; −1, 8 −1 3) нет решений; 4) x. −1",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\nx+1,8 \\leq 0 \\\\\nx+0,5 \\leq-0,5 .\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-1",
+    "clip": [
+      72,
+      476.1732482910156,
+      523,
+      538.8404541015625
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.2",
+    "source": "Укажите решение системы неравенств {︃ −35 + 5x< 0, 6 −3x< −3. 1) x; 3 7 2) нет решений; 3) x; 7 4) x. 3",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\n-35+5 x<0 \\\\\n6-3 x<-3\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-2",
+    "clip": [
+      72,
+      198.55438232421875,
+      523,
+      257.8944396972656
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.3",
+    "source": "Укажите решение системы неравенств {︃ −12 + 3x< 0, 9 −4x> −23. 1) x; 8 2) x; 4 3) x; 4 4) x. 4 8",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\n-12+3 x<0, \\\\\n9-4 x>-23 .\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-3",
+    "clip": [
+      72,
+      415.33441162109375,
+      523,
+      474.6744079589844
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.4",
+    "source": "Укажите решение системы неравенств {︃ −35 + 5x< 0, 6 −3x> −18. 1) x; 8 2) x; 7 3) x; 7 8 4) x. 7",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\n-35+5 x<0 \\\\\n6-3 x>-18\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-4",
+    "clip": [
+      72,
+      632.1143798828125,
+      523,
+      691.4544067382812
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.5",
+    "source": "Укажите решение системы неравенств {︃ −9 + 3x< 0, 2 −3x> −10. 1) x; 4 2) x; 3 3) x; 3 4) x. 3 4",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\n-9+3 x<0 \\\\\n2-3 x>-10\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-5",
+    "clip": [
+      72,
+      198.55438232421875,
+      523,
+      257.8944396972656
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.6",
+    "source": "Укажите решение системы неравенств {︃ x−4,3 ≥0, x+ 5 ≤10. 1) x; 4, 3 5 2) x; 4, 3 3) x; 5 4) x. 4, 3 5",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\nx-4,3 \\geq 0 \\\\\nx+5 \\leq 10\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-6",
+    "clip": [
+      72,
+      415.3292541503906,
+      523,
+      479.3254089355469
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.7",
+    "source": "Укажите решение системы неравенств {︃ −35 + 5x> 0, 6 −3x> −3. 1) x; 3 2) x; 3 7 3) нет решений; 4) x. 7",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\n-35+5 x>0 \\\\\n6-3 x>-3\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-7",
+    "clip": [
+      72,
+      636.7643432617188,
+      523,
+      696.1054077148438
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.8",
+    "source": "Укажите решение системы неравенств {︃ −9 + 3x< 0, 2 −3x< −10. 1) x; 3 2) нет решений; 3) x; 4 4) x. 3 4",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\n-9+3 x<0 \\\\\n2-3 x<-10\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-8",
+    "clip": [
+      72,
+      198.55438232421875,
+      523,
+      257.8944396972656
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.9",
+    "source": "Укажите решение системы неравенств {︃ x−3,7 ≤0, x−2 ≥1. 1) x; 3 3, 7 2) x; 3, 7 3) x; 3 3, 7 4) x. 3",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\nx-3,7 \\leq 0 \\\\\nx-2 \\geq 1\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-9",
+    "clip": [
+      72,
+      415.3292541503906,
+      523,
+      479.3254089355469
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.10",
+    "source": "Укажите решение системы неравенств {︃ x+ 0,7 ≤0, x−1 ≥−5. 1) x; −4 2) x; −0, 7 3) x; −4 −0, 7 4) x. −4 −0, 7",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\nx+0,7 \\leq 0, \\\\\nx-1 \\geq-5 .\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-10",
+    "clip": [
+      72,
+      638.0873413085938,
+      523,
+      700.7554321289062
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.11",
+    "source": "Укажите решение системы неравенств {︃ x+ 3,2 ≤0, x+ 1 ≤−1. 1) x; −3, 2 −2 2) x; −3.2 3) x; −3, 2 −2 4) x. −3, 2",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\nx+3,2 \\leq 0, \\\\\nx+1 \\leq-1 .\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-11",
+    "clip": [
+      72,
+      198.54925537109375,
+      523,
+      262.5454406738281
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.12",
+    "source": "Укажите решение системы неравенств {︃ −5 + 5x< 0, 4 −3x< 31. 1) x; 9 2) нет решений; 3) x; 1 4) x. −9 1",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\n-5+5 x<0 \\\\\n4-3 x<31\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-12",
+    "clip": [
+      72,
+      419.98541259765625,
+      523,
+      480.3224182128906
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.13",
+    "source": "Укажите решение системы неравенств {︃ −9 + 3x> 0, 2 −3x> −10. 1) нет решений; 2) x; 3 4 3) x; 4 4) x. 3",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\n-9+3 x>0 \\\\\n2-3 x>-10\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-13",
+    "clip": [
+      72,
+      635.0813598632812,
+      523,
+      697.1023559570312
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.14",
+    "source": "Укажите решение системы неравенств {︃ x−7,4 ≥0, x+ 2 ≥3. 1) x. 1 2) x. 1 7, 4 3) x. 7, 4 4) x. 7, 4",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\nx-7,4 \\geq 0 \\\\\nx+2 \\geq 3\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-14",
+    "clip": [
+      72,
+      200.87939453125,
+      523,
+      262.5454406738281
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.15",
+    "source": "Укажите решение системы неравенств {︃ −12 + 3x> 0, 9 −4x> −3. 1) нет решений; 2) x; 3 3) x; 4 4) x. 3 4",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\n-12+3 x>0 \\\\\n9-4 x>-3\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-15",
+    "clip": [
+      72,
+      417.30438232421875,
+      523,
+      479.3254089355469
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.2.16",
+    "source": "Укажите решение системы неравенств {︃ −27 + 3x> 0, 6 −3x< −6. 1) x. 4 2) x. 9 3) x. 4 9 4) x. 9",
+    "end_at_answer": true,
+    "latex": "Укажите решение системы неравенств\n\n$$\n\\left\\{\\begin{array}{l}\n-27+3 x>0 \\\\\n6-3 x<-6\n\\end{array}\\right.\n$$\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-2-16",
+    "clip": [
+      72,
+      636.765380859375,
+      523,
+      696.1054077148438
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.4.1",
+    "source": "Укажите решение неравенства 4x−x2 ≤0. 1) x; 0 4 2) x; 0 3) x; 0 4 4) x. 4",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $4 x-x^{2} \\leq 0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-4-1",
+    "clip": [
+      72,
+      333.46844482421875,
+      523,
+      389.97442626953125
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.4.2",
+    "source": "Укажите решение неравенства 5x−x2 ≥0. 1) x; 0 5 2) x; 0 5 3) x; 5 4) x. 0",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $5 x-x^{2} \\geq 0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-4-2",
+    "clip": [
+      72,
+      497.84539794921875,
+      523,
+      554.3514404296875
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.4.3",
+    "source": "Укажите решение неравенства 6x−x2 > 0. 1) x; 0 2) x; 0 6 3) x; 0 6 4) x. 6",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $6 x-x^{2}>0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-4-3",
+    "clip": [
+      72,
+      662.222412109375,
+      523,
+      718.7284545898438
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.4.4",
+    "source": "Укажите решение неравенства 6x−x2 < 0. 1) x; 0 6 2) x; 0 6 3) x; 6 4) x. 0",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $6 x-x^{2}<0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-4-4",
+    "clip": [
+      72,
+      148.98541259765625,
+      523,
+      205.49142456054688
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.4.5",
+    "source": "Укажите решение неравенства 6x−x2 ≤0. 1) x; 0 6 2) x; 0 3) x; 6 4) x. 0 6",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $6 x-x^{2} \\leq 0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-4-5",
+    "clip": [
+      72,
+      313.3623962402344,
+      523,
+      369.868408203125
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.4.6",
+    "source": "Укажите решение неравенства 7x−x2 < 0. 1) x; 0 7 2) x; 0 3) x; 7 4) x. 0 7",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $7 x-x^{2}<0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-4-6",
+    "clip": [
+      72,
+      477.7394104003906,
+      523,
+      534.2454223632812
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.4.7",
+    "source": "Укажите решение неравенства 7x−x2 > 0. 1) x; 0 2) x; 0 7 3) x; 0 7 4) x. 7",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $7 x-x^{2}>0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-4-7",
+    "clip": [
+      72,
+      642.1154174804688,
+      523,
+      698.6214599609375
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.4.8",
+    "source": "Укажите решение неравенства 8x−x2 < 0. 1) x; 8 2) x; 0 8 3) x; 0 8 4) x. 0",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $8 x-x^{2}<0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-4-8",
+    "clip": [
+      72,
+      148.98541259765625,
+      523,
+      205.49142456054688
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.4.9",
+    "source": "Укажите решение неравенства 8x−x2 > 0. 1) x; 0 2) x; 0 8 3) x; 8 4) x. 0 8",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $8 x-x^{2}>0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-4-9",
+    "clip": [
+      72,
+      313.3623962402344,
+      523,
+      369.868408203125
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.6.1",
+    "source": "Укажите решение неравенства (x+ 1)(x−9) > 0. 1) x; −1 9 2) x; −1 9 3) x; 9 4) x. −1",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $(x+1)(x-9)>0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-6-1",
+    "clip": [
+      72,
+      552.2893676757812,
+      523,
+      610.7924194335938
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.6.2",
+    "source": "Укажите решение неравенства (x+ 2)(x−4) ≤0. 1) x; −2 2) x; −2 4 3) x; 4 4) x. −2 4",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $(x+2)(x-4) \\leq 0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-6-2",
+    "clip": [
+      72,
+      149.1363525390625,
+      523,
+      207.64242553710938
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.6.3",
+    "source": "Укажите решение неравенства (x+ 2)(x−7) > 0. 1) x; 7 2) x; −2 3) x; −2 7 4) x. −2 7",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $(x+2)(x-7)>0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-6-3",
+    "clip": [
+      72,
+      316.6664123535156,
+      523,
+      374.1694030761719
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.6.4",
+    "source": "Укажите решение неравенства (x+ 2)(x−8) ≥0. 1) x; −2 8 2) x; −2 3) x; −2 8 4) x. 8",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $(x+2)(x-8) \\geq 0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-6-4",
+    "clip": [
+      72,
+      482.1902770996094,
+      523,
+      540.6963500976562
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.6.5",
+    "source": "Укажите решение неравенства (x+ 3)(x−7) ≤0. 1) x; 7 2) x; −3 7 3) x; −3 7 4) x. −3",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $(x+3)(x-7) \\leq 0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-6-5",
+    "clip": [
+      72,
+      649.7213745117188,
+      523,
+      707.2244262695312
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.6.6",
+    "source": "Укажите решение неравенства (x+ 4)(x−9) ≥0. 1) x; −4 9 2) x; 9 3) x; −4 9 4) x. −4",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $(x+4)(x-9) \\geq 0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-6-6",
+    "clip": [
+      72,
+      149.1363525390625,
+      523,
+      207.64242553710938
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.6.7",
+    "source": "Укажите решение неравенства (x+ 4)(x−8) > 0. 1) x; −4 2) x; −4 8 3) x; 8 4) x. −4 8",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $(x+4)(x-8)>0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-6-7",
+    "clip": [
+      72,
+      315.6663513183594,
+      523,
+      374.1694030761719
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.6.8",
+    "source": "Укажите решение неравенства (x+ 5)(x−2) < 0. 1) x; 2 2) x; −5 3) x; −5 2 4) x. −5 2",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $(x+5)(x-2)<0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-6-8",
+    "clip": [
+      72,
+      483.1933288574219,
+      523,
+      540.6963500976562
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.6.9",
+    "source": "Укажите решение неравенства (x+ 8)(x−3) < 0. 1) x; −8 3 2) x; −8 3 3) x; −8 4) x. 3",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $(x+8)(x-3)<0$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-6-9",
+    "clip": [
+      72,
+      648.7213134765625,
+      523,
+      707.2244262695312
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.8.1",
+    "source": "Укажите решение неравенства x2 ≤36. 1) x; −6 6 2) x; −6 6 3) x; 6 4) x. −6",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $x^{2} \\leq 36$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-8-1",
+    "clip": [
+      72,
+      148.9793701171875,
+      523,
+      207.48544311523438
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.8.2",
+    "source": "Укажите решение неравенства x2 > 36. 1) x; −6 6 2) x; −6 3) x; 6 4) x. −6 6",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $x^{2}>36$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-8-2",
+    "clip": [
+      72,
+      315.35333251953125,
+      523,
+      373.8564147949219
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.8.3",
+    "source": "Укажите решение неравенства x2 ≤64. 1) x; 8 2) x; −8 8 3) x; −8 4) x. −8 8",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $x^{2} \\leq 64$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-8-3",
+    "clip": [
+      72,
+      482.7243957519531,
+      523,
+      540.2274780273438
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.8.4",
+    "source": "Укажите решение неравенства 25x2 ≥4. 1) x; −0, 4 0, 4 2) x; −0, 4 0, 4 3) x; −0, 4 4) x. 0, 4",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $25 x^{2} \\geq 4$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-8-4",
+    "clip": [
+      72,
+      648.09326171875,
+      523,
+      709.2544555664062
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.8.5",
+    "source": "Укажите решение неравенства 49x2 ≥36. 1) x; −6 7 2) x; −6 7 6 7 3) x; 6 7 4) x. −6 7 6 7",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $49 x^{2} \\geq 36$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-8-5",
+    "clip": [
+      72,
+      148.98403930664062,
+      523,
+      218.01644897460938
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.8.6",
+    "source": "Укажите решение неравенства 81x2 ≤16. 1) x; 4 9 2) x; −4 9 4 9 3) x; −4 9 4) x. −4 9 4 9",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $81 x^{2} \\leq 16$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-8-6",
+    "clip": [
+      72,
+      325.885009765625,
+      523,
+      394.91741943359375
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.8.7",
+    "source": "Укажите решение неравенства 81x2 ≥16. 1) x; 4 9 2) x; −4 9 4 9 3) x; −4 9 4) x. −4 9 4 9",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $81 x^{2} \\geq 16$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-8-7",
+    "clip": [
+      72,
+      502.78692626953125,
+      523,
+      571.8203125
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.8.8",
+    "source": "Укажите решение неравенства 25x2 > 49. 1) x; 1, 4 2) x; −1, 4 1, 4 3) x; −1.4 1.4 4) x. −1.4",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $25 x^{2}>49$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-8-8",
+    "clip": [
+      72,
+      148.98228454589844,
+      523,
+      208.81338500976562
+    ],
+    "scale": 3,
+    "warnings": []
+  },
+  {
+    "id": "13.8.9",
+    "source": "Укажите решение неравенства 81x2 > 64. 1) x; −8 9 8 9 2) x; 8 9 3) x; −8 9 4) x. −8 9 8 9",
+    "end_at_answer": true,
+    "latex": "Укажите решение неравенства $81 x^{2}>64$.\n\n\\taskpic{1}",
+    "image_stem": "oge-inequality-options-13-8-9",
+    "clip": [
+      72,
+      316.6830139160156,
+      523,
+      385.7154235839844
+    ],
+    "scale": 3,
+    "warnings": []
+  }
+]

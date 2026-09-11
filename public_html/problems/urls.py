@@ -40,6 +40,8 @@ urlpatterns = [
     path('imports/<int:batch_pk>/tasks/<int:pk>/topic/',
          views.textbook_import_quick_topic,
          name='textbook_import_quick_topic'),
+    path('imports/<int:batch_pk>/blocks/<int:block_pk>/',
+         views.textbook_import_block, name='textbook_import_block'),
     path('imports/<int:batch_pk>/tasks/<int:pk>/',
          views.textbook_import_review, name='textbook_import_review'),
     path('<int:pk>/', views.task_detail, name='task_detail'),

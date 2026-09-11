@@ -89,7 +89,43 @@ _RAW_TOPIC_ALIASES = {
     'обратные тригонометрические функции': 'ALG.05.18',
     'решение задач с помощью уравнений': 'ALG.09.01',
     'производная степенной и сложной функции': 'ALG.07.09',
-    'связь графиков функции, производной и первообразной': 'ALG.07.10',
+    'клетчатая бумага': 'GEO.06',
+    'задачи на клетчатой бумаге': 'GEO.06',
+    'геометрические высказывания': 'GEO.01',
+    'практические задачи': 'ARI.06',
+    'маршруты': 'ARI.06',
+    'шины': 'ARI.06',
+    'участки': 'ARI.06',
+    'листы': 'ARI.06',
+    'печки': 'ARI.06',
+    'квартиры': 'ARI.06',
+    'тарифы': 'ARI.06',
+    'дроби': 'ARI.03',
+    'десятичные дроби': 'ARI.03.05',
+    'обыкновенные дроби': 'ARI.03.04',
+    'координатная прямая': 'ARI.03.07',
+    'степени и корни': 'ARI.05',
+    'вероятности': 'STA.03',
+    'графики функций': 'ALG.05',
+    'расчеты по формулам': 'ARI.06',
+    'расчёты по формулам': 'ARI.06',
+    'прогрессии': 'ALG.06',
+    'окружности': 'GEO.04',
+    'четырехугольники': 'GEO.03',
+    'четырёхугольники': 'GEO.03',
+    'построение графиков': 'ALG.05.03',
+    'геометрические вычисления': 'GEO.02',
+    'геометрические доказательства': 'GEO.02',
+    'сложная геометрия': 'GEO.02',
+    'геометрические задачи повышенной сложности': 'GEO.02',
+    'окружность, круг и их элементы': 'GEO.04',
+    'треугольники и их элементы': 'GEO.02',
+    'выражения, уравнения и неравенства': 'ALG.03',
+    'геометрические задачи на вычисление': 'GEO.02',
+    'построение графиков функций': 'ALG.05.03',
+    'геометрические задачи на доказательство': 'GEO.02',
+    'анализ геометрических высказываний': 'GEO.01',
+    'алгебраические задачи': 'ALG.03',
 }
 
 _SERVICE_RE = re.compile(
@@ -103,6 +139,7 @@ _SERVICE_LABEL_RE = re.compile(
     r'контрольные(?:\s+работы)?|'
     r'самостоятельные(?:\s+работы)?|'
     r'проверочн(?:ая|ые)\s+работ(?:а|ы)?(?:\s*№?\s*\d+)?|'
+    r'прототипы|аналоги|'
     r'ответы.*|указания.*|решения.*)$'
 )
 CANDIDATE_REASON_LABELS = {
@@ -184,6 +221,19 @@ def match_topic_candidates(source_path, topic_original='', limit=3,
             break
 
     ranked = {}
+
+    def keep(topic, score, reason):
+        candidate = {
+            'id': topic.pk,
+            'code': topic.code,
+            'name': str(topic),
+            'score': score,
+            'reason': reason,
+        }
+        previous = ranked.get(topic.pk)
+        if previous is None or candidate['score'] > previous['score']:
+            ranked[topic.pk] = candidate
+
     for label in labels:
         is_leaf = label in leaf_labels
         for variant in _label_variants(label):
@@ -191,32 +241,19 @@ def match_topic_candidates(source_path, topic_original='', limit=3,
             use_leaf = is_leaf and full_match
             alias_code = TOPIC_ALIASES.get(variant)
             if alias_code and alias_code in by_code:
-                topic = by_code[alias_code]
-                ranked.setdefault(topic.pk, {
-                    'id': topic.pk,
-                    'code': topic.code,
-                    'name': str(topic),
-                    'score': 1.0 if use_leaf else 0.92,
-                    'reason': 'exact-alias' if use_leaf else 'parent-alias',
-                })
+                keep(
+                    by_code[alias_code],
+                    1.0 if use_leaf else 0.92,
+                    'exact-alias' if use_leaf else 'parent-alias')
             for topic in by_name.get(variant, []):
-                ranked.setdefault(topic.pk, {
-                    'id': topic.pk,
-                    'code': topic.code,
-                    'name': str(topic),
-                    'score': 1.0 if use_leaf else 0.9,
-                    'reason': 'exact-name' if use_leaf else 'parent-name',
-                })
+                keep(
+                    topic,
+                    1.0 if use_leaf else 0.9,
+                    'exact-name' if use_leaf else 'parent-name')
         if is_leaf and len(labels) >= 2:
             compound = f'{labels[-2]} / {label}'
             for topic in by_name.get(compound, []):
-                ranked.setdefault(topic.pk, {
-                    'id': topic.pk,
-                    'code': topic.code,
-                    'name': str(topic),
-                    'score': 1.0,
-                    'reason': 'exact-path',
-                })
+                keep(topic, 1.0, 'exact-path')
 
     if not any(item['score'] == 1.0 for item in ranked.values()):
         target = labels[-1]

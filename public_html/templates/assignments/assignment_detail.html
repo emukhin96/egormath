@@ -47,8 +47,9 @@
   </div>
   {% else %}
   <div class="card ws-view" id="task-{{ row.number }}" data-task-card>
-    {% include 'includes/task_row.html' with number=row.number stars=row.item.effective_stars text=row.task.text_latex %}
-    {% task_images row.task %}
+    {% include 'worksheets/_common_condition.html' %}
+    {% include 'includes/task_row.html' with number=row.number stars=row.item.effective_stars text=row.statement %}
+    {% include 'problems/_task_images.html' with images=row.statement_images %}
 
     {% with sub=row.submission %}
     {% if sub.review and editable %}

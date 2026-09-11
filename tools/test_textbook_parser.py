@@ -620,6 +620,7 @@ class TextbookParserTests(unittest.TestCase):
         self.assertEqual(bundle.source, {
             "tasks_file": "book.tex",
             "solutions_file": "solutions.tex",
+            "answers_file": "",
         })
 
     def test_solution_subitems_are_matched_without_top_level_labels(self):

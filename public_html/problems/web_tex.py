@@ -31,7 +31,8 @@ _BOLDIT_CLOSE = '\x0f'
 _MATH_RE = re.compile(
     r'\$\$.*?\$\$|\\\[.*?\\\]|\$.*?\$|\\\(.*?\\\)', re.S)
 _TABULAR_RE = re.compile(
-    r'\\begin\{tabular\}\s*(\{[^{}]*\})?(.*?)\\end\{tabular\}', re.S)
+    r'\\begin\{tabular\}\s*(?:\[[^\]]*\]\s*)?'
+    r'(\{(?:[^{}]|\{[^{}]*\})*\})?(.*?)\\end\{tabular\}', re.S)
 _ARG = r'\{((?:[^{}]|\{[^{}]*\})*)\}'
 _ANNOT_RE = re.compile(r'\\annot' + _ARG, re.S)
 _NOFRAME_RE = re.compile(r'\\annotnoframe' + _ARG, re.S)
@@ -126,6 +127,7 @@ def _math_for_web(value):
 
 def _plain(text):
     """Замены в фрагменте вне формул: переносы, ~, экранированные символы."""
+    text = text.replace(r'\hspace{0pt}', '')
     text = re.sub(r'\\par\b', _BR + _BR, text)
     text = text.replace('\\\\', _BR)
     text = text.replace('\n', _BR)
@@ -173,7 +175,8 @@ def _table_html(body):
     rows = []
     for row in _split_outside_math(body, r'\\\\'):
         cells = [c.strip() for c in _split_outside_math(row, r'(?<!\\)&')]
-        if not any(cells):
+        # Пустая строка с разделителями — бланк для заполнения, а не мусор.
+        if not any(cells) and len(cells) == 1:
             continue
         rows.append('<tr>'
                     + ''.join(f'<td>{_fragment_html(c)}</td>' for c in cells)

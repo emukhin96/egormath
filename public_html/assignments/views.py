@@ -352,7 +352,8 @@ def _assignment_rows(assignment, with_review=False, item_ids=None):
             'attempt_history': attempt_history,
             'legacy_attempts': legacy_attempts,
         })
-    return rows
+    from worksheets.block_presentation import decorate_block_rows
+    return decorate_block_rows(rows)
 
 
 def _mask_fragments(spec, obj, prefix, for_teacher):

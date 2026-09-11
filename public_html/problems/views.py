@@ -368,6 +368,25 @@ def task_duplicate(request, pk):
         Worksheet.objects.select_for_update().get(pk=item.worksheet_id)
     copy, mapping = task.make_variant(request.user, with_mapping=True,
                                      standalone=item is None)
+    if item and mapping.get('block_tasks'):
+        rows = list(item.worksheet.ordered_items())
+        originals = [row for row in rows if row.task_id in mapping['block_tasks']]
+        clones = []
+        for original in originals:
+            clone = item.worksheet.items.create(
+                task_id=mapping['block_tasks'][original.task_id], order=original.order,
+                stars_override=original.stars_override, columns_override=original.columns_override,
+                all_subitems=original.all_subitems)
+            clone.subitems.set([mapping['subitems'][pk]
+                               for pk in original.subitems.values_list('pk', flat=True)])
+            clones.append(clone)
+        insertion = max(rows.index(row) for row in originals) + 1
+        ordered = rows[:insertion] + clones + rows[insertion:]
+        for pos, row in enumerate(ordered, 1):
+            row.order = pos * 10
+            row.save(update_fields=['order'])
+        messages.success(request, 'Копия общего блока добавлена после исходного блока.')
+        return redirect('worksheet_detail', pk=item.worksheet_id)
     if item:
         rows = list(item.worksheet.items.order_by('order', 'pk'))
         for position, row in enumerate(rows, 1):
@@ -1512,6 +1531,42 @@ def textbook_import_bulk(request, pk):
     messages.success(
         request, f'Темы ({labels}) добавлены выбранным задачам: {updated}.')
     return redirect(next_url)
+
+
+@teacher_required
+def textbook_import_block(request, batch_pk, block_pk):
+    """Показывает все пять черновиков с общим условием один раз."""
+    from .block_text import split_common_condition
+    from .textbook_import import normalize_image_stem
+    batch = _own_import_batch(request, batch_pk)
+    drafts = list(batch.drafts.filter(block_id=block_pk)
+                  .select_related('block').order_by('block_position'))
+    if not drafts:
+        raise Http404
+    assets = {asset.stem: asset for asset in batch.assets.all()}
+
+    def parts(text, images):
+        result, start = [], 0
+        for match in re.finditer(r'\\taskpic\{(\d+)\}', text):
+            result.append({'text': text[start:match.start()]})
+            index = int(match.group(1)) - 1
+            name = images[index] if 0 <= index < len(images) else ''
+            result.append({'image': True, 'name': name,
+                           'asset': assets.get(normalize_image_stem(name))})
+            start = match.end()
+        result.append({'text': text[start:]})
+        return result
+
+    split = None
+    if [d.block_position for d in drafts] == [1, 2, 3, 4, 5]:
+        split = split_common_condition([d.text_latex for d in drafts],
+                                       [d.images for d in drafts])
+    common = parts(split.text, drafts[0].images) if split else []
+    rows = [{'draft': d, 'parts': parts(split.questions[i] if split else d.text_latex,
+                                      d.images)} for i, d in enumerate(drafts)]
+    return render(request, 'problems/textbook_import_block.html', {
+        'batch': batch, 'task_block': drafts[0].block, 'common': common,
+        'rows': rows, 'combined': split is not None})
 
 
 @teacher_required
