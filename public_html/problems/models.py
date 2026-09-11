@@ -4,7 +4,7 @@ import os
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.validators import FileExtensionValidator
-from django.db import models
+from django.db import models, transaction
 from PIL import Image
 
 from .latex_utils import strip_latex
@@ -227,7 +227,28 @@ def mask_spec_for(obj):
     return cached[1]
 
 
+class TaskBlock(models.Model):
+    """Неделимая последовательность задач с общим условием в источнике."""
+
+    source = models.ForeignKey(Source, on_delete=models.PROTECT,
+                               related_name='task_blocks')
+    key = models.CharField('Ключ блока', max_length=190)
+    title = models.CharField('Название', max_length=190)
+    size = models.PositiveSmallIntegerField('Число вопросов', default=5)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=['source', 'key'], name='unique_source_task_block')]
+
+    def __str__(self):
+        return self.title
+
+
 class Task(models.Model):
+    block = models.ForeignKey(
+        TaskBlock, null=True, blank=True, on_delete=models.PROTECT,
+        related_name='tasks', verbose_name='Общий блок', editable=False)
+    block_position = models.PositiveSmallIntegerField('Номер в блоке', default=0, editable=False)
     # 10 и 11 — одна метка. GRADE_CHOICES — для селектов 5–11.
     # GRADE_FIELD_CHOICES оставляет 1–4 и 11 валидными для старых записей.
     GRADE_CHOICES = [
@@ -388,12 +409,34 @@ class Task(models.Model):
             return any(not s.effective_answer_latex for s in subs)
         return not self.effective_answer_latex
 
-    def make_variant(self, user=None, *, with_mapping=False, standalone=False):
+    @transaction.atomic
+    def make_variant(self, user=None, *, with_mapping=False, standalone=False,
+                     _within_block=False):
         """Копия со всеми материалами: локальная или самостоятельная в базе."""
+        if self.block_id and not _within_block:
+            from uuid import uuid4
+            from .task_blocks import block_members
+            block = TaskBlock.objects.create(
+                source=self.block.source, key=f'copy:{uuid4().hex}',
+                title=self.block.title + ' (копия)', size=self.block.size)
+            copies, combined = {}, {'subitems': {}, 'source_refs': {}, 'images': {}}
+            for member in block_members(self):
+                cloned, mapping = member.make_variant(
+                    user, with_mapping=True, standalone=standalone, _within_block=True)
+                cloned.block = block
+                cloned.block_position = member.block_position
+                cloned.save(update_fields=['block', 'block_position'])
+                copies[member.pk] = cloned
+                for kind in combined:
+                    combined[kind].update(mapping[kind])
+            combined['block_tasks'] = {pk: cloned.pk for pk, cloned in copies.items()}
+            return (copies[self.pk], combined) if with_mapping else copies[self.pk]
         mapping = {'subitems': {}, 'source_refs': {}, 'images': {}}
         original = self
         copy = Task.objects.get(pk=self.pk)
         copy.pk = None
+        copy.block = None
+        copy.block_position = 0
         copy.variant_of = None if standalone else original.variant_of or original
         if user is not None:
             copy.created_by = user
@@ -691,6 +734,10 @@ class TextbookTaskDraft(models.Model):
     batch = models.ForeignKey(
         TextbookImportBatch, on_delete=models.CASCADE, related_name='drafts',
         verbose_name='Партия')
+    block = models.ForeignKey(
+        TaskBlock, null=True, blank=True, on_delete=models.PROTECT,
+        related_name='drafts', verbose_name='Общий блок', editable=False)
+    block_position = models.PositiveSmallIntegerField('Номер в блоке', default=0, editable=False)
     external_id = models.CharField('Ключ задачи', max_length=190)
     source_number = models.CharField('Номер в источнике', max_length=190)
     source_path = models.JSONField('Путь в источнике', default=list, blank=True)
@@ -710,6 +757,11 @@ class TextbookTaskDraft(models.Model):
     images = models.JSONField('Изображения', default=list, blank=True)
     topic_candidates = models.JSONField(
         'Кандидаты рубрикатора', default=list, blank=True)
+    exam_item_codes = models.JSONField(
+        'Коды экзаменационных заданий', default=list, blank=True)
+    grade_band_codes = models.JSONField(
+        'Коды классов', default=list, blank=True)
+    tags = models.JSONField('Теги источника', default=list, blank=True)
     author_answer_latex = models.TextField('Авторский ответ', blank=True)
     author_solution_latex = models.TextField('Авторское решение', blank=True)
     solution_source_external_id = models.CharField(

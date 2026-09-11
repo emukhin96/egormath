@@ -1,0 +1,6 @@
+{% load task_extras %}
+{% for part in parts %}
+{% if part.image %}
+{% if part.asset and not part.asset.is_pdf %}<img class="import-block-image" src="{% url 'textbook_import_asset_file' batch.pk part.asset.pk %}" alt="Рисунок общего блока: {{ part.name }}">{% elif part.asset %}<a href="{% url 'textbook_import_asset_file' batch.pk part.asset.pk %}">Открыть рисунок PDF</a>{% else %}<p class="muted">Рисунок {{ part.name }} не сопоставлен.</p>{% endif %}
+{% elif part.text %}<div class="math-content task-text">{{ part.text|web_text|linebreaksbr }}</div>{% endif %}
+{% endfor %}

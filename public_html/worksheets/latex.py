@@ -28,6 +28,38 @@ ARRAY_BIDI_SHIM = (
     '\\ExplSyntaxOff'
 )
 
+# egor складывает всю очередь в один figure: сотня чертежей выходит за
+# страницу без Overfull. Разрешаем переносы между рядами, сохраняя подписи.
+BREAKABLE_PICTURES = r'''
+\makeatletter
+\patchcmd{\egor@emitpicaux}{\\[3mm]}{\par\vspace{3mm}\noindent}{}{
+  \PackageError{egormath}{Unsupported egor picture rows}{Update the picture adapter}}
+\NewCommandCopy{\egorOriginalFlushpics}{\flushpics}
+\RenewDocumentCommand{\flushpics}{O{0}}{%
+  \begingroup
+  \renewenvironment{figure}[1][]{\par\noindent\ignorespaces}{\unskip\par}%
+  \egorOriginalFlushpics[#1]%
+  \endgroup
+}
+\makeatother
+'''
+
+
+# Сохраняем обычную сигнатуру task для обратного импорта .tex: меняется
+# только способ печати следующего короткого учительского задания.
+KEEP_SHORT_ANSWER = r'''
+\NewCommandCopy{\egorOriginalTask}{\task}
+\NewDocumentCommand{\egorCompactTask}{m m +m O{} O{} O{}}{%
+  \egorOriginalTask{#1}{0}{%
+    \begin{minipage}[t]{\linewidth}%
+    #3\par\ans{#5}\par\resh{#6}%
+    \end{minipage}\par}%
+  \answer{#5}%
+  \let\task\egorOriginalTask
+}
+\newcommand{\egorKeepAnswer}{\let\task\egorCompactTask}
+'''
+
 # Метки подпунктов как у \asbuk (без ё, й, ъ, ы, ь) — для сводного ответа
 CYRILLIC_LABELS = 'абвгдежзиклмнопрстуфхцчшщэюя'
 
@@ -123,7 +155,32 @@ def _resolve_taskpics(text, filenames, used):
     return TASKPIC_REF_RE.sub(repl, text)
 
 
-def task_to_tex(item, variant='teacher'):
+def _keep_choice_statement(body):
+    """Не отделяет систему/коэффициенты от вариантов ответа и их рисунков."""
+    is_system = body.startswith('Укажите решение системы неравенств')
+    is_inequality = body.startswith(('Укажите решение неравенства',
+                                    'Укажите неравенство, решение которого'))
+    is_linear = body.startswith('На рисунках изображены графики функций вида')
+    is_graph_match = ('Установите соответствие' in body.split('\n\n',1)[0]
+                      and 'А & Б & В' in body)
+    if not (is_system or is_inequality or is_linear or is_graph_match):
+        return body
+    # Неразобранная OCR-склейка с несколькими кадрами может быть длиннее
+    # страницы. Её нельзя запирать целиком в minipage до разделения.
+    if len(re.findall(r'\\taskpic\{[^{}]+\}', body)) > 1:
+        return body
+    if r'\taskpic{' not in body and not all(f'{n})' in body for n in range(1, 5)):
+        return body
+    # Полоса вариантов должна занимать строку возле условия, иначе egor
+    # сжимает её рядом с другими рисунками в общей очереди в конце листка.
+    body = re.sub(r'\\taskpic\{([^{}]+)\}(?:\s*\\\\)*',
+                  lambda m: (r'\par\noindent\includegraphics'
+                             r'[width=.9\linewidth,height=.45\textheight,keepaspectratio]'
+                             '{' + m[1] + r'}\par'), body)
+    return '\\begin{minipage}[t]{\\linewidth}\n' + body + '\n\\end{minipage}'
+
+
+def task_to_tex(item, variant='teacher', *, statement=None, common_indices=()):
     """\\task{звёзды}{колонки}{условие}[подпункты][ответ][решение]
 
     Работает от элемента листка: звёзды/колонки — с учётом переопределений,
@@ -133,8 +190,8 @@ def task_to_tex(item, variant='teacher'):
     subitem_objs = item.selected_subitems()
     filenames = [image.filename for image in task.images.all()]
     body_used = set()
-    body = _resolve_taskpics(task.text_latex.strip(), filenames, body_used)
-    used = set(body_used)
+    body = _resolve_taskpics((task.text_latex if statement is None else statement).strip(), filenames, body_used)
+    used = set(body_used) | set(common_indices)
     sub_texts = []
     deferred_pics = set()
     for subitem in subitem_objs:
@@ -187,6 +244,9 @@ def task_to_tex(item, variant='teacher'):
         if ((i in deferred_pics and i not in body_used)
                 or i not in used):
             body += '\n\\taskpic{%s}' % name
+    body = _keep_choice_statement(body)
+    short_answer = (variant == 'teacher' and answer and not solution and not sub_lines
+                    and len(body) < 400 and r'\begin' not in body and r'\taskpic' not in body)
     parts = [
         '\\task{%d}{%d}{%%\n%s%%\n}' % (
             item.effective_stars, columns, body),
@@ -201,7 +261,10 @@ def task_to_tex(item, variant='teacher'):
         tail = [subitems]
     for value in tail:
         parts.append(_opt(value))
-    return ''.join(parts)
+    result = ''.join(parts)
+    if short_answer:
+        result = '\\egorKeepAnswer\n' + result
+    return result
 
 
 # Команды egor для стилей текстового элемента (WorksheetItem.text_style)
@@ -261,11 +324,18 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
     options = VARIANT_OPTIONS[variant]
     usepackage = ('\\usepackage[%s]{egor}' % options) if options \
         else '\\usepackage{egor}'
+    items = _drop_empty_rubrics([
+        item for item in worksheet.ordered_items()
+        if item.pk not in exclude_ids
+    ])
+    has_images = any(item.task_id and item.task.images.all() for item in items)
 
     lines = [
         '\\documentclass[a5paper,10pt]{article}',
         usepackage,
         ARRAY_BIDI_SHIM,
+        BREAKABLE_PICTURES if has_images else '',
+        KEEP_SHORT_ANSWER,
         '',
         '\\begin{document}',
     ]
@@ -280,10 +350,8 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
     lines.append(bighead)
     lines.append('')
 
-    items = _drop_empty_rubrics([
-        item for item in worksheet.ordered_items()
-        if item.pk not in exclude_ids
-    ])
+    from .block_presentation import block_presentations
+    presentations = block_presentations(items)
     list_open = False
     list_has_item = False
     for item in items:
@@ -310,7 +378,25 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
             lines.append('\\begin{enumerate}')
             list_open = True
         lines.append('')
-        lines.append(task_to_tex(item, variant))
+        presentation = presentations.get(item.pk)
+        if presentation and presentation.common:
+            filenames = [image.filename for image in item.task.images.all()]
+            # Общее условие не является шестой задачей и не сдвигает ответы.
+            # Рисунки нужны рядом с условием, а не в очереди рисунков задачи.
+            # OCR-перенос после картинки лишний: includegraphics ниже уже
+            # завершает абзац. Иначе следующий \\\\ падает в вертикальном режиме.
+            common_source = re.sub(r'(\\taskpic\{\d+\})\s*(?:\\\\\s*)+',
+                                   r'\1\n', presentation.common)
+            common = TASKPIC_REF_RE.sub(
+                lambda match: ('\n' + r'\par\noindent\includegraphics'
+                               r'[width=.85\linewidth,height=.35\textheight,keepaspectratio]'
+                               + '{%s}' % filenames[int(match.group(1)) - 1]
+                               + r'\par' + '\n'),
+                common_source)
+            lines.append('\\item[] \\textbf{Общее условие к следующим пяти заданиям.}\\par\n' + common)
+        lines.append(task_to_tex(
+            item, variant, statement=presentation.text if presentation else None,
+            common_indices=presentation.common_indices if presentation else ()))
         list_has_item = True
 
     if list_open:
@@ -320,8 +406,10 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
             lines.append('\\item[]')
         lines.append('')
         lines.append('\\end{enumerate}')
-    if any(item.task_id and item.task.images.all() for item in items):
+    if has_images:
         lines.append('')
+        # На A5 длинная общая строка делает чертежи и подписи нечитаемыми.
+        lines.append('\\picsperrow{3}')
         lines.append('\\flushpics')
     lines.append('')
     lines.append('\\end{document}')

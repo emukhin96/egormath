@@ -20,10 +20,10 @@ from django.db import transaction
 from django.db.models import Max
 from django.utils.text import slugify
 
-from .models import (Source, Task, TaskImage, TaskSource, TaskSubitem,
-                     TextbookImportAsset, TextbookImportBatch,
+from .models import (ExamItem, Source, Tag, Task, TaskImage, TaskSource,
+                     TaskSubitem, TextbookImportAsset, TextbookImportBatch,
                      TextbookTaskDraft, Topic)
-from .rubricator import set_task_topics
+from .rubricator import set_grade_bands, set_task_exams, set_task_topics
 from .textbook_parser import (ZIV_LEAKED_HEADING_WARNING,
                               ZIV_LOOKS_LIKE_HEADING_WARNING,
                               ZIV_SPLIT_FROM_WARNING,
@@ -228,11 +228,18 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
                                     for item in subitems)) else ''),
             confidence=_confidence(row.get('confidence')),
             warnings=warnings,
+            exam_item_codes=_string_list(
+                row.get('exam_item_codes'), 'exam_item_codes'),
+            grade_band_codes=_string_list(
+                row.get('grade_band_codes'), 'grade_band_codes'),
+            tags=_string_list(row.get('tags'), 'tags'),
             status=status,
         ))
     apply_topic_suggestions(drafts)
     mark_already_imported_drafts(drafts, source)
     TextbookTaskDraft.objects.bulk_create(drafts, batch_size=500)
+    from .task_blocks import bind_oge_draft_blocks
+    bind_oge_draft_blocks(batch)
     if batch.profile == 'ziv':
         repair_ziv_batch_leaks(batch)
         batch.refresh_from_db()
@@ -974,6 +981,8 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         raise TextbookImportError('Эту партию может загрузить только редактор.')
     if batch.status == TextbookImportBatch.STATUS_IMPORTED:
         return {'created': 0, 'reused': 0, 'collections': 0}
+    from .task_blocks import bind_oge_draft_blocks
+    bind_oge_draft_blocks(batch)
     if require_complete:
         blockers = batch.drafts.filter(status__in=[
             TextbookTaskDraft.STATUS_REVIEW,
@@ -985,6 +994,17 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
     approved = batch.drafts.filter(status=TextbookTaskDraft.STATUS_APPROVED)
     if draft_ids is not None:
         approved = approved.filter(pk__in=draft_ids)
+    selected_ids = set(approved.values_list('pk', flat=True))
+    for block_id in approved.exclude(block=None).values_list('block_id', flat=True).distinct():
+        siblings = list(batch.drafts.filter(block_id=block_id).select_related('block'))
+        size = siblings[0].block.size
+        if (sorted(d.block_position for d in siblings) != list(range(1, size + 1))
+                or any(d.status not in [TextbookTaskDraft.STATUS_APPROVED,
+                                        TextbookTaskDraft.STATUS_IMPORTED] for d in siblings)):
+            raise TextbookImportError(
+                f'{siblings[0].block.title}: сначала проверьте все {size} вопросов блока.')
+        selected_ids.update(d.pk for d in siblings if d.status == TextbookTaskDraft.STATUS_APPROVED)
+    approved = batch.drafts.filter(pk__in=selected_ids, status=TextbookTaskDraft.STATUS_APPROVED)
     if not require_complete and not approved.exists():
         raise TextbookImportError('Нет одобренных задач для загрузки.')
     missing_topics = approved.filter(topic__isnull=True).count()
@@ -1004,6 +1024,7 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
     created = 0
     reused = 0
     collection_cache = {}
+    block_worksheets = {}
     from worksheets.models import Collection
     initial_collection_count = Collection.objects.filter(
         source=batch.source).count()
@@ -1043,6 +1064,13 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
                 locator=draft.external_id,
                 source_path=draft.source_path)
 
+        if draft.block_id:
+            if task.block_id and (task.block_id != draft.block_id
+                                  or task.block_position != draft.block_position):
+                raise TextbookImportError('Задача уже принадлежит другому общему блоку.')
+            task.block_id = draft.block_id
+            task.block_position = draft.block_position
+            task.save(update_fields=['block', 'block_position'])
         _attach_task_images(task, draft, batch)
         _merge_author_fields(task, draft)
         topic_ids = draft_topic_ids(draft)
@@ -1055,6 +1083,27 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
             else:
                 set_task_topics(task, topic_ids, draft.topic_id)
 
+        exam_codes = [
+            code for code in (draft.exam_item_codes or []) if str(code).strip()]
+        if exam_codes:
+            exam_ids = list(ExamItem.objects.filter(
+                code__in=exam_codes).values_list('pk', flat=True))
+            if exam_ids:
+                if task.exam_items.exists():
+                    task.exam_items.add(*exam_ids)
+                else:
+                    set_task_exams(task, exam_ids)
+        grade_codes = [
+            code for code in (draft.grade_band_codes or []) if str(code).strip()]
+        if grade_codes and not task.grade_bands.exists():
+            set_grade_bands(task, grade_codes)
+        for tag_name in draft.tags or []:
+            name = str(tag_name).strip()
+            if not name:
+                continue
+            tag, _created = Tag.objects.get_or_create(name=name[:64])
+            task.tags.add(tag)
+
         path = [str(x).strip() for x in draft.source_path if str(x).strip()]
         if not path:
             path = [draft.collection_title.strip() or batch.title]
@@ -1066,9 +1115,13 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
             batch, path, collection_cache, collection_key=leaf_key)
         if collection:
             worksheet = collection.worksheet
+            if draft.block_id:
+                block_worksheets[worksheet.pk] = worksheet
             if topic_ids:
                 worksheet.topics.add(
                     *Topic.objects.filter(pk__in=topic_ids))
+            if grade_codes and not worksheet.grade_bands.exists():
+                set_grade_bands(worksheet, grade_codes)
             if not worksheet.items.filter(task=task, deleted_at=None).exists():
                 order = _ensure_import_rubrics(worksheet, headings)
                 WorksheetItem.objects.create(
@@ -1077,6 +1130,13 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         draft.imported_task = task
         draft.status = TextbookTaskDraft.STATUS_IMPORTED
         draft.save(update_fields=['imported_task', 'status'])
+
+    from worksheets.blocks import item_units
+    for worksheet in block_worksheets.values():
+        ordered = [item for unit in item_units(list(worksheet.ordered_items())) for item in unit]
+        for pos, item in enumerate(ordered, 1):
+            item.order = pos * 10
+        WorksheetItem.objects.bulk_update(ordered, ['order'])
 
     leftover = batch.drafts.filter(status__in=[
         TextbookTaskDraft.STATUS_REVIEW,

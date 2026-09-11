@@ -17,6 +17,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.decorators import teacher_required
 from problems.models import Task
+from problems.task_blocks import block_members
 
 from .models import Worksheet
 from .views import append_task
@@ -88,6 +89,15 @@ def cart_add(request):
     task = get_object_or_404(
         Task, pk=request.POST.get('task_id'), variant_of__isnull=True)
     ids = cart_ids(request)
+    if task.block_id:
+        try:
+            members = [t.pk for t in block_members(task)]
+        except ValueError as exc:
+            return _respond(request, False, str(exc), False)
+        if not all(pk in ids for pk in members):
+            ids = [pk for pk in ids if pk not in members] + members
+            _store(request, ids)
+        return _respond(request, True, f'В корзине весь блок: {len(members)} задач.', True)
     if task.pk in ids:
         message = f'Задача #{task.pk} уже в корзине.'
     else:
@@ -105,7 +115,9 @@ def cart_remove(request):
         task_id = int(request.POST.get('task_id', ''))
     except ValueError:
         return _respond(request, False, 'Задача не указана.', False)
-    _store(request, [pk for pk in cart_ids(request) if pk != task_id])
+    task = Task.objects.filter(pk=task_id).first()
+    removed = set(task.block.tasks.values_list('pk', flat=True)) if task and task.block_id else {task_id}
+    _store(request, [pk for pk in cart_ids(request) if pk not in removed])
     return _respond(request, True, f'Задача #{task_id} убрана из корзины.',
                     False)
 
@@ -113,15 +125,14 @@ def cart_remove(request):
 def _pour(request, worksheet):
     """Переложить корзину в листок; возвращает число новых элементов."""
     tasks = Task.objects.in_bulk(cart_ids(request))
-    added = 0
+    before = worksheet.items.filter(deleted_at=None, task__isnull=False).count()
     for pk in cart_ids(request):
         task = tasks.get(pk)
         if task is None:
             continue
         outcome, _ = append_task(worksheet, task)
-        added += outcome != 'exists'
     _store(request, [])
-    return added
+    return worksheet.items.filter(deleted_at=None, task__isnull=False).count() - before
 
 
 @teacher_required

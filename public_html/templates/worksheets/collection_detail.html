@@ -36,9 +36,10 @@
       <div class="ws-body">
         <div class="ws-content">
           {% if item.task_id %}
+          {% include 'worksheets/_common_condition.html' %}
           <div class="task-line">
             <span class="ws-num">{{ row.number }}.</span>
-            <span class="math-content task-text">{{ item.task.text_latex|web_text }}</span>
+            <span class="math-content task-text">{{ row.statement|web_text }}</span>
           </div>
           {% if row.subitems %}
           <ol class="subitems">
@@ -49,7 +50,7 @@
             {% endfor %}
           </ol>
           {% endif %}
-          {% task_images item.task %}
+          {% include 'problems/_task_images.html' with images=row.statement_images %}
           {% include 'problems/_task_answers.html' with task=item.task subitems=row.subitems hide_answers=True %}
           {% elif item.is_rubric %}
           <h3>{{ item.rubric }}</h3>

@@ -321,9 +321,10 @@ class LatexGenerationTests(TestCase):
         self.assertIn('\\taskpic{pic1.png}', tex)
         self.assertIn('\\taskpic{pic2.jpg}', tex)
         ws_tex = worksheet_to_tex(self.worksheet, 'student')
+        self.assertIn('\\picsperrow{3}', ws_tex)
         self.assertIn('\\flushpics', ws_tex)
         self.assertLess(ws_tex.index('\\end{enumerate}'),
-                        ws_tex.index('\\flushpics'))
+                        ws_tex.rindex('\\flushpics'))
         # Без картинок \flushpics не выводится
         other = make_worksheet(self.teacher, title='Без картинок')
         self.assertNotIn('\\flushpics', worksheet_to_tex(other, 'student'))

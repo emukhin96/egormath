@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% load task_extras %}
+{% block title %}{{ task_block.title }} — Математика{% endblock %}
+{% block content %}
+<div class="page-head"><div><span class="page-eyebrow">Сверка общего блока</span><h1>{{ task_block.title }}</h1><p class="page-subtitle">{{ batch.source }}</p></div><a class="btn btn-secondary" href="{% url 'textbook_import_detail' batch.pk %}">К партии</a></div>
+{% if combined %}
+<section class="card"><h2>Общее условие</h2>{% include 'problems/_import_block_parts.html' with parts=common %}</section>
+{% else %}
+<p class="muted">Общее условие не удалось однозначно отделить. Ниже показаны полные тексты вопросов.</p>
+{% endif %}
+{% for row in rows %}
+<section class="card">
+<h2>Задание {{ row.draft.block_position }} · {{ row.draft.external_id }}</h2>
+{% include 'problems/_import_block_parts.html' with parts=row.parts %}
+<details><summary>Авторский ответ</summary><div class="math-content">{{ row.draft.author_answer_latex|web_text }}</div></details>
+<p class="form-buttons"><a class="btn btn-secondary" href="{% url 'textbook_import_review' batch.pk row.draft.pk %}">Сверить вопрос {{ row.draft.block_position }}</a></p>
+</section>
+{% endfor %}
+{% endblock %}

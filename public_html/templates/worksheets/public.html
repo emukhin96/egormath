@@ -14,9 +14,10 @@
   {% for row in rows %}
     {% with item=row.item %}
     {% if item.task_id %}
-    {% include 'includes/task_row.html' with number=row.number stars=item.effective_stars text=item.task.text_latex %}
+    {% include 'worksheets/_common_condition.html' %}
+    {% include 'includes/task_row.html' with number=row.number stars=item.effective_stars text=row.statement %}
     {% include 'problems/_subitems.html' with subitems=row.subitems %}
-    {% task_images item.task %}
+    {% include 'problems/_task_images.html' with images=row.statement_images %}
     {% elif item.is_rubric %}
     <h2>{{ item.rubric }}</h2>
     {% if item.rubric_note %}<p class="muted math-content ws-rubric-note">{{ item.rubric_note }}</p>{% endif %}

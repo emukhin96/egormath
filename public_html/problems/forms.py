@@ -114,6 +114,8 @@ class TextbookBundleUploadForm(forms.Form):
         ('galitsky', 'Галицкий: глобальные номера, ответы в конце'),
         ('ziv', 'Зив: работа / тема / вариант / номер'),
         ('shestakov', 'Шестаков: задачник и отдельный решебник'),
+        ('ostromogilsky',
+         'Остромогильский / ФИПИ ОГЭ: готовый import.json'),
     ]
 
     title = forms.CharField(label='Название партии', max_length=190)
@@ -166,10 +168,11 @@ class TextbookBundleUploadForm(forms.Form):
             self.add_error(
                 'profile',
                 'Профиль Шестакова требует отдельный TEX с решениями.')
-        if profile == 'ziv' and kind == self.INPUT_SEPARATE_SOLUTIONS:
+        if profile == 'ostromogilsky' and kind != self.INPUT_JSON:
             self.add_error(
                 'profile',
-                'Профиль Зива сейчас разбирает один TEX с ответами в конце.')
+                'Банк ОГЭ загружается готовым import.json: сначала CLI '
+                'с --answers-pdf, затем этот файл.')
         cleaned['resolved_profile'] = (
             profile or (
                 'shestakov' if kind == self.INPUT_SEPARATE_SOLUTIONS

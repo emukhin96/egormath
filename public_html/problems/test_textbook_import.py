@@ -277,6 +277,42 @@ class TextbookImportTests(TestCase):
             'created': 0, 'reused': 0, 'collections': 0})
         self.assertEqual(Task.objects.count(), 1)
 
+    def test_commit_assigns_exam_grade_and_tags(self):
+        from problems.rubricator import seed_rubricator
+        seed_rubricator()
+        topic = Topic.objects.get(code='ARI.03')
+        payload = bundle(
+            external_id='6.1',
+            source_number='6.1',
+            source_path=['№6. Дроби', 'Прототипы'],
+            collection_key='oge/06/proto',
+            collection_title='№6. Дроби — прототипы',
+            topic_original='Дроби',
+            exam_item_codes=['OGE_2026_06'],
+            grade_band_codes=['GRADE_9'],
+            tags=['DEMO'],
+            author_answer_latex='15,3',
+            text_latex='Найдите $5,6+9,7$.',
+        )
+        batch = self.create_batch(payload)
+        draft = batch.drafts.get()
+        self.assertEqual(draft.exam_item_codes, ['OGE_2026_06'])
+        self.assertEqual(draft.grade_band_codes, ['GRADE_9'])
+        self.assertEqual(draft.tags, ['DEMO'])
+        draft.status = TextbookTaskDraft.STATUS_APPROVED
+        set_draft_topics(draft, [topic.pk], topic.pk)
+        draft.save(update_fields=['status', 'topic', 'topic_ids'])
+        commit_batch(batch, user=self.teacher)
+        task = Task.objects.get()
+        self.assertIn(
+            'OGE_2026_06',
+            list(task.exam_items.values_list('code', flat=True)))
+        self.assertIn(
+            'GRADE_9',
+            list(task.grade_bands.values_list('code', flat=True)))
+        self.assertEqual(list(task.tags.values_list('name', flat=True)), ['DEMO'])
+        self.assertEqual(task.author_answer_latex, '15,3')
+
     def test_commit_adds_variant_rubrics_inside_topic_collection(self):
         topic = Topic.objects.create(name='Тема вариантов')
         payload = bundle(
@@ -1438,6 +1474,20 @@ class TextbookImportTests(TestCase):
         draft = batch.drafts.get()
         self.assertEqual(draft.topic_id, topic.pk)
         self.assertEqual(draft.topic_candidates[0]['reason'], 'exact-alias')
+
+    def test_oge_numbered_heading_still_auto_assigns_alias(self):
+        topic = Topic.objects.get(code='ARI.03')
+        batch = self.create_batch(bundle(
+            external_id='6.1',
+            source_path=['№6. Дроби', 'Прототипы'],
+            topic_original='Дроби',
+            collection_key='oge/06/proto',
+            collection_title='№6. Дроби — прототипы',
+        ))
+        draft = batch.drafts.get()
+        self.assertEqual(draft.topic_id, topic.pk)
+        self.assertEqual(draft.topic_candidates[0]['reason'], 'exact-alias')
+        self.assertEqual(draft.topic_candidates[0]['score'], 1.0)
 
     def test_fuzzy_topic_candidate_is_not_auto_assigned(self):
         Topic.objects.create(

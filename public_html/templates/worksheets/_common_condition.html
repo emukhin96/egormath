@@ -1,0 +1,9 @@
+{% load task_extras %}
+{% if row.common_parts %}
+<section class="ws-common-condition">
+<h3>Общее условие к следующим пяти заданиям</h3>
+{% for part in row.common_parts %}
+{% if part.images %}{% include 'problems/_task_images.html' with images=part.images %}{% else %}<div class="math-content task-text">{{ part.text|web_text|linebreaksbr }}</div>{% endif %}
+{% endfor %}
+</section>
+{% endif %}

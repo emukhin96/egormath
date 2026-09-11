@@ -906,6 +906,28 @@ class WebTexTests(TestCase):
             '<tr><td>$\\begin{matrix}a\\\\b\\end{matrix}$</td>'
             '<td>1</td></tr>', html)
 
+    def test_tabular_vertical_alignment_is_not_cell_content(self):
+        html = self.render(
+            r'\begin{tabular}[t]{|l|l|}Пункт & Масловка \\ Цифра & '
+            r'\end{tabular}')
+        self.assertIn('<tr><td>Пункт</td><td>Масловка</td></tr>', html)
+        self.assertNotIn('[t]', html)
+        self.assertNotIn('{|l|l|}', html)
+
+    def test_tabular_paragraph_column_width_is_not_cell_content(self):
+        html = self.render(
+            r'\begin{tabular}{|p{2cm}|p{3cm}|}Тип & Стоимость '
+            r'\end{tabular}')
+        self.assertIn('<tr><td>Тип</td><td>Стоимость</td></tr>', html)
+        self.assertNotIn('2cm', html)
+
+    def test_tabular_preserves_empty_answer_row(self):
+        html = self.render(
+            r'\begin{tabular}{|c|c|c|}А & Б & В \\ & & \\ '
+            r'\end{tabular}')
+        self.assertIn('<tr><td></td><td></td><td></td></tr>', html)
+        self.assertEqual(html.count('<tr>'), 2)
+
     def test_preview_cut_inside_bracket_math(self):
         from problems.web_tex import tex_preview_html
         # Граница внутри \(…\) — формула откатывается целиком

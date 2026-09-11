@@ -79,11 +79,12 @@
     {% with item=row.item %}
     <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" data-id="{{ item.pk }}"{% if item.task_id %} data-task-id="{{ item.task.pk }}" data-has-answer="{% if item.task.effective_answer_latex or item.task.effective_solution_latex or item.task.has_subitem_answers %}1{% endif %}" data-no-answer="{% if item.task.has_blank_answer %}1{% endif %}"{% endif %}>
       <div class="ws-body">
-        <span class="drag-handle" title="Перетащите, чтобы изменить порядок">⠿</span>
+        {% if not item.task.block_id %}<span class="drag-handle" title="Перетащите, чтобы изменить порядок">⠿</span>{% endif %}
 
         {% if item.task_id %}
         {# --- Задача --- #}
         <div class="ws-content">
+          {% if item.task.block_id %}<p class="page-subtitle">{{ item.task.block.title }} · вопрос {{ item.task.block_position }} из {{ item.task.block.size }}. Кнопки ↑/↓ перемещают весь блок.</p>{% endif %}
           <form id="settings-{{ item.pk }}" method="post" class="ws-settings"
                 data-autosave="change"
                 action="{% url 'worksheet_item_settings' worksheet.pk item.pk %}">
@@ -91,6 +92,7 @@
             <input type="hidden" name="stars"
                    value="{{ item.stars_override|default_if_none:'' }}">
           </form>
+          {% include 'worksheets/_common_condition.html' %}
           <div class="task-line">
             <span class="ws-num">{{ row.number }}.</span>
             <span class="ws-stars" data-form="settings-{{ item.pk }}"
@@ -98,7 +100,7 @@
                   title="Сложность в листке — кликните по звезде">
               {% for value, label in stars_choices %}{% if value %}<button type="button" class="ws-star{% if item.effective_stars >= value %} on{% endif %}" data-value="{{ value }}">★</button>{% endif %}{% endfor %}
             </span>
-            <span class="math-content task-text">{{ item.task.text_latex|web_text }}</span>
+            <span class="math-content task-text">{{ row.statement|web_text }}</span>
           </div>
           {% if item.task.subitems.all %}
           <ol class="subitems">
@@ -114,7 +116,7 @@
             {% endfor %}
           </ol>
           {% endif %}
-          {% task_images item.task %}
+          {% include 'problems/_task_images.html' with images=row.statement_images %}
           {% include 'problems/_task_answers.html' with task=item.task subitems=item.task.subitems.all %}
           <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
           <div class="task-meta">
