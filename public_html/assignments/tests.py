@@ -1312,23 +1312,23 @@ class AutoCheckFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Разминка')
 
-    def test_review_shows_badge_and_recomputes_after_reference_change(self):
+    def test_review_colors_answer_and_recomputes_after_reference_change(self):
         self._save('0; 2')
         self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
         self.client.login(username='teacher1', password='pass12345')
         review_url = reverse('review_assignment', args=[self.assignment.pk])
-        self.assertContains(self.client.get(review_url), '✓ верно')
+        self.assertContains(self.client.get(review_url), 'class="mask-value" data-status="ok"')
         # Учитель исправил маску — сверка пересчитывается при открытии проверки
         self.task.answer_mask = 'Корни: {{set: 1; 3}}'
         self.task.save()
         response = self.client.get(review_url)
-        self.assertContains(response, '✗ неверно')
+        self.assertContains(response, 'class="mask-value" data-status="wrong"')
         submission = Submission.objects.get(
             assignment=self.assignment, task=self.task)
         self.assertEqual(submission.auto_check, 'wrong')
 
-    def test_review_shows_filled_mask_with_slot_badges_and_reference(self):
-        """Учителю — заполненная маска, бейдж у каждого слота и эталон маски;
+    def test_review_shows_filled_mask_with_result_and_reference(self):
+        """Учителю — заполненная маска, цвета полей и авторский ответ;
         формула из math-field показывается как $…$, а не кодом."""
         self.task.answer_mask = r'Корни: {{set: 0; 2}}, разложение {{factor: x(x-2)}}'
         self.task.save()
@@ -1339,12 +1339,10 @@ class AutoCheckFlowTests(TestCase):
         response = self.client.get(
             reverse('review_assignment', args=[self.assignment.pk]))
         self.assertContains(response, 'mask-answer')
-        self.assertContains(response, f'data-check="task{self.task.pk}_s1"')
-        self.assertContains(response, f'data-check="task{self.task.pk}_s2"')
-        self.assertContains(response, '✓ верно', count=2)
-        self.assertContains(response, 'Маска с эталонами')
-        self.assertContains(response, '[0; 2]')
-        self.assertContains(response, '$x(x-2)$')
+        self.assertNotContains(response, 'check-badge')
+        self.assertContains(response, 'class="mask-value" data-status="ok"', count=2)
+        self.assertContains(response, 'Ответ:')
+        self.assertContains(response, '0; 2')
         self.assertContains(response, '$(x-2)x$')
 
     def test_visibility_set_on_assign_and_locked_afterwards(self):

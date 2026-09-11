@@ -345,6 +345,8 @@ def _assignment_rows(assignment, with_review=False, item_ids=None):
             'spec': spec,
             'fragments': _mask_fragments(spec, submission, prefix, with_review),
             'mask_reference': reference_text(spec) if spec else '',
+            'has_solution': bool(task.effective_solution_latex) or any(
+                sr['subitem'].effective_solution_latex for sr in subrows),
             'has_comment': bool(review and review.comment),
             'subrows': subrows,
             'attempt_history': attempt_history,

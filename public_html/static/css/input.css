@@ -270,6 +270,11 @@
   table.list.progress-table thead th[rowspan]:first-child { z-index: 3; }
   table.list.progress-table thead th { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   table.list.progress-table thead tr:first-child th:last-child { border-right: 0; }
+  table.list.progress-table tbody th,
+  table.list.progress-table tbody td { border-right: 1px solid var(--border); }
+  table.list.progress-table tbody td:last-child { border-right: 0; }
+  table.list.progress-table tbody tr:hover > th,
+  table.list.progress-table tbody tr:hover > td { background: #f2f6fc; }
   .progress-group-start { border-left: 0; }
   .progress-mark { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 28px; padding: 0; border: 0; border-radius: 6px; font-size: 19px; font-weight: 600; cursor: pointer; }
   .progress-mark sub { font-size: 10px; position: static; align-self: flex-end; margin-bottom: 3px; line-height: 1; }
@@ -718,6 +723,13 @@
     margin-top: var(--space-5);
     padding-top: var(--space-4);
     border-top: 1px solid rgb(255 255 255 / 12%);
+  }
+
+  .sidebar-list + .sidebar-stat,
+  .sidebar-stat + .sidebar-stat,
+  .sidebar-stat + .sidebar-list,
+  .sidebar-copy + .sidebar-actions {
+    margin-top: var(--space-3);
   }
 
   .sidebar-kicker {
@@ -1983,7 +1995,30 @@
   .mask-value {
     font-weight: 600;
     padding: 0 4px;
-    border-bottom: 2px solid var(--accent);
+    border-bottom: 2px solid var(--muted);
+  }
+
+  .mask-value[data-status='ok'] { border-bottom-color: #218739; }
+  .mask-value[data-status='wrong'] { border-bottom-color: #c53030; }
+
+  .review-answer-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin-block: var(--space-2);
+  }
+
+  .review-reference { color: var(--muted); }
+
+  .review-actions.form-buttons {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .review-actions > .btn {
+    width: 100%;
+    white-space: normal;
   }
 
   .mask-blank {
