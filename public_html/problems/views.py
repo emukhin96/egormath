@@ -1572,6 +1572,7 @@ def textbook_import_block(request, batch_pk, block_pk):
 
 @teacher_required
 def textbook_import_review(request, batch_pk, pk):
+    from .models import ExamItem
     batch = _own_import_batch(request, batch_pk)
     draft = get_object_or_404(
         TextbookTaskDraft.objects.select_related('topic', 'imported_task'),
@@ -1691,6 +1692,7 @@ def textbook_import_review(request, batch_pk, pk):
         'draft': draft,
         'form': form,
         'review_subitems': review_subitems,
+        'import_exam_items': ExamItem.objects.filter(code__in=draft.exam_item_codes),
         'previous': previous,
         'following': following,
         'review_locked': draft.status == TextbookTaskDraft.STATUS_IMPORTED,
