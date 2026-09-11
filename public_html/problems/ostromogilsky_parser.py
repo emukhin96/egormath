@@ -10,6 +10,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
+from .oge_metadata import apply_oge_metadata
 from .textbook_parser import (
     TASK_IMAGE_RE, TaskDraft, apply_imported_answer, finalize_draft_images,
     normalize_imported_text)
@@ -987,6 +988,7 @@ def parse_ostromogilsky(
             warnings=warnings,
             confidence=1.0 if not warnings else 0.7,
         )
+        apply_oge_metadata(draft, 'ostromogilsky')
         finalize_draft_images(draft)
         tasks.append(draft)
 

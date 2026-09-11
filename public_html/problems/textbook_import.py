@@ -24,6 +24,7 @@ from .models import (ExamItem, Source, Tag, Task, TaskImage, TaskSource,
                      TaskSubitem, TextbookImportAsset, TextbookImportBatch,
                      TextbookTaskDraft, Topic)
 from .rubricator import set_grade_bands, set_task_exams, set_task_topics
+from .oge_metadata import apply_oge_metadata
 from .textbook_parser import (ZIV_LEAKED_HEADING_WARNING,
                               ZIV_LOOKS_LIKE_HEADING_WARNING,
                               ZIV_SPLIT_FROM_WARNING,
@@ -235,6 +236,11 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             tags=_string_list(row.get('tags'), 'tags'),
             status=status,
         ))
+    for draft in drafts:
+        try:
+            apply_oge_metadata(draft, batch.profile)
+        except ValueError as exc:
+            raise TextbookImportError(str(exc)) from exc
     apply_topic_suggestions(drafts)
     mark_already_imported_drafts(drafts, source)
     TextbookTaskDraft.objects.bulk_create(drafts, batch_size=500)
@@ -1030,6 +1036,11 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         source=batch.source).count()
 
     for draft in approved.select_related('topic').order_by('pk'):
+        try:
+            if apply_oge_metadata(draft, batch.profile):
+                draft.save(update_fields=['exam_item_codes', 'tags'])
+        except ValueError as exc:
+            raise TextbookImportError(str(exc)) from exc
         ref = (TaskSource.objects.select_related('task')
                .filter(source=batch.source, locator=draft.external_id).first())
         if ref:
@@ -1042,15 +1053,8 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         else:
             # Совпадение текста между изданиями — только подсказка для
             # рецензента, но не безопасное основание автоматически слить задачи.
-            from assignments.checks import draft_mask
-            from assignments.checks.formats import oge_kind
-            answer_mask = ''
-            if not draft.subitems and oge_kind(draft.exam_item_codes):
-                answer_mask = draft_mask(draft.author_answer_latex,
-                                         exam_codes=draft.exam_item_codes)
             task = Task.objects.create(
                 text_latex=draft.text_latex,
-                answer_mask=answer_mask,
                 author_answer_latex=(
                     '' if draft.subitems else draft.author_answer_latex),
                 author_solution_latex=(
@@ -1093,6 +1097,20 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         exam_codes = [
             code for code in (draft.exam_item_codes or []) if str(code).strip()]
         if exam_codes:
+            unknown = set(exam_codes) - set(ExamItem.objects.filter(
+                code__in=exam_codes).values_list('code', flat=True))
+            if unknown:
+                raise TextbookImportError(
+                    f'{draft.external_id}: неизвестные метки экзамена: '
+                    + ', '.join(sorted(unknown)))
+            if batch.profile == 'ostromogilsky':
+                existing_lines = set(task.exam_items.filter(
+                    exam_model__exam_type='OGE', exam_model__exam_year=2026,
+                    item_number__gt=0
+                ).values_list('code', flat=True))
+                if existing_lines - set(exam_codes):
+                    raise TextbookImportError(
+                        f'{draft.external_id}: у задачи в базе другая метка номера ОГЭ.')
             exam_ids = list(ExamItem.objects.filter(
                 code__in=exam_codes).values_list('pk', flat=True))
             if exam_ids:
@@ -1100,6 +1118,15 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
                     task.exam_items.add(*exam_ids)
                 else:
                     set_task_exams(task, exam_ids)
+        # Маска строится из окончательного авторского ответа. При повторной
+        # загрузке заполняется только пустая маска, выбор учителя сохраняется.
+        from assignments.checks import draft_mask
+        from assignments.checks.formats import oge_kind
+        if not task.answer_mask.strip() and not draft.subitems and oge_kind(exam_codes):
+            mask = draft_mask(task.author_answer_latex, exam_codes=exam_codes)
+            if mask:
+                task.answer_mask = mask
+                task.save(update_fields=['answer_mask'])
         grade_codes = [
             code for code in (draft.grade_band_codes or []) if str(code).strip()]
         if grade_codes and not task.grade_bands.exists():
