@@ -266,6 +266,7 @@ def commit_draft(draft, owner, *, force=False):
     reused = 0
     missing_images = []
     worksheet_topics = set()
+    used_in_sheet = set()
     order = 0
     for el in draft.get('elements') or []:
         order += 10
@@ -302,7 +303,20 @@ def commit_draft(draft, owner, *, force=False):
         has_sub_solutions = any((s or '').strip() for s in sub_solutions)
         task_answer = '' if has_sub_answers else (el.get('answer') or '')
         task_solution = '' if has_sub_solutions else (el.get('solution') or '')
+        paths, missing = resolve_element_image_paths(key, el)
+        missing_images.extend(missing)
+        incoming_names = {path.name for path in paths}
         task_pk = find_existing_task(text, subitems)
+        # Одна и та же формулировка в классной и домашней — две задачи,
+        # иначе догрузка рисунков смешает картинки на общем Task.
+        if task_pk in used_in_sheet:
+            task_pk = None
+        elif task_pk:
+            task = Task.objects.get(pk=task_pk)
+            existing_names = {img.filename for img in task.images.all()}
+            if (incoming_names and existing_names
+                    and incoming_names != existing_names):
+                task_pk = None
         if task_pk:
             task = Task.objects.get(pk=task_pk)
             reused += 1
@@ -324,11 +338,10 @@ def commit_draft(draft, owner, *, force=False):
                     solution_latex=(
                         sub_solutions[j] if j < len(sub_solutions) else ''))
             created += 1
+        used_in_sheet.add(task.pk)
         applied = _apply_taxonomy(task, draft, grade_opt, el)
         for topic in applied:
             worksheet_topics.add(topic.pk)
-        paths, missing = resolve_element_image_paths(key, el)
-        missing_images.extend(missing)
         _attach_images(task, paths)
         locator = f'{key}#{order}'
         if not TaskSource.objects.filter(source=source, locator=locator).exists():

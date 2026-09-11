@@ -219,6 +219,41 @@ a) внутри хотя бы одного из углов;\\
         self.assertNotIn('taskpic', ''.join(tasks[4]['subitems']))
         self.assertIn('DOC', tasks[4]['subitems'][1])
 
+    def test_captioned_images_after_enumerate_end(self):
+        src = r"""
+\documentclass{article}
+\begin{document}
+\begin{enumerate}[1.]
+\item Найдите $x$ на рисунке.
+\item Найдите отношение $BD:DC$.
+\item Текстовая задача без рисунка.
+\end{enumerate}
+\begin{center}
+\makebox[6cm][c]{\textit{К задаче 1}}\makebox[48mm][c]{\textit{К задаче 2}}
+\includegraphics[width=6cm]{pic-class-1.png}
+\includegraphics[width=48mm]{pic-class-2.png}
+\end{center}
+\newpage
+\begin{enumerate}[1.]
+\item Найдите $x$ на рисунке.
+\item Найдите отношение $BD:DC$.
+\end{enumerate}
+\begin{center}
+\makebox[6cm][c]{\textit{К задаче 1}}\makebox[48mm][c]{\textit{К задаче 2}}
+\includegraphics[width=6cm]{pic-home-1.png}
+\includegraphics[width=48mm]{pic-home-2.png}
+\end{center}
+\end{document}
+"""
+        parsed = parse_enumerate_source(src)
+        tasks = [el for el in parsed['elements'] if el['kind'] == 'task']
+        self.assertEqual(len(tasks), 5)
+        self.assertEqual(tasks[0]['images'], ['pic-class-1.png'])
+        self.assertEqual(tasks[1]['images'], ['pic-class-2.png'])
+        self.assertEqual(tasks[2]['images'], [])
+        self.assertEqual(tasks[3]['images'], ['pic-home-1.png'])
+        self.assertEqual(tasks[4]['images'], ['pic-home-2.png'])
+
     def test_title_skips_running_header(self):
         src = r"""
 \documentclass{article}

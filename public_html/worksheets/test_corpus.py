@@ -238,6 +238,66 @@ class CorpusLoadTests(TestCase):
         self.assertEqual(info['created'], 0)
         self.assertEqual(Task.objects.filter(variant_of__isnull=True).count(), 2)
 
+    def test_commit_does_not_reuse_same_text_with_different_images(self):
+        from worksheet_corpus.store import save_draft
+        key = '9 класс/matvert9-geom-cheva_menelay'
+        pic_a = 'menelay-a.png'
+        pic_b = 'menelay-b.png'
+        self._put_asset(key, pic_a)
+        self._put_asset(key, pic_b)
+        draft = _sample_draft(key=key)
+        draft['header']['title'] = 'Теорема Менелая'
+        draft['elements'] = [
+            {
+                'kind': 'task',
+                'text': 'Найдите $x$ на рисунке.',
+                'subitems': [],
+                'stars': 0,
+                'columns': 0,
+                'answer': '',
+                'solution': '',
+                'subitem_answers': [],
+                'subitem_solutions': [],
+                'images': [],
+                'image_files': [],
+                'image_names': [pic_a],
+                'warnings': [],
+                'status': 'needs_review',
+                'skip': False,
+            },
+            {
+                'kind': 'task',
+                'text': 'Найдите $x$ на рисунке.',
+                'subitems': [],
+                'stars': 0,
+                'columns': 0,
+                'answer': '',
+                'solution': '',
+                'subitem_answers': [],
+                'subitem_solutions': [],
+                'images': [],
+                'image_files': [],
+                'image_names': [pic_b],
+                'warnings': [],
+                'status': 'needs_review',
+                'skip': False,
+            },
+        ]
+        save_draft(draft)
+        media = Path(self.tmp.name) / 'media'
+        with override_settings(MEDIA_ROOT=str(media)):
+            worksheet, info = commit_draft(draft, self.teacher)
+        self.assertEqual(info['created'], 2)
+        self.assertEqual(info['reused'], 0)
+        tasks = [
+            item.task for item in
+            worksheet.items.filter(task__isnull=False).order_by('order')]
+        self.assertNotEqual(tasks[0].pk, tasks[1].pk)
+        self.assertEqual(
+            [img.filename for img in tasks[0].images.all()], [pic_a])
+        self.assertEqual(
+            [img.filename for img in tasks[1].images.all()], [pic_b])
+
     def test_find_imported_does_not_match_longer_key(self):
         from worksheet_corpus.store import save_draft
         from .corpus import find_imported_worksheet
