@@ -692,6 +692,9 @@ class TextbookImportBatch(models.Model):
     ]
 
     title = models.CharField('Название партии', max_length=190)
+    transfer_key = models.CharField(
+        'Контрольная сумма переноса', max_length=64, unique=True,
+        null=True, blank=True, editable=False)
     profile = models.CharField('Профиль парсера', max_length=32)
     source = models.ForeignKey(
         Source, on_delete=models.PROTECT, related_name='import_batches',
