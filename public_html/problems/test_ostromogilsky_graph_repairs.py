@@ -3,11 +3,21 @@ from copy import deepcopy
 from tempfile import TemporaryDirectory
 from pathlib import Path
 from django.test import SimpleTestCase
-from .ostromogilsky_graph_repairs import attach_graph_repairs
+from .ostromogilsky_graph_repairs import (attach_graph_repairs,
+                                          graph_repair_specs)
 from .textbook_parser import ImportBundle,TaskDraft
 
 
 class GraphRepairTests(SimpleTestCase):
+    def test_11_9_6_uses_positive_slope_after_source_match(self):
+        row = next(
+            item for item in graph_repair_specs()
+            if item['id'] == '11.9.6')
+        self.assertIn('А) $y=\\frac{1}{5} \\cdot x-4$', row['latex'])
+        self.assertNotIn('А) $y=-\\frac{1}{5}', row['latex'])
+        self.assertIn('А) y= −1 5', row['source'])
+        self.assertEqual(row['warnings'], [])
+
     def test_label_correction_uses_separate_page_copy(self):
         from unittest.mock import MagicMock,patch
         from .ostromogilsky_graph_repairs import extract_graph_repairs
