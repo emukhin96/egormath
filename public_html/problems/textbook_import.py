@@ -1042,8 +1042,15 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         else:
             # Совпадение текста между изданиями — только подсказка для
             # рецензента, но не безопасное основание автоматически слить задачи.
+            from assignments.checks import draft_mask
+            from assignments.checks.formats import oge_kind
+            answer_mask = ''
+            if not draft.subitems and oge_kind(draft.exam_item_codes):
+                answer_mask = draft_mask(draft.author_answer_latex,
+                                         exam_codes=draft.exam_item_codes)
             task = Task.objects.create(
                 text_latex=draft.text_latex,
+                answer_mask=answer_mask,
                 author_answer_latex=(
                     '' if draft.subitems else draft.author_answer_latex),
                 author_solution_latex=(

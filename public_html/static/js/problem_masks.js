@@ -6,7 +6,7 @@
   var form=document.getElementById('answer-mask-form');
   var config=document.getElementById('answer-mask-config').dataset;
   var previewDialog=document.getElementById('answer-preview-dialog');
-  function body(data){var f=new FormData();Object.entries(data).forEach(p=>f.set(p[0],p[1]));return f;}
+  function body(data){var f=new FormData();Object.entries(data).forEach(p=>{if(Array.isArray(p[1]))p[1].forEach(v=>f.append(p[0],v));else f.set(p[0],p[1]);});return f;}
   async function answers(root, withPreview){
     var url=new URL(api.endpoint(root),location.href);if(withPreview)url.searchParams.set('preview','1');
     var result=await api.request(url.toString());
@@ -94,7 +94,7 @@
       if(missing){
         var changes=[],unresolved=[];
         for(var o of owners.filter(o=>!o.mask.trim())){
-          var result=await api.request(config.draftUrl,body({answer:o.author.trim()||o.editor.trim(),condition:o.condition})).catch(()=>({mask:''}));
+          var result=await api.request(config.draftUrl,body({answer:o.author.trim()||o.editor.trim(),condition:o.condition,exam_codes:o.exam_codes||[]})).catch(()=>({mask:''}));
           if(result.mask)changes.push({id:o.id,mask:result.mask});else unresolved.push(o.label);
         }
         if(unresolved.length)api.toast(false,'Уточните тип вручную: '+unresolved.join(', '));
@@ -113,14 +113,14 @@
   form.querySelector('[data-mask-generate]').addEventListener('click',async function(){
     this.disabled=true;
     try{
-      var result=await api.request(config.draftUrl,body({answer:current[form.elements.source.value]||'',condition:current.condition}));
+      var result=await api.request(config.draftUrl,body({answer:current[form.elements.source.value]||'',condition:current.condition,exam_codes:current.exam_codes||[]}));
       if(form.elements.mask.value.trim()&&!confirm('Заменить текущую маску новым черновиком?'))return;
       form.elements.mask.value=result.mask;form.querySelector('[data-mask-message]').textContent='Черновик готов. Проверьте предпросмотр перед сохранением.';
     }catch(error){form.querySelector('[data-mask-message]').textContent=error.message;form.querySelector('.problem-section').open=true;}
     finally{this.disabled=false;}
   });
   form.querySelectorAll('[data-mask-template]').forEach(function(b){b.addEventListener('click',function(){
-    var field=form.elements.mask, snippet='{{number: '+b.dataset.maskTemplate+'}}';
+    var field=form.elements.mask, snippet='{{'+(b.dataset.maskKind||'number')+': '+b.dataset.maskTemplate+'}}';
     field.setRangeText(snippet,field.selectionStart,field.selectionEnd,'select');field.focus();
     form.querySelector('[data-mask-message]').textContent='Вставлен пример. Укажите правильное значение вместо него.';
   });});

@@ -152,7 +152,7 @@
       var preset = e.target.closest('[data-mask-template]');
       if (preset) {
         var field = preset.closest('.problem-section').querySelector('textarea[data-mask-source]');
-        var snippet = '{{number: ' + preset.dataset.maskTemplate + '}}';
+        var snippet = '{{' + (preset.dataset.maskKind || 'number') + ': ' + preset.dataset.maskTemplate + '}}';
         field.setRangeText(snippet, field.selectionStart, field.selectionEnd, 'select');
         field.dispatchEvent(new Event('input', {bubbles: true})); field.focus(); return;
       }

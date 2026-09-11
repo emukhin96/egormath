@@ -77,12 +77,14 @@ def mask_data(task, item=None, include_preview=False):
     positions = {pk: n + 1 for n, pk in enumerate(task.subitems.values_list('pk', flat=True))}
     subs = list(item.selected_subitems() if item else task.subitems.all())
     owners = subs or ([] if task.subitems.exists() else [task])
+    exam_codes = list(task.exam_items.values_list('code', flat=True))
     answers = [{'id': o.pk if isinstance(o, TaskSubitem) else None,
              'label': f'Подпункт {positions[o.pk]}' if isinstance(o, TaskSubitem) else 'Ответ',
              'text': o.text_latex,
              'condition': task.text_latex + ('\n' + o.text_latex if isinstance(o, TaskSubitem) else ''),
              'author': o.author_answer_latex,
              'editor': o.answer_latex, 'mask': o.answer_mask,
+             'exam_codes': exam_codes,
              'full_answer_only': task.full_answer_only}
             for o in owners]
     if include_preview:

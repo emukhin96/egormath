@@ -16,9 +16,13 @@ import re
 from dataclasses import dataclass, field
 
 from ..check_answer import OK, UNKNOWN, WRONG, _compact, normalize
-from . import expressions, sets
+from . import expressions, sets, formats
 
 NUMBER = 'number'
+DIGITS = 'digits'
+DECIMAL = 'decimal'
+RATIO = 'ratio'
+PROPORTION = 'proportion'
 CHOICE = 'choice'
 SIMPLIFY = 'simplify'
 FACTOR = 'factor'
@@ -30,6 +34,10 @@ ORDER = 'order'
 
 KINDS = {
     NUMBER: 'число',
+    DIGITS: 'последовательность цифр',
+    DECIMAL: 'десятичное число (ОГЭ)',
+    RATIO: 'отношение с заданным порядком',
+    PROPORTION: 'отношение с допустимой перестановкой',
     CHOICE: 'выбор из вариантов',
     SIMPLIFY: 'выражение для упрощения',
     FACTOR: 'разложение на множители',
@@ -51,6 +59,10 @@ PRESETS = {
 
 # Справка для формы учителя: (пример, пояснение)
 HELP = (
+    ('{{digits: 234}}', 'только цифры в точном порядке, без пробелов; 234,00 и 468/2 не принимаются'),
+    ('{{decimal: -0,5}}', 'целое или десятичное число с запятой; дроби и выражения не принимаются'),
+    ('{{ratio: 1:2}}', 'отношение: 2:4 и 8:16 верны; 2:1 и 0,5 неверны'),
+    ('{{proportion: 1:2}}', 'отношение с перестановкой: 1:2, 2:1 и 4:2 верны; 0,5 неверно'),
     ('{{number: 10}}', 'число; принимается любая численно равная запись '
                        '(2,5 / 5/2 / \\frac{5}{2}); допуск — {{number: 3,14 ~ 0,01}}'),
     ('{{choice: мальчиков|*девочек}}', 'выпадающий список, правильный вариант со звёздочкой'),
@@ -227,6 +239,22 @@ def _parse_number(slot, payload):
     slot.data, slot.tolerance, slot.reference = value, tolerance, payload.strip()
 
 
+def _parse_format(slot, payload):
+    if slot.kind == DIGITS:
+        value = payload if formats.digits(payload) else None
+        hint = 'эталон должен содержать только цифры 0–9 без пробелов'
+    elif slot.kind == DECIMAL:
+        value = formats.decimal(payload)
+        hint = 'эталон: целое или десятичное число с запятой'
+    else:
+        value = formats.ratio(payload)
+        hint = 'эталон: два числа через двоеточие, второе не равно нулю'
+    if value is None:
+        slot.error = hint
+        return
+    slot.data, slot.reference = value, payload
+
+
 def _parse_expression(slot, payload):
     from sympy import Eq, Expr
     expr = expressions.parse_expr(payload)
@@ -274,6 +302,8 @@ def _parse_order(slot, payload):
 
 
 _PARSERS = {
+    DIGITS: _parse_format, DECIMAL: _parse_format,
+    RATIO: _parse_format, PROPORTION: _parse_format,
     NUMBER: _parse_number, CHOICE: _parse_choice, SIMPLIFY: _parse_expression,
     FACTOR: _parse_expression, EQUATION: _parse_expression, PAIR: _parse_pair,
     SET: _parse_set, RANGE: _parse_range, ORDER: _parse_order,
@@ -351,6 +381,16 @@ def check_slot(slot, value):
     if not value or not slot.is_valid:
         return ''
     kind = slot.kind
+    if kind == DIGITS:
+        return OK if formats.digits(value) and value == slot.data else WRONG
+    if kind == DECIMAL:
+        student = formats.decimal(value)
+        return OK if student is not None and student == slot.data else WRONG
+    if kind in (RATIO, PROPORTION):
+        student = formats.ratio(value)
+        equal = student is not None and (student == slot.data or (
+            kind == PROPORTION and student * slot.data == 1))
+        return OK if equal else WRONG
     if kind == CHOICE:
         if _compact(value) == _compact(slot.correct):
             return OK
@@ -526,9 +566,20 @@ def _unwrap_set_braces(text):
     return text
 
 
-def draft_mask(answer, condition=""):
+def draft_mask(answer, condition="", exam_codes=None):
     """Черновик маски из текстового «Ответа» для тривиальных случаев;
     '' — не угадали, учитель пишет маску сам."""
+    kind = formats.oge_kind(exam_codes)
+    if kind == '':
+        return ''
+    if kind:
+        text = (answer or '').replace('$', '').strip()
+        text = text.replace('{,}', ',')
+        candidate = f'{{{{{kind}: {text}}}}}'
+        return candidate if parse_mask(candidate).is_valid else ''
+    ratio_text = (answer or '').replace('$', '').strip()
+    if ':' in ratio_text and formats.ratio(ratio_text) is not None:
+        return f'{{{{{RATIO}: {ratio_text}}}}}'
     from .drafting import contextual_draft
     contextual = contextual_draft(answer, condition)
     if contextual is not None:
