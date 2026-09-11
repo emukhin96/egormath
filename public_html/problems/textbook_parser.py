@@ -3284,6 +3284,9 @@ def bundle_for(profile: str, tasks_path: Path,
 
 
 def write_bundle(bundle: ImportBundle, output: Path) -> None:
+    from .oge_metadata import apply_oge_metadata
+    for task in bundle.tasks:
+        apply_oge_metadata(task, bundle.profile)
     output.mkdir(parents=True, exist_ok=True)
     payload = asdict(bundle)
     (output / "import.json").write_text(
