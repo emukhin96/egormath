@@ -461,7 +461,8 @@ def task_mask_preview(request):
 def task_mask_draft(request):
     """Заготовка маски из текстового «Ответа» (только очевидные случаи)."""
     from assignments.checks import draft_mask
-    mask = draft_mask(request.POST.get('answer', ''), request.POST.get('condition', ''))
+    mask = draft_mask(request.POST.get('answer', ''), request.POST.get('condition', ''),
+                      exam_codes=request.POST.getlist('exam_codes'))
     return JsonResponse({
         'ok': bool(mask), 'mask': mask,
         'message': '' if mask else

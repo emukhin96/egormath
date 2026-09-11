@@ -312,6 +312,7 @@ class TextbookImportTests(TestCase):
             list(task.grade_bands.values_list('code', flat=True)))
         self.assertEqual(list(task.tags.values_list('name', flat=True)), ['DEMO'])
         self.assertEqual(task.author_answer_latex, '15,3')
+        self.assertEqual(task.answer_mask, '{{decimal: 15,3}}')
 
     def test_commit_adds_variant_rubrics_inside_topic_collection(self):
         topic = Topic.objects.create(name='Тема вариантов')
