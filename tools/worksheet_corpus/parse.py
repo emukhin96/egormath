@@ -232,8 +232,11 @@ def parse_enumerate_source(source: str) -> dict:
             continue
         top_spans.append((start, end, inner))
     last_end = 0
+    last_batch = []
     for start, end, inner in top_spans:
         between = body[last_end:start]
+        if last_batch:
+            _attach_trailing_figures(last_batch, between)
         _append_section_rubrics(between, elements)
         batch = []
         extras_after = []
@@ -245,7 +248,10 @@ def parse_enumerate_source(source: str) -> dict:
         for task, extras in zip(batch, extras_after):
             elements.append(task)
             elements.extend(extras)
+        last_batch = batch
         last_end = end
+    if last_batch:
+        _attach_trailing_figures(last_batch, body[last_end:])
     if not any(el['kind'] == 'task' for el in elements):
         try:
             return parse_flexible_tasks(source)
@@ -550,6 +556,24 @@ def _apply_stripped_parts(task, parts):
     n_sub = len(task.get('subitems') or [])
     if n_sub:
         task['subitems'] = parts[1:1 + n_sub]
+
+
+def _attach_trailing_figures(tasks, text):
+    """Рисунки «К задаче N» после списка — к N-му пункту этого списка."""
+    if not tasks or not (text or '').strip():
+        return
+    images = []
+    extract_graphics(text, images)
+    imgs = _file_image_names(images)
+    caps = [int(m.group(1)) for m in CAPTION_TASK_RE.finditer(text)]
+    if not caps or not imgs:
+        return
+    for num, img in zip(caps, imgs):
+        idx = num - 1
+        if 0 <= idx < len(tasks):
+            dest = tasks[idx].setdefault('images', [])
+            if img not in dest:
+                dest.append(img)
 
 
 def _rewire_list_images(tasks):
