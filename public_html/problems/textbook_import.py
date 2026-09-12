@@ -959,7 +959,11 @@ def _add_draft_task_to_collection(batch, draft, task, cache):
     worksheet = collection.worksheet
     topic_ids = draft_topic_ids(draft)
     if topic_ids:
-        worksheet.topics.add(*Topic.objects.filter(pk__in=topic_ids))
+        topics = list(Topic.objects.filter(pk__in=topic_ids))
+        current = collection
+        while current is not None:
+            current.worksheet.topics.add(*topics)
+            current = current.parent
     grade_codes = [
         code for code in (draft.grade_band_codes or []) if str(code).strip()]
     if grade_codes and not worksheet.grade_bands.exists():

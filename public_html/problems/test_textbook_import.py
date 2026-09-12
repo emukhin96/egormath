@@ -268,6 +268,8 @@ class TextbookImportTests(TestCase):
         self.assertEqual(leaf.worksheet.title, 'Квадратные уравнения')
         parent = Collection.objects.get(source_path=['Алгебра'])
         self.assertFalse(parent.is_published)
+        self.assertEqual(list(leaf.worksheet.topics.all()), [topic])
+        self.assertEqual(list(parent.worksheet.topics.all()), [topic])
         self.assertTrue(WorksheetItem.objects.filter(
             worksheet=leaf.worksheet, task=task).exists())
         self.assertEqual(list(task.topics.all()), [topic])

@@ -408,32 +408,109 @@ def worksheet_detail(request, pk):
 
 @teacher_required
 def collection_list(request):
-    """Каталог рабочих подборок без пустых узлов их иерархии."""
-    visible = (models.Q() if request.user.is_superuser
-               else models.Q(is_published=True)
-               | models.Q(worksheet__owner=request.user))
-    collections = (Collection.objects
-                   .filter(visible)
-                   .select_related('worksheet', 'source', 'parent')
-                   .prefetch_related('children')
-                   .annotate(items_total=models.Count(
-                       'worksheet__items',
-                       filter=models.Q(
-                           worksheet__items__deleted_at__isnull=True)))
-                   .filter(items_total__gt=0)
-                   .order_by('source', 'order', 'pk'))
+    """Двухуровневый каталог: сначала источник, затем его дерево разделов."""
+    sources = _collection_catalog(request.user)
+    source_pk = request.GET.get('source', '')
+    selected_source = next(
+        (row for row in sources if str(row['source'].pk) == source_pk), None)
     return render(request, 'worksheets/collection_list.html', {
-        'collections': collections,
+        'collection_sources': sources,
+        'selected_source': selected_source,
     })
+
+
+def _collection_catalog(user):
+    """Строит доступное дерево и отсекает ветви без единого элемента."""
+    collections = list(
+        Collection.objects.all()
+        .select_related('worksheet', 'source', 'parent')
+        .prefetch_related('worksheet__topics')
+        .annotate(direct_items_total=models.Count(
+            'worksheet__items',
+            filter=models.Q(worksheet__items__deleted_at__isnull=True),
+            distinct=True))
+        .order_by('source__title', 'order', 'pk'))
+    ids = {collection.pk for collection in collections}
+    by_source = {}
+    for collection in collections:
+        collection.catalog_visible = (
+            user.is_superuser or collection.is_published
+            or collection.worksheet.owner_id == user.pk)
+        by_source.setdefault(collection.source_id, {
+            'source': collection.source, 'collections': [],
+        })['collections'].append(collection)
+
+    result = []
+    for group in by_source.values():
+        by_parent = {}
+        for collection in group['collections']:
+            parent_id = (collection.parent_id
+                         if collection.parent_id in ids else None)
+            by_parent.setdefault(parent_id, []).append(collection)
+
+        def walk(collection, depth=0):
+            children = [row for child in by_parent.get(collection.pk, [])
+                        if (row := walk(child, depth + 1))]
+            direct_items_total = (collection.direct_items_total
+                                  if collection.catalog_visible else 0)
+            direct_topics = (list(collection.worksheet.topics.all())
+                             if collection.catalog_visible or children else [])
+            topics = {topic.pk: topic for topic in direct_topics}
+            for child in children:
+                topics.update({topic.pk: topic for topic in child['topics']})
+            item_total = (direct_items_total
+                          + sum(child['item_total'] for child in children))
+            if not item_total:
+                return None
+            return {
+                'collection': collection,
+                'depth': depth,
+                'children': children,
+                'direct_items_total': direct_items_total,
+                'item_total': item_total,
+                'leaf_total': ((1 if direct_items_total else 0)
+                               + sum(child['leaf_total'] for child in children)),
+                'topics': sorted(topics.values(),
+                                 key=lambda topic: (topic.order, topic.name)),
+            }
+
+        roots = [row for root in by_parent.get(None, [])
+                 if (row := walk(root))]
+
+        def flatten(rows):
+            return [item for row in rows
+                    for item in [row, *flatten(row['children'])]]
+
+        flat_rows = flatten(roots)
+        if not flat_rows:
+            continue
+        group.update(
+            roots=roots,
+            rows=flat_rows,
+            item_total=sum(row['item_total'] for row in roots),
+            leaf_total=sum(row['leaf_total'] for row in roots),
+            topics=sorted(
+                {topic.pk: topic for row in roots
+                 for topic in row['topics']}.values(),
+                key=lambda topic: (topic.order, topic.name)),
+        )
+        result.append(group)
+    return result
 
 
 def _visible_collection(request, pk):
     collection = get_object_or_404(
-        Collection.objects.select_related('worksheet', 'source', 'parent'),
+        Collection.objects.select_related('worksheet', 'source', 'parent')
+        .prefetch_related('worksheet__topics'),
         pk=pk)
-    if (not collection.is_published
-            and collection.worksheet.owner_id != request.user.pk
-            and not request.user.is_superuser):
+    if (collection.is_published
+            or collection.worksheet.owner_id == request.user.pk
+            or request.user.is_superuser):
+        return collection
+    if not any(
+            row['collection'].pk == collection.pk
+            for source in _collection_catalog(request.user)
+            for row in source['rows']):
         raise PermissionDenied
     return collection
 
@@ -465,6 +542,10 @@ def collection_detail(request, pk):
         })
     from .block_presentation import decorate_block_rows
     decorate_block_rows(rows)
+    sources = _collection_catalog(request.user)
+    selected_source = next(
+        (row for row in sources if row['source'].pk == collection.source_id),
+        None)
     return render(request, 'worksheets/collection_detail.html', {
         'collection': collection,
         'worksheet': collection.worksheet,
@@ -475,6 +556,10 @@ def collection_detail(request, pk):
         'can_edit': (not children
                      and (collection.worksheet.owner_id == request.user.pk
                           or request.user.is_superuser)),
+        'mask_help': MASK_HELP,
+        'collection_sources': sources,
+        'selected_source': selected_source,
+        'current_collection': collection,
     })
 
 

@@ -788,6 +788,18 @@
     color: #fff;
   }
 
+  .collection-sidebar-tree li {
+    padding-left: calc(var(--collection-depth, 0) * var(--space-3));
+  }
+
+  .collection-sidebar-tree li.is-current {
+    margin-inline: calc(-1 * var(--space-2));
+    padding-right: var(--space-2);
+    padding-left: calc(var(--space-2) + var(--collection-depth, 0) * var(--space-3));
+    border-radius: 6px;
+    background: rgb(255 255 255 / 12%);
+  }
+
   .sidebar-list strong,
   .sidebar-stat strong {
     color: #fff;
@@ -2575,6 +2587,85 @@
 
   .form-buttons + .helptext {
     margin-top: 0;
+  }
+
+  .page-head .form-buttons .ws-toggle {
+    margin-left: 0;
+  }
+
+  .collection-source-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-4);
+  }
+
+  .collection-source-card {
+    display: block;
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .collection-source-card:hover {
+    border-color: var(--accent);
+  }
+
+  .collection-source-card h2 {
+    margin: var(--space-1) 0 var(--space-2);
+  }
+
+  .collection-source-card p {
+    margin: 0 0 var(--space-3);
+    color: var(--muted);
+  }
+
+  .collection-source-stats {
+    display: flex;
+    gap: var(--space-4);
+    margin-bottom: var(--space-3);
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+
+  .collection-source-stats strong {
+    color: var(--text);
+    font-size: 1rem;
+  }
+
+  .collection-tree-card {
+    overflow-x: auto;
+  }
+
+  .collection-tree-name {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding-left: calc(var(--collection-depth, 0) * var(--space-5));
+  }
+
+  .collection-branch {
+    color: var(--muted);
+  }
+
+  .collection-topics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .collection-topic,
+  .collection-topic-more {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 999px;
+    color: #34506f;
+    background: #e8f1fb;
+    font-size: 0.72rem;
+    line-height: 1.35;
+  }
+
+  .collection-topic-more {
+    color: var(--muted);
+    background: #f1f3f5;
   }
 
   .pagination {
