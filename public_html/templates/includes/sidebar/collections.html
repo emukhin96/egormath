@@ -22,7 +22,7 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Темы раздела</p>
   <ul class="sidebar-list">
-    {% for topic in current_collection.worksheet.topics.all %}<li>{% if topic.code %}<strong>{{ topic.code }}</strong><br>{% endif %}{{ topic.name }}</li>{% empty %}<li>Тема не назначена</li>{% endfor %}
+    {% for topic in current_collection_topics %}<li>{% if topic.code %}<strong>{{ topic.code }}</strong><br>{% endif %}{{ topic.name }}</li>{% empty %}<li>Тема не назначена</li>{% endfor %}
   </ul>
 </section>
 {% endif %}
