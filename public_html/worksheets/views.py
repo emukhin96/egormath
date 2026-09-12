@@ -407,7 +407,7 @@ def worksheet_detail(request, pk):
 
 @teacher_required
 def collection_list(request):
-    """Каталог опубликованных подборок и черновиков текущего редактора."""
+    """Каталог рабочих подборок без пустых узлов их иерархии."""
     visible = (models.Q() if request.user.is_superuser
                else models.Q(is_published=True)
                | models.Q(worksheet__owner=request.user))
@@ -419,6 +419,7 @@ def collection_list(request):
                        'worksheet__items',
                        filter=models.Q(
                            worksheet__items__deleted_at__isnull=True)))
+                   .filter(items_total__gt=0)
                    .order_by('source', 'order', 'pk'))
     return render(request, 'worksheets/collection_list.html', {
         'collections': collections,
@@ -441,6 +442,12 @@ def collection_detail(request, pk):
     """Страница подборки: ответы в рамке после задачи, скрыты тумблером."""
     collection = _visible_collection(request, pk)
     items = list(collection.worksheet.ordered_items())
+    children = list(
+        collection.children.select_related('worksheet', 'source')
+        .annotate(items_total=models.Count(
+            'worksheet__items',
+            filter=models.Q(worksheet__items__deleted_at__isnull=True)))
+        .order_by('order', 'pk'))
     rows = []
     number = 0
     for item in items:
@@ -457,9 +464,11 @@ def collection_detail(request, pk):
         'collection': collection,
         'worksheet': collection.worksheet,
         'rows': rows,
+        'children': children,
         'can_use': bool(items),
-        'can_edit': (collection.worksheet.owner_id == request.user.pk
-                     or request.user.is_superuser),
+        'can_edit': (not children
+                     and (collection.worksheet.owner_id == request.user.pk
+                          or request.user.is_superuser)),
     })
 
 
