@@ -135,3 +135,29 @@ class CollectionTests(TestCase):
         self.assertContains(detail, 'Готовая тема')
         self.assertContains(detail, 'Открыть подборку')
         self.assertNotContains(detail, 'Подборка пуста')
+
+    def test_large_collection_is_paginated_with_continuous_numbering(self):
+        worksheet = Worksheet.objects.create(
+            title='Большая подборка', owner=self.owner)
+        collection = Collection.objects.create(
+            worksheet=worksheet, source=self.source, locator='large',
+            source_path=['Большая подборка'], is_published=True)
+        for number in range(1, 31):
+            task = Task.objects.create(
+                text_latex=f'Задача {number}.', created_by=self.owner)
+            WorksheetItem.objects.create(
+                worksheet=worksheet, task=task, order=number * 10)
+        self.client.login(username='teacher1', password='pass12345')
+
+        first = self.client.get(reverse(
+            'collection_detail', args=[collection.pk]))
+        self.assertContains(first, 'Задача 25.')
+        self.assertNotContains(first, 'Задача 26.')
+        self.assertContains(first, '?page=2')
+
+        second = self.client.get(
+            reverse('collection_detail', args=[collection.pk]),
+            {'page': 2})
+        self.assertContains(second, '<span class="ws-num">26.</span>', html=True)
+        self.assertContains(second, 'Задача 30.')
+        self.assertNotContains(second, 'Задача 25.')

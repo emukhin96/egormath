@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.db import IntegrityError, models, transaction
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -441,7 +442,9 @@ def _visible_collection(request, pk):
 def collection_detail(request, pk):
     """Страница подборки: ответы в рамке после задачи, скрыты тумблером."""
     collection = _visible_collection(request, pk)
-    items = list(collection.worksheet.ordered_items())
+    all_items = list(collection.worksheet.ordered_items())
+    page = Paginator(all_items, 25).get_page(request.GET.get('page'))
+    items = list(page.object_list)
     children = list(
         collection.children.select_related('worksheet', 'source')
         .annotate(items_total=models.Count(
@@ -449,7 +452,9 @@ def collection_detail(request, pk):
             filter=models.Q(worksheet__items__deleted_at__isnull=True)))
         .order_by('order', 'pk'))
     rows = []
-    number = 0
+    number = sum(
+        bool(item.task_id)
+        for item in all_items[:page.start_index() - 1])
     for item in items:
         if item.task_id:
             number += 1
@@ -464,8 +469,9 @@ def collection_detail(request, pk):
         'collection': collection,
         'worksheet': collection.worksheet,
         'rows': rows,
+        'page': page,
         'children': children,
-        'can_use': bool(items),
+        'can_use': bool(all_items),
         'can_edit': (not children
                      and (collection.worksheet.owner_id == request.user.pk
                           or request.user.is_superuser)),

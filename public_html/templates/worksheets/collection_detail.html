@@ -85,6 +85,7 @@
   {% else %}
   <p class="muted">Подборка пуста.</p>
   {% endif %}
+  {% include 'includes/pagination.html' with page=page query=request.GET %}
   {% endif %}
 </div>
 {% endblock %}
