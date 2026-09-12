@@ -3315,7 +3315,7 @@ def bundle_for(profile: str, tasks_path: Path,
         import hashlib
         parser_files = [Path(__file__), *(Path(__file__).parent / name for name in (
             'ege_parser.py', 'ege_answers.py', 'ege_figures.py', 'ege_repairs.py',
-            'ege_metadata.py', 'data/ege_source_repairs.json',
+            'ege_metadata.py', 'ege_cleanup.py', 'data/ege_source_repairs.json',
             'data/ege_answer_repairs.json'))]
         parser_hash = hashlib.sha256(b''.join(p.read_bytes() for p in parser_files)).hexdigest()
         bundle.source.update({
@@ -3335,6 +3335,8 @@ def bundle_for(profile: str, tasks_path: Path,
             item.author_answer_latex for item in t.subitems) for t in bundle.tasks)
         bundle.diagnostics['removed_subsection_headings'] = remove_trailing_headings(
             bundle.tasks, bundle.source['tasks_sha256'])
+        from .ege_cleanup import clean_ege_drafts
+        bundle.diagnostics['text_cleanup'] = clean_ege_drafts(bundle.tasks)
         bundle.diagnostics['tasks_by_exam'] = dict(Counter(
             task.external_id.split('.')[0] for task in bundle.tasks))
         bundle.diagnostics['review_counts'] = dict(Counter(
