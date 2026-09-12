@@ -3220,6 +3220,11 @@ def bundle_from_text(
         tasks, diagnostics = parse_ostromogilsky(
             tasks_text, answers=answers, expected_ids=expected_ids,
             pdf_task_contexts=pdf_task_contexts)
+    elif profile == "ostromogilsky_ege":
+        from .ege_parser import parse_ege
+        tasks, diagnostics = parse_ege(
+            tasks_text, answers=answers, expected_ids=expected_ids,
+            pdf_task_contexts=pdf_task_contexts)
     else:
         raise ValueError(f"Неизвестный профиль: {profile}")
     review_counts = Counter(
@@ -3253,22 +3258,47 @@ def bundle_from_text(
 
 def bundle_for(profile: str, tasks_path: Path,
                solutions_path: Path | None,
-               answers_pdf: Path | None = None) -> ImportBundle:
+               answers_pdf: Path | None = None,
+               pdf_index_path: Path | None = None) -> ImportBundle:
     answers = None
     expected_ids = None
     answers_file = ""
     pdf_task_contexts = None
-    if profile == "ostromogilsky":
+    if profile in {"ostromogilsky", "ostromogilsky_ege"}:
         if answers_pdf is None:
             raise ValueError(
-                "Для профиля ostromogilsky обязателен PDF с ключом "
+                "Для профиля банка ФИПИ обязателен PDF с ключом "
                 "(--answers-pdf)")
         from .ostromogilsky_parser import extract_pdf_answers
         answers, expected_ids = extract_pdf_answers(answers_pdf)
-        from .ostromogilsky_splits import extract_pdf_task_contexts
-        pdf_task_contexts = extract_pdf_task_contexts(answers_pdf)
+        if profile == "ostromogilsky_ege":
+            import hashlib
+            from .ege_parser import build_pdf_index
+            pdf_hash = hashlib.sha256(answers_pdf.read_bytes()).hexdigest()
+            parser_hash = hashlib.sha256(Path(__file__).with_name('ege_parser.py').read_bytes()).hexdigest()
+            cache_key = [pdf_hash, parser_hash]
+            cached = json.loads(pdf_index_path.read_text()) if pdf_index_path and pdf_index_path.exists() else {}
+            if cached.get('cache_key') == cache_key:
+                pdf_task_contexts = cached
+            else:
+                pdf_task_contexts = build_pdf_index(answers_pdf)
+                pdf_task_contexts['cache_key'] = cache_key
+                if pdf_index_path:
+                    pdf_index_path.parent.mkdir(parents=True, exist_ok=True)
+                    pdf_index_path.write_text(json.dumps(pdf_task_contexts, ensure_ascii=False, indent=2) + '\n')
+            expected_ids = set(pdf_task_contexts['tasks'])
+            answers = {key: value for key, value in answers.items() if key in expected_ids}
+            from .ege_answers import extract_ege_answers
+            answers, answer_diagnostics = extract_ege_answers(
+                tasks_path.read_text(encoding='utf-8'), answers, pdf_task_contexts)
+            from .ege_repairs import repair_answers
+            answer_diagnostics['verified_pdf_transcriptions'] = repair_answers(
+                answers, hashlib.sha256(tasks_path.read_bytes()).hexdigest(), pdf_hash)
+        else:
+            from .ostromogilsky_splits import extract_pdf_task_contexts
+            pdf_task_contexts = extract_pdf_task_contexts(answers_pdf)
         answers_file = str(answers_pdf.resolve())
-    return bundle_from_text(
+    bundle = bundle_from_text(
         profile,
         tasks_path.read_text(encoding="utf-8"),
         (solutions_path.read_text(encoding="utf-8")
@@ -3281,12 +3311,46 @@ def bundle_for(profile: str, tasks_path: Path,
         answers_file=answers_file,
         pdf_task_contexts=pdf_task_contexts,
     )
+    if profile == "ostromogilsky_ege":
+        import hashlib
+        parser_files = [Path(__file__), *(Path(__file__).parent / name for name in (
+            'ege_parser.py', 'ege_answers.py', 'ege_figures.py', 'ege_repairs.py',
+            'ege_metadata.py', 'data/ege_source_repairs.json',
+            'data/ege_answer_repairs.json'))]
+        parser_hash = hashlib.sha256(b''.join(p.read_bytes() for p in parser_files)).hexdigest()
+        bundle.source.update({
+            "tasks_sha256": hashlib.sha256(tasks_path.read_bytes()).hexdigest(),
+            "pdf_sha256": hashlib.sha256(answers_pdf.read_bytes()).hexdigest(),
+            "edition": "ostromogilsky-ege-2026-08-28",
+            "parser_sha256": parser_hash,
+        })
+        bundle.diagnostics['answer_extraction'] = answer_diagnostics
+        from .ege_repairs import repair_drafts, exclude_incomplete_tasks, remove_trailing_headings
+        bundle.diagnostics['verified_condition_repairs'] = repair_drafts(
+            bundle.tasks, bundle.source['tasks_sha256'])
+        bundle.diagnostics['excluded_source_tasks'] = exclude_incomplete_tasks(
+            bundle.tasks, bundle.source['tasks_sha256'])
+        bundle.diagnostics['unique_tasks'] = len(bundle.tasks)
+        bundle.diagnostics['answers_matched'] = sum(bool(t.author_answer_latex) or any(
+            item.author_answer_latex for item in t.subitems) for t in bundle.tasks)
+        bundle.diagnostics['removed_subsection_headings'] = remove_trailing_headings(
+            bundle.tasks, bundle.source['tasks_sha256'])
+        bundle.diagnostics['tasks_by_exam'] = dict(Counter(
+            task.external_id.split('.')[0] for task in bundle.tasks))
+        bundle.diagnostics['review_counts'] = dict(Counter(
+            'warning' if t.warnings else 'clean' for t in bundle.tasks))
+        bundle.diagnostics['tasks_with_images'] = sum(bool(t.images) for t in bundle.tasks)
+        bundle.diagnostics['tasks_with_subitems'] = sum(bool(t.subitems) for t in bundle.tasks)
+        bundle.diagnostics['tasks_with_author_answer'] = bundle.diagnostics['answers_matched']
+    return bundle
 
 
 def write_bundle(bundle: ImportBundle, output: Path) -> None:
     from .oge_metadata import apply_oge_metadata
+    from .ege_metadata import apply_ege_metadata
     for task in bundle.tasks:
         apply_oge_metadata(task, bundle.profile)
+        apply_ege_metadata(task, bundle.profile)
     output.mkdir(parents=True, exist_ok=True)
     payload = asdict(bundle)
     (output / "import.json").write_text(
@@ -3352,24 +3416,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--profile", required=True,
-        choices=("galitsky", "ziv", "shestakov", "ostromogilsky"))
+        choices=("galitsky", "ziv", "shestakov", "ostromogilsky", "ostromogilsky_ege"))
     parser.add_argument("--tasks", required=True, type=Path)
     parser.add_argument("--solutions", type=Path)
     parser.add_argument(
         "--answers-pdf", type=Path,
         help="Интерактивный PDF с якорями ans:: (обязателен для ostromogilsky)")
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--pdf-index", type=Path,
+                        help="Кэш проверенного индекса PDF для профиля ЕГЭ")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.profile == "ostromogilsky" and args.answers_pdf is None:
+    if args.profile in {"ostromogilsky", "ostromogilsky_ege"} and args.answers_pdf is None:
         raise SystemExit(
             "Для профиля ostromogilsky укажите --answers-pdf с ключом ответов.")
     bundle = bundle_for(
         args.profile, args.tasks, args.solutions,
-        answers_pdf=args.answers_pdf)
+        answers_pdf=args.answers_pdf, pdf_index_path=args.pdf_index)
     if args.profile == "ostromogilsky" and args.answers_pdf is not None:
         from .ostromogilsky_pdf_geometry import extract_pdf_geometry, attach_pdf_geometry
         from .ostromogilsky_parser import extract_pdf_answers
@@ -3410,8 +3476,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             bool(task.author_answer_latex) for task in bundle.tasks)
         bundle.diagnostics['review_counts'] = dict(Counter(
             'warning' if task.warnings else 'clean' for task in bundle.tasks))
+    if args.profile == "ostromogilsky_ege":
+        from .ege_figures import package_ege_images
+        from .ege_parser import build_pdf_index
+        index = json.loads(args.pdf_index.read_text()) if args.pdf_index else build_pdf_index(args.answers_pdf)
+        bundle.diagnostics['image_packaging'] = package_ege_images(
+            bundle, args.tasks.parent, args.answers_pdf, args.output / 'images', index)
     write_bundle(bundle, args.output)
-    print(json.dumps(bundle.diagnostics, ensure_ascii=False, indent=2))
+    print(json.dumps({k: v for k, v in bundle.diagnostics.items()
+                      if k not in {'raw_tex_spans', 'prepared_tex_spans', 'pdf_index', 'answer_extraction', 'image_packaging'}}, ensure_ascii=False, indent=2))
     return 0
 
 

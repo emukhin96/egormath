@@ -167,7 +167,7 @@ class CorpusClassifyTests(TestCase):
         ege['header']['left'] = 'Подготовка к ЕГЭ'
         ege['topic_code'] = 'GEO.08'
         classify_draft(ege, overwrite=True)
-        self.assertEqual(ege['exam_item_codes'], ['EGE_PROFILE_2026'])
+        self.assertEqual(ege['exam_item_codes'], ['EGE_PROFILE_2027'])
         tagged = _sample_draft(
             key='9 класс/zamena-oge-tag',
             title='Замена',
@@ -193,7 +193,7 @@ class CorpusClassifyTests(TestCase):
         self.assertTrue(ExamItem.objects.filter(code='OGE_2026').exists())
         self.assertTrue(ExamItem.objects.filter(code='OGE_2026_19').exists())
         self.assertTrue(
-            ExamItem.objects.filter(code='EGE_PROFILE_2026').exists())
+            ExamItem.objects.filter(code='EGE_PROFILE_2027').exists())
 
 
 class CorpusLoadTests(TestCase):
@@ -610,7 +610,7 @@ class CorpusViewTests(TestCase):
         resp = self.client.post(url, {
             'title': draft['title'],
             'exams_submitted': '1',
-            'exam_item_codes': ['EGE_PROFILE_2026_15'],
+            'exam_item_codes': ['EGE_PROFILE_2027_16'],
             'text_1': draft['elements'][1]['text'],
             'action': 'save',
         }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
@@ -619,7 +619,7 @@ class CorpusViewTests(TestCase):
         saved = load_draft(draft['id'])
         self.assertEqual(
             set(saved['exam_item_codes']),
-            {'EGE_PROFILE_2026', 'EGE_PROFILE_2026_15'})
+            {'EGE_PROFILE_2027', 'EGE_PROFILE_2027_16'})
 
     def test_push_and_unpush(self):
         from worksheet_corpus.store import load_draft, save_draft

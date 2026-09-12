@@ -116,6 +116,8 @@ class TextbookBundleUploadForm(forms.Form):
         ('shestakov', 'Шестаков: задачник и отдельный решебник'),
         ('ostromogilsky',
          'Остромогильский / ФИПИ ОГЭ: готовый import.json'),
+        ('ostromogilsky_ege',
+         'Остромогильский / ФИПИ ЕГЭ: готовый import.json'),
     ]
 
     title = forms.CharField(label='Название партии', max_length=190)
@@ -168,10 +170,10 @@ class TextbookBundleUploadForm(forms.Form):
             self.add_error(
                 'profile',
                 'Профиль Шестакова требует отдельный TEX с решениями.')
-        if profile == 'ostromogilsky' and kind != self.INPUT_JSON:
+        if profile in {'ostromogilsky', 'ostromogilsky_ege'} and kind != self.INPUT_JSON:
             self.add_error(
                 'profile',
-                'Банк ОГЭ загружается готовым import.json: сначала CLI '
+                'Банк ФИПИ загружается готовым import.json: сначала CLI '
                 'с --answers-pdf, затем этот файл.')
         cleaned['resolved_profile'] = (
             profile or (
