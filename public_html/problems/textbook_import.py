@@ -1215,6 +1215,18 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
             if mask:
                 task.answer_mask = mask
                 task.save(update_fields=['answer_mask'])
+        if batch.profile == 'ostromogilsky_ege':
+            targets = list(task.subitems.order_by('order', 'pk')) if draft.subitems else [task]
+            for index, target in enumerate(targets):
+                if target.answer_mask.strip():
+                    continue
+                label = draft.subitems[index].get('label', '') if draft.subitems else ''
+                mask = draft_mask(target.author_answer_latex, target.text_latex,
+                                  exam_codes=exam_codes, source_number=draft.external_id,
+                                  subitem_label=label)
+                if mask:
+                    target.answer_mask = mask
+                    target.save(update_fields=['answer_mask'])
         grade_codes = [
             code for code in (draft.grade_band_codes or []) if str(code).strip()]
         if grade_codes and not task.grade_bands.exists():

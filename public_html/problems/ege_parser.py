@@ -577,7 +577,7 @@ def parse_ege(text: str, *, answers: dict[str, str] | None = None,
             item.text_latex = item.text_latex.strip()
         if (exam_number(task.external_id) in {15, 18}
                 and [item.label for item in task.subitems] == ['а', 'б']
-                and task.subitems[0].text_latex.startswith('Докажите')
+                and re.search(r'\bДокажите\b', task.subitems[0].text_latex)
                 and not task.subitems[1].text_latex.startswith('Докажите')
                 and task.author_answer_latex
                 and not re.search(r'[аaбb]\)', task.author_answer_latex)):

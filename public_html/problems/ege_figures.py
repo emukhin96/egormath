@@ -132,6 +132,16 @@ def package_ege_images(bundle, source_dir, pdf_path, dest, index):
     doc = fitz.open(pdf_path)
     try:
         for name in sorted(_image_names(bundle)):
+            from .ege_cleanup import (PDF_FIGURE_STEM, PDF_SHA256,
+                                      PDF_FIGURE_PAGE, PDF_FIGURE_CLIP)
+            if name == PDF_FIGURE_STEM:
+                if hashlib.sha256(Path(pdf_path).read_bytes()).hexdigest() != PDF_SHA256:
+                    raise ValueError('Изменился PDF сверенного рисунка 3.10.3')
+                doc[PDF_FIGURE_PAGE - 1].get_pixmap(
+                    clip=fitz.Rect(PDF_FIGURE_CLIP), matrix=fitz.Matrix(3, 3)).save(
+                        dest / (PDF_FIGURE_STEM + '.png'))
+                diagnostics['copied'].append(PDF_FIGURE_STEM)
+                continue
             info = _image_info(name)
             stem = Path(name).stem
             matches = source_files.get(stem, [])

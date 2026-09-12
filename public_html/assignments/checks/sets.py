@@ -39,13 +39,24 @@ def numeric_value(text):
     # MathLive сокращает односимвольный аргумент: \sqrt8 вместо \sqrt{8}.
     text = re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text or '')
     text = normalize(_strip_var(text))
+    text = re.sub(r'\\operatorname\{arctg\}|\\arctg\b', r'\\arctan', text)
     if not text:
         return None
     value = parse_number(text)
     if value is not None:
         return value
     from .expressions import parse_expr
-    expr = parse_expr(text)
+    # Lark-грамматика не распознаёт константу π: вводим свободный
+    # временный символ и заменяем его константой после безопасного разбора.
+    pi_pattern = r'\\pi(?![A-Za-z])|π|\bpi\b'
+    if re.search(pi_pattern, text):
+        from sympy import Symbol, pi
+        marker = next((c for c in 'QPXYZABC' if c not in text), None)
+        expr = parse_expr(re.sub(pi_pattern, marker, text)) if marker else None
+        if expr is not None:
+            expr = expr.subs(Symbol(marker), pi)
+    else:
+        expr = parse_expr(text)
     if expr is None or not getattr(expr, 'is_number', False):
         return None
     try:

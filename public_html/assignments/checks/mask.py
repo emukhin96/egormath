@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass, field
 
 from ..check_answer import OK, UNKNOWN, WRONG, _compact, normalize
-from . import expressions, sets, formats
+from . import expressions, sets, formats, series
 
 NUMBER = 'number'
 DIGITS = 'digits'
@@ -30,12 +30,13 @@ PAIR = 'pair'
 SET = 'set'
 EQUATION = 'equation'
 RANGE = 'range'
+SERIES = 'series'
 ORDER = 'order'
 
 KINDS = {
     NUMBER: 'число',
     DIGITS: 'последовательность цифр',
-    DECIMAL: 'десятичное число (ОГЭ)',
+    DECIMAL: 'десятичное число',
     RATIO: 'отношение с заданным порядком',
     PROPORTION: 'отношение с допустимой перестановкой',
     CHOICE: 'выбор из вариантов',
@@ -45,6 +46,7 @@ KINDS = {
     SET: 'конечное множество чисел',
     EQUATION: 'уравнение',
     RANGE: 'числовое множество',
+    SERIES: 'периодическое множество кратных π',
     ORDER: 'расставить в порядке',
 }
 
@@ -78,6 +80,7 @@ HELP = (
     ('{{set: -2; 1}}', 'множество чисел, порядок не важен; {{set: }} — «нет решений»'),
     ('{{equation: y=x+5}}', 'уравнение в приведённом виде (y-x=5 тоже верно, 2y=2x+10 — нет)'),
     ('{{range: 1; 4}}', 'корни уравнения: одно поле независимо от количества корней'),
+    ('{{series: \\pi+2\\pi*n}}', 'периодическое множество рациональных кратных π'),
     ('{{range: (-\\infty;-5)\\cup(5;+\\infty)}}', 'числовое множество; неравенства '
                                                '(x<-5, x>5), «и» — пересечение, '
                                                'нет решений / ℝ, границы вроде \\sqrt{2} и 7/3'),
@@ -292,6 +295,13 @@ def _parse_range(slot, payload):
         return
     slot.data, slot.reference = value, payload.strip()
 
+def _parse_series(slot, payload):
+    value = series.parse(payload)
+    if value is None or series.canonical(value) is None:
+        slot.error = 'эталон: объединение серий вида π+2π*n'
+        return
+    slot.data, slot.reference = value, payload.strip()
+
 
 def _parse_order(slot, payload):
     items = [o for o in _split_options(payload) if o]
@@ -306,7 +316,7 @@ _PARSERS = {
     RATIO: _parse_format, PROPORTION: _parse_format,
     NUMBER: _parse_number, CHOICE: _parse_choice, SIMPLIFY: _parse_expression,
     FACTOR: _parse_expression, EQUATION: _parse_expression, PAIR: _parse_pair,
-    SET: _parse_set, RANGE: _parse_range, ORDER: _parse_order,
+    SET: _parse_set, RANGE: _parse_range, SERIES: _parse_series, ORDER: _parse_order,
 }
 
 
@@ -415,6 +425,10 @@ def check_slot(slot, value):
         if student is None:
             return UNKNOWN
         return OK if sets.ranges_equal(student, slot.data) else WRONG
+    if kind == SERIES:
+        student = series.parse(value)
+        equal = series.equal(student, slot.data)
+        return UNKNOWN if equal is None else (OK if equal else WRONG)
     if kind == SIMPLIFY:
         return expressions.check_simplified(value, slot.data)
     if kind == FACTOR:
@@ -566,9 +580,14 @@ def _unwrap_set_braces(text):
     return text
 
 
-def draft_mask(answer, condition="", exam_codes=None):
+def draft_mask(answer, condition="", exam_codes=None, *, source_number="", subitem_label=""):
     """Черновик маски из текстового «Ответа» для тривиальных случаев;
     '' — не угадали, учитель пишет маску сам."""
+    from .ege_policy import ege_draft
+    ege = ege_draft(answer, condition, exam_codes, source_number=source_number,
+                    subitem_label=subitem_label)
+    if ege is not None:
+        return ege
     kind = formats.oge_kind(exam_codes)
     if kind == '':
         return ''
