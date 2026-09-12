@@ -1279,6 +1279,8 @@ def textbook_import_upload(request):
 @teacher_required
 def textbook_import_detail(request, pk):
     batch = _own_import_batch(request, pk)
+    from .textbook_import import missing_imported_collection_draft_ids
+    missing_collection_ids = missing_imported_collection_draft_ids(batch)
     status = request.GET.get('status', '')
     collection_groups = _textbook_collection_groups(batch)
     groups_by_token = {group['token']: group for group in collection_groups}
@@ -1357,13 +1359,15 @@ def textbook_import_detail(request, pk):
         selected_group['approved_count'] = sum(
             status == TextbookTaskDraft.STATUS_APPROVED
             for status in section_statuses)
+        selected_group['missing_collection_count'] = len(
+            missing_imported_collection_draft_ids(batch, group_drafts))
         selected_group['open_count'] = sum(
             status in {TextbookTaskDraft.STATUS_REVIEW,
                        TextbookTaskDraft.STATUS_CONFLICT}
             for status in section_statuses)
         selected_group['can_commit'] = (
             selected_group['approved_count'] > 0
-            and batch.status != TextbookImportBatch.STATUS_IMPORTED)
+            or selected_group['missing_collection_count'] > 0)
     _attach_draft_taxonomy(page.object_list)
     context = taxonomy_page_context({
         'topics': selected_topics,
@@ -1405,6 +1409,7 @@ def textbook_import_detail(request, pk):
             page=None),
         'all_sections_href': _all_sections_href(request),
         'approved_count': counts.get(TextbookTaskDraft.STATUS_APPROVED, 0),
+        'missing_collection_count': len(missing_collection_ids),
     })
     return render(request, 'problems/textbook_import_detail.html', context)
 
@@ -1789,8 +1794,10 @@ def textbook_import_commit_section(request, pk):
         messages.error(request, 'Выбранный раздел задачника не найден.')
         return redirect(_textbook_detail_url(batch, section=section_token))
     group_drafts = _textbook_group_drafts(batch, group)
-    draft_ids = list(group_drafts.filter(
-        status=TextbookTaskDraft.STATUS_APPROVED).values_list('pk', flat=True))
+    draft_ids = list(group_drafts.filter(status__in=[
+        TextbookTaskDraft.STATUS_APPROVED,
+        TextbookTaskDraft.STATUS_IMPORTED,
+    ]).values_list('pk', flat=True))
     try:
         result = commit_batch(
             batch, user=request.user, draft_ids=draft_ids,

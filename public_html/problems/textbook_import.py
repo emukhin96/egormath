@@ -802,6 +802,51 @@ def _collection_layout(path, collection_key):
     return path, headings, key
 
 
+def _draft_collection_layout(batch, draft):
+    """Вычисляет целевую подборку и рубрики одинаково для новых
+    и уже существующих задач.
+    """
+    path = [str(x).strip() for x in draft.source_path if str(x).strip()]
+    if not path:
+        path = [draft.collection_title.strip() or batch.title]
+    path, headings, leaf_key = _collection_layout(
+        path, draft.collection_key.strip())
+    if not path:
+        path = [draft.collection_title.strip() or batch.title]
+    return path, headings, leaf_key
+
+
+def missing_imported_collection_draft_ids(batch, drafts=None):
+    """Возвращает ID строк «Импортировано», не вошедших в свою подборку."""
+    from worksheets.models import Collection, WorksheetItem
+
+    drafts = (drafts if drafts is not None else batch.drafts.all())
+    rows = list(drafts.filter(
+        status=TextbookTaskDraft.STATUS_IMPORTED).only(
+            'pk', 'imported_task_id', 'source_path', 'collection_key',
+            'collection_title'))
+    targets = {}
+    for draft in rows:
+        path, _headings, leaf_key = _draft_collection_layout(batch, draft)
+        locator = _leaf_collection_locator(leaf_key, path)
+        targets[draft.pk] = (locator, draft.imported_task_id)
+    locators = {locator for locator, _task_id in targets.values()}
+    worksheets = dict(Collection.objects.filter(
+        source=batch.source, locator__in=locators).values_list(
+            'locator', 'worksheet_id'))
+    worksheet_ids = set(worksheets.values())
+    task_ids = {
+        task_id for _locator, task_id in targets.values() if task_id is not None}
+    memberships = set(WorksheetItem.objects.filter(
+        worksheet_id__in=worksheet_ids, task_id__in=task_ids,
+        deleted_at=None).values_list('worksheet_id', 'task_id'))
+    return {
+        draft_id for draft_id, (locator, task_id) in targets.items()
+        if task_id is None
+        or (worksheets.get(locator), task_id) not in memberships
+    }
+
+
 def _rubrics_to_append(current, headings):
     """Какие заголовки дописать, чтобы контекст листа стал headings."""
     headings = list(headings)
@@ -901,6 +946,31 @@ def _collection_for_path(batch, path, cache, collection_key='',
     return parent
 
 
+def _add_draft_task_to_collection(batch, draft, task, cache):
+    """Создаёт путь подборки и идемпотентно добавляет в него задачу."""
+    from worksheets.models import WorksheetItem
+
+    path, headings, leaf_key = _draft_collection_layout(batch, draft)
+    collection = _collection_for_path(
+        batch, path, cache, collection_key=leaf_key,
+        collection_title=(draft.collection_title if not headings else ''))
+    if not collection:
+        return None, False
+    worksheet = collection.worksheet
+    topic_ids = draft_topic_ids(draft)
+    if topic_ids:
+        worksheet.topics.add(*Topic.objects.filter(pk__in=topic_ids))
+    grade_codes = [
+        code for code in (draft.grade_band_codes or []) if str(code).strip()]
+    if grade_codes and not worksheet.grade_bands.exists():
+        set_grade_bands(worksheet, grade_codes)
+    if worksheet.items.filter(task=task, deleted_at=None).exists():
+        return worksheet, False
+    order = _ensure_import_rubrics(worksheet, headings)
+    WorksheetItem.objects.create(worksheet=worksheet, task=task, order=order)
+    return worksheet, True
+
+
 def _merge_author_fields(task, draft):
     if draft.subitems:
         return
@@ -985,14 +1055,10 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
     require_complete — вся партия должна быть проверена; иначе достаточно
     выбранных строк, и партия остаётся на проверке.
     """
-    from worksheets.models import WorksheetItem
-
     batch = (TextbookImportBatch.objects.select_for_update()
              .select_related('source', 'created_by').get(pk=batch.pk))
     if batch.created_by_id != user.pk and not user.is_superuser:
         raise TextbookImportError('Эту партию может загрузить только редактор.')
-    if batch.status == TextbookImportBatch.STATUS_IMPORTED:
-        return {'created': 0, 'reused': 0, 'collections': 0}
     from .task_blocks import bind_oge_draft_blocks
     bind_oge_draft_blocks(batch)
     if require_complete:
@@ -1006,6 +1072,12 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
     approved = batch.drafts.filter(status=TextbookTaskDraft.STATUS_APPROVED)
     if draft_ids is not None:
         approved = approved.filter(pk__in=draft_ids)
+    imported = batch.drafts.filter(
+        status=TextbookTaskDraft.STATUS_IMPORTED)
+    if draft_ids is not None:
+        imported = imported.filter(pk__in=draft_ids)
+    missing_imported_ids = missing_imported_collection_draft_ids(
+        batch, imported)
     selected_ids = set(approved.values_list('pk', flat=True))
     for block_id in approved.exclude(block=None).values_list('block_id', flat=True).distinct():
         siblings = list(batch.drafts.filter(block_id=block_id).select_related('block'))
@@ -1017,7 +1089,8 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
                 f'{siblings[0].block.title}: сначала проверьте все {size} вопросов блока.')
         selected_ids.update(d.pk for d in siblings if d.status == TextbookTaskDraft.STATUS_APPROVED)
     approved = batch.drafts.filter(pk__in=selected_ids, status=TextbookTaskDraft.STATUS_APPROVED)
-    if not require_complete and not approved.exists():
+    if (not require_complete and not approved.exists()
+            and not missing_imported_ids):
         raise TextbookImportError('Нет одобренных задач для загрузки.')
     missing_topics = approved.filter(topic__isnull=True).count()
     if missing_topics:
@@ -1037,7 +1110,7 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
     reused = 0
     collection_cache = {}
     block_worksheets = {}
-    from worksheets.models import Collection
+    from worksheets.models import Collection, WorksheetItem
     initial_collection_count = Collection.objects.filter(
         source=batch.source).count()
 
@@ -1144,33 +1217,40 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
             tag, _created = Tag.objects.get_or_create(name=name[:64])
             task.tags.add(tag)
 
-        path = [str(x).strip() for x in draft.source_path if str(x).strip()]
-        if not path:
-            path = [draft.collection_title.strip() or batch.title]
-        path, headings, leaf_key = _collection_layout(
-            path, draft.collection_key.strip())
-        if not path:
-            path = [draft.collection_title.strip() or batch.title]
-        collection = _collection_for_path(
-            batch, path, collection_cache, collection_key=leaf_key,
-            collection_title=(draft.collection_title if not headings else ''))
-        if collection:
-            worksheet = collection.worksheet
-            if draft.block_id:
-                block_worksheets[worksheet.pk] = worksheet
-            if topic_ids:
-                worksheet.topics.add(
-                    *Topic.objects.filter(pk__in=topic_ids))
-            if grade_codes and not worksheet.grade_bands.exists():
-                set_grade_bands(worksheet, grade_codes)
-            if not worksheet.items.filter(task=task, deleted_at=None).exists():
-                order = _ensure_import_rubrics(worksheet, headings)
-                WorksheetItem.objects.create(
-                    worksheet=worksheet, task=task, order=order)
+        worksheet, _added = _add_draft_task_to_collection(
+            batch, draft, task, collection_cache)
+        if worksheet and draft.block_id:
+            block_worksheets[worksheet.pk] = worksheet
 
         draft.imported_task = task
         draft.status = TextbookTaskDraft.STATUS_IMPORTED
         draft.save(update_fields=['imported_task', 'status'])
+
+    for draft in batch.drafts.filter(
+            pk__in=missing_imported_ids).select_related(
+                'imported_task').order_by('pk'):
+        task = draft.imported_task
+        if task is None:
+            raise TextbookImportError(
+                f'{draft.external_id}: статус «Импортировано» '
+                'не связан с задачей в базе.')
+        if draft.block_id:
+            if task.block_id and (
+                    task.block_id != draft.block_id
+                    or task.block_position != draft.block_position):
+                raise TextbookImportError(
+                    'Задача уже принадлежит другому общему блоку.')
+            if (task.block_id != draft.block_id
+                    or task.block_position != draft.block_position):
+                task.block_id = draft.block_id
+                task.block_position = draft.block_position
+                task.save(update_fields=['block', 'block_position'])
+        worksheet, added = _add_draft_task_to_collection(
+            batch, draft, task, collection_cache)
+        if added:
+            reused += 1
+        if worksheet and draft.block_id:
+            block_worksheets[worksheet.pk] = worksheet
 
     from worksheets.blocks import item_units
     for worksheet in block_worksheets.values():
