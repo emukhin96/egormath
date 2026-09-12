@@ -596,12 +596,12 @@ def exam_codes_from_elements(elements, grade=None) -> list[str]:
             if re.search(r'(?i)база|base', head):
                 codes.append('EGE_BASE_2026')
             else:
-                codes.append('EGE_PROFILE_2026')
+                codes.append('EGE_PROFILE_2027')
         if TASK_FIPI_RE.search(head):
             if grade is not None and grade <= 9:
                 codes.append('OGE_2026')
             else:
-                codes.append('EGE_PROFILE_2026')
+                codes.append('EGE_PROFILE_2027')
     return _unique_codes(codes)
 
 
@@ -642,15 +642,15 @@ def suggest_exams(draft: dict) -> list[str]:
             m = EGE_RE.search(text) or EGE_STUCK_RE.search(text)
             if m:
                 num = int(m.group(1))
-                if 1 <= num <= 19:
-                    codes.append(f'EGE_PROFILE_2026_{num:02d}')
+                if 1 <= num <= 20:
+                    codes.append(f'EGE_PROFILE_2027_{num:02d}')
                     break
         if not any(c.startswith('EGE_PROFILE') for c in codes):
             m = ZADANIE_RE.search(blob)
             if m:
                 num = int(m.group(1))
-                if 1 <= num <= 19:
-                    codes.append(f'EGE_PROFILE_2026_{num:02d}')
+                if 1 <= num <= 20:
+                    codes.append(f'EGE_PROFILE_2027_{num:02d}')
     if MCKO_RE.search(blob):
         codes.append('MCKO_2026_01')
     if not any(c.startswith('OGE_') for c in codes):
@@ -661,7 +661,7 @@ def suggest_exams(draft: dict) -> list[str]:
             if re.search(r'(?i)\b(?:база|base)\b', blob):
                 codes.append('EGE_BASE_2026')
             else:
-                codes.append('EGE_PROFILE_2026')
+                codes.append('EGE_PROFILE_2027')
     codes.extend(exam_codes_from_elements(
         draft.get('elements'), draft.get('grade')))
     codes = _unique_codes(codes)
@@ -673,9 +673,9 @@ def suggest_exams(draft: dict) -> list[str]:
             line = 'OGE_2026'
         elif code.startswith('EGE_BASE_2026_') and code != 'EGE_BASE_2026':
             line = 'EGE_BASE_2026'
-        elif (code.startswith('EGE_PROFILE_2026_')
-              and code != 'EGE_PROFILE_2026'):
-            line = 'EGE_PROFILE_2026'
+        elif (code.startswith('EGE_PROFILE_2027_')
+              and code != 'EGE_PROFILE_2027'):
+            line = 'EGE_PROFILE_2027'
         if line and line not in have:
             extra.append(line)
             have.add(line)

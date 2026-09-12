@@ -1,0 +1,1406 @@
+{
+  "items": [
+    {
+      "id": "14.8.1",
+      "answer_latex": "а) \\(-\\frac{2\\pi}{3}+2\\pi n, -\\frac{\\pi}{3}+2\\pi n, \\frac{\\pi}{2}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(-\\frac{14\\pi}{3}, -\\frac{13\\pi}{3}, -\\frac{7\\pi}{2}\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) -2𝜋"
+    },
+    {
+      "id": "14.9",
+      "answer_latex": "а) \\(\\pi n, \\frac{\\pi}{4}+2\\pi n, -\\frac{\\pi}{4}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(-4\\pi, -\\frac{15\\pi}{4}, -3\\pi\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 𝜋𝑛, 𝜋$"
+    },
+    {
+      "id": "14.9.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+\\pi n, \\frac{\\pi}{4}+2\\pi n, \\frac{3\\pi}{4}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(\\frac{7\\pi}{2}, \\frac{17\\pi}{4}, \\frac{9\\pi}{2}\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.10",
+      "answer_latex": "а) \\(-\\frac{\\pi}{2}+2\\pi n, \\frac{2\\pi}{3}+2\\pi n, -\\frac{2\\pi}{3}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(\\frac{3\\pi}{2}, \\frac{8\\pi}{3}\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) -𝜋"
+    },
+    {
+      "id": "14.10.1",
+      "answer_latex": "а) \\(2\\pi n, -\\frac{\\pi}{6}+2\\pi n, -\\frac{5\\pi}{6}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(2\\pi, \\frac{19\\pi}{6}\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 2𝜋𝑛, -𝜋$"
+    },
+    {
+      "id": "14.11",
+      "answer_latex": "а) \\(\\frac{5\\pi}{6}+2\\pi n, -\\frac{5\\pi}{6}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(-\\frac{7\\pi}{6}, -\\frac{5\\pi}{6}\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 5𝜋"
+    },
+    {
+      "id": "14.11.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{3}+2\\pi n, -\\frac{\\pi}{3}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(\\frac{7\\pi}{3}\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.12",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+\\pi n, -\\frac{\\pi}{4}+2\\pi n, -\\frac{3\\pi}{4}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(-\\frac{7\\pi}{2}, -\\frac{11\\pi}{4}, -\\frac{5\\pi}{2}\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.12.1",
+      "answer_latex": "а) \\(\\pi n, \\frac{\\pi}{4}+2\\pi n, -\\frac{\\pi}{4}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(3\\pi, \\frac{15\\pi}{4}, 4\\pi\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 𝜋𝑛, 𝜋$"
+    },
+    {
+      "id": "14.12.2",
+      "answer_latex": "а) \\(\\pi n, \\frac{\\pi}{6}+2\\pi n, -\\frac{\\pi}{6}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(-3\\pi, -\\frac{13\\pi}{6}, -2\\pi\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 𝜋𝑛, 𝜋$"
+    },
+    {
+      "id": "14.13",
+      "answer_latex": "а) \\(\\pi n, \\frac{3\\pi}{4}+2\\pi n, -\\frac{3\\pi}{4}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(-2\\pi, -\\frac{5\\pi}{4}, -\\pi\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 𝜋𝑛, 3𝜋$"
+    },
+    {
+      "id": "14.13.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+\\pi n, -\\frac{\\pi}{4}+2\\pi n, -\\frac{3\\pi}{4}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(\\frac{3\\pi}{2}, \\frac{7\\pi}{4}, \\frac{5\\pi}{2}\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.14",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+\\pi n, -\\frac{\\pi}{3}+2\\pi n, -\\frac{2\\pi}{3}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(\\frac{7\\pi}{2}, \\frac{11\\pi}{3}, \\frac{9\\pi}{2}\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.14.1",
+      "answer_latex": "а) \\(\\pi n, \\frac{\\pi}{4}+2\\pi n, -\\frac{\\pi}{4}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(-3\\pi, -\\frac{9\\pi}{4}, -2\\pi\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 𝜋𝑛, 𝜋$"
+    },
+    {
+      "id": "14.15",
+      "answer_latex": "а) \\(-\\frac{\\pi}{3}+\\pi n, \\frac{\\pi}{4}+2\\pi n, \\frac{3\\pi}{4}+2\\pi n, n\\in\\mathbb{Z}\\); б) \\(-\\frac{\\pi}{3}, \\frac{\\pi}{4}\\)",
+      "packet_hash": "ba666225a2b8ff812468df5411c9c8628ae448d5ef80019f783f40fe6555142a",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) -𝜋"
+    },
+    {
+      "id": "14.16",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+\\pi n,-\\frac{\\pi}{3}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(-\\frac{7\\pi}{2},-\\frac{10\\pi}{3},-\\frac{5\\pi}{2}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.16.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+\\pi n,-\\frac{\\pi}{4}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{7\\pi}{2},\\frac{15\\pi}{4},\\frac{9\\pi}{2}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.17",
+      "answer_latex": "а) \\(\\pi n,-\\frac{\\pi}{6}+2\\pi n,-\\frac{5\\pi}{6}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(-\\frac{13\\pi}{6},-2\\pi,-\\pi\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 𝜋𝑛, -𝜋$"
+    },
+    {
+      "id": "14.17.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+\\pi n,\\frac{\\pi}{3}+2\\pi n,-\\frac{\\pi}{3}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{7\\pi}{3},\\frac{5\\pi}{2},\\frac{7\\pi}{2}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.17.2",
+      "answer_latex": "а) \\(\\pi n,-\\frac{\\pi}{6}+2\\pi n,-\\frac{5\\pi}{6}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(-2\\pi,-\\pi,-\\frac{5\\pi}{6}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 𝜋𝑛, -𝜋$"
+    },
+    {
+      "id": "14.18",
+      "answer_latex": "а) \\(\\pi n,\\frac{\\pi}{6}+2\\pi n,\\frac{5\\pi}{6}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(-3\\pi,-2\\pi,-\\frac{11\\pi}{6}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 𝜋𝑛, 𝜋$"
+    },
+    {
+      "id": "14.18.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+\\pi n,\\frac{\\pi}{3}+2\\pi n,-\\frac{\\pi}{3}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(-\\frac{5\\pi}{3},-\\frac{3\\pi}{2},-\\frac{\\pi}{2}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.19",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+\\pi n,\\frac{\\pi}{3}+2\\pi n,-\\frac{\\pi}{3}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{5\\pi}{2},\\frac{7\\pi}{2},\\frac{11\\pi}{3}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.19.1",
+      "answer_latex": "а) \\(\\pi n,\\frac{\\pi}{6}+2\\pi n,\\frac{5\\pi}{6}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(-\\frac{19\\pi}{6},-3\\pi,-2\\pi\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 𝜋𝑛, 𝜋$"
+    },
+    {
+      "id": "14.20",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+\\pi n,\\frac{\\pi}{4}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{11\\pi}{2},\\frac{21\\pi}{4}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.21",
+      "answer_latex": "а) \\(-\\frac{\\pi}{4}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(-\\frac{13\\pi}{4}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) -𝜋"
+    },
+    {
+      "id": "14.21.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{4}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(-\\frac{31\\pi}{4}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.21.2",
+      "answer_latex": "а) \\(\\frac{\\pi}{3}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{16\\pi}{3},\\frac{19\\pi}{3}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.21.3",
+      "answer_latex": "а) \\(\\frac{\\pi}{6}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{43\\pi}{6},\\frac{49\\pi}{6}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.21.4",
+      "answer_latex": "а) \\(-\\frac{\\pi}{6}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(-\\frac{31\\pi}{6}\\)",
+      "packet_hash": "53fb29b207d5cb9d81fd3331b6b5f2c89f6e693becc1b05408e71d1de48d6e58",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) -𝜋"
+    },
+    {
+      "id": "14.22",
+      "answer_latex": "а) \\(-\\frac{\\pi}{4}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(-\\frac{29\\pi}{4},-\\frac{25\\pi}{4}\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) -𝜋"
+    },
+    {
+      "id": "14.23",
+      "answer_latex": "а) \\(-\\frac{\\pi}{4}+2\\pi n,-\\frac{3\\pi}{4}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{37\\pi}{4},\\frac{39\\pi}{4}\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) -𝜋"
+    },
+    {
+      "id": "14.23.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{3}+2\\pi n,\\frac{2\\pi}{3}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{13\\pi}{3},\\frac{14\\pi}{3}\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.24",
+      "answer_latex": "а) \\(1,\\frac{3}{2}\\); б) \\(\\frac{3}{2}\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 1, 3$"
+    },
+    {
+      "id": "14.24.1",
+      "answer_latex": "а) \\(2,\\frac{1}{2}\\); б) \\(\\frac{1}{2}\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 2, 1$"
+    },
+    {
+      "id": "14.24.2",
+      "answer_latex": "а) \\(1,\\frac{3}{2}\\); б) \\(1\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 1, 3$"
+    },
+    {
+      "id": "14.24.3",
+      "answer_latex": "а) \\(2,\\frac{1}{2}\\); б) \\(2\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 2, 1$"
+    },
+    {
+      "id": "14.25",
+      "answer_latex": "а) \\(-\\frac{\\pi}{2}+2\\pi n,-\\frac{\\pi}{6}+2\\pi n,-\\frac{5\\pi}{6}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{3\\pi}{2},\\frac{11\\pi}{6}\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) -𝜋"
+    },
+    {
+      "id": "14.25.1",
+      "answer_latex": "а) \\(\\pi+2\\pi n,\\frac{\\pi}{3}+2\\pi n,-\\frac{\\pi}{3}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(3\\pi,\\frac{11\\pi}{3}\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 𝜋+ 2𝜋𝑛, 𝜋$"
+    },
+    {
+      "id": "14.25.2",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+2\\pi n,\\frac{\\pi}{6}+2\\pi n,\\frac{5\\pi}{6}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(-\\frac{23\\pi}{6},-\\frac{7\\pi}{2}\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.26",
+      "answer_latex": "а) \\(\\frac{\\pi}{3}+\\pi n,\\frac{2\\pi}{3}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{11\\pi}{3},\\frac{13\\pi}{3},\\frac{14\\pi}{3}\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.26.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{3}+\\pi n,\\frac{2\\pi}{3}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{5\\pi}{3},\\frac{7\\pi}{3},\\frac{8\\pi}{3}\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.27",
+      "answer_latex": "а) \\(\\frac{\\pi}{6}+\\pi n,-\\frac{\\pi}{6}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{11\\pi}{6},\\frac{13\\pi}{6},\\frac{17\\pi}{6}\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.27.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{3}+\\pi n,-\\frac{\\pi}{3}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{4\\pi}{3},\\frac{5\\pi}{3},\\frac{7\\pi}{3}\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.28",
+      "answer_latex": "а) \\(\\pi n,\\frac{\\pi}{4}+2\\pi n,-\\frac{\\pi}{4}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(2\\pi,\\frac{9\\pi}{4},3\\pi\\)",
+      "packet_hash": "090e1d8d07c7171038dba76038c46a9dddb4580739f38e9677f205842bed9651",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 𝜋𝑛, 𝜋$"
+    },
+    {
+      "id": "14.28.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{3}+\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{10\\pi}{3},\\frac{13\\pi}{3}\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.29",
+      "answer_latex": "а) \\(\\frac{\\pi}{4}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{17\\pi}{4}\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.29.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{6}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(-\\frac{35\\pi}{6}\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.30",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+2\\pi n,\\frac{\\pi}{6}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{\\pi}{6},\\frac{\\pi}{2}\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.30.1",
+      "answer_latex": "а) \\(\\frac{\\pi}{2}+2\\pi n,\\frac{5\\pi}{6}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(\\frac{\\pi}{2},\\frac{5\\pi}{6}\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "14.31",
+      "answer_latex": "а) \\(\\frac{\\pi}{4}+2\\pi n,\\frac{3\\pi}{4}+2\\pi n,n\\in\\mathbb{Z}\\); б) \\(-\\frac{7\\pi}{4},-\\frac{5\\pi}{4}\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "а) 𝜋"
+    },
+    {
+      "id": "15.10",
+      "answer_latex": "\\(\\arcsin\\frac{\\sqrt{70}}{21}\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "arcsin"
+    },
+    {
+      "id": "15.11.1",
+      "answer_latex": "\\(16:25\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "16 : 25"
+    },
+    {
+      "id": "15.20",
+      "answer_latex": "\\(3:2\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "3 : 2"
+    },
+    {
+      "id": "15.20.1",
+      "answer_latex": "\\(3:2\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "3 : 2"
+    },
+    {
+      "id": "15.21",
+      "answer_latex": "\\(\\frac{9\\sqrt{3}}{4}\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$9$"
+    },
+    {
+      "id": "15.32",
+      "answer_latex": "\\(\\frac{15\\sqrt{19}}{4}\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$15$"
+    },
+    {
+      "id": "15.33",
+      "answer_latex": "\\(3\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$3$"
+    },
+    {
+      "id": "15.34",
+      "answer_latex": "\\(2\\arcsin\\frac{3\\sqrt{10}}{20}\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "2 arcsin 3"
+    },
+    {
+      "id": "16.10.1",
+      "answer_latex": "\\((-5;-\\sqrt{22}]\\cup[-4;4]\\cup[\\sqrt{22};5)\\)",
+      "packet_hash": "6d14647e27252f962841599dbaff37fdb0f877d233890788e8e009804d6ee391",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︀"
+    },
+    {
+      "id": "16.11",
+      "answer_latex": "\\((\\frac{1}{2};1]\\cup[10;+\\infty)\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︂1"
+    },
+    {
+      "id": "16.11.1",
+      "answer_latex": "\\((0;\\frac{\\sqrt{5}}{5}]\\cup[\\frac{1}{2};1)\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︃"
+    },
+    {
+      "id": "16.11.2",
+      "answer_latex": "\\((-4;-2]\\cup[10;+\\infty)\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(-4; -2] \\cup [10; +\\infty )$"
+    },
+    {
+      "id": "16.11.3",
+      "answer_latex": "\\([-\\frac{1}{6};-\\frac{1}{24})\\cup(0;+\\infty)\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "[︂"
+    },
+    {
+      "id": "16.11.4",
+      "answer_latex": "\\([-2;-1)\\cup(0;9]\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$[-2; -1) \\cup (0; 9]$"
+    },
+    {
+      "id": "16.11.5",
+      "answer_latex": "\\((\\frac{1}{2};\\frac{4}{3}]\\cup[3;+\\infty)\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︂1"
+    },
+    {
+      "id": "16.11.6",
+      "answer_latex": "\\((-16;-\\frac{1}{4}]\\cup(0;+\\infty)\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︂"
+    },
+    {
+      "id": "16.11.7",
+      "answer_latex": "\\((-\\infty;-12]\\cup(-\\frac{35}{8};0]\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(-\\infty ; -12] \\cup $"
+    },
+    {
+      "id": "16.12",
+      "answer_latex": "\\([2;3)\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$[2; 3)$"
+    },
+    {
+      "id": "16.12.1",
+      "answer_latex": "\\([1;2)\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$[1; 2)$"
+    },
+    {
+      "id": "16.13",
+      "answer_latex": "\\((0;\\frac{1}{64})\\cup\\{\\frac{1}{16}\\}\\cup(64;+\\infty)\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︂"
+    },
+    {
+      "id": "16.13.1",
+      "answer_latex": "\\((0;\\frac{1}{64})\\cup\\{\\frac{1}{2}\\}\\cup(64;+\\infty)\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︂"
+    },
+    {
+      "id": "16.13.2",
+      "answer_latex": "\\((0;1)\\cup\\{27\\}\\cup(81;+\\infty)\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(0; 1) \\cup \\{27\\} \\cup (81; +\\infty )$"
+    },
+    {
+      "id": "16.14",
+      "answer_latex": "\\((-1;-\\frac{\\sqrt{2}}{2})\\cup(-\\frac{\\sqrt{2}}{2};0)\\cup(0;\\frac{1}{2}]\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︃"
+    },
+    {
+      "id": "16.15",
+      "answer_latex": "\\((0;1)\\cup\\{8\\}\\cup(64;+\\infty)\\)",
+      "packet_hash": "ec4e4bea0b0b6b0e145dd139932bef0374b0aaf73893b60ae8dd213895040995",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(0; 1) \\cup \\{8\\} \\cup (64; +\\infty )$"
+    },
+    {
+      "id": "16.25.1",
+      "answer_latex": "\\((0;\\log_{5}3]\\cup[\\log_{3}5;2)\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(0; log5 3] \\cup [log3 5; 2)$"
+    },
+    {
+      "id": "16.26",
+      "answer_latex": "\\((-\\infty;1)\\cup[2;+\\infty)\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": true,
+      "before": "$(-\\infty ; 1) \\cup [2; +\\infty )$"
+    },
+    {
+      "id": "16.26.1",
+      "answer_latex": "\\((1;2]\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": true,
+      "before": "$(1; 2]$"
+    },
+    {
+      "id": "16.27",
+      "answer_latex": "\\((0;\\frac{1}{64}]\\cup[\\frac{1}{9};\\frac{1}{5})\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︂"
+    },
+    {
+      "id": "16.27.1",
+      "answer_latex": "\\((0;\\frac{1}{27}]\\cup[\\frac{1}{8};1)\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︂"
+    },
+    {
+      "id": "16.28",
+      "answer_latex": "\\([-\\sqrt{10};3]\\cup[\\sqrt{10};4)\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "[︀"
+    },
+    {
+      "id": "16.28.1",
+      "answer_latex": "\\((-7;-6]\\cup[-3\\sqrt{2};3\\sqrt{2}]\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(-7; -6] \\cup $"
+    },
+    {
+      "id": "16.28.2",
+      "answer_latex": "\\((-\\infty;-3\\sqrt{2}]\\cup[3;4)\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︀"
+    },
+    {
+      "id": "16.28.3",
+      "answer_latex": "\\((-\\infty;-3]\\cup[-2\\sqrt{2};-2)\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(-\\infty ; -3] \\cup $"
+    },
+    {
+      "id": "16.28.4",
+      "answer_latex": "\\([-2\\sqrt{2};2\\sqrt{2}]\\cup[5;6)\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "[︀"
+    },
+    {
+      "id": "16.29",
+      "answer_latex": "\\([1;1{,}1)\\cup(1{,}1;+\\infty)\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": true,
+      "before": "$[1; 1,1) \\cup (1,1; +\\infty )$"
+    },
+    {
+      "id": "16.29.1",
+      "answer_latex": "\\([0;0{,}3)\\cup(0{,}3;+\\infty)\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": true,
+      "before": "$[0; 0,3) \\cup (0,3; +\\infty )$"
+    },
+    {
+      "id": "16.30",
+      "answer_latex": "\\(\\{-1\\}\\cup[1;\\sqrt{2})\\cup(\\sqrt{2};+\\infty)\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$\\{-1\\} \\cup $"
+    },
+    {
+      "id": "16.30.1",
+      "answer_latex": "\\((-\\infty;-\\frac{\\sqrt{2}}{2})\\cup(-\\frac{\\sqrt{2}}{2};-\\frac{1}{2}]\\cup\\{\\frac{1}{2}\\}\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︃"
+    },
+    {
+      "id": "16.31",
+      "answer_latex": "\\((-\\infty;0)\\cup(0;1]\\)",
+      "packet_hash": "17bbeaa6c4a7867aa6772e45ea4b3f25abf7209a1bcc375aba9911aa5efe71c9",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(-\\infty ; 0) \\cup (0; 1]$"
+    },
+    {
+      "id": "16.31.1",
+      "answer_latex": "\\([-5;1)\\cup(1;+\\infty)\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$[-5; 1) \\cup (1; +\\infty )$"
+    },
+    {
+      "id": "16.32",
+      "answer_latex": "\\((1;4]\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(1; 4]$"
+    },
+    {
+      "id": "16.32.1",
+      "answer_latex": "\\((1;81]\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(1; 81]$"
+    },
+    {
+      "id": "16.33",
+      "answer_latex": "\\((-2;-\\sqrt{3}]\\cup[\\sqrt{3};2)\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︀"
+    },
+    {
+      "id": "16.33.1",
+      "answer_latex": "\\((1;2]\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(1; 2]$"
+    },
+    {
+      "id": "16.33.2",
+      "answer_latex": "\\([1;2)\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$[1; 2)$"
+    },
+    {
+      "id": "16.34",
+      "answer_latex": "\\((1,5;2)\\cup\\{2,4\\}\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(1,5; 2) \\cup \\{2,4\\}$"
+    },
+    {
+      "id": "17.1",
+      "answer_latex": "\\(625\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$625$"
+    },
+    {
+      "id": "17.2",
+      "answer_latex": "\\(15\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$15$"
+    },
+    {
+      "id": "19.40",
+      "answer_latex": "\\((-9;-1)\\cup(1;9)\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$(-9; -1) \\cup (1; 9)$"
+    },
+    {
+      "id": "19.41",
+      "answer_latex": "\\((2;6-2\\sqrt{2})\\cup(6+2\\sqrt{2};+\\infty)\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︀"
+    },
+    {
+      "id": "19.42",
+      "answer_latex": "\\((\\frac{-2-\\sqrt{2}}{3};-1)\\cup(-1;-\\frac{3}{5})\\cup(-\\frac{3}{5};-2+\\sqrt{2})\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︃"
+    },
+    {
+      "id": "19.43",
+      "answer_latex": "\\((-2\\sqrt{2};2]\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︀"
+    },
+    {
+      "id": "19.43.1",
+      "answer_latex": "\\((-2;2\\sqrt{2}]\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "(︀"
+    },
+    {
+      "id": "19.44",
+      "answer_latex": "\\((1;2\\sqrt{3}]\\)",
+      "packet_hash": "c8c077212bc1a00b42d65c189b0c23d9d7aa065f25c1152bb67f2265779fd09e",
+      "review": "main_visual_verified",
+      "corrected_model_output": true,
+      "before": "(︀"
+    },
+    {
+      "id": "19.44.1",
+      "answer_latex": "\\([\\frac{1}{2};\\sqrt{3})\\)",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "[︂1"
+    },
+    {
+      "id": "20.1",
+      "answer_latex": "а) Да; б) Нет; в) $\\frac{283}{190}$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 283$"
+    },
+    {
+      "id": "20.1.1",
+      "answer_latex": "а) Да; б) Нет; в) $51$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 51$"
+    },
+    {
+      "id": "20.2",
+      "answer_latex": "а) Нет; б) $388$; в) $187$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) 388; в) 187$"
+    },
+    {
+      "id": "20.3",
+      "answer_latex": "а) Да; б) Нет; в) $403$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 403$"
+    },
+    {
+      "id": "20.4",
+      "answer_latex": "а) Да; б) Нет; в) $8$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 8$"
+    },
+    {
+      "id": "20.4.1",
+      "answer_latex": "а) Да; б) Нет; в) $9$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 9$"
+    },
+    {
+      "id": "20.5",
+      "answer_latex": "а) Да; б) Нет; в) $\\frac{5}{7}$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 5$"
+    },
+    {
+      "id": "20.6",
+      "answer_latex": "а) Да; б) Да; в) $3$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Да; в) 3$"
+    },
+    {
+      "id": "20.7",
+      "answer_latex": "а) Да; б) Нет; в) $198$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 198$"
+    },
+    {
+      "id": "20.7.1",
+      "answer_latex": "а) Да; б) Нет; в) $138$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 138$"
+    },
+    {
+      "id": "20.7.2",
+      "answer_latex": "а) Да; б) Нет; в) $303$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 303$"
+    },
+    {
+      "id": "20.8",
+      "answer_latex": "а) Нет; б) Нет; в) $11$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 11$"
+    },
+    {
+      "id": "20.8.1",
+      "answer_latex": "а) Да; б) Нет; в) $4$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 4$"
+    },
+    {
+      "id": "20.9",
+      "answer_latex": "а) Да; б) Нет; в) $10$",
+      "packet_hash": "617c89e4f7b7e243351ef630e7a9c78abfb57fad78239b3e9e8990fc426ee5c0",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 10$"
+    },
+    {
+      "id": "20.9.1",
+      "answer_latex": "а) Да; б) Нет; в) 11,3",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 11,3$"
+    },
+    {
+      "id": "20.9.2",
+      "answer_latex": "а) Да; б) Нет; в) 11,6",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 11,6$"
+    },
+    {
+      "id": "20.10",
+      "answer_latex": "а) Да; б) Нет; в) 2004",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 2004$"
+    },
+    {
+      "id": "20.11.1",
+      "answer_latex": "а) Да; б) Нет; в) Верно",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) Верно$"
+    },
+    {
+      "id": "20.12",
+      "answer_latex": "а) Да; б) Нет; в) 10 035",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 10 035$"
+    },
+    {
+      "id": "20.13",
+      "answer_latex": "а) Да; б) Нет; в) 910",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": true,
+      "before": "$а) Да; б) Нет; в) 910$"
+    },
+    {
+      "id": "20.13.1",
+      "answer_latex": "а) Да; б) Нет; в) 810",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 810$"
+    },
+    {
+      "id": "20.14",
+      "answer_latex": "а) Да; б) Нет; в) 9",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 9$"
+    },
+    {
+      "id": "20.14.1",
+      "answer_latex": "а) Да; б) Нет; в) 6",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 6$"
+    },
+    {
+      "id": "20.15",
+      "answer_latex": "а) Да; б) Нет; в) 231",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 231$"
+    },
+    {
+      "id": "20.16",
+      "answer_latex": "а) Нет; б) Нет; в) 44",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": true,
+      "before": "$а) Нет; б) Нет; в) 44$"
+    },
+    {
+      "id": "20.17",
+      "answer_latex": "а) Нет; б) Нет; в) 3",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 3$"
+    },
+    {
+      "id": "20.17.1",
+      "answer_latex": "а) Да; б) Нет; в) 5",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 5$"
+    },
+    {
+      "id": "20.18",
+      "answer_latex": "а) 4; б) 102; в) 201",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 4; б) 102; в) 201$"
+    },
+    {
+      "id": "20.18.1",
+      "answer_latex": "а) 6; б) 89; в) 19",
+      "packet_hash": "2effbcc887acf7e5aa0202db55ef777e2febae877bc28b1ca38c4c510cf52e7c",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 6; б) 89; в) 19$"
+    },
+    {
+      "id": "20.19",
+      "answer_latex": "а) Да; б) Нет; в) 10",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 10$"
+    },
+    {
+      "id": "20.19.1",
+      "answer_latex": "а) Да; б) Нет; в) 90",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 90$"
+    },
+    {
+      "id": "20.20",
+      "answer_latex": "а) Да; б) Нет; в) 25",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 25$"
+    },
+    {
+      "id": "20.20.1",
+      "answer_latex": "а) Да; б) Нет; в) 50",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 50$"
+    },
+    {
+      "id": "20.21",
+      "answer_latex": "а) Нет; б) Нет; в) \\(\\frac{24}{11}\\)",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": true,
+      "before": "$а) Нет; б) Нет; в) 24$"
+    },
+    {
+      "id": "20.21.1",
+      "answer_latex": "а) Нет; б) Нет; в) 10,5",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 10,5$"
+    },
+    {
+      "id": "20.21.2",
+      "answer_latex": "а) Нет; б) Нет; в) 8,9",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 8,9$"
+    },
+    {
+      "id": "20.21.3",
+      "answer_latex": "а) Нет; б) Нет; в) 11,8",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 11,8$"
+    },
+    {
+      "id": "20.22",
+      "answer_latex": "а) Да; б) Да; в) 34",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Да; в) 34$"
+    },
+    {
+      "id": "20.22.1",
+      "answer_latex": "а) Да; б) Да; в) 48",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Да; в) 48$"
+    },
+    {
+      "id": "20.23",
+      "answer_latex": "а) Нет; б) Нет; в) 465",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 465$"
+    },
+    {
+      "id": "20.24",
+      "answer_latex": "а) Нет; б) Нет; в) 9",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 9$"
+    },
+    {
+      "id": "20.24.1",
+      "answer_latex": "а) Нет; б) Нет; в) 6",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 6$"
+    },
+    {
+      "id": "20.24.2",
+      "answer_latex": "а) Нет; б) Нет; в) 9",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 9$"
+    },
+    {
+      "id": "20.24.3",
+      "answer_latex": "а) Нет; б) Нет; в) 21",
+      "packet_hash": "529da8ff7b5928bc1c3937b565e55e87c77ce0142c905a9abe15fcb74f02f1fb",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 21$"
+    },
+    {
+      "id": "20.25",
+      "answer_latex": "а) Да; б) Нет; в) 6",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 6$"
+    },
+    {
+      "id": "20.26",
+      "answer_latex": "а) Да; б) Нет; в) 139",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 139$"
+    },
+    {
+      "id": "20.27",
+      "answer_latex": "а) Да; б) Нет; в) 1430",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 1430$"
+    },
+    {
+      "id": "20.27.1",
+      "answer_latex": "а) Да; б) Нет; в) 1995",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 1995$"
+    },
+    {
+      "id": "20.28",
+      "answer_latex": "а) Да; б) Нет; в) 23",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 23$"
+    },
+    {
+      "id": "20.29",
+      "answer_latex": "а) Да; б) Нет; в) 150",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 150$"
+    },
+    {
+      "id": "20.29.1",
+      "answer_latex": "а) Да; б) Нет; в) 144",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 144$"
+    },
+    {
+      "id": "20.29.2",
+      "answer_latex": "а) Да; б) Нет; в) 27",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": true,
+      "before": "$а) Да; б) Нет; в) 27$"
+    },
+    {
+      "id": "20.29.4",
+      "answer_latex": "а) Да; б) Нет; в) 30",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 30$"
+    },
+    {
+      "id": "20.30",
+      "answer_latex": "а) Да; б) Нет; в) 37",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 37$"
+    },
+    {
+      "id": "20.30.1",
+      "answer_latex": "а) Да; б) Нет; в) 35",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 35$"
+    },
+    {
+      "id": "20.30.2",
+      "answer_latex": "а) Да; б) Нет; в) 31",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": true,
+      "before": "$а) Да; б) Нет; в) 31$"
+    },
+    {
+      "id": "20.30.3",
+      "answer_latex": "а) Да; б) Нет; в) 33",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 33$"
+    },
+    {
+      "id": "20.31",
+      "answer_latex": "а) Нет; б) Нет; в) 4",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 4$"
+    },
+    {
+      "id": "20.32",
+      "answer_latex": "а) Да; б) Нет; в) 14",
+      "packet_hash": "194a93d9254c7bfc2b50b6cc1a56669cfe046c0d5d94f0a3937e7c7c9b75c079",
+      "review": "main_visual_verified",
+      "corrected_model_output": true,
+      "before": "$а) Да; б) Нет; в) 14$"
+    },
+    {
+      "id": "20.32.1",
+      "answer_latex": "а) Да; б) Нет; в) 9554",
+      "packet_hash": "eafb06376b1268dfe9870779608440628fd6cec0c8df158811b37470f98c9aa2",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 9554$"
+    },
+    {
+      "id": "20.33",
+      "answer_latex": "а) Нет; б) Нет; в) 182",
+      "packet_hash": "eafb06376b1268dfe9870779608440628fd6cec0c8df158811b37470f98c9aa2",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 182$"
+    },
+    {
+      "id": "20.33.1",
+      "answer_latex": "а) Нет; б) Нет; в) 226",
+      "packet_hash": "eafb06376b1268dfe9870779608440628fd6cec0c8df158811b37470f98c9aa2",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 226$"
+    },
+    {
+      "id": "20.33.2",
+      "answer_latex": "а) Нет; б) Нет; в) 266",
+      "packet_hash": "eafb06376b1268dfe9870779608440628fd6cec0c8df158811b37470f98c9aa2",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Нет; б) Нет; в) 266$"
+    },
+    {
+      "id": "20.34",
+      "answer_latex": "а) 1, 2, 3, 4, 5, 12, 6, 7, 8, 9, 11, 10; б) Нет; в) 72",
+      "packet_hash": "eafb06376b1268dfe9870779608440628fd6cec0c8df158811b37470f98c9aa2",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 1, 2, 3, 4, 5, 12, 6, 7,$"
+    },
+    {
+      "id": "20.35",
+      "answer_latex": "а) 15; б) Нет; в) 29",
+      "packet_hash": "eafb06376b1268dfe9870779608440628fd6cec0c8df158811b37470f98c9aa2",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) 15; б) Нет; в) 29$"
+    },
+    {
+      "id": "20.36",
+      "answer_latex": "а) Да; б) Нет; в) 6",
+      "packet_hash": "eafb06376b1268dfe9870779608440628fd6cec0c8df158811b37470f98c9aa2",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 6$"
+    },
+    {
+      "id": "20.37",
+      "answer_latex": "а) Да; б) Нет; в) 3",
+      "packet_hash": "eafb06376b1268dfe9870779608440628fd6cec0c8df158811b37470f98c9aa2",
+      "review": "main_visual_verified",
+      "corrected_model_output": true,
+      "before": "$а) Да; б) Нет; в) 3$"
+    },
+    {
+      "id": "20.38",
+      "answer_latex": "а) Да; б) 11; в) 31",
+      "packet_hash": "eafb06376b1268dfe9870779608440628fd6cec0c8df158811b37470f98c9aa2",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) 11; в) 31$"
+    },
+    {
+      "id": "20.39",
+      "answer_latex": "а) Да; б) Нет; в) 977",
+      "packet_hash": "eafb06376b1268dfe9870779608440628fd6cec0c8df158811b37470f98c9aa2",
+      "review": "main_visual_verified",
+      "corrected_model_output": false,
+      "before": "$а) Да; б) Нет; в) 977$"
+    }
+  ],
+  "source_sha256": "847dd1b8c188a55e627295a5a8f1b718a164efc467114da9f232cbfb3520e616",
+  "pdf_sha256": "1e0b2ddcb9117cc7463ec2017e029148e7ce375687173873c389cfa6022e0773"
+}

@@ -24,7 +24,7 @@ from worksheet_corpus.latex_scan import (
 from worksheet_corpus.cleanup import (
     clean_answer_junk, clean_draft, rewrite_equation_answer)
 from worksheet_corpus.classify import (
-    exam_codes_from_elements, classify_draft, suggest_topic,
+    exam_codes_from_elements, classify_draft, suggest_exams, suggest_topic,
     topic_is_confident)
 from worksheet_corpus.subitems import (
     maybe_split_element, split_pile)
@@ -555,12 +555,17 @@ class SplitHelpersTests(unittest.TestCase):
             exam_codes_from_elements([
                 {'kind': 'task', 'text': r'\fipi Найдите корень уравнения.'},
             ], grade=11),
-            ['EGE_PROFILE_2026'])
+            ['EGE_PROFILE_2027'])
+
+    def test_ege_profile_position_twenty_is_recognized(self):
+        self.assertEqual(
+            suggest_exams({'rel_path': 'ege-20-celye-chisla.tex'}),
+            ['EGE_PROFILE_2027_20', 'EGE_PROFILE_2027'])
         self.assertEqual(
             exam_codes_from_elements([
                 {'kind': 'rubric', 'rubric': r'\fipi Линейные уравнения'},
             ], grade=11),
-            ['EGE_PROFILE_2026'])
+            ['EGE_PROFILE_2027'])
 
 
 class TitleOriginTests(unittest.TestCase):

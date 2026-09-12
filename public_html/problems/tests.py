@@ -1829,8 +1829,8 @@ class RubricatorTests(TestCase):
         teacher = make_teacher()
         task = Task.objects.create(
             text_latex='Неравенства профиля xyz', created_by=teacher)
-        child = ExamItem.objects.get(code='EGE_PROFILE_2026_15')
-        parent = ExamItem.objects.get(code='EGE_PROFILE_2026')
+        child = ExamItem.objects.get(code='EGE_PROFILE_2027_16')
+        parent = ExamItem.objects.get(code='EGE_PROFILE_2027')
         set_task_exams(task, [child.pk])
         self.assertEqual(
             set(task.exam_items.values_list('code', flat=True)),
@@ -1840,11 +1840,11 @@ class RubricatorTests(TestCase):
             set(task.exam_items.values_list('code', flat=True)),
             {parent.code})
         self.assertEqual(
-            ensure_exam_parent_codes(['EGE_PROFILE_2026_15']),
-            ['EGE_PROFILE_2026_15', 'EGE_PROFILE_2026'])
+            ensure_exam_parent_codes(['EGE_PROFILE_2027_16']),
+            ['EGE_PROFILE_2027_16', 'EGE_PROFILE_2027'])
         self.assertEqual(
-            ensure_exam_parent_codes(['EGE_PROFILE_2026']),
-            ['EGE_PROFILE_2026'])
+            ensure_exam_parent_codes(['EGE_PROFILE_2027']),
+            ['EGE_PROFILE_2027'])
 
     def test_filter_exam_line_matches_numbered_and_legacy(self):
         from problems.models import ExamItem
@@ -1860,15 +1860,15 @@ class RubricatorTests(TestCase):
             text_latex='Старый номер xyz', created_by=teacher)
         other = Task.objects.create(
             text_latex='Другой экзамен xyz', created_by=teacher)
-        child = ExamItem.objects.get(code='EGE_PROFILE_2026_15')
-        parent = ExamItem.objects.get(code='EGE_PROFILE_2026')
+        child = ExamItem.objects.get(code='EGE_PROFILE_2027_16')
+        parent = ExamItem.objects.get(code='EGE_PROFILE_2027')
         oge = ExamItem.objects.get(code='OGE_2026_09')
         set_task_exams(numbered, [child.pk])
         set_task_exams(parent_only, [parent.pk])
         Task.exam_items.through.objects.create(task=legacy, examitem=child)
         set_task_exams(other, [oge.pk])
         line_hits = filter_by_taxonomy(
-            Task.objects.all(), {'exam': ['EGE_PROFILE_2026']},
+            Task.objects.all(), {'exam': ['EGE_PROFILE_2027']},
             topics_lookups=('topics',))
         texts = set(line_hits.values_list('text_latex', flat=True))
         self.assertIn('С номером xyz', texts)
@@ -1876,7 +1876,7 @@ class RubricatorTests(TestCase):
         self.assertIn('Старый номер xyz', texts)
         self.assertNotIn('Другой экзамен xyz', texts)
         numbered_hits = filter_by_taxonomy(
-            Task.objects.all(), {'exam': ['EGE_PROFILE_2026_15']},
+            Task.objects.all(), {'exam': ['EGE_PROFILE_2027_16']},
             topics_lookups=('topics',))
         numbered_texts = set(numbered_hits.values_list('text_latex', flat=True))
         self.assertIn('С номером xyz', numbered_texts)
@@ -1915,7 +1915,7 @@ class RubricatorTests(TestCase):
         self.assertEqual(
             set(ExamItem.objects.filter(item_number=0).values_list(
                 'code', flat=True)),
-            {'OGE_2026', 'EGE_BASE_2026', 'EGE_PROFILE_2026'})
+            {'OGE_2026', 'EGE_BASE_2026', 'EGE_PROFILE_2027'})
 
     def test_direct_m2m_and_variant_copy_add_exam_parent(self):
         from django.contrib.admin.sites import site
@@ -1925,8 +1925,8 @@ class RubricatorTests(TestCase):
         from problems.rubricator import seed_rubricator
         seed_rubricator()
         teacher = make_teacher()
-        child = ExamItem.objects.get(code='EGE_PROFILE_2026_15')
-        parent = ExamItem.objects.get(code='EGE_PROFILE_2026')
+        child = ExamItem.objects.get(code='EGE_PROFILE_2027_16')
+        parent = ExamItem.objects.get(code='EGE_PROFILE_2027')
         task = Task.objects.create(
             text_latex='Прямой M2M xyz', created_by=teacher)
         task.exam_items.set([child])

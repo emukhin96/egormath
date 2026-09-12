@@ -239,9 +239,14 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
     for draft in drafts:
         try:
             apply_oge_metadata(draft, batch.profile)
+            from .ege_metadata import apply_ege_metadata
+            apply_ege_metadata(draft, batch.profile)
         except ValueError as exc:
             raise TextbookImportError(str(exc)) from exc
     apply_topic_suggestions(drafts)
+    if batch.profile == 'ostromogilsky_ege':
+        from .ege_metadata import apply_ege_topics
+        apply_ege_topics(drafts)
     mark_already_imported_drafts(drafts, source)
     TextbookTaskDraft.objects.bulk_create(drafts, batch_size=500)
     from .task_blocks import bind_oge_draft_blocks
