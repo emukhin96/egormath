@@ -139,7 +139,9 @@
   document.addEventListener('submit',async function(e){
     var f=e.target.closest('[data-mask-check]');if(!f)return;e.preventDefault();
     try{
-      var data=new FormData(f);f.querySelectorAll('math-field[data-mirror]').forEach(m=>data.set(m.dataset.mirror,m.value||''));
+      var data=new FormData(f);f.querySelectorAll('math-field[data-mirror]').forEach(function(m){
+        data.set(m.dataset.mirror,(window.EgorMask&&EgorMask.value)?EgorMask.value(m):(m.value||''));
+      });
       var result=await api.request(config.previewUrl,data);
       if(window.EgorCheckBadge)window.EgorCheckBadge.apply(f,result.checks||{});
       f.querySelector('[data-trial-result]').textContent=({ok:'Верно',wrong:'Неверно',unknown:'Не все поля заполнены или ответ не разобран'})[result.overall]||'Введите пробный ответ';

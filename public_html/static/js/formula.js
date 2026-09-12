@@ -1,8 +1,7 @@
 /* Ввод формул на странице задания (MathLive, подключён с CDN).
 
-   1. <math-field data-mirror="имя"> — поле ответа типа «формула». Элемент не
-      участвует в форме, поэтому его LaTeX зеркалится в скрытый <input>;
-      событие change на нём запускает автосохранение формы (autosave.js).
+   1. Поля <math-field> масок ответа зеркалит mask.js, чтобы и обычные
+      формулы, и строгие форматы участвовали в автосохранении.
    2. Кнопка [data-formula-insert] рядом с textarea показывает панель
       #formula-panel прямо под этим полем (не <dialog>: экранная клавиатура
       MathLive рисуется в body и под модальным окном была недоступна) и
@@ -14,20 +13,6 @@
 
   function fire(el, type) {
     el.dispatchEvent(new Event(type, {bubbles: true}));
-  }
-
-  function bindMirrors() {
-    document.querySelectorAll('math-field[data-mirror]').forEach(function (mf) {
-      var form = mf.closest('form');
-      var hidden = form && form.querySelector('input[name="' + mf.dataset.mirror + '"]');
-      if (!hidden || mf.dataset.mirrorBound) return;
-      mf.dataset.mirrorBound = '1';
-      mf.addEventListener('input', function () { hidden.value = mf.value; });
-      mf.addEventListener('change', function () {
-        hidden.value = mf.value;
-        fire(hidden, 'change');
-      });
-    });
   }
 
   function insertAtCursor(textarea, snippet) {
@@ -136,7 +121,6 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    bindMirrors();
     bindPreviews();
     bindPanel();
   });

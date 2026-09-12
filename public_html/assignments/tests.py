@@ -528,6 +528,20 @@ class StudentAnswerTests(TestCase):
             reverse('assignment_detail', args=[self.assignment.pk]))
         self.assertContains(response, 'data-autosave="change"')
 
+    def test_strict_masks_use_math_keyboard_for_student(self):
+        task = self.tasks[0]
+        task.answer_mask = (
+            '{{digits: 234}} {{decimal: -0,5}} '
+            '{{ratio: 1:2}} {{proportion: 1:2}}')
+        task.save(update_fields=['answer_mask'])
+
+        response = self.client.get(reverse(
+            'assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(response, 'data-mask-format=', count=4)
+        for kind in ('digits', 'decimal', 'ratio', 'proportion'):
+            self.assertContains(response, f'data-mask-format="{kind}"')
+        self.assertContains(response, 'mathlive.min.js')
+
     def test_progress_counts_answers_and_photos(self):
         """Сайдбар: «отвечено N из M» учитывает текст, подпункты и фото."""
         t1, t2 = self.tasks
@@ -1500,5 +1514,27 @@ if (!parsed || parsed.length !== 1) process.exit(3);
 if (parsed[0].lo !== 1.5 || parsed[0].hi !== 4 || !parsed[0].lc || !parsed[0].rc)
   process.exit(4);
 if (NL.num('1{,}5') !== 1.5 || NL.parse('[1.5; 4]') === null) process.exit(5);
+"""
+        subprocess.check_call([node, '-e', script, str(js)])
+
+
+class MaskJsTests(SimpleTestCase):
+    def test_mathlive_strict_value_normalizes_only_serialization(self):
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('node не установлен')
+        js = Path(__file__).resolve().parents[1] / 'static/js/mask.js'
+        script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const ctx = {window: {}, document: {addEventListener: function () {}}};
+vm.runInNewContext(src, ctx);
+const value = ctx.window.EgorMask.value;
+function field(text, kind) { return {value: text, dataset: {maskFormat: kind}}; }
+if (value(field('-0{,}5', 'decimal')) !== '-0,5') process.exit(2);
+if (value(field('1\\colon 2', 'ratio')) !== '1:2') process.exit(3);
+if (value(field('2 3 4', 'digits')) !== '2 3 4') process.exit(4);
+if (value({value: '\\frac{1}{2}', dataset: {}}) !== '\\frac{1}{2}') process.exit(5);
 """
         subprocess.check_call([node, '-e', script, str(js)])
