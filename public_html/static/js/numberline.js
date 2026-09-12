@@ -8,7 +8,7 @@
      - тянуть за стрелку на краю оси — бесконечный конец нового промежутка;
      - клик по концу — включить/исключить точку (● / ○);
      - клик по телу промежутка — убрать его;
-     - отпустить там же, где нажали, — одна точка [a; a].
+     - отпустить там же, где нажали, — одна точка \{a\}.
    Каждое изменение пишет LaTeX в math-field («(-\\infty; -5) \\cup [1; 4)»)
    — его же разбирает сервер — и шлёт change для автосохранения. Текст
    руками (скобки, неравенства, ∅, ℝ) разбирается обратно.
@@ -115,6 +115,14 @@
     if (isFinite(point)) return [{lo:point,hi:point,lc:true,rc:true}];
     piece = piece.trim();
     if (!piece) return null;
+    var finiteSet = piece.match(/^\\?\{([\s\S]*?)\\?\}$/);
+    if (finiteSet) {
+      var values = finiteSet[1].split(/\s*;\s*/).filter(Boolean).map(num);
+      if (!values.length || values.some(isNaN)) return null;
+      return values.map(function (value) {
+        return {lo: value, hi: value, lc: true, rc: true};
+      });
+    }
     var ref = piece.match(/^\u0000(\d+)\u0000$/);
     if (ref) {
       var iv = parseBracket(tokens[parseInt(ref[1], 10)]);
@@ -227,9 +235,22 @@
   }
 
   function format(list) {
-    return list.map(function (iv) {
-      return (iv.lc ? '[' : '(') + endText(iv, 'lo') + '; ' + endText(iv, 'hi') + (iv.rc ? ']' : ')');
-    }).join(' ∪ ');
+    var points = list.filter(isPoint);
+    var parts = [];
+    if (points.length) {
+      parts.push('{' + points.map(function (iv) {
+        return endText(iv, 'lo');
+      }).join('; ') + '}');
+    }
+    list.filter(function (iv) { return !isPoint(iv); }).forEach(function (iv) {
+      parts.push((iv.lc ? '[' : '(') + endText(iv, 'lo') + '; '
+        + endText(iv, 'hi') + (iv.rc ? ']' : ')'));
+    });
+    return parts.join(' ∪ ');
+  }
+
+  function isPoint(iv) {
+    return iv.lo === iv.hi && iv.lc && iv.rc && isFinite(iv.lo);
   }
 
   function toLatexBound(raw) {
@@ -256,9 +277,18 @@
   }
 
   function formatLatex(list) {
-    return list.map(function (iv) {
-      return (iv.lc ? '[' : '(') + latexEnd(iv, 'lo') + '; ' + latexEnd(iv, 'hi') + (iv.rc ? ']' : ')');
-    }).join(' \\cup ');
+    var points = list.filter(isPoint);
+    var parts = [];
+    if (points.length) {
+      parts.push('\\{' + points.map(function (iv) {
+        return latexEnd(iv, 'lo');
+      }).join('; ') + '\\}');
+    }
+    list.filter(function (iv) { return !isPoint(iv); }).forEach(function (iv) {
+      parts.push((iv.lc ? '[' : '(') + latexEnd(iv, 'lo') + '; '
+        + latexEnd(iv, 'hi') + (iv.rc ? ']' : ')'));
+    });
+    return parts.join(' \\cup ');
   }
 
   function svgEl(name, attrs) {
