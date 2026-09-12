@@ -842,9 +842,11 @@ def _ensure_import_rubrics(worksheet, headings):
     return order
 
 
-def _collection_for_path(batch, path, cache, collection_key=''):
+def _collection_for_path(batch, path, cache, collection_key='',
+                         collection_title=''):
     from worksheets.models import Collection, Worksheet
 
+    collection_title = (collection_title or '').strip()
     parent = None
     for depth in range(1, len(path) + 1):
         prefix = path[:depth]
@@ -868,8 +870,11 @@ def _collection_for_path(batch, path, cache, collection_key=''):
             raise TextbookImportError(
                 f'Подборка «{prefix[-1]}» принадлежит другому редактору.')
         if collection is None:
+            worksheet_title = (
+                collection_title if is_leaf and collection_title
+                else prefix[-1])
             worksheet = Worksheet.objects.create(
-                title=prefix[-1][:190], owner=batch.created_by)
+                title=worksheet_title[:190], owner=batch.created_by)
             collection = Collection.objects.create(
                 worksheet=worksheet, source=batch.source, parent=parent,
                 locator=locator, source_path=prefix, order=depth * 10,
@@ -887,8 +892,9 @@ def _collection_for_path(batch, path, cache, collection_key=''):
                 collection_updates.append('is_published')
             if collection_updates:
                 collection.save(update_fields=collection_updates)
-            if collection.worksheet.title != prefix[-1][:190]:
-                collection.worksheet.title = prefix[-1][:190]
+            worksheet_title = (collection_title or prefix[-1])[:190]
+            if collection.worksheet.title != worksheet_title:
+                collection.worksheet.title = worksheet_title
                 collection.worksheet.save(update_fields=['title'])
         cache[locator] = collection
         parent = collection
@@ -1146,7 +1152,8 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         if not path:
             path = [draft.collection_title.strip() or batch.title]
         collection = _collection_for_path(
-            batch, path, collection_cache, collection_key=leaf_key)
+            batch, path, collection_cache, collection_key=leaf_key,
+            collection_title=(draft.collection_title if not headings else ''))
         if collection:
             worksheet = collection.worksheet
             if draft.block_id:

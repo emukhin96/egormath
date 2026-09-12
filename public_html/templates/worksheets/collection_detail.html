@@ -4,16 +4,18 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <span class="page-eyebrow">Подборка</span>
+    <span class="page-eyebrow">{% if children %}Раздел подборок{% else %}Подборка{% endif %}</span>
     <h1>{{ worksheet.title }}</h1>
     <p class="page-subtitle">{{ collection.source }} · {{ collection.source_path|join:' › ' }}</p>
   </div>
   <div class="form-buttons">
+    {% if rows %}
     <label class="ws-toggle" title="Показывать ответы и решения задач">
       <input type="checkbox" id="toggle-answers">
       <span class="ws-toggle-slider"></span>
       <span class="ws-toggle-text">показать ответы и решения</span>
     </label>
+    {% endif %}
     {% if can_edit %}
     <a class="btn btn-secondary" href="{% url 'collection_edit' collection.pk %}">Редактировать</a>
     {% endif %}
@@ -27,6 +29,19 @@
 </div>
 
 <div class="card worksheet-items-card">
+  {% if children %}
+  <p class="helptext">Это раздел, который объединяет дочерние подборки. Выберите нужную подборку ниже.</p>
+  <table class="list">
+    <tr><th>Подборка</th><th>Элементов</th><th></th></tr>
+    {% for child in children %}
+    <tr>
+      <td><a href="{% url 'collection_detail' child.pk %}">{{ child.worksheet.title }}</a></td>
+      <td>{{ child.items_total }}</td>
+      <td><a class="btn btn-small btn-secondary" href="{% url 'collection_detail' child.pk %}">{% if child.items_total %}Открыть подборку{% else %}Открыть раздел{% endif %}</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
   <p class="helptext">Будет создан обычный личный листок: задачи и текстовые вставки можно перемещать, удалять, дополнять и верстать в PDF. Знак «+» справа добавляет задачу в корзину — можно собрать листок не из всей подборки.</p>
   {% if rows %}
   <div id="ws-items" data-answers-key="collection-show-answers">
@@ -69,6 +84,7 @@
   </div>
   {% else %}
   <p class="muted">Подборка пуста.</p>
+  {% endif %}
   {% endif %}
 </div>
 {% endblock %}

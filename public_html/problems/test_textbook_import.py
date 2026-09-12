@@ -265,6 +265,7 @@ class TextbookImportTests(TestCase):
         leaf = Collection.objects.get(
             source_path=['Алгебра', 'Квадратные уравнения'])
         self.assertTrue(leaf.is_published)
+        self.assertEqual(leaf.worksheet.title, 'Квадратные уравнения')
         parent = Collection.objects.get(source_path=['Алгебра'])
         self.assertFalse(parent.is_published)
         self.assertTrue(WorksheetItem.objects.filter(
@@ -304,6 +305,8 @@ class TextbookImportTests(TestCase):
         draft.save(update_fields=['status', 'topic', 'topic_ids'])
         commit_batch(batch, user=self.teacher)
         task = Task.objects.get()
+        leaf = Collection.objects.get(locator='key:oge/06/proto')
+        self.assertEqual(leaf.worksheet.title, '№6. Дроби — прототипы')
         self.assertIn(
             'OGE_2026_06',
             list(task.exam_items.values_list('code', flat=True)))

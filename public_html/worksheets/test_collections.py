@@ -114,3 +114,24 @@ class CollectionTests(TestCase):
         self.assertContains(response, 'не содержит элементов')
         self.assertEqual(Worksheet.objects.filter(
             owner=self.owner, title='Группа').count(), 1)
+
+    def test_catalog_hides_empty_group_and_group_links_to_child(self):
+        group_sheet = Worksheet.objects.create(
+            title='№10. Вероятности', owner=self.owner)
+        group = Collection.objects.create(
+            worksheet=group_sheet, source=self.source,
+            locator='group', source_path=['№10. Вероятности'])
+        self.collection.parent = group
+        self.collection.save(update_fields=['parent'])
+        self.client.login(username='teacher1', password='pass12345')
+
+        catalog = self.client.get(reverse('collection_list'))
+        self.assertNotContains(catalog, '№10. Вероятности')
+        self.assertContains(catalog, 'Готовая тема')
+
+        detail = self.client.get(reverse(
+            'collection_detail', args=[group.pk]))
+        self.assertContains(detail, 'Это раздел, который объединяет')
+        self.assertContains(detail, 'Готовая тема')
+        self.assertContains(detail, 'Открыть подборку')
+        self.assertNotContains(detail, 'Подборка пуста')
