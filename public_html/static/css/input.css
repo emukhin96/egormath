@@ -1985,6 +1985,11 @@
     font-size: 1rem;
   }
 
+  .mask-strict {
+    min-width: 120px;
+    max-width: 240px;
+  }
+
   .mask-nosolution {
     margin-left: var(--space-2);
     font-size: 0.9rem;

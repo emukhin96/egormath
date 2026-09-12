@@ -75,7 +75,8 @@
         data[el.name] = el.value;
       });
       container.querySelectorAll('math-field[data-mirror]').forEach(function (mf) {
-        data[mf.dataset.mirror] = mf.value || '';
+        data[mf.dataset.mirror] = (window.EgorMask && EgorMask.value)
+          ? EgorMask.value(mf) : (mf.value || '');
       });
       return data;
     }

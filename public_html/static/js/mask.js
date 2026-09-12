@@ -1,7 +1,8 @@
 /* Поведение контролов маски ответа на странице ученика (разметка —
    _mask.html, серверная). Значения слотов уходят обычным автосохранением
-   формы (autosave.js, событие change), math-field зеркалится в скрытый
-   input в formula.js.
+   формы (autosave.js, событие change). Math-field зеркалится здесь же
+   в скрытое поле; для строгих форматов техническая запись MathLive
+   приводится к формату, который проверяет сервер.
 
    1. Слот «множество»: флажок «решений нет» очищает и блокирует поле чисел
       (сервер при флажке пишет ∅, что бы ни было в поле).
@@ -144,6 +145,30 @@
     });
   }
 
+  function mirrorValue(field) {
+    var value = field.value || '';
+    if (!field.dataset.maskFormat) return value;
+    return value.replace(/\{,\}/g, ',').replace(/\\colon\s*/g, ':').trim();
+  }
+
+  function bindMathMirrors(root) {
+    root.querySelectorAll('math-field[data-mirror]').forEach(function (field) {
+      if (field.dataset.mirrorBound) return;
+      var name = field.dataset.mirror;
+      var wrap = field.closest('.formula-field');
+      var hidden = wrap && wrap.querySelector('input[name="' + name + '"]');
+      if (!hidden) return;
+      field.dataset.mirrorBound = '1';
+      function sync(type) {
+        hidden.value = mirrorValue(field);
+        if (type) hidden.dispatchEvent(new Event(type, {bubbles: true}));
+      }
+      field.addEventListener('input', function () { sync(); });
+      field.addEventListener('change', function () { sync('change'); });
+      sync();
+    });
+  }
+
   // Клавиатура принадлежит окну с активным полем, иначе native dialog
   // оставляет её под модальным слоем независимо от z-index.
   document.addEventListener('focusin', function(e) {
@@ -166,6 +191,7 @@
   }, true);
 
   function enhance(root) {
+    bindMathMirrors(root);
     bindSetSlots(root);
     bindOrderSlots(root);
     root.querySelectorAll('[data-mask-order]').forEach(enhanceOrderSlot);
@@ -174,5 +200,5 @@
 
   document.addEventListener('DOMContentLoaded', function () { enhance(document); });
   /* Для разметки, вставленной позже (превью маски в форме задачи) */
-  window.EgorMask = {enhance: enhance};
+  window.EgorMask = {enhance: enhance, value: mirrorValue};
 })();
