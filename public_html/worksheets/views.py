@@ -454,7 +454,7 @@ def _collection_catalog(user):
             direct_items_total = (collection.direct_items_total
                                   if collection.catalog_visible else 0)
             direct_topics = (list(collection.worksheet.topics.all())
-                             if collection.catalog_visible or children else [])
+                             if collection.catalog_visible else [])
             topics = {topic.pk: topic for topic in direct_topics}
             for child in children:
                 topics.update({topic.pk: topic for topic in child['topics']})
@@ -546,6 +546,9 @@ def collection_detail(request, pk):
     selected_source = next(
         (row for row in sources if row['source'].pk == collection.source_id),
         None)
+    current_collection_row = next(
+        (row for row in (selected_source['rows'] if selected_source else [])
+         if row['collection'].pk == collection.pk), None)
     return render(request, 'worksheets/collection_detail.html', {
         'collection': collection,
         'worksheet': collection.worksheet,
@@ -560,6 +563,8 @@ def collection_detail(request, pk):
         'collection_sources': sources,
         'selected_source': selected_source,
         'current_collection': collection,
+        'current_collection_topics': (
+            current_collection_row['topics'] if current_collection_row else []),
     })
 
 
