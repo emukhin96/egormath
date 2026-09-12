@@ -1061,6 +1061,9 @@
   .worksheet-catalog .task-meta a, .worksheet-catalog .task-meta button { white-space: nowrap; }
   table.list .worksheet-main-row td { border-bottom: 0; }
   .worksheet-action-row td { padding-top: 0; }
+  .worksheet-title-cell { width: 100%; min-width: 200px; }
+  .worksheet-count-cell { white-space: nowrap; }
+  .worksheet-topics-cell { min-width: 160px; }
   .progress-assignment { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
 
   .task-meta a, .task-meta .link-btn {
@@ -1285,9 +1288,8 @@
     .worksheet-title-cell { grid-column: 2; grid-row: 1; }
     .worksheet-main-row .row-actions { grid-column: 3; grid-row: 1; }
     .worksheet-grade-cell { grid-column: 2; grid-row: 2; }
-    .worksheet-pdf-cell { grid-column: 3; grid-row: 2; }
     .worksheet-topics-cell { grid-column: 2 / -1; }
-    .worksheet-owner-cell, .worksheet-count-cell { grid-column: 2 / -1; }
+    .worksheet-count-cell { grid-column: 3; grid-row: 2; }
     .worksheet-main-row .worksheet-date-cell { display: none; }
     .worksheet-action-row { display: block; }
     .worksheet-action-row td:first-child { display: none; }
@@ -2595,7 +2597,7 @@
 
   .collection-source-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
     gap: var(--space-4);
   }
 
