@@ -1,0 +1,28 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Подборки</p>
+  <h2>{% if selected_source %}{{ selected_source.source.title|truncatechars:34 }}{% else %}Источники{% endif %}</h2>
+  {% if selected_source %}<div class="sidebar-actions"><a class="sidebar-action" href="{% url 'collection_list' %}">Все источники</a></div>{% endif %}
+</section>
+<section class="sidebar-section">
+  {% if selected_source %}
+  <p class="sidebar-kicker">Структура источника</p>
+  <ul class="sidebar-list collection-sidebar-tree">
+    {% for row in selected_source.rows %}
+    <li style="--collection-depth: {{ row.depth }}"{% if current_collection.pk == row.collection.pk %} class="is-current"{% endif %}><a href="{% url 'collection_detail' row.collection.pk %}">{{ row.collection.worksheet.title|truncatechars:32 }}</a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="sidebar-kicker">Доступные источники</p>
+  <ul class="sidebar-list">
+    {% for group in collection_sources %}<li><a href="?source={{ group.source.pk }}">{{ group.source.title|truncatechars:34 }}</a><br><span>{{ group.leaf_total }} подборок</span></li>{% empty %}<li>Источники не добавлены</li>{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% if current_collection %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Темы раздела</p>
+  <ul class="sidebar-list">
+    {% for topic in current_collection.worksheet.topics.all %}<li>{% if topic.code %}<strong>{{ topic.code }}</strong><br>{% endif %}{{ topic.name }}</li>{% empty %}<li>Тема не назначена</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}

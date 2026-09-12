@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static task_extras %}
 {% block title %}{{ worksheet.title }} — Математика{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/collections.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
@@ -14,6 +15,11 @@
       <input type="checkbox" id="toggle-answers">
       <span class="ws-toggle-slider"></span>
       <span class="ws-toggle-text">показать ответы и решения</span>
+    </label>
+    <label class="ws-toggle" title="Показывать поля масок ответов">
+      <input type="checkbox" id="toggle-masks" data-storage-key="collection-masks">
+      <span class="ws-toggle-slider"></span>
+      <span class="ws-toggle-text">маски ответов</span>
     </label>
     {% endif %}
     {% if can_edit %}
@@ -42,7 +48,6 @@
     {% endfor %}
   </table>
   {% else %}
-  <p class="helptext">Будет создан обычный личный листок: задачи и текстовые вставки можно перемещать, удалять, дополнять и верстать в PDF. Знак «+» справа добавляет задачу в корзину — можно собрать листок не из всей подборки.</p>
   {% if rows %}
   <div id="ws-items" data-answers-key="collection-show-answers">
     {% for row in rows %}
@@ -67,6 +72,7 @@
           {% endif %}
           {% include 'problems/_task_images.html' with images=row.statement_images %}
           {% include 'problems/_task_answers.html' with task=item.task subitems=row.subitems hide_answers=True %}
+          <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
           {% elif item.is_rubric %}
           <h3>{{ item.rubric }}</h3>
           {% if item.rubric_note %}<p>{{ item.rubric_note }}</p>{% endif %}
@@ -90,6 +96,9 @@
 </div>
 {% endblock %}
 {% block extra_js %}
+{% include 'problems/_mask_dialogs.html' %}
+<script defer src="{% static 'js/problem_editor.js' %}?v=2"></script>
+{% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
 {% endblock %}

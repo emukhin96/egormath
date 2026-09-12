@@ -1,11 +1,51 @@
 {% extends 'base.html' %}
 {% block title %}Подборки — Математика{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/collections.html' %}{% endblock %}
 {% block content %}
-<div class="page-head"><div><span class="page-eyebrow">Материалы</span><h1>Подборки</h1>
-  <p class="page-subtitle">Готовые последовательности задач по структуре задачников.</p></div></div>
-<div class="card">
-{% if collections %}<table class="list"><tr><th>Подборка</th><th>Источник</th><th>Раздел</th><th>Элементов</th><th></th></tr>
-{% for c in collections %}<tr><td><a href="{% url 'collection_detail' c.pk %}">{{ c.worksheet.title }}</a></td><td>{{ c.source }}</td><td>{{ c.source_path|join:' › ' }}</td><td>{{ c.items_total }}</td><td>{% if c.items_total %}<form method="post" action="{% url 'collection_use' c.pk %}">{% csrf_token %}<button class="btn btn-small" type="submit">В мои листки</button></form>{% else %}<span class="muted">—</span>{% endif %}</td></tr>{% endfor %}
-</table>{% else %}<p class="muted">Подборок пока нет.</p>{% endif %}
+<div class="page-head">
+  <div>
+    <span class="page-eyebrow">Материалы</span>
+    <h1>{% if selected_source %}{{ selected_source.source.title }}{% else %}Подборки{% endif %}</h1>
+    <p class="page-subtitle">
+      {% if selected_source %}
+      {% if selected_source.source.author %}{{ selected_source.source.author }}{% if selected_source.source.year %}, {{ selected_source.source.year }}{% endif %}{% else %}Разделы и подборки источника{% endif %}
+      {% else %}Выберите источник, затем нужный раздел или подборку.{% endif %}
+    </p>
+  </div>
+  {% if selected_source %}<a class="btn btn-secondary" href="{% url 'collection_list' %}">Все источники</a>{% endif %}
 </div>
+
+{% if selected_source %}
+<div class="card collection-tree-card">
+  <table class="list collection-tree-table">
+    <tr><th>Раздел или подборка</th><th>Темы</th><th>Элементов</th><th></th></tr>
+    {% for row in selected_source.rows %}
+    {% with c=row.collection %}
+    <tr>
+      <td><div class="collection-tree-name" style="--collection-depth: {{ row.depth }}">
+        {% if row.children %}<span class="collection-branch" aria-hidden="true">▾</span>{% endif %}
+        <a href="{% url 'collection_detail' c.pk %}">{{ c.worksheet.title }}</a>
+        {% if row.children %}<span class="badge">раздел</span>{% endif %}
+      </div></td>
+      <td>{% include 'worksheets/_collection_topics.html' with topics=row.topics %}</td>
+      <td>{% if row.direct_items_total %}{{ row.direct_items_total }}{% else %}<span class="muted">{{ row.item_total }} в подразделах</span>{% endif %}</td>
+      <td>{% if row.direct_items_total %}<form method="post" action="{% url 'collection_use' c.pk %}">{% csrf_token %}<button class="btn btn-small" type="submit">В мои листки</button></form>{% else %}<a class="btn btn-small btn-secondary" href="{% url 'collection_detail' c.pk %}">Открыть раздел</a>{% endif %}</td>
+    </tr>
+    {% endwith %}
+    {% endfor %}
+  </table>
+</div>
+{% elif collection_sources %}
+<div class="collection-source-grid">
+  {% for group in collection_sources %}
+  <a class="card collection-source-card" href="?source={{ group.source.pk }}">
+    <span class="page-eyebrow">Источник</span>
+    <h2>{{ group.source.title }}</h2>
+    {% if group.source.author %}<p>{{ group.source.author }}{% if group.source.year %}, {{ group.source.year }}{% endif %}</p>{% endif %}
+    <div class="collection-source-stats"><span><strong>{{ group.leaf_total }}</strong> подборок</span><span><strong>{{ group.item_total }}</strong> элементов</span></div>
+    {% include 'worksheets/_collection_topics.html' with topics=group.topics limit=5 %}
+  </a>
+  {% endfor %}
+</div>
+{% else %}<div class="card"><p class="muted">Подборок пока нет.</p></div>{% endif %}
 {% endblock %}

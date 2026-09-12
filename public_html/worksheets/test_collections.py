@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 
-from problems.models import Source, Task, TaskSubitem
+from problems.models import Source, Task, TaskSubitem, Topic
 from problems.tests import make_teacher
 from worksheets.latex import worksheet_to_tex
 from worksheets.models import Collection, Worksheet, WorksheetItem
@@ -51,8 +51,13 @@ class CollectionTests(TestCase):
 
     def test_collection_catalog_and_editor_render(self):
         self.client.login(username='teacher1', password='pass12345')
-        self.assertContains(self.client.get(reverse('collection_list')),
-                            'Готовая тема')
+        catalog = self.client.get(reverse('collection_list'))
+        self.assertContains(catalog, 'Задачник')
+        self.assertNotContains(catalog, 'Готовая тема')
+        source = self.client.get(reverse('collection_list'), {
+            'source': self.source.pk,
+        })
+        self.assertContains(source, 'Готовая тема')
         detail = self.client.get(reverse(
             'collection_detail', args=[self.collection.pk]))
         self.assertContains(detail, 'Использовать подборку')
@@ -60,9 +65,14 @@ class CollectionTests(TestCase):
         self.assertContains(detail, 'toggle-answers')
         self.assertContains(detail, 'показать ответы и решения')
         self.assertContains(detail, 'data-answers-key="collection-show-answers"')
+        self.assertContains(detail, 'id="toggle-masks"')
+        self.assertContains(detail, 'data-worksheet-mask')
+        self.assertContains(detail, 'id="answer-mask-dialog"')
+        self.assertNotContains(detail, 'Будет создан обычный личный листок')
         # Тумблер в шапке страницы — рядом с кнопками, не внутри списка
         head = detail.content.decode().split('id="ws-items"', 1)[0]
         self.assertIn('toggle-answers', head)
+        self.assertIn('toggle-masks', head)
         self.assertContains(detail, 'data-cart-form')
         editor = self.client.get(reverse(
             'collection_edit', args=[self.collection.pk]), follow=True)
@@ -115,7 +125,7 @@ class CollectionTests(TestCase):
         self.assertEqual(Worksheet.objects.filter(
             owner=self.owner, title='Группа').count(), 1)
 
-    def test_catalog_hides_empty_group_and_group_links_to_child(self):
+    def test_catalog_shows_group_hierarchy_and_group_links_to_child(self):
         group_sheet = Worksheet.objects.create(
             title='№10. Вероятности', owner=self.owner)
         group = Collection.objects.create(
@@ -125,9 +135,12 @@ class CollectionTests(TestCase):
         self.collection.save(update_fields=['parent'])
         self.client.login(username='teacher1', password='pass12345')
 
-        catalog = self.client.get(reverse('collection_list'))
-        self.assertNotContains(catalog, '№10. Вероятности')
+        catalog = self.client.get(reverse('collection_list'), {
+            'source': self.source.pk,
+        })
+        self.assertContains(catalog, '№10. Вероятности')
         self.assertContains(catalog, 'Готовая тема')
+        self.assertContains(catalog, '2 в подразделах')
 
         detail = self.client.get(reverse(
             'collection_detail', args=[group.pk]))
@@ -135,6 +148,30 @@ class CollectionTests(TestCase):
         self.assertContains(detail, 'Готовая тема')
         self.assertContains(detail, 'Открыть подборку')
         self.assertNotContains(detail, 'Подборка пуста')
+
+        self.client.logout()
+        self.client.login(username='teacher2', password='pass12345')
+        other_catalog = self.client.get(reverse('collection_list'), {
+            'source': self.source.pk,
+        })
+        self.assertContains(other_catalog, '№10. Вероятности')
+        self.assertEqual(self.client.get(reverse(
+            'collection_detail', args=[group.pk])).status_code, 200)
+
+    def test_catalog_displays_collection_topics_in_tree_and_sidebar(self):
+        topic = Topic.objects.create(code='TEST.COL', name='Алгебра')
+        self.worksheet.topics.add(topic)
+        self.client.login(username='teacher1', password='pass12345')
+
+        catalog = self.client.get(reverse('collection_list'), {
+            'source': self.source.pk,
+        })
+        self.assertContains(catalog, 'TEST.COL')
+        self.assertContains(catalog, 'Алгебра')
+        detail = self.client.get(reverse(
+            'collection_detail', args=[self.collection.pk]))
+        self.assertContains(detail, 'Темы раздела')
+        self.assertContains(detail, 'TEST.COL')
 
     def test_large_collection_is_paginated_with_continuous_numbering(self):
         worksheet = Worksheet.objects.create(
