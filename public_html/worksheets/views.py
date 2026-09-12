@@ -69,7 +69,9 @@ def worksheet_list(request):
                       collection__isnull=True)
                   .select_related('owner')
                   .prefetch_related('topics', 'grade_bands')
-                  .annotate(items_total=models.Count('items', distinct=True)))
+                  .annotate(items_total=models.Count('items', distinct=True),
+                            was_assigned=models.Exists(Assignment.objects.filter(
+                                worksheet_id=models.OuterRef('pk')))))
 
     owner_id = params.get('owner', '').strip()
     if request.user.is_superuser and owner_id.isdigit():
