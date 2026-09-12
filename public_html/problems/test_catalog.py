@@ -101,3 +101,8 @@ class CatalogTests(TestCase):
         self.assertIn('value="да" selected', preview)
         self.assertEqual(preview.count(' selected'), 4)
         self.assertNotIn('check-badge', preview)
+
+    def test_mask_data_uses_task_subitem_letters(self):
+        self.assertEqual(
+            [answer['label'] for answer in mask_data(self.task)],
+            ['а', 'б'])

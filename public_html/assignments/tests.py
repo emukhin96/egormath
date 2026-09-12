@@ -1514,6 +1514,23 @@ if (!parsed || parsed.length !== 1) process.exit(3);
 if (parsed[0].lo !== 1.5 || parsed[0].hi !== 4 || !parsed[0].lc || !parsed[0].rc)
   process.exit(4);
 if (NL.num('1{,}5') !== 1.5 || NL.parse('[1.5; 4]') === null) process.exit(5);
+const points = [
+  {lo: -2, hi: -2, lc: true, rc: true},
+  {lo: 1, hi: 1, lc: true, rc: true},
+  {lo: 3, hi: 3, lc: true, rc: true},
+];
+const pointText = NL.formatLatex(points);
+if (pointText !== '\\{-2; 1; 3\\}') process.exit(6);
+const pointParsed = NL.parse(pointText);
+if (!pointParsed || pointParsed.length !== 3
+    || pointParsed.some(iv => iv.lo !== iv.hi || !iv.lc || !iv.rc)) process.exit(7);
+if (NL.format(points) !== '{-2; 1; 3}') process.exit(8);
+const mixed = NL.formatLatex(points.slice(0, 1).concat([
+  {lo: 1, hi: 4, lc: true, rc: false},
+]));
+if (mixed !== '\\{-2\\} \\cup [1; 4)') process.exit(9);
+const mixedParsed = NL.parse(mixed);
+if (!mixedParsed || mixedParsed.length !== 2) process.exit(10);
 """
         subprocess.check_call([node, '-e', script, str(js)])
 

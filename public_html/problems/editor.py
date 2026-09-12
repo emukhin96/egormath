@@ -74,12 +74,16 @@ def context(request, task):
 
 
 def mask_data(task, item=None, include_preview=False):
-    positions = {pk: n + 1 for n, pk in enumerate(task.subitems.values_list('pk', flat=True))}
+    from worksheets.latex import subitem_label
+
+    positions = {
+        pk: n for n, pk in enumerate(
+            task.subitems.values_list('pk', flat=True))}
     subs = list(item.selected_subitems() if item else task.subitems.all())
     owners = subs or ([] if task.subitems.exists() else [task])
     exam_codes = list(task.exam_items.values_list('code', flat=True))
     answers = [{'id': o.pk if isinstance(o, TaskSubitem) else None,
-             'label': f'Подпункт {positions[o.pk]}' if isinstance(o, TaskSubitem) else 'Ответ',
+             'label': subitem_label(positions[o.pk]) if isinstance(o, TaskSubitem) else 'Ответ',
              'text': o.text_latex,
              'condition': task.text_latex + ('\n' + o.text_latex if isinstance(o, TaskSubitem) else ''),
              'author': o.author_answer_latex,
