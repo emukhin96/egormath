@@ -139,8 +139,9 @@ class CollectionTests(TestCase):
             'source': self.source.pk,
         })
         self.assertContains(catalog, '№10. Вероятности')
-        self.assertContains(catalog, 'Готовая тема')
-        self.assertContains(catalog, '2 в подразделах')
+        self.assertNotContains(catalog, 'Готовая тема')
+        self.assertContains(catalog, 'collection-source-card')
+        self.assertContains(catalog, '<strong>2</strong> элементов', html=True)
 
         detail = self.client.get(reverse(
             'collection_detail', args=[group.pk]))

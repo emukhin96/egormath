@@ -96,7 +96,7 @@
   <tr>
     <th class="col-select"><input type="checkbox" data-bulk-all="ws-bulk-form"
         title="Выбрать все листки"></th>
-    <th>Название</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Класс</th><th>Темы</th><th>Задач</th><th>Создан</th><th>Изменён</th><th>PDF</th><th></th>
+    <th>Название</th><th>Класс</th><th>Темы</th><th>Задач</th><th>Создан</th><th>Изменён</th><th></th>
   </tr>
   {% for w in worksheets %}
   <tr class="worksheet-main-row">
@@ -109,7 +109,6 @@
       {% if w.comment %}<div class="muted ws-comment" style="font-size:.85rem">{{ w.comment|truncatechars:120 }}</div>{% endif %}
 
     </td>
-    {% if request.user.is_superuser %}<td class="worksheet-owner-cell">{{ w.owner.get_full_name|default:w.owner.username }}</td>{% endif %}
     <td class="worksheet-grade-cell">
       <form method="post" action="{% url 'worksheet_quick_update' w.pk %}"
             data-autosave="change" class="inline-form">
@@ -126,15 +125,9 @@
         {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=False compact=True selected_json=w.taxonomy_json %}
       </form>
     </td>
-    <td class="worksheet-count-cell">Задач: {{ w.items_total }}</td>
+    <td class="worksheet-count-cell">{{ w.items_total }}</td>
     <td class="worksheet-date-cell">{{ w.created_at|date:'d.m.Y' }}</td>
     <td class="worksheet-date-cell">{{ w.updated_at|date:'d.m.Y H:i' }}</td>
-    <td class="worksheet-pdf-cell">
-      {# Одна кнопка: страница предпросмотра и сборки, вариант выбирается там #}
-      <a class="btn btn-small btn-secondary"
-         href="{% url 'worksheet_pdf_editor' w.pk %}"
-         title="Предпросмотр и сборка PDF (ученик / с ответами / учитель)">PDF</a>
-    </td>
     <td class="row-actions">
       <form method="post" action="{% url 'worksheet_delete' w.pk %}" class="inline-form"
             onsubmit="return confirm('Удалить листок «{{ w.title|escapejs }}»? Будут удалены и его назначения ученикам.');">
@@ -143,8 +136,10 @@
       </form>
     </td>
   </tr>
-  <tr class="worksheet-action-row"><td></td><td colspan="{% if request.user.is_superuser %}9{% else %}8{% endif %}">
+  <tr class="worksheet-action-row"><td></td><td colspan="7">
       <div class="task-meta">
+      {% if request.user.is_superuser %}<span>Владелец: {{ w.owner.get_full_name|default:w.owner.username }}</span> · {% endif %}
+      <a href="{% url 'worksheet_pdf_editor' w.pk %}" title="Предпросмотр и сборка PDF">PDF</a> ·
       <form method="post" action="{% url 'worksheet_copy' w.pk %}" class="inline-form">
         {% csrf_token %}
         <button type="submit" class="link-btn" title="Создать дубликат листка">Дублировать</button>
