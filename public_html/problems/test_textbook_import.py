@@ -6,7 +6,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 
-from problems.models import (Task, TaskImage, TaskSource, TaskTopic,
+from problems.models import (Source, Task, TaskImage, TaskSource, TaskTopic,
                              TextbookImportBatch, TextbookTaskDraft, Topic)
 from problems.tests import make_teacher
 from problems.textbook_import import (TextbookImportError, attach_image_archive,
@@ -451,6 +451,61 @@ class TextbookImportTests(TestCase):
         self.assertContains(response, 'Импортировано')
         self.assertContains(response, reverse('task_detail', args=[task.pk]))
         self.assertContains(response, 'target="_blank"')
+
+    def test_imported_task_without_collection_can_restore_section(self):
+        source = Source.objects.create(
+            title='Зив', author='Автор')
+        payload = bundle(
+            external_id='sr/10/v1/1', source_number='1',
+            source_path=[
+                'Самостоятельные работы',
+                'Чётность и нечётность функции',
+                'Вариант 1',
+            ],
+            collection_key='sr/10/v1',
+            collection_title='Чётность и нечётность функции')
+        task = Task.objects.create(
+            text_latex=payload['tasks'][0]['text_latex'],
+            created_by=self.teacher)
+        TaskSource.objects.create(
+            task=task, source=source, number='1', locator='sr/10/v1/1',
+            source_path=payload['tasks'][0]['source_path'])
+        batch = create_batch_from_bundle(
+            payload, user=self.teacher, title='Зив',
+            source_title='Зив', source_author='Автор')
+        draft = batch.drafts.get()
+        self.assertEqual(draft.status, TextbookTaskDraft.STATUS_IMPORTED)
+        self.assertEqual(Collection.objects.count(), 0)
+
+        self.client.login(username='teacher1', password='pass12345')
+        detail = self.client.get(
+            reverse('textbook_import_detail', args=[batch.pk]))
+        group = next(
+            item for item in detail.context['collection_groups']
+            if item['is_leaf'])
+        detail = self.client.get(
+            reverse('textbook_import_detail', args=[batch.pk]),
+            {'section': group['token']})
+        self.assertEqual(detail.context['missing_collection_count'], 1)
+        self.assertEqual(
+            detail.context['selected_group']['missing_collection_count'], 1)
+        self.assertContains(detail, 'Восстановить подборку')
+
+        response = self.client.post(reverse(
+            'textbook_import_commit_section', args=[batch.pk]), {
+                'section': group['token'],
+            })
+        self.assertEqual(response.status_code, 302)
+        leaf = Collection.objects.get(locator='key:sr/10')
+        self.assertTrue(leaf.is_published)
+        self.assertTrue(leaf.worksheet.items.filter(task=task).exists())
+        self.assertEqual(Task.objects.count(), 1)
+
+        repaired = self.client.get(
+            reverse('textbook_import_detail', args=[batch.pk]),
+            {'section': group['token']})
+        self.assertEqual(repaired.context['missing_collection_count'], 0)
+        self.assertFalse(repaired.context['selected_group']['can_commit'])
 
     def test_imported_draft_review_does_not_save_edits(self):
         topic = Topic.objects.create(name='Тема уже загруженной')

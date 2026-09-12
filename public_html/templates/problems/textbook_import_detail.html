@@ -14,7 +14,7 @@
 {% if collection_groups %}
 <section class="card" id="collection-preview">
   <h2>Предпросмотр подборок и массовая тема</h2>
-  <p class="muted">Нажмите название раздела или темы в сводке — таблица ниже покажет только эту подборку. «Все задачи» снова показывает партию по порядку. При загрузке в каталог глава или тема станет подборкой, а разделы и варианты — заголовками рубрик. Назначение темы изменяет только черновики; задачи в рабочей базе пока не создаются.</p>
+  <p class="muted">Нажмите название раздела или темы в сводке — таблица ниже покажет только эту подборку. «Все задачи» снова показывает партию по порядку. При загрузке в каталог глава или тема станет подборкой, а разделы и варианты — заголовками рубрик. Пометка «база» означает, что задача уже создана; если она ещё не вошла в подборку, кнопка загрузки восстановит эту связь.</p>
   <p class="form-buttons"><a class="btn btn-secondary{% if not selected_group %} is-current{% endif %}" href="{{ all_sections_href }}">Все задачи</a></p>
   {% if ziv_variant_summary %}
   <details class="import-ziv-parity" open>
@@ -55,10 +55,10 @@
   {% if selected_group.topic_candidates %}<p class="helptext">Кандидаты рубрикатора: {% for item in selected_group.topic_candidates %}{{ item.name }} ({{ item.reason_label }}){% if not forloop.last %}; {% endif %}{% endfor %}. Точное совпадение ставится при импорте. Кнопка ниже назначит выбранные или единственную предложенную тему всему разделу.</p>{% endif %}
   {% if batch.diagnostics.ziv_uneven_variant_topics %}<p class="msg msg-warning">Жёлтые строки в сводке выше — темы, где число задач в парных вариантах не совпадает. Откройте такой раздел и проверьте, не слиплись ли формулировки.</p>{% endif %}
   {% if selected_group.can_commit %}
-  <form method="post" action="{% url 'textbook_import_commit_section' batch.pk %}" onsubmit="return confirm('Загрузить в каталог {{ selected_group.approved_count }} одобренных задач раздела «{{ selected_group.title }}»? Непроверенные строки этого и других разделов останутся в партии.');">
+  <form method="post" action="{% url 'textbook_import_commit_section' batch.pk %}" onsubmit="return confirm('Загрузить в каталог {{ selected_group.approved_count }} одобренных задач и добавить в подборку {{ selected_group.missing_collection_count }} задач из базы для раздела «{{ selected_group.title }}»?');">
     {% csrf_token %}
     <input type="hidden" name="section" value="{{ selected_group.token }}">
-    <div class="form-buttons"><button class="btn" type="submit">Загрузить тему в каталог</button></div>
+    <div class="form-buttons"><button class="btn" type="submit">{% if selected_group.approved_count %}Загрузить тему в каталог{% else %}Восстановить подборку{% endif %}</button></div>
   </form>
   {% elif batch.status != 'imported' and selected_group.open_count %}
   <p class="helptext">Одобрите хотя бы одну задачу этого раздела — появится кнопка загрузки только её одобренных строк.</p>
@@ -103,8 +103,8 @@
     <a class="btn btn-secondary{% if answers_filter %} is-current{% endif %}" href="{{ missing_answers_href }}">Без ответов ({{ missing_answer_count }})</a>
     {% if batch.status != 'imported' %}
     <form method="post" action="{% url 'textbook_import_approve_clean' batch.pk %}">{% csrf_token %}<button class="btn btn-secondary" type="submit">Одобрить безошибочные</button></form>
-    <form method="post" action="{% url 'textbook_import_commit' batch.pk %}" onsubmit="return confirm('Загрузить {{ approved_count }} одобренных задач и создать подборки? Непроверенные и конфликтные строки останутся в партии.');">{% csrf_token %}<button class="btn" type="submit"{% if not approved_count %} disabled{% endif %}>Загрузить в каталог</button></form>
     {% endif %}
+    {% if approved_count or missing_collection_count %}<form method="post" action="{% url 'textbook_import_commit' batch.pk %}" onsubmit="return confirm('Загрузить {{ approved_count }} одобренных задач и добавить в подборки {{ missing_collection_count }} задач из базы? Непроверенные и конфликтные строки останутся в партии.');">{% csrf_token %}<button class="btn" type="submit">{% if approved_count %}Загрузить в каталог{% else %}Восстановить подборки{% endif %}</button></form>{% endif %}
   </div>
   {% if batch.status != 'imported' %}
   <form id="import-bulk-form" method="post" action="{% url 'textbook_import_bulk' batch.pk %}" class="bulk-bar" data-bulk hidden>
