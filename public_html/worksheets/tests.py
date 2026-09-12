@@ -44,6 +44,20 @@ class SuperuserWorksheetAccessTests(TestCase):
         self.assertEqual(self.worksheet.title, 'Изменён суперпользователем')
         self.assertEqual(self.worksheet.owner, self.teacher)
 
+    def test_issued_badge_includes_completed_assignments_without_duplicate_rows(self):
+        from assignments.models import Assignment
+        unassigned = make_worksheet(self.teacher, title='Без выдачи')
+        for index in range(2):
+            student = make_student(self.teacher, username=f'issued{index}')
+            Assignment.objects.create(worksheet=self.worksheet, student=student,
+                                      assigned_by=self.teacher, status=Assignment.STATUS_REVIEWED)
+        response = self.client.get(reverse('worksheet_list'))
+        rows = list(response.context['worksheets'])
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(next(w for w in rows if w.pk == self.worksheet.pk).was_assigned)
+        self.assertFalse(next(w for w in rows if w.pk == unassigned.pk).was_assigned)
+        self.assertContains(response, 'class="worksheet-issued-badge"', count=1)
+
     @mock.patch('worksheets.views._worksheet_pdf_response')
     def test_superuser_opens_foreign_teacher_pdf(self, pdf_response):
         pdf_response.return_value = HttpResponse(

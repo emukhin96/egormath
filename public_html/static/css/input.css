@@ -1063,7 +1063,21 @@
   .worksheet-action-row td { padding-top: 0; }
   .worksheet-title-cell { width: 100%; min-width: 200px; }
   .worksheet-count-cell { white-space: nowrap; }
-  .worksheet-topics-cell { min-width: 160px; }
+  .worksheet-topics-cell { min-width: 240px; }
+  .worksheet-date-cell { font-size: .75rem; color: var(--muted); }
+  .worksheet-date-cell time { display: block; white-space: nowrap; }
+  .worksheet-issued-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.2em;
+    height: 1.2em;
+    border-radius: 50%;
+    background: #e6f4e7;
+    color: var(--ok);
+    font-size: .8rem;
+    vertical-align: baseline;
+  }
   .progress-assignment { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
 
   .task-meta a, .task-meta .link-btn {
