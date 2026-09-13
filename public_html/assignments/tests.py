@@ -74,6 +74,44 @@ class AssignFlowTests(TestCase):
         self.assertFalse(Assignment.objects.filter(
             student=foreign_student).exists())
 
+    def test_teacher_changes_one_assignment_status_from_worksheet(self):
+        assignment = Assignment.objects.create(
+            worksheet=self.worksheet, student=self.student,
+            assigned_by=self.teacher)
+        self.client.login(username='teacher1', password='pass12345')
+
+        page = self.client.get(reverse(
+            'worksheet_detail', args=[self.worksheet.pk]))
+        self.assertContains(
+            page, reverse('review_assignment', args=[assignment.pk]))
+        self.assertContains(page, f'assignment-status-{assignment.pk}')
+
+        response = self.client.post(reverse(
+            'assignment_status_update', args=[assignment.pk]), {
+                'status': Assignment.STATUS_SUBMITTED,
+            })
+
+        self.assertRedirects(
+            response, reverse('worksheet_detail', args=[self.worksheet.pk]))
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, Assignment.STATUS_SUBMITTED)
+        self.assertIsNotNone(assignment.submitted_at)
+
+    def test_teacher_cannot_change_foreign_assignment_status(self):
+        other_teacher = make_teacher('teacher2')
+        foreign_student = make_student(other_teacher, 'student2')
+        foreign = make_assignment(other_teacher, foreign_student)
+        self.client.login(username='teacher1', password='pass12345')
+
+        response = self.client.post(reverse(
+            'assignment_status_update', args=[foreign.pk]), {
+                'status': Assignment.STATUS_REVIEWED,
+            })
+
+        self.assertEqual(response.status_code, 404)
+        foreign.refresh_from_db()
+        self.assertEqual(foreign.status, Assignment.STATUS_ASSIGNED)
+
 
 class SuperuserStudentVisibilityTests(TestCase):
     def setUp(self):

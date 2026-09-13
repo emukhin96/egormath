@@ -54,7 +54,7 @@
 </div>
 
 <div class="card worksheet-items-card">
-  <h2>Задачи листка
+  <h2 class="worksheet-items-heading"><span>Задачи листка</span>
     <label class="ws-toggle" title="Показывать ответы и решения задач">
       <input type="checkbox" id="toggle-answers">
       <span class="ws-toggle-slider"></span>
@@ -119,13 +119,13 @@
           {% include 'problems/_task_images.html' with images=row.statement_images %}
           {% include 'problems/_task_answers.html' with task=item.task subitems=item.task.subitems.all %}
           <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
-          <div class="task-meta">
-            <a class="task-id" href="{% url 'task_detail' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}
-            · <button type="button" class="link-btn ws-star-reset"
+          <div class="task-meta worksheet-task-meta">
+            <span class="task-meta-item"><a class="task-id" href="{% url 'task_detail' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}</span>
+            <span class="task-meta-item"><button type="button" class="link-btn ws-star-reset"
                       data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
-                      title="Убрать все звёзды только в этом листке">сбросить звёзды</button>
-            · <span data-mask-links></span>
-            <form method="post" class="inline-form" data-autosave="change"
+                      title="Убрать все звёзды только в этом листке">сбросить звёзды</button></span>
+            <span class="task-meta-item" data-mask-links></span>
+            <form method="post" class="inline-form task-meta-item" data-autosave="change"
                   action="{% url 'task_manage' item.task.pk %}">
               {% csrf_token %}
               <input type="hidden" name="block" value="answer_policy">
@@ -137,7 +137,7 @@
                 <span class="ws-toggle-text">только полный</span>
               </label>
             </form>
-            <form method="post" class="inline-form" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button class="link-btn" title="Добавить независимую копию следующей строкой">дублировать</button></form>
+            <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button class="link-btn" title="Добавить независимую копию следующей строкой">дублировать</button></form>
             {% if item.task.subitems.all %}
             <label class="inline-label">колонки
               <input type="number" name="columns" form="settings-{{ item.pk }}"
@@ -383,34 +383,25 @@
   {% endif %}
 
   {% if assignments %}
-  <h2>Назначения</h2><p><a class="btn btn-secondary" href="{% url 'worksheet_progress' worksheet.pk %}">Прогресс учеников</a></p>
-  <table class="list">
-    <tr><th>Ученик</th><th>Статус</th><th>Самопроверка</th><th></th></tr>
-    {% for a in assignments %}
-    <tr>
-      <td>{{ a.student.get_full_name|default:a.student.username }}</td>
-      <td><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span></td>
-      <td>
-        {% if a.self_check_total %}
-          <strong>{{ a.self_check_total }}</strong>
-          {% for item in a.self_check_tasks %}
-          <span class="check-summary-item">№{{ item.numbers }}: {{ item.attempts }}
-            {% if item.latest.result == 'ok' %}<span class="badge badge-reviewed">верно</span>
-            {% elif item.latest.result == 'wrong' %}<span class="badge badge-returned">неверно</span>
-            {% elif item.latest.result == 'incomplete' %}<span class="badge badge-assigned">частично</span>
-            {% elif item.latest %}<span class="badge badge-assigned">не разобрано</span>
-            {% else %}<span class="muted">без деталей</span>{% endif %}
-          </span>
-          {% endfor %}
-        {% else %}<span class="muted">—</span>{% endif %}
-      </td>
-      <td>{% if a.status == 'submitted' or a.status == 'reviewed' %}
-        <a class="btn btn-small btn-secondary" href="{% url 'review_assignment' a.pk %}">
-          {% if a.status == 'submitted' %}Проверить{% else %}Открыть{% endif %}</a>
-      {% endif %}</td>
-    </tr>
-    {% endfor %}
-  </table>
+  <h2>Назначения</h2>
+  <p><a class="btn btn-secondary" href="{% url 'worksheet_progress' worksheet.pk %}">Полный экран прогресса</a></p>
+  <div data-progress-table data-progress-url="{% url 'worksheet_progress' worksheet.pk %}?manage=1">
+    {% include 'assignments/_progress_table.html' with people=progress_people point_groups=point_groups manage_status=True %}
+  </div>
+  {% include 'assignments/_progress_dialog.html' %}
+  {% for a in assignments %}
+  <dialog id="assignment-status-{{ a.pk }}" class="dialog">
+    <form method="post" action="{% url 'assignment_status_update' a.pk %}">
+      {% csrf_token %}
+      <div class="dialog-heading"><h3>{{ a.student.get_full_name|default:a.student.username }}</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
+      <label for="assignment-status-choose-{{ a.pk }}">Статус работы</label>
+      <select id="assignment-status-choose-{{ a.pk }}" name="status">
+        {% for value, label in status_choices %}<option value="{{ value }}"{% if a.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <div class="form-buttons"><button type="submit" class="btn">Сохранить</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
+    </form>
+  </dialog>
+  {% endfor %}
   {% endif %}
 </div>
 
@@ -426,8 +417,6 @@
         {% if link.is_active %}Отключить{% else %}Включить{% endif %}</button>
     </form>
   </p>
-  {% empty %}
-  <p class="muted">Ссылок нет. Любой человек с такой ссылкой видит листок без ответов и без входа на сайт.</p>
   {% endfor %}
   <form method="post" action="{% url 'share_create' worksheet.pk %}">
     {% csrf_token %}
@@ -476,4 +465,5 @@
 <script defer src="{% static 'js/answers-toggle.js' %}"></script>
 <script defer src="{% static 'js/builder.js' %}?v=3"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
+{% if assignments %}<script defer src="{% static 'js/teacher_progress.js' %}?v=6"></script>{% endif %}
 {% endblock %}

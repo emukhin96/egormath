@@ -5,8 +5,8 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Оформление</p>
   <h2>Быстрые настройки</h2>
-  <p class="sidebar-copy">Выберите оформление. PDF соберётся только после
-    нажатия кнопки ниже.</p>
+  <p class="sidebar-copy">Первая версия PDF собирается автоматически.
+    После изменения настроек нажмите кнопку ниже, чтобы пересобрать её.</p>
   {% if variant == 'student' %}<p class="sidebar-copy">После успешной сборки
     это оформление станет вариантом по умолчанию для учеников.</p>{% endif %}
   <div class="sidebar-switches" id="pdf-switches">
@@ -60,8 +60,9 @@
 <div class="page-head">
   <div><span class="page-eyebrow">PDF · {{ variant_label }}</span>
     <h1>{{ worksheet.title }}</h1>
-    <p class="page-subtitle">Правьте tex-код слева и собирайте PDF вручную.
-      Изменения кода не сохраняются в листок — это разовая сборка.</p>
+    <p class="page-subtitle">Первая версия собирается автоматически. После
+      правки tex-кода или настроек запустите повторную сборку вручную.
+      Изменения кода не сохраняются в листок.</p>
   </div>
 </div>
 

@@ -9,7 +9,7 @@
     <h1>{{ worksheet.title }}</h1>
     <p class="page-subtitle">{{ collection.source }} · {{ collection.source_path|join:' › ' }}</p>
   </div>
-  <div class="form-buttons">
+  <div class="form-buttons collection-head-actions">
     {% if rows %}
     <label class="ws-toggle" title="Показывать ответы и решения задач">
       <input type="checkbox" id="toggle-answers">

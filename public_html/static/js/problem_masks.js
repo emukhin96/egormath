@@ -76,7 +76,7 @@
           fields.querySelectorAll('.mask-text,.mask-order-items li').forEach(renderMathContent);
         }
         var editButton=button(o.mask?'Настроить':'Добавить маску','maskEdit',o.id||'');
-        if(links){editButton.className='link-btn';editButton.textContent=(o.mask?'настроить маску':'добавить маску')+(o.id?' · '+o.label:'');links.append(editButton,' · ');}else row.appendChild(editButton);
+        if(links){editButton.className='link-btn';editButton.textContent=(o.mask?'настроить маску':'добавить маску')+(o.id?' · '+o.label:'');if(links.children.length)links.append(' · ');links.append(editButton);}else row.appendChild(editButton);
         actions.appendChild(row);
         if(window.EgorMask)window.EgorMask.enhance(row);
       }
