@@ -1860,7 +1860,9 @@ class ShareLinkTests(TestCase):
         self.assertContains(response, 'task-row')
         html = response.content.decode()
         self.assertLess(html.index('class="stars"'),
-                        html.index('class="ws-num"'))
+                        html.index('class="math-content task-text"'))
+        self.assertLess(html.index('class="ws-num"'),
+                        html.index('class="task-copy"'))
 
     def test_inactive_link_404(self):
         self.link.is_active = False

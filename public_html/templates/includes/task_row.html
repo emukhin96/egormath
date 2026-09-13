@@ -1,7 +1,9 @@
 {% load task_extras %}
-{# Звёзды и номер — префикс первой строки; продолжение условия идёт под ними. #}
+{# Номер — отдельная колонка; продолжение условия идёт под звёздами, но не под номером. #}
 <div class="task-row">
-  {% if stars %}<span class="stars">{% for _ in ''|center:stars %}★{% endfor %}</span>{% endif %}
   <span class="ws-num">{{ number }}.</span>
-  <span class="math-content task-text">{{ text|web_text }}</span>
+  <span class="task-copy">
+    {% if stars %}<span class="stars">{% for _ in ''|center:stars %}★{% endfor %}</span>{% endif %}
+    <span class="math-content task-text">{{ text|web_text }}</span>
+  </span>
 </div>

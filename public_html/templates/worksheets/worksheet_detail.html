@@ -60,7 +60,7 @@
       <span class="ws-toggle-slider"></span>
       <span class="ws-toggle-text">ответы и решения</span>
     </label>
-    <label class="ws-toggle"><input type="checkbox" id="toggle-masks"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Маски ответов</span></label>
+    <label class="ws-toggle"><input type="checkbox" id="toggle-masks"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">маски ответов</span></label>
   </h2>
   {% if deleted_items %}
   <div class="undo-bar">
@@ -97,12 +97,14 @@
           {% include 'worksheets/_common_condition.html' %}
           <div class="task-line">
             <span class="ws-num">{{ row.number }}.</span>
-            <span class="ws-stars" data-form="settings-{{ item.pk }}"
-                  data-effective="{{ item.effective_stars }}"
-                  title="Сложность в листке — кликните по звезде">
-              {% for value, label in stars_choices %}{% if value %}<button type="button" class="ws-star{% if item.effective_stars >= value %} on{% endif %}" data-value="{{ value }}">★</button>{% endif %}{% endfor %}
+            <span class="task-copy">
+              <span class="ws-stars" data-form="settings-{{ item.pk }}"
+                    data-effective="{{ item.effective_stars }}"
+                    title="Сложность в листке — кликните по звезде">
+                {% for value, label in stars_choices %}{% if value %}<button type="button" class="ws-star{% if item.effective_stars >= value %} on{% endif %}" data-value="{{ value }}">★</button>{% endif %}{% endfor %}
+              </span>
+              <span class="math-content task-text">{{ row.statement|web_text }}</span>
             </span>
-            <span class="math-content task-text">{{ row.statement|web_text }}</span>
           </div>
           {% if item.task.subitems.all %}
           <ol class="subitems">
