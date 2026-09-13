@@ -63,7 +63,7 @@
     <label class="ws-toggle"><input type="checkbox" id="toggle-masks"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Маски ответов</span></label>
   </h2>
   {% if deleted_items %}
-  <div class="undo-bar" data-auto-dismiss>
+  <div class="undo-bar">
     {% for d in deleted_items %}
     <span>{% if d.task_id %}Задача <a href="{% url 'task_detail' d.task.pk %}">#{{ d.task.pk }}</a> удалена из листка.{% elif d.is_rubric %}Рубрика «{{ d.rubric }}» удалена из листка.{% else %}Текстовый элемент удалён из листка.{% endif %}</span>
     {% endfor %}
@@ -125,11 +125,12 @@
                       data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
                       title="Убрать все звёзды только в этом листке">сбросить звёзды</button></span>
             <span class="task-meta-item" data-mask-links></span>
-            <form method="post" class="inline-form task-meta-item" data-autosave="change"
-                  action="{% url 'task_manage' item.task.pk %}">
+            <form method="post" class="inline-form task-meta-item" data-answer-policy-form
+                  action="{% url 'task_manage' item.task.pk %}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}">
               {% csrf_token %}
               <input type="hidden" name="block" value="answer_policy">
-              <input type="hidden" name="scope" value="global">
+              <input type="hidden" name="worksheet" value="{{ worksheet.pk }}">
+              <input type="hidden" name="item" value="{{ item.pk }}">
               <label class="ws-toggle" title="Переключить тип ответа и сразу сохранить">
                 <span class="ws-toggle-text">краткий ответ</span>
                 <input type="checkbox" name="full_answer_only"{% if item.task.full_answer_only %} checked{% endif %}>
@@ -396,7 +397,7 @@
       <div class="dialog-heading"><h3>{{ a.student.get_full_name|default:a.student.username }}</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
       <label for="assignment-status-choose-{{ a.pk }}">Статус работы</label>
       <select id="assignment-status-choose-{{ a.pk }}" name="status">
-        {% for value, label in status_choices %}<option value="{{ value }}"{% if a.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        {% for value, label in status_choices %}<option value="{{ value }}"{% if a.status == value %} selected{% endif %}{% if value == 'reviewed' and a.status != 'submitted' and a.status != 'reviewed' %} disabled{% endif %}>{{ label }}</option>{% endfor %}
       </select>
       <div class="form-buttons"><button type="submit" class="btn">Сохранить</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
     </form>
@@ -463,7 +464,7 @@
 <script defer src="{% static 'js/problem_editor.js' %}?v=2"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}"></script>
-<script defer src="{% static 'js/builder.js' %}?v=3"></script>
+<script defer src="{% static 'js/builder.js' %}?v=4"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
 {% if assignments %}<script defer src="{% static 'js/teacher_progress.js' %}?v=6"></script>{% endif %}
 {% endblock %}

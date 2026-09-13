@@ -193,7 +193,15 @@ def assignment_list(request):
     for group in groups_on_page:
         existing = by_worksheet.get(group['worksheet_id'], {})
         group['recipient_rows'] = [
-            {'profile': profile, 'assignment': existing.get(profile.user_id)}
+            {
+                'profile': profile,
+                'assignment': existing.get(profile.user_id),
+                'can_mark_reviewed': bool(
+                    existing.get(profile.user_id)
+                    and existing[profile.user_id].status in (
+                        Assignment.STATUS_SUBMITTED,
+                        Assignment.STATUS_REVIEWED)),
+            }
             for profile in all_profiles]
     worksheets = Worksheet.visible_to(request.user).order_by('-updated_at')
     return render(request, 'assignments/assignment_list.html', {
@@ -218,6 +226,7 @@ def assignment_list(request):
             'q': q, 'status': status, 'student': student_id,
             'worksheet': worksheet_id, 'due': due, 'owner': owner_id,
         },
+        'return_query': request.GET.urlencode(),
     })
 
 
@@ -244,6 +253,7 @@ def assignment_group_update(request, worksheet_id):
     allow_photos = first.allow_photos if first else True
     due_at = first.due_at if first else None
     now = timezone.now()
+    blocked_review = 0
     with transaction.atomic():
         for student_id in selected_ids:
             assignment, _ = Assignment.objects.get_or_create(
@@ -257,17 +267,31 @@ def assignment_group_update(request, worksheet_id):
             status = request.POST.get(f'status_{student_id}', '')
             if status not in status_values:
                 status = assignment.status
-            _set_assignment_status(assignment, status, now)
+            if not _set_assignment_status(assignment, status, now):
+                blocked_review += 1
         worksheet.assignments.filter(
             student_id__in=set(existing) - selected_ids).delete()
-    messages.success(request, 'Ученики и статусы задания сохранены.')
-    return redirect('assignment_list')
+    if blocked_review:
+        messages.warning(
+            request,
+            'Ученики сохранены. Проверенной можно отметить только '
+            'отправленную работу.')
+    else:
+        messages.success(request, 'Ученики и статусы задания сохранены.')
+    target = reverse('assignment_list')
+    if request.GET:
+        target += f'?{request.GET.urlencode()}'
+    return redirect(target)
 
 
 def _set_assignment_status(assignment, status, now=None):
     """Меняет статус назначения и согласованные с ним даты."""
+    if (status == Assignment.STATUS_REVIEWED
+            and assignment.status not in (
+                Assignment.STATUS_SUBMITTED, Assignment.STATUS_REVIEWED)):
+        return False
     if assignment.status == status:
-        return
+        return True
     now = now or timezone.now()
     assignment.status = status
     if status == Assignment.STATUS_ASSIGNED:
@@ -281,6 +305,7 @@ def _set_assignment_status(assignment, status, now=None):
     elif status == Assignment.STATUS_REVIEWED:
         assignment.reviewed_at = assignment.reviewed_at or now
     assignment.save()
+    return True
 
 
 @teacher_required
@@ -292,8 +317,12 @@ def assignment_status_update(request, pk):
     if status not in dict(Assignment.STATUS_CHOICES):
         messages.error(request, 'Неизвестный статус работы.')
     else:
-        _set_assignment_status(assignment, status)
-        messages.success(request, 'Статус работы сохранён.')
+        if _set_assignment_status(assignment, status):
+            messages.success(request, 'Статус работы сохранён.')
+        else:
+            messages.error(
+                request,
+                'Проверенной можно отметить только отправленную работу.')
     return redirect('worksheet_detail', pk=assignment.worksheet_id)
 
 

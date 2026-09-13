@@ -7,10 +7,6 @@
     var autosave = window.EgorAutosave.autosave;
     var showSaved = window.EgorAutosave.showSaved;
 
-    document.querySelectorAll('[data-auto-dismiss]').forEach(function (bar) {
-      setTimeout(function () { bar.hidden = true; }, 8000);
-    });
-
     // --- Заголовок и подзаголовок: редактирование кликом по тексту ---
     document.querySelectorAll('.ws-editable').forEach(function (span) {
       var input = document.querySelector(

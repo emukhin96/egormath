@@ -109,6 +109,20 @@
       }
     }catch(error){api.toast(false,error.message);}finally{loading=false;trigger.disabled=false;}
   });
+  document.addEventListener('change',async function(e){
+    var toggle=e.target.closest('[data-answer-policy-form] input[name="full_answer_only"]');
+    if(!toggle)return;
+    var policyForm=toggle.form;
+    var root=policyForm.closest('.ws-item')?.querySelector('[data-worksheet-mask]');
+    if(!root)return;
+    var previous=!toggle.checked;
+    toggle.disabled=true;
+    try{
+      var result=await api.save(root,new FormData(policyForm),policyForm);
+      if(!result)toggle.checked=previous;
+    }catch(error){toggle.checked=previous;api.toast(false,error.message);}
+    finally{toggle.disabled=false;}
+  });
   form.elements.source.addEventListener('change',function(){source();form.elements.reference.value=current[form.elements.source.value]||'';});
   form.querySelector('[data-mask-generate]').addEventListener('click',async function(){
     this.disabled=true;

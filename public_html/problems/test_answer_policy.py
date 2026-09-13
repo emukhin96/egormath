@@ -43,6 +43,20 @@ class AnswerPolicyTests(TestCase):
         self.assertEqual(copy.subitems.get().answer_mask, sub.answer_mask)
         self.assertTrue(copy.make_variant(self.teacher, standalone=True).full_answer_only)
 
+    def test_worksheet_toggle_uses_scope_dialog_with_local_primary(self):
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.ws.pk]))
+
+        self.assertContains(response, 'data-answer-policy-form')
+        self.assertContains(
+            response, f'name="worksheet" value="{self.ws.pk}"')
+        self.assertContains(response, f'name="item" value="{self.item.pk}"')
+        self.assertNotContains(response, 'name="scope" value="global"')
+        html = response.content.decode()
+        self.assertLess(
+            html.index('data-save-scope="local"'),
+            html.index('data-save-scope="global"'))
+
     def test_create_full_answer_task(self):
         response = self.client.post(reverse('task_create'), {
             'text_latex': 'Новая развёрнутая', 'stars': 0, 'columns': 1,
