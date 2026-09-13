@@ -1763,15 +1763,11 @@
     margin-top: -2px;
   }
 
-  /* Колонки строки задачи. rem, не em: иначе --task-indent на h2
-     (1.25rem) становится заметно шире, чем у основного текста. */
+  /* Отступ вложенных элементов равен колонке номера и межколоночному зазору. */
   .task-row,
   .ws-view {
-    --task-stars-col: 52px;
     --task-num-col: 2rem;
-    --task-indent: calc(
-      var(--task-stars-col) + var(--task-num-col) + 2 * var(--space-2)
-    );
+    --task-indent: calc(var(--task-num-col) + var(--space-2));
   }
 
   /* Конструктор: номер остаётся в отдельной колонке списка, а звёзды входят
@@ -1796,6 +1792,10 @@
 
   .task-line .task-copy {
     min-width: 0;
+  }
+
+  #ws-items .ws-content > .task-images {
+    margin-left: calc(2rem + 6px);
   }
 
   .task-line .task-main .task-text {
@@ -2725,6 +2725,10 @@
     line-height: 1.5;
   }
 
+  .ws-item:has(> .ws-body > .drag-handle) > .worksheet-task-meta {
+    margin-left: 28px;
+  }
+
   .worksheet-task-meta .task-meta-item {
     display: inline-flex;
     align-items: center;
@@ -3527,8 +3531,7 @@
 
     .ws-view h2,
     .ws-view .ws-text,
-    .ws-view .ws-rubric-note,
-    .ws-view .task-images {
+    .ws-view .ws-rubric-note {
       margin-left: 0;
     }
 

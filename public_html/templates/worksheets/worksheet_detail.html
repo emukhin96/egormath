@@ -123,33 +123,6 @@
           {% include 'problems/_task_images.html' with images=row.statement_images %}
           {% include 'problems/_task_answers.html' with task=item.task subitems=item.task.subitems.all %}
           <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
-          <div class="task-meta worksheet-task-meta">
-            <span class="task-meta-item"><a class="task-id" href="{% url 'task_detail' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}</span>
-            <span class="task-meta-item"><button type="button" class="link-btn ws-star-reset"
-                      data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
-                      title="Убрать все звёзды только в этом листке">сбросить звёзды</button></span>
-            <span class="task-meta-item" data-mask-links></span>
-            <form method="post" class="inline-form task-meta-item" data-answer-policy-form
-                  action="{% url 'task_manage' item.task.pk %}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}">
-              {% csrf_token %}
-              <input type="hidden" name="block" value="answer_policy">
-              <input type="hidden" name="worksheet" value="{{ worksheet.pk }}">
-              <input type="hidden" name="item" value="{{ item.pk }}">
-              <label class="ws-toggle" title="Переключить тип ответа и сразу сохранить">
-                <span class="ws-toggle-text">краткий ответ</span>
-                <input type="checkbox" name="full_answer_only"{% if item.task.full_answer_only %} checked{% endif %}>
-                <span class="ws-toggle-slider"></span>
-                <span class="ws-toggle-text">только полный</span>
-              </label>
-            </form>
-            <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button class="link-btn" title="Добавить независимую копию следующей строкой">дублировать</button></form>
-            {% if item.task.subitems.all %}
-            <label class="inline-label">колонки
-              <input type="number" name="columns" form="settings-{{ item.pk }}"
-                     min="0" max="6" value="{{ item.columns_override|default_if_none:'' }}"
-                     placeholder="{{ item.task.columns }}" class="ws-columns"></label>
-            {% endif %}
-          </div>
         </div>
 
         {% elif item.is_rubric %}
@@ -212,6 +185,33 @@
       </div>
 
       {% if item.task_id %}
+      <div class="task-meta worksheet-task-meta">
+        <span class="task-meta-item"><a class="task-id" href="{% url 'task_detail' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}</span>
+        <span class="task-meta-item"><button type="button" class="link-btn ws-star-reset"
+                  data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
+                  title="Убрать все звёзды только в этом листке">сбросить звёзды</button></span>
+        <span class="task-meta-item" data-mask-links></span>
+        <form method="post" class="inline-form task-meta-item" data-answer-policy-form
+              action="{% url 'task_manage' item.task.pk %}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}">
+          {% csrf_token %}
+          <input type="hidden" name="block" value="answer_policy">
+          <input type="hidden" name="worksheet" value="{{ worksheet.pk }}">
+          <input type="hidden" name="item" value="{{ item.pk }}">
+          <label class="ws-toggle" title="Переключить тип ответа и сразу сохранить">
+            <span class="ws-toggle-text">краткий ответ</span>
+            <input type="checkbox" name="full_answer_only"{% if item.task.full_answer_only %} checked{% endif %}>
+            <span class="ws-toggle-slider"></span>
+            <span class="ws-toggle-text">только полный</span>
+          </label>
+        </form>
+        <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button class="link-btn" title="Добавить независимую копию следующей строкой">дублировать</button></form>
+        {% if item.task.subitems.all %}
+        <label class="inline-label">колонки
+          <input type="number" name="columns" form="settings-{{ item.pk }}"
+                 min="0" max="6" value="{{ item.columns_override|default_if_none:'' }}"
+                 placeholder="{{ item.task.columns }}" class="ws-columns"></label>
+        {% endif %}
+      </div>
       <dialog id="vis-{{ item.pk }}" class="dialog">
         <form method="post" action="{% url 'worksheet_item_visibility' worksheet.pk item.pk %}">
           {% csrf_token %}
