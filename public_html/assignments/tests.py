@@ -224,6 +224,26 @@ class AssignmentWorkspaceTests(TestCase):
             list(response.context['assignments']),
             [older_submitted, submitted])
 
+    def test_catalog_dialog_updates_recipients_and_statuses(self):
+        existing = Assignment.objects.create(
+            worksheet=self.worksheet, student=self.student,
+            assigned_by=self.teacher)
+        response = self.client.get(reverse('assignment_list'))
+        self.assertContains(response, 'data-assignment-group-form')
+        self.assertContains(response, 'Изменить')
+
+        response = self.client.post(reverse(
+            'assignment_group_update', args=[self.worksheet.pk]), {
+                'students': [self.student2.pk],
+                f'status_{self.student2.pk}': Assignment.STATUS_REVIEWED,
+            })
+        self.assertRedirects(response, reverse('assignment_list'))
+        self.assertFalse(Assignment.objects.filter(pk=existing.pk).exists())
+        replacement = Assignment.objects.get(
+            worksheet=self.worksheet, student=self.student2)
+        self.assertEqual(replacement.status, Assignment.STATUS_REVIEWED)
+        self.assertIsNotNone(replacement.reviewed_at)
+
     def test_create_for_group_and_student_without_duplicates(self):
         response = self.client.post(reverse('assignment_create'), {
             'worksheet': self.worksheet.pk,
@@ -1237,6 +1257,51 @@ class AutoCheckFlowTests(TestCase):
         self.assertEqual(
             [target['result'] for target in attempt.snapshot['targets']],
             ['ok', 'wrong'])
+
+    def test_each_subitem_has_own_check_button_and_result(self):
+        self.assignment.check_visibility = Assignment.CHECK_LIVE
+        self.assignment.save()
+        a = TaskSubitem.objects.create(
+            task=self.task, order=1, text_latex='а', answer_mask='{{number: 1}}')
+        b = TaskSubitem.objects.create(
+            task=self.task, order=2, text_latex='б', answer_mask='{{number: 2}}')
+        response = self.client.get(self.detail)
+        self.assertContains(response, 'name="check_subitem"', count=2)
+        self.assertContains(response, f'value="{a.pk}"')
+        self.assertContains(response, f'value="{b.pk}"')
+
+        response = self.client.post(
+            reverse('check_task', args=[self.assignment.pk, self.task.pk]),
+            {
+                'check_subitem': str(a.pk),
+                f'task{self.task.pk}_sub{a.pk}_s1': '1',
+                f'task{self.task.pk}_sub{b.pk}_s1': '3',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.json()['checks'], {
+            f'task{self.task.pk}_sub{a.pk}': 'ok',
+            f'task{self.task.pk}_sub{a.pk}_s1': 'ok',
+        })
+        submission = Submission.objects.get(
+            assignment=self.assignment, task=self.task)
+        parts = {part.subitem_id: part for part in submission.parts.all()}
+        self.assertTrue(parts[a.pk].check_revealed)
+        self.assertFalse(parts[b.pk].check_revealed)
+        attempt = submission.check_history.get()
+        self.assertEqual(attempt.result, SubmissionCheckAttempt.RESULT_OK)
+        self.assertEqual(
+            [target['id'] for target in attempt.snapshot['targets']], [a.pk])
+
+    def test_check_rejects_subitem_from_another_task(self):
+        self.assignment.check_visibility = Assignment.CHECK_LIVE
+        self.assignment.save()
+        foreign = TaskSubitem.objects.create(
+            task=Task.objects.create(text_latex='Чужая задача'),
+            order=1, text_latex='а', answer_mask='{{number: 1}}')
+        response = self.client.post(
+            reverse('check_task', args=[self.assignment.pk, self.task.pk]),
+            {'check_subitem': str(foreign.pk)})
+        self.assertEqual(response.status_code, 404)
 
     def test_partial_subitems_are_recorded_as_incomplete(self):
         self.assignment.check_visibility = Assignment.CHECK_LIVE

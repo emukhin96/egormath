@@ -27,10 +27,6 @@
   Работа возвращена на доработку. Задачи с комментарием учителя отмечены в списке справа — исправьте их и отправьте снова.
 </div>
 {% endif %}
-{% if can_check %}
-<p class="helptext">Кнопка «Проверить» у задачи сверяет ваш ответ с эталоном. Итоговую отметку ставит учитель.</p>
-{% endif %}
-
 {# Режим change, не debounce: debounce перехватывает submit, а в форме есть кнопки с formaction. #}
 <form method="post" action="{% url 'save_answers' assignment.pk %}" id="answers-form"
       {% if editable %}data-autosave="change"{% endif %}>
@@ -77,6 +73,12 @@
         {% if editable or sr.part.has_mask_values or not sr.part.legacy_answer %}
         <div class="subitem-answer">
           {% include 'assignments/_mask.html' with fragments=sr.fragments editable=editable show_checks=show_checks %}
+          {% if can_check and sr.spec %}
+          <button type="submit" class="btn btn-small btn-secondary subitem-check"
+                  data-check-task="{{ row.prefix }}" data-check-part="{{ sr.subitem.pk }}"
+                  name="check_subitem" value="{{ sr.subitem.pk }}"
+                  formaction="{% url 'check_task' assignment.pk row.task.pk %}" formmethod="post">Проверить</button>
+          {% endif %}
         </div>
         {% endif %}
         {% elif sr.part.legacy_answer or not editable %}
@@ -118,7 +120,7 @@
       {# Без маски сверять нечего: кнопка неактивна #}
       <button type="submit" class="btn btn-small btn-secondary" data-check-task="{{ row.prefix }}"
               formaction="{% url 'check_task' assignment.pk row.task.pk %}" formmethod="post"
-              {% if not row.short_answer %}disabled title="У этой задачи нет маски ответа — решение проверит учитель"{% endif %}>Проверить</button>
+              {% if row.subrows %}hidden{% elif not row.short_answer %}disabled title="У этой задачи нет маски ответа — решение проверит учитель"{% endif %}>Проверить</button>
       {% endif %}
       {% if can_upload %}
       {# Файл привязан к отдельной multipart-форме (атрибут form): формы не вкладываются #}
@@ -159,12 +161,14 @@
   {% endfor %}
 
   {% if editable %}
-  <div class="card">
-    <button type="submit" class="btn btn-secondary">Сохранить черновик</button>
-    <button type="submit" class="btn" id="submit-assignment"
-            formaction="{% url 'submit_assignment' assignment.pk %}">
-      Отправить на проверку</button>
+  <div class="card assignment-submit-card">
     <span class="helptext">После отправки изменить ответы будет нельзя.</span>
+    <div class="form-buttons">
+      <button type="submit" class="btn btn-secondary">Сохранить черновик</button>
+      <button type="submit" class="btn" id="submit-assignment"
+              formaction="{% url 'submit_assignment' assignment.pk %}">
+        Отправить на проверку</button>
+    </div>
   </div>
   {% endif %}
 </form>
@@ -190,10 +194,10 @@
 {% endblock %}
 {% block extra_js %}
 <script defer src="{% static 'js/check_badge.js' %}"></script>
-<script defer src="{% static 'js/assignment.js' %}?v=2"></script>
+<script defer src="{% static 'js/assignment.js' %}?v=3"></script>
 {% if editable %}
 <script defer src="{% static 'js/mask.js' %}?v=5"></script>
-<script defer src="{% static 'js/numberline.js' %}?v=4"></script>
+<script defer src="{% static 'js/numberline.js' %}?v=5"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script>
 <script defer src="{% static 'js/formula.js' %}"></script>
 {% endif %}

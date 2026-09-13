@@ -96,13 +96,34 @@
   </div>
   {% if worksheet_groups %}
   <div class="catalog-table-wrap"><table class="list assignment-sheet-table">
-    <thead><tr><th>Листок</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Учеников</th><th>На проверке</th><th>Проверено</th><th>Последняя выдача</th><th>Ближайший срок</th></tr></thead>
+    <thead><tr><th>Листок</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Учеников</th><th>На проверке</th><th>Проверено</th><th>Последняя выдача</th><th>Ближайший срок</th><th></th></tr></thead>
     <tbody>{% for group in worksheet_groups %}<tr>
       <td><a class="assignment-title" href="{% url 'worksheet_progress' group.worksheet_id %}">{{ group.worksheet__title }}</a></td>
       {% if request.user.is_superuser %}<td>{% if group.worksheet__owner__first_name or group.worksheet__owner__last_name %}{{ group.worksheet__owner__first_name }} {{ group.worksheet__owner__last_name }}{% else %}{{ group.worksheet__owner__username }}{% endif %}</td>{% endif %}
       <td>{{ group.students_total }}</td><td>{{ group.submitted_total }}</td><td>{{ group.reviewed_total }}</td><td>{{ group.last_assigned|date:'d.m.Y' }}</td><td>{{ group.nearest_due|date:'d.m.Y H:i'|default:'—' }}</td>
+      <td><button type="button" class="btn btn-small btn-secondary" data-dialog-open="assignment-group-{{ group.worksheet_id }}">Изменить</button></td>
     </tr>{% endfor %}</tbody>
   </table></div>
+  {% for group in worksheet_groups %}
+  <dialog id="assignment-group-{{ group.worksheet_id }}" class="dialog assignment-group-dialog">
+    <form method="post" action="{% url 'assignment_group_update' group.worksheet_id %}" data-assignment-group-form>
+      {% csrf_token %}
+      <div class="dialog-heading"><h3>{{ group.worksheet__title }}</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
+      <p class="helptext">Отметьте учеников и выберите текущий статус для каждого.</p>
+      <div class="assignment-recipient-list">
+        {% for row in group.recipient_rows %}
+        <div class="assignment-recipient-row">
+          <label><input type="checkbox" name="students" value="{{ row.profile.user_id }}"{% if row.assignment %} checked data-existing{% endif %}> <span>{{ row.profile.user.get_full_name|default:row.profile.user.username }}</span></label>
+          <select name="status_{{ row.profile.user_id }}" aria-label="Статус: {{ row.profile.user.get_full_name|default:row.profile.user.username }}">
+            {% for value, label in status_choices %}<option value="{{ value }}"{% if row.assignment.status == value or not row.assignment and value == 'assigned' %} selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        {% empty %}<p class="muted">Сначала добавьте учеников в разделе «Ученики».</p>{% endfor %}
+      </div>
+      <div class="form-buttons"><button type="submit" class="btn">Сохранить</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
+    </form>
+  </dialog>
+  {% endfor %}
   {% else %}
   <div class="empty-state">
     <h2>Работы не найдены</h2>
@@ -111,4 +132,11 @@
   {% endif %}
 </div>
 {% include 'includes/pagination.html' with page=page query=request.GET %}
+<script>
+document.addEventListener('submit', function (event) {
+  var form = event.target.closest('[data-assignment-group-form]');
+  if (!form || !form.querySelector('[data-existing]:not(:checked)')) return;
+  if (!confirm('Убрать выбранных учеников? Их ответы и история проверки этого листка будут удалены.')) event.preventDefault();
+});
+</script>
 {% endblock %}

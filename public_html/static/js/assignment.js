@@ -73,6 +73,7 @@
     var before = formSnapshot(form);
     button.disabled = true;
     var body = new FormData(form);
+    if (button.name) body.set(button.name, button.value);
     var enqueue = window.EgorAutosave?.enqueue || function (_, operation) { return operation(); };
     enqueue(form, function () { return fetch(url, {
       method: 'POST',

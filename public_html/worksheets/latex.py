@@ -16,6 +16,60 @@ VARIANT_OPTIONS = {
     'teacher': 'answers=inline,solutions',
 }
 
+PDF_OPTION_VALUES = {
+    'size': {'10pt', '11pt', '12pt'},
+    'paper': {'a4paper', 'a5paper'},
+    'font': {'cm', 'school', 'palatino'},
+    'diagn': {'off', 'on'},
+}
+EGOR_PACKAGE_RE = re.compile(r'\\usepackage(?:\[([^\]]*)\])?\{egor\}')
+
+
+def pdf_options_from_tex(tex):
+    """Извлекает только поддерживаемые быстрые настройки из TeX."""
+    document = re.search(r'\\documentclass(?:\[([^\]]*)\])?\{article\}', tex)
+    class_options = ((document.group(1) if document else '') or '').split(',')
+    package = EGOR_PACKAGE_RE.search(tex)
+    egor_options = ((package.group(1) if package else '') or '').split(',')
+    raw = {
+        'size': next((x.strip() for x in class_options
+                      if x.strip() in PDF_OPTION_VALUES['size']), '10pt'),
+        'paper': next((x.strip() for x in class_options
+                       if x.strip() in PDF_OPTION_VALUES['paper']), 'a4paper'),
+        'font': next((x.strip().split('=', 1)[1] for x in egor_options
+                      if x.strip().startswith('font=')), 'cm'),
+        'diagn': 'on' if 'diagn' in {x.strip() for x in egor_options} else 'off',
+    }
+    return {key: value for key, value in raw.items()
+            if value in PDF_OPTION_VALUES[key]}
+
+
+def apply_pdf_options(tex, options):
+    """Применяет сохранённое оформление к свежему TeX листка."""
+    current = pdf_options_from_tex(tex)
+    current.update({key: value for key, value in (options or {}).items()
+                    if key in PDF_OPTION_VALUES
+                    and value in PDF_OPTION_VALUES[key]})
+    tex = re.sub(
+        r'(\\documentclass)(?:\[[^\]]*\])?(\{article\})',
+        lambda match: (f'{match.group(1)}[{current["size"]},'
+                       f'{current["paper"]}]{match.group(2)}'),
+        tex, count=1)
+
+    def replace_package(match):
+        parts = [part.strip() for part in (match.group(1) or '').split(',')
+                 if part.strip()]
+        parts = [part for part in parts
+                 if not part.startswith('font=') and part != 'diagn']
+        if current['font'] != 'cm':
+            parts.append(f'font={current["font"]}')
+        if current['diagn'] == 'on':
+            parts.append('diagn')
+        return (f'\\usepackage[{",".join(parts)}]{{egor}}' if parts
+                else r'\usepackage{egor}')
+
+    return EGOR_PACKAGE_RE.sub(replace_package, tex, count=1)
+
 # TeX Live 2025-11 убрал \tbl_save_outer_table_cols: из ядра, а bidi
 # (xelatex, его подтягивает egor) всё ещё вставляет вызов в \@@array.
 # Без заглушки падают array/tabular/cases — в том числе формулы систем

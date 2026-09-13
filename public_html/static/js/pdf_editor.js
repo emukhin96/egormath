@@ -1,6 +1,6 @@
 /* Split-редактор PDF: слева tex-код, справа собранный PDF.
    «Собрать PDF» шлёт код на сервер и показывает результат в iframe;
-   быстрые переключатели (размер/шрифт/бумага) правят код и пересобирают. */
+   быстрые переключатели (размер/шрифт/бумага) только правят код. */
 (function () {
   'use strict';
 
@@ -87,6 +87,7 @@
       log.hidden = true;
       var body = new URLSearchParams();
       body.append('tex', source.value);
+      body.append('variant', root.dataset.variant);
       fetch(root.dataset.compileUrl, {
         method: 'POST',
         headers: {'X-CSRFToken': csrf,
@@ -135,7 +136,6 @@
       }
       source.value = tex;
       markActive();
-      compile();
     }
 
     function markActive() {
@@ -162,13 +162,13 @@
     });
 
     document.getElementById('compile-btn').addEventListener('click', compile);
+    var sidebarCompile = document.getElementById('sidebar-compile-btn');
+    if (sidebarCompile) sidebarCompile.addEventListener('click', compile);
     document.getElementById('reset-btn').addEventListener('click', function () {
       source.value = original.value;
       markActive();
-      compile();
     });
 
     markActive();
-    compile();
   });
 })();

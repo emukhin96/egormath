@@ -5,8 +5,10 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Оформление</p>
   <h2>Быстрые настройки</h2>
-  <p class="sidebar-copy">Типовые правки кода — в один клик. После
-    переключения PDF пересобирается сам.</p>
+  <p class="sidebar-copy">Выберите оформление. PDF соберётся только после
+    нажатия кнопки ниже.</p>
+  {% if variant == 'student' %}<p class="sidebar-copy">После успешной сборки
+    это оформление станет вариантом по умолчанию для учеников.</p>{% endif %}
   <div class="sidebar-switches" id="pdf-switches">
     <p class="sidebar-kicker">Размер текста</p>
     <div class="switch-group" data-switch="size">
@@ -33,6 +35,9 @@
       <button type="button" data-value="off">Обычный</button>
       <button type="button" data-value="on">Диагностика</button>
     </div>
+  </div>
+  <div class="sidebar-actions sidebar-compile">
+    <button type="button" class="btn" id="sidebar-compile-btn">Собрать PDF</button>
   </div>
 </section>
 <section class="sidebar-section">
@@ -62,6 +67,7 @@
 
 <div class="pdf-editor"
      data-compile-url="{% url 'worksheet_pdf_compile' worksheet.pk %}"
+     data-variant="{{ variant }}"
      data-filename="{{ pdf_filename }}">
   <div class="pdf-editor-pane">
     <div class="form-buttons pdf-editor-toolbar">

@@ -63,7 +63,7 @@
     <label class="ws-toggle"><input type="checkbox" id="toggle-masks"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Маски ответов</span></label>
   </h2>
   {% if deleted_items %}
-  <div class="undo-bar">
+  <div class="undo-bar" data-auto-dismiss>
     {% for d in deleted_items %}
     <span>{% if d.task_id %}Задача <a href="{% url 'task_detail' d.task.pk %}">#{{ d.task.pk }}</a> удалена из листка.{% elif d.is_rubric %}Рубрика «{{ d.rubric }}» удалена из листка.{% else %}Текстовый элемент удалён из листка.{% endif %}</span>
     {% endfor %}
@@ -125,6 +125,18 @@
                       data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
                       title="Убрать все звёзды только в этом листке">сбросить звёзды</button>
             · <span data-mask-links></span>
+            <form method="post" class="inline-form" data-autosave="change"
+                  action="{% url 'task_manage' item.task.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="block" value="answer_policy">
+              <input type="hidden" name="scope" value="global">
+              <label class="ws-toggle" title="Переключить тип ответа и сразу сохранить">
+                <span class="ws-toggle-text">краткий ответ</span>
+                <input type="checkbox" name="full_answer_only"{% if item.task.full_answer_only %} checked{% endif %}>
+                <span class="ws-toggle-slider"></span>
+                <span class="ws-toggle-text">только полный</span>
+              </label>
+            </form>
             <form method="post" class="inline-form" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button class="link-btn" title="Добавить независимую копию следующей строкой">дублировать</button></form>
             {% if item.task.subitems.all %}
             <label class="inline-label">колонки
@@ -241,10 +253,6 @@
     {% endwith %}
     {% endfor %}
   </div>
-  <p class="helptext">Перетаскивайте элементы за ⠿. Рубрика — самостоятельный
-    элемент: задачи ниже неё относятся к ней до следующей рубрики. Если рубрик
-    нет вовсе — в PDF список начнётся без заголовка. Снятые подпункты не попадут
-    в листок (текст задачи остаётся всегда).</p>
   {% else %}
   <p class="muted">Задач пока нет — найдите их в базе ниже или создайте новую.</p>
   {% endif %}

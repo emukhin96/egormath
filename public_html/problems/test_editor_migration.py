@@ -9,7 +9,8 @@ class LegacyAnswerMigrationTests(TransactionTestCase):
         executor = MigrationExecutor(connection)
         current = executor.loader.graph.leaf_nodes()
         before = [('problems', '0019_exam_line_items'),
-                  ('assignments', '0008_submissioncheckattempt')]
+                  ('assignments', '0008_submissioncheckattempt'),
+                  ('worksheets', '0017_collection_parent_topics')]
         try:
             executor.migrate(before)
             apps = executor.loader.project_state(before).apps
