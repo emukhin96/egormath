@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -941,6 +942,7 @@ class WorksheetViewTests(TestCase):
         self.assertNotIn(item.pk,
                          [r['item'].pk for r in response.context['rows']])
         self.assertContains(response, 'undo-bar')
+        self.assertNotContains(response, 'data-auto-dismiss')
         self.assertContains(response, 'ws-toast-src')
         self.assertContains(response, 'Задача удалена из листка.')
         self.assertNotIn(item.task.text_latex,
@@ -951,6 +953,18 @@ class WorksheetViewTests(TestCase):
         item.refresh_from_db()
         self.assertIsNone(item.deleted_at)
         self.assertContains(restore, 'Задача возвращена в листок.')
+
+    def test_undo_remains_available_while_item_is_trashed(self):
+        self.login_teacher()
+        item = self.worksheet.items.order_by('order').first()
+        item.deleted_at = timezone.now() - timedelta(minutes=5)
+        item.save(update_fields=['deleted_at'])
+
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.worksheet.pk]))
+
+        self.assertContains(response, 'undo-bar')
+        self.assertContains(response, 'Отменить')
 
     def test_second_remove_purges_previous_trash(self):
         # Отмена одноуровневая: новое удаление затирает прежний «мусор»

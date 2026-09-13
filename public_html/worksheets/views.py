@@ -310,8 +310,7 @@ def worksheet_detail(request, pk):
     # в поиске конструктора и не добавилась второй раз
     task_ids = list(worksheet.items.exclude(task_id=None)
                     .values_list('task_id', flat=True))
-    deleted_items = list(worksheet.items.filter(
-                         deleted_at__gte=timezone.now() - timedelta(seconds=12))
+    deleted_items = list(worksheet.items.filter(deleted_at__isnull=False)
                          .select_related('task'))
 
     # Кто скрывает какие элементы: {item_id: {pk ссылок/назначений}}

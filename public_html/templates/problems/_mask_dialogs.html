@@ -44,6 +44,6 @@
 <dialog class="dialog" id="answer-scope-dialog" aria-labelledby="answer-scope-title">
   <h3 id="answer-scope-title">Где сохранить изменения?</h3>
   <p>В общей базе изменения будут доступны во всех листках. Локальная копия изменит только текущий листок.</p>
-  <div class="form-buttons"><button type="button" class="btn" data-save-scope="global">В общей базе</button><button type="button" class="btn btn-secondary" data-save-scope="local">Только в этом листке</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
+  <div class="form-buttons"><button type="button" class="btn" data-save-scope="local">Только в этом листке</button><button type="button" class="btn btn-secondary" data-save-scope="global">В общей базе</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
 </dialog>
 <div hidden id="answer-mask-config" data-preview-url="{% url 'task_mask_preview' %}" data-draft-url="{% url 'task_mask_draft' %}"></div>

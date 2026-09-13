@@ -106,7 +106,7 @@
   </table></div>
   {% for group in worksheet_groups %}
   <dialog id="assignment-group-{{ group.worksheet_id }}" class="dialog assignment-group-dialog">
-    <form method="post" action="{% url 'assignment_group_update' group.worksheet_id %}" data-assignment-group-form>
+    <form method="post" action="{% url 'assignment_group_update' group.worksheet_id %}{% if return_query %}?{{ return_query }}{% endif %}" data-assignment-group-form>
       {% csrf_token %}
       <div class="dialog-heading"><h3>{{ group.worksheet__title }}</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
       <p class="helptext">Отметьте учеников и выберите текущий статус для каждого.</p>
@@ -115,7 +115,7 @@
         <div class="assignment-recipient-row">
           <label><input type="checkbox" name="students" value="{{ row.profile.user_id }}"{% if row.assignment %} checked data-existing{% endif %}> <span>{{ row.profile.user.get_full_name|default:row.profile.user.username }}</span></label>
           <select name="status_{{ row.profile.user_id }}" aria-label="Статус: {{ row.profile.user.get_full_name|default:row.profile.user.username }}">
-            {% for value, label in status_choices %}<option value="{{ value }}"{% if row.assignment.status == value or not row.assignment and value == 'assigned' %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            {% for value, label in status_choices %}<option value="{{ value }}"{% if row.assignment.status == value or not row.assignment and value == 'assigned' %} selected{% endif %}{% if value == 'reviewed' and not row.can_mark_reviewed %} disabled{% endif %}>{{ label }}</option>{% endfor %}
           </select>
         </div>
         {% empty %}<p class="muted">Сначала добавьте учеников в разделе «Ученики».</p>{% endfor %}

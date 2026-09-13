@@ -273,14 +273,73 @@ class AssignmentWorkspaceTests(TestCase):
         response = self.client.post(reverse(
             'assignment_group_update', args=[self.worksheet.pk]), {
                 'students': [self.student2.pk],
-                f'status_{self.student2.pk}': Assignment.STATUS_REVIEWED,
+                f'status_{self.student2.pk}': Assignment.STATUS_SUBMITTED,
             })
         self.assertRedirects(response, reverse('assignment_list'))
         self.assertFalse(Assignment.objects.filter(pk=existing.pk).exists())
         replacement = Assignment.objects.get(
             worksheet=self.worksheet, student=self.student2)
-        self.assertEqual(replacement.status, Assignment.STATUS_REVIEWED)
-        self.assertIsNotNone(replacement.reviewed_at)
+        self.assertEqual(replacement.status, Assignment.STATUS_SUBMITTED)
+        self.assertIsNotNone(replacement.submitted_at)
+
+    def test_catalog_review_requires_submitted_assignment(self):
+        assignment = Assignment.objects.create(
+            worksheet=self.worksheet, student=self.student,
+            assigned_by=self.teacher)
+        url = reverse('assignment_group_update', args=[self.worksheet.pk])
+        data = {
+            'students': [self.student.pk],
+            f'status_{self.student.pk}': Assignment.STATUS_REVIEWED,
+        }
+
+        self.client.post(url, data)
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, Assignment.STATUS_ASSIGNED)
+        self.assertIsNone(assignment.reviewed_at)
+
+        assignment.status = Assignment.STATUS_SUBMITTED
+        assignment.submitted_at = timezone.now()
+        assignment.save(update_fields=['status', 'submitted_at'])
+        self.client.post(url, data)
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, Assignment.STATUS_REVIEWED)
+        self.assertIsNotNone(assignment.reviewed_at)
+
+    def test_catalog_update_preserves_filters(self):
+        Assignment.objects.create(
+            worksheet=self.worksheet, student=self.student,
+            assigned_by=self.teacher)
+        url = (reverse('assignment_group_update', args=[self.worksheet.pk])
+               + '?status=assigned&q=sheet')
+
+        response = self.client.post(url, {
+            'students': [self.student.pk],
+            f'status_{self.student.pk}': Assignment.STATUS_ASSIGNED,
+        })
+
+        self.assertRedirects(
+            response,
+            reverse('assignment_list') + '?status=assigned&q=sheet')
+
+    def test_foreign_teacher_cannot_update_assignment_group(self):
+        other_teacher = make_teacher('teacher2')
+        foreign_student = make_student(other_teacher, 'student3')
+        foreign_worksheet = make_worksheet(
+            other_teacher, title='Чужой листок')
+        foreign = Assignment.objects.create(
+            worksheet=foreign_worksheet, student=foreign_student,
+            assigned_by=other_teacher)
+
+        response = self.client.post(reverse(
+            'assignment_group_update', args=[foreign_worksheet.pk]), {
+                'students': [self.student.pk],
+                f'status_{self.student.pk}': Assignment.STATUS_SUBMITTED,
+            })
+
+        self.assertEqual(response.status_code, 404)
+        foreign.refresh_from_db()
+        self.assertEqual(foreign.status, Assignment.STATUS_ASSIGNED)
+        self.assertTrue(Assignment.objects.filter(pk=foreign.pk).exists())
 
     def test_create_for_group_and_student_without_duplicates(self):
         response = self.client.post(reverse('assignment_create'), {
