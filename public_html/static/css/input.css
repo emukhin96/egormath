@@ -691,6 +691,10 @@
     font-size: 0.9rem;
   }
 
+  .undo-bar-close {
+    margin-left: auto;
+  }
+
   /* Кнопка видимости задачи в конструкторе: синяя, не «опасная» */
   .vis-btn {
     padding: 3px 5px;
@@ -1770,25 +1774,22 @@
     );
   }
 
-  /* Конструктор и каталог: номер, звёзды и текст всегда в одной строке.
-     Раньше flex-wrap переносил длинный .task-text целиком под звёзды. */
+  /* Конструктор: префикс занимает только первую строку, поэтому продолжение
+     длинного условия начинается от левого края, в том числе под звёздами. */
   .task-line {
-    display: flex;
-    gap: 6px;
-    align-items: baseline;
-    flex-wrap: nowrap;
+    display: block;
   }
 
   .task-line .stars,
   .task-line .ws-stars,
   .task-line .ws-num {
-    flex-shrink: 0;
+    margin-right: 6px;
+    vertical-align: baseline;
   }
 
   .task-line .task-main,
   .task-line .task-text {
-    flex: 1;
-    min-width: 0;
+    display: inline;
     margin: 0;
   }
 
@@ -1822,31 +1823,22 @@
     list-style-position: inside;
   }
 
-  /* Просмотр: звёзды на полях слева от номера, текст всех задач
-     по одной вертикали. Колонка номера — под «12.» / «99.»; редкий
-     «100.» занимает зазор, а не раздувает табуляцию у всех строк. */
+  /* Просмотр: звёзды и номер образуют префикс только первой строки.
+     Продолжение длинного условия может располагаться под ними. */
   .task-row {
-    display: grid;
-    grid-template-columns:
-      var(--task-stars-col) var(--task-num-col) minmax(0, 1fr);
-    column-gap: var(--space-2);
-    align-items: baseline;
+    display: block;
   }
 
   .task-row .stars {
-    grid-column: 1;
-    grid-row: 1;
-    justify-self: end;
+    margin-right: var(--space-2);
   }
 
   .task-row .ws-num {
-    grid-column: 2;
-    grid-row: 1;
+    margin-right: var(--space-2);
   }
 
   .task-row .task-text {
-    grid-column: 3;
-    grid-row: 1;
+    display: inline;
     margin: 0;
   }
 
@@ -2708,6 +2700,8 @@
 
   .worksheet-items-heading .ws-toggle {
     margin-left: 0;
+    align-self: center;
+    line-height: 1;
   }
 
   .worksheet-task-meta {
@@ -2722,6 +2716,10 @@
     display: inline-flex;
     align-items: center;
     margin: 0;
+  }
+
+  .worksheet-task-meta .ws-toggle {
+    margin-left: 0;
   }
 
   .worksheet-task-meta .task-meta-item:empty {
@@ -3502,21 +3500,17 @@
   }
 
   @media (max-width: 760px) {
-    /* Узкие экраны: звёзды между номером и текстом, без переноса текста */
+    /* Узкие экраны: сохраняем обтекание префикса условием задачи. */
     .task-row {
-      display: flex;
-      flex-wrap: nowrap;
-      gap: var(--space-2);
-      align-items: baseline;
+      display: block;
     }
 
     .task-row .stars {
-      flex: none;
+      margin-right: var(--space-2);
     }
 
     .task-row .task-text {
-      flex: 1;
-      min-width: 0;
+      display: inline;
     }
 
     /* Узкий экран: без «полей» — рубрики и тексты с края карточки */

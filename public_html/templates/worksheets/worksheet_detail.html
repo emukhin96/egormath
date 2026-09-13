@@ -71,6 +71,8 @@
       {% csrf_token %}
       <button type="submit" class="btn btn-small btn-secondary">Отменить</button>
     </form>
+    <button type="button" class="icon-btn undo-bar-close" data-undo-dismiss
+            aria-label="Скрыть уведомление">×</button>
   </div>
   {% endif %}
   {% if rows %}
@@ -464,7 +466,7 @@
 <script defer src="{% static 'js/problem_editor.js' %}?v=2"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}"></script>
-<script defer src="{% static 'js/builder.js' %}?v=4"></script>
+<script defer src="{% static 'js/builder.js' %}?v=5"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
 {% if assignments %}<script defer src="{% static 'js/teacher_progress.js' %}?v=6"></script>{% endif %}
 {% endblock %}

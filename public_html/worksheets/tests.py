@@ -943,6 +943,8 @@ class WorksheetViewTests(TestCase):
                          [r['item'].pk for r in response.context['rows']])
         self.assertContains(response, 'undo-bar')
         self.assertNotContains(response, 'data-auto-dismiss')
+        self.assertContains(response, 'data-undo-dismiss')
+        self.assertContains(response, 'aria-label="Скрыть уведомление"')
         self.assertContains(response, 'ws-toast-src')
         self.assertContains(response, 'Задача удалена из листка.')
         self.assertNotIn(item.task.text_latex,
@@ -1856,6 +1858,9 @@ class ShareLinkTests(TestCase):
         self.assertNotContains(response, 'context-sidebar')
         self.assertContains(response, 'minimal-body')
         self.assertContains(response, 'task-row')
+        html = response.content.decode()
+        self.assertLess(html.index('class="stars"'),
+                        html.index('class="ws-num"'))
 
     def test_inactive_link_404(self):
         self.link.is_active = False
