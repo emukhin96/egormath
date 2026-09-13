@@ -1774,23 +1774,28 @@
     );
   }
 
-  /* Конструктор: префикс занимает только первую строку, поэтому продолжение
-     длинного условия начинается от левого края, в том числе под звёздами. */
+  /* Конструктор: номер остаётся в отдельной колонке списка, а звёзды входят
+     в текстовый блок — продолжение условия идёт под ними, но не под номером. */
   .task-line {
-    display: block;
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    column-gap: 6px;
+    align-items: baseline;
   }
 
-  .task-line .stars,
-  .task-line .ws-stars,
-  .task-line .ws-num {
+  .task-line .ws-stars {
     margin-right: 6px;
     vertical-align: baseline;
   }
 
-  .task-line .task-main,
+  .task-line .task-copy,
   .task-line .task-text {
     display: inline;
     margin: 0;
+  }
+
+  .task-line .task-copy {
+    min-width: 0;
   }
 
   .task-line .task-main .task-text {
@@ -1823,22 +1828,29 @@
     list-style-position: inside;
   }
 
-  /* Просмотр: звёзды и номер образуют префикс только первой строки.
-     Продолжение длинного условия может располагаться под ними. */
+  /* Просмотр: сохраняем обычную колонку номера. Звёзды находятся внутри
+     текстовой колонки, поэтому перенос располагается под звёздами. */
   .task-row {
-    display: block;
+    display: grid;
+    grid-template-columns: var(--task-num-col) minmax(0, 1fr);
+    column-gap: var(--space-2);
+    align-items: baseline;
+  }
+
+  .task-row .task-copy {
+    min-width: 0;
+  }
+
+  .task-row .stars,
+  .task-row .task-text {
+    display: inline;
   }
 
   .task-row .stars {
     margin-right: var(--space-2);
   }
 
-  .task-row .ws-num {
-    margin-right: var(--space-2);
-  }
-
   .task-row .task-text {
-    display: inline;
     margin: 0;
   }
 
@@ -2702,6 +2714,7 @@
     margin-left: 0;
     align-self: center;
     line-height: 1;
+    transform: translateY(1px);
   }
 
   .worksheet-task-meta {
@@ -3500,17 +3513,9 @@
   }
 
   @media (max-width: 760px) {
-    /* Узкие экраны: сохраняем обтекание префикса условием задачи. */
+    /* Узкие экраны: номер также остаётся отдельной колонкой списка. */
     .task-row {
-      display: block;
-    }
-
-    .task-row .stars {
-      margin-right: var(--space-2);
-    }
-
-    .task-row .task-text {
-      display: inline;
+      display: grid;
     }
 
     /* Узкий экран: без «полей» — рубрики и тексты с края карточки */
