@@ -173,7 +173,8 @@ def worksheet_progress(request, worksheet_id):
             return HttpResponseNotModified()
     people = progress_people(groups_of_points, assignments.order_by('student__last_name', 'student__username'))
     context = {'worksheet': worksheet, 'items': items, 'point_groups': groups_of_points, 'people': people,
-               'groups': StudentGroup.visible_to(request.user), 'group_id': group_id}
+               'groups': StudentGroup.visible_to(request.user), 'group_id': group_id,
+               'manage_status': request.GET.get('manage') == '1'}
     template = 'assignments/_progress_table.html' if request.GET.get('fragment') else 'assignments/progress.html'
     response = render(request, template, context)
     if etag:

@@ -317,9 +317,10 @@ def worksheet_detail(request, pk):
     # Кто скрывает какие элементы: {item_id: {pk ссылок/назначений}}
     share_links = list(worksheet.share_links.order_by('-created_at')
                        .prefetch_related('hidden_items'))
-    assignments = list(worksheet.assignments.select_related('student')
-                       .prefetch_related(
-                           'hidden_items', 'submissions__check_history'))
+    from assignments.progress import (progress_assignments, progress_groups,
+                                      progress_people)
+    assignments = list(progress_assignments(
+        worksheet.assignments.select_related('student')))
     link_hidden = {}
     for link in share_links:
         for hidden_item in link.hidden_items.all():
@@ -371,6 +372,9 @@ def worksheet_detail(request, pk):
 
     from .block_presentation import decorate_block_rows
     decorate_block_rows(rows)
+    point_groups = progress_groups([
+        item for item in items if item.task_id])
+    progress_people_rows = progress_people(point_groups, assignments)
 
     # Поиск задач для добавления (правая часть страницы)
     search_active = any(request.GET.get(k) for k in ('q', 'topic', 'grade', 'tag'))
@@ -406,6 +410,9 @@ def worksheet_detail(request, pk):
         'grade_choices': Task.GRADE_CHOICES,
         'share_links': share_links,
         'assignments': assignments,
+        'point_groups': point_groups,
+        'progress_people': progress_people_rows,
+        'status_choices': Assignment.STATUS_CHOICES,
         'deleted_items': deleted_items,
     })
 

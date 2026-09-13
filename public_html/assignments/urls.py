@@ -14,6 +14,8 @@ urlpatterns = [
          name='assign_worksheet'),
     path('worksheet/<int:worksheet_id>/update/',
          views.assignment_group_update, name='assignment_group_update'),
+    path('<int:pk>/status/', views.assignment_status_update,
+         name='assignment_status_update'),
     path('<int:pk>/', views.assignment_detail, name='assignment_detail'),
     path('<int:pk>/answers/', views.save_answers, name='save_answers'),
     path('<int:pk>/check/<int:task_id>/', views.check_task, name='check_task'),

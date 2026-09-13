@@ -257,23 +257,44 @@ def assignment_group_update(request, worksheet_id):
             status = request.POST.get(f'status_{student_id}', '')
             if status not in status_values:
                 status = assignment.status
-            if assignment.status != status:
-                assignment.status = status
-                if status == Assignment.STATUS_ASSIGNED:
-                    assignment.submitted_at = None
-                    assignment.reviewed_at = None
-                elif status == Assignment.STATUS_SUBMITTED:
-                    assignment.submitted_at = assignment.submitted_at or now
-                    assignment.reviewed_at = None
-                elif status == Assignment.STATUS_RETURNED:
-                    assignment.reviewed_at = None
-                elif status == Assignment.STATUS_REVIEWED:
-                    assignment.reviewed_at = assignment.reviewed_at or now
-                assignment.save()
+            _set_assignment_status(assignment, status, now)
         worksheet.assignments.filter(
             student_id__in=set(existing) - selected_ids).delete()
     messages.success(request, 'Ученики и статусы задания сохранены.')
     return redirect('assignment_list')
+
+
+def _set_assignment_status(assignment, status, now=None):
+    """Меняет статус назначения и согласованные с ним даты."""
+    if assignment.status == status:
+        return
+    now = now or timezone.now()
+    assignment.status = status
+    if status == Assignment.STATUS_ASSIGNED:
+        assignment.submitted_at = None
+        assignment.reviewed_at = None
+    elif status == Assignment.STATUS_SUBMITTED:
+        assignment.submitted_at = assignment.submitted_at or now
+        assignment.reviewed_at = None
+    elif status == Assignment.STATUS_RETURNED:
+        assignment.reviewed_at = None
+    elif status == Assignment.STATUS_REVIEWED:
+        assignment.reviewed_at = assignment.reviewed_at or now
+    assignment.save()
+
+
+@teacher_required
+@require_POST
+def assignment_status_update(request, pk):
+    """Меняет статус одной работы из таблицы прогресса листка."""
+    assignment = get_object_or_404(Assignment.visible_to(request.user), pk=pk)
+    status = request.POST.get('status', '')
+    if status not in dict(Assignment.STATUS_CHOICES):
+        messages.error(request, 'Неизвестный статус работы.')
+    else:
+        _set_assignment_status(assignment, status)
+        messages.success(request, 'Статус работы сохранён.')
+    return redirect('worksheet_detail', pk=assignment.worksheet_id)
 
 
 @teacher_required

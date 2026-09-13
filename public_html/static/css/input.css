@@ -409,6 +409,19 @@
     gap: var(--space-2);
   }
 
+  .topbar-user > .inline-form {
+    display: inline-flex;
+    align-items: center;
+    align-self: stretch;
+  }
+
+  .topbar-user .linklike {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    line-height: 1.2;
+  }
+
   /* Корзина задач в шапке (native details). Кнопка-summary — обычная
      .btn.btn-secondary из гайдлайна, поэтому геометрию не переопределяем. */
   .cart-menu {
@@ -1075,13 +1088,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.2em;
-    height: 1.2em;
+    width: 1.35em;
+    height: 1.35em;
     border-radius: 50%;
-    background: #e6f4e7;
-    color: var(--ok);
-    font-size: .8rem;
-    vertical-align: baseline;
+    background: #e8f1fb;
+    color: var(--accent);
+    font-size: .95rem;
+    font-weight: 700;
+    vertical-align: middle;
   }
   .progress-assignment { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
 
@@ -2046,8 +2060,8 @@
   }
 
   .mask-strict {
-    min-width: 165px;
-    max-width: 280px;
+    min-width: 190px;
+    max-width: 320px;
   }
 
   .mask-nosolution {
@@ -2480,6 +2494,7 @@
     align-items: center;
     gap: 6px;
     vertical-align: middle;
+    margin-bottom: 0;
   }
 
   .ws-toggle input {
@@ -2639,6 +2654,47 @@
 
   .page-head .form-buttons .ws-toggle {
     margin-left: 0;
+  }
+
+  .collection-head-actions > form {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+  }
+
+  .worksheet-items-heading {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .worksheet-items-heading .ws-toggle {
+    margin-left: 0;
+  }
+
+  .worksheet-task-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    line-height: 1.5;
+  }
+
+  .worksheet-task-meta .task-meta-item {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+  }
+
+  .worksheet-task-meta .task-meta-item:empty {
+    display: none;
+  }
+
+  .worksheet-task-meta .task-meta-item:not(:first-child)::before {
+    content: "·";
+    margin-right: var(--space-1);
+    color: var(--muted);
   }
 
   .collection-source-grid {

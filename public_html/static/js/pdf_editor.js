@@ -170,5 +170,6 @@
     });
 
     markActive();
+    compile();
   });
 })();
