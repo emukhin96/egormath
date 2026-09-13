@@ -6,6 +6,9 @@
   {{ form.as_p }}
   <div class="form-buttons">
     <button class="btn" type="submit">Сохранить</button>
+    {% if block == 'solution' and owner.effective_solution_latex %}
+    <button class="btn btn-secondary" type="button" data-delete-solution>Удалить решение</button>
+    {% endif %}
     <button class="btn btn-secondary" type="button" data-editor-cancel>Отмена</button>
   </div>
 </form>

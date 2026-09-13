@@ -57,6 +57,9 @@ class Worksheet(models.Model):
         'Имя PDF-файла', max_length=80, blank=True,
         help_text='Без расширения, например alg8-kv_ur; '
                   'пусто — сгенерируется из темы, класса и названия')
+    student_pdf_options = models.JSONField(
+        'Оформление PDF для ученика', default=dict, blank=True,
+        help_text='Последние параметры ученического PDF, собранного учителем')
     created_at = models.DateTimeField('Создан', auto_now_add=True)
     updated_at = models.DateTimeField('Изменён', auto_now=True)
 

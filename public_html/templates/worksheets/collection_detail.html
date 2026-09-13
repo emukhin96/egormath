@@ -41,7 +41,7 @@
     <tr><th>Подборка</th><th>Элементов</th><th></th></tr>
     {% for child in children %}
     <tr>
-      <td><a href="{% url 'collection_detail' child.pk %}">{{ child.worksheet.title }}</a></td>
+      <td><a href="{% url 'collection_detail' child.pk %}">{{ child.catalog_title }}</a></td>
       <td>{{ child.items_total }}</td>
       <td><a class="btn btn-small btn-secondary" href="{% url 'collection_detail' child.pk %}">{% if child.items_total %}Открыть подборку{% else %}Открыть раздел{% endif %}</a></td>
     </tr>

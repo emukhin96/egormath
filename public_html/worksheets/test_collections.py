@@ -125,7 +125,7 @@ class CollectionTests(TestCase):
         self.assertEqual(Worksheet.objects.filter(
             owner=self.owner, title='Группа').count(), 1)
 
-    def test_catalog_shows_group_hierarchy_and_group_links_to_child(self):
+    def test_catalog_shows_group_and_skips_single_child_level(self):
         group_sheet = Worksheet.objects.create(
             title='№10. Вероятности', owner=self.owner)
         group = Collection.objects.create(
@@ -144,10 +144,11 @@ class CollectionTests(TestCase):
         self.assertContains(catalog, '<strong>2</strong> элементов', html=True)
 
         detail = self.client.get(reverse(
-            'collection_detail', args=[group.pk]))
-        self.assertContains(detail, 'Это раздел, который объединяет')
-        self.assertContains(detail, 'Готовая тема')
-        self.assertContains(detail, 'Открыть подборку')
+            'collection_detail', args=[group.pk]), follow=True)
+        self.assertRedirects(
+            detail, reverse('collection_detail', args=[self.collection.pk]))
+        self.assertContains(detail, 'Вычислите')
+        self.assertNotContains(detail, 'Это раздел, который объединяет')
         self.assertNotContains(detail, 'Подборка пуста')
 
         self.client.logout()
@@ -156,8 +157,10 @@ class CollectionTests(TestCase):
             'source': self.source.pk,
         })
         self.assertContains(other_catalog, '№10. Вероятности')
-        self.assertEqual(self.client.get(reverse(
-            'collection_detail', args=[group.pk])).status_code, 200)
+        self.assertRedirects(
+            self.client.get(reverse('collection_detail', args=[group.pk])),
+            reverse('collection_detail', args=[self.collection.pk]),
+            fetch_redirect_response=False)
 
     def test_catalog_displays_collection_topics_in_tree_and_sidebar(self):
         topic = Topic.objects.create(code='TEST.COL', name='Алгебра')

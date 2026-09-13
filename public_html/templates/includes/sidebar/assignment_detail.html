@@ -23,9 +23,7 @@
 </section>
 <section class="sidebar-section">
   <p class="sidebar-kicker">Состояние</p>
-  {% if editable %}
-  <p class="sidebar-copy">Ответы сохраняются автоматически при уходе из поля{% if can_check %}, «Проверить» у задачи сверяет ответ с эталоном{% endif %}; «Отправить на проверку» закрывает работу для правок.</p>
-  {% else %}
+  {% if not editable %}
   <p class="sidebar-copy">Редактирование закрыто. Дождитесь проверки или возврата работы.</p>
   {% endif %}
   <div class="sidebar-actions">

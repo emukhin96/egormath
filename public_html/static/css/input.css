@@ -452,7 +452,7 @@
     position: absolute;
     right: 0;
     top: calc(100% + 6px);
-    width: 320px;
+    width: min(440px, calc(100vw - 2 * var(--space-4)));
     padding: var(--space-3);
     display: grid;
     gap: var(--space-2);
@@ -470,6 +470,7 @@
 
   .cart-panel .helptext {
     margin: 0;
+    overflow-wrap: anywhere;
   }
 
   .cart-form {
@@ -1061,6 +1062,10 @@
   .worksheet-catalog .task-meta a, .worksheet-catalog .task-meta button { white-space: nowrap; }
   table.list .worksheet-main-row td { border-bottom: 0; }
   .worksheet-action-row td { padding-top: 0; }
+  table.list .worksheet-main-row:hover + .worksheet-action-row td,
+  table.list .worksheet-main-row:has(+ .worksheet-action-row:hover) td {
+    background: #f2f6fc;
+  }
   .worksheet-title-cell { width: 100%; min-width: 200px; }
   .worksheet-count-cell { white-space: nowrap; }
   .worksheet-topics-cell { min-width: 240px; }
@@ -1833,10 +1838,10 @@
   }
 
   /* Шапка публичной страницы: заголовок и подзаголовок компактно,
-     кнопка PDF — в правом верхнем углу */
+     кнопка PDF — по центру их общей высоты */
   .public-head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
     margin-bottom: var(--space-4);
@@ -1861,6 +1866,19 @@
   .subitem-answer {
     color: var(--muted);
     font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-block: var(--space-1);
+  }
+
+  .subitem-answer .mask-answer {
+    margin: 0;
+  }
+
+  .subitem-check {
+    align-self: center;
   }
 
   /* Ответы ученика: textarea + кнопка «Формула», под ними превью KaTeX и
@@ -1912,6 +1930,20 @@
     align-items: center;
     gap: var(--space-2);
     margin-top: var(--space-2);
+  }
+
+  .task-tools .btn,
+  .task-tools .photo-pick {
+    margin: 0;
+  }
+
+  .assignment-submit-card > .helptext {
+    margin: 0 0 var(--space-2);
+  }
+
+  .assignment-submit-card > .form-buttons {
+    gap: var(--space-3);
+    margin: 0;
   }
 
   .photo-pick {
@@ -2014,8 +2046,8 @@
   }
 
   .mask-strict {
-    min-width: 120px;
-    max-width: 240px;
+    min-width: 165px;
+    max-width: 280px;
   }
 
   .mask-nosolution {
@@ -4002,6 +4034,37 @@
     background: #fffafa;
   }
 
+  .assignment-group-dialog { max-width: 620px; }
+
+  .assignment-recipient-list {
+    display: grid;
+    gap: var(--space-1);
+    max-height: 55vh;
+    margin: var(--space-3) 0;
+    overflow-y: auto;
+  }
+
+  .assignment-recipient-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 190px;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .assignment-recipient-row label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    margin: 0;
+    font-weight: 400;
+  }
+
+  .assignment-recipient-row input { width: auto; flex: none; }
+  .assignment-recipient-row select { width: 100%; }
+
   .empty-state {
     padding: var(--space-6) var(--space-4);
     text-align: center;
@@ -4177,6 +4240,10 @@
     .assignment-filters .filter-search {
       flex: none;
       width: 100%;
+    }
+
+    .assignment-recipient-row {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 

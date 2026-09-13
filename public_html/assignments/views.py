@@ -170,13 +170,35 @@ def assignment_list(request):
     page = Paginator(grouped, 30).get_page(request.GET.get('page'))
     groups_on_page = list(page.object_list)
     page.object_list = groups_on_page
-    students = (Profile.students_for(request.user)
-                .select_related('user')
-                .order_by('user__last_name', 'user__first_name'))
+    students = list(Profile.students_for(request.user)
+                    .select_related('user')
+                    .order_by('user__last_name', 'user__first_name'))
+    worksheet_ids = [g['worksheet_id'] for g in groups_on_page]
+    page_assignments = list(
+        Assignment.visible_to(request.user)
+        .filter(worksheet_id__in=worksheet_ids)
+        .select_related('student').order_by('student__last_name',
+                                             'student__first_name'))
+    known_profiles = {profile.user_id: profile for profile in students}
+    missing_ids = {a.student_id for a in page_assignments} - set(known_profiles)
+    for profile in Profile.objects.filter(user_id__in=missing_ids).select_related('user'):
+        known_profiles[profile.user_id] = profile
+    all_profiles = sorted(known_profiles.values(), key=lambda profile: (
+        profile.user.last_name, profile.user.first_name,
+        profile.user.username))
+    by_worksheet = {}
+    for assignment in page_assignments:
+        by_worksheet.setdefault(assignment.worksheet_id, {})[
+            assignment.student_id] = assignment
+    for group in groups_on_page:
+        existing = by_worksheet.get(group['worksheet_id'], {})
+        group['recipient_rows'] = [
+            {'profile': profile, 'assignment': existing.get(profile.user_id)}
+            for profile in all_profiles]
     worksheets = Worksheet.visible_to(request.user).order_by('-updated_at')
     return render(request, 'assignments/assignment_list.html', {
         'page': page,
-        'assignments': assignments.filter(worksheet_id__in=[g['worksheet_id'] for g in groups_on_page]),
+        'assignments': assignments.filter(worksheet_id__in=worksheet_ids),
         'worksheet_groups': groups_on_page,
         'stats': stats,
         'students': students,
@@ -197,6 +219,61 @@ def assignment_list(request):
             'worksheet': worksheet_id, 'due': due, 'owner': owner_id,
         },
     })
+
+
+@teacher_required
+@require_POST
+def assignment_group_update(request, worksheet_id):
+    """Меняет адресатов листка и статус каждого назначения из каталога."""
+    worksheet = get_object_or_404(
+        Worksheet.visible_to(request.user), pk=worksheet_id)
+    existing = {
+        assignment.student_id: assignment
+        for assignment in worksheet.assignments.select_related('student')
+    }
+    allowed_ids = set(Profile.students_for(request.user)
+                      .values_list('user_id', flat=True)) | set(existing)
+    selected_ids = {
+        int(value) for value in request.POST.getlist('students')
+        if value.isdigit() and int(value) in allowed_ids
+    }
+    status_values = dict(Assignment.STATUS_CHOICES)
+    first = next(iter(existing.values()), None)
+    check_visibility = (first.check_visibility if first
+                        else Assignment.CHECK_LIVE)
+    allow_photos = first.allow_photos if first else True
+    due_at = first.due_at if first else None
+    now = timezone.now()
+    with transaction.atomic():
+        for student_id in selected_ids:
+            assignment, _ = Assignment.objects.get_or_create(
+                worksheet=worksheet, student_id=student_id,
+                defaults={
+                    'assigned_by': request.user,
+                    'check_visibility': check_visibility,
+                    'allow_photos': allow_photos,
+                    'due_at': due_at,
+                })
+            status = request.POST.get(f'status_{student_id}', '')
+            if status not in status_values:
+                status = assignment.status
+            if assignment.status != status:
+                assignment.status = status
+                if status == Assignment.STATUS_ASSIGNED:
+                    assignment.submitted_at = None
+                    assignment.reviewed_at = None
+                elif status == Assignment.STATUS_SUBMITTED:
+                    assignment.submitted_at = assignment.submitted_at or now
+                    assignment.reviewed_at = None
+                elif status == Assignment.STATUS_RETURNED:
+                    assignment.reviewed_at = None
+                elif status == Assignment.STATUS_REVIEWED:
+                    assignment.reviewed_at = assignment.reviewed_at or now
+                assignment.save()
+        worksheet.assignments.filter(
+            student_id__in=set(existing) - selected_ids).delete()
+    messages.success(request, 'Ученики и статусы задания сохранены.')
+    return redirect('assignment_list')
 
 
 @teacher_required
@@ -581,12 +658,14 @@ def _attempt_target(obj, *, kind, object_id, label):
     }
 
 
-def _attempt_snapshot(submission, task, subitems):
-    """Снимок всей задачи, включая ещё не заполненные подпункты."""
+def _attempt_snapshot(submission, task, subitems, only_subitem=None):
+    """Снимок задачи или отдельно проверяемого подпункта."""
     if subitems:
         parts = {part.subitem_id: part for part in submission.parts.all()}
         targets = []
         for index, subitem in enumerate(subitems, start=1):
+            if only_subitem is not None and subitem.pk != only_subitem.pk:
+                continue
             part = parts.get(subitem.pk)
             if part is None:
                 part = SubmissionPart(
@@ -637,7 +716,7 @@ def check_task(request, pk, task_id):
     """Кнопка «Проверить» у задачи: раскрыть ученику результат сверки.
 
     Сначала сохраняет всю форму (кнопка шлёт её целиком), затем помечает
-    ответ задачи (или все её подпункты) как раскрытые и считает нажатие.
+    ответ задачи либо выбранного подпункта как раскрытый и считает нажатие.
     Доступно только в режимах, где ученик вправе видеть результат до
     сдачи; для fetch — JSON «префикс → результат», иначе redirect к задаче.
     """
@@ -651,6 +730,18 @@ def check_task(request, pk, task_id):
     task = get_object_or_404(Task, pk=task_id)
     item = _visible_task_item(assignment, task)
     subitems = item.selected_subitems()
+    selected_subitem = None
+    selected_subitem_id = request.POST.get('check_subitem')
+    if selected_subitem_id:
+        try:
+            selected_subitem_id = int(selected_subitem_id)
+        except (TypeError, ValueError):
+            raise Http404
+        selected_subitem = next(
+            (subitem for subitem in subitems
+             if subitem.pk == selected_subitem_id), None)
+        if selected_subitem is None:
+            raise Http404
     if not task.short_answer_available(subitems):
         # Кнопка на странице отключена; прямой запрос — без раскрытия и попытки
         message = ('Эта задача только с развёрнутым ответом — решение проверит учитель'
@@ -680,7 +771,8 @@ def check_task(request, pk, task_id):
         checks = {}
         if subitems:
             parts = {p.subitem_id: p for p in submission.parts.all()}
-            for subitem in subitems:
+            checked_subitems = [selected_subitem] if selected_subitem else subitems
+            for subitem in checked_subitems:
                 part = parts.get(subitem.pk)
                 if part is None or not part.display_answer:
                     continue
@@ -689,7 +781,7 @@ def check_task(request, pk, task_id):
             _reveal(submission, f'task{task.pk}')
         if checks:
             result, snapshot = _attempt_snapshot(
-                submission, task, subitems)
+                submission, task, subitems, only_subitem=selected_subitem)
             latest_number = submission.check_history.order_by('-number').values_list('number', flat=True).first() or 0
             number = max(submission.check_attempts, latest_number) + 1
             SubmissionCheckAttempt.objects.create(

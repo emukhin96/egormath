@@ -98,6 +98,16 @@
     finally { delete form.dataset.busy; if(button)button.disabled=false; if(toggle)toggle.disabled=false; }
   });
   document.addEventListener('click', async function(e){
+    var removeSolution=e.target.closest('[data-delete-solution]');
+    if(removeSolution){
+      if(!confirm('Удалить авторское и редакторское решение? Это действие сохранится сразу.'))return;
+      var solutionForm=removeSolution.closest('form');
+      ['author_solution_latex','solution_latex'].forEach(function(name){
+        var field=solutionForm.querySelector('[name="'+name+'"]');
+        if(field)field.value='';
+      });
+      solutionForm.requestSubmit();return;
+    }
     var cancel=e.target.closest('[data-editor-cancel]');
     if(cancel){
       var form=cancel.closest('form');

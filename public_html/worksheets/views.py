@@ -1,5 +1,6 @@
 from assignments.checks import HELP as MASK_HELP
 import json
+import re
 from datetime import timedelta
 
 from django.conf import settings
@@ -309,7 +310,8 @@ def worksheet_detail(request, pk):
     # в поиске конструктора и не добавилась второй раз
     task_ids = list(worksheet.items.exclude(task_id=None)
                     .values_list('task_id', flat=True))
-    deleted_items = list(worksheet.items.filter(deleted_at__isnull=False)
+    deleted_items = list(worksheet.items.filter(
+                         deleted_at__gte=timezone.now() - timedelta(seconds=12))
                          .select_related('task'))
 
     # Кто скрывает какие элементы: {item_id: {pk ссылок/назначений}}
@@ -421,6 +423,28 @@ def collection_list(request):
     })
 
 
+def _collection_title(collection):
+    """Короткое название каталога с двузначным номером задания."""
+    title = collection.worksheet.title.strip()
+    title = re.sub(
+        r'^№\s*1[–-]5\.\s*Практические\s+(?:задачи|задания)\s*:\s*',
+        '№01–05. ', title, flags=re.IGNORECASE)
+    title = re.sub(
+        r'^№\s*1[–-]5\.\s*Практические\s+(?:задачи|задания)\s*$',
+        '№01–05', title, flags=re.IGNORECASE)
+    match = re.match(r'^№\s*([1-9])([.\s])', title)
+    if match:
+        title = f'№0{match.group(1)}{match.group(2)}{title[match.end():]}'
+    return title
+
+
+def _collection_sort_key(collection):
+    title = _collection_title(collection)
+    match = re.match(r'^№\s*(\d+)', title)
+    return (int(match.group(1)) if match else 10_000,
+            collection.order, title.casefold(), collection.pk)
+
+
 def _collection_catalog(user):
     """Строит доступное дерево и отсекает ветви без единого элемента."""
     collections = list(
@@ -435,6 +459,7 @@ def _collection_catalog(user):
     ids = {collection.pk for collection in collections}
     by_source = {}
     for collection in collections:
+        collection.catalog_title = _collection_title(collection)
         collection.catalog_visible = (
             user.is_superuser or collection.is_published
             or collection.worksheet.owner_id == user.pk)
@@ -449,6 +474,8 @@ def _collection_catalog(user):
             parent_id = (collection.parent_id
                          if collection.parent_id in ids else None)
             by_parent.setdefault(parent_id, []).append(collection)
+        for siblings in by_parent.values():
+            siblings.sort(key=_collection_sort_key)
 
         def walk(collection, depth=0):
             children = [row for child in by_parent.get(collection.pk, [])
@@ -530,6 +557,13 @@ def collection_detail(request, pk):
             'worksheet__items',
             filter=models.Q(worksheet__items__deleted_at__isnull=True)))
         .order_by('order', 'pk'))
+    for child in children:
+        child.catalog_title = _collection_title(child)
+    children.sort(key=_collection_sort_key)
+    # Пустой технический раздел с единственным продолжением не заставляет
+    # пользователя проходить ещё один экран дерева.
+    if not all_items and len(children) == 1:
+        return redirect('collection_detail', pk=children[0].pk)
     rows = []
     number = sum(
         bool(item.task_id)
@@ -1115,12 +1149,16 @@ def worksheet_pdf_editor(request, pk):
         raise Http404
     font_choices = [(v, label) for v, label in PDF_EDITOR_FONT_LABELS
                     if v in settings.PDF_EDITOR_FONTS]
+    tex = worksheet_to_tex(worksheet, variant)
+    if variant == WorksheetPdf.VARIANT_STUDENT and worksheet.student_pdf_options:
+        from .latex import apply_pdf_options
+        tex = apply_pdf_options(tex, worksheet.student_pdf_options)
     return render(request, 'worksheets/pdf_editor.html', {
         'worksheet': worksheet,
         'variant': variant,
         'variant_label': dict(WorksheetPdf.VARIANT_CHOICES)[variant],
         'variant_choices': WorksheetPdf.VARIANT_CHOICES,
-        'tex': worksheet_to_tex(worksheet, variant),
+        'tex': tex,
         'pdf_filename': worksheet.pdf_filename(variant),
         'font_choices': font_choices,
     })
@@ -1150,7 +1188,8 @@ def _acquire_compile_lock(user):
         return False
 
 
-def _editor_compile(request, worksheet, tex, doc_id, filename, collect):
+def _editor_compile(request, worksheet, tex, doc_id, filename, collect,
+                    on_success=None):
     """Черновая сборка: проверка tex → lock → assets → API."""
     if not tex.strip():
         return JsonResponse(
@@ -1181,6 +1220,8 @@ def _editor_compile(request, worksheet, tex, doc_id, filename, collect):
             {'ok': False, 'message': str(exc), 'log': exc.log}, status=502)
     finally:
         PdfCompileLock.objects.filter(user=request.user).delete()
+    if on_success:
+        on_success()
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'inline; filename="{filename}"'
     return response
@@ -1195,11 +1236,24 @@ def worksheet_pdf_compile(request, pk):
     листка не трогает — это «черновая» сборка именно присланного кода.
     """
     worksheet = _own_worksheet(request, pk)
+    variant = request.POST.get('variant', WorksheetPdf.VARIANT_STUDENT)
+    if variant not in dict(WorksheetPdf.VARIANT_CHOICES):
+        raise Http404
+    tex = request.POST.get('tex', '')
+
+    def remember_student_options():
+        if variant != WorksheetPdf.VARIANT_STUDENT:
+            return
+        from .latex import pdf_options_from_tex
+        worksheet.student_pdf_options = pdf_options_from_tex(tex)
+        worksheet.save(update_fields=['student_pdf_options'])
+
     return _editor_compile(
-        request, worksheet, request.POST.get('tex', ''),
+        request, worksheet, tex,
         doc_id=f'ws{worksheet.pk}-editor',
-        filename=worksheet.pdf_filename(),
-        collect=lambda: collect_assets(worksheet))
+        filename=worksheet.pdf_filename(variant),
+        collect=lambda: collect_assets(worksheet),
+        on_success=remember_student_options)
 
 
 @teacher_required

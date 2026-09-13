@@ -1123,6 +1123,8 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'data-value="palatino"')
         # Переключатель режима диагностики (опция diagn пакета egor)
         self.assertContains(response, 'data-switch="diagn"')
+        self.assertContains(response, 'id="sidebar-compile-btn"')
+        self.assertContains(response, 'data-variant="answers"')
         # Для окружения без шрифтов выбор сужается настройкой
         with self.settings(PDF_EDITOR_FONTS=['cm']):
             response = self.client.get(
@@ -1160,6 +1162,26 @@ class WorksheetViewTests(TestCase):
             url, {'tex': 'x' * (PDF_EDITOR_TEX_LIMIT + 1)})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(mocked.call_count, calls_before)
+
+    @mock.patch('worksheets.views.compile_latex', return_value=b'%PDF-1.5')
+    def test_student_pdf_remembers_last_successful_teacher_options(self, _compile):
+        self.login_teacher()
+        tex = (r'\documentclass[a4paper,12pt]{article}' '\n'
+               r'\usepackage[font=palatino,diagn]{egor}')
+        response = self.client.post(
+            reverse('worksheet_pdf_compile', args=[self.worksheet.pk]),
+            {'variant': 'student', 'tex': tex})
+        self.assertEqual(response.status_code, 200)
+        self.worksheet.refresh_from_db()
+        self.assertEqual(self.worksheet.student_pdf_options, {
+            'size': '12pt', 'paper': 'a4paper',
+            'font': 'palatino', 'diagn': 'on',
+        })
+        editor = self.client.get(reverse(
+            'worksheet_pdf_editor', args=[self.worksheet.pk]))
+        self.assertContains(editor, r'\documentclass[12pt,a4paper]{article}')
+        self.assertContains(editor, r'font=palatino')
+        self.assertContains(editor, 'diagn')
 
     @mock.patch('worksheets.views.collect_assets')
     @mock.patch('worksheets.views.compile_latex', return_value=b'%PDF-1.5')
@@ -1261,6 +1283,11 @@ class WorksheetViewTests(TestCase):
                 return_value=b'%PDF-1.5 fake')
     def test_student_pdf_access(self, mocked):
         from assignments.models import Assignment
+        self.worksheet.student_pdf_options = {
+            'size': '12pt', 'paper': 'a4paper',
+            'font': 'palatino', 'diagn': 'on',
+        }
+        self.worksheet.save(update_fields=['student_pdf_options'])
         Assignment.objects.create(
             worksheet=self.worksheet, student=self.student,
             assigned_by=self.teacher)
@@ -1268,6 +1295,9 @@ class WorksheetViewTests(TestCase):
         url = reverse('worksheet_pdf', args=[self.worksheet.pk])
         response = self.client.get(url, {'variant': 'student'})
         self.assertEqual(response.status_code, 200)
+        compiled_tex = mocked.call_args.args[0]
+        self.assertIn(r'\documentclass[12pt,a4paper]{article}', compiled_tex)
+        self.assertIn(r'\usepackage[font=palatino,diagn]{egor}', compiled_tex)
         # Вариант с ответами ученику запрещён
         response = self.client.get(url, {'variant': 'teacher'})
         self.assertEqual(response.status_code, 403)
@@ -1670,6 +1700,7 @@ class ShareLinkTests(TestCase):
         response = self.client.get(
             reverse('public_worksheet', args=[self.link.token]))
         self.assertContains(response, 'Квадратные уравнения')
+        self.assertNotContains(response, 'Формулы отображаются приближённо')
         # Ответы не показываются
         self.assertNotContains(response, 'Ответ')
 

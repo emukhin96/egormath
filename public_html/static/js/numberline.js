@@ -609,10 +609,9 @@
     var self = this;
     var range = this.step * TICKS;
 
-    /* Ось со стрелками */
+    /* Ось со стрелкой только в положительном направлении */
     svg.appendChild(svgEl('line', {x1: 2, y1: AXIS_Y, x2: W - 2, y2: AXIS_Y, 'class': 'nl-axis'}));
     svg.appendChild(svgEl('path', {d: 'M' + (W - 2) + ',' + AXIS_Y + ' l-7,-4 v8 z', 'class': 'nl-arrow'}));
-    svg.appendChild(svgEl('path', {d: 'M2,' + AXIS_Y + ' l7,-4 v8 z', 'class': 'nl-arrow'}));
 
     for (var k = -TICKS; k <= TICKS; k++) {
       var v = k * this.step;

@@ -20,7 +20,7 @@
   {% for row in selected_source.roots %}
   <a class="card collection-source-card" href="{% url 'collection_detail' row.collection.pk %}">
     <span class="page-eyebrow">{% if row.children %}Раздел{% else %}Подборка{% endif %}</span>
-    <h2>{{ row.collection.worksheet.title }}</h2>
+    <h2>{{ row.collection.catalog_title }}</h2>
     <div class="collection-source-stats"><span><strong>{{ row.leaf_total }}</strong> подборок</span><span><strong>{{ row.item_total }}</strong> элементов</span></div>
     {% include 'worksheets/_collection_topics.html' with topics=row.topics limit=5 %}
   </a>

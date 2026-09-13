@@ -122,7 +122,7 @@
       <form method="post" action="{% url 'worksheet_quick_update' w.pk %}"
             data-autosave="change" class="inline-form">
         {% csrf_token %}
-        {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=False compact=True selected_json=w.taxonomy_json %}
+        {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=False compact=True chip_full=True selected_json=w.taxonomy_json %}
       </form>
     </td>
     <td class="worksheet-count-cell">{{ w.items_total }}</td>
@@ -140,7 +140,6 @@
   </tr>
   <tr class="worksheet-action-row"><td></td><td colspan="6">
       <div class="task-meta">
-      {% if request.user.is_superuser %}<span>{{ w.owner.get_full_name|default:w.owner.username }}</span> · {% endif %}
       <a href="{% url 'worksheet_pdf_editor' w.pk %}" title="Предпросмотр и сборка PDF">PDF</a> ·
       <form method="post" action="{% url 'worksheet_copy' w.pk %}" class="inline-form">
         {% csrf_token %}
@@ -153,7 +152,8 @@
         <button type="submit" class="link-btn" title="Вернуть листок в корпус">Убрать из каталога</button>
       </form>
       {% endif %}
-       · <a href="{% url 'worksheet_progress' w.pk %}">Прогресс учеников</a></div>
+       · <a href="{% url 'worksheet_progress' w.pk %}">Прогресс учеников</a>
+      {% if request.user.is_superuser %} · <span>{{ w.owner.get_full_name|default:w.owner.username }}</span>{% endif %}</div>
   </td></tr>
   {% endfor %}
 </table>

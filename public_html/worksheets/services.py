@@ -206,6 +206,9 @@ def get_worksheet_pdf(worksheet, variant, exclude_ids=None):
     exclude_ids = set(exclude_ids or ())
     filter_key = _pdf_filter_key(exclude_ids)
     tex = worksheet_to_tex(worksheet, variant, exclude_ids=exclude_ids)
+    if variant == WorksheetPdf.VARIANT_STUDENT and worksheet.student_pdf_options:
+        from .latex import apply_pdf_options
+        tex = apply_pdf_options(tex, worksheet.student_pdf_options)
     content_hash = tex_hash(tex)
     cached = WorksheetPdf.objects.filter(
         worksheet=worksheet, variant=variant,

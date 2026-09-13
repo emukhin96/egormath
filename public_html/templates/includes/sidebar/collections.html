@@ -8,7 +8,7 @@
   <p class="sidebar-kicker">Структура источника</p>
   <ul class="sidebar-list collection-sidebar-tree">
     {% for row in selected_source.roots %}
-    <li style="--collection-depth: {{ row.depth }}"{% if current_collection.pk == row.collection.pk %} class="is-current"{% endif %}><a href="{% url 'collection_detail' row.collection.pk %}">{{ row.collection.worksheet.title|truncatechars:32 }}</a></li>
+    <li style="--collection-depth: {{ row.depth }}"{% if current_collection.pk == row.collection.pk %} class="is-current"{% endif %}><a href="{% url 'collection_detail' row.collection.pk %}">{{ row.collection.catalog_title|truncatechars:32 }}</a></li>
     {% endfor %}
   </ul>
   {% else %}
