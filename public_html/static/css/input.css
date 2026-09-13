@@ -409,6 +409,10 @@
     gap: var(--space-2);
   }
 
+  .topbar-user > .cart-menu {
+    margin-right: var(--space-1);
+  }
+
   .topbar-user > .inline-form {
     display: inline-flex;
     align-items: center;
@@ -826,6 +830,10 @@
   }
 
   .sidebar-stat {
+    display: flex;
+    min-height: 56px;
+    flex-direction: column;
+    justify-content: center;
     padding: var(--space-2);
     border-radius: 6px;
     background: rgb(255 255 255 / 7%);
@@ -1088,14 +1096,23 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.35em;
-    height: 1.35em;
+    width: 1.55rem;
+    height: 1.55rem;
     border-radius: 50%;
     background: #e8f1fb;
     color: var(--accent);
-    font-size: .95rem;
-    font-weight: 700;
     vertical-align: middle;
+  }
+
+  .worksheet-issued-badge svg {
+    display: block;
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.25;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
   .progress-assignment { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
 
@@ -1845,6 +1862,12 @@
     margin-left: var(--task-indent);
   }
 
+  .ws-view .task-images img {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
   /* Конструктор: «а)» на вертикали номеров (1., 2.), не правее. */
   .worksheet-items-card ol.subitems {
     margin-left: 0;
@@ -1935,6 +1958,12 @@
 
   .answer-block {
     margin: var(--space-3) 0;
+  }
+
+  .ws-view .answer-block,
+  .ws-view .mask-photo-note,
+  .ws-view .task-tools {
+    margin-left: var(--task-indent);
   }
 
   /* Действия по задаче: «Проверить», выбор фото */

@@ -57,6 +57,8 @@ class SuperuserWorksheetAccessTests(TestCase):
         self.assertTrue(next(w for w in rows if w.pk == self.worksheet.pk).was_assigned)
         self.assertFalse(next(w for w in rows if w.pk == unassigned.pk).was_assigned)
         self.assertContains(response, 'class="worksheet-issued-badge"', count=1)
+        self.assertContains(response, 'aria-label="Выдан ученикам"', count=1)
+        self.assertContains(response, '<svg viewBox="0 0 24 24"', count=1)
 
     @mock.patch('worksheets.views._worksheet_pdf_response')
     def test_superuser_opens_foreign_teacher_pdf(self, pdf_response):
