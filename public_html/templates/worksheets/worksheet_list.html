@@ -105,7 +105,14 @@
              form="ws-bulk-form" title="Выбрать листок">
     </td>
     <td class="worksheet-title-cell">
-      <a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a>{% if w.was_assigned %} <span class="worksheet-issued-badge" role="img" aria-label="Выдан ученикам" title="Выдан ученикам">✓</span>{% endif %}
+      <a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a>{% if w.was_assigned %}
+      <span class="worksheet-issued-badge" role="img" aria-label="Выдан ученикам" title="Выдан ученикам">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+      </span>{% endif %}
       {% if w.comment %}<div class="muted ws-comment" style="font-size:.85rem">{{ w.comment|truncatechars:120 }}</div>{% endif %}
 
     </td>

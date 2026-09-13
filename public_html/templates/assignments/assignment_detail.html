@@ -109,9 +109,8 @@
       {% endif %}
     </div>
     {% endif %}
-    {% if editable and not row.short_answer %}
-    {% if can_upload %}<p class="helptext mask-photo-note">Краткий ответ для этой задачи не предусмотрен — пришлите фото решения.</p>
-    {% else %}<p class="helptext">Ввод ответа для этой задачи пока не настроен. Уточните у учителя, как передать решение.</p>{% endif %}
+    {% if editable and not row.short_answer and can_upload %}
+    <p class="helptext mask-photo-note">Краткий ответ для этой задачи не предусмотрен — пришлите фото решения.</p>
     {% endif %}
 
     {% if can_check or can_upload %}

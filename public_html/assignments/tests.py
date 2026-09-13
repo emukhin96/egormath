@@ -586,6 +586,19 @@ class StudentAnswerTests(TestCase):
             reverse('assignment_detail', args=[self.assignment.pk]))
         self.assertContains(response, 'data-autosave="change"')
 
+    def test_task_without_answer_input_has_no_explanatory_placeholder(self):
+        task = self.tasks[0]
+        task.full_answer_only = True
+        task.save(update_fields=['full_answer_only'])
+        self.assignment.allow_photos = False
+        self.assignment.save(update_fields=['allow_photos'])
+
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+
+        self.assertNotContains(
+            response, 'Ввод ответа для этой задачи пока не настроен')
+
     def test_strict_masks_use_math_keyboard_for_student(self):
         task = self.tasks[0]
         task.answer_mask = (
