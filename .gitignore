@@ -9,6 +9,7 @@ virtualenv.pyz
 
 # Django
 db.sqlite3
+.cache/
 public_html/staticfiles/
 var/imports/
 var/worksheets-import/

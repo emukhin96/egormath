@@ -120,6 +120,21 @@ else:
         }
     }
 
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'egormath-default',
+    },
+    # CGI-процессы не разделяют память. Файловый кэш хранит неизменяемую
+    # часть рубрикатора между запросами и не требует отдельного сервиса.
+    'taxonomy': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': SITE_ROOT / '.cache' / 'taxonomy',
+        'TIMEOUT': 300,
+        'OPTIONS': {'MAX_ENTRIES': 10},
+    },
+}
+
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
      'OPTIONS': {'min_length': 6}},
