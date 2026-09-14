@@ -56,8 +56,6 @@ def add_candidate(position, task, subitem_ids=None):
         Candidate.objects.get_or_create(position=position, task=task, subitem_ids=ids)
         Position.objects.filter(pk=position.pk).update(mismatch_confirmed=False)
     else:
-        if ids:
-            raise WorkError('Задачи с общим условием добавляются целым блоком.')
         from problems.task_blocks import block_members
         try:
             members = block_members(task)
@@ -80,7 +78,7 @@ def add_candidate(position, task, subitem_ids=None):
                 item.order = order
                 item.save(update_fields=['order'])
         for target, member in zip(targets, members):
-            Candidate.objects.get_or_create(position=target, task=member, subitem_ids=[])
+            Candidate.objects.get_or_create(position=target, task=member, subitem_ids=ids if member.pk == task.pk else [])
             Position.objects.filter(pk=target.pk).update(mismatch_confirmed=False)
     position.work.save(update_fields=['updated_at'])
 
@@ -282,6 +280,11 @@ def prepare(work, owner, students, duration=40, deadline=None, max_variants=None
     else:
         variants, shortage, repeats = generate(data, min(len(recipients), max_variants or len(recipients)), seed, prior_keys(parent) if parent else None)
         notes = data['notes']
+    if not allow_photos:
+        checked = [p for pool in data['positions'] for candidate in pool for p in candidate['points']] if data else [p for rows in variants for p in rows]
+        missing = sorted({p['label'] for p in checked if not parse_mask(p['snapshot']['mask']).is_valid})
+        if missing:
+            raise WorkError('Нет способа ответить в пунктах ' + ', '.join(missing) + '. Настройте поля ответа или разрешите фотографии.')
     shuffled = list(recipients)
     random.Random(seed).shuffle(shuffled)
     assignment = {str(student): i % len(variants) + 1 for i, student in enumerate(shuffled)}
@@ -294,8 +297,23 @@ def prepare(work, owner, students, duration=40, deadline=None, max_variants=None
                               plan=plan, kind=kind, parent=parent)
 
 
-@transaction.atomic
 def issue(run_id, confirm=False):
+    """При откате БД удаляем только файлы этой неудачной выдачи."""
+    written = []
+    try:
+        with transaction.atomic():
+            return _issue(run_id, confirm, written)
+    except Exception:
+        for storage, name in written:
+            try:
+                storage.delete(name)
+            except OSError:
+                import logging
+                logging.getLogger(__name__).exception('Не удалось убрать файл отменённой выдачи')
+        raise
+
+
+def _issue(run_id, confirm, written):
     run = Run.objects.select_for_update().select_related('work', 'parent').get(pk=run_id)
     if run.issued_at:
         return run
@@ -327,7 +345,9 @@ def issue(run_id, confirm=False):
                 if source.get('sha256') and hashlib.sha256(content).hexdigest() != source['sha256']:
                     raise WorkError('Картинка изменилась. Обновите предпросмотр.', 409)
                 asset = Asset(point=point, name=source['name'], audiences=source['audiences'])
-                asset.file.save(uuid.uuid4().hex + Path(source['name']).suffix, ContentFile(content), save=True)
+                asset.file.save(uuid.uuid4().hex + Path(source['name']).suffix, ContentFile(content), save=False)
+                written.append((asset.file.storage, asset.file.name))
+                asset.save()
         for student, assigned in run.plan['students'].items():
             if assigned == number:
                 root = (run.parent.root or run.parent) if run.parent and run.kind == 'correction' else None

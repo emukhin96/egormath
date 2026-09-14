@@ -26,6 +26,8 @@ class FamilyMember(models.Model):
 class Work(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     title = models.CharField('Название', max_length=190)
+    source_worksheet = models.ForeignKey('worksheets.Worksheet', null=True, blank=True,
+                                        on_delete=models.SET_NULL, related_name='independent_templates')
     updated_at = models.DateTimeField(auto_now=True)
 
     @classmethod
