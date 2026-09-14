@@ -2,6 +2,7 @@
 {% load task_extras %}
 {% block content %}
 <div class="page-head"><div><span class="page-eyebrow">Конструктор · самостоятельная</span><h1>{{ work.title }}</h1>{% if work.source_worksheet_id %}<p>На основе <a href="{% url 'worksheet_detail' work.source_worksheet_id %}">{{ work.source_worksheet.title }}</a>. Шаблон редактируется независимо.</p>{% endif %}</div><a class="btn" href="{% url 'independentworks:prepare' work.pk %}{% if preparation_query %}?{{ preparation_query }}{% endif %}">Выдать задание</a></div>
+<form method="post" action="{% url 'independentworks:copy' work.pk %}" class="form-buttons">{% csrf_token %}<button class="btn btn-secondary">Копировать шаблон</button></form>
 <form method="post" class="form-buttons">{% csrf_token %}<input type="hidden" name="action" value="title"><label>Название<input name="title" maxlength="190" value="{{ work.title }}" required></label><button class="btn btn-secondary">Сохранить</button></form>
 <div class="card worksheet-items-card">
 <h2>Сравнение кандидатов по номерам</h2>

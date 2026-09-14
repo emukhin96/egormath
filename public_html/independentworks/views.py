@@ -274,7 +274,7 @@ def finish_analog(request, pk, task_id):
         get_object_or_404(Family, pk=family_id).tasks.add(task)
         svc.add_candidate(position, task)
     del request.session[f'iw_analog_{pk}_{task_id}']
-    return redirect('independentworks:edit', pk=position.work_id)
+    return redirect('independentworks:pick', pk=position.pk)
 
 
 @enabled
@@ -494,7 +494,10 @@ def review(request, pk, point_id):
             answer.comment = request.POST.get(comment_key, request.POST.get('comment', ''))[:20000]
         answer.save(update_fields=['grade', 'comment', 'updated_at'])
     if request.headers.get('Accept') == 'application/json':
-        return JsonResponse({'grade': answer.grade, 'result': svc.result(attempt)})
+        # own_attempt заранее загрузил ответы; после проверки нужен свежий итог.
+        attempt._prefetched_objects_cache.pop('answers', None)
+        feedback = (Review.SYMBOLS.get(answer.grade, answer.grade) + ' · ' + answer.get_grade_display()) if answer.grade else ('На проверке' if answer.pending else {'ok': 'Верно', 'wrong': 'Неверно'}.get(answer.auto_check, 'Ответ не введён'))
+        return JsonResponse({'grade': answer.grade, 'feedback': feedback, 'result': svc.result(attempt), 'cumulative': svc.cumulative(attempt)})
     messages.success(request, 'Проверка сохранена')
     return redirect('independentworks:attempt', pk=pk)
 

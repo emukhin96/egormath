@@ -47,6 +47,10 @@
           document.querySelectorAll('[data-grade-url]').forEach(s=>{if(s.dataset.gradeUrl===scale.dataset.gradeUrl)s.querySelectorAll('[data-grade]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.grade===result.grade)));});
           document.querySelectorAll('[data-review-total-done]').forEach(e=>e.textContent=result.result.done);
           document.querySelectorAll('[data-review-total-percent]').forEach(e=>e.textContent=result.result.percent);
+          document.querySelectorAll('[data-point-feedback-url]').forEach(e=>{if(e.dataset.pointFeedbackUrl===scale.dataset.gradeUrl&&result.feedback!==undefined)e.textContent=result.feedback;});
+          document.querySelectorAll('[data-review-pending]').forEach(e=>e.hidden=!result.result.pending);
+          document.querySelectorAll('[data-review-pending-count]').forEach(e=>e.textContent=result.result.pending||0);
+          if(result.cumulative){document.querySelectorAll('[data-review-cumulative-done]').forEach(e=>e.textContent=result.cumulative.done);document.querySelectorAll('[data-review-cumulative-percent]').forEach(e=>e.textContent=result.cumulative.percent);}
           if(window.EgorAutosave)EgorAutosave.showSaved(true);
         }finally{delete scale.dataset.busy;grading=false;}
       }
