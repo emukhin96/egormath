@@ -1,0 +1,21 @@
+<div class="card filter-card">
+  <form method="get" class="filters" id="task-filters">
+    <div>
+      <label for="f_q">Поиск</label>
+      <input type="text" name="q" id="f_q" value="{{ params.q|default:'' }}" placeholder="ключевые слова">
+    </div>
+    <div>
+      <label for="f_grade">Класс</label>
+      <select name="grade" id="f_grade" class="quick-select" onchange="this.form.submit()">
+        {% include 'includes/grade_options.html' with selected=params.grade empty_label='Любой' %}
+      </select>
+    </div>
+    <div class="tax-filter">
+      <label>Тема</label>
+      {% include 'includes/taxonomy_picker.html' with mode='filter' primary=False facets=False grades=False compact=True selected_json=selected_json %}
+    </div>
+    <div><button type="submit" class="btn">Найти</button></div>
+    <div><a class="btn btn-secondary" href="{% if position %}{% url 'independentworks:pick' position.pk %}{% else %}{% url 'task_list' %}{% endif %}">Сбросить</a></div>
+  </form>
+</div>
+

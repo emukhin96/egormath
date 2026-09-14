@@ -172,7 +172,7 @@ def edit(request, pk):
 def copy_work(request, pk):
     old = get_object_or_404(Work.visible_to(request.user), pk=pk)
     with transaction.atomic():
-        work = Work.objects.create(owner=request.user, title=(old.title + ' (копия)')[:190])
+        work = Work.objects.create(owner=request.user, title=(old.title + ' (копия)')[:190], source_worksheet=old.source_worksheet)
         for p in old.positions.prefetch_related('candidates'):
             new = Position.objects.create(work=work, order=p.order, text=p.text)
             for c in p.candidates.all():
@@ -185,10 +185,15 @@ def copy_work(request, pk):
 def pick(request, pk):
     position = get_object_or_404(Position, pk=pk, work__in=Work.visible_to(request.user))
     base = position.candidates.select_related('task').first()
-    tasks = Task.objects.filter(variant_of__isnull=True).prefetch_related('subitems', 'images', 'analog_families', 'familymember_set__family')
+    from problems.views import filter_tasks
+    from problems.rubricator import taxonomy_page_context, filter_state_from_params
     query = request.GET.get('q', '')
-    if query:
-        tasks = tasks.filter(Q(text_plain__icontains=query) | Q(pk=int(query) if query.isdigit() else 0))
+    params = request.GET.copy()
+    if query.isdigit():
+        params.pop('q', None)
+    tasks = filter_tasks(params).prefetch_related('analog_families', 'familymember_set__family')
+    if query.isdigit():
+        tasks = tasks.filter(pk=int(query))
     recommended = tasks.none()
     if base:
         family_ids = set(base.task.analog_families.values_list('pk', flat=True))
@@ -203,12 +208,31 @@ def pick(request, pk):
             raise svc.WorkError('Неверный подпункт.')
         if task.subitems.filter(pk__in=ids).count() != len(ids):
             raise svc.WorkError('Подпункт не принадлежит задаче.')
-        svc.add_candidate(position, task, ids)
-        messages.success(request, 'Кандидат добавлен')
+        if request.POST.get('parts_mode') == 'all':
+            ids = []
+        elif request.POST.get('parts_mode') == 'selected' and not ids:
+            raise svc.WorkError('Выберите хотя бы один подпункт или всю задачу.')
+        if request.POST.get('candidate'):
+            candidate = get_object_or_404(position.candidates, pk=request.POST['candidate'], task=task)
+            with transaction.atomic():
+                Work.objects.select_for_update().get(pk=position.work_id)
+                candidate.subitem_ids = ids
+                candidate.save(update_fields=['subitem_ids'])
+                position.mismatch_confirmed = False
+                position.save(update_fields=['mismatch_confirmed'])
+                position.work.save(update_fields=['updated_at'])
+            messages.success(request, 'Подпункты сохранены')
+        else:
+            svc.add_candidate(position, task, ids)
+            messages.success(request, 'Кандидат добавлен')
         return redirect(request.get_full_path())
     from django.core.paginator import Paginator
     page = Paginator(tasks.order_by('-pk'), 15).get_page(request.GET.get('page'))
-    return render(request, 'independentworks/pick.html', {'position': position, 'base': base, 'recommended': recommended[:30], 'page': page, 'q': query})
+    context = taxonomy_page_context(filter_state_from_params(request.GET))
+    context.update({'position': position, 'base': base, 'recommended': recommended[:30], 'page': page, 'q': query,
+                    'params': request.GET, 'grade_choices': Task.GRADE_CHOICES,
+                    'selected_candidates': position.candidates.select_related('task').prefetch_related('task__subitems', 'task__images')})
+    return render(request, 'independentworks/pick.html', context)
 
 
 @enabled

@@ -1,1 +1,17 @@
-{% load task_extras %}<article class="card iw-section">{% for member in task.familymember_set.all %}<p class="helptext">{{ member.family.title }}{% for evidence in member.evidence %} · {{ evidence.path|join:" / " }}{% if evidence.locator %} · {{ evidence.locator }}{% endif %}{% endfor %}</p>{% endfor %}<div class="math-content">{{ task.text_latex|web_text }}</div>{% task_images task %}<details><summary>Ответ и решение</summary><div class="math-content">{{ task.effective_answer_latex|web_answer }} {{ task.effective_solution_latex|web_text }}</div>{% for part in task.subitems.all %}<div class="math-content">{{ part.text_latex|web_text }} — {{ part.effective_answer_latex|web_answer }} {{ part.effective_solution_latex|web_text }}</div>{% endfor %}{% task_images task "answers" %}</details><form method="post">{% csrf_token %}<input type="hidden" name="task" value="{{ task.pk }}">{% for part in task.subitems.all %}<label class="iw-choice"><input type="checkbox" name="parts" value="{{ part.pk }}"><span class="math-content">{{ part.text_latex|web_text }}</span></label>{% endfor %}<p class="helptext">Ничего не отмечено — вся задача. Отметьте подпункты для своего набора.</p><div class="form-buttons"><button class="btn">Добавить в пул</button><a class="btn btn-secondary" href="{% url 'task_detail' task.pk %}" target="_blank" rel="noopener">Открыть задачу</a></div></form><form method="post" action="{% url 'independentworks:create_analog' position.pk task.pk %}">{% csrf_token %}<button class="btn btn-secondary">Создать аналог вручную</button></form></article>
+{% load task_extras %}
+<article class="card form-section" data-task-row>
+{% for member in task.familymember_set.all %}<p class="helptext">{{ member.family.title }}{% for evidence in member.evidence %} · {{ evidence.path|join:" / " }}{% if evidence.locator %} · {{ evidence.locator }}{% endif %}{% endfor %}</p>{% endfor %}
+{% include 'problems/_catalog_content.html' with selecting=True %}
+<form method="post">{% csrf_token %}
+<input type="hidden" name="task" value="{{ task.pk }}">
+{% if candidate %}<input type="hidden" name="candidate" value="{{ candidate.pk }}">{% endif %}
+<label class="check-label"><input type="radio" name="parts_mode" value="all" {% if not candidate.subitem_ids %}checked{% endif %}>Вся задача</label>
+{% if task.subitems.all %}
+<label class="check-label"><input type="radio" name="parts_mode" value="selected" {% if candidate.subitem_ids %}checked{% endif %}>Выбранные подпункты</label>
+{% include 'problems/_subitem_choices.html' with selected_ids=candidate.subitem_ids %}
+{% endif %}
+<div class="form-buttons"><button class="btn">{% if candidate %}Сохранить подпункты{% else %}Добавить в пул{% endif %}</button><a class="btn btn-secondary" href="{% url 'task_detail' task.pk %}" target="_blank" rel="noopener">Открыть задачу #{{ task.pk }}</a></div>
+</form>
+<details><summary>Маски ответов</summary><p>{{ task.answer_mask|default:'Нет маски задачи' }}</p>{% for part in task.subitems.all %}<p>{{ forloop.counter }}: {{ part.answer_mask|default:'Ручная проверка' }}</p>{% endfor %}</details>
+<form method="post" action="{% url 'independentworks:create_analog' position.pk task.pk %}">{% csrf_token %}<button class="btn btn-secondary">Создать аналог вручную</button></form>
+</article>
