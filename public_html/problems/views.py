@@ -1322,12 +1322,13 @@ def textbook_import_detail(request, pk):
                                       suggested_topic_for_drafts)
         group_drafts = _textbook_group_drafts(batch, selected_group)
         selected_group['topic_counts'] = _group_topic_counts(
-            group_drafts.only('topic_id', 'topic_ids'))
+            group_drafts.only('topic_id', 'topic_ids', 'batch_id'))
         suggested_topic = suggested_topic_for_drafts(
             group_drafts.select_related('topic'))
         assigned_sets = [
             tuple(draft_topic_ids(draft))
-            for draft in group_drafts.only('topic_id', 'topic_ids')
+            for draft in group_drafts.only('topic_id', 'topic_ids',
+                                           'batch_id')
         ]
         if assigned_sets and len(set(assigned_sets)) == 1 and assigned_sets[0]:
             selected_topics = list(assigned_sets[0])

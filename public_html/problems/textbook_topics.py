@@ -191,7 +191,9 @@ def _meaningful_topic_labels(parts):
 
 
 def _topic_index():
-    topics = list(Topic.objects.exclude(code__isnull=True).exclude(code=''))
+    topics = list(
+        Topic.objects.select_related('parent')
+        .exclude(code__isnull=True).exclude(code=''))
     by_code = {topic.code: topic for topic in topics if topic.code}
     by_name = {}
     for topic in topics:
@@ -379,11 +381,14 @@ def suggested_topic_for_drafts(drafts):
     if len(assigned) == 1 and all(draft.topic_id for draft in rows):
         return Topic.objects.filter(pk=next(iter(assigned))).first()
     found = {}
+    index = None
     for draft in rows:
         candidates = draft.topic_candidates
         if not candidates:
+            if index is None:
+                index = _topic_index()
             candidates = match_topic_candidates(
-                draft.source_path, draft.topic_original)
+                draft.source_path, draft.topic_original, index=index)
         for item in candidates:
             if item.get('reason') == 'fuzzy-name':
                 continue

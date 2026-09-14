@@ -480,7 +480,7 @@ def ziv_variant_summary(batch):
     }
     drafts = (batch.drafts.exclude(status=TextbookTaskDraft.STATUS_SKIPPED)
               .only('external_id', 'collection_title', 'source_path',
-                    'topic_original'))
+                    'topic_original', 'batch_id'))
     for draft in drafts:
         parsed = _ziv_topic_variant(draft.external_id)
         if parsed is None:
@@ -829,7 +829,7 @@ def missing_imported_collection_draft_ids(batch, drafts=None):
     rows = list(drafts.filter(
         status=TextbookTaskDraft.STATUS_IMPORTED).only(
             'pk', 'imported_task_id', 'source_path', 'collection_key',
-            'collection_title'))
+            'collection_title', 'batch_id'))
     targets = {}
     for draft in rows:
         path, _headings, leaf_key = _draft_collection_layout(batch, draft)
@@ -1111,7 +1111,7 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
             f'{missing_topics}.')
     resolved_stems = set(batch.assets.values_list('stem', flat=True))
     missing_assets = sum(
-        1 for draft in approved.only('images')
+        1 for draft in approved.only('images', 'batch_id')
         if unmatched_image_names(draft, resolved_stems))
     if missing_assets:
         raise TextbookImportError(
