@@ -253,7 +253,7 @@ def prepare_run(request, pk):
         if parent.run.work_id != work.pk:
             raise Http404
     kind = request.GET.get('kind', 'initial')
-    if (kind not in ('initial', 'correction', 'retake')) or (kind != 'initial' and not parent):
+    if kind not in ('initial', 'correction', 'retake') or (kind == 'initial') != (parent is None):
         raise svc.WorkError('Неизвестный вид повторной попытки.')
     form = RunForm(request.POST or None, teacher=request.user)
     if request.method == 'POST' and form.is_valid():
@@ -431,10 +431,16 @@ def publish(request, pk):
     run = teacher_run(request, pk)
     ids = request.POST.getlist('attempts')
     flags = sorted(set(request.POST.getlist('flags')) & svc.FLAGS)
-    selected_attempts = run.attempts.filter(pk__in=ids) if ids else run.attempts.all()
-    for attempt in selected_attempts:
-        if attempt.finished:
-            Attempt.objects.filter(pk=attempt.pk).update(published_at=timezone.now(), release_flags=flags)
+    if not flags:
+        raise svc.WorkError('Выберите хотя бы одну категорию для публикации.')
+    with transaction.atomic():
+        selected_attempts = run.attempts.select_for_update().select_related('run')
+        if ids:
+            selected_attempts = selected_attempts.filter(pk__in=ids)
+        for attempt in selected_attempts:
+            if attempt.finished:
+                combined = sorted(attempt.disclosure | set(flags))
+                Attempt.objects.filter(pk=attempt.pk).update(published_at=timezone.now(), release_flags=combined)
     messages.success(request, 'Разрешения публикации сохранены')
     return redirect('independentworks:progress', pk=pk)
 
