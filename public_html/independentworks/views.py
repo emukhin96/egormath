@@ -43,6 +43,14 @@ def enabled(view):
     return wrapped
 
 
+def preparation_query(request):
+    params = request.GET.copy()
+    for key in list(params):
+        if key not in ('resume', 'parent', 'kind'):
+            params.pop(key)
+    return params.urlencode()
+
+
 def teacher_run(request, pk):
     return get_object_or_404(Run.objects.select_related('work', 'parent'), pk=pk, work__in=Work.visible_to(request.user))
 
@@ -58,10 +66,7 @@ def own_attempt(request, pk, teacher=False):
 
 @enabled
 def catalog(request):
-    if get_role(request.user) == 'teacher':
-        return render(request, 'independentworks/catalog.html', {'works': Work.visible_to(request.user).order_by('-updated_at'), 'runs': Run.objects.filter(work__in=Work.visible_to(request.user), issued_at__isnull=False)[:30]})
-    attempts = Attempt.objects.filter(student=request.user, run__issued_at__isnull=False).select_related('run', 'variant').order_by('-pk')
-    return render(request, 'independentworks/catalog.html', {'attempts': attempts})
+    return redirect(reverse('assignment_list') + '?kind=independent') if get_role(request.user) == 'teacher' else redirect('dashboard')
 
 
 @enabled
@@ -149,7 +154,7 @@ def edit(request, pk):
                 raise svc.WorkError('Неизвестное действие.')
             work.save(update_fields=['updated_at'])
         messages.success(request, 'Сохранено')
-        return redirect('independentworks:edit', pk=pk)
+        return redirect(request.get_full_path())
     positions = list(work.positions.prefetch_related('candidates__task__subitems'))
     number = 0
     for p in positions:
@@ -163,7 +168,7 @@ def edit(request, pk):
             candidate.selected = svc.selected(candidate)
             candidate.point_count = len(candidate.selected) or 1
             candidate.mask_count = 0 if candidate.task.full_answer_only else sum(o.has_mask for o in (candidate.selected or [candidate.task]))
-    return render(request, 'independentworks/edit.html', {'work': work, 'positions': positions})
+    return render(request, 'independentworks/edit.html', {'work': work, 'positions': positions, 'preparation_query': preparation_query(request)})
 
 
 @enabled
@@ -230,7 +235,7 @@ def pick(request, pk):
     page = Paginator(tasks.order_by('-pk'), 15).get_page(request.GET.get('page'))
     context = taxonomy_page_context(filter_state_from_params(request.GET))
     context.update({'position': position, 'base': base, 'recommended': recommended[:30], 'page': page, 'q': query,
-                    'params': request.GET, 'grade_choices': Task.GRADE_CHOICES,
+                    'params': request.GET, 'preparation_query': preparation_query(request), 'grade_choices': Task.GRADE_CHOICES,
                     'selected_candidates': position.candidates.select_related('task').prefetch_related('task__subitems', 'task__images')})
     return render(request, 'independentworks/pick.html', context)
 
@@ -276,6 +281,11 @@ def finish_analog(request, pk, task_id):
 @teacher_required
 def prepare_run(request, pk):
     work = get_object_or_404(Work.visible_to(request.user), pk=pk)
+    if request.method == 'GET' and request.resolver_match.namespace == 'independentworks':
+        params = request.GET.copy()
+        params['mode'] = 'independent'
+        params['work'] = str(pk)
+        return redirect(reverse('assignment_create') + '?' + params.urlencode())
     parent = None
     if request.GET.get('parent'):
         parent = own_attempt(request, request.GET['parent'], teacher=True)
@@ -311,10 +321,12 @@ def preview_context(run):
             rows.append({'point': point, 'common': snapshot.get('common', ''), 'text': snapshot['text'],
                 'notes': [n['text'] for n in run.plan['notes'] if n['before'] == point['position']] if point['position'] not in visited else [],
                 'content_images': [{'url': reverse('independentworks:preview_asset', args=[run.pk, vi, pi, ai]),
-                                    'name': asset['name'], 'pdf': asset['name'].lower().endswith('.pdf')}
+                                    'filename': asset['name'], 'is_pdf': asset['name'].lower().endswith('.pdf')}
                                    for ai, asset in enumerate(snapshot.get('assets', []), 1) if 'statement' in asset['audiences']],
                 'reference': snapshot['answer'], 'solution': snapshot['solution'],
                 'fragments': render_fragments(parse_mask(snapshot['mask']), f'preview{vi}p{pi}', {}, {}, seed=f'{vi}-{pi}') if parse_mask(snapshot['mask']).is_valid else None})
+            rows[-1]['reference_images'] = [{'url': reverse('independentworks:preview_asset', args=[run.pk, vi, pi, ai]), 'filename': asset['name'], 'is_pdf': asset['name'].lower().endswith('.pdf')} for ai, asset in enumerate(snapshot.get('assets', []), 1) if set(asset['audiences']) & {'answer', 'solution'}]
+            rows[-1]['repeated'] = point['source_key'] in run.plan['repeats']
             visited.add(point['position'])
         variants.append({'number': vi, 'rows': rows,
             'tail_notes': [n['text'] for n in run.plan['notes'] if n['before'] > max(visited, default=0)]})
@@ -397,7 +409,7 @@ def point_rows(attempt, teacher=False):
                      'auto': answer.auto_check if answer and 'checks' in disclosure else '',
                      'pending': (answer.pending if answer else not spec.is_valid),
                      'assets': [a for a in point.assets.all() if 'statement' in a.audiences or set(a.audiences) & disclosure]})
-        rows[-1]['content_images'] = [{'url': reverse('independentworks:asset', args=[attempt.pk, a.pk]), 'name': a.name, 'pdf': a.name.lower().endswith('.pdf')} for a in rows[-1]['assets']]
+        rows[-1]['content_images'] = [{'url': reverse('independentworks:asset', args=[attempt.pk, a.pk]), 'filename': a.name, 'is_pdf': a.name.lower().endswith('.pdf')} for a in rows[-1]['assets']]
         visited.add(point.position)
     return rows
 
@@ -422,6 +434,7 @@ def attempt_page(request, pk):
     return render(request, 'independentworks/attempt.html', {
         'attempt': attempt, 'teacher_view': teacher, 'rows': point_rows(attempt, teacher) if accessible else [],
         'editable': not teacher and bool(attempt.started_at) and not attempt.finished,
+        'can_start': not attempt.started_at and not (attempt.run.deadline and timezone.now() >= attempt.run.deadline),
         'accessible': accessible, 'show_checks': teacher or 'checks' in attempt.disclosure,
         'tail_notes': [n['text'] for n in attempt.variant.notes if n['before'] > max((p.position for p in attempt.variant.points.all()), default=0)] if accessible else [],
         'result': svc.result(attempt) if teacher or 'checks' in attempt.disclosure else None,
@@ -584,7 +597,7 @@ def photo_file(request, pk):
 
 
 def progress_context(run):
-    attempts = list(run.attempts.select_related('student', 'run', 'variant', 'root').prefetch_related('variant__points__assets', 'answers__photos', 'answers__point'))
+    attempts = list(run.attempts.select_related('student', 'run', 'variant', 'root').prefetch_related('variant__points__assets', 'answers__photos', 'answers__point', 'corrections__answers__point', 'root__variant__points', 'root__answers__point', 'root__corrections__answers__point'))
     numbers = sorted(set(p.position for a in attempts for p in a.variant.points.all()))
     people = []
     stats = {}
@@ -598,7 +611,9 @@ def progress_context(run):
                 if row['point'].position != number:
                     continue
                 status = 'ok' if row['auto'] == 'ok' else 'wrong' if row['auto'] == 'wrong' else 'draft' if row['answer'] else 'empty'
-                points.append({'detail_url': reverse('independentworks:point_detail', args=[a.pk, row['point'].pk]), 'label': row['point'].label, 'status': status, 'status_label': row['grade'] or ('На проверке' if row['pending'] else row['auto']), 'mark': row['grade_symbol'], 'attempt_count': 0})
+                if row['answer'] and row['answer'].grade:
+                    status = 'ok' if row['answer'].credit == 1 else 'draft' if row['answer'].credit else 'wrong'
+                points.append({'detail_url': reverse('independentworks:point_detail', args=[a.pk, row['point'].pk]), 'label': row['point'].label, 'status': status, 'status_label': row['grade'] or ('На проверке' if row['pending'] else {'ok': 'Верно', 'wrong': 'Неверно'}.get(row['auto'], 'Ответ не введён')), 'mark': row['grade_symbol'], 'attempt_count': 0})
             cells.append({'item': {'pk': number}, 'owner': {'pk': number}, 'points': points, 'hidden': not points})
         remaining = max(0, int((a.ends_at - timezone.now()).total_seconds())) if a.ends_at else 0
         people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a),
@@ -606,12 +621,15 @@ def progress_context(run):
         if a.started_at:
             for row in rows:
                 key = row['point'].candidate_key
-                stat = stats.setdefault(key, {'key': key, 'students': set(), 'points': 0, 'done': 0})
+                stat = stats.setdefault(key, {'key': key, 'students': set(), 'variants': set(), 'positions': set(), 'points': 0, 'done': 0})
                 stat['students'].add(a.student_id)
+                stat['variants'].add(a.variant.number)
+                stat['positions'].add(row['point'].position)
                 stat['points'] += 1
                 stat['done'] += row['answer'].credit if row['answer'] else 0
     for stat in stats.values():
         stat['count'] = len(stat.pop('students'))
+        stat['label'] = '№' + ', '.join(map(str, sorted(stat.pop('positions')))) + ' · варианты ' + ', '.join(map(str, sorted(stat.pop('variants'))))
         stat['percent'] = round(100 * stat['done'] / stat['points'])
     return {'independent': True, 'point_groups': [{'item': {'pk': n}, 'number': n, 'columns': [{'owner': {'pk': n}, 'label': 'Пункты'}]} for n in numbers], 'run': run, 'people': people, 'numbers': numbers, 'stats': list(stats.values()), 'variants': run.variants.all()}
 

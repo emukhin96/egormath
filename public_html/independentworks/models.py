@@ -28,6 +28,7 @@ class Work(models.Model):
     title = models.CharField('Название', max_length=190)
     source_worksheet = models.ForeignKey('worksheets.Worksheet', null=True, blank=True,
                                         on_delete=models.SET_NULL, related_name='independent_templates')
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     @classmethod

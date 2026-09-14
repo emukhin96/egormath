@@ -15,8 +15,9 @@
 {% for note in row.notes %}<div class="card ws-view math-content">{{ note|web_text }}</div>{% endfor %}
 <div class="card ws-view">
 {% include 'assignments/_point_content.html' %}
+{% if row.repeated %}<p class="msg msg-warning">№{{ row.point.label }} · этот пункт уже выдавался в предыдущих попытках.</p>{% endif %}
 {% if row.fragments %}<div>{% include 'assignments/_mask.html' with fragments=row.fragments editable=True show_checks=False %}</div><p class="helptext">Пробный ввод не сохраняется.</p>{% else %}<p class="helptext">Фото решения · ручная проверка.</p>{% endif %}
-<details><summary>Эталон и решение — только учителю</summary><div class="math-content">{{ row.reference|web_answer }} {{ row.solution|web_text }}</div></details>
+<details><summary>Эталон и решение — только учителю</summary><div class="math-content">{{ row.reference|web_answer }} {{ row.solution|web_text }}</div>{% include 'problems/_task_images.html' with images=row.reference_images %}</details>
 </div>
 {% endfor %}
 {% for note in variant.tail_notes %}<div class="card ws-view math-content">{{ note|web_text }}</div>{% endfor %}
@@ -24,7 +25,7 @@
 {% endfor %}
 <form method="post" action="{% url 'independentworks:issue' run.pk %}" class="card form-section">{% csrf_token %}
 {% if run.plan.shortage or run.plan.repeats %}<label class="check-label"><input type="checkbox" name="confirm" required>Подтверждаю выдачу с повторениями</label>{% endif %}
-<div class="form-buttons"><button class="btn">Выдать просмотренные варианты</button><a class="btn btn-secondary" href="{% url 'independentworks:prepare' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Изменить параметры</a><a class="btn btn-secondary" href="{% url 'independentworks:edit' run.work_id %}">К кандидатам по номерам</a></div>
+<div class="form-buttons"><button class="btn">Выдать просмотренные варианты</button><a class="btn btn-secondary" href="{% url 'independentworks:prepare' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Изменить параметры</a><a class="btn btn-secondary" href="{% url 'independentworks:edit' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">К кандидатам по номерам</a></div>
 </form>
 {% endblock %}
 {% block extra_js %}

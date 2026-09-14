@@ -167,13 +167,29 @@ def assignment_list(request):
         submitted_total=Count('pk', filter=Q(status=Assignment.STATUS_SUBMITTED)),
         reviewed_total=Count('pk', filter=Q(status=Assignment.STATUS_REVIEWED)),
         queue_priority=Min('queue_order')).order_by('queue_priority', '-last_assigned', 'worksheet_id')
+    from independentworks.integration import assignment_groups
+    kind = request.GET.get('kind', '')
+    grouped = list(grouped) if kind != 'independent' else []
+    for group in grouped:
+        group['kind'] = 'ordinary'
+        group['key'] = f"ordinary-{group['worksheet_id']}"
+    independent_groups = assignment_groups(request.user, request.GET)
+    grouped += independent_groups
+    grouped.sort(key=lambda g: (g['queue_priority'], -g['last_assigned'].timestamp(), g['key']))
+    if kind == 'independent':
+        stats = dict.fromkeys(stats, 0)
+    for group in assignment_groups(request.user, {'kind': kind, 'owner': owner_id}):
+        stats['total'] += group['students_total']
+        stats['submitted'] += group['submitted_total']
+        stats['reviewed'] += group['reviewed_total']
+        stats['assigned'] += group['students_total'] - group['submitted_total'] - group['reviewed_total']
     page = Paginator(grouped, 30).get_page(request.GET.get('page'))
     groups_on_page = list(page.object_list)
     page.object_list = groups_on_page
     students = list(Profile.students_for(request.user)
                     .select_related('user')
                     .order_by('user__last_name', 'user__first_name'))
-    worksheet_ids = [g['worksheet_id'] for g in groups_on_page]
+    worksheet_ids = [g['worksheet_id'] for g in groups_on_page if g['kind'] == 'ordinary']
     page_assignments = list(
         Assignment.visible_to(request.user)
         .filter(worksheet_id__in=worksheet_ids)
@@ -224,7 +240,7 @@ def assignment_list(request):
         ],
         'filters': {
             'q': q, 'status': status, 'student': student_id,
-            'worksheet': worksheet_id, 'due': due, 'owner': owner_id,
+            'worksheet': worksheet_id, 'due': due, 'owner': owner_id, 'kind': kind,
         },
         'return_query': request.GET.urlencode(),
     })

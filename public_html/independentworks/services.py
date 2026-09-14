@@ -443,7 +443,10 @@ def result(attempt):
 
 def cumulative(attempt, student_view=False):
     root = attempt.root or attempt
-    attempts = [root] + list(root.corrections.select_related('variant', 'run').prefetch_related('answers__point'))
+    corrections = root.corrections.all()
+    if 'corrections' not in getattr(root, '_prefetched_objects_cache', {}):
+        corrections = corrections.select_related('variant', 'run').prefetch_related('answers__point')
+    attempts = [root] + list(corrections)
     best = {p.root_key: 0 for p in root.variant.points.all()}
     for item in attempts:
         if student_view and (not item.finished or 'checks' not in item.disclosure):

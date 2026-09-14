@@ -1,5 +1,6 @@
 <div class="card filter-card">
   <form method="get" class="filters" id="task-filters">
+    {% if preparation_query %}<input type="hidden" name="resume" value="{{ params.resume }}">{% if params.parent %}<input type="hidden" name="parent" value="{{ params.parent }}"><input type="hidden" name="kind" value="{{ params.kind }}">{% endif %}{% endif %}
     <div>
       <label for="f_q">Поиск</label>
       <input type="text" name="q" id="f_q" value="{{ params.q|default:'' }}" placeholder="ключевые слова">

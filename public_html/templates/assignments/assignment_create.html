@@ -6,7 +6,7 @@
   <div>
     <span class="page-eyebrow">Новая выдача</span>
     <h1>Выдать задание</h1>
-    <p class="page-subtitle">{% if independent %}Самостоятельная с зафиксированными вариантами и серверным сроком.{% else %}Один листок — группе, нескольким группам или отдельным ученикам.{% endif %}</p>
+    <p class="page-subtitle">{% if independent %}{% if kind == 'correction' %}Работа над ошибками.{% elif kind == 'retake' %}Пересдача.{% endif %} Самостоятельная с зафиксированными вариантами и серверным сроком.{% else %}Один листок — группе, нескольким группам или отдельным ученикам.{% endif %}</p>
   </div>
   <a class="btn btn-secondary" href="{% url 'assignment_list' %}">К заданиям</a>
 </div>
@@ -15,7 +15,7 @@
 {% if choose_work %}
 <form method="get" class="card form-section"><input type="hidden" name="mode" value="independent"><label>Шаблон<select name="work" required>{% for template in work_options %}<option value="{{ template.pk }}">{{ template.title }}</option>{% endfor %}</select></label><div class="form-buttons"><button class="btn">Продолжить</button><a class="btn btn-secondary" href="{% url 'independentworks:create' %}">Создать шаблон</a></div></form>
 {% else %}
-<form method="post" class="assignment-create-form" id="assignment-create-form"
+<form method="post" class="assignment-create-form" id="assignment-create-form" data-fixed-recipients="{% if parent %}1{% else %}0{% endif %}"
       data-bound="{{ form.is_bound|yesno:'1,0' }}"
       data-refresh-url="{% url 'assignment_create' %}">
   {% csrf_token %}{% if independent %}<input type="hidden" name="mode" value="independent"><input type="hidden" name="work" value="{{ work.pk }}">{% endif %}
@@ -82,7 +82,7 @@
     var option = worksheet && worksheet.options[worksheet.selectedIndex];
     if (worksheet) form.querySelector('[data-summary-worksheet]').textContent = option && option.value ? option.text : 'Не выбран';
     form.querySelector('[data-summary-groups]').textContent = Array.from(groupBoxes).filter(function (box) { return box.checked; }).length;
-    form.querySelector('[data-summary-students]').textContent = Array.from(studentBoxes).filter(function (box) { return box.checked; }).length;
+    form.querySelector('[data-summary-students]').textContent = Number(form.dataset.fixedRecipients || 0) + Array.from(studentBoxes).filter(function (box) { return box.checked; }).length;
   }
   var release = form.querySelector('[name=release_mode]');
   function releaseOptions() { var panel = form.querySelector('[data-release-flags]'); if (panel && release) panel.hidden = release.value !== 'auto'; }

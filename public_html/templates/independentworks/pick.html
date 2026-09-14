@@ -1,7 +1,7 @@
 {% extends 'independentworks/base.html' %}
 {% load task_extras static %}
 {% block content %}
-<div class="page-head"><h1>Кандидаты номера</h1><a class="btn btn-secondary" href="{% url 'independentworks:edit' position.work_id %}">К конструктору</a></div>
+<div class="page-head"><h1>Кандидаты номера</h1><a class="btn btn-secondary" href="{% url 'independentworks:edit' position.work_id %}{% if preparation_query %}?{{ preparation_query }}{% endif %}">К конструктору</a></div>
 <div class="task-catalog">
 <label class="ws-toggle"><input type="checkbox" id="toggle-catalog-answers"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Ответы и решения</span></label>
 <details open><summary>Утверждённый пул · {{ selected_candidates|length }} кандидатов</summary>

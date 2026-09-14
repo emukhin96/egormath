@@ -57,6 +57,7 @@ class IndependentWorkTests(TestCase):
         self.client.post(url, {f'p{point.pk}_comment': 'Проверь вычисления'}, HTTP_ACCEPT='application/json')
         answer = Answer.objects.get(attempt=a, point=point)
         self.assertEqual(answer.grade, '+')
+        self.assertContains(self.client.get(self.url('progress', a.run_id)), 'progress-mark progress-ok')
         self.client.post(url, {'grade': ''}, HTTP_ACCEPT='application/json')
         answer.refresh_from_db()
         self.assertEqual(answer.comment, 'Проверь вычисления')
@@ -68,6 +69,55 @@ class IndependentWorkTests(TestCase):
         self.assertContains(progress, self.url('point_detail', a.pk, point.pk))
         self.client.force_login(self.student)
         self.assertEqual(self.client.get(self.url('point_detail', a.pk, point.pk)).status_code, 403)
+
+    def test_unified_student_dashboard_disclosure_and_closed_start(self):
+        a = self.issued(deadline=timezone.now() + timedelta(minutes=1))
+        self.client.force_login(self.student)
+        response = self.client.get(reverse('dashboard'))
+        self.assertContains(response, self.url('attempt', a.pk))
+        self.assertNotContains(response, 'SECRET_ANSWER')
+        with patch('independentworks.integration.timezone.now', return_value=timezone.now() + timedelta(minutes=2)):
+            response = self.client.get(reverse('dashboard'))
+            self.assertEqual(len(response.context['closed_unstarted']), 1)
+            self.assertIsNone(response.context['closed_unstarted'][0].result)
+            self.assertEqual(response.context['todo'], [])
+        a = svc.start(a.pk)
+        point = a.variant.points.get()
+        svc.save_answer(a.pk, point.pk, 0, {'s1': '4'})
+        svc.submit(a.pk)
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(len(response.context['submitted']), 1)
+        self.assertIsNone(response.context['submitted'][0].result)
+        a.release_flags = ['checks']; a.published_at = timezone.now()
+        a.save(update_fields=['release_flags', 'published_at'])
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.context['reviewed'][0].result['percent'], 100)
+
+    def test_mixed_catalog_pagination_and_material_types(self):
+        from worksheets.models import Worksheet
+        from assignments.models import Assignment
+        sheet = Worksheet.objects.create(owner=self.teacher, title='Обычный листок')
+        Assignment.objects.create(worksheet=sheet, student=self.student)
+        for _ in range(31):
+            self.issued()
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse('assignment_list'))
+        self.assertEqual(response.context['page'].paginator.count, 32)
+        first = {g['key'] for g in response.context['worksheet_groups']}
+        response = self.client.get(reverse('assignment_list'), {'page': 2})
+        second = {g['key'] for g in response.context['worksheet_groups']}
+        self.assertFalse(first & second)
+        self.assertEqual(len(first | second), 32)
+        response = self.client.get(reverse('assignment_list'), {'kind': 'ordinary'})
+        self.assertEqual(response.context['page'].paginator.count, 1)
+        response = self.client.get(reverse('assignment_list'), {'kind': 'independent', 'q': 'Уравнения'})
+        self.assertEqual(response.context['page'].paginator.count, 31)
+        response = self.client.get(reverse('worksheet_list'))
+        self.assertContains(response, self.url('edit', self.work.pk))
+        response = self.client.get(reverse('worksheet_list'), {'kind': 'independent'})
+        self.assertEqual([w.pk for w in response.context['worksheets']], [self.work.pk])
+        self.assertRedirects(self.client.get(self.url('catalog')), reverse('assignment_list') + '?kind=independent')
+        self.assertRedirects(self.client.get(self.url('prepare', self.work.pk)), reverse('assignment_create') + f'?mode=independent&work={self.work.pk}')
 
     def test_idempotent_issue_start(self):
         a = self.issued()
@@ -234,6 +284,11 @@ class IndependentWorkTests(TestCase):
         image = TaskImage.objects.create(task=self.task, image=ContentFile(stream.getvalue(), name='figure.png'))
         self.task.solution_latex = r'SECRET_SOLUTION \taskpic{1}'
         self.task.save()
+        self.client.force_login(self.teacher)
+        preview_run = svc.prepare(self.work, self.teacher, [self.student.pk])
+        preview = self.client.get(self.url('preview', preview_run.pk))
+        self.assertContains(preview, self.url('preview_asset', preview_run.pk, 1, 1, 1))
+        self.assertTemplateUsed(preview, 'problems/_task_images.html')
         a = self.begin(release_mode='auto', release_flags=['solution'])
         asset = Asset.objects.get()
         self.client.force_login(self.student)
@@ -258,9 +313,9 @@ class IndependentWorkTests(TestCase):
     def test_pages_and_etag(self):
         self.client.force_login(self.teacher)
         run = svc.prepare(self.work, self.teacher, [self.student.pk])
-        for name, args in [('catalog', []), ('create', []), ('edit', [self.work.pk]), ('pick', [self.position.pk]), ('prepare', [self.work.pk]), ('preview', [run.pk])]:
+        for name, args in [('create', []), ('edit', [self.work.pk]), ('pick', [self.position.pk]), ('prepare', [self.work.pk]), ('preview', [run.pk])]:
             with self.subTest(name=name):
-                self.assertEqual(self.client.get(self.url(name, *args)).status_code, 200)
+                self.assertEqual(self.client.get(self.url(name, *args), follow=True).status_code, 200)
         svc.issue(run.pk)
         self.assertEqual(self.client.get(self.url('progress', run.pk)).status_code, 200)
         self.assertEqual(self.client.get(self.url('attempt', run.attempts.get().pk)).status_code, 200)
@@ -461,7 +516,7 @@ class IndependentWorkTests(TestCase):
                 with self.assertRaises(svc.WorkError):
                     svc.prepare(self.work, self.teacher, [self.student.pk], kind=kind, parent=previous)
         self.client.force_login(self.teacher)
-        response = self.client.get(self.url('prepare', self.work.pk), {'parent': parent.pk})
+        response = self.client.get(self.url('prepare', self.work.pk), {'parent': parent.pk}, follow=True)
         self.assertEqual(response.status_code, 400)
 
     def test_missing_snapshot_record_and_file_abort_issue(self):
@@ -594,23 +649,28 @@ class ConcurrentWorkTests(TransactionTestCase):
         User = get_user_model()
         self.teacher = User.objects.create_user('load_teacher')
         work = Work.objects.create(owner=self.teacher, title='Нагрузка')
-        position = Position.objects.create(work=work)
-        task = Task.objects.create(text_latex='Два плюс два', answer_mask='{{number: 4}}')
-        Candidate.objects.create(position=position, task=task)
+        for number in range(10):
+            position = Position.objects.create(work=work, order=number + 1)
+            task = Task.objects.create(text_latex=f'Пункт {number + 1}: два плюс два', answer_mask='{{number: 4}}')
+            Candidate.objects.create(position=position, task=task)
         User.objects.bulk_create([User(username=f'load_{i}') for i in range(30)])
         self.students = list(User.objects.filter(username__regex=r'^load_[0-9]+$'))
         self.run = svc.prepare(work, self.teacher, [u.pk for u in self.students], max_variants=1)
         svc.issue(self.run.pk)
         self.ids = list(self.run.attempts.values_list('pk', flat=True))
-        self.point_id = self.run.variants.get().points.get().pk
+        self.point_ids = list(self.run.variants.get().points.values_list('pk', flat=True))
+        self.point_id = self.point_ids[0]
 
     def test_30_students_save_with_monitoring(self):
         def student(attempt_id):
             close_old_connections()
             try:
                 svc.start(attempt_id)
+                import time
                 for version in range(3):
-                    svc.save_answer(attempt_id, self.point_id, version, {'s1': str(version + 2)})
+                    for point_id in self.point_ids:
+                        time.sleep(0.002 * (attempt_id % 3))
+                        svc.save_answer(attempt_id, point_id, version, {'s1': str(version + 2)})
                 svc.submit(attempt_id)
                 return attempt_id
             finally:
@@ -619,8 +679,14 @@ class ConcurrentWorkTests(TransactionTestCase):
             close_old_connections()
             try:
                 from .views import progress_context
+                from django.test.utils import CaptureQueriesContext
+                from django.db import connection
                 for _ in range(5):
-                    self.assertEqual(len(progress_context(self.run)['people']), 30)
+                    with CaptureQueriesContext(connection) as queries:
+                        context = progress_context(self.run)
+                    self.assertEqual(len(context['people']), 30)
+                    self.assertEqual(len(context['numbers']), 10)
+                    self.assertLess(len(queries), 100)
             finally:
                 connections.close_all()
         with ThreadPoolExecutor(max_workers=31) as pool:
@@ -628,7 +694,7 @@ class ConcurrentWorkTests(TransactionTestCase):
             results = list(pool.map(student, self.ids))
             watching.result()
         self.assertEqual(len(results), 30)
-        self.assertEqual(Answer.objects.filter(attempt__run=self.run, version=3, auto_check='ok').count(), 30)
+        self.assertEqual(Answer.objects.filter(attempt__run=self.run, version=3, auto_check='ok').count(), 300)
         self.assertEqual(self.run.attempts.filter(submitted_at__isnull=False).count(), 30)
 
     def test_parallel_start_and_version_conflict(self):
