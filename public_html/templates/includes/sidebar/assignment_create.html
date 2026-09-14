@@ -2,16 +2,12 @@
   <p class="sidebar-kicker">Новая выдача</p>
   <h2>Три шага</h2>
   <ul class="sidebar-list">
-    <li><strong>1.</strong> Выберите листок</li>
+    <li><strong>1.</strong> Выберите материал</li>
     <li><strong>2.</strong> Отметьте группы или учеников</li>
     <li><strong>3.</strong> Задайте срок и режим проверки</li>
   </ul>
 </section>
 <section class="sidebar-section">
   <p class="sidebar-kicker">Важно</p>
-  <p class="sidebar-copy">Режим автосверки фиксируется при первой выдаче листка. Это сохраняет одинаковые условия для всех учеников.</p>
-</section>
-<section class="sidebar-section">
-  <p class="sidebar-kicker">Навигация</p>
-  <div class="sidebar-actions"><a class="sidebar-action" href="{% url 'assignment_list' %}">Все задания</a></div>
+  <p class="sidebar-copy">{% if independent %}Варианты фиксируются при выдаче. Время начинается по кнопке ученика; самопроверка недоступна.{% else %}Режим автосверки фиксируется при первой выдаче листка. Это сохраняет одинаковые условия для всех учеников.{% endif %}</p>
 </section>

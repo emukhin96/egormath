@@ -6,59 +6,51 @@
   <div>
     <span class="page-eyebrow">Новая выдача</span>
     <h1>Выдать задание</h1>
-    <p class="page-subtitle">Один листок — группе, нескольким группам или отдельным ученикам.</p>
+    <p class="page-subtitle">{% if independent %}Самостоятельная с зафиксированными вариантами и серверным сроком.{% else %}Один листок — группе, нескольким группам или отдельным ученикам.{% endif %}</p>
   </div>
   <a class="btn btn-secondary" href="{% url 'assignment_list' %}">К заданиям</a>
 </div>
 
+{% if independentworks_enabled %}<div class="form-buttons"><a class="btn btn-secondary" href="{% url 'assignment_create' %}">Обычное задание</a><a class="btn btn-secondary" href="{% url 'assignment_create' %}?mode=independent">Самостоятельная</a></div>{% endif %}
+{% if choose_work %}
+<form method="get" class="card form-section"><input type="hidden" name="mode" value="independent"><label>Шаблон<select name="work" required>{% for template in work_options %}<option value="{{ template.pk }}">{{ template.title }}</option>{% endfor %}</select></label><div class="form-buttons"><button class="btn">Продолжить</button><a class="btn btn-secondary" href="{% url 'independentworks:create' %}">Создать шаблон</a></div></form>
+{% else %}
 <form method="post" class="assignment-create-form" id="assignment-create-form"
       data-bound="{{ form.is_bound|yesno:'1,0' }}"
       data-refresh-url="{% url 'assignment_create' %}">
-  {% csrf_token %}
+  {% csrf_token %}{% if independent %}<input type="hidden" name="mode" value="independent"><input type="hidden" name="work" value="{{ work.pk }}">{% endif %}
   {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
   <div class="assignment-create-grid">
     <div>
       <section class="card form-section">
-        <div class="form-section-head"><span class="form-step">1</span><div><h2>Что выдаём</h2><p class="helptext">Можно выбрать только свой листок.</p></div></div>
-        {{ form.worksheet.errors }}
+        <div class="form-section-head"><span class="form-step">1</span><div><h2>Что выдаём</h2><p class="helptext">{% if independent %}Независимый шаблон самостоятельной.{% else %}Можно выбрать только свой листок.{% endif %}</p></div></div>
+        {% if independent %}<h3>{{ work.title }}</h3><a href="{% url 'independentworks:edit' work.pk %}">Проверить кандидатов по номерам</a>{% else %}        {{ form.worksheet.errors }}
         {{ form.worksheet.label_tag }}
         {{ form.worksheet }}
-        <p class="helptext">Если листок уже выдавался, прежний режим автосверки сохранится для всех учеников.</p>
+        <p class="helptext">Если листок уже выдавался, прежний режим автосверки сохранится для всех учеников.</p>{% endif %}
       </section>
 
       <section class="card form-section">
         <div class="form-section-head"><span class="form-step">2</span><div><h2>Кому выдаём</h2><p class="helptext">Ученики из выбранных групп и отдельного списка объединяются без дублей.</p></div></div>
-        <div class="recipient-grid">
-          <div class="choice-list">
-            {{ form.groups.errors }}
-            <h3>{{ form.groups.label }}</h3>
-            <div class="choice-items">
-              {% for checkbox in form.groups %}<label class="choice-item" for="{{ checkbox.id_for_label }}">{{ checkbox.tag }} <span>{{ checkbox.choice_label }}</span></label>
-              {% empty %}<p class="muted">Групп пока нет.</p>{% endfor %}
-            </div>
-          </div>
-          <div class="choice-list" data-student-list>
-            {{ form.students.errors }}
-            <h3>{{ form.students.label }}</h3>
-            <label class="sr-only" for="student-filter">Найти ученика</label>
-            <input type="text" id="student-filter" class="choice-search" placeholder="Найти ученика…" data-student-filter>
-            <div class="choice-items">
-              {% for checkbox in form.students %}<label class="choice-item" for="{{ checkbox.id_for_label }}" data-student-choice>{{ checkbox.tag }} <span>{{ checkbox.choice_label }}</span></label>
-              {% empty %}<p class="muted">Сначала добавьте учеников.</p>{% endfor %}
-            </div>
-          </div>
-        </div>
+        {% if parent %}<p>{{ parent.student.get_full_name|default:parent.student.username }}</p>{% else %}{% include 'assignments/_recipients.html' %}{% endif %}
       </section>
 
       <section class="card form-section">
-        <div class="form-section-head"><span class="form-step">3</span><div><h2>Условия работы</h2><p class="helptext">Срок — ориентир: после него сдача не блокируется.</p></div></div>
-        <div class="settings-grid">
+        <div class="form-section-head"><span class="form-step">3</span><div><h2>Условия работы</h2><p class="helptext">{% if independent %}Время на сервере. Часовой пояс: {{ timezone }}. Без общего окончания можно начать в любой день.{% else %}Срок — ориентир: после него сдача не блокируется.{% endif %}</p></div></div>
+        {% if independent %}<div class="settings-grid">
+          <div>{{ form.duration.errors }}{{ form.duration.label_tag }}{{ form.duration }}</div>
+          <div>{{ form.deadline.errors }}{{ form.deadline.label_tag }}{{ form.deadline }}</div>
+          <div>{{ form.max_variants.errors }}{{ form.max_variants.label_tag }}{{ form.max_variants }}</div>
+          <div>{{ form.release_mode.errors }}{{ form.release_mode.label_tag }}{{ form.release_mode }}</div>
+        </div><div data-release-flags>{{ form.release_flags.errors }}{{ form.release_flags.label_tag }}{{ form.release_flags }}</div>
+        {% else %}        <div class="settings-grid">
           <div>{{ form.due_at.errors }}{{ form.due_at.label_tag }}{{ form.due_at }}</div>
           <div>
             {{ form.check_visibility.errors }}{{ form.check_visibility.label_tag }}{{ form.check_visibility }}
             <span class="helptext">{{ form.check_visibility.help_text }}</span>
           </div>
         </div>
+{% endif %}
         <label class="check-label assignment-photo-option">{{ form.allow_photos }} <span>{{ form.allow_photos.label }}</span></label>
       </section>
     </div>
@@ -67,15 +59,16 @@
       <span class="page-eyebrow">Перед выдачей</span>
       <h2>Проверьте параметры</h2>
       <dl class="summary-list">
-        <div><dt>Листок</dt><dd data-summary-worksheet>Не выбран</dd></div>
+        <div><dt>Листок</dt><dd data-summary-worksheet>{{ work.title|default:"Не выбран" }}</dd></div>
         <div><dt>Групп</dt><dd data-summary-groups>0</dd></div>
         <div><dt>Учеников отдельно</dt><dd data-summary-students>0</dd></div>
       </dl>
-      <p class="helptext">Повторная выдача того же листка тому же ученику будет безопасно пропущена.</p>
-      <button class="btn" type="submit">Выдать задание</button>
+      <p class="helptext">{% if independent %}Перед выдачей вы увидите конкретные варианты и распределение.{% else %}Повторная выдача того же листка тому же ученику будет безопасно пропущена.{% endif %}</p>
+      <button class="btn" type="submit">{% if independent %}Сформировать и просмотреть{% else %}Выдать задание{% endif %}</button>
     </aside>
   </div>
 </form>
+{% endif %}
 {% endblock %}
 {% block extra_js %}
 <script>
@@ -87,10 +80,13 @@
   var studentBoxes = form.querySelectorAll('[name="students"]');
   function updateSummary() {
     var option = worksheet && worksheet.options[worksheet.selectedIndex];
-    form.querySelector('[data-summary-worksheet]').textContent = option && option.value ? option.text : 'Не выбран';
+    if (worksheet) form.querySelector('[data-summary-worksheet]').textContent = option && option.value ? option.text : 'Не выбран';
     form.querySelector('[data-summary-groups]').textContent = Array.from(groupBoxes).filter(function (box) { return box.checked; }).length;
     form.querySelector('[data-summary-students]').textContent = Array.from(studentBoxes).filter(function (box) { return box.checked; }).length;
   }
+  var release = form.querySelector('[name=release_mode]');
+  function releaseOptions() { var panel = form.querySelector('[data-release-flags]'); if (panel && release) panel.hidden = release.value !== 'auto'; }
+  form.addEventListener('change', releaseOptions); releaseOptions();
   form.addEventListener('change', updateSummary);
   if (worksheet) worksheet.addEventListener('change', function () {
     if (form.dataset.bound === '1') return;
