@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'problems',
     'worksheets',
     'assignments',
+    'independentworks',
 ]
 
 MIDDLEWARE = [
@@ -155,6 +156,9 @@ MEDIA_ROOT = SITE_ROOT / 'media'
 MEDIA_URL = '/media/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# На проде раздел открывается только после миграций и приёмки.
+INDEPENDENT_WORKS_ENABLED = read_secret('INDEPENDENT_WORKS_ENABLED', '1' if DEBUG else '0') == '1'
 
 LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/dashboard/'
