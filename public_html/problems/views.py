@@ -42,7 +42,7 @@ def filter_tasks(params):
              .prefetch_related('topics', 'topic_links', 'grade_bands',
                                'facet_values', 'exam_items', 'tags',
                                'source_refs__source', 'subitems', 'images')
-             .select_related('created_by'))
+             .select_related('created_by').order_by('-created_at', '-pk'))
     q = params.get('q', '').strip()
     if q:
         tasks = tasks.filter(
@@ -1805,11 +1805,15 @@ def textbook_import_commit_section(request, pk):
     except TextbookImportError as exc:
         messages.error(request, str(exc))
         return redirect(_textbook_detail_url(batch, section=section_token))
-    messages.success(
-        request,
-        'Раздел «%(title)s» загружен: создано задач — %(created)s, '
-        'переиспользовано — %(reused)s, новых подборок — %(collections)s.'
-        % {'title': group['title'], **result})
+    if any(result.values()):
+        messages.success(
+            request,
+            'Раздел «%(title)s» загружен: создано задач — %(created)s, '
+            'переиспользовано — %(reused)s, новых подборок — %(collections)s.'
+            % {'title': group['title'], **result})
+    else:
+        messages.success(request, f'Раздел «{group["title"]}» уже загружен. '
+                                  'Изменений нет.')
     batch.refresh_from_db()
     if batch.status == TextbookImportBatch.STATUS_IMPORTED:
         return redirect('collection_list')

@@ -15,6 +15,7 @@
       list.classList.toggle('show-answers', on);
       list.querySelectorAll('.ws-answers').forEach(function (el) {
         el.hidden = !on;
+        if (on) el.querySelectorAll('.math-content').forEach(renderMathContent);
       });
       try { localStorage.setItem(KEY, on ? '1' : ''); } catch (e) {}
     }

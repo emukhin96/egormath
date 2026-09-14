@@ -1100,6 +1100,9 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
     approved = batch.drafts.filter(pk__in=selected_ids, status=TextbookTaskDraft.STATUS_APPROVED)
     if (not require_complete and not approved.exists()
             and not missing_imported_ids):
+        # Повтор выбранного уже опубликованного раздела — успешный no-op.
+        if draft_ids is not None and imported.exists():
+            return {'created': 0, 'reused': 0, 'collections': 0}
         raise TextbookImportError('Нет одобренных задач для загрузки.')
     missing_topics = approved.filter(topic__isnull=True).count()
     if missing_topics:

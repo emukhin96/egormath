@@ -76,6 +76,12 @@ class CatalogTests(TestCase):
         self.assertNotContains(response, 'badge-mask')
         self.assertContains(response, 'ws-answers" hidden')
 
+    def test_builder_answers_are_hidden_before_scripts_run(self):
+        worksheet = Worksheet.objects.create(owner=self.teacher, title='Листок')
+        WorksheetItem.objects.create(worksheet=worksheet, task=self.task)
+        response = self.client.get(reverse('worksheet_detail', args=[worksheet.pk]))
+        self.assertContains(response, 'ws-answers" hidden')
+
     def test_creation_saves_author_fields_and_subitem_mask(self):
         response = self.client.get(reverse('task_create'))
         self.assertContains(response, 'problem-columns')
@@ -106,3 +112,44 @@ class CatalogTests(TestCase):
         self.assertEqual(
             [answer['label'] for answer in mask_data(self.task)],
             ['а', 'б'])
+
+
+class CatalogPerformanceTests(TestCase):
+    def test_prefetched_taxonomy_matches_unprepared_without_queries(self):
+        from .models import Topic, GradeBand, TaskTopic, FacetValue, ExamItem
+        from .rubricator import (seed_rubricator, task_taxonomy_state,
+                                 worksheet_taxonomy_state)
+        from .views import filter_tasks
+        from django.http import QueryDict
+        seed_rubricator()
+        teacher = make_teacher()
+        task = Task.objects.create(text_latex='Уравнение', created_by=teacher)
+        topic = Topic.objects.filter(code__isnull=False).first()
+        TaskTopic.objects.create(task=task, topic=topic, role=TaskTopic.ROLE_PRIMARY)
+        task.grade_bands.add(GradeBand.objects.first())
+        task.facet_values.add(FacetValue.objects.first())
+        task.exam_items.add(ExamItem.objects.first())
+        expected = task_taxonomy_state(task)
+        self.assertEqual(expected['primary'], topic.pk)
+        prepared = filter_tasks(QueryDict()).get(pk=task.pk)
+        with self.assertNumQueries(0):
+            self.assertEqual(task_taxonomy_state(prepared), expected)
+        worksheet = Worksheet.objects.create(owner=teacher, title='Листок')
+        worksheet.topics.add(topic)
+        worksheet.grade_bands.add(GradeBand.objects.first())
+        expected = worksheet_taxonomy_state(worksheet)
+        prepared = Worksheet.objects.prefetch_related('topics', 'grade_bands').get(pk=worksheet.pk)
+        with self.assertNumQueries(0):
+            self.assertEqual(worksheet_taxonomy_state(prepared), expected)
+
+    def test_equal_creation_dates_have_stable_pages(self):
+        from django.core.paginator import Paginator
+        from django.http import QueryDict
+        from django.utils import timezone
+        from .views import filter_tasks
+        tasks = Task.objects.bulk_create([Task(text_latex=str(i)) for i in range(51)])
+        Task.objects.update(created_at=timezone.now())
+        paginator = Paginator(filter_tasks(QueryDict()), 25)
+        ids = [task.pk for n in paginator.page_range for task in paginator.page(n)]
+        self.assertEqual(ids, sorted((task.pk for task in tasks), reverse=True))
+        self.assertEqual(len(set(ids)), 51)

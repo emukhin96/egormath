@@ -12,8 +12,11 @@ function protectDecimalCommas(html) {
 }
 
 // Тот же рендер для разметки, вставленной скриптами (превью маски и т.п.)
+var renderedMathContents = new WeakMap();
 function renderMathContent(el) {
   if (typeof renderMathInElement !== 'function') return;
+  if (el.closest('.ws-answers[hidden]')) return;
+  if (renderedMathContents.get(el) === el.innerHTML) return;
   el.innerHTML = protectDecimalCommas(el.innerHTML);
   renderMathInElement(el, {
     delimiters: [
@@ -26,6 +29,8 @@ function renderMathContent(el) {
     macros: {'\\degr': '^{\\circ}'},
     throwOnError: false,
   });
+  // Запоминаем результат, а не флаг: после редактирования рендер нужен снова.
+  renderedMathContents.set(el, el.innerHTML);
 }
 
 document.addEventListener('DOMContentLoaded', function () {
