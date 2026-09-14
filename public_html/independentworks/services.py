@@ -129,8 +129,11 @@ def candidate_data(candidate, number):
             if i in point_solution:
                 audiences.append('solution')
             if audiences:
-                with img.image.open('rb') as stream:
-                    checksum = hashlib.sha256(stream.read()).hexdigest()
+                try:
+                    with img.image.open('rb') as stream:
+                        checksum = hashlib.sha256(stream.read()).hexdigest()
+                except OSError as error:
+                    raise WorkError('Вложение недоступно. Восстановите файл и обновите предпросмотр.', 409) from error
                 sources.append({'path': img.image.name, 'name': img.filename, 'audiences': audiences, 'sha256': checksum})
         key = f't{task.pk}:s{owner.pk}' if parts else f't{task.pk}'
         rows.append({'position': number, 'part': index if parts else 0,
@@ -241,6 +244,10 @@ def correction_fingerprint(parent):
 
 def prepare(work, owner, students, duration=40, deadline=None, max_variants=None,
             allow_photos=True, release_mode='manual', release_flags=None, parent=None, kind='initial'):
+    if kind not in ('initial', 'correction', 'retake') or (kind == 'initial') != (parent is None):
+        raise WorkError('Исходная попытка нужна только для исправления или пересдачи.')
+    if parent is not None and parent.run.work_id != work.pk:
+        raise WorkError('Исходная попытка относится к другой самостоятельной.')
     if duration < 1 or duration > 1440 or (max_variants is not None and max_variants < 1):
         raise WorkError('Длительность — от 1 до 1440 минут; число вариантов — положительное.')
     if deadline and deadline <= timezone.now():
@@ -307,13 +314,16 @@ def issue(run_id, confirm=False):
             sources = snapshot.pop('assets', [])
             point = Point.objects.create(variant=variant, snapshot=snapshot, **values)
             for source in sources:
-                if 'asset_id' in source:
-                    original = Asset.objects.get(pk=source['asset_id']).file
-                else:
-                    from django.core.files.storage import default_storage
-                    original = default_storage.open(source['path'], 'rb')
-                with (original.open('rb') if hasattr(original, 'storage') else original) as stream:
-                    content = stream.read()
+                try:
+                    if 'asset_id' in source:
+                        original = Asset.objects.get(pk=source['asset_id']).file
+                    else:
+                        from django.core.files.storage import default_storage
+                        original = default_storage.open(source['path'], 'rb')
+                    with (original.open('rb') if hasattr(original, 'storage') else original) as stream:
+                        content = stream.read()
+                except (Asset.DoesNotExist, OSError) as error:
+                    raise WorkError('Вложение изменилось или недоступно. Обновите предпросмотр.', 409) from error
                 if source.get('sha256') and hashlib.sha256(content).hexdigest() != source['sha256']:
                     raise WorkError('Картинка изменилась. Обновите предпросмотр.', 409)
                 asset = Asset(point=point, name=source['name'], audiences=source['audiences'])
