@@ -13,7 +13,7 @@
   <span class="muted">Нет текста условия</span>
   {% endif %}
   {% if draft.has_author_answer_material or draft.has_author_solution_material %}
-  <div class="ws-answers">
+  <div class="ws-answers" hidden>
     {% if draft.has_author_answer_material %}
     <div class="answer-box math-content">
       <strong>Ответ:</strong>

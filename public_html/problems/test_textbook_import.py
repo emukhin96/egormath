@@ -1133,6 +1133,7 @@ class TextbookImportTests(TestCase):
         self.assertContains(response, 'id="toggle-import-draft-answers"')
         self.assertContains(response, 'ответы и решения')
         self.assertContains(response, 'answer-box')
+        self.assertContains(response, 'class="ws-answers" hidden')
         self.assertContains(response, 'а)&nbsp;')
         self.assertContains(response, 'Решение:')
         self.assertNotContains(response, 'class="show-answers"')
