@@ -22,6 +22,7 @@ def shell(request):
         }
     is_teacher = get_role(user) == Profile.ROLE_TEACHER
     context = {
+        'independentworks_enabled': settings.INDEPENDENT_WORKS_ENABLED,
         'is_teacher': is_teacher,
         'cart': None,
         'favicon_local': favicon_local,

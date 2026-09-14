@@ -2,6 +2,7 @@
 import json
 
 from django import forms
+from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.forms import inlineformset_factory
@@ -56,6 +57,14 @@ def worksheet_context(request, task):
 def context(request, task):
     item = worksheet_context(request, task)
     ctx = taxonomy_page_context(task_taxonomy_state(task))
+    if getattr(settings, 'INDEPENDENT_WORKS_ENABLED', False):
+        for key in request.session.keys():
+            if key.startswith('iw_analog_') and key.endswith('_' + str(task.pk)):
+                position_id = key.split('_')[2]
+                from independentworks.models import Position, Work
+                if Position.objects.filter(pk=position_id, work__in=Work.visible_to(request.user)).exists():
+                    ctx['iw_finish_url'] = reverse('independentworks:finish_analog', args=[position_id, task.pk])
+                    break
     ctx.update(task=task, item=item, worksheet=item.worksheet if item else None,
                tags_value=', '.join(task.tags.values_list('name', flat=True)),
                mask_help=HELP, mask_kinds={**KINDS, **{k: k for k in PRESETS}},
