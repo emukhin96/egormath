@@ -47,10 +47,11 @@ def sync_families():
     for key, ids in groups.items():
         if len(ids) < 2:
             continue
+        title = titles.get(key, 'Аналоги источника')[:255]
         if len(key) > 255:
             from .services import digest
             key = 'source:' + digest(key)
-        family, _ = Family.objects.get_or_create(key=key, defaults={'title': titles.get(key, 'Аналоги источника')[:255], 'origin': 'source'})
+        family, _ = Family.objects.get_or_create(key=key, defaults={'title': title, 'origin': 'source'})
         family.tasks.add(*ids, through_defaults={'origin': 'source'})
         total += 1
     return total
