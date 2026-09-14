@@ -1,5 +1,5 @@
 """Создание, дублирование и показ материалов в каталоге и листках."""
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
 from worksheets.models import Worksheet, WorksheetItem
@@ -153,3 +153,58 @@ class CatalogPerformanceTests(TestCase):
         ids = [task.pk for n in paginator.page_range for task in paginator.page(n)]
         self.assertEqual(ids, sorted((task.pk for task in tasks), reverse=True))
         self.assertEqual(len(set(ids)), 51)
+
+
+class TaxonomyCatalogCacheTests(TransactionTestCase):
+    def setUp(self):
+        from django.core.cache import caches
+        from .rubricator import TAXONOMY_CACHE_ALIAS, seed_rubricator
+
+        caches[TAXONOMY_CACHE_ALIAS].clear()
+        seed_rubricator()
+
+    def test_warm_catalog_reads_only_fresh_counts(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from .rubricator import taxonomy_catalog
+
+        with CaptureQueriesContext(connection) as cold_queries:
+            cold = taxonomy_catalog()
+        with self.assertNumQueries(1):
+            warm = taxonomy_catalog()
+
+        self.assertGreater(len(cold_queries), 1)
+        self.assertEqual(warm, cold)
+
+    def test_reference_change_invalidates_catalog(self):
+        from .models import Topic
+        from .rubricator import taxonomy_catalog
+
+        catalog = taxonomy_catalog()
+        topic = Topic.objects.get(code='ALG.07.03')
+        old_name = topic.name
+        topic.name = 'Касательная: обновлённая тема'
+        topic.save(update_fields=['name'])
+
+        refreshed = taxonomy_catalog()
+
+        before = next(row for row in catalog['topics']
+                      if row['id'] == topic.pk)
+        after = next(row for row in refreshed['topics']
+                     if row['id'] == topic.pk)
+        self.assertEqual(before['name'], old_name)
+        self.assertEqual(after['name'], topic.name)
+
+    def test_task_counts_are_not_stale_in_cached_catalog(self):
+        from .models import TaskTopic, Topic
+        from .rubricator import taxonomy_catalog
+
+        topic = Topic.objects.get(code='ALG.07.03')
+        before = next(row['count'] for row in taxonomy_catalog()['topics']
+                      if row['id'] == topic.pk)
+        task = Task.objects.create(text_latex='Новая задача для счётчика')
+        TaskTopic.objects.create(task=task, topic=topic)
+
+        after = next(row['count'] for row in taxonomy_catalog()['topics']
+                     if row['id'] == topic.pk)
+        self.assertEqual(after, before + 1)

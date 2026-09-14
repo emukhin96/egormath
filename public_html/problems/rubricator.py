@@ -1,8 +1,12 @@
 """Рубрикатор: сид справочника и назначение тем/меток задачам и листкам."""
 
+import hashlib
 import json
+from copy import deepcopy
 from decimal import Decimal
 
+from django.core.cache import caches
+from django.db import connection, connections, transaction
 from django.db.models import Count, Q
 
 from .models import (ExamItem, ExamModel, FacetType, FacetValue, GradeBand,
@@ -22,6 +26,8 @@ GRADE_SHORT = {
     'GRADE_5': '5', 'GRADE_6': '6', 'GRADE_7': '7',
     'GRADE_8': '8', 'GRADE_9': '9', 'GRADE_10_11': '10–11',
 }
+TAXONOMY_CACHE_ALIAS = 'taxonomy'
+TAXONOMY_CATALOG_CACHE_KEY = 'catalog-base-v1'
 
 
 def parse_grade_choice(value):
@@ -384,6 +390,48 @@ def connect_exam_parent_signal():
         dispatch_uid='problems.keep_exam_line_items')
 
 
+def invalidate_taxonomy_catalog(*, using=None):
+    """Удаляет общий кэш справочников после успешной транзакции."""
+    using = using or 'default'
+    transaction.on_commit(
+        lambda: _delete_taxonomy_catalog_cache(using),
+        using=using,
+    )
+
+
+def _delete_taxonomy_catalog_cache(using):
+    """Недоступный кэш не должен мешать сохранению справочника."""
+    try:
+        caches[TAXONOMY_CACHE_ALIAS].delete(
+            _taxonomy_catalog_cache_key(using))
+    except OSError:
+        pass
+
+
+def _on_taxonomy_model_changed(sender, using, **kwargs):
+    invalidate_taxonomy_catalog(using=using)
+
+
+def connect_taxonomy_cache_signals():
+    """Следит только за справочниками; числа задач считаются свежими."""
+    from django.db.models.signals import post_delete, post_save
+
+    catalog_models = (
+        Topic, GradeBand, FacetType, FacetValue, ExamModel, ExamItem)
+    for model in catalog_models:
+        label = model._meta.label_lower
+        post_save.connect(
+            _on_taxonomy_model_changed,
+            sender=model,
+            dispatch_uid=f'problems.invalidate_taxonomy_cache.save.{label}',
+        )
+        post_delete.connect(
+            _on_taxonomy_model_changed,
+            sender=model,
+            dispatch_uid=f'problems.invalidate_taxonomy_cache.delete.{label}',
+        )
+
+
 def apply_task_taxonomy(task, post):
     """Читает POST виджета: темы, классы, фасеты, экзамен, сложность."""
     if post.get('topics_submitted') or 'topics' in post or 'primary_topic' in post:
@@ -486,34 +534,17 @@ def filter_by_taxonomy(qs, params, *, topics_lookups):
 
 def topic_counts(lookup='tasks'):
     """Число связанных объектов у каждой темы, включая потомков."""
-    raw = dict(Topic.objects.annotate(n=Count(lookup, distinct=True))
-               .values_list('pk', 'n'))
-    by_parent = {}
-    for topic in Topic.objects.all():
-        by_parent.setdefault(topic.parent_id, []).append(topic)
-
-    totals = {}
-
-    def walk(topic):
-        total = raw.get(topic.pk, 0)
-        for child in by_parent.get(topic.pk, []):
-            total += walk(child)
-        totals[topic.pk] = total
-        return total
-
-    for root in by_parent.get(None, []):
-        walk(root)
-    return totals
+    return _topic_counts_for_catalog(
+        _taxonomy_catalog_base()['topics'], lookup=lookup)
 
 
-def taxonomy_catalog():
-    """JSON-дерево и справочники фасетов для виджета на странице."""
+def _build_taxonomy_catalog_base():
+    """Строит редко меняющуюся часть рубрикатора без чисел задач."""
     from .models import topic_tree
 
     children_of = set(
         Topic.objects.exclude(parent=None)
         .values_list('parent_id', flat=True).distinct())
-    counts = topic_counts()
     topics = []
     for topic in topic_tree():
         topics.append({
@@ -523,7 +554,7 @@ def taxonomy_catalog():
             'parent': topic.parent_id,
             'depth': topic.depth,
             'leaf': topic.pk not in children_of,
-            'count': counts.get(topic.pk, 0),
+            'count': 0,
         })
     grades = [
         {**row, 'short': GRADE_SHORT.get(row['code'], row['name'])}
@@ -556,6 +587,62 @@ def taxonomy_catalog():
         'methods': methods,
         'exams': exams,
     }
+
+
+def _taxonomy_catalog_base():
+    """Берёт общий файловый кэш; внутри тестовой транзакции не пишет его."""
+    if connection.in_atomic_block:
+        return _build_taxonomy_catalog_base()
+    cache = caches[TAXONOMY_CACHE_ALIAS]
+    key = _taxonomy_catalog_cache_key(connection.alias)
+    try:
+        catalog = cache.get(key)
+    except OSError:
+        catalog = None
+    if catalog is None:
+        catalog = _build_taxonomy_catalog_base()
+        try:
+            cache.set(key, catalog)
+        except OSError:
+            pass
+    return catalog
+
+
+def _taxonomy_catalog_cache_key(using='default'):
+    """Разделяет локальную, тестовую и production-базы в общем каталоге."""
+    database_name = str(connections[using].settings_dict.get('NAME', ''))
+    digest = hashlib.sha256(database_name.encode()).hexdigest()[:12]
+    return f'{TAXONOMY_CATALOG_CACHE_KEY}:{digest}'
+
+
+def _topic_counts_for_catalog(topics, lookup='tasks'):
+    """Считает свежие итоги, используя дерево из кэша."""
+    raw = dict(Topic.objects.annotate(n=Count(lookup, distinct=True))
+               .values_list('pk', 'n'))
+    by_parent = {}
+    for topic in topics:
+        by_parent.setdefault(topic['parent'], []).append(topic['id'])
+    totals = {}
+
+    def walk(topic_id):
+        total = raw.get(topic_id, 0)
+        for child_id in by_parent.get(topic_id, []):
+            total += walk(child_id)
+        totals[topic_id] = total
+        return total
+
+    for root_id in by_parent.get(None, []):
+        walk(root_id)
+    return totals
+
+
+def taxonomy_catalog():
+    """Кэшированные справочники и актуальные числа задач для виджета."""
+    catalog = deepcopy(_taxonomy_catalog_base())
+    counts = _topic_counts_for_catalog(catalog['topics'])
+    for topic in catalog['topics']:
+        topic['count'] = counts.get(topic['id'], 0)
+    return catalog
 
 
 def task_taxonomy_state(task):
