@@ -121,7 +121,7 @@
           </ol>
           {% endif %}
           {% include 'problems/_task_images.html' with images=row.statement_images %}
-          {% include 'problems/_task_answers.html' with task=item.task subitems=item.task.subitems.all %}
+          {% include 'problems/_task_answers.html' with task=item.task subitems=item.task.subitems.all hide_answers=True %}
           <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
         </div>
 
@@ -467,7 +467,7 @@
 {% include 'problems/_mask_dialogs.html' %}
 <script defer src="{% static 'js/problem_editor.js' %}?v=2"></script>
 {% include 'problems/_mask_scripts.html' %}
-<script defer src="{% static 'js/answers-toggle.js' %}"></script>
+<script defer src="{% static 'js/answers-toggle.js' %}?v=2"></script>
 <script defer src="{% static 'js/builder.js' %}?v=5"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
 {% if assignments %}<script defer src="{% static 'js/teacher_progress.js' %}?v=6"></script>{% endif %}

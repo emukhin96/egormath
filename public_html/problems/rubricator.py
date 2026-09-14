@@ -559,13 +559,16 @@ def taxonomy_catalog():
 
 
 def task_taxonomy_state(task):
-    primary = task.topic_links.filter(role=TaskTopic.ROLE_PRIMARY).first()
+    # Читаем подготовленные связи: filter/values_list обходят prefetch-кэш.
+    primary = min((link for link in task.topic_links.all()
+                   if link.role == TaskTopic.ROLE_PRIMARY),
+                  key=lambda link: link.pk, default=None)
     return {
-        'topics': list(task.topics.values_list('pk', flat=True)),
+        'topics': [topic.pk for topic in task.topics.all()],
         'primary': primary.topic_id if primary else None,
-        'grades': list(task.grade_bands.values_list('code', flat=True)),
-        'facets': list(task.facet_values.values_list('pk', flat=True)),
-        'exams': list(task.exam_items.values_list('pk', flat=True)),
+        'grades': [band.code for band in task.grade_bands.all()],
+        'facets': [value.pk for value in task.facet_values.all()],
+        'exams': [item.pk for item in task.exam_items.all()],
         'difficulty': task.difficulty,
     }
 
@@ -635,9 +638,9 @@ def filter_state_from_params(params):
 
 def worksheet_taxonomy_state(worksheet):
     return {
-        'topics': list(worksheet.topics.values_list('pk', flat=True)),
+        'topics': [topic.pk for topic in worksheet.topics.all()],
         'primary': None,
-        'grades': list(worksheet.grade_bands.values_list('code', flat=True)),
+        'grades': [band.code for band in worksheet.grade_bands.all()],
         'facets': [],
         'exams': [],
         'difficulty': None,

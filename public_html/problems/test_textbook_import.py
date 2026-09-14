@@ -56,6 +56,58 @@ class TextbookImportTests(TestCase):
             payload or bundle(), user=self.teacher, title='Пробная партия',
             source_title='Тестовый задачник', source_author='Автор')
 
+    def test_section_retry_is_noop_and_can_restore_membership(self):
+        from worksheets.models import WorksheetItem
+        batch = self.create_batch(bundle(source_path=['Глава', 'Раздел']))
+        draft = batch.drafts.get()
+        draft.topic = Topic.objects.create(name='Тема повторной публикации')
+        draft.status = TextbookTaskDraft.STATUS_APPROVED
+        draft.save()
+        commit_batch(batch, user=self.teacher, draft_ids=[draft.pk], require_complete=False)
+        before = (Task.objects.count(), WorksheetItem.objects.count())
+        result = commit_batch(batch, user=self.teacher, draft_ids=[draft.pk], require_complete=False)
+        self.assertEqual(result, {'created': 0, 'reused': 0, 'collections': 0})
+        self.assertEqual((Task.objects.count(), WorksheetItem.objects.count()), before)
+        draft.refresh_from_db()
+        WorksheetItem.objects.filter(task_id=draft.imported_task_id).delete()
+        commit_batch(batch, user=self.teacher, draft_ids=[draft.pk], require_complete=False)
+        self.assertEqual((Task.objects.count(), WorksheetItem.objects.count()), before)
+        self.client.force_login(self.teacher)
+        detail = self.client.get(reverse('textbook_import_detail', args=[batch.pk]))
+        section = next(g for g in detail.context['collection_groups'] if g['is_leaf'])
+        response = self.client.post(reverse('textbook_import_commit_section', args=[batch.pk]),
+                                    {'section': section['token']}, follow=True)
+        self.assertContains(response, 'уже загружен')
+
+    def test_section_failure_rolls_back_and_preserves_selected_section(self):
+        from unittest.mock import patch
+        from . import textbook_import
+        payload = bundle(source_path=['Глава', 'Раздел'])
+        payload['tasks'].append(dict(payload['tasks'][0], external_id='1.2.38', source_number='38'))
+        batch = self.create_batch(payload)
+        topic = Topic.objects.create(name='Тема отката')
+        batch.drafts.update(topic=topic, status=TextbookTaskDraft.STATUS_APPROVED)
+        self.client.force_login(self.teacher)
+        detail = self.client.get(reverse('textbook_import_detail', args=[batch.pk]))
+        section = next(g for g in detail.context['collection_groups'] if g['is_leaf'])
+        original = textbook_import._add_draft_task_to_collection
+        calls = 0
+        def fail_second(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise TextbookImportError('Ошибка проверки раздела')
+            return original(*args, **kwargs)
+        with patch.object(textbook_import, '_add_draft_task_to_collection', side_effect=fail_second):
+            response = self.client.post(reverse('textbook_import_commit_section', args=[batch.pk]),
+                                        {'section': section['token']})
+        self.assertIn('section=' + section['token'], response.url)
+        self.assertEqual(Task.objects.count(), 0)
+        self.assertEqual(batch.drafts.filter(status=TextbookTaskDraft.STATUS_APPROVED).count(), 2)
+        response = self.client.get(response.url)
+        self.assertContains(response, 'Ошибка проверки раздела')
+        self.assertTrue(response.context['selected_group']['can_commit'])
+
     def test_upload_creates_only_drafts(self):
         self.client.login(username='teacher1', password='pass12345')
         upload = SimpleUploadedFile(
