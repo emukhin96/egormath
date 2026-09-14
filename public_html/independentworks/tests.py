@@ -411,6 +411,154 @@ class IndependentWorkTests(TestCase):
                 self.assertNotIn('checks', response.json())
 
 
+    def test_mysql_settings_do_not_import_working_secrets(self):
+        import os
+        import subprocess
+        import sys
+        from pathlib import Path
+        env = dict(os.environ, IW_TEST_MYSQL_HOST='localhost', IW_TEST_MYSQL_USER='isolated',
+                   IW_TEST_MYSQL_PASSWORD='', DJANGO_ENV='production', LATEX_API_KEY='sentinel',
+                   GEMINI_API_KEY='sentinel', DJANGO_SECRET_KEY='sentinel')
+        code = "import sys; import independentworks.mysql_settings as s; assert 'core.settings' not in sys.modules; assert s.LATEX_API_KEY == s.GEMINI_API_KEY == ''; assert s.SECRET_KEY != 'sentinel'"
+        result = subprocess.run([sys.executable, '-c', code], env=env,
+                                cwd=Path(__file__).resolve().parent.parent, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        del env['IW_TEST_MYSQL_USER']
+        result = subprocess.run([sys.executable, '-c', 'import independentworks.mysql_settings'],
+                                env=env, cwd=Path(__file__).resolve().parent.parent, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b'IW_TEST_MYSQL_USER', result.stderr)
+
+    def test_prepare_rejects_invalid_parent_kind_combinations(self):
+        parent = self.begin()
+        svc.submit(parent.pk)
+        parent.refresh_from_db()
+        for kind, previous in [('correction', None), ('retake', None), ('initial', parent), ('bogus', None)]:
+            with self.subTest(kind=kind, parent=previous is not None):
+                with self.assertRaises(svc.WorkError):
+                    svc.prepare(self.work, self.teacher, [self.student.pk], kind=kind, parent=previous)
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.url('prepare', self.work.pk), {'parent': parent.pk})
+        self.assertEqual(response.status_code, 400)
+
+    def test_missing_snapshot_record_and_file_abort_issue(self):
+        for missing in ('record', 'file'):
+            with self.subTest(missing=missing):
+                a = self.begin()
+                asset = Asset.objects.create(point=a.variant.points.get(), name='test.png', audiences=['statement'])
+                asset.file.save('test.png', ContentFile(b'snapshot'))
+                svc.submit(a.pk)
+                a.refresh_from_db()
+                run = svc.prepare(self.work, self.teacher, [self.student.pk], kind='correction', parent=a)
+                if missing == 'record':
+                    asset.delete()
+                else:
+                    asset.file.delete(save=False)
+                with self.assertRaises(svc.WorkError) as caught:
+                    svc.issue(run.pk)
+                self.assertEqual(caught.exception.status, 409)
+                self.assertFalse(run.variants.exists())
+                self.assertFalse(run.attempts.exists())
+
+    def test_long_family_key_preserves_title(self):
+        from .analogs import sync_families
+        source = Source.objects.create(title='Длинный прототип')
+        prototype = '1' * 130 + '.' + '2' * 130
+        for i in range(2):
+            task = Task.objects.create(text_latex=str(i))
+            TaskSource.objects.create(task=task, source=source, locator=str(i), source_path=['Прототип ' + prototype])
+        sync_families()
+        family = Family.objects.get(key__startswith='source:')
+        self.assertTrue(family.title.startswith('Длинный прототип · прототип'))
+        self.assertEqual(family.tasks.count(), 2)
+        sync_families()
+        self.assertEqual(Family.objects.filter(key__startswith='source:').count(), 1)
+
+    def test_second_teacher_cannot_access_work_or_mutate_results(self):
+        teacher = get_user_model().objects.create_user('teacher2')
+        Profile.objects.create(user=teacher, role='teacher')
+        a = self.begin()
+        p = a.variant.points.get()
+        asset = Asset.objects.create(point=p, name='test.png', audiences=['statement'])
+        asset.file.save('test.png', ContentFile(b'snapshot'))
+        svc.submit(a.pk)
+        self.client.force_login(teacher)
+        paths = [('progress', a.run_id), ('export', a.run_id), ('preview', a.run_id),
+                 ('attempt', a.pk), ('asset', a.pk, asset.pk), ('edit', self.work.pk),
+                 ('pick', self.position.pk), ('prepare', self.work.pk)]
+        for name, *args in paths:
+            with self.subTest(route=name):
+                self.assertEqual(self.client.get(self.url(name, *args)).status_code, 404)
+        for name, args, data in [
+            ('publish', [a.run_id], {'flags': ['checks']}),
+            ('review', [a.pk, p.pk], {'grade': '+'}),
+            ('repeat', [a.pk], {'kind': 'correction'}),
+        ]:
+            with self.subTest(route=name):
+                self.assertEqual(self.client.post(self.url(name, *args), data).status_code, 404)
+        a.refresh_from_db()
+        self.assertIsNone(a.published_at)
+        self.assertFalse(a.answers.exists())
+
+    def test_comment_only_publication_and_additive_flags(self):
+        a = self.begin(release_mode='auto', release_flags=['checks'])
+        p = a.variant.points.get()
+        svc.save_answer(a.pk, p.pk, 0, {'s1': '4'})
+        svc.submit(a.pk)
+        Answer.objects.filter(attempt=a).update(comment='SECRET_COMMENT')
+        self.client.force_login(self.teacher)
+        self.assertEqual(self.client.post(self.url('publish', a.run_id), {'flags': ['comment']}).status_code, 302)
+        a.refresh_from_db()
+        self.assertEqual(a.disclosure, {'checks', 'comment'})
+        self.assertEqual(self.client.post(self.url('publish', a.run_id), {'flags': ['answer']}).status_code, 302)
+        self.assertEqual(self.client.post(self.url('publish', a.run_id), {}).status_code, 400)
+        a.refresh_from_db()
+        self.assertEqual(a.disclosure, {'checks', 'comment', 'answer'})
+        b = self.begin()
+        svc.submit(b.pk)
+        Answer.objects.create(attempt=b, point=b.variant.points.get(), comment='ONLY_COMMENT')
+        self.client.post(self.url('publish', b.run_id), {'flags': ['comment']})
+        self.client.force_login(self.student)
+        page = self.client.get(self.url('attempt', b.pk))
+        self.assertContains(page, 'ONLY_COMMENT')
+        for hidden in ('SECRET_ANSWER', 'SECRET_SOLUTION', 'Зачтено'):
+            self.assertNotContains(page, hidden)
+
+    def test_auto_disclosure_each_category_without_manual_publication(self):
+        self.client.force_login(self.student)
+        for flag, marker in [('checks', 'Зачтено'), ('answer', 'SECRET_ANSWER'), ('solution', 'SECRET_SOLUTION'), ('comment', 'AUTO_COMMENT')]:
+            with self.subTest(flag=flag):
+                a = self.begin(release_mode='auto', release_flags=[flag])
+                svc.save_answer(a.pk, a.variant.points.get().pk, 0, {'s1': '4'})
+                Answer.objects.filter(attempt=a).update(comment='AUTO_COMMENT')
+                before = self.client.get(self.url('attempt', a.pk))
+                self.assertNotContains(before, marker)
+                svc.submit(a.pk)
+                a.refresh_from_db()
+                self.assertIsNone(a.published_at)
+                page = self.client.get(self.url('attempt', a.pk))
+                self.assertContains(page, marker)
+                for hidden in {'Зачтено', 'SECRET_ANSWER', 'SECRET_SOLUTION', 'AUTO_COMMENT'} - {marker}:
+                    self.assertNotContains(page, hidden)
+
+    def test_create_from_collection_uses_current_family_relation(self):
+        from worksheets.models import Worksheet, WorksheetItem, Collection
+        source = Source.objects.create(title='Источник для самостоятельной')
+        sheet = Worksheet.objects.create(owner=self.teacher, title='Парная подборка')
+        WorksheetItem.objects.create(worksheet=sheet, task=self.task, order=1)
+        collection = Collection.objects.create(worksheet=sheet, source=source, is_published=True)
+        analog = Task.objects.create(text_latex='Аналог')
+        family = Family.objects.create(key='manual:collection', title='Пара')
+        family.tasks.add(self.task, analog)
+        self.assertEqual(Family.tasks.through._meta.db_table, 'independentworks_familymember')
+        self.client.force_login(self.teacher)
+        self.assertEqual(self.client.get(self.url('create')).status_code, 200)
+        response = self.client.post(self.url('create'), {'title': 'Из подборки', 'collection': collection.pk})
+        self.assertEqual(response.status_code, 302)
+        work = Work.objects.get(title='Из подборки')
+        self.assertEqual(set(work.positions.get().candidates.values_list('task_id', flat=True)), {self.task.pk, analog.pk})
+
+
 from concurrent.futures import ThreadPoolExecutor
 from django.db import connections, close_old_connections
 from django.test import TransactionTestCase, skipUnlessDBFeature
