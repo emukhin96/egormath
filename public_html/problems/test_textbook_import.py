@@ -3,7 +3,9 @@ import json
 import zipfile
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from problems.models import (Source, Task, TaskImage, TaskSource, TaskTopic,
@@ -11,8 +13,10 @@ from problems.models import (Source, Task, TaskImage, TaskSource, TaskTopic,
 from problems.tests import make_teacher
 from problems.textbook_import import (TextbookImportError, attach_image_archive,
                                       commit_batch, create_batch_from_bundle,
+                                      missing_imported_collection_draft_ids,
                                       repair_ziv_batch_leaks,
-                                      sync_batch_draft_images)
+                                      sync_batch_draft_images,
+                                      ziv_variant_summary)
 from problems.textbook_parser import parse_ziv
 from problems.textbook_topics import (match_topic_candidates, set_draft_topics,
                                       suggested_topic_for_drafts)
@@ -55,6 +59,71 @@ class TextbookImportTests(TestCase):
         return create_batch_from_bundle(
             payload or bundle(), user=self.teacher, title='Пробная партия',
             source_title='Тестовый задачник', source_author='Автор')
+
+    def test_ziv_summary_uses_one_query_for_all_drafts(self):
+        batch = self.create_batch(bundle(external_id='sr/09/v1/1'))
+        batch.profile = 'ziv'
+        batch.save(update_fields=['profile'])
+        TextbookTaskDraft.objects.bulk_create([
+            TextbookTaskDraft(
+                batch=batch, external_id=f'sr/09/v2/{number}',
+                source_number=str(number), source_path=['Работа', 'Тема'],
+                collection_title='Тема', text_latex=f'Задача {number}')
+            for number in range(2, 22)
+        ])
+
+        with self.assertNumQueries(1):
+            summary = ziv_variant_summary(batch)
+
+        self.assertEqual(sum(row['total'] for row in summary), 21)
+
+    def test_missing_collection_check_does_not_query_each_draft(self):
+        batch = self.create_batch()
+        task = Task.objects.create(text_latex='Опубликованная задача')
+        batch.drafts.update(
+            status=TextbookTaskDraft.STATUS_IMPORTED,
+            imported_task=task)
+        TextbookTaskDraft.objects.bulk_create([
+            TextbookTaskDraft(
+                batch=batch, external_id=f'published-{number}',
+                source_number=str(number), source_path=['Глава', 'Раздел'],
+                collection_key='chapter.section',
+                collection_title='Раздел', text_latex=f'Задача {number}',
+                status=TextbookTaskDraft.STATUS_IMPORTED,
+                imported_task=task)
+            for number in range(2, 22)
+        ])
+
+        with self.assertNumQueries(2):
+            missing = missing_imported_collection_draft_ids(batch)
+
+        self.assertEqual(len(missing), 21)
+
+    def test_section_detail_queries_do_not_scale_with_drafts(self):
+        batch = self.create_batch(bundle(source_path=['Глава', 'Раздел']))
+        self.client.force_login(self.teacher)
+        url = reverse('textbook_import_detail', args=[batch.pk])
+        landing = self.client.get(url)
+        section = next(
+            group for group in landing.context['collection_groups']
+            if group['is_leaf'])
+        with CaptureQueriesContext(connection) as single_queries:
+            self.client.get(url, {'section': section['token']})
+        TextbookTaskDraft.objects.bulk_create([
+            TextbookTaskDraft(
+                batch=batch, external_id=f'section-{number}',
+                source_number=str(number), source_path=['Глава', 'Раздел'],
+                collection_key='alg.quadratic',
+                collection_title='Квадратные уравнения',
+                text_latex=f'Задача {number}')
+            for number in range(2, 22)
+        ])
+
+        with CaptureQueriesContext(connection) as many_queries:
+            response = self.client.get(url, {'section': section['token']})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(many_queries), len(single_queries) + 2)
 
     def test_section_retry_is_noop_and_can_restore_membership(self):
         from worksheets.models import WorksheetItem
