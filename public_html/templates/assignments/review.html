@@ -54,7 +54,7 @@
     </details>
     {% endif %}
     <p>{% include 'assignments/_grade_scale.html' %}</p>
-    <p class="review-comment"><label>Комментарий<textarea name="task{{ row.task.pk }}_comment" rows="2">{{ row.review.comment|default:'' }}</textarea></label></p>
+    <p class="review-comment">{% with task_id=row.task.pk|stringformat:"s" %}{% include 'assignments/_review_comment.html' with comment_name="task"|add:task_id|add:"_comment" comment_value=row.review.comment %}{% endwith %}</p>
 
   </div>
   {% endif %}

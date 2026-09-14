@@ -1,3 +1,3 @@
-<div class="grade-scale" data-grade-url="{% url 'grade_task' assignment.pk row.task.pk %}" aria-label="Оценка задачи {{ row.number }}">
-{% for value,label,symbol in grade_choices %}<button type="button" class="btn btn-small btn-secondary" data-grade="{{ value }}" aria-label="{{ symbol }} — {{ label }}" title="{{ label }}" aria-pressed="{% if row.review.grade == value %}true{% else %}false{% endif %}">{{ symbol }}</button>{% endfor %}
+<div class="grade-scale" data-grade-url="{% if grade_url %}{{ grade_url }}{% else %}{% url 'grade_task' assignment.pk row.task.pk %}{% endif %}" aria-label="Оценка задачи {{ row.number }}">
+{% for value,label,symbol in grade_choices %}<button type="button" class="btn btn-small btn-secondary" data-grade="{{ value }}" aria-label="{{ symbol }} — {{ label }}" title="{{ label }}" aria-pressed="{% if selected_grade == value or row.review.grade == value %}true{% else %}false{% endif %}">{{ symbol }}</button>{% endfor %}
 </div>

@@ -5,9 +5,12 @@
   async function request(url, options){var r=await fetch(url,options);if(!r.ok && r.status!==304)throw new Error('Не удалось обновить данные');return r;}
   function math(root){if(window.renderMathContent)root.querySelectorAll('.math-content').forEach(renderMathContent);}
   function replace(root,html){
-    if(root.dataset.previous===html)return;
+    var signature=html.replace(/name="csrfmiddlewaretoken" value="[^"]*"/g,'name="csrfmiddlewaretoken"');
+    if(root.dataset.previous===signature)return;
     var opened=Array.from(root.querySelectorAll('details')).map(d=>d.open);
-    root.innerHTML=html;root.dataset.previous=html;
+    var drafts=Array.from(root.querySelectorAll('[data-preserve-input]')).filter(e=>e.value!==e.defaultValue).map(e=>({name:e.name,value:e.value,start:e.selectionStart,end:e.selectionEnd,focused:e===document.activeElement}));
+    root.innerHTML=html;root.dataset.previous=signature;
+    drafts.forEach(d=>{var e=Array.from(root.querySelectorAll('[data-preserve-input]')).find(e=>e.name===d.name);if(e){e.value=d.value;if(d.focused){e.focus();e.setSelectionRange(d.start,d.end);}}});
     root.querySelectorAll('details').forEach((d,i)=>{if(i<opened.length)d.open=opened[i];});math(root);
   }
   function updateTable(root, html){
@@ -22,6 +25,17 @@
     oldCells.forEach((cell,i)=>{if(cell.innerHTML!==newCells[i].innerHTML)cell.innerHTML=newCells[i].innerHTML;});
   }
   document.addEventListener('input',function(e){if(e.target.matches('.review-comment textarea'))document.querySelectorAll('.review-comment textarea').forEach(t=>{if(t!==e.target&&t.name===e.target.name)t.value=e.target.value;});});
+  document.addEventListener('submit',async function(e){
+    var form=e.target.closest('[data-point-review]');if(!form)return;e.preventDefault();
+    if(form.dataset.busy)return;form.dataset.busy='1';grading=true;gradeEpoch++;
+    var input=form.querySelector('textarea'), submitted=input.value;
+    try{
+      await request(form.action,{method:'POST',body:new FormData(form),headers:{'Accept':'application/json'}});
+      input.defaultValue=submitted;
+      if(window.EgorAutosave)EgorAutosave.showSaved(true);
+    }catch(error){if(window.EgorAutosave)EgorAutosave.showSaved(false,error.message);}
+    finally{delete form.dataset.busy;grading=false;}
+  });
   document.addEventListener('click',async function(e){
     var grade=e.target.closest('[data-grade]'), attempts=e.target.closest('[data-attempt-url]');
     try{
@@ -29,7 +43,7 @@
         var scale=grade.closest('[data-grade-url]');if(scale.dataset.busy)return;scale.dataset.busy='1';grading=true;gradeEpoch++;
         try{
           var data=new FormData();data.set('grade',grade.dataset.grade);data.set('csrfmiddlewaretoken',document.querySelector('[name=csrfmiddlewaretoken]').value);
-          var result=await (await request(scale.dataset.gradeUrl,{method:'POST',body:data})).json();
+          var result=await (await request(scale.dataset.gradeUrl,{method:'POST',body:data,headers:{'Accept':'application/json'}})).json();
           document.querySelectorAll('[data-grade-url]').forEach(s=>{if(s.dataset.gradeUrl===scale.dataset.gradeUrl)s.querySelectorAll('[data-grade]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.grade===result.grade)));});
           document.querySelectorAll('[data-review-total-done]').forEach(e=>e.textContent=result.result.done);
           document.querySelectorAll('[data-review-total-percent]').forEach(e=>e.textContent=result.result.percent);

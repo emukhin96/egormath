@@ -1,0 +1,5 @@
+{% include 'assignments/_grade_scale.html' with grade_url=row.grade_url selected_grade=row.answer.grade grade_choices=grades %}
+<form method="post" action="{{ row.grade_url }}" data-point-review>{% csrf_token %}
+<div class="review-comment">{% include 'assignments/_review_comment.html' with comment_name=row.comment_name comment_value=row.comment %}</div>
+<div class="form-buttons"><button class="btn">Сохранить комментарий</button></div>
+</form>
