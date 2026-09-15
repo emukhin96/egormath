@@ -4,7 +4,7 @@
   <ul class="sidebar-list">
     <li><strong>Класс:</strong> {{ worksheet.grade|default:'—' }}</li>
     {% if worksheet.grade_label %}<li><strong>Подзаголовок:</strong> {{ worksheet.grade_label|truncatechars:30 }}</li>{% endif %}
-    <li><strong>Элементов:</strong> {{ rows|length }}</li>
+    <li><strong>Элементов:</strong> <span data-worksheet-item-count>{{ rows|length }}</span></li>
     <li><strong>Назначений:</strong> {{ assignments|length }}</li>
     <li><strong>Публичных ссылок:</strong> {{ share_links|length }}</li>
   </ul>
@@ -27,9 +27,12 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Назначения</p>
   <ul class="sidebar-list">
-    {% for assignment in assignments|slice:":5" %}
+    {% for section in assignment_groups %}
+    <li><strong>{{ section.group.name }}</strong><br><span>Учеников: {{ section.assignments|length }}</span></li>
+    {% endfor %}
+    {% for assignment in individual_assignments %}
     <li>
-      {{ assignment.student.get_full_name|default:assignment.student.username|truncatechars:24 }}
+      <a href="{% url 'review_assignment' assignment.pk %}">{{ assignment.student.get_full_name|default:assignment.student.username }}</a>
       <br><span>{{ assignment.get_status_display }}</span>
     </li>
     {% endfor %}

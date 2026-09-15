@@ -41,6 +41,11 @@ class Assignment(models.Model):
     assigned_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
         related_name='given_assignments', verbose_name='Назначил')
+    source_groups = models.ManyToManyField(
+        'accounts.StudentGroup', blank=True, related_name='worksheet_assignments',
+        verbose_name='Группы при выдаче')
+    recipient_origin_known = models.BooleanField(
+        'Способ выдачи сохранён', default=False)
     status = models.CharField(
         'Статус', max_length=10, choices=STATUS_CHOICES,
         default=STATUS_ASSIGNED)

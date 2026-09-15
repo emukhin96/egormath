@@ -1,0 +1,25 @@
+<form method="post" action="{{ action }}" data-builder-action>
+  {% csrf_token %}
+  <div class="dialog-heading">
+    <h3 id="recipient-visibility-title">Видимые номера</h3>
+    <button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button>
+  </div>
+  <p>{{ recipient_label }}</p>
+  <p class="helptext">Отметьте задачи, которые будут видны получателю на странице и в PDF. Вопросы общего блока выбираются вместе. Нумерация у получателя пересчитается.</p>
+  <div class="form-buttons">
+    <button type="button" class="btn btn-small btn-secondary" data-visibility-select="all">Выбрать все</button>
+    <button type="button" class="btn btn-small btn-secondary" data-visibility-select="none">Снять все</button>
+  </div>
+  <div class="ws-number-options">
+    {% for option in options %}
+    <label class="ws-number-option">
+      <input type="checkbox" name="visible_items" value="{{ option.value }}"{% if option.visible %} checked{% endif %}>
+      <span>{{ option.label }}{% if option.block %} <span class="muted">(общий блок)</span>{% endif %}</span>
+    </label>
+    {% empty %}<p class="muted">В листке пока нет задач.</p>{% endfor %}
+  </div>
+  <div class="form-buttons">
+    <button type="submit" class="btn">Сохранить</button>
+    <button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button>
+  </div>
+</form>

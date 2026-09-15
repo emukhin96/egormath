@@ -33,19 +33,28 @@ def _check_visibility_or_default(post):
     return value
 
 
+@transaction.atomic
 def _create_assignments(*, worksheet, teacher, students, check_visibility,
-                        allow_photos, due_at):
+                        allow_photos, due_at, groups=(), individual_ids=()):
     """Создать назначения без дублей; используется обеими точками выдачи."""
     created = 0
+    memberships = {}
+    for group in groups:
+        for student_id in group.students.values_list('pk', flat=True):
+            memberships.setdefault(student_id, []).append(group.pk)
+    individual_ids = {int(pk) for pk in individual_ids}
     for student in students:
-        _, was_created = Assignment.objects.get_or_create(
+        assignment, was_created = Assignment.objects.get_or_create(
             worksheet=worksheet, student=student,
             defaults={
                 'assigned_by': teacher,
+                'recipient_origin_known': True,
                 'check_visibility': check_visibility,
                 'allow_photos': allow_photos,
                 'due_at': due_at,
             })
+        if was_created and student.pk not in individual_ids:
+            assignment.source_groups.set(memberships.get(student.pk, []))
         created += was_created
     return created
 
@@ -58,6 +67,7 @@ def assign_worksheet(request, worksheet_id):
     student_ids = set(request.POST.getlist('students'))
     # Выбранные группы: назначение всем участникам
     group_ids = request.POST.getlist('groups')
+    selected_groups = StudentGroup.visible_to(request.user).filter(pk__in=group_ids)
     if group_ids:
         group_student_ids = (StudentGroup.visible_to(request.user)
                              .filter(pk__in=group_ids)
@@ -77,6 +87,8 @@ def assign_worksheet(request, worksheet_id):
         check_visibility=check_visibility,
         allow_photos=allow_photos,
         due_at=due_at,
+        groups=selected_groups,
+        individual_ids=[pk for pk in request.POST.getlist('students') if pk.isdigit()],
     )
     if created:
         messages.success(request, f'Назначено ученикам: {created}.')
@@ -292,6 +304,7 @@ def assignment_group_update(request, worksheet_id):
                 worksheet=worksheet, student_id=student_id,
                 defaults={
                     'assigned_by': request.user,
+                    'recipient_origin_known': True,
                     'check_visibility': check_visibility,
                     'allow_photos': allow_photos,
                     'due_at': due_at,
@@ -390,6 +403,8 @@ def assignment_create(request):
             check_visibility=form.cleaned_data['check_visibility'],
             allow_photos=form.cleaned_data['allow_photos'],
             due_at=form.cleaned_data['due_at'],
+            groups=form.cleaned_data['groups'],
+            individual_ids=form.cleaned_data['students'].values_list('pk', flat=True),
         )
         selected = form.cleaned_data['recipients'].count()
         skipped = selected - created

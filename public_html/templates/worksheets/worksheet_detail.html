@@ -4,10 +4,11 @@
 {% block sidebar %}{% include 'includes/sidebar/worksheet_detail.html' %}{% endblock %}
 {% block content %}
 {# Шапка в стандартном .page-head — как на остальных страницах #}
-<div class="page-head">
+<div class="page-head worksheet-page-head">
 <div>
 <span class="page-eyebrow">{% if collection %}Конструктор подборки{% else %}Конструктор листка{% endif %}</span>
 {# Заголовок и подзаголовок редактируются кликом по тексту (builder.js) #}
+<div class="worksheet-title-row">
 <h1 class="ws-title">
   <span class="ws-editable" data-edit="title" tabindex="0" role="button"
         title="Нажмите, чтобы переименовать">{{ worksheet.title }}</span>
@@ -21,11 +22,13 @@
          type="text" name="grade_label" value="{{ worksheet.grade_label }}"
          maxlength="100" hidden>
 </h1>
+{% if request.user.is_superuser %}<p class="page-subtitle">Владелец: {{ worksheet.owner.get_full_name|default:worksheet.owner.username }}</p>{% endif %}
+</div>
 {% if worksheet.comment %}
 <p class="ws-comment muted">{{ worksheet.comment|linebreaksbr }}</p>
 {% endif %}
 </div>
-{% if request.user.is_superuser %}<p class="page-subtitle">Владелец: {{ worksheet.owner.get_full_name|default:worksheet.owner.username }}</p>{% endif %}
+
 </div>
 {% if collection %}
 <div class="msg msg-warning">
@@ -59,12 +62,13 @@
     {% include 'includes/builder_answers_toggle.html' %}
     {% include 'includes/builder_masks_toggle.html' %}
   </h2>
+  <div id="ws-undo">
   {% if deleted_items %}
   <div class="undo-bar">
     {% for d in deleted_items %}
     <span>{% if d.task_id %}Задача <a href="{% url 'task_detail' d.task.pk %}">#{{ d.task.pk }}</a> удалена из листка.{% elif d.is_rubric %}Рубрика «{{ d.rubric }}» удалена из листка.{% else %}Текстовый элемент удалён из листка.{% endif %}</span>
     {% endfor %}
-    <form method="post" action="{% url 'worksheet_restore_item' worksheet.pk %}" class="inline-form">
+    <form method="post" action="{% url 'worksheet_restore_item' worksheet.pk %}" class="inline-form" data-builder-action>
       {% csrf_token %}
       <button type="submit" class="btn btn-small btn-secondary">Отменить</button>
     </form>
@@ -72,7 +76,7 @@
             aria-label="Скрыть уведомление">×</button>
   </div>
   {% endif %}
-  {% if rows %}
+  </div>
   <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}">
     {% for row in rows %}
     {% with item=row.item %}
@@ -171,7 +175,7 @@
           {% endif %}
           <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'up' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.first %}disabled{% endif %}>↑</button></form>
           <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'down' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.last %}disabled{% endif %}>↓</button></form>
-          <form method="post" action="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" class="inline-form">{% csrf_token %}<button class="icon-btn" title="Убрать из листка" aria-label="Убрать из листка">×</button></form>
+          <form method="post" action="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" class="inline-form" data-builder-action>{% csrf_token %}<button class="icon-btn" title="Убрать из листка" aria-label="Убрать из листка">×</button></form>
         </div>
       </div>
 
@@ -197,14 +201,14 @@
         </form>
         <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button class="link-btn" title="Добавить независимую копию следующей строкой">дублировать</button></form>
         {% if item.task.subitems.all %}
-        <label class="inline-label">колонки
+        <label class="inline-label task-meta-item ws-column-control">колонки
           <input type="number" name="columns" form="settings-{{ item.pk }}"
                  min="0" max="6" value="{{ item.columns_override|default_if_none:'' }}"
                  placeholder="{{ item.task.columns }}" class="ws-columns"></label>
         {% endif %}
       </div>
       <dialog id="vis-{{ item.pk }}" class="dialog">
-        <form method="post" action="{% url 'worksheet_item_visibility' worksheet.pk item.pk %}">
+        <form method="post" action="{% url 'worksheet_item_visibility' worksheet.pk item.pk %}" data-builder-action>
           {% csrf_token %}
           <h3>Видимость задачи {{ row.number }}</h3>
           {% if share_links or assignments %}
@@ -221,7 +225,7 @@
             <label class="dialog-topic">
               <input type="checkbox" name="hide_links" value="{{ link.pk }}"
                      {% if link.pk in row.hidden_links %}checked{% endif %}>
-              Ссылка от {{ link.created_at|date:'d.m.Y H:i' }}{% if not link.is_active %} <span class="muted">(отключена)</span>{% endif %}
+              {{ link.comment|default:'Ссылка' }} · {{ link.created_at|date:'d.m.Y H:i' }}{% if not link.is_active %} <span class="muted">(отключена)</span>{% endif %}
             </label>
             {% endfor %}
           </div>
@@ -249,9 +253,7 @@
     {% endwith %}
     {% endfor %}
   </div>
-  {% else %}
-  <p class="muted">Задач пока нет — найдите их в базе ниже или создайте новую.</p>
-  {% endif %}
+  <p class="muted" id="ws-empty"{% if rows %} hidden{% endif %}>Задач пока нет — найдите их в базе ниже или создайте новую.</p>
 
   {% url 'worksheet_add_element' worksheet.pk as add_text_url %}
   {% include 'includes/builder_add_text.html' %}
@@ -321,6 +323,19 @@
   <a class="btn" href="{% url 'assignment_create' %}?worksheet={{ worksheet.pk }}">Выдать задание</a>
 
   {% if assignments %}
+  <h2>Видимые номера для учеников</h2>
+  <p class="helptext">Выберите ученика и отметьте номера, которые ему показывать.</p>
+  {% for section in assignment_groups %}
+  <details class="ws-recipient-group">
+    <summary>{{ section.group.name }} · {{ section.assignments|length }}</summary>
+    <div class="form-buttons">
+      {% for a in section.assignments %}{% include 'worksheets/_recipient_button.html' %}{% endfor %}
+    </div>
+  </details>
+  {% endfor %}
+  <div class="form-buttons">
+    {% for a in individual_assignments %}{% include 'worksheets/_recipient_button.html' %}{% endfor %}
+  </div>
   <h2>Назначения</h2>
   <p><a class="btn btn-secondary" href="{% url 'worksheet_progress' worksheet.pk %}">Полный экран прогресса</a></p>
   <div data-progress-table data-progress-url="{% url 'worksheet_progress' worksheet.pk %}?manage=1">
@@ -343,24 +358,34 @@
   {% endif %}
 </div>
 
-<div class="card">
+<div class="card" id="worksheet-share-links">
   <h2>Публичные ссылки</h2>
   {% for link in share_links %}
-  <p>
-    <a href="{% url 'public_worksheet' link.token %}" class="mono" target="_blank" rel="noopener">{{ request.scheme }}://{{ request.get_host }}{% url 'public_worksheet' link.token %}</a>
+  <div class="ws-share-link">
+    <a href="{% url 'public_worksheet' link.token %}" class="mono ws-share-url" target="_blank" rel="noopener">{{ request.scheme }}://{{ request.get_host }}{% url 'public_worksheet' link.token %}</a>
     {% if not link.is_active %}<span class="badge badge-returned">отключена</span>{% endif %}
-    <form method="post" action="{% url 'share_toggle' worksheet.pk link.pk %}" class="inline-form">
+    <form method="post" action="{% url 'share_comment' worksheet.pk link.pk %}" data-autosave="debounce" class="ws-share-comment">
       {% csrf_token %}
-      <button type="submit" class="btn btn-small btn-secondary">
-        {% if link.is_active %}Отключить{% else %}Включить{% endif %}</button>
+      <label for="share-comment-{{ link.pk }}">Комментарий для себя</label>
+      <input type="text" name="comment" id="share-comment-{{ link.pk }}" maxlength="500" value="{{ link.comment }}" placeholder="Например: Анна, дополнительная практика">
+      <span class="helptext">Виден только учителю. Сохраняется автоматически.</span>
     </form>
-  </p>
+    <div class="form-buttons">
+      <button type="button" class="btn btn-small btn-secondary" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'link' link.pk %}">Видимые номера</button>
+      <form method="post" action="{% url 'share_toggle' worksheet.pk link.pk %}" class="inline-form">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-small btn-secondary">{% if link.is_active %}Отключить{% else %}Включить{% endif %}</button>
+      </form>
+    </div>
+  </div>
   {% endfor %}
   <form method="post" action="{% url 'share_create' worksheet.pk %}">
     {% csrf_token %}
     <button type="submit" class="btn btn-secondary">Создать ссылку</button>
   </form>
 </div>
+
+<dialog id="recipient-visibility-dialog" class="dialog" aria-labelledby="recipient-visibility-title"></dialog>
 
 <dialog id="copy-dialog" class="dialog">
   <form method="post" action="{% url 'worksheet_copy' worksheet.pk %}">
@@ -401,7 +426,8 @@
 <script defer src="{% static 'js/problem_editor.js' %}?v=3"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=3"></script>
-<script defer src="{% static 'js/builder.js' %}?v=7"></script>
+<script defer src="{% static 'js/builder.js' %}?v=8"></script>
+<script defer src="{% static 'js/worksheet_controls.js' %}?v=1"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
 {% if assignments %}<script defer src="{% static 'js/teacher_progress.js' %}?v=6"></script>{% endif %}
 {% endblock %}

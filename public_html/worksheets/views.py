@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 
 from django.utils.dateparse import parse_date
 
@@ -341,7 +341,7 @@ def worksheet_detail(request, pk):
     from assignments.progress import (progress_assignments, progress_groups,
                                       progress_people)
     assignments = list(progress_assignments(
-        worksheet.assignments.select_related('student')))
+        worksheet.assignments.select_related('student').prefetch_related('source_groups')))
     link_hidden = {}
     for link in share_links:
         for hidden_item in link.hidden_items.all():
@@ -412,6 +412,8 @@ def worksheet_detail(request, pk):
     # Листок уже выдан — режим сверки зафиксирован первым назначением
     locked_check = locked_check_visibility(worksheet) if assignments else None
 
+    from .recipients import assignment_sections
+    assignment_groups, individual_assignments = assignment_sections(assignments, groups)
     collection = Collection.objects.filter(worksheet=worksheet).first()
     return render(request, 'worksheets/worksheet_detail.html', {
         'worksheet': worksheet,
@@ -431,6 +433,8 @@ def worksheet_detail(request, pk):
         'grade_choices': Task.GRADE_CHOICES,
         'share_links': share_links,
         'assignments': assignments,
+        'assignment_groups': assignment_groups,
+        'individual_assignments': individual_assignments,
         'point_groups': point_groups,
         'progress_people': progress_people_rows,
         'status_choices': Assignment.STATUS_CHOICES,
@@ -1338,6 +1342,56 @@ def share_toggle(request, pk, link_id):
     link.is_active = not link.is_active
     link.save()
     return redirect('worksheet_detail', pk=pk)
+
+
+@teacher_required
+@require_POST
+def share_comment(request, pk, link_id):
+    """Личная заметка учителя, не выводится на публичной странице."""
+    worksheet = _own_worksheet(request, pk)
+    link = get_object_or_404(ShareLink, pk=link_id, worksheet=worksheet)
+    comment = request.POST.get('comment', '').strip()
+    if len(comment) > 500:
+        return _builder_response(request, pk, ok=False,
+                                 message='Комментарий должен быть не длиннее 500 символов.')
+    link.comment = comment
+    link.save(update_fields=['comment'])
+    return _builder_response(request, pk, message='Комментарий сохранён.')
+
+
+@teacher_required
+@require_http_methods(['GET', 'POST'])
+def worksheet_recipient_visibility(request, pk, kind, recipient_id):
+    """Массовый выбор видимых номеров для одной ссылки или назначения."""
+    from .recipients import visibility_options
+
+    worksheet = _own_worksheet(request, pk)
+    if kind == 'link':
+        recipient = get_object_or_404(worksheet.share_links, pk=recipient_id)
+        label = recipient.comment or f'Ссылка от {recipient.created_at:%d.%m.%Y %H:%M}'
+    elif kind == 'assignment':
+        recipient = get_object_or_404(worksheet.assignments.select_related('student'), pk=recipient_id)
+        label = recipient.student.get_full_name() or recipient.student.username
+    else:
+        raise Http404
+    options = visibility_options(worksheet, recipient)
+    if request.method == 'POST':
+        selected = set(request.POST.getlist('visible_items'))
+        allowed = {str(option['value']) for option in options}
+        if not selected <= allowed:
+            return _builder_response(request, pk, ok=False,
+                                     message='Состав листка изменился. Откройте выбор номеров заново.')
+        active_ids = {item_id for option in options for item_id in option['item_ids']}
+        hidden_ids = {item_id for option in options if str(option['value']) not in selected
+                      for item_id in option['item_ids']}
+        # Не трогаем рубрики, текст и мягко удалённые элементы.
+        with transaction.atomic():
+            recipient.hidden_items.remove(*active_ids)
+            recipient.hidden_items.add(*hidden_ids)
+        return _builder_response(request, pk, message='Видимые номера сохранены.')
+    return render(request, 'worksheets/_recipient_visibility.html', {
+        'recipient_label': label, 'options': options, 'action': request.path,
+    })
 
 
 # --- Публичные страницы (без входа) ---
