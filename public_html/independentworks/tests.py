@@ -46,6 +46,29 @@ class IndependentWorkTests(TestCase):
     def url(self, name, *args):
         return reverse('independentworks:' + name, args=args)
 
+    def test_common_review_dialog_and_independent_comment_save(self):
+        a = self.begin()
+        point = a.variant.points.get()
+        svc.submit(a.pk)
+        self.client.force_login(self.teacher)
+        url = self.url('review', a.pk, point.pk)
+        response = self.client.post(url, {'grade': '+'}, HTTP_ACCEPT='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.client.post(url, {f'p{point.pk}_comment': 'Проверь вычисления'}, HTTP_ACCEPT='application/json')
+        answer = Answer.objects.get(attempt=a, point=point)
+        self.assertEqual(answer.grade, '+')
+        self.client.post(url, {'grade': ''}, HTTP_ACCEPT='application/json')
+        answer.refresh_from_db()
+        self.assertEqual(answer.comment, 'Проверь вычисления')
+        detail = self.client.get(self.url('point_detail', a.pk, point.pk))
+        self.assertContains(detail, 'data-grade-url')
+        self.assertContains(detail, 'data-preserve-input')
+        progress = self.client.get(self.url('progress', a.run_id))
+        self.assertTemplateUsed(progress, 'assignments/_progress_table.html')
+        self.assertContains(progress, self.url('point_detail', a.pk, point.pk))
+        self.client.force_login(self.student)
+        self.assertEqual(self.client.get(self.url('point_detail', a.pk, point.pk)).status_code, 403)
+
     def test_idempotent_issue_start(self):
         a = self.issued()
         svc.issue(a.run_id)

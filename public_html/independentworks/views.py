@@ -392,12 +392,25 @@ def point_rows(attempt, teacher=False):
                      'comment': answer.comment if answer and 'comment' in disclosure else '',
                      'grade': (Review.SYMBOLS.get(answer.grade, answer.grade) + ' · ' + answer.get_grade_display()) if answer and answer.grade and 'checks' in disclosure else '',
                      'grade_symbol': Review.SYMBOLS.get(answer.grade, answer.grade) if answer and 'checks' in disclosure else '',
+                     'grade_url': reverse('independentworks:review', args=[attempt.pk, point.pk]) if teacher else '',
+                     'comment_name': f'p{point.pk}_comment',
                      'auto': answer.auto_check if answer and 'checks' in disclosure else '',
                      'pending': (answer.pending if answer else not spec.is_valid),
                      'assets': [a for a in point.assets.all() if 'statement' in a.audiences or set(a.audiences) & disclosure]})
         rows[-1]['content_images'] = [{'url': reverse('independentworks:asset', args=[attempt.pk, a.pk]), 'name': a.name, 'pdf': a.name.lower().endswith('.pdf')} for a in rows[-1]['assets']]
         visited.add(point.position)
     return rows
+
+
+@enabled
+@teacher_required
+def point_detail(request, pk, point_id):
+    attempt = own_attempt(request, pk, teacher=True)
+    svc.finish_expired(attempt)
+    row = next((r for r in point_rows(attempt, teacher=True) if r['point'].pk == point_id), None)
+    if row is None:
+        raise Http404
+    return render(request, 'independentworks/_point_review.html', {'attempt': attempt, 'row': row, 'grades': [('', 'По автосверке', '↺')] + Review.grade_options()})
 
 
 @enabled
@@ -412,7 +425,7 @@ def attempt_page(request, pk):
         'accessible': accessible, 'show_checks': teacher or 'checks' in attempt.disclosure,
         'tail_notes': [n['text'] for n in attempt.variant.notes if n['before'] > max((p.position for p in attempt.variant.points.all()), default=0)] if accessible else [],
         'result': svc.result(attempt) if teacher or 'checks' in attempt.disclosure else None,
-        'grades': Review.grade_options(), 'now': timezone.now().isoformat(),
+        'grades': [('', 'По автосверке', '↺')] + Review.grade_options(), 'now': timezone.now().isoformat(),
         'cumulative': svc.cumulative(attempt, student_view=not teacher) if teacher or 'checks' in attempt.disclosure else None})
 
 
@@ -461,9 +474,14 @@ def review(request, pk, point_id):
     with transaction.atomic():
         Attempt.objects.select_for_update().get(pk=pk)
         answer, _ = Answer.objects.get_or_create(attempt=attempt, point=point)
-        answer.grade = grade
-        answer.comment = request.POST.get('comment', '')[:20000]
+        if 'grade' in request.POST:
+            answer.grade = grade
+        comment_key = f'p{point.pk}_comment'
+        if 'comment' in request.POST or comment_key in request.POST:
+            answer.comment = request.POST.get(comment_key, request.POST.get('comment', ''))[:20000]
         answer.save(update_fields=['grade', 'comment', 'updated_at'])
+    if request.headers.get('Accept') == 'application/json':
+        return JsonResponse({'grade': answer.grade, 'result': svc.result(attempt)})
     messages.success(request, 'Проверка сохранена')
     return redirect('independentworks:attempt', pk=pk)
 
@@ -573,9 +591,17 @@ def progress_context(run):
     for a in attempts:
         svc.finish_expired(a)
         rows = point_rows(a, teacher=True)
-        cells = [[r for r in rows if r['point'].position == n] for n in numbers]
+        cells = []
+        for number in numbers:
+            points = []
+            for row in rows:
+                if row['point'].position != number:
+                    continue
+                status = 'ok' if row['auto'] == 'ok' else 'wrong' if row['auto'] == 'wrong' else 'draft' if row['answer'] else 'empty'
+                points.append({'detail_url': reverse('independentworks:point_detail', args=[a.pk, row['point'].pk]), 'label': row['point'].label, 'status': status, 'status_label': row['grade'] or ('На проверке' if row['pending'] else row['auto']), 'mark': row['grade_symbol'], 'attempt_count': 0})
+            cells.append({'item': {'pk': number}, 'owner': {'pk': number}, 'points': points, 'hidden': not points})
         remaining = max(0, int((a.ends_at - timezone.now()).total_seconds())) if a.ends_at else 0
-        people.append({'attempt': a, 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a),
+        people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a),
                        'remaining': f'{remaining // 60}:{remaining % 60:02}'})
         if a.started_at:
             for row in rows:
@@ -587,7 +613,7 @@ def progress_context(run):
     for stat in stats.values():
         stat['count'] = len(stat.pop('students'))
         stat['percent'] = round(100 * stat['done'] / stat['points'])
-    return {'run': run, 'people': people, 'numbers': numbers, 'stats': list(stats.values()), 'variants': run.variants.all()}
+    return {'independent': True, 'point_groups': [{'item': {'pk': n}, 'number': n, 'columns': [{'owner': {'pk': n}, 'label': 'Пункты'}]} for n in numbers], 'run': run, 'people': people, 'numbers': numbers, 'stats': list(stats.values()), 'variants': run.variants.all()}
 
 
 @enabled
