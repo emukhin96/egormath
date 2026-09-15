@@ -2733,6 +2733,13 @@
   .worksheet-title-row > .page-subtitle { margin: 0; }
   .worksheet-task-meta .ws-column-control { gap: var(--space-1); }
   .worksheet-task-meta .ws-column-control input { margin: 0; }
+  .ws-share-create { margin-bottom: var(--space-3); }
+  .ws-copy-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; flex: none; border: 1px solid var(--border); }
+  .ws-copy-btn:hover, .ws-copy-btn:focus-visible { color: var(--accent); background: #e8f1fb; }
+  .ws-photo-toggle { margin-left: 0; min-height: 36px; }
+  .ws-photo-toggle input:indeterminate + .ws-toggle-slider::after { left: 10px; }
+  .ws-photo-toggle input:focus-visible + .ws-toggle-slider { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ws-recipient-back { margin-bottom: var(--space-3); }
   .ws-share-link { margin-bottom: var(--space-3); }
   .ws-share-heading, .ws-share-comment { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
   .ws-share-url { overflow-wrap: anywhere; }

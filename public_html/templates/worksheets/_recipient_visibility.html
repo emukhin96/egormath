@@ -1,12 +1,27 @@
 <form method="post" action="{{ action }}" data-builder-action>
   {% csrf_token %}
+  <button type="button" class="link-btn ws-recipient-back" data-recipient-back hidden>← Назад</button>
   <div class="dialog-heading">
     <h3 id="recipient-visibility-title">{{ recipient_label }}</h3>
     <button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button>
   </div>
   {% if settings_form %}
   <input type="hidden" name="settings_present" value="1">
-  <div class="ws-assignment-settings">{{ settings_form.as_p }}</div>
+  <div class="ws-assignment-settings">
+    {% for field in settings_form %}
+    {% if field.name == 'allow_photos' %}
+    <div><label>Фото решений</label>
+      <input type="hidden" name="allow_photos" value="{{ field.value|default:'' }}">
+      <label class="ws-toggle ws-photo-toggle">
+        <span class="ws-toggle-text">не принимать</span>
+        <input type="checkbox" id="id_allow_photos" data-photo-toggle aria-label="Принимать фото решений"{% if field.value == 'yes' %} checked{% endif %}{% if not field.value %} data-mixed{% endif %}>
+        <span class="ws-toggle-slider"></span><span class="ws-toggle-text">принимать</span>
+      </label>
+      <span class="helptext" data-photo-mixed{% if field.value %} hidden{% endif %}>Разные настройки</span>
+    </div>
+    {% else %}<p>{{ field.label_tag }}{{ field }}</p>{% endif %}
+    {% endfor %}
+  </div>
   {% endif %}
   {% if assignment %}
   <label for="recipient-status">Статус работы</label>
