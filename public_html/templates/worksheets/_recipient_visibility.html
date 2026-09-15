@@ -13,9 +13,8 @@
     <div><label>Фото решений</label>
       <input type="hidden" name="allow_photos" value="{{ field.value|default:'' }}">
       <label class="ws-toggle ws-photo-toggle">
-        <span class="ws-toggle-text">не принимать</span>
         <input type="checkbox" id="id_allow_photos" data-photo-toggle aria-label="Принимать фото решений"{% if field.value == 'yes' %} checked{% endif %}{% if not field.value %} data-mixed{% endif %}>
-        <span class="ws-toggle-slider"></span><span class="ws-toggle-text">принимать</span>
+        <span class="ws-toggle-slider"></span>
       </label>
       <span class="helptext" data-photo-mixed{% if field.value %} hidden{% endif %}>Разные настройки</span>
     </div>

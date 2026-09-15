@@ -253,7 +253,17 @@
   .problem-mask-inline .mask-math math-field { min-height: 30px; }
   .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
   .dialog-heading h3 { margin: 0; }
-  .dialog-heading .icon-btn { margin-left: auto; font-size: 28px; min-width: 40px; min-height: 40px; }
+  .dialog-heading .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    padding: 0;
+    font-size: 28px;
+    line-height: 1;
+    min-width: 40px;
+    min-height: 40px;
+  }
   .grade-scale { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); }
   .grade-scale [aria-pressed="true"] { background: var(--accent); color: white; }
   .attempt-row { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
@@ -2734,7 +2744,7 @@
   .worksheet-task-meta .ws-column-control { gap: var(--space-1); }
   .worksheet-task-meta .ws-column-control input { margin: 0; }
   .ws-share-create { margin-bottom: var(--space-3); }
-  .ws-copy-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; flex: none; border: 1px solid var(--border); }
+  .ws-copy-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; flex: none; border: 0; }
   .ws-copy-btn:hover, .ws-copy-btn:focus-visible { color: var(--accent); background: #e8f1fb; }
   .ws-photo-toggle { margin-left: 0; min-height: 36px; }
   .ws-photo-toggle input:indeterminate + .ws-toggle-slider::after { left: 10px; }
