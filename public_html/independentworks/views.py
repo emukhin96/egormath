@@ -70,28 +70,36 @@ def create(request):
     form = WorkForm(request.POST or None)
     sheets = Worksheet.visible_to(request.user).order_by('-updated_at')
     collections = Collection.objects.select_related('worksheet').filter(is_published=True).order_by('source_id', 'order')
+    selected_sheet = request.GET.get('worksheet', '')
     if request.method == 'POST' and form.is_valid():
-        with transaction.atomic():
-            work = form.save(commit=False)
-            work.owner = request.user
-            work.save()
-            sheet_id = request.POST.get('worksheet')
-            collection_id = request.POST.get('collection')
-            sheet = get_object_or_404(sheets, pk=sheet_id) if sheet_id else None
-            if collection_id:
-                sheet = get_object_or_404(collections, pk=collection_id).worksheet
-            if sheet:
-                for item in sheet.ordered_items():
-                    note = '\n'.join(filter(None, [item.rubric, item.rubric_note, item.text_latex]))
-                    position = Position.objects.create(work=work, order=item.order, text=note)
-                    if item.task_id:
-                        Candidate.objects.create(position=position, task=item.task, subitem_ids=[] if item.all_subitems else list(item.subitems.values_list('pk', flat=True)))
-                        if collection_id:
-                            analogs = Task.objects.filter(analog_families__in=item.task.analog_families.all()).exclude(pk=item.task_id).distinct()
-                            for task in analogs:
-                                Candidate.objects.create(position=position, task=task)
-            return redirect('independentworks:edit', pk=work.pk)
-    return render(request, 'independentworks/create.html', {'form': form, 'worksheets': sheets[:150], 'collections': collections})
+        from .preparation import ziv_rows, selection_fingerprint, from_worksheet
+        sheet_id = request.POST.get('worksheet')
+        collection_id = request.POST.get('collection')
+        sheet = get_object_or_404(sheets, pk=sheet_id) if sheet_id else None
+        rows = None
+        if collection_id:
+            collection = get_object_or_404(collections, pk=collection_id)
+            sheet = collection.worksheet
+            from .analogs import ZIV
+            from problems.models import TaskSource
+            is_ziv = any(ZIV.fullmatch(r or '') for r in TaskSource.objects.filter(
+                source=collection.source, task_id__in=sheet.ordered_items().values('task_id')).values_list('locator', flat=True))
+            if is_ziv:
+                try:
+                    pair = int(request.POST.get('pair', '1'))
+                except ValueError:
+                    raise svc.WorkError('Выберите пару вариантов.')
+                rows = ziv_rows(collection, pair)
+                fingerprint = selection_fingerprint(rows)
+                if not rows:
+                    raise svc.WorkError('В выбранной паре нет импортированных задач.')
+                if request.POST.get('selection') != fingerprint:
+                    return render(request, 'independentworks/source_preview.html', {
+                        'form': form, 'collection': collection, 'pair': pair,
+                        'source_rows': rows, 'selection': fingerprint})
+        work = from_worksheet(sheet, request.user, form.cleaned_data['title'], rows)
+        return redirect('independentworks:edit', pk=work.pk)
+    return render(request, 'independentworks/create.html', {'form': form, 'worksheets': sheets[:150], 'collections': collections, 'selected_sheet': selected_sheet})
 
 
 @enabled
@@ -252,7 +260,14 @@ def prepare_run(request, pk):
     kind = request.GET.get('kind', 'initial')
     if kind not in ('initial', 'correction', 'retake') or (kind == 'initial') != (parent is None):
         raise svc.WorkError('Неизвестный вид повторной попытки.')
-    form = RunForm(request.POST or None, teacher=request.user)
+    initial = {}
+    if request.GET.get('resume'):
+        previous = teacher_run(request, request.GET['resume'])
+        if previous.work_id != work.pk or previous.parent_id != (parent.pk if parent else None) or previous.kind != kind:
+            raise Http404
+        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'release_mode', 'release_flags')}
+        initial['students'] = list(previous.plan['students'])
+    form = RunForm(request.POST or None, teacher=request.user, initial=initial)
     if request.method == 'POST' and form.is_valid():
         data = dict(form.cleaned_data)
         students = [parent.student_id] if parent else form.recipients(request.user)
@@ -265,13 +280,20 @@ def prepare_run(request, pk):
 def preview_context(run):
     names = {str(u.pk): u.get_full_name() or u.username for u in Profile.student_users_for(run.owner).filter(pk__in=run.plan['students'])}
     variants = []
-    for points in run.plan['variants']:
-        visited = set()
-        rows = []
-        for point in points:
-            rows.append(dict(point, notes=[n['text'] for n in run.plan['notes'] if n['before'] == point['position']] if point['position'] not in visited else []))
+    for vi, points in enumerate(run.plan['variants'], 1):
+        visited, rows = set(), []
+        for pi, point in enumerate(points, 1):
+            snapshot = point['snapshot']
+            rows.append({'point': point, 'common': snapshot.get('common', ''), 'text': snapshot['text'],
+                'notes': [n['text'] for n in run.plan['notes'] if n['before'] == point['position']] if point['position'] not in visited else [],
+                'content_images': [{'url': reverse('independentworks:preview_asset', args=[run.pk, vi, pi, ai]),
+                                    'name': asset['name'], 'pdf': asset['name'].lower().endswith('.pdf')}
+                                   for ai, asset in enumerate(snapshot.get('assets', []), 1) if 'statement' in asset['audiences']],
+                'reference': snapshot['answer'], 'solution': snapshot['solution'],
+                'fragments': render_fragments(parse_mask(snapshot['mask']), f'preview{vi}p{pi}', {}, {}, seed=f'{vi}-{pi}') if parse_mask(snapshot['mask']).is_valid else None})
             visited.add(point['position'])
-        variants.append(rows)
+        variants.append({'number': vi, 'rows': rows,
+            'tail_notes': [n['text'] for n in run.plan['notes'] if n['before'] > max(visited, default=0)]})
     return {'run': run, 'variants': variants, 'recipients': [(pk, names.get(pk, pk), num) for pk, num in run.plan['students'].items()]}
 
 
@@ -349,6 +371,7 @@ def point_rows(attempt, teacher=False):
                      'auto': answer.auto_check if answer and 'checks' in disclosure else '',
                      'pending': (answer.pending if answer else not spec.is_valid),
                      'assets': [a for a in point.assets.all() if 'statement' in a.audiences or set(a.audiences) & disclosure]})
+        rows[-1]['content_images'] = [{'url': reverse('independentworks:asset', args=[attempt.pk, a.pk]), 'name': a.name, 'pdf': a.name.lower().endswith('.pdf')} for a in rows[-1]['assets']]
         visited.add(point.position)
     return rows
 

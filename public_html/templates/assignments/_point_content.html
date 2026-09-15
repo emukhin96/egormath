@@ -1,0 +1,7 @@
+{% load task_extras %}
+{% if row.common %}<div class="math-content ws-common-condition">{{ row.common|web_text }}</div>{% endif %}
+{% include 'includes/task_row.html' with number=row.point.label text=row.text %}
+{% for image in row.content_images %}
+{% if image.pdf %}<a href="{{ image.url }}" target="_blank" rel="noopener">{{ image.name }}</a>
+{% else %}<img class="iw-image" src="{{ image.url }}" alt="Иллюстрация к пункту {{ row.point.label }}">{% endif %}
+{% endfor %}

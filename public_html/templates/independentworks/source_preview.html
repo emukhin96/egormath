@@ -1,0 +1,23 @@
+{% extends 'independentworks/base.html' %}
+{% load task_extras %}
+{% block content %}
+<div class="page-head"><div><span class="page-eyebrow">Состав из источника</span><h1>{{ form.title.value }}</h1><p>{{ collection.worksheet.title }} · варианты {{ pair }}–{{ pair|add:1 }}</p></div></div>
+{% for row in source_rows %}
+<section class="card form-section"><h2>Исходный №{{ row.number }}</h2>
+{% if row.incomplete %}<p class="msg msg-warning">Импортирован один кандидат. Парная задача пока отсутствует.</p>{% endif %}
+{% for task in row.candidates %}
+{% include 'includes/task_row.html' with number=forloop.counter text=task.text_latex %}
+{% include 'problems/_subitems.html' with subitems=task.subitems.all %}
+{% task_images task %}
+{% endfor %}
+</section>
+{% endfor %}
+<form method="post" class="form-buttons">{% csrf_token %}
+<input type="hidden" name="title" value="{{ form.title.value }}">
+<input type="hidden" name="collection" value="{{ collection.pk }}">
+<input type="hidden" name="pair" value="{{ pair }}">
+<input type="hidden" name="selection" value="{{ selection }}">
+<button class="btn">Подтвердить состав и создать шаблон</button>
+<a class="btn btn-secondary" href="{% url 'independentworks:create' %}">Назад</a>
+</form>
+{% endblock %}

@@ -556,7 +556,7 @@ class IndependentWorkTests(TestCase):
         response = self.client.post(self.url('create'), {'title': 'Из подборки', 'collection': collection.pk})
         self.assertEqual(response.status_code, 302)
         work = Work.objects.get(title='Из подборки')
-        self.assertEqual(set(work.positions.get().candidates.values_list('task_id', flat=True)), {self.task.pk, analog.pk})
+        self.assertEqual(set(work.positions.get().candidates.values_list('task_id', flat=True)), {self.task.pk})
 
 
 from concurrent.futures import ThreadPoolExecutor

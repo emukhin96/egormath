@@ -40,6 +40,7 @@
       action="{% url 'worksheet_quick_update' worksheet.pk %}">{% csrf_token %}</form>
 
 <div class="ws-toolbar">
+  {% if independentworks_enabled %}<a class="btn btn-secondary" href="{% url 'independentworks:create' %}?worksheet={{ worksheet.pk }}">Создать самостоятельную</a>{% endif %}
   <a class="btn btn-secondary" href="{% url 'worksheet_edit' worksheet.pk %}">Свойства</a>
   <button type="button" class="btn btn-secondary" data-dialog-open="copy-dialog">Дублировать</button>
   {# Одна кнопка PDF: варианты (ученик/ответы/учитель) выбираются на странице сборки #}
