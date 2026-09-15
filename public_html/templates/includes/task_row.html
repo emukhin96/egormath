@@ -1,6 +1,6 @@
 {% load task_extras %}
 {# Номер — отдельная колонка; продолжение условия идёт под звёздами, но не под номером. #}
-<div class="task-row">
+<div class="{% if builder %}task-line{% else %}task-row{% endif %}">
   <span class="ws-num">{{ number }}.</span>
   <span class="task-copy">
     {% if stars %}<span class="stars">{% for _ in ''|center:stars %}★{% endfor %}</span>{% endif %}

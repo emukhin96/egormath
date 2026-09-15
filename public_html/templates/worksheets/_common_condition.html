@@ -1,5 +1,5 @@
 {% load task_extras %}
-{% if row.common_parts %}
+{% if row.common %}<div class="math-content ws-common-condition">{{ row.common|web_text }}</div>{% elif row.common_parts %}
 <section class="ws-common-condition">
 <h3>Общее условие к следующим пяти заданиям</h3>
 {% for part in row.common_parts %}

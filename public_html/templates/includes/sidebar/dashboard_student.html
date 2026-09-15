@@ -9,7 +9,7 @@
     <li><strong>Учитель:</strong> {{ current.worksheet.owner.get_full_name|default:current.worksheet.owner.username }}</li>
   </ul>
   <div class="sidebar-actions">
-    <a class="sidebar-action" href="{% url 'assignment_detail' current.pk %}">Открыть задание</a>
+    <a class="sidebar-action" href="{% if current.detail_url %}{{ current.detail_url }}{% else %}{% url 'assignment_detail' current.pk %}{% endif %}">Открыть задание</a>
   </div>
   {% else %}
   <p class="sidebar-copy">Сейчас нет заданий, доступных для редактирования.</p>

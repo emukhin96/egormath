@@ -86,9 +86,16 @@ def student_dashboard(request):
                        .filter(student=request.user)
                        .select_related('worksheet', 'worksheet__owner')
                        .order_by('-assigned_at'))
+    from independentworks.integration import student_assignments
+    assignments += student_assignments(request.user)
+    assignments.sort(key=lambda a: a.assigned_at, reverse=True)
+    kind = request.GET.get("kind", "")
+    if kind in ("ordinary", "independent"):
+        assignments = [a for a in assignments if getattr(a, "kind", "ordinary") == kind]
     # Группы по статусу: сначала то, что требует действия ученика
     todo = [a for a in assignments if a.is_editable_by_student]
     todo.sort(key=lambda a: (
+        0 if getattr(a, "active", False) else 1,
         0 if a.status == Assignment.STATUS_RETURNED else 1,
         0 if a.is_overdue else 1,
         a.due_at.timestamp() if a.due_at else float('inf'),
@@ -106,6 +113,8 @@ def student_dashboard(request):
         'todo': todo,
         'submitted': submitted,
         'reviewed': reviewed,
+        'closed_unstarted': [a for a in assignments if getattr(a, 'closed_unstarted', False)],
+        'kind': kind,
         'overdue_total': sum(1 for a in todo if a.is_overdue),
     })
 

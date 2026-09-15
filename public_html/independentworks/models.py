@@ -28,6 +28,7 @@ class Work(models.Model):
     title = models.CharField('Название', max_length=190)
     source_worksheet = models.ForeignKey('worksheets.Worksheet', null=True, blank=True,
                                         on_delete=models.SET_NULL, related_name='independent_templates')
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     @classmethod
@@ -68,6 +69,7 @@ class Run(models.Model):
     fingerprint = models.CharField(max_length=64)
     issued_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
+    superseded_at = models.DateTimeField(null=True, blank=True)
     kind = models.CharField(max_length=12, default='initial')
     parent = models.ForeignKey('Attempt', null=True, blank=True, on_delete=models.PROTECT, related_name='followup_runs')
     created_at = models.DateTimeField(auto_now_add=True)

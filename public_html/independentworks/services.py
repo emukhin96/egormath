@@ -241,7 +241,7 @@ def correction_fingerprint(parent):
 
 
 def prepare(work, owner, students, duration=40, deadline=None, max_variants=None,
-            allow_photos=True, release_mode='manual', release_flags=None, parent=None, kind='initial'):
+            allow_photos=True, release_mode='manual', release_flags=None, parent=None, kind='initial', previous=None):
     if kind not in ('initial', 'correction', 'retake') or (kind == 'initial') != (parent is None):
         raise WorkError('Исходная попытка нужна только для исправления или пересдачи.')
     if parent is not None and parent.run.work_id != work.pk:
@@ -290,11 +290,21 @@ def prepare(work, owner, students, duration=40, deadline=None, max_variants=None
     assignment = {str(student): i % len(variants) + 1 for i, student in enumerate(shuffled)}
     plan = {'variants': variants, 'students': assignment, 'notes': notes, 'shortage': shortage,
             'repeats': repeats, 'seed': seed}
-    return Run.objects.create(work=work, owner=owner, title=work.title, duration=duration,
-                              deadline=deadline, max_variants=max_variants, allow_photos=allow_photos,
-                              release_mode=release_mode, release_flags=flags,
-                              fingerprint=correction_fingerprint(parent) if kind == 'correction' else digest(data),
-                              plan=plan, kind=kind, parent=parent)
+    with transaction.atomic():
+        if previous is not None:
+            previous = Run.objects.select_for_update().get(pk=previous.pk)
+            if (previous.work_id != work.pk or previous.owner_id != owner.pk
+                    or previous.parent_id != (parent.pk if parent else None) or previous.kind != kind):
+                raise WorkError('Предпросмотр относится к другой выдаче.', 409)
+            if previous.issued_at or previous.superseded_at:
+                raise WorkError('Предпросмотр уже выдан или заменён. Откройте актуальную выдачу.', 409)
+            previous.superseded_at = timezone.now()
+            previous.save(update_fields=['superseded_at'])
+        return Run.objects.create(work=work, owner=owner, title=work.title, duration=duration,
+                                  deadline=deadline, max_variants=max_variants, allow_photos=allow_photos,
+                                  release_mode=release_mode, release_flags=flags,
+                                  fingerprint=correction_fingerprint(parent) if kind == 'correction' else digest(data),
+                                  plan=plan, kind=kind, parent=parent)
 
 
 def issue(run_id, confirm=False):
@@ -317,6 +327,8 @@ def _issue(run_id, confirm, written):
     run = Run.objects.select_for_update().select_related('work', 'parent').get(pk=run_id)
     if run.issued_at:
         return run
+    if run.superseded_at:
+        raise WorkError('Предпросмотр заменён новым. Выдайте актуальный просмотренный вариант.', 409)
     if run.deadline and run.deadline <= timezone.now():
         raise WorkError('Срок уже прошёл. Подготовьте новое проведение.')
     current = correction_fingerprint(run.parent) if run.kind == 'correction' else digest(material(run.work))
@@ -443,7 +455,10 @@ def result(attempt):
 
 def cumulative(attempt, student_view=False):
     root = attempt.root or attempt
-    attempts = [root] + list(root.corrections.select_related('variant', 'run').prefetch_related('answers__point'))
+    corrections = root.corrections.all()
+    if 'corrections' not in getattr(root, '_prefetched_objects_cache', {}):
+        corrections = corrections.select_related('variant', 'run').prefetch_related('answers__point')
+    attempts = [root] + list(corrections)
     best = {p.root_key: 0 for p in root.variant.points.all()}
     for item in attempts:
         if student_view and (not item.finished or 'checks' not in item.disclosure):
@@ -459,3 +474,37 @@ def cumulative(attempt, student_view=False):
 def answer_display(point, answer):
     spec = parse_mask(point.snapshot['mask'])
     return filled_text(spec, answer.values) if answer and spec.is_valid else ''
+
+
+@transaction.atomic
+def update_recipients(run_id, students, choices):
+    """Меняем только не начатые назначения, сохраняя выданные снимки."""
+    run = Run.objects.select_for_update().get(pk=run_id)
+    if not run.issued_at:
+        raise WorkError('Проведение ещё не выдано.')
+    attempts = {a.student_id: a for a in run.attempts.select_for_update().order_by('pk')}
+    if not students:
+        raise WorkError('Оставьте хотя бы одного получателя.')
+    if run.kind != 'initial' and students != set(attempts):
+        raise WorkError('Получатель повторной попытки закреплён.', 409)
+    from accounts.models import Profile
+    allowed = set(Profile.student_users_for(run.owner).values_list('pk', flat=True)) | set(attempts)
+    if not students <= allowed:
+        raise WorkError('Ученик недоступен владельцу проведения.', 403)
+    variants = {v.pk: v for v in run.variants.all()}
+    if any(v not in variants for v in choices.values()):
+        raise WorkError('Вариант не принадлежит этому проведению.')
+    for student, attempt in attempts.items():
+        if (attempt.started_at or run.kind != 'initial') and (student not in students or choices[student] != attempt.variant_id):
+            raise WorkError('Начавшего ученика или закреплённую попытку менять нельзя.', 409)
+    if students - set(attempts) and (run.closed_at or run.deadline and run.deadline <= timezone.now()):
+        raise WorkError('Срок начала прошёл: добавить получателей нельзя.', 409)
+    for student in set(attempts) - students:
+        attempts[student].delete()
+    for student in students:
+        if student in attempts:
+            Attempt.objects.filter(pk=attempts[student].pk).update(variant_id=choices[student])
+        else:
+            Attempt.objects.create(run=run, student_id=student, variant_id=choices[student])
+    run.plan = {**run.plan, 'students': {str(student): variants[choices[student]].number for student in sorted(students)}}
+    run.save(update_fields=['plan'])

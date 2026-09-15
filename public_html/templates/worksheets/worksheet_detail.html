@@ -56,12 +56,8 @@
 
 <div class="card worksheet-items-card">
   <h2 class="worksheet-items-heading"><span>Задачи листка</span>
-    <label class="ws-toggle" title="Показывать ответы и решения задач">
-      <input type="checkbox" id="toggle-answers">
-      <span class="ws-toggle-slider"></span>
-      <span class="ws-toggle-text">ответы и решения</span>
-    </label>
-    <label class="ws-toggle"><input type="checkbox" id="toggle-masks"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">маски ответов</span></label>
+    {% include 'includes/builder_answers_toggle.html' %}
+    {% include 'includes/builder_masks_toggle.html' %}
   </h2>
   {% if deleted_items %}
   <div class="undo-bar">
@@ -82,7 +78,7 @@
     {% with item=row.item %}
     <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" data-id="{{ item.pk }}"{% if item.task_id %} data-task-id="{{ item.task.pk }}" data-has-answer="{% if item.task.effective_answer_latex or item.task.effective_solution_latex or item.task.has_subitem_answers %}1{% endif %}" data-no-answer="{% if item.task.has_blank_answer %}1{% endif %}"{% endif %}>
       <div class="ws-body">
-        {% if not item.task.block_id %}<span class="drag-handle" title="Перетащите, чтобы изменить порядок">⠿</span>{% endif %}
+        {% if not item.task.block_id %}{% include 'includes/builder_drag_handle.html' %}{% endif %}
 
         {% if item.task_id %}
         {# --- Задача --- #}
@@ -257,15 +253,8 @@
   <p class="muted">Задач пока нет — найдите их в базе ниже или создайте новую.</p>
   {% endif %}
 
-  <details class="ws-add-text">
-    <summary>+ Добавить текст между задачами</summary>
-    <form method="post" action="{% url 'worksheet_add_element' worksheet.pk %}">
-      {% csrf_token %}
-      <input type="hidden" name="kind" value="text">
-      <textarea name="text_latex" rows="2" placeholder="Произвольный текст (LaTeX), например пояснение или указание"></textarea>
-      <button type="submit" class="btn btn-small">Добавить</button>
-    </form>
-  </details>
+  {% url 'worksheet_add_element' worksheet.pk as add_text_url %}
+  {% include 'includes/builder_add_text.html' %}
 
   <details class="ws-add-text">
     <summary>+ Добавить рубрику</summary>
@@ -412,7 +401,7 @@
 <script defer src="{% static 'js/problem_editor.js' %}?v=2"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=2"></script>
-<script defer src="{% static 'js/builder.js' %}?v=5"></script>
+<script defer src="{% static 'js/builder.js' %}?v=6"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
 {% if assignments %}<script defer src="{% static 'js/teacher_progress.js' %}?v=6"></script>{% endif %}
 {% endblock %}

@@ -167,13 +167,30 @@ def assignment_list(request):
         submitted_total=Count('pk', filter=Q(status=Assignment.STATUS_SUBMITTED)),
         reviewed_total=Count('pk', filter=Q(status=Assignment.STATUS_REVIEWED)),
         queue_priority=Min('queue_order')).order_by('queue_priority', '-last_assigned', 'worksheet_id')
+    from independentworks.integration import assignment_groups, assignment_runs
+    kind = request.GET.get('kind', '')
+    grouped = list(grouped) if kind != 'independent' else []
+    for group in grouped:
+        group['kind'] = 'ordinary'
+        group['key'] = f"ordinary-{group['worksheet_id']}"
+    independent_runs = assignment_runs(request.user, request.GET)
+    independent_groups = assignment_groups(request.user, request.GET, runs=independent_runs)
+    grouped += independent_groups
+    grouped.sort(key=lambda g: (g['queue_priority'], -g['last_assigned'].timestamp(), g['key']))
+    if kind == 'independent':
+        stats = dict.fromkeys(stats, 0)
+    for group in assignment_groups(request.user, {'kind': kind, 'owner': owner_id}, runs=independent_runs):
+        stats['total'] += group['students_total']
+        stats['submitted'] += group['submitted_total']
+        stats['reviewed'] += group['reviewed_total']
+        stats['assigned'] += group['students_total'] - group['submitted_total'] - group['reviewed_total']
     page = Paginator(grouped, 30).get_page(request.GET.get('page'))
     groups_on_page = list(page.object_list)
     page.object_list = groups_on_page
     students = list(Profile.students_for(request.user)
                     .select_related('user')
                     .order_by('user__last_name', 'user__first_name'))
-    worksheet_ids = [g['worksheet_id'] for g in groups_on_page]
+    worksheet_ids = [g['worksheet_id'] for g in groups_on_page if g['kind'] == 'ordinary']
     page_assignments = list(
         Assignment.visible_to(request.user)
         .filter(worksheet_id__in=worksheet_ids)
@@ -203,6 +220,21 @@ def assignment_list(request):
                         Assignment.STATUS_REVIEWED)),
             }
             for profile in all_profiles]
+    runs_by_key = {f'independent-{r.pk}': r for r in independent_runs}
+    for group in groups_on_page:
+        if group['kind'] != 'independent':
+            continue
+        run = runs_by_key[group['key']]
+        existing = {a.student_id: a for a in run.attempts.all()}
+        allowed = list(Profile.student_users_for(run.owner).order_by('last_name', 'first_name', 'username'))
+        users = {u.pk: u for u in allowed}
+        users.update({a.student_id: a.student for a in existing.values()})
+        group['run'] = run
+        group['variants'] = list(run.variants.all())
+        group['recipient_rows'] = [
+            {'student': u, 'assignment': existing.get(u.pk),
+             'locked': bool(existing.get(u.pk) and (existing[u.pk].started_at or run.kind != 'initial'))}
+            for u in users.values() if run.kind == 'initial' or u.pk in existing]
     worksheets = Worksheet.visible_to(request.user).order_by('-updated_at')
     return render(request, 'assignments/assignment_list.html', {
         'page': page,
@@ -224,7 +256,7 @@ def assignment_list(request):
         ],
         'filters': {
             'q': q, 'status': status, 'student': student_id,
-            'worksheet': worksheet_id, 'due': due, 'owner': owner_id,
+            'worksheet': worksheet_id, 'due': due, 'owner': owner_id, 'kind': kind,
         },
         'return_query': request.GET.urlencode(),
     })
@@ -338,9 +370,11 @@ def assignment_create(request):
         work_id = request.POST.get('work') or request.GET.get('work')
         if work_id:
             return prepare_run(request, work_id)
+        works = Work.visible_to(request.user).select_related('source_worksheet').filter(title__icontains=request.GET.get('q', '').strip()).annotate(
+            number_count=Count('positions', filter=Q(positions__text='') | Q(positions__candidates__isnull=False), distinct=True)).order_by('-updated_at', '-pk')
         return render(request, 'assignments/assignment_create.html', {
             'independent': True, 'choose_work': True,
-            'work_options': Work.visible_to(request.user).order_by('-updated_at')})
+            'work_options': Paginator(works, 30).get_page(request.GET.get('page'))})
     initial = {'allow_photos': True}
     worksheet_id = request.GET.get('worksheet', '')
     if worksheet_id.isdigit():

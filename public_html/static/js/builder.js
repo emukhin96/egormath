@@ -102,7 +102,7 @@
 
     // --- Перетаскивание элементов ---
     var list = document.getElementById('ws-items');
-    if (list && typeof Sortable !== 'undefined') {
+    if (list && list.dataset.reorderUrl && typeof Sortable !== 'undefined') {
       var csrf = document.querySelector('#ws-items input[name=csrfmiddlewaretoken]');
       Sortable.create(list, {
         handle: '.drag-handle',
@@ -121,6 +121,7 @@
             body: body.toString(),
           }).then(function (r) {
             if (!r.ok) { location.reload(); return; }
+            if (list.dataset.reorderReload === '1') { location.reload(); return; }
             showSaved(true, '');
             // Перенумеровать задачи (рубрики и тексты без номера)
             var n = 0;

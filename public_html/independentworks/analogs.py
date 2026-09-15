@@ -4,8 +4,9 @@ import re
 from collections import defaultdict
 
 from django.db import transaction
+from django.db.models import Prefetch
 from problems.models import TaskSource
-from worksheets.models import Collection
+from worksheets.models import Collection, WorksheetItem
 from .models import Family, FamilyMember
 
 ZIV = re.compile(r'(sr|kr|pr)/(\d+)/v([1-8])/(.+)')
@@ -37,7 +38,7 @@ def bank_identity(source_id, path, locator=''):
     return key, number
 
 
-def discover_families():
+def discover_families(*, source_id=None):
     groups = {}
     ambiguous = []
     ziv_variants = defaultdict(lambda: defaultdict(set))
@@ -47,7 +48,8 @@ def discover_families():
         if evidence not in group['members'][task_id]:
             group['members'][task_id].append(evidence)
 
-    refs = list(TaskSource.objects.select_related('source').filter(task__variant_of__isnull=True))
+    source_filter = {'source_id': source_id} if source_id is not None else {}
+    refs = list(TaskSource.objects.select_related('source').filter(task__variant_of__isnull=True, **source_filter))
     ref_index = defaultdict(list)
     for ref in refs:
         ref_index[(ref.source_id, ref.task_id)].append(ref)
@@ -69,7 +71,9 @@ def discover_families():
             else:
                 ambiguous.append(f'Задача #{ref.task_id}: не определён прототип ({" / ".join(path)})')
 
-    collections = list(Collection.objects.select_related('worksheet', 'source').prefetch_related('worksheet__items__task'))
+    collections = list(Collection.objects.filter(**source_filter).select_related('worksheet', 'source').prefetch_related(Prefetch('worksheet__items',
+        queryset=WorksheetItem.objects.filter(deleted_at__isnull=True).select_related('task').order_by('order', 'pk'),
+        to_attr='analog_items')))
     by_id = {c.pk: c for c in collections}
     for collection in collections:
         ancestors, current, visited = [], collection, set()
@@ -79,7 +83,7 @@ def discover_families():
             current = by_id.get(current.parent_id)
         path = list(collection.source_path or ancestors)
         context = path
-        for item in collection.worksheet.ordered_items():
+        for item in collection.worksheet.analog_items:
             if item.rubric:
                 # Следующая рубрика заменяет предыдущую; «Аналоги» без
                 # номера не наследует произвольный соседний прототип.
@@ -114,13 +118,41 @@ def discover_families():
     return {key: value for key, value in groups.items() if len(value['members']) > 1}, incomplete, sorted(set(ambiguous))
 
 
-def sync_families(*, dry_run=False, report=False):
-    groups, incomplete, ambiguous = discover_families()
+def sync_families(*, dry_run=False, report=False, source_id=None):
+    groups, incomplete, ambiguous = discover_families(source_id=source_id)
     result = {'families': len(groups), 'created': 0, 'members_added': 0,
-              'incomplete': incomplete, 'ambiguous': ambiguous, 'dry_run': dry_run}
+              'keys_updated': 0, 'incomplete': incomplete, 'ambiguous': ambiguous, 'dry_run': dry_run}
     with transaction.atomic():
+        # Старый ключ не различал главы. Переносим только однозначное
+        # семейство; ручных участников сохраняем вместе с его идентификатором.
+        legacy_targets = defaultdict(list)
+        for key in groups:
+            if key.startswith('bank:') and key.count(':') == 3:
+                legacy_targets[key.rsplit(':', 1)[0]].append(key)
+        blocked = set()
+        aliases = {}
+        for old_key, targets in legacy_targets.items():
+            old = Family.objects.select_for_update().filter(key=old_key).first()
+            if not old:
+                continue
+            source_ids = set(old.familymember_set.filter(origin='source').values_list('task_id', flat=True))
+            target = targets[0]
+            if (len(targets) != 1 or old_key in groups or old.origin != 'source'
+                    or not source_ids or not source_ids <= set(groups[target]['members'])
+                    or Family.objects.filter(key=target).exists()):
+                blocked.update(targets)
+                blocked.add(old_key)
+                result['ambiguous'].append(f'{old_key}: старое семейство требует ручного уточнения раздела')
+                continue
+            result['keys_updated'] += 1
+            aliases[target] = old
+            if not dry_run:
+                old.key = target
+                old.save(update_fields=['key'])
         for key, group in groups.items():
-            family = Family.objects.filter(key=key).first()
+            if key in blocked:
+                continue
+            family = aliases.get(key) or Family.objects.filter(key=key).first()
             if family is None:
                 result['created'] += 1
                 if not dry_run:

@@ -118,6 +118,28 @@ def worksheet_list(request):
     for w in worksheets:
         w.taxonomy_json = dumps_state(worksheet_taxonomy_state(w))
         w.corpus_key = corpus_key_from_comment(w.comment)
+    if settings.INDEPENDENT_WORKS_ENABLED:
+        from independentworks.models import Work
+        templates = Work.visible_to(request.user).select_related('owner').annotate(items_total=models.Count('positions', distinct=True))
+        if owner_id.isdigit():
+            templates = templates.filter(owner_id=owner_id)
+        if params.get('grade') or params.getlist('topic'):
+            templates = templates.filter(positions__candidates__task__in=filter_tasks(params)).distinct()
+        for param, lookup in (('created_from', 'created_at__date__gte'),
+                              ('created_to', 'created_at__date__lte'),
+                              ('updated_from', 'updated_at__date__gte'),
+                              ('updated_to', 'updated_at__date__lte')):
+            date = parse_date(params.get(param, ''))
+            if date:
+                templates = templates.filter(**{lookup: date})
+        materials = list(worksheets) if params.get('kind') != 'independent' else []
+        if params.get('kind') != 'ordinary':
+            for work in templates:
+                work.kind = 'independent'
+                materials.append(work)
+        field = order.lstrip('-')
+        materials.sort(key=lambda w: (getattr(w, field) is not None, getattr(w, field) or '', str(getattr(w, 'kind', 'ordinary')) + str(w.pk)), reverse=order.startswith('-'))
+        ctx['worksheets'] = materials
     return render(request, 'worksheets/worksheet_list.html', ctx)
 
 

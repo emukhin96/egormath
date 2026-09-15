@@ -24,13 +24,25 @@
     }
     oldCells.forEach((cell,i)=>{if(cell.innerHTML!==newCells[i].innerHTML)cell.innerHTML=newCells[i].innerHTML;});
   }
+  function applyReviewResult(url,result){
+    url=new URL(url,location.href).href;
+    document.querySelectorAll('[data-grade-url]').forEach(s=>{if(new URL(s.dataset.gradeUrl,location.href).href===url)s.querySelectorAll('[data-grade]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.grade===result.grade)));});
+    document.querySelectorAll('[data-review-total-done]').forEach(e=>e.textContent=result.result.done);
+    document.querySelectorAll('[data-review-total-percent]').forEach(e=>e.textContent=result.result.percent);
+    document.querySelectorAll('[data-point-feedback-url]').forEach(e=>{if(new URL(e.dataset.pointFeedbackUrl,location.href).href===url&&result.feedback!==undefined)e.textContent=result.feedback;});
+    document.querySelectorAll('[data-review-pending]').forEach(e=>e.hidden=!result.result.pending);
+    document.querySelectorAll('[data-review-pending-count]').forEach(e=>e.textContent=result.result.pending||0);
+    if(result.cumulative){document.querySelectorAll('[data-review-cumulative-done]').forEach(e=>e.textContent=result.cumulative.done);document.querySelectorAll('[data-review-cumulative-percent]').forEach(e=>e.textContent=result.cumulative.percent);}
+  }
   document.addEventListener('input',function(e){if(e.target.matches('.review-comment textarea'))document.querySelectorAll('.review-comment textarea').forEach(t=>{if(t!==e.target&&t.name===e.target.name)t.value=e.target.value;});});
   document.addEventListener('submit',async function(e){
     var form=e.target.closest('[data-point-review]');if(!form)return;e.preventDefault();
     if(form.dataset.busy)return;form.dataset.busy='1';grading=true;gradeEpoch++;
-    var input=form.querySelector('textarea'), submitted=input.value;
     try{
-      await request(form.action,{method:'POST',body:new FormData(form),headers:{'Accept':'application/json'}});
+      var input=form.querySelector('textarea');if(!input)throw new Error('Не найдено поле комментария');
+      var submitted=input.value;
+      var result=await (await request(form.action,{method:'POST',body:new FormData(form),headers:{'Accept':'application/json'}})).json();
+      applyReviewResult(form.action,result);
       input.defaultValue=submitted;
       if(window.EgorAutosave)EgorAutosave.showSaved(true);
     }catch(error){if(window.EgorAutosave)EgorAutosave.showSaved(false,error.message);}
@@ -44,9 +56,7 @@
         try{
           var data=new FormData();data.set('grade',grade.dataset.grade);data.set('csrfmiddlewaretoken',document.querySelector('[name=csrfmiddlewaretoken]').value);
           var result=await (await request(scale.dataset.gradeUrl,{method:'POST',body:data,headers:{'Accept':'application/json'}})).json();
-          document.querySelectorAll('[data-grade-url]').forEach(s=>{if(s.dataset.gradeUrl===scale.dataset.gradeUrl)s.querySelectorAll('[data-grade]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.grade===result.grade)));});
-          document.querySelectorAll('[data-review-total-done]').forEach(e=>e.textContent=result.result.done);
-          document.querySelectorAll('[data-review-total-percent]').forEach(e=>e.textContent=result.result.percent);
+          applyReviewResult(scale.dataset.gradeUrl,result);
           if(window.EgorAutosave)EgorAutosave.showSaved(true);
         }finally{delete scale.dataset.busy;grading=false;}
       }

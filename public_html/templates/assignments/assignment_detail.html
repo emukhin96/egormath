@@ -17,7 +17,7 @@
 
 {% if assignment.status == 'reviewed' %}
 <div class="msg msg-success">
-  Проверено: выполнено <strong>{{ result.done }} из {{ result.total }}</strong> задач ({{ result.percent }}%).
+  {% include 'assignments/_result_summary.html' with units='задач' %}
   Ниже — отметки и комментарии учителя.
 </div>
 {% elif not editable %}

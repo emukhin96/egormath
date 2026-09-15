@@ -1,2 +1,2 @@
 {% include 'assignments/_progress_table.html' %}
-{% if stats %}<details><summary>По кандидатам</summary>{% for stat in stats %}<p>{{ stat.key }} · учеников: {{ stat.count }} · пунктов: {{ stat.points }} · зачтено {{ stat.percent }}%</p>{% endfor %}</details>{% endif %}
+{% if stats %}<details class="card problem-section"><summary>Результаты по кандидатам</summary>{% for stat in stats %}<p>{{ stat.label }} · учеников: {{ stat.count }} · пунктов: {{ stat.points }} · зачтено {{ stat.percent }}%</p>{% endfor %}</details>{% endif %}

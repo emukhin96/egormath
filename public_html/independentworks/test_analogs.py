@@ -89,3 +89,85 @@ class AnalogDiscoveryTests(TestCase):
         self.assertEqual(Family.objects.count(), 1)
         self.assertEqual(Family.objects.get().tasks.count(), 2)
         self.assertEqual(report['ambiguous'], [])
+
+    def test_collection_discovery_query_count_does_not_grow(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from .analogs import discover_families
+        def collection(number):
+            sheet = Worksheet.objects.create(owner=self.owner, title=f'Прототип 6.{number}')
+            Collection.objects.create(source=self.source, worksheet=sheet, locator=str(number))
+            for order in (1, 2):
+                WorksheetItem.objects.create(worksheet=sheet, order=order, task=Task.objects.create(text_latex='Задача'))
+        collection(1)
+        with CaptureQueriesContext(connection) as small:
+            discover_families()
+        for i in range(2, 12):
+            collection(i)
+        with CaptureQueriesContext(connection) as large:
+            groups, _, _ = discover_families()
+        self.assertEqual(len(groups), 11)
+        self.assertEqual(len(small), len(large))
+        self.assertLessEqual(len(large), 3)
+
+    def test_legacy_key_is_renamed_preserving_manual_members(self):
+        tasks = [self.ref(str(i), ['Алгебра', 'Прототип 1.1']) for i in range(2)]
+        family = Family.objects.create(key=f'bank:{self.source.pk}:1.1', title='Старое', origin='source')
+        FamilyMember.objects.create(family=family, task=tasks[0], origin='source')
+        manual = Task.objects.create(text_latex='Ручной аналог')
+        FamilyMember.objects.create(family=family, task=manual, origin='manual')
+        report = sync_families(dry_run=True, report=True)
+        self.assertEqual(report['keys_updated'], 1)
+        self.assertEqual(report['created'], 0)
+        family.refresh_from_db()
+        self.assertEqual(family.key, f'bank:{self.source.pk}:1.1')
+        sync_families()
+        family.refresh_from_db()
+        self.assertEqual(family.key.count(':'), 3)
+        self.assertEqual(set(family.tasks.all()), set(tasks + [manual]))
+        self.assertEqual(family.familymember_set.get(task=manual).origin, 'manual')
+        self.assertEqual(Family.objects.count(), 1)
+        report = sync_families(report=True)
+        self.assertEqual((report['created'], report['members_added'], report['keys_updated']), (0, 0, 0))
+
+    def test_ambiguous_legacy_key_is_not_split_or_duplicated(self):
+        for chapter in ('Алгебра', 'Геометрия'):
+            for i in range(2):
+                self.ref(f'{chapter}-{i}', [chapter, 'Прототип 1.1'])
+        family = Family.objects.create(key=f'bank:{self.source.pk}:1.1', title='Старое', origin='source')
+        FamilyMember.objects.create(family=family, task=Task.objects.first(), origin='source')
+        report = sync_families(report=True)
+        self.assertEqual(Family.objects.count(), 1)
+        self.assertEqual(report['created'], 0)
+        self.assertEqual(len(report['ambiguous']), 1)
+        self.assertEqual(family.tasks.count(), 1)
+
+    def test_production_paths_and_source_scoped_command(self):
+        """Пути из импорта ЕГЭ: отдельный прототип и дочерняя подборка аналогов."""
+        import io
+        import json
+        from django.core.management import call_command
+        tasks = []
+        for locator, path in [
+            ('1.1', ['№1. Планиметрия 1', 'Прототип 1.1']),
+            ('1.1.1', ['№1. Планиметрия 1', 'Прототип 1.1', 'Аналоги']),
+            ('1.1.2', ['№1. Планиметрия 1', 'Прототип 1.1', 'Аналоги']),
+            ('1.10', ['№1. Планиметрия 1', 'Прототип 1.10']),
+            ('1.10.1', ['№1. Планиметрия 1', 'Прототип 1.10', 'Аналоги']),
+        ]:
+            tasks.append(self.ref(locator, path))
+        other = Source.objects.create(title='Другой банк')
+        for n in range(2):
+            TaskSource.objects.create(source=other, task=Task.objects.create(text_latex='Чужой'),
+                locator=f'1.1.{n}', source_path=['№1. Планиметрия 1', 'Прототип 1.1'])
+        out = io.StringIO()
+        call_command('sync_independent_analogs', source=self.source.pk, dry_run=True, json=True, stdout=out)
+        report = json.loads(out.getvalue())
+        self.assertEqual((report['created'], report['members_added']), (2, 5))
+        self.assertEqual(report['source']['task_references'], 5)
+        self.assertFalse(Family.objects.exists())
+        sync_families(source_id=self.source.pk)
+        self.assertEqual(Family.objects.count(), 2)
+        family = tasks[0].analog_families.get()
+        self.assertEqual(set(family.tasks.all()), set(tasks[:3]))
+        self.assertEqual(sync_families(source_id=self.source.pk, report=True)['members_added'], 0)

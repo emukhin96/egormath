@@ -5,5 +5,5 @@
 <p>{% if row.grade %}{{ row.grade }}{% elif row.pending %}На проверке{% else %}Автосверка: {{ row.auto|default:'Ответ не введён' }}{% endif %}</p>
 {% if row.reference %}<div class="math-content">Эталон: {{ row.reference|web_answer }}</div>{% endif %}
 {% if row.solution %}<details><summary>Решение</summary><div class="math-content">{{ row.solution|web_text }}</div></details>{% endif %}
-{% for photo in row.answer.photos.all %}<a href="{% url 'independentworks:photo' photo.pk %}" target="_blank" rel="noopener"><img class="iw-photo" src="{% url 'independentworks:photo' photo.pk %}" alt="Фото решения"></a>{% endfor %}
+{% include 'assignments/_photo_gallery.html' with photos=row.answer.photos.all photo_route='independentworks:photo' %}
 {% if attempt.finished %}{% include 'independentworks/_review_controls.html' %}{% endif %}

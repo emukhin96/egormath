@@ -12,10 +12,11 @@
   {% endif %}
 </div>
 
+{% if independentworks_enabled %}{% include 'includes/work_kind_filter.html' %}{% endif %}
 {% if current %}
 <div class="hero-card">
   <div class="hero-body">
-    <p class="hero-title">{{ current.worksheet.title }}</p>
+    <p class="hero-title">{{ current.worksheet.title }}</p>{% if current.kind_label %}<p>{{ current.kind_label }}</p>{% endif %}
     <p class="hero-meta">
       <span>Учитель: {{ current.worksheet.owner.get_full_name|default:current.worksheet.owner.username }}</span>
       <span>·</span>
@@ -24,7 +25,7 @@
       <span class="badge badge-{{ current.status }}">{{ current.get_status_display }}</span>
     </p>
   </div>
-  <a class="btn" href="{% url 'assignment_detail' current.pk %}">Открыть задание</a>
+  <a class="btn" href="{% if current.detail_url %}{{ current.detail_url }}{% else %}{% url 'assignment_detail' current.pk %}{% endif %}">Открыть задание</a>
 </div>
 {% endif %}
 
@@ -52,4 +53,5 @@
   {% include 'accounts/_student_assignment_table.html' with items=reviewed %}
 </div>
 {% endif %}
+{% if closed_unstarted %}<div class="card"><h2>Не начато · срок истёк</h2>{% include 'accounts/_student_assignment_table.html' with items=closed_unstarted %}</div>{% endif %}
 {% endblock %}

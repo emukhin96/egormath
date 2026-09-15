@@ -43,6 +43,14 @@ def enabled(view):
     return wrapped
 
 
+def preparation_query(request):
+    params = request.GET.copy()
+    for key in list(params):
+        if key not in ('resume', 'parent', 'kind'):
+            params.pop(key)
+    return params.urlencode()
+
+
 def teacher_run(request, pk):
     return get_object_or_404(Run.objects.select_related('work', 'parent'), pk=pk, work__in=Work.visible_to(request.user))
 
@@ -58,16 +66,13 @@ def own_attempt(request, pk, teacher=False):
 
 @enabled
 def catalog(request):
-    if get_role(request.user) == 'teacher':
-        return render(request, 'independentworks/catalog.html', {'works': Work.visible_to(request.user).order_by('-updated_at'), 'runs': Run.objects.filter(work__in=Work.visible_to(request.user), issued_at__isnull=False)[:30]})
-    attempts = Attempt.objects.filter(student=request.user, run__issued_at__isnull=False).select_related('run', 'variant').order_by('-pk')
-    return render(request, 'independentworks/catalog.html', {'attempts': attempts})
+    return redirect(reverse('assignment_list') + '?kind=independent') if get_role(request.user) == 'teacher' else redirect(reverse('dashboard') + '?kind=independent')
 
 
 @enabled
 @teacher_required
 def create(request):
-    form = WorkForm(request.POST or None)
+    form = WorkForm(request.POST or None, initial={'title': request.GET.get('title', '')})
     sheets = Worksheet.visible_to(request.user).order_by('-updated_at')
     collections = Collection.objects.select_related('worksheet').filter(is_published=True).order_by('source_id', 'order')
     selected_sheet = request.GET.get('worksheet', '')
@@ -75,6 +80,19 @@ def create(request):
         from .preparation import ziv_rows, selection_fingerprint, from_worksheet
         sheet_id = request.POST.get('worksheet')
         collection_id = request.POST.get('collection')
+        source_mode = request.POST.get('source_mode')
+        if source_mode == 'blank':
+            sheet_id = collection_id = None
+        elif source_mode == 'sheet':
+            collection_id = None
+            if not sheet_id:
+                raise svc.WorkError('Выберите исходный листок.')
+        elif source_mode == 'collection':
+            sheet_id = None
+            if not collection_id:
+                raise svc.WorkError('Выберите подборку.')
+        elif source_mode:
+            raise svc.WorkError('Неизвестный источник шаблона.')
         sheet = get_object_or_404(sheets, pk=sheet_id) if sheet_id else None
         rows = None
         if collection_id:
@@ -99,7 +117,7 @@ def create(request):
                         'source_rows': rows, 'selection': fingerprint})
         work = from_worksheet(sheet, request.user, form.cleaned_data['title'], rows)
         return redirect('independentworks:edit', pk=work.pk)
-    return render(request, 'independentworks/create.html', {'form': form, 'worksheets': sheets[:150], 'collections': collections, 'selected_sheet': selected_sheet})
+    return render(request, 'independentworks/create.html', {'form': form, 'worksheets': sheets[:150], 'collections': collections, 'selected_sheet': request.POST.get('worksheet', selected_sheet), 'selected_collection': request.POST.get('collection', request.GET.get('collection', '')), 'selected_pair': request.POST.get('pair', request.GET.get('pair', '1')), 'source_mode': request.POST.get('source_mode', request.GET.get('source_mode', 'sheet' if selected_sheet else 'blank'))})
 
 
 @enabled
@@ -117,7 +135,7 @@ def edit(request, pk):
                 form.save()
             elif action == 'add':
                 order = (work.positions.aggregate(n=Max('order'))['n'] or 0) + 1
-                Position.objects.create(work=work, order=order, text=request.POST.get('text', ''))
+                new_position = Position.objects.create(work=work, order=order, text=request.POST.get('text', ''))
             elif action == 'remove':
                 get_object_or_404(work.positions, pk=request.POST.get('position')).delete()
             elif action == 'candidate_remove':
@@ -149,8 +167,12 @@ def edit(request, pk):
                 raise svc.WorkError('Неизвестное действие.')
             work.save(update_fields=['updated_at'])
         messages.success(request, 'Сохранено')
-        return redirect('independentworks:edit', pk=pk)
-    positions = list(work.positions.prefetch_related('candidates__task__subitems'))
+        if action == 'add':
+            params = request.GET.copy()
+            params['position'] = new_position.pk
+            return redirect(reverse('independentworks:edit', args=[work.pk]) + '?' + params.urlencode())
+        return redirect(request.get_full_path())
+    positions = list(work.positions.prefetch_related('candidates__task__subitems', 'candidates__task__images'))
     number = 0
     for p in positions:
         p.rows = list(p.candidates.all())
@@ -163,7 +185,33 @@ def edit(request, pk):
             candidate.selected = svc.selected(candidate)
             candidate.point_count = len(candidate.selected) or 1
             candidate.mask_count = 0 if candidate.task.full_answer_only else sum(o.has_mask for o in (candidate.selected or [candidate.task]))
-    return render(request, 'independentworks/edit.html', {'work': work, 'positions': positions})
+        counts = sorted({c.point_count for c in p.rows})
+        p.point_summary = ' / '.join(str(n) for n in counts) or '—'
+        p.needs_manual = any(c.mask_count < c.point_count for c in p.rows)
+    selected = next((p for p in positions if str(p.pk) == request.GET.get('position')), positions[0] if positions else None)
+    return render(request, 'independentworks/edit.html', {'work': work, 'positions': positions, 'selected_position': selected, 'preparation_query': preparation_query(request)})
+
+
+@enabled
+@teacher_required
+@require_POST
+def reorder(request, pk):
+    """Тот же контракт порядка, что у конструктора листка; только свои номера."""
+    get_object_or_404(Work.visible_to(request.user), pk=pk)
+    try:
+        order = [int(value) for value in request.POST.get('order', '').split(',') if value]
+    except ValueError:
+        raise svc.WorkError('Некорректный порядок номеров.')
+    with transaction.atomic():
+        work = Work.objects.select_for_update().get(pk=pk)
+        positions = {p.pk: p for p in work.positions.all()}
+        if len(order) != len(positions) or set(order) != set(positions):
+            raise svc.WorkError('Состав изменился. Обновите страницу и повторите перетаскивание.')
+        for number, position_id in enumerate(order, 1):
+            positions[position_id].order = number
+        Position.objects.bulk_update(list(positions.values()), ['order'])
+        work.save(update_fields=['updated_at'])
+    return JsonResponse({'ok': True})
 
 
 @enabled
@@ -182,8 +230,49 @@ def copy_work(request, pk):
 
 @enabled
 @teacher_required
+def candidate_masks(request, pk):
+    from types import SimpleNamespace
+    from problems.editor import mask_data
+    candidate = get_object_or_404(Candidate.objects.select_related('task'), pk=pk,
+        position__work__in=Work.visible_to(request.user))
+    selected = SimpleNamespace(pk=candidate.pk, selected_subitems=lambda: svc.selected(candidate))
+    return JsonResponse({'answers': mask_data(candidate.task, selected, include_preview=True)})
+
+
+@enabled
+@teacher_required
+def picker_masks(request, pk, task_id):
+    """Общий редактор масок с областью выбранного кандидата."""
+    from types import SimpleNamespace
+    from problems.editor import manage
+    position = get_object_or_404(Position, pk=pk, work__in=Work.visible_to(request.user))
+    task = get_object_or_404(Task, pk=task_id)
+    if task.variant_of_id and not position.candidates.filter(task=task).exists():
+        raise Http404
+    candidate_id = request.GET.get('candidate')
+    candidate = get_object_or_404(position.candidates, pk=candidate_id, task=task) if candidate_id else None
+    area = request.GET.get('area', 'pool')
+    if area not in ('pool', 'recommended', 'topic', 'catalog'):
+        raise Http404
+    selection = SimpleNamespace(pk=f'pick_{position.pk}_{area}',
+        selected_subitems=lambda: svc.selected(candidate) if candidate else task.subitems.all())
+    return manage(request, task_id, mask_selection=selection)
+
+
+@enabled
+@teacher_required
 def pick(request, pk):
     position = get_object_or_404(Position, pk=pk, work__in=Work.visible_to(request.user))
+    if request.method == 'POST' and request.POST.get('action') == 'candidate_remove':
+        with transaction.atomic():
+            work = Work.objects.select_for_update().get(pk=position.work_id)
+            candidate = get_object_or_404(position.candidates, pk=request.POST.get('candidate'))
+            candidate.delete()
+            position.mismatch_confirmed = False
+            position.save(update_fields=['mismatch_confirmed'])
+            work.save(update_fields=['updated_at'])
+        messages.success(request, 'Кандидат удалён')
+        return redirect(request.get_full_path())
     base = position.candidates.select_related('task').first()
     from problems.views import filter_tasks
     from problems.rubricator import taxonomy_page_context, filter_state_from_params
@@ -195,11 +284,18 @@ def pick(request, pk):
     if query.isdigit():
         tasks = tasks.filter(pk=int(query))
     recommended = tasks.none()
+    same_topic = tasks.none()
+    topic_names = []
+    position.number = position.work.positions.filter(order__lte=position.order).filter(Q(text='') | Q(candidates__isnull=False)).distinct().count()
     if base:
         family_ids = set(base.task.analog_families.values_list('pk', flat=True))
         if base.task.variant_of_id:
             family_ids.update(base.task.variant_of.analog_families.values_list('pk', flat=True))
-        recommended = tasks.filter(analog_families__in=family_ids).exclude(pk=base.task_id).distinct()
+        recommended = Task.objects.filter(variant_of__isnull=True, analog_families__in=family_ids).exclude(pk=base.task_id).distinct().prefetch_related('subitems', 'images', 'familymember_set__family')
+        topics = list(base.task.topics.all())
+        topic_names = [topic.name for topic in topics]
+        same_topic = Task.objects.filter(variant_of__isnull=True, topics__in=topics).exclude(
+            pk__in=position.candidates.values('task_id')).exclude(pk__in=recommended.values('pk')).distinct().order_by('-pk').prefetch_related('subitems', 'images', 'familymember_set__family')
     if request.method == 'POST':
         task = get_object_or_404(Task, pk=request.POST.get('task'), variant_of__isnull=True)
         try:
@@ -212,10 +308,12 @@ def pick(request, pk):
             ids = []
         elif request.POST.get('parts_mode') == 'selected' and not ids:
             raise svc.WorkError('Выберите хотя бы один подпункт или всю задачу.')
+        from .pool import validate_selection
         if request.POST.get('candidate'):
             candidate = get_object_or_404(position.candidates, pk=request.POST['candidate'], task=task)
             with transaction.atomic():
                 Work.objects.select_for_update().get(pk=position.work_id)
+                validate_selection(position, task, ids, candidate)
                 candidate.subitem_ids = ids
                 candidate.save(update_fields=['subitem_ids'])
                 position.mismatch_confirmed = False
@@ -223,14 +321,30 @@ def pick(request, pk):
                 position.work.save(update_fields=['updated_at'])
             messages.success(request, 'Подпункты сохранены')
         else:
-            svc.add_candidate(position, task, ids)
+            with transaction.atomic():
+                Work.objects.select_for_update().get(pk=position.work_id)
+                validate_selection(position, task, ids)
+                svc.add_candidate(position, task, ids)
             messages.success(request, 'Кандидат добавлен')
         return redirect(request.get_full_path())
     from django.core.paginator import Paginator
     page = Paginator(tasks.order_by('-pk'), 15).get_page(request.GET.get('page'))
+    from collections import defaultdict
+    from .pool import usage
+    used = defaultdict(list)
+    for c in Candidate.objects.filter(position__work=position.work).select_related('position'):
+        used[c.task_id].append(c)
+    numbers = {p.pk: n for n, p in enumerate(position.work.positions.filter(Q(text='') | Q(candidates__isnull=False)).distinct(), 1)}
+    recommended, same_topic = list(recommended[:30]), list(same_topic[:30])
+    page.object_list = list(page.object_list)
+    for task in recommended + same_topic + page.object_list:
+        state = usage(position, task, used[task.pk])
+        task.pool_blocked, task.pool_partial = state['blocked'], state['partial']
+        task.pool_used_parts = state['used']
+        task.pool_label = ', '.join('№' + str(n) for n in sorted({numbers[c.position_id] for c in state['rows']}))
     context = taxonomy_page_context(filter_state_from_params(request.GET))
-    context.update({'position': position, 'base': base, 'recommended': recommended[:30], 'page': page, 'q': query,
-                    'params': request.GET, 'grade_choices': Task.GRADE_CHOICES,
+    context.update({'picker_tab': request.GET.get('tab', 'catalog' if any(k in request.GET for k in ('q', 'grade', 'topic')) or not base else 'recommended'), 'position': position, 'base': base, 'same_topic': same_topic[:30], 'topic_names': topic_names, 'recommended': recommended[:30], 'page': page, 'q': query,
+                    'params': request.GET, 'preparation_query': preparation_query(request), 'grade_choices': Task.GRADE_CHOICES,
                     'selected_candidates': position.candidates.select_related('task').prefetch_related('task__subitems', 'task__images')})
     return render(request, 'independentworks/pick.html', context)
 
@@ -243,17 +357,16 @@ def create_analog(request, pk, task_id):
     task = get_object_or_404(Task.objects.select_related('variant_of'), pk=task_id)
     if task.variant_of_id and not position.candidates.filter(task=task).exists():
         raise Http404
-    with transaction.atomic():
-        copy = task.make_variant(request.user, standalone=True)
-        family = task.analog_families.first()
-        if not family and task.variant_of_id:
-            family = task.variant_of.analog_families.first()
-        if not family:
-            family = Family.objects.create(key='manual:' + uuid.uuid4().hex, title='Аналоги задачи ' + str(task.pk))
-            family.tasks.add(task)
-        # Связь и пул дополняются после сохранения в обычном редакторе.
-        request.session[f'iw_analog_{position.pk}_{copy.pk}'] = family.pk
-    return redirect(reverse('task_detail', args=[copy.pk]) + '?iw_position=' + str(position.pk))
+    token = uuid.uuid4().hex
+    request.session['iw_analog_draft_' + token] = {'source': task.pk, 'position': position.pk}
+    return redirect('independentworks:analog_draft', pk=position.pk, token=token)
+
+
+@enabled
+@teacher_required
+def analog_draft(request, pk, token):
+    from .analog_editor import draft
+    return draft(request, pk, token)
 
 
 @enabled
@@ -269,13 +382,18 @@ def finish_analog(request, pk, task_id):
         get_object_or_404(Family, pk=family_id).tasks.add(task)
         svc.add_candidate(position, task)
     del request.session[f'iw_analog_{pk}_{task_id}']
-    return redirect('independentworks:edit', pk=position.work_id)
+    return redirect('independentworks:pick', pk=position.pk)
 
 
 @enabled
 @teacher_required
 def prepare_run(request, pk):
     work = get_object_or_404(Work.visible_to(request.user), pk=pk)
+    if request.method == 'GET' and request.resolver_match.namespace == 'independentworks':
+        params = request.GET.copy()
+        params['mode'] = 'independent'
+        params['work'] = str(pk)
+        return redirect(reverse('assignment_create') + '?' + params.urlencode())
     parent = None
     if request.GET.get('parent'):
         parent = own_attempt(request, request.GET['parent'], teacher=True)
@@ -285,6 +403,7 @@ def prepare_run(request, pk):
     if kind not in ('initial', 'correction', 'retake') or (kind == 'initial') != (parent is None):
         raise svc.WorkError('Неизвестный вид повторной попытки.')
     initial = {}
+    previous = None
     if request.GET.get('resume'):
         previous = teacher_run(request, request.GET['resume'])
         if previous.work_id != work.pk or previous.parent_id != (parent.pk if parent else None) or previous.kind != kind:
@@ -296,7 +415,7 @@ def prepare_run(request, pk):
         data = dict(form.cleaned_data)
         students = [parent.student_id] if parent else form.recipients(request.user)
         data.pop('students'); data.pop('groups')
-        run = svc.prepare(work, request.user, students, parent=parent, kind=kind, **data)
+        run = svc.prepare(work, request.user, students, parent=parent, kind=kind, previous=previous, **data)
         return redirect('independentworks:preview', pk=run.pk)
     return render(request, 'assignments/assignment_create.html', {'independent': True, 'work': work, 'form': form, 'parent': parent, 'kind': kind, 'timezone': timezone.get_current_timezone_name()})
 
@@ -311,10 +430,12 @@ def preview_context(run):
             rows.append({'point': point, 'common': snapshot.get('common', ''), 'text': snapshot['text'],
                 'notes': [n['text'] for n in run.plan['notes'] if n['before'] == point['position']] if point['position'] not in visited else [],
                 'content_images': [{'url': reverse('independentworks:preview_asset', args=[run.pk, vi, pi, ai]),
-                                    'name': asset['name'], 'pdf': asset['name'].lower().endswith('.pdf')}
+                                    'filename': asset['name'], 'is_pdf': asset['name'].lower().endswith('.pdf')}
                                    for ai, asset in enumerate(snapshot.get('assets', []), 1) if 'statement' in asset['audiences']],
                 'reference': snapshot['answer'], 'solution': snapshot['solution'],
                 'fragments': render_fragments(parse_mask(snapshot['mask']), f'preview{vi}p{pi}', {}, {}, seed=f'{vi}-{pi}') if parse_mask(snapshot['mask']).is_valid else None})
+            rows[-1]['reference_images'] = [{'url': reverse('independentworks:preview_asset', args=[run.pk, vi, pi, ai]), 'filename': asset['name'], 'is_pdf': asset['name'].lower().endswith('.pdf')} for ai, asset in enumerate(snapshot.get('assets', []), 1) if set(asset['audiences']) & {'answer', 'solution'}]
+            rows[-1]['repeated'] = point['source_key'] in run.plan['repeats']
             visited.add(point['position'])
         variants.append({'number': vi, 'rows': rows,
             'tail_notes': [n['text'] for n in run.plan['notes'] if n['before'] > max(visited, default=0)]})
@@ -397,7 +518,7 @@ def point_rows(attempt, teacher=False):
                      'auto': answer.auto_check if answer and 'checks' in disclosure else '',
                      'pending': (answer.pending if answer else not spec.is_valid),
                      'assets': [a for a in point.assets.all() if 'statement' in a.audiences or set(a.audiences) & disclosure]})
-        rows[-1]['content_images'] = [{'url': reverse('independentworks:asset', args=[attempt.pk, a.pk]), 'name': a.name, 'pdf': a.name.lower().endswith('.pdf')} for a in rows[-1]['assets']]
+        rows[-1]['content_images'] = [{'url': reverse('independentworks:asset', args=[attempt.pk, a.pk]), 'filename': a.name, 'is_pdf': a.name.lower().endswith('.pdf')} for a in rows[-1]['assets']]
         visited.add(point.position)
     return rows
 
@@ -422,6 +543,7 @@ def attempt_page(request, pk):
     return render(request, 'independentworks/attempt.html', {
         'attempt': attempt, 'teacher_view': teacher, 'rows': point_rows(attempt, teacher) if accessible else [],
         'editable': not teacher and bool(attempt.started_at) and not attempt.finished,
+        'can_start': not attempt.started_at and not (attempt.run.deadline and timezone.now() >= attempt.run.deadline),
         'accessible': accessible, 'show_checks': teacher or 'checks' in attempt.disclosure,
         'tail_notes': [n['text'] for n in attempt.variant.notes if n['before'] > max((p.position for p in attempt.variant.points.all()), default=0)] if accessible else [],
         'result': svc.result(attempt) if teacher or 'checks' in attempt.disclosure else None,
@@ -481,7 +603,10 @@ def review(request, pk, point_id):
             answer.comment = request.POST.get(comment_key, request.POST.get('comment', ''))[:20000]
         answer.save(update_fields=['grade', 'comment', 'updated_at'])
     if request.headers.get('Accept') == 'application/json':
-        return JsonResponse({'grade': answer.grade, 'result': svc.result(attempt)})
+        # own_attempt заранее загрузил ответы; после проверки нужен свежий итог.
+        attempt._prefetched_objects_cache.pop('answers', None)
+        feedback = (Review.SYMBOLS.get(answer.grade, answer.grade) + ' · ' + answer.get_grade_display()) if answer.grade else ('На проверке' if answer.pending else {'ok': 'Верно', 'wrong': 'Неверно'}.get(answer.auto_check, 'Ответ не введён'))
+        return JsonResponse({'grade': answer.grade, 'feedback': feedback, 'result': svc.result(attempt), 'cumulative': svc.cumulative(attempt)})
     messages.success(request, 'Проверка сохранена')
     return redirect('independentworks:attempt', pk=pk)
 
@@ -505,6 +630,21 @@ def publish(request, pk):
                 Attempt.objects.filter(pk=attempt.pk).update(published_at=timezone.now(), release_flags=combined)
     messages.success(request, 'Разрешения публикации сохранены')
     return redirect('independentworks:progress', pk=pk)
+
+
+@enabled
+@teacher_required
+@require_POST
+def recipients(request, pk):
+    run = teacher_run(request, pk)
+    try:
+        students = {int(value) for value in request.POST.getlist('students')}
+        choices = {student: int(request.POST.get(f'variant_{student}', '')) for student in students}
+    except ValueError:
+        raise svc.WorkError('Выберите учеников и варианты.')
+    svc.update_recipients(run.pk, students, choices)
+    messages.success(request, 'Получатели самостоятельной сохранены')
+    return redirect(reverse('assignment_list') + ('?' + request.GET.urlencode() if request.GET else ''))
 
 
 @enabled
@@ -584,7 +724,7 @@ def photo_file(request, pk):
 
 
 def progress_context(run):
-    attempts = list(run.attempts.select_related('student', 'run', 'variant', 'root').prefetch_related('variant__points__assets', 'answers__photos', 'answers__point'))
+    attempts = list(run.attempts.select_related('student', 'run', 'variant', 'root').prefetch_related('variant__points__assets', 'answers__photos', 'answers__point', 'corrections__answers__point', 'root__variant__points', 'root__answers__point', 'root__corrections__answers__point'))
     numbers = sorted(set(p.position for a in attempts for p in a.variant.points.all()))
     people = []
     stats = {}
@@ -598,20 +738,25 @@ def progress_context(run):
                 if row['point'].position != number:
                     continue
                 status = 'ok' if row['auto'] == 'ok' else 'wrong' if row['auto'] == 'wrong' else 'draft' if row['answer'] else 'empty'
-                points.append({'detail_url': reverse('independentworks:point_detail', args=[a.pk, row['point'].pk]), 'label': row['point'].label, 'status': status, 'status_label': row['grade'] or ('На проверке' if row['pending'] else row['auto']), 'mark': row['grade_symbol'], 'attempt_count': 0})
+                if row['answer'] and row['answer'].grade:
+                    status = 'ok' if row['answer'].credit == 1 else 'draft' if row['answer'].credit else 'wrong'
+                points.append({'detail_url': reverse('independentworks:point_detail', args=[a.pk, row['point'].pk]), 'label': row['point'].label, 'status': status, 'status_label': row['grade'] or ('На проверке' if row['pending'] else {'ok': 'Верно', 'wrong': 'Неверно'}.get(row['auto'], 'Ответ не введён')), 'mark': row['grade_symbol'], 'attempt_count': 0})
             cells.append({'item': {'pk': number}, 'owner': {'pk': number}, 'points': points, 'hidden': not points})
         remaining = max(0, int((a.ends_at - timezone.now()).total_seconds())) if a.ends_at else 0
-        people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a),
+        people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a), 'show_cumulative': bool(a.root_id or any(c.started_at for c in a.corrections.all())),
                        'remaining': f'{remaining // 60}:{remaining % 60:02}'})
         if a.started_at:
             for row in rows:
                 key = row['point'].candidate_key
-                stat = stats.setdefault(key, {'key': key, 'students': set(), 'points': 0, 'done': 0})
+                stat = stats.setdefault(key, {'key': key, 'students': set(), 'variants': set(), 'positions': set(), 'points': 0, 'done': 0})
                 stat['students'].add(a.student_id)
+                stat['variants'].add(a.variant.number)
+                stat['positions'].add(row['point'].position)
                 stat['points'] += 1
                 stat['done'] += row['answer'].credit if row['answer'] else 0
     for stat in stats.values():
         stat['count'] = len(stat.pop('students'))
+        stat['label'] = '№' + ', '.join(map(str, sorted(stat.pop('positions')))) + ' · варианты ' + ', '.join(map(str, sorted(stat.pop('variants'))))
         stat['percent'] = round(100 * stat['done'] / stat['points'])
     return {'independent': True, 'point_groups': [{'item': {'pk': n}, 'number': n, 'columns': [{'owner': {'pk': n}, 'label': 'Пункты'}]} for n in numbers], 'run': run, 'people': people, 'numbers': numbers, 'stats': list(stats.values()), 'variants': run.variants.all()}
 
