@@ -4481,3 +4481,7 @@
   .iw-save-error { color: var(--err); }
   @media (max-width: 760px) { .iw-compare { grid-template-columns: 1fr; } }
 }
+
+@layer components {
+  .iw-candidate-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--space-3); margin-block: var(--space-3); }
+}

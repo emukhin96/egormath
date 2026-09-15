@@ -1,1 +1,21 @@
-{% extends 'independentworks/base.html' %}{% load task_extras %}{% block content %}<div class="page-head"><h1>Подбор кандидатов</h1><a class="btn btn-secondary" href="{% url 'independentworks:edit' position.work_id %}">Вернуться в конструктор</a></div><p>Выбранные кандидаты сохраняются при поиске и переходах между страницами.</p><div class="iw-compare">{% if base %}<aside class="card iw-section"><h2>Исходная задача</h2><div class="math-content">{{ base.task.text_latex|web_text }}</div>{% task_images base.task %}</aside>{% endif %}<div class="iw-stack">{% if recommended %}<h2>Из того же семейства / парного варианта</h2>{% for task in recommended %}{% include 'independentworks/_candidate.html' %}{% endfor %}{% endif %}<h2>Поиск в базе</h2><form method="get" class="iw-inline"><label>Текст или ID задачи<input name="q" value="{{ q }}"></label><button class="btn btn-secondary">Найти</button></form>{% for task in page %}{% include 'independentworks/_candidate.html' %}{% endfor %}<nav class="form-buttons">{% if page.has_previous %}<a class="btn btn-secondary" href="?q={{ q|urlencode }}&page={{ page.previous_page_number }}">Назад</a>{% endif %}<span>{{ page.number }} / {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a class="btn btn-secondary" href="?q={{ q|urlencode }}&page={{ page.next_page_number }}">Далее</a>{% endif %}</nav></div></div>{% endblock %}
+{% extends 'independentworks/base.html' %}
+{% load task_extras static %}
+{% block content %}
+<div class="page-head"><h1>Кандидаты номера</h1><a class="btn btn-secondary" href="{% url 'independentworks:edit' position.work_id %}">К конструктору</a></div>
+<div class="task-catalog">
+<label class="ws-toggle"><input type="checkbox" id="toggle-catalog-answers"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Ответы и решения</span></label>
+<details open><summary>Утверждённый пул · {{ selected_candidates|length }} кандидатов</summary>
+<div class="iw-candidate-grid">{% for candidate in selected_candidates %}{% include 'independentworks/_candidate.html' with task=candidate.task %}{% empty %}<p>Добавьте первую задачу из каталога.</p>{% endfor %}</div>
+</details>
+<div class="iw-compare">
+{% if base %}<aside class="card form-section"><h2>Исходная задача</h2>{% include 'problems/_catalog_content.html' with task=base.task %}</aside>{% endif %}
+<div>
+{% if recommended %}<h2>Связанные аналоги</h2>{% for task in recommended %}{% include 'independentworks/_candidate.html' with candidate=None %}{% endfor %}{% endif %}
+<h2>Поиск в базе</h2>
+{% include 'problems/_catalog_filters.html' %}
+{% for task in page %}{% include 'independentworks/_candidate.html' with candidate=None %}{% endfor %}
+{% include 'includes/pagination.html' with query=params %}
+</div></div>
+</div>
+{% endblock %}
+{% block extra_js %}<script defer src="{% static 'js/task_catalog.js' %}?v=2"></script>{% endblock %}

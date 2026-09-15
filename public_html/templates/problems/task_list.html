@@ -15,26 +15,7 @@
   </div>
 </div>
 
-<div class="card filter-card">
-  <form method="get" class="filters" id="task-filters">
-    <div>
-      <label for="f_q">Поиск</label>
-      <input type="text" name="q" id="f_q" value="{{ params.q|default:'' }}" placeholder="ключевые слова">
-    </div>
-    <div>
-      <label for="f_grade">Класс</label>
-      <select name="grade" id="f_grade" class="quick-select" onchange="this.form.submit()">
-        {% include 'includes/grade_options.html' with selected=params.grade empty_label='Любой' %}
-      </select>
-    </div>
-    <div class="tax-filter">
-      <label>Тема</label>
-      {% include 'includes/taxonomy_picker.html' with mode='filter' primary=False facets=False grades=False compact=True selected_json=selected_json %}
-    </div>
-    <div><button type="submit" class="btn">Найти</button></div>
-    <div><a class="btn btn-secondary" href="{% url 'task_list' %}">Сбросить</a></div>
-  </form>
-</div>
+{% include 'problems/_catalog_filters.html' %}
 
 {% if page.object_list %}
 <form id="task-bulk-form" method="post" action="{% url 'task_bulk_update' %}"
@@ -67,10 +48,7 @@
 {% for task in page %}<tr data-task-row>
 <td><input type="checkbox" class="row-select" name="ids" value="{{ task.pk }}" form="task-bulk-form" title="Выбрать задачу"></td>
 <td><a class="task-id" href="{% url 'task_detail' task.pk %}">#{{ task.pk }}</a></td>
-<td><div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
-{% include 'problems/_subitems.html' with subitems=task.subitems.all %}
-{% task_images task %}
-{% include 'problems/_task_answers.html' with subitems=task.subitems.all hide_answers=True %}
+<td>{% include 'problems/_catalog_content.html' %}
 <div data-worksheet-mask data-task-id="{{ task.pk }}" data-manage-url="{% url 'task_manage' task.pk %}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
 <div class="task-meta"><span data-mask-links></span><form class="inline-form" method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn">дублировать</button></form></div>
 </td>

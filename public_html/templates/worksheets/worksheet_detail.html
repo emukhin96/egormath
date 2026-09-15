@@ -108,18 +108,12 @@
             </span>
           </div>
           {% if item.task.subitems.all %}
-          <ol class="subitems">
-            {% for s in item.task.subitems.all %}
-            <li>
-              <label class="subitem-label">
-                <input type="checkbox" name="subitems" value="{{ s.pk }}"
-                       form="settings-{{ item.pk }}"
-                       {% if row.selected_ids == None or s.pk in row.selected_ids %}checked{% endif %}>
-                <span class="math-content">{{ s.text_latex|web_text }}</span>{{ s.text_latex|subitem_tail:forloop.last }}
-              </label>
-            </li>
-            {% endfor %}
-          </ol>
+          {% with item_id=item.pk|stringformat:"s" %}
+          {% if row.selected_ids == None %}
+          {% include 'problems/_subitem_choices.html' with task=item.task form_id="settings-"|add:item_id field_name="subitems" all_selected=True %}
+          {% else %}
+          {% include 'problems/_subitem_choices.html' with task=item.task form_id="settings-"|add:item_id field_name="subitems" selected_ids=row.selected_ids %}
+          {% endif %}{% endwith %}
           {% endif %}
           {% include 'problems/_task_images.html' with images=row.statement_images %}
           {% include 'problems/_task_answers.html' with task=item.task subitems=item.task.subitems.all hide_answers=True %}

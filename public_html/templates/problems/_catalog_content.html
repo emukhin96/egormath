@@ -1,0 +1,5 @@
+{% load task_extras %}
+<div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
+{% if not selecting %}{% include 'problems/_subitems.html' with subitems=task.subitems.all %}{% endif %}
+{% task_images task %}
+{% include 'problems/_task_answers.html' with subitems=task.subitems.all hide_answers=True %}
