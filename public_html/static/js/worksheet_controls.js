@@ -37,18 +37,55 @@
     document.getElementById('ws-undo').innerHTML = doc.getElementById('ws-undo').innerHTML;
     document.getElementById('ws-empty').hidden = freshRows.length > 0;
     document.querySelectorAll('[data-worksheet-item-count]').forEach(function (count) { count.textContent = freshRows.length; });
+    document.querySelectorAll('[data-progress-cell^="status-"]').forEach(function (cell) {
+      var fresh = doc.querySelector('[data-progress-cell="' + cell.dataset.progressCell + '"]');
+      if (fresh) cell.innerHTML = fresh.innerHTML;
+    });
+    document.querySelectorAll('dialog[id^="assignment-status-"]').forEach(function (modal) {
+      var fresh = doc.getElementById(modal.id);
+      if (fresh && !modal.open) modal.replaceWith(fresh);
+    });
+    var recipients = document.getElementById('worksheet-recipients');
+    if (recipients && doc.getElementById(recipients.id)) recipients.replaceWith(doc.getElementById(recipients.id));
     document.dispatchEvent(new CustomEvent('worksheet:updated'));
   }
 
+  document.addEventListener('keydown', function (e) {
+    if (e.target.matches('td[data-dialog-open]') && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault(); e.target.click();
+    }
+  });
+  document.addEventListener('change', function (e) {
+    if (!e.target.matches('[name=visible_items]')) return;
+    var preserved = e.target.form.querySelector('[name=unchanged_items][value="' + e.target.value + '"]');
+    if (preserved) preserved.remove();
+  });
   document.addEventListener('click', async function (e) {
+    var share = e.target.closest('.ws-share-link');
+    if (share && e.target.closest('[data-share-copy]')) {
+      try {
+        await navigator.clipboard.writeText(share.querySelector('.ws-share-url').href);
+        window.EgorAutosave.showSaved(true, 'Ссылка скопирована');
+      } catch (error) { window.EgorAutosave.showSaved(false, 'Не удалось скопировать ссылку'); }
+    }
+    if (share && e.target.closest('[data-share-edit]')) {
+      var editor = share.querySelector('[data-share-comment]');
+      editor.hidden = false; editor.elements.comment.focus();
+    }
+    if (share && e.target.closest('[data-share-cancel]')) {
+      var editor = share.querySelector('[data-share-comment]');
+      editor.reset(); editor.hidden = true;
+    }
     var dismiss = e.target.closest('[data-undo-dismiss]');
     if (dismiss) dismiss.closest('.undo-bar').hidden = true;
     var select = e.target.closest('[data-visibility-select]');
     if (select) {
       select.form.querySelectorAll('[name=visible_items]').forEach(function (input) {
         input.checked = select.dataset.visibilitySelect === 'all';
+        input.indeterminate = false;
       });
     }
+    if (select) select.form.querySelectorAll('[name=unchanged_items]').forEach(function (input) { input.remove(); });
     var button = e.target.closest('[data-visibility-url]');
     if (!button || busy) return;
     busy = true;
@@ -58,14 +95,15 @@
       var form = doc.querySelector('form[data-builder-action]');
       if (!form) throw new Error('Не удалось открыть выбор номеров');
       dialog.replaceChildren(form);
-      dialog.showModal();
+      form.querySelectorAll('[data-mixed]').forEach(function (input) { input.indeterminate = true; });
+      if (!dialog.open) dialog.showModal();
     } catch (error) {
       window.EgorAutosave.showSaved(false, error.message);
     } finally { busy = false; button.disabled = false; }
   });
 
   document.addEventListener('submit', async function (e) {
-    var form = e.target.closest('[data-builder-action]');
+    var form = e.target.closest('[data-builder-action], [data-share-comment], [data-share-toggle]');
     if (!form) return;
     e.preventDefault();
     if (busy) return;
@@ -77,7 +115,16 @@
       saved = true;
       var modal = form.closest('dialog');
       if (modal) modal.close();
-      await refresh();
+      if (form.matches('[data-share-comment]')) {
+        var share = form.closest('.ws-share-link'), value = data.get('comment').trim();
+        var comment = share.querySelector('[data-share-comment-text]');
+        comment.textContent = '(' + value + ')'; comment.hidden = !value;
+        form.elements.comment.value = value; form.elements.comment.defaultValue = value;
+        form.hidden = true;
+      } else if (form.matches('[data-share-toggle]')) {
+        form.querySelector('button').textContent = result.is_active ? 'отключить' : 'включить';
+        form.closest('.ws-share-link').querySelector('[data-share-disabled]').hidden = result.is_active;
+      } else await refresh();
       window.EgorAutosave.showSaved(true, result.message);
     } catch (error) {
       window.EgorAutosave.showSaved(false, saved
