@@ -1,0 +1,31 @@
+from django.urls import path
+from . import views
+
+app_name = 'independentworks'
+urlpatterns = [
+    path('', views.catalog, name='catalog'),
+    path('new/', views.create, name='create'),
+    path('<int:pk>/edit/', views.edit, name='edit'),
+    path('<int:pk>/copy/', views.copy_work, name='copy'),
+    path('position/<int:pk>/pick/', views.pick, name='pick'),
+    path('position/<int:pk>/analog/<int:task_id>/', views.create_analog, name='create_analog'),
+    path('position/<int:pk>/analog/<int:task_id>/finish/', views.finish_analog, name='finish_analog'),
+    path('<int:pk>/prepare/', views.prepare_run, name='prepare'),
+    path('run/<int:pk>/preview/', views.preview, name='preview'),
+    path('run/<int:pk>/preview/<int:variant>/<int:point>/<int:asset>/', views.preview_asset, name='preview_asset'),
+    path('run/<int:pk>/issue/', views.issue_run, name='issue'),
+    path('run/<int:pk>/progress/', views.progress, name='progress'),
+    path('run/<int:pk>/publish/', views.publish, name='publish'),
+    path('run/<int:pk>/export/', views.export, name='export'),
+    path('attempt/<int:pk>/', views.attempt_page, name='attempt'),
+    path('attempt/<int:pk>/start/', views.start_attempt, name='start'),
+    path('attempt/<int:pk>/submit/', views.submit_attempt, name='submit'),
+    path('attempt/<int:pk>/assign/', views.reassign, name='reassign'),
+    path('attempt/<int:pk>/repeat/', views.repeat, name='repeat'),
+    path('attempt/<int:pk>/point/<int:point_id>/save/', views.save, name='save'),
+    path('attempt/<int:pk>/point/<int:point_id>/review/', views.review, name='review'),
+    path('attempt/<int:pk>/point/<int:point_id>/photo/', views.upload_photo, name='upload_photo'),
+    path('attempt/<int:pk>/asset/<int:asset_id>/', views.asset_file, name='asset'),
+    path('photo/<int:pk>/', views.photo_file, name='photo'),
+    path('photo/<int:pk>/delete/', views.delete_photo, name='delete_photo'),
+]
