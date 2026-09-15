@@ -5,6 +5,8 @@
   if (!list) return;
   var dialog = document.getElementById('recipient-visibility-dialog');
   var busy = false;
+  var recipientHistory = [];
+  dialog.addEventListener('close', function () { recipientHistory = []; });
 
   async function page(url) {
     var response = await fetch(url, {credentials: 'same-origin'});
@@ -56,6 +58,10 @@
     }
   });
   document.addEventListener('change', function (e) {
+    if (e.target.matches('[data-photo-toggle]')) {
+      e.target.form.elements.allow_photos.value = e.target.checked ? 'yes' : 'no';
+      e.target.form.querySelector('[data-photo-mixed]').hidden = true;
+    }
     if (e.target.matches('[name=due_action]')) {
       e.target.form.elements.due_at.disabled = e.target.value !== 'set';
     }
@@ -64,6 +70,13 @@
     if (preserved) preserved.remove();
   });
   document.addEventListener('click', async function (e) {
+    if (e.target.closest('[data-recipient-back]')) {
+      if (!busy && recipientHistory.length) {
+        dialog.replaceChildren(recipientHistory.pop());
+        dialog.querySelector('[data-recipient-back]').focus();
+      }
+      return;
+    }
     var share = e.target.closest('.ws-share-link');
     if (share && e.target.closest('[data-share-copy]')) {
       try {
@@ -97,6 +110,9 @@
       var doc = await page(button.dataset.visibilityUrl);
       var form = doc.querySelector('form[data-builder-action]');
       if (!form) throw new Error('Не удалось открыть выбор номеров');
+      if (dialog.open && dialog.contains(button)) recipientHistory.push(dialog.querySelector('form'));
+      else recipientHistory = [];
+      form.querySelector('[data-recipient-back]').hidden = !recipientHistory.length;
       dialog.replaceChildren(form);
       if (form.elements.due_action) form.elements.due_at.disabled = form.elements.due_action.value !== 'set';
       form.querySelectorAll('[data-mixed]').forEach(function (input) { input.indeterminate = true; });
