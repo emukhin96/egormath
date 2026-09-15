@@ -71,8 +71,9 @@
     if (form && form.dataset.autosave === 'change') autosave(form);
   });
 
-  document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('form[data-autosave=debounce]').forEach(function (form) {
+  function initDebouncedForms() {
+    document.querySelectorAll('form[data-autosave=debounce]:not([data-autosave-ready])').forEach(function (form) {
+      form.dataset.autosaveReady = '1';
       form.addEventListener('input', function () { autosaveDebounced(form); });
       form.addEventListener('submit', function (e) {
         e.preventDefault();
@@ -80,7 +81,9 @@
         autosave(form);
       });
     });
-  });
+  }
+  document.addEventListener('DOMContentLoaded', initDebouncedForms);
+  document.addEventListener('worksheet:updated', initDebouncedForms);
 
   window.EgorAutosave = {showSaved: showSaved, autosave: autosave, enqueue: enqueue};
 

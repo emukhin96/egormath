@@ -1,0 +1,4 @@
+<button type="button" class="btn btn-small btn-secondary"
+        data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'assignment' a.pk %}">
+  {{ a.student.get_full_name|default:a.student.username }} · номера
+</button>

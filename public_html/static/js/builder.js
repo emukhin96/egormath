@@ -7,13 +7,6 @@
     var autosave = window.EgorAutosave.autosave;
     var showSaved = window.EgorAutosave.showSaved;
 
-    document.querySelectorAll('[data-undo-dismiss]').forEach(function (button) {
-      button.addEventListener('click', function () {
-        var bar = button.closest('.undo-bar');
-        if (bar) bar.hidden = true;
-      });
-    });
-
     // --- Заголовок и подзаголовок: редактирование кликом по тексту ---
     document.querySelectorAll('.ws-editable').forEach(function (span) {
       var input = document.querySelector(

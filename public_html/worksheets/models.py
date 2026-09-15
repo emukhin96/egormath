@@ -307,6 +307,7 @@ class ShareLink(models.Model):
         verbose_name='Листок')
     token = models.CharField(
         'Токен', max_length=32, unique=True, default=_new_token)
+    comment = models.CharField('Комментарий для учителя', max_length=500, blank=True)
     is_active = models.BooleanField('Активна', default=True)
     created_at = models.DateTimeField('Создана', auto_now_add=True)
     hidden_items = models.ManyToManyField(
