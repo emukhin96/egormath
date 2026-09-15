@@ -222,3 +222,49 @@ class RecipientControlsTests(TestCase):
         self.assertContains(response, 'data-progress-cell="status-')
         self.assertContains(response, 'contenteditable="plaintext-only"', count=2)
         self.assertNotContains(response, 'Полный экран прогресса')
+
+    def test_all_assignment_settings_and_visibility(self):
+        other = Assignment.objects.create(worksheet=self.ws,
+            student=make_student(self.teacher, 'bulk_settings_student'), assigned_by=self.teacher)
+        url = reverse('worksheet_recipient_visibility', args=[self.ws.pk, 'all', 0])
+        self.assertContains(self.client.get(url), 'Автосверка ответов')
+        data = {'settings_present': '1', 'check_visibility': 'teacher',
+                'allow_photos': 'no', 'due_action': 'set', 'due_at': '2026-12-01T18:30',
+                'visible_items': [self.items[0].pk]}
+        self.assertTrue(self.post(url, data).json()['ok'])
+        for assignment in (self.assignment, other):
+            assignment.refresh_from_db()
+            self.assertEqual(assignment.check_visibility, 'teacher')
+            self.assertFalse(assignment.allow_photos)
+            self.assertIsNotNone(assignment.due_at)
+            self.assertEqual(list(assignment.hidden_items.all()), [self.items[1]])
+        data.update(due_at='', allow_photos='yes')
+        self.assertEqual(self.post(url, data).status_code, 400)
+        self.assignment.refresh_from_db()
+        self.assertFalse(self.assignment.allow_photos)
+        self.assertIsNotNone(self.assignment.due_at)
+        data.update(due_action='clear', check_visibility='', allow_photos='')
+        self.assertTrue(self.post(url, data).json()['ok'])
+        self.assignment.refresh_from_db()
+        self.assertIsNone(self.assignment.due_at)
+        self.assertEqual(self.assignment.check_visibility, 'teacher')
+        self.assertFalse(self.assignment.allow_photos)
+
+    def test_group_parameters_do_not_change_other_recipients_or_shared_mode(self):
+        group = StudentGroup.objects.create(teacher=self.teacher, name='Параметры группы')
+        group.students.add(self.student)
+        other = Assignment.objects.create(worksheet=self.ws,
+            student=make_student(self.teacher, 'outside_settings_student'), assigned_by=self.teacher)
+        url = self.visibility_url('group', group)
+        self.assertNotContains(self.client.get(url), 'name="check_visibility"')
+        response = self.post(url, {'settings_present': '1', 'check_visibility': 'teacher',
+            'allow_photos': 'no', 'due_action': 'keep', 'visible_items': [i.pk for i in self.items]})
+        self.assertTrue(response.json()['ok'])
+        self.assignment.refresh_from_db()
+        other.refresh_from_db()
+        self.assertFalse(self.assignment.allow_photos)
+        self.assertTrue(other.allow_photos)
+        self.assertEqual(self.assignment.check_visibility, 'live')
+        self.client.force_login(make_teacher('foreign_settings_teacher'))
+        self.assertEqual(self.post(reverse('worksheet_recipient_visibility',
+            args=[self.ws.pk, 'all', 0]), {}).status_code, 404)

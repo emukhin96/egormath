@@ -1367,10 +1367,17 @@ def worksheet_recipient_visibility(request, pk, kind, recipient_id):
     """Настройки ссылки, ученика или группы получателей листка."""
     from .recipients import assignment_sections, visibility_options
     from assignments.views import _set_assignment_status
+    from assignments.forms import AssignmentSettingsForm
 
     worksheet = _own_worksheet(request, pk)
     members = []
-    if kind == 'link':
+    if kind == 'all':
+        members = list(worksheet.assignments.select_related('student').prefetch_related('source_groups'))
+        if not members:
+            raise Http404
+        recipient = members[0]
+        label = 'Все ученики'
+    elif kind == 'link':
         recipient = get_object_or_404(worksheet.share_links, pk=recipient_id)
         label = recipient.comment or f'Ссылка от {recipient.created_at:%d.%m.%Y %H:%M}'
     elif kind == 'assignment':
@@ -1389,6 +1396,12 @@ def worksheet_recipient_visibility(request, pk, kind, recipient_id):
     else:
         raise Http404
     targets = members or [recipient]
+    settings_form = AssignmentSettingsForm(
+        request.POST if request.method == 'POST' and 'settings_present' in request.POST else None,
+        recipients=targets, whole_worksheet=kind == 'all') if kind != 'link' else None
+    sections = []
+    if kind == 'all':
+        sections, _ = assignment_sections(members, StudentGroup.visible_to(request.user).prefetch_related('students'))
     options = visibility_options(worksheet, recipient)
     if members:
         hidden_sets = [set(a.hidden_items.values_list('pk', flat=True)) for a in members]
@@ -1410,12 +1423,19 @@ def worksheet_recipient_visibility(request, pk, kind, recipient_id):
         status = request.POST.get('status') if kind == 'assignment' else None
         if status is not None and status not in dict(Assignment.STATUS_CHOICES):
             return _builder_response(request, pk, ok=False, message='Неизвестный статус работы.')
+        if settings_form and settings_form.is_bound and not settings_form.is_valid():
+            return _builder_response(request, pk, ok=False,
+                                     message=' '.join(str(error) for errors in settings_form.errors.values() for error in errors))
         with transaction.atomic():
             if status is not None:
                 recipient = Assignment.objects.select_for_update().get(pk=recipient.pk)
                 if not _set_assignment_status(recipient, status):
                     return _builder_response(request, pk, ok=False,
                                              message='Проверенной можно отметить только отправленную работу.')
+            if settings_form and settings_form.is_bound:
+                changes = settings_form.changes()
+                if changes:
+                    worksheet.assignments.filter(pk__in=[a.pk for a in targets]).update(**changes)
             for target in targets:
                 target.hidden_items.remove(*active_ids)
                 target.hidden_items.add(*hidden_ids)
@@ -1423,7 +1443,8 @@ def worksheet_recipient_visibility(request, pk, kind, recipient_id):
     return render(request, 'worksheets/_recipient_visibility.html', {
         'recipient_label': label, 'options': options, 'action': request.path,
         'assignment': recipient if kind == 'assignment' else None,
-        'members': members, 'worksheet': worksheet,
+        'members': members, 'worksheet': worksheet, 'settings_form': settings_form,
+        'recipient_groups': sections, 'whole_worksheet': kind == 'all',
         'status_choices': Assignment.STATUS_CHOICES,
     })
 

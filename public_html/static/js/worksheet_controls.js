@@ -56,6 +56,9 @@
     }
   });
   document.addEventListener('change', function (e) {
+    if (e.target.matches('[name=due_action]')) {
+      e.target.form.elements.due_at.disabled = e.target.value !== 'set';
+    }
     if (!e.target.matches('[name=visible_items]')) return;
     var preserved = e.target.form.querySelector('[name=unchanged_items][value="' + e.target.value + '"]');
     if (preserved) preserved.remove();
@@ -95,6 +98,7 @@
       var form = doc.querySelector('form[data-builder-action]');
       if (!form) throw new Error('Не удалось открыть выбор номеров');
       dialog.replaceChildren(form);
+      if (form.elements.due_action) form.elements.due_at.disabled = form.elements.due_action.value !== 'set';
       form.querySelectorAll('[data-mixed]').forEach(function (input) { input.indeterminate = true; });
       if (!dialog.open) dialog.showModal();
     } catch (error) {

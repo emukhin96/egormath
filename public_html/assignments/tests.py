@@ -382,7 +382,7 @@ class AssignmentWorkspaceTests(TestCase):
         self.assertTrue(form.fields['check_visibility'].disabled)
         self.assertEqual(
             form.fields['check_visibility'].initial, Assignment.CHECK_LIVE)
-        self.assertContains(response, 'режим сверки для этого листка изменить нельзя')
+        self.assertContains(response, 'Редактировать назначения')
         self.assertContains(response, '— уже назначено')
         self.assertRegex(
             response.content.decode(),
@@ -1553,7 +1553,7 @@ class AutoCheckFlowTests(TestCase):
         # Листок выдан: селект заблокирован, а присланное значение игнорируется
         response = self.client.get(detail_url)
         self.assertEqual(response.context['locked_check'], Assignment.CHECK_LIVE)
-        self.assertContains(response, 'Уже задано ученикам')
+        self.assertContains(response, 'Редактировать назначения')
         response = self.client.get(reverse('assignment_create'), {'worksheet': worksheet.pk})
         self.assertTrue(response.context['form'].fields['check_visibility'].disabled)
         self.assertEqual(response.context['form'].fields['check_visibility'].initial, 'live')
