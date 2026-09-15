@@ -81,9 +81,6 @@ def create(request):
             if collection_id:
                 sheet = get_object_or_404(collections, pk=collection_id).worksheet
             if sheet:
-                from .analogs import sync_families
-                if collection_id:
-                    sync_families()
                 for item in sheet.ordered_items():
                     note = '\n'.join(filter(None, [item.rubric, item.rubric_note, item.text_latex]))
                     position = Position.objects.create(work=work, order=item.order, text=note)
@@ -180,7 +177,7 @@ def copy_work(request, pk):
 def pick(request, pk):
     position = get_object_or_404(Position, pk=pk, work__in=Work.visible_to(request.user))
     base = position.candidates.select_related('task').first()
-    tasks = Task.objects.filter(variant_of__isnull=True).prefetch_related('subitems', 'images', 'analog_families')
+    tasks = Task.objects.filter(variant_of__isnull=True).prefetch_related('subitems', 'images', 'analog_families', 'familymember_set__family')
     query = request.GET.get('q', '')
     if query:
         tasks = tasks.filter(Q(text_plain__icontains=query) | Q(pk=int(query) if query.isdigit() else 0))

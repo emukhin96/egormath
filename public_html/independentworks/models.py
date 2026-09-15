@@ -17,6 +17,7 @@ class FamilyMember(models.Model):
     family = models.ForeignKey(Family, on_delete=models.CASCADE)
     task = models.ForeignKey('problems.Task', on_delete=models.CASCADE)
     origin = models.CharField(max_length=30, default='manual')
+    evidence = models.JSONField(default=list, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['family', 'task'], name='iw_family_task')]
