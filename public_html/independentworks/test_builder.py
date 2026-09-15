@@ -30,3 +30,20 @@ class BuilderTests(TestCase):
         candidate.refresh_from_db()
         self.assertEqual(candidate.subitem_ids, [b.pk])
         self.assertEqual(self.client.get(reverse('independentworks:edit', args=[work.pk])).status_code, 200)
+
+    def test_same_issuance_form_and_worksheet_entrypoint(self):
+        teacher = get_user_model().objects.create_superuser('issuer_teacher', password='test')
+        self.client.force_login(teacher)
+        work = Work.objects.create(owner=teacher, title='Общая выдача')
+        response = self.client.get(reverse('assignment_create'), {'mode': 'independent', 'work': work.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'assignments/assignment_create.html')
+        self.assertTemplateUsed(response, 'assignments/_recipients.html')
+        self.assertContains(response, 'student-filter')
+        self.assertContains(response, 'id_duration')
+        self.assertNotContains(response, 'id_check_visibility')
+        ordinary = self.client.get(reverse('assignment_create'))
+        self.assertContains(ordinary, 'id_check_visibility')
+        self.assertNotContains(ordinary, 'id_duration')
+        with override_settings(INDEPENDENT_WORKS_ENABLED=False):
+            self.assertEqual(self.client.get(reverse('assignment_create'), {'mode': 'independent'}).status_code, 404)

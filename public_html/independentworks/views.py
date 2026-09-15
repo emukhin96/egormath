@@ -298,7 +298,7 @@ def prepare_run(request, pk):
         data.pop('students'); data.pop('groups')
         run = svc.prepare(work, request.user, students, parent=parent, kind=kind, **data)
         return redirect('independentworks:preview', pk=run.pk)
-    return render(request, 'independentworks/prepare.html', {'work': work, 'form': form, 'parent': parent, 'kind': kind, 'timezone': timezone.get_current_timezone_name()})
+    return render(request, 'assignments/assignment_create.html', {'independent': True, 'work': work, 'form': form, 'parent': parent, 'kind': kind, 'timezone': timezone.get_current_timezone_name()})
 
 
 def preview_context(run):

@@ -329,6 +329,18 @@ def assignment_status_update(request, pk):
 @teacher_required
 def assignment_create(request):
     """Выдать один листок нескольким адресатам из отдельного мастера."""
+    if request.GET.get('mode') == 'independent' or request.POST.get('mode') == 'independent':
+        from django.conf import settings
+        if not settings.INDEPENDENT_WORKS_ENABLED:
+            raise Http404
+        from independentworks.models import Work
+        from independentworks.views import prepare_run
+        work_id = request.POST.get('work') or request.GET.get('work')
+        if work_id:
+            return prepare_run(request, work_id)
+        return render(request, 'assignments/assignment_create.html', {
+            'independent': True, 'choose_work': True,
+            'work_options': Work.visible_to(request.user).order_by('-updated_at')})
     initial = {'allow_photos': True}
     worksheet_id = request.GET.get('worksheet', '')
     if worksheet_id.isdigit():

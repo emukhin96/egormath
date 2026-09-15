@@ -1554,7 +1554,9 @@ class AutoCheckFlowTests(TestCase):
         response = self.client.get(detail_url)
         self.assertEqual(response.context['locked_check'], Assignment.CHECK_LIVE)
         self.assertContains(response, 'Уже задано ученикам')
-        self.assertContains(response, 'id="a_check" style="max-width:340px" disabled')
+        response = self.client.get(reverse('assignment_create'), {'worksheet': worksheet.pk})
+        self.assertTrue(response.context['form'].fields['check_visibility'].disabled)
+        self.assertEqual(response.context['form'].fields['check_visibility'].initial, 'live')
         self.client.post(assign_url, {'students': [student2.pk],
                                       'check_visibility': 'teacher'})
         second = Assignment.objects.get(worksheet=worksheet, student=student2)

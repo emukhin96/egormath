@@ -1,0 +1,20 @@
+        <div class="recipient-grid">
+          <div class="choice-list">
+            {{ form.groups.errors }}
+            <h3>{{ form.groups.label }}</h3>
+            <div class="choice-items">
+              {% for checkbox in form.groups %}<label class="choice-item" for="{{ checkbox.id_for_label }}">{{ checkbox.tag }} <span>{{ checkbox.choice_label }}</span></label>
+              {% empty %}<p class="muted">Групп пока нет.</p>{% endfor %}
+            </div>
+          </div>
+          <div class="choice-list" data-student-list>
+            {{ form.students.errors }}
+            <h3>{{ form.students.label }}</h3>
+            <label class="sr-only" for="student-filter">Найти ученика</label>
+            <input type="text" id="student-filter" class="choice-search" placeholder="Найти ученика…" data-student-filter>
+            <div class="choice-items">
+              {% for checkbox in form.students %}<label class="choice-item" for="{{ checkbox.id_for_label }}" data-student-choice>{{ checkbox.tag }} <span>{{ checkbox.choice_label }}</span></label>
+              {% empty %}<p class="muted">Сначала добавьте учеников.</p>{% endfor %}
+            </div>
+          </div>
+        </div>

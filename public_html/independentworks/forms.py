@@ -1,6 +1,7 @@
 from django import forms
 from accounts.models import Profile, StudentGroup
 from .models import Work
+from assignments.forms import StudentChoiceField
 
 
 class WorkForm(forms.ModelForm):
@@ -10,7 +11,7 @@ class WorkForm(forms.ModelForm):
 
 
 class RunForm(forms.Form):
-    students = forms.ModelMultipleChoiceField(label='Ученики', queryset=Profile.objects.none(), required=False, widget=forms.CheckboxSelectMultiple)
+    students = StudentChoiceField(label='Отдельные ученики', queryset=Profile.objects.none(), required=False, widget=forms.CheckboxSelectMultiple)
     groups = forms.ModelMultipleChoiceField(label='Группы', queryset=StudentGroup.objects.none(), required=False, widget=forms.CheckboxSelectMultiple)
     duration = forms.IntegerField(label='Длительность, минут', min_value=1, max_value=1440, initial=40)
     deadline = forms.DateTimeField(label='Общее окончание (необязательно)', required=False, widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}))
@@ -21,7 +22,7 @@ class RunForm(forms.Form):
 
     def __init__(self, *args, teacher, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['students'].queryset = Profile.student_users_for(teacher)
+        self.fields['students'].queryset = Profile.student_users_for(teacher).select_related('profile').order_by('last_name', 'first_name', 'username')
         self.fields['groups'].queryset = StudentGroup.visible_to(teacher)
 
     def recipients(self, teacher):

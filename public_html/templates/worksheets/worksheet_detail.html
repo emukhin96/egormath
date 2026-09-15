@@ -327,60 +327,9 @@
 
 <div class="card" id="assign-students">
   <h2>Назначить ученикам</h2>
-  {% if student_profiles %}
-  <form method="post" action="{% url 'assign_worksheet' worksheet.pk %}">
-    {% csrf_token %}
-    {% if groups %}
-    <p>
-      <span class="helptext">Группы (назначается всем участникам):</span>
-      {% for g in groups %}
-      <label style="font-weight:normal">
-        <input type="checkbox" name="groups" value="{{ g.pk }}">
-        {{ g.name }}{% if request.user.is_superuser %} — {{ g.teacher.get_full_name|default:g.teacher.username }}{% endif %}
-        <span class="muted">({{ g.students.count }})</span>
-      </label>
-      {% endfor %}
-    </p>
-    {% endif %}
-    <p>
-      {% for p in student_profiles %}
-      <label style="font-weight:normal">
-        <input type="checkbox" name="students" value="{{ p.user_id }}"
-               {% if p.user_id in assigned_ids %}checked disabled{% endif %}>
-        {{ p.user.get_full_name }}{% if p.grade %} ({{ p.grade }} кл.){% endif %}
-        {% if p.user_id in assigned_ids %}<span class="muted">— уже назначено</span>{% endif %}
-      </label>
-      {% endfor %}
-    </p>
-    <p>
-      <label for="a_check">Автосверка ответов с эталоном</label>
-      {# Листок уже выдан — режим общий для всех его назначений и не меняется #}
-      <select name="check_visibility" id="a_check" style="max-width:340px" {% if locked_check %}disabled{% endif %}>
-        {% for value, label in check_choices %}
-        <option value="{{ value }}" {% if value == locked_check or not locked_check and value == 'live' %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-      {% if locked_check %}
-      <span class="helptext">Уже задано ученикам — режим сверки для этого листка изменить нельзя.</span>
-      {% else %}
-      <span class="helptext">После первой выдачи режим для листка фиксируется. При самопроверке вы увидите, сколько раз ученик нажимал «Проверить».</span>
-      {% endif %}
-    </p>
-    <p>
-      <label style="font-weight:normal">
-        <input type="checkbox" name="allow_photos" checked>
-        Принимать фото решений <span class="muted">— кнопка загрузки у каждой задачи</span>
-      </label>
-    </p>
-    <p>
-      <label for="a_due">Срок сдачи (необязательно)</label>
-      <input type="datetime-local" name="due_at" id="a_due" style="max-width:250px">
-    </p>
-    <button type="submit" class="btn">Назначить выбранным</button>
-  </form>
-  {% else %}
-  <p class="muted">У вас нет учеников. <a href="{% url 'students' %}">Добавьте учеников</a>.</p>
-  {% endif %}
+  <p>Получатели и параметры задаются в общей форме выдачи.</p>
+  {% if locked_check %}<p class="helptext">Уже задано ученикам — режим сверки для этого листка изменить нельзя.</p>{% endif %}
+  <a class="btn" href="{% url 'assignment_create' %}?worksheet={{ worksheet.pk }}">Выдать задание</a>
 
   {% if assignments %}
   <h2>Назначения</h2>
