@@ -83,7 +83,8 @@ def _delete_unused_task(task):
     try:
         with transaction.atomic():
             task = Task.objects.select_for_update().get(pk=task.pk)
-            if task.worksheet_items.exists() or task.submissions.exists():
+            if (task.worksheet_items.filter(deleted_at__isnull=True).exists()
+                    or task.submissions.exists()):
                 return False
             task.delete()
         return True

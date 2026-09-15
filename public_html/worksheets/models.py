@@ -3,6 +3,7 @@ import secrets
 
 from django.conf import settings
 from django.db import models
+from django.db.models.deletion import ProtectedError
 
 from problems.models import (GradeBand, Task, TaskSubitem, Topic,
                              normalize_grade_level)
@@ -10,6 +11,20 @@ from problems.models import (GradeBand, Task, TaskSubitem, Topic,
 
 def _new_token():
     return secrets.token_urlsafe(16)
+
+
+def delete_trashed_worksheet_items(collector, field, sub_objs, using):
+    """Удаляет строки корзины, но защищает задачи активного листка."""
+    active_items = sub_objs.filter(deleted_at__isnull=True)
+    if active_items.exists():
+        raise ProtectedError(
+            'Задача используется в активном элементе листка.',
+            active_items,
+        )
+    # Nullable CASCADE сначала присваивает FK значение NULL. На MySQL это
+    # нарушает worksheetitem_task_or_text, поэтому строки корзины удаляем
+    # напрямую до удаления самой задачи.
+    collector.fast_deletes.append(sub_objs)
 
 
 _TRANSLIT = {
@@ -179,7 +194,8 @@ class WorksheetItem(models.Model):
         Worksheet, on_delete=models.CASCADE, related_name='items',
         verbose_name='Листок')
     task = models.ForeignKey(
-        Task, on_delete=models.CASCADE, related_name='worksheet_items',
+        Task, on_delete=delete_trashed_worksheet_items,
+        related_name='worksheet_items',
         null=True, blank=True, verbose_name='Задача')
     text_latex = models.TextField(
         'Произвольный текст (LaTeX)', blank=True,
