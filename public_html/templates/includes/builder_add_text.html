@@ -1,0 +1,9 @@
+<details class="ws-add-text">
+  <summary>+ Добавить текст между задачами</summary>
+  <form method="post"{% if add_text_url %} action="{{ add_text_url }}"{% endif %}>
+    {% csrf_token %}
+    {% if independent %}<input type="hidden" name="action" value="add">{% else %}<input type="hidden" name="kind" value="text">{% endif %}
+    <textarea name="{% if independent %}text{% else %}text_latex{% endif %}" rows="2" placeholder="Произвольный текст (LaTeX), например пояснение или указание"{% if independent %} required{% endif %}></textarea>
+    <button type="submit" class="btn btn-small">Добавить</button>
+  </form>
+</details>

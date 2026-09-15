@@ -4513,3 +4513,17 @@
     .iw-workspace-sticky { position: static; }
   }
 }
+
+@layer components {
+  .iw-position-heading { margin-top: 0; }
+  .iw-position-heading h2 { margin: 0; }
+  .iw-template-toolbar { align-items: flex-end; }
+  .iw-title-form { display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: var(--space-2); }
+  .iw-title-form label { grid-column: 1 / -1; margin: 0; }
+  .iw-pool-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+  .iw-pool-list { display: grid; gap: var(--space-3); }
+  .iw-pool-layout .iw-candidate-grid { grid-template-columns: minmax(0, 1fr); }
+  .iw-pool-layout > * { min-width: 0; }
+  @media (max-width: 900px) { .iw-pool-layout { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 600px) { .iw-title-form { grid-template-columns: minmax(0, 1fr); } }
+}

@@ -165,3 +165,52 @@ class BuilderTests(TestCase):
         response = self.client.get(reverse('assignment_create'), {'mode': 'independent', 'work': work.pk})
         self.assertContains(response, 'Самостоятельная</span><h2>Темы</h2>')
         self.assertNotContains(response, '>Обычное задание</a>')
+
+    def test_reorder_is_complete_and_scoped_to_work(self):
+        teacher = get_user_model().objects.create_superuser('reorder_teacher')
+        self.client.force_login(teacher)
+        work = Work.objects.create(owner=teacher, title='Порядок')
+        first = Position.objects.create(work=work, order=1)
+        note = Position.objects.create(work=work, order=2, text='Между задачами')
+        last = Position.objects.create(work=work, order=3)
+        other = Work.objects.create(owner=teacher, title='Другая работа')
+        foreign = Position.objects.create(work=other)
+        url = reverse('independentworks:reorder', args=[work.pk])
+        initial = list(work.positions.values_list('pk', flat=True))
+        for ids in ([first.pk, last.pk], [first.pk, first.pk, last.pk], [first.pk, foreign.pk, last.pk]):
+            self.assertEqual(self.client.post(url, {'order': ','.join(map(str, ids))}).status_code, 400)
+            self.assertEqual(list(work.positions.values_list('pk', flat=True)), initial)
+        expected = [last.pk, note.pk, first.pk]
+        self.assertEqual(self.client.post(url, {'order': ','.join(map(str, expected))}).status_code, 200)
+        self.assertEqual(list(work.positions.values_list('pk', flat=True)), expected)
+        self.assertEqual(other.positions.get().pk, foreign.pk)
+        page = self.client.get(reverse('independentworks:edit', args=[work.pk]))
+        self.assertTemplateUsed(page, 'includes/builder_add_text.html')
+        self.assertTemplateUsed(page, 'includes/builder_drag_handle.html')
+        self.assertTemplateUsed(page, 'includes/builder_answers_toggle.html')
+        self.assertContains(page, 'data-reorder-url="' + url + '"')
+        self.assertNotContains(page, '<summary>Пояснение</summary>')
+
+    def test_pool_is_visible_and_removal_is_scoped(self):
+        teacher = get_user_model().objects.create_superuser('pool_teacher')
+        self.client.force_login(teacher)
+        work = Work.objects.create(owner=teacher, title='Пул')
+        position = Position.objects.create(work=work)
+        another = Position.objects.create(work=work, order=2)
+        candidates = [Candidate.objects.create(position=position,
+            task=Task.objects.create(text_latex='Выбранное условие ' + str(n))) for n in range(2)]
+        foreign = Candidate.objects.create(position=another, task=candidates[0].task)
+        url = reverse('independentworks:pick', args=[position.pk]) + '?q=no-matches&resume=17'
+        page = self.client.get(url)
+        self.assertContains(page, 'Выбранное условие 0')
+        self.assertContains(page, 'Выбранное условие 1')
+        self.assertContains(page, 'Убрать кандидата', count=2)
+        self.assertNotContains(page, 'Основание связи')
+        self.assertNotContains(page, '<dialog')
+        self.assertTemplateUsed(page, 'includes/builder_answers_toggle.html')
+        self.assertEqual(self.client.post(url, {'action': 'candidate_remove', 'candidate': foreign.pk}).status_code, 404)
+        self.assertTrue(Candidate.objects.filter(pk=foreign.pk).exists())
+        response = self.client.post(url, {'action': 'candidate_remove', 'candidate': candidates[0].pk})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, url)
+        self.assertEqual(position.candidates.count(), 1)

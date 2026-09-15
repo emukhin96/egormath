@@ -195,6 +195,28 @@ def edit(request, pk):
 @enabled
 @teacher_required
 @require_POST
+def reorder(request, pk):
+    """Тот же контракт порядка, что у конструктора листка; только свои номера."""
+    get_object_or_404(Work.visible_to(request.user), pk=pk)
+    try:
+        order = [int(value) for value in request.POST.get('order', '').split(',') if value]
+    except ValueError:
+        raise svc.WorkError('Некорректный порядок номеров.')
+    with transaction.atomic():
+        work = Work.objects.select_for_update().get(pk=pk)
+        positions = {p.pk: p for p in work.positions.all()}
+        if len(order) != len(positions) or set(order) != set(positions):
+            raise svc.WorkError('Состав изменился. Обновите страницу и повторите перетаскивание.')
+        for number, position_id in enumerate(order, 1):
+            positions[position_id].order = number
+        Position.objects.bulk_update(list(positions.values()), ['order'])
+        work.save(update_fields=['updated_at'])
+    return JsonResponse({'ok': True})
+
+
+@enabled
+@teacher_required
+@require_POST
 def copy_work(request, pk):
     old = get_object_or_404(Work.visible_to(request.user), pk=pk)
     with transaction.atomic():
@@ -210,6 +232,16 @@ def copy_work(request, pk):
 @teacher_required
 def pick(request, pk):
     position = get_object_or_404(Position, pk=pk, work__in=Work.visible_to(request.user))
+    if request.method == 'POST' and request.POST.get('action') == 'candidate_remove':
+        with transaction.atomic():
+            work = Work.objects.select_for_update().get(pk=position.work_id)
+            candidate = get_object_or_404(position.candidates, pk=request.POST.get('candidate'))
+            candidate.delete()
+            position.mismatch_confirmed = False
+            position.save(update_fields=['mismatch_confirmed'])
+            work.save(update_fields=['updated_at'])
+        messages.success(request, 'Кандидат удалён')
+        return redirect(request.get_full_path())
     base = position.candidates.select_related('task').first()
     from problems.views import filter_tasks
     from problems.rubricator import taxonomy_page_context, filter_state_from_params

@@ -6,6 +6,7 @@ urlpatterns = [
     path('', views.catalog, name='catalog'),
     path('new/', views.create, name='create'),
     path('<int:pk>/edit/', views.edit, name='edit'),
+    path('<int:pk>/reorder/', views.reorder, name='reorder'),
     path('<int:pk>/copy/', views.copy_work, name='copy'),
     path('position/<int:pk>/pick/', views.pick, name='pick'),
     path('position/<int:pk>/analog/<int:task_id>/', views.create_analog, name='create_analog'),

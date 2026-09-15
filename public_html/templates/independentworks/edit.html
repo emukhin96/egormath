@@ -1,35 +1,45 @@
 {% extends 'independentworks/base.html' %}
-{% load task_extras %}
+{% load task_extras static %}
 {% block content %}
 <div class="page-head"><div><span class="page-eyebrow">Состав самостоятельной</span><h1>{{ work.title }}</h1>{% if work.source_worksheet_id %}<p class="page-subtitle">На основе <a href="{% url 'worksheet_detail' work.source_worksheet_id %}">{{ work.source_worksheet.title }}</a>. Шаблон редактируется независимо.</p>{% else %}<p class="page-subtitle">Все номера и утверждённые кандидаты. Для подбора аналогов откройте нужный номер.</p>{% endif %}</div><a class="btn" href="{% url 'independentworks:prepare' work.pk %}{% if preparation_query %}?{{ preparation_query }}{% endif %}">Подготовить выдачу</a></div>
+<div class="ws-toolbar iw-template-toolbar"><form method="post" class="iw-title-form">{% csrf_token %}<input type="hidden" name="action" value="title"><label for="iw-title">Название</label><input type="text" id="iw-title" name="title" maxlength="190" value="{{ work.title }}" required><button class="btn">Сохранить название</button></form><form method="post" action="{% url 'independentworks:copy' work.pk %}">{% csrf_token %}<button class="btn btn-secondary">Копировать шаблон</button></form></div>
+<div class="card worksheet-items-card"><h2 class="worksheet-items-heading"><span>Номера самостоятельной</span>{% include 'includes/builder_answers_toggle.html' %}</h2>
+<div id="ws-items" data-reorder-url="{% url 'independentworks:reorder' work.pk %}" data-reorder-reload="1" data-answers-key="iw-show-answers">
 {% if positions %}
 {% for position in positions %}
-<section class="card iw-workspace-detail" id="position-{{ position.pk }}"><div class="ws-content">
-<div class="form-buttons"><h2>{% if position.rows or not position.text %}№{{ position.number }} · кандидатов: {{ position.rows|length }}{% else %}Пояснение{% endif %}</h2>
+<section class="ws-item" id="position-{{ position.pk }}" data-id="{{ position.pk }}"><div class="ws-body">{% include 'includes/builder_drag_handle.html' %}<div class="ws-content">
+<div class="form-buttons iw-position-heading"><h2>{% if position.rows or not position.text %}№{{ position.number }} · кандидатов: {{ position.rows|length }}{% else %}Пояснение{% endif %}</h2>
 <form method="post">{% csrf_token %}<input type="hidden" name="position" value="{{ position.pk }}"><input type="hidden" name="action" value="move"><button class="icon-btn" name="direction" value="up" aria-label="Выше">↑</button><button class="icon-btn" name="direction" value="down" aria-label="Ниже">↓</button></form>
 <form method="post">{% csrf_token %}<input type="hidden" name="position" value="{{ position.pk }}"><button class="icon-btn" name="action" value="remove" aria-label="Удалить номер">×</button></form>
 </div>
-{% if position.text %}<div class="math-content">{{ position.text|web_text }}</div>{% endif %}
-<details class="problem-section"><summary>Пояснение</summary><form method="post">{% csrf_token %}<input type="hidden" name="position" value="{{ position.pk }}"><input type="hidden" name="action" value="text"><textarea name="text" rows="2">{{ position.text }}</textarea><div class="form-buttons"><button class="btn btn-secondary">Сохранить пояснение</button></div></form></details>
+{% if position.text and position.rows %}<div class="math-content">{{ position.text|web_text }}</div>{% endif %}
+{% if not position.rows and position.text %}<div class="ws-textitem"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="text"><input type="hidden" name="position" value="{{ position.pk }}"><span class="task-meta">Текст между задачами:</span><textarea name="text" rows="2">{{ position.text }}</textarea><button class="btn btn-small">Сохранить</button></form></div>{% endif %}
 <div class="iw-candidate-grid">
 {% for candidate in position.rows %}
 <article class="iw-workspace-candidate">
-{% include 'includes/task_row.html' with number=forloop.counter text=candidate.task.text_latex %}
+<div class="iw-workspace-heading"><a href="{% url 'task_detail' candidate.task_id %}" target="_blank" rel="noopener">Задача #{{ candidate.task_id }}</a><form method="post">{% csrf_token %}<input type="hidden" name="candidate" value="{{ candidate.pk }}"><button class="icon-btn" name="action" value="candidate_remove" aria-label="Убрать кандидата">×</button></form></div><div class="ws-content">
+{% include 'includes/task_row.html' with number=forloop.counter text=candidate.task.text_latex builder=True %}
 {% if candidate.selected %}{% include 'problems/_subitems.html' with subitems=candidate.selected %}{% endif %}
 {% task_images candidate.task %}
-<details class="problem-section"><summary>Ответы и решения</summary>{% include 'problems/_task_answers.html' with task=candidate.task subitems=candidate.selected hide_answers=False %}</details>
+{% include 'problems/_task_answers.html' with task=candidate.task subitems=candidate.selected hide_answers=True %}
 <details class="problem-section"><summary>Маски ответов</summary>{% if candidate.selected %}{% for part in candidate.selected %}<p>{{ forloop.counter }}: {{ part.answer_mask|default:"Ручная проверка" }}</p>{% endfor %}{% else %}<p>{{ candidate.task.answer_mask|default:"Ручная проверка" }}</p>{% endif %}</details>
 <p class="helptext">Пунктов: {{ candidate.point_count }} · автосверка: {{ candidate.mask_count }} из {{ candidate.point_count }}</p>
-<div class="form-buttons"><a href="{% url 'task_detail' candidate.task_id %}" target="_blank" rel="noopener">Задача #{{ candidate.task_id }}</a><form method="post">{% csrf_token %}<input type="hidden" name="candidate" value="{{ candidate.pk }}"><button class="icon-btn" name="action" value="candidate_remove" aria-label="Убрать кандидата">×</button></form></div>
+</div>
 </article>
 {% endfor %}
 </div>
 {% if position.mismatch %}<div class="msg msg-warning">Разное число подпунктов.{% if position.mismatch_confirmed %} Подтверждено.{% else %}<form method="post">{% csrf_token %}<input type="hidden" name="position" value="{{ position.pk }}"><button class="btn btn-secondary" name="action" value="confirm">Подтверждаю различие объёма</button></form>{% endif %}</div>{% endif %}
-<div class="form-buttons"><a class="btn btn-secondary" href="{% url 'independentworks:pick' position.pk %}{% if preparation_query %}?{{ preparation_query }}{% endif %}">Кандидаты и подпункты</a></div>
-</div></section>
+{% if position.rows or not position.text %}<div class="form-buttons"><a class="btn btn-secondary" href="{% url 'independentworks:pick' position.pk %}{% if preparation_query %}?{{ preparation_query }}{% endif %}">Кандидаты и подпункты</a></div>{% endif %}
+</div></div></section>
 {% endfor %}
 {% else %}<section class="card empty-state"><h2>Добавьте первый номер</h2><p class="muted">Затем выберите задачу и её аналоги из базы.</p><form method="post">{% csrf_token %}<button class="btn" name="action" value="add">Добавить номер</button></form></section>{% endif %}
 {% if positions %}<div class="form-buttons"><form method="post">{% csrf_token %}<button class="btn" name="action" value="add">Добавить номер</button></form></div>{% endif %}
-<details class="card problem-section iw-workspace-settings"><summary>Добавить пояснение между номерами</summary><form method="post">{% csrf_token %}<label>Текст пояснения<textarea name="text" rows="2" required></textarea></label><div class="form-buttons"><button class="btn" name="action" value="add">Добавить пояснение</button></div></form></details>
-<details class="card problem-section iw-workspace-settings"><summary>Название и копирование шаблона</summary><form method="post">{% csrf_token %}<input type="hidden" name="action" value="title"><label>Название<input name="title" maxlength="190" value="{{ work.title }}" required></label><div class="form-buttons"><button class="btn">Сохранить название</button></div></form><form method="post" action="{% url 'independentworks:copy' work.pk %}" class="form-buttons">{% csrf_token %}<button class="btn btn-secondary">Копировать шаблон</button></form></details>
+</div>
+{% include 'includes/builder_add_text.html' with independent=True %}
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<script defer src="{% static 'js/answers-toggle.js' %}?v=2"></script>
+<script defer src="{% static 'js/builder.js' %}?v=6"></script>
 {% endblock %}
