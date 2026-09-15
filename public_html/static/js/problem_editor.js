@@ -49,6 +49,21 @@
   function formKey(form) {
     return form.querySelector('[name=block]').value + ':' + (form.querySelector('[name=subitem]')?.value || '');
   }
+  async function updateWorksheet(source) {
+    // Серверная строка содержит новые URL и ID подпунктов локальной копии.
+    // Обновляем также соседние вопросы скопированного блока и повторы задачи.
+    var response = await fetch(location.href, {credentials: 'same-origin'});
+    if (!response.ok || response.redirected) throw new Error('Не удалось обновить листок');
+    var doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+    if (!doc.querySelector('#ws-items')) throw new Error('Не удалось обновить листок');
+    document.querySelectorAll('#ws-items > .ws-item[data-task-id]').forEach(function (row) {
+      var fresh = doc.querySelector('#ws-items > .ws-item[data-id="' + row.dataset.id + '"]');
+      if (!fresh || (row.dataset.taskId !== source.dataset.taskId && row.dataset.taskId === fresh.dataset.taskId)) return;
+      row.replaceWith(fresh);
+      fresh.querySelectorAll('.math-content').forEach(renderMathContent);
+    });
+    document.dispatchEvent(new CustomEvent('worksheet:updated'));
+  }
   function update(result, submitted) {
     var root = document.querySelector('[data-problem-editor]');
     if (!root) { location.reload(); return; }
@@ -81,7 +96,16 @@
     }
     data.set('scope', scope);
     var result = await request(endpoint(root), data);
-    update(result, form); return result;
+    if (root.matches('[data-worksheet-mask]') && root.closest('#ws-items')) {
+      try {
+        await updateWorksheet(root);
+        toast(true, 'Сохранено ✓');
+      } catch (error) {
+        // Запись уже выполнена: не откатываем переключатель как при ошибке POST.
+        toast(false, 'Сохранено, но не удалось обновить вид листка. Обновите страницу.');
+      }
+    } else update(result, form);
+    return result;
   }
   document.addEventListener('input', function (e) { var f=e.target.closest('[data-editor-form]'); if(f)f.dataset.dirty='1'; });
   document.addEventListener('change', function (e) { var f=e.target.closest('[data-editor-form]'); if(f){f.dataset.dirty='1';if(f.hasAttribute('data-editor-auto'))f.requestSubmit();} });
