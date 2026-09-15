@@ -4521,11 +4521,12 @@
   .iw-template-toolbar .btn { line-height: 20px; }
   .iw-title-form { align-items: end; display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: var(--space-2); }
   .iw-title-form label { grid-column: 1 / -1; margin: 0; }
-  .iw-pool-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
-  .iw-pool-list { display: grid; gap: var(--space-3); }
-  .iw-pool-layout .iw-candidate-grid { grid-template-columns: minmax(0, 1fr); }
+  .iw-pool-layout { display: grid; gap: var(--space-5); }
+  .iw-pool-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); align-items: start; }
+  .iw-pool-layout .iw-candidate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .iw-pool-layout > * { min-width: 0; }
-  @media (max-width: 900px) { .iw-pool-layout { grid-template-columns: minmax(0, 1fr); } }
+  .iw-pool-layout [data-worksheet-mask] { margin-block: var(--space-3); }
+  @media (max-width: 760px) { .iw-pool-list, .iw-pool-layout .iw-candidate-grid { grid-template-columns: minmax(0, 1fr); } }
   @media (max-width: 600px) { .iw-title-form { grid-template-columns: minmax(0, 1fr); } }
 }
 

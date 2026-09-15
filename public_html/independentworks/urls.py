@@ -9,6 +9,7 @@ urlpatterns = [
     path('<int:pk>/reorder/', views.reorder, name='reorder'),
     path('<int:pk>/copy/', views.copy_work, name='copy'),
     path('candidate/<int:pk>/masks/', views.candidate_masks, name='candidate_masks'),
+    path('position/<int:pk>/task/<int:task_id>/masks/', views.picker_masks, name='picker_masks'),
     path('position/<int:pk>/pick/', views.pick, name='pick'),
     path('position/<int:pk>/analog-draft/<str:token>/', views.analog_draft, name='analog_draft'),
     path('position/<int:pk>/analog/<int:task_id>/', views.create_analog, name='create_analog'),

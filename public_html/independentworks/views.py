@@ -241,6 +241,26 @@ def candidate_masks(request, pk):
 
 @enabled
 @teacher_required
+def picker_masks(request, pk, task_id):
+    """Общий редактор масок с областью выбранного кандидата."""
+    from types import SimpleNamespace
+    from problems.editor import manage
+    position = get_object_or_404(Position, pk=pk, work__in=Work.visible_to(request.user))
+    task = get_object_or_404(Task, pk=task_id)
+    if task.variant_of_id and not position.candidates.filter(task=task).exists():
+        raise Http404
+    candidate_id = request.GET.get('candidate')
+    candidate = get_object_or_404(position.candidates, pk=candidate_id, task=task) if candidate_id else None
+    area = request.GET.get('area', 'pool')
+    if area not in ('pool', 'recommended', 'topic', 'catalog'):
+        raise Http404
+    selection = SimpleNamespace(pk=f'pick_{position.pk}_{area}',
+        selected_subitems=lambda: svc.selected(candidate) if candidate else task.subitems.all())
+    return manage(request, task_id, mask_selection=selection)
+
+
+@enabled
+@teacher_required
 def pick(request, pk):
     position = get_object_or_404(Position, pk=pk, work__in=Work.visible_to(request.user))
     if request.method == 'POST' and request.POST.get('action') == 'candidate_remove':

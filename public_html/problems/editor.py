@@ -133,17 +133,20 @@ def local_copy(task, item, user):
 
 
 @teacher_required
-def manage(request, pk):
+def manage(request, pk, *, mask_selection=None):
     task = get_object_or_404(Task, pk=pk)
-    item = worksheet_context(request, task)
+    item = None if mask_selection is not None else worksheet_context(request, task)
     selected_only = request.GET.get('view') != 'task'
+    selection = mask_selection if mask_selection is not None else (item if selected_only else None)
     if request.method == 'GET':
-        return JsonResponse({'ok': True, 'answers': mask_data(task, item if selected_only else None, include_preview=request.GET.get('preview') == '1')})
+        return JsonResponse({'ok': True, 'answers': mask_data(task, selection, include_preview=request.GET.get('preview') == '1')})
     if request.method != 'POST':
         return JsonResponse({'ok': False}, status=405)
     with transaction.atomic():
         task = Task.objects.select_for_update().get(pk=pk)
         block = request.POST.get('block')
+        if mask_selection is not None and block != 'masks':
+            return JsonResponse({'ok': False, 'message': 'Здесь можно изменить только маски ответов.'}, status=400)
         if block not in {*BLOCKS, 'subitems', 'images', 'sources', 'masks'}:
             return JsonResponse({'ok': False, 'errors': {'__all__': ['Неизвестный блок']}}, status=400)
         scope = request.POST.get('scope', 'global' if item is None else '')
@@ -178,7 +181,7 @@ def manage(request, pk):
         if block == 'masks':
             try:
                 submitted = json.loads(data.get('masks', '[]'))
-                allowed = {o['id']: o for o in mask_data(task, item if selected_only else None)}
+                allowed = {o['id']: o for o in mask_data(task, selection)}
                 if not isinstance(submitted, list) or not submitted:
                     raise ValueError('Нет масок для сохранения')
                 seen = set()
@@ -237,6 +240,8 @@ def manage(request, pk):
         from django.utils import timezone
         Task.objects.filter(pk=task.pk).update(updated_at=timezone.now())
         task.refresh_from_db()
+        if mask_selection is not None:
+            return JsonResponse({'ok': True, 'task_id': task.pk, 'answers': mask_data(task, selection)})
         url = reverse('task_detail', args=[task.pk])
         if item:
             url += f'?worksheet={item.worksheet_id}&item={item.pk}'
@@ -247,5 +252,5 @@ def manage(request, pk):
             request.GET['item'] = str(item.pk)
         html = render_to_string('problems/_editor.html', context(request, task), request=request)
         return JsonResponse({'ok': True, 'html': html, 'url': url,
-                             'task_id': task.pk, 'answers': mask_data(task, item if selected_only else None),
+                             'task_id': task.pk, 'answers': mask_data(task, selection),
                              'sidebar': render_to_string('includes/sidebar/task_detail.html', {'task': task}, request=request)})
