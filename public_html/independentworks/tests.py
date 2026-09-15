@@ -46,6 +46,71 @@ class IndependentWorkTests(TestCase):
     def url(self, name, *args):
         return reverse('independentworks:' + name, args=args)
 
+    def test_manage_recipients_in_shared_dialog(self):
+        a = self.issued()
+        extra = get_user_model().objects.create_user('extra_recipient')
+        Profile.objects.create(user=extra, teacher=self.teacher, role='student')
+        self.client.force_login(self.teacher)
+        page = self.client.get(reverse('assignment_list'))
+        self.assertContains(page, f'data-dialog-open="assignment-group-independent-{a.run_id}"')
+        self.assertContains(page, self.url('recipients', a.run_id))
+        response = self.client.post(self.url('recipients', a.run_id), {'students': [extra.pk], f'variant_{extra.pk}': a.variant_id})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Attempt.objects.filter(pk=a.pk).exists())
+        new = Attempt.objects.get(run=a.run)
+        self.assertEqual(new.student_id, extra.pk)
+        self.assertEqual(new.variant_id, a.variant_id)
+        a.run.refresh_from_db()
+        self.assertEqual(a.run.plan['students'], {str(extra.pk): a.variant.number})
+        self.client.force_login(self.student)
+        self.assertEqual(self.client.post(self.url('recipients', a.run_id), {}).status_code, 403)
+
+    def test_recipient_changes_preserve_started_attempts_and_check_access(self):
+        a = self.begin()
+        self.client.force_login(self.teacher)
+        url = self.url('recipients', a.run_id)
+        self.assertEqual(self.client.post(url, {'students': [self.other.pk], f'variant_{self.other.pk}': a.variant_id}).status_code, 403)
+        extra = get_user_model().objects.create_user('started_extra')
+        Profile.objects.create(user=extra, teacher=self.teacher, role='student')
+        self.assertEqual(self.client.post(url, {'students': [extra.pk], f'variant_{extra.pk}': a.variant_id}).status_code, 409)
+        foreign = self.issued().variant
+        self.assertEqual(self.client.post(url, {'students': [self.student.pk], f'variant_{self.student.pk}': foreign.pk}).status_code, 400)
+        a.refresh_from_db()
+        self.assertIsNotNone(a.started_at)
+        self.assertEqual(a.run.attempts.count(), 1)
+
+    def test_closed_run_and_repeat_cannot_gain_recipients(self):
+        extra = get_user_model().objects.create_user('late_recipient')
+        Profile.objects.create(user=extra, teacher=self.teacher, role='student')
+        a = self.issued(deadline=timezone.now() + timedelta(minutes=1))
+        a.run.deadline = timezone.now() - timedelta(minutes=1)
+        a.run.save(update_fields=['deadline'])
+        with self.assertRaises(svc.WorkError):
+            svc.update_recipients(a.run_id, {self.student.pk, extra.pk}, {self.student.pk: a.variant_id, extra.pk: a.variant_id})
+        self.assertEqual(a.run.attempts.count(), 1)
+        b = self.begin()
+        svc.submit(b.pk)
+        b.refresh_from_db()
+        run = svc.prepare(b.run.work, self.teacher, [self.student.pk], parent=b, kind='correction')
+        svc.issue(run.pk)
+        variant = run.variants.get()
+        with self.assertRaises(svc.WorkError):
+            svc.update_recipients(run.pk, {extra.pk}, {extra.pk: variant.pk})
+        self.assertEqual(run.attempts.get().student_id, self.student.pk)
+
+    def test_cumulative_label_requires_a_correction(self):
+        a = self.begin()
+        svc.submit(a.pk)
+        self.client.force_login(self.teacher)
+        url = self.url('progress', a.run_id)
+        self.assertNotContains(self.client.get(url), 'С учётом работы над ошибками:')
+        a.refresh_from_db()
+        correction = svc.prepare(a.run.work, self.teacher, [self.student.pk], parent=a, kind='correction')
+        svc.issue(correction.pk)
+        svc.start(correction.attempts.get().pk)
+        self.assertContains(self.client.get(url), 'С учётом работы над ошибками:')
+        self.assertContains(self.client.get(url), 'Для каждого исходного пункта берётся лучший зачёт')
+
     def test_replacement_preview_keeps_old_plan_but_blocks_old_issue(self):
         first = svc.prepare(self.work, self.teacher, [self.student.pk])
         old_plan = first.plan

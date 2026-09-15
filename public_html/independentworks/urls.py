@@ -15,6 +15,7 @@ urlpatterns = [
     path('run/<int:pk>/preview/<int:variant>/<int:point>/<int:asset>/', views.preview_asset, name='preview_asset'),
     path('run/<int:pk>/issue/', views.issue_run, name='issue'),
     path('run/<int:pk>/progress/', views.progress, name='progress'),
+    path('run/<int:pk>/recipients/', views.recipients, name='recipients'),
     path('run/<int:pk>/publish/', views.publish, name='publish'),
     path('run/<int:pk>/export/', views.export, name='export'),
     path('attempt/<int:pk>/', views.attempt_page, name='attempt'),

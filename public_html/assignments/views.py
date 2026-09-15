@@ -220,6 +220,21 @@ def assignment_list(request):
                         Assignment.STATUS_REVIEWED)),
             }
             for profile in all_profiles]
+    runs_by_key = {f'independent-{r.pk}': r for r in independent_runs}
+    for group in groups_on_page:
+        if group['kind'] != 'independent':
+            continue
+        run = runs_by_key[group['key']]
+        existing = {a.student_id: a for a in run.attempts.all()}
+        allowed = list(Profile.student_users_for(run.owner).order_by('last_name', 'first_name', 'username'))
+        users = {u.pk: u for u in allowed}
+        users.update({a.student_id: a.student for a in existing.values()})
+        group['run'] = run
+        group['variants'] = list(run.variants.all())
+        group['recipient_rows'] = [
+            {'student': u, 'assignment': existing.get(u.pk),
+             'locked': bool(existing.get(u.pk) and (existing[u.pk].started_at or run.kind != 'initial'))}
+            for u in users.values() if run.kind == 'initial' or u.pk in existing]
     worksheets = Worksheet.visible_to(request.user).order_by('-updated_at')
     return render(request, 'assignments/assignment_list.html', {
         'page': page,

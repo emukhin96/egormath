@@ -474,3 +474,37 @@ def cumulative(attempt, student_view=False):
 def answer_display(point, answer):
     spec = parse_mask(point.snapshot['mask'])
     return filled_text(spec, answer.values) if answer and spec.is_valid else ''
+
+
+@transaction.atomic
+def update_recipients(run_id, students, choices):
+    """Меняем только не начатые назначения, сохраняя выданные снимки."""
+    run = Run.objects.select_for_update().get(pk=run_id)
+    if not run.issued_at:
+        raise WorkError('Проведение ещё не выдано.')
+    attempts = {a.student_id: a for a in run.attempts.select_for_update().order_by('pk')}
+    if not students:
+        raise WorkError('Оставьте хотя бы одного получателя.')
+    if run.kind != 'initial' and students != set(attempts):
+        raise WorkError('Получатель повторной попытки закреплён.', 409)
+    from accounts.models import Profile
+    allowed = set(Profile.student_users_for(run.owner).values_list('pk', flat=True)) | set(attempts)
+    if not students <= allowed:
+        raise WorkError('Ученик недоступен владельцу проведения.', 403)
+    variants = {v.pk: v for v in run.variants.all()}
+    if any(v not in variants for v in choices.values()):
+        raise WorkError('Вариант не принадлежит этому проведению.')
+    for student, attempt in attempts.items():
+        if (attempt.started_at or run.kind != 'initial') and (student not in students or choices[student] != attempt.variant_id):
+            raise WorkError('Начавшего ученика или закреплённую попытку менять нельзя.', 409)
+    if students - set(attempts) and (run.closed_at or run.deadline and run.deadline <= timezone.now()):
+        raise WorkError('Срок начала прошёл: добавить получателей нельзя.', 409)
+    for student in set(attempts) - students:
+        attempts[student].delete()
+    for student in students:
+        if student in attempts:
+            Attempt.objects.filter(pk=attempts[student].pk).update(variant_id=choices[student])
+        else:
+            Attempt.objects.create(run=run, student_id=student, variant_id=choices[student])
+    run.plan = {**run.plan, 'students': {str(student): variants[choices[student]].number for student in sorted(students)}}
+    run.save(update_fields=['plan'])

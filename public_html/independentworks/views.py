@@ -527,6 +527,21 @@ def publish(request, pk):
 @enabled
 @teacher_required
 @require_POST
+def recipients(request, pk):
+    run = teacher_run(request, pk)
+    try:
+        students = {int(value) for value in request.POST.getlist('students')}
+        choices = {student: int(request.POST.get(f'variant_{student}', '')) for student in students}
+    except ValueError:
+        raise svc.WorkError('Выберите учеников и варианты.')
+    svc.update_recipients(run.pk, students, choices)
+    messages.success(request, 'Получатели самостоятельной сохранены')
+    return redirect(reverse('assignment_list') + ('?' + request.GET.urlencode() if request.GET else ''))
+
+
+@enabled
+@teacher_required
+@require_POST
 def reassign(request, pk):
     attempt = own_attempt(request, pk, teacher=True)
     variant = get_object_or_404(attempt.run.variants, pk=request.POST.get('variant'))
@@ -620,7 +635,7 @@ def progress_context(run):
                 points.append({'detail_url': reverse('independentworks:point_detail', args=[a.pk, row['point'].pk]), 'label': row['point'].label, 'status': status, 'status_label': row['grade'] or ('На проверке' if row['pending'] else {'ok': 'Верно', 'wrong': 'Неверно'}.get(row['auto'], 'Ответ не введён')), 'mark': row['grade_symbol'], 'attempt_count': 0})
             cells.append({'item': {'pk': number}, 'owner': {'pk': number}, 'points': points, 'hidden': not points})
         remaining = max(0, int((a.ends_at - timezone.now()).total_seconds())) if a.ends_at else 0
-        people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a),
+        people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a), 'show_cumulative': bool(a.root_id or any(c.started_at for c in a.corrections.all())),
                        'remaining': f'{remaining // 60}:{remaining % 60:02}'})
         if a.started_at:
             for row in rows:

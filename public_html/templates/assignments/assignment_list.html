@@ -102,28 +102,37 @@
       <td><a class="assignment-title" href="{% if group.progress_url %}{{ group.progress_url }}{% else %}{% url 'worksheet_progress' group.worksheet_id %}{% endif %}">{{ group.worksheet__title }}</a>{% if group.kind == "independent" %}<div class="muted">{{ group.kind_label }}</div>{% endif %}</td>
       {% if request.user.is_superuser %}<td>{% if group.worksheet__owner__first_name or group.worksheet__owner__last_name %}{{ group.worksheet__owner__first_name }} {{ group.worksheet__owner__last_name }}{% else %}{{ group.worksheet__owner__username }}{% endif %}</td>{% endif %}
       <td>{{ group.students_total }}</td><td>{{ group.submitted_total }}</td><td>{{ group.reviewed_total }}</td><td>{{ group.last_assigned|date:'d.m.Y' }}</td><td>{{ group.nearest_due|date:'d.m.Y H:i'|default:'—' }}</td>
-      <td>{% if group.kind == "independent" %}<a class="btn btn-small btn-secondary" href="{{ group.progress_url }}">Прогресс</a>{% else %}<button type="button" class="btn btn-small btn-secondary" data-dialog-open="assignment-group-{{ group.worksheet_id }}">Изменить</button>{% endif %}</td>
+      <td><button type="button" class="btn btn-small btn-secondary" data-dialog-open="assignment-group-{{ group.key }}">Изменить</button></td>
     </tr>{% endfor %}</tbody>
   </table></div>
   {% for group in worksheet_groups %}
-  {% if group.kind == "ordinary" %}<dialog id="assignment-group-{{ group.worksheet_id }}" class="dialog assignment-group-dialog">
-    <form method="post" action="{% url 'assignment_group_update' group.worksheet_id %}{% if return_query %}?{{ return_query }}{% endif %}" data-assignment-group-form>
+  <dialog id="assignment-group-{{ group.key }}" class="dialog assignment-group-dialog">
+    <form method="post" action="{% if group.kind == "independent" %}{% url 'independentworks:recipients' group.run.pk %}{% else %}{% url 'assignment_group_update' group.worksheet_id %}{% endif %}{% if return_query %}?{{ return_query }}{% endif %}" {% if group.kind == "ordinary" %}data-assignment-group-form{% endif %}>
       {% csrf_token %}
       <div class="dialog-heading"><h3>{{ group.worksheet__title }}</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
-      <p class="helptext">Отметьте учеников и выберите текущий статус для каждого.</p>
+      {% if group.kind == "independent" %}<p class="helptext">Отметьте получателей и выберите из уже выданных вариантов. Начавших учеников и их варианты менять нельзя. Для работы над ошибками и пересдачи получатель закреплён.</p>{% else %}<p class="helptext">Отметьте учеников и выберите текущий статус для каждого.</p>{% endif %}
       <div class="assignment-recipient-list">
         {% for row in group.recipient_rows %}
+        {% if group.kind == "independent" %}
         <div class="assignment-recipient-row">
+          <label><input type="checkbox" name="students" value="{{ row.student.pk }}"{% if row.assignment %} checked{% endif %}{% if row.locked %} disabled{% endif %}> <span>{{ row.student.get_full_name|default:row.student.username }}{% if row.locked %} · {{ row.assignment.state }}{% endif %}</span></label>
+          {% if row.locked %}<input type="hidden" name="students" value="{{ row.student.pk }}">{% endif %}
+          <select name="variant_{{ row.student.pk }}" aria-label="Вариант: {{ row.student.get_full_name|default:row.student.username }}"{% if row.locked %} disabled{% endif %}>
+            {% for variant in group.variants %}<option value="{{ variant.pk }}"{% if row.assignment.variant_id == variant.pk %} selected{% endif %}>Вариант {{ variant.number }}</option>{% endfor %}
+          </select>
+          {% if row.locked %}<input type="hidden" name="variant_{{ row.student.pk }}" value="{{ row.assignment.variant_id }}">{% endif %}
+        </div>
+        {% else %}<div class="assignment-recipient-row">
           <label><input type="checkbox" name="students" value="{{ row.profile.user_id }}"{% if row.assignment %} checked data-existing{% endif %}> <span>{{ row.profile.user.get_full_name|default:row.profile.user.username }}</span></label>
           <select name="status_{{ row.profile.user_id }}" aria-label="Статус: {{ row.profile.user.get_full_name|default:row.profile.user.username }}">
             {% for value, label in status_choices %}<option value="{{ value }}"{% if row.assignment.status == value or not row.assignment and value == 'assigned' %} selected{% endif %}{% if value == 'reviewed' and not row.can_mark_reviewed %} disabled{% endif %}>{{ label }}</option>{% endfor %}
           </select>
         </div>
-        {% empty %}<p class="muted">Сначала добавьте учеников в разделе «Ученики».</p>{% endfor %}
+        {% endif %}{% empty %}<p class="muted">Сначала добавьте учеников в разделе «Ученики».</p>{% endfor %}
       </div>
       <div class="form-buttons"><button type="submit" class="btn">Сохранить</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
     </form>
-  </dialog>{% endif %}
+  </dialog>
   {% endfor %}
   {% else %}
   <div class="empty-state">
