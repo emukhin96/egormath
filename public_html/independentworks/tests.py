@@ -528,13 +528,17 @@ class IndependentWorkTests(TestCase):
         self.client.force_login(self.teacher)
         response = self.client.post(self.url('create_analog', self.position.pk, self.task.pk))
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(Task.objects.count(), 1)
+        editor = self.client.get(response.url)
+        self.assertContains(editor, 'Сохранить аналог')
+        self.assertEqual(Task.objects.count(), 1)
+        data = {'text_latex': 'Сохранённый аналог', 'columns': 1, 'stars': 0}
+        for name in ('formset', 'subitem_formset', 'image_formset'):
+            prefix = editor.context[name].prefix
+            data.update({prefix + '-TOTAL_FORMS': 0, prefix + '-INITIAL_FORMS': 0})
+        self.assertEqual(self.client.post(response.url, data).status_code, 302)
         task = Task.objects.exclude(pk=self.task.pk).get()
         self.assertIsNone(task.variant_of_id)
-        self.assertEqual(self.position.candidates.count(), 1)
-        editor = self.client.get(response.url)
-        self.assertContains(editor, 'Добавить сохранённый аналог в самостоятельную')
-        response = self.client.post(self.url('finish_analog', self.position.pk, task.pk))
-        self.assertEqual(response.status_code, 302)
         self.assertEqual(self.position.candidates.count(), 2)
         self.assertEqual(set(task.analog_families.get().tasks.values_list('pk', flat=True)), {task.pk, self.task.pk})
 

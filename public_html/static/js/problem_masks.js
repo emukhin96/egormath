@@ -66,7 +66,7 @@
       var links=root.closest('.ws-item,[data-task-row]')?.querySelector('[data-mask-links]');if(links)links.textContent='';
       var actions=document.createElement('div');actions.className='problem-mask-actions';target.appendChild(actions);
       if(owners.some(o=>o.full_answer_only)){var policy=document.createElement('span');policy.className='helptext';policy.textContent='Только развёрнутый ответ. Сохранённые маски не используются.';actions.appendChild(policy);}
-      if(!owners.some(o=>o.full_answer_only)&&owners.filter(o=>!o.mask.trim()).length>1)actions.appendChild(button('Создать недостающие маски','maskMissing','1'));
+      if(!root.dataset.maskReadonly&&!owners.some(o=>o.full_answer_only)&&owners.filter(o=>!o.mask.trim()).length>1)actions.appendChild(button('Создать недостающие маски','maskMissing','1'));
 
       for(var i=0;i<owners.length;i++){
         var o=owners[i],row=document.createElement('div');row.className='problem-mask-summary';
@@ -75,6 +75,7 @@
           var fields=document.createElement('div');fields.className='problem-mask-inline';fields.innerHTML=o.preview_html||'';row.appendChild(fields);
           fields.querySelectorAll('.mask-text,.mask-order-items li').forEach(renderMathContent);
         }
+        if(root.dataset.maskReadonly){if(!o.mask||o.full_answer_only){var note=document.createElement('span');note.className='helptext';note.textContent='Фото решения · ручная проверка';row.appendChild(note);}actions.appendChild(row);if(window.EgorMask)window.EgorMask.enhance(row);continue;}
         var editButton=button(o.mask?'Настроить':'Добавить маску','maskEdit',o.id||'');
         if(links){editButton.className='link-btn';editButton.textContent=(o.mask?'настроить маску':'добавить маску')+(o.id?' · '+o.label:'');if(links.children.length)links.append(' · ');links.append(editButton);}else row.appendChild(editButton);
         actions.appendChild(row);

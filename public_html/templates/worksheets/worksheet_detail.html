@@ -57,7 +57,7 @@
 <div class="card worksheet-items-card">
   <h2 class="worksheet-items-heading"><span>Задачи листка</span>
     {% include 'includes/builder_answers_toggle.html' %}
-    <label class="ws-toggle"><input type="checkbox" id="toggle-masks"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">маски ответов</span></label>
+    {% include 'includes/builder_masks_toggle.html' %}
   </h2>
   {% if deleted_items %}
   <div class="undo-bar">

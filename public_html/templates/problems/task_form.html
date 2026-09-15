@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static task_extras %}
 {% block title %}{% if task %}Задача #{{ task.pk }}{% else %}Новая задача{% endif %} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/task_form.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div><span class="page-eyebrow">Редактор задачи</span>
-    <h1>{% if task %}Задача #{{ task.pk }}{% else %}Новая задача{% endif %}</h1>
+    <h1>{% if analog_source %}Новый аналог задачи #{{ analog_source.pk }}{% elif task %}Задача #{{ task.pk }}{% else %}Новая задача{% endif %}</h1>
     {% if task.variant_of_id %}<span class="badge badge-returned">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}
   </div>
 </div>
@@ -14,6 +14,7 @@
 <p class="muted">Из конструктора листка «{{ worksheet.title }}».</p>
 {% endif %}
 
+{% if analog_source %}<p class="helptext">Копия появится в базе и в пуле только после нажатия «Сохранить аналог». <a href="{{ analog_back }}">Назад к подбору</a></p>{% endif %}
 <form method="post" enctype="multipart/form-data" id="task-form" {% if not task %}data-new-task="1"{% endif %}>
 {% csrf_token %}{{ form.non_field_errors }}
 <div class="problem-columns">
@@ -63,7 +64,7 @@
       {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=True grades=True selected_json=selected_json %}
     </div>
 
-</details><details class="problem-section" {% if image_formset.total_error_count or formset.total_error_count %}open{% endif %}><summary>Изображения и источники</summary>    <h2>Картинки</h2>
+</details><details class="problem-section" {% if image_formset.total_error_count or formset.total_error_count %}open{% endif %}><summary>Изображения и источники</summary>{% if analog_source %}<p class="helptext">Изображения исходной задачи будут скопированы при сохранении.</p>{% task_images analog_source %}{% endif %}    <h2>Картинки</h2>
     <p class="helptext">Иллюстрации к условию: в PDF верстаются внизу страницы
       с подписью «К задаче N» (\taskpic / \flushpics). Форматы: PNG/JPEG или
       векторный PDF. Картинку можно вставить прямо из буфера обмена

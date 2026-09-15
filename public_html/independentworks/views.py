@@ -230,6 +230,17 @@ def copy_work(request, pk):
 
 @enabled
 @teacher_required
+def candidate_masks(request, pk):
+    from types import SimpleNamespace
+    from problems.editor import mask_data
+    candidate = get_object_or_404(Candidate.objects.select_related('task'), pk=pk,
+        position__work__in=Work.visible_to(request.user))
+    selected = SimpleNamespace(pk=candidate.pk, selected_subitems=lambda: svc.selected(candidate))
+    return JsonResponse({'answers': mask_data(candidate.task, selected, include_preview=True)})
+
+
+@enabled
+@teacher_required
 def pick(request, pk):
     position = get_object_or_404(Position, pk=pk, work__in=Work.visible_to(request.user))
     if request.method == 'POST' and request.POST.get('action') == 'candidate_remove':
@@ -277,10 +288,12 @@ def pick(request, pk):
             ids = []
         elif request.POST.get('parts_mode') == 'selected' and not ids:
             raise svc.WorkError('Выберите хотя бы один подпункт или всю задачу.')
+        from .pool import validate_selection
         if request.POST.get('candidate'):
             candidate = get_object_or_404(position.candidates, pk=request.POST['candidate'], task=task)
             with transaction.atomic():
                 Work.objects.select_for_update().get(pk=position.work_id)
+                validate_selection(position, task, ids, candidate)
                 candidate.subitem_ids = ids
                 candidate.save(update_fields=['subitem_ids'])
                 position.mismatch_confirmed = False
@@ -288,11 +301,27 @@ def pick(request, pk):
                 position.work.save(update_fields=['updated_at'])
             messages.success(request, 'Подпункты сохранены')
         else:
-            svc.add_candidate(position, task, ids)
+            with transaction.atomic():
+                Work.objects.select_for_update().get(pk=position.work_id)
+                validate_selection(position, task, ids)
+                svc.add_candidate(position, task, ids)
             messages.success(request, 'Кандидат добавлен')
         return redirect(request.get_full_path())
     from django.core.paginator import Paginator
     page = Paginator(tasks.order_by('-pk'), 15).get_page(request.GET.get('page'))
+    from collections import defaultdict
+    from .pool import usage
+    used = defaultdict(list)
+    for c in Candidate.objects.filter(position__work=position.work).select_related('position'):
+        used[c.task_id].append(c)
+    numbers = {p.pk: n for n, p in enumerate(position.work.positions.filter(Q(text='') | Q(candidates__isnull=False)).distinct(), 1)}
+    recommended, same_topic = list(recommended[:30]), list(same_topic[:30])
+    page.object_list = list(page.object_list)
+    for task in recommended + same_topic + page.object_list:
+        state = usage(position, task, used[task.pk])
+        task.pool_blocked, task.pool_partial = state['blocked'], state['partial']
+        task.pool_used_parts = state['used']
+        task.pool_label = ', '.join('№' + str(n) for n in sorted({numbers[c.position_id] for c in state['rows']}))
     context = taxonomy_page_context(filter_state_from_params(request.GET))
     context.update({'picker_tab': request.GET.get('tab', 'catalog' if any(k in request.GET for k in ('q', 'grade', 'topic')) or not base else 'recommended'), 'position': position, 'base': base, 'same_topic': same_topic[:30], 'topic_names': topic_names, 'recommended': recommended[:30], 'page': page, 'q': query,
                     'params': request.GET, 'preparation_query': preparation_query(request), 'grade_choices': Task.GRADE_CHOICES,
@@ -308,17 +337,16 @@ def create_analog(request, pk, task_id):
     task = get_object_or_404(Task.objects.select_related('variant_of'), pk=task_id)
     if task.variant_of_id and not position.candidates.filter(task=task).exists():
         raise Http404
-    with transaction.atomic():
-        copy = task.make_variant(request.user, standalone=True)
-        family = task.analog_families.first()
-        if not family and task.variant_of_id:
-            family = task.variant_of.analog_families.first()
-        if not family:
-            family = Family.objects.create(key='manual:' + uuid.uuid4().hex, title='Аналоги задачи ' + str(task.pk))
-            family.tasks.add(task)
-        # Связь и пул дополняются после сохранения в обычном редакторе.
-        request.session[f'iw_analog_{position.pk}_{copy.pk}'] = family.pk
-    return redirect(reverse('task_detail', args=[copy.pk]) + '?iw_position=' + str(position.pk))
+    token = uuid.uuid4().hex
+    request.session['iw_analog_draft_' + token] = {'source': task.pk, 'position': position.pk}
+    return redirect('independentworks:analog_draft', pk=position.pk, token=token)
+
+
+@enabled
+@teacher_required
+def analog_draft(request, pk, token):
+    from .analog_editor import draft
+    return draft(request, pk, token)
 
 
 @enabled

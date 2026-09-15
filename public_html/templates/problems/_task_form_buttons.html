@@ -1,5 +1,6 @@
 {# Кнопки формы задачи; используются сверху и снизу страницы #}
 <p class="form-buttons">
+  {% if analog_source %}<button type="submit" class="btn">Сохранить аналог</button><a class="btn btn-secondary" href="{{ analog_back }}">Назад</a>{% else %}
   {% if duplicate_pk %}
   <a class="btn btn-secondary" href="{% url 'task_detail' duplicate_pk %}"
      target="_blank" rel="noopener">Открыть задачу #{{ duplicate_pk }}</a>
@@ -19,4 +20,5 @@
     Сохранить и добавить следующую</button>
   {% endif %}
   <a class="btn btn-secondary" href="{% if worksheet %}{% url 'worksheet_detail' worksheet.pk %}{% elif task %}{% url 'task_detail' task.pk %}{% else %}{% url 'task_list' %}{% endif %}">Отмена</a>
+  {% endif %}
 </p>

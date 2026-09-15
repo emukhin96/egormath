@@ -1,7 +1,7 @@
 {% load task_extras %}
 <ol class="subitems">
 {% for part in task.subitems.all %}
-<li><label class="subitem-label"><input type="checkbox" name="{{ field_name|default:'parts' }}" value="{{ part.pk }}" {% if form_id %}form="{{ form_id }}"{% endif %} {% if all_selected or part.pk in selected_ids %}checked{% endif %}>
+<li><label class="subitem-label"><input type="checkbox" name="{{ field_name|default:'parts' }}" value="{{ part.pk }}" {% if part.pk in disabled_ids %}disabled{% endif %} {% if form_id %}form="{{ form_id }}"{% endif %} {% if all_selected or part.pk in selected_ids %}checked{% endif %}>
 <span class="math-content">{{ part.text_latex|web_text }}</span>{{ part.text_latex|subitem_tail:forloop.last }}</label></li>
 {% endfor %}
 </ol>
