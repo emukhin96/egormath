@@ -359,15 +359,18 @@ def assignment_status_update(request, pk):
     """Меняет статус одной работы из таблицы прогресса листка."""
     assignment = get_object_or_404(Assignment.visible_to(request.user), pk=pk)
     status = request.POST.get('status', '')
+    error = ''
     if status not in dict(Assignment.STATUS_CHOICES):
-        messages.error(request, 'Неизвестный статус работы.')
+        error = 'Неизвестный статус работы.'
+    elif not _set_assignment_status(assignment, status):
+        error = 'Проверенной можно отметить только отправленную работу.'
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'ok': not error, 'message': error or 'Статус работы сохранён.'},
+                            status=400 if error else 200)
+    if error:
+        messages.error(request, error)
     else:
-        if _set_assignment_status(assignment, status):
-            messages.success(request, 'Статус работы сохранён.')
-        else:
-            messages.error(
-                request,
-                'Проверенной можно отметить только отправленную работу.')
+        messages.success(request, 'Статус работы сохранён.')
     return redirect('worksheet_detail', pk=assignment.worksheet_id)
 
 

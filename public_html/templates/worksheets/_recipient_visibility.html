@@ -1,11 +1,16 @@
 <form method="post" action="{{ action }}" data-builder-action>
   {% csrf_token %}
   <div class="dialog-heading">
-    <h3 id="recipient-visibility-title">Видимые номера</h3>
+    <h3 id="recipient-visibility-title">{{ recipient_label }}</h3>
     <button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button>
   </div>
-  <p>{{ recipient_label }}</p>
-  <p class="helptext">Отметьте задачи, которые будут видны получателю на странице и в PDF. Вопросы общего блока выбираются вместе. Нумерация у получателя пересчитается.</p>
+  {% if assignment %}
+  <label for="recipient-status">Статус работы</label>
+  <select id="recipient-status" name="status">
+    {% for value, label in status_choices %}<option value="{{ value }}"{% if assignment.status == value %} selected{% endif %}{% if value == 'reviewed' and assignment.status != 'submitted' and assignment.status != 'reviewed' %} disabled{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  <h4>Видимые номера</h4>
   <div class="form-buttons">
     <button type="button" class="btn btn-small btn-secondary" data-visibility-select="all">Выбрать все</button>
     <button type="button" class="btn btn-small btn-secondary" data-visibility-select="none">Снять все</button>
@@ -13,11 +18,15 @@
   <div class="ws-number-options">
     {% for option in options %}
     <label class="ws-number-option">
-      <input type="checkbox" name="visible_items" value="{{ option.value }}"{% if option.visible %} checked{% endif %}>
+      <input type="checkbox" name="visible_items" value="{{ option.value }}"{% if option.visible %} checked{% endif %}{% if option.mixed %} data-mixed{% endif %}>
+      {% if option.mixed %}<input type="hidden" name="unchanged_items" value="{{ option.value }}">{% endif %}
       <span>{{ option.label }}{% if option.block %} <span class="muted">(общий блок)</span>{% endif %}</span>
     </label>
     {% empty %}<p class="muted">В листке пока нет задач.</p>{% endfor %}
   </div>
+  {% if members %}<h4>Ученики</h4><div class="ws-recipient-members">
+    {% for member in members %}<button type="button" class="link-btn" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'assignment' member.pk %}">{{ member.student.get_full_name|default:member.student.username }} · {{ member.get_status_display }}</button>{% endfor %}
+  </div>{% endif %}
   <div class="form-buttons">
     <button type="submit" class="btn">Сохранить</button>
     <button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button>

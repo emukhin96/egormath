@@ -24,16 +24,16 @@
   </div>
 </section>
 {% if assignments %}
-<section class="sidebar-section">
+<section class="sidebar-section" id="worksheet-recipients">
   <p class="sidebar-kicker">Назначения</p>
   <ul class="sidebar-list">
     {% for section in assignment_groups %}
-    <li><strong>{{ section.group.name }}</strong><br><span>Учеников: {{ section.assignments|length }}</span></li>
+    <li><button type="button" class="ws-recipient-link" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'group' section.group.pk %}"><strong>{{ section.group.name }}</strong><br><span>Учеников: {{ section.assignments|length }}</span></button></li>
     {% endfor %}
     {% for assignment in individual_assignments %}
     <li>
-      <a href="{% url 'review_assignment' assignment.pk %}">{{ assignment.student.get_full_name|default:assignment.student.username }}</a>
-      <br><span>{{ assignment.get_status_display }}</span>
+      <button type="button" class="ws-recipient-link" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'assignment' assignment.pk %}">{{ assignment.student.get_full_name|default:assignment.student.username }}
+      <br><span>{{ assignment.get_status_display }}</span></button>
     </li>
     {% endfor %}
   </ul>

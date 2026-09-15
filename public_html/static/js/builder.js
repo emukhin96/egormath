@@ -14,47 +14,40 @@
       if (!input) return;
       var form = input.form
         || document.getElementById(input.getAttribute('form'));
-      var finishing = false;
-
-      function open() {
-        span.hidden = true;
-        input.hidden = false;
-        input.focus();
-        input.select();
-      }
-
-      function render(value) {
-        span.textContent = value || span.dataset.placeholder || '';
-      }
-
-      function finish(save) {
-        if (finishing) return;
-        finishing = true;
-        var value = input.value.trim();
-        var mustKeep = input.required && !value;
-        if (save && !mustKeep && value !== span.textContent.trim()) {
-          input.value = value;
-          render(value);
-          if (form && window.EgorAutosave) window.EgorAutosave.autosave(form);
-        } else {
-          // Откат к текущему отображаемому значению
-          var shown = span.textContent.trim();
-          input.value = shown === span.dataset.placeholder ? '' : shown;
-        }
-        input.hidden = true;
-        span.hidden = false;
-        finishing = false;
-      }
-
-      span.addEventListener('click', open);
+      var saved = input.value, revision = 0;
+      span.addEventListener('input', function () { revision += 1; });
       span.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+        if (e.isComposing) return;
+        if (e.key === 'Enter') { e.preventDefault(); span.blur(); }
+        if (e.key === 'Escape') {
+          e.preventDefault(); span.textContent = input.value; span.blur();
+        }
       });
-      input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
-        if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      span.addEventListener('blur', function () {
+        var value = span.textContent.replace(/\s+/g, ' ').trim();
+        var limit = Number(input.getAttribute('maxlength'));
+        if ((input.required && !value) || value.length > limit) {
+          span.textContent = input.value;
+          showSaved(false, !value ? 'Название не может быть пустым' : 'Слишком длинный текст');
+          return;
+        }
+        span.textContent = value;
+        if (value === input.value) return;
+        input.value = value;
+        var current = ++revision;
+        autosave(form).then(function (ok) {
+          if (ok) saved = value;
+          if (!ok && current === revision) {
+            input.value = saved;
+            span.textContent = saved;
+          }
+          if (ok && span.dataset.edit === 'title') {
+            document.title = value + ' — Математика';
+            var heading = document.querySelector('#context-sidebar h2');
+            if (heading) heading.textContent = value;
+          }
+        });
       });
-      input.addEventListener('blur', function () { finish(true); });
     });
 
     // --- Кликабельные звёзды ---

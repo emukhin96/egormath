@@ -1340,7 +1340,9 @@ def share_toggle(request, pk, link_id):
     worksheet = _own_worksheet(request, pk)
     link = get_object_or_404(ShareLink, pk=link_id, worksheet=worksheet)
     link.is_active = not link.is_active
-    link.save()
+    link.save(update_fields=['is_active'])
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'is_active': link.is_active})
     return redirect('worksheet_detail', pk=pk)
 
 
@@ -1362,35 +1364,67 @@ def share_comment(request, pk, link_id):
 @teacher_required
 @require_http_methods(['GET', 'POST'])
 def worksheet_recipient_visibility(request, pk, kind, recipient_id):
-    """Массовый выбор видимых номеров для одной ссылки или назначения."""
-    from .recipients import visibility_options
+    """Настройки ссылки, ученика или группы получателей листка."""
+    from .recipients import assignment_sections, visibility_options
+    from assignments.views import _set_assignment_status
 
     worksheet = _own_worksheet(request, pk)
+    members = []
     if kind == 'link':
         recipient = get_object_or_404(worksheet.share_links, pk=recipient_id)
         label = recipient.comment or f'Ссылка от {recipient.created_at:%d.%m.%Y %H:%M}'
     elif kind == 'assignment':
         recipient = get_object_or_404(worksheet.assignments.select_related('student'), pk=recipient_id)
         label = recipient.student.get_full_name() or recipient.student.username
+    elif kind == 'group':
+        assignments = list(worksheet.assignments.select_related('student').prefetch_related('source_groups'))
+        groups = StudentGroup.visible_to(request.user).prefetch_related('students')
+        sections, _ = assignment_sections(assignments, groups)
+        section = next((section for section in sections if section['group'].pk == recipient_id), None)
+        if section is None:
+            raise Http404
+        members = section['assignments']
+        recipient = members[0]
+        label = section['group'].name
     else:
         raise Http404
+    targets = members or [recipient]
     options = visibility_options(worksheet, recipient)
+    if members:
+        hidden_sets = [set(a.hidden_items.values_list('pk', flat=True)) for a in members]
+        for option in options:
+            states = [not (set(option['item_ids']) & hidden) for hidden in hidden_sets]
+            option['visible'] = all(states)
+            option['mixed'] = any(states) and not all(states)
     if request.method == 'POST':
         selected = set(request.POST.getlist('visible_items'))
+        preserved = set(request.POST.getlist('unchanged_items')) if members else set()
         allowed = {str(option['value']) for option in options}
-        if not selected <= allowed:
+        if not (selected | preserved) <= allowed or selected & preserved:
             return _builder_response(request, pk, ok=False,
-                                     message='Состав листка изменился. Откройте выбор номеров заново.')
-        active_ids = {item_id for option in options for item_id in option['item_ids']}
-        hidden_ids = {item_id for option in options if str(option['value']) not in selected
+                                     message='Состав листка изменился. Откройте настройки заново.')
+        active_ids = {item_id for option in options if str(option['value']) not in preserved
                       for item_id in option['item_ids']}
-        # Не трогаем рубрики, текст и мягко удалённые элементы.
+        hidden_ids = {item_id for option in options if str(option['value']) not in (selected | preserved)
+                      for item_id in option['item_ids']}
+        status = request.POST.get('status') if kind == 'assignment' else None
+        if status is not None and status not in dict(Assignment.STATUS_CHOICES):
+            return _builder_response(request, pk, ok=False, message='Неизвестный статус работы.')
         with transaction.atomic():
-            recipient.hidden_items.remove(*active_ids)
-            recipient.hidden_items.add(*hidden_ids)
-        return _builder_response(request, pk, message='Видимые номера сохранены.')
+            if status is not None:
+                recipient = Assignment.objects.select_for_update().get(pk=recipient.pk)
+                if not _set_assignment_status(recipient, status):
+                    return _builder_response(request, pk, ok=False,
+                                             message='Проверенной можно отметить только отправленную работу.')
+            for target in targets:
+                target.hidden_items.remove(*active_ids)
+                target.hidden_items.add(*hidden_ids)
+        return _builder_response(request, pk, message='Настройки сохранены.')
     return render(request, 'worksheets/_recipient_visibility.html', {
         'recipient_label': label, 'options': options, 'action': request.path,
+        'assignment': recipient if kind == 'assignment' else None,
+        'members': members, 'worksheet': worksheet,
+        'status_choices': Assignment.STATUS_CHOICES,
     })
 
 

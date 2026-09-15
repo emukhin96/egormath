@@ -178,3 +178,47 @@ class RecipientControlsTests(TestCase):
             assignment = ws.assignments.get(student=second)
             self.assertTrue(assignment.recipient_origin_known)
             self.assertEqual(list(assignment.source_groups.all()), [group])
+
+    def test_group_preserves_mixed_visibility_until_changed(self):
+        second = make_student(self.teacher, 'second_group_student')
+        other = Assignment.objects.create(worksheet=self.ws, student=second, assigned_by=self.teacher)
+        group = StudentGroup.objects.create(teacher=self.teacher, name='Общая группа')
+        group.students.add(self.student, second)
+        self.assignment.hidden_items.add(self.items[0])
+        url = self.visibility_url('group', group)
+        self.assertContains(self.client.get(url), 'data-mixed')
+        self.assertTrue(self.post(url, {'unchanged_items': [self.items[0].pk]}).json()['ok'])
+        self.assertEqual(set(self.assignment.hidden_items.all()), set(self.items))
+        self.assertEqual(list(other.hidden_items.all()), [self.items[1]])
+        self.assertTrue(self.post(url, {'visible_items': [i.pk for i in self.items]}).json()['ok'])
+        self.assertFalse(self.assignment.hidden_items.exists())
+        self.assertFalse(other.hidden_items.exists())
+        self.client.force_login(make_teacher('outsider_group_teacher'))
+        self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_invalid_status_keeps_visibility_and_valid_status_saves_together(self):
+        url = self.visibility_url('assignment', self.assignment)
+        self.assignment.hidden_items.add(self.items[0])
+        for status in ('unknown', Assignment.STATUS_REVIEWED):
+            self.assertEqual(self.post(url, {'status': status}).status_code, 400)
+            self.assertEqual(list(self.assignment.hidden_items.all()), [self.items[0]])
+        self.assertTrue(self.post(url, {'status': Assignment.STATUS_SUBMITTED,
+                                       'visible_items': [self.items[0].pk]}).json()['ok'])
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.status, Assignment.STATUS_SUBMITTED)
+        self.assertIsNotNone(self.assignment.submitted_at)
+        self.assertEqual(list(self.assignment.hidden_items.all()), [self.items[1]])
+
+    def test_status_cell_and_link_toggle_return_json(self):
+        url = reverse('assignment_status_update', args=[self.assignment.pk])
+        self.assertEqual(self.post(url, {'status': 'reviewed'}).status_code, 400)
+        self.assertTrue(self.post(url, {'status': 'submitted'}).json()['ok'])
+        self.assertTrue(self.post(url, {'status': 'reviewed'}).json()['ok'])
+        response = self.post(reverse('share_toggle', args=[self.ws.pk, self.link.pk]), {})
+        self.assertFalse(response.json()['is_active'])
+        self.link.refresh_from_db()
+        self.assertFalse(self.link.is_active)
+        response = self.client.get(reverse('worksheet_detail', args=[self.ws.pk]))
+        self.assertContains(response, 'data-progress-cell="status-')
+        self.assertContains(response, 'contenteditable="plaintext-only"', count=2)
+        self.assertNotContains(response, 'Полный экран прогресса')

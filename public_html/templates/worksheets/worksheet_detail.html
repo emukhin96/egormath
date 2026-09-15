@@ -10,16 +10,16 @@
 {# Заголовок и подзаголовок редактируются кликом по тексту (builder.js) #}
 <div class="worksheet-title-row">
 <h1 class="ws-title">
-  <span class="ws-editable" data-edit="title" tabindex="0" role="button"
+  <span class="ws-editable" data-edit="title" contenteditable="plaintext-only" role="textbox" aria-label="Название листка"
         title="Нажмите, чтобы переименовать">{{ worksheet.title }}</span>
   <input class="ws-title-input" data-edit-input="title" form="title-inline-form"
-         type="text" name="title" value="{{ worksheet.title }}" maxlength="190"
+         type="hidden" name="title" value="{{ worksheet.title }}" maxlength="190"
          required hidden>
-  <span class="muted ws-editable" data-edit="grade_label" tabindex="0" role="button"
+  <span class="muted ws-editable" data-edit="grade_label" contenteditable="plaintext-only" role="textbox" aria-label="Подзаголовок"
         data-placeholder="подзаголовок…"
-        title="Нажмите, чтобы изменить подзаголовок">{{ worksheet.grade_label|default:'подзаголовок…' }}</span>
+        title="Нажмите, чтобы изменить подзаголовок">{{ worksheet.grade_label }}</span>
   <input class="ws-subtitle-input" data-edit-input="grade_label" form="subtitle-inline-form"
-         type="text" name="grade_label" value="{{ worksheet.grade_label }}"
+         type="hidden" name="grade_label" value="{{ worksheet.grade_label }}"
          maxlength="100" hidden>
 </h1>
 {% if request.user.is_superuser %}<p class="page-subtitle">Владелец: {{ worksheet.owner.get_full_name|default:worksheet.owner.username }}</p>{% endif %}
@@ -323,28 +323,14 @@
   <a class="btn" href="{% url 'assignment_create' %}?worksheet={{ worksheet.pk }}">Выдать задание</a>
 
   {% if assignments %}
-  <h2>Видимые номера для учеников</h2>
-  <p class="helptext">Выберите ученика и отметьте номера, которые ему показывать.</p>
-  {% for section in assignment_groups %}
-  <details class="ws-recipient-group">
-    <summary>{{ section.group.name }} · {{ section.assignments|length }}</summary>
-    <div class="form-buttons">
-      {% for a in section.assignments %}{% include 'worksheets/_recipient_button.html' %}{% endfor %}
-    </div>
-  </details>
-  {% endfor %}
-  <div class="form-buttons">
-    {% for a in individual_assignments %}{% include 'worksheets/_recipient_button.html' %}{% endfor %}
-  </div>
-  <h2>Назначения</h2>
-  <p><a class="btn btn-secondary" href="{% url 'worksheet_progress' worksheet.pk %}">Полный экран прогресса</a></p>
+  <h2><a href="{% url 'worksheet_progress' worksheet.pk %}">Прогресс</a></h2>
   <div data-progress-table data-progress-url="{% url 'worksheet_progress' worksheet.pk %}?manage=1">
     {% include 'assignments/_progress_table.html' with people=progress_people point_groups=point_groups manage_status=True %}
   </div>
   {% include 'assignments/_progress_dialog.html' %}
   {% for a in assignments %}
   <dialog id="assignment-status-{{ a.pk }}" class="dialog">
-    <form method="post" action="{% url 'assignment_status_update' a.pk %}">
+    <form method="post" action="{% url 'assignment_status_update' a.pk %}" data-builder-action>
       {% csrf_token %}
       <div class="dialog-heading"><h3>{{ a.student.get_full_name|default:a.student.username }}</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
       <label for="assignment-status-choose-{{ a.pk }}">Статус работы</label>
@@ -362,21 +348,25 @@
   <h2>Публичные ссылки</h2>
   {% for link in share_links %}
   <div class="ws-share-link">
-    <a href="{% url 'public_worksheet' link.token %}" class="mono ws-share-url" target="_blank" rel="noopener">{{ request.scheme }}://{{ request.get_host }}{% url 'public_worksheet' link.token %}</a>
-    {% if not link.is_active %}<span class="badge badge-returned">отключена</span>{% endif %}
-    <form method="post" action="{% url 'share_comment' worksheet.pk link.pk %}" data-autosave="debounce" class="ws-share-comment">
-      {% csrf_token %}
-      <label for="share-comment-{{ link.pk }}">Комментарий для себя</label>
-      <input type="text" name="comment" id="share-comment-{{ link.pk }}" maxlength="500" value="{{ link.comment }}" placeholder="Например: Анна, дополнительная практика">
-      <span class="helptext">Виден только учителю. Сохраняется автоматически.</span>
-    </form>
-    <div class="form-buttons">
-      <button type="button" class="btn btn-small btn-secondary" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'link' link.pk %}">Видимые номера</button>
-      <form method="post" action="{% url 'share_toggle' worksheet.pk link.pk %}" class="inline-form">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-small btn-secondary">{% if link.is_active %}Отключить{% else %}Включить{% endif %}</button>
+    <div class="ws-share-heading">
+      <a href="{% url 'public_worksheet' link.token %}" class="mono ws-share-url" target="_blank" rel="noopener">{{ request.scheme }}://{{ request.get_host }}{% url 'public_worksheet' link.token %}</a>
+      <button type="button" class="btn btn-small btn-secondary" data-share-copy>скопировать</button>
+      <span data-share-comment-text{% if not link.comment %} hidden{% endif %}>({{ link.comment }})</span>
+      <span data-share-disabled class="badge badge-returned"{% if link.is_active %} hidden{% endif %}>отключена</span>
+    </div>
+    <div class="task-meta worksheet-task-meta">
+      <button type="button" class="link-btn" data-share-edit>комментарий</button><span>·</span>
+      <button type="button" class="link-btn" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'link' link.pk %}">видимые номера</button><span>·</span>
+      <form method="post" action="{% url 'share_toggle' worksheet.pk link.pk %}" class="inline-form" data-share-toggle>
+        {% csrf_token %}<button type="submit" class="link-btn">{% if link.is_active %}отключить{% else %}включить{% endif %}</button>
       </form>
     </div>
+    <form method="post" action="{% url 'share_comment' worksheet.pk link.pk %}" class="ws-share-comment" data-share-comment hidden>
+      {% csrf_token %}
+      <input type="text" name="comment" maxlength="500" value="{{ link.comment }}" aria-label="Комментарий к ссылке">
+      <button type="submit" class="btn btn-small">Сохранить</button>
+      <button type="button" class="link-btn" data-share-cancel>отмена</button>
+    </form>
   </div>
   {% endfor %}
   <form method="post" action="{% url 'share_create' worksheet.pk %}">
@@ -426,8 +416,8 @@
 <script defer src="{% static 'js/problem_editor.js' %}?v=3"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=3"></script>
-<script defer src="{% static 'js/builder.js' %}?v=8"></script>
-<script defer src="{% static 'js/worksheet_controls.js' %}?v=1"></script>
+<script defer src="{% static 'js/builder.js' %}?v=9"></script>
+<script defer src="{% static 'js/worksheet_controls.js' %}?v=2"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
 {% if assignments %}<script defer src="{% static 'js/teacher_progress.js' %}?v=6"></script>{% endif %}
 {% endblock %}
