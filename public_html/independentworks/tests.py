@@ -46,6 +46,60 @@ class IndependentWorkTests(TestCase):
     def url(self, name, *args):
         return reverse('independentworks:' + name, args=args)
 
+    def test_replacement_preview_keeps_old_plan_but_blocks_old_issue(self):
+        first = svc.prepare(self.work, self.teacher, [self.student.pk])
+        old_plan = first.plan
+        with self.assertRaises(svc.WorkError):
+            svc.prepare(self.work, self.teacher, [], previous=first)
+        first.refresh_from_db()
+        self.assertIsNone(first.superseded_at)
+        second = svc.prepare(self.work, self.teacher, [self.student.pk], duration=20, previous=first)
+        first.refresh_from_db()
+        self.assertIsNotNone(first.superseded_at)
+        self.assertEqual(first.plan, old_plan)
+        with self.assertRaises(svc.WorkError):
+            svc.issue(first.pk)
+        with self.assertRaises(svc.WorkError):
+            svc.prepare(self.work, self.teacher, [self.student.pk], previous=first)
+        svc.issue(second.pk)
+        with self.assertRaises(svc.WorkError):
+            svc.prepare(self.work, self.teacher, [self.student.pk], previous=second)
+        second.refresh_from_db()
+        self.assertIsNone(second.superseded_at)
+        self.assertEqual(second.attempts.count(), 1)
+        self.assertEqual(svc.issue(second.pk).pk, second.pk)
+
+    def test_resume_deadline_native_format_and_replacement(self):
+        deadline = (timezone.now() + timedelta(days=1)).replace(second=0, microsecond=0)
+        first = svc.prepare(self.work, self.teacher, [self.student.pk], deadline=deadline)
+        self.client.force_login(self.teacher)
+        url = reverse('assignment_create') + f'?mode=independent&work={self.work.pk}&resume={first.pk}'
+        response = self.client.get(url)
+        value = timezone.localtime(deadline).strftime('%Y-%m-%dT%H:%M')
+        self.assertContains(response, f'value="{value}"')
+        response = self.client.post(url, {'duration': 40, 'deadline': value, 'students': [self.student.pk], 'allow_photos': 'on', 'release_mode': 'manual'})
+        self.assertEqual(response.status_code, 302)
+        first.refresh_from_db()
+        self.assertIsNotNone(first.superseded_at)
+        from .models import Run
+        self.assertEqual(Run.objects.latest('pk').deadline, deadline)
+
+    def test_catalog_redirect_keeps_student_kind(self):
+        self.client.force_login(self.student)
+        self.assertRedirects(self.client.get(self.url('catalog')), reverse('dashboard') + '?kind=independent')
+
+    def test_global_stats_reuse_loaded_runs_despite_search(self):
+        from .integration import assignment_groups, assignment_runs
+        self.issued()
+        runs = assignment_runs(self.teacher, {})
+        with self.assertNumQueries(0):
+            self.assertEqual(assignment_groups(self.teacher, {'q': 'Не совпадает'}, runs=runs), [])
+            self.assertEqual(assignment_groups(self.teacher, {}, runs=runs)[0]['students_total'], 1)
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse('assignment_list'), {'q': 'Не совпадает', 'kind': 'independent'})
+        self.assertEqual(response.context['stats']['total'], 1)
+        self.assertEqual(len(response.context['page'].object_list), 0)
+
     def test_common_review_dialog_and_independent_comment_save(self):
         a = self.begin()
         point = a.variant.points.get()
@@ -663,6 +717,32 @@ class ConcurrentWorkTests(TransactionTestCase):
         self.ids = list(self.run.attempts.values_list('pk', flat=True))
         self.point_ids = list(self.run.variants.get().points.values_list('pk', flat=True))
         self.point_id = self.point_ids[0]
+
+    def test_parallel_issue_and_preview_replacement(self):
+        from threading import Barrier
+        from .models import Run
+        old = svc.prepare(self.run.work, self.teacher, [self.students[0].pk])
+        barrier = Barrier(2)
+        def operation(replace):
+            close_old_connections()
+            try:
+                barrier.wait(timeout=10)
+                if replace:
+                    svc.prepare(self.run.work, self.teacher, [self.students[0].pk], previous=old)
+                    return 'replaced'
+                svc.issue(old.pk)
+                return 'issued'
+            except svc.WorkError:
+                return 'conflict'
+            finally:
+                connections.close_all()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = list(pool.map(operation, [True, False]))
+        old.refresh_from_db()
+        self.assertEqual(outcomes.count('conflict'), 1)
+        self.assertNotEqual(bool(old.issued_at), bool(old.superseded_at))
+        self.assertEqual(old.attempts.count(), 1 if old.issued_at else 0)
+        self.assertEqual(Run.objects.filter(work=self.run.work).count(), 3 if old.superseded_at else 2)
 
     def test_30_students_save_with_monitoring(self):
         def student(attempt_id):

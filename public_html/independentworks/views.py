@@ -66,7 +66,7 @@ def own_attempt(request, pk, teacher=False):
 
 @enabled
 def catalog(request):
-    return redirect(reverse('assignment_list') + '?kind=independent') if get_role(request.user) == 'teacher' else redirect('dashboard')
+    return redirect(reverse('assignment_list') + '?kind=independent') if get_role(request.user) == 'teacher' else redirect(reverse('dashboard') + '?kind=independent')
 
 
 @enabled
@@ -204,7 +204,7 @@ def pick(request, pk):
         family_ids = set(base.task.analog_families.values_list('pk', flat=True))
         if base.task.variant_of_id:
             family_ids.update(base.task.variant_of.analog_families.values_list('pk', flat=True))
-        recommended = tasks.filter(analog_families__in=family_ids).exclude(pk=base.task_id).distinct()
+        recommended = Task.objects.filter(variant_of__isnull=True, analog_families__in=family_ids).exclude(pk=base.task_id).distinct().prefetch_related('subitems', 'images', 'familymember_set__family')
     if request.method == 'POST':
         task = get_object_or_404(Task, pk=request.POST.get('task'), variant_of__isnull=True)
         try:
@@ -295,6 +295,7 @@ def prepare_run(request, pk):
     if kind not in ('initial', 'correction', 'retake') or (kind == 'initial') != (parent is None):
         raise svc.WorkError('Неизвестный вид повторной попытки.')
     initial = {}
+    previous = None
     if request.GET.get('resume'):
         previous = teacher_run(request, request.GET['resume'])
         if previous.work_id != work.pk or previous.parent_id != (parent.pk if parent else None) or previous.kind != kind:
@@ -306,7 +307,7 @@ def prepare_run(request, pk):
         data = dict(form.cleaned_data)
         students = [parent.student_id] if parent else form.recipients(request.user)
         data.pop('students'); data.pop('groups')
-        run = svc.prepare(work, request.user, students, parent=parent, kind=kind, **data)
+        run = svc.prepare(work, request.user, students, parent=parent, kind=kind, previous=previous, **data)
         return redirect('independentworks:preview', pk=run.pk)
     return render(request, 'assignments/assignment_create.html', {'independent': True, 'work': work, 'form': form, 'parent': parent, 'kind': kind, 'timezone': timezone.get_current_timezone_name()})
 

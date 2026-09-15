@@ -47,3 +47,18 @@ class BuilderTests(TestCase):
         self.assertNotContains(ordinary, 'id_duration')
         with override_settings(INDEPENDENT_WORKS_ENABLED=False):
             self.assertEqual(self.client.get(reverse('assignment_create'), {'mode': 'independent'}).status_code, 404)
+
+    def test_recommendations_survive_catalog_filters(self):
+        from .models import Family
+        teacher = get_user_model().objects.create_superuser('recommend_teacher')
+        self.client.force_login(teacher)
+        work = Work.objects.create(owner=teacher, title='Рекомендации')
+        position = Position.objects.create(work=work)
+        base = Task.objects.create(text_latex='Исходная', grade_level=9)
+        analog = Task.objects.create(text_latex='Связанный аналог', grade_level=8)
+        Candidate.objects.create(position=position, task=base)
+        family = Family.objects.create(key='manual:recommend', title='Пара')
+        family.tasks.add(base, analog)
+        response = self.client.get(reverse('independentworks:pick', args=[position.pk]), {'q': str(base.pk), 'grade': '9'})
+        self.assertEqual(list(response.context['page']), [base])
+        self.assertEqual(list(response.context['recommended']), [analog])

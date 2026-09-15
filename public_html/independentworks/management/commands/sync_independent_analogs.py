@@ -16,7 +16,7 @@ class Command(BaseCommand):
             self.stdout.write(json.dumps(report, ensure_ascii=False, indent=2))
             return
         self.stdout.write(('Предварительный отчёт. ' if options['dry_run'] else '') +
-            f"Семейств: {report['families']}; новых: {report['created']}; новых участников: {report['members_added']}")
+            f"Семейств: {report['families']}; новых: {report['created']}; новых участников: {report['members_added']}; уточнённых ключей: {report['keys_updated']}")
         for category, label in [('incomplete', 'Неполные пары'), ('ambiguous', 'Неоднозначности')]:
             self.stdout.write(f'{label}: {len(report[category])}')
             for message in report[category]:

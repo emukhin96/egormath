@@ -2,6 +2,7 @@
 {% load task_extras %}
 {% block content %}
 <div class="page-head"><div><h1>{{ run.title }} · перед выдачей</h1><p>{{ recipients|length }} учеников · {{ variants|length }} вариантов · {{ run.duration }} мин.</p></div></div>
+{% if run.superseded_at %}<p class="msg msg-warning">Этот предпросмотр заменён новым. Выдача из него недоступна; откройте актуальный предпросмотр.</p>{% endif %}
 {% if run.plan.shortage or run.plan.repeats %}<p class="msg msg-warning">Есть повторные варианты или ранее выданные пункты. Проверьте распределение и состав ниже.</p>{% endif %}
 <details><summary>Распределение по ученикам</summary>
 <form method="post" class="form-section">{% csrf_token %}

@@ -241,7 +241,7 @@ def correction_fingerprint(parent):
 
 
 def prepare(work, owner, students, duration=40, deadline=None, max_variants=None,
-            allow_photos=True, release_mode='manual', release_flags=None, parent=None, kind='initial'):
+            allow_photos=True, release_mode='manual', release_flags=None, parent=None, kind='initial', previous=None):
     if kind not in ('initial', 'correction', 'retake') or (kind == 'initial') != (parent is None):
         raise WorkError('Исходная попытка нужна только для исправления или пересдачи.')
     if parent is not None and parent.run.work_id != work.pk:
@@ -290,11 +290,21 @@ def prepare(work, owner, students, duration=40, deadline=None, max_variants=None
     assignment = {str(student): i % len(variants) + 1 for i, student in enumerate(shuffled)}
     plan = {'variants': variants, 'students': assignment, 'notes': notes, 'shortage': shortage,
             'repeats': repeats, 'seed': seed}
-    return Run.objects.create(work=work, owner=owner, title=work.title, duration=duration,
-                              deadline=deadline, max_variants=max_variants, allow_photos=allow_photos,
-                              release_mode=release_mode, release_flags=flags,
-                              fingerprint=correction_fingerprint(parent) if kind == 'correction' else digest(data),
-                              plan=plan, kind=kind, parent=parent)
+    with transaction.atomic():
+        if previous is not None:
+            previous = Run.objects.select_for_update().get(pk=previous.pk)
+            if (previous.work_id != work.pk or previous.owner_id != owner.pk
+                    or previous.parent_id != (parent.pk if parent else None) or previous.kind != kind):
+                raise WorkError('Предпросмотр относится к другой выдаче.', 409)
+            if previous.issued_at or previous.superseded_at:
+                raise WorkError('Предпросмотр уже выдан или заменён. Откройте актуальную выдачу.', 409)
+            previous.superseded_at = timezone.now()
+            previous.save(update_fields=['superseded_at'])
+        return Run.objects.create(work=work, owner=owner, title=work.title, duration=duration,
+                                  deadline=deadline, max_variants=max_variants, allow_photos=allow_photos,
+                                  release_mode=release_mode, release_flags=flags,
+                                  fingerprint=correction_fingerprint(parent) if kind == 'correction' else digest(data),
+                                  plan=plan, kind=kind, parent=parent)
 
 
 def issue(run_id, confirm=False):
@@ -317,6 +327,8 @@ def _issue(run_id, confirm, written):
     run = Run.objects.select_for_update().select_related('work', 'parent').get(pk=run_id)
     if run.issued_at:
         return run
+    if run.superseded_at:
+        raise WorkError('Предпросмотр заменён новым. Выдайте актуальный просмотренный вариант.', 409)
     if run.deadline and run.deadline <= timezone.now():
         raise WorkError('Срок уже прошёл. Подготовьте новое проведение.')
     current = correction_fingerprint(run.parent) if run.kind == 'correction' else digest(material(run.work))

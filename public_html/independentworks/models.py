@@ -69,6 +69,7 @@ class Run(models.Model):
     fingerprint = models.CharField(max_length=64)
     issued_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
+    superseded_at = models.DateTimeField(null=True, blank=True)
     kind = models.CharField(max_length=12, default='initial')
     parent = models.ForeignKey('Attempt', null=True, blank=True, on_delete=models.PROTECT, related_name='followup_runs')
     created_at = models.DateTimeField(auto_now_add=True)

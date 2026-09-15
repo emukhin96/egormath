@@ -167,18 +167,19 @@ def assignment_list(request):
         submitted_total=Count('pk', filter=Q(status=Assignment.STATUS_SUBMITTED)),
         reviewed_total=Count('pk', filter=Q(status=Assignment.STATUS_REVIEWED)),
         queue_priority=Min('queue_order')).order_by('queue_priority', '-last_assigned', 'worksheet_id')
-    from independentworks.integration import assignment_groups
+    from independentworks.integration import assignment_groups, assignment_runs
     kind = request.GET.get('kind', '')
     grouped = list(grouped) if kind != 'independent' else []
     for group in grouped:
         group['kind'] = 'ordinary'
         group['key'] = f"ordinary-{group['worksheet_id']}"
-    independent_groups = assignment_groups(request.user, request.GET)
+    independent_runs = assignment_runs(request.user, request.GET)
+    independent_groups = assignment_groups(request.user, request.GET, runs=independent_runs)
     grouped += independent_groups
     grouped.sort(key=lambda g: (g['queue_priority'], -g['last_assigned'].timestamp(), g['key']))
     if kind == 'independent':
         stats = dict.fromkeys(stats, 0)
-    for group in assignment_groups(request.user, {'kind': kind, 'owner': owner_id}):
+    for group in assignment_groups(request.user, {'kind': kind, 'owner': owner_id}, runs=independent_runs):
         stats['total'] += group['students_total']
         stats['submitted'] += group['submitted_total']
         stats['reviewed'] += group['reviewed_total']

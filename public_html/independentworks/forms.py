@@ -14,7 +14,7 @@ class RunForm(forms.Form):
     students = StudentChoiceField(label='Отдельные ученики', queryset=Profile.objects.none(), required=False, widget=forms.CheckboxSelectMultiple)
     groups = forms.ModelMultipleChoiceField(label='Группы', queryset=StudentGroup.objects.none(), required=False, widget=forms.CheckboxSelectMultiple)
     duration = forms.IntegerField(label='Длительность, минут', min_value=1, max_value=1440, initial=40)
-    deadline = forms.DateTimeField(label='Общее окончание (необязательно)', required=False, widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}))
+    deadline = forms.DateTimeField(label='Общее окончание (необязательно)', required=False, input_formats=['%Y-%m-%dT%H:%M', '%Y-%m-%dT%H:%M:%S'], widget=forms.DateTimeInput(format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}))
     max_variants = forms.IntegerField(label='Максимум вариантов (пусто — каждому свой)', required=False, min_value=1)
     allow_photos = forms.BooleanField(label='Принимать фотографии', required=False, initial=True)
     release_mode = forms.ChoiceField(label='Публикация', choices=[('manual', 'После одобрения учителя'), ('auto', 'Сразу после сдачи')])

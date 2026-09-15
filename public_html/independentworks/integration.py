@@ -46,14 +46,22 @@ def student_assignments(user):
     return rows
 
 
-def assignment_groups(user, params):
+def assignment_runs(user, params):
     if not settings.INDEPENDENT_WORKS_ENABLED or params.get('kind') == 'ordinary':
         return []
-    runs = Run.objects.filter(work__in=Work.visible_to(user), issued_at__isnull=False).select_related('owner').prefetch_related('attempts__student', 'attempts__answers', 'attempts__variant__points')
+    runs = Run.objects.filter(work__in=Work.visible_to(user), issued_at__isnull=False).select_related('owner', 'work').prefetch_related('attempts__student', 'attempts__answers', 'attempts__variant__points')
     if params.get('owner', '').isdigit() and user.is_superuser:
         runs = runs.filter(owner_id=params['owner'])
+    return list(runs)
+
+
+def assignment_groups(user, params, *, runs=None):
+    if not settings.INDEPENDENT_WORKS_ENABLED or params.get('kind') == 'ordinary':
+        return []
+    if runs is None:
+        runs = assignment_runs(user, params)
     if params.get('worksheet', '').isdigit():
-        runs = runs.filter(work__source_worksheet_id=params['worksheet'])
+        runs = [r for r in runs if r.work.source_worksheet_id == int(params['worksheet'])]
     rows = []
     now = timezone.now()
     for run in runs:
