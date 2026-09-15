@@ -70,7 +70,11 @@ def worksheet_list(request):
                       collection__isnull=True)
                   .select_related('owner')
                   .prefetch_related('topics', 'grade_bands')
-                  .annotate(items_total=models.Count('items', distinct=True),
+                  .annotate(items_total=models.Count(
+                      'items',
+                      filter=(models.Q(items__deleted_at__isnull=True)
+                              & models.Q(items__task__isnull=False)),
+                      distinct=True),
                             was_assigned=models.Exists(Assignment.objects.filter(
                                 worksheet_id=models.OuterRef('pk')))))
 
