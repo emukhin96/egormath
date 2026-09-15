@@ -956,6 +956,24 @@ class WorksheetViewTests(TestCase):
         self.assertIsNone(item.deleted_at)
         self.assertContains(restore, 'Задача возвращена в листок.')
 
+    def test_removed_task_is_not_counted_and_can_be_deleted(self):
+        """Корзина листка не влияет на счётчик и не блокирует удаление задачи."""
+        self.login_teacher()
+        item = self.worksheet.items.order_by('order').first()
+        task = item.task
+        self.client.post(reverse(
+            'worksheet_remove_item', args=[self.worksheet.pk, item.pk]))
+
+        listed = self.client.get(reverse('worksheet_list'))
+        listed_worksheet = next(
+            worksheet for worksheet in listed.context['worksheets']
+            if worksheet.pk == self.worksheet.pk)
+        self.assertEqual(listed_worksheet.items_total, 1)
+
+        task.delete()
+        self.assertFalse(self.worksheet.items.filter(pk=item.pk).exists())
+        self.assertEqual(self.worksheet.ordered_items().count(), 1)
+
     def test_undo_remains_available_while_item_is_trashed(self):
         self.login_teacher()
         item = self.worksheet.items.order_by('order').first()

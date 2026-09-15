@@ -179,7 +179,7 @@ class WorksheetItem(models.Model):
         Worksheet, on_delete=models.CASCADE, related_name='items',
         verbose_name='Листок')
     task = models.ForeignKey(
-        Task, on_delete=models.PROTECT, related_name='worksheet_items',
+        Task, on_delete=models.CASCADE, related_name='worksheet_items',
         null=True, blank=True, verbose_name='Задача')
     text_latex = models.TextField(
         'Произвольный текст (LaTeX)', blank=True,
