@@ -370,9 +370,11 @@ def assignment_create(request):
         work_id = request.POST.get('work') or request.GET.get('work')
         if work_id:
             return prepare_run(request, work_id)
+        works = Work.visible_to(request.user).select_related('source_worksheet').filter(title__icontains=request.GET.get('q', '').strip()).annotate(
+            number_count=Count('positions', filter=Q(positions__text='') | Q(positions__candidates__isnull=False), distinct=True)).order_by('-updated_at', '-pk')
         return render(request, 'assignments/assignment_create.html', {
             'independent': True, 'choose_work': True,
-            'work_options': Work.visible_to(request.user).order_by('-updated_at')})
+            'work_options': Paginator(works, 30).get_page(request.GET.get('page'))})
     initial = {'allow_photos': True}
     worksheet_id = request.GET.get('worksheet', '')
     if worksheet_id.isdigit():

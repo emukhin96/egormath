@@ -1,6 +1,8 @@
 {% load task_extras %}
 <article class="card form-section" data-task-row>
-{% for member in task.familymember_set.all %}<p class="helptext">{{ member.family.title }}{% for evidence in member.evidence %} · {{ evidence.path|join:" / " }}{% if evidence.locator %} · {{ evidence.locator }}{% endif %}{% endfor %}</p>{% endfor %}
+<div class="iw-workspace-heading"><h3>Задача #{{ task.pk }}</h3>{% if candidate %}<span class="muted">В пуле</span>{% endif %}</div>
+<details class="problem-section"><summary>Основание связи</summary>{% for member in task.familymember_set.all %}<p class="helptext">{{ member.family.title }}{% for evidence in member.evidence %} · {{ evidence.path|join:" / " }}{% if evidence.locator %} · {{ evidence.locator }}{% endif %}{% endfor %}</p>{% endfor %}
+</details>
 {% include 'problems/_catalog_content.html' with selecting=True %}
 <form method="post">{% csrf_token %}
 <input type="hidden" name="task" value="{{ task.pk }}">
@@ -12,6 +14,6 @@
 {% endif %}
 <div class="form-buttons"><button class="btn">{% if candidate %}Сохранить подпункты{% else %}Добавить в пул{% endif %}</button><a class="btn btn-secondary" href="{% url 'task_detail' task.pk %}" target="_blank" rel="noopener">Открыть задачу #{{ task.pk }}</a></div>
 </form>
-<details><summary>Маски ответов</summary><p>{{ task.answer_mask|default:'Нет маски задачи' }}</p>{% for part in task.subitems.all %}<p>{{ forloop.counter }}: {{ part.answer_mask|default:'Ручная проверка' }}</p>{% endfor %}</details>
+<details class="problem-section"><summary>Маски ответов</summary><p>{{ task.answer_mask|default:'Нет маски задачи' }}</p>{% for part in task.subitems.all %}<p>{{ forloop.counter }}: {{ part.answer_mask|default:'Ручная проверка' }}</p>{% endfor %}</details>
 <form method="post" action="{% url 'independentworks:create_analog' position.pk task.pk %}">{% csrf_token %}<button class="btn btn-secondary">Создать аналог вручную</button></form>
 </article>

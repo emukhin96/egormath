@@ -72,7 +72,7 @@ def catalog(request):
 @enabled
 @teacher_required
 def create(request):
-    form = WorkForm(request.POST or None)
+    form = WorkForm(request.POST or None, initial={'title': request.GET.get('title', '')})
     sheets = Worksheet.visible_to(request.user).order_by('-updated_at')
     collections = Collection.objects.select_related('worksheet').filter(is_published=True).order_by('source_id', 'order')
     selected_sheet = request.GET.get('worksheet', '')
@@ -80,6 +80,19 @@ def create(request):
         from .preparation import ziv_rows, selection_fingerprint, from_worksheet
         sheet_id = request.POST.get('worksheet')
         collection_id = request.POST.get('collection')
+        source_mode = request.POST.get('source_mode')
+        if source_mode == 'blank':
+            sheet_id = collection_id = None
+        elif source_mode == 'sheet':
+            collection_id = None
+            if not sheet_id:
+                raise svc.WorkError('Выберите исходный листок.')
+        elif source_mode == 'collection':
+            sheet_id = None
+            if not collection_id:
+                raise svc.WorkError('Выберите подборку.')
+        elif source_mode:
+            raise svc.WorkError('Неизвестный источник шаблона.')
         sheet = get_object_or_404(sheets, pk=sheet_id) if sheet_id else None
         rows = None
         if collection_id:
@@ -104,7 +117,7 @@ def create(request):
                         'source_rows': rows, 'selection': fingerprint})
         work = from_worksheet(sheet, request.user, form.cleaned_data['title'], rows)
         return redirect('independentworks:edit', pk=work.pk)
-    return render(request, 'independentworks/create.html', {'form': form, 'worksheets': sheets[:150], 'collections': collections, 'selected_sheet': selected_sheet})
+    return render(request, 'independentworks/create.html', {'form': form, 'worksheets': sheets[:150], 'collections': collections, 'selected_sheet': request.POST.get('worksheet', selected_sheet), 'selected_collection': request.POST.get('collection', request.GET.get('collection', '')), 'selected_pair': request.POST.get('pair', request.GET.get('pair', '1')), 'source_mode': request.POST.get('source_mode', request.GET.get('source_mode', 'sheet' if selected_sheet else 'blank'))})
 
 
 @enabled
@@ -122,7 +135,7 @@ def edit(request, pk):
                 form.save()
             elif action == 'add':
                 order = (work.positions.aggregate(n=Max('order'))['n'] or 0) + 1
-                Position.objects.create(work=work, order=order, text=request.POST.get('text', ''))
+                new_position = Position.objects.create(work=work, order=order, text=request.POST.get('text', ''))
             elif action == 'remove':
                 get_object_or_404(work.positions, pk=request.POST.get('position')).delete()
             elif action == 'candidate_remove':
@@ -154,8 +167,12 @@ def edit(request, pk):
                 raise svc.WorkError('Неизвестное действие.')
             work.save(update_fields=['updated_at'])
         messages.success(request, 'Сохранено')
+        if action == 'add':
+            params = request.GET.copy()
+            params['position'] = new_position.pk
+            return redirect(reverse('independentworks:edit', args=[work.pk]) + '?' + params.urlencode())
         return redirect(request.get_full_path())
-    positions = list(work.positions.prefetch_related('candidates__task__subitems'))
+    positions = list(work.positions.prefetch_related('candidates__task__subitems', 'candidates__task__images'))
     number = 0
     for p in positions:
         p.rows = list(p.candidates.all())
@@ -168,7 +185,11 @@ def edit(request, pk):
             candidate.selected = svc.selected(candidate)
             candidate.point_count = len(candidate.selected) or 1
             candidate.mask_count = 0 if candidate.task.full_answer_only else sum(o.has_mask for o in (candidate.selected or [candidate.task]))
-    return render(request, 'independentworks/edit.html', {'work': work, 'positions': positions, 'preparation_query': preparation_query(request)})
+        counts = sorted({c.point_count for c in p.rows})
+        p.point_summary = ' / '.join(str(n) for n in counts) or '—'
+        p.needs_manual = any(c.mask_count < c.point_count for c in p.rows)
+    selected = next((p for p in positions if str(p.pk) == request.GET.get('position')), positions[0] if positions else None)
+    return render(request, 'independentworks/edit.html', {'work': work, 'positions': positions, 'selected_position': selected, 'preparation_query': preparation_query(request)})
 
 
 @enabled
@@ -234,7 +255,7 @@ def pick(request, pk):
     from django.core.paginator import Paginator
     page = Paginator(tasks.order_by('-pk'), 15).get_page(request.GET.get('page'))
     context = taxonomy_page_context(filter_state_from_params(request.GET))
-    context.update({'position': position, 'base': base, 'recommended': recommended[:30], 'page': page, 'q': query,
+    context.update({'picker_tab': request.GET.get('tab', 'catalog' if any(k in request.GET for k in ('q', 'grade', 'topic')) or not base else 'recommended'), 'position': position, 'base': base, 'recommended': recommended[:30], 'page': page, 'q': query,
                     'params': request.GET, 'preparation_query': preparation_query(request), 'grade_choices': Task.GRADE_CHOICES,
                     'selected_candidates': position.candidates.select_related('task').prefetch_related('task__subitems', 'task__images')})
     return render(request, 'independentworks/pick.html', context)

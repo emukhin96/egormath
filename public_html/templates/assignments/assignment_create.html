@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+{% extends 'base.html' %}{% load static %}
 {% block title %}Выдать задание — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/assignment_create.html' %}{% endblock %}
 {% block content %}
@@ -13,7 +13,10 @@
 
 {% if independentworks_enabled %}<div class="form-buttons"><a class="btn btn-secondary" href="{% url 'assignment_create' %}">Обычное задание</a><a class="btn btn-secondary" href="{% url 'assignment_create' %}?mode=independent">Самостоятельная</a></div>{% endif %}
 {% if choose_work %}
-<form method="get" class="card form-section"><input type="hidden" name="mode" value="independent"><label>Шаблон<select name="work" required>{% for template in work_options %}<option value="{{ template.pk }}">{{ template.title }}</option>{% endfor %}</select></label><div class="form-buttons"><button class="btn">Продолжить</button><a class="btn btn-secondary" href="{% url 'independentworks:create' %}">Создать шаблон</a></div></form>
+<section class="card form-section"><div class="iw-workspace-heading"><h2>Шаблоны самостоятельных</h2><a class="btn" href="{% url 'independentworks:create' %}">Создать самостоятельную</a></div>
+<form method="get"><input type="hidden" name="mode" value="independent"><label>Поиск по названию<input name="q" value="{{ request.GET.q|default:'' }}" placeholder="Название самостоятельной"></label><div class="form-buttons"><button class="btn btn-secondary">Найти</button></div></form>
+<div class="progress-table-wrap"><table class="list"><thead><tr><th>Название</th><th>Номеров</th><th>Обновлено</th><th></th></tr></thead><tbody>{% for template in work_options %}<tr><td><a href="{% url 'independentworks:edit' template.pk %}">{{ template.title }}</a>{% if template.source_worksheet_id %}<div class="helptext">Из листка «{{ template.source_worksheet.title }}»</div>{% endif %}</td><td>{{ template.number_count }}</td><td>{{ template.updated_at|date:'d.m.Y' }}</td><td><a class="btn btn-secondary btn-small" href="{% url 'assignment_create' %}?mode=independent&amp;work={{ template.pk }}">Выбрать</a></td></tr>{% empty %}<tr><td colspan="4">Шаблоны не найдены. Создайте новую самостоятельную или измените поиск.</td></tr>{% endfor %}</tbody></table></div>
+{% include 'includes/pagination.html' with page=work_options query=request.GET %}</section>
 {% else %}
 <form method="post" class="assignment-create-form" id="assignment-create-form" data-fixed-recipients="{% if parent %}1{% else %}0{% endif %}"
       data-bound="{{ form.is_bound|yesno:'1,0' }}"
@@ -24,7 +27,7 @@
     <div>
       <section class="card form-section">
         <div class="form-section-head"><span class="form-step">1</span><div><h2>Что выдаём</h2><p class="helptext">{% if independent %}Независимый шаблон самостоятельной.{% else %}Можно выбрать только свой листок.{% endif %}</p></div></div>
-        {% if independent %}<h3>{{ work.title }}</h3><a href="{% url 'independentworks:edit' work.pk %}">Проверить кандидатов по номерам</a>{% else %}        {{ form.worksheet.errors }}
+        {% if independent %}<h3>{{ work.title }}</h3><a href="{% url 'independentworks:edit' work.pk %}{% if request.GET.resume %}?resume={{ request.GET.resume }}{% if parent %}&amp;parent={{ parent.pk }}&amp;kind={{ kind }}{% endif %}{% endif %}">Проверить кандидатов по номерам</a>{% else %}        {{ form.worksheet.errors }}
         {{ form.worksheet.label_tag }}
         {{ form.worksheet }}
         <p class="helptext">Если листок уже выдавался, прежний режим автосверки сохранится для всех учеников.</p>{% endif %}
