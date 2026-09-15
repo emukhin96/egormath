@@ -4531,6 +4531,8 @@
 }
 
 @layer components {
+  .iw-pool-layout .task-images img,
+  .iw-workspace-candidate .task-images img { border: 0; border-radius: 0; }
   .iw-candidate-used { background: var(--bg); }
   .iw-candidate-used fieldset { opacity: 0.6; }
 }
