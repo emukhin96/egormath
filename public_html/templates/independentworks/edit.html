@@ -1,13 +1,10 @@
 {% extends 'independentworks/base.html' %}
 {% load task_extras %}
 {% block content %}
-<div class="page-head"><div><span class="page-eyebrow">Состав самостоятельной</span><h1>{{ work.title }}</h1>{% if work.source_worksheet_id %}<p class="page-subtitle">На основе <a href="{% url 'worksheet_detail' work.source_worksheet_id %}">{{ work.source_worksheet.title }}</a>. Шаблон редактируется независимо.</p>{% else %}<p class="page-subtitle">Выберите номер в таблице, чтобы проверить условия, подпункты и кандидатов.</p>{% endif %}</div><a class="btn" href="{% url 'independentworks:prepare' work.pk %}{% if preparation_query %}?{{ preparation_query }}{% endif %}">Подготовить выдачу</a></div>
+<div class="page-head"><div><span class="page-eyebrow">Состав самостоятельной</span><h1>{{ work.title }}</h1>{% if work.source_worksheet_id %}<p class="page-subtitle">На основе <a href="{% url 'worksheet_detail' work.source_worksheet_id %}">{{ work.source_worksheet.title }}</a>. Шаблон редактируется независимо.</p>{% else %}<p class="page-subtitle">Все номера и утверждённые кандидаты. Для подбора аналогов откройте нужный номер.</p>{% endif %}</div><a class="btn" href="{% url 'independentworks:prepare' work.pk %}{% if preparation_query %}?{{ preparation_query }}{% endif %}">Подготовить выдачу</a></div>
 {% if positions %}
-<div class="card iw-workspace-overview"><div class="iw-workspace-heading"><h2>Состав работы</h2><span class="muted">Элементов: {{ positions|length }}</span></div><div class="progress-table-wrap"><table class="list"><thead><tr><th>Номер</th><th>Задание</th><th>Кандидаты</th><th>Пункты</th><th>Проверка</th><th></th></tr></thead><tbody>
-{% for p in positions %}<tr {% if p.pk == selected_position.pk %}class="iw-workspace-selected"{% endif %}><td>{% if p.rows or not p.text %}№{{ p.number }}{% else %}Пояснение{% endif %}</td><td>{% if p.rows %}{{ p.rows.0.task.text_latex|web_text|striptags|truncatechars:95 }}{% elif p.text %}{{ p.text|truncatechars:95 }}{% else %}<span class="muted">Добавьте первую задачу</span>{% endif %}</td><td>{{ p.rows|length }}</td><td>{{ p.point_summary }}</td><td>{% if not p.rows %}—{% elif p.mismatch and not p.mismatch_confirmed %}Разный объём{% elif p.needs_manual %}Есть ручная проверка{% else %}Автосверка{% endif %}</td><td><a class="btn btn-secondary btn-small" href="?position={{ p.pk }}{% if preparation_query %}&amp;{{ preparation_query }}{% endif %}" {% if p.pk == selected_position.pk %}aria-current="true"{% endif %}>{% if p.pk == selected_position.pk %}Открыто{% else %}Открыть{% endif %}</a></td></tr>{% endfor %}
-</tbody></table></div></div>
-{% with position=selected_position %}
-<section class="card iw-workspace-detail"><div class="ws-content">
+{% for position in positions %}
+<section class="card iw-workspace-detail" id="position-{{ position.pk }}"><div class="ws-content">
 <div class="form-buttons"><h2>{% if position.rows or not position.text %}№{{ position.number }} · кандидатов: {{ position.rows|length }}{% else %}Пояснение{% endif %}</h2>
 <form method="post">{% csrf_token %}<input type="hidden" name="position" value="{{ position.pk }}"><input type="hidden" name="action" value="move"><button class="icon-btn" name="direction" value="up" aria-label="Выше">↑</button><button class="icon-btn" name="direction" value="down" aria-label="Ниже">↓</button></form>
 <form method="post">{% csrf_token %}<input type="hidden" name="position" value="{{ position.pk }}"><button class="icon-btn" name="action" value="remove" aria-label="Удалить номер">×</button></form>
@@ -21,6 +18,7 @@
 {% if candidate.selected %}{% include 'problems/_subitems.html' with subitems=candidate.selected %}{% endif %}
 {% task_images candidate.task %}
 <details class="problem-section"><summary>Ответы и решения</summary>{% include 'problems/_task_answers.html' with task=candidate.task subitems=candidate.selected hide_answers=False %}</details>
+<details class="problem-section"><summary>Маски ответов</summary>{% if candidate.selected %}{% for part in candidate.selected %}<p>{{ forloop.counter }}: {{ part.answer_mask|default:"Ручная проверка" }}</p>{% endfor %}{% else %}<p>{{ candidate.task.answer_mask|default:"Ручная проверка" }}</p>{% endif %}</details>
 <p class="helptext">Пунктов: {{ candidate.point_count }} · автосверка: {{ candidate.mask_count }} из {{ candidate.point_count }}</p>
 <div class="form-buttons"><a href="{% url 'task_detail' candidate.task_id %}" target="_blank" rel="noopener">Задача #{{ candidate.task_id }}</a><form method="post">{% csrf_token %}<input type="hidden" name="candidate" value="{{ candidate.pk }}"><button class="icon-btn" name="action" value="candidate_remove" aria-label="Убрать кандидата">×</button></form></div>
 </article>
@@ -29,7 +27,7 @@
 {% if position.mismatch %}<div class="msg msg-warning">Разное число подпунктов.{% if position.mismatch_confirmed %} Подтверждено.{% else %}<form method="post">{% csrf_token %}<input type="hidden" name="position" value="{{ position.pk }}"><button class="btn btn-secondary" name="action" value="confirm">Подтверждаю различие объёма</button></form>{% endif %}</div>{% endif %}
 <div class="form-buttons"><a class="btn btn-secondary" href="{% url 'independentworks:pick' position.pk %}{% if preparation_query %}?{{ preparation_query }}{% endif %}">Кандидаты и подпункты</a></div>
 </div></section>
-{% endwith %}
+{% endfor %}
 {% else %}<section class="card empty-state"><h2>Добавьте первый номер</h2><p class="muted">Затем выберите задачу и её аналоги из базы.</p><form method="post">{% csrf_token %}<button class="btn" name="action" value="add">Добавить номер</button></form></section>{% endif %}
 {% if positions %}<div class="form-buttons"><form method="post">{% csrf_token %}<button class="btn" name="action" value="add">Добавить номер</button></form></div>{% endif %}
 <details class="card problem-section iw-workspace-settings"><summary>Добавить пояснение между номерами</summary><form method="post">{% csrf_token %}<label>Текст пояснения<textarea name="text" rows="2" required></textarea></label><div class="form-buttons"><button class="btn" name="action" value="add">Добавить пояснение</button></div></form></details>

@@ -221,11 +221,18 @@ def pick(request, pk):
     if query.isdigit():
         tasks = tasks.filter(pk=int(query))
     recommended = tasks.none()
+    same_topic = tasks.none()
+    topic_names = []
+    position.number = position.work.positions.filter(order__lte=position.order).filter(Q(text='') | Q(candidates__isnull=False)).distinct().count()
     if base:
         family_ids = set(base.task.analog_families.values_list('pk', flat=True))
         if base.task.variant_of_id:
             family_ids.update(base.task.variant_of.analog_families.values_list('pk', flat=True))
         recommended = Task.objects.filter(variant_of__isnull=True, analog_families__in=family_ids).exclude(pk=base.task_id).distinct().prefetch_related('subitems', 'images', 'familymember_set__family')
+        topics = list(base.task.topics.all())
+        topic_names = [topic.name for topic in topics]
+        same_topic = Task.objects.filter(variant_of__isnull=True, topics__in=topics).exclude(
+            pk__in=position.candidates.values('task_id')).exclude(pk__in=recommended.values('pk')).distinct().order_by('-pk').prefetch_related('subitems', 'images', 'familymember_set__family')
     if request.method == 'POST':
         task = get_object_or_404(Task, pk=request.POST.get('task'), variant_of__isnull=True)
         try:
@@ -255,7 +262,7 @@ def pick(request, pk):
     from django.core.paginator import Paginator
     page = Paginator(tasks.order_by('-pk'), 15).get_page(request.GET.get('page'))
     context = taxonomy_page_context(filter_state_from_params(request.GET))
-    context.update({'picker_tab': request.GET.get('tab', 'catalog' if any(k in request.GET for k in ('q', 'grade', 'topic')) or not base else 'recommended'), 'position': position, 'base': base, 'recommended': recommended[:30], 'page': page, 'q': query,
+    context.update({'picker_tab': request.GET.get('tab', 'catalog' if any(k in request.GET for k in ('q', 'grade', 'topic')) or not base else 'recommended'), 'position': position, 'base': base, 'same_topic': same_topic[:30], 'topic_names': topic_names, 'recommended': recommended[:30], 'page': page, 'q': query,
                     'params': request.GET, 'preparation_query': preparation_query(request), 'grade_choices': Task.GRADE_CHOICES,
                     'selected_candidates': position.candidates.select_related('task').prefetch_related('task__subitems', 'task__images')})
     return render(request, 'independentworks/pick.html', context)

@@ -38,7 +38,7 @@ def bank_identity(source_id, path, locator=''):
     return key, number
 
 
-def discover_families():
+def discover_families(*, source_id=None):
     groups = {}
     ambiguous = []
     ziv_variants = defaultdict(lambda: defaultdict(set))
@@ -48,7 +48,8 @@ def discover_families():
         if evidence not in group['members'][task_id]:
             group['members'][task_id].append(evidence)
 
-    refs = list(TaskSource.objects.select_related('source').filter(task__variant_of__isnull=True))
+    source_filter = {'source_id': source_id} if source_id is not None else {}
+    refs = list(TaskSource.objects.select_related('source').filter(task__variant_of__isnull=True, **source_filter))
     ref_index = defaultdict(list)
     for ref in refs:
         ref_index[(ref.source_id, ref.task_id)].append(ref)
@@ -70,7 +71,7 @@ def discover_families():
             else:
                 ambiguous.append(f'Задача #{ref.task_id}: не определён прототип ({" / ".join(path)})')
 
-    collections = list(Collection.objects.select_related('worksheet', 'source').prefetch_related(Prefetch('worksheet__items',
+    collections = list(Collection.objects.filter(**source_filter).select_related('worksheet', 'source').prefetch_related(Prefetch('worksheet__items',
         queryset=WorksheetItem.objects.filter(deleted_at__isnull=True).select_related('task').order_by('order', 'pk'),
         to_attr='analog_items')))
     by_id = {c.pk: c for c in collections}
@@ -117,8 +118,8 @@ def discover_families():
     return {key: value for key, value in groups.items() if len(value['members']) > 1}, incomplete, sorted(set(ambiguous))
 
 
-def sync_families(*, dry_run=False, report=False):
-    groups, incomplete, ambiguous = discover_families()
+def sync_families(*, dry_run=False, report=False, source_id=None):
+    groups, incomplete, ambiguous = discover_families(source_id=source_id)
     result = {'families': len(groups), 'created': 0, 'members_added': 0,
               'keys_updated': 0, 'incomplete': incomplete, 'ambiguous': ambiguous, 'dry_run': dry_run}
     with transaction.atomic():

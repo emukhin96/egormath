@@ -11,7 +11,7 @@
   <a class="btn btn-secondary" href="{% url 'assignment_list' %}">К заданиям</a>
 </div>
 
-{% if independentworks_enabled %}<div class="form-buttons"><a class="btn btn-secondary" href="{% url 'assignment_create' %}">Обычное задание</a><a class="btn btn-secondary" href="{% url 'assignment_create' %}?mode=independent">Самостоятельная</a></div>{% endif %}
+{% if independent and work %}<div class="card form-section"><span class="page-eyebrow">{% if kind == 'correction' %}Работа над ошибками{% elif kind == 'retake' %}Пересдача{% else %}Самостоятельная{% endif %}</span><h2>{{ work.title }}</h2><a href="{% url 'independentworks:edit' work.pk %}">К составу самостоятельной</a></div>{% elif independentworks_enabled %}<div class="form-buttons"><a class="btn{% if independent %} btn-secondary{% endif %}" href="{% url 'assignment_create' %}" {% if not independent %}aria-current="page"{% endif %}>Обычное задание</a><a class="btn{% if not independent %} btn-secondary{% endif %}" href="{% url 'assignment_create' %}?mode=independent" {% if independent %}aria-current="page"{% endif %}>Самостоятельная</a></div>{% endif %}
 {% if choose_work %}
 <section class="card form-section"><div class="iw-workspace-heading"><h2>Шаблоны самостоятельных</h2><a class="btn" href="{% url 'independentworks:create' %}">Создать самостоятельную</a></div>
 <form method="get"><input type="hidden" name="mode" value="independent"><label>Поиск по названию<input name="q" value="{{ request.GET.q|default:'' }}" placeholder="Название самостоятельной"></label><div class="form-buttons"><button class="btn btn-secondary">Найти</button></div></form>
@@ -62,7 +62,7 @@
       <span class="page-eyebrow">Перед выдачей</span>
       <h2>Проверьте параметры</h2>
       <dl class="summary-list">
-        <div><dt>Листок</dt><dd data-summary-worksheet>{{ work.title|default:"Не выбран" }}</dd></div>
+        <div><dt>{% if independent %}Самостоятельная{% else %}Листок{% endif %}</dt><dd data-summary-worksheet>{{ work.title|default:"Не выбран" }}</dd></div>
         <div><dt>Групп</dt><dd data-summary-groups>0</dd></div>
         <div><dt>Учеников отдельно</dt><dd data-summary-students>0</dd></div>
       </dl>

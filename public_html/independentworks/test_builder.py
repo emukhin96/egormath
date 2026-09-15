@@ -74,7 +74,8 @@ class BuilderTests(TestCase):
         url = reverse('independentworks:edit', args=[work.pk])
         response = self.client.get(url, {'position': second.pk, 'resume': '17'})
         self.assertEqual(response.context['selected_position'], second)
-        self.assertContains(response, f'position={first.pk}&amp;resume=17')
+        self.assertContains(response, f'id="position-{first.pk}"')
+        self.assertContains(response, f'id="position-{second.pk}"')
         response = self.client.post(url + '?resume=17', {'action': 'add'})
         new = work.positions.last()
         self.assertIn(f'position={new.pk}', response.url)
@@ -111,3 +112,56 @@ class BuilderTests(TestCase):
         self.assertEqual(page.object_list[0].number_count, 1)
         page = self.client.get(url, {'mode': 'independent', 'q': 'Материал 12'}).context['work_options']
         self.assertEqual([w.title for w in page], ['Материал 12'])
+
+    def test_overview_contains_all_candidates_and_masks(self):
+        teacher = get_user_model().objects.create_superuser('all_numbers')
+        self.client.force_login(teacher)
+        work = Work.objects.create(owner=teacher, title='Вся самостоятельная')
+        for n in range(2):
+            position = Position.objects.create(work=work, order=n)
+            for k in range(2):
+                task = Task.objects.create(text_latex=f'Условие {n}-{k}: $x^2$', answer_mask='{{number: 7}}')
+                Candidate.objects.create(position=position, task=task)
+        response = self.client.get(reverse('independentworks:edit', args=[work.pk]))
+        for n in range(2):
+            for k in range(2):
+                self.assertContains(response, f'Условие {n}-{k}')
+        self.assertContains(response, 'Маски ответов', count=4)
+        self.assertContains(response, 'math-content')
+        self.assertContains(response, 'Удалить номер', count=2)
+        self.assertContains(response, 'Убрать кандидата', count=4)
+        candidate = work.positions.first().candidates.first()
+        response = self.client.post(reverse('independentworks:edit', args=[work.pk]),
+            {'action': 'candidate_remove', 'candidate': candidate.pk})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Candidate.objects.filter(position__work=work).count(), 3)
+        response = self.client.post(reverse('independentworks:edit', args=[work.pk]),
+            {'action': 'remove', 'position': work.positions.last().pk})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(work.positions.count(), 1)
+        self.assertEqual(Candidate.objects.filter(position__work=work).count(), 1)
+
+
+    def test_same_topic_is_suggested_without_creating_family(self):
+        from problems.models import Topic
+        from .models import Family
+        teacher = get_user_model().objects.create_superuser('topic_picker')
+        self.client.force_login(teacher)
+        topic = Topic.objects.create(name='Пропорциональные отрезки')
+        base = Task.objects.create(text_latex='Исходная')
+        analog = Task.objects.create(text_latex='По той же теме')
+        unrelated = Task.objects.create(text_latex='Другая тема')
+        base.topics.add(topic)
+        analog.topics.add(topic)
+        work = Work.objects.create(owner=teacher, title='Темы')
+        position = Position.objects.create(work=work)
+        Candidate.objects.create(position=position, task=base)
+        response = self.client.get(reverse('independentworks:pick', args=[position.pk]))
+        self.assertEqual(list(response.context['same_topic']), [analog])
+        self.assertEqual(response.context['picker_tab'], 'recommended')
+        self.assertContains(response, 'Пропорциональные отрезки')
+        self.assertNotContains(response, 'Состав работы')
+        self.assertFalse(Family.objects.exists())
+        response = self.client.get(reverse('assignment_create'), {'mode': 'independent', 'work': work.pk})
+        self.assertContains(response, 'Самостоятельная</span><h2>Темы</h2>')
+        self.assertNotContains(response, '>Обычное задание</a>')

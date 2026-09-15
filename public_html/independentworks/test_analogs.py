@@ -141,3 +141,33 @@ class AnalogDiscoveryTests(TestCase):
         self.assertEqual(report['created'], 0)
         self.assertEqual(len(report['ambiguous']), 1)
         self.assertEqual(family.tasks.count(), 1)
+
+    def test_production_paths_and_source_scoped_command(self):
+        """Пути из импорта ЕГЭ: отдельный прототип и дочерняя подборка аналогов."""
+        import io
+        import json
+        from django.core.management import call_command
+        tasks = []
+        for locator, path in [
+            ('1.1', ['№1. Планиметрия 1', 'Прототип 1.1']),
+            ('1.1.1', ['№1. Планиметрия 1', 'Прототип 1.1', 'Аналоги']),
+            ('1.1.2', ['№1. Планиметрия 1', 'Прототип 1.1', 'Аналоги']),
+            ('1.10', ['№1. Планиметрия 1', 'Прототип 1.10']),
+            ('1.10.1', ['№1. Планиметрия 1', 'Прототип 1.10', 'Аналоги']),
+        ]:
+            tasks.append(self.ref(locator, path))
+        other = Source.objects.create(title='Другой банк')
+        for n in range(2):
+            TaskSource.objects.create(source=other, task=Task.objects.create(text_latex='Чужой'),
+                locator=f'1.1.{n}', source_path=['№1. Планиметрия 1', 'Прототип 1.1'])
+        out = io.StringIO()
+        call_command('sync_independent_analogs', source=self.source.pk, dry_run=True, json=True, stdout=out)
+        report = json.loads(out.getvalue())
+        self.assertEqual((report['created'], report['members_added']), (2, 5))
+        self.assertEqual(report['source']['task_references'], 5)
+        self.assertFalse(Family.objects.exists())
+        sync_families(source_id=self.source.pk)
+        self.assertEqual(Family.objects.count(), 2)
+        family = tasks[0].analog_families.get()
+        self.assertEqual(set(family.tasks.all()), set(tasks[:3]))
+        self.assertEqual(sync_families(source_id=self.source.pk, report=True)['members_added'], 0)
