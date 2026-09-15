@@ -72,31 +72,36 @@
       widget.dataset.effective = count;
     }
 
-    document.querySelectorAll('.ws-stars').forEach(function (widget) {
-      var form = document.getElementById(widget.dataset.form);
-      if (!form) return;
-      var hidden = form.querySelector('input[name=stars]');
-      var reset = document.querySelector(
-        '.ws-star-reset[data-form="' + widget.dataset.form + '"]');
+    function initStars() {
+      document.querySelectorAll('.ws-stars:not([data-initialized])').forEach(function (widget) {
+        widget.dataset.initialized = '1';
+        var form = document.getElementById(widget.dataset.form);
+        if (!form) return;
+        var hidden = form.querySelector('input[name=stars]');
+        var reset = document.querySelector(
+          '.ws-star-reset[data-form="' + widget.dataset.form + '"]');
 
-      function setStars(value) {
-        hidden.value = value === null ? '' : String(value);
-        paintStars(widget, value === null ? Number(reset.dataset.base) : value);
-        autosave(form);
-      }
+        function setStars(value) {
+          hidden.value = value === null ? '' : String(value);
+          paintStars(widget, value === null ? Number(reset.dataset.base) : value);
+          autosave(form);
+        }
 
-      widget.querySelectorAll('.ws-star').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          var value = Number(btn.dataset.value);
-          // Клик по текущему значению — на звезду меньше (так можно дойти до 0)
-          if (value === Number(widget.dataset.effective)) value -= 1;
-          setStars(value);
+        widget.querySelectorAll('.ws-star').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var value = Number(btn.dataset.value);
+            // Клик по текущему значению — на звезду меньше (так можно дойти до 0)
+            if (value === Number(widget.dataset.effective)) value -= 1;
+            setStars(value);
+          });
         });
+        if (reset) {
+          reset.addEventListener('click', function () { setStars(0); });
+        }
       });
-      if (reset) {
-        reset.addEventListener('click', function () { setStars(0); });
-      }
-    });
+    }
+    initStars();
+    document.addEventListener('worksheet:updated', initStars);
 
     // Тумблер ответов — answers-toggle.js (тот же #toggle-answers / #ws-items).
 

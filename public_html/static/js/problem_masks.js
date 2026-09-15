@@ -117,9 +117,11 @@
     var root=policyForm.closest('.ws-item')?.querySelector('[data-worksheet-mask]');
     if(!root)return;
     var previous=!toggle.checked;
+    // Заблокированный checkbox не входит в FormData. Снимаем значение заранее.
+    var data=new FormData(policyForm);
     toggle.disabled=true;
     try{
-      var result=await api.save(root,new FormData(policyForm),policyForm);
+      var result=await api.save(root,data,policyForm);
       if(!result)toggle.checked=previous;
     }catch(error){toggle.checked=previous;api.toast(false,error.message);}
     finally{toggle.disabled=false;}
@@ -170,6 +172,7 @@
       document.querySelectorAll('[data-worksheet-mask]').forEach(function(root){root.hidden=!toggle.checked;if(toggle.checked)refresh(root);});
     }
     toggle.addEventListener('change',display);display();
+    document.addEventListener('worksheet:updated',display);
     document.addEventListener('autosave:done',function(e){
       if(!toggle.checked || !e.detail.ok)return;
       var row=e.target.closest('.ws-item');

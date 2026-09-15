@@ -22,5 +22,6 @@
     try { toggle.checked = localStorage.getItem(KEY) === '1'; } catch (e) {}
     apply();
     toggle.addEventListener('change', apply);
+    document.addEventListener('worksheet:updated', apply);
   });
 })();
