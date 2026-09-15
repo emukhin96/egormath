@@ -4,6 +4,10 @@
     <h3 id="recipient-visibility-title">{{ recipient_label }}</h3>
     <button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button>
   </div>
+  {% if settings_form %}
+  <input type="hidden" name="settings_present" value="1">
+  <div class="ws-assignment-settings">{{ settings_form.as_p }}</div>
+  {% endif %}
   {% if assignment %}
   <label for="recipient-status">Статус работы</label>
   <select id="recipient-status" name="status">
@@ -24,6 +28,9 @@
     </label>
     {% empty %}<p class="muted">В листке пока нет задач.</p>{% endfor %}
   </div>
+  {% if recipient_groups %}<h4>Группы</h4><div class="ws-recipient-members">
+    {% for section in recipient_groups %}<button type="button" class="link-btn" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'group' section.group.pk %}">{{ section.group.name }}</button>{% endfor %}
+  </div>{% endif %}
   {% if members %}<h4>Ученики</h4><div class="ws-recipient-members">
     {% for member in members %}<button type="button" class="link-btn" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'assignment' member.pk %}">{{ member.student.get_full_name|default:member.student.username }} · {{ member.get_status_display }}</button>{% endfor %}
   </div>{% endif %}

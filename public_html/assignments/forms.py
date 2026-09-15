@@ -54,7 +54,7 @@ class AssignmentCreateForm(forms.Form):
     check_visibility = forms.ChoiceField(
         label='Автосверка ответов', choices=Assignment.CHECK_CHOICES,
         initial=Assignment.CHECK_LIVE,
-        help_text='По умолчанию ученик проверяет ответ кнопкой. После первой выдачи режим листка изменить нельзя.')
+        help_text='По умолчанию ученик проверяет ответ кнопкой. Режим общий для всех назначений листка.')
     allow_photos = forms.BooleanField(
         label='Принимать фото решений', required=False, initial=True)
 
@@ -90,8 +90,8 @@ class AssignmentCreateForm(forms.Form):
                 check_field.initial = locked
                 self.initial['check_visibility'] = locked
                 check_field.help_text = (
-                    'Уже задано ученикам — режим сверки для этого листка '
-                    'изменить нельзя.')
+                    'Режим уже выданного листка меняется в конструкторе: '
+                    '«Редактировать назначения».')
         if not self.fields['check_visibility'].help_text:
             self.fields['check_visibility'].help_text = (
                 'После первой выдачи режим для листка фиксируется. При '
@@ -129,3 +129,46 @@ class AssignmentCreateForm(forms.Form):
         cleaned['recipients'] = self.fields['students'].queryset.filter(
             pk__in=student_ids)
         return cleaned
+
+
+class AssignmentSettingsForm(forms.Form):
+    """Параметры существующих назначений; пустой выбор сохраняет различия."""
+    check_visibility = forms.ChoiceField(
+        label='Автосверка ответов — для всего листка', required=False,
+        choices=[('', 'Не менять')] + Assignment.CHECK_CHOICES)
+    allow_photos = forms.ChoiceField(
+        label='Фото решений', required=False,
+        choices=[('', 'Не менять'), ('yes', 'Принимать'), ('no', 'Не принимать')])
+    due_action = forms.ChoiceField(
+        label='Срок сдачи', choices=[('keep', 'Не менять'), ('set', 'Установить'), ('clear', 'Без срока')])
+    due_at = forms.DateTimeField(
+        label='Дата и время', required=False, input_formats=['%Y-%m-%dT%H:%M'],
+        widget=forms.DateTimeInput(format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}))
+
+    def __init__(self, *args, recipients, whole_worksheet=False, **kwargs):
+        initial = {'due_action': 'keep'}
+        for field in ('check_visibility', 'allow_photos', 'due_at'):
+            values = {getattr(a, field) for a in recipients}
+            if len(values) == 1:
+                value = values.pop()
+                initial[field] = ('yes' if value else 'no') if field == 'allow_photos' else value
+        super().__init__(*args, initial=initial, **kwargs)
+        if not whole_worksheet:
+            self.fields.pop('check_visibility')
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get('due_action') == 'set' and not cleaned.get('due_at'):
+            self.add_error('due_at', 'Укажите дату и время.')
+        return cleaned
+
+    def changes(self):
+        """Только явно выбранные изменения после успешной валидации."""
+        data, changes = self.cleaned_data, {}
+        if data.get('check_visibility'):
+            changes['check_visibility'] = data['check_visibility']
+        if data.get('allow_photos'):
+            changes['allow_photos'] = data['allow_photos'] == 'yes'
+        if data['due_action'] != 'keep':
+            changes['due_at'] = data['due_at'] if data['due_action'] == 'set' else None
+        return changes
