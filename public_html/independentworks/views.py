@@ -122,6 +122,17 @@ def create(request):
 
 @enabled
 @teacher_required
+@require_POST
+def create_from_worksheet(request, pk):
+    """Создаёт независимый шаблон прямо из открытого листка."""
+    from .preparation import from_worksheet
+    sheet = get_object_or_404(Worksheet.visible_to(request.user), pk=pk)
+    work = from_worksheet(sheet, request.user, sheet.title)
+    return redirect('independentworks:edit', pk=work.pk)
+
+
+@enabled
+@teacher_required
 def edit(request, pk):
     work = get_object_or_404(Work.visible_to(request.user), pk=pk)
     if request.method == 'POST':

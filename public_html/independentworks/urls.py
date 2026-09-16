@@ -5,6 +5,7 @@ app_name = 'independentworks'
 urlpatterns = [
     path('', views.catalog, name='catalog'),
     path('new/', views.create, name='create'),
+    path('from-worksheet/<int:pk>/', views.create_from_worksheet, name='create_from_worksheet'),
     path('<int:pk>/edit/', views.edit, name='edit'),
     path('<int:pk>/reorder/', views.reorder, name='reorder'),
     path('<int:pk>/copy/', views.copy_work, name='copy'),
