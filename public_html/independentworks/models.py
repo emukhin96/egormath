@@ -62,6 +62,7 @@ class Run(models.Model):
     duration = models.PositiveIntegerField('Длительность, минут', default=40)
     deadline = models.DateTimeField('Общее окончание', null=True, blank=True)
     max_variants = models.PositiveIntegerField(null=True, blank=True)
+    restrict_clipboard = models.BooleanField(default=False)
     allow_photos = models.BooleanField(default=True)
     release_mode = models.CharField(max_length=12, default='manual')
     release_flags = models.JSONField(default=list)
@@ -121,6 +122,7 @@ class Attempt(models.Model):
     student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='children')
     root = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='corrections')
+    clipboard_exempt = models.BooleanField(default=False)
     started_at = models.DateTimeField(null=True, blank=True)
     ends_at = models.DateTimeField(null=True, blank=True, db_index=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
@@ -129,6 +131,10 @@ class Attempt(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['run', 'student'], name='iw_run_student')]
+
+    @property
+    def restrict_clipboard(self):
+        return self.run.restrict_clipboard and not self.clipboard_exempt
 
     @property
     def finished(self):

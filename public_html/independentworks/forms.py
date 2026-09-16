@@ -16,6 +16,7 @@ class RunForm(forms.Form):
     duration = forms.IntegerField(label='Длительность, минут', min_value=1, max_value=1440, initial=40)
     deadline = forms.DateTimeField(label='Общее окончание (необязательно)', required=False, input_formats=['%Y-%m-%dT%H:%M', '%Y-%m-%dT%H:%M:%S'], widget=forms.DateTimeInput(format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}))
     max_variants = forms.IntegerField(label='Максимум вариантов (пусто — каждому свой)', required=False, min_value=1)
+    restrict_clipboard = forms.BooleanField(label='Ограничить копирование условий и вставку ответов', required=False)
     allow_photos = forms.BooleanField(label='Принимать фотографии', required=False, initial=True)
     withhold_answers = forms.BooleanField(label='Не показывать ответы сразу', required=False, initial=True, widget=forms.CheckboxInput(attrs={'role': 'switch'}))
     release_mode = forms.ChoiceField(label='Публикация', choices=[('manual', 'После одобрения учителя'), ('auto', 'Сразу после сдачи')])
