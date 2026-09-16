@@ -56,12 +56,6 @@ def worksheet_context(request, task):
 
 def context(request, task):
     item = worksheet_context(request, task)
-    return_worksheet = None
-    return_worksheet_id = request.GET.get('return_worksheet')
-    if return_worksheet_id and item is None:
-        from worksheets.models import Worksheet
-        return_worksheet = Worksheet.visible_to(request.user).filter(
-            pk=return_worksheet_id).first()
     ctx = taxonomy_page_context(task_taxonomy_state(task))
     if getattr(settings, 'INDEPENDENT_WORKS_ENABLED', False):
         for key in request.session.keys():
@@ -72,7 +66,6 @@ def context(request, task):
                     ctx['iw_finish_url'] = reverse('independentworks:finish_analog', args=[position_id, task.pk])
                     break
     ctx.update(task=task, item=item, worksheet=item.worksheet if item else None,
-               return_worksheet=return_worksheet,
                tags_value=', '.join(task.tags.values_list('name', flat=True)),
                mask_help=HELP, mask_kinds={**KINDS, **{k: k for k in PRESETS}},
                condition_form=block_form('condition', task),

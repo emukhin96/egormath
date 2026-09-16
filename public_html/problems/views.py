@@ -367,12 +367,14 @@ def task_duplicate(request, pk):
     if item:
         # Сериализуем вставки в один листок, включая строки с равным order.
         Worksheet.objects.select_for_update().get(pk=item.worksheet_id)
+    standalone = request.POST.get('standalone') == '1'
     copy, mapping = task.make_variant(request.user, with_mapping=True,
-                                     standalone=item is None)
+                                     standalone=standalone or item is None)
     if item and mapping.get('block_tasks'):
         rows = list(item.worksheet.ordered_items())
         originals = [row for row in rows if row.task_id in mapping['block_tasks']]
         clones = []
+        opened_clone = None
         for original in originals:
             clone = item.worksheet.items.create(
                 task_id=mapping['block_tasks'][original.task_id], order=original.order,
@@ -381,12 +383,20 @@ def task_duplicate(request, pk):
             clone.subitems.set([mapping['subitems'][pk]
                                for pk in original.subitems.values_list('pk', flat=True)])
             clones.append(clone)
+            if original.pk == item.pk:
+                opened_clone = clone
         insertion = max(rows.index(row) for row in originals) + 1
         ordered = rows[:insertion] + clones + rows[insertion:]
         for pos, row in enumerate(ordered, 1):
             row.order = pos * 10
             row.save(update_fields=['order'])
-        messages.success(request, 'Копия общего блока добавлена после исходного блока.')
+        if standalone:
+            messages.success(
+                request, 'Копия общего блока создана в базе и добавлена в листок.')
+            return redirect(
+                f'{reverse("task_detail", args=[copy.pk])}'
+                f'?worksheet={item.worksheet_id}&item={opened_clone.pk}')
+        messages.success(request, 'Локальная копия общего блока добавлена после исходного блока.')
         return redirect('worksheet_detail', pk=item.worksheet_id)
     if item:
         rows = list(item.worksheet.items.order_by('order', 'pk'))
@@ -400,16 +410,15 @@ def task_duplicate(request, pk):
             all_subitems=item.all_subitems)
         clone.subitems.set([mapping['subitems'][pk]
                            for pk in item.subitems.values_list('pk', flat=True)])
+        if standalone:
+            messages.success(
+                request, f'Копия #{copy.pk} создана в базе и добавлена в листок.')
+            return redirect(
+                f'{reverse("task_detail", args=[copy.pk])}'
+                f'?worksheet={item.worksheet_id}&item={clone.pk}')
         messages.success(request, f'Копия #{copy.pk} добавлена после задачи #{task.pk}.')
         return redirect('worksheet_detail', pk=item.worksheet_id)
     messages.success(request, f'Создана независимая копия #{copy.pk} задачи #{task.pk}.')
-    return_worksheet_id = request.POST.get('return_worksheet')
-    if return_worksheet_id:
-        return_worksheet = get_object_or_404(
-            Worksheet.visible_to(request.user), pk=return_worksheet_id)
-        return redirect(
-            f'{reverse("task_detail", args=[copy.pk])}'
-            f'?return_worksheet={return_worksheet.pk}')
     return redirect('task_detail', pk=copy.pk)
 
 
