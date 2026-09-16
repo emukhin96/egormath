@@ -431,3 +431,64 @@ class StudentGroupTests(TestCase):
             {'groups': [group.pk]})
         self.assertTrue(Assignment.objects.filter(
             worksheet=worksheet, student=self.student).exists())
+
+
+class LogoutCsrfTests(TestCase):
+    def test_logout_requires_current_csrf_token(self):
+        """Устаревший токен отклоняется, актуальный позволяет выйти."""
+        from django.middleware.csrf import get_token, rotate_token
+        from django.test import Client, RequestFactory
+
+        user = User.objects.create_user(username='logout-test')
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(user)
+        request = RequestFactory().get('/')
+        stale_token = get_token(request)
+        rotate_token(request)
+        client.cookies['csrftoken'] = request.META['CSRF_COOKIE']
+        response = client.post(reverse('logout'), {'csrfmiddlewaretoken': stale_token})
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('_auth_user_id', client.session)
+        response = client.post(reverse('logout'), {
+            'csrfmiddlewaretoken': request.META['CSRF_COOKIE'],
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn('_auth_user_id', client.session)
+
+    def test_logout_refreshes_token_at_submit_without_sidebar(self):
+        """Старая вкладка использует свежую cookie, даже без боковой панели."""
+        import shutil
+        import subprocess
+        from pathlib import Path
+
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('node не установлен')
+        script = r'''
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const fs = require('node:fs');
+const field = {value: 'old-rendered-token'};
+let submit;
+const form = {
+  addEventListener: (name, handler) => { if (name === 'submit') submit = handler; },
+  querySelector: () => field,
+};
+const document = {
+  cookie: 'csrftoken=initial-token',
+  querySelector: () => form,
+  getElementById: () => null,
+  addEventListener: (name, handler) => { if (name === 'DOMContentLoaded') handler(); },
+};
+vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), {document});
+// Cookie поменялась после загрузки страницы, как при входе в другой вкладке.
+document.cookie = 'sessionid=session; csrftoken=current-token';
+submit();
+assert.equal(field.value, 'current-token');
+// Без доступной cookie сохраняем серверный токен формы.
+document.cookie = '';
+submit();
+assert.equal(field.value, 'current-token');
+'''
+        js = Path(__file__).resolve().parents[1] / 'static/js/shell.js'
+        subprocess.check_call([node, '-e', script, str(js)])

@@ -1,4 +1,15 @@
 document.addEventListener("DOMContentLoaded", () => {
+  // После входа в другой вкладке Django меняет CSRF-cookie, а старая форма
+  // остаётся в DOM. Перед выходом берём актуальный токен той же сессии.
+  const logout = document.querySelector("form[data-logout]");
+  if (logout) {
+    logout.addEventListener("submit", () => {
+      const token = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      const field = logout.querySelector('[name="csrfmiddlewaretoken"]');
+      if (token && field) field.value = decodeURIComponent(token[1]);
+    });
+  }
+
   const sidebar = document.getElementById("context-sidebar");
   const toggle = document.getElementById("context-toggle");
   const close = document.getElementById("sidebar-close");
