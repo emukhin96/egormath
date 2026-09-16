@@ -1,0 +1,8 @@
+  {% if show_checks %}
+  <span data-point-feedback-url="{{ row.grade_url }}">
+    {% if row.grade %}<span class="badge badge-assigned">{{ row.grade }}</span>
+    {% elif row.pending %}<span class="badge badge-submitted">Задача на проверке</span>
+    {% elif row.auto %}{% include 'assignments/_check_badge.html' with prefix=row.prefix status=row.auto %}
+    {% else %}<span class="muted">Ответ не введён</span>{% endif %}
+  </span>
+  {% endif %}
