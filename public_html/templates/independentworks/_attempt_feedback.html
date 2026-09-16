@@ -1,0 +1,17 @@
+{% load task_extras %}
+{% if show_checks or row.comment %}
+<div class="answer-box">
+  {% if show_checks %}
+  <div data-point-feedback-url="{{ row.grade_url }}">
+    <strong>Проверка:</strong>
+    {% if row.grade %}<span class="badge badge-assigned">{{ row.grade }}</span>
+    {% elif row.pending %}<span class="badge badge-submitted">Задача на проверке</span>
+    {% elif row.auto %}{% include 'assignments/_check_badge.html' with prefix=row.prefix status=row.auto %}
+    {% else %}<span class="muted">Ответ не введён</span>{% endif %}
+  </div>
+  {% endif %}
+  {% if row.comment %}<div class="math-content"><strong>Комментарий учителя:</strong> {{ row.comment|linebreaksbr }}</div>{% endif %}
+</div>
+{% endif %}
+{% if row.reference %}<div class="answer-box math-content"><strong>Правильный ответ:</strong> {{ row.reference|web_answer }}</div>{% endif %}
+{% if row.solution %}<div class="solution-box math-content"><strong>Решение:</strong> {{ row.solution|web_text }}</div>{% endif %}
