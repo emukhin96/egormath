@@ -148,6 +148,59 @@ class TextbookImportTests(TestCase):
                                     {'section': section['token']}, follow=True)
         self.assertContains(response, 'уже загружен')
 
+    def test_section_retry_recreates_deleted_task(self):
+        batch = self.create_batch()
+        batch.drafts.update(topic=Topic.objects.create(name='Восстановление'),
+                            status=TextbookTaskDraft.STATUS_APPROVED)
+        commit_batch(batch, user=self.teacher)
+        draft = batch.drafts.get()
+        WorksheetItem.objects.filter(task=draft.imported_task).delete()
+        draft.imported_task.delete()
+        draft.refresh_from_db()
+        self.assertIsNone(draft.imported_task_id)
+        self.assertEqual(draft.status, TextbookTaskDraft.STATUS_IMPORTED)
+        result = commit_batch(batch, user=self.teacher, draft_ids=[draft.pk],
+                              require_complete=False)
+        self.assertEqual(result['created'], 1)
+        draft.refresh_from_db()
+        self.assertIsNotNone(draft.imported_task_id)
+        self.assertTrue(WorksheetItem.objects.filter(task=draft.imported_task).exists())
+        self.assertEqual(commit_batch(batch, user=self.teacher)['created'], 0)
+
+    def test_orphaned_import_reuses_existing_source_key(self):
+        batch = self.create_batch()
+        batch.drafts.update(topic=Topic.objects.create(name='Повтор ключа'),
+                            status=TextbookTaskDraft.STATUS_APPROVED)
+        commit_batch(batch, user=self.teacher)
+        task_id = batch.drafts.get().imported_task_id
+        batch.drafts.update(imported_task=None)
+        result = commit_batch(batch, user=self.teacher)
+        self.assertEqual(result['created'], 0)
+        self.assertEqual(result['reused'], 1)
+        self.assertEqual(batch.drafts.get().imported_task_id, task_id)
+
+    def test_orphaned_import_keeps_validation_and_rolls_back(self):
+        batch = self.create_batch()
+        batch.drafts.update(status=TextbookTaskDraft.STATUS_IMPORTED, topic=None)
+        with self.assertRaisesRegex(TextbookImportError, 'не выбрана тема'):
+            commit_batch(batch, user=self.teacher)
+        self.assertEqual(batch.drafts.get().status, TextbookTaskDraft.STATUS_IMPORTED)
+        self.assertEqual(Task.objects.count(), 0)
+
+    def test_orphaned_import_does_not_restore_unselected_drafts(self):
+        payload = bundle()
+        payload['tasks'].append(dict(payload['tasks'][0], external_id='other'))
+        batch = self.create_batch(payload)
+        batch.drafts.update(topic=Topic.objects.create(name='Выбранный раздел'),
+                            status=TextbookTaskDraft.STATUS_IMPORTED)
+        selected = batch.drafts.first()
+        commit_batch(batch, user=self.teacher, draft_ids=[selected.pk],
+                     require_complete=False)
+        other = batch.drafts.exclude(pk=selected.pk).get()
+        self.assertIsNone(other.imported_task_id)
+        self.assertEqual(other.status, TextbookTaskDraft.STATUS_IMPORTED)
+        self.assertEqual(Task.objects.count(), 1)
+
     def test_section_failure_rolls_back_and_preserves_selected_section(self):
         from unittest.mock import patch
         from . import textbook_import

@@ -1068,6 +1068,14 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
              .select_related('source', 'created_by').get(pk=batch.pk))
     if batch.created_by_id != user.pk and not user.is_superuser:
         raise TextbookImportError('Эту партию может загрузить только редактор.')
+    # Удаление задачи обнуляет FK, но сохраняет статус черновика.
+    # Повторная загрузка должна пройти обычные проверки темы, рисунков
+    # и ключа источника; при ошибке транзакция восстановит прежний статус.
+    orphaned = batch.drafts.filter(
+        status=TextbookTaskDraft.STATUS_IMPORTED, imported_task__isnull=True)
+    if draft_ids is not None:
+        orphaned = orphaned.filter(pk__in=draft_ids)
+    orphaned.update(status=TextbookTaskDraft.STATUS_APPROVED)
     from .task_blocks import bind_oge_draft_blocks
     bind_oge_draft_blocks(batch)
     if require_complete:
