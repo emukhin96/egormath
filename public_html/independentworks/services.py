@@ -280,11 +280,6 @@ def prepare(work, owner, students, duration=40, deadline=None, max_variants=None
     else:
         variants, shortage, repeats = generate(data, min(len(recipients), max_variants or len(recipients)), seed, prior_keys(parent) if parent else None)
         notes = data['notes']
-    if not allow_photos:
-        checked = [p for pool in data['positions'] for candidate in pool for p in candidate['points']] if data else [p for rows in variants for p in rows]
-        missing = sorted({p['label'] for p in checked if not parse_mask(p['snapshot']['mask']).is_valid})
-        if missing:
-            raise WorkError('Нет способа ответить в пунктах ' + ', '.join(missing) + '. Настройте поля ответа или разрешите фотографии.')
     shuffled = list(recipients)
     random.Random(seed).shuffle(shuffled)
     assignment = {str(student): i % len(variants) + 1 for i, student in enumerate(shuffled)}

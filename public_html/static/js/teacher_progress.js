@@ -2,6 +2,13 @@
 (function(){
   'use strict';
   var dialog=document.getElementById('progress-dialog'), detailUrl=null, busy=false, grading=false, gradeEpoch=0, versions={}, etags={};
+  function notify(ok, message) {
+    if (dialog && dialog.open) {
+      var status = dialog.querySelector('[data-review-status]');
+      status.hidden = false; status.textContent = message || 'Сохранено ✓';
+      status.className = ok ? 'review-save-success' : 'msg msg-error';
+    } else if (window.EgorAutosave) EgorAutosave.showSaved(ok, message);
+  }
   async function request(url, options){var r=await fetch(url,options);if(!r.ok && r.status!==304)throw new Error('Не удалось обновить данные');return r;}
   function math(root){if(window.renderMathContent)root.querySelectorAll('.math-content').forEach(renderMathContent);}
   function replace(root,html){
@@ -44,8 +51,8 @@
       var result=await (await request(form.action,{method:'POST',body:new FormData(form),headers:{'Accept':'application/json'}})).json();
       applyReviewResult(form.action,result);
       input.defaultValue=submitted;
-      if(window.EgorAutosave)EgorAutosave.showSaved(true);
-    }catch(error){if(window.EgorAutosave)EgorAutosave.showSaved(false,error.message);}
+      notify(true, 'Комментарий сохранён ✓');
+    }catch(error){notify(false,error.message);}
     finally{delete form.dataset.busy;grading=false;}
   });
   document.addEventListener('click',async function(e){
@@ -57,11 +64,11 @@
           var data=new FormData();data.set('grade',grade.dataset.grade);data.set('csrfmiddlewaretoken',document.querySelector('[name=csrfmiddlewaretoken]').value);
           var result=await (await request(scale.dataset.gradeUrl,{method:'POST',body:data,headers:{'Accept':'application/json'}})).json();
           applyReviewResult(scale.dataset.gradeUrl,result);
-          if(window.EgorAutosave)EgorAutosave.showSaved(true);
+          notify(true, 'Оценка сохранена ✓');
         }finally{delete scale.dataset.busy;grading=false;}
       }
-      if(attempts){var requestedUrl=attempts.dataset.attemptUrl;detailUrl=requestedUrl;var html=await(await request(requestedUrl)).text();if(detailUrl!==requestedUrl)return;var target=dialog.querySelector('[data-progress-detail]');replace(target,html);dialog.showModal();}
-    }catch(error){if(window.EgorAutosave)EgorAutosave.showSaved(false,error.message);}
+      if(attempts){var requestedUrl=attempts.dataset.attemptUrl;detailUrl=requestedUrl;dialog.querySelector('[data-review-status]').hidden=true;var html=await(await request(requestedUrl)).text();if(detailUrl!==requestedUrl)return;var target=dialog.querySelector('[data-progress-detail]');replace(target,html);dialog.showModal();}
+    }catch(error){notify(false,error.message);}
   });
   async function poll(){
     if(document.hidden||busy||grading)return;busy=true;var pollEpoch=gradeEpoch;

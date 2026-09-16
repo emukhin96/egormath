@@ -207,9 +207,11 @@ def _parse_choice(slot, payload):
             slot.error = 'правильный вариант должен быть один'
             return
         plain = [o.lstrip('*').strip() for o in options]
-        slot.correct = starred[0] if starred else plain[0]
-        slot.options = list(PRESETS[slot.preset]) + [
-            o for o in plain if o not in PRESETS[slot.preset]]
+        canonical = {o.casefold().replace('ё', 'е'): o for o in PRESETS[slot.preset]}
+        def preset_value(value):
+            return canonical.get(value.casefold().replace('ё', 'е'), value)
+        slot.correct = preset_value(starred[0] if starred else plain[0])
+        slot.options = list(dict.fromkeys([*PRESETS[slot.preset], *(preset_value(o) for o in plain)]))
     else:
         if len(options) < 2:
             slot.error = 'нужно минимум два варианта через |'
@@ -402,7 +404,7 @@ def check_slot(slot, value):
             kind == PROPORTION and student * slot.data == 1))
         return OK if equal else WRONG
     if kind == CHOICE:
-        if _compact(value) == _compact(slot.correct):
+        if _compact(value).replace('ё', 'е') == _compact(slot.correct).replace('ё', 'е'):
             return OK
         return WRONG if value in slot.options else UNKNOWN
     if kind == NUMBER:

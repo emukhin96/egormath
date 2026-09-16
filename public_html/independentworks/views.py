@@ -66,7 +66,12 @@ def own_attempt(request, pk, teacher=False):
 
 @enabled
 def catalog(request):
-    return redirect(reverse('assignment_list') + '?kind=independent') if get_role(request.user) == 'teacher' else redirect(reverse('dashboard') + '?kind=independent')
+    if get_role(request.user) != 'teacher':
+        return redirect(reverse('dashboard') + '?kind=independent')
+    from assignments.views import assignment_list
+    request.GET = request.GET.copy()
+    request.GET['kind'] = 'independent'
+    return assignment_list(request)
 
 
 @enabled
@@ -330,6 +335,8 @@ def pick(request, pk):
                 position.mismatch_confirmed = False
                 position.save(update_fields=['mismatch_confirmed'])
                 position.work.save(update_fields=['updated_at'])
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'message': 'Подпункты сохранены'})
             messages.success(request, 'Подпункты сохранены')
         else:
             with transaction.atomic():
@@ -425,9 +432,13 @@ def prepare_run(request, pk):
     if request.method == 'POST' and form.is_valid():
         data = dict(form.cleaned_data)
         students = [parent.student_id] if parent else form.recipients(request.user)
-        data.pop('students'); data.pop('groups')
-        run = svc.prepare(work, request.user, students, parent=parent, kind=kind, previous=previous, **data)
-        return redirect('independentworks:preview', pk=run.pk)
+        data.pop('students'); data.pop('groups'); data.pop('withhold_answers')
+        try:
+            run = svc.prepare(work, request.user, students, parent=parent, kind=kind, previous=previous, **data)
+        except svc.WorkError as error:
+            form.add_error(None, str(error))
+        else:
+            return redirect('independentworks:preview', pk=run.pk)
     return render(request, 'assignments/assignment_create.html', {'independent': True, 'work': work, 'form': form, 'parent': parent, 'kind': kind, 'timezone': timezone.get_current_timezone_name()})
 
 
@@ -448,6 +459,7 @@ def preview_context(run):
             rows[-1]['reference_images'] = [{'url': reverse('independentworks:preview_asset', args=[run.pk, vi, pi, ai]), 'filename': asset['name'], 'is_pdf': asset['name'].lower().endswith('.pdf')} for ai, asset in enumerate(snapshot.get('assets', []), 1) if set(asset['audiences']) & {'answer', 'solution'}]
             rows[-1]['repeated'] = point['source_key'] in run.plan['repeats']
             visited.add(point['position'])
+        group_point_rows(rows)
         variants.append({'number': vi, 'rows': rows,
             'tail_notes': [n['text'] for n in run.plan['notes'] if n['before'] > max(visited, default=0)]})
     return {'run': run, 'variants': variants, 'recipients': [(pk, names.get(pk, pk), num) for pk, num in run.plan['students'].items()]}
@@ -505,6 +517,21 @@ def issue_run(request, pk):
     return redirect('independentworks:progress', pk=pk)
 
 
+def group_point_rows(rows):
+    """Общее условие показываем один раз внутри карточки номера."""
+    previous = None
+    for row in rows:
+        point = row['point']
+        key = (point['position'], point['candidate_key']) if isinstance(point, dict) else (point.position, point.candidate_key)
+        row['group_start'] = key != previous
+        if not row['group_start']:
+            row['common'] = ''
+        previous = key
+    for index, row in enumerate(rows):
+        row['group_end'] = index == len(rows) - 1 or rows[index + 1]['group_start']
+    return rows
+
+
 def point_rows(attempt, teacher=False):
     disclosure = svc.FLAGS if teacher else attempt.disclosure
     answers = {a.point_id: a for a in attempt.answers.all()}
@@ -552,7 +579,7 @@ def attempt_page(request, pk):
     svc.finish_expired(attempt)
     accessible = teacher or bool(attempt.started_at)
     return render(request, 'independentworks/attempt.html', {
-        'attempt': attempt, 'teacher_view': teacher, 'rows': point_rows(attempt, teacher) if accessible else [],
+        'attempt': attempt, 'teacher_view': teacher, 'rows': group_point_rows(point_rows(attempt, teacher)) if accessible else [],
         'editable': not teacher and bool(attempt.started_at) and not attempt.finished,
         'can_start': not attempt.started_at and not (attempt.run.deadline and timezone.now() >= attempt.run.deadline),
         'accessible': accessible, 'show_checks': teacher or 'checks' in attempt.disclosure,
@@ -630,7 +657,9 @@ def publish(request, pk):
     ids = request.POST.getlist('attempts')
     flags = sorted(set(request.POST.getlist('flags')) & svc.FLAGS)
     if not flags:
-        raise svc.WorkError('Выберите хотя бы одну категорию для публикации.')
+        context = progress_context(run)
+        context.update(publication_error='Выберите хотя бы одну категорию для публикации.', publication_attempts=ids)
+        return render(request, 'independentworks/progress.html', context, status=400)
     with transaction.atomic():
         selected_attempts = run.attempts.select_for_update().select_related('run')
         if ids:
@@ -640,6 +669,30 @@ def publish(request, pk):
                 combined = sorted(attempt.disclosure | set(flags))
                 Attempt.objects.filter(pk=attempt.pk).update(published_at=timezone.now(), release_flags=combined)
     messages.success(request, 'Разрешения публикации сохранены')
+    return redirect('independentworks:progress', pk=pk)
+
+
+@enabled
+@teacher_required
+@require_POST
+def add_students(request, pk):
+    run = teacher_run(request, pk)
+    try:
+        students = {int(value) for value in request.POST.getlist('students')}
+        if not students:
+            raise svc.WorkError('Выберите учеников для добавления.')
+        variant = int(request.POST.get('variant', ''))
+        with transaction.atomic():
+            Run.objects.select_for_update().get(pk=run.pk)
+            choices = dict(run.attempts.values_list('student_id', 'variant_id'))
+            for student in students:
+                choices.setdefault(student, variant)
+            svc.update_recipients(run.pk, set(choices), choices)
+    except (ValueError, svc.WorkError) as error:
+        context = progress_context(run)
+        context['recipient_error'] = str(error) if isinstance(error, svc.WorkError) else 'Выберите вариант.'
+        return render(request, 'independentworks/progress.html', context, status=400)
+    messages.success(request, 'Ученики добавлены в этот запуск')
     return redirect('independentworks:progress', pk=pk)
 
 
@@ -769,7 +822,7 @@ def progress_context(run):
         stat['count'] = len(stat.pop('students'))
         stat['label'] = '№' + ', '.join(map(str, sorted(stat.pop('positions')))) + ' · варианты ' + ', '.join(map(str, sorted(stat.pop('variants'))))
         stat['percent'] = round(100 * stat['done'] / stat['points'])
-    return {'independent': True, 'point_groups': [{'item': {'pk': n}, 'number': n, 'columns': [{'owner': {'pk': n}, 'label': 'Пункты'}]} for n in numbers], 'run': run, 'people': people, 'numbers': numbers, 'stats': list(stats.values()), 'variants': run.variants.all()}
+    return {'independent': True, 'point_groups': [{'item': {'pk': n}, 'number': n, 'columns': [{'owner': {'pk': n}, 'label': 'Пункты'}]} for n in numbers], 'run': run, 'people': people, 'numbers': numbers, 'stats': list(stats.values()), 'variants': run.variants.all(), 'available_students': Profile.student_users_for(run.owner).exclude(pk__in=[a.student_id for a in attempts]), 'can_add_students': run.kind == 'initial' and bool(run.issued_at) and not run.closed_at and not (run.deadline and run.deadline <= timezone.now())}
 
 
 @enabled

@@ -429,7 +429,7 @@ class AssignmentWorkspaceTests(TestCase):
     def test_teacher_navigation_contains_assignments(self):
         response = self.client.get(reverse('assignment_list'))
         self.assertContains(response, '>Задания</a>')
-        self.assertContains(response, 'href="/assignments/" class="is-active"')
+        self.assertContains(response, 'href="/assignments/?kind=ordinary" class="is-active"')
 
     @override_settings(TIME_ZONE='Europe/Moscow')
     def test_due_filters_use_local_date_and_expected_ranges(self):
