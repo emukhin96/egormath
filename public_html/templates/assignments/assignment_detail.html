@@ -163,10 +163,10 @@
   <div class="card assignment-submit-card">
     <span class="helptext">После отправки изменить ответы будет нельзя.</span>
     <div class="form-buttons">
-      <button type="submit" class="btn btn-secondary">Сохранить черновик</button>
       <button type="submit" class="btn" id="submit-assignment"
               formaction="{% url 'submit_assignment' assignment.pk %}">
         Отправить на проверку</button>
+      <button type="submit" class="btn btn-secondary">Сохранить черновик</button>
     </div>
   </div>
   {% endif %}

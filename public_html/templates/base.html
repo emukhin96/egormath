@@ -16,13 +16,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=4">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=6">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
   <script defer src="{% static 'js/math.js' %}?v=2"></script>
   <script defer src="{% static 'js/autosave.js' %}?v=6"></script>
-  <script defer src="{% static 'js/shell.js' %}"></script>
+  <script defer src="{% static 'js/shell.js' %}?v=2"></script>
   <script defer src="{% static 'js/dialogs.js' %}"></script>
   <script defer src="{% static 'js/taxonomy.js' %}?v=2"></script>
   {# Как верхнее меню: суперпользователь без профиля тоже учитель (get_role). #}
@@ -60,7 +60,7 @@
         {% endif %}
         <span class="user-avatar" aria-hidden="true">{{ user.get_full_name|default:user.username|first|upper }}</span>
         <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
-        <form method="post" action="{% url 'logout' %}" class="inline-form">
+        <form method="post" action="{% url 'logout' %}" class="inline-form" data-logout>
           {% csrf_token %}
           <button type="submit" class="linklike">Выйти</button>
         </form>
