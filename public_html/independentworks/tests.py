@@ -238,7 +238,7 @@ class IndependentWorkTests(TestCase):
         self.assertContains(response, self.url('edit', self.work.pk))
         response = self.client.get(reverse('worksheet_list'), {'kind': 'independent'})
         self.assertEqual([w.pk for w in response.context['worksheets']], [self.work.pk])
-        self.assertRedirects(self.client.get(self.url('catalog')), reverse('assignment_list') + '?kind=independent')
+        self.assertContains(self.client.get(self.url('catalog')), '<h1>Самостоятельные</h1>', html=True)
         self.assertRedirects(self.client.get(self.url('prepare', self.work.pk)), reverse('assignment_create') + f'?mode=independent&work={self.work.pk}')
 
     def test_idempotent_issue_start(self):
@@ -761,6 +761,87 @@ class IndependentWorkTests(TestCase):
         self.assertEqual(response.status_code, 302)
         work = Work.objects.get(title='Из подборки')
         self.assertEqual(set(work.positions.get().candidates.values_list('task_id', flat=True)), {self.task.pk})
+
+    def test_preparation_error_keeps_form_and_values(self):
+        self.client.force_login(self.teacher)
+        response = self.client.post(reverse('assignment_create') + f'?mode=independent&work={self.work.pk}', {
+            'duration': 15, 'max_variants': 2, 'release_toggle': '1', 'withhold_answers': 'on',
+        })
+        self.assertContains(response, 'Выберите учеников.')
+        self.assertEqual(response.context['form']['duration'].value(), '15')
+        self.assertEqual(response.context['form']['max_variants'].value(), '2')
+        self.assertContains(response, 'Сформировать и просмотреть')
+
+    def test_release_toggle_maps_to_manual_and_auto(self):
+        from .forms import RunForm
+        for checked, expected in [(True, 'manual'), (False, 'auto')]:
+            data = {'duration': 15, 'release_toggle': '1'}
+            if checked:
+                data['withhold_answers'] = 'on'
+            form = RunForm(data, teacher=self.teacher)
+            self.assertTrue(form.is_valid(), form.errors)
+            self.assertEqual(form.cleaned_data['release_mode'], expected)
+
+    def test_common_condition_once_but_retained_in_detail(self):
+        self.task.text_latex = 'Общее условие уникальное'
+        self.task.save()
+        for i in range(2):
+            TaskSubitem.objects.create(task=self.task, order=i, text_latex=f'Пункт {i}', answer_mask='{{number: 1}}')
+        run = svc.prepare(self.work, self.teacher, [self.student.pk])
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.url('preview', run.pk))
+        self.assertContains(response, 'Общее условие уникальное', count=1)
+        svc.issue(run.pk)
+        attempt = svc.start(run.attempts.get().pk)
+        response = self.client.get(self.url('attempt', attempt.pk))
+        self.assertContains(response, 'Общее условие уникальное', count=1)
+        for point in attempt.variant.points.all():
+            self.assertContains(self.client.get(self.url('point_detail', attempt.pk, point.pk)), 'Общее условие уникальное', count=1)
+
+    def test_add_students_preserves_started_attempt(self):
+        attempt = self.begin()
+        extra = get_user_model().objects.create_user('additional_student')
+        Profile.objects.create(user=extra, teacher=self.teacher, role='student')
+        self.client.force_login(self.teacher)
+        response = self.client.post(self.url('add_students', attempt.run_id), {'students': [extra.pk], 'variant': attempt.variant_id})
+        self.assertRedirects(response, self.url('progress', attempt.run_id))
+        attempt.refresh_from_db()
+        self.assertIsNotNone(attempt.started_at)
+        self.assertEqual(attempt.run.attempts.count(), 2)
+        self.client.post(self.url('add_students', attempt.run_id), {'students': [extra.pk], 'variant': attempt.variant_id})
+        self.assertEqual(attempt.run.attempts.count(), 2)
+        response = self.client.post(self.url('add_students', attempt.run_id), {'students': [self.other.pk], 'variant': attempt.variant_id})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(attempt.run.attempts.count(), 2)
+
+    def test_publication_error_preserves_selected_students(self):
+        attempt = self.issued()
+        self.client.force_login(self.teacher)
+        response = self.client.post(self.url('publish', attempt.run_id), {'attempts': [attempt.pk]})
+        self.assertContains(response, 'Выберите хотя бы одну категорию', status_code=400)
+        self.assertEqual(response.context['publication_attempts'], [str(attempt.pk)])
+        self.assertContains(response, 'Открыть выбранные категории', status_code=400)
+
+    def test_parts_save_returns_json_without_redirect(self):
+        part = TaskSubitem.objects.create(task=self.task, text_latex='Подпункт')
+        self.client.force_login(self.teacher)
+        response = self.client.post(self.url('pick', self.position.pk), {
+            'task': self.task.pk, 'candidate': self.candidate.pk,
+            'parts_mode': 'selected', 'parts': [part.pk],
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['message'], 'Подпункты сохранены')
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.subitem_ids, [part.pk])
+
+    def test_parity_yo_has_no_duplicate_choices(self):
+        from assignments.checks import parse_mask, check_slot
+        for reference in ('нечетная', 'нечётная'):
+            spec = parse_mask('{{parity: ' + reference + '}}')
+            slot = spec.slots[0]
+            self.assertEqual(slot.options, ['чётная', 'нечётная', 'общего вида'])
+            for answer in ('нечетная', 'нечётная'):
+                self.assertEqual(check_slot(slot, answer), 'ok')
 
 
 from concurrent.futures import ThreadPoolExecutor

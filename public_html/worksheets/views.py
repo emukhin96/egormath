@@ -398,7 +398,7 @@ def worksheet_detail(request, pk):
     from .block_presentation import decorate_block_rows
     decorate_block_rows(rows)
     point_groups = progress_groups([
-        item for item in items if item.task_id])
+        item for item in items if item.task_id], assignments)
     progress_people_rows = progress_people(point_groups, assignments)
 
     # Поиск задач для добавления (правая часть страницы)

@@ -1,5 +1,22 @@
 /* Представления рабочего места; сохранение выполняют обычные серверные формы. */
 (function () {
+  document.addEventListener('submit', async function (event) {
+    var parts = event.target.closest('[data-iw-parts]');
+    if (!parts || (event.submitter && event.submitter.hasAttribute('formaction'))) return;
+    event.preventDefault();
+    if (parts.dataset.busy) return;
+    parts.dataset.busy = '1';
+    var button = event.submitter;
+    if (button) button.disabled = true;
+    try {
+      var response = await fetch(location.href, {method: 'POST', body: new FormData(parts), headers: {'X-Requested-With': 'XMLHttpRequest'}});
+      var result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Не удалось сохранить подпункты');
+      if (window.EgorAutosave) EgorAutosave.showSaved(true, result.message);
+    } catch (error) {
+      if (window.EgorAutosave) EgorAutosave.showSaved(false, error.message);
+    } finally { delete parts.dataset.busy; if (button) button.disabled = false; }
+  });
   var form = document.querySelector('[data-iw-source]');
   if (form) {
     function source() {

@@ -1,34 +1,34 @@
 {% extends 'base.html' %}
-{% block title %}Выданные задания — Математика{% endblock %}
+{% block title %}{% if filters.kind == 'independent' %}Самостоятельные{% else %}Выданные задания{% endif %} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/assignment_list.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <span class="page-eyebrow">Работы учеников</span>
-    <h1>Выданные задания</h1>
+    <h1>{% if filters.kind == 'independent' %}Самостоятельные{% else %}Выданные задания{% endif %}</h1>
     <p class="page-subtitle">Выданные работы и общий прогресс учеников.</p>
   </div>
-  <a class="btn" href="{% url 'assignment_create' %}">Выдать задание</a>
+  {% if filters.kind == 'independent' %}<div class="form-buttons"><a class="btn" href="{% url 'independentworks:create' %}">Создать самостоятельную</a><a class="btn btn-secondary" href="{% url 'assignment_create' %}?mode=independent">Шаблоны · выдать</a></div>{% else %}<a class="btn" href="{% url 'assignment_create' %}">Выдать задание</a>{% endif %}
 </div>
 
 <div class="stat-grid assignment-stats">
-  <a class="stat" href="?status=submitted">
+  <a class="stat" href="?status=submitted&amp;kind={{ filters.kind }}">
     <span class="stat-label">На проверке</span><span class="stat-value">{{ stats.submitted }}</span>
   </a>
-  <a class="stat" href="?due=overdue">
+  <a class="stat" href="?due=overdue&amp;kind={{ filters.kind }}">
     <span class="stat-label">Просрочено</span><span class="stat-value">{{ stats.overdue }}</span>
   </a>
-  <a class="stat" href="?status=returned">
+  <a class="stat" href="?status=returned&amp;kind={{ filters.kind }}">
     <span class="stat-label">На доработке</span><span class="stat-value">{{ stats.returned }}</span>
   </a>
-  <a class="stat" href="?status=reviewed">
+  <a class="stat" href="?status=reviewed&amp;kind={{ filters.kind }}">
     <span class="stat-label">Проверено</span><span class="stat-value">{{ stats.reviewed }}</span>
   </a>
 </div>
 
 <form method="get" class="card filter-card">
   <div class="filters assignment-filters">
-    {% if independentworks_enabled %}<div><label for="assignment-kind">Вид работы</label><select name="kind" id="assignment-kind"><option value="">Все работы</option><option value="ordinary"{% if filters.kind == 'ordinary' %} selected{% endif %}>Обычные задания</option><option value="independent"{% if filters.kind == 'independent' %} selected{% endif %}>Самостоятельные</option></select></div>{% endif %}
+    {% if request.resolver_match.namespace == "independentworks" %}<input type="hidden" name="kind" value="independent">{% elif independentworks_enabled %}<div><label for="assignment-kind">Вид работы</label><select name="kind" id="assignment-kind"><option value="">Все работы</option><option value="ordinary"{% if filters.kind == 'ordinary' %} selected{% endif %}>Обычные задания</option><option value="independent"{% if filters.kind == 'independent' %} selected{% endif %}>Самостоятельные</option></select></div>{% endif %}
     <div class="filter-search">
       <label for="assignment-q">Поиск</label>
       <input type="text" name="q" id="assignment-q" value="{{ filters.q }}"
@@ -84,7 +84,7 @@
     <div class="filter-actions">
       <button class="btn" type="submit">Применить</button>
       {% if filters.q or filters.status or filters.student or filters.worksheet or filters.due or filters.owner or filters.kind %}
-      <a class="btn btn-secondary" href="{% url 'assignment_list' %}">Сбросить</a>
+      <a class="btn btn-secondary" href="{% if filters.kind == 'independent' %}{% url 'independentworks:catalog' %}{% else %}{% url 'assignment_list' %}{% endif %}">Сбросить</a>
       {% endif %}
     </div>
   </div>

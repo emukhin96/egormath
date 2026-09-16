@@ -1,6 +1,6 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Сводка</p>
-  <h2>Выданные задания</h2>
+  <h2>{% if filters.kind == 'independent' %}Самостоятельные{% else %}Выданные задания{% endif %}</h2>
   <div class="sidebar-stats">
     <div class="sidebar-stat"><strong>{{ stats.submitted }}</strong><span>на проверке</span></div>
     <div class="sidebar-stat"><strong>{{ stats.overdue }}</strong><span>просрочено</span></div>
@@ -11,8 +11,8 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Действия</p>
   <div class="sidebar-actions">
-    <a class="sidebar-action" href="{% url 'assignment_create' %}">Выдать задание</a>
-    {% if stats.submitted %}<a class="sidebar-action" href="?status=submitted{% if filters.owner %}&amp;owner={{ filters.owner }}{% endif %}">Открыть очередь проверки</a>{% endif %}
+    <a class="sidebar-action" href="{% url 'assignment_create' %}{% if filters.kind == 'independent' %}?mode=independent{% endif %}">Выдать задание</a>
+    {% if stats.submitted %}<a class="sidebar-action" href="?status=submitted&amp;kind={{ filters.kind }}{% if filters.owner %}&amp;owner={{ filters.owner }}{% endif %}">Открыть очередь проверки</a>{% endif %}
   </div>
 </section>
 <section class="sidebar-section">

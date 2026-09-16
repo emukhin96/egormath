@@ -19,6 +19,15 @@ class LiveProgressTests(TestCase):
         self.assignment = Assignment.objects.create(worksheet=self.worksheet, student=self.student, assigned_by=self.teacher)
         self.client.force_login(self.teacher)
 
+    def test_fully_hidden_columns_removed_without_renumbering(self):
+        from .progress import progress_groups
+        second = WorksheetItem.objects.create(worksheet=self.worksheet, task=self.task, order=2)
+        self.assignment.hidden_items.add(self.item)
+        groups = progress_groups([self.item, second], [self.assignment])
+        self.assertEqual([group['number'] for group in groups], [2])
+        other = Assignment.objects.create(worksheet=self.worksheet, student=make_student(self.teacher, username='visible_student'), assigned_by=self.teacher)
+        self.assertEqual(len(progress_groups([self.item, second], [self.assignment, other])), 2)
+
     def grade(self, value):
         return self.client.post(reverse('grade_task', args=[self.assignment.pk, self.task.pk]), {'grade': value})
 

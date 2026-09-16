@@ -112,9 +112,13 @@ def task_attempts(request, pk, task_id):
     return response
 
 
-def progress_groups(items):
+def progress_groups(items, assignments=None):
     groups_of_points = []
+    hidden_sets = [{item.pk for item in assignment.hidden_items.all()} for assignment in assignments] if assignments is not None else []
+    hidden = set.intersection(*hidden_sets) if hidden_sets else set()
     for number, item in enumerate(items, 1):
+        if item.pk in hidden:
+            continue
         parts = item.selected_subitems()
         columns = [{'owner': part, 'is_part': True, 'label': f'{number}{subitem_label(index)}'}
                    for index, part in enumerate(parts)] if parts else [{'owner': item.task, 'is_part': False, 'label': str(number)}]
@@ -158,7 +162,7 @@ def worksheet_progress(request, worksheet_id):
         group = get_object_or_404(StudentGroup.visible_to(request.user), pk=group_id if group_id.isdigit() else 0)
         assignments = assignments.filter(student__in=group.students.all())
     items = list(worksheet.ordered_items().filter(task__isnull=False))
-    groups_of_points = progress_groups(items)
+    groups_of_points = progress_groups(items, assignments)
     etag = None
     if request.GET.get('fragment'):
         state = [list(assignments.values('pk', 'status', 'student__first_name', 'student__last_name', 'student__username')),
@@ -204,7 +208,7 @@ def progress_overview(request):
     mini_tables = []
     if student:
         for assignment in page:
-            points = progress_groups(list(assignment.worksheet.ordered_items().filter(task__isnull=False)))
+            points = progress_groups(list(assignment.worksheet.ordered_items().filter(task__isnull=False)), [assignment])
             mini_tables.append({'assignment': assignment, 'point_groups': points,
                                 'people': progress_people(points, [assignment])})
     context = {
