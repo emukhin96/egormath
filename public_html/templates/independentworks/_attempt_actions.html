@@ -1,0 +1,13 @@
+{# Общая строка действий ученика до начала и после выполнения работы. #}
+<div class="form-buttons">
+  {% if start %}
+  <form method="post" action="{% url 'independentworks:start' attempt.pk %}" class="inline-form">
+    {% csrf_token %}<button class="btn">Начать</button>
+  </form>
+  {% elif editable %}
+  <form method="post" action="{% url 'independentworks:submit' attempt.pk %}" data-iw-flush class="inline-form">
+    {% csrf_token %}<button class="btn">Сдать работу</button>
+  </form>
+  {% endif %}
+  <a class="btn btn-secondary" href="{% url 'dashboard' %}">К моим заданиям</a>
+</div>
