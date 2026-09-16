@@ -58,20 +58,36 @@ class CatalogTests(TestCase):
         self.assertFalse(copy.all_subitems)
         self.assertEqual(list(copy.subitems.values_list('text_latex', flat=True)), ['Первый'])
 
-    def test_database_duplicate_keeps_return_link_to_worksheet(self):
+    def test_database_duplicate_is_added_to_worksheet_and_keeps_context(self):
         ws = Worksheet.objects.create(owner=self.teacher, title='Исходный листок')
+        original_item = WorksheetItem.objects.create(
+            worksheet=ws, task=self.task, order=10)
 
         response = self.client.post(
             reverse('task_duplicate', args=[self.task.pk]),
-            {'return_worksheet': ws.pk})
+            {'worksheet': ws.pk, 'item': original_item.pk, 'standalone': '1'})
         copy = Task.objects.exclude(pk=self.task.pk).get()
+        copied_item = ws.items.get(task=copy)
         return_url = (reverse('task_detail', args=[copy.pk])
-                      + f'?return_worksheet={ws.pk}')
+                      + f'?worksheet={ws.pk}&item={copied_item.pk}')
 
         self.assertIsNone(copy.variant_of_id)
+        self.assertEqual(
+            list(ws.ordered_items().values_list('task_id', flat=True)),
+            [self.task.pk, copy.pk])
         self.assertRedirects(response, return_url)
         self.assertContains(self.client.get(return_url), 'Вернуться в листок')
         self.assertContains(self.client.get(return_url), 'Исходный листок')
+
+        saved = self.client.post(
+            reverse('task_manage', args=[copy.pk])
+            + f'?worksheet={ws.pk}&item={copied_item.pk}&view=task',
+            {'block': 'condition', 'text_latex': 'Изменённая копия',
+             'scope': 'global'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(saved.json()['url'], return_url)
+        self.assertIn('Вернуться в листок', saved.json()['html'])
 
     def test_duplicate_permissions(self):
         ws = Worksheet.objects.create(owner=make_teacher('other'), title='Чужой')
