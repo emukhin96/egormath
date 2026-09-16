@@ -203,9 +203,18 @@ class StudentManagementTests(TestCase):
         })
         student = User.objects.get(first_name='Пётр')
         old_hash = student.password
-        self.client.post(reverse('reset_student_password', args=[student.pk]))
+        page = self.client.get(reverse('students'))
+        self.assertContains(page, f'data-dialog-open="reset-password-{student.pk}"')
+        self.assertContains(page, 'Сбросить и показать новый пароль')
+        response = self.client.post(reverse('reset_student_password', args=[student.pk]))
+        self.assertRedirects(response, reverse('students'), fetch_redirect_response=False)
         student.refresh_from_db()
         self.assertNotEqual(student.password, old_hash)
+        page = self.client.get(reverse('students'))
+        credentials = page.context['new_credentials']
+        self.assertEqual(credentials['username'], student.username)
+        self.assertTrue(student.check_password(credentials['password']))
+        self.assertIsNone(self.client.get(reverse('students')).context['new_credentials'])
 
     def test_dashboard_routing(self):
         self.client.login(username='teacher1', password='pass12345')
