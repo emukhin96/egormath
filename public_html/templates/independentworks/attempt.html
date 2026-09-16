@@ -1,12 +1,13 @@
 {% extends 'independentworks/base.html' %}
 {% load static task_extras %}
 {% block title %}{{ attempt.run.title }}{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/independent_attempt.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <span class="page-eyebrow">{{ attempt.run.kind_label }} · {{ attempt.state }}</span>
+    <span class="page-eyebrow">{{ attempt.run.kind_label }}</span>
     <h1>{{ attempt.run.title }}</h1>
-    <p class="page-subtitle">Вариант {{ attempt.variant.number }} · {{ attempt.run.duration }} мин.</p>
+    <p class="page-subtitle">Вариант {{ attempt.variant.number }} · {{ attempt.run.duration }} мин. · <span class="badge {% if attempt.finished %}badge-submitted{% else %}badge-assigned{% endif %}">{{ attempt.state }}</span></p>
   </div>
   {% if teacher_view %}<a class="btn btn-secondary" href="{% url 'independentworks:progress' attempt.run_id %}">Общий прогресс</a>{% endif %}
 </div>
@@ -14,8 +15,7 @@
 <div class="iw-clock" data-iw-timer data-ends="{{ attempt.ends_at|date:'c' }}" data-now="{{ now }}" role="timer" aria-label="Оставшееся время">Оставшееся время</div>
 <p class="helptext">Ответы сохраняются автоматически. Галочка у ответа означает, что он принят сервером. Самопроверки нет.</p>
 {% endif %}
-{% include 'assignments/_result_summary.html' %}
-{% if attempt.finished and not teacher_view %}<p class="helptext">Работа сдана. {% if not show_checks %}Результаты будут доступны после разрешения учителя.{% endif %}</p>{% endif %}
+{% include 'independentworks/_attempt_result.html' %}
 {% if can_start and not teacher_view %}
 <div class="card assignment-submit-card">
   <p class="helptext">Время начнёт отсчитываться после нажатия кнопки. Закрытие вкладки не останавливает таймер.{% if attempt.run.deadline %} Общее окончание: {{ attempt.run.deadline|date:'d.m.Y H:i' }}.{% endif %}</p>
@@ -24,10 +24,9 @@
 {% elif not attempt.started_at and not teacher_view %}
 <p class="helptext">Работа не начата. Срок начала истёк.</p>
 {% endif %}
-{% if accessible %}<div class="iw-stack">{% for row in rows %}{% for note in row.notes %}<div class="math-content card iw-section">{{ note|web_text }}</div>{% endfor %}{% if row.group_start %}<div class="card iw-section">{% endif %}<section class="iw-point" id="point-{{ row.point.pk }}">{% include 'assignments/_point_content.html' %}
-{% if editable %}<form method="post" action="{% url 'independentworks:save' attempt.pk row.point.pk %}" data-iw-answer class="task-tools subitem-answer">{% csrf_token %}<input type="hidden" name="version" value="{{ row.answer.version|default:0 }}">{% if row.fragments %}{% include 'assignments/_mask.html' with fragments=row.fragments editable=True show_checks=False %}<button class="btn btn-small btn-secondary">Сохранить ответ</button><span data-iw-save-status role="status">{% if row.answer.version %}✓ Сохранён{% else %}Ответ не введён{% endif %}</span>{% else %}{% if attempt.run.allow_photos %}<p>Загрузите фотографию развёрнутого решения.</p>{% else %}<p class="helptext">Выполните задание по указаниям учителя. Электронный ввод ответа не требуется.</p>{% endif %}{% endif %}</form>{% else %}<div class="math-content"><strong>Ваш ответ: </strong>{{ row.display|default:'—'|web_answer }}</div>{% endif %}
-{% if show_checks %}<p data-point-feedback-url="{{ row.grade_url }}">{% if row.grade %}{{ row.grade }}{% elif row.pending %}Задача на проверке{% elif row.auto == 'ok' %}Верно{% elif row.auto == 'wrong' %}Неверно{% else %}Ответ не введён{% endif %}</p>{% endif %}
-{% if row.reference %}<div class="math-content"><strong>Правильный ответ: </strong>{{ row.reference|web_answer }}</div>{% endif %}{% if row.solution %}<div class="math-content"><strong>Решение: </strong>{{ row.solution|web_text }}</div>{% endif %}{% if row.comment %}<p><strong>Комментарий: </strong>{{ row.comment|linebreaksbr }}</p>{% endif %}
+{% if accessible %}<div class="iw-stack">{% for row in rows %}{% for note in row.notes %}<div class="math-content card iw-section">{{ note|web_text }}</div>{% endfor %}{% if row.group_start %}<div class="card iw-section ws-view">{% endif %}<section class="iw-point" id="point-{{ row.point.pk }}">{% include 'assignments/_point_content.html' %}
+{% if editable %}<form method="post" action="{% url 'independentworks:save' attempt.pk row.point.pk %}" data-iw-answer class="task-tools subitem-answer">{% csrf_token %}<input type="hidden" name="version" value="{{ row.answer.version|default:0 }}">{% if row.fragments %}{% include 'assignments/_mask.html' with fragments=row.fragments editable=True show_checks=False %}<button class="btn btn-small btn-secondary">Сохранить ответ</button><span data-iw-save-status role="status">{% if row.answer.version %}✓ Сохранён{% else %}Ответ не введён{% endif %}</span>{% else %}{% if attempt.run.allow_photos %}<p>Загрузите фотографию развёрнутого решения.</p>{% else %}<p class="helptext">Выполните задание по указаниям учителя. Электронный ввод ответа не требуется.</p>{% endif %}{% endif %}</form>{% else %}<div class="answer-block math-content"><strong>Ваш ответ: </strong>{{ row.display|default:'—'|web_answer }}</div>{% endif %}
+{% include 'independentworks/_attempt_feedback.html' %}
 {% include 'assignments/_photo_gallery.html' with photos=row.answer.photos.all photo_route='independentworks:photo' delete_route='independentworks:delete_photo' %}
 {% if editable and attempt.run.allow_photos %}<form method="post" enctype="multipart/form-data" action="{% url 'independentworks:upload_photo' attempt.pk row.point.pk %}" data-iw-flush class="task-tools form-buttons">{% csrf_token %}<label for="photo-{{ row.point.pk }}">Фото решения</label><input id="photo-{{ row.point.pk }}" type="file" name="photo" accept="image/*" required><button class="btn btn-small btn-secondary">Загрузить</button></form>{% endif %}
 {% if teacher_view and attempt.finished %}{% include 'independentworks/_review_controls.html' %}{% endif %}</section>{% if row.group_end %}</div>{% endif %}{% endfor %}</div>{% for note in tail_notes %}<div class="math-content card iw-section">{{ note|web_text }}</div>{% endfor %}{% endif %}

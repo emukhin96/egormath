@@ -1,0 +1,15 @@
+{% if result and result.percent != None %}
+<div class="hero-card">
+  <div class="hero-body">
+    <p class="hero-title">{% if result.pending %}Предварительный результат{% else %}Результат работы{% endif %}</p>
+    {% include 'assignments/_result_summary.html' %}
+    <p class="hero-meta">Ниже — ваши ответы и результаты проверки.</p>
+  </div>
+  {% if not teacher_view %}<a class="btn btn-secondary" href="{% url 'dashboard' %}">К моим заданиям</a>{% endif %}
+</div>
+{% elif attempt.finished and not teacher_view %}
+<div class="card assignment-submit-card">
+  <h2>Работа сдана</h2>
+  <p class="helptext">Ответы сохранены. Результаты будут доступны после разрешения учителя.</p>
+</div>
+{% endif %}

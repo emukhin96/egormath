@@ -1,0 +1,19 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">{{ attempt.run.kind_label }}</p>
+  <h2>{{ attempt.run.title|truncatechars:34 }}</h2>
+  <ul class="sidebar-list">
+    <li><strong>Статус:</strong> {{ attempt.state }}</li>
+    <li><strong>Вариант:</strong> {{ attempt.variant.number }}</li>
+    <li><strong>Время:</strong> {{ attempt.run.duration }} мин.</li>
+    {% if attempt.run.deadline %}<li><strong>Срок:</strong> {{ attempt.run.deadline|date:'d.m.Y H:i' }}</li>{% endif %}
+  </ul>
+</section>
+{% if accessible %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">{% if result %}Результат{% else %}Задания{% endif %}</p>
+  {% if result and result.percent != None %}<div class="sidebar-stat"><strong>{{ result.done }} из {{ result.total }}</strong><span>пунктов зачтено ({{ result.percent }}%)</span></div>{% endif %}
+  <ul class="sidebar-list">
+    {% for row in rows %}<li><a href="#point-{{ row.point.pk }}">№ {{ row.point.label }}</a>{% if show_checks %} — {% if row.grade %}{{ row.grade }}{% elif row.pending %}на проверке{% elif row.auto == 'ok' %}верно{% elif row.auto == 'wrong' %}неверно{% else %}нет ответа{% endif %}{% endif %}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
