@@ -4,7 +4,6 @@
     <div><span class="page-eyebrow">База задач</span><h1>Задача #{{ task.pk }}</h1>
       {% if task.variant_of_id %}<span class="badge badge-returned">Локальная копия #{{ task.variant_of_id }}</span>{% endif %}
       {% if worksheet %}<a href="{% url 'worksheet_detail' worksheet.pk %}">Вернуться в листок «{{ worksheet.title }}»</a>{% endif %}
-      {% if return_worksheet %}<a href="{% url 'worksheet_detail' return_worksheet.pk %}">Вернуться в листок «{{ return_worksheet.title }}»</a>{% endif %}
     </div>
     <div class="form-buttons">
       {% if not task.variant_of_id %}{% include 'includes/cart_button.html' with task=task %}{% endif %}
