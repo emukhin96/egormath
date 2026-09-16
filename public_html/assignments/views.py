@@ -35,7 +35,7 @@ def _check_visibility_or_default(post):
 
 @transaction.atomic
 def _create_assignments(*, worksheet, teacher, students, check_visibility,
-                        allow_photos, due_at, groups=(), individual_ids=()):
+                        allow_photos, due_at, groups=(), individual_ids=(), restrict_clipboard=False):
     """Создать назначения без дублей; используется обеими точками выдачи."""
     created = 0
     memberships = {}
@@ -51,6 +51,7 @@ def _create_assignments(*, worksheet, teacher, students, check_visibility,
                 'recipient_origin_known': True,
                 'check_visibility': check_visibility,
                 'allow_photos': allow_photos,
+                'restrict_clipboard': restrict_clipboard,
                 'due_at': due_at,
             })
         if was_created and student.pk not in individual_ids:
@@ -86,6 +87,7 @@ def assign_worksheet(request, worksheet_id):
         students=(profile.user for profile in my_students),
         check_visibility=check_visibility,
         allow_photos=allow_photos,
+        restrict_clipboard='restrict_clipboard' in request.POST,
         due_at=due_at,
         groups=selected_groups,
         individual_ids=[pk for pk in request.POST.getlist('students') if pk.isdigit()],
@@ -307,6 +309,7 @@ def assignment_group_update(request, worksheet_id):
                     'recipient_origin_known': True,
                     'check_visibility': check_visibility,
                     'allow_photos': allow_photos,
+                    'restrict_clipboard': first.restrict_clipboard if first else False,
                     'due_at': due_at,
                 })
             status = request.POST.get(f'status_{student_id}', '')
@@ -405,6 +408,7 @@ def assignment_create(request):
             students=form.cleaned_data['recipients'],
             check_visibility=form.cleaned_data['check_visibility'],
             allow_photos=form.cleaned_data['allow_photos'],
+            restrict_clipboard=form.cleaned_data['restrict_clipboard'],
             due_at=form.cleaned_data['due_at'],
             groups=form.cleaned_data['groups'],
             individual_ids=form.cleaned_data['students'].values_list('pk', flat=True),
@@ -631,6 +635,7 @@ def _answer_payload(owner, post, prefix):
     return {}, None
 
 
+@transaction.atomic
 def _persist_answers(assignment, post):
     """Записывает присланные поля ответов по всем видимым задачам.
 
@@ -642,10 +647,16 @@ def _persist_answers(assignment, post):
     (auto_check — учителю), а раскрытый ученику результат (check_revealed)
     сбрасывает при смене ответа: новый ответ — новая кнопка «Проверить».
     """
+    from workaudit.services import lock_work
+    assignment = lock_work(Assignment, assignment.pk)
+    if not assignment.is_editable_by_student:
+        raise PermissionDenied('Работа уже отправлена на проверку.')
     hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     existing = {s.task_id: s for s in assignment.submissions.all()}
 
     def _apply(obj, fields, reference, spec):
+        from workaudit.services import answer_snapshot, record_revision
+        snapshot_before = answer_snapshot(obj)
         before = obj.display_answer
         for name, value in fields.items():
             if name == 'answer_json':
@@ -658,6 +669,7 @@ def _persist_answers(assignment, post):
             obj.check_revealed = False
         obj.save(update_fields=[*fields, 'auto_check', 'check_json', 'checked_at',
                                 'check_revealed', 'updated_at'])
+        record_revision(obj, snapshot_before)
 
     def _has_value(fields):
         return any(
@@ -990,17 +1002,18 @@ def submit_assignment(request, pk):
         raise PermissionDenied('Работа уже отправлена на проверку.')
     # Кнопка «Отправить» шлёт ту же форму, что и «Сохранить черновик»:
     # сначала записываем введённое, иначе учитель увидит пустую работу
-    _persist_answers(assignment, request.POST)
-    # Строки-ответы для видимых задач: скрытые не создаём
-    hidden = set(assignment.hidden_items.values_list('pk', flat=True))
-    for item in assignment.worksheet.ordered_items():
-        if item.task_id is None or item.pk in hidden:
-            continue
-        Submission.objects.get_or_create(
-            assignment=assignment, task=item.task)
-    assignment.status = Assignment.STATUS_SUBMITTED
-    assignment.submitted_at = timezone.now()
-    assignment.save()
+    with transaction.atomic():
+        _persist_answers(assignment, request.POST)
+        # Строки-ответы для видимых задач: скрытые не создаём
+        hidden = set(assignment.hidden_items.values_list('pk', flat=True))
+        for item in assignment.worksheet.ordered_items():
+            if item.task_id is None or item.pk in hidden:
+                continue
+            Submission.objects.get_or_create(
+                assignment=assignment, task=item.task)
+        assignment.status = Assignment.STATUS_SUBMITTED
+        assignment.submitted_at = timezone.now()
+        assignment.save()
     messages.success(request, 'Работа отправлена на проверку.')
     return redirect('assignment_detail', pk=pk)
 

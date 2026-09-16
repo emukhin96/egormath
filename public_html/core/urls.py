@@ -28,6 +28,7 @@ urlpatterns = [
     path('worksheets/cart/', include('worksheets.cart_urls')),
     path('worksheets/', include('worksheets.urls')),
     path('assignments/', include('assignments.urls')),
+    path('work-activity/', include('workaudit.urls')),
     path('independent-works/', include('independentworks.urls')),
     path('s/<str:token>/', worksheets_views.public_worksheet, name='public_worksheet'),
     path('s/<str:token>/pdf/', worksheets_views.public_worksheet_pdf, name='public_worksheet_pdf'),

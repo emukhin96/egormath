@@ -55,6 +55,8 @@ class AssignmentCreateForm(forms.Form):
         label='Автосверка ответов', choices=Assignment.CHECK_CHOICES,
         initial=Assignment.CHECK_LIVE,
         help_text='По умолчанию ученик проверяет ответ кнопкой. Режим общий для всех назначений листка.')
+    restrict_clipboard = forms.BooleanField(
+        label='Ограничить копирование условий и вставку ответов', required=False)
     allow_photos = forms.BooleanField(
         label='Принимать фото решений', required=False, initial=True)
 
@@ -136,6 +138,9 @@ class AssignmentSettingsForm(forms.Form):
     check_visibility = forms.ChoiceField(
         label='Автосверка ответов — для всего листка', required=False,
         choices=[('', 'Не менять')] + Assignment.CHECK_CHOICES)
+    restrict_clipboard = forms.ChoiceField(
+        label='Копирование условий и вставка ответов', required=False,
+        choices=[('', 'Не менять'), ('yes', 'Ограничить'), ('no', 'Разрешить')])
     allow_photos = forms.ChoiceField(
         label='Фото решений', required=False,
         choices=[('', 'Не менять'), ('yes', 'Принимать'), ('no', 'Не принимать')])
@@ -147,11 +152,11 @@ class AssignmentSettingsForm(forms.Form):
 
     def __init__(self, *args, recipients, whole_worksheet=False, **kwargs):
         initial = {'due_action': 'keep'}
-        for field in ('check_visibility', 'allow_photos', 'due_at'):
+        for field in ('check_visibility', 'allow_photos', 'due_at', 'restrict_clipboard'):
             values = {getattr(a, field) for a in recipients}
             if len(values) == 1:
                 value = values.pop()
-                initial[field] = ('yes' if value else 'no') if field == 'allow_photos' else value
+                initial[field] = ('yes' if value else 'no') if field in ('allow_photos', 'restrict_clipboard') else value
         super().__init__(*args, initial=initial, **kwargs)
         if not whole_worksheet:
             self.fields.pop('check_visibility')
@@ -169,6 +174,8 @@ class AssignmentSettingsForm(forms.Form):
             changes['check_visibility'] = data['check_visibility']
         if data.get('allow_photos'):
             changes['allow_photos'] = data['allow_photos'] == 'yes'
+        if data.get('restrict_clipboard'):
+            changes['restrict_clipboard'] = data['restrict_clipboard'] == 'yes'
         if data['due_action'] != 'keep':
             changes['due_at'] = data['due_at'] if data['due_action'] == 'set' else None
         return changes

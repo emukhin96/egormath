@@ -1,0 +1,1 @@
+{% if object.pk %}<details class="check-history" data-audit-url="{% url 'workaudit:history' kind object.pk %}"><summary>История сохранённых ответов</summary><div data-audit-body></div></details>{% endif %}

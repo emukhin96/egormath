@@ -241,7 +241,7 @@ def correction_fingerprint(parent):
 
 
 def prepare(work, owner, students, duration=40, deadline=None, max_variants=None,
-            allow_photos=True, release_mode='manual', release_flags=None, parent=None, kind='initial', previous=None):
+            allow_photos=True, release_mode='manual', release_flags=None, parent=None, kind='initial', previous=None, restrict_clipboard=False):
     if kind not in ('initial', 'correction', 'retake') or (kind == 'initial') != (parent is None):
         raise WorkError('Исходная попытка нужна только для исправления или пересдачи.')
     if parent is not None and parent.run.work_id != work.pk:
@@ -296,7 +296,7 @@ def prepare(work, owner, students, duration=40, deadline=None, max_variants=None
             previous.superseded_at = timezone.now()
             previous.save(update_fields=['superseded_at'])
         return Run.objects.create(work=work, owner=owner, title=work.title, duration=duration,
-                                  deadline=deadline, max_variants=max_variants, allow_photos=allow_photos,
+                                  deadline=deadline, max_variants=max_variants, allow_photos=allow_photos, restrict_clipboard=restrict_clipboard,
                                   release_mode=release_mode, release_flags=flags,
                                   fingerprint=correction_fingerprint(parent) if kind == 'correction' else digest(data),
                                   plan=plan, kind=kind, parent=parent)
@@ -396,7 +396,8 @@ def editable(attempt):
 
 @transaction.atomic
 def save_answer(attempt_id, point_id, version, values):
-    attempt = Attempt.objects.select_for_update().get(pk=attempt_id)
+    from workaudit.services import lock_work
+    attempt = lock_work(Attempt, attempt_id)
     editable(attempt)
     point = Point.objects.get(pk=point_id, variant_id=attempt.variant_id)
     answer, _ = Answer.objects.get_or_create(attempt=attempt, point=point)
@@ -406,6 +407,8 @@ def save_answer(attempt_id, point_id, version, values):
     allowed = {s.name for s in spec.slots} if spec.is_valid else set()
     if set(values) - allowed or any(not isinstance(v, str) or len(v) > 10000 for v in values.values()):
         raise WorkError('Некорректный ответ.')
+    from workaudit.services import answer_snapshot, record_revision
+    snapshot_before = answer_snapshot(answer)
     auto, checks = check_mask(spec, values) if spec.is_valid else ('unknown', {})
     # Пустые поля пригодной маски дают нулевой зачёт, а не ручную очередь.
     if spec.is_valid and (not auto or (auto == 'unknown' and 'unknown' not in checks.values())):
@@ -416,12 +419,14 @@ def save_answer(attempt_id, point_id, version, values):
     if not changed:
         raise WorkError('Конфликт сохранения. Перезагрузите страницу.', 409)
     answer.refresh_from_db()
+    record_revision(answer, snapshot_before)
     return answer
 
 
 @transaction.atomic
 def submit(attempt_id):
-    attempt = Attempt.objects.select_for_update().get(pk=attempt_id)
+    from workaudit.services import lock_work
+    attempt = lock_work(Attempt, attempt_id)
     finish_expired(attempt)
     if attempt.submitted_at:
         return attempt

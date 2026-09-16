@@ -11,6 +11,7 @@
   </div>
   {% if teacher_view %}<a class="btn btn-secondary" href="{% url 'independentworks:progress' attempt.run_id %}">Общий прогресс</a>{% endif %}
 </div>
+{% if teacher_view %}{% include 'workaudit/panel.html' with kind='attempt' object=attempt %}{% elif editable or can_start %}{% include 'workaudit/notice.html' with kind='attempt' object=attempt restricted=attempt.restrict_clipboard active=editable %}{% endif %}
 {% if editable %}
 <div class="iw-clock" data-iw-timer data-ends="{{ attempt.ends_at|date:'c' }}" data-now="{{ now }}" role="timer" aria-label="Оставшееся время">Оставшееся время</div>
 <p class="helptext">Ответы сохраняются автоматически. Галочка у ответа означает, что он принят сервером. Самопроверки нет.</p>
@@ -24,8 +25,9 @@
 {% elif not attempt.started_at and not teacher_view %}
 <p class="helptext">Работа не начата. Срок начала истёк.</p>
 {% endif %}
-{% if accessible %}<div class="iw-stack">{% for row in rows %}{% for note in row.notes %}<div class="math-content card iw-section">{{ note|web_text }}</div>{% endfor %}{% if row.group_start %}<div class="card iw-section ws-view">{% endif %}<section class="iw-point" id="point-{{ row.point.pk }}">{% include 'assignments/_point_content.html' %}
+{% if accessible %}<div class="iw-stack">{% for row in rows %}{% for note in row.notes %}<div class="math-content card iw-section">{{ note|web_text }}</div>{% endfor %}{% if row.group_start %}<div class="card iw-section ws-view">{% endif %}<section class="iw-point" id="point-{{ row.point.pk }}"><div data-audit-statement>{% include 'assignments/_point_content.html' %}</div>
 {% if editable %}<form method="post" action="{% url 'independentworks:save' attempt.pk row.point.pk %}" data-iw-answer class="task-tools subitem-answer">{% csrf_token %}<input type="hidden" name="version" value="{{ row.answer.version|default:0 }}">{% if row.fragments %}{% include 'assignments/_mask.html' with fragments=row.fragments editable=True show_checks=False %}<button class="btn btn-small btn-secondary">Сохранить ответ</button><span data-iw-save-status role="status">{% if row.answer.version %}✓ Сохранён{% else %}Ответ не введён{% endif %}</span>{% else %}{% if attempt.run.allow_photos %}<p>Загрузите фотографию развёрнутого решения.</p>{% else %}<p class="helptext">Выполните задание по указаниям учителя. Электронный ввод ответа не требуется.</p>{% endif %}{% endif %}</form>{% else %}<div class="answer-block math-content"><strong>Ваш ответ: </strong>{{ row.display|default:'—'|web_answer }}</div>{% endif %}
+{% if teacher_view %}{% include 'workaudit/revisions.html' with kind='answer' object=row.answer %}{% endif %}
 {% include 'independentworks/_attempt_feedback.html' %}
 {% include 'assignments/_photo_gallery.html' with photos=row.answer.photos.all photo_route='independentworks:photo' delete_route='independentworks:delete_photo' %}
 {% if editable and attempt.run.allow_photos %}<form method="post" enctype="multipart/form-data" action="{% url 'independentworks:upload_photo' attempt.pk row.point.pk %}" data-iw-flush class="task-tools form-buttons">{% csrf_token %}<label for="photo-{{ row.point.pk }}">Фото решения</label><input id="photo-{{ row.point.pk }}" type="file" name="photo" accept="image/*" required><button class="btn btn-small btn-secondary">Загрузить</button></form>{% endif %}
@@ -50,8 +52,10 @@
 {% if attempt.parent_id %}<p><a href="{% url 'independentworks:attempt' attempt.parent_id %}">Предыдущая попытка</a></p>{% endif %}
 {% endblock %}
 {% block extra_js %}
+{% if teacher_view %}<script defer src="{% static 'js/work_history.js' %}"></script>{% endif %}
 {% if teacher_view %}<script defer src="{% static 'js/teacher_progress.js' %}"></script>{% endif %}
 {% if editable %}
+<script defer src="{% static 'js/work_activity.js' %}"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/independentworks.js' %}"></script>
 {% endif %}
