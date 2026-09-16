@@ -107,15 +107,30 @@
       <td class="mono">{{ profile.user.username }}</td>
       <td class="row-actions">
         <a class="btn btn-small btn-secondary" href="{% url 'student_edit' profile.user_id %}">Изменить</a>
-        <form method="post" action="{% url 'reset_student_password' profile.user_id %}" class="inline-form"
-              onsubmit="return confirm('Сбросить пароль ученика {{ profile.user.get_full_name|escapejs }}?');">
-          {% csrf_token %}<button type="submit" class="btn btn-small btn-secondary">Сбросить пароль</button>
-        </form>
+        <button type="button" class="btn btn-small btn-secondary" data-dialog-open="reset-password-{{ profile.user_id }}">Сбросить пароль</button>
+
       </td>
     </tr>
     {% endfor %}
     </tbody>
   </table>
+  {% for profile in student_profiles %}
+        <dialog class="dialog problem-dialog" id="reset-password-{{ profile.user_id }}" aria-labelledby="reset-password-title-{{ profile.user_id }}">
+          <div class="dialog-heading">
+            <h3 id="reset-password-title-{{ profile.user_id }}">Сбросить пароль ученика?</h3>
+            <button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button>
+          </div>
+          <p>{{ profile.user.get_full_name|default:profile.user.username }} · <span class="mono">{{ profile.user.username }}</span></p>
+          <p>Прежний пароль перестанет действовать. Новый пароль будет показан один раз после сброса — сохраните и передайте его ученику.</p>
+          <form method="post" action="{% url 'reset_student_password' profile.user_id %}">
+            {% csrf_token %}
+            <div class="form-buttons">
+              <button type="submit" class="btn">Сбросить и показать новый пароль</button>
+              <button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button>
+            </div>
+          </form>
+        </dialog>
+  {% endfor %}
   {% else %}
   <p class="muted">Ученики не найдены — измените фильтры или добавьте нового.</p>
   {% endif %}
