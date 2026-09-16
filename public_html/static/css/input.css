@@ -4534,14 +4534,29 @@
   .iw-stack { display: grid; gap: var(--space-3); margin-block: var(--space-4); }
   .iw-section { display: grid; gap: var(--space-3); padding: var(--space-4); margin-block: var(--space-3); }
   .iw-section h2, .iw-section h3, .iw-section p { margin: 0; }
-  .iw-section form { display: grid; gap: var(--space-2); }
+  .iw-section form:not(.task-tools) { display: grid; gap: var(--space-2); }
   .iw-inline { display: flex; align-items: end; flex-wrap: wrap; gap: var(--space-2); margin-block: var(--space-3); }
   .iw-choice { display: flex; align-items: baseline; gap: var(--space-2); }
   .iw-candidate { border-bottom: 1px solid var(--border); padding-block: var(--space-3); }
   .iw-compare { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: var(--space-4); align-items: start; }
   .iw-image { max-width: min(100%, 560px); max-height: 500px; object-fit: contain; }
   .iw-photo { max-width: 200px; max-height: 180px; object-fit: contain; }
-  .iw-clock { position: sticky; top: 0; background: var(--bg); border: 1px solid var(--border); padding: var(--space-3); z-index: 5; font-variant-numeric: tabular-nums; }
+  .iw-clock {
+    position: sticky;
+    top: calc(var(--topbar-height) + var(--space-2));
+    z-index: 5;
+    width: fit-content;
+    margin-left: auto;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+    box-shadow: var(--panel-shadow);
+    color: var(--accent-dark);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 760px) { .iw-clock { top: var(--space-2); } }
   .iw-table-wrap { overflow-x: auto; }
   .iw-table { width: 100%; border-collapse: collapse; }
   .iw-table th, .iw-table td { padding: var(--space-3); border-bottom: 1px solid var(--border); vertical-align: top; text-align: left; }
@@ -4610,6 +4625,7 @@
   .iw-workspace-heading > h3 { min-width: 0; overflow-wrap: anywhere; }
   .summary-list > div { flex-wrap: wrap; }
   .summary-list dd { min-width: 0; max-width: 100%; overflow-wrap: anywhere; margin-left: auto; }
+  .iw-point { min-width: 0; }
   .iw-point + .iw-point { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
   .review-save-success { color: #166534; background: #dcfce7; border-radius: var(--radius); padding: var(--space-2); }
   .time-presets { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }

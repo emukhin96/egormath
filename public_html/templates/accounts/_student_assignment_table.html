@@ -1,4 +1,5 @@
 {# Таблица заданий ученика: items — список Assignment, skip — задание, уже показанное в hero-карточке #}
+<div class="catalog-table-wrap" role="region" aria-label="Список заданий" tabindex="0">
 <table class="list">
   <tr><th>Листок</th><th>Учитель</th><th>Выдано</th><th>Срок</th><th>Статус</th><th>Результат</th><th></th></tr>
   {% for a in items %}
@@ -15,3 +16,4 @@
   {% endif %}
   {% endfor %}
 </table>
+</div>
