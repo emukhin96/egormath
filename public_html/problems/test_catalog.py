@@ -58,6 +58,21 @@ class CatalogTests(TestCase):
         self.assertFalse(copy.all_subitems)
         self.assertEqual(list(copy.subitems.values_list('text_latex', flat=True)), ['Первый'])
 
+    def test_database_duplicate_keeps_return_link_to_worksheet(self):
+        ws = Worksheet.objects.create(owner=self.teacher, title='Исходный листок')
+
+        response = self.client.post(
+            reverse('task_duplicate', args=[self.task.pk]),
+            {'return_worksheet': ws.pk})
+        copy = Task.objects.exclude(pk=self.task.pk).get()
+        return_url = (reverse('task_detail', args=[copy.pk])
+                      + f'?return_worksheet={ws.pk}')
+
+        self.assertIsNone(copy.variant_of_id)
+        self.assertRedirects(response, return_url)
+        self.assertContains(self.client.get(return_url), 'Вернуться в листок')
+        self.assertContains(self.client.get(return_url), 'Исходный листок')
+
     def test_duplicate_permissions(self):
         ws = Worksheet.objects.create(owner=make_teacher('other'), title='Чужой')
         item = WorksheetItem.objects.create(worksheet=ws, task=self.task)
