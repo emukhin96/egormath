@@ -253,6 +253,56 @@ class NeuroTests(TestCase):
             'application/json')
         self.assertEqual(body['generationConfig']['maxOutputTokens'], 4096)
 
+    def test_proxy_routing_and_direct_headers(self):
+        """Туннель используется только при настройке; секрет не уходит Google."""
+        from unittest import mock
+        from django.test import override_settings
+        from .neuro import solve_task
+
+        for base, expected in (
+            ('https://proxy.example/', 'https://proxy.example'),
+            ('', 'https://generativelanguage.googleapis.com'),
+        ):
+            with self.subTest(base=base), override_settings(
+                GEMINI_API_KEY='key', GEMINI_MODEL='model',
+                GEMINI_API_BASE=base, GEMINI_PROXY_SECRET='secret',
+            ), mock.patch('problems.neuro.requests.post', return_value=
+                          self._response({'answer': '4'})) as post:
+                solve_task('2+2')
+                self.assertEqual(post.call_args.args[0],
+                                 expected + '/v1beta/models/model:generateContent')
+                headers = post.call_args.kwargs['headers']
+                self.assertEqual(headers['x-goog-api-key'], 'key')
+                self.assertEqual(headers.get('X-Egor-Proxy-Secret'),
+                                 'secret' if base else None)
+
+    def test_proxy_without_secret_does_not_send_request(self):
+        from unittest import mock
+        from django.test import override_settings
+        from .neuro import NeuroError, solve_task
+
+        with override_settings(GEMINI_API_KEY='key',
+                               GEMINI_API_BASE='https://proxy.example',
+                               GEMINI_PROXY_SECRET=''), mock.patch(
+                                   'problems.neuro.requests.post') as post:
+            with self.assertRaisesMessage(NeuroError, 'GEMINI_PROXY_SECRET'):
+                solve_task('2+2')
+            post.assert_not_called()
+
+    def test_region_error_explains_proxy_configuration(self):
+        from unittest import mock
+        from django.test import override_settings
+        from .neuro import NeuroError, solve_task
+
+        response = mock.Mock(status_code=400, text='region rejected')
+        response.json.return_value = {
+            'error': {'message': 'User location is not supported'}}
+        with override_settings(GEMINI_API_KEY='key'), mock.patch(
+            'problems.neuro.requests.post', return_value=response
+        ), self.assertLogs('problems.neuro', level='WARNING'):
+            with self.assertRaisesMessage(NeuroError, 'GEMINI_API_BASE'):
+                solve_task('2+2')
+
     def test_invented_subitems_fold_into_answer(self):
         """Параметр без подпунктов модель часто кладёт в массивы — не теряем."""
         from unittest import mock

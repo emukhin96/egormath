@@ -552,6 +552,15 @@ DJANGO_ENV=production ../venv/bin/python manage.py createsuperuser
 `public_html/wsgi.py` и `.htaccess` уже в репозитории. Перезапуск:
 `touch public_html/wsgi.py`. При 500 смотреть `~/egormath/wsgi_import_error.log`.
 
+Если Gemini отвечает `User location is not supported` (HTTP 400), задайте
+`.secrets/GEMINI_API_BASE` — корневой URL прокси без `/v1beta`, и
+`.secrets/GEMINI_PROXY_SECRET` — тот же секрет, что использует прокси.
+Перезапустите WSGI после изменения настроек. Сайт передаёт прокси ключ
+Gemini в `x-goog-api-key`, а секрет — в `X-Egor-Proxy-Secret`.
+Без `GEMINI_API_BASE` запрос идёт напрямую в Google; при заданном адресе
+и отсутствующем секрете запрос не отправляется. Недоступный туннель
+не переключает сайт обратно на прямой маршрут.
+
 ## 3. Ручной деплой
 
 ```bash
@@ -623,4 +632,3 @@ DJANGO_ENV=production ../venv/bin/python manage.py import_textbook_batches \
 
 Node на Timeweb **не нужен**: `app.css` собирается локально и лежит в git.
 Серверу достаточно `collectstatic` в `deploy.sh`.
-
