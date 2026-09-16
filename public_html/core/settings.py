@@ -178,6 +178,8 @@ LATEX_API_TIMEOUT = int(read_secret('LATEX_API_TIMEOUT', '120'))
 GEMINI_API_KEY = (read_secret('GEMINI_API_KEY', '')
                   or read_secret('GOOGLE_API_KEY', ''))
 GEMINI_MODEL = read_secret('GEMINI_MODEL', 'gemini-3.5-flash-lite')
+GEMINI_API_BASE = read_secret('GEMINI_API_BASE', '')
+GEMINI_PROXY_SECRET = read_secret('GEMINI_PROXY_SECRET', '')
 GEMINI_TIMEOUT = int(read_secret('GEMINI_TIMEOUT', '60'))
 GEMINI_RATE_PER_MINUTE = int(read_secret('GEMINI_RATE_PER_MINUTE', '20'))
 

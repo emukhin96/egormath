@@ -153,6 +153,15 @@ def solve_task(text, subitems=()):
         raise NeuroError('Задача слишком длинная для нейрогенерации.')
 
     timeout = settings.GEMINI_TIMEOUT
+    base = settings.GEMINI_API_BASE.strip().rstrip('/')
+    headers = {'x-goog-api-key': api_key}
+    url = GEMINI_URL % settings.GEMINI_MODEL
+    if base:
+        if not settings.GEMINI_PROXY_SECRET:
+            raise NeuroError('Прокси нейрогенерации не настроен: '
+                             'нет GEMINI_PROXY_SECRET.')
+        url = base + '/v1beta/models/%s:generateContent' % settings.GEMINI_MODEL
+        headers['X-Egor-Proxy-Secret'] = settings.GEMINI_PROXY_SECRET
     response = None
     last_timeout = None
     attempts = len(SOLVE_SCHEMA_ATTEMPTS)
@@ -169,9 +178,9 @@ def solve_task(text, subitems=()):
         }
         try:
             response = requests.post(
-                GEMINI_URL % settings.GEMINI_MODEL,
+                url,
                 json=payload,
-                headers={'x-goog-api-key': api_key},
+                headers=headers,
                 timeout=timeout,
             )
             last_timeout = None
@@ -201,6 +210,13 @@ def solve_task(text, subitems=()):
             detail = ''
         if not isinstance(detail, str):
             detail = ''
+        if 'User location is not supported' in detail:
+            raise NeuroError(
+                'Gemini недоступен из региона сервера. Проверьте '
+                'GEMINI_API_BASE и запустите tools/gemini_proxy.py --tunnel.')
+        if base and response.status_code == 403 and 'Прокси:' in detail:
+            raise NeuroError('Прокси отклонил запрос. Проверьте совпадение '
+                             'GEMINI_PROXY_SECRET на сайте и прокси.')
         if response.status_code in (401, 403) or 'API key' in detail:
             raise NeuroError(
                 'Ключ Gemini отклонён сервером. Проверьте GEMINI_API_KEY.')
