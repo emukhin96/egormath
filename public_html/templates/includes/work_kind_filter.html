@@ -1,8 +1,7 @@
 <form method="get" class="card filter-card">
   <div class="filters">
     <div>
-      <label for="work-kind">Вид работы</label>
-      <select name="kind" id="work-kind">
+      <select name="kind" id="work-kind" aria-label="Вид работы">
         <option value="">Все работы</option>
         <option value="ordinary"{% if kind == 'ordinary' %} selected{% endif %}>Обычные задания</option>
         <option value="independent"{% if kind == 'independent' %} selected{% endif %}>Самостоятельные</option>
