@@ -8,7 +8,7 @@
     <h1>Выдать задание</h1>
     <p class="page-subtitle">{% if independent %}{% if kind == 'correction' %}Работа над ошибками.{% elif kind == 'retake' %}Пересдача.{% endif %} Самостоятельная с зафиксированными вариантами и серверным сроком.{% else %}Один листок — группе, нескольким группам или отдельным ученикам.{% endif %}</p>
   </div>
-  <a class="btn btn-secondary" href="{% url 'assignment_list' %}">К заданиям</a>
+  <a class="btn btn-secondary" href="{% if independent %}{% url 'independentworks:catalog' %}{% else %}{% url 'assignment_list' %}{% endif %}">{% if independent %}К самостоятельным{% else %}К заданиям{% endif %}</a>
 </div>
 
 {% if independent and work %}<div class="card form-section"><span class="page-eyebrow">{% if kind == 'correction' %}Работа над ошибками{% elif kind == 'retake' %}Пересдача{% else %}Самостоятельная{% endif %}</span><h2>{{ work.title }}</h2><a href="{% url 'independentworks:edit' work.pk %}">К составу самостоятельной</a></div>{% elif independentworks_enabled %}<div class="form-buttons"><a class="btn{% if independent %} btn-secondary{% endif %}" href="{% url 'assignment_create' %}" {% if not independent %}aria-current="page"{% endif %}>Обычное задание</a><a class="btn{% if not independent %} btn-secondary{% endif %}" href="{% url 'assignment_create' %}?mode=independent" {% if independent %}aria-current="page"{% endif %}>Самостоятельная</a></div>{% endif %}
@@ -41,10 +41,10 @@
       <section class="card form-section">
         <div class="form-section-head"><span class="form-step">3</span><div><h2>Условия работы</h2><p class="helptext">{% if independent %}Время на сервере. Часовой пояс: {{ timezone }}. Без общего окончания можно начать в любой день.{% else %}Срок — ориентир: после него сдача не блокируется.{% endif %}</p></div></div>
         {% if independent %}<div class="settings-grid">
-          <div>{{ form.duration.errors }}{{ form.duration.label_tag }}{{ form.duration }}</div>
-          <div>{{ form.deadline.errors }}{{ form.deadline.label_tag }}{{ form.deadline }}</div>
+          <div>{{ form.duration.errors }}{{ form.duration.label_tag }}{{ form.duration }}<div class="time-presets"><button type="button" class="btn btn-secondary btn-small" data-duration="10">10 мин</button><button type="button" class="btn btn-secondary btn-small" data-duration="15">15 мин</button><button type="button" class="btn btn-secondary btn-small" data-duration="30">30 мин</button></div></div>
+          <div>{{ form.deadline.errors }}{{ form.deadline.label_tag }}{{ form.deadline }}<div class="time-presets"><button type="button" class="btn btn-secondary btn-small" data-deadline="0">Сейчас</button><button type="button" class="btn btn-secondary btn-small" data-deadline="15">Сейчас +15′</button><button type="button" class="btn btn-secondary btn-small" data-deadline="30">Сейчас +30′</button></div></div>
           <div>{{ form.max_variants.errors }}{{ form.max_variants.label_tag }}{{ form.max_variants }}</div>
-          <div>{{ form.release_mode.errors }}{{ form.release_mode.label_tag }}{{ form.release_mode }}</div>
+          <div>{{ form.release_mode.errors }}<input type="hidden" name="release_toggle" value="1"><label class="ws-toggle">{{ form.withhold_answers }}<span class="ws-toggle-slider"></span><span class="ws-toggle-text">Не показывать ответы сразу</span></label></div>
         </div><div data-release-flags>{{ form.release_flags.errors }}{{ form.release_flags.label_tag }}{{ form.release_flags }}</div>
         {% else %}        <div class="settings-grid">
           <div>{{ form.due_at.errors }}{{ form.due_at.label_tag }}{{ form.due_at }}</div>
@@ -87,8 +87,22 @@
     form.querySelector('[data-summary-groups]').textContent = Array.from(groupBoxes).filter(function (box) { return box.checked; }).length;
     form.querySelector('[data-summary-students]').textContent = Number(form.dataset.fixedRecipients || 0) + Array.from(studentBoxes).filter(function (box) { return box.checked; }).length;
   }
-  var release = form.querySelector('[name=release_mode]');
-  function releaseOptions() { var panel = form.querySelector('[data-release-flags]'); if (panel && release) panel.hidden = release.value !== 'auto'; }
+  var release = form.querySelector('[name=withhold_answers]');
+  form.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-duration], [data-deadline]');
+    if (!button) return;
+    var input;
+    if (button.hasAttribute('data-duration')) {
+      input = form.querySelector('[name=duration]'); input.value = button.dataset.duration;
+    } else {
+      input = form.querySelector('[name=deadline]');
+      var date = new Date(Date.now() + Number(button.dataset.deadline) * 60000);
+      var parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {timeZone: '{{ timezone|escapejs }}', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hourCycle:'h23'}).formatToParts(date).map(function(p){return [p.type,p.value];}));
+      input.value = parts.year + '-' + parts.month + '-' + parts.day + 'T' + parts.hour + ':' + parts.minute;
+    }
+    input.dispatchEvent(new Event('change', {bubbles:true}));
+  });
+  function releaseOptions() { var panel = form.querySelector('[data-release-flags]'); if (panel && release) panel.hidden = release.checked; }
   form.addEventListener('change', releaseOptions); releaseOptions();
   form.addEventListener('change', updateSummary);
   if (worksheet) worksheet.addEventListener('change', function () {

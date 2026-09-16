@@ -48,12 +48,13 @@ class PreparationTests(TestCase):
         self.assertIsNone(work.source_worksheet)
         self.assertEqual(work.positions.get().candidates.get().task, task)
 
-    def test_no_mask_and_photos_disabled_is_rejected(self):
+    def test_no_mask_and_photos_disabled_can_be_issued(self):
         work = Work.objects.create(owner=self.owner, title='Нет ввода')
         position = Position.objects.create(work=work)
         Candidate.objects.create(position=position, task=Task.objects.create(text_latex='Докажите'))
-        with self.assertRaisesMessage(svc.WorkError, 'Нет способа ответить'):
-            svc.prepare(work, self.owner, [self.owner.pk], allow_photos=False)
+        run = svc.prepare(work, self.owner, [self.owner.pk], allow_photos=False)
+        svc.issue(run.pk)
+        self.assertEqual(run.attempts.count(), 1)
 
     def test_failed_issue_removes_copied_files(self):
         with tempfile.TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=directory):
