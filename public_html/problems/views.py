@@ -403,6 +403,13 @@ def task_duplicate(request, pk):
         messages.success(request, f'Копия #{copy.pk} добавлена после задачи #{task.pk}.')
         return redirect('worksheet_detail', pk=item.worksheet_id)
     messages.success(request, f'Создана независимая копия #{copy.pk} задачи #{task.pk}.')
+    return_worksheet_id = request.POST.get('return_worksheet')
+    if return_worksheet_id:
+        return_worksheet = get_object_or_404(
+            Worksheet.visible_to(request.user), pk=return_worksheet_id)
+        return redirect(
+            f'{reverse("task_detail", args=[copy.pk])}'
+            f'?return_worksheet={return_worksheet.pk}')
     return redirect('task_detail', pk=copy.pk)
 
 
