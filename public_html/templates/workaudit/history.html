@@ -1,0 +1,5 @@
+<p class="helptext">Снимки успешных сохранений за последние 90 дней. Время решения на бумаге здесь не отражается.</p>
+{% for revision in page %}<section class="answer-block"><strong>{% if revision.initial %}Начальное состояние · время ввода неизвестно{% else %}{{ revision.created_at|date:'d.m.Y H:i:s' }}{% endif %}</strong>
+{% for key, value in revision.snapshot.items %}{% if key == 'answer_json' %}{% for slot, answer in value.items %}<p>Поле {{ forloop.counter }}: {{ answer|default:'(пусто)' }}</p>{% endfor %}{% elif value or key != 'answer_text' and key != 'answer_number' and key != 'interval_low' and key != 'interval_high' %}<p>{% if key == 'answer_text' %}Текст{% elif key == 'answer_number' %}Число{% elif key == 'interval_low' %}Левая граница{% elif key == 'interval_high' %}Правая граница{% else %}Поле {{ forloop.counter }}{% endif %}: {{ value|default:'(пусто)' }}</p>{% endif %}{% endfor %}
+</section>{% empty %}<p>За последние 90 дней изменений не записано.</p>{% endfor %}
+{% include 'workaudit/pagination.html' %}

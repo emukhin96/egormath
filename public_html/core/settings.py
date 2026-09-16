@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'worksheets',
     'assignments',
     'independentworks',
+    'workaudit',
 ]
 
 MIDDLEWARE = [

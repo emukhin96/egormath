@@ -54,6 +54,7 @@ class Assignment(models.Model):
         default=CHECK_LIVE,
         help_text='Учитель видит результат всегда; эталон ученику не '
                   'показывается ни в одном режиме. После выдачи не меняется')
+    restrict_clipboard = models.BooleanField('Ограничить копирование условий и вставку ответов', default=False)
     allow_photos = models.BooleanField(
         'Принимать фото решений', default=True,
         help_text='Кнопка загрузки фото у каждой задачи на странице ученика')

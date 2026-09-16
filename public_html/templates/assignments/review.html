@@ -14,6 +14,7 @@
 </p>
 </div></div>
 
+{% include 'workaudit/panel.html' with kind='assignment' object=assignment %}
 <form method="post" action="{% url 'save_review' assignment.pk %}" id="review-form">
   {% csrf_token %}<input type="hidden" name="grade_interface" value="1">
   {% if owner_filter %}<input type="hidden" name="owner" value="{{ owner_filter }}">{% endif %}
@@ -45,6 +46,7 @@
     {% endif %}
 
     <div data-live-answer="{{ row.item.pk }}">{% include 'assignments/_live_answer.html' %}</div>
+    {% if row.subrows %}{% for sr in row.subrows %}{% if sr.part %}<p>Подпункт {{ forloop.counter }}</p>{% include 'workaudit/revisions.html' with kind='part' object=sr.part %}{% endif %}{% endfor %}{% else %}{% include 'workaudit/revisions.html' with kind='submission' object=row.submission %}{% endif %}
     {% if row.has_solution %}
     <details class="review-solution"><summary>Эталонное решение</summary>
       {% if row.task.effective_solution_latex %}<div class="solution-box math-content">{{ row.task.effective_solution_latex|web_text }}</div>{% endif %}
@@ -85,4 +87,4 @@
   </div>
 </form>
 {% endblock %}
-{% block extra_js %}<div data-review-live-url="{% url 'assignment_live' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=3"></script>{% endblock %}
+{% block extra_js %}<script defer src="{% static 'js/work_history.js' %}"></script><div data-review-live-url="{% url 'assignment_live' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=3"></script>{% endblock %}

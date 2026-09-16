@@ -426,7 +426,7 @@ def prepare_run(request, pk):
         previous = teacher_run(request, request.GET['resume'])
         if previous.work_id != work.pk or previous.parent_id != (parent.pk if parent else None) or previous.kind != kind:
             raise Http404
-        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'release_mode', 'release_flags')}
+        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'release_mode', 'release_flags', 'restrict_clipboard')}
         initial['students'] = list(previous.plan['students'])
     form = RunForm(request.POST or None, teacher=request.user, initial=initial)
     if request.method == 'POST' and form.is_valid():
