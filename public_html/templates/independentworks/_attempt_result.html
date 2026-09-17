@@ -5,7 +5,7 @@
     {% include 'assignments/_result_summary.html' %}
     <p class="hero-meta">Ниже — ваши ответы и результаты проверки.</p>
   </div>
-  {% if not teacher_view %}<a class="btn btn-secondary" href="{% url 'dashboard' %}">К моим заданиям</a>{% endif %}
+  {% if not teacher_view %}<a class="btn btn-secondary" href="{% url 'dashboard' %}">Назад</a>{% endif %}
 </div>
 {% elif attempt.finished and not teacher_view %}
 <div class="card assignment-submit-card">

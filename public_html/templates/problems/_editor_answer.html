@@ -7,7 +7,7 @@
   <details class="ws-add-text"><summary>Править ответ и источники</summary>
     {% include 'problems/_editor_form.html' with form=answer_form block='answer' %}
     <p class="helptext">Основной — авторский ответ. Редакторский / AI используется при его отсутствии.</p>
-    {% if owner.answer_mask %}<p class="helptext">После изменения ответа проверьте маску: её эталон не заменяется автоматически.</p>{% endif %}
+    {% if owner.answer_mask %}<p class="helptext">После изменения ответа проверьте маску: правильный ответ в ней не заменяется автоматически.</p>{% endif %}
   </details>
   <div class="problem-mask-summary">
     <strong>Ответ ученика</strong>

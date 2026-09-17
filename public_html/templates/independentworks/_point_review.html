@@ -3,7 +3,7 @@
 {% include 'assignments/_point_content.html' %}
 <div class="progress-current-answer"><strong>Ответ:</strong><span class="math-content">{{ row.display|default:'—'|web_answer }}</span></div>
 <p>{% if row.grade %}{{ row.grade }}{% elif row.pending %}На проверке{% else %}Автосверка: {{ row.auto|default:'Ответ не введён' }}{% endif %}</p>
-{% if row.reference %}<div class="math-content">Эталон: {{ row.reference|web_answer }}</div>{% endif %}
+{% if row.reference %}<div class="math-content">Ответ: {{ row.reference|web_answer }}</div>{% endif %}
 {% if row.solution %}<details><summary>Решение</summary><div class="math-content">{{ row.solution|web_text }}</div></details>{% endif %}
 {% include 'assignments/_photo_gallery.html' with photos=row.answer.photos.all photo_route='independentworks:photo' %}
 {% if attempt.finished %}{% include 'independentworks/_review_controls.html' %}{% endif %}
