@@ -81,7 +81,7 @@
         // Сохраняем выбор оценки при обновлении снимка.
         var polledDetail=detailUrl;var response=await request(polledDetail,{headers:etags[polledDetail]?{'If-None-Match':etags[polledDetail]}:{}});if(response.status!==304){var html=await response.text();if(dialog.open&&detailUrl===polledDetail&&!grading&&pollEpoch===gradeEpoch){replace(dialog.querySelector('[data-progress-detail]'),html);etags[polledDetail]=response.headers.get('ETag');}}
       }
-      var status=document.querySelector('[data-live-status]');if(status)status.textContent='Обновлено '+new Date().toLocaleTimeString()+'. Нажмите ячейку для ответов и попыток.';
+      var status=document.querySelector('[data-live-status]');if(status)status.textContent='Обновлено в '+new Date().toLocaleTimeString();
     }catch(error){var status=document.querySelector('[data-live-status]');if(status)status.textContent='Связь прервана. Повторим обновление автоматически.';}finally{busy=false;}
   }
   if(dialog)dialog.addEventListener('close',function(){detailUrl=null;});
