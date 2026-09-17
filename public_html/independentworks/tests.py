@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from accounts.models import Profile
 from problems.models import Task, TaskSubitem, TaskSource, Source, TaskImage
-from .models import Work, Position, Candidate, Attempt, Answer, Asset, Family
+from .models import Work, Position, Candidate, Run, Attempt, Answer, Asset, Family
 from . import services as svc
 
 
@@ -146,8 +146,46 @@ class IndependentWorkTests(TestCase):
         self.assertEqual(response.status_code, 302)
         first.refresh_from_db()
         self.assertIsNotNone(first.superseded_at)
-        from .models import Run
         self.assertEqual(Run.objects.latest('pk').deadline, deadline)
+
+    def test_saved_draft_is_available_from_independent_catalog(self):
+        self.client.force_login(self.teacher)
+        url = reverse('assignment_create') + (
+            f'?mode=independent&work={self.work.pk}')
+        response = self.client.post(url, {
+            'mode': 'independent',
+            'work': self.work.pk,
+            'students': [self.student.pk],
+            'duration': 35,
+            'max_variants': 1,
+            'restrict_clipboard': 'on',
+            'release_mode': 'manual',
+            'action': 'draft',
+        })
+        self.assertRedirects(response, self.url('catalog'))
+        draft = Run.objects.get()
+        self.assertIsNone(draft.issued_at)
+        self.assertIsNone(draft.superseded_at)
+        self.assertEqual(draft.duration, 35)
+        self.assertEqual(draft.max_variants, 1)
+        self.assertTrue(draft.restrict_clipboard)
+        self.assertFalse(draft.allow_photos)
+        self.assertEqual(draft.plan['students'], {str(self.student.pk): 1})
+        catalog = self.client.get(self.url('catalog'))
+        resume_url = (reverse('assignment_create')
+                      + f'?mode=independent&amp;work={self.work.pk}'
+                      + f'&amp;resume={draft.pk}')
+        self.assertContains(catalog, 'Черновики выдачи')
+        self.assertContains(catalog, resume_url)
+        resumed = self.client.get(
+            reverse('assignment_create'), {
+                'mode': 'independent', 'work': self.work.pk,
+                'resume': draft.pk,
+            })
+        self.assertEqual(resumed.context['draft_saved'], True)
+        self.assertContains(resumed, 'value="35"')
+        self.assertContains(resumed, 'id_restrict_clipboard" checked')
+        self.assertNotContains(resumed, 'id_allow_photos" checked')
 
     def test_catalog_redirect_keeps_student_kind(self):
         self.client.force_login(self.student)
@@ -238,9 +276,10 @@ class IndependentWorkTests(TestCase):
         response = self.client.get(reverse('assignment_list'), {'kind': 'independent', 'q': 'Уравнения'})
         self.assertEqual(response.context['page'].paginator.count, 31)
         response = self.client.get(reverse('worksheet_list'))
-        self.assertContains(response, self.url('edit', self.work.pk))
-        response = self.client.get(reverse('worksheet_list'), {'kind': 'independent'})
-        self.assertEqual([w.pk for w in response.context['worksheets']], [self.work.pk])
+        self.assertNotContains(response, self.url('edit', self.work.pk))
+        self.assertEqual([w.pk for w in response.context['worksheets']], [sheet.pk])
+        self.assertNotContains(response, 'Вид материала')
+        self.assertNotContains(response, 'Создать самостоятельную')
         self.assertContains(self.client.get(self.url('catalog')), '<h1>Самостоятельные</h1>', html=True)
         self.assertRedirects(self.client.get(self.url('prepare', self.work.pk)), reverse('assignment_create') + f'?mode=independent&work={self.work.pk}')
 
