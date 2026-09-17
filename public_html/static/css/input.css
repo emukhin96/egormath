@@ -1537,7 +1537,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: var(--space-4) var(--space-5);
-    margin-bottom: var(--space-5);
+    margin-bottom: var(--space-4);
     box-shadow: var(--panel-shadow);
     display: flex;
     flex-wrap: wrap;
@@ -1994,7 +1994,6 @@
 
   .ws-view .answer-box,
   .ws-view .answer-block,
-  .ws-view .mask-photo-note,
   .ws-view .task-tools {
     margin-left: var(--task-indent);
   }
