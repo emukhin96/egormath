@@ -844,7 +844,7 @@ def progress_context(run):
     attempts = list(run.attempts.select_related('student', 'run', 'variant', 'root').prefetch_related('variant__points__assets', 'answers__photos', 'answers__point', 'corrections__answers__point', 'root__variant__points', 'root__answers__point', 'root__corrections__answers__point'))
     numbers = sorted(set(p.position for a in attempts for p in a.variant.points.all()))
     people = []
-    stats = {}
+    variant_stats = {}
     for a in attempts:
         svc.finish_expired(a)
         rows = point_rows(a, teacher=True)
@@ -862,20 +862,30 @@ def progress_context(run):
         remaining = max(0, int((a.ends_at - timezone.now()).total_seconds())) if a.ends_at else 0
         people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a), 'show_cumulative': bool(a.root_id or any(c.started_at for c in a.corrections.all())),
                        'remaining': f'{remaining // 60}:{remaining % 60:02}'})
+        variant_stat = variant_stats.setdefault(a.variant_id, {
+            'number': a.variant.number, 'count': 0, 'started': 0,
+            'by_number': {}, 'points': 0, 'done': 0})
+        variant_stat['count'] += 1
         if a.started_at:
+            variant_stat['started'] += 1
             for row in rows:
-                key = row['point'].candidate_key
-                stat = stats.setdefault(key, {'key': key, 'students': set(), 'variants': set(), 'positions': set(), 'points': 0, 'done': 0})
-                stat['students'].add(a.student_id)
-                stat['variants'].add(a.variant.number)
-                stat['positions'].add(row['point'].position)
-                stat['points'] += 1
-                stat['done'] += row['answer'].credit if row['answer'] else 0
-    for stat in stats.values():
-        stat['count'] = len(stat.pop('students'))
-        stat['label'] = '№' + ', '.join(map(str, sorted(stat.pop('positions')))) + ' · варианты ' + ', '.join(map(str, sorted(stat.pop('variants'))))
-        stat['percent'] = round(100 * stat['done'] / stat['points'])
-    return {'independent': True, 'point_groups': [{'item': {'pk': n}, 'number': n, 'columns': [{'owner': {'pk': n}, 'label': 'Пункты'}]} for n in numbers], 'run': run, 'people': people, 'numbers': numbers, 'stats': list(stats.values()), 'variants': run.variants.all(), 'available_students': Profile.student_users_for(run.owner).exclude(pk__in=[a.student_id for a in attempts]), 'can_add_students': run.kind == 'initial' and bool(run.issued_at) and not run.closed_at and not (run.deadline and run.deadline <= timezone.now())}
+                number_stat = variant_stat['by_number'].setdefault(
+                    row['point'].position, {'points': 0, 'done': 0})
+                credit = row['answer'].credit if row['answer'] else 0
+                number_stat['points'] += 1
+                number_stat['done'] += credit
+                variant_stat['points'] += 1
+                variant_stat['done'] += credit
+    for stat in variant_stats.values():
+        stat['cells'] = []
+        for number in numbers:
+            cell = stat['by_number'].get(number)
+            if cell:
+                cell['percent'] = round(100 * cell['done'] / cell['points'])
+            stat['cells'].append(cell)
+        stat['percent'] = round(100 * stat['done'] / stat['points']) if stat['points'] else 0
+        del stat['by_number']
+    return {'independent': True, 'point_groups': [{'item': {'pk': n}, 'number': n, 'columns': [{'owner': {'pk': n}, 'label': 'Пункты'}]} for n in numbers], 'run': run, 'people': people, 'numbers': numbers, 'variant_stats': sorted(variant_stats.values(), key=lambda row: row['number']), 'variants': run.variants.all(), 'available_students': Profile.student_users_for(run.owner).exclude(pk__in=[a.student_id for a in attempts]), 'can_add_students': run.kind == 'initial' and bool(run.issued_at) and not run.closed_at and not (run.deadline and run.deadline <= timezone.now())}
 
 
 @enabled
