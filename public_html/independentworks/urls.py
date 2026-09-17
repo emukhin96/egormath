@@ -22,6 +22,7 @@ urlpatterns = [
     path('run/<int:pk>/progress/', views.progress, name='progress'),
     path('run/<int:pk>/add-students/', views.add_students, name='add_students'),
     path('run/<int:pk>/recipients/', views.recipients, name='recipients'),
+    path('run/<int:pk>/release-settings/', views.release_settings, name='release_settings'),
     path('run/<int:pk>/publish/', views.publish, name='publish'),
     path('run/<int:pk>/export/', views.export, name='export'),
     path('attempt/<int:pk>/', views.attempt_page, name='attempt'),

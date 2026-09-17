@@ -666,6 +666,37 @@ def review(request, pk, point_id):
 @enabled
 @teacher_required
 @require_POST
+def release_settings(request, pk):
+    run = teacher_run(request, pk)
+    show_checks = 'show_checks' in request.POST
+    with transaction.atomic():
+        run = Run.objects.select_for_update().get(pk=run.pk)
+        flags = set(run.release_flags)
+        if show_checks:
+            flags.add('checks')
+            run.release_mode = 'auto'
+        else:
+            flags.discard('checks')
+            if run.release_mode == 'auto' and not flags:
+                run.release_mode = 'manual'
+        run.release_flags = sorted(flags)
+        run.save(update_fields=['release_mode', 'release_flags'])
+        for attempt in run.attempts.select_for_update():
+            attempt_flags = set(attempt.release_flags)
+            if show_checks and attempt.published_at:
+                attempt_flags.add('checks')
+            elif not show_checks:
+                attempt_flags.discard('checks')
+            updated = sorted(attempt_flags)
+            if updated != attempt.release_flags:
+                Attempt.objects.filter(pk=attempt.pk).update(release_flags=updated)
+    messages.success(request, 'Настройка показа правильности сохранена')
+    return redirect('independentworks:progress', pk=pk)
+
+
+@enabled
+@teacher_required
+@require_POST
 def publish(request, pk):
     run = teacher_run(request, pk)
     ids = request.POST.getlist('attempts')

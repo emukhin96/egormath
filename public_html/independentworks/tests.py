@@ -866,6 +866,33 @@ class IndependentWorkTests(TestCase):
         self.assertEqual(response.context['publication_attempts'], [str(attempt.pk)])
         self.assertContains(response, 'Открыть выбранные категории', status_code=400)
 
+    def test_release_settings_persist_for_current_and_future_submissions(self):
+        attempt = self.begin(release_mode='manual')
+        svc.save_answer(attempt.pk, attempt.variant.points.get().pk, 0, {'s1': '4'})
+        svc.submit(attempt.pk)
+        attempt.published_at = timezone.now()
+        attempt.release_flags = ['comment']
+        attempt.save(update_fields=['published_at', 'release_flags'])
+        self.client.force_login(self.teacher)
+        url = self.url('release_settings', attempt.run_id)
+        self.assertRedirects(self.client.post(url, {'show_checks': 'on'}), self.url('progress', attempt.run_id))
+        attempt.refresh_from_db()
+        attempt.run.refresh_from_db()
+        self.assertEqual(attempt.run.release_mode, 'auto')
+        self.assertEqual(attempt.run.release_flags, ['checks'])
+        self.assertEqual(attempt.release_flags, ['checks', 'comment'])
+        page = self.client.get(self.url('progress', attempt.run_id))
+        self.assertContains(page, 'name="show_checks" checked')
+        self.client.force_login(self.student)
+        self.assertContains(self.client.get(self.url('attempt', attempt.pk)), 'Зачтено')
+        self.client.force_login(self.teacher)
+        self.assertRedirects(self.client.post(url, {}), self.url('progress', attempt.run_id))
+        attempt.refresh_from_db()
+        attempt.run.refresh_from_db()
+        self.assertEqual(attempt.run.release_mode, 'manual')
+        self.assertEqual(attempt.run.release_flags, [])
+        self.assertEqual(attempt.release_flags, ['comment'])
+
     def test_parts_save_returns_json_without_redirect(self):
         part = TaskSubitem.objects.create(task=self.task, text_latex='Подпункт')
         self.client.force_login(self.teacher)
