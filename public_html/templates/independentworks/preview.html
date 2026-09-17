@@ -1,11 +1,11 @@
 {% extends 'independentworks/base.html' %}
 {% load task_extras %}
 {% block content %}
-<div class="page-head"><div><h1>{{ run.title }} · перед выдачей</h1><p>{{ recipients|length }} учеников · {{ variants|length }} вариантов · {{ run.duration }} мин.</p></div></div>
+<div class="page-head"><div><h1>{{ run.title }} · перед выдачей</h1><p>{{ recipients|length }} учеников · {{ variants|length }} вариантов · {{ run.duration }} мин.</p><p class="page-subtitle"><a href="{% url 'independentworks:edit' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">← К кандидатам по номерам</a></p></div></div>
 {% if run.superseded_at %}<p class="msg msg-warning">Этот предпросмотр заменён новым. Выдача из него недоступна; откройте актуальный предпросмотр.</p>{% endif %}
 {% if run.plan.shortage or run.plan.repeats %}<p class="msg msg-warning">Есть повторные варианты или ранее выданные пункты. Проверьте распределение и состав ниже.</p>{% endif %}
 <div class="iw-preview-layout"><div class="iw-preview-document">
-<div class="form-buttons" role="group" aria-label="Выбрать вариант">{% for variant in variants %}<button type="button" class="btn btn-secondary" data-preview-select="{{ variant.number }}" aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}">Вариант {{ variant.number }}</button>{% endfor %}</div>
+{% if variants|length > 1 %}<div class="form-buttons" role="group" aria-label="Выбрать вариант">{% for variant in variants %}<button type="button" class="btn btn-secondary" data-preview-select="{{ variant.number }}" aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}">Вариант {{ variant.number }}</button>{% endfor %}</div>{% endif %}
 {% for variant in variants %}
 <section data-preview-variant="{{ variant.number }}" {% if not forloop.first %}hidden{% endif %}>
 <h2>Вариант {{ variant.number }}</h2>
@@ -16,7 +16,7 @@
 {% include 'assignments/_point_content.html' %}
 {% if row.repeated %}<p class="msg msg-warning">№{{ row.point.label }} · этот пункт уже выдавался в предыдущих попытках.</p>{% endif %}
 {% if row.fragments %}<div>{% include 'assignments/_mask.html' with fragments=row.fragments editable=True show_checks=False %}</div><p class="helptext">Пробный ввод не сохраняется.</p>{% else %}<p class="helptext">{% if run.allow_photos %}Фото решения · ручная проверка.{% else %}Задание без электронного ввода ответа.{% endif %}</p>{% endif %}
-<details class="problem-section"><summary>Эталон и решение — только учителю</summary><div class="math-content">{{ row.reference|web_answer }} {{ row.solution|web_text }}</div>{% include 'problems/_task_images.html' with images=row.reference_images %}</details>
+<details class="problem-section"><summary>Ответ и решение — только учителю</summary><div class="math-content">{{ row.reference|web_answer }} {{ row.solution|web_text }}</div>{% include 'problems/_task_images.html' with images=row.reference_images %}</details>
 </section>{% if row.group_end %}</div>{% endif %}
 {% endfor %}
 {% for note in variant.tail_notes %}<div class="card ws-view math-content">{{ note|web_text }}</div>{% endfor %}
@@ -29,8 +29,8 @@
 <button class="btn btn-secondary">Сохранить распределение</button></form></aside>
 </div>
 <form method="post" action="{% url 'independentworks:issue' run.pk %}" class="card form-section">{% csrf_token %}
-{% if run.plan.shortage or run.plan.repeats %}<label class="check-label"><input type="checkbox" name="confirm" required>Подтверждаю выдачу с повторениями</label>{% endif %}
-<div class="form-buttons"><button class="btn" {% if run.superseded_at %}disabled{% endif %}>Выдать просмотренные варианты</button><a class="btn btn-secondary" href="{% url 'independentworks:prepare' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Изменить параметры</a><a class="btn btn-secondary" href="{% url 'independentworks:edit' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">К кандидатам по номерам</a></div>
+{% if run.plan.shortage or run.plan.repeats %}<label class="check-label assignment-photo-option"><input type="checkbox" name="confirm" required><span>Подтверждаю выдачу с повторениями</span></label>{% endif %}
+<div class="form-buttons"><button class="btn" {% if run.superseded_at %}disabled{% endif %}>Выдать просмотренные варианты</button><a class="btn btn-secondary" href="{% url 'independentworks:prepare' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Изменить параметры</a></div>
 </form>
 {% endblock %}
 {% block extra_js %}

@@ -53,5 +53,5 @@
   {% include 'accounts/_student_assignment_table.html' with items=reviewed %}
 </div>
 {% endif %}
-{% if closed_unstarted %}<div class="card"><h2>Не начато · срок истёк</h2>{% include 'accounts/_student_assignment_table.html' with items=closed_unstarted %}</div>{% endif %}
+{% if closed_unstarted %}<div class="card"><h2>Закончилось время выполнения</h2>{% include 'accounts/_student_assignment_table.html' with items=closed_unstarted %}</div>{% endif %}
 {% endblock %}
