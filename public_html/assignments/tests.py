@@ -758,14 +758,13 @@ class StudentAnswerTests(TestCase):
 
     def test_mask_renders_controls_and_legacy_readonly(self):
         """С маской ученик видит контролы по слотам (simplify — math-field),
-        без маски — только подсказку про фото; старый свободный ответ после
+        без маски — только действие загрузки фото; старый свободный ответ после
         сдачи показывается как есть."""
         task = self.tasks[0]
         response = self.client.get(
             reverse('assignment_detail', args=[self.assignment.pk]))
         self.assertNotContains(response, f'name="task{task.pk}_text"')
-        notes = len(self.tasks)
-        self.assertContains(response, 'mask-photo-note', count=notes)
+        self.assertNotContains(response, 'mask-photo-note')
         task.answer_mask = r'Упростите: {{simplify: \frac{2}{a+3}}}'
         task.save()
         response = self.client.get(
@@ -774,7 +773,7 @@ class StudentAnswerTests(TestCase):
         self.assertContains(response, '<math-field')
         self.assertContains(response, f'name="task{task.pk}_s1"')
         self.assertContains(response, 'mathlive')
-        self.assertContains(response, 'mask-photo-note', count=notes - 1)
+        self.assertNotContains(response, 'mask-photo-note')
         # Старый ответ без маски после сдачи — только для чтения
         task.answer_mask = ''
         task.save()
