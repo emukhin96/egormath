@@ -11,7 +11,8 @@ from django.urls import reverse
 from django.utils import timezone
 from accounts.models import Profile
 from problems.models import Task, TaskSubitem, TaskSource, Source, TaskImage
-from .models import Work, Position, Candidate, Run, Attempt, Answer, Asset, Family
+from .models import (Work, Position, Candidate, Run, Attempt, Answer,
+                     AnswerCheckAttempt, Asset, Family)
 from . import services as svc
 
 
@@ -251,8 +252,8 @@ class IndependentWorkTests(TestCase):
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(len(response.context['submitted']), 1)
         self.assertIsNone(response.context['submitted'][0].result)
-        a.release_flags = ['checks']; a.published_at = timezone.now()
-        a.save(update_fields=['release_flags', 'published_at'])
+        a.run.release_mode = 'auto'; a.run.release_flags = ['checks']
+        a.run.save(update_fields=['release_mode', 'release_flags'])
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(response.context['reviewed'][0].result['percent'], 100)
 
@@ -345,9 +346,8 @@ class IndependentWorkTests(TestCase):
         self.assertNotContains(response, 'SECRET_SOLUTION')
         svc.submit(a.pk)
         self.assertContains(self.client.get(self.url('attempt', a.pk)), 'SECRET_ANSWER')
-        a.published_at = timezone.now()
-        a.release_flags = ['answer']
-        a.save(update_fields=['published_at', 'release_flags'])
+        a.run.release_flags = ['answer']
+        a.run.save(update_fields=['release_flags'])
         response = self.client.get(self.url('attempt', a.pk))
         self.assertContains(response, 'SECRET_ANSWER')
         self.assertNotContains(response, 'SECRET_SOLUTION')
@@ -563,7 +563,8 @@ class IndependentWorkTests(TestCase):
         svc.submit(child.pk)
         self.assertEqual(svc.cumulative(a)['percent'], 100)
         self.assertEqual(svc.cumulative(a, student_view=True)['percent'], 0)
-        Attempt.objects.filter(pk=child.pk).update(published_at=timezone.now(), release_flags=['checks'])
+        child.run.release_mode = 'auto'; child.run.release_flags = ['checks']
+        child.run.save(update_fields=['release_mode', 'release_flags'])
         self.assertEqual(svc.cumulative(a, student_view=True)['percent'], 100)
 
     def test_manual_analog_finishes_in_normal_editor(self):
@@ -746,20 +747,35 @@ class IndependentWorkTests(TestCase):
         self.assertIsNone(a.published_at)
         self.assertFalse(a.answers.exists())
 
-    def test_comment_only_publication_and_additive_flags(self):
-        a = self.begin(release_mode='auto', release_flags=['checks'])
+    def test_after_submit_settings_replace_globally(self):
+        extra = get_user_model().objects.create_user('global_release_student')
+        Profile.objects.create(user=extra, teacher=self.teacher, role='student')
+        run = svc.prepare(self.work, self.teacher, [self.student.pk, extra.pk],
+                          release_mode='auto', release_flags=['checks'])
+        svc.issue(run.pk, confirm=True)
+        attempts = list(run.attempts.order_by('pk'))
+        a = svc.start(attempts[0].pk)
+        other_attempt = svc.start(attempts[1].pk)
         p = a.variant.points.get()
         svc.save_answer(a.pk, p.pk, 0, {'s1': '4'})
         svc.submit(a.pk)
+        svc.submit(other_attempt.pk)
         Answer.objects.filter(attempt=a).update(comment='SECRET_COMMENT')
         self.client.force_login(self.teacher)
         self.assertEqual(self.client.post(self.url('publish', a.run_id), {'flags': ['comment']}).status_code, 302)
+        a.run.refresh_from_db()
         a.refresh_from_db()
-        self.assertEqual(a.disclosure, {'checks', 'comment'})
+        self.assertEqual(a.run.release_flags, ['comment'])
+        self.assertEqual(a.disclosure, {'comment'})
+        other_attempt.refresh_from_db()
+        self.assertEqual(other_attempt.disclosure, {'comment'})
         self.assertEqual(self.client.post(self.url('publish', a.run_id), {'flags': ['answer']}).status_code, 302)
-        self.assertEqual(self.client.post(self.url('publish', a.run_id), {}).status_code, 400)
+        self.assertEqual(self.client.post(self.url('publish', a.run_id), {}).status_code, 302)
+        a.run.refresh_from_db()
         a.refresh_from_db()
-        self.assertEqual(a.disclosure, {'checks', 'comment', 'answer'})
+        self.assertEqual(a.run.release_mode, 'manual')
+        self.assertEqual(a.disclosure, set())
+        self.assertNotContains(self.client.get(self.url('progress', a.run_id)), 'name="attempts"')
         b = self.begin()
         svc.submit(b.pk)
         Answer.objects.create(attempt=b, point=b.variant.points.get(), comment='ONLY_COMMENT')
@@ -858,40 +874,39 @@ class IndependentWorkTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(attempt.run.attempts.count(), 2)
 
-    def test_publication_error_preserves_selected_students(self):
-        attempt = self.issued()
+    def test_self_check_persists_and_logs_every_checked_answer(self):
+        attempt = self.begin(self_check=False)
         self.client.force_login(self.teacher)
-        response = self.client.post(self.url('publish', attempt.run_id), {'attempts': [attempt.pk]})
-        self.assertContains(response, 'Выберите хотя бы одну категорию', status_code=400)
-        self.assertEqual(response.context['publication_attempts'], [str(attempt.pk)])
-        self.assertContains(response, 'Открыть выбранные категории', status_code=400)
-
-    def test_release_settings_persist_for_current_and_future_submissions(self):
-        attempt = self.begin(release_mode='manual')
-        svc.save_answer(attempt.pk, attempt.variant.points.get().pk, 0, {'s1': '4'})
-        svc.submit(attempt.pk)
-        attempt.published_at = timezone.now()
-        attempt.release_flags = ['comment']
-        attempt.save(update_fields=['published_at', 'release_flags'])
-        self.client.force_login(self.teacher)
-        url = self.url('release_settings', attempt.run_id)
-        self.assertRedirects(self.client.post(url, {'show_checks': 'on'}), self.url('progress', attempt.run_id))
-        attempt.refresh_from_db()
+        url = self.url('self_check_settings', attempt.run_id)
+        self.assertRedirects(self.client.post(url, {'self_check': 'on'}), self.url('progress', attempt.run_id))
         attempt.run.refresh_from_db()
-        self.assertEqual(attempt.run.release_mode, 'auto')
-        self.assertEqual(attempt.run.release_flags, ['checks'])
-        self.assertEqual(attempt.release_flags, ['checks', 'comment'])
+        self.assertTrue(attempt.run.self_check)
         page = self.client.get(self.url('progress', attempt.run_id))
-        self.assertContains(page, 'name="show_checks" checked')
+        self.assertContains(page, 'name="self_check" checked')
         self.client.force_login(self.student)
-        self.assertContains(self.client.get(self.url('attempt', attempt.pk)), 'Зачтено')
+        point = attempt.variant.points.get()
+        check_url = self.url('check_answer', attempt.pk, point.pk)
+        response = self.client.post(check_url, {
+            'version': 0, f'p{point.pk}_s1': '3'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.json()['checks'][f'p{point.pk}_s1'], 'wrong')
+        response = self.client.post(check_url, {
+            'version': 1, f'p{point.pk}_s1': '4'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.json()['checks'][f'p{point.pk}_s1'], 'ok')
+        history = AnswerCheckAttempt.objects.filter(answer__attempt=attempt)
+        self.assertEqual(list(history.values_list('number', 'result')), [(1, 'wrong'), (2, 'ok')])
+        self.assertEqual(history.first().snapshot['values'], {'s1': '3'})
+        from workaudit.models import AnswerRevision
+        self.assertEqual(AnswerRevision.objects.filter(answer__attempt=attempt).count(), 2)
         self.client.force_login(self.teacher)
+        teacher_page = self.client.get(self.url('attempt', attempt.pk))
+        self.assertContains(teacher_page, 'Самопроверки: 2')
+        self.assertContains(teacher_page, 'Поле 1: 3')
         self.assertRedirects(self.client.post(url, {}), self.url('progress', attempt.run_id))
-        attempt.refresh_from_db()
         attempt.run.refresh_from_db()
-        self.assertEqual(attempt.run.release_mode, 'manual')
-        self.assertEqual(attempt.run.release_flags, [])
-        self.assertEqual(attempt.release_flags, ['comment'])
+        self.assertFalse(attempt.run.self_check)
+        self.client.force_login(self.student)
+        self.assertEqual(self.client.post(check_url, {
+            'version': 2, f'p{point.pk}_s1': '4'}).status_code, 403)
 
     def test_parts_save_returns_json_without_redirect(self):
         part = TaskSubitem.objects.create(task=self.task, text_latex='Подпункт')

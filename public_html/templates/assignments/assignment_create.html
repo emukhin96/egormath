@@ -47,6 +47,7 @@
           <div>{{ form.deadline.errors }}{{ form.deadline.label_tag }}{{ form.deadline }}<div class="time-presets"><button type="button" class="btn btn-secondary btn-small" data-deadline="0">Сейчас</button><button type="button" class="btn btn-secondary btn-small" data-deadline="15">Сейчас +15′</button><button type="button" class="btn btn-secondary btn-small" data-deadline="30">Сейчас +30′</button></div></div>
           <div>{{ form.max_variants.errors }}{{ form.max_variants.label_tag }}{{ form.max_variants }}</div>
           <div>{{ form.release_mode.errors }}<input type="hidden" name="release_toggle" value="1"><label class="ws-toggle">{{ form.withhold_answers }}<span class="ws-toggle-slider"></span><span class="ws-toggle-text">Не показывать ответы сразу</span></label></div>
+          <div><label class="ws-toggle">{{ form.self_check }}<span class="ws-toggle-slider"></span><span class="ws-toggle-text">Самопроверка до сдачи</span></label></div>
         </div><div data-release-flags>{{ form.release_flags.errors }}{{ form.release_flags.label_tag }}{{ form.release_flags }}</div>
         {% else %}        <div class="settings-grid">
           <div>{{ form.due_at.errors }}{{ form.due_at.label_tag }}{{ form.due_at }}</div>

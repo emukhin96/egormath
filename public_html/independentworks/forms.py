@@ -21,6 +21,8 @@ class RunForm(forms.Form):
         required=False, initial=True)
     allow_photos = forms.BooleanField(
         label='Принимать фотографии', required=False, initial=False)
+    self_check = forms.BooleanField(
+        label='Самопроверка до сдачи', required=False, initial=False)
     withhold_answers = forms.BooleanField(label='Не показывать ответы сразу', required=False, initial=True, widget=forms.CheckboxInput(attrs={'role': 'switch'}))
     release_mode = forms.ChoiceField(label='Публикация', choices=[('manual', 'После одобрения учителя'), ('auto', 'Сразу после сдачи')])
     release_flags = forms.MultipleChoiceField(label='Что показывать после сдачи', required=False, choices=[('checks', 'Правильность и итог'), ('answer', 'Правильный ответ'), ('solution', 'Решение'), ('comment', 'Комментарий')], widget=forms.CheckboxSelectMultiple)

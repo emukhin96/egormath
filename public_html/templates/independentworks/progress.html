@@ -26,44 +26,31 @@
 {% endif %}
 
 <section class="card iw-section">
-  <h2>Показ верности ответа</h2>
-  <form method="post" action="{% url 'independentworks:release_settings' run.pk %}">
+  <h2>Самопроверка</h2>
+  <form method="post" action="{% url 'independentworks:self_check_settings' run.pk %}">
     {% csrf_token %}
     <label class="ws-toggle">
-      <input type="checkbox" name="show_checks" {% if 'checks' in run.release_flags and run.release_mode == 'auto' %}checked{% endif %}>
+      <input type="checkbox" name="self_check" {% if run.self_check %}checked{% endif %}>
       <span class="ws-toggle-slider"></span>
-      <span class="ws-toggle-text">Показывать правильность и итог после сдачи</span>
+      <span class="ws-toggle-text">Разрешить проверять ответы до сдачи</span>
     </label>
-    <p class="helptext">Настройка действует на уже завершивших работу учеников и на тех, кто сдаст её позже.</p>
+    <p class="helptext">Ученик увидит только «верно» или «неверно». Каждое нажатие и версия ответа сохраняются в истории.</p>
     <div class="form-buttons"><button class="btn">Сохранить</button></div>
   </form>
 </section>
 
 <section class="card iw-section">
-  <h2>Дополнить публикацию</h2>
-  {% if publication_error %}<p class="msg msg-error" role="alert">{{ publication_error }}</p>{% endif %}
+  <h2>Что показывать после сдачи</h2>
   <form method="post" action="{% url 'independentworks:publish' run.pk %}">
     {% csrf_token %}
-    <div class="recipient-grid">
-      <section class="choice-list publication-choice-list" aria-labelledby="publication-recipients">
-        <h3 id="publication-recipients">Кому показать</h3>
-        <p class="helptext">Выберите учеников. Если никого не отметить, публикация откроется всем сдавшим работу.</p>
-        <div class="choice-items">
-          {% for person in people %}<label class="choice-item"><input type="checkbox" name="attempts" value="{{ person.attempt.pk }}" {% if person.attempt.pk|stringformat:"s" in publication_attempts %}checked{% endif %}><span>{{ person.attempt.student.get_full_name|default:person.attempt.student.username }}</span></label>{% endfor %}
-        </div>
-      </section>
-      <section class="choice-list publication-choice-list" aria-labelledby="publication-categories">
-        <h3 id="publication-categories">Что показать</h3>
-        <p class="helptext">Выберите категории, которые хотите открыть. Ранее опубликованные данные останутся доступны.</p>
-        <div class="choice-items">
-          <label class="choice-item"><input type="checkbox" name="flags" value="checks"><span>Правильность и итог</span></label>
-          <label class="choice-item"><input type="checkbox" name="flags" value="answer"><span>Правильный ответ</span></label>
-          <label class="choice-item"><input type="checkbox" name="flags" value="solution"><span>Решение</span></label>
-          <label class="choice-item"><input type="checkbox" name="flags" value="comment"><span>Комментарий</span></label>
-        </div>
-      </section>
+    <p class="helptext">Выбранные категории откроются всем ученикам этого запуска только после сдачи или завершения времени.</p>
+    <div class="choice-items choice-items-compact">
+      <label class="choice-item"><input type="checkbox" name="flags" value="checks" {% if 'checks' in run.release_flags and run.release_mode == 'auto' %}checked{% endif %}><span>Правильность и итог</span></label>
+      <label class="choice-item"><input type="checkbox" name="flags" value="answer" {% if 'answer' in run.release_flags and run.release_mode == 'auto' %}checked{% endif %}><span>Правильный ответ</span></label>
+      <label class="choice-item"><input type="checkbox" name="flags" value="solution" {% if 'solution' in run.release_flags and run.release_mode == 'auto' %}checked{% endif %}><span>Решение</span></label>
+      <label class="choice-item"><input type="checkbox" name="flags" value="comment" {% if 'comment' in run.release_flags and run.release_mode == 'auto' %}checked{% endif %}><span>Комментарий учителя</span></label>
     </div>
-    <div class="form-buttons"><button class="btn">Открыть выбранные категории</button></div>
+    <div class="form-buttons"><button class="btn">Сохранить</button></div>
   </form>
 </section>
 
