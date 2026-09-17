@@ -31,7 +31,7 @@ def student_assignments(user):
         if remaining is not None and not a.finished:
             label += f' · осталось {remaining // 60}:{remaining % 60:02}'
         if closed:
-            label += ' · срок начала истёк'
+            label = 'Не начато'
         rows.append(SimpleNamespace(
             pk=f'independent-{a.pk}', kind='independent', kind_label=a.run.kind_label,
             worksheet=SimpleNamespace(title=a.run.title, owner=a.run.owner),

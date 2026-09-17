@@ -201,6 +201,9 @@ class IndependentWorkTests(TestCase):
         with patch('independentworks.integration.timezone.now', return_value=timezone.now() + timedelta(minutes=2)):
             response = self.client.get(reverse('dashboard'))
             self.assertEqual(len(response.context['closed_unstarted']), 1)
+            self.assertEqual(
+                response.context['closed_unstarted'][0].get_status_display,
+                'Не начато')
             self.assertIsNone(response.context['closed_unstarted'][0].result)
             self.assertEqual(response.context['todo'], [])
         a = svc.start(a.pk)
@@ -791,6 +794,8 @@ class IndependentWorkTests(TestCase):
         self.client.force_login(self.teacher)
         response = self.client.get(self.url('preview', run.pk))
         self.assertContains(response, 'Общее условие уникальное', count=1)
+        self.assertContains(response, 'Ответ и решение — только учителю')
+        self.assertNotContains(response, 'data-preview-select="1"')
         svc.issue(run.pk)
         attempt = svc.start(run.attempts.get().pk)
         response = self.client.get(self.url('attempt', attempt.pk))

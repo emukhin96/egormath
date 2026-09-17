@@ -62,7 +62,7 @@
     if (restricted) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      window.EgorAutosave?.showSaved(false, 'Учитель ограничил копирование условий и вставку ответов.');
+      window.EgorAutosave?.showSaved(false, 'Ошибка');
     }
     // paste и beforeinput одной операции не должны давать две записи.
     const now = performance.now();
