@@ -438,8 +438,22 @@ def prepare_run(request, pk):
         except svc.WorkError as error:
             form.add_error(None, str(error))
         else:
+            if request.POST.get('action') == 'draft':
+                messages.success(
+                    request,
+                    'Черновик выдачи сохранён. К настройкам можно вернуться '
+                    'из раздела «Самостоятельные».')
+                return redirect('independentworks:catalog')
             return redirect('independentworks:preview', pk=run.pk)
-    return render(request, 'assignments/assignment_create.html', {'independent': True, 'work': work, 'form': form, 'parent': parent, 'kind': kind, 'timezone': timezone.get_current_timezone_name()})
+    return render(request, 'assignments/assignment_create.html', {
+        'independent': True,
+        'work': work,
+        'form': form,
+        'parent': parent,
+        'kind': kind,
+        'draft_saved': bool(previous),
+        'timezone': timezone.get_current_timezone_name(),
+    })
 
 
 def preview_context(run):

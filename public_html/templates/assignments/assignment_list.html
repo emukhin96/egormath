@@ -11,6 +11,21 @@
   {% if filters.kind == 'independent' %}<div class="form-buttons"><a class="btn" href="{% url 'independentworks:create' %}">Создать самостоятельную</a><a class="btn btn-secondary" href="{% url 'assignment_create' %}?mode=independent">Шаблоны · выдать</a></div>{% else %}<a class="btn" href="{% url 'assignment_create' %}">Выдать задание</a>{% endif %}
 </div>
 
+{% if filters.kind == 'independent' and draft_runs %}
+<div class="card assignment-catalog">
+  <div class="table-summary"><strong>Черновики выдачи</strong><span>Сохранённые получатели и условия работы</span></div>
+  <div class="catalog-table-wrap"><table class="list assignment-sheet-table">
+    <thead><tr><th>Самостоятельная</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Учеников</th><th>Длительность</th><th>Срок</th><th>Сохранён</th><th></th></tr></thead>
+    <tbody>{% for run in draft_runs %}<tr>
+      <td><strong>{{ run.title }}</strong><div class="muted">{{ run.kind_label }}</div></td>
+      {% if request.user.is_superuser %}<td>{{ run.owner.get_full_name|default:run.owner.username }}</td>{% endif %}
+      <td>{{ run.plan.students|length }}</td><td>{{ run.duration }} мин.</td><td>{{ run.deadline|date:'d.m.Y H:i'|default:'—' }}</td><td>{{ run.created_at|date:'d.m.Y H:i' }}</td>
+      <td><a class="btn btn-small" href="{% url 'assignment_create' %}?mode=independent&amp;work={{ run.work_id }}&amp;resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Продолжить</a></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endif %}
+
 <div class="stat-grid assignment-stats">
   <a class="stat" href="?status=submitted&amp;kind={{ filters.kind }}">
     <span class="stat-label">На проверке</span><span class="stat-value">{{ stats.submitted }}</span>
