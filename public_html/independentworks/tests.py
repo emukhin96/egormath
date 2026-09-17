@@ -874,6 +874,25 @@ class IndependentWorkTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(attempt.run.attempts.count(), 2)
 
+    def test_candidate_results_group_students_by_variant(self):
+        extra = get_user_model().objects.create_user('variant_group_student')
+        Profile.objects.create(user=extra, teacher=self.teacher, role='student')
+        run = svc.prepare(self.work, self.teacher, [self.student.pk, extra.pk], max_variants=1)
+        svc.issue(run.pk)
+        attempts = list(run.attempts.order_by('pk'))
+        for attempt, value in zip(attempts, ('4', '3')):
+            attempt = svc.start(attempt.pk)
+            point = attempt.variant.points.get()
+            svc.save_answer(attempt.pk, point.pk, 0, {'s1': value})
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.url('progress', run.pk))
+        self.assertEqual(len(response.context['variant_stats']), 1)
+        stat = response.context['variant_stats'][0]
+        self.assertEqual((stat['number'], stat['count'], stat['started']), (1, 2, 2))
+        self.assertEqual((stat['done'], stat['points'], stat['percent']), (1, 2, 50))
+        self.assertContains(response, 'Учеников: 2')
+        self.assertContains(response, '1 / 2 · 50%')
+
     def test_self_check_persists_and_logs_every_checked_answer(self):
         attempt = self.begin(self_check=False)
         self.client.force_login(self.teacher)
