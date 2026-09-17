@@ -26,6 +26,20 @@
 {% endif %}
 
 <section class="card iw-section">
+  <h2>Показ верности ответа</h2>
+  <form method="post" action="{% url 'independentworks:release_settings' run.pk %}">
+    {% csrf_token %}
+    <label class="ws-toggle">
+      <input type="checkbox" name="show_checks" {% if 'checks' in run.release_flags and run.release_mode == 'auto' %}checked{% endif %}>
+      <span class="ws-toggle-slider"></span>
+      <span class="ws-toggle-text">Показывать правильность и итог после сдачи</span>
+    </label>
+    <p class="helptext">Настройка действует на уже завершивших работу учеников и на тех, кто сдаст её позже.</p>
+    <div class="form-buttons"><button class="btn">Сохранить</button></div>
+  </form>
+</section>
+
+<section class="card iw-section">
   <h2>Дополнить публикацию</h2>
   {% if publication_error %}<p class="msg msg-error" role="alert">{{ publication_error }}</p>{% endif %}
   <form method="post" action="{% url 'independentworks:publish' run.pk %}">
