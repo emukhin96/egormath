@@ -7,12 +7,12 @@
     <span class="page-eyebrow">Новая выдача</span>
     <h1>Выдать задание</h1>
     <p class="page-subtitle">{% if independent %}{% if kind == 'correction' %}Работа над ошибками.{% elif kind == 'retake' %}Пересдача.{% endif %} Самостоятельная с зафиксированными вариантами и серверным сроком.{% else %}Один листок — группе, нескольким группам или отдельным ученикам.{% endif %}</p>
-    {% if independent %}<p class="page-subtitle"><a href="{% url 'independentworks:catalog' %}" data-save-draft-before-leave>← К самостоятельным</a></p>{% endif %}
+    {% if independent %}<a class="page-back-link" href="{% url 'independentworks:catalog' %}" data-save-draft-before-leave>← К самостоятельным</a>{% endif %}
   </div>
   {% if independent %}{% if work %}<button class="btn" type="submit" form="assignment-create-form" name="action" value="preview">Сформировать и просмотреть</button>{% endif %}{% else %}<a class="btn btn-secondary" href="{% url 'assignment_list' %}">К заданиям</a>{% endif %}
 </div>
 
-{% if independent and work %}<div class="card form-section"><span class="page-eyebrow">{% if kind == 'correction' %}Работа над ошибками{% elif kind == 'retake' %}Пересдача{% else %}Самостоятельная{% endif %}</span><h2>{{ work.title }}</h2></div>{% elif independentworks_enabled %}<div class="form-buttons"><a class="btn{% if independent %} btn-secondary{% endif %}" href="{% url 'assignment_create' %}" {% if not independent %}aria-current="page"{% endif %}>Обычное задание</a><a class="btn{% if not independent %} btn-secondary{% endif %}" href="{% url 'assignment_create' %}?mode=independent" {% if independent %}aria-current="page"{% endif %}>Самостоятельная</a></div>{% endif %}
+{% if not work and independentworks_enabled %}<div class="form-buttons"><a class="btn{% if independent %} btn-secondary{% endif %}" href="{% url 'assignment_create' %}" {% if not independent %}aria-current="page"{% endif %}>Обычное задание</a><a class="btn{% if not independent %} btn-secondary{% endif %}" href="{% url 'assignment_create' %}?mode=independent" {% if independent %}aria-current="page"{% endif %}>Самостоятельная</a></div>{% endif %}
 {% if choose_work %}
 <section class="card form-section"><div class="iw-workspace-heading"><h2>Шаблоны самостоятельных</h2><a class="btn" href="{% url 'independentworks:create' %}">Создать самостоятельную</a></div>
 <form method="get"><input type="hidden" name="mode" value="independent"><label>Поиск по названию<input name="q" value="{{ request.GET.q|default:'' }}" placeholder="Название самостоятельной"></label><div class="form-buttons"><button class="btn btn-secondary">Найти</button></div></form>
@@ -28,7 +28,7 @@
   <div class="assignment-create-grid">
     <div>
       <section class="card form-section">
-        <div class="form-section-head"><span class="form-step">1</span><div><h2>Что выдаём</h2><p class="helptext">{% if independent %}Независимый шаблон самостоятельной.{% else %}Можно выбрать только свой листок.{% endif %}</p></div></div>
+        <div class="form-section-head"><span class="form-step">1</span><div><h2>Что выдаём</h2>{% if not independent %}<p class="helptext">Можно выбрать только свой листок.</p>{% endif %}</div></div>
         {% if independent %}<h3>{{ work.title }}</h3>{% else %}        {{ form.worksheet.errors }}
         {{ form.worksheet.label_tag }}
         {{ form.worksheet }}
@@ -41,7 +41,7 @@
       </section>
 
       <section class="card form-section">
-        <div class="form-section-head"><span class="form-step">3</span><div><h2>Условия работы</h2><p class="helptext">{% if independent %}Время на сервере. Часовой пояс: {{ timezone }}. Без общего окончания можно начать в любой день.{% else %}Срок — ориентир: после него сдача не блокируется.{% endif %}</p></div></div>
+        <div class="form-section-head"><span class="form-step">3</span><div><h2>Условия работы</h2>{% if not independent %}<p class="helptext">Срок — ориентир: после него сдача не блокируется.</p>{% endif %}</div></div>
         {% if independent %}<div class="settings-grid">
           <div>{{ form.duration.errors }}{{ form.duration.label_tag }}{{ form.duration }}<div class="time-presets"><button type="button" class="btn btn-secondary btn-small" data-duration="10">10 мин</button><button type="button" class="btn btn-secondary btn-small" data-duration="15">15 мин</button><button type="button" class="btn btn-secondary btn-small" data-duration="30">30 мин</button></div></div>
           <div>{{ form.deadline.errors }}{{ form.deadline.label_tag }}{{ form.deadline }}<div class="time-presets"><button type="button" class="btn btn-secondary btn-small" data-deadline="0">Сейчас</button><button type="button" class="btn btn-secondary btn-small" data-deadline="15">Сейчас +15′</button><button type="button" class="btn btn-secondary btn-small" data-deadline="30">Сейчас +30′</button></div></div>
@@ -63,14 +63,13 @@
 
     <aside class="card assignment-create-summary">
       <span class="page-eyebrow">Перед выдачей</span>
-      <h2>Проверьте параметры</h2>
       <dl class="summary-list">
-        <div><dt>{% if independent %}Самостоятельная{% else %}Листок{% endif %}</dt><dd data-summary-worksheet>{{ work.title|default:"Не выбран" }}</dd></div>
+        <div class="summary-work"><dt>{% if independent %}Самостоятельная{% else %}Листок{% endif %}</dt><dd data-summary-worksheet>{{ work.title|default:"Не выбран" }}</dd></div>
         <div><dt>Групп</dt><dd data-summary-groups>0</dd></div>
         <div><dt>Учеников отдельно</dt><dd data-summary-students>0</dd></div>
       </dl>
       <p class="helptext">{% if independent %}Перед выдачей вы увидите конкретные варианты и распределение.{% else %}Повторная выдача того же листка тому же ученику будет безопасно пропущена.{% endif %}</p>
-      {% if independent %}<div class="form-buttons"><button class="btn" type="submit" name="action" value="preview">Сформировать и просмотреть</button><button class="btn btn-secondary" type="submit" name="action" value="draft">Сохранить черновик</button></div>{% else %}<button class="btn" type="submit">Выдать задание</button>{% endif %}
+      {% if independent %}<div class="form-buttons summary-actions"><button class="btn" type="submit" name="action" value="preview">Сформировать и просмотреть</button><button class="btn btn-secondary" type="submit" name="action" value="draft">Сохранить черновик</button></div>{% else %}<button class="btn" type="submit">Выдать задание</button>{% endif %}
     </aside>
   </div>
 </form>

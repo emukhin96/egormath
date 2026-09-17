@@ -1314,6 +1314,12 @@
     font-size: 0.85rem;
   }
 
+  .page-back-link {
+    display: inline-block;
+    margin-top: var(--space-1);
+    font-size: 1rem;
+  }
+
   .card-head {
     margin-bottom: var(--space-3);
     display: flex;
@@ -4370,6 +4376,25 @@
     margin: 0;
     text-align: right;
     font-weight: 600;
+  }
+
+  .summary-list .summary-work {
+    display: block;
+  }
+
+  .summary-list .summary-work dd {
+    margin-top: var(--space-1);
+    text-align: left;
+  }
+
+  .assignment-create-summary .summary-actions {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .assignment-create-summary .summary-actions .btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .review-main {

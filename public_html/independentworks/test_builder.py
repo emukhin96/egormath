@@ -47,6 +47,12 @@ class BuilderTests(TestCase):
         self.assertContains(response, 'data-save-draft-before-leave')
         self.assertContains(response, 'name="action" value="preview"', count=2)
         self.assertContains(response, 'name="action" value="draft"')
+        self.assertContains(response, 'class="page-back-link"')
+        self.assertContains(response, 'class="summary-work"')
+        self.assertContains(response, 'class="form-buttons summary-actions"')
+        self.assertNotContains(response, 'Независимый шаблон самостоятельной.')
+        self.assertNotContains(response, 'Время на сервере.')
+        self.assertNotContains(response, 'Проверьте параметры')
         self.assertNotContains(response, 'К составу самостоятельной')
         self.assertNotContains(response, 'Проверить кандидатов по номерам')
         self.assertNotContains(response, 'id_check_visibility')
@@ -172,7 +178,8 @@ class BuilderTests(TestCase):
         self.assertNotContains(response, 'Состав работы')
         self.assertFalse(Family.objects.exists())
         response = self.client.get(reverse('assignment_create'), {'mode': 'independent', 'work': work.pk})
-        self.assertContains(response, 'Самостоятельная</span><h2>Темы</h2>')
+        self.assertContains(response, '<h3>Темы</h3>')
+        self.assertNotContains(response, '<span class="page-eyebrow">Самостоятельная</span>')
         self.assertNotContains(response, '>Обычное задание</a>')
 
     def test_reorder_is_complete_and_scoped_to_work(self):
