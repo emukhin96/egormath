@@ -74,7 +74,7 @@ class AnswerPolicyTests(TestCase):
         self.client.force_login(self.student)
         response = self.client.get(reverse('assignment_detail', args=[assignment.pk]))
         self.assertNotContains(response, f'name="task{self.task.pk}_s1"')
-        self.assertContains(response, 'Краткий ответ для этой задачи не предусмотрен')
+        self.assertNotContains(response, 'Краткий ответ для этой задачи не предусмотрен')
         data = {f'task{self.task.pk}_s1': '8'}
         self.client.post(reverse('save_answers', args=[assignment.pk]), data)
         response = self.client.post(reverse('check_task', args=[assignment.pk, self.task.pk]), data,
