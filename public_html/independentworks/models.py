@@ -64,6 +64,7 @@ class Run(models.Model):
     max_variants = models.PositiveIntegerField(null=True, blank=True)
     restrict_clipboard = models.BooleanField(default=False)
     allow_photos = models.BooleanField(default=True)
+    self_check = models.BooleanField(default=False)
     release_mode = models.CharField(max_length=12, default='manual')
     release_flags = models.JSONField(default=list)
     plan = models.JSONField(default=dict)
@@ -150,8 +151,6 @@ class Attempt(models.Model):
     def disclosure(self):
         if not self.finished:
             return set()
-        if self.published_at:
-            return set(self.release_flags)
         return set(self.run.release_flags) if self.run.release_mode == 'auto' else set()
 
 
@@ -161,6 +160,7 @@ class Answer(models.Model):
     values = models.JSONField(default=dict)
     auto_check = models.CharField(max_length=12, blank=True)
     checks = models.JSONField(default=dict)
+    check_revealed = models.BooleanField(default=False)
     grade = models.CharField(max_length=2, blank=True, choices=Review.GRADE_CHOICES)
     comment = models.TextField(blank=True)
     version = models.PositiveIntegerField(default=0)
@@ -178,6 +178,21 @@ class Answer(models.Model):
     @property
     def pending(self):
         return not self.grade and self.auto_check not in ('ok', 'wrong')
+
+
+class AnswerCheckAttempt(models.Model):
+    """Неизменяемый снимок одного нажатия «Проверить»."""
+
+    answer = models.ForeignKey(Answer, on_delete=models.CASCADE, related_name='check_history')
+    number = models.PositiveIntegerField()
+    result = models.CharField(max_length=12)
+    snapshot = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['number']
+        constraints = [models.UniqueConstraint(
+            fields=['answer', 'number'], name='iw_unique_check_attempt_answer_number')]
 
 
 class Photo(models.Model):
