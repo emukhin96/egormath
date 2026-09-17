@@ -11,6 +11,12 @@
   function signature(form) {
     return JSON.stringify([...dataOf(form)].filter(([name]) => name !== 'version' && name !== 'csrfmiddlewaretoken'));
   }
+  function clearChecks(form) {
+    form.querySelectorAll('[data-check]').forEach(holder => {
+      if (window.EgorCheckBadge) EgorCheckBadge.render(holder, '');
+      else { holder.dataset.status = ''; holder.textContent = ''; }
+    });
+  }
   async function save(form) {
     const state = states.get(form);
     if (state.pending) { await state.pending; return save(form); }
@@ -18,7 +24,7 @@
     if (expired || signature(form) === state.saved) return;
     const sent = signature(form), data = dataOf(form);
     message(state, 'Сохраняется…');
-    state.pending = (async () => {
+    const request = (async () => {
       const response = await fetch(form.action, {method: 'POST', body: data, headers: {'X-Requested-With': 'XMLHttpRequest'}});
       const result = await response.json();
       if (!response.ok) { if (response.status === 409) state.conflict = true; throw new Error(result.message || 'Ошибка сохранения'); }
@@ -26,8 +32,9 @@
       state.saved = sent;
       message(state, signature(form) === sent ? '✓ Сохранён' : 'Изменён, ещё не сохранён');
     })();
-    try { await state.pending; } catch (error) { message(state, error.message, true); throw error; }
-    finally { state.pending = null; }
+    state.pending = request;
+    try { await request; } catch (error) { message(state, error.message, true); throw error; }
+    finally { if (state.pending === request) state.pending = null; }
     if (signature(form) !== state.saved && !expired) await save(form);
   }
   forms.forEach(form => {
@@ -35,6 +42,7 @@
     states.set(form, state);
     const changed = () => {
       if (expired) return;
+      clearChecks(form);
       message(state, signature(form) === state.saved ? '✓ Сохранён' : 'Изменён, ещё не сохранён');
       clearTimeout(state.timer);
       state.timer = setTimeout(() => save(form).catch(() => {}), 500);
@@ -43,6 +51,37 @@
     form.addEventListener('change', changed);
     form.addEventListener('focusout', () => save(form).catch(() => {}));
     form.addEventListener('submit', event => { event.preventDefault(); save(form).catch(() => {}); });
+    const checkButton = form.querySelector('[data-iw-check]');
+    if (checkButton) checkButton.addEventListener('click', async () => {
+      const state = states.get(form);
+      clearTimeout(state.timer);
+      checkButton.disabled = true;
+      const previous = state.pending;
+      const checking = (async () => {
+        if (previous) await previous;
+        const data = dataOf(form);
+        const response = await fetch(checkButton.getAttribute('formaction'), {
+          method: 'POST', body: data, headers: {'X-Requested-With': 'XMLHttpRequest'}
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'Ошибка проверки');
+        if (result.version !== undefined) {
+          form.elements.version.value = result.version;
+          state.saved = signature(form);
+        }
+        if (window.EgorCheckBadge) EgorCheckBadge.apply(form, result.checks || {});
+        message(state, result.message || 'Проверено');
+      })();
+      state.pending = checking;
+      try {
+        await checking;
+      } catch (error) {
+        message(state, error.message, true);
+      } finally {
+        if (state.pending === checking) state.pending = null;
+        checkButton.disabled = false;
+      }
+    });
   });
   document.querySelectorAll('[data-iw-flush]').forEach(form => form.addEventListener('submit', async event => {
     event.preventDefault();

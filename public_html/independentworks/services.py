@@ -241,7 +241,8 @@ def correction_fingerprint(parent):
 
 
 def prepare(work, owner, students, duration=40, deadline=None, max_variants=None,
-            allow_photos=True, release_mode='manual', release_flags=None, parent=None, kind='initial', previous=None, restrict_clipboard=False):
+            allow_photos=True, self_check=False, release_mode='manual', release_flags=None,
+            parent=None, kind='initial', previous=None, restrict_clipboard=False):
     if kind not in ('initial', 'correction', 'retake') or (kind == 'initial') != (parent is None):
         raise WorkError('Исходная попытка нужна только для исправления или пересдачи.')
     if parent is not None and parent.run.work_id != work.pk:
@@ -296,7 +297,8 @@ def prepare(work, owner, students, duration=40, deadline=None, max_variants=None
             previous.superseded_at = timezone.now()
             previous.save(update_fields=['superseded_at'])
         return Run.objects.create(work=work, owner=owner, title=work.title, duration=duration,
-                                  deadline=deadline, max_variants=max_variants, allow_photos=allow_photos, restrict_clipboard=restrict_clipboard,
+                                  deadline=deadline, max_variants=max_variants, allow_photos=allow_photos,
+                                  self_check=self_check, restrict_clipboard=restrict_clipboard,
                                   release_mode=release_mode, release_flags=flags,
                                   fingerprint=correction_fingerprint(parent) if kind == 'correction' else digest(data),
                                   plan=plan, kind=kind, parent=parent)
@@ -415,7 +417,8 @@ def save_answer(attempt_id, point_id, version, values):
         auto = 'wrong'
     editable(attempt)
     changed = Answer.objects.filter(pk=answer.pk, version=version).update(
-        values=values, auto_check=auto, checks=checks, version=version + 1, updated_at=timezone.now())
+        values=values, auto_check=auto, checks=checks, check_revealed=False,
+        version=version + 1, updated_at=timezone.now())
     if not changed:
         raise WorkError('Конфликт сохранения. Перезагрузите страницу.', 409)
     answer.refresh_from_db()

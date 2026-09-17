@@ -56,7 +56,8 @@ def teacher_run(request, pk):
 
 
 def own_attempt(request, pk, teacher=False):
-    qs = Attempt.objects.select_related('run', 'variant', 'root', 'parent').prefetch_related('variant__points__assets', 'answers__photos')
+    qs = Attempt.objects.select_related('run', 'variant', 'root', 'parent').prefetch_related(
+        'variant__points__assets', 'answers__photos', 'answers__check_history')
     if teacher:
         qs = qs.filter(run__work__in=Work.visible_to(request.user))
     else:
@@ -426,7 +427,7 @@ def prepare_run(request, pk):
         previous = teacher_run(request, request.GET['resume'])
         if previous.work_id != work.pk or previous.parent_id != (parent.pk if parent else None) or previous.kind != kind:
             raise Http404
-        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'release_mode', 'release_flags', 'restrict_clipboard')}
+        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'self_check', 'release_mode', 'release_flags', 'restrict_clipboard')}
         initial['students'] = list(previous.plan['students'])
     form = RunForm(request.POST or None, teacher=request.user, initial=initial)
     if request.method == 'POST' and form.is_valid():
@@ -555,10 +556,12 @@ def point_rows(attempt, teacher=False):
         answer = answers.get(point.pk)
         spec = parse_mask(point.snapshot['mask'])
         prefix = f'p{point.pk}'
+        reveal_live = bool(answer and attempt.run.self_check and answer.check_revealed and not attempt.finished)
+        reveal_checks = 'checks' in disclosure or reveal_live
         rows.append({'point': point, 'answer': answer, 'prefix': prefix,
                      'notes': [note['text'] for note in attempt.variant.notes if note['before'] == point.position] if point.position not in visited else [],
                      'common': point.snapshot.get('common', ''), 'text': point.snapshot['text'],
-                     'fragments': render_fragments(spec, prefix, answer.values if answer else {}, answer.checks if answer and 'checks' in disclosure else {}, seed=prefix) if spec.is_valid else None,
+                     'fragments': render_fragments(spec, prefix, answer.values if answer else {}, answer.checks if answer and reveal_checks else {}, seed=prefix) if spec.is_valid else None,
                      'display': svc.answer_display(point, answer),
                      'reference': point.snapshot['answer'] if 'answer' in disclosure else '',
                      'solution': point.snapshot['solution'] if 'solution' in disclosure else '',
@@ -567,7 +570,7 @@ def point_rows(attempt, teacher=False):
                      'grade_symbol': Review.SYMBOLS.get(answer.grade, answer.grade) if answer and 'checks' in disclosure else '',
                      'grade_url': reverse('independentworks:review', args=[attempt.pk, point.pk]) if teacher else '',
                      'comment_name': f'p{point.pk}_comment',
-                     'auto': answer.auto_check if answer and 'checks' in disclosure else '',
+                     'auto': answer.auto_check if answer and reveal_checks else '',
                      'pending': (answer.pending if answer else not spec.is_valid),
                      'assets': [a for a in point.assets.all() if 'statement' in a.audiences or set(a.audiences) & disclosure]})
         rows[-1]['content_images'] = [{'url': reverse('independentworks:asset', args=[attempt.pk, a.pk]), 'filename': a.name, 'is_pdf': a.name.lower().endswith('.pdf')} for a in rows[-1]['assets']]
@@ -628,6 +631,36 @@ def save(request, pk, point_id):
 
 @enabled
 @require_POST
+def check_answer(request, pk, point_id):
+    attempt = own_attempt(request, pk)
+    if not attempt.run.self_check:
+        raise PermissionDenied('Самопроверка для этой работы выключена.')
+    point = get_object_or_404(Point, pk=point_id, variant=attempt.variant)
+    try:
+        version = int(request.POST.get('version', '-1'))
+    except ValueError:
+        raise svc.WorkError('Неверная версия ответа.')
+    values = collect_values(request.POST, f'p{point.pk}', parse_mask(point.snapshot['mask']))
+    if not any(values.values()):
+        return JsonResponse({'ok': True, 'message': 'Сначала введите ответ', 'checks': {}})
+    answer = svc.save_answer(pk, point_id, version, values)
+    with transaction.atomic():
+        answer = Answer.objects.select_for_update().get(pk=answer.pk)
+        answer.check_revealed = True
+        answer.save(update_fields=['check_revealed'])
+        latest = answer.check_history.order_by('-number').values_list('number', flat=True).first() or 0
+        from .models import AnswerCheckAttempt
+        AnswerCheckAttempt.objects.create(
+            answer=answer, number=latest + 1, result=answer.auto_check,
+            snapshot={'values': answer.values, 'checks': answer.checks})
+    checks = {f'p{point.pk}': answer.auto_check}
+    checks.update({f'p{point.pk}_{name}': status for name, status in answer.checks.items()})
+    return JsonResponse({'ok': True, 'message': 'Проверено', 'checks': checks,
+                         'version': answer.version, 'saved_at': answer.updated_at.isoformat()})
+
+
+@enabled
+@require_POST
 def submit_attempt(request, pk):
     attempt = own_attempt(request, pk)
     svc.submit(attempt.pk)
@@ -666,31 +699,13 @@ def review(request, pk, point_id):
 @enabled
 @teacher_required
 @require_POST
-def release_settings(request, pk):
+def self_check_settings(request, pk):
     run = teacher_run(request, pk)
-    show_checks = 'show_checks' in request.POST
-    with transaction.atomic():
-        run = Run.objects.select_for_update().get(pk=run.pk)
-        flags = set(run.release_flags)
-        if show_checks:
-            flags.add('checks')
-            run.release_mode = 'auto'
-        else:
-            flags.discard('checks')
-            if run.release_mode == 'auto' and not flags:
-                run.release_mode = 'manual'
-        run.release_flags = sorted(flags)
-        run.save(update_fields=['release_mode', 'release_flags'])
-        for attempt in run.attempts.select_for_update():
-            attempt_flags = set(attempt.release_flags)
-            if show_checks and attempt.published_at:
-                attempt_flags.add('checks')
-            elif not show_checks:
-                attempt_flags.discard('checks')
-            updated = sorted(attempt_flags)
-            if updated != attempt.release_flags:
-                Attempt.objects.filter(pk=attempt.pk).update(release_flags=updated)
-    messages.success(request, 'Настройка показа правильности сохранена')
+    run.self_check = 'self_check' in request.POST
+    run.save(update_fields=['self_check'])
+    if not run.self_check:
+        Answer.objects.filter(attempt__run=run).update(check_revealed=False)
+    messages.success(request, 'Настройка самопроверки сохранена')
     return redirect('independentworks:progress', pk=pk)
 
 
@@ -699,21 +714,14 @@ def release_settings(request, pk):
 @require_POST
 def publish(request, pk):
     run = teacher_run(request, pk)
-    ids = request.POST.getlist('attempts')
     flags = sorted(set(request.POST.getlist('flags')) & svc.FLAGS)
-    if not flags:
-        context = progress_context(run)
-        context.update(publication_error='Выберите хотя бы одну категорию для публикации.', publication_attempts=ids)
-        return render(request, 'independentworks/progress.html', context, status=400)
     with transaction.atomic():
-        selected_attempts = run.attempts.select_for_update().select_related('run')
-        if ids:
-            selected_attempts = selected_attempts.filter(pk__in=ids)
-        for attempt in selected_attempts:
-            if attempt.finished:
-                combined = sorted(attempt.disclosure | set(flags))
-                Attempt.objects.filter(pk=attempt.pk).update(published_at=timezone.now(), release_flags=combined)
-    messages.success(request, 'Разрешения публикации сохранены')
+        run = Run.objects.select_for_update().get(pk=run.pk)
+        run.release_flags = flags
+        run.release_mode = 'auto' if flags else 'manual'
+        run.save(update_fields=['release_flags', 'release_mode'])
+        run.attempts.update(published_at=None, release_flags=[])
+    messages.success(request, 'Настройки показа после сдачи сохранены')
     return redirect('independentworks:progress', pk=pk)
 
 
