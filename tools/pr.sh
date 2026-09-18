@@ -7,7 +7,8 @@
 #
 #   tools/pr.sh push                          текущую ветку → GitHub (fast-forward only)
 #   tools/pr.sh open "Заголовок" [body.md]    открыть PR ветка → main (или показать уже открытый)
-#   tools/pr.sh status                        PR текущей ветки: состояние, CI, замечания ревью
+#   tools/pr.sh status                        PR текущей ветки: состояние, CI, замечания ревью (с id)
+#   tools/pr.sh reply <id> "Текст"            ответить в треде замечания (id — из status)
 #
 # Токен: fine-grained PAT на один репозиторий, права Contents: read/write,
 # Pull requests: read/write. Файл в .gitignore; скрипт его никогда не печатает.
@@ -102,7 +103,8 @@ import json, sys
 cs = json.load(sys.stdin)
 print("замечаний в коде: %d" % len(cs))
 for c in cs:
-    print("  %s %s:%s — %s" % (c["user"]["login"], c["path"], c.get("line") or c.get("original_line"), c["body"].strip().splitlines()[0][:110]))'
+    tag = "    ↳" if c.get("in_reply_to_id") else "  #%s" % c["id"]
+    print("%s %s %s:%s — %s" % (tag, c["user"]["login"], c["path"], c.get("line") or c.get("original_line"), c["body"].strip().splitlines()[0][:110]))'
     api GET "/issues/$num/comments?per_page=100" | python3 -c '
 import json, sys
 cs = json.load(sys.stdin)
@@ -117,9 +119,28 @@ for c in d.get("check_runs", []):
   }
 }
 
+cmd_reply() {
+  local id=${1:-} text=${2:-}
+  [[ "$id" =~ ^[0-9]+$ ]] || die "нужен числовой id замечания (tools/pr.sh status)"
+  [ -n "$text" ] || die "нужен текст ответа"
+  local num
+  num=$(pr_json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["number"] if isinstance(d, list) and d else "")')
+  [ -n "$num" ] || die "открытого PR для ветки $BRANCH нет"
+  local payload
+  payload=$(mktemp)
+  python3 -c 'import json,sys; print(json.dumps({"body": sys.argv[1]}))' "$text" > "$payload"
+  api POST "/pulls/$num/comments/$id/replies" --data "@$payload" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+if "html_url" in d: print("ответ опубликован: %s" % d["html_url"])
+else: print("GitHub: %s" % d.get("message")); sys.exit(1)'
+  rm -f "$payload"
+}
+
 case "${1:-}" in
   push)   shift; cmd_push "$@" ;;
   open)   shift; cmd_open "$@" ;;
   status) shift; cmd_status ;;
-  *) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  reply)  shift; cmd_reply "$@" ;;
+  *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
