@@ -120,7 +120,7 @@ def validate_background(background, options):
     clean = {}
     if background == CanvasPage.BG_PLANE:
         options = options if isinstance(options, dict) else {}
-        cell = options.get('cell', PLANE_CELLS[0])
+        cell = options.get('cell', PLANE_CELLS[1])  # по умолчанию крупная клетка
         if cell not in PLANE_CELLS:
             raise CanvasValidationError('Недопустимый размер клетки')
         origin = options.get('origin', PLANE_ORIGINS[0])
