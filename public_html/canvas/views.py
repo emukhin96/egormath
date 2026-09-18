@@ -74,7 +74,7 @@ def _read_json(request):
 
 
 def _disabled():
-    return _error('Холст временно отключён', status=503)
+    return _error('Доска для записей временно отключена', status=503)
 
 
 @login_required
@@ -109,7 +109,7 @@ def save_page(request, pk, task_id, number):
     assignment, access = _resolve(request, pk, task_id, lock=True)
     layer = access.layer
     if layer is None:
-        return _error('Сейчас холст только для чтения — изменения не сохранены', status=403)
+        return _error('Сейчас доска для записей только для чтения — изменения не сохранены', status=403)
     data, error = _read_json(request)
     if error:
         return error
@@ -176,7 +176,7 @@ def delete_page(request, pk, task_id, number):
     assignment, access = _resolve(request, pk, task_id, lock=True)
     layer = access.layer
     if layer is None:
-        return _error('Сейчас холст только для чтения', status=403)
+        return _error('Сейчас доска для записей только для чтения', status=403)
     with transaction.atomic():
         pages = list(CanvasPage.objects.select_for_update().filter(
             submission__assignment=assignment, submission__task_id=task_id))

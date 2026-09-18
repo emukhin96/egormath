@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  var W = 1000, H = 750;
+  var W = 1000, H = 1000;
   var COLORS = ['#111827', '#1d4ed8', '#dc2626', '#16a34a', '#ea580c', '#7c3aed'];
   var HL_COLORS = ['#facc15', '#4ade80', '#f472b6', '#38bdf8'];
   var PEN_WIDTHS = [2, 4, 7], HL_WIDTHS = [12, 20, 30], ERASER_SIZES = [10, 25, 50];
@@ -59,10 +59,33 @@
   function button(cls, text, title, onclick) {
     var b = el('button', cls, text);
     b.type = 'button';
-    if (title) b.title = title;
+    if (title) { b.title = title; b.setAttribute('aria-label', title); }
     if (onclick) b.addEventListener('click', onclick);
     return b;
   }
+  var ICONS = {
+    pen: '<path d="m4 16-1 5 5-1L20 8l-4-4Z M14 6l4 4"/>',
+    hl: '<path d="m5 14 5 5 10-10-5-5Z M5 14l-2 5 2 2 5-2 M3 22h11"/>',
+    eraser: '<path d="m3 14 10-10a2 2 0 0 1 3 0l5 5a2 2 0 0 1 0 3l-9 9H8Z M8 9l8 8 M12 21h10"/>',
+    select: '<path d="m5 3 14 10-7 1-3 7Z"/>',
+    undo: '<path d="M9 4 3 10l6 6 M3 10h11a7 7 0 0 1 0 14" transform="translate(0 -2)"/>',
+    redo: '<path d="m15 4 6 6-6 6 M21 10H10a7 7 0 0 0 0 14" transform="translate(0 -2)"/>',
+    trash: '<path d="M3 6h18 M9 6V3h6v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7"/>',
+    clear: '<path d="m13 9 7-7 M3 15l6-6 6 6-6 6Z M5 17l4-4 M7 19l4-4 M15 21h7"/>',
+    group: '<rect x="3" y="3" width="12" height="12" rx="1"/><rect x="9" y="9" width="12" height="12" rx="1"/>',
+    ungroup: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><path d="m14 3 7 7 M21 3l-7 7"/>',
+    front: '<path d="m8 8 4-5 4 5 M12 3v12 M4 13v8h16v-8"/>',
+    back: '<path d="m8 13 4 5 4-5 M12 3v15 M4 13v8h16v-8"/>',
+  };
+  function addIcon(node, name) {
+    node.classList.add('canvas-icon');
+    node.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
+    return node;
+  }
+  function iconButton(name, title, action) {
+    return addIcon(button(name === 'trash' ? 'icon-btn' : 'btn btn-small btn-secondary', '', title, action), name);
+  }
+
   function dist(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
   function distToSegment(c, a, b) {
     var dx = b[0] - a[0], dy = b[1] - a[1], len2 = dx * dx + dy * dy;
@@ -232,10 +255,22 @@
 
   /* ---------- рендер ---------- */
 
+  // Старые страницы 1000×750 размещаем в квадрате без изменения рисунков
+  // и их положения относительно осей. Новые сразу имеют размер 1000×1000.
+  function offsetOf(page) {
+    if (!page || page.bgOptions.square) return 0;
+    if (page.background === 'plane') {
+      var cell = page.bgOptions.cell || 25;
+      return page.bgOptions.origin === 'bottom_left' ? 250 : H / 2 - Math.round(375 / cell) * cell;
+    }
+    return 125;
+  }
+
   function planeOrigin(page) {
     var cell = page.bgOptions.cell || 25;
-    if (page.bgOptions.origin === 'bottom_left') return [cell * 2, H - cell * 2];
-    return [W / 2, Math.round(H / 2 / cell) * cell];
+    var height = page.bgOptions.square ? H : 750;
+    if (page.bgOptions.origin === 'bottom_left') return [cell * 2, height - cell * 2];
+    return [W / 2, Math.round(height / 2 / cell) * cell];
   }
   function cellOf(page) {
     if (page.background === 'plane') return page.bgOptions.cell || 25;
@@ -244,14 +279,15 @@
 
   function drawBackground(ctx, page) {
     ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, W, H);
+    var top = -offsetOf(page), bottom = top + H;
+    ctx.fillRect(0, top, W, H);
     var cell = cellOf(page);
     if (!cell) return;
     ctx.strokeStyle = GRID_COLOR;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (var x = 0; x <= W; x += cell) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
-    for (var y = 0; y <= H; y += cell) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    for (var x = 0; x <= W; x += cell) { ctx.moveTo(x, top); ctx.lineTo(x, bottom); }
+    for (var y = Math.floor(top / cell) * cell; y <= bottom; y += cell) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
     if (page.background !== 'plane') return;
     var o = planeOrigin(page);
@@ -260,21 +296,21 @@
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(0, o[1]); ctx.lineTo(W, o[1]);
-    ctx.moveTo(o[0], H); ctx.lineTo(o[0], 0);
+    ctx.moveTo(o[0], bottom); ctx.lineTo(o[0], top);
     /* единичные отметки, как в образцах xoy */
     ctx.moveTo(o[0] + cell, o[1] - 5); ctx.lineTo(o[0] + cell, o[1] + 5);
     ctx.moveTo(o[0] - 5, o[1] - cell); ctx.lineTo(o[0] + 5, o[1] - cell);
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(W, o[1]); ctx.lineTo(W - 14, o[1] - 5); ctx.lineTo(W - 14, o[1] + 5); ctx.closePath();
-    ctx.moveTo(o[0], 0); ctx.lineTo(o[0] - 5, 14); ctx.lineTo(o[0] + 5, 14); ctx.closePath();
+    ctx.moveTo(o[0], top); ctx.lineTo(o[0] - 5, top + 14); ctx.lineTo(o[0] + 5, top + 14); ctx.closePath();
     ctx.fill();
     ctx.font = 'italic 20px "Times New Roman", serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillText('x', W - 12, o[1] + 8);
     ctx.textAlign = 'left';
-    ctx.fillText('y', o[0] + 10, 2);
+    ctx.fillText('y', o[0] + 10, top + 2);
     ctx.font = '16px "Times New Roman", serif';
     ctx.textAlign = 'center';
     ctx.fillText('1', o[0] + cell, o[1] + 7);
@@ -377,6 +413,13 @@
     this.built = false;
     root.canvasWidget = this;
     root.classList.add('canvas-widget');
+    this.launcher = root.id && document.querySelector('[data-canvas-open="' + root.id + '"]');
+    if (!this.launcher) {
+      this.launcher = button('btn btn-small btn-secondary canvas-launch', 'Доска для записей', 'Открыть доску для записей');
+      root.parentNode.insertBefore(this.launcher, root);
+    }
+    var self = this;
+    this.launcher.addEventListener('click', function () { if (self.root.hidden) self.show(true); else self.close(); });
     var count = parseInt(root.dataset.pages || '0', 10) || 0;
     if (this.role === 'student') {
       if (count) this.show();
@@ -387,41 +430,54 @@
   }
 
   Widget.prototype.renderLauncher = function () {
-    var self = this;
-    this.root.innerHTML = '';
-    var wrap = el('div', 'canvas-launch');
-    wrap.appendChild(button('btn btn-small btn-secondary', 'Холст', 'Написать решение от руки', function () {
-      self.show(true);
-    }));
-    this.root.appendChild(wrap);
+    this.root.hidden = true;
+    this.launcher.hidden = false;
+    this.launcher.setAttribute('aria-expanded', 'false');
+  };
+
+  Widget.prototype.close = function () {
+    if (this.drag) this.onUp({pointerId: this.drag.pointerId}, true);
+    this.pending = [];
+    this.flushAll();
+    if (Widget.active === this) Widget.active = null;
+    this.renderLauncher();
   };
 
   Widget.prototype.applyTeacherToggle = function () {
     var on = false;
     try { on = localStorage.getItem(SHOW_KEY) === '1'; } catch (e) {}
     if (on) { this.show(); return; }
+    if (this.resizeObserver) this.resizeObserver.disconnect();
     this.built = false;
+    this.root.hidden = false;
+    this.launcher.hidden = true;
     this.root.innerHTML = '';
     var count = parseInt(this.root.dataset.pages || '0', 10) || 0;
     var note = el('p', 'helptext canvas-launch',
-      count ? 'Холст: страниц — ' + count + '. Включите «Показать холсты», чтобы увидеть.'
-            : 'Холста нет. Включите «Показать холсты», чтобы оставить пометки от руки.');
+      count ? 'Доска для записей: страниц — ' + count + '. Включите «Показать доски для записей», чтобы увидеть.'
+            : 'Доски для записей нет. Включите «Показать доски для записей», чтобы оставить пометки от руки.');
     this.root.appendChild(note);
   };
 
   Widget.prototype.show = function (createFirst) {
     var self = this;
-    if (this.loaded) { this.build(); return; }
+    this.root.hidden = false;
+    this.launcher.hidden = false;
+    this.launcher.setAttribute('aria-expanded', 'true');
+    if (this.loaded) {
+      if (!this.pages.length && createFirst && this.layer) this.addPage();
+      this.build(); return;
+    }
     fetch(this.url, {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
       .then(function (r) { return r.json().then(function (data) { return {status: r.status, data: data}; }); })
       .then(function (result) {
-        if (!result.data || !result.data.ok) throw new Error(result.data && result.data.message || 'Не удалось загрузить холст');
+        if (!result.data || !result.data.ok) throw new Error(result.data && result.data.message || 'Не удалось загрузить доску для записей');
         self.applyData(result.data);
         self.loaded = true;
         if (!self.pages.length && createFirst && self.layer) self.addPage();
         self.build();
       })
-      .catch(function (error) { toast(false, error.message || 'Не удалось загрузить холст'); });
+      .catch(function (error) { toast(false, error.message || 'Не удалось загрузить доску для записей'); });
   };
 
   Widget.prototype.reload = function () {
@@ -490,11 +546,11 @@
   };
 
   Widget.prototype.addPage = function () {
-    if (!this.canAddPage()) return;
+    if (!this.canAddPage() || this.removing) return;
     var previous = this.pages[this.pages.length - 1];
     var page = this.makePage({number: this.pages.length + 1, created_by_role: this.layer,
       background: previous ? previous.background : 'grid',
-      background_options: previous ? previous.bgOptions : {}});
+      background_options: Object.assign({}, previous ? previous.bgOptions : {}, {square: true})});
     this.pages.push(page);
     this.touch(page);
     this.index = this.pages.length - 1;
@@ -505,22 +561,39 @@
 
   Widget.prototype.removeLastPage = function () {
     var self = this, page = this.pages[this.pages.length - 1];
-    if (!page || !this.editableLayer(page)) return;
-    if (page.layers.student.elements.length || page.layers.teacher.elements.length) return;
-    var finish = function () {
-      self.pages.pop();
-      self.index = Math.max(0, self.pages.length - 1);
-      self.refresh();
-    };
-    this.flush(page).then(function (ok) {
-      if (!ok) return;
-      return fetch(this.url + page.number + '/delete/', {
-      method: 'POST', credentials: 'same-origin',
-      headers: {'X-CSRFToken': csrfToken(), 'X-Requested-With': 'XMLHttpRequest'},
-    }).then(function (r) { return r.json(); }).then(function (data) {
-      if (data.ok) finish(); else toast(false, data.message || 'Не удалось удалить страницу');
-    }).catch(function () { toast(false, 'Нет связи — страница не удалена'); });
-    });
+    if (this.removing || !page || !this.editableLayer(page)) return Promise.resolve(false);
+    if (page.layers.student.elements.length || page.layers.teacher.elements.length) return Promise.resolve(false);
+    this.removing = true;
+    this.root.classList.add('canvas-busy');
+    return this.flush(page).then(function (ok) {
+      if (!ok) return false;
+      return fetch(self.url + page.number + '/delete/', {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'X-CSRFToken': csrfToken(), 'X-Requested-With': 'XMLHttpRequest'},
+      }).then(function (r) { return r.json(); }).then(function (data) {
+        if (!data.ok) { toast(false, data.message || 'Не удалось удалить страницу'); return false; }
+        clearTimeout(page.timer);
+        self.dropBackup(page, self.layer);
+        self.pages.pop();
+        self.index = Math.max(0, self.pages.length - 1);
+        self.updateNonEmpty();
+        self.selection = []; self.pending = [];
+        self.refresh();
+        if (!self.pages.length) self.close();
+        return true;
+      });
+    }).catch(function () { toast(false, 'Нет связи — страница не удалена'); return false; })
+      .finally(function () { self.removing = false; self.root.classList.remove('canvas-busy'); });
+  };
+
+  Widget.prototype.syncDeleteButton = function () {
+    if (!this.deletePageButton) return;
+    var last = this.pages[this.pages.length - 1];
+    var empty = last && !last.layers.student.elements.length && !last.layers.teacher.elements.length;
+    this.deletePageButton.disabled = !last || !this.editableLayer(last) || !empty;
+    this.deletePageButton.title = !last ? 'Страниц нет' : !this.editableLayer(last)
+      ? 'Отправленную страницу нельзя удалить' : !empty
+      ? 'Сначала очистите последнюю страницу' : 'Удалить пустую последнюю страницу';
   };
 
   /* ---------- DOM ---------- */
@@ -548,7 +621,8 @@
     this.stage.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     root.addEventListener('pointerdown', function () { Widget.active = self; });
     if (window.ResizeObserver) {
-      new ResizeObserver(function () { self.resize(); }).observe(this.stage);
+      this.resizeObserver = new ResizeObserver(function () { self.resize(); });
+      this.resizeObserver.observe(this.stage);
     } else {
       window.addEventListener('resize', function () { self.resize(); });
     }
@@ -563,7 +637,7 @@
     var head = this.head;
     head.innerHTML = '';
     var tabs = el('div', 'canvas-pages');
-    tabs.appendChild(el('span', 'canvas-label', 'Холст'));
+    tabs.appendChild(el('span', 'canvas-label', 'Доска для записей'));
     this.pages.forEach(function (p, i) {
       var b = button('btn btn-small btn-secondary canvas-page', String(p.number),
         p.locked ? 'Страница отправлена — только просмотр' : 'Страница ' + p.number, function () {
@@ -576,12 +650,11 @@
     if (this.canAddPage()) {
       tabs.appendChild(button('btn btn-small btn-secondary', '+', 'Добавить страницу', function () { self.addPage(); }));
     }
-    var last = this.pages[this.pages.length - 1];
-    if (last && this.editableLayer(last) && !last.layers.student.elements.length && !last.layers.teacher.elements.length
-        && (this.pages.length > 1 || this.role !== 'student')) {
-      tabs.appendChild(button('icon-btn', '×', 'Удалить пустую последнюю страницу', function () { self.removeLastPage(); }));
-    }
+    this.deletePageButton = iconButton('trash', 'Удалить пустую последнюю страницу', function () { self.removeLastPage(); });
+    if (this.layer) tabs.appendChild(this.deletePageButton);
+    this.syncDeleteButton();
     head.appendChild(tabs);
+    head.appendChild(button('icon-btn canvas-close', '×', 'Закрыть доску для записей', function () { self.close(); }));
     if (!page) {
       head.appendChild(el('span', 'helptext', this.layer ? 'Нажмите «+», чтобы добавить страницу.' : 'Страниц нет.'));
       this.toolbar.innerHTML = '';
@@ -603,7 +676,7 @@
     bg.title = 'Фон страницы';
     bg.addEventListener('change', function () {
       page.background = bg.value;
-      if (bg.value === 'plane' && !page.bgOptions.cell) page.bgOptions = {cell: 25, origin: 'center'};
+      if (bg.value === 'plane' && !page.bgOptions.cell) page.bgOptions = Object.assign({}, page.bgOptions, {cell: 25, origin: 'center'});
       self.touch(page);
       self.refresh();
     });
@@ -614,7 +687,8 @@
         var opt = el('option', null, pair[1]); opt.value = String(pair[0]); cellSel.appendChild(opt);
       });
       cellSel.value = String(page.bgOptions.cell || 25);
-      cellSel.disabled = !editable;
+      cellSel.disabled = true;
+      cellSel.title = 'Размер клетки координатной плоскости фиксирован';
       cellSel.addEventListener('change', function () {
         page.bgOptions = Object.assign({}, page.bgOptions, {cell: parseInt(cellSel.value, 10)});
         self.touch(page); self.redraw();
@@ -642,9 +716,9 @@
     }
     head.appendChild(controls);
 
-    this.buildToolbar(editable);
     this.selection = [];
     this.pending = [];
+    this.buildToolbar(editable);
     this.resize();
   };
 
@@ -666,6 +740,7 @@
     function group(cls) { var g = el('div', 'canvas-group' + (cls ? ' ' + cls : '')); bar.appendChild(g); return g; }
     function tool(container, name, text, title) {
       var b = button('btn btn-small btn-secondary canvas-tool', text, title, function () { self.setTool(name); });
+      if (ICONS[name]) addIcon(b, name);
       b.dataset.tool = name;
       b.setAttribute('aria-pressed', String(self.tool === name));
       container.appendChild(b);
@@ -680,11 +755,13 @@
     var shapes = group();
     Object.keys(SHAPE_TOOLS).forEach(function (name) { tool(shapes, name, SHAPE_TOOLS[name].label, SHAPE_TOOLS[name].title); });
 
-    var graphs = group();
+    var graphs = group('canvas-graphs');
     Object.keys(FN).forEach(function (kind) {
-      graphs.appendChild(button('btn btn-small btn-secondary canvas-tool', FN[kind].label, FN[kind].title + ' — вставить заготовку', function () {
+      var graph = button('btn btn-small btn-secondary canvas-tool', FN[kind].label, FN[kind].title + ' — вставить заготовку', function () {
         self.insertFn(kind);
-      }));
+      });
+      if (window.katex) window.katex.render({parabola: 'x^2', abs: '|x|', sqrt: '\\sqrt{x}', hyperbola: '1/x'}[kind], graph, {throwOnError: false});
+      graphs.appendChild(graph);
     });
 
     var colors = group('canvas-colors');
@@ -705,8 +782,9 @@
     var sizes = this.tool === 'hl' ? HL_WIDTHS : this.tool === 'eraser' ? ERASER_SIZES : PEN_WIDTHS;
     var currentWidth = this.tool === 'hl' ? this.hlWidth : this.tool === 'eraser' ? this.eraserSize : this.penWidth;
     sizes.forEach(function (w, i) {
-      var b = button('canvas-width', '', self.tool === 'eraser' ? 'Размер ластика' : 'Толщина', function () {
+      var b = button('canvas-width', '', (self.tool === 'eraser' ? 'Размер ластика: ' : 'Толщина: ') + w, function () {
         if (self.tool === 'hl') self.hlWidth = w; else if (self.tool === 'eraser') self.eraserSize = w; else self.penWidth = w;
+        self.rewidthSelection(w);
         self.buildToolbar(true);
       });
       var dot = el('span');
@@ -717,8 +795,8 @@
     });
 
     var history = group();
-    var undo = button('btn btn-small btn-secondary', '↶', 'Отменить (Ctrl+Z)', function () { self.undo(); });
-    var redo = button('btn btn-small btn-secondary', '↷', 'Вернуть (Ctrl+Shift+Z)', function () { self.redo(); });
+    var undo = iconButton('undo', 'Отменить (Ctrl+Z)', function () { self.undo(); });
+    var redo = iconButton('redo', 'Вернуть (Ctrl+Shift+Z)', function () { self.redo(); });
     undo.disabled = !page.undo.length;
     redo.disabled = !page.redo.length;
     history.appendChild(undo);
@@ -728,17 +806,17 @@
 
     var sel = group('canvas-selection');
     sel.hidden = !this.selection.length;
-    sel.appendChild(button('btn btn-small btn-secondary', 'Удалить', 'Удалить выделенное (Delete)', function () { self.deleteSelection(); }));
-    sel.appendChild(button('btn btn-small btn-secondary', 'Группа', 'Сгруппировать (Ctrl+G)', function () { self.groupSelection(true); }));
-    sel.appendChild(button('btn btn-small btn-secondary', 'Разгруппировать', 'Разгруппировать (Ctrl+Shift+G)', function () { self.groupSelection(false); }));
-    sel.appendChild(button('btn btn-small btn-secondary', 'Вперёд', 'На передний план (])', function () { self.reorderSelection(true); }));
-    sel.appendChild(button('btn btn-small btn-secondary', 'Назад', 'На задний план ([)', function () { self.reorderSelection(false); }));
+    sel.appendChild(iconButton('trash', 'Удалить выделенное (Delete)', function () { self.deleteSelection(); }));
+    sel.appendChild(iconButton('group', 'Сгруппировать (Ctrl+G)', function () { self.groupSelection(true); }));
+    sel.appendChild(iconButton('ungroup', 'Разгруппировать (Ctrl+Shift+G)', function () { self.groupSelection(false); }));
+    sel.appendChild(iconButton('front', 'На передний план (])', function () { self.reorderSelection(true); }));
+    sel.appendChild(iconButton('back', 'На задний план ([)', function () { self.reorderSelection(false); }));
     this.selectionGroup = sel;
 
     var misc = group();
-    misc.appendChild(button('btn btn-small btn-secondary', 'Очистить', 'Очистить страницу (можно отменить)', function () { self.clearPage(); }));
+    misc.appendChild(iconButton('clear', 'Очистить страницу (можно отменить)', function () { self.clearPage(); }));
     if (cellOf(page)) {
-      misc.appendChild(this.toggle('К сетке', this.snap, function (on) { self.snap = on; }));
+      misc.appendChild(this.toggle('Привязывать к сетке', this.snap, function (on) { self.snap = on; }));
     }
   };
 
@@ -771,13 +849,12 @@
       canvas.style.width = width + 'px';
       canvas.style.height = height + 'px';
     });
-    this.stage.style.height = height + 'px';
     this.redraw();
   };
 
   Widget.prototype.context = function (canvas) {
     var ctx = canvas.getContext('2d'), dpr = window.devicePixelRatio || 1;
-    ctx.setTransform(dpr * this.scale, 0, 0, dpr * this.scale, 0, 0);
+    ctx.setTransform(dpr * this.scale, 0, 0, dpr * this.scale, 0, offsetOf(this.page()) * dpr * this.scale);
     return ctx;
   };
 
@@ -805,7 +882,7 @@
     var page = this.page();
     if (!page || !this.scale) return;
     var ctx = this.context(this.base);
-    ctx.clearRect(0, 0, W, H);
+    ctx.clearRect(0, -offsetOf(page), W, H);
     drawBackground(ctx, page);
     var self = this, drag = this.drag;
     this.visibleLayers(page).forEach(function (layer) {
@@ -825,7 +902,7 @@
     var page = this.page();
     if (!page || !this.scale) return;
     var ctx = this.context(this.top);
-    ctx.clearRect(0, 0, W, H);
+    ctx.clearRect(0, -offsetOf(page), W, H);
     var drag = this.drag;
     if (drag && drag.kind === 'draw' && drag.element) drawElement(ctx, drag.element, page);
     if (drag && drag.kind === 'shape' && drag.preview) drawElement(ctx, drag.preview, page);
@@ -879,7 +956,7 @@
 
   Widget.prototype.commit = function (page, after) {
     var layer = this.editableLayer(page);
-    if (!layer) return;
+    if (!layer || this.removing) return;
     var before = page.layers[layer].elements;
     if (before === after) return;
     if (after.length > this.limits.elements) { toast(false, 'Слишком много элементов на странице'); return; }
@@ -892,6 +969,7 @@
   };
 
   Widget.prototype.syncHistoryButtons = function (page) {
+    this.syncDeleteButton();
     if (this.undoButton) this.undoButton.disabled = !page.undo.length;
     if (this.redoButton) this.redoButton.disabled = !page.redo.length;
     if (this.selectionGroup) this.selectionGroup.hidden = !this.selection.length;
@@ -947,8 +1025,17 @@
     var page = this.page(), self = this;
     if (!this.selection.length || this.tool !== 'select') return;
     this.commit(page, this.ownElements(page).map(function (e) {
-      if (self.selection.indexOf(e.id) < 0 || e.t === 'hl') return e;
+      if (self.selection.indexOf(e.id) < 0) return e;
       return Object.assign({}, e, {c: color});
+    }));
+    this.redraw();
+  };
+
+  Widget.prototype.rewidthSelection = function (width) {
+    var page = this.page(), self = this;
+    if (!this.selection.length || this.tool !== 'select') return;
+    this.commit(page, this.ownElements(page).map(function (element) {
+      return self.selection.indexOf(element.id) < 0 ? element : Object.assign({}, element, {w: width});
     }));
     this.redraw();
   };
@@ -996,7 +1083,7 @@
     var page = this.page();
     if (!page || !this.editableLayer(page)) return;
     var cell = cellOf(page) || 25;
-    var o = page.background === 'plane' ? planeOrigin(page) : [W / 2, H / 2];
+    var o = page.background === 'plane' ? planeOrigin(page) : [W / 2, H / 2 - offsetOf(page)];
     var element = {id: uid(), t: 'fn', k: kind, c: this.color, w: 2, p: [[o[0], o[1]], [o[0] + cell, o[1] - cell]]};
     this.addElement(element);
     this.tool = 'select';
@@ -1025,7 +1112,7 @@
 
   Widget.prototype.point = function (e) {
     var rect = this.stage.getBoundingClientRect();
-    return [(e.clientX - rect.left) / this.scale, (e.clientY - rect.top) / this.scale];
+    return [(e.clientX - rect.left) / this.scale, (e.clientY - rect.top) / this.scale - offsetOf(this.page())];
   };
 
   Widget.prototype.snapped = function (pt) {
@@ -1037,7 +1124,7 @@
 
   Widget.prototype.onDown = function (e) {
     var page = this.page();
-    if (!page || !this.editableLayer(page) || this.drag) return;
+    if (!page || !this.editableLayer(page) || this.drag || this.removing) return;
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     if (e.pointerType === 'pen') Widget.penSeen = true;
     if (e.pointerType === 'touch' && Widget.penSeen) return; /* ладонь при письме стилусом */
@@ -1071,8 +1158,9 @@
 
   Widget.prototype.startSelect = function (e, pt) {
     var page = this.page(), elements = this.ownElements(page);
+    var additive = e.shiftKey || e.ctrlKey || e.metaKey;
     var selected = this.selectedElements();
-    if (selected.length === 1 && selected[0].t === 'fn') {
+    if (!additive && selected.length === 1 && selected[0].t === 'fn') {
       var fn = selected[0];
       for (var i = 1; i >= 0; i--) {
         if (dist(fn.p[i], pt) <= 12) {
@@ -1086,13 +1174,13 @@
       if (hits(elements[j], pt, HIT_TOL)) { hit = elements[j]; break; }
     }
     if (hit) {
-      if (this.selection.indexOf(hit.id) < 0 || e.shiftKey) this.select(hit, e.shiftKey);
+      if (this.selection.indexOf(hit.id) < 0 || additive) this.select(hit, additive);
       var ids = {};
       this.selection.forEach(function (id) { ids[id] = true; });
       this.drag = {kind: 'move', pointerId: e.pointerId, from: pt, dx: 0, dy: 0, ids: ids};
     } else {
-      if (!e.shiftKey) this.selection = [];
-      this.drag = {kind: 'band', pointerId: e.pointerId, from: pt, to: pt, add: e.shiftKey};
+      if (!additive) this.selection = [];
+      this.drag = {kind: 'band', pointerId: e.pointerId, from: pt, to: pt, add: additive};
     }
     this.syncHistoryButtons(page);
     this.redraw();
@@ -1202,13 +1290,12 @@
                    Math.max(drag.from[0], drag.to[0]), Math.max(drag.from[1], drag.to[1])];
         if (box[2] - box[0] > 4 || box[3] - box[1] > 4) {
           var picked = this.ownElements(page).filter(function (el) { return insideBox(el, box); });
-          picked.forEach(function (el) { self.select(el, true); });
-          if (!drag.add) {
-            var ids = {}; picked.forEach(function (el) { ids[el.id] = true; });
-            this.selection = this.ownElements(page).filter(function (el) {
-              return ids[el.id] || (el.g && picked.some(function (p) { return p.g === el.g; }));
-            }).map(function (el) { return el.id; });
-          }
+          var ids = {};
+          if (drag.add) this.selection.forEach(function (id) { ids[id] = true; });
+          picked.forEach(function (el) { ids[el.id] = true; });
+          this.selection = this.ownElements(page).filter(function (el) {
+            return ids[el.id] || (el.g && picked.some(function (p) { return p.g === el.g; }));
+          }).map(function (el) { return el.id; });
         }
         this.syncHistoryButtons(page);
         this.redraw();
@@ -1252,7 +1339,7 @@
 
   document.addEventListener('keydown', function (e) {
     var widget = Widget.active;
-    if (!widget || !widget.built) return;
+    if (!widget || !widget.built || widget.root.hidden || widget.removing) return;
     var target = e.target;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable || target.tagName === 'MATH-FIELD')) return;
     var page = widget.page();
@@ -1380,7 +1467,7 @@
       self.storeBackup(page, layer);
       var delay = RETRY[Math.min(page.retry, RETRY.length - 1)];
       page.retry++;
-      toast(false, 'Нет связи — холст не сохранён, повторю через ' + Math.round(delay / 1000) + ' с');
+      toast(false, 'Нет связи — доска для записей не сохранена, повторю через ' + Math.round(delay / 1000) + ' с');
       page.timer = setTimeout(function () { self.save(page); }, delay);
       return false;
     });
@@ -1455,7 +1542,7 @@
     Promise.all(widgets.map(function (w) { return w.flushAll(); })).then(function (results) {
       delete form.dataset.canvasFlushing;
       if (!results.every(Boolean)) {
-        toast(false, 'Холст не сохранён — повторите отправку после сохранения');
+        toast(false, 'Доска для записей не сохранена — повторите отправку после сохранения');
         return;
       }
       form.dataset.canvasFlushed = '1';

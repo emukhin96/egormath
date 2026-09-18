@@ -13,7 +13,7 @@ import re
 
 from .models import CanvasPage
 
-COORD_MIN, COORD_MAX = -200, 1200
+COORD_MIN, COORD_MAX = -300, 1200
 ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,16}$')
 COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
 
@@ -114,6 +114,9 @@ def validate_elements(raw):
 def validate_background(background, options):
     if not isinstance(background, str) or background not in BACKGROUNDS:
         raise CanvasValidationError('Неизвестный фон')
+    options = options if isinstance(options, dict) else {}
+    if 'square' in options and not isinstance(options['square'], bool):
+        raise CanvasValidationError('Некорректный формат страницы')
     clean = {}
     if background == CanvasPage.BG_PLANE:
         options = options if isinstance(options, dict) else {}
@@ -124,4 +127,6 @@ def validate_background(background, options):
         if origin not in PLANE_ORIGINS:
             raise CanvasValidationError('Недопустимое положение начала координат')
         clean = {'cell': cell, 'origin': origin}
+    if options.get('square'):
+        clean['square'] = True
     return background, clean

@@ -110,7 +110,7 @@
       {% endif %}
     </div>
     {% endif %}
-    {% if can_check or can_upload %}
+    {% if can_check or can_upload or canvas_enabled %}
     <div class="task-tools">
       {% if can_check %}
       {# Без маски сверять нечего: кнопка неактивна #}
@@ -124,6 +124,9 @@
         <input type="file" name="photos" form="photo-form-{{ row.task.pk }}" data-photo-input
                accept="image/jpeg,image/png,image/webp" multiple></label>
       <button type="submit" class="btn btn-small btn-secondary" form="photo-form-{{ row.task.pk }}" data-photo-submit>Загрузить</button>
+      {% endif %}
+      {% if canvas_enabled %}
+      <button type="button" class="btn btn-small btn-secondary" data-canvas-open="board-{{ row.item.pk }}" aria-controls="board-{{ row.item.pk }}" aria-expanded="false">Доска для записей</button>
       {% endif %}
     </div>
     {% endif %}
@@ -145,8 +148,8 @@
     {% endif %}
 
     {% if canvas_enabled %}
-    {# Холст: панель строит canvas.js; до первого штриха — только кнопка «Холст» #}
-    <div data-canvas data-url="{% url 'canvas:pages' assignment.pk row.task.pk %}" data-role="student" data-pages="{{ row.canvas_pages }}" data-nonempty="{% if row.canvas_answered %}1{% endif %}"></div>
+    {# Панель доски открывается кнопкой в общем ряду действий задачи. #}
+    <div id="board-{{ row.item.pk }}" data-canvas data-url="{% url 'canvas:pages' assignment.pk row.task.pk %}" data-role="student" data-pages="{{ row.canvas_pages }}" data-nonempty="{% if row.canvas_answered %}1{% endif %}"></div>
     {% endif %}
 
     {% if sub.review and not editable %}

@@ -16,7 +16,7 @@ function setup() {
     localStorage: {getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key)},
     addEventListener() {},
     fetch(url, options) {
-      calls.push({url, body: JSON.parse(options.body)});
+      calls.push({url, body: options.body ? JSON.parse(options.body) : null});
       return new Promise((resolve, reject) => pending.push({
         resolve(status = 200, data = {ok: true, version: 1}) { resolve({status, json: async () => data}); }, reject,
       }));
@@ -27,7 +27,7 @@ function setup() {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../public_html/static/js/canvas.js'), 'utf8'), context);
   const Widget = context.EgorCanvas.Widget;
   const widget = Object.assign(Object.create(Widget.prototype), {
-    root: {dataset: {}}, url: '/assignments/1/canvas/1/', role: 'student', layer: 'student',
+    root: {dataset: {}, classList: {add() {}, remove() {}}}, url: '/assignments/1/canvas/1/', role: 'student', layer: 'student',
     pages: [], limits: {student: 5, teacher: 2, total: 10, elements: 2000},
     refresh() {}, redraw() {}, syncHistoryButtons() {},
   });
@@ -141,4 +141,92 @@ test('автосохранение второй страницы сначала 
   assert.equal(env.calls[1].url, w.url + '2/');
   env.pending.shift().resolve();
   assert.equal(await saved, true);
+});
+
+test('Ctrl и Cmd добавляют объекты в выделение; толщина и удаление применяются ко всем', () => {
+  for (const modifier of ['ctrlKey', 'metaKey']) {
+    const {widget: w} = setup(); w.addPage(); w.tool = 'select';
+    const page = w.page();
+    const a = {id: 'a', t: 'line', c: '#000000', w: 2, p: [[10, 10], [50, 10]]};
+    const b = {id: 'b', t: 'line', c: '#000000', w: 2, p: [[10, 80], [50, 80]]};
+    w.commit(page, [a, b]);
+    w.startSelect({pointerId: 1}, [25, 10]);
+    w.startSelect({pointerId: 2, [modifier]: true}, [25, 80]);
+    assert.deepEqual(Array.from(w.selection).sort(), ['a', 'b']);
+    w.rewidthSelection(7);
+    assert.ok(page.layers.student.elements.every(e => e.w === 7));
+    w.undo();
+    assert.ok(page.layers.student.elements.every(e => e.w === 2));
+    w.startSelect({pointerId: 1}, [25, 10]);
+    w.startSelect({pointerId: 2, [modifier]: true}, [25, 80]);
+    w.rewidthSelection(4);
+    w.moveSelection(10, 15);
+    assert.equal(page.layers.student.elements[0].p[0][0], 20);
+    assert.equal(page.layers.student.elements[1].p[0][1], 95);
+    w.deleteSelection();
+    assert.equal(page.layers.student.elements.length, 0);
+    w.undo();
+    assert.equal(page.layers.student.elements.length, 2);
+  }
+});
+
+test('удаление пустой страницы ждёт сохранения и отправляет запрос на правильный адрес', async () => {
+  const env = setup(), w = env.widget;
+  w.addPage(); w.addPage();
+  const previous = w.pages[0];
+  previous.dirty = false; previous.layers.student.version = 1;
+  const deleting = w.removeLastPage();
+  assert.equal(env.calls[0].url, w.url + '2/');
+  assert.equal(w.removing, true);
+  env.pending.shift().resolve(); await drain();
+  assert.equal(env.calls[1].url, w.url + '2/delete/');
+  env.pending.shift().resolve(200, {ok: true});
+  assert.equal(await deleting, true);
+  assert.equal(w.pages.length, 1);
+  assert.equal(w.removing, false);
+});
+
+test('очистка включает удаление последней страницы, а отмена снова выключает', () => {
+  const {widget: w} = setup(); w.addPage();
+  const page = w.page();
+  w.deletePageButton = {};
+  w.commit(page, [stroke('a')]); w.syncDeleteButton();
+  assert.equal(w.deletePageButton.disabled, true);
+  w.clearPage(); w.syncDeleteButton();
+  assert.equal(w.deletePageButton.disabled, false);
+  w.undo(); w.syncDeleteButton();
+  assert.equal(w.deletePageButton.disabled, true);
+});
+
+test('закрытие прячет доску, сохраняя рисунок и кнопку открытия', () => {
+  const {widget: w} = setup(); w.addPage();
+  w.launcher = {setAttribute(name, value) { this[name] = value; }};
+  w.commit(w.page(), [stroke('a')]);
+  w.flushAll = () => Promise.resolve(true);
+  w.close();
+  assert.equal(w.root.hidden, true);
+  assert.equal(w.launcher.hidden, false);
+  assert.equal(w.launcher['aria-expanded'], 'false');
+  assert.equal(w.page().layers.student.elements[0].id, 'a');
+});
+
+test('новая страница квадратная, старая сохраняет систему координат', () => {
+  const {widget: w} = setup(); w.addPage();
+  assert.equal(w.page().bgOptions.square, true);
+  assert.equal(w.makePage({number: 1}).bgOptions.square, undefined);
+  w.stage = {clientWidth: 600, style: {}};
+  w.base = {style: {}}; w.top = {style: {}};
+  w.resize();
+  assert.equal(w.base.width, w.base.height);
+});
+
+test('старая плоскость центрируется вместе с рисунком, указатель учитывает смещение', () => {
+  const {widget: w} = setup();
+  w.pages = [w.makePage({number: 1, background: 'plane', background_options: {cell: 50, origin: 'center'}})];
+  w.index = 0; w.scale = 0.5;
+  let transform;
+  w.context({getContext() { return {setTransform(...args) { transform = args; }}; }});
+  assert.equal(transform[5], 50);
+  w.stage = {getBoundingClientRect() { return {left: 0, top: 0}; }};
+  assert.deepEqual(Array.from(w.point({clientX: 250, clientY: 250})), [500, 400]);
 });

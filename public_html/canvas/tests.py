@@ -103,6 +103,20 @@ class StudentCanvasTests(CanvasBase):
         self.assertEqual(response.json()['elements'][0]['id'], 'a1')
         self.assertEqual(self.save(elements=[stroke('b2')], version=1).status_code, 200)
 
+    def test_square_page_options_survive_background_changes(self):
+        for version, background in enumerate(('plane', 'blank', 'grid')):
+            response = self.save(version=version, background=background,
+                                 background_options={'square': True, 'cell': 25, 'origin': 'center'})
+            self.assertEqual(response.status_code, 200)
+            page = CanvasPage.objects.get()
+            self.assertTrue(page.background_options['square'])
+        self.assertEqual(self.save(version=3, background_options={'square': 'yes'}).status_code, 400)
+
+    def test_legacy_page_can_draw_at_top_of_square_view(self):
+        element = stroke()
+        element['p'] = [[0, -250], [10, -240]]
+        self.assertEqual(self.save(elements=[element]).status_code, 200)
+
     def test_student_cannot_touch_teacher_layer(self):
         self.assertEqual(self.save(layer='teacher').status_code, 403)
 
@@ -118,6 +132,12 @@ class StudentCanvasTests(CanvasBase):
         self.assertEqual(self.client.post(self.url('delete', 1)).status_code, 409)
         self.assertEqual(self.client.post(self.url('delete', 2)).status_code, 200)
         self.assertEqual(CanvasPage.objects.count(), 1)
+
+    def test_last_page_can_be_deleted_after_clear(self):
+        self.save()
+        self.assertEqual(self.save(elements=[], version=1).status_code, 200)
+        self.assertEqual(self.client.post(self.url('delete', 1)).status_code, 200)
+        self.assertFalse(CanvasPage.objects.exists())
 
     def test_hidden_task_rejected(self):
         self.save()
