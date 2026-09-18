@@ -37,8 +37,9 @@ def answer_versions(assignment, item_ids=None):
     """Лёгкие версии строк без загрузки снимков всех попыток."""
     hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     values = assignment.submissions.annotate(last_part=Max('parts__updated_at'),
-        last_photo=Max('photos__uploaded_at'), last_attempt=Max('check_history__pk')).values(
-        'task_id', 'updated_at', 'auto_check', 'check_attempts', 'last_part', 'last_photo', 'last_attempt')
+        last_photo=Max('photos__uploaded_at'), last_attempt=Max('check_history__pk'),
+        last_canvas=Max('canvas_pages__student_updated_at')).values(
+        'task_id', 'updated_at', 'auto_check', 'check_attempts', 'last_part', 'last_photo', 'last_attempt', 'last_canvas')
     if item_ids is not None:
         values = values.filter(task_id__in=assignment.worksheet.items.filter(pk__in=item_ids).values('task_id'))
     stamps = {v['task_id']: v for v in values}

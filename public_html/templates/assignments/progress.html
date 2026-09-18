@@ -5,8 +5,9 @@
 <p><a href="{% url 'worksheet_detail' worksheet.pk %}">Вернуться в листок</a></p>
 <form method="get" class="progress-filters"><label for="progress-group">Группа</label><select id="progress-group" name="group"><option value="">Все назначенные ученики</option>{% for group in groups %}<option value="{{ group.pk }}" {% if group.pk|stringformat:'s' == group_id %}selected{% endif %}>{{ group.name }}</option>{% endfor %}</select><button class="btn btn-secondary">Показать</button></form>
 <p class="helptext" data-live-status role="status">Ответы и попытки обновляются каждые 5 секунд, до отправки работы. Нажмите ячейку для подробностей.</p>
+{% if canvas_enabled %}{% include 'canvas/_toggle.html' %}{% endif %}
 <p class="progress-legend"><span>✓ — верно с первой</span><span>✓₂ — верно со второй</span><span>×₂ — неверно после двух</span><span>… — введено, не проверено</span><span>— не начато / не назначено</span></p><div data-progress-table>{% include 'assignments/_progress_table.html' %}</div>
 {% include 'assignments/_progress_dialog.html' %}
 
 {% endblock %}
-{% block extra_js %}<script defer src="{% static 'js/teacher_progress.js' %}?v=5"></script>{% endblock %}
+{% block extra_js %}<script defer src="{% static 'js/teacher_progress.js' %}?v=5"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}"></script>{% endif %}{% endblock %}

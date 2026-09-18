@@ -10,3 +10,4 @@
 </div>
 <details class="check-history" open><summary>Самопроверка — нажатий: {{ row.submission.check_attempts|default:0 }}</summary>{% include 'assignments/_attempts.html' %}</details>
 {% include 'assignments/_photo_gallery.html' with photos=row.submission.photos.all photo_route='photo_file' %}
+{% if canvas_enabled and row.canvas_pages %}<div data-canvas data-url="{% url 'canvas:pages' row.submission.assignment_id row.task.pk %}" data-role="viewer" data-pages="{{ row.canvas_pages }}" data-version="{{ row.canvas_version }}"></div>{% endif %}

@@ -562,6 +562,15 @@ def _assignment_rows(assignment, with_review=False, item_ids=None):
             'attempt_history': attempt_history,
             'legacy_attempts': legacy_attempts,
         })
+    # Холст: число страниц и версия слоя ученика — одним запросом, чтобы
+    # шаблоны знали, есть ли что показывать, не загружая сам JSON
+    from canvas.services import assignment_page_stats
+    stats = assignment_page_stats(assignment)
+    for row in rows:
+        if row['task'] is not None:
+            count, updated = stats.get(row['task'].pk, (0, None))
+            row['canvas_pages'] = count
+            row['canvas_version'] = updated.isoformat() if updated else ''
     from worksheets.block_presentation import decorate_block_rows
     return decorate_block_rows(rows)
 
@@ -1029,6 +1038,10 @@ def submit_assignment(request, pk):
         assignment.status = Assignment.STATUS_SUBMITTED
         assignment.submitted_at = timezone.now()
         assignment.save()
+        # Страницы холста ученик больше не правит — после возврата
+        # продолжит на новой; учитель пишет пометки поверх этих
+        from canvas.services import lock_assignment_pages
+        lock_assignment_pages(assignment, assignment.submitted_at)
     messages.success(request, 'Работа отправлена на проверку.')
     return redirect('assignment_detail', pk=pk)
 

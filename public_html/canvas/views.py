@@ -1,0 +1,183 @@
+"""JSON-эндпоинты холста к задаче обычного задания.
+
+Сервер только принимает и отдаёт JSON слоёв — ничего не рендерит и не
+пересчитывает. Оба слоя одной страницы правятся разными людьми и никогда
+одновременно, поэтому конфликт возможен лишь между двумя вкладками одного
+человека: его ловит версия слоя (409 с актуальными данными).
+"""
+import json
+
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.http import Http404, JsonResponse
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.views.decorators.http import require_GET, require_POST
+
+from accounts.decorators import get_role
+from accounts.models import Profile
+from assignments.models import Assignment, Submission
+from assignments.views import _get_or_create_submission
+
+from . import services
+from .models import CanvasPage
+from .validation import CanvasValidationError, validate_background, validate_elements
+
+
+def _error(message, status=400, **extra):
+    payload = {'ok': False, 'message': message}
+    payload.update(extra)
+    return JsonResponse(payload, status=status)
+
+
+def _resolve(request, pk, task_id):
+    """(назначение, доступ) для текущего пользователя или 404/403."""
+    role = get_role(request.user)
+    if role == Profile.ROLE_STUDENT:
+        assignment = get_object_or_404(
+            Assignment.objects.select_related('worksheet'), pk=pk, student=request.user)
+        access = services.assignment_access(assignment, request.user, CanvasPage.ROLE_STUDENT)
+    elif role == Profile.ROLE_TEACHER:
+        assignment = get_object_or_404(
+            Assignment.visible_to(request.user).select_related('worksheet'), pk=pk)
+        access = services.assignment_access(assignment, request.user, CanvasPage.ROLE_TEACHER)
+    else:
+        raise Http404
+    return assignment, access
+
+
+def _pages(assignment, task_id):
+    return list(CanvasPage.objects.filter(
+        submission__assignment=assignment, submission__task_id=task_id))
+
+
+def _read_json(request):
+    length = request.META.get('CONTENT_LENGTH') or 0
+    try:
+        length = int(length)
+    except (TypeError, ValueError):
+        length = 0
+    if length > CanvasPage.MAX_BYTES + 64 * 1024:
+        return None, _error('Страница слишком большая — упростите рисунок', status=413)
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except (ValueError, UnicodeDecodeError):
+        return None, _error('Некорректный JSON')
+    if not isinstance(data, dict):
+        return None, _error('Некорректный JSON')
+    return data, None
+
+
+def _disabled():
+    return _error('Холст временно отключён', status=503)
+
+
+@login_required
+@require_GET
+def pages(request, pk, task_id):
+    if not services.enabled():
+        return _disabled()
+    assignment, access = _resolve(request, pk, task_id)
+    pages = _pages(assignment, task_id)
+    return JsonResponse({
+        'ok': True,
+        'pages': [services.page_payload(page, access) for page in pages],
+        'layer': access.layer,
+        'can_edit_student': access.can_edit_student,
+        'can_edit_teacher': access.can_edit_teacher,
+        'show_teacher_layer': access.show_teacher_layer,
+        'limits': {
+            'student': CanvasPage.STUDENT_PAGE_LIMIT,
+            'teacher': CanvasPage.TEACHER_PAGE_LIMIT,
+            'total': CanvasPage.TOTAL_PAGE_LIMIT,
+            'elements': CanvasPage.MAX_ELEMENTS,
+        },
+    })
+
+
+@login_required
+@require_POST
+def save_page(request, pk, task_id, number):
+    if not services.enabled():
+        return _disabled()
+    assignment, access = _resolve(request, pk, task_id)
+    layer = access.layer
+    if layer is None:
+        return _error('Сейчас холст только для чтения — изменения не сохранены', status=403)
+    data, error = _read_json(request)
+    if error:
+        return error
+    if data.get('layer', layer) != layer:
+        return _error('Этот слой вам недоступен', status=403)
+    try:
+        elements = validate_elements(data.get('elements', []))
+        background, options = validate_background(
+            data.get('background', CanvasPage.BG_GRID), data.get('background_options'))
+    except CanvasValidationError as exc:
+        return _error(str(exc))
+    if len(json.dumps(elements, separators=(',', ':'))) > CanvasPage.MAX_BYTES:
+        return _error('Страница слишком большая — упростите рисунок', status=413)
+    try:
+        version = int(data.get('version', 0))
+    except (TypeError, ValueError):
+        return _error('Некорректная версия')
+
+    with transaction.atomic():
+        submission = _get_or_create_submission(assignment, task_id)
+        pages = list(CanvasPage.objects.select_for_update().filter(submission=submission))
+        page = next((p for p in pages if p.number == number), None)
+        if page is None:
+            if number != len(pages) + 1:
+                return _error('Страницы добавляются по порядку', status=409)
+            reason = services.creation_allowed(pages, access, layer)
+            if reason:
+                return _error(reason, status=403)
+            if version != 0:
+                return _error('Страница уже создана в другом окне', status=409)
+            page = CanvasPage(submission=submission, number=number, created_by_role=layer)
+        elif not services.can_edit_page(page, access, layer):
+            return _error('Эта страница заморожена — изменения не сохранены', status=403)
+        current_elements, current_version = page.layer(layer)
+        if page.pk and version != current_version:
+            return _error(
+                'Страница изменена в другом окне', status=409,
+                elements=current_elements, version=current_version)
+        now = timezone.now()
+        if layer == CanvasPage.ROLE_TEACHER:
+            page.teacher_elements = elements
+            page.teacher_version = current_version + 1
+            page.teacher_updated_at = now
+            page.teacher_by = request.user
+            new_version = page.teacher_version
+        else:
+            page.student_elements = elements
+            page.student_version = current_version + 1
+            page.student_updated_at = now
+            new_version = page.student_version
+        page.background = background
+        page.background_options = options
+        page.save()
+    return JsonResponse({'ok': True, 'version': new_version, 'message': 'Сохранено ✓'})
+
+
+@login_required
+@require_POST
+def delete_page(request, pk, task_id, number):
+    if not services.enabled():
+        return _disabled()
+    assignment, access = _resolve(request, pk, task_id)
+    layer = access.layer
+    if layer is None:
+        return _error('Сейчас холст только для чтения', status=403)
+    with transaction.atomic():
+        pages = list(CanvasPage.objects.select_for_update().filter(
+            submission__assignment=assignment, submission__task_id=task_id))
+        page = next((p for p in pages if p.number == number), None)
+        if page is None:
+            return JsonResponse({'ok': True})
+        if page.number != len(pages) or not page.is_empty:
+            return _error('Удалить можно только пустую последнюю страницу', status=409)
+        if not services.can_edit_page(page, access, layer):
+            return _error('Эта страница заморожена', status=403)
+        page.delete()
+    return JsonResponse({'ok': True})

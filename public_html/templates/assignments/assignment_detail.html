@@ -144,6 +144,11 @@
     </div>
     {% endif %}
 
+    {% if canvas_enabled %}
+    {# Холст: панель строит canvas.js; до первого штриха — только кнопка «Холст» #}
+    <div data-canvas data-url="{% url 'canvas:pages' assignment.pk row.task.pk %}" data-role="student" data-pages="{{ row.canvas_pages }}"></div>
+    {% endif %}
+
     {% if sub.review and not editable %}
     <div class="answer-box">
       <strong>Проверка:</strong>
@@ -190,7 +195,8 @@
 {% endblock %}
 {% block extra_js %}
 <script defer src="{% static 'js/check_badge.js' %}"></script>
-<script defer src="{% static 'js/assignment.js' %}?v=3"></script>
+<script defer src="{% static 'js/assignment.js' %}?v=4"></script>
+{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}"></script>{% endif %}
 {% if editable %}
 <script defer src="{% static 'js/work_activity.js' %}"></script>
 <script defer src="{% static 'js/mask.js' %}?v=5"></script>

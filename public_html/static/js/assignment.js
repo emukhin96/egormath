@@ -19,7 +19,7 @@
       if (c.type === 'checkbox') { if (c.checked) return true; continue; }
       if ((c.value || '').trim()) return true;
     }
-    return !!card.querySelector('[data-photos] img');
+    return !!card.querySelector('[data-photos] img') || !!card.querySelector('[data-canvas][data-nonempty="1"]');
   }
 
   function csrf(form) {

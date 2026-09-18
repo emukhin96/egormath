@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'assignments',
     'independentworks',
     'workaudit',
+    'canvas',
 ]
 
 MIDDLEWARE = [
@@ -89,6 +90,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'accounts.context_processors.shell',
+                'canvas.context_processors.canvas',
             ],
         },
     },
@@ -198,6 +200,10 @@ PDF_EDITOR_FONTS = [
 SUBMISSION_PHOTO_MAX_SIZE_MB = 15       # до сжатия
 SUBMISSION_PHOTO_MAX_SIDE = 1600        # px, большая сторона после сжатия
 SUBMISSION_PHOTO_MAX_COUNT = 6          # фото на одну задачу
+
+# Холст (мини-доска к задаче). Выключатель на случай перегрузки:
+# CANVAS_ENABLED=0 в .secrets/ прячет панель и закрывает эндпоинты (503).
+CANVAS_ENABLED = read_secret('CANVAS_ENABLED', '1').strip().lower() not in ('0', 'false', 'no', 'off')
 
 if IS_PRODUCTION:
     CSRF_TRUSTED_ORIGINS = [
