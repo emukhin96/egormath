@@ -146,7 +146,7 @@
 
     {% if canvas_enabled %}
     {# Холст: панель строит canvas.js; до первого штриха — только кнопка «Холст» #}
-    <div data-canvas data-url="{% url 'canvas:pages' assignment.pk row.task.pk %}" data-role="student" data-pages="{{ row.canvas_pages }}"></div>
+    <div data-canvas data-url="{% url 'canvas:pages' assignment.pk row.task.pk %}" data-role="student" data-pages="{{ row.canvas_pages }}" data-nonempty="{% if row.canvas_answered %}1{% endif %}"></div>
     {% endif %}
 
     {% if sub.review and not editable %}

@@ -25,6 +25,13 @@ jobs:
         working-directory: public_html
         run: python manage.py test
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check canvas autosave
+        run: node --test tools/test_canvas.js
+
       - name: Rebuild CSS
         run: |
           mkdir -p tools

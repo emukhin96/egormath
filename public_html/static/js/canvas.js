@@ -107,6 +107,12 @@
     if (Math.abs(sy) < 1) sy = sy < 0 ? -1 : 1;
     var f = FN[element.k].f, lines = [], current = [];
     for (var px = -60; px <= W + 60; px += 3) {
+      // Асимптота может оказаться между отсчётами: ветви не соединяем.
+      if (element.k === 'hyperbola' && current.length
+          && (current[current.length - 1][0] - o[0]) * (px - o[0]) < 0) {
+        if (current.length > 1) lines.push(current);
+        current = [];
+      }
       var x = (px - o[0]) / sx, y = f(x);
       var py = isFinite(y) ? o[1] - sy * y : NaN;
       if (isNaN(py) || py < -3000 || py > H + 3000) {
@@ -372,7 +378,6 @@
     root.canvasWidget = this;
     root.classList.add('canvas-widget');
     var count = parseInt(root.dataset.pages || '0', 10) || 0;
-    root.dataset.nonempty = count ? '1' : '';
     if (this.role === 'student') {
       if (count) this.show();
       else this.renderLauncher();
@@ -419,12 +424,35 @@
       .catch(function (error) { toast(false, error.message || 'Не удалось загрузить холст'); });
   };
 
+  Widget.prototype.reload = function () {
+    var self = this;
+    if (!this.loaded || !this.built || this.reloading || this.drag
+        || this.pages.some(function (p) { return p.dirty || p.saving; })) return;
+    this.reloading = true;
+    fetch(this.url, {credentials: 'same-origin'})
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok || self.drag || self.pages.some(function (p) { return p.dirty || p.saving; })) return;
+        var index = self.index;
+        self.applyData(data);
+        self.index = Math.min(index, Math.max(0, self.pages.length - 1));
+        self.refresh();
+      }).catch(function () {}).finally(function () { self.reloading = false; });
+  };
+
   Widget.prototype.applyData = function (data) {
     var self = this;
-    this.layer = data.layer;
+    this.layer = this.role === 'viewer' ? null : data.layer;
     this.limits = data.limits || {student: 5, teacher: 2, total: 10, elements: 2000};
     this.showTeacherLayer = !!data.show_teacher_layer;
     this.pages = data.pages.map(function (raw) { return self.makePage(raw); });
+    while (this.canAddPage()) {
+      var page = this.makePage({number: this.pages.length + 1, created_by_role: this.layer});
+      var backup = null;
+      try { backup = JSON.parse(localStorage.getItem(this.backupKey(page, this.layer))); } catch (e) {}
+      if (!backup || backup.version !== 0 || !Array.isArray(backup.elements)) break;
+      this.pages.push(page);
+    }
     this.pages.forEach(function (page) { self.restoreBackup(page); });
     this.index = 0;
     this.updateNonEmpty();
@@ -468,6 +496,7 @@
       background: previous ? previous.background : 'grid',
       background_options: previous ? previous.bgOptions : {}});
     this.pages.push(page);
+    this.touch(page);
     this.index = this.pages.length - 1;
     this.selection = [];
     this.pending = [];
@@ -483,14 +512,15 @@
       self.index = Math.max(0, self.pages.length - 1);
       self.refresh();
     };
-    var saved = page.layers.student.version || page.layers.teacher.version;
-    if (!saved) { finish(); return; }
-    fetch(this.url + page.number + '/delete/', {
+    this.flush(page).then(function (ok) {
+      if (!ok) return;
+      return fetch(this.url + page.number + '/delete/', {
       method: 'POST', credentials: 'same-origin',
       headers: {'X-CSRFToken': csrfToken(), 'X-Requested-With': 'XMLHttpRequest'},
     }).then(function (r) { return r.json(); }).then(function (data) {
       if (data.ok) finish(); else toast(false, data.message || 'Не удалось удалить страницу');
     }).catch(function () { toast(false, 'Нет связи — страница не удалена'); });
+    });
   };
 
   /* ---------- DOM ---------- */
@@ -1145,7 +1175,10 @@
     this.drag = null;
     var page = this.page(), self = this;
     try { this.stage.releasePointerCapture(e.pointerId); } catch (err) {}
-    if (cancelled) { this.redraw(); return; }
+    if (cancelled) {
+      if (drag.kind === 'erase') page.layers[this.editableLayer(page)].elements = drag.before;
+      this.redraw(); return;
+    }
     switch (drag.kind) {
       case 'draw': {
         var points = simplify(drag.element.p, 0.6).map(roundPoint);
@@ -1254,6 +1287,8 @@
     page.rev++;
     page.dirty = true;
     this.updateNonEmpty();
+    var layer = this.editableLayer(page);
+    if (layer) this.storeBackup(page, layer);
     if (!page.firstDirtyAt) page.firstDirtyAt = Date.now();
     clearTimeout(page.timer);
     var wait = Date.now() - page.firstDirtyAt >= MAX_WAIT ? 0 : DEBOUNCE;
@@ -1261,7 +1296,7 @@
   };
 
   Widget.prototype.updateNonEmpty = function () {
-    var any = this.pages.some(function (p) { return p.layers.student.elements.length || p.layers.teacher.elements.length; });
+    var any = this.pages.some(function (p) { return p.layers.student.elements.length; });
     this.root.dataset.nonempty = any ? '1' : '';
   };
 
@@ -1273,24 +1308,39 @@
   };
 
   Widget.prototype.flush = function (page) {
-    if (page && page.dirty && !page.saving) { clearTimeout(page.timer); return this.save(page); }
-    return Promise.resolve(true);
+    var self = this;
+    if (!page) return Promise.resolve(true);
+    var pending = page.saving ? page.savePromise : this.save(page);
+    return pending.then(function (ok) {
+      if (!ok) return false;
+      return page.dirty ? self.flush(page) : true;
+    });
   };
 
   Widget.prototype.flushAll = function () {
     var self = this;
-    return Promise.all(this.pages.map(function (page) { return self.flush(page); }));
+    // Страницы создаются по порядку, включая пустые промежуточные.
+    return this.pages.reduce(function (promise, page) {
+      return promise.then(function (ok) { return ok ? self.flush(page) : false; });
+    }, Promise.resolve(true));
   };
 
   Widget.prototype.save = function (page) {
     var self = this, layer = this.editableLayer(page);
     clearTimeout(page.timer);
-    if (!layer || !page.dirty) return Promise.resolve(true);
-    if (page.saving) { page.pendingSave = true; return Promise.resolve(false); }
+    if (!page.dirty) return Promise.resolve(true);
+    if (!layer) return Promise.resolve(false);
+    if (page.saving) return page.savePromise;
+    var previous = this.pages[this.pages.indexOf(page) - 1];
+    if (previous && !previous.layers.student.version && !previous.layers.teacher.version) {
+      return this.flush(previous).then(function (ok) { return ok ? self.save(page) : false; });
+    }
     page.saving = true;
-    var rev = page.rev, body = this.body(page, layer);
+    var rev, body;
     var enqueue = window.EgorAutosave && EgorAutosave.enqueue || function (_, operation) { return operation(); };
-    return enqueue(this, function () {
+    page.savePromise = enqueue(this, function () {
+      rev = page.rev;
+      body = self.body(page, layer);
       return fetch(self.url + page.number + '/', {
         method: 'POST', credentials: 'same-origin', body: body,
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken(), 'X-Requested-With': 'XMLHttpRequest'},
@@ -1301,8 +1351,10 @@
       if (data.ok) {
         page.layers[layer].version = data.version;
         page.retry = 0;
-        self.dropBackup(page, layer);
-        if (page.rev === rev) { page.dirty = false; page.firstDirtyAt = 0; }
+        if (page.rev === rev) {
+          page.dirty = false; page.firstDirtyAt = 0;
+          self.dropBackup(page, layer);
+        } else self.storeBackup(page, layer);
         toast(true, data.message || 'Сохранено ✓');
       } else if (result.status === 409 && data.elements) {
         page.layers[layer].elements = data.elements;
@@ -1314,16 +1366,14 @@
         toast(false, data.message || 'Страница изменена в другом окне');
         self.redraw();
         self.syncHistoryButtons(page);
-      } else if (result.status === 403 || result.status === 503) {
-        page.dirty = false; page.firstDirtyAt = 0;
-        page.locked = page.locked || result.status === 403;
-        toast(false, data.message || 'Изменения не сохранены');
-        self.refresh();
       } else {
-        page.dirty = false;
+        self.storeBackup(page, layer);
         toast(false, data.message || 'Ошибка сохранения');
       }
-      if (page.pendingSave || (page.dirty && page.rev !== rev)) { page.pendingSave = false; self.touch(page); }
+      if (data.ok && page.dirty) {
+        clearTimeout(page.timer);
+        page.timer = setTimeout(function () { self.save(page); }, DEBOUNCE);
+      }
       return !!data.ok;
     }).catch(function () {
       page.saving = false;
@@ -1334,6 +1384,7 @@
       page.timer = setTimeout(function () { self.save(page); }, delay);
       return false;
     });
+    return page.savePromise;
   };
 
   Widget.prototype.backupKey = function (page, layer) { return 'canvas-backup:' + this.url + page.number + ':' + layer; };
@@ -1375,7 +1426,7 @@
         clearTimeout(page.timer);
         var body = widget.body(page, layer);
         widget.storeBackup(page, layer);
-        if (body.length < KEEPALIVE_LIMIT && typeof fetch === 'function') {
+        if (!page.saving && body.length < KEEPALIVE_LIMIT && typeof fetch === 'function') {
           fetch(widget.url + page.number + '/', {
             method: 'POST', credentials: 'same-origin', body: body, keepalive: true,
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken(), 'X-Requested-With': 'XMLHttpRequest'},
@@ -1388,18 +1439,28 @@
     if (document.hidden) Widget.all.forEach(function (widget) { widget.flushAll(); });
   });
 
-  /* «Отправить на проверку»: сначала дописываем холст, потом обычный submit */
-  document.addEventListener('click', function (e) {
-    var button = e.target.closest && e.target.closest('#submit-assignment');
-    if (!button || button.dataset.canvasFlushed) return;
-    var dirty = Widget.all.some(function (w) { return w.pages.some(function (p) { return p.dirty; }); });
+  /* Перед отправкой задания и возвратом проверки ждём все слои.
+     При ошибке форма остаётся открытой вместе с локальным черновиком. */
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    var widgets = Widget.all.filter(function (w) { return form.contains(w.root); });
+    if (!widgets.length || form.dataset.canvasFlushed) return;
+    var dirty = widgets.some(function (w) { return w.pages.some(function (p) { return p.dirty || p.saving; }); });
     if (!dirty) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    Promise.all(Widget.all.map(function (w) { return w.flushAll(); })).then(function () {
-      button.dataset.canvasFlushed = '1';
-      button.click();
-      delete button.dataset.canvasFlushed;
+    if (form.dataset.canvasFlushing) return;
+    form.dataset.canvasFlushing = '1';
+    var submitter = e.submitter;
+    Promise.all(widgets.map(function (w) { return w.flushAll(); })).then(function (results) {
+      delete form.dataset.canvasFlushing;
+      if (!results.every(Boolean)) {
+        toast(false, 'Холст не сохранён — повторите отправку после сохранения');
+        return;
+      }
+      form.dataset.canvasFlushed = '1';
+      try { form.requestSubmit(submitter || undefined); }
+      finally { delete form.dataset.canvasFlushed; }
     });
   }, true);
 
@@ -1411,6 +1472,15 @@
 
   function init(root) {
     if (root.canvasWidget || !root.dataset.url) return;
+    if (root.dataset.role === 'viewer') {
+      var editor = Array.from(document.querySelectorAll('[data-canvas][data-role="teacher"]'))
+        .find(function (node) { return node.dataset.url === root.dataset.url; });
+      if (editor) {
+        root.hidden = true;
+        if (editor.canvasWidget) editor.canvasWidget.reload();
+        return;
+      }
+    }
     Widget.all.push(new Widget(root));
   }
   function initAll(scope) {

@@ -120,13 +120,43 @@ class StudentCanvasTests(CanvasBase):
         self.assertEqual(CanvasPage.objects.count(), 1)
 
     def test_hidden_task_rejected(self):
+        self.save()
         self.assignment.hidden_items.add(self.item)
         self.assertEqual(self.save().status_code, 404)
+        self.assertEqual(self.client.get(self.url('pages')).status_code, 404)
+        self.assertEqual(self.client.post(self.url('delete', 1)).status_code, 404)
+
+    def test_malformed_values_return_validation_error(self):
+        for value in (float('nan'), float('inf'), -float('inf')):
+            with self.subTest(value=value):
+                element = stroke()
+                element['p'][0][0] = value
+                self.assertEqual(self.save(elements=[element]).status_code, 400)
+                self.assertEqual(self.save(version=value).status_code, 400)
+        for value in ([], {}):
+            with self.subTest(value=value):
+                element = stroke()
+                element['t'] = value
+                self.assertEqual(self.save(elements=[element]).status_code, 400)
+                self.assertEqual(self.save(background=value).status_code, 400)
+        self.assertFalse(CanvasPage.objects.exists())
 
     def test_live_signature_changes_after_save(self):
         before = answer_versions(self.assignment)
         self.save()
         self.assertNotEqual(before, answer_versions(self.assignment))
+
+    def test_only_nonempty_student_layer_counts_as_answer(self):
+        detail = reverse('assignment_detail', args=[self.assignment.pk])
+        self.save(elements=[])
+        self.assertEqual(self.client.get(detail).context['answered_count'], 0)
+        self.save(version=1)
+        self.assertEqual(self.client.get(detail).context['answered_count'], 1)
+        self.save(elements=[], version=2)
+        page = CanvasPage.objects.get()
+        page.teacher_elements = [stroke('teacher')]
+        page.save()
+        self.assertEqual(self.client.get(detail).context['answered_count'], 0)
 
     def test_payload_too_large(self):
         big = [{'id': f'p{i}', 't': 'path', 'c': '#000000', 'w': 2,
@@ -197,6 +227,16 @@ class SubmitAndTeacherTests(CanvasBase):
         # Учитель во время доработки только смотрит
         self.client.force_login(self.teacher)
         self.assertEqual(self.save(number=1, layer='teacher', version=1).status_code, 403)
+
+    def test_teacher_page_stays_locked_after_return(self):
+        self.submit()
+        self.client.force_login(self.teacher)
+        self.assertEqual(self.save(layer='teacher').status_code, 200)
+        self.client.post(reverse('save_review', args=[self.assignment.pk]), {'action': 'return'})
+        self.client.force_login(self.student)
+        self.assertTrue(self.client.get(self.url('pages')).json()['pages'][0]['locked'])
+        self.assertEqual(self.save(number=1).status_code, 403)
+        self.assertEqual(self.save(number=2).status_code, 200)
 
     def test_foreign_teacher_and_student(self):
         other_teacher = make_teacher(username='other_teacher')

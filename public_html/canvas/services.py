@@ -1,6 +1,6 @@
 """Общая логика холста: права, страницы, заморозка."""
 from django.conf import settings
-from django.db.models import Count, Max
+from django.db.models import Count, Max, Q
 from django.utils import timezone
 
 from .models import CanvasPage
@@ -18,12 +18,13 @@ def lock_assignment_pages(assignment, now=None):
 
 
 def assignment_page_stats(assignment):
-    """{task_id: (страниц, последнее изменение слоя ученика)} одним запросом."""
+    """Число страниц, последнее изменение и непустые слои ученика по задачам."""
     rows = (CanvasPage.objects
             .filter(submission__assignment=assignment)
             .values('submission__task_id')
-            .annotate(n=Count('pk'), updated=Max('student_updated_at')))
-    return {row['submission__task_id']: (row['n'], row['updated']) for row in rows}
+            .annotate(n=Count('pk'), updated=Max('student_updated_at'),
+                      answered=Count('pk', filter=~Q(student_elements=[]))))
+    return {row['submission__task_id']: (row['n'], row['updated'], row['answered']) for row in rows}
 
 
 class Access:

@@ -568,8 +568,10 @@ def _assignment_rows(assignment, with_review=False, item_ids=None):
     stats = assignment_page_stats(assignment)
     for row in rows:
         if row['task'] is not None:
-            count, updated = stats.get(row['task'].pk, (0, None))
+            count, updated, answered = stats.get(row['task'].pk, (0, None, 0))
             row['canvas_pages'] = count
+            row['canvas_answered'] = bool(answered)
+            row['answered'] = row['answered'] or bool(answered)
             row['canvas_version'] = updated.isoformat() if updated else ''
     from worksheets.block_presentation import decorate_block_rows
     return decorate_block_rows(rows)
@@ -1027,6 +1029,9 @@ def submit_assignment(request, pk):
     # Кнопка «Отправить» шлёт ту же форму, что и «Сохранить черновик»:
     # сначала записываем введённое, иначе учитель увидит пустую работу
     with transaction.atomic():
+        assignment = Assignment.objects.select_for_update().get(pk=assignment.pk)
+        if not assignment.is_editable_by_student:
+            raise PermissionDenied('Работа уже отправлена на проверку.')
         _persist_answers(assignment, request.POST)
         # Строки-ответы для видимых задач: скрытые не создаём
         hidden = set(assignment.hidden_items.values_list('pk', flat=True))
@@ -1105,8 +1110,10 @@ def review_assignment(request, pk):
 
 @teacher_required
 @require_POST
+@transaction.atomic
 def save_review(request, pk):
     assignment = _teacher_assignment(request, pk)
+    assignment = Assignment.objects.select_for_update().get(pk=assignment.pk)
     action = request.POST.get('action', 'save')
     owner_id = request.POST.get('owner', '').strip()
     if not request.user.is_superuser or not owner_id.isdigit():

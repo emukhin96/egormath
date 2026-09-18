@@ -8,6 +8,7 @@
   t — тип, c — цвет, w — толщина, p — точки (логические единицы страницы
   1000×750), g — id группы, k — вид заготовки графика, l — подпись точки.
 """
+import math
 import re
 
 from .models import CanvasPage
@@ -41,6 +42,8 @@ class CanvasValidationError(ValueError):
 def _int(value, name):
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise CanvasValidationError(f'{name}: ожидается число')
+    if isinstance(value, float) and not math.isfinite(value):
+        raise CanvasValidationError(f'{name}: ожидается конечное число')
     value = int(round(value))
     return value
 
@@ -59,7 +62,7 @@ def validate_element(raw):
     if not isinstance(raw, dict):
         raise CanvasValidationError('Элемент должен быть объектом')
     kind = raw.get('t')
-    if kind not in POINT_COUNTS:
+    if not isinstance(kind, str) or kind not in POINT_COUNTS:
         raise CanvasValidationError(f'Неизвестный тип элемента: {kind!r}')
     element_id = raw.get('id')
     if not isinstance(element_id, str) or not ID_RE.match(element_id):
@@ -109,7 +112,7 @@ def validate_elements(raw):
 
 
 def validate_background(background, options):
-    if background not in BACKGROUNDS:
+    if not isinstance(background, str) or background not in BACKGROUNDS:
         raise CanvasValidationError('Неизвестный фон')
     clean = {}
     if background == CanvasPage.BG_PLANE:

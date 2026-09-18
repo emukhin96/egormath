@@ -16,8 +16,9 @@ from django.views.decorators.http import require_GET, require_POST
 
 from accounts.decorators import get_role
 from accounts.models import Profile
-from assignments.models import Assignment, Submission
-from assignments.views import _get_or_create_submission
+from assignments.models import Assignment
+from assignments.views import _get_or_create_submission, _visible_task_item
+from problems.models import Task
 
 from . import services
 from .models import CanvasPage
@@ -30,19 +31,23 @@ def _error(message, status=400, **extra):
     return JsonResponse(payload, status=status)
 
 
-def _resolve(request, pk, task_id):
+def _resolve(request, pk, task_id, *, lock=False):
     """(назначение, доступ) для текущего пользователя или 404/403."""
     role = get_role(request.user)
     if role == Profile.ROLE_STUDENT:
         assignment = get_object_or_404(
             Assignment.objects.select_related('worksheet'), pk=pk, student=request.user)
-        access = services.assignment_access(assignment, request.user, CanvasPage.ROLE_STUDENT)
     elif role == Profile.ROLE_TEACHER:
         assignment = get_object_or_404(
             Assignment.visible_to(request.user).select_related('worksheet'), pk=pk)
-        access = services.assignment_access(assignment, request.user, CanvasPage.ROLE_TEACHER)
     else:
         raise Http404
+    if lock:
+        # Общий замок с отправкой/возвратом: права и лимиты проверяем
+        # после завершения предыдущего изменения, даже для первой страницы.
+        assignment = Assignment.objects.select_for_update().get(pk=assignment.pk)
+    access = services.assignment_access(assignment, request.user, role)
+    _visible_task_item(assignment, get_object_or_404(Task, pk=task_id))
     return assignment, access
 
 
@@ -97,10 +102,11 @@ def pages(request, pk, task_id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def save_page(request, pk, task_id, number):
     if not services.enabled():
         return _disabled()
-    assignment, access = _resolve(request, pk, task_id)
+    assignment, access = _resolve(request, pk, task_id, lock=True)
     layer = access.layer
     if layer is None:
         return _error('Сейчас холст только для чтения — изменения не сохранены', status=403)
@@ -119,7 +125,7 @@ def save_page(request, pk, task_id, number):
         return _error('Страница слишком большая — упростите рисунок', status=413)
     try:
         version = int(data.get('version', 0))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return _error('Некорректная версия')
 
     with transaction.atomic():
@@ -134,7 +140,8 @@ def save_page(request, pk, task_id, number):
                 return _error(reason, status=403)
             if version != 0:
                 return _error('Страница уже создана в другом окне', status=409)
-            page = CanvasPage(submission=submission, number=number, created_by_role=layer)
+            page = CanvasPage(submission=submission, number=number, created_by_role=layer,
+                              locked_at=timezone.now() if layer == CanvasPage.ROLE_TEACHER else None)
         elif not services.can_edit_page(page, access, layer):
             return _error('Эта страница заморожена — изменения не сохранены', status=403)
         current_elements, current_version = page.layer(layer)
@@ -162,10 +169,11 @@ def save_page(request, pk, task_id, number):
 
 @login_required
 @require_POST
+@transaction.atomic
 def delete_page(request, pk, task_id, number):
     if not services.enabled():
         return _disabled()
-    assignment, access = _resolve(request, pk, task_id)
+    assignment, access = _resolve(request, pk, task_id, lock=True)
     layer = access.layer
     if layer is None:
         return _error('Сейчас холст только для чтения', status=403)
