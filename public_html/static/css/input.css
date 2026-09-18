@@ -4705,7 +4705,12 @@
   }
   .canvas-page-locked { color: var(--muted); }
   .canvas-bg { margin: 0; width: auto; min-height: 28px; padding: 2px 6px; font-size: 0.82rem; }
-  .canvas-toolbar { gap: var(--space-3); margin-bottom: var(--space-2); }
+  /* Панель: две фиксированные строки, состав кнопок не меняется — поле не прыгает */
+  .canvas-toolbar { flex-direction: column; align-items: stretch; gap: var(--space-2); margin-bottom: var(--space-2); }
+  .canvas-toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); min-height: 30px; }
+  .canvas-swatch:disabled { opacity: 0.3; cursor: default; box-shadow: 0 0 0 1px var(--border); }
+  .canvas-disabled { opacity: 0.45; }
+  .canvas-controls .canvas-bg:disabled { opacity: 0.6; }
   .canvas-toolbar .btn { margin: 0; }
   .canvas-toolbar .canvas-icon, .canvas-pages .canvas-icon {
     display: inline-flex; align-items: center; justify-content: center;
