@@ -152,6 +152,16 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+# На проде статика отдаётся с Cache-Control max-age=7 дней (.htaccess), поэтому
+# имена файлов получают хэш содержимого: после деплоя браузеры сразу берут
+# новые app.css/canvas.js, ручные ?v=N в шаблонах больше не нужны.
+# Нестрогий режим: файл, которого нет в манифесте, отдаётся по обычному пути,
+# а не роняет страницу.
+if IS_PRODUCTION:
+    STORAGES = {
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'core.staticfiles.HashedStaticFilesStorage'},
+    }
 
 # Медиа (фото решений, кэш PDF) храним ВНЕ public_html: файлы приватные,
 # раздаются только через view с проверкой прав.

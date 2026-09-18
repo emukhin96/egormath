@@ -17,7 +17,7 @@
 
   var W = 1000, H = 1000;
   var COLORS = ['#111827', '#1d4ed8', '#dc2626', '#16a34a', '#ea580c', '#7c3aed'];
-  var HL_COLORS = ['#facc15', '#4ade80', '#f472b6', '#38bdf8'];
+  var HL_COLORS = ['#facc15', '#4ade80', '#f472b6', '#38bdf8', '#fb923c', '#c084fc'];
   var PEN_WIDTHS = [2, 4, 7], HL_WIDTHS = [12, 20, 30], ERASER_SIZES = [10, 25, 50];
   var HL_ALPHA = 0.35, HIT_TOL = 8, MAX_UNDO = 100;
   var DEBOUNCE = 1000, MAX_WAIT = 5000, RETRY = [3000, 10000, 30000], KEEPALIVE_LIMIT = 60000;
@@ -681,31 +681,31 @@
       self.refresh();
     });
     controls.appendChild(bg);
-    if (page.background === 'plane') {
-      var cellSel = el('select', 'canvas-bg');
-      [[25, 'мелкая клетка'], [50, 'крупная клетка']].forEach(function (pair) {
-        var opt = el('option', null, pair[1]); opt.value = String(pair[0]); cellSel.appendChild(opt);
-      });
-      cellSel.value = String(page.bgOptions.cell || 25);
-      cellSel.disabled = true;
-      cellSel.title = 'Размер клетки координатной плоскости фиксирован';
-      cellSel.addEventListener('change', function () {
-        page.bgOptions = Object.assign({}, page.bgOptions, {cell: parseInt(cellSel.value, 10)});
-        self.touch(page); self.redraw();
-      });
-      controls.appendChild(cellSel);
-      var originSel = el('select', 'canvas-bg');
-      [['center', 'начало в центре'], ['bottom_left', 'начало слева внизу']].forEach(function (pair) {
-        var opt = el('option', null, pair[1]); opt.value = pair[0]; originSel.appendChild(opt);
-      });
-      originSel.value = page.bgOptions.origin || 'center';
-      originSel.disabled = !editable;
-      originSel.addEventListener('change', function () {
-        page.bgOptions = Object.assign({}, page.bgOptions, {origin: originSel.value});
-        self.touch(page); self.redraw();
-      });
-      controls.appendChild(originSel);
-    }
+    var plane = page.background === 'plane';
+    var cellSel = el('select', 'canvas-bg');
+    [[25, 'мелкая клетка'], [50, 'крупная клетка']].forEach(function (pair) {
+      var opt = el('option', null, pair[1]); opt.value = String(pair[0]); cellSel.appendChild(opt);
+    });
+    cellSel.value = String(page.bgOptions.cell || 25);
+    cellSel.disabled = true;
+    cellSel.title = plane ? 'Размер клетки координатной плоскости фиксирован' : 'Только для координатной плоскости';
+    cellSel.addEventListener('change', function () {
+      page.bgOptions = Object.assign({}, page.bgOptions, {cell: parseInt(cellSel.value, 10)});
+      self.touch(page); self.redraw();
+    });
+    controls.appendChild(cellSel);
+    var originSel = el('select', 'canvas-bg');
+    [['center', 'начало в центре'], ['bottom_left', 'начало слева внизу']].forEach(function (pair) {
+      var opt = el('option', null, pair[1]); opt.value = pair[0]; originSel.appendChild(opt);
+    });
+    originSel.value = page.bgOptions.origin || 'center';
+    originSel.disabled = !editable || !plane;
+    originSel.title = plane ? 'Положение начала координат' : 'Только для координатной плоскости';
+    originSel.addEventListener('change', function () {
+      page.bgOptions = Object.assign({}, page.bgOptions, {origin: originSel.value});
+      self.touch(page); self.redraw();
+    });
+    controls.appendChild(originSel);
     if (this.role === 'student' && this.showTeacherLayer) {
       controls.appendChild(this.toggle('Пометки учителя', this.showTeacher, function (on) {
         self.showTeacher = on; self.redraw();
@@ -732,30 +732,41 @@
     return label;
   };
 
+  /* Панель строится один раз на страницу и больше не перестраивается: набор
+     кнопок, их число и порядок не зависят от инструмента и выделения, меняются
+     только aria-pressed/disabled и цвета слотов. Иначе появление ряда с
+     действиями над выделением сдвигало бы рабочее поле. */
   Widget.prototype.buildToolbar = function (editable) {
     var self = this, bar = this.toolbar;
     bar.innerHTML = '';
+    this.toolButtons = {};
+    this.swatches = [];
+    this.widthButtons = [];
+    this.selectionButtons = [];
     if (!editable) return;
     var page = this.page();
-    function group(cls) { var g = el('div', 'canvas-group' + (cls ? ' ' + cls : '')); bar.appendChild(g); return g; }
+    var row1 = el('div', 'canvas-toolbar-row'), row2 = el('div', 'canvas-toolbar-row');
+    bar.appendChild(row1);
+    bar.appendChild(row2);
+    function group(row, cls) { var g = el('div', 'canvas-group' + (cls ? ' ' + cls : '')); row.appendChild(g); return g; }
     function tool(container, name, text, title) {
       var b = button('btn btn-small btn-secondary canvas-tool', text, title, function () { self.setTool(name); });
       if (ICONS[name]) addIcon(b, name);
       b.dataset.tool = name;
-      b.setAttribute('aria-pressed', String(self.tool === name));
       container.appendChild(b);
+      self.toolButtons[name] = b;
       return b;
     }
-    var main = group();
+    var main = group(row1);
     tool(main, 'pen', 'Карандаш', 'Карандаш (P)');
     tool(main, 'hl', 'Маркер', 'Выделитель (Shift+P)');
     tool(main, 'eraser', 'Ластик', 'Ластик: стирает карандаш и маркер (E)');
     tool(main, 'select', 'Выбор', 'Выделение и перемещение (V)');
 
-    var shapes = group();
+    var shapes = group(row1);
     Object.keys(SHAPE_TOOLS).forEach(function (name) { tool(shapes, name, SHAPE_TOOLS[name].label, SHAPE_TOOLS[name].title); });
 
-    var graphs = group('canvas-graphs');
+    var graphs = group(row1, 'canvas-graphs');
     Object.keys(FN).forEach(function (kind) {
       var graph = button('btn btn-small btn-secondary canvas-tool', FN[kind].label, FN[kind].title + ' — вставить заготовку', function () {
         self.insertFn(kind);
@@ -764,59 +775,95 @@
       graphs.appendChild(graph);
     });
 
-    var colors = group('canvas-colors');
-    var palette = this.tool === 'hl' ? HL_COLORS : COLORS;
-    var current = this.tool === 'hl' ? this.hlColor : this.color;
-    palette.forEach(function (c) {
+    var history = group(row1);
+    this.undoButton = iconButton('undo', 'Отменить (Ctrl+Z)', function () { self.undo(); });
+    this.redoButton = iconButton('redo', 'Вернуть (Ctrl+Shift+Z)', function () { self.redo(); });
+    history.appendChild(this.undoButton);
+    history.appendChild(this.redoButton);
+    history.appendChild(iconButton('clear', 'Очистить страницу (можно отменить)', function () { self.clearPage(); }));
+
+    var colors = group(row2, 'canvas-colors');
+    COLORS.forEach(function (_, i) {
       var b = button('canvas-swatch', '', 'Цвет', function () {
+        var c = self.paletteFor().colors[i];
         if (self.tool === 'hl') self.hlColor = c; else self.color = c;
         self.recolorSelection(c);
-        self.buildToolbar(true);
+        self.syncToolbar();
       });
-      b.style.setProperty('--c', c);
-      b.setAttribute('aria-pressed', String(c === current));
       colors.appendChild(b);
+      self.swatches.push(b);
     });
 
-    var widths = group('canvas-widths');
-    var sizes = this.tool === 'hl' ? HL_WIDTHS : this.tool === 'eraser' ? ERASER_SIZES : PEN_WIDTHS;
-    var currentWidth = this.tool === 'hl' ? this.hlWidth : this.tool === 'eraser' ? this.eraserSize : this.penWidth;
-    sizes.forEach(function (w, i) {
-      var b = button('canvas-width', '', (self.tool === 'eraser' ? 'Размер ластика: ' : 'Толщина: ') + w, function () {
+    var widths = group(row2, 'canvas-widths');
+    PEN_WIDTHS.forEach(function (_, i) {
+      var b = button('canvas-width', '', 'Толщина', function () {
+        var w = self.paletteFor().widths[i];
         if (self.tool === 'hl') self.hlWidth = w; else if (self.tool === 'eraser') self.eraserSize = w; else self.penWidth = w;
         self.rewidthSelection(w);
-        self.buildToolbar(true);
+        self.syncToolbar();
       });
       var dot = el('span');
       dot.style.width = dot.style.height = (6 + i * 5) + 'px';
       b.appendChild(dot);
-      b.setAttribute('aria-pressed', String(w === currentWidth));
       widths.appendChild(b);
+      self.widthButtons.push(b);
     });
 
-    var history = group();
-    var undo = iconButton('undo', 'Отменить (Ctrl+Z)', function () { self.undo(); });
-    var redo = iconButton('redo', 'Вернуть (Ctrl+Shift+Z)', function () { self.redo(); });
-    undo.disabled = !page.undo.length;
-    redo.disabled = !page.redo.length;
-    history.appendChild(undo);
-    history.appendChild(redo);
-    this.undoButton = undo;
-    this.redoButton = redo;
+    var sel = group(row2, 'canvas-selection');
+    [['trash', 'Удалить выделенное (Delete)', function () { self.deleteSelection(); }],
+     ['group', 'Сгруппировать (Ctrl+G)', function () { self.groupSelection(true); }],
+     ['ungroup', 'Разгруппировать (Ctrl+Shift+G)', function () { self.groupSelection(false); }],
+     ['front', 'На передний план (])', function () { self.reorderSelection(true); }],
+     ['back', 'На задний план ([)', function () { self.reorderSelection(false); }]].forEach(function (item) {
+      var b = iconButton(item[0], item[1], item[2]);
+      b.classList.remove('icon-btn');
+      b.classList.add('btn', 'btn-small', 'btn-secondary');
+      sel.appendChild(b);
+      self.selectionButtons.push(b);
+    });
 
-    var sel = group('canvas-selection');
-    sel.hidden = !this.selection.length;
-    sel.appendChild(iconButton('trash', 'Удалить выделенное (Delete)', function () { self.deleteSelection(); }));
-    sel.appendChild(iconButton('group', 'Сгруппировать (Ctrl+G)', function () { self.groupSelection(true); }));
-    sel.appendChild(iconButton('ungroup', 'Разгруппировать (Ctrl+Shift+G)', function () { self.groupSelection(false); }));
-    sel.appendChild(iconButton('front', 'На передний план (])', function () { self.reorderSelection(true); }));
-    sel.appendChild(iconButton('back', 'На задний план ([)', function () { self.reorderSelection(false); }));
-    this.selectionGroup = sel;
+    var misc = group(row2);
+    this.snapToggle = this.toggle('Привязывать к сетке', this.snap, function (on) { self.snap = on; });
+    misc.appendChild(this.snapToggle);
+    this.syncToolbar();
+  };
 
-    var misc = group();
-    misc.appendChild(iconButton('clear', 'Очистить страницу (можно отменить)', function () { self.clearPage(); }));
-    if (cellOf(page)) {
-      misc.appendChild(this.toggle('Привязывать к сетке', this.snap, function (on) { self.snap = on; }));
+  /* Палитра и толщины текущего инструмента (слотов всегда поровну) */
+  Widget.prototype.paletteFor = function () {
+    if (this.tool === 'hl') return {colors: HL_COLORS, widths: HL_WIDTHS, current: this.hlColor, width: this.hlWidth};
+    if (this.tool === 'eraser') return {colors: COLORS, widths: ERASER_SIZES, current: null, width: this.eraserSize};
+    return {colors: COLORS, widths: PEN_WIDTHS, current: this.color, width: this.penWidth};
+  };
+
+  Widget.prototype.syncToolbar = function () {
+    var self = this, page = this.page();
+    if (!page || !this.toolButtons) return;
+    Object.keys(this.toolButtons).forEach(function (name) {
+      self.toolButtons[name].setAttribute('aria-pressed', String(self.tool === name));
+    });
+    var palette = this.paletteFor();
+    this.swatches.forEach(function (b, i) {
+      var c = palette.colors[i];
+      b.style.setProperty('--c', c);
+      b.title = self.tool === 'eraser' ? 'У ластика нет цвета' : 'Цвет';
+      b.disabled = self.tool === 'eraser';
+      b.setAttribute('aria-pressed', String(c === palette.current));
+    });
+    this.widthButtons.forEach(function (b, i) {
+      var w = palette.widths[i];
+      b.title = (self.tool === 'eraser' ? 'Размер ластика: ' : 'Толщина: ') + w;
+      b.setAttribute('aria-pressed', String(w === palette.width));
+    });
+    var hasSelection = this.tool === 'select' && this.selection.length > 0;
+    this.selectionButtons.forEach(function (b, i) {
+      b.disabled = !hasSelection || (i === 1 && self.selection.length < 2);
+    });
+    if (this.undoButton) this.undoButton.disabled = !page.undo.length;
+    if (this.redoButton) this.redoButton.disabled = !page.redo.length;
+    if (this.snapToggle) {
+      var input = this.snapToggle.querySelector('input');
+      input.disabled = !cellOf(page);
+      this.snapToggle.classList.toggle('canvas-disabled', !cellOf(page));
     }
   };
 
@@ -824,7 +871,7 @@
     this.tool = name;
     this.pending = [];
     if (name !== 'select') this.selection = [];
-    this.buildToolbar(true);
+    this.syncToolbar();
     this.drawTop();
   };
 
@@ -970,9 +1017,7 @@
 
   Widget.prototype.syncHistoryButtons = function (page) {
     this.syncDeleteButton();
-    if (this.undoButton) this.undoButton.disabled = !page.undo.length;
-    if (this.redoButton) this.redoButton.disabled = !page.redo.length;
-    if (this.selectionGroup) this.selectionGroup.hidden = !this.selection.length;
+    this.syncToolbar();
   };
 
   Widget.prototype.undo = function () {
@@ -1088,7 +1133,7 @@
     this.addElement(element);
     this.tool = 'select';
     this.selection = [element.id];
-    this.buildToolbar(true);
+    this.syncToolbar();
     this.drawTop();
   };
 

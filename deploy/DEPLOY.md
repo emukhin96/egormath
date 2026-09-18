@@ -572,6 +572,13 @@ ssh cs13661@vh426.timeweb.ru
 `seed_rubricator`, collectstatic, `touch wsgi.py`. Лог:
 `~/egormath/deploy.log`.
 
+`collectstatic` на проде использует `core.staticfiles.HashedStaticFilesStorage`:
+в `staticfiles/` лежат и обычные имена, и копии с хэшем содержимого
+(`css/app.6afbb756ab6c.css`) плюс `staticfiles.json`; шаблоны ссылаются на
+хэшированные, поэтому семидневный `max-age` из `.htaccess` больше не держит
+у учеников старые CSS/JS. Старые хэшированные копии накапливаются — раз в
+несколько месяцев `collectstatic --clear` их убирает.
+
 **Не** копировать скрипт в `~/auto_pull.sh` и **не** добавлять задание
 в планировщик Timeweb.
 
