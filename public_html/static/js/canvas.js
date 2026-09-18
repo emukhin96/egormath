@@ -861,6 +861,7 @@
       b.style.setProperty('--c', c);
       b.title = self.tool === 'eraser' ? 'У ластика нет цвета'
         : 'Цвет: ' + (COLOR_NAMES[c] || c) + (self.selection.length ? ' — перекрасить выделенное' : '');
+      b.setAttribute('aria-label', b.title);
       b.disabled = self.tool === 'eraser';
       b.setAttribute('aria-pressed', String(c === palette.current));
     });
@@ -868,6 +869,7 @@
       var w = palette.widths[i];
       b.title = self.tool === 'eraser' ? 'Размер ластика: ' + ERASER_NAMES[i] + ' (' + w + ')'
         : 'Толщина: ' + SIZE_NAMES[i] + ' (' + w + ')' + (self.selection.length ? ' — применить к выделенному' : '');
+      b.setAttribute('aria-label', b.title);
       b.setAttribute('aria-pressed', String(w === palette.width));
     });
     var hasSelection = this.tool === 'select' && this.selection.length > 0;
