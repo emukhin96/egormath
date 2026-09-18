@@ -46,6 +46,10 @@
     {% endif %}
 
     <div data-live-answer="{{ row.item.pk }}">{% include 'assignments/_live_answer.html' %}</div>
+    {% if canvas_enabled %}
+    {# Холст вне живого фрагмента: пометки учителя не должны пропадать при обновлении ответов #}
+    <div data-canvas data-url="{% url 'canvas:pages' assignment.pk row.task.pk %}" data-role="teacher" data-pages="{{ row.canvas_pages }}"></div>
+    {% endif %}
     {% if row.subrows %}{% for sr in row.subrows %}{% if sr.part %}<p>Подпункт {{ forloop.counter }}</p>{% include 'workaudit/revisions.html' with kind='part' object=sr.part %}{% endif %}{% endfor %}{% else %}{% include 'workaudit/revisions.html' with kind='submission' object=row.submission %}{% endif %}
     {% if row.has_solution %}
     <details class="review-solution"><summary>Ответ и решение</summary>
@@ -70,6 +74,7 @@
       Автосверка: {{ assignment.get_check_visibility_display|lower }} — режим задан при выдаче и не меняется.
       Автосверка — подсказка; оценку решения ставите вы. + и .+ дают 100%, ± — 75%, 干 — 50%; остальные — 0%. Ответ ученику не показывается.
     </p>
+    {% if canvas_enabled %}{% include 'canvas/_toggle.html' %}{% endif %}
     <div class="form-buttons review-actions">
       <button type="submit" name="action" value="save" class="btn btn-secondary">Сохранить черновик</button>
       {% if next_pending %}
@@ -87,4 +92,4 @@
   </div>
 </form>
 {% endblock %}
-{% block extra_js %}<script defer src="{% static 'js/work_history.js' %}"></script><div data-review-live-url="{% url 'assignment_live' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=3"></script>{% endblock %}
+{% block extra_js %}<script defer src="{% static 'js/work_history.js' %}"></script><div data-review-live-url="{% url 'assignment_live' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=3"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}"></script>{% endif %}{% endblock %}
