@@ -126,7 +126,7 @@
       <button type="submit" class="btn btn-small btn-secondary" form="photo-form-{{ row.task.pk }}" data-photo-submit>Загрузить</button>
       {% endif %}
       {% if canvas_enabled %}
-      <button type="button" class="btn btn-small btn-secondary" data-canvas-open="board-{{ row.item.pk }}" aria-controls="board-{{ row.item.pk }}" aria-expanded="false">Доска для записей</button>
+      <button type="button" class="btn btn-small btn-secondary" data-canvas-open="board-{{ row.item.pk }}" aria-controls="board-{{ row.item.pk }}" aria-expanded="false" title="Открыть доску для записей: решение от руки мышью или стилусом, сохраняется само">Доска для записей</button>
       {% endif %}
     </div>
     {% endif %}
