@@ -6,7 +6,8 @@
 # main здесь намеренно отсутствуют — слияние делает только человек, вручную.
 #
 #   tools/pr.sh push                          текущую ветку → GitHub (fast-forward only)
-#   tools/pr.sh open "Заголовок" [body.md]    открыть PR ветка → main (или показать уже открытый)
+#   tools/pr.sh open "Заголовок" [body.md] [база]   PR ветка → main (или показать уже открытый);
+#                                             база — ветка другого PR, если это стек
 #   tools/pr.sh status                        PR текущей ветки: состояние, CI, замечания ревью (с id)
 #   tools/pr.sh reply <id> "Текст"            ответить в треде замечания (id — из status)
 #
@@ -57,8 +58,8 @@ cmd_push() {
 }
 
 cmd_open() {
-  local title=${1:-} body=${2:-}
-  [ -n "$title" ] || die "нужен заголовок: tools/pr.sh open \"Заголовок\" [body.md]"
+  local title=${1:-} body=${2:-} base=${3:-main}
+  [ -n "$title" ] || die "нужен заголовок: tools/pr.sh open \"Заголовок\" [body.md] [база]"
   [ -z "$body" ] || [ -r "$body" ] || die "файл с описанием не найден: $body"
   local existing
   existing=$(pr_json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["html_url"] if isinstance(d, list) and d else "")')
@@ -67,11 +68,11 @@ cmd_open() {
     || die "ветка $BRANCH ещё не в GitHub — сначала tools/pr.sh push"
   local payload
   payload=$(mktemp)
-  python3 - "$title" "$body" "$BRANCH" > "$payload" <<'PY'
+  python3 - "$title" "$body" "$BRANCH" "$base" > "$payload" <<'PY'
 import json, sys
-title, body, head = sys.argv[1], sys.argv[2], sys.argv[3]
+title, body, head, base = sys.argv[1:5]
 text = open(body, encoding='utf-8').read() if body else ''
-print(json.dumps({'title': title, 'body': text, 'head': head, 'base': 'main'}))
+print(json.dumps({'title': title, 'body': text, 'head': head, 'base': base}))
 PY
   api POST /pulls --data "@$payload" | python3 -c '
 import json, sys
@@ -142,5 +143,5 @@ case "${1:-}" in
   open)   shift; cmd_open "$@" ;;
   status) shift; cmd_status ;;
   reply)  shift; cmd_reply "$@" ;;
-  *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
