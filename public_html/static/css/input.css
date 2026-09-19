@@ -4704,7 +4704,11 @@
     background: var(--accent); color: #fff; border-color: var(--accent);
   }
   .canvas-page-locked { color: var(--muted); }
-  .canvas-bg { margin: 0; width: auto; min-height: 28px; padding: 2px 6px; font-size: 0.82rem; }
+  .canvas-bg { margin: 0; width: auto; max-width: 12rem; min-height: 28px; padding: 2px 6px; font-size: 0.82rem; }
+  /* Подпись + селект: селект не тянется на всю колонку даже без правила выше */
+  .canvas-bg-field { display: inline-flex; align-items: center; gap: var(--space-1); margin: 0; font-size: 0.82rem; color: var(--muted); }
+  .canvas-bg-field select { width: auto; max-width: 12rem; }
+  .canvas-bg-note { font-size: 0.82rem; color: var(--muted); }
   /* Панель: две фиксированные строки, состав кнопок не меняется — поле не прыгает */
   .canvas-toolbar { flex-direction: column; align-items: stretch; gap: var(--space-2); margin-bottom: var(--space-2); }
   .canvas-toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); min-height: 30px; }
