@@ -12,7 +12,7 @@ function setup() {
     querySelector() { return null; }, cookie: '',
   };
   const context = {
-    document, Promise, WeakMap, setTimeout() { return 1; }, clearTimeout() {},
+    document, Promise, WeakMap, setTimeout() { return 1; }, clearTimeout() {}, setInterval() { return 1; },
     localStorage: {getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key)},
     addEventListener() {},
     fetch(url, options) {

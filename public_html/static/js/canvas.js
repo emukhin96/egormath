@@ -25,7 +25,8 @@
   var PEN_WIDTHS = [2, 4, 7], HL_WIDTHS = [12, 20, 30], ERASER_SIZES = [10, 25, 50];
   var HL_ALPHA = 0.35, HIT_TOL = 8, MAX_UNDO = 100;
   var DEBOUNCE = 1000, MAX_WAIT = 5000, RETRY = [3000, 10000, 30000], KEEPALIVE_LIMIT = 60000;
-  var SHOW_KEY = 'canvas-show';
+  var SHOW_KEY = 'canvas-show', HIDE_TEACHER_KEY = 'canvas-hide-teacher';
+  var POLL = 10000;               /* опрос чужого слоя, пока доска открыта и вкладка видна */
   var GRID_COLOR = '#d4d4d8', ACCENT = '#1765b5';
   var CELLS = {grid: 25, grid_large: 50};
   var FN = {
@@ -406,6 +407,7 @@
     this.index = 0;
     this.layer = null;          /* слой, который можно править, или null */
     this.showTeacher = true;
+    try { this.showTeacher = localStorage.getItem(HIDE_TEACHER_KEY) !== '1'; } catch (e) {}
     this.tool = this.role === 'teacher' ? 'pen' : 'pen';
     this.color = this.role === 'teacher' ? '#dc2626' : '#1d4ed8';
     this.hlColor = HL_COLORS[0];
@@ -482,9 +484,10 @@
       this.build(); return;
     }
     fetch(this.url, {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
-      .then(function (r) { return r.json().then(function (data) { return {status: r.status, data: data}; }); })
+      .then(function (r) { return r.json().then(function (data) { return {status: r.status, data: data, etag: r.headers.get('ETag')}; }); })
       .then(function (result) {
         if (!result.data || !result.data.ok) throw new Error(result.data && result.data.message || 'Не удалось загрузить доску для записей');
+        self.etag = result.etag;
         self.applyData(result.data);
         self.loaded = true;
         if (!self.pages.length && createFirst && self.layer) self.addPage();
@@ -493,20 +496,74 @@
       .catch(function (error) { toast(false, error.message || 'Не удалось загрузить доску для записей'); });
   };
 
+  /* Забрать чужой слой (и новые страницы) с сервера, не трогая свой: свой
+     слой защищён версией и 409, чужой просто подменяется. Вызывается живым
+     обзором учителя, опросом ученика и после сохранения, если сервер сообщил
+     о новой версии чужого слоя. */
   Widget.prototype.reload = function () {
     var self = this;
-    if (!this.loaded || !this.built || this.reloading || this.drag
-        || this.pages.some(function (p) { return p.dirty || p.saving; })) return;
+    if (!this.loaded || this.reloading) return Promise.resolve(false);
     this.reloading = true;
-    fetch(this.url, {credentials: 'same-origin'})
-      .then(function (r) { return r.json(); })
+    var headers = {'X-Requested-With': 'XMLHttpRequest'};
+    if (this.etag) headers['If-None-Match'] = this.etag;
+    return fetch(this.url, {credentials: 'same-origin', headers: headers})
+      .then(function (r) {
+        if (r.status === 304) return null;
+        return r.json().then(function (data) { self.etag = r.headers.get('ETag'); return data; });
+      })
       .then(function (data) {
-        if (!data.ok || self.drag || self.pages.some(function (p) { return p.dirty || p.saving; })) return;
-        var index = self.index;
-        self.applyData(data);
-        self.index = Math.min(index, Math.max(0, self.pages.length - 1));
-        self.refresh();
-      }).catch(function () {}).finally(function () { self.reloading = false; });
+        if (!data || !data.ok) return false;
+        return self.merge(data);
+      }).catch(function () { return false; })
+      .finally(function () { self.reloading = false; });
+  };
+
+  Widget.prototype.merge = function (data) {
+    var self = this, changed = false, current = this.page();
+    this.canAddPages = data.can_add_pages !== false;
+    var other = this.layer === 'teacher' ? 'student' : 'teacher';
+    data.pages.forEach(function (raw, i) {
+      var page = self.pages[i];
+      if (!page) {
+        page = self.makePage(raw);
+        self.pages.push(page);
+        changed = true;
+        return;
+      }
+      if (page.number !== raw.number) return;
+      var incoming = raw[other];
+      if (incoming && incoming.version !== page.layers[other].version) {
+        page.layers[other] = {elements: incoming.elements, version: incoming.version};
+        if (page !== current) page.fresh = true;
+        changed = true;
+      }
+      /* Без своего слоя (просмотр) обновляем оба; свой слой не трогаем никогда */
+      if (!self.layer && raw.student && raw.student.version !== page.layers.student.version) {
+        page.layers.student = {elements: raw.student.elements, version: raw.student.version};
+        changed = true;
+      }
+      if (page.createdBy !== self.layer) {
+        if (page.background !== raw.background || JSON.stringify(page.bgOptions) !== JSON.stringify(raw.background_options || {})) {
+          page.background = raw.background; page.bgOptions = raw.background_options || {};
+          changed = true;
+        }
+      }
+      if (page.locked !== !!raw.locked) { page.locked = !!raw.locked; changed = true; }
+    });
+    if (!changed) return false;
+    this.updateNonEmpty();
+    if (this.built) {
+      /* Посреди штриха или недостроенной фигуры панель не пересобираем */
+      if (this.drag || this.pending.length) this.redraw(); else this.refresh();
+    }
+    return true;
+  };
+
+  /* Опрос раз в POLL: только у ученика с открытой доской и видимой вкладкой —
+     учитель на странице проверки получает reload() от живого обзора. */
+  Widget.prototype.polls = function () {
+    return this.role === 'student' && this.loaded && this.built && !this.root.hidden
+      && !document.hidden && this.showTeacherLayer;
   };
 
   Widget.prototype.applyData = function (data) {
@@ -514,6 +571,7 @@
     this.layer = this.role === 'viewer' ? null : data.layer;
     this.limits = data.limits || {student: 5, teacher: 2, total: 10, elements: 2000};
     this.showTeacherLayer = !!data.show_teacher_layer;
+    this.canAddPages = data.can_add_pages !== false;
     this.pages = data.pages.map(function (raw) { return self.makePage(raw); });
     while (this.canAddPage()) {
       var page = this.makePage({number: this.pages.length + 1, created_by_role: this.layer});
@@ -549,7 +607,7 @@
   };
 
   Widget.prototype.canAddPage = function () {
-    if (!this.layer) return false;
+    if (!this.layer || this.canAddPages === false) return false;
     var pages = this.pages;
     if (pages.length >= this.limits.total) return false;
     if (this.layer === 'student') {
@@ -658,6 +716,7 @@
         });
       b.setAttribute('aria-pressed', String(i === self.index));
       if (p.locked) b.classList.add('canvas-page-locked');
+      if (p.fresh && i !== self.index) { b.classList.add('canvas-page-fresh'); b.title += ' — есть новые пометки'; }
       tabs.appendChild(b);
     });
     if (this.canAddPage()) {
@@ -742,10 +801,12 @@
     });
     if (ownsBackground) controls.appendChild(labelled('Начало координат', originSel));
     if (this.role === 'student' && this.showTeacherLayer) {
-      var teacherToggle = this.toggle('Пометки учителя', this.showTeacher, function (on) {
-        self.showTeacher = on; self.redraw();
+      var teacherToggle = this.toggle('Скрыть пометки учителя', !this.showTeacher, function (hide) {
+        self.showTeacher = !hide;
+        try { localStorage.setItem(HIDE_TEACHER_KEY, hide ? '1' : '0'); } catch (e) {}
+        self.redraw();
       });
-      teacherToggle.title = 'Показать или скрыть пометки учителя поверх вашего решения';
+      teacherToggle.title = 'Пометки учителя появляются поверх вашего решения по мере того, как он их оставляет; тумблер их прячет';
       controls.appendChild(teacherToggle);
     }
     if (page.locked && this.role === 'student') {
@@ -922,6 +983,7 @@
     if (i === this.index) return;
     this.flush(this.page());
     this.index = i;
+    this.pages[i].fresh = false;
     this.refresh();
   };
 
@@ -1532,6 +1594,8 @@
       if (data.ok) {
         page.layers[layer].version = data.version;
         page.retry = 0;
+        var other = layer === 'teacher' ? 'student' : 'teacher';
+        if (typeof data.other_version === 'number' && data.other_version !== page.layers[other].version) self.reload();
         if (page.rev === rev) {
           page.dirty = false; page.firstDirtyAt = 0;
           self.dropBackup(page, layer);
@@ -1692,6 +1756,12 @@
       }).observe(document.body, {childList: true, subtree: true});
     }
   });
+
+  function pollAll() {
+    Widget.all.forEach(function (w) { if (w.polls()) w.reload(); });
+  }
+  setInterval(pollAll, POLL);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) pollAll(); });
 
   window.EgorCanvas = {Widget: Widget, init: initAll};
 })();

@@ -30,11 +30,19 @@ def assignment_page_stats(assignment):
 class Access:
     """Что текущий пользователь может делать с холстом одной задачи."""
 
-    def __init__(self, *, role, can_edit_student, can_edit_teacher, show_teacher_layer):
+    def __init__(self, *, role, can_edit_student, can_edit_teacher, show_teacher_layer,
+                 teacher_pages=False):
         self.role = role
         self.can_edit_student = can_edit_student
         self.can_edit_teacher = can_edit_teacher
         self.show_teacher_layer = show_teacher_layer
+        self.teacher_pages = teacher_pages   # учитель может добавлять свои страницы
+
+    @property
+    def can_add_pages(self):
+        if self.role == CanvasPage.ROLE_TEACHER:
+            return self.can_edit_teacher and self.teacher_pages
+        return self.can_edit_student
 
     @property
     def layer(self):
@@ -47,17 +55,27 @@ class Access:
 
 
 def assignment_access(assignment, user, role):
-    """Правило одной строкой: слой учителя открыт ровно тогда, когда
-    слой ученика закрыт; ученик видит пометки после возврата или проверки."""
+    """Слой учителя открыт всегда — учитель пишет на доске и во время работы
+    ученика; слой ученика открыт, пока работа редактируема. Ученик видит
+    пометки в любом статусе (может скрыть тумблером). Свои страницы учитель
+    добавляет только после отправки: иначе нумерация у двоих разъедется."""
     editable = assignment.is_editable_by_student
     if role == CanvasPage.ROLE_STUDENT:
         return Access(
             role=role, can_edit_student=editable, can_edit_teacher=False,
-            show_teacher_layer=assignment.status in (
-                assignment.STATUS_RETURNED, assignment.STATUS_REVIEWED))
+            show_teacher_layer=True)
     return Access(
-        role=role, can_edit_student=False, can_edit_teacher=not editable,
-        show_teacher_layer=True)
+        role=role, can_edit_student=False, can_edit_teacher=True,
+        show_teacher_layer=True, teacher_pages=not editable)
+
+
+def pages_etag(pages, access):
+    """Подпись набора страниц для If-None-Match: версии слоёв и всё, что
+    меняется вместе с ними; сами элементы не хэшируем."""
+    parts = [access.layer or '-', 'a' if access.can_add_pages else '-']
+    for page in pages:
+        parts.append(f'{page.number}:{page.student_version}:{page.teacher_version}:{int(page.is_locked)}')
+    return '"' + '|'.join(parts) + '"'
 
 
 def page_payload(page, access):
@@ -87,6 +105,9 @@ def creation_allowed(pages, access, layer):
     """Проверка лимитов перед созданием новой страницы; текст ошибки или None."""
     if len(pages) >= CanvasPage.TOTAL_PAGE_LIMIT:
         return f'Не больше {CanvasPage.TOTAL_PAGE_LIMIT} страниц на задачу'
+    if not access.can_add_pages:
+        return ('Свои страницы учитель добавляет после отправки работы'
+                if layer == CanvasPage.ROLE_TEACHER else 'Сейчас страницы добавлять нельзя')
     if layer == CanvasPage.ROLE_STUDENT:
         active = sum(1 for p in pages if not p.is_locked and p.created_by_role == CanvasPage.ROLE_STUDENT)
         if active >= CanvasPage.STUDENT_PAGE_LIMIT:
