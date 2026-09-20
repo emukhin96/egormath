@@ -230,3 +230,36 @@ test('старая плоскость центрируется вместе с �
   w.stage = {getBoundingClientRect() { return {left: 0, top: 0}; }};
   assert.deepEqual(Array.from(w.point({clientX: 250, clientY: 250})), [500, 400]);
 });
+
+test('merge подменяет чужой слой, синхронизирует права и убирает удалённые страницы', () => {
+  const {widget: w} = setup();
+  w.loaded = true; w.built = true; w.layer = null; w.canAddPages = false; w.showTeacherLayer = true; w.pending = []; w.selection = [];
+  w.pages = [
+    w.makePage({number: 1, locked: true, student: {elements: [stroke('a')], version: 1}, teacher: {elements: [], version: 0}}),
+    w.makePage({number: 2, locked: true, student: {elements: [], version: 1}, teacher: {elements: [], version: 0}}),
+  ];
+  w.index = 1;
+  let refreshed = 0; w.refresh = () => { refreshed++; }; w.updateNonEmpty = () => {};
+  // Работу вернули: слой ученика снова открыт, страницу 2 удалили в другой вкладке, у страницы 1 — пометка
+  const changed = w.merge({ok: true, layer: 'student', can_add_pages: true, show_teacher_layer: true, pages: [
+    {number: 1, locked: true, background: 'grid', background_options: {}, created_by_role: 'student',
+     student: {elements: [stroke('a')], version: 1}, teacher: {elements: [stroke('t')], version: 1}},
+  ]});
+  assert.equal(changed, true);
+  assert.equal(w.layer, 'student');
+  assert.equal(w.canAddPages, true);
+  assert.equal(w.pages.length, 1);
+  assert.equal(w.index, 0);
+  assert.equal(w.pages[0].layers.teacher.elements[0].id, 't');
+  assert.equal(w.pages[0].layers.student.elements[0].id, 'a');
+  assert.equal(refreshed, 1);
+  // Несохранённая заготовка и грязная страница не удаляются
+  w.addPage();
+  w.commit(w.page(), [stroke('b')]);
+  const local = w.pages.length;
+  assert.equal(w.merge({ok: true, layer: 'student', can_add_pages: true, show_teacher_layer: true, pages: [
+    {number: 1, locked: true, background: 'grid', background_options: {}, created_by_role: 'student',
+     student: {elements: [stroke('a')], version: 1}, teacher: {elements: [stroke('t')], version: 1}},
+  ]}), false);
+  assert.equal(w.pages.length, local);
+});

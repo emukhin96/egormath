@@ -520,8 +520,28 @@
 
   Widget.prototype.merge = function (data) {
     var self = this, changed = false, current = this.page();
-    this.canAddPages = data.can_add_pages !== false;
+    /* Права меняются вместе со статусом работы (отправил, вернули): новый слой
+       или право добавлять страницы — повод пересобрать панель, даже если
+       страницы те же */
+    var layer = this.role === 'viewer' ? null : data.layer;
+    var canAdd = data.can_add_pages !== false;
+    if (layer !== this.layer || canAdd !== this.canAddPages) {
+      this.layer = layer; this.canAddPages = canAdd; changed = true;
+    }
+    if (!!data.show_teacher_layer !== this.showTeacherLayer) { this.showTeacherLayer = !!data.show_teacher_layer; changed = true; }
     var other = this.layer === 'teacher' ? 'student' : 'teacher';
+    /* Страницы, которых на сервере больше нет (удалили в другой вкладке), убираем —
+       кроме ещё не сохранённых локальных заготовок и несохранённых правок */
+    var known = {};
+    data.pages.forEach(function (raw) { known[raw.number] = true; });
+    for (var k = this.pages.length - 1; k >= 0; k--) {
+      var gone = this.pages[k];
+      var unsaved = gone.dirty || gone.saving || (!gone.layers.student.version && !gone.layers.teacher.version);
+      if (known[gone.number] || unsaved) continue;
+      this.pages.splice(k, 1);
+      changed = true;
+    }
+    if (this.index >= this.pages.length) this.index = Math.max(0, this.pages.length - 1);
     data.pages.forEach(function (raw, i) {
       var page = self.pages[i];
       if (!page) {
