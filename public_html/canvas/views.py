@@ -172,7 +172,8 @@ def save_page(request, pk, task_id, number):
             page.student_updated_at = now
             new_version, other_version = page.student_version, page.teacher_version
             fields = ['student_elements', 'student_version', 'student_updated_at']
-        # Фон — свойство страницы того, кто её создал; чужой слой его не трогает.
+        # Фон — свойство страницы того, кто её создал: чужой слой его не меняет,
+        # даже если старый клиент или прямой POST прислали другие значения.
         if page.created_by_role == layer:
             page.background = background
             page.background_options = options

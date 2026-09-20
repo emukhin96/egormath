@@ -720,7 +720,8 @@
       tabs.appendChild(b);
     });
     if (this.canAddPage()) {
-      tabs.appendChild(button('btn btn-small btn-secondary', '+', 'Добавить страницу (до ' + this.limits.student + ' у ученика)', function () { self.addPage(); }));
+      var limitHint = this.layer === 'teacher' ? 'до ' + this.limits.teacher + ' страниц учителя' : 'до ' + this.limits.student + ' страниц';
+      tabs.appendChild(button('btn btn-small btn-secondary', '+', 'Добавить страницу (' + limitHint + ')', function () { self.addPage(); }));
     }
     this.deletePageButton = iconButton('trash', 'Удалить пустую последнюю страницу', function () { self.removeLastPage(); });
     if (this.layer) tabs.appendChild(this.deletePageButton);
