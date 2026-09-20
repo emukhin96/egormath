@@ -92,16 +92,19 @@ else: print("GitHub: %s %s" % (d.get("message"), d.get("errors", ""))); sys.exit
 }
 
 cmd_status() {
-  local num
-  num=$(pr_json | python3 -c '
+  local info num
+  # Первая строка — номер PR для запросов ниже, остальные — для пользователя (stdout)
+  info=$(pr_json | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
 if not (isinstance(d, list) and d): sys.exit(0)
 pr = d[0]
-print("PR #%s %s [%s] %s" % (pr["number"], pr["title"], pr["state"], pr["html_url"]), file=sys.stderr)
-print("ветка %s → %s, head %s%s" % (pr["head"]["ref"], pr["base"]["ref"], pr["head"]["sha"][:7], ", draft" if pr["draft"] else ""), file=sys.stderr)
-print(pr["number"])')
-  if [ -z "$num" ]; then echo "открытого PR для ветки $BRANCH нет"; return 0; fi
+print(pr["number"])
+print("PR #%s %s [%s] %s" % (pr["number"], pr["title"], pr["state"], pr["html_url"]))
+print("ветка %s → %s, head %s%s" % (pr["head"]["ref"], pr["base"]["ref"], pr["head"]["sha"][:7], ", draft" if pr["draft"] else ""))')
+  if [ -z "$info" ]; then echo "открытого PR для ветки $BRANCH нет"; return 0; fi
+  num=${info%%$'\n'*}
+  printf '%s\n' "${info#*$'\n'}"
   api GET "/pulls/$num/reviews?per_page=100" | python3 -c '
 import json, sys
 for r in json.load(sys.stdin):
