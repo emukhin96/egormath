@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import contextvars
 import csv
 import json
 import re
@@ -136,6 +137,38 @@ STRUCTURAL_HEADING_RE = re.compile(
     r"\\(?:sub)*section\*?\{[^{}]*\}")
 OCR_FIGURE_WRAPPER_RE = re.compile(
     r"\\textbackslash\s+(?:begin|end)\\?\{figure\\?\}(?:\\\\)?")
+
+# Стиль меток подпунктов текущего профиля. Зив, Галицкий и Шестаков нумеруют
+# пункты буквами «а) б) в)», поэтому цифры «3» и «6» считаются OCR-ошибками
+# для «з» и «б». Мерзляк нумерует пункты цифрами «1) 2) 3)»: в этом режиме
+# цифра — настоящая метка, а буквенная эвристика выключена. Контекст
+# устанавливает профильный парсер (``with numeric_subitem_labels():``).
+SUBITEM_LABEL_STYLE: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "subitem_label_style", default="letters")
+
+
+class numeric_subitem_labels:
+    """Контекст-менеджер: пункты задач и ответов нумеруются цифрами."""
+
+    def __enter__(self):
+        self._token = SUBITEM_LABEL_STYLE.set("numeric")
+        return self
+
+    def __exit__(self, *exc_info):
+        SUBITEM_LABEL_STYLE.reset(self._token)
+        return False
+
+
+def _numeric_labels() -> bool:
+    return SUBITEM_LABEL_STYLE.get() == "numeric"
+
+
+# Метка «2)» в строке ответа или условия при цифровой нумерации пунктов:
+# после «;», «:», точки, вопроса, закрытой формулы или в начале строки.
+# Координаты «(1; 2)» и формулы отсеивает ``_numeric_inline_markers``.
+_INLINE_NUMERIC_ITEM_RE = re.compile(
+    r"(?:^|(?<=[;:.?!])|(?<=\\\))|(?<=\\\])|(?<=\n))"
+    r"[ \t]*(?P<label>\d{1,2})\)(?=[\s~]|$)")
 
 
 @dataclass
@@ -697,18 +730,75 @@ def path_at(all_sections: Sequence[Section], pos: int) -> list[str]:
     return [title for title in stack if title]
 
 
+def _open_paren_depth(prefix: str) -> int:
+    depth = 0
+    for char in prefix:
+        if char == "(":
+            depth += 1
+        elif char == ")" and depth:
+            depth -= 1
+    return depth
+
+
+def _numeric_inline_markers(body: str) -> list[tuple[int, int, str]]:
+    """Цифровые метки «1) … 2) …» вне формул и вне незакрытых скобок."""
+    spans = [(match.start(), match.end())
+             for match in _MATH_SPAN_RE.finditer(body)]
+    result = []
+    for match in _INLINE_NUMERIC_ITEM_RE.finditer(body):
+        start = match.start("label")
+        if any(span_start < start < span_end for span_start, span_end in spans):
+            continue
+        # «(1; 2)» — координаты, а не метка «2)». Закрывающая скобка
+        # самих меток «1)» на глубину не влияет: ниже нуля не уходим.
+        if _open_paren_depth(body[:start]) > 0:
+            continue
+        result.append((match.start(), match.end(), match.group("label")))
+    return result
+
+
+def _numeric_marker_sequence(marker_data):
+    """Возрастающая цепочка цифровых меток независимо от вложенности списков.
+
+    OCR Мерзляка заворачивает часть пунктов во вложенный ``\\item[]``,
+    поэтому глубина списка ничего не значит: берём метки по порядку номеров.
+    """
+    result = []
+    previous = 0
+    for start, end, label, _depth in marker_data:
+        if not label.isdigit():
+            continue
+        number = int(label)
+        if number <= previous:
+            if result:
+                break
+            continue
+        result.append((start, end, label))
+        previous = number
+    return result
+
+
 def _subitem_marker_data(body: str) -> list[tuple[int, int, str, int]]:
+    numeric = _numeric_labels()
     markers = [
         (match.start(), match.end(), match.group("label"))
         for match in ALPHA_ITEM_RE.finditer(body)
+        if not numeric or match.group("label").isdigit()
     ]
     for match in PLAIN_ALPHA_ITEM_RE.finditer(body):
+        if numeric and not match.group("label").isdigit():
+            continue
         start = match.start()
         if body[max(0, start - 2):start] == r"\\":
             start -= 2
         markers.append((start, match.end(), match.group("label")))
-    for match in INLINE_ALPHA_ITEM_RE.finditer(body):
-        markers.append((match.start(), match.end(), match.group("label")))
+    inline = (_numeric_inline_markers(body) if numeric else [
+        (match.start(), match.end(), match.group("label"))
+        for match in INLINE_ALPHA_ITEM_RE.finditer(body)])
+    seen_starts = {marker[0] for marker in markers} if numeric else set()
+    for marker in inline:
+        if marker[0] not in seen_starts:
+            markers.append(marker)
     markers.sort(key=lambda item: item[0])
     events = list(LIST_ENV_RE.finditer(body))
     event_index = 0
@@ -897,8 +987,10 @@ def split_subitems(
         body: str, *, normalize_punctuation: bool = True,
         minimum_items: int = 2, allow_numbered_parts: bool = True,
 ) -> tuple[str, list[SubitemDraft]]:
-    body = heal_ocr_six_item_labels(body)
-    if allow_numbered_parts:
+    numeric = _numeric_labels()
+    if not numeric:
+        body = heal_ocr_six_item_labels(body)
+    if allow_numbered_parts and not numeric:
         parts = _numbered_part_chunks(body)
         if parts:
             items = []
@@ -926,7 +1018,9 @@ def split_subitems(
                 return "", items
     marker_data = _subitem_marker_data(body)
     markers = []
-    if marker_data:
+    if marker_data and numeric:
+        markers = _numeric_marker_sequence(marker_data)
+    elif marker_data:
         min_depth = min(marker[3] for marker in marker_data)
         markers = [marker[:3] for marker in marker_data
                    if marker[3] == min_depth]
@@ -1925,6 +2019,8 @@ def _flatten_solution_items(solution: str) -> str:
 
 def _normalized_subitem_label(label: str) -> str:
     value = clean(label).lower()
+    if value.isdigit() and _numeric_labels():
+        return value
     aliases = {
         "а": "a", "a": "a",
         "б": "b", "b": "b", "6": "b",
@@ -1949,6 +2045,8 @@ _CYR_ITEM_LABELS = {
 def cyrillic_item_label(label: str) -> str:
     """Латинскую OCR-метку ``a)`` показывает как «а», как в PDF."""
     raw = clean(label)
+    if raw.isdigit() and _numeric_labels():
+        return raw
     return _CYR_ITEM_LABELS.get(_normalized_subitem_label(raw), raw)
 
 
@@ -2126,6 +2224,13 @@ def redistribute_glued_subitem_answers(task) -> bool:
     items = list(getattr(task, "subitems", None) or [])
     if len(items) < 2:
         return False
+    # Цифровые метки «1) 2) 3)» (Мерзляк) — свой режим разбора, даже если
+    # черновик пришёл из базы без профильного контекста.
+    if not _numeric_labels() and all(
+            str(_subitem_get(item, "label")).strip().isdigit()
+            for item in items):
+        with numeric_subitem_labels():
+            return redistribute_glued_subitem_answers(task)
     rows = [dict(item) if isinstance(item, dict) else item for item in items]
     changed = False
 
@@ -3213,6 +3318,9 @@ def bundle_from_text(
         tasks, diagnostics = parse_shestakov(tasks_text, solutions_text)
     elif profile == "galitsky":
         tasks, diagnostics = parse_galitsky(tasks_text)
+    elif profile == "merzlyak":
+        from .merzlyak_parser import parse_merzlyak
+        tasks, diagnostics = parse_merzlyak(tasks_text)
     elif profile == "ziv":
         tasks, diagnostics = parse_ziv(tasks_text)
     elif profile == "ostromogilsky":
@@ -3394,12 +3502,13 @@ def write_bundle(bundle: ImportBundle, output: Path) -> None:
             "- Пропущено ожидаемых номеров: "
             f"{len(bundle.diagnostics['missing_task_ids'])}")
         if "matched_solutions" in bundle.diagnostics:
-            lines.extend([
+            lines.append(
                 f"- Однозначно сопоставлено решений: "
-                f"{bundle.diagnostics['matched_solutions']}",
+                f"{bundle.diagnostics['matched_solutions']}")
+        if "physical_order_affected_ids" in bundle.diagnostics:
+            lines.append(
                 f"- Затронуто нарушениями порядка колонок: "
-                f"{len(bundle.diagnostics['physical_order_affected_ids'])}",
-            ])
+                f"{len(bundle.diagnostics['physical_order_affected_ids'])}")
         if "answers_matched" in bundle.diagnostics:
             lines.extend([
                 f"- Сопоставлено ответов: "
@@ -3418,7 +3527,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--profile", required=True,
-        choices=("galitsky", "ziv", "shestakov", "ostromogilsky", "ostromogilsky_ege"))
+        choices=("galitsky", "merzlyak", "ziv", "shestakov", "ostromogilsky",
+                 "ostromogilsky_ege"))
     parser.add_argument("--tasks", required=True, type=Path)
     parser.add_argument("--solutions", type=Path)
     parser.add_argument(
