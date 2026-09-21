@@ -450,20 +450,26 @@
     this.renderLauncher();
   };
 
+  /* Тумблер «Показать доски для записей» включён по умолчанию: выключает только
+     явное '0' в localStorage. Пустая доска (data-pages="0") не запрашивается —
+     показывается кнопка, как у ученика; выключенная — просто скрыта. */
+  Widget.showEnabled = function () {
+    try { return localStorage.getItem(SHOW_KEY) !== '0'; } catch (e) { return true; }
+  };
+
   Widget.prototype.applyTeacherToggle = function () {
-    var on = false;
-    try { on = localStorage.getItem(SHOW_KEY) === '1'; } catch (e) {}
-    if (on) { this.show(); return; }
+    var count = parseInt(this.root.dataset.pages || '0', 10) || 0;
+    if (Widget.showEnabled()) {
+      if (count || this.loaded) this.show(); else this.renderLauncher();
+      return;
+    }
+    if (this.drag) this.onUp({pointerId: this.drag.pointerId}, true);
+    this.flushAll();
     if (this.resizeObserver) this.resizeObserver.disconnect();
     this.built = false;
-    this.root.hidden = false;
-    this.launcher.hidden = true;
+    this.root.hidden = true;
     this.root.innerHTML = '';
-    var count = parseInt(this.root.dataset.pages || '0', 10) || 0;
-    var note = el('p', 'helptext canvas-launch',
-      count ? 'Доска для записей: страниц — ' + count + '. Включите «Показать доски для записей», чтобы увидеть.'
-            : 'Доски для записей нет. Включите «Показать доски для записей», чтобы оставить пометки от руки.');
-    this.root.appendChild(note);
+    this.launcher.hidden = true;
   };
 
   Widget.prototype.show = function (createFirst) {
@@ -655,7 +661,8 @@
       tabs.appendChild(b);
     });
     if (this.canAddPage()) {
-      tabs.appendChild(button('btn btn-small btn-secondary', '+', 'Добавить страницу (до ' + this.limits.student + ' у ученика)', function () { self.addPage(); }));
+      var limitHint = this.layer === 'teacher' ? 'до ' + this.limits.teacher + ' страниц учителя' : 'до ' + this.limits.student + ' страниц';
+      tabs.appendChild(button('btn btn-small btn-secondary', '+', 'Добавить страницу (' + limitHint + ')', function () { self.addPage(); }));
     }
     this.deletePageButton = iconButton('trash', 'Удалить пустую последнюю страницу', function () { self.removeLastPage(); });
     if (this.layer) tabs.appendChild(this.deletePageButton);
@@ -672,6 +679,25 @@
     var editable = this.editableLayer(page);
 
     var controls = el('div', 'canvas-controls');
+    /* Фон — свойство страницы того, кто её создал: ученик правит свои страницы,
+       учитель — свои; чужие страницы и просмотр получают одну подпись вместо
+       трёх выпадающих списков. */
+    var ownsBackground = !!this.layer && page.createdBy === this.layer;
+    if (!ownsBackground) {
+      var plane0 = page.background === 'plane';
+      var desc = BG_LABELS[page.background] || page.background;
+      if (plane0) {
+        desc += ', ' + ((page.bgOptions.cell || 25) === 50 ? 'крупная клетка' : 'мелкая клетка')
+          + ', ' + (page.bgOptions.origin === 'bottom_left' ? 'начало слева внизу' : 'начало в центре');
+      }
+      controls.appendChild(el('span', 'canvas-bg-note', 'Фон: ' + desc.toLowerCase()));
+    }
+    function labelled(text, select) {
+      var label = el('label', 'canvas-bg-field');
+      label.appendChild(el('span', null, text));
+      label.appendChild(select);
+      return label;
+    }
     var bg = el('select', 'canvas-bg');
     Object.keys(BG_LABELS).forEach(function (key) {
       var opt = el('option', null, BG_LABELS[key]);
@@ -687,7 +713,7 @@
       self.touch(page);
       self.refresh();
     });
-    controls.appendChild(bg);
+    if (ownsBackground) controls.appendChild(labelled('Фон', bg));
     var plane = page.background === 'plane';
     var cellSel = el('select', 'canvas-bg');
     [[25, 'мелкая клетка'], [50, 'крупная клетка']].forEach(function (pair) {
@@ -703,7 +729,7 @@
       page.bgOptions = Object.assign({}, page.bgOptions, {cell: parseInt(cellSel.value, 10)});
       self.touch(page); self.redraw();
     });
-    controls.appendChild(cellSel);
+    if (ownsBackground) controls.appendChild(labelled('Клетка', cellSel));
     var originSel = el('select', 'canvas-bg');
     [['center', 'начало в центре'], ['bottom_left', 'начало слева внизу']].forEach(function (pair) {
       var opt = el('option', null, pair[1]); opt.value = pair[0]; originSel.appendChild(opt);
@@ -715,7 +741,7 @@
       page.bgOptions = Object.assign({}, page.bgOptions, {origin: originSel.value});
       self.touch(page); self.redraw();
     });
-    controls.appendChild(originSel);
+    if (ownsBackground) controls.appendChild(labelled('Начало координат', originSel));
     if (this.role === 'student' && this.showTeacherLayer) {
       var teacherToggle = this.toggle('Пометки учителя', this.showTeacher, function (on) {
         self.showTeacher = on; self.redraw();
@@ -1646,9 +1672,9 @@
   document.addEventListener('DOMContentLoaded', function () {
     var toggle = document.getElementById('toggle-canvas');
     if (toggle) {
-      try { toggle.checked = localStorage.getItem(SHOW_KEY) === '1'; } catch (e) {}
+      toggle.checked = Widget.showEnabled();
       toggle.addEventListener('change', function () {
-        try { localStorage.setItem(SHOW_KEY, toggle.checked ? '1' : ''); } catch (e) {}
+        try { localStorage.setItem(SHOW_KEY, toggle.checked ? '1' : '0'); } catch (e) {}
         Widget.all.forEach(function (w) { if (w.role !== 'student') w.applyTeacherToggle(); });
       });
     }

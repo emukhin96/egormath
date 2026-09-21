@@ -218,6 +218,27 @@ class SubmitAndTeacherTests(CanvasBase):
         self.assertEqual(page.teacher_elements[0]['id'], 't1')
         self.assertEqual(self.save(layer='student', version=1).status_code, 403)
 
+    def test_background_belongs_to_page_creator(self):
+        self.client.force_login(self.student)
+        self.save(background='plane', background_options={'cell': 50, 'origin': 'center', 'square': True})
+        self.submit()
+        self.client.force_login(self.teacher)
+        # Учитель шлёт другой фон (старый клиент или прямой POST) — фон ученика не меняется
+        response = self.save(layer='teacher', background='blank', background_options={})
+        self.assertEqual(response.status_code, 200)
+        page = CanvasPage.objects.get()
+        self.assertEqual(page.background, 'plane')
+        self.assertEqual(page.background_options, {'cell': 50, 'origin': 'center', 'square': True})
+        # На своей странице учитель фон задаёт
+        self.assertEqual(self.save(number=2, layer='teacher', background='grid_large').status_code, 200)
+        self.assertEqual(CanvasPage.objects.get(number=2).background, 'grid_large')
+
+    def test_legacy_plane_keeps_small_cell(self):
+        """Старая страница без cell сохраняется с мелкой клеткой — как её рисует клиент."""
+        self.client.force_login(self.student)
+        self.assertEqual(self.save(background='plane', background_options={}).status_code, 200)
+        self.assertEqual(CanvasPage.objects.get().background_options, {'cell': 25, 'origin': 'center'})
+
     def test_teacher_pages_limit_and_role(self):
         self.submit()
         self.client.force_login(self.teacher)
