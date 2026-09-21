@@ -215,6 +215,7 @@ read/write** (для статуса CI в `status` — ещё **Checks: read**).
 ```
 tools/pr.sh push                        # текущая ветка → GitHub, только fast-forward
 tools/pr.sh open "Заголовок" body.md    # PR ветка → main (если уже открыт — покажет ссылку)
+tools/pr.sh open "Заголовок" body.md feat/base   # стек: PR поверх ещё не слитой ветки
 tools/pr.sh status                      # состояние PR, замечания ревью (с id), CI
 tools/pr.sh reply <id> "Текст"          # ответ в треде замечания: что и в каком коммите исправлено
 ```
