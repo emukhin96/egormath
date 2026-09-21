@@ -51,8 +51,11 @@ IMAGE_WARNING_PREFIX = 'Требуется загрузить файлы изо�
 
 
 def normalize_image_stem(name):
-    path = Path(str(name or '').replace('\\', '/'))
-    return path.stem.lower().strip()
+    filename = Path(str(name or '').replace('\\', '/')).name
+    suffix = Path(filename).suffix.lower()
+    if suffix in IMAGE_SUFFIXES:
+        filename = filename[:-len(suffix)]
+    return filename.lower().strip()
 
 
 def _is_junk_image_path(path):

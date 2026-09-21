@@ -1696,7 +1696,7 @@ class RubricatorTests(TestCase):
         self.assertTrue(Topic.objects.filter(code='ALG.07.10').exists())
         from problems.rubricator_data import VERSION_12_TOPICS, iter_leaf_topics
         leaves = dict(iter_leaf_topics())
-        self.assertEqual(len(leaves), 271)
+        self.assertEqual(len(leaves), 272)
         self.assertEqual(len(VERSION_12_TOPICS), 20)
         for code, name in VERSION_12_TOPICS:
             self.assertEqual(leaves[code], name)
