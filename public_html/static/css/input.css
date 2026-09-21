@@ -4704,6 +4704,12 @@
     background: var(--accent); color: #fff; border-color: var(--accent);
   }
   .canvas-page-locked { color: var(--muted); }
+  /* Точка на вкладке: на этой странице появились новые пометки */
+  .canvas-page-fresh { position: relative; }
+  .canvas-page-fresh::after {
+    content: ''; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px;
+    border-radius: 50%; background: #dc2626; box-shadow: 0 0 0 2px #fff;
+  }
   .canvas-bg { margin: 0; width: auto; max-width: 12rem; min-height: 28px; padding: 2px 6px; font-size: 0.82rem; }
   /* Подпись + селект: селект не тянется на всю колонку даже без правила выше */
   .canvas-bg-field { display: inline-flex; align-items: center; gap: var(--space-1); margin: 0; font-size: 0.82rem; color: var(--muted); }

@@ -65,9 +65,10 @@ class StudentCanvasTests(CanvasBase):
         data = self.client.get(self.url('pages')).json()
         self.assertEqual(len(data['pages']), 1)
         self.assertEqual(data['layer'], 'student')
-        # До возврата слой учителя ученику не отдаётся вовсе
-        self.assertNotIn('teacher', data['pages'][0])
-        self.assertFalse(data['show_teacher_layer'])
+        # Слой учителя отдаётся ученику всегда — учитель может писать во время работы
+        self.assertEqual(data['pages'][0]['teacher'], {'elements': [], 'version': 0})
+        self.assertTrue(data['show_teacher_layer'])
+        self.assertTrue(data['can_add_pages'])
 
     def test_schema_validation(self):
         bad = [
@@ -194,29 +195,69 @@ class StudentCanvasTests(CanvasBase):
 
 
 class SubmitAndTeacherTests(CanvasBase):
-    def test_teacher_only_after_submit(self):
+    def test_teacher_writes_while_student_works(self):
+        """Слой учителя открыт и до отправки; слои не мешают друг другу."""
         self.client.force_login(self.student)
-        self.save()
+        self.save(background='plane', background_options={'cell': 50, 'origin': 'center', 'square': True})
         self.client.force_login(self.teacher)
-        self.assertEqual(self.save(layer='teacher', elements=[stroke('t1', '#dc2626')]).status_code, 403)
         data = self.client.get(self.url('pages')).json()
-        self.assertIsNone(data['layer'])
-        self.assertIn('teacher', data['pages'][0])
+        self.assertEqual(data['layer'], 'teacher')
+        self.assertFalse(data['can_add_pages'])
+        response = self.save(layer='teacher', elements=[stroke('t1', '#dc2626')], background='blank')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['other_version'], 1)
+        page = CanvasPage.objects.get()
+        self.assertEqual(page.teacher_elements[0]['id'], 't1')
+        self.assertEqual(page.student_elements[0]['id'], 'a1')
+        # фон остался ученический: чужой слой его не трогает
+        self.assertEqual(page.background, 'plane')
+        self.assertEqual(page.background_options['cell'], 50)
+        # свои страницы учитель до отправки не добавляет
+        self.assertEqual(self.save(number=2, layer='teacher').status_code, 403)
+        # ученик видит пометку сразу, в статусе «Выдано»
+        self.client.force_login(self.student)
+        data = self.client.get(self.url('pages')).json()
+        self.assertTrue(data['show_teacher_layer'])
+        self.assertEqual(data['pages'][0]['teacher']['elements'][0]['id'], 't1')
+        # и продолжает писать свой слой, не затирая учительский
+        response = self.save(elements=[stroke('a1'), stroke('a2')], version=1)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['other_version'], 1)
+        page.refresh_from_db()
+        self.assertEqual(len(page.student_elements), 2)
+        self.assertEqual(page.teacher_elements[0]['id'], 't1')
 
         self.submit()
         self.assertEqual(self.assignment.status, Assignment.STATUS_SUBMITTED)
-        page = CanvasPage.objects.get()
+        page.refresh_from_db()
         self.assertIsNotNone(page.locked_at)
-        # Ученик больше не пишет, учитель — пишет
-        self.assertEqual(self.save(elements=[stroke('b2')], version=1).status_code, 403)
+        # Ученик больше не пишет, учитель — пишет и может добавить свою страницу
+        self.assertEqual(self.save(elements=[stroke('b2')], version=2).status_code, 403)
         self.client.force_login(self.teacher)
-        response = self.save(layer='teacher', elements=[stroke('t1', '#dc2626')])
+        self.assertTrue(self.client.get(self.url('pages')).json()['can_add_pages'])
+        response = self.save(layer='teacher', elements=[stroke('t1', '#dc2626'), stroke('t2')], version=1)
         self.assertEqual(response.status_code, 200)
         page.refresh_from_db()
         self.assertEqual(page.teacher_by, self.teacher)
-        self.assertEqual(page.student_elements[0]['id'], 'a1')
-        self.assertEqual(page.teacher_elements[0]['id'], 't1')
-        self.assertEqual(self.save(layer='student', version=1).status_code, 403)
+        self.assertEqual(len(page.student_elements), 2)
+        self.assertEqual(len(page.teacher_elements), 2)
+        self.assertEqual(self.save(layer='student', version=2).status_code, 403)
+
+    def test_pages_etag(self):
+        self.client.force_login(self.student)
+        self.save()
+        response = self.client.get(self.url('pages'))
+        etag = response['ETag']
+        self.assertEqual(self.client.get(self.url('pages'), HTTP_IF_NONE_MATCH=etag).status_code, 304)
+        self.client.force_login(self.teacher)
+        self.save(layer='teacher')
+        self.client.force_login(self.student)
+        response = self.client.get(self.url('pages'), HTTP_IF_NONE_MATCH=etag)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotEqual(response['ETag'], etag)
+        # у учителя своя подпись: другой слой и другие права
+        self.client.force_login(self.teacher)
+        self.assertNotEqual(self.client.get(self.url('pages'))['ETag'], response['ETag'])
 
     def test_background_belongs_to_page_creator(self):
         self.client.force_login(self.student)
@@ -265,9 +306,11 @@ class SubmitAndTeacherTests(CanvasBase):
         # Замороженная страница закрыта, новая — открыта и не считается в лимит
         self.assertEqual(self.save(number=1, version=1).status_code, 403)
         self.assertEqual(self.save(number=2).status_code, 200)
-        # Учитель во время доработки только смотрит
+        # Учитель во время доработки пишет на любой странице, но свои не добавляет
         self.client.force_login(self.teacher)
-        self.assertEqual(self.save(number=1, layer='teacher', version=1).status_code, 403)
+        self.assertEqual(self.save(number=1, layer='teacher', version=1).status_code, 200)
+        self.assertEqual(self.save(number=2, layer='teacher', version=0).status_code, 200)
+        self.assertEqual(self.save(number=3, layer='teacher').status_code, 403)
 
     def test_teacher_page_stays_locked_after_return(self):
         self.submit()

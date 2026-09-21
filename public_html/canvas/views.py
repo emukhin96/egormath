@@ -1,15 +1,17 @@
 """JSON-эндпоинты холста к задаче обычного задания.
 
 Сервер только принимает и отдаёт JSON слоёв — ничего не рендерит и не
-пересчитывает. Оба слоя одной страницы правятся разными людьми и никогда
-одновременно, поэтому конфликт возможен лишь между двумя вкладками одного
-человека: его ловит версия слоя (409 с актуальными данными).
+пересчитывает. Слои одной страницы лежат в разных полях со своими
+версиями и сохраняются по отдельности (update_fields), поэтому ученик и
+учитель могут писать одновременно, а конфликт возможен лишь между двумя
+вкладками одного человека: его ловит версия слоя (409 с актуальными
+данными). Чужой слой клиент забирает опросом GET с If-None-Match.
 """
 import json
 
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponseNotModified, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
@@ -84,13 +86,17 @@ def pages(request, pk, task_id):
         return _disabled()
     assignment, access = _resolve(request, pk, task_id)
     pages = _pages(assignment, task_id)
-    return JsonResponse({
+    etag = services.pages_etag(pages, access)
+    if request.headers.get('If-None-Match') == etag:
+        return HttpResponseNotModified()
+    response = JsonResponse({
         'ok': True,
         'pages': [services.page_payload(page, access) for page in pages],
         'layer': access.layer,
         'can_edit_student': access.can_edit_student,
         'can_edit_teacher': access.can_edit_teacher,
         'show_teacher_layer': access.show_teacher_layer,
+        'can_add_pages': access.can_add_pages,
         'limits': {
             'student': CanvasPage.STUDENT_PAGE_LIMIT,
             'teacher': CanvasPage.TEACHER_PAGE_LIMIT,
@@ -98,6 +104,9 @@ def pages(request, pk, task_id):
             'elements': CanvasPage.MAX_ELEMENTS,
         },
     })
+    response['ETag'] = etag
+    response['Cache-Control'] = 'no-cache'
+    return response
 
 
 @login_required
@@ -155,19 +164,26 @@ def save_page(request, pk, task_id, number):
             page.teacher_version = current_version + 1
             page.teacher_updated_at = now
             page.teacher_by = request.user
-            new_version = page.teacher_version
+            new_version, other_version = page.teacher_version, page.student_version
+            fields = ['teacher_elements', 'teacher_version', 'teacher_updated_at', 'teacher_by']
         else:
             page.student_elements = elements
             page.student_version = current_version + 1
             page.student_updated_at = now
-            new_version = page.student_version
+            new_version, other_version = page.student_version, page.teacher_version
+            fields = ['student_elements', 'student_version', 'student_updated_at']
         # Фон — свойство страницы того, кто её создал: чужой слой его не меняет,
         # даже если старый клиент или прямой POST прислали другие значения.
         if page.created_by_role == layer:
             page.background = background
             page.background_options = options
-        page.save()
-    return JsonResponse({'ok': True, 'version': new_version, 'message': 'Сохранено ✓'})
+            fields += ['background', 'background_options']
+        if page.pk:
+            page.save(update_fields=fields)
+        else:
+            page.save()
+    return JsonResponse({'ok': True, 'version': new_version, 'other_version': other_version,
+                         'message': 'Сохранено ✓'})
 
 
 @login_required
