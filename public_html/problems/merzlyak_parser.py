@@ -426,6 +426,8 @@ def prepare_merzlyak_text(text: str) -> str:
     # «точка ( \(0 ;-8\) )» — скобки координат вынесены из формулы.
     text = re.sub(r"\(\s*\\\(([^()]*?)\\\)\s*\)", r"\\((\1)\\)", text)
     text = re.sub(r"\\\\\[0pt\]", "", text)
+    # Mathpix не сохранил файл: заглушка не должна стать «картинкой».
+    text = re.sub(r"\\includegraphics(?:\[[^\]]*\])?\{image-not-found\}", "", text)
     text = _heal_ocr_words(text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text
@@ -494,7 +496,13 @@ def extract_figures(text: str) -> tuple[str, FigureIndex]:
     out_len = 0
     pos = 0
     last_numbered: tuple[str, int] | None = None
+    # Части «а», «б», … без общей подписи: OCR иногда печатает «Рис. §.N»
+    # отдельной строкой уже после float-окружений.
+    unnamed_group: list[tuple[int, list[str]]] = []
+    trailing_caption = re.compile(r"^\s*Рис\.?\s*(?P<num>\d{1,2}\.\d{1,3})\s*(?:\\\\)?[ \t]*\n")
     for match in FIGURE_RE.finditer(text):
+        if match.start() < pos:
+            continue
         block = match.group(0)
         captions = [clean(m.group("caption")) for m in CAPTION_RE.finditer(block)]
         paths = [m.group("path") for m in GRAPHICS_RE.finditer(block)]
@@ -513,6 +521,7 @@ def extract_figures(text: str) -> tuple[str, FigureIndex]:
                     # Части с «а» — новый составной рисунок, чья подпись
                     # «Рис. §.N» потеряна OCR: остаётся позиционным.
                     last_numbered = None
+                    unnamed_group = []
                 elif last_numbered and match.start() - last_numbered[1] < 1500:
                     # «Рис. 9.8» + части «б», «в», «г» — один составной рисунок.
                     kind, number = "numbered", last_numbered[0]
@@ -520,15 +529,32 @@ def extract_figures(text: str) -> tuple[str, FigureIndex]:
         chunk = text[pos:match.start()]
         out.append(chunk)
         out_len += len(chunk)
+        pos = match.end()
         if kind and paths:
             for path in paths:
                 index.add(kind, number, path, out_len)
-        else:
-            chunk = "\n" + "\n".join(
-                rf"\includegraphics{{{path}}}" for path in paths) + "\n"
-            out.append(chunk)
-            out_len += len(chunk)
-        pos = match.end()
+            continue
+        trailing = trailing_caption.match(text[pos:pos + 200])
+        if trailing and paths:
+            unnamed_group.append((out_len, paths, len(out)))
+            number = trailing.group("num")
+            for position, group_paths, out_index in unnamed_group:
+                for path in group_paths:
+                    index.add("numbered", number, path, position)
+                if out_index < len(out):
+                    # Ранее выпущенные части убираем из потока; длину
+                    # сохраняем, чтобы не сдвинуть позиции индекса.
+                    out[out_index] = "\n" * len(out[out_index])
+            unnamed_group = []
+            last_numbered = (number, pos + trailing.end())
+            pos += trailing.end()
+            continue
+        chunk = "\n" + "\n".join(
+            rf"\includegraphics{{{path}}}" for path in paths) + "\n"
+        if paths and any(FIG_PART_RE.match(caption) for caption in captions):
+            unnamed_group.append((out_len, paths, len(out)))
+        out.append(chunk)
+        out_len += len(chunk)
     out.append(text[pos:])
     return "".join(out), index
 
