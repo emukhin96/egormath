@@ -420,6 +420,9 @@ def prepare_merzlyak_text(text: str) -> str:
     # «\left.+(y-2)^{2}=25 ; 2\right)(x+1)…» — метка «2)» стала скобкой.
     text = re.sub(r"\\left\.(?P<body>[^\n]*?);\s*(?P<label>\d{1,2})\\right\)",
                   r"\g<body>\); \g<label>) \(", text)
+    # «относительно: 1\()\) оси абсцисс» / «относительно: 1 ) начала» —
+    # скобка метки ушла в пустую формулу или оторвалась пробелом.
+    text = _heal_numeric_item_labels(text)
     text = _tabular_to_array(text)
     text = _join_hyphenation(text)
     text = re.sub(r"\bс\s+м(?![а-яё])", "см", text)
@@ -431,6 +434,18 @@ def prepare_merzlyak_text(text: str) -> str:
     text = _heal_ocr_words(text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text
+
+
+# Метка пункта после «:», «;», точки или в начале строки, у которой OCR
+# сломал скобку: «1\()\)», «1 )». Число без такого контекста («\(x=1\) )»)
+# не трогаем.
+_BROKEN_ITEM_LABEL_RE = re.compile(
+    r"(?m)(?:^|(?<=[:;.?!]))(?P<lead>[ \t]*)(?P<label>\d{1,2})"
+    r"(?:[ \t]*\\\([ \t]*\)[ \t]*\\\)|[ \t]+\))(?=\s)")
+
+
+def _heal_numeric_item_labels(text: str) -> str:
+    return _BROKEN_ITEM_LABEL_RE.sub(r"\g<lead>\g<label>)", text)
 
 
 _LATIN_LOOKALIKES = str.maketrans({

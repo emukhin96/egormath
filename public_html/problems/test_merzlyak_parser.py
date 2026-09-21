@@ -9,7 +9,9 @@ from .merzlyak_parser import (
     parse_merzlyak, prepare_merzlyak_text, wrap_answer_numbers)
 from .models import TextbookTaskDraft
 from .test_textbook_import import make_teacher
-from .textbook_parser import bundle_from_text
+from .textbook_parser import (
+    SubitemDraft, TaskDraft, bundle_from_text, numeric_subitem_labels,
+    redistribute_glued_subitem_answers, split_subitems)
 
 FIGURE = r"""
 \begin{figure}[h]
@@ -205,6 +207,46 @@ class MerzlyakHelpersTests(TestCase):
         self.assertIn('\n1) a', text)
         self.assertIn('\n5.36. Б.', text)
         self.assertNotIn('◇', text)
+
+    def test_broken_numeric_labels_from_book_become_subitems(self):
+        # Реальные фрагменты OCR: 20.19, 21.10, 21.12.
+        fragments = {
+            '20.19': 'Точки \\(A(x ; 3)\\) и \\(B(-2 ; y)\\) симметричны '
+                     'относительно: 1\\()\\) оси абсцисс; 2) оси ординат. '
+                     'Найдите \\(x\\) и \\(y\\).',
+            '21.10': 'Найдите координаты точек, симметричных точкам '
+                     '\\(A(3 ;-1)\\) и \\(B(0 ;-2)\\) относительно: '
+                     '1 ) начала координат; 2 ) точки \\(M(2 ;-3)\\).',
+            '21.12': 'Точки \\(A(x ;-2)\\) и \\(B(1 ; y)\\) симметричны '
+                     'относительно: 1 ) начала координат; 2) точки '
+                     '\\(M(-1 ; 3)\\). Найдите \\(x\\) и \\(y\\).',
+        }
+        for number, fragment in fragments.items():
+            with self.subTest(number=number):
+                text = prepare_merzlyak_text(fragment)
+                self.assertNotIn('\\()\\)', text)
+                self.assertNotIn(' )', text)
+                with numeric_subitem_labels():
+                    _lead, items = split_subitems(text)
+                self.assertEqual([item.label for item in items], ['1', '2'])
+        # Число перед скобкой формулы — не метка.
+        self.assertEqual(prepare_merzlyak_text('если \\(x=1\\) ) верно'),
+                         'если \\(x=1\\) ) верно')
+
+    def test_glued_numeric_answers_redistribute_to_all_subitems(self):
+        task = TaskDraft(
+            external_id='1.1', source_number='1.1', source_path=[],
+            collection_key='k', collection_title='t', topic_original='',
+            text_latex='Найдите:',
+            subitems=[SubitemDraft(label='1', text_latex='a'),
+                      SubitemDraft(label='2', text_latex='b')],
+            author_answer_latex='1) 10; 2) 20')
+        # Без профильного контекста, как при правке черновика из базы.
+        self.assertTrue(redistribute_glued_subitem_answers(task))
+        self.assertEqual(
+            [item.author_answer_latex for item in task.subitems],
+            ['10', '20'])
+        self.assertEqual(task.author_answer_latex, '')
 
     def test_cut_task_body_stops_at_heading_line_and_section(self):
         body, tail = cut_task_body(
