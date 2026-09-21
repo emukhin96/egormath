@@ -2251,8 +2251,11 @@ def redistribute_glued_subitem_answers(task) -> bool:
             key = _normalized_subitem_label(piece.label)
             piece_text = (piece.text_latex or "").strip()
             if str(piece.label).isdigit():
-                if key != "b" or not piece_text or re.fullmatch(
-                        r"[.$]+", piece_text):
+                if not piece_text or re.fullmatch(r"[.$]+", piece_text):
+                    continue
+                # При цифровых метках «2)» — настоящий пункт; буквенный
+                # фильтр «6 = б» только для профилей с «а) б) в)».
+                if not _numeric_labels() and key != "b":
                     continue
             for later in rows[start:]:
                 if _subitem_label_key(later) != key:
