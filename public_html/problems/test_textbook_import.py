@@ -14,6 +14,7 @@ from problems.tests import make_teacher
 from problems.textbook_import import (TextbookImportError, attach_image_archive,
                                       commit_batch, create_batch_from_bundle,
                                       missing_imported_collection_draft_ids,
+                                      normalize_image_stem,
                                       repair_ziv_batch_leaks,
                                       sync_batch_draft_images,
                                       ziv_variant_summary)
@@ -1424,6 +1425,29 @@ class TextbookImportTests(TestCase):
         self.assertEqual(TaskImage.objects.count(), 1)
         self.assertIn('figure-1', TaskImage.objects.get().filename)
 
+    def test_image_stem_keeps_decimal_source_number(self):
+        self.assertEqual(
+            normalize_image_stem('merzlyak9-fig-11.7'),
+            'merzlyak9-fig-11.7')
+        self.assertEqual(
+            normalize_image_stem('folder/merzlyak9-fig-11.7.png'),
+            'merzlyak9-fig-11.7')
+
+        batch = self.create_batch(bundle(images=['merzlyak9-fig-11.7']))
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, 'w') as zf:
+            zf.writestr('merzlyak9-fig-11.7.png', TINY_PNG)
+        archive.seek(0)
+
+        stored = attach_image_archive(
+            batch, SimpleUploadedFile('pics.zip', archive.read()))
+
+        self.assertEqual(stored, 1)
+        draft = batch.drafts.get()
+        self.assertEqual(draft.unmatched_images(), [])
+        self.assertFalse(any(
+            'Требуется загрузить' in item for item in draft.warnings))
+
     def test_create_batch_collects_ocr_images_from_subitem_solution(self):
         payload = bundle(
             images=[],
@@ -1769,6 +1793,51 @@ class TextbookImportTests(TestCase):
             self.assertIn(
                 draft.topic_candidates[0]['reason'],
                 {'exact-alias', 'exact-name'})
+
+    def test_merzlyak_geometry_sections_auto_assign_topics(self):
+        cases = [
+            ('§ 1. Синус, косинус, тангенс и котангенс угла от 0° до 180°',
+             'GEO.02.07'),
+            ('§ 2. Теорема косинусов', 'GEO.02.07'),
+            ('§ 3. Теорема синусов', 'GEO.02.07'),
+            ('§ 4. Решение треугольников', 'GEO.02.07'),
+            ('§ 5. Формулы для нахождения площади треугольника',
+             'GEO.02.08'),
+            ('§ 6. Правильные многоугольники и их свойства', 'GEO.03.05'),
+            ('§ 7. Длина окружности. Площадь круга', 'GEO.04.06'),
+            ('§ 8. Расстояние между двумя точками с данными координатами. '
+             'Деление отрезка в данном отношении', 'GEO.06.01'),
+            ('§ 9. Уравнение фигуры', 'GEO.06.03'),
+            ('§ 10. Общее уравнение прямой', 'GEO.06.02'),
+            ('§ 11. Уравнение прямой с угловым коэффициентом. Уравнение '
+             'прямой, проходящей через две данные точки', 'GEO.06.02'),
+            ('§ 12. Метод координат', 'GEO.06.06'),
+            ('§ 13. Понятие вектора', 'GEO.06.04'),
+            ('§ 14. Координаты вектора', 'GEO.06.05'),
+            ('§ 15. Сложение и вычитание векторов', 'GEO.06.04'),
+            ('§ 16. Умножение вектора на число. Применение векторов '
+             'к решению задач', 'GEO.06.04'),
+            ('§ 17. Скалярное произведение векторов', 'GEO.06.05'),
+            ('§ 18. Преобразование (отображение) фигур', 'GEO.05.06'),
+            ('§ 19. Движение. Параллельный перенос', 'GEO.05.02'),
+            ('§ 20. Осевая симметрия', 'GEO.05.01'),
+            ('§ 21. Центральная симметрия', 'GEO.05.01'),
+            ('§ 22. Поворот', 'GEO.05.02'),
+            ('§ 23. Гомотетия. Подобие фигур', 'GEO.05.03'),
+        ]
+        for index, (heading, code) in enumerate(cases, 1):
+            topic = Topic.objects.get(code=code)
+            batch = self.create_batch(bundle(
+                external_id=f'merzlyak-topic-{index}',
+                source_path=['Геометрия 9', heading],
+                topic_original=heading,
+                collection_key=f'merzlyak/{index}',
+                collection_title=heading,
+            ))
+            draft = batch.drafts.get()
+            self.assertEqual(draft.topic_id, topic.pk, heading)
+            self.assertEqual(
+                draft.topic_candidates[0]['reason'], 'exact-alias', heading)
 
     def test_ziv_variant_path_auto_assigns_section_topic(self):
         topic = Topic.objects.get(code='ALG.06.02')

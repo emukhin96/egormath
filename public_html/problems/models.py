@@ -818,13 +818,13 @@ class TextbookTaskDraft(models.Model):
                     or self.author_solution_subitem_count)
 
     def unmatched_images(self):
+        from .textbook_import import normalize_image_stem
+
         resolved = {
             asset.stem for asset in self.batch.assets.all()
         } if self.batch_id else set()
         return [name for name in self.images
-                if os.path.splitext(os.path.basename(
-                    str(name).replace('\\', '/')))[0].lower()
-                not in resolved]
+                if normalize_image_stem(name) not in resolved]
 
 
 class TextbookImportAsset(models.Model):
