@@ -453,8 +453,8 @@ class BoardsTests(CanvasBase):
         self.assertEqual(len(data['pages']), 1)
         self.assertEqual(data['pages'][0]['task'], other.pk)
         self.assertEqual(sorted(t['task_no'] for t in data['tasks']), [1, 2])
-        # при опросе с since список задач не нужен
-        self.assertEqual(self.live(since=data['since']).json()['tasks'], [])
+        # при опросе с since список задач приходит снова (он в подписи; без изменений — 304)
+        self.assertEqual(len(self.live(since=data['since']).json()['tasks']), 2)
 
     def test_task_filter(self):
         other = Task.objects.create(text_latex='Вторая')
@@ -480,6 +480,25 @@ class BoardsTests(CanvasBase):
         self.client.force_login(self.teacher)
         self.assertEqual(self.live(task=self.task.pk, since=since).json()['pages'], [])
         self.assertEqual(len(self.live(since=since).json()['pages']), 1)
+        # новая доска третьей задачи появляется в tasks при опросе с фильтром, а не только при первой загрузке
+        third = Task.objects.create(text_latex='Третья')
+        WorksheetItem.objects.create(worksheet=self.worksheet, task=third, order=3)
+        filtered = self.live(task=self.task.pk, since=since)
+        self.client.force_login(self.student)
+        self.client.post(reverse('canvas:save', args=[self.assignment.pk, third.pk, 1]),
+                         data=json.dumps({'layer': 'student', 'elements': [stroke()], 'background': 'grid', 'version': 0}),
+                         content_type='application/json')
+        self.client.force_login(self.teacher)
+        again = self.live(etag=filtered['ETag'], task=self.task.pk, since=filtered.json()['since'])
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual(sorted(t['task_no'] for t in again.json()['tasks']), [1, 2, 3])
+        self.assertEqual(again.json()['pages'], [])
+        # у ученика без доски по выбранной задаче в tasks есть пустая запись этой задачи
+        empty_student = make_student(self.teacher, username='empty')
+        empty = Assignment.objects.create(worksheet=self.worksheet, student=empty_student, assigned_by=self.teacher)
+        entry = [t for t in self.live(task=self.task.pk).json()['tasks'] if t['assignment'] == empty.pk]
+        self.assertEqual(entry, [{'assignment': empty.pk, 'task': self.task.pk, 'task_no': 1, 'count': 0,
+                                  'canvas_url': reverse('canvas:pages', args=[empty.pk, self.task.pk])}])
         # ETag различает фильтры; неизвестная задача = без фильтра
         self.assertNotEqual(self.live()['ETag'], self.live(task=self.task.pk)['ETag'])
         self.assertIsNone(self.live(task='999').json()['task'])
