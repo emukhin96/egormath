@@ -50,3 +50,53 @@ class StrictFormatsTests(SimpleTestCase):
         self.assertEqual(draft_mask('1:2'), '{{ratio: 1:2}}')
         self.assertEqual(draft_mask('234'), '{{number: 234}}')
         self.check_values('{{number: 234}}', ['234,00', '468/2'], ['235'])
+
+    def test_textbook_geometry_drafting(self):
+        self.assertEqual(
+            draft_mask(r'$60^{\circ}$ или $120^{\circ}$'),
+            '{{set: 60; 120}}')
+        self.assertEqual(
+            draft_mask(r'$60^{\circ}$'),
+            '{{number: 60}}°')
+        self.assertEqual(
+            draft_mask(r'$15$ см, $24$ см'),
+            '{{set: 15; 24}} см')
+        self.assertEqual(
+            draft_mask(r'$40^{\circ}$, $80^{\circ}$, $40^{\circ}$'),
+            '')
+        self.assertEqual(
+            draft_mask(r'$5$ сторон'),
+            '{{number: 5}} сторон')
+        self.assertEqual(
+            draft_mask(
+                r'$A(1; 2)$, $B(-3; 4)$',
+                'Найдите координаты точек A и B.'),
+            '$A =$ {{pair: (1; 2)}}, $B =$ {{pair: (-3; 4)}}')
+        self.assertEqual(
+            draft_mask(
+                r'$(1; -4)$ или $(-1; 1)$',
+                'Найдите координаты точки M.'),
+            '{{pair: (1; -4); (-1; 1)}}')
+        self.assertEqual(
+            draft_mask('$x=2$, $y=-3$', 'Найдите x и y.'),
+            '$x =${{range: 2}}, $y =${{range: -3}}')
+        self.assertEqual(
+            draft_mask('$x=3$', 'Найдите x.'),
+            '$x =${{range: 3}}')
+        self.assertEqual(
+            draft_mask('$x=7$ или $x=-1$', 'Решите уравнение.'),
+            '$x =${{range: 7; -1}}')
+        self.assertEqual(
+            draft_mask('$5x+3y=6$', 'Составьте уравнение прямой.'),
+            '{{equation: 5x+3y=6}}')
+
+    def test_textbook_yes_no_drafting(self):
+        self.assertEqual(draft_mask('Да.'), '{{yesno: да}}')
+        self.assertEqual(draft_mask('Нет.'), '{{yesno: нет}}')
+        self.assertEqual(draft_mask('Да, точка A лежит на прямой.'), '')
+        self.assertEqual(
+            draft_mask('Существует.', 'Существует ли такой угол?'),
+            '{{yesno: да}}')
+        self.assertEqual(
+            draft_mask('Не могут.', 'Могут ли точки совпадать?'),
+            '{{yesno: нет}}')

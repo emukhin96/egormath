@@ -1159,7 +1159,8 @@ def _review_subitem_post_count(post):
             f'{prefix}{count}' in post
             for prefix in (
                 'subitem_text_', 'subitem_label_',
-                'subitem_author_answer_', 'subitem_author_solution_')):
+                'subitem_author_answer_', 'subitem_answer_mask_',
+                'subitem_author_solution_')):
         count += 1
     return count
 
@@ -1174,6 +1175,7 @@ def _subitems_from_review_editors(post):
             'text_latex': post.get(f'subitem_text_{index}', ''),
             'author_answer_latex': post.get(
                 f'subitem_author_answer_{index}', ''),
+            'answer_mask': post.get(f'subitem_answer_mask_{index}', ''),
             'author_solution_latex': post.get(
                 f'subitem_author_solution_{index}', ''),
         })
@@ -1208,11 +1210,14 @@ def _overlay_review_author_fields(subitems, original, post):
     by_label = {}
     for index, item in enumerate(original):
         answer_key = f'subitem_author_answer_{index}'
+        mask_key = f'subitem_answer_mask_{index}'
         solution_key = f'subitem_author_solution_{index}'
-        if answer_key not in post and solution_key not in post:
+        if (answer_key not in post and mask_key not in post
+                and solution_key not in post):
             continue
         by_label[_subitem_label_key(item.get('label'))] = {
             'author_answer_latex': post.get(answer_key, '').strip(),
+            'answer_mask': post.get(mask_key, '').strip(),
             'author_solution_latex': post.get(solution_key, '').strip(),
         }
     if not by_label:
@@ -1629,9 +1634,11 @@ def textbook_import_review(request, batch_pk, pk):
             if not form.errors:
                 if updated.subitems and any(
                         str(item.get('author_answer_latex') or '').strip()
+                        or str(item.get('answer_mask') or '').strip()
                         or str(item.get('author_solution_latex') or '').strip()
                         for item in updated.subitems):
                     updated.author_answer_latex = ''
+                    updated.answer_mask = ''
                     updated.author_solution_latex = ''
                 if (request.POST.get('topics_submitted')
                         or 'topics' in request.POST
@@ -1673,9 +1680,12 @@ def textbook_import_review(request, batch_pk, pk):
             if f'subitem_text_{index}' in request.POST:
                 subitem['text_latex'] = request.POST[f'subitem_text_{index}']
             answer_key = f'subitem_author_answer_{index}'
+            mask_key = f'subitem_answer_mask_{index}'
             solution_key = f'subitem_author_solution_{index}'
             if answer_key in request.POST:
                 subitem['author_answer_latex'] = request.POST[answer_key]
+            if mask_key in request.POST:
+                subitem['answer_mask'] = request.POST[mask_key]
             if solution_key in request.POST:
                 subitem['author_solution_latex'] = request.POST[solution_key]
     else:

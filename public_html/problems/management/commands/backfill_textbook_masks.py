@@ -1,0 +1,71 @@
+import copy
+
+from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
+
+from problems.models import TextbookImportBatch
+from problems.textbook_import import fill_draft_answer_masks
+
+
+class Command(BaseCommand):
+    help = 'Заполняет безопасно выводимые маски ответов в черновиках импорта.'
+
+    def add_arguments(self, parser):
+        parser.add_argument('batch_id', type=int)
+        parser.add_argument(
+            '--apply', action='store_true',
+            help='Сохранить рассчитанные маски; без флага работает предпросмотр.')
+
+    def handle(self, *args, **options):
+        try:
+            batch = TextbookImportBatch.objects.get(pk=options['batch_id'])
+        except TextbookImportBatch.DoesNotExist as exc:
+            raise CommandError('Партия импорта не найдена.') from exc
+
+        drafts = list(batch.drafts.order_by('pk'))
+        changed = []
+        targets = generated = unsupported = masks = 0
+        for draft in drafts:
+            before_parent = draft.answer_mask
+            before_subitems = copy.deepcopy(draft.subitems)
+            if draft.subitems:
+                targets += sum(bool(str(item.get('author_answer_latex') or '').strip())
+                               for item in draft.subitems)
+            else:
+                targets += bool(draft.author_answer_latex.strip())
+
+            fill_draft_answer_masks(draft)
+            current = ([str(item.get('answer_mask') or '').strip()
+                        for item in draft.subitems]
+                       if draft.subitems else [draft.answer_mask.strip()])
+            masks += sum(bool(value) for value in current)
+            if (draft.answer_mask != before_parent
+                    or draft.subitems != before_subitems):
+                changed.append(draft)
+                if not before_parent and draft.answer_mask:
+                    generated += 1
+                generated += sum(
+                    not str(old.get('answer_mask') or '').strip()
+                    and bool(str(new.get('answer_mask') or '').strip())
+                    for old, new in zip(before_subitems, draft.subitems))
+
+            if draft.subitems:
+                unsupported += sum(
+                    bool(str(item.get('author_answer_latex') or '').strip())
+                    and not bool(str(item.get('answer_mask') or '').strip())
+                    for item in draft.subitems)
+            else:
+                unsupported += bool(draft.author_answer_latex.strip()) \
+                    and not bool(draft.answer_mask.strip())
+
+        if options['apply'] and changed:
+            with transaction.atomic():
+                type(drafts[0]).objects.bulk_update(
+                    changed, ['answer_mask', 'subitems'], batch_size=500)
+
+        mode = 'сохранено' if options['apply'] else 'предпросмотр'
+        self.stdout.write(self.style.SUCCESS(
+            f'{mode}: партия {batch.pk}; целей с авторским ответом {targets}; '
+            f'масок {masks}; новых {generated}; '
+            f'без безопасной маски {unsupported}; '
+            f'изменённых задач {len(changed)}.'))

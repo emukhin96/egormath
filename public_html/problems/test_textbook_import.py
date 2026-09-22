@@ -3,12 +3,14 @@ import json
 import zipfile
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from problems.models import (Source, Task, TaskImage, TaskSource, TaskTopic,
+from problems.models import (Source, Task, TaskImage, TaskSource, TaskSubitem,
+                             TaskTopic,
                              TextbookImportBatch, TextbookTaskDraft, Topic)
 from problems.tests import make_teacher
 from problems.textbook_import import (TextbookImportError, attach_image_archive,
@@ -60,6 +62,63 @@ class TextbookImportTests(TestCase):
         return create_batch_from_bundle(
             payload or bundle(), user=self.teacher, title='Пробная партия',
             source_title='Тестовый задачник', source_author='Автор')
+
+    def test_mask_is_generated_and_transferred_to_task(self):
+        batch = self.create_batch(bundle(
+            text_latex='Найдите длину отрезка.',
+            author_answer_latex='$42$ см'))
+        draft = batch.drafts.get()
+        self.assertEqual(draft.answer_mask, '{{number: 42}} см')
+        draft.topic = Topic.objects.create(name='Тема с маской')
+        draft.status = TextbookTaskDraft.STATUS_APPROVED
+        draft.save(update_fields=['topic', 'status'])
+
+        commit_batch(batch, user=self.teacher)
+
+        draft.refresh_from_db()
+        self.assertEqual(draft.imported_task.answer_mask, '{{number: 42}} см')
+
+    def test_subitem_masks_are_generated_and_transferred(self):
+        batch = self.create_batch(bundle(
+            text_latex='Ответьте на вопросы.',
+            author_answer_latex='',
+            subitems=[
+                {'label': 'а', 'text_latex': 'Найдите число.',
+                 'author_answer_latex': '$3$'},
+                {'label': 'б', 'text_latex': 'Докажите утверждение.',
+                 'author_answer_latex': ''},
+            ]))
+        draft = batch.drafts.get()
+        self.assertEqual(draft.answer_mask, '')
+        self.assertEqual(draft.subitems[0]['answer_mask'], '{{number: 3}}')
+        self.assertEqual(draft.subitems[1]['answer_mask'], '')
+        draft.topic = Topic.objects.create(name='Тема подпунктов с маской')
+        draft.status = TextbookTaskDraft.STATUS_APPROVED
+        draft.save(update_fields=['topic', 'status'])
+
+        commit_batch(batch, user=self.teacher)
+
+        masks = list(TaskSubitem.objects.order_by('order').values_list(
+            'answer_mask', flat=True))
+        self.assertEqual(masks, ['{{number: 3}}', ''])
+
+    def test_invalid_import_mask_is_rejected(self):
+        with self.assertRaisesMessage(TextbookImportError,
+                                      'Некорректная маска answer_mask'):
+            self.create_batch(bundle(answer_mask='{{number: не число}}'))
+
+    def test_backfill_masks_has_dry_run_and_apply_modes(self):
+        batch = self.create_batch(bundle(
+            text_latex='Найдите число.', author_answer_latex='$7$'))
+        batch.drafts.update(answer_mask='')
+
+        call_command('backfill_textbook_masks', batch.pk, stdout=io.StringIO())
+        self.assertEqual(batch.drafts.get().answer_mask, '')
+
+        call_command(
+            'backfill_textbook_masks', batch.pk, apply=True,
+            stdout=io.StringIO())
+        self.assertEqual(batch.drafts.get().answer_mask, '{{number: 7}}')
 
     def test_ziv_summary_uses_one_query_for_all_drafts(self):
         batch = self.create_batch(bundle(external_id='sr/09/v1/1'))
