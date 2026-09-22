@@ -1784,5 +1784,23 @@
   setInterval(pollAll, POLL);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) pollAll(); });
 
-  window.EgorCanvas = {Widget: Widget, init: initAll};
+  /* Чистый рендер страницы в любой canvas (миниатюры дашборда «Доски»):
+     без панели, обработчиков и undo. size — сторона в CSS-пикселях. */
+  function renderPage(canvas, raw, size) {
+    var page = {
+      background: raw.background || 'grid', bgOptions: raw.background_options || {},
+      layers: {student: {elements: raw.student ? raw.student.elements : []},
+               teacher: {elements: raw.teacher ? raw.teacher.elements : []}},
+    };
+    var dpr = Math.min(window.devicePixelRatio || 1, 2), scale = size / W;
+    canvas.width = Math.round(size * dpr); canvas.height = Math.round(size * dpr);
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, offsetOf(page) * dpr * scale);
+    drawBackground(ctx, page);
+    ['student', 'teacher'].forEach(function (name) {
+      page.layers[name].elements.forEach(function (element) { drawElement(ctx, element, page); });
+    });
+  }
+
+  window.EgorCanvas = {Widget: Widget, init: initAll, render: renderPage};
 })();

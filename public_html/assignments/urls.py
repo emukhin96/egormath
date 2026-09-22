@@ -1,10 +1,14 @@
 from django.urls import path
 
+from canvas import boards
+
 from . import views, progress
 
 urlpatterns = [
     path('progress/', progress.progress_overview, name='progress_overview'),
     path('progress/<int:worksheet_id>/', progress.worksheet_progress, name='worksheet_progress'),
+    path('progress/<int:worksheet_id>/boards/', boards.worksheet_boards, name='worksheet_boards'),
+    path('progress/<int:worksheet_id>/boards/live/', boards.worksheet_boards_live, name='worksheet_boards_live'),
     path('<int:pk>/live/', progress.assignment_live, name='assignment_live'),
     path('<int:pk>/attempts/<int:task_id>/', progress.task_attempts, name='task_attempts'),
     path('<int:pk>/grade/<int:task_id>/', progress.grade_task, name='grade_task'),
