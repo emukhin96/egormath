@@ -17,7 +17,7 @@ from accounts.decorators import teacher_required
 from assignments.models import Assignment, Submission, SubmissionPart
 from independentworks.models import Attempt, Answer, Run, Work
 from .models import ActivityEvent, AnswerRevision
-from .services import visibility_summary, lock_work
+from .services import activity_timeline, lock_work
 
 
 def work_for(user, kind, pk, teacher=False):
@@ -89,11 +89,23 @@ def events(request, kind, pk):
 @teacher_required
 def activity(request, kind, pk):
     work = work_for(request.user, kind, pk, teacher=True)
-    events = ActivityEvent.objects.filter(**{kind: work}, received_at__gte=timezone.now()-timedelta(days=90)).order_by('-received_at', '-pk')
-    summary = visibility_summary(events.filter(kind__in=['hidden', 'visible']).only('page_id', 'kind', 'sequence', 'elapsed_ms'))
+    events = ActivityEvent.objects.filter(**{kind: work}, received_at__gte=timezone.now()-timedelta(days=90))
+    if request.GET.get('raw'):
+        # Сырой список — для спорных случаев: каждое событие отдельной строкой
+        return render(request, 'workaudit/activity_raw.html', {
+            'page': Paginator(events.order_by('-received_at', '-pk'), 50).get_page(request.GET.get('page'))})
+    rows, summary = activity_timeline(events)
+    show = request.GET.get('show', '')
+    if show == 'away':
+        rows = [r for r in rows if r['kind'] == 'away']
+    elif show == 'clipboard':
+        rows = [r for r in rows if r['kind'] in ('copy', 'paste', 'drop')]
+    if request.GET.get('short') != '1':
+        rows = [r for r in rows if not r['short']]
     return render(request, 'workaudit/activity.html', {
-        'page': Paginator(events, 50).get_page(request.GET.get('page')),
-        'summary': summary})
+        'page': Paginator(rows, 50).get_page(request.GET.get('page')),
+        'summary': summary, 'show': show, 'short': request.GET.get('short') == '1',
+        'query': {'show': show, 'short': request.GET.get('short', '')}})
 
 
 @never_cache

@@ -18,7 +18,7 @@ from problems.tests import make_teacher, make_student
 from worksheets.tests import make_worksheet
 from worksheets.models import WorksheetItem
 from .models import ActivityEvent, AnswerRevision
-from .services import answer_snapshot, record_revision, visibility_summary
+from .services import activity_timeline, answer_snapshot, format_span, record_revision, visibility_summary
 
 
 @override_settings(INDEPENDENT_WORKS_ENABLED=True)
@@ -154,6 +154,54 @@ class AuditTests(TestCase):
                                       e(two, 0, 'hidden', 500), e(one, 2, 'hidden', 11000)])
         first = next(row for row in summary if row['page'] == str(one)[:8])
         self.assertEqual(first, {'page': str(one)[:8], 'seconds': 10, 'count': 2, 'unknown': 1})
+
+    def test_timeline_intervals_tabs_and_short(self):
+        one, two = uuid.uuid4(), uuid.uuid4()
+        t0 = timezone.now()
+        def e(page, seq, kind, ms, at, blocked=False):
+            # Всё получено одной пачкой через минуту — лента должна идти по client_at
+            return ActivityEvent(page_id=page, sequence=seq, kind=kind, elapsed_ms=ms, blocked=blocked,
+                                 client_at=t0 + timedelta(seconds=at), received_at=t0 + timedelta(seconds=300))
+        rows, summary = activity_timeline([
+            e(one, 0, 'hidden', 100, 10), e(one, 1, 'visible', 100100, 110),      # уход на 100 с
+            e(one, 2, 'copy', 120000, 130, blocked=True),
+            e(one, 3, 'hidden', 130000, 140), e(one, 4, 'visible', 132000, 142),   # короткий, 2 с
+            e(two, 0, 'hidden', 500, 200),                                         # вторая вкладка, не вернулся
+            e(one, 5, 'hidden', 140000, 150), e(one, 6, 'hidden', 141000, 151),    # разорванная пара
+        ], started_at=t0)
+        self.assertEqual(summary['away'], 5)   # 100 с, 2 с, разорванная пара (2 строки), вторая вкладка
+        self.assertEqual(summary['away_seconds'], 102)
+        self.assertEqual(summary['away_max'], 100)
+        self.assertEqual(summary['unknown'], 3)
+        self.assertEqual((summary['copy'], summary['blocked'], summary['tabs'], summary['short']), (1, 1, 2, 1))
+        self.assertEqual([r['at'] for r in rows], sorted((r['at'] for r in rows), reverse=True))
+        first = next(r for r in rows if r['seconds'] == 100)
+        self.assertEqual((first['tab'], first['offset'], first['short']), (1, 10, False))
+        self.assertEqual(first['received'], t0 + timedelta(seconds=300))
+        self.assertEqual([r['offset'] for r in rows], [200, 151, 150, 140, 130, 10])   # по client_at, не по пачке
+        self.assertTrue(next(r for r in rows if r['tab'] == 2)['open_ended'])
+        self.assertEqual(next(r for r in rows if r['kind'] == 'copy')['blocked'], True)
+        self.assertEqual((format_span(40), format_span(252), format_span(3900)), ('40 с', '4 мин 12 с', '1 ч 05 мин'))
+
+    def test_activity_panel_filters_and_raw(self):
+        page = str(uuid.uuid4())
+        def ev(**fields):
+            row = self.event(); row.update(page=page, **fields); return row
+        self.post_events([ev(seq=0, kind='hidden', elapsed=100), ev(seq=1, kind='visible', elapsed=30100),
+                          ev(seq=2, kind='paste', elapsed=40000)])
+        self.client.force_login(self.teacher)
+        url = reverse('workaudit:activity', args=['assignment', self.assignment.pk])
+        response = self.client.get(url)
+        self.assertContains(response, 'Уходил со страницы 1 раз, всего 30 с')
+        self.assertContains(response, 'ушёл со страницы на 30 с')
+        self.assertContains(response, 'вставка ответа')
+        self.assertNotContains(response, 'вкладка 1')
+        away = self.client.get(url, {'show': 'away'})
+        self.assertContains(away, 'ушёл со страницы на 30 с')
+        self.assertNotContains(away, 'вставка ответа')
+        raw = self.client.get(url, {'raw': '1'})
+        self.assertContains(raw, 'Возврат на страницу')
+        self.assertContains(raw, 'К ленте')
 
     def test_cleanup_and_page_size(self):
         obj = Submission.objects.create(assignment=self.assignment, task=self.task)

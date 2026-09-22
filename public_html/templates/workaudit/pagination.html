@@ -1,5 +1,5 @@
 {% if page.has_previous or page.has_next %}<div class="form-buttons">
-{% if page.has_previous %}<a class="btn btn-small btn-secondary" data-audit-page href="?page={{ page.previous_page_number }}">Новее</a>{% endif %}
+{% if page.has_previous %}<a class="btn btn-small btn-secondary" data-audit-page href="?page={{ page.previous_page_number }}{% if raw %}&raw=1{% elif query %}&show={{ query.show }}&short={{ query.short }}{% endif %}">Новее</a>{% endif %}
 <span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>
-{% if page.has_next %}<a class="btn btn-small btn-secondary" data-audit-page href="?page={{ page.next_page_number }}">Старее</a>{% endif %}
+{% if page.has_next %}<a class="btn btn-small btn-secondary" data-audit-page href="?page={{ page.next_page_number }}{% if raw %}&raw=1{% elif query %}&show={{ query.show }}&short={{ query.short }}{% endif %}">Старее</a>{% endif %}
 </div>{% endif %}
