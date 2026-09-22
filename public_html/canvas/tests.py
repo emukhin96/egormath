@@ -419,12 +419,31 @@ class BoardsTests(CanvasBase):
         data = self.live().json()
         self.assertEqual([s['assignment'] for s in data['states']], [self.assignment.pk])
         self.assertEqual(data['states'][0]['status'], Assignment.STATUS_ASSIGNED)
-        # первая загрузка — одна последняя страница на ученика
+        # первая загрузка — одна последняя страница на ученика…
         self.assertEqual(len(data['pages']), 1)
         self.assertEqual(data['pages'][0]['number'], 2)
         self.assertEqual(data['pages'][0]['task_no'], 1)
+        # …и лёгкий список всех задач со страницами, включая старые
+        self.assertEqual(data['tasks'], [{'assignment': self.assignment.pk, 'task': self.task.pk, 'task_no': 1, 'count': 2,
+                                          'canvas_url': self.url('pages')}])
         self.assertEqual(data['pages'][0]['student']['elements'][0]['id'], 'b1')
         self.assertEqual(data['overflow'], 0)
+
+    def test_first_load_lists_every_task_with_pages(self):
+        other = Task.objects.create(text_latex='Вторая')
+        WorksheetItem.objects.create(worksheet=self.worksheet, task=other, order=2)
+        self.client.force_login(self.student)
+        self.save()   # задача 1, раньше
+        self.client.post(reverse('canvas:save', args=[self.assignment.pk, other.pk, 1]),
+                         data=json.dumps({'layer': 'student', 'elements': [stroke()], 'background': 'grid', 'version': 0}),
+                         content_type='application/json')
+        self.client.force_login(self.teacher)
+        data = self.live().json()
+        self.assertEqual(len(data['pages']), 1)
+        self.assertEqual(data['pages'][0]['task'], other.pk)
+        self.assertEqual(sorted(t['task_no'] for t in data['tasks']), [1, 2])
+        # при опросе с since список задач не нужен
+        self.assertEqual(self.live(since=data['since']).json()['tasks'], [])
 
     def test_since_and_not_modified(self):
         self.client.force_login(self.student)

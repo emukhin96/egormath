@@ -576,7 +576,8 @@
 
   Widget.prototype.applyTeacherToggle = function () {
     var count = parseInt(this.root.dataset.pages || '0', 10) || 0;
-    if (Widget.showEnabled()) {
+    /* data-always — виджет в диалоге дашборда: там нет тумблера, доска нужна всегда */
+    if (this.root.dataset.always || Widget.showEnabled()) {
       if (count || this.loaded) this.show(); else this.renderLauncher();
       return;
     }
@@ -1964,7 +1965,7 @@
       toggle.checked = Widget.showEnabled();
       toggle.addEventListener('change', function () {
         try { localStorage.setItem(SHOW_KEY, toggle.checked ? '1' : '0'); } catch (e) {}
-        Widget.all.forEach(function (w) { if (w.role !== 'student') w.applyTeacherToggle(); });
+        Widget.all.forEach(function (w) { if (w.role !== 'student' && !w.root.dataset.always) w.applyTeacherToggle(); });
       });
     }
     initAll();
