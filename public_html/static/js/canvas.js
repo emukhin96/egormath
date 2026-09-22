@@ -76,6 +76,7 @@
     hl: '<path d="m5 14 5 5 10-10-5-5Z M5 14l-2 5 2 2 5-2 M3 22h11"/>',
     eraser: '<path d="m3 14 10-10a2 2 0 0 1 3 0l5 5a2 2 0 0 1 0 3l-9 9H8Z M8 9l8 8 M12 21h10"/>',
     select: '<path d="m5 3 14 10-7 1-3 7Z"/>',
+    image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
     undo: '<path d="M9 4 3 10l6 6 M3 10h11a7 7 0 0 1 0 14" transform="translate(0 -2)"/>',
     redo: '<path d="m15 4 6 6-6 6 M21 10H10a7 7 0 0 0 0 14" transform="translate(0 -2)"/>',
     trash: '<path d="M3 6h18 M9 6V3h6v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7"/>',
@@ -168,6 +169,102 @@
     return null;
   }
 
+  /* ---------- рисунок задачи (t: 'img') ----------
+     p = [левый верхний, правый верхний, левый нижний] угол; четвёртый угол
+     выводится. Три точки задают аффинное преобразование: перенос, масштаб
+     по двум осям, поворот и наклон — рисуется одним ctx.transform + drawImage. */
+  var imageCache = {}, imageWaiters = [];
+  function imageOf(url) {
+    var entry = imageCache[url];
+    if (entry) return entry;
+    entry = imageCache[url] = {img: new Image(), ready: false, failed: false};
+    entry.img.onload = function () {
+      entry.ready = true;
+      var waiters = imageWaiters; imageWaiters = [];
+      waiters.forEach(function (fn) { fn(); });
+    };
+    entry.img.onerror = function () { entry.failed = true; };
+    entry.img.src = url;
+    return entry;
+  }
+  /* Кто ждёт загрузку картинок, чтобы перерисоваться (виджеты, миниатюры) */
+  function whenImagesLoad(fn) { if (imageWaiters.indexOf(fn) < 0) imageWaiters.push(fn); }
+
+  function imgCorners(element) {
+    var p = element.p;
+    return [p[0], p[1], [p[1][0] + p[2][0] - p[0][0], p[1][1] + p[2][1] - p[0][1]], p[2]];
+  }
+  function imgCenter(element) {
+    var c = imgCorners(element);
+    return [(c[0][0] + c[2][0]) / 2, (c[0][1] + c[2][1]) / 2];
+  }
+  function insideParallelogram(element, pt) {
+    var p = element.p, u = [p[1][0] - p[0][0], p[1][1] - p[0][1]], v = [p[2][0] - p[0][0], p[2][1] - p[0][1]];
+    var det = u[0] * v[1] - u[1] * v[0];
+    if (Math.abs(det) < 1e-6) return false;
+    var dx = pt[0] - p[0][0], dy = pt[1] - p[0][1];
+    var a = (dx * v[1] - dy * v[0]) / det, b = (u[0] * dy - u[1] * dx) / det;
+    return a >= 0 && a <= 1 && b >= 0 && b <= 1;
+  }
+  /* Ручки: углы (масштаб), середины сторон (наклон), кружок над верхом (поворот) */
+  var IMG_ROTATE_GAP = 40;
+  function imgHandles(element) {
+    var c = imgCorners(element), mid = function (a, b) { return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; };
+    var top = mid(c[0], c[1]), center = imgCenter(element);
+    var len = dist(top, center) || 1, n = [(top[0] - center[0]) / len, (top[1] - center[1]) / len];
+    return [
+      {kind: 'corner', index: 0, at: c[0]}, {kind: 'corner', index: 1, at: c[1]},
+      {kind: 'corner', index: 2, at: c[2]}, {kind: 'corner', index: 3, at: c[3]},
+      {kind: 'side', index: 0, at: top}, {kind: 'side', index: 1, at: mid(c[1], c[2])},
+      {kind: 'side', index: 2, at: mid(c[2], c[3])}, {kind: 'side', index: 3, at: mid(c[3], c[0])},
+      {kind: 'rotate', index: 0, at: [top[0] + n[0] * IMG_ROTATE_GAP, top[1] + n[1] * IMG_ROTATE_GAP]},
+    ];
+  }
+  function imgFromCorners(element, tl, tr, bl) {
+    return Object.assign({}, element, {p: [roundPoint(tl), roundPoint(tr), roundPoint(bl)]});
+  }
+  /* Новое положение рисунка после перетаскивания ручки: element — исходный,
+     start — где ручку взяли, pt — где курсор, shift — модификатор */
+  function imgTransform(element, handle, start, pt, shift) {
+    var p = element.p, tl = p[0], tr = p[1], bl = p[2];
+    var u = [tr[0] - tl[0], tr[1] - tl[1]], v = [bl[0] - tl[0], bl[1] - tl[1]];
+    if (handle.kind === 'corner') {
+      var a = handle.index === 1 || handle.index === 2 ? 1 : 0, b = handle.index >= 2 ? 1 : 0;
+      var anchor = [tl[0] + (1 - a) * u[0] + (1 - b) * v[0], tl[1] + (1 - a) * u[1] + (1 - b) * v[1]];
+      var su = 2 * a - 1, sv = 2 * b - 1, d = [pt[0] - anchor[0], pt[1] - anchor[1]];
+      var det = u[0] * v[1] - u[1] * v[0];
+      if (Math.abs(det) < 1e-6) return element;
+      var ku = (d[0] * v[1] - d[1] * v[0]) / det * su, kv = (u[0] * d[1] - u[1] * d[0]) / det * sv;
+      if (shift) { var k = (ku + kv) / 2; ku = kv = k; }
+      ku = Math.max(ku, 0.05); kv = Math.max(kv, 0.05);
+      var nu = [u[0] * ku, u[1] * ku], nv = [v[0] * kv, v[1] * kv];
+      var ntl = [anchor[0] - (1 - a) * nu[0] - (1 - b) * nv[0], anchor[1] - (1 - a) * nu[1] - (1 - b) * nv[1]];
+      return imgFromCorners(element, ntl, [ntl[0] + nu[0], ntl[1] + nu[1]], [ntl[0] + nv[0], ntl[1] + nv[1]]);
+    }
+    if (handle.kind === 'rotate') {
+      var c = imgCenter(element);
+      var angle = Math.atan2(pt[1] - c[1], pt[0] - c[0]) - Math.atan2(start[1] - c[1], start[0] - c[0]);
+      if (shift) {
+        var current = Math.atan2(u[1], u[0]), step = Math.PI / 12;
+        angle = Math.round((current + angle) / step) * step - current;
+      }
+      var cos = Math.cos(angle), sin = Math.sin(angle);
+      var rot = function (q) { var x = q[0] - c[0], y = q[1] - c[1]; return [c[0] + x * cos - y * sin, c[1] + x * sin + y * cos]; };
+      return imgFromCorners(element, rot(tl), rot(tr), rot(bl));
+    }
+    /* side: верх/низ сдвигаются вдоль u, лево/право — вдоль v */
+    var axis = handle.index % 2 === 0 ? u : v, len = Math.hypot(axis[0], axis[1]) || 1;
+    var hat = [axis[0] / len, axis[1] / len];
+    var t = (pt[0] - start[0]) * hat[0] + (pt[1] - start[1]) * hat[1];
+    var sh = [hat[0] * t, hat[1] * t];
+    switch (handle.index) {
+      case 0: return imgFromCorners(element, [tl[0] + sh[0], tl[1] + sh[1]], [tr[0] + sh[0], tr[1] + sh[1]], bl);
+      case 2: return imgFromCorners(element, tl, tr, [bl[0] + sh[0], bl[1] + sh[1]]);
+      case 1: return imgFromCorners(element, tl, [tr[0] + sh[0], tr[1] + sh[1]], bl);
+      default: return imgFromCorners(element, [tl[0] + sh[0], tl[1] + sh[1]], tr, [bl[0] + sh[0], bl[1] + sh[1]]);
+    }
+  }
+
   /* Ломаные для попадания курсора: у замкнутых фигур — контур с возвратом */
   function outlines(element) {
     var p = element.p;
@@ -183,6 +280,7 @@
         return [pts];
       }
       case 'fn': return fnPolylines(element);
+      case 'img': { var ic = imgCorners(element); return [ic.concat([ic[0]])]; }
       default: {
         var poly = polygonOf(element);
         return poly ? [poly.concat([poly[0]])] : [p];
@@ -203,6 +301,7 @@
   }
 
   function hits(element, pt, tol) {
+    if (element.t === 'img' && insideParallelogram(element, pt)) return true;
     var box = bbox(element);
     if (pt[0] < box[0] - tol || pt[0] > box[2] + tol || pt[1] < box[1] - tol || pt[1] > box[3] + tol) return false;
     var limit = tol + element.w / 2;
@@ -376,6 +475,22 @@
       case 'circle':
         ctx.beginPath(); ctx.arc(p[0][0], p[0][1], dist(p[0], p[1]), 0, Math.PI * 2); ctx.stroke();
         break;
+      case 'img': {
+        var entry = element.u ? imageOf(element.u) : null;
+        var ic = imgCorners(element);
+        if (entry && entry.ready) {
+          var iw = entry.img.naturalWidth || 1, ih = entry.img.naturalHeight || 1;
+          ctx.transform((p[1][0] - p[0][0]) / iw, (p[1][1] - p[0][1]) / iw, (p[2][0] - p[0][0]) / ih, (p[2][1] - p[0][1]) / ih, p[0][0], p[0][1]);
+          ctx.drawImage(entry.img, 0, 0, iw, ih);
+        } else {
+          /* Пока картинка грузится (или не загрузилась) — серый параллелограмм */
+          ctx.fillStyle = entry && entry.failed ? '#fecaca' : '#e5e7eb';
+          ctx.beginPath(); ctx.moveTo(ic[0][0], ic[0][1]);
+          for (var q = 1; q < 4; q++) ctx.lineTo(ic[q][0], ic[q][1]);
+          ctx.closePath(); ctx.fill();
+        }
+        break;
+      }
       case 'fn':
         ctx.beginPath();
         fnPolylines(element).forEach(function (line) {
@@ -593,6 +708,7 @@
     this.limits = data.limits || {student: 5, teacher: 2, total: 10, elements: 2000};
     this.showTeacherLayer = !!data.show_teacher_layer;
     this.canAddPages = data.can_add_pages !== false;
+    this.images = data.images || [];
     this.pages = data.pages.map(function (raw) { return self.makePage(raw); });
     while (this.canAddPage()) {
       var page = this.makePage({number: this.pages.length + 1, created_by_role: this.layer});
@@ -895,6 +1011,10 @@
       if (window.katex) window.katex.render({parabola: 'x^2', abs: '|x|', sqrt: '\\sqrt{x}', hyperbola: '1/x'}[kind], graph, {throwOnError: false});
       graphs.appendChild(graph);
     });
+    var pictures = group(row1, 'canvas-pictures');
+    this.imageButton = button('btn btn-small btn-secondary canvas-tool', 'Рисунок', 'Вставить рисунок из условия задачи', function () { self.pickImage(self.imageButton); });
+    if (ICONS.image) addIcon(this.imageButton, 'image');
+    pictures.appendChild(this.imageButton);
 
     var history = group(row1);
     this.undoButton = iconButton('undo', 'Отменить (Ctrl+Z, на Mac ⌘Z)', function () { self.undo(); });
@@ -980,6 +1100,13 @@
       b.setAttribute('aria-label', b.title);
       b.setAttribute('aria-pressed', String(w === palette.width));
     });
+    if (this.imageButton) {
+      var n = (this.images || []).length;
+      this.imageButton.disabled = !n;
+      this.imageButton.title = n ? 'Вставить рисунок из условия задачи' + (n > 1 ? ' (' + n + ')' : '')
+        : 'У этой задачи нет рисунков, которые можно положить на доску';
+      this.imageButton.setAttribute('aria-label', this.imageButton.title);
+    }
     var hasSelection = this.tool === 'select' && this.selection.length > 0;
     this.selectionButtons.forEach(function (b, i) {
       b.disabled = !hasSelection || (i === 1 && self.selection.length < 2);
@@ -1043,6 +1170,8 @@
   };
 
   Widget.prototype.redraw = function () {
+    var self = this;
+    whenImagesLoad(function () { if (document.body.contains(self.root)) self.redraw(); });
     var self = this;
     if (this.raf) return;
     this.raf = requestAnimationFrame(function () {
@@ -1110,6 +1239,23 @@
         ctx.strokeRect(b[0] - 3, b[1] - 3, b[2] - b[0] + 6, b[3] - b[1] + 6);
       });
       ctx.setLineDash([]);
+      if (selected.length === 1 && selected[0].t === 'img') {
+        var img = drag && drag.kind === 'handle' && drag.preview ? drag.preview : selected[0];
+        var hc = imgCorners(img), hs = imgHandles(img), r = 7 / this.scale * Math.min(this.scale, 1) + 3;
+        ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.5; ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(hc[0][0], hc[0][1]);
+        for (var hq = 1; hq < 4; hq++) ctx.lineTo(hc[hq][0], hc[hq][1]);
+        ctx.closePath(); ctx.stroke();
+        var topMid = hs[4].at, rotAt = hs[8].at;
+        ctx.beginPath(); ctx.moveTo(topMid[0], topMid[1]); ctx.lineTo(rotAt[0], rotAt[1]); ctx.stroke();
+        hs.forEach(function (h) {
+          ctx.fillStyle = h.kind === 'rotate' ? ACCENT : '#fff'; ctx.strokeStyle = ACCENT; ctx.lineWidth = 2;
+          ctx.beginPath();
+          if (h.kind === 'side') ctx.rect(h.at[0] - r * 0.8, h.at[1] - r * 0.8, r * 1.6, r * 1.6);
+          else ctx.arc(h.at[0], h.at[1], r, 0, Math.PI * 2);
+          ctx.fill(); ctx.stroke();
+        });
+      }
       if (selected.length === 1 && selected[0].t === 'fn') {
         var fn = drag && drag.kind === 'handle' && drag.preview ? drag.preview : selected[0];
         ctx.fillStyle = '#fff'; ctx.strokeStyle = ACCENT; ctx.lineWidth = 2;
@@ -1251,6 +1397,51 @@
     this.redraw();
   };
 
+  /* Иллюстрация задачи на доску: ширина 400 логических px, в центре видимой
+     страницы; сразу выделена, дальше — ручки */
+  Widget.prototype.insertImage = function (image) {
+    var self = this, page = this.page();
+    if (!page || !this.editableLayer(page)) return;
+    var entry = imageOf(image.url);
+    var place = function () {
+      var iw = entry.img.naturalWidth || 4, ih = entry.img.naturalHeight || 3;
+      var w = Math.min(400, iw), h = Math.round(w * ih / iw);
+      var cx = W / 2, cy = H / 2 - offsetOf(page);
+      var tl = [Math.round(cx - w / 2), Math.round(cy - h / 2)];
+      var element = {id: uid(), t: 'img', s: image.id, u: image.url, c: '#000000', w: 1,
+        p: [tl, [tl[0] + w, tl[1]], [tl[0], tl[1] + h]]};
+      self.addElement(element);
+      self.tool = 'select';
+      self.selection = [element.id];
+      self.syncToolbar();
+      self.drawTop();
+    };
+    if (entry.ready) place();
+    else if (entry.failed) toast(false, 'Не удалось загрузить рисунок');
+    else whenImagesLoad(place);
+  };
+
+  Widget.prototype.pickImage = function (anchor) {
+    var self = this, images = this.images || [];
+    if (!images.length) return;
+    if (images.length === 1) { this.insertImage(images[0]); return; }
+    var old = this.root.querySelector('.canvas-menu');
+    if (old) { old.remove(); return; }
+    var menu = el('div', 'canvas-menu');
+    images.forEach(function (image, i) {
+      var b = button('canvas-menu-item', '', 'Вставить рисунок ' + (i + 1), function () { menu.remove(); self.insertImage(image); });
+      var thumb = el('img'); thumb.src = image.url; thumb.alt = 'рисунок ' + (i + 1); thumb.loading = 'lazy';
+      b.appendChild(thumb);
+      menu.appendChild(b);
+    });
+    anchor.parentNode.appendChild(menu);
+    setTimeout(function () {
+      document.addEventListener('pointerdown', function close(ev) {
+        if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('pointerdown', close); }
+      });
+    }, 0);
+  };
+
   Widget.prototype.insertFn = function (kind) {
     var page = this.page();
     if (!page || !this.editableLayer(page)) return;
@@ -1332,6 +1523,15 @@
     var page = this.page(), elements = this.ownElements(page);
     var additive = e.shiftKey || e.ctrlKey || e.metaKey;
     var selected = this.selectedElements();
+    if (!additive && selected.length === 1 && selected[0].t === 'img') {
+      var img = selected[0], grab = 11 / this.scale, handlesOfImg = imgHandles(img);
+      for (var h = handlesOfImg.length - 1; h >= 0; h--) {
+        if (dist(handlesOfImg[h].at, pt) <= grab) {
+          this.drag = {kind: 'handle', pointerId: e.pointerId, element: img, handle: handlesOfImg[h], start: pt, preview: null};
+          return;
+        }
+      }
+    }
     if (!additive && selected.length === 1 && selected[0].t === 'fn') {
       var fn = selected[0];
       for (var i = 1; i >= 0; i--) {
@@ -1393,6 +1593,11 @@
         this.drawTop();
         return;
       case 'handle': {
+        if (drag.handle) {
+          drag.preview = imgTransform(drag.element, drag.handle, drag.start, pt, e.shiftKey);
+          this.redraw();
+          return;
+        }
         var target = roundPoint(this.snapped(pt)), fn = drag.element, points;
         if (drag.index === 0) {
           var dx = target[0] - fn.p[0][0], dy = target[1] - fn.p[0][1];
@@ -1798,10 +2003,16 @@
     var ctx = canvas.getContext('2d');
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, offsetOf(page) * dpr * scale);
     drawBackground(ctx, page);
+    var pending = false;
     ['student', 'teacher'].forEach(function (name) {
-      page.layers[name].elements.forEach(function (element) { drawElement(ctx, element, page); });
+      page.layers[name].elements.forEach(function (element) {
+        if (element.t === 'img' && element.u && !imageOf(element.u).ready) pending = true;
+        drawElement(ctx, element, page);
+      });
     });
+    if (pending) whenImagesLoad(function () { if (document.body.contains(canvas)) renderPage(canvas, raw, size); });
   }
 
-  window.EgorCanvas = {Widget: Widget, init: initAll, render: renderPage};
+  window.EgorCanvas = {Widget: Widget, init: initAll, render: renderPage,
+    image: {corners: imgCorners, handles: imgHandles, transform: imgTransform, inside: insideParallelogram}};
 })();
