@@ -343,3 +343,79 @@ class SubmitAndTeacherTests(CanvasBase):
         self.assertContains(response, 'toggle-canvas')
         response = self.client.get(reverse('assignment_live', args=[self.assignment.pk]))
         self.assertContains(response, 'data-role=\\"viewer\\"')
+
+
+class BoardsTests(CanvasBase):
+    """Дашборд «Доски»: выборка, лимит, опрос изменений."""
+
+    def live(self, etag=None, **params):
+        extra = {'HTTP_IF_NONE_MATCH': etag} if etag else {}
+        return self.client.get(reverse('worksheet_boards_live', args=[self.worksheet.pk]), params, **extra)
+
+    def test_page_and_first_load(self):
+        self.client.force_login(self.student)
+        self.save()
+        self.save(number=2, elements=[stroke('b1')])
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk]))
+        self.assertContains(response, 'data-board="%d"' % self.assignment.pk)
+        self.assertContains(response, 'boards.js')
+        data = self.live().json()
+        self.assertEqual([s['assignment'] for s in data['states']], [self.assignment.pk])
+        self.assertEqual(data['states'][0]['status'], Assignment.STATUS_ASSIGNED)
+        # первая загрузка — одна последняя страница на ученика
+        self.assertEqual(len(data['pages']), 1)
+        self.assertEqual(data['pages'][0]['number'], 2)
+        self.assertEqual(data['pages'][0]['task_no'], 1)
+        self.assertEqual(data['pages'][0]['student']['elements'][0]['id'], 'b1')
+        self.assertEqual(data['overflow'], 0)
+
+    def test_since_and_not_modified(self):
+        self.client.force_login(self.student)
+        self.save()
+        self.client.force_login(self.teacher)
+        first = self.live()
+        since, etag = first.json()['since'], first['ETag']
+        self.assertEqual(self.live(etag=etag, since=since).status_code, 304)
+        self.assertEqual(self.live(since=since).json()['pages'], [])
+        # ученик дописал — страница приходит, подпись меняется
+        self.client.force_login(self.student)
+        self.save(elements=[stroke(), stroke('a2')], version=1)
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse('worksheet_boards_live', args=[self.worksheet.pk]),
+                                   {'since': since}, HTTP_IF_NONE_MATCH=etag)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()['pages']), 1)
+        self.assertEqual(len(response.json()['pages'][0]['student']['elements']), 2)
+        # пометка учителя тоже считается изменением
+        since = response.json()['since']
+        self.assertEqual(self.save(layer='teacher').status_code, 200)
+        self.assertEqual(len(self.live(since=since).json()['pages']), 1)
+
+    def test_limit_and_overflow(self):
+        for i in range(17):
+            student = make_student(self.teacher, username=f'st{i}')
+            Assignment.objects.create(worksheet=self.worksheet, student=student, assigned_by=self.teacher)
+        self.client.force_login(self.teacher)
+        data = self.live().json()
+        self.assertEqual(len(data['states']), 15)
+        self.assertEqual(data['overflow'], 3)
+        response = self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk]))
+        self.assertContains(response, 'ещё 3 не поместились')
+        # недавно писавший ученик попадает на экран первым
+        self.client.force_login(self.student)
+        self.save()
+        self.client.force_login(self.teacher)
+        self.assertEqual(self.live().json()['states'][0]['assignment'], self.assignment.pk)
+
+    def test_foreign_teacher(self):
+        self.client.force_login(make_teacher(username='other_teacher'))
+        self.assertEqual(self.live().status_code, 404)
+        self.assertEqual(self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk])).status_code, 404)
+        self.client.force_login(self.student)
+        self.assertIn(self.live().status_code, (302, 403, 404))
+
+    @override_settings(CANVAS_ENABLED=False)
+    def test_disabled(self):
+        self.client.force_login(self.teacher)
+        self.assertEqual(self.live().status_code, 503)
