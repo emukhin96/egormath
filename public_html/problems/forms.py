@@ -211,12 +211,17 @@ class TextbookDraftReviewForm(forms.ModelForm):
         model = TextbookTaskDraft
         fields = [
             'external_id', 'source_number', 'text_latex',
-            'subitems', 'author_answer_latex', 'author_solution_latex',
+            'subitems', 'author_answer_latex', 'answer_mask',
+            'author_solution_latex',
             'status',
         ]
         widgets = {
             'subitems': forms.Textarea(attrs={'rows': 8}),
             'author_answer_latex': forms.Textarea(attrs={'rows': 3}),
+            'answer_mask': forms.Textarea(attrs={
+                'rows': 2,
+                'placeholder': 'Например: {{number: 10}} см',
+            }),
             'author_solution_latex': forms.Textarea(attrs={'rows': 12}),
         }
 
@@ -229,6 +234,9 @@ class TextbookDraftReviewForm(forms.ModelForm):
         from .textbook_parser import apply_imported_answer
         return apply_imported_answer(
             self.cleaned_data.get('author_answer_latex') or '')
+
+    def clean_answer_mask(self):
+        return clean_mask_text(self.cleaned_data.get('answer_mask'))
 
     def clean_author_solution_latex(self):
         from .textbook_parser import apply_imported_math

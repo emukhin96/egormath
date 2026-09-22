@@ -4693,6 +4693,24 @@
   .ws-view .canvas-widget { margin-left: var(--task-indent); }
   .canvas-launch { margin: 0; }
 
+  /* Дашборд «Доски»: до 15 миниатюр на экране, диалог с полным виджетом */
+  .boards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-3); margin: var(--space-3) 0; }
+  .board-card {
+    display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2);
+    border: 1px solid var(--border); border-radius: var(--radius); background: #fff; cursor: pointer;
+    transition: box-shadow 0.15s;
+  }
+  .board-card:hover, .board-card:focus-visible { box-shadow: 0 0 0 2px var(--accent); outline: none; }
+  .board-card.board-fresh { box-shadow: 0 0 0 2px #16a34a; }
+  .board-meta { display: flex; justify-content: space-between; gap: var(--space-2); align-items: baseline; font-size: 0.85rem; }
+  .board-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board-state { color: var(--muted); white-space: nowrap; }
+  .board-thumb { width: 100% !important; height: auto !important; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+  .boards-dialog { width: min(1100px, calc(100vw - 32px)); max-width: none; }
+  .boards-dialog-tasks { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--space-2); }
+  .boards-dialog-tasks .btn { margin: 0; }
+  .boards-dialog .canvas-launch, .boards-dialog .canvas-close { display: none; }
+
   /* «Активность ученика»: сводка, чипы, лента интервалов */
   .audit-summary { margin: 0 0 var(--space-2); font-size: 0.9rem; }
   .audit-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-2); }
@@ -4742,6 +4760,16 @@
   .canvas-icon svg { width: 20px; height: 20px; flex: none; }
   .canvas-graphs .canvas-tool { min-width: 30px; padding: 3px 6px; font-family: KaTeX_Main, serif; }
   .canvas-graphs .katex { font-size: 1.05em; }
+  /* Меню выбора рисунка задачи: всплывает над панелью, не сдвигая поле */
+  .canvas-pictures { position: relative; }
+  .canvas-menu {
+    position: absolute; top: 100%; left: 0; z-index: 20; margin-top: 4px;
+    display: flex; gap: var(--space-1); padding: var(--space-1); background: #fff;
+    border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(5, 20, 43, 0.18);
+  }
+  .canvas-menu-item { width: 72px; height: 56px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
+  .canvas-menu-item:hover { border-color: var(--accent); }
+  .canvas-menu-item img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .canvas-toolbar .ws-toggle { margin-left: 0; }
   .canvas-group { gap: var(--space-1); }
   .canvas-swatch {

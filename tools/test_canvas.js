@@ -32,7 +32,7 @@ function setup() {
     refresh() {}, redraw() {}, syncHistoryButtons() {},
   });
   Widget.all.push(widget);
-  return {widget, listeners, storage, calls, pending};
+  return {widget, listeners, storage, calls, pending, context};
 }
 const drain = () => new Promise(resolve => setImmediate(resolve));
 const stroke = id => ({id, t: 'path', c: '#000000', w: 2, p: [[10, 10], [20, 20]]});
@@ -262,4 +262,69 @@ test('merge подменяет чужой слой, синхронизирует
      student: {elements: [stroke('a')], version: 1}, teacher: {elements: [stroke('t')], version: 1}},
   ]}), false);
   assert.equal(w.pages.length, local);
+});
+
+test('рисунок: углы, попадание внутрь, масштаб с Shift, поворот на 90°, наклон', () => {
+  const env = setup();
+  const eq = (a, b) => assert.deepEqual(JSON.parse(JSON.stringify(a)), b);   /* массивы из vm-контекста */
+  const geo = env.context.EgorCanvas.image;
+  const el = {id: 'i', t: 'img', s: 1, w: 1, c: '#000', p: [[100, 100], [500, 100], [100, 400]]};
+  eq(geo.corners(el)[2], [500, 400]);
+  assert.equal(geo.inside(el, [300, 250]), true);
+  assert.equal(geo.inside(el, [600, 250]), false);
+  const hs = geo.handles(el);
+  assert.equal(hs.length, 9);
+  eq(hs[4].at, [300, 100]);
+  eq(hs[8].at, [300, 60]);
+  // правый нижний угол тянем к (900, 700): ширина ×2, высота ×2, левый верхний на месте
+  let out = geo.transform(el, hs[2], [500, 400], [900, 700], false);
+  eq(out.p, [[100, 100], [900, 100], [100, 700]]);
+  // с Shift — пропорционально: (900, 400) даёт средний коэффициент 1.5
+  out = geo.transform(el, hs[2], [500, 400], [900, 400], true);
+  eq(out.p, [[100, 100], [700, 100], [100, 550]]);
+  // поворот на 90° вокруг центра (300, 250): сохраняет длины сторон
+  const c = [300, 250];
+  out = geo.transform(el, hs[8], [300, 60], [490, 250], false);
+  const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  assert.equal(Math.round(d(out.p[0], out.p[1])), 400);
+  assert.equal(Math.round(d(out.p[0], out.p[2])), 300);
+  eq(out.p[0], [450, 50]);
+  // с Shift — шаг 15°: почти 90° становится ровно 90°
+  out = geo.transform(el, hs[8], [300, 60], [480, 240], true);
+  eq(out.p[0], [450, 50]);
+  // наклон: верхняя сторона сдвигается вдоль u на 50, нижняя стоит
+  out = geo.transform(el, hs[4], [300, 100], [350, 130], false);
+  eq(out.p, [[150, 100], [550, 100], [100, 400]]);
+  eq(geo.corners(out)[2], [500, 400]);
+});
+
+test('картинки: ожидание привязано к URL, ошибка будит ожидающих, redraw не копит подписки', () => {
+  const env = setup();
+  const geo = env.context.EgorCanvas.image;
+  const images = [];
+  env.context.Image = function () { images.push(this); };
+  const a = geo.of('/a.png'), b = geo.of('/b.png');
+  const got = [];
+  geo.settle('/a.png', e => got.push('a:' + (e.ready ? 'ok' : 'fail')));
+  geo.settle('/b.png', e => got.push('b:' + (e.ready ? 'ok' : 'fail')));
+  images[0].onload();                      // загрузилась только a
+  assert.deepEqual(got, ['a:ok']);
+  images[1].onerror();                     // b не смогла — её ожидающий тоже разбужен
+  assert.deepEqual(got, ['a:ok', 'b:fail']);
+  geo.settle('/a.png', e => got.push('late:' + e.ready));   // уже готова — сразу
+  assert.deepEqual(got, ['a:ok', 'b:fail', 'late:true']);
+  // redraw: подписка на неготовую картинку одна на URL, сколько бы раз ни рисовали
+  const {widget: w} = env;
+  w.addPage();
+  w.page().layers.student.elements = [{id: 'i', t: 'img', s: 1, u: '/c.png', w: 1, c: '#000', p: [[0, 0], [10, 0], [0, 10]]}];
+  env.context.requestAnimationFrame = () => 1;
+  env.context.document.body = {contains: () => true};
+  const redraw = env.context.EgorCanvas.Widget.prototype.redraw;   /* setup() глушит redraw заглушкой */
+  redraw.call(w); redraw.call(w); redraw.call(w);
+  const c = geo.of('/c.png');
+  assert.equal(c.waiters.length, 1);
+  assert.equal(geo.pending(w.page().layers.student.elements).length, 1);
+  images[2].onload();
+  assert.equal(c.waiters.length, 0);
+  assert.equal(geo.pending(w.page().layers.student.elements).length, 0);
 });

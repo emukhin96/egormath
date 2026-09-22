@@ -766,6 +766,7 @@ class TextbookTaskDraft(models.Model):
         'Коды классов', default=list, blank=True)
     tags = models.JSONField('Теги источника', default=list, blank=True)
     author_answer_latex = models.TextField('Авторский ответ', blank=True)
+    answer_mask = models.TextField('Маска ответа для ученика', blank=True)
     author_solution_latex = models.TextField('Авторское решение', blank=True)
     solution_source_external_id = models.CharField(
         'Ключ сопоставленного решения', max_length=190, blank=True)

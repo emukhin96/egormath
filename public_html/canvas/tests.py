@@ -1,5 +1,6 @@
 """Права, лимиты и заморозка страниц холста."""
 import json
+import tempfile
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -7,7 +8,9 @@ from django.urls import reverse
 from accounts.models import Profile
 from assignments.models import Assignment
 from assignments.progress import answer_versions
-from problems.models import Task
+from django.core.files.base import ContentFile
+
+from problems.models import Task, TaskImage
 from problems.tests import make_student, make_teacher
 from worksheets.models import WorksheetItem
 from worksheets.tests import make_worksheet
@@ -343,3 +346,162 @@ class SubmitAndTeacherTests(CanvasBase):
         self.assertContains(response, 'toggle-canvas')
         response = self.client.get(reverse('assignment_live', args=[self.assignment.pk]))
         self.assertContains(response, 'data-role=\\"viewer\\"')
+
+
+def make_image(task, name='fig.png'):
+    """Картинка задачи: PNG через PIL (save() сжимает растровые файлы) или PDF-заглушка."""
+    import io
+    from PIL import Image
+    image = TaskImage(task=task, order=1)
+    if name.endswith('.pdf'):
+        image.image.save(name, ContentFile(b'%PDF-1.4'), save=True)
+    else:
+        buf = io.BytesIO()
+        Image.new('RGB', (40, 30), 'white').save(buf, format='PNG')
+        image.image.save(name, ContentFile(buf.getvalue()), save=True)
+    return image
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class ImageElementTests(CanvasBase):
+    """Иллюстрация задачи на доске: только своя, только растровая."""
+
+    def setUp(self):
+        super().setUp()
+        self.image = make_image(self.task)
+        self.pdf = make_image(self.task, 'fig.pdf')
+        self.foreign = make_image(Task.objects.create(text_latex='Другая задача'), 'other.png')
+        self.client.force_login(self.student)
+
+    def img(self, source, element_id='i1'):
+        return {'id': element_id, 't': 'img', 's': source, 'w': 1, 'c': '#000000',
+                'p': [[100, 100], [500, 100], [100, 400]]}
+
+    def test_images_listed_without_pdf(self):
+        data = self.client.get(self.url('pages')).json()
+        self.assertEqual([i['id'] for i in data['images']], [self.image.pk])
+        self.assertIn(f'/images/{self.image.pk}/file/', data['images'][0]['url'])
+
+    def test_etag_changes_with_images(self):
+        response = self.client.get(self.url('pages'))
+        etag = response['ETag']
+        self.assertEqual(self.client.get(self.url('pages'), HTTP_IF_NONE_MATCH=etag).status_code, 304)
+        make_image(self.task, 'second.png')
+        response = self.client.get(self.url('pages'), HTTP_IF_NONE_MATCH=etag)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()['images']), 2)
+        self.image.delete()
+        self.assertEqual(self.client.get(self.url('pages'), HTTP_IF_NONE_MATCH=response['ETag']).status_code, 200)
+
+    def test_save_and_reject_foreign(self):
+        self.assertEqual(self.save(elements=[stroke(), self.img(self.image.pk)]).status_code, 200)
+        saved = CanvasPage.objects.get().student_elements[1]
+        self.assertEqual((saved['t'], saved['s'], len(saved['p'])), ('img', self.image.pk, 3))
+        self.assertEqual(saved['u'], f'/problems/images/{self.image.pk}/file/')
+        response = self.save(elements=[self.img(self.foreign.pk)], version=1)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('этой задачи', response.json()['message'])
+        self.assertEqual(self.save(elements=[self.img(self.pdf.pk)], version=1).status_code, 400)
+
+    def test_schema(self):
+        bad = self.img(self.image.pk); bad['p'] = bad['p'][:2]
+        self.assertEqual(self.save(elements=[bad]).status_code, 400)
+        bad = self.img(self.image.pk); del bad['s']
+        self.assertEqual(self.save(elements=[bad]).status_code, 400)
+        bad = self.img(self.image.pk); bad['s'] = 'x'
+        self.assertEqual(self.save(elements=[bad]).status_code, 400)
+
+
+class BoardsTests(CanvasBase):
+    """Дашборд «Доски»: выборка, лимит, опрос изменений."""
+
+    def live(self, etag=None, **params):
+        extra = {'HTTP_IF_NONE_MATCH': etag} if etag else {}
+        return self.client.get(reverse('worksheet_boards_live', args=[self.worksheet.pk]), params, **extra)
+
+    def test_page_and_first_load(self):
+        self.client.force_login(self.student)
+        self.save()
+        self.save(number=2, elements=[stroke('b1')])
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk]))
+        self.assertContains(response, 'data-board="%d"' % self.assignment.pk)
+        self.assertContains(response, 'boards.js')
+        data = self.live().json()
+        self.assertEqual([s['assignment'] for s in data['states']], [self.assignment.pk])
+        self.assertEqual(data['states'][0]['status'], Assignment.STATUS_ASSIGNED)
+        # первая загрузка — одна последняя страница на ученика…
+        self.assertEqual(len(data['pages']), 1)
+        self.assertEqual(data['pages'][0]['number'], 2)
+        self.assertEqual(data['pages'][0]['task_no'], 1)
+        # …и лёгкий список всех задач со страницами, включая старые
+        self.assertEqual(data['tasks'], [{'assignment': self.assignment.pk, 'task': self.task.pk, 'task_no': 1, 'count': 2,
+                                          'canvas_url': self.url('pages')}])
+        self.assertEqual(data['pages'][0]['student']['elements'][0]['id'], 'b1')
+        self.assertEqual(data['overflow'], 0)
+
+    def test_first_load_lists_every_task_with_pages(self):
+        other = Task.objects.create(text_latex='Вторая')
+        WorksheetItem.objects.create(worksheet=self.worksheet, task=other, order=2)
+        self.client.force_login(self.student)
+        self.save()   # задача 1, раньше
+        self.client.post(reverse('canvas:save', args=[self.assignment.pk, other.pk, 1]),
+                         data=json.dumps({'layer': 'student', 'elements': [stroke()], 'background': 'grid', 'version': 0}),
+                         content_type='application/json')
+        self.client.force_login(self.teacher)
+        data = self.live().json()
+        self.assertEqual(len(data['pages']), 1)
+        self.assertEqual(data['pages'][0]['task'], other.pk)
+        self.assertEqual(sorted(t['task_no'] for t in data['tasks']), [1, 2])
+        # при опросе с since список задач не нужен
+        self.assertEqual(self.live(since=data['since']).json()['tasks'], [])
+
+    def test_since_and_not_modified(self):
+        self.client.force_login(self.student)
+        self.save()
+        self.client.force_login(self.teacher)
+        first = self.live()
+        since, etag = first.json()['since'], first['ETag']
+        self.assertEqual(self.live(etag=etag, since=since).status_code, 304)
+        self.assertEqual(self.live(since=since).json()['pages'], [])
+        # ученик дописал — страница приходит, подпись меняется
+        self.client.force_login(self.student)
+        self.save(elements=[stroke(), stroke('a2')], version=1)
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse('worksheet_boards_live', args=[self.worksheet.pk]),
+                                   {'since': since}, HTTP_IF_NONE_MATCH=etag)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()['pages']), 1)
+        self.assertEqual(len(response.json()['pages'][0]['student']['elements']), 2)
+        # пометка учителя тоже считается изменением
+        since = response.json()['since']
+        self.assertEqual(self.save(layer='teacher').status_code, 200)
+        self.assertEqual(len(self.live(since=since).json()['pages']), 1)
+
+    def test_limit_and_overflow(self):
+        for i in range(17):
+            student = make_student(self.teacher, username=f'st{i}')
+            Assignment.objects.create(worksheet=self.worksheet, student=student, assigned_by=self.teacher)
+        self.client.force_login(self.teacher)
+        data = self.live().json()
+        self.assertEqual(len(data['states']), 15)
+        self.assertEqual(data['overflow'], 3)
+        response = self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk]))
+        self.assertContains(response, 'ещё 3 не поместились')
+        # недавно писавший ученик попадает на экран первым
+        self.client.force_login(self.student)
+        self.save()
+        self.client.force_login(self.teacher)
+        self.assertEqual(self.live().json()['states'][0]['assignment'], self.assignment.pk)
+
+    def test_foreign_teacher(self):
+        self.client.force_login(make_teacher(username='other_teacher'))
+        self.assertEqual(self.live().status_code, 404)
+        self.assertEqual(self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk])).status_code, 404)
+        self.client.force_login(self.student)
+        self.assertIn(self.live().status_code, (302, 403, 404))
+
+    @override_settings(CANVAS_ENABLED=False)
+    def test_disabled(self):
+        self.client.force_login(self.teacher)
+        self.assertEqual(self.live().status_code, 503)

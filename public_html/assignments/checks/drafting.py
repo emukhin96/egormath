@@ -8,9 +8,11 @@ import re
 from . import sets
 
 _SOLVE = re.compile(r'реши\w*\s+(?:следующ\w*\s+)?(?:уравнен|систем)|найди\w*\s+(?:все\s+)?корни', re.I)
+_EQUATION_REQUEST = re.compile(
+    r'(?:состав|запиш|напиш)\w*.{0,40}уравнен', re.I)
 _ASSIGNMENT = re.compile(r'(?<![A-Za-z\\])([a-z](?:_\{?\d+\}?)?)\s*=\s*', re.I)
 _GEOMETRY = re.compile(r'треугольник|ромб|квадрат|прямоугольник|трапец|окружност|круг|параллелограмм|пирамид|призм|цилиндр|конус|шар', re.I)
-_UNIT = re.compile(r'(?<![а-я])(мм|см|дм|км|м)(?:\s*(?:\^\{?([23])\}?|([²³])))?(?![а-я])', re.I)
+_UNIT = re.compile(r'(?<![а-яё])(мм|см|дм|км|м)(?:\s*(?:\^\{?([23])\}?|([²³])))?(?![а-яё])', re.I)
 
 
 def _plain(text):
@@ -26,7 +28,13 @@ def _slot(kind, value):
 def _equation(answer, condition):
     # Обычные школьные неизвестные; параметры a, b не становятся полями.
     variables = sorted(set(re.findall(r'(?<![A-Za-z\\])[xyz](?![A-Za-z])', condition)))
-    assignments = list(_ASSIGNMENT.finditer(answer))
+    assignments = []
+    for match in _ASSIGNMENT.finditer(answer):
+        prefix = answer[:match.start()]
+        if prefix.strip() and not re.search(
+                r'(?:[,;]|\bи(?:ли)?)\s*$', prefix, re.I):
+            continue
+        assignments.append(match)
     if assignments:
         groups = {}
         for i, match in enumerate(assignments):
@@ -68,11 +76,15 @@ def _geometry(answer, condition):
     if len(questions) < 2:
         return ''
     question = questions[-1].strip().rstrip('.?')
-    units = list(_UNIT.finditer(answer))
-    if not units:
-        units = list(_UNIT.finditer(condition))
-    unit_names = {m[1].lower() for m in units}
-    unit = next(iter(unit_names)) if len(unit_names) == 1 else ''
+    answer_units = list(_UNIT.finditer(answer))
+    condition_units = list(_UNIT.finditer(condition))
+
+    def single_unit(matches):
+        names = {match[1].lower() for match in matches}
+        return next(iter(names)) if len(names) == 1 else ''
+
+    answer_unit = single_unit(answer_units)
+    unit = answer_unit or single_unit(condition_units)
     value = _UNIT.sub('', answer).strip()
     # Две одноимённые длины можно однозначно назвать по их величине.
     if re.match(r'катеты\b', question, re.I):
@@ -106,7 +118,7 @@ def _geometry(answer, condition):
     if sets.numeric_value(value) is not None:
         if re.match(r'другое основание\b', question, re.I):
             return 'Другое основание равно ' + _slot('number', value) + (' ' + unit if unit else '')
-        return _slot('number', value) + (' ' + unit if unit else '')
+        return _slot('number', value) + (' ' + answer_unit if answer_unit else '')
     return ''
 
 
@@ -117,6 +129,12 @@ def contextual_draft(answer, condition):
         return None
     if _SOLVE.search(condition):
         return _equation(answer, condition)
+    if _EQUATION_REQUEST.search(condition) and '=' in answer:
+        return _slot('equation', answer)
+    if _ASSIGNMENT.search(answer):
+        drafted = _equation(answer, condition)
+        if drafted:
+            return drafted
     if _GEOMETRY.search(condition) and re.search(r'найдите|вычислите|определите', condition, re.I):
         return _geometry(answer, condition)
     return None

@@ -56,6 +56,15 @@
             <textarea id="subitem_author_answer_{{ forloop.counter0 }}" name="subitem_author_answer_{{ forloop.counter0 }}" rows="2">{{ subitem.author_answer_latex }}</textarea>
           </p>
         </details>
+        {% if subitem.answer_mask %}<div class="import-preview-block"><strong>Маска ответа</strong><code>{{ subitem.answer_mask }}</code></div>{% endif %}
+        <details class="import-source-edit">
+          <summary>{% if subitem.answer_mask %}Править маску ответа{% else %}Добавить маску ответа{% endif %}</summary>
+          <p>
+            <label for="subitem_answer_mask_{{ forloop.counter0 }}">Маска ответа подпункта</label>
+            <textarea id="subitem_answer_mask_{{ forloop.counter0 }}" name="subitem_answer_mask_{{ forloop.counter0 }}" rows="2" placeholder="&#123;&#123;number: 10&#125;&#125;">{{ subitem.answer_mask }}</textarea>
+            <span class="helptext">Оставьте пустой для доказательства, построения или развёрнутого ответа. Тип equation сравнивает уравнения в заданном виде: перенос слагаемых допустим, а пропорциональное умножение или деление всего уравнения — нет.</span>
+          </p>
+        </details>
         {% if subitem.author_solution_latex %}<div class="import-preview-block"><strong>Предпросмотр решения</strong><div class="math-content">{{ subitem.author_solution_latex|web_text|linebreaksbr }}</div></div>{% endif %}
         <details class="import-source-edit">
           <summary>{% if subitem.author_solution_latex %}Править исходник решения{% else %}Добавить решение{% endif %}</summary>
@@ -76,6 +85,15 @@
       <p>
         <span class="import-field-toolbar"><label for="{{ form.author_answer_latex.id_for_label }}">Авторский ответ</label>{% include 'problems/_wrap_math_button.html' with field_id=form.author_answer_latex.id_for_label %}</span>
         {{ form.author_answer_latex.errors }}{{ form.author_answer_latex }}
+      </p>
+    </details>
+    {% if draft.answer_mask %}<div class="import-preview-block"><strong>Маска ответа</strong><code>{{ draft.answer_mask }}</code></div>{% endif %}
+    <details class="import-source-edit"{% if form.answer_mask.errors %} open{% endif %}>
+      <summary>{% if draft.answer_mask %}Править маску ответа{% else %}Добавить маску ответа{% endif %}</summary>
+      <p>
+        <label for="{{ form.answer_mask.id_for_label }}">Маска ответа</label>
+        {{ form.answer_mask.errors }}{{ form.answer_mask }}
+        <span class="helptext">Оставьте пустой для доказательства, построения или развёрнутого ответа. Тип equation сравнивает уравнения в заданном виде: перенос слагаемых допустим, а пропорциональное умножение или деление всего уравнения — нет.</span>
       </p>
     </details>
     {% if draft.author_solution_latex %}<div class="import-preview-block"><strong>Предпросмотр авторского решения</strong><div class="math-content">{{ draft.author_solution_latex|web_text|linebreaksbr }}</div></div>{% endif %}

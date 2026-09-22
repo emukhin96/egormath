@@ -111,6 +111,9 @@ def normalize_subitems(value):
             'text_latex': text,
             'author_answer_latex': apply_imported_answer(
                 item.get('author_answer_latex') or ''),
+            'answer_mask': normalize_answer_mask(
+                item.get('answer_mask'),
+                key=f'subitems[{index}].answer_mask'),
             'author_solution_latex': apply_imported_math(
                 item.get('author_solution_latex') or ''),
         })
@@ -122,6 +125,56 @@ def normalize_subitems(value):
     })()
     redistribute_glued_subitem_answers(holder)
     return holder.subitems
+
+
+def normalize_answer_mask(value, *, key='answer_mask'):
+    """Проверяет маску из JSON до сохранения партии."""
+    if value is None:
+        return ''
+    if not isinstance(value, str):
+        raise TextbookImportError(f'Поле {key} должно быть строкой.')
+    value = value.strip()
+    if not value:
+        return ''
+    from assignments.checks import parse_mask
+    spec = parse_mask(value)
+    if spec.errors or not spec.slots:
+        details = '; '.join(spec.errors) or 'нет полей ответа'
+        raise TextbookImportError(f'Некорректная маска {key}: {details}.')
+    return value
+
+
+def fill_draft_answer_masks(draft):
+    """Заполняет только безопасно распознанные пустые маски черновика."""
+    from assignments.checks import draft_mask
+    from assignments.checks.formats import oge_kind
+    if (oge_kind(draft.exam_item_codes)
+            or any(str(code).startswith('EGE_')
+                   for code in draft.exam_item_codes or [])):
+        return
+    if draft.subitems:
+        draft.answer_mask = ''
+        for item in draft.subitems:
+            if str(item.get('answer_mask') or '').strip():
+                continue
+            answer = str(item.get('author_answer_latex') or '').strip()
+            if not answer:
+                continue
+            condition = '\n'.join(filter(None, (
+                draft.text_latex,
+                str(item.get('text_latex') or '').strip(),
+            )))
+            item['answer_mask'] = draft_mask(
+                answer, condition,
+                exam_codes=draft.exam_item_codes,
+                source_number=draft.external_id,
+                subitem_label=str(item.get('label') or ''))
+        return
+    if not draft.answer_mask and draft.author_answer_latex.strip():
+        draft.answer_mask = draft_mask(
+            draft.author_answer_latex, draft.text_latex,
+            exam_codes=draft.exam_item_codes,
+            source_number=draft.external_id)
 
 
 def _confidence(value):
@@ -198,6 +251,7 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
                 f'Задача {external_id} не содержит условия или подпунктов.')
         author_answer_latex = apply_imported_answer(
             row.get('author_answer_latex') or '')
+        answer_mask = normalize_answer_mask(row.get('answer_mask'))
         author_solution_latex = apply_imported_math(
             row.get('author_solution_latex') or '')
         if subitems and any(
@@ -206,6 +260,8 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
                 for item in subitems):
             author_answer_latex = ''
             author_solution_latex = ''
+        if subitems:
+            answer_mask = ''
         drafts.append(TextbookTaskDraft(
             batch=batch,
             external_id=external_id,
@@ -222,6 +278,7 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             subitems=subitems,
             images=images,
             author_answer_latex=author_answer_latex,
+            answer_mask=answer_mask,
             author_solution_latex=author_solution_latex,
             solution_source_external_id=(
                 external_id if (author_answer_latex
@@ -244,6 +301,7 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             apply_oge_metadata(draft, batch.profile)
             from .ege_metadata import apply_ege_metadata
             apply_ege_metadata(draft, batch.profile)
+            fill_draft_answer_masks(draft)
         except ValueError as exc:
             raise TextbookImportError(str(exc)) from exc
     apply_topic_suggestions(drafts)
@@ -997,6 +1055,9 @@ def _merge_author_fields(task, draft):
         if incoming and not existing:
             setattr(task, field, incoming)
             updates.append(field)
+    if draft.answer_mask.strip() and not task.answer_mask.strip():
+        task.answer_mask = draft.answer_mask.strip()
+        updates.append('answer_mask')
     if updates:
         task.save(update_fields=updates)
 
@@ -1024,6 +1085,10 @@ def _merge_subitem_author_fields(task, draft):
             if value and not old:
                 setattr(sub, field, value)
                 updates.append(field)
+        mask = str(incoming.get('answer_mask') or '').strip()
+        if mask and not sub.answer_mask.strip():
+            sub.answer_mask = mask
+            updates.append('answer_mask')
         if updates:
             sub.save(update_fields=updates)
 
@@ -1157,6 +1222,7 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
             # рецензента, но не безопасное основание автоматически слить задачи.
             task = Task.objects.create(
                 text_latex=draft.text_latex,
+                answer_mask=('' if draft.subitems else draft.answer_mask),
                 author_answer_latex=(
                     '' if draft.subitems else draft.author_answer_latex),
                 author_solution_latex=(
@@ -1166,6 +1232,7 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
                 TaskSubitem.objects.create(
                     task=task, order=index * 10,
                     text_latex=item['text_latex'],
+                    answer_mask=item.get('answer_mask', ''),
                     author_answer_latex=item.get(
                         'author_answer_latex', ''),
                     author_solution_latex=item.get(
