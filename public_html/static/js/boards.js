@@ -58,6 +58,11 @@
     Array.prototype.forEach.call(root.querySelectorAll('[data-board]'), function (el) {
       if (!seen[el.dataset.board]) el.remove();
     });
+    (data.tasks || []).forEach(function (t) {
+      var byTask = pagesOf[t.assignment] = pagesOf[t.assignment] || {};
+      var entry = byTask[t.task] = byTask[t.task] || {task_no: t.task_no, canvas_url: t.canvas_url, count: 0};
+      entry.count = Math.max(entry.count, t.count);
+    });
     data.pages.forEach(function (page) {
       var byTask = pagesOf[page.assignment] = pagesOf[page.assignment] || {};
       var entry = byTask[page.task] = byTask[page.task] || {task_no: page.task_no, canvas_url: page.canvas_url, count: 0};
@@ -121,6 +126,7 @@
     var entry = pagesOf[assignment][task];
     var node = document.createElement('div');
     node.dataset.canvas = ''; node.dataset.role = 'teacher'; node.dataset.url = entry.canvas_url; node.dataset.pages = String(entry.count);
+    node.dataset.always = '1';   /* тумблер «Показать доски» со страницы прогресса здесь не действует */
     node.id = 'boards-canvas-' + assignment + '-' + task;
     holder.appendChild(node);        /* canvas.js поднимет виджет через MutationObserver */
     open = {assignment: assignment, task: task};

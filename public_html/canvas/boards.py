@@ -99,21 +99,29 @@ def worksheet_boards_live(request, worksheet_id):
     etag = f'"{signature}"'
     if request.headers.get('If-None-Match') == etag:
         return HttpResponseNotModified()
+    numbers = _task_numbers(worksheet)
+    tasks = []
     if since is None:
-        # Первая загрузка: одна последняя страница на ученика, без лишнего JSON
-        light = pages.values_list('pk', 'submission__assignment_id', 'student_updated_at', 'teacher_updated_at', 'created_at')
-        latest = {}
-        for pk, assignment_id, s_at, t_at, c_at in light:
+        # Первая загрузка: лёгкий список всех задач со страницами у каждого
+        # ученика (для диалога) и JSON только одной последней страницы — для миниатюры
+        light = pages.values_list('pk', 'submission__assignment_id', 'submission__task_id', 'number',
+                                  'student_updated_at', 'teacher_updated_at', 'created_at')
+        latest, per_task = {}, {}
+        for pk, assignment_id, task_id, number, s_at, t_at, c_at in light:
             stamp = max(t for t in (s_at, t_at, c_at) if t)
             if assignment_id not in latest or stamp > latest[assignment_id][0]:
                 latest[assignment_id] = (stamp, pk)
+            key = (assignment_id, task_id)
+            per_task[key] = max(per_task.get(key, 0), number)
         changed = list(pages.filter(pk__in=[pk for _, pk in latest.values()]))
+        tasks = [{'assignment': a, 'task': t, 'task_no': numbers.get(t), 'count': n,
+                  'canvas_url': reverse('canvas:pages', args=[a, t])}
+                 for (a, t), n in sorted(per_task.items())]
     else:
         changed = list(pages.filter(Q(student_updated_at__gt=since) | Q(teacher_updated_at__gt=since)
                                     | Q(created_at__gt=since)))
-    numbers = _task_numbers(worksheet)
     response = JsonResponse({
-        'ok': True, 'since': now.isoformat(), 'overflow': overflow, 'states': states,
+        'ok': True, 'since': now.isoformat(), 'overflow': overflow, 'states': states, 'tasks': tasks,
         'pages': [{
             'assignment': p.submission.assignment_id,
             'task': p.submission.task_id, 'task_no': numbers.get(p.submission.task_id),
