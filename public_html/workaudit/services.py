@@ -70,12 +70,15 @@ def activity_timeline(events, started_at=None):
     один уход с длительностью, буфер обмена — отдельные строки, вкладки
     нумеруются по порядку появления. `events` — все события работы за окно,
     в любом порядке; `started_at` — точка отсчёта времени (по умолчанию —
-    первое событие). Возвращает (строки новые сверху, сводка)."""
+    первое событие). Время события — `client_at` (по часам устройства):
+    клиент шлёт события пачками раз в 30 с, а при сбое сети — позже, так
+    что серверное `received_at` сплющило бы пачку в одну отметку.
+    Возвращает (строки новые сверху, сводка)."""
     by_page = {}
     for event in events:
         by_page.setdefault(str(event.page_id), []).append(event)
     # Номер вкладки — по моменту первого события в ней
-    order = sorted(by_page, key=lambda page: min(e.received_at for e in by_page[page]))
+    order = sorted(by_page, key=lambda page: min(e.client_at for e in by_page[page]))
     tab_no = {page: i + 1 for i, page in enumerate(order)}
     rows = []
     summary = {'away': 0, 'away_seconds': 0, 'away_max': 0, 'unknown': 0,
@@ -101,8 +104,9 @@ def activity_timeline(events, started_at=None):
                     summary['away_max'] = max(summary['away_max'], seconds)
                 hidden = None
             else:
-                rows.append({'kind': row.kind, 'label': row.get_kind_display(), 'at': row.received_at,
-                             'blocked': row.blocked, 'tab': tab_no[page], 'seconds': None, 'short': False})
+                rows.append({'kind': row.kind, 'label': row.get_kind_display(), 'at': row.client_at,
+                             'received': row.received_at, 'blocked': row.blocked, 'tab': tab_no[page],
+                             'seconds': None, 'short': False})
                 summary[row.kind] += 1
                 summary['blocked'] += int(row.blocked)
         if hidden is not None:
@@ -122,7 +126,7 @@ def activity_timeline(events, started_at=None):
 
 
 def _away(hidden, seconds, tab, open_ended=False):
-    return {'kind': 'away', 'label': 'ушёл со страницы', 'at': hidden.received_at, 'blocked': False,
+    return {'kind': 'away', 'label': 'ушёл со страницы', 'at': hidden.client_at, 'received': hidden.received_at, 'blocked': False,
             'tab': tab, 'seconds': None if seconds is None else round(seconds), 'open_ended': open_ended,
             'short': seconds is not None and seconds < SHORT_AWAY_SECONDS}
 

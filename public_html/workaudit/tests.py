@@ -159,8 +159,9 @@ class AuditTests(TestCase):
         one, two = uuid.uuid4(), uuid.uuid4()
         t0 = timezone.now()
         def e(page, seq, kind, ms, at, blocked=False):
-            return ActivityEvent(page_id=page, sequence=seq, kind=kind, elapsed_ms=ms,
-                                 received_at=t0 + timedelta(seconds=at), blocked=blocked)
+            # Всё получено одной пачкой через минуту — лента должна идти по client_at
+            return ActivityEvent(page_id=page, sequence=seq, kind=kind, elapsed_ms=ms, blocked=blocked,
+                                 client_at=t0 + timedelta(seconds=at), received_at=t0 + timedelta(seconds=300))
         rows, summary = activity_timeline([
             e(one, 0, 'hidden', 100, 10), e(one, 1, 'visible', 100100, 110),      # уход на 100 с
             e(one, 2, 'copy', 120000, 130, blocked=True),
@@ -176,6 +177,8 @@ class AuditTests(TestCase):
         self.assertEqual([r['at'] for r in rows], sorted((r['at'] for r in rows), reverse=True))
         first = next(r for r in rows if r['seconds'] == 100)
         self.assertEqual((first['tab'], first['offset'], first['short']), (1, 10, False))
+        self.assertEqual(first['received'], t0 + timedelta(seconds=300))
+        self.assertEqual([r['offset'] for r in rows], [200, 151, 150, 140, 130, 10])   # по client_at, не по пачке
         self.assertTrue(next(r for r in rows if r['tab'] == 2)['open_ended'])
         self.assertEqual(next(r for r in rows if r['kind'] == 'copy')['blocked'], True)
         self.assertEqual((format_span(40), format_span(252), format_span(3900)), ('40 с', '4 мин 12 с', '1 ч 05 мин'))

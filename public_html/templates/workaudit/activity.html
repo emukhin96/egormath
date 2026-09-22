@@ -8,11 +8,11 @@
   <a class="btn btn-small btn-secondary" data-audit-page href="?show=clipboard&short={{ query.short }}" aria-pressed="{% if show == 'clipboard' %}true{% else %}false{% endif %}">Буфер обмена</a>
   {% if summary.short %}<a class="helptext" data-audit-page href="?show={{ query.show }}&short={% if short %}0{% else %}1{% endif %}">{% if short %}скрыть короткие уходы{% else %}ещё {{ summary.short }} коротк{{ summary.short|plural:"ий,их,их" }} (до 5 с){% endif %}</a>{% endif %}
 </p>
-<ol class="audit-timeline">{% for row in page %}<li class="audit-row audit-{{ row.kind }}{% if row.blocked %} audit-blocked{% endif %}" title="{{ row.at|date:'d.m.Y H:i:s' }}{% if summary.tabs > 1 %} · вкладка {{ row.tab }}{% endif %}">
+<ol class="audit-timeline">{% for row in page %}<li class="audit-row audit-{{ row.kind }}{% if row.blocked %} audit-blocked{% endif %}" title="на устройстве {{ row.at|date:'d.m.Y H:i:s' }} · получено {{ row.received|date:'H:i:s' }}{% if summary.tabs > 1 %} · вкладка {{ row.tab }}{% endif %}">
   <span class="audit-time">+{{ row.offset|span }}</span>
   <span class="audit-text">{% if row.kind == 'away' %}ушёл со страницы{% if row.open_ended %} и не вернулся{% elif row.seconds is None %} — длительность неизвестна{% else %} на {{ row.seconds|span }}{% endif %}{% else %}{{ row.label|lower }}{% if row.blocked %} — заблокировано{% endif %}{% endif %}</span>
   {% if summary.tabs > 1 %}<span class="helptext">вкладка {{ row.tab }}</span>{% endif %}
 </li>{% empty %}<li class="helptext">Под этот фильтр событий нет.</li>{% endfor %}</ol>
 {% include 'workaudit/pagination.html' %}
 {% endif %}
-<p class="helptext audit-note">События браузера могут быть неполными и не доказывают списывание; время — от первого события в работе, точное — при наведении. <a data-audit-page href="?raw=1">Подробно, по событиям</a></p>
+<p class="helptext audit-note">События браузера могут быть неполными и не доказывают списывание; время — по часам устройства ученика, от первого события в работе; точное и время получения — при наведении. <a data-audit-page href="?raw=1">Подробно, по событиям</a></p>
