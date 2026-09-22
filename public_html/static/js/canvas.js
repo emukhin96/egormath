@@ -173,22 +173,37 @@
      p = [левый верхний, правый верхний, левый нижний] угол; четвёртый угол
      выводится. Три точки задают аффинное преобразование: перенос, масштаб
      по двум осям, поворот и наклон — рисуется одним ctx.transform + drawImage. */
-  var imageCache = {}, imageWaiters = [];
+  var imageCache = {};
   function imageOf(url) {
     var entry = imageCache[url];
     if (entry) return entry;
-    entry = imageCache[url] = {img: new Image(), ready: false, failed: false};
-    entry.img.onload = function () {
-      entry.ready = true;
-      var waiters = imageWaiters; imageWaiters = [];
-      waiters.forEach(function (fn) { fn(); });
+    entry = imageCache[url] = {img: new Image(), ready: false, failed: false, waiters: []};
+    var settle = function () {
+      var waiters = entry.waiters; entry.waiters = [];
+      waiters.forEach(function (fn) { fn(entry); });
     };
-    entry.img.onerror = function () { entry.failed = true; };
+    entry.img.onload = function () { entry.ready = true; settle(); };
+    entry.img.onerror = function () { entry.failed = true; settle(); };
     entry.img.src = url;
     return entry;
   }
-  /* Кто ждёт загрузку картинок, чтобы перерисоваться (виджеты, миниатюры) */
-  function whenImagesLoad(fn) { if (imageWaiters.indexOf(fn) < 0) imageWaiters.push(fn); }
+  /* Ожидание конкретной картинки: fn(entry) один раз, когда она загрузилась
+     или не смогла; уже загруженная — сразу. Подписка не дублируется. */
+  function whenImageSettles(url, fn) {
+    var entry = imageOf(url);
+    if (entry.ready || entry.failed) { fn(entry); return; }
+    if (entry.waiters.indexOf(fn) < 0) entry.waiters.push(fn);
+  }
+  /* Ещё не загруженные картинки среди элементов */
+  function pendingImages(elements) {
+    var urls = [];
+    elements.forEach(function (element) {
+      if (element.t !== 'img' || !element.u) return;
+      var entry = imageOf(element.u);
+      if (!entry.ready && !entry.failed && urls.indexOf(element.u) < 0) urls.push(element.u);
+    });
+    return urls;
+  }
 
   function imgCorners(element) {
     var p = element.p;
@@ -1170,9 +1185,18 @@
   };
 
   Widget.prototype.redraw = function () {
-    var self = this;
-    whenImagesLoad(function () { if (document.body.contains(self.root)) self.redraw(); });
-    var self = this;
+    var self = this, page = this.page();
+    if (page) {
+      if (!this.awaited) this.awaited = {};
+      pendingImages(page.layers.student.elements.concat(page.layers.teacher.elements)).forEach(function (url) {
+        if (self.awaited[url]) return;
+        self.awaited[url] = true;
+        whenImageSettles(url, function () {
+          delete self.awaited[url];
+          if (document.body.contains(self.root)) self.redraw();
+        });
+      });
+    }
     if (this.raf) return;
     this.raf = requestAnimationFrame(function () {
       self.raf = null;
@@ -1402,8 +1426,8 @@
   Widget.prototype.insertImage = function (image) {
     var self = this, page = this.page();
     if (!page || !this.editableLayer(page)) return;
-    var entry = imageOf(image.url);
-    var place = function () {
+    var place = function (entry) {
+      if (entry.failed) { toast(false, 'Не удалось загрузить рисунок'); return; }
       var iw = entry.img.naturalWidth || 4, ih = entry.img.naturalHeight || 3;
       var w = Math.min(400, iw), h = Math.round(w * ih / iw);
       var cx = W / 2, cy = H / 2 - offsetOf(page);
@@ -1416,9 +1440,7 @@
       self.syncToolbar();
       self.drawTop();
     };
-    if (entry.ready) place();
-    else if (entry.failed) toast(false, 'Не удалось загрузить рисунок');
-    else whenImagesLoad(place);
+    whenImageSettles(image.url, place);
   };
 
   Widget.prototype.pickImage = function (anchor) {
@@ -2003,16 +2025,15 @@
     var ctx = canvas.getContext('2d');
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, offsetOf(page) * dpr * scale);
     drawBackground(ctx, page);
-    var pending = false;
     ['student', 'teacher'].forEach(function (name) {
-      page.layers[name].elements.forEach(function (element) {
-        if (element.t === 'img' && element.u && !imageOf(element.u).ready) pending = true;
-        drawElement(ctx, element, page);
-      });
+      page.layers[name].elements.forEach(function (element) { drawElement(ctx, element, page); });
     });
-    if (pending) whenImagesLoad(function () { if (document.body.contains(canvas)) renderPage(canvas, raw, size); });
+    pendingImages(page.layers.student.elements.concat(page.layers.teacher.elements)).forEach(function (url) {
+      whenImageSettles(url, function () { if (document.body.contains(canvas)) renderPage(canvas, raw, size); });
+    });
   }
 
   window.EgorCanvas = {Widget: Widget, init: initAll, render: renderPage,
-    image: {corners: imgCorners, handles: imgHandles, transform: imgTransform, inside: insideParallelogram}};
+    image: {corners: imgCorners, handles: imgHandles, transform: imgTransform, inside: insideParallelogram,
+            of: imageOf, settle: whenImageSettles, pending: pendingImages}};
 })();

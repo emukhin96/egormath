@@ -297,3 +297,34 @@ test('рисунок: углы, попадание внутрь, масштаб 
   eq(out.p, [[150, 100], [550, 100], [100, 400]]);
   eq(geo.corners(out)[2], [500, 400]);
 });
+
+test('картинки: ожидание привязано к URL, ошибка будит ожидающих, redraw не копит подписки', () => {
+  const env = setup();
+  const geo = env.context.EgorCanvas.image;
+  const images = [];
+  env.context.Image = function () { images.push(this); };
+  const a = geo.of('/a.png'), b = geo.of('/b.png');
+  const got = [];
+  geo.settle('/a.png', e => got.push('a:' + (e.ready ? 'ok' : 'fail')));
+  geo.settle('/b.png', e => got.push('b:' + (e.ready ? 'ok' : 'fail')));
+  images[0].onload();                      // загрузилась только a
+  assert.deepEqual(got, ['a:ok']);
+  images[1].onerror();                     // b не смогла — её ожидающий тоже разбужен
+  assert.deepEqual(got, ['a:ok', 'b:fail']);
+  geo.settle('/a.png', e => got.push('late:' + e.ready));   // уже готова — сразу
+  assert.deepEqual(got, ['a:ok', 'b:fail', 'late:true']);
+  // redraw: подписка на неготовую картинку одна на URL, сколько бы раз ни рисовали
+  const {widget: w} = env;
+  w.addPage();
+  w.page().layers.student.elements = [{id: 'i', t: 'img', s: 1, u: '/c.png', w: 1, c: '#000', p: [[0, 0], [10, 0], [0, 10]]}];
+  env.context.requestAnimationFrame = () => 1;
+  env.context.document.body = {contains: () => true};
+  const redraw = env.context.EgorCanvas.Widget.prototype.redraw;   /* setup() глушит redraw заглушкой */
+  redraw.call(w); redraw.call(w); redraw.call(w);
+  const c = geo.of('/c.png');
+  assert.equal(c.waiters.length, 1);
+  assert.equal(geo.pending(w.page().layers.student.elements).length, 1);
+  images[2].onload();
+  assert.equal(c.waiters.length, 0);
+  assert.equal(geo.pending(w.page().layers.student.elements).length, 0);
+});

@@ -382,6 +382,17 @@ class ImageElementTests(CanvasBase):
         self.assertEqual([i['id'] for i in data['images']], [self.image.pk])
         self.assertIn(f'/images/{self.image.pk}/file/', data['images'][0]['url'])
 
+    def test_etag_changes_with_images(self):
+        response = self.client.get(self.url('pages'))
+        etag = response['ETag']
+        self.assertEqual(self.client.get(self.url('pages'), HTTP_IF_NONE_MATCH=etag).status_code, 304)
+        make_image(self.task, 'second.png')
+        response = self.client.get(self.url('pages'), HTTP_IF_NONE_MATCH=etag)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()['images']), 2)
+        self.image.delete()
+        self.assertEqual(self.client.get(self.url('pages'), HTTP_IF_NONE_MATCH=response['ETag']).status_code, 200)
+
     def test_save_and_reject_foreign(self):
         self.assertEqual(self.save(elements=[stroke(), self.img(self.image.pk)]).status_code, 200)
         saved = CanvasPage.objects.get().student_elements[1]
