@@ -9,7 +9,7 @@
   var POLL = 5000, POLL_DIALOG = 15000, IDLE = 30 * 60 * 1000, THUMB = 300;
   var root = document.querySelector('[data-boards]');
   if (!root || !window.EgorCanvas) return;
-  var liveUrl = root.dataset.liveUrl;
+  var liveUrl = root.dataset.liveUrl, taskFilter = parseInt(root.dataset.task || '0', 10) || 0;
   var status = document.querySelector('[data-boards-status]');
   var dialog = document.getElementById('boards-dialog');
   var since = null, etag = null, timer = null, lastActivity = Date.now(), stopped = false, busy = false;
@@ -40,7 +40,7 @@
     var el = card(page.assignment);
     if (!el) return;
     EgorCanvas.render(el.querySelector('canvas'), page, THUMB);
-    el.querySelector('[data-board-task]').textContent = 'задача ' + page.task_no + ', стр. ' + page.number;
+    el.querySelector('[data-board-task]').textContent = (taskFilter ? '' : 'задача ' + page.task_no + ', ') + 'стр. ' + page.number;
     el.querySelector('[data-board-updated]').textContent = ago(page.updated);
     el.dataset.updated = page.updated;
     el.classList.add('board-fresh');
@@ -149,7 +149,7 @@
       b.addEventListener('click', function () { mount(id, parseInt(task, 10)); });
       bar.appendChild(b);
     });
-    var first = latest[id] ? latest[id].task : parseInt(tasks[0], 10);
+    var first = taskFilter && byTask[taskFilter] ? taskFilter : latest[id] ? latest[id].task : parseInt(tasks[0], 10);
     mount(id, first);
     if (!dialog.open) dialog.showModal();
     schedule();

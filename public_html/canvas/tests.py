@@ -456,6 +456,37 @@ class BoardsTests(CanvasBase):
         # при опросе с since список задач не нужен
         self.assertEqual(self.live(since=data['since']).json()['tasks'], [])
 
+    def test_task_filter(self):
+        other = Task.objects.create(text_latex='Вторая')
+        WorksheetItem.objects.create(worksheet=self.worksheet, task=other, order=2)
+        self.client.force_login(self.student)
+        self.save()
+        self.client.post(reverse('canvas:save', args=[self.assignment.pk, other.pk, 1]),
+                         data=json.dumps({'layer': 'student', 'elements': [stroke()], 'background': 'grid', 'version': 0}),
+                         content_type='application/json')
+        self.client.force_login(self.teacher)
+        # без фильтра — последняя изменённая (задача 2); с фильтром — задача 1
+        self.assertEqual(self.live().json()['pages'][0]['task'], other.pk)
+        data = self.live(task=self.task.pk).json()
+        self.assertEqual(data['task'], self.task.pk)
+        self.assertEqual([p['task'] for p in data['pages']], [self.task.pk])
+        self.assertEqual(sorted(t['task_no'] for t in data['tasks']), [1, 2])   # диалог видит обе
+        # опрос с since отдаёт только изменения по выбранной задаче
+        since = data['since']
+        self.client.force_login(self.student)
+        self.client.post(reverse('canvas:save', args=[self.assignment.pk, other.pk, 1]),
+                         data=json.dumps({'layer': 'student', 'elements': [stroke(), stroke('b')], 'background': 'grid', 'version': 1}),
+                         content_type='application/json')
+        self.client.force_login(self.teacher)
+        self.assertEqual(self.live(task=self.task.pk, since=since).json()['pages'], [])
+        self.assertEqual(len(self.live(since=since).json()['pages']), 1)
+        # ETag различает фильтры; неизвестная задача = без фильтра
+        self.assertNotEqual(self.live()['ETag'], self.live(task=self.task.pk)['ETag'])
+        self.assertIsNone(self.live(task='999').json()['task'])
+        response = self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk]), {'task': self.task.pk})
+        self.assertContains(response, 'data-task="%d"' % self.task.pk)
+        self.assertContains(response, 'boards/live/?task=%d' % self.task.pk)
+
     def test_since_and_not_modified(self):
         self.client.force_login(self.student)
         self.save()
