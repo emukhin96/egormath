@@ -78,11 +78,17 @@ def worksheet_boards(request, worksheet_id):
     numbers = _task_numbers(worksheet)
     task_id = _task_filter(request, numbers)
     query = {k: v for k, v in (('group', request.GET.get('group', '')), ('task', task_id)) if v}
+    # Кнопки задач — только те, где у кого-то из выбранных учеников есть доска
+    # (плюс выбранная в адресе, чтобы её кнопка не пропала)
+    with_boards = set(CanvasPage.objects.filter(submission__assignment__in=[a.pk for a in assignments])
+                      .values_list('submission__task_id', flat=True).distinct())
+    if task_id:
+        with_boards.add(task_id)
     return render(request, 'canvas/boards.html', {
         'worksheet': worksheet, 'assignments': assignments, 'overflow': overflow,
         'groups': StudentGroup.visible_to(request.user), 'group': group,
         'group_id': request.GET.get('group', ''), 'boards_max': BOARDS_MAX,
-        'tasks': [{'id': tid, 'no': no} for tid, no in numbers.items()], 'task_id': task_id,
+        'tasks': [{'id': tid, 'no': no} for tid, no in numbers.items() if tid in with_boards], 'task_id': task_id,
         'task_no': numbers.get(task_id),
         'live_url': reverse('worksheet_boards_live', args=[worksheet.pk]) + ('?' + urlencode(query) if query else ''),
     })
