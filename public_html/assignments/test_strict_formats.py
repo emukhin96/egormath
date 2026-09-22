@@ -54,13 +54,13 @@ class StrictFormatsTests(SimpleTestCase):
     def test_textbook_geometry_drafting(self):
         self.assertEqual(
             draft_mask(r'$60^{\circ}$ или $120^{\circ}$'),
-            '{{set: 60; 120}}')
+            '{{set: 60; 120}}°')
         self.assertEqual(
             draft_mask(r'$60^{\circ}$'),
             '{{number: 60}}°')
         self.assertEqual(
             draft_mask(r'$15$ см, $24$ см'),
-            '{{set: 15; 24}} см')
+            '{{number: 15}} см, {{number: 24}} см')
         self.assertEqual(
             draft_mask(r'$40^{\circ}$, $80^{\circ}$, $40^{\circ}$'),
             '')
@@ -72,6 +72,12 @@ class StrictFormatsTests(SimpleTestCase):
                 r'$A(1; 2)$, $B(-3; 4)$',
                 'Найдите координаты точек A и B.'),
             '$A =$ {{pair: (1; 2)}}, $B =$ {{pair: (-3; 4)}}')
+        self.assertEqual(
+            draft_mask(
+                r'$\overrightarrow{AF}(1; 2)$, $\vec m(-3; 4)$',
+                'Найдите координаты векторов.'),
+            (r'$\overrightarrow{AF} =$ {{pair: (1; 2)}}, '
+             r'$\vec m =$ {{pair: (-3; 4)}}'))
         self.assertEqual(
             draft_mask(
                 r'$(1; -4)$ или $(-1; 1)$',
@@ -89,6 +95,25 @@ class StrictFormatsTests(SimpleTestCase):
         self.assertEqual(
             draft_mask('$5x+3y=6$', 'Составьте уравнение прямой.'),
             '{{equation: 5x+3y=6}}')
+
+    def test_ordered_named_values_do_not_become_a_set(self):
+        self.assertEqual(
+            draft_mask(
+                r'$\frac{3}{2}$ см, $\frac{25}{8}$ см',
+                'Найдите радиусы вписанной и описанной окружностей.'),
+            (r'{{number: \frac{3}{2}}} см, '
+             r'{{number: \frac{25}{8}}} см'))
+        self.assertEqual(
+            draft_mask('$8$ км/ч, $3$ км/ч',
+                       'Найдите скорости лодки и течения.'),
+            '{{number: 8}} км/ч, {{number: 3}} км/ч')
+
+    def test_generated_mask_must_accept_its_reference(self):
+        self.assertEqual(
+            draft_mask(r'$(x+3)^2+(y-2)^2=25$',
+                       'Составьте уравнение окружности.'),
+            '')
+        self.assertEqual(draft_mask('$x+x$'), '')
 
     def test_textbook_yes_no_drafting(self):
         self.assertEqual(draft_mask('Да.'), '{{yesno: да}}')

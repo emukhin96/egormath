@@ -93,7 +93,9 @@ _TOLERANCE_RE = re.compile(r'^(.*?)\s*~\s*([^~]+)$')
 _ANSWER_MATH_RE = re.compile(r'\$([^$]+)\$')
 _COORDINATE_PAIR_RE = re.compile(
     r'(?:(?<![A-Za-zА-Яа-я])'
-    r'(?P<label>(?:[A-Za-z]{1,4}|[А-Я])(?:_[0-9]+)?)\s*)?'
+    r'(?P<label>(?:\\(?:vec|overrightarrow)\s*'
+    r'(?:\{[^{}]+\}|[A-Za-zА-Яа-я](?:_\{?[0-9]+\}?)?)|'
+    r'(?:[A-Za-z]{1,4}|[А-Я])(?:_\{?[0-9]+\}?)?))\s*)?'
     r'\(\s*(?P<x>[^;()]+?)\s*;\s*(?P<y>[^;()]+?)\s*\)')
 _UNIT_TOKEN_RE = re.compile(
     r'сторон(?:а|ы)?|'
@@ -593,8 +595,8 @@ def _unwrap_set_braces(text):
     return text
 
 
-def _numeric_math_set(answer):
-    """Несколько отдельных чисел в формулах превращает в одно множество.
+def _numeric_math_set(answer, condition=''):
+    """Несколько отдельных чисел в формулах превращает в поля.
 
     Между формулами допускаются только перечислительные связки. Поэтому
     предложение с пояснением не станет коротким проверяемым ответом.
@@ -606,7 +608,9 @@ def _numeric_math_set(answer):
     if len(matches) < 2:
         return ''
     values = []
+    degrees = []
     for match in matches:
+        degrees.append(bool(re.search(r'\^\{?\\circ\}?', match.group(1))))
         value = re.sub(r'\^\{?\\circ\}?', '', match.group(1)).strip()
         if '=' in value or sets.numeric_value(value) is None:
             return ''
@@ -614,6 +618,7 @@ def _numeric_math_set(answer):
     if len(set(values)) != len(values):
         return ''
     outside = _ANSWER_MATH_RE.sub(' ', source)
+    has_or = bool(re.search(r'\bили\b', outside, re.I))
     outside = re.sub(r'\b(?:и|или)\b', ' ', outside, flags=re.I)
     outside = re.sub(r'(?:°|\\circ|\^\{?\\circ\}?)', ' ', outside)
     units = [re.sub(r'\s+', '', match.group())
@@ -623,11 +628,21 @@ def _numeric_math_set(answer):
     outside = _UNIT_TOKEN_RE.sub(' ', outside)
     if re.sub(r'[\s,;./]', '', outside):
         return ''
-    candidate = f'{{{{{SET}: {"; ".join(values)}}}}}'
+    if any(degrees) and not all(degrees):
+        return ''
+    degree = all(degrees)
+    suffix = '°' if degree else (f' {units[0]}' if units else '')
+    homogeneous = bool(re.search(
+        r'\b(?:корн\w*|решени\w*|сторон\w*|угл\w*)\b',
+        condition or '', re.I))
+    if has_or or homogeneous:
+        candidate = f'{{{{{SET}: {"; ".join(values)}}}}}{suffix}'
+    else:
+        candidate = ', '.join(
+            f'{{{{{NUMBER}: {value}}}}}{suffix}' for value in values)
     if not parse_mask(candidate).is_valid:
         return ''
-    suffix = f' {units[0]}' if units and units[0] != '°' else ('°' if units else '')
-    return candidate + suffix
+    return candidate
 
 
 def _single_numeric_math(answer):
@@ -674,10 +689,6 @@ def _coordinate_pair_mask(answer, condition):
     if not re.search(r'координат', condition or '', re.I):
         return ''
     plain = (answer or '').replace('$', '')
-    plain = re.sub(
-        r'\\(?:vec|overrightarrow)\{([^{}]+)\}',
-        lambda match: re.sub(r'\s+', '', match.group(1)), plain)
-    plain = re.sub(r'([A-Za-zА-Яа-я])_\{?([0-9]+)\}?', r'\1_\2', plain)
     matches = list(_COORDINATE_PAIR_RE.finditer(plain))
     if not matches:
         return ''
@@ -694,7 +705,9 @@ def _coordinate_pair_mask(answer, condition):
         pairs.append(pair)
     labels = [
         None if str(match.group('label') or '').casefold() in {'и', 'или'}
-        else match.group('label')
+        else re.sub(
+            r'([A-Za-zА-Яа-я])_\{?([0-9]+)\}?', r'\1_\2',
+            str(match.group('label') or '').strip())
         for match in matches
     ]
     if len(set(labels)) == 1:
@@ -709,7 +722,7 @@ def _coordinate_pair_mask(answer, condition):
         for label, pair in zip(labels, pairs))
 
 
-def draft_mask(answer, condition="", exam_codes=None, *, source_number="", subitem_label=""):
+def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subitem_label=""):
     """Черновик маски из текстового «Ответа» для тривиальных случаев;
     '' — не угадали, учитель пишет маску сам."""
     from .ege_policy import ege_draft
@@ -728,7 +741,7 @@ def draft_mask(answer, condition="", exam_codes=None, *, source_number="", subit
     answer = (answer or '').replace('\\displaystyle', '')
     answer = answer.replace('\\operatorname{tg}', '\\tan')
     answer = answer.replace('\\operatorname{ctg}', '\\cot')
-    numeric_set = _numeric_math_set(answer)
+    numeric_set = _numeric_math_set(answer, condition)
     if numeric_set:
         return numeric_set
     coordinates = _coordinate_pair_mask(answer, condition)
@@ -787,3 +800,30 @@ def draft_mask(answer, condition="", exam_codes=None, *, source_number="", subit
     if isinstance(expr, Expr):
         return f'{{{{{SIMPLIFY}: {text}}}}}'
     return ''
+
+
+def _mask_accepts_own_references(source):
+    """Не предлагаем маску, которая отвергает свой же эталон."""
+    if not source:
+        return False
+    spec = parse_mask(source)
+    if not spec.is_valid or not spec.slots:
+        return False
+    for slot in spec.slots:
+        if slot.kind == CHOICE:
+            value = slot.correct
+        elif slot.kind == ORDER:
+            value = '|'.join(str(index) for index in range(len(slot.items)))
+        else:
+            value = slot.reference
+        if check_slot(slot, value) != OK:
+            return False
+    return True
+
+
+def draft_mask(answer, condition="", exam_codes=None, *, source_number="", subitem_label=""):
+    """Безопасный черновик маски; ``''`` означает ручную сверку."""
+    candidate = _draft_mask(
+        answer, condition, exam_codes,
+        source_number=source_number, subitem_label=subitem_label)
+    return candidate if _mask_accepts_own_references(candidate) else ''

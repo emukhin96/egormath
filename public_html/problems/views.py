@@ -1207,6 +1207,8 @@ def _merge_review_subitems(from_editors, from_json):
 
 def _overlay_review_author_fields(subitems, original, post):
     """Авторские поля привязываются к метке пункта, а не к позиции JSON."""
+    from .textbook_import import normalize_answer_mask
+
     by_label = {}
     for index, item in enumerate(original):
         answer_key = f'subitem_author_answer_{index}'
@@ -1217,7 +1219,8 @@ def _overlay_review_author_fields(subitems, original, post):
             continue
         by_label[_subitem_label_key(item.get('label'))] = {
             'author_answer_latex': post.get(answer_key, '').strip(),
-            'answer_mask': post.get(mask_key, '').strip(),
+            'answer_mask': normalize_answer_mask(
+                post.get(mask_key, ''), key=f'маска подпункта {index + 1}'),
             'author_solution_latex': post.get(solution_key, '').strip(),
         }
     if not by_label:
@@ -1618,19 +1621,18 @@ def textbook_import_review(request, batch_pk, pk):
         form = TextbookDraftReviewForm(request.POST, instance=draft)
         if form.is_valid():
             updated = form.save(commit=False)
-            if any(f'subitem_text_{index}' in request.POST
-                   for index in range(_review_subitem_post_count(request.POST))):
-                from .textbook_import import TextbookImportError
-                try:
+            from .textbook_import import TextbookImportError
+            try:
+                if any(f'subitem_text_{index}' in request.POST
+                       for index in range(_review_subitem_post_count(request.POST))):
                     structured = _subitems_from_review_editors(request.POST)
-                except TextbookImportError as exc:
-                    form.add_error('subitems', str(exc))
-                else:
                     updated.subitems = _merge_review_subitems(
                         structured, updated.subitems)
-            else:
-                updated.subitems = _overlay_review_author_fields(
-                    updated.subitems, original_subitems, request.POST)
+                else:
+                    updated.subitems = _overlay_review_author_fields(
+                        updated.subitems, original_subitems, request.POST)
+            except TextbookImportError as exc:
+                form.add_error('subitems', str(exc))
             if not form.errors:
                 if updated.subitems and any(
                         str(item.get('author_answer_latex') or '').strip()

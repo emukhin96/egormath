@@ -4,7 +4,10 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from problems.models import TextbookImportBatch
-from problems.textbook_import import fill_draft_answer_masks
+from problems.textbook_import import (TextbookImportError,
+                                      _merge_author_fields,
+                                      _merge_subitem_author_fields,
+                                      fill_draft_answer_masks)
 
 
 class Command(BaseCommand):
@@ -22,7 +25,7 @@ class Command(BaseCommand):
         except TextbookImportBatch.DoesNotExist as exc:
             raise CommandError('Партия импорта не найдена.') from exc
 
-        drafts = list(batch.drafts.order_by('pk'))
+        drafts = list(batch.drafts.select_related('imported_task').order_by('pk'))
         changed = []
         targets = generated = unsupported = masks = 0
         for draft in drafts:
@@ -58,14 +61,36 @@ class Command(BaseCommand):
                 unsupported += bool(draft.author_answer_latex.strip()) \
                     and not bool(draft.answer_mask.strip())
 
-        if options['apply'] and changed:
-            with transaction.atomic():
-                type(drafts[0]).objects.bulk_update(
-                    changed, ['answer_mask', 'subitems'], batch_size=500)
+        transferred = 0
+        if options['apply']:
+            try:
+                with transaction.atomic():
+                    if changed:
+                        type(drafts[0]).objects.bulk_update(
+                            changed, ['answer_mask', 'subitems'], batch_size=500)
+                    for draft in drafts:
+                        if (draft.status != draft.STATUS_IMPORTED
+                                or not draft.imported_task_id):
+                            continue
+                        task = draft.imported_task
+                        if draft.subitems:
+                            before = task.subitems.exclude(
+                                answer_mask='').count()
+                            _merge_subitem_author_fields(task, draft)
+                            after = task.subitems.exclude(
+                                answer_mask='').count()
+                        else:
+                            before = bool(task.answer_mask.strip())
+                            _merge_author_fields(task, draft)
+                            after = bool(task.answer_mask.strip())
+                        transferred += after - before
+            except TextbookImportError as exc:
+                raise CommandError(str(exc)) from exc
 
         mode = 'сохранено' if options['apply'] else 'предпросмотр'
         self.stdout.write(self.style.SUCCESS(
             f'{mode}: партия {batch.pk}; целей с авторским ответом {targets}; '
             f'масок {masks}; новых {generated}; '
             f'без безопасной маски {unsupported}; '
-            f'изменённых задач {len(changed)}.'))
+            f'изменённых задач {len(changed)}; '
+            f'перенесено в каталог {transferred}.'))

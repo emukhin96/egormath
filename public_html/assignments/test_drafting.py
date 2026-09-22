@@ -53,3 +53,18 @@ class ContextDraftTests(SimpleTestCase):
 
     def test_unrecognised_geometry_keeps_scalar(self):
         self.assertEqual(draft_mask('8', 'Найдите высоту трапеции.'), '{{number: 8}}')
+
+    def test_general_geometry_value_does_not_inherit_condition_unit(self):
+        self.assertEqual(
+            draft_mask('$0,5$',
+                       'В треугольнике сторона равна 10 см. Найдите косинус угла.'),
+            '{{number: 0,5}}')
+        self.assertEqual(
+            draft_mask('$2$',
+                       'В треугольнике, причём он равнобедренный. Найдите высоту.'),
+            '{{number: 2}}')
+
+    def test_equation_request_is_not_treated_as_solved_variable(self):
+        self.assertEqual(
+            draft_mask('$x=3$', 'Составьте уравнение прямой.'),
+            '{{equation: x=3}}')
