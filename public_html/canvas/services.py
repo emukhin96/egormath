@@ -3,6 +3,8 @@ from django.conf import settings
 from django.db.models import Count, Max, Q
 from django.utils import timezone
 
+from problems.models import TaskImage
+
 from .models import CanvasPage
 
 
@@ -117,3 +119,29 @@ def creation_allowed(pages, access, layer):
         if own >= CanvasPage.TEACHER_PAGE_LIMIT:
             return f'Учитель может добавить не больше {CanvasPage.TEACHER_PAGE_LIMIT} страниц'
     return None
+
+
+def task_images(task_id):
+    """Растровые иллюстрации задачи, которые можно положить на доску
+    (PDF Canvas не рисует). Размер клиент узнаёт сам при загрузке."""
+    from django.urls import reverse
+    return [{'id': image.pk, 'url': reverse('task_image_file', args=[image.pk]), 'name': image.filename}
+            for image in TaskImage.objects.filter(task_id=task_id) if not image.is_pdf]
+
+
+def foreign_images(elements, task_id):
+    """id картинок из элементов, которые не принадлежат этой задаче."""
+    wanted = {e['s'] for e in elements if e.get('t') == 'img'}
+    if not wanted:
+        return set()
+    own = {image.pk for image in TaskImage.objects.filter(task_id=task_id, pk__in=wanted) if not image.is_pdf}
+    return wanted - own
+
+
+def attach_image_urls(elements):
+    """Адрес файла хранится прямо в элементе (`u`): так рисунок рисует любой
+    потребитель JSON — виджет, живой обзор, миниатюра дашборда — без справочника."""
+    from django.urls import reverse
+    for element in elements:
+        if element.get('t') == 'img':
+            element['u'] = reverse('task_image_file', args=[element['s']])

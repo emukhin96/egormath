@@ -28,6 +28,7 @@ POINT_COUNTS = {
     'tri': (3, 3),
     'para': (3, 3),
     'fn': (2, 2),
+    'img': (3, 3),   # иллюстрация задачи: левый верхний, правый верхний, левый нижний углы
 }
 FN_KINDS = ('parabola', 'abs', 'sqrt', 'hyperbola')
 BACKGROUNDS = {choice for choice, _ in CanvasPage.BG_CHOICES}
@@ -95,6 +96,11 @@ def validate_element(raw):
         element['k'] = fn_kind
     if kind == 'dot' and raw.get('l'):
         element['l'] = True
+    if kind == 'img':
+        source = raw.get('s')
+        if isinstance(source, bool) or not isinstance(source, int) or source <= 0:
+            raise CanvasValidationError('У рисунка нет ссылки на картинку задачи')
+        element['s'] = source
     return element
 
 

@@ -97,6 +97,7 @@ def pages(request, pk, task_id):
         'can_edit_teacher': access.can_edit_teacher,
         'show_teacher_layer': access.show_teacher_layer,
         'can_add_pages': access.can_add_pages,
+        'images': services.task_images(task_id),
         'limits': {
             'student': CanvasPage.STUDENT_PAGE_LIMIT,
             'teacher': CanvasPage.TEACHER_PAGE_LIMIT,
@@ -132,6 +133,9 @@ def save_page(request, pk, task_id, number):
         return _error(str(exc))
     if len(json.dumps(elements, separators=(',', ':'))) > CanvasPage.MAX_BYTES:
         return _error('Страница слишком большая — упростите рисунок', status=413)
+    if services.foreign_images(elements, task_id):
+        return _error('На доску можно положить только иллюстрации этой задачи')
+    services.attach_image_urls(elements)
     try:
         version = int(data.get('version', 0))
     except (TypeError, ValueError, OverflowError):

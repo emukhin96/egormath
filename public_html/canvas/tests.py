@@ -1,5 +1,6 @@
 """Права, лимиты и заморозка страниц холста."""
 import json
+import tempfile
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -7,7 +8,9 @@ from django.urls import reverse
 from accounts.models import Profile
 from assignments.models import Assignment
 from assignments.progress import answer_versions
-from problems.models import Task
+from django.core.files.base import ContentFile
+
+from problems.models import Task, TaskImage
 from problems.tests import make_student, make_teacher
 from worksheets.models import WorksheetItem
 from worksheets.tests import make_worksheet
@@ -343,6 +346,59 @@ class SubmitAndTeacherTests(CanvasBase):
         self.assertContains(response, 'toggle-canvas')
         response = self.client.get(reverse('assignment_live', args=[self.assignment.pk]))
         self.assertContains(response, 'data-role=\\"viewer\\"')
+
+
+def make_image(task, name='fig.png'):
+    """Картинка задачи: PNG через PIL (save() сжимает растровые файлы) или PDF-заглушка."""
+    import io
+    from PIL import Image
+    image = TaskImage(task=task, order=1)
+    if name.endswith('.pdf'):
+        image.image.save(name, ContentFile(b'%PDF-1.4'), save=True)
+    else:
+        buf = io.BytesIO()
+        Image.new('RGB', (40, 30), 'white').save(buf, format='PNG')
+        image.image.save(name, ContentFile(buf.getvalue()), save=True)
+    return image
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class ImageElementTests(CanvasBase):
+    """Иллюстрация задачи на доске: только своя, только растровая."""
+
+    def setUp(self):
+        super().setUp()
+        self.image = make_image(self.task)
+        self.pdf = make_image(self.task, 'fig.pdf')
+        self.foreign = make_image(Task.objects.create(text_latex='Другая задача'), 'other.png')
+        self.client.force_login(self.student)
+
+    def img(self, source, element_id='i1'):
+        return {'id': element_id, 't': 'img', 's': source, 'w': 1, 'c': '#000000',
+                'p': [[100, 100], [500, 100], [100, 400]]}
+
+    def test_images_listed_without_pdf(self):
+        data = self.client.get(self.url('pages')).json()
+        self.assertEqual([i['id'] for i in data['images']], [self.image.pk])
+        self.assertIn(f'/images/{self.image.pk}/file/', data['images'][0]['url'])
+
+    def test_save_and_reject_foreign(self):
+        self.assertEqual(self.save(elements=[stroke(), self.img(self.image.pk)]).status_code, 200)
+        saved = CanvasPage.objects.get().student_elements[1]
+        self.assertEqual((saved['t'], saved['s'], len(saved['p'])), ('img', self.image.pk, 3))
+        self.assertEqual(saved['u'], f'/problems/images/{self.image.pk}/file/')
+        response = self.save(elements=[self.img(self.foreign.pk)], version=1)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('этой задачи', response.json()['message'])
+        self.assertEqual(self.save(elements=[self.img(self.pdf.pk)], version=1).status_code, 400)
+
+    def test_schema(self):
+        bad = self.img(self.image.pk); bad['p'] = bad['p'][:2]
+        self.assertEqual(self.save(elements=[bad]).status_code, 400)
+        bad = self.img(self.image.pk); del bad['s']
+        self.assertEqual(self.save(elements=[bad]).status_code, 400)
+        bad = self.img(self.image.pk); bad['s'] = 'x'
+        self.assertEqual(self.save(elements=[bad]).status_code, 400)
 
 
 class BoardsTests(CanvasBase):
