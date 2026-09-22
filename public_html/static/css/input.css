@@ -4692,6 +4692,19 @@
   .canvas-widget { margin-top: var(--space-3); min-width: 0; max-width: 600px; }
   .ws-view .canvas-widget { margin-left: var(--task-indent); }
   .canvas-launch { margin: 0; }
+
+  /* «Активность ученика»: сводка, чипы, лента интервалов */
+  .audit-summary { margin: 0 0 var(--space-2); font-size: 0.9rem; }
+  .audit-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-2); }
+  .audit-filters .btn { margin: 0; }
+  .audit-filters .btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .audit-timeline { list-style: none; margin: 0; padding: 0; font-size: 0.9rem; }
+  .audit-row { display: flex; gap: var(--space-2); align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--border); }
+  .audit-time { flex: none; min-width: 5.5rem; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .audit-away .audit-text::before { content: '⇠ '; color: var(--muted); }
+  .audit-copy .audit-text::before, .audit-paste .audit-text::before, .audit-drop .audit-text::before { content: '⎘ '; color: var(--muted); }
+  .audit-blocked .audit-text { color: #b45309; }
+  .audit-note { margin-top: var(--space-2); }
   .canvas-head, .canvas-toolbar, .canvas-pages, .canvas-controls, .canvas-group {
     display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
   }

@@ -1,0 +1,5 @@
+<p class="helptext">События браузера могут быть неполными и не доказывают списывание. Время получения — серверное, время действия — по часам устройства. Интервалы разных страниц не суммируются.</p>
+{% for item in summary %}<p>Страница {{ item.page }}: скрытий {{ item.count }}, известная длительность {{ item.seconds }} с.{% if item.unknown %} Незавершённых или неполных интервалов: {{ item.unknown }}; длительность неизвестна.{% endif %}</p>{% endfor %}
+<ol>{% for event in page %}<li>{{ event.received_at|date:'d.m.Y H:i:s' }} — {{ event.get_kind_display }}{% if event.kind == 'copy' or event.kind == 'paste' or event.kind == 'drop' %} · {% if event.blocked %}заблокировано{% else %}разрешено{% endif %}{% endif %}<span class="helptext"> · страница {{ event.page_id|stringformat:'s'|slice:':8' }} · на устройстве {{ event.client_at|date:'d.m.Y H:i:s' }}</span></li>{% empty %}<li>За последние 90 дней событий нет.</li>{% endfor %}</ol>
+{% include 'workaudit/pagination.html' with raw=1 %}
+<p><a class="helptext" data-audit-page href="?">К ленте</a></p>
