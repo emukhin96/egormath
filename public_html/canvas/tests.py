@@ -505,6 +505,13 @@ class BoardsTests(CanvasBase):
         response = self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk]), {'task': self.task.pk})
         self.assertContains(response, 'data-task="%d"' % self.task.pk)
         self.assertContains(response, 'boards/live/?task=%d' % self.task.pk)
+        # кнопки задач: только те, где есть доски; выбранная — нажата
+        fourth = Task.objects.create(text_latex='Без досок')
+        WorksheetItem.objects.create(worksheet=self.worksheet, task=fourth, order=4)
+        html = self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk]), {'task': self.task.pk}).content.decode()
+        self.assertIn('href="?task=%d" aria-pressed="true"' % self.task.pk, html)
+        self.assertIn('href="?task=%d" aria-pressed="false"' % other.pk, html)
+        self.assertNotIn('task=%d"' % fourth.pk, html)
 
     def test_since_and_not_modified(self):
         self.client.force_login(self.student)

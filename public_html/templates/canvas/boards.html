@@ -2,10 +2,14 @@
 {% block title %}Доски · {{ worksheet.title }}{% endblock %}
 {% block content %}
 <h1>{{ worksheet.title }} · доски</h1>
-<p><a href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">Вернуться к прогрессу</a></p>
-<form method="get" class="progress-filters"><label for="boards-group">Группа</label><select id="boards-group" name="group"><option value="">Все назначенные ученики</option>{% for g in groups %}<option value="{{ g.pk }}" {% if g.pk|stringformat:'s' == group_id %}selected{% endif %}>{{ g.name }}</option>{% endfor %}</select>
-<label for="boards-task">Задача</label><select id="boards-task" name="task"><option value="">Последняя изменённая у каждого</option>{% for t in tasks %}<option value="{{ t.id }}" {% if t.id == task_id %}selected{% endif %}>Задача {{ t.no }}</option>{% endfor %}</select>
-<button class="btn btn-secondary">Показать</button></form>
+<div class="progress-head">
+  <form method="get" class="progress-filters"><label for="boards-group">Группа</label><select id="boards-group" name="group"><option value="">Все назначенные ученики</option>{% for g in groups %}<option value="{{ g.pk }}" {% if g.pk|stringformat:'s' == group_id %}selected{% endif %}>{{ g.name }}</option>{% endfor %}</select>{% if task_id %}<input type="hidden" name="task" value="{{ task_id }}">{% endif %}<button class="btn btn-secondary">Показать</button></form>
+  <a class="progress-back" href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">Вернуться к прогрессу</a>
+</div>
+<p class="boards-tasks"><span class="boards-tasks-label">Задача</span>
+  <a class="btn btn-small btn-secondary" href="?{% if group_id %}group={{ group_id }}{% endif %}" aria-pressed="{% if not task_id %}true{% else %}false{% endif %}" title="У каждого ученика — последняя изменённая доска">Последняя</a>
+  {% for t in tasks %}<a class="btn btn-small btn-secondary" href="?{% if group_id %}group={{ group_id }}&{% endif %}task={{ t.id }}" aria-pressed="{% if t.id == task_id %}true{% else %}false{% endif %}" title="Доски задачи {{ t.no }} у всех учеников">{{ t.no }}</a>{% empty %}<span class="helptext">досок пока нет</span>{% endfor %}
+</p>
 {% if not canvas_enabled %}<p class="helptext">Доски для записей временно отключены.</p>{% else %}
 <p class="helptext boards-status" data-boards-status role="status">Доски обновляются каждые 5 секунд. Нажмите на доску, чтобы открыть её с инструментами и оставить пометки.</p>
 {% if overflow %}<p class="helptext boards-overflow">На экране {{ boards_max }} учеников с самой свежей активностью; ещё {{ overflow }} не поместились — выберите группу поменьше.</p>{% endif %}
