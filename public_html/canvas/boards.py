@@ -7,6 +7,7 @@
 не должен отдавать JSON всех досок класса на каждый тик.
 """
 import hashlib
+from urllib.parse import urlencode
 
 from django.db.models import Count, Max, Q, Sum
 from django.http import HttpResponseNotModified, JsonResponse
@@ -47,6 +48,14 @@ def _task_numbers(worksheet):
     return {item.task_id: number for number, item in enumerate(items, 1)}
 
 
+def _task_filter(request, numbers):
+    """?task=<id задачи> — показывать доски одной задачи у всех, а не последнюю
+    изменённую у каждого; неизвестная задача = без фильтра."""
+    raw = request.GET.get('task', '')
+    task_id = int(raw) if raw.isdigit() else None
+    return task_id if task_id in numbers else None
+
+
 def _updated(page):
     stamps = [t for t in (page.student_updated_at, page.teacher_updated_at) if t]
     return max(stamps) if stamps else page.created_at
@@ -66,11 +75,16 @@ def _states(assignments):
 def worksheet_boards(request, worksheet_id):
     worksheet = get_object_or_404(Worksheet.visible_to(request.user), pk=worksheet_id)
     assignments, overflow, group = _selection(request, worksheet)
+    numbers = _task_numbers(worksheet)
+    task_id = _task_filter(request, numbers)
+    query = {k: v for k, v in (('group', request.GET.get('group', '')), ('task', task_id)) if v}
     return render(request, 'canvas/boards.html', {
         'worksheet': worksheet, 'assignments': assignments, 'overflow': overflow,
         'groups': StudentGroup.visible_to(request.user), 'group': group,
         'group_id': request.GET.get('group', ''), 'boards_max': BOARDS_MAX,
-        'live_url': reverse('worksheet_boards_live', args=[worksheet.pk]),
+        'tasks': [{'id': tid, 'no': no} for tid, no in numbers.items()], 'task_id': task_id,
+        'task_no': numbers.get(task_id),
+        'live_url': reverse('worksheet_boards_live', args=[worksheet.pk]) + ('?' + urlencode(query) if query else ''),
     })
 
 
@@ -87,31 +101,35 @@ def worksheet_boards_live(request, worksheet_id):
     if since is not None and timezone.is_naive(since):
         since = None
     now = timezone.now()
+    numbers = _task_numbers(worksheet)
+    task_id = _task_filter(request, numbers)
     pages = CanvasPage.objects.filter(submission__assignment_id__in=ids).select_related('submission')
+    if task_id:
+        pages = pages.filter(submission__task_id=task_id)
     states = _states(assignments)
     # Подпись экрана: статусы учеников + сводка по всем страницам выборки.
     # Не зависит от since, поэтому пустой опрос после первой загрузки — сразу 304.
     summary = pages.aggregate(n=Count('pk'), s=Max('student_updated_at'), t=Max('teacher_updated_at'),
                               c=Max('created_at'), sv=Sum('student_version'), tv=Sum('teacher_version'))
     signature = hashlib.sha256(repr([
-        [(s['assignment'], s['status']) for s in states], overflow, sorted(summary.items()),
+        [(s['assignment'], s['status']) for s in states], overflow, task_id, sorted(summary.items()),
     ]).encode()).hexdigest()
     etag = f'"{signature}"'
     if request.headers.get('If-None-Match') == etag:
         return HttpResponseNotModified()
-    numbers = _task_numbers(worksheet)
     tasks = []
     if since is None:
         # Первая загрузка: лёгкий список всех задач со страницами у каждого
-        # ученика (для диалога) и JSON только одной последней страницы — для миниатюры
-        light = pages.values_list('pk', 'submission__assignment_id', 'submission__task_id', 'number',
+        # ученика (для диалога, без фильтра по задаче) и JSON только одной
+        # последней страницы — для миниатюры
+        light = CanvasPage.objects.filter(submission__assignment_id__in=ids).values_list('pk', 'submission__assignment_id', 'submission__task_id', 'number',
                                   'student_updated_at', 'teacher_updated_at', 'created_at')
         latest, per_task = {}, {}
-        for pk, assignment_id, task_id, number, s_at, t_at, c_at in light:
+        for pk, assignment_id, page_task, number, s_at, t_at, c_at in light:
             stamp = max(t for t in (s_at, t_at, c_at) if t)
-            if assignment_id not in latest or stamp > latest[assignment_id][0]:
+            if (not task_id or page_task == task_id) and (assignment_id not in latest or stamp > latest[assignment_id][0]):
                 latest[assignment_id] = (stamp, pk)
-            key = (assignment_id, task_id)
+            key = (assignment_id, page_task)
             per_task[key] = max(per_task.get(key, 0), number)
         changed = list(pages.filter(pk__in=[pk for _, pk in latest.values()]))
         tasks = [{'assignment': a, 'task': t, 'task_no': numbers.get(t), 'count': n,
@@ -122,6 +140,7 @@ def worksheet_boards_live(request, worksheet_id):
                                     | Q(created_at__gt=since)))
     response = JsonResponse({
         'ok': True, 'since': now.isoformat(), 'overflow': overflow, 'states': states, 'tasks': tasks,
+        'task': task_id,
         'pages': [{
             'assignment': p.submission.assignment_id,
             'task': p.submission.task_id, 'task_no': numbers.get(p.submission.task_id),
