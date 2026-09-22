@@ -109,32 +109,39 @@ def worksheet_boards_live(request, worksheet_id):
     states = _states(assignments)
     # Подпись экрана: статусы учеников + сводка по всем страницам выборки.
     # Не зависит от since, поэтому пустой опрос после первой загрузки — сразу 304.
+    # Лёгкий список всех задач со страницами у каждого ученика — для диалога,
+    # без фильтра по задаче; при фильтре — плюс пустая запись выбранной задачи у тех,
+    # у кого доски по ней нет (диалог открывает её пустой, не соседнюю). Список
+    # входит в подпись и приходит при каждом 200, чтобы новая доска другой задачи
+    # появилась в диалоге без перезагрузки.
+    light = list(CanvasPage.objects.filter(submission__assignment_id__in=ids).values_list(
+        'pk', 'submission__assignment_id', 'submission__task_id', 'number',
+        'student_updated_at', 'teacher_updated_at', 'created_at'))
+    latest, per_task = {}, {}
+    for pk, assignment_id, page_task, number, s_at, t_at, c_at in light:
+        stamp = max(t for t in (s_at, t_at, c_at) if t)
+        if (not task_id or page_task == task_id) and (assignment_id not in latest or stamp > latest[assignment_id][0]):
+            latest[assignment_id] = (stamp, pk)
+        key = (assignment_id, page_task)
+        per_task[key] = max(per_task.get(key, 0), number)
+    if task_id:
+        for assignment_id in ids:
+            per_task.setdefault((assignment_id, task_id), 0)
+    tasks = [{'assignment': a, 'task': t, 'task_no': numbers.get(t), 'count': n,
+              'canvas_url': reverse('canvas:pages', args=[a, t])}
+             for (a, t), n in sorted(per_task.items())]
     summary = pages.aggregate(n=Count('pk'), s=Max('student_updated_at'), t=Max('teacher_updated_at'),
                               c=Max('created_at'), sv=Sum('student_version'), tv=Sum('teacher_version'))
     signature = hashlib.sha256(repr([
         [(s['assignment'], s['status']) for s in states], overflow, task_id, sorted(summary.items()),
+        sorted(per_task.items()),
     ]).encode()).hexdigest()
     etag = f'"{signature}"'
     if request.headers.get('If-None-Match') == etag:
         return HttpResponseNotModified()
-    tasks = []
     if since is None:
-        # Первая загрузка: лёгкий список всех задач со страницами у каждого
-        # ученика (для диалога, без фильтра по задаче) и JSON только одной
-        # последней страницы — для миниатюры
-        light = CanvasPage.objects.filter(submission__assignment_id__in=ids).values_list('pk', 'submission__assignment_id', 'submission__task_id', 'number',
-                                  'student_updated_at', 'teacher_updated_at', 'created_at')
-        latest, per_task = {}, {}
-        for pk, assignment_id, page_task, number, s_at, t_at, c_at in light:
-            stamp = max(t for t in (s_at, t_at, c_at) if t)
-            if (not task_id or page_task == task_id) and (assignment_id not in latest or stamp > latest[assignment_id][0]):
-                latest[assignment_id] = (stamp, pk)
-            key = (assignment_id, page_task)
-            per_task[key] = max(per_task.get(key, 0), number)
+        # Первая загрузка: JSON рисунка только одной последней страницы — для миниатюры
         changed = list(pages.filter(pk__in=[pk for _, pk in latest.values()]))
-        tasks = [{'assignment': a, 'task': t, 'task_no': numbers.get(t), 'count': n,
-                  'canvas_url': reverse('canvas:pages', args=[a, t])}
-                 for (a, t), n in sorted(per_task.items())]
     else:
         changed = list(pages.filter(Q(student_updated_at__gt=since) | Q(teacher_updated_at__gt=since)
                                     | Q(created_at__gt=since)))

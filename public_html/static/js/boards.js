@@ -145,10 +145,12 @@
     tasks.forEach(function (task) {
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'btn btn-small btn-secondary'; b.dataset.dialogTask = task;
-      b.textContent = 'Задача ' + byTask[task].task_no;
+      b.textContent = 'Задача ' + byTask[task].task_no + (byTask[task].count ? '' : ' — пусто');
       b.addEventListener('click', function () { mount(id, parseInt(task, 10)); });
       bar.appendChild(b);
     });
+    /* При фильтре по задаче диалог открывается на ней — пустой, если доски нет:
+       сервер добавляет такую задачу в tasks с count 0 */
     var first = taskFilter && byTask[taskFilter] ? taskFilter : latest[id] ? latest[id].task : parseInt(tasks[0], 10);
     mount(id, first);
     if (!dialog.open) dialog.showModal();

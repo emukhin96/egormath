@@ -592,7 +592,8 @@
   Widget.prototype.applyTeacherToggle = function () {
     var count = parseInt(this.root.dataset.pages || '0', 10) || 0;
     /* data-always — виджет в диалоге дашборда: там нет тумблера, доска нужна всегда */
-    if (this.root.dataset.always || Widget.showEnabled()) {
+    if (this.root.dataset.always) { this.show(); return; }   /* в диалоге доска нужна даже пустая */
+    if (Widget.showEnabled()) {
       if (count || this.loaded) this.show(); else this.renderLauncher();
       return;
     }
