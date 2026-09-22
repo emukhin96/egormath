@@ -71,10 +71,11 @@ def assignment_access(assignment, user, role):
         show_teacher_layer=True, teacher_pages=not editable)
 
 
-def pages_etag(pages, access):
-    """Подпись набора страниц для If-None-Match: версии слоёв и всё, что
-    меняется вместе с ними; сами элементы не хэшируем."""
-    parts = [access.layer or '-', 'a' if access.can_add_pages else '-']
+def pages_etag(pages, access, images=()):
+    """Подпись ответа для If-None-Match: версии слоёв, права и набор
+    доступных иллюстраций задачи; сами элементы не хэшируем."""
+    parts = [access.layer or '-', 'a' if access.can_add_pages else '-',
+             'i' + ','.join(str(image['id']) for image in images)]
     for page in pages:
         parts.append(f'{page.number}:{page.student_version}:{page.teacher_version}:{int(page.is_locked)}')
     return '"' + '|'.join(parts) + '"'

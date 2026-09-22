@@ -86,7 +86,8 @@ def pages(request, pk, task_id):
         return _disabled()
     assignment, access = _resolve(request, pk, task_id)
     pages = _pages(assignment, task_id)
-    etag = services.pages_etag(pages, access)
+    images = services.task_images(task_id)
+    etag = services.pages_etag(pages, access, images)
     if request.headers.get('If-None-Match') == etag:
         return HttpResponseNotModified()
     response = JsonResponse({
@@ -97,7 +98,7 @@ def pages(request, pk, task_id):
         'can_edit_teacher': access.can_edit_teacher,
         'show_teacher_layer': access.show_teacher_layer,
         'can_add_pages': access.can_add_pages,
-        'images': services.task_images(task_id),
+        'images': images,
         'limits': {
             'student': CanvasPage.STUDENT_PAGE_LIMIT,
             'teacher': CanvasPage.TEACHER_PAGE_LIMIT,
