@@ -90,6 +90,17 @@ HELP = (
 
 _OPEN_RE = re.compile(r'\{\{\s*([a-z]+)\s*:')
 _TOLERANCE_RE = re.compile(r'^(.*?)\s*~\s*([^~]+)$')
+_ANSWER_MATH_RE = re.compile(r'\$([^$]+)\$')
+_COORDINATE_PAIR_RE = re.compile(
+    r'(?:(?<![A-Za-zА-Яа-я])'
+    r'(?P<label>(?:[A-Za-z]{1,4}|[А-Я])(?:_[0-9]+)?)\s*)?'
+    r'\(\s*(?P<x>[^;()]+?)\s*;\s*(?P<y>[^;()]+?)\s*\)')
+_UNIT_TOKEN_RE = re.compile(
+    r'сторон(?:а|ы)?|'
+    r'(?:мм|см|дм|м|км)(?:\s*/\s*(?:с|мин|ч))|'
+    r'(?:мм|см|дм|м|км|г|кг|с|мин|ч|Н)(?:\s*\^\s*[23])?|'
+    r'°|градус(?:а|ов)?|раз(?:а)?|'
+    r'единиц(?:а|ы)?|кв\.\s*ед\.|куб\.\s*ед\.', re.I)
 
 
 @dataclass
@@ -582,6 +593,122 @@ def _unwrap_set_braces(text):
     return text
 
 
+def _numeric_math_set(answer):
+    """Несколько отдельных чисел в формулах превращает в одно множество.
+
+    Между формулами допускаются только перечислительные связки. Поэтому
+    предложение с пояснением не станет коротким проверяемым ответом.
+    """
+    source = re.sub(
+        r'([A-Za-zА-Яа-я.]+)\$\^\{?([23])\}?\$',
+        r'\1^\2', answer or '')
+    matches = list(_ANSWER_MATH_RE.finditer(source))
+    if len(matches) < 2:
+        return ''
+    values = []
+    for match in matches:
+        value = re.sub(r'\^\{?\\circ\}?', '', match.group(1)).strip()
+        if '=' in value or sets.numeric_value(value) is None:
+            return ''
+        values.append(value)
+    if len(set(values)) != len(values):
+        return ''
+    outside = _ANSWER_MATH_RE.sub(' ', source)
+    outside = re.sub(r'\b(?:и|или)\b', ' ', outside, flags=re.I)
+    outside = re.sub(r'(?:°|\\circ|\^\{?\\circ\}?)', ' ', outside)
+    units = [re.sub(r'\s+', '', match.group())
+             for match in _UNIT_TOKEN_RE.finditer(outside)]
+    if len({unit.casefold() for unit in units}) > 1:
+        return ''
+    outside = _UNIT_TOKEN_RE.sub(' ', outside)
+    if re.sub(r'[\s,;./]', '', outside):
+        return ''
+    candidate = f'{{{{{SET}: {"; ".join(values)}}}}}'
+    if not parse_mask(candidate).is_valid:
+        return ''
+    suffix = f' {units[0]}' if units and units[0] != '°' else ('°' if units else '')
+    return candidate + suffix
+
+
+def _single_numeric_math(answer):
+    """Число в единственной формуле с короткой единицей измерения."""
+    source = re.sub(
+        r'([A-Za-zА-Яа-я.]+)\$\^\{?([23])\}?\$',
+        r'\1^\2', answer or '')
+    matches = list(_ANSWER_MATH_RE.finditer(source))
+    if len(matches) != 1:
+        return ''
+    raw = matches[0].group(1).strip()
+    approximate = bool(re.match(r'^\\approx\b', raw))
+    raw = re.sub(r'^\\approx\s*', '', raw)
+    degree = bool(re.search(r'\^\{?\\circ\}?', raw))
+    value = re.sub(r'\^\{?\\circ\}?', '', raw).strip()
+    if '=' in value or sets.numeric_value(value) is None:
+        return ''
+    outside = (source[:matches[0].start()]
+               + source[matches[0].end():]).strip().rstrip('.')
+    prefix = ''
+    if re.match(r'^(?:в|около)\b', outside, re.I):
+        word, outside = outside.split(maxsplit=1)
+        prefix = word.capitalize() + ' '
+    if re.match(r'^(?:≈|\\approx)\s*', outside):
+        approximate = True
+        outside = re.sub(r'^(?:≈|\\approx)\s*', '', outside)
+    if degree:
+        outside = re.sub(r'^(?:°|градус(?:а|ов)?)$', '', outside,
+                         flags=re.I).strip()
+    units = [match.group().strip() for match in _UNIT_TOKEN_RE.finditer(outside)]
+    residue = _UNIT_TOKEN_RE.sub(' ', outside)
+    if re.sub(r'[\s,;./]', '', residue):
+        return ''
+    suffix = '°' if degree else (f' {units[0]}' if len(units) == 1 else '')
+    if len(units) > 1:
+        return ''
+    if approximate:
+        prefix += '≈ '
+    return f'{prefix}{{{{{NUMBER}: {value}}}}}{suffix}'
+
+
+def _coordinate_pair_mask(answer, condition):
+    """Координаты точек: подписи берём из ответа, числа не решаем."""
+    if not re.search(r'координат', condition or '', re.I):
+        return ''
+    plain = (answer or '').replace('$', '')
+    plain = re.sub(
+        r'\\(?:vec|overrightarrow)\{([^{}]+)\}',
+        lambda match: re.sub(r'\s+', '', match.group(1)), plain)
+    plain = re.sub(r'([A-Za-zА-Яа-я])_\{?([0-9]+)\}?', r'\1_\2', plain)
+    matches = list(_COORDINATE_PAIR_RE.finditer(plain))
+    if not matches:
+        return ''
+    residue = _COORDINATE_PAIR_RE.sub(' ', plain)
+    residue = re.sub(r'\b(?:и|или)\b', ' ', residue, flags=re.I)
+    if re.sub(r'[\s,;.]', '', residue):
+        return ''
+    pairs = []
+    for match in matches:
+        pair = f'({match.group("x").strip()}; {match.group("y").strip()})'
+        candidate = f'{{{{{PAIR}: {pair}}}}}'
+        if not parse_mask(candidate).is_valid:
+            return ''
+        pairs.append(pair)
+    labels = [
+        None if str(match.group('label') or '').casefold() in {'и', 'или'}
+        else match.group('label')
+        for match in matches
+    ]
+    if len(set(labels)) == 1:
+        candidate = f'{{{{{PAIR}: {"; ".join(pairs)}}}}}'
+        if not parse_mask(candidate).is_valid:
+            return ''
+        return (f'${labels[0]} =$ ' if labels[0] else '') + candidate
+    if any(not label for label in labels) or len(set(labels)) != len(labels):
+        return ''
+    return ', '.join(
+        f'${label} =$ {{{{{PAIR}: {pair}}}}}'
+        for label, pair in zip(labels, pairs))
+
+
 def draft_mask(answer, condition="", exam_codes=None, *, source_number="", subitem_label=""):
     """Черновик маски из текстового «Ответа» для тривиальных случаев;
     '' — не угадали, учитель пишет маску сам."""
@@ -598,18 +725,44 @@ def draft_mask(answer, condition="", exam_codes=None, *, source_number="", subit
         text = text.replace('{,}', ',')
         candidate = f'{{{{{kind}: {text}}}}}'
         return candidate if parse_mask(candidate).is_valid else ''
-    ratio_text = (answer or '').replace('$', '').strip()
+    answer = (answer or '').replace('\\displaystyle', '')
+    answer = answer.replace('\\operatorname{tg}', '\\tan')
+    answer = answer.replace('\\operatorname{ctg}', '\\cot')
+    numeric_set = _numeric_math_set(answer)
+    if numeric_set:
+        return numeric_set
+    coordinates = _coordinate_pair_mask(answer, condition)
+    if coordinates:
+        return coordinates
+    ratio_text = answer.replace('$', '').strip()
     if ':' in ratio_text and formats.ratio(ratio_text) is not None:
         return f'{{{{{RATIO}: {ratio_text}}}}}'
     from .drafting import contextual_draft
     contextual = contextual_draft(answer, condition)
-    if contextual is not None:
-        return contextual if contextual and parse_mask(contextual).is_valid else ''
-    text = (answer or '').replace('$', ' ').strip()
+    if contextual:
+        return contextual if parse_mask(contextual).is_valid else ''
+    if contextual == '' and re.search(
+            r'реши\w*\s+(?:следующ\w*\s+)?(?:уравнен|систем)|'
+            r'найди\w*\s+(?:все\s+)?корни', condition or '', re.I):
+        return ''
+    single_numeric = _single_numeric_math(answer)
+    if single_numeric:
+        return single_numeric
+    text = answer.replace('$', ' ').strip()
     if not text:
         return ''
     text = re.sub(r'\s+', ' ', text)
     low = normalize(text).lower().rstrip('.')
+    if re.fullmatch(r'да(?:\s*\(см\.[^)]*\))?', low):
+        return '{{yesno: да}}'
+    if re.fullmatch(r'нет(?:\s*\(см\.[^)]*\))?', low):
+        return '{{yesno: нет}}'
+    if re.search(r'существу(?:ет|ют)\s+ли', condition or '', re.I) \
+            and low in {'существует', 'существуют'}:
+        return '{{yesno: да}}'
+    if re.search(r'могут\s+ли', condition or '', re.I) \
+            and low == 'не могут':
+        return '{{yesno: нет}}'
     for preset, options in PRESETS.items():
         if low in options or (preset == 'parity' and low in ('четная', 'нечетная')):
             return f'{{{{{preset}: {low}}}}}'

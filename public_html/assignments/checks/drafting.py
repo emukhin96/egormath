@@ -26,7 +26,13 @@ def _slot(kind, value):
 def _equation(answer, condition):
     # Обычные школьные неизвестные; параметры a, b не становятся полями.
     variables = sorted(set(re.findall(r'(?<![A-Za-z\\])[xyz](?![A-Za-z])', condition)))
-    assignments = list(_ASSIGNMENT.finditer(answer))
+    assignments = []
+    for match in _ASSIGNMENT.finditer(answer):
+        prefix = answer[:match.start()]
+        if prefix.strip() and not re.search(
+                r'(?:[,;]|\bи(?:ли)?)\s*$', prefix, re.I):
+            continue
+        assignments.append(match)
     if assignments:
         groups = {}
         for i, match in enumerate(assignments):
@@ -117,6 +123,10 @@ def contextual_draft(answer, condition):
         return None
     if _SOLVE.search(condition):
         return _equation(answer, condition)
+    if _ASSIGNMENT.search(answer):
+        drafted = _equation(answer, condition)
+        if drafted:
+            return drafted
     if _GEOMETRY.search(condition) and re.search(r'найдите|вычислите|определите', condition, re.I):
         return _geometry(answer, condition)
     return None
