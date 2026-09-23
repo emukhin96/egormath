@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .merzlyak_parser import (
-    answer_markers, cut_task_body, normalize_degrees, normalize_units,
+    _book_structure, MERZLYAK_GEOM9_STRUCTURE, answer_markers, cut_task_body, normalize_degrees, normalize_units,
     parse_merzlyak, prepare_merzlyak_text, wrap_answer_numbers)
 from .models import TextbookTaskDraft
 from .test_textbook_import import make_teacher
@@ -156,6 +156,58 @@ class MerzlyakParserTests(TestCase):
             r'\section*{§ 1 Функция}' '\n1.1. Найдите значение функции.\n'
             r'\section*{Ответы и указания}' '\n1.1. 3.')
         self.assertEqual(tasks[0].source_path, ['§ 1'])
+
+    def test_toc_wins_over_coincidental_geometry_heading(self):
+        text = r'\section*{Поворот}' + '\n' + r'\section*{Оглавление}' + '\n' + (
+            'Глава 1. Алгебра ..... 3\n§ 1. Функция .....4\n')
+        self.assertEqual(_book_structure(text),
+                         {1: ('Глава 1. Алгебра', {1: '§ 1. Функция'})})
+
+    def test_geometry_fallback_requires_reliable_headings(self):
+        self.assertEqual(_book_structure(r'\section*{Поворот}'), {})
+        self.assertEqual(_book_structure(
+            r'\section*{Поворот}\section*{Теорема косинусов}'),
+            MERZLYAK_GEOM9_STRUCTURE)
+        self.assertEqual(_book_structure(r'\section*{§ 2 Теорема косинусов}'),
+                         MERZLYAK_GEOM9_STRUCTURE)
+        self.assertEqual(_book_structure(r'\section*{§ 1 Теорема косинусов}'), {})
+        self.assertEqual(_book_structure(
+            r'\section*{Ответы и указания}\section*{Поворот}'
+            r'\section*{Теорема косинусов}'), {})
+
+    def test_toc_without_dot_leaders_keeps_paragraph_boundaries(self):
+        text = r'\section*{Оглавление}' + '\n' + (
+            'Глава 1. Квадратичная функция ..... 3\n'
+            '§ 1. Функция 4\n'
+            '§ 2. Без страницы\n'
+            '§ 3. Многострочное название\nпродолжение 25\n'
+            'Глава 2. Уравнения 45\n'
+            '§ 4. Решение уравнений.....46\n')
+        self.assertEqual(_book_structure(text), {
+            1: ('Глава 1. Квадратичная функция', {
+                1: '§ 1. Функция', 2: '§ 2. Без страницы',
+                3: '§ 3. Многострочное название продолжение'}),
+            2: ('Глава 2. Уравнения', {4: '§ 4. Решение уравнений'}),
+        })
+
+    def test_geometry_ocr_toc_keeps_standalone_revision_section(self):
+        structure = _book_structure(r'\section*{оглавление}' + '\n' + (
+            'лава 6. Начальные сведения по стереометрии\\\\\n'
+            '§ 25. Цилиндр. Конус. Шар ..... 240\\\\\n'
+            'Итоги главы 6 ..... 247\\\\\n'
+            '§ 26. Упражнения для повторения курса планиметрии ..... 249\n'))
+        self.assertEqual(structure[6], MERZLYAK_GEOM9_STRUCTURE[6][0:1]
+                         + ({25: MERZLYAK_GEOM9_STRUCTURE[6][1][25]},))
+        self.assertEqual(structure[7], MERZLYAK_GEOM9_STRUCTURE[7])
+
+    def test_missing_toc_paragraph_is_reported(self):
+        tasks, diagnostics = parse_merzlyak(
+            '1.1. Найдите число.\n2.1. Найдите второе число.\n'
+            + r'\section*{Ответы и указания}' + '\n1.1. 3. 2.1. 4.\n'
+            + r'\section*{Оглавление}' + '\n'
+            'Глава 1. Алгебра\n§ 1. Функция 4\n')
+        self.assertEqual(diagnostics['paragraphs_without_structure'], [2])
+        self.assertTrue(any('Параграф не найден' in w for w in tasks[1].warnings))
 
     def test_theory_and_chapter_summary_do_not_leak_into_tasks(self):
         self.assertNotIn('Из первого признака', self.by_id['1.7'].text_latex)

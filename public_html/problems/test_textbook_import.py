@@ -64,7 +64,7 @@ class TextbookImportTests(TestCase):
             payload or bundle(), user=self.teacher, title='Пробная партия',
             source_title='Тестовый задачник', source_author='Автор')
 
-    def test_mask_budget_defers_remaining_subitems_until_review(self):
+    def test_deferred_subitems_are_read_only_on_review_and_completed_on_commit(self):
         from .textbook_import import DEFERRED_MASK_WARNING
         payload = bundle(subitems=[
             {'label': 'а', 'text_latex': 'Первый пункт',
@@ -87,15 +87,124 @@ class TextbookImportTests(TestCase):
         draft.save()
         self.client.force_login(self.teacher)
         url = reverse('textbook_import_review', args=[batch.pk, draft.pk])
-        self.assertEqual(self.client.get(url).status_code, 200)
+        with patch('assignments.checks.draft_mask') as generate:
+            self.assertEqual(self.client.get(url).status_code, 200)
+            self.assertEqual(self.client.head(url).status_code, 200)
+            generate.assert_not_called()
+        draft.refresh_from_db()
+        self.assertEqual(draft.subitems[1]['answer_mask'], '')
+        self.assertIn(DEFERRED_MASK_WARNING, draft.warnings)
+        draft.topic = Topic.objects.create(name='Тема отложенных пунктов')
+        draft.status = TextbookTaskDraft.STATUS_APPROVED
+        draft.save()
+        commit_batch(batch, user=self.teacher)
         draft.refresh_from_db()
         self.assertEqual(draft.subitems[0]['answer_mask'], '{{number: 4}}')
         self.assertEqual(draft.subitems[1]['answer_mask'], '{{number: 7}}')
         self.assertNotIn(DEFERRED_MASK_WARNING, draft.warnings)
         self.assertIn('Проверить рисунок', draft.warnings)
+        self.assertEqual(list(TaskSubitem.objects.order_by('order').values_list(
+            'answer_mask', flat=True)),
+            ['{{number: 4}}', '{{number: 7}}', '{{number: 8}}'])
+
+    def test_clean_approval_ignores_only_pending_masks(self):
+        payload = bundle(author_answer_latex='$42$')
+        payload['tasks'].extend([
+            dict(payload['tasks'][0], external_id='2', warnings=['Проверить условие']),
+            dict(payload['tasks'][0], external_id='3', confidence=0.5),
+            dict(payload['tasks'][0], external_id='4'),
+        ])
+        with patch('problems.textbook_import.MASK_DRAFT_BUDGET_SECONDS', 0):
+            batch = self.create_batch(payload)
+        topic = Topic.objects.create(name='Тема массового одобрения')
+        batch.drafts.exclude(external_id='4').update(topic=topic)
+        batch.drafts.filter(external_id='4').update(topic=None)
+        self.client.force_login(self.teacher)
         with patch('assignments.checks.draft_mask') as generate:
-            self.assertEqual(self.client.get(url).status_code, 200)
+            response = self.client.post(reverse('textbook_import_approve_clean', args=[batch.pk]))
             generate.assert_not_called()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(list(batch.drafts.filter(
+            status=TextbookTaskDraft.STATUS_APPROVED).values_list('external_id', flat=True)),
+            ['1.2.37'])
+        commit_batch(batch, user=self.teacher, require_complete=False)
+        self.assertEqual(Task.objects.get().answer_mask, '{{number: 42}}')
+
+    def test_bulk_approval_then_direct_commit_completes_pending_masks(self):
+        from .textbook_import import DEFERRED_MASK_WARNING
+        with patch('problems.textbook_import.MASK_DRAFT_BUDGET_SECONDS', 0):
+            batch = self.create_batch(bundle(author_answer_latex='$42$'))
+        batch.drafts.update(topic=Topic.objects.create(name='Тема массового выбора'))
+        draft = batch.drafts.get()
+        self.client.force_login(self.teacher)
+        response = self.client.post(reverse('textbook_import_bulk', args=[batch.pk]), {
+            'ids': [draft.pk], 'status': TextbookTaskDraft.STATUS_APPROVED,
+        })
+        self.assertEqual(response.status_code, 302)
+        commit_batch(batch, user=self.teacher)
+        draft.refresh_from_db()
+        self.assertEqual(draft.imported_task.answer_mask, '{{number: 42}}')
+        self.assertNotIn(DEFERRED_MASK_WARNING, draft.warnings)
+
+    def test_publication_resumes_short_posts_and_publishes_all_masks(self):
+        from .textbook_import import DEFERRED_MASK_WARNING
+        payload = bundle(author_answer_latex='$42$')
+        payload['tasks'].extend([
+            dict(payload['tasks'][0], external_id=str(i), text_latex=f'Найдите число {i}.')
+            for i in range(2, 4)
+        ])
+        with patch('problems.textbook_import.MASK_DRAFT_BUDGET_SECONDS', 0):
+            batch = self.create_batch(payload)
+        topic = Topic.objects.create(name='Тема пошаговой публикации')
+        batch.drafts.update(topic=topic)
+        self.client.force_login(self.teacher)
+        self.client.post(reverse('textbook_import_approve_clean', args=[batch.pk]))
+        url = reverse('textbook_import_commit', args=[batch.pk])
+        with patch('problems.textbook_import.MASK_DRAFT_BUDGET_SECONDS', 0):
+            for remaining in (2, 1):
+                response = self.client.post(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['remaining'], remaining)
+                self.assertEqual(Task.objects.count(), 0)
+            self.assertEqual(self.client.post(url).status_code, 302)
+        self.assertEqual(Task.objects.count(), 3)
+        self.assertEqual(set(Task.objects.values_list('answer_mask', flat=True)),
+                         {'{{number: 42}}'})
+        self.assertTrue(all(DEFERRED_MASK_WARNING not in d.warnings
+                            for d in batch.drafts.all()))
+        with patch('assignments.checks.draft_mask') as generate:
+            self.assertEqual(self.client.post(url).status_code, 302)
+            generate.assert_not_called()
+        self.assertEqual(Task.objects.count(), 3)
+
+    def test_section_preparation_leaves_other_sections_pending(self):
+        from .textbook_import import DEFERRED_MASK_WARNING
+        payload = bundle(author_answer_latex='$42$')
+        payload['tasks'].extend([
+            dict(payload['tasks'][0], external_id='2', text_latex='Вторая задача.'),
+            dict(payload['tasks'][0], external_id='3', source_path=['Другая глава'],
+                 collection_key='other', collection_title='Другая глава'),
+        ])
+        with patch('problems.textbook_import.MASK_DRAFT_BUDGET_SECONDS', 0):
+            batch = self.create_batch(payload)
+        topic = Topic.objects.create(name='Тема выбранного раздела')
+        batch.drafts.update(topic=topic, status=TextbookTaskDraft.STATUS_APPROVED)
+        self.client.force_login(self.teacher)
+        detail = self.client.get(reverse('textbook_import_detail', args=[batch.pk]))
+        section = next(g for g in detail.context['collection_groups']
+                       if g['is_leaf'] and g['path'][-1] == 'Квадратные уравнения')
+        url = reverse('textbook_import_commit_section', args=[batch.pk])
+        with patch('problems.textbook_import.MASK_DRAFT_BUDGET_SECONDS', 0):
+            response = self.client.post(url, {'section': section['token']})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.context['section'], section['token'])
+            self.assertContains(response, 'name="section"')
+            self.assertEqual(self.client.post(url, {'section': section['token']}).status_code, 302)
+        other = batch.drafts.get(external_id='3')
+        self.assertEqual(other.status, TextbookTaskDraft.STATUS_APPROVED)
+        self.assertEqual(other.answer_mask, '')
+        self.assertIn(DEFERRED_MASK_WARNING, other.warnings)
+        self.assertEqual(Task.objects.count(), 2)
 
     def test_expired_mask_budget_preserves_answers_and_other_tasks(self):
         from .textbook_import import DEFERRED_MASK_WARNING

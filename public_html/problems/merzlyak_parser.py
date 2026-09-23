@@ -160,36 +160,85 @@ def _normalize_title(value: str) -> str:
     return re.sub(r"[\s.]+", " ", value).strip().lower()
 
 
+def _without_toc_page(title: str) -> str:
+    """Убирает отточие и страницу, включая OCR без отточия."""
+    return re.sub(r'(?:\s*\.{2,}\s*|\s+)\d+\s*$', '', title).strip()
+
+
 def _book_structure(text: str) -> dict:
-    """Оглавление текущей книги; геометрический справочник — только для неё."""
-    # Сохраняем сверенную структуру геометрии даже при неполном оглавлении.
-    known = _known_titles()
-    for match in SECTION_RE.finditer(text):
-        title = re.sub(r'^§\s*\d+\.?\s*', '', match.group('title'))
-        if _normalize_title(title) in known:
-            return MERZLYAK_GEOM9_STRUCTURE
+    """Сначала оглавление книги, затем узнаваемый справочник геометрии."""
     toc = re.search(r"\\section\*?\{\s*Оглавление\s*\}", text, re.I)
-    structure = {}
     if toc:
-        # Название параграфа может переноситься на следующую строку.
-        entries = re.compile(
-            r"(?m)^\s*(?:Глава\s+(?P<chapter>\d+)\.\s*(?P<title>[^\n]+)"
-            r"|§\s*(?P<paragraph>\d+)\.\s*(?P<name>.*?)\s*\.{2,}\s*\d+)",
-            re.S)
-        current = None
-        for match in entries.finditer(text[toc.end():]):
-            if match.group('chapter'):
-                current = int(match.group('chapter'))
-                title = clean(match.group('title')).rstrip('\\').strip()
-                structure[current] = (f'Глава {current}. {title}', {})
-            elif current is not None:
-                number = int(match.group('paragraph'))
-                title = clean(match.group('name').replace(r'\\', ' '))
-                title = re.sub(r'\s+', ' ', title).strip()
-                structure[current][1][number] = f'§ {number}. {title}'
-        if any(paragraphs for _, paragraphs in structure.values()):
-            return structure
-    return {}
+        tail = text[toc.end():]
+        following = SECTION_RE.search(tail)
+        if following:
+            tail = tail[:following.start()]
+        structure = {}
+        chapter = None
+        pending = None
+        chapter_closed = False
+
+        def finish():
+            nonlocal pending, chapter
+            if pending is not None and chapter is not None:
+                number, parts = pending
+                title = _without_toc_page(' '.join(parts))
+                title = re.sub(r'\s+', ' ', clean(title)).strip()
+                if title:
+                    if chapter_closed:
+                        chapter = max(structure, default=0) + 1
+                        structure[chapter] = (f'§ {number}. {title}', {})
+                    structure[chapter][1][number] = f'§ {number}. {title}'
+            pending = None
+
+        # Границы параграфов и глав непроницаемы даже при потере отточия.
+        for raw in tail.replace(r'\\', '\n').splitlines():
+            line = raw.strip()
+            chapter_match = re.match(r'^[Гг]?лава\s+(\d+)\.?\s+(.+)$', line)
+            paragraph_match = re.match(r'^§\s*(\d+)\.?\s+(.+)$', line)
+            if chapter_match:
+                finish()
+                chapter_closed = False
+                chapter = int(chapter_match[1])
+                title = clean(_without_toc_page(chapter_match[2]))
+                structure[chapter] = (f'Глава {chapter}. {title}', {})
+            elif line.startswith('Итоги главы'):
+                finish()
+                chapter_closed = True
+            elif paragraph_match:
+                finish()
+                pending = (int(paragraph_match[1]), [paragraph_match[2]])
+            elif pending is not None and line:
+                if line.startswith(('Итоги', r'\end', r'\begin')):
+                    finish()
+                else:
+                    pending[1].append(line)
+            if pending is not None and re.search(r'(?:\s|\.{2,})\d+\s*$', line):
+                finish()
+        finish()
+        return structure
+
+    # Служебные разделы после ответов не идентифицируют учебник.
+    answers = ANSWERS_HEADING_RE.search(text)
+    body = text[:answers.start()] if answers else text
+    known = _known_titles()
+    numbered = {
+        number: _normalize_title(re.sub(r'^§\s*\d+\.\s*', '', title))
+        for _, paragraphs in MERZLYAK_GEOM9_STRUCTURE.values()
+        for number, title in paragraphs.items()
+    }
+    matches = set()
+    for match in SECTION_RE.finditer(body):
+        title = match.group('title').strip()
+        paragraph = re.match(r'^§\s*(\d+)\.?\s+(.+)$', title)
+        if paragraph:
+            if numbered.get(int(paragraph[1])) == _normalize_title(paragraph[2]):
+                return MERZLYAK_GEOM9_STRUCTURE
+            title = paragraph[2]
+        title = _normalize_title(title)
+        if title in known:
+            matches.add(title)
+    return MERZLYAK_GEOM9_STRUCTURE if len(matches) >= 2 else {}
 
 
 # --------------------------------------------------------------------------
@@ -1019,6 +1068,8 @@ def parse_merzlyak(text: str) -> tuple[list[TaskDraft], dict]:
     text, source_repairs = apply_source_repairs(text)
     prepared = prepare_merzlyak_text(text)
     structure = _book_structure(prepared)
+    structured_paragraphs = {
+        number for _, paragraphs in structure.values() for number in paragraphs}
     heading = ANSWERS_HEADING_RE.search(prepared)
     task_text = prepared[:heading.start()]
     # В легенде тоже встречаются номера («5.6. Задания для устной работы»).
@@ -1059,6 +1110,8 @@ def parse_merzlyak(text: str) -> tuple[list[TaskDraft], dict]:
             task.warnings = [
                 warning for warning in task.warnings
                 if "Несбалансированные" not in warning]
+            if _task_key(marker.external_id)[0] not in structured_paragraphs:
+                task.warnings.append('Параграф не найден в структуре книги: проверить подборку')
             if "(Сноска)" in body:
                 task.warnings.append(
                     "В блок попала сноска со страницы: проверить, к какой "
@@ -1132,6 +1185,8 @@ def parse_merzlyak(text: str) -> tuple[list[TaskDraft], dict]:
         "duplicate_task_ids": [],
         "missing_task_ids": _expected_ids(markers),
         "tasks_by_paragraph": {key: counts[key] for key in sorted(counts, key=int)},
+        "paragraphs_without_structure": sorted(
+            int(key) for key in counts if int(key) not in structured_paragraphs),
         "trimmed_theory_tails": trimmed_tails,
         "figures_numbered": len(figures.numbered),
         "figures_positional": positional,
