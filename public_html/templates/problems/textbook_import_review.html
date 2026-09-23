@@ -36,7 +36,7 @@
     <details{% if form.subitems.errors %} open{% endif %}><summary>Структурированный JSON подпунктов</summary><p>{{ form.subitems.errors }}{{ form.subitems }}<span class="helptext">Служебное поле: при сохранении его заполняют поля подпунктов ниже. Добавить или удалить пункт можно здесь.</span></p></details>
     {% if review_subitems %}
     <div class="import-subitem-editors">
-      <strong>Подпункты и авторские материалы</strong>
+      <strong>Подпункты, авторские и редакторские материалы</strong>
       {% for subitem in review_subitems %}
       <section class="import-subitem-editor">
         <h3>Подпункт {{ subitem.label|default:forloop.counter }}</h3>
@@ -49,7 +49,7 @@
             <textarea id="subitem_text_{{ forloop.counter0 }}" name="subitem_text_{{ forloop.counter0 }}" rows="3">{{ subitem.text_latex }}</textarea>
           </p>
         </details>
-        {% if subitem.author_answer_latex %}<div class="import-preview-block"><strong>Предпросмотр ответа</strong><div class="math-content">{{ subitem.author_answer_latex|web_answer }}</div></div>{% endif %}
+        {% if subitem.author_answer_latex %}<div class="import-preview-block"><strong>Предпросмотр авторского ответа</strong><div class="math-content">{{ subitem.author_answer_latex|web_answer }}</div></div>{% endif %}
         <details class="import-source-edit">
           <summary>{% if subitem.author_answer_latex %}Править исходник ответа{% else %}Добавить ответ{% endif %}</summary>
           <p>
@@ -66,7 +66,7 @@
             <span class="helptext">Оставьте пустой для доказательства, построения или развёрнутого ответа. Тип equation сравнивает уравнения в заданном виде: перенос слагаемых допустим, а пропорциональное умножение или деление всего уравнения — нет.</span>
           </p>
         </details>
-        {% if subitem.author_solution_latex %}<div class="import-preview-block"><strong>Предпросмотр решения</strong><div class="math-content">{{ subitem.author_solution_latex|web_text|linebreaksbr }}</div></div>{% endif %}
+        {% if subitem.author_solution_latex %}<div class="import-preview-block"><strong>Предпросмотр авторского решения</strong><div class="math-content">{{ subitem.author_solution_latex|web_text|linebreaksbr }}</div></div>{% endif %}
         <details class="import-source-edit">
           <summary>{% if subitem.author_solution_latex %}Править исходник решения{% else %}Добавить решение{% endif %}</summary>
           <p>
@@ -74,12 +74,18 @@
             <textarea id="subitem_author_solution_{{ forloop.counter0 }}" name="subitem_author_solution_{{ forloop.counter0 }}" rows="5">{{ subitem.author_solution_latex }}</textarea>
           </p>
         </details>
+        <details class="import-source-edit"{% if subitem.answer_latex or subitem.solution_latex %} open{% endif %}>
+          <summary>Редакторский / AI-ответ и решение</summary>
+          {% if subitem.answer_latex %}<div class="import-preview-block math-content">{{ subitem.answer_latex|web_answer }}</div>{% endif %}
+          <p><span class="import-field-toolbar"><label for="subitem_answer_{{ forloop.counter0 }}">Редакторский / AI-ответ подпункта</label><button type="button" class="btn btn-small btn-secondary import-wrap-math" data-wrap-math="subitem_answer_{{ forloop.counter0 }}">$…$</button></span><textarea id="subitem_answer_{{ forloop.counter0 }}" name="subitem_answer_{{ forloop.counter0 }}" rows="2">{{ subitem.answer_latex }}</textarea></p>
+          {% if subitem.solution_latex %}<div class="import-preview-block math-content">{{ subitem.solution_latex|web_text|linebreaksbr }}</div>{% endif %}
+          <p><span class="import-field-toolbar"><label for="subitem_solution_{{ forloop.counter0 }}">Редакторское / AI-решение подпункта</label><button type="button" class="btn btn-small btn-secondary import-wrap-math" data-wrap-math="subitem_solution_{{ forloop.counter0 }}">$…$</button></span><textarea id="subitem_solution_{{ forloop.counter0 }}" name="subitem_solution_{{ forloop.counter0 }}" rows="5">{{ subitem.solution_latex }}</textarea></p>
+        </details>
       </section>
       {% endfor %}
     </div>
     {% endif %}
-    {% if draft.author_answer_latex or draft.author_solution_latex or not review_subitems %}
-    {% if review_subitems %}<p class="helptext">Ниже — ответ или решение, которые парсер не разложил по подпунктам. После переноса в пункты родительские поля очистятся.</p>{% endif %}
+    {% if review_subitems %}<p class="helptext">Общие ответы и указания ко всей задаче сохраняются отдельно от материалов подпунктов.</p>{% endif %}
     {% if draft.author_answer_latex %}<div class="import-preview-block"><strong>Предпросмотр авторского ответа</strong><div class="math-content">{{ draft.author_answer_latex|web_answer }}</div></div>{% endif %}
     <details class="import-source-edit"{% if form.author_answer_latex.errors %} open{% endif %}>
       <summary>{% if draft.author_answer_latex %}Править исходник ответа{% else %}Добавить ответ{% endif %}</summary>
@@ -105,7 +111,13 @@
         {{ form.author_solution_latex.errors }}{{ form.author_solution_latex }}
       </p>
     </details>
-    {% endif %}
+    <details class="import-source-edit"{% if draft.answer_latex or draft.solution_latex or form.answer_latex.errors or form.solution_latex.errors %} open{% endif %}>
+      <summary>Редакторский / AI-ответ и решение</summary>
+      {% if draft.answer_latex %}<div class="import-preview-block math-content">{{ draft.answer_latex|web_answer }}</div>{% endif %}
+      <p><span class="import-field-toolbar"><label for="{{ form.answer_latex.id_for_label }}">Редакторский / AI-ответ</label>{% include 'problems/_wrap_math_button.html' with field_id=form.answer_latex.id_for_label %}</span>{{ form.answer_latex.errors }}{{ form.answer_latex }}</p>
+      {% if draft.solution_latex %}<div class="import-preview-block math-content">{{ draft.solution_latex|web_text|linebreaksbr }}</div>{% endif %}
+      <p><span class="import-field-toolbar"><label for="{{ form.solution_latex.id_for_label }}">Редакторское / AI-решение</label>{% include 'problems/_wrap_math_button.html' with field_id=form.solution_latex.id_for_label %}</span>{{ form.solution_latex.errors }}{{ form.solution_latex }}</p>
+    </details>
     {% if draft_images %}<div class="import-preview-block"><strong>Рисунки</strong>
       <ul class="import-asset-list">{% for item in draft_images %}<li>{% if item.asset %}<a href="{% url 'textbook_import_asset_file' batch.pk item.asset.pk %}">{{ item.name }}</a>{% if not item.asset.is_pdf %} <img class="import-asset-thumb" src="{% url 'textbook_import_asset_file' batch.pk item.asset.pk %}" alt="{{ item.name }}">{% endif %}{% else %}<span class="muted">{{ item.name }} — файл не сопоставлен</span>{% endif %}</li>{% endfor %}</ul>
     </div>{% endif %}

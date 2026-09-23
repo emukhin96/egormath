@@ -12,34 +12,14 @@
   {% elif not draft.text_latex %}
   <span class="muted">Нет текста условия</span>
   {% endif %}
-  {% if draft.has_author_answer_material or draft.has_author_solution_material %}
+  {% if draft.has_answer_material or draft.has_solution_material %}
   <div class="ws-answers" hidden>
-    {% if draft.has_author_answer_material %}
-    <div class="answer-box math-content">
-      <strong>Ответ:</strong>
-      {% if draft.subitems %}
-        {% if draft.author_answer_latex %}<div>{{ draft.author_answer_latex|web_answer }}</div>{% endif %}
-        {% for subitem in draft.subitems|ordered_subitems %}
-          {% if subitem.author_answer_latex %}<div>{{ subitem.label|cyr_item_label }})&nbsp;{{ subitem.author_answer_latex|web_answer }}</div>{% endif %}
-        {% endfor %}
-      {% else %}
-        {{ draft.author_answer_latex|web_answer }}
-      {% endif %}
-    </div>
+    {% if draft.subitems %}
+      {% for subitem in draft.subitems|ordered_subitems %}
+        <div><strong>{{ subitem.label|cyr_item_label }})&nbsp;</strong>{% include 'problems/_textbook_material_preview.html' with owner=subitem %}</div>
+      {% endfor %}
     {% endif %}
-    {% if draft.has_author_solution_material %}
-    <div class="solution-box math-content">
-      <strong>Решение:</strong>
-      {% if draft.subitems %}
-        {% if draft.author_solution_latex %}<div>{{ draft.author_solution_latex|web_text|linebreaksbr }}</div>{% endif %}
-        {% for subitem in draft.subitems|ordered_subitems %}
-          {% if subitem.author_solution_latex %}<div>{{ subitem.label|cyr_item_label }})&nbsp;{{ subitem.author_solution_latex|web_text|linebreaksbr }}</div>{% endif %}
-        {% endfor %}
-      {% else %}
-        {{ draft.author_solution_latex|web_text|linebreaksbr }}
-      {% endif %}
-    </div>
-    {% endif %}
+    {% include 'problems/_textbook_material_preview.html' with owner=draft %}
   </div>
   {% endif %}
 </div>

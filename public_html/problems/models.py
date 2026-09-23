@@ -765,6 +765,8 @@ class TextbookTaskDraft(models.Model):
     grade_band_codes = models.JSONField(
         'Коды классов', default=list, blank=True)
     tags = models.JSONField('Теги источника', default=list, blank=True)
+    answer_latex = models.TextField('Редакторский / AI-ответ', blank=True)
+    solution_latex = models.TextField('Редакторское / AI-решение', blank=True)
     author_answer_latex = models.TextField('Авторский ответ', blank=True)
     answer_mask = models.TextField('Маска ответа для ученика', blank=True)
     author_solution_latex = models.TextField('Авторское решение', blank=True)
@@ -817,6 +819,36 @@ class TextbookTaskDraft(models.Model):
     def has_author_solution_material(self):
         return bool(self.author_solution_latex.strip()
                     or self.author_solution_subitem_count)
+
+    @property
+    def effective_answer_latex(self):
+        return self.author_answer_latex.strip() or self.answer_latex.strip()
+
+    @property
+    def effective_solution_latex(self):
+        return self.author_solution_latex.strip() or self.solution_latex.strip()
+
+    @property
+    def answer_material_subitem_count(self):
+        return sum(bool(item.get('author_answer_latex') or item.get('answer_latex'))
+                   for item in self.subitems)
+
+    @property
+    def solution_material_subitem_count(self):
+        return sum(bool(item.get('author_solution_latex') or item.get('solution_latex'))
+                   for item in self.subitems)
+
+    @property
+    def has_answer_material(self):
+        return bool(self.effective_answer_latex or any(
+            item.get('author_answer_latex') or item.get('answer_latex')
+            for item in self.subitems))
+
+    @property
+    def has_solution_material(self):
+        return bool(self.effective_solution_latex or any(
+            item.get('author_solution_latex') or item.get('solution_latex')
+            for item in self.subitems))
 
     def unmatched_images(self):
         from .textbook_import import normalize_image_stem
