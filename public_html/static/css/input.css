@@ -2765,6 +2765,30 @@
     margin-left: 0;
   }
 
+  /* Раздел подборок «списком»: два уровня на одной странице */
+  .collection-view-switch {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+    font-size: 0.9rem;
+  }
+  .collection-flat-group + .collection-flat-group { margin-top: var(--space-4); }
+  .collection-flat-group.depth-2 { margin-left: var(--space-4); }
+  .collection-flat-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin: 0 0 var(--space-2);
+    padding-bottom: var(--space-1);
+    border-bottom: 1px solid var(--border);
+    font-size: 1.05rem;
+  }
+  .collection-flat-group.depth-2 .collection-flat-heading { font-size: 0.95rem; }
+  .collection-flat-heading .muted { font-weight: 400; font-size: 0.85rem; }
+
   .collection-head-actions > form {
     display: inline-flex;
     align-items: center;

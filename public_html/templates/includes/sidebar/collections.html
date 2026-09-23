@@ -18,6 +18,14 @@
   </ul>
   {% endif %}
 </section>
+{% if flat_groups %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">На этой странице</p>
+  <ul class="sidebar-list collection-sidebar-tree">
+    {% for group in flat_groups %}{% if group.depth == 1 %}<li style="--collection-depth: 0"><a href="#collection-{{ group.collection.pk }}">{{ group.collection.catalog_title|truncatechars:32 }}</a></li>{% endif %}{% endfor %}
+  </ul>
+</section>
+{% endif %}
 {% if current_collection %}
 <section class="sidebar-section">
   <p class="sidebar-kicker">Темы раздела</p>
