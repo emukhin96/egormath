@@ -398,6 +398,24 @@ class LatexGenerationTests(TestCase):
         self.assertIn(r'\taskpic[\arabic{enumi}а]{sub.png}', tex)
         self.assertIn(r'\taskpic[\arabic{enumi}а, б]{both.png}', tex)
 
+    def test_taskpic_of_unselected_subitem_is_dropped(self):
+        # Рисунок невыбранного подпункта не печатается; общий — остаётся
+        task = Task.objects.create(text_latex='Постройте графики.')
+        task.images.create(image='task_images/common.png', order=10)
+        task.images.create(image='task_images/first.png', order=20)
+        task.images.create(image='task_images/shared.png', order=30)
+        first = TaskSubitem.objects.create(
+            task=task, order=10, text_latex=r'$y=x$ \taskpic{2} \taskpic{3}')
+        second = TaskSubitem.objects.create(
+            task=task, order=20, text_latex=r'$y=x^2$ \taskpic{3}')
+        item = make_item(self.worksheet, task, all_subitems=False)
+        item.subitems.set([second])
+        tex = task_to_tex(item)
+        self.assertIn(r'\taskpic{common.png}', tex)
+        self.assertNotIn('first.png', tex)
+        self.assertIn(r'\taskpic[\arabic{enumi}а]{shared.png}', tex)
+        self.assertIsNotNone(first.pk)
+
     def test_taskpic_ref_in_solution_moves_to_task_body(self):
         task = Task.objects.create(
             text_latex='Задача',

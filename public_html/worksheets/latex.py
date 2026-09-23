@@ -311,9 +311,21 @@ def task_to_tex(item, variant='teacher', *, statement=None, common_indices=()):
     if variant == 'teacher':
         deferred_pics.update(solution_used)
     used.update(solution_used)
+    # Рисунки, на которые ссылаются только невыбранные подпункты, в листок
+    # не попадают: самого подпункта в листке нет.
+    selected_ids = {s.pk for s in subitem_objs}
+    unselected_refs = set()
+    all_subitems = getattr(item, 'all_subitems', True)
+    for subitem in ([] if all_subitems else task.subitems.all()):
+        if subitem.pk not in selected_ids:
+            for text in (subitem.text_latex, subitem.effective_answer_latex,
+                         subitem.effective_solution_latex):
+                _resolve_taskpics(text or '', filenames, unselected_refs)
     # Рисунки из optional-аргументов и рисунки без ссылки
     # выводим один раз в основном теле задачи.
     for i, name in enumerate(filenames):
+        if i not in used and i in unselected_refs:
+            continue
         if ((i in deferred_pics and i not in body_used)
                 or i not in used):
             body += '\n' + _taskpic_command(name, pic_subitems.get(i))
