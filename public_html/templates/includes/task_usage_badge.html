@@ -1,0 +1,14 @@
+{# Бейдж «уже задавалась»: task.usage из assignments.task_usage.attach_usage #}
+{% with usage=task.usage %}{% if usage.rows %}
+<details class="usage-badge">
+  <summary class="badge badge-usage" title="Кому и когда задавалась задача">
+    {% if usage.audience.student %}задавалась {{ usage.rows.0.date|date:'d.m.Y' }}{% if usage.rows|length > 1 %} · ещё {{ usage.rows|length|add:'-1' }}{% endif %}{% elif usage.audience.group %}задавалась {{ usage.students_total }} из {{ usage.audience_total }} · {{ usage.rows.0.date|date:'d.m.Y' }}{% else %}задавалась · {{ usage.students_total }} уч. · {{ usage.rows.0.date|date:'d.m.Y' }}{% endif %}
+  </summary>
+  <ul class="usage-list">
+    {% for row in usage.rows|slice:':30' %}
+    <li>{{ row.student_name }} — <a href="{{ row.url }}">{{ row.title }}</a> · {{ row.date|date:'d.m.Y' }}{% if row.kind == 'independent' %} · самостоятельная{% endif %}</li>
+    {% endfor %}
+    {% if usage.rows|length > 30 %}<li class="muted">… и ещё {{ usage.rows|length|add:'-30' }}</li>{% endif %}
+  </ul>
+</details>
+{% endif %}{% endwith %}
