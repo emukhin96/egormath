@@ -127,8 +127,8 @@
       {% if batch.status != 'imported' %}<td class="col-select">{% if draft.status != 'imported' %}<input type="checkbox" class="row-select" name="ids" value="{{ draft.pk }}" form="import-bulk-form" title="Выбрать задачу">{% endif %}</td>{% endif %}
       <td class="col-key"><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.external_id }}</a><div class="import-key-status">{% include 'problems/_textbook_draft_status.html' with draft=draft %}</div></td>
       <td class="col-text">{% include 'problems/_textbook_draft_preview.html' with draft=draft %}</td>
-      <td class="col-answer">{% if draft.has_author_answer_material %}<span class="badge" title="{% if draft.subitems %}{{ draft.author_answer_subitem_count }}/{{ draft.subitems|length }}{% else %}есть{% endif %}">да</span>{% else %}<span class="muted">—</span>{% endif %}</td>
-      <td class="col-solution">{% if draft.has_author_solution_material %}<span class="badge" title="{% if draft.subitems %}{{ draft.author_solution_subitem_count }}/{{ draft.subitems|length }}{% else %}есть{% endif %}">да</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="col-answer">{% if draft.has_answer_material %}<span class="badge" title="{% if draft.subitems %}{{ draft.answer_material_subitem_count }}/{{ draft.subitems|length }}{% else %}есть{% endif %}">да</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="col-solution">{% if draft.has_solution_material %}<span class="badge" title="{% if draft.subitems %}{{ draft.solution_material_subitem_count }}/{{ draft.subitems|length }}{% else %}есть{% endif %}">да</span>{% else %}<span class="muted">—</span>{% endif %}</td>
       <td class="col-meta">
         <div class="import-section-path">{% for part in draft.source_path %}<div class="import-section-part">{{ part|heading_dot }}</div>{% endfor %}</div>
         <div class="import-section-topics">{% include 'problems/_textbook_draft_topic.html' with draft=draft %}</div>

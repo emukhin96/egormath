@@ -1188,7 +1188,8 @@ def _subitem_set(item, key: str, value: str) -> None:
 
 
 _DRAFT_LATEX_KEYS = (
-    "text_latex", "author_answer_latex", "author_solution_latex")
+    "text_latex", "author_answer_latex", "author_solution_latex",
+    "answer_latex", "solution_latex")
 
 
 def finalize_draft_images(task) -> bool:
@@ -1199,11 +1200,7 @@ def finalize_draft_images(task) -> bool:
     changed = False
     images = list(getattr(task, "images", None) or [])
     subitems = list(getattr(task, "subitems", None) or [])
-    blobs = [
-        getattr(task, "text_latex", "") or "",
-        getattr(task, "author_answer_latex", "") or "",
-        getattr(task, "author_solution_latex", "") or "",
-    ]
+    blobs = [getattr(task, key, "") or "" for key in _DRAFT_LATEX_KEYS]
     for item in subitems:
         blobs.extend(_subitem_get(item, key) for key in _DRAFT_LATEX_KEYS)
     for blob in blobs:
@@ -1228,17 +1225,15 @@ def finalize_draft_images(task) -> bool:
         return normalize_imported_graphics(value)
 
     new_values = {
-        "text_latex": rewrite(getattr(task, "text_latex", "") or ""),
-        "author_answer_latex": rewrite(
-            getattr(task, "author_answer_latex", "") or ""),
-        "author_solution_latex": rewrite(
-            getattr(task, "author_solution_latex", "") or ""),
+        key: rewrite(getattr(task, key, "") or "")
+        for key in _DRAFT_LATEX_KEYS if hasattr(task, key)
     }
     new_subitems = []
     for item in subitems:
         row = dict(item) if isinstance(item, dict) else item
         for key in _DRAFT_LATEX_KEYS:
-            _subitem_set(row, key, rewrite(_subitem_get(row, key)))
+            if (key in row if isinstance(row, dict) else hasattr(row, key)):
+                _subitem_set(row, key, rewrite(_subitem_get(row, key)))
         new_subitems.append(row)
 
     def _assign(name: str, value) -> None:

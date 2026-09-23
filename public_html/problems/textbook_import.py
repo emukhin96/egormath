@@ -1,9 +1,9 @@
 """Безопасная загрузка проверяемого JSON парсера задачников.
 
 Первый этап создаёт только черновики. Второй, после ручного одобрения,
-идемпотентно создаёт задачи и backing-worksheet подборок. Рабочие поля
-answer_latex/solution_latex не меняются: ими продолжает владеть редакторский
-и AI-контур.
+идемпотентно создаёт задачи и backing-worksheet подборок. Авторский материал
+и редакторские / AI-дополнения сохраняются раздельно на всех этапах,
+включая публикацию и повторный импорт.
 """
 
 import hashlib
@@ -123,6 +123,12 @@ def normalize_subitems(value):
             'author_solution_latex': apply_imported_math(
                 item.get('author_solution_latex') or ''),
         })
+    for original, normalized in zip(value, result):
+        for field, normalize in (('answer_latex', apply_imported_answer),
+                                 ('solution_latex', apply_imported_math)):
+            if field in original:
+                normalized[field] = normalize(_required_string(
+                    original, field, allow_blank=True))
     result = order_letter_subitems(result)
     holder = type('Draft', (), {
         'subitems': result,
@@ -163,7 +169,8 @@ def fill_draft_answer_masks(draft, *, deadline=None):
         for item in draft.subitems:
             if str(item.get('answer_mask') or '').strip():
                 continue
-            answer = str(item.get('author_answer_latex') or '').strip()
+            answer = str(item.get('author_answer_latex')
+                         or item.get('answer_latex') or '').strip()
             if not answer:
                 continue
             if deadline is not None and monotonic() >= deadline:
@@ -178,11 +185,11 @@ def fill_draft_answer_masks(draft, *, deadline=None):
                 source_number=draft.external_id,
                 subitem_label=str(item.get('label') or ''))
         return True
-    if not draft.answer_mask and draft.author_answer_latex.strip():
+    if not draft.answer_mask and draft.effective_answer_latex:
         if deadline is not None and monotonic() >= deadline:
             return False
         draft.answer_mask = draft_mask(
-            draft.author_answer_latex, draft.text_latex,
+            draft.effective_answer_latex, draft.text_latex,
             exam_codes=draft.exam_item_codes,
             source_number=draft.external_id)
     return True
@@ -299,12 +306,6 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
         answer_mask = normalize_answer_mask(row.get('answer_mask'))
         author_solution_latex = apply_imported_math(
             row.get('author_solution_latex') or '')
-        if subitems and any(
-                item.get('author_answer_latex')
-                or item.get('author_solution_latex')
-                for item in subitems):
-            author_answer_latex = ''
-            author_solution_latex = ''
         if subitems:
             answer_mask = ''
         drafts.append(TextbookTaskDraft(
@@ -322,6 +323,8 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             text_latex=text_latex,
             subitems=subitems,
             images=images,
+            answer_latex=apply_imported_answer(row.get('answer_latex') or ''),
+            solution_latex=apply_imported_math(row.get('solution_latex') or ''),
             author_answer_latex=author_answer_latex,
             answer_mask=answer_mask,
             author_solution_latex=author_solution_latex,
@@ -468,7 +471,7 @@ def sync_batch_draft_images(batch):
     if dirty:
         TextbookTaskDraft.objects.bulk_update(dirty, [
             'text_latex', 'author_answer_latex', 'author_solution_latex',
-            'subitems', 'images',
+            'answer_latex', 'solution_latex', 'subitems', 'images',
         ])
     cleanup_junk_image_assets(batch)
     refresh_image_warnings(batch)
@@ -533,6 +536,9 @@ def _copy_subitem_author_fields(old_subitems, new_subitems):
         if not item.get('author_solution_latex') and prev.get(
                 'author_solution_latex'):
             item['author_solution_latex'] = prev['author_solution_latex']
+        for field in ('answer_latex', 'solution_latex'):
+            if prev.get(field):
+                item[field] = prev[field]
     return new_subitems
 
 
@@ -1091,20 +1097,20 @@ def _add_draft_task_to_collection(batch, draft, task, cache):
 
 
 def _merge_author_fields(task, draft):
-    if draft.subitems:
-        return
     updates = []
-    for field in ('author_answer_latex', 'author_solution_latex'):
+    for field in ('author_answer_latex', 'author_solution_latex',
+                  'answer_latex', 'solution_latex'):
         incoming = getattr(draft, field).strip()
         existing = getattr(task, field).strip()
         if incoming and existing and incoming != existing:
             raise TextbookImportError(
-                f'{draft.external_id}: авторское поле конфликтует с задачей '
+                f'{draft.external_id}: поле ответа/решения конфликтует с задачей '
                 f'#{task.pk}. Проверьте сопоставление вручную.')
         if incoming and not existing:
             setattr(task, field, incoming)
             updates.append(field)
-    if draft.answer_mask.strip() and not task.answer_mask.strip():
+    if (not draft.subitems and draft.answer_mask.strip()
+            and not task.answer_mask.strip()):
         task.answer_mask = draft.answer_mask.strip()
         updates.append('answer_mask')
     if updates:
@@ -1124,12 +1130,13 @@ def _merge_subitem_author_fields(task, draft):
                 f'{draft.external_id}: условие подпункта {sub.order} '
                 'отличается от уже загруженного.')
         updates = []
-        for field in ('author_answer_latex', 'author_solution_latex'):
+        for field in ('author_answer_latex', 'author_solution_latex',
+                      'answer_latex', 'solution_latex'):
             value = str(incoming.get(field) or '').strip()
             old = getattr(sub, field).strip()
             if value and old and value != old:
                 raise TextbookImportError(
-                    f'{draft.external_id}: конфликт авторского текста '
+                    f'{draft.external_id}: конфликт ответа/решения '
                     f'подпункта {sub.order}.')
             if value and not old:
                 setattr(sub, field, value)
@@ -1275,16 +1282,18 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
             task = Task.objects.create(
                 text_latex=draft.text_latex,
                 answer_mask=('' if draft.subitems else draft.answer_mask),
-                author_answer_latex=(
-                    '' if draft.subitems else draft.author_answer_latex),
-                author_solution_latex=(
-                    '' if draft.subitems else draft.author_solution_latex),
+                author_answer_latex=draft.author_answer_latex,
+                author_solution_latex=draft.author_solution_latex,
+                answer_latex=draft.answer_latex,
+                solution_latex=draft.solution_latex,
                 stars=0, columns=0, created_by=batch.created_by)
             for index, item in enumerate(draft.subitems, start=1):
                 TaskSubitem.objects.create(
                     task=task, order=index * 10,
                     text_latex=item['text_latex'],
                     answer_mask=item.get('answer_mask', ''),
+                    answer_latex=item.get('answer_latex', ''),
+                    solution_latex=item.get('solution_latex', ''),
                     author_answer_latex=item.get(
                         'author_answer_latex', ''),
                     author_solution_latex=item.get(

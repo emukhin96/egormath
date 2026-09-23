@@ -212,11 +212,13 @@ class TextbookDraftReviewForm(forms.ModelForm):
         fields = [
             'external_id', 'source_number', 'text_latex',
             'subitems', 'author_answer_latex', 'answer_mask',
-            'author_solution_latex',
+            'author_solution_latex', 'answer_latex', 'solution_latex',
             'status',
         ]
         widgets = {
             'subitems': forms.Textarea(attrs={'rows': 8}),
+            'answer_latex': forms.Textarea(attrs={'rows': 3}),
+            'solution_latex': forms.Textarea(attrs={'rows': 12}),
             'author_answer_latex': forms.Textarea(attrs={'rows': 3}),
             'answer_mask': forms.Textarea(attrs={
                 'rows': 2,
@@ -242,6 +244,14 @@ class TextbookDraftReviewForm(forms.ModelForm):
         from .textbook_parser import apply_imported_math
         return apply_imported_math(
             self.cleaned_data.get('author_solution_latex') or '')
+
+    def clean_answer_latex(self):
+        from .textbook_parser import apply_imported_answer
+        return apply_imported_answer(self.cleaned_data.get('answer_latex') or '')
+
+    def clean_solution_latex(self):
+        from .textbook_parser import apply_imported_math
+        return apply_imported_math(self.cleaned_data.get('solution_latex') or '')
 
     def clean_subitems(self):
         from .textbook_import import TextbookImportError, normalize_subitems

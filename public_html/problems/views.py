@@ -1071,20 +1071,21 @@ def _textbook_detail_url(batch, request=None, **overrides):
 ANSWERS_FILTER_NONE = 'none'
 
 
-def _draft_lacks_author_answer(answer, subitems) -> bool:
-    if str(answer or '').strip():
+def _draft_lacks_answer(author_answer, answer, subitems) -> bool:
+    if str(author_answer or answer or '').strip():
         return False
     return not any(
-        str((item or {}).get('author_answer_latex') or '').strip()
+        str((item or {}).get('author_answer_latex')
+            or (item or {}).get('answer_latex') or '').strip()
         for item in (subitems or []))
 
 
 def _filter_drafts_without_answers(qs):
     """Черновики без ответа у родителя и у всех подпунктов."""
     empty_pks = [
-        pk for pk, answer, items in qs.values_list(
-            'pk', 'author_answer_latex', 'subitems')
-        if _draft_lacks_author_answer(answer, items)
+        pk for pk, author_answer, answer, items in qs.values_list(
+            'pk', 'author_answer_latex', 'answer_latex', 'subitems')
+        if _draft_lacks_answer(author_answer, answer, items)
     ]
     return qs.filter(pk__in=empty_pks)
 
@@ -1159,6 +1160,7 @@ def _review_subitem_post_count(post):
             f'{prefix}{count}' in post
             for prefix in (
                 'subitem_text_', 'subitem_label_',
+                'subitem_answer_', 'subitem_solution_',
                 'subitem_author_answer_', 'subitem_answer_mask_',
                 'subitem_author_solution_')):
         count += 1
@@ -1179,6 +1181,10 @@ def _subitems_from_review_editors(post):
             'author_solution_latex': post.get(
                 f'subitem_author_solution_{index}', ''),
         })
+        for field in ('answer_latex', 'solution_latex'):
+            key = f"subitem_{field.removesuffix('_latex')}_{index}"
+            if key in post:
+                items[-1][field] = post[key]
     return normalize_subitems(items)
 
 
@@ -1198,7 +1204,7 @@ def _merge_review_subitems(from_editors, from_json):
     for item in from_json:
         key = _subitem_label_key(item.get('label'))
         if key in by_label and key not in used:
-            merged.append(by_label[key])
+            merged.append({**item, **by_label[key]})
             used.add(key)
         else:
             merged.append(item)
@@ -1206,25 +1212,22 @@ def _merge_review_subitems(from_editors, from_json):
 
 
 def _overlay_review_author_fields(subitems, original, post):
-    """Авторские поля привязываются к метке пункта, а не к позиции JSON."""
+    """Поля материалов привязываются к метке, а не к позиции JSON."""
     from .textbook_import import normalize_answer_mask
 
     by_label = {}
     for index, item in enumerate(original):
-        answer_key = f'subitem_author_answer_{index}'
-        mask_key = f'subitem_answer_mask_{index}'
-        solution_key = f'subitem_author_solution_{index}'
-        if (answer_key not in post and mask_key not in post
-                and solution_key not in post):
-            continue
-        by_label[_subitem_label_key(item.get('label'))] = {
-            'author_answer_latex': post.get(answer_key, '').strip(),
-            'answer_mask': normalize_answer_mask(
-                post.get(mask_key, ''), key=f'маска подпункта {index + 1}'),
-            'author_solution_latex': post.get(solution_key, '').strip(),
-        }
-    if not by_label:
-        return subitems
+        values = {}
+        for field in ('author_answer_latex', 'author_solution_latex',
+                      'answer_latex', 'solution_latex', 'answer_mask'):
+            prefix = field.removesuffix('_latex')
+            key = f'subitem_{prefix}_{index}'
+            if key in post:
+                value = post[key].strip()
+                values[field] = (normalize_answer_mask(value)
+                                 if field == 'answer_mask' else value)
+        if values:
+            by_label[_subitem_label_key(item.get('label'))] = values
     used = set()
     for subitem in subitems:
         key = _subitem_label_key(subitem.get('label'))
@@ -1634,14 +1637,8 @@ def textbook_import_review(request, batch_pk, pk):
             except TextbookImportError as exc:
                 form.add_error('subitems', str(exc))
             if not form.errors:
-                if updated.subitems and any(
-                        str(item.get('author_answer_latex') or '').strip()
-                        or str(item.get('answer_mask') or '').strip()
-                        or str(item.get('author_solution_latex') or '').strip()
-                        for item in updated.subitems):
-                    updated.author_answer_latex = ''
+                if updated.subitems:
                     updated.answer_mask = ''
-                    updated.author_solution_latex = ''
                 if (request.POST.get('topics_submitted')
                         or 'topics' in request.POST
                         or 'topic' in request.POST
@@ -1684,6 +1681,10 @@ def textbook_import_review(request, batch_pk, pk):
             answer_key = f'subitem_author_answer_{index}'
             mask_key = f'subitem_answer_mask_{index}'
             solution_key = f'subitem_author_solution_{index}'
+            for field in ('answer_latex', 'solution_latex'):
+                key = f"subitem_{field.removesuffix('_latex')}_{index}"
+                if key in request.POST:
+                    subitem[field] = request.POST[key]
             if answer_key in request.POST:
                 subitem['author_answer_latex'] = request.POST[answer_key]
             if mask_key in request.POST:

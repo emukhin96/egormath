@@ -644,8 +644,8 @@ class TextbookImportTests(TestCase):
         batch = self.create_batch(payload)
         draft = batch.drafts.get()
         self.assertEqual(draft.text_latex, '')
-        self.assertEqual(draft.author_answer_latex, '')
-        self.assertEqual(draft.author_solution_latex, '')
+        self.assertEqual(draft.author_answer_latex, 'Общий ответ.')
+        self.assertEqual(draft.author_solution_latex, 'Общее решение.')
         self.assertEqual(
             draft.subitems[0]['author_solution_latex'],
             'Решение подпункта.')
@@ -1182,8 +1182,8 @@ class TextbookImportTests(TestCase):
         self.assertContains(response, 'Править исходник условия')
         self.assertContains(response, 'Править исходник ответа')
         self.assertContains(response, 'Править исходник решения')
-        self.assertNotContains(response, 'name="author_answer_latex"')
-        self.assertNotContains(response, 'name="author_solution_latex"')
+        self.assertContains(response, 'name="author_answer_latex"')
+        self.assertContains(response, 'name="author_solution_latex"')
         self.assertContains(response, 'data-tax-picker')
         self.assertContains(response, 'data-single="0"')
         self.assertContains(response, 'data-primary="1"')
@@ -1197,8 +1197,8 @@ class TextbookImportTests(TestCase):
             'subitems': json.dumps(draft.subitems),
             'subitem_author_answer_0': 'Новый ответ.',
             'subitem_author_solution_0': 'Новое решение.',
-            'author_answer_latex': 'Не должно сохраниться.',
-            'author_solution_latex': 'Не должно сохраниться.',
+            'author_answer_latex': 'Общий материал.',
+            'author_solution_latex': 'Общий материал.',
             'topic': str(second_topic.pk),
             'status': TextbookTaskDraft.STATUS_REVIEW,
         })
@@ -1212,8 +1212,8 @@ class TextbookImportTests(TestCase):
             draft.subitems[0]['author_answer_latex'], 'Новый ответ.')
         self.assertEqual(
             draft.subitems[0]['author_solution_latex'], 'Новое решение.')
-        self.assertEqual(draft.author_answer_latex, '')
-        self.assertEqual(draft.author_solution_latex, '')
+        self.assertEqual(draft.author_answer_latex, 'Общий материал.')
+        self.assertEqual(draft.author_solution_latex, 'Общий материал.')
 
     def test_review_rejects_invalid_subitem_mask_without_text_editors(self):
         batch = self.create_batch(bundle(
@@ -1243,7 +1243,7 @@ class TextbookImportTests(TestCase):
         draft.refresh_from_db()
         self.assertEqual(draft.subitems[0]['answer_mask'], original_mask)
 
-    def test_commit_never_writes_parent_author_fields_for_subitems(self):
+    def test_commit_preserves_common_author_material_with_subitems(self):
         topic = Topic.objects.create(name='Тема подпунктов')
         batch = self.create_batch(bundle(
             subitems=[{
@@ -1260,8 +1260,8 @@ class TextbookImportTests(TestCase):
         commit_batch(batch, user=self.teacher)
 
         task = Task.objects.get()
-        self.assertEqual(task.author_answer_latex, '')
-        self.assertEqual(task.author_solution_latex, '')
+        self.assertEqual(task.author_answer_latex, 'Общий ответ.')
+        self.assertEqual(task.author_solution_latex, 'Общее решение.')
         subitem = task.subitems.get()
         self.assertEqual(subitem.author_answer_latex, 'Ответ подпункта.')
         self.assertEqual(subitem.author_solution_latex, 'Решение подпункта.')
@@ -1600,7 +1600,7 @@ class TextbookImportTests(TestCase):
         self.assertContains(response, 'answer-box')
         self.assertContains(response, 'class="ws-answers" hidden')
         self.assertContains(response, 'а)&nbsp;')
-        self.assertContains(response, 'Решение:')
+        self.assertContains(response, 'Авторское решение:')
         self.assertNotContains(response, 'class="show-answers"')
         self.assertNotContains(response, '— ответ:')
 
