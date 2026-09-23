@@ -46,7 +46,35 @@
     el.classList.add('board-fresh');
     setTimeout(function () { el.classList.remove('board-fresh'); }, 4000);
   }
+  /* Кнопки задач над сеткой: пересобираются из tasks каждого ответа — новая
+     первая доска по задаче добавляет кнопку, удаление последней — убирает */
+  function syncTaskLinks(tasks) {
+    var bar = document.querySelector('[data-boards-tasks]');
+    if (!bar || !tasks) return;
+    var wanted = {};
+    tasks.forEach(function (t) { if (t.count > 0 || t.task === taskFilter) wanted[t.task] = t.task_no; });
+    Array.prototype.forEach.call(bar.querySelectorAll('[data-task-link]'), function (a) {
+      if (!(a.dataset.taskLink in wanted)) a.remove();
+    });
+    var empty = bar.querySelector('[data-tasks-empty]');
+    Object.keys(wanted).map(Number).sort(function (a, b) { return wanted[a] - wanted[b]; }).forEach(function (task) {
+      if (bar.querySelector('[data-task-link="' + task + '"]')) return;
+      var a = document.createElement('a');
+      a.className = 'btn btn-small btn-secondary'; a.dataset.taskLink = task;
+      var base = liveUrl.split('?')[1] || '', params = new URLSearchParams(base);
+      params.set('task', task);
+      a.href = '?' + params.toString();
+      a.setAttribute('aria-label', 'Задача ' + wanted[task]); a.title = 'Доски задачи ' + wanted[task] + ' у всех учеников';
+      a.textContent = wanted[task];
+      if (task === taskFilter) a.setAttribute('aria-current', 'page');
+      /* по порядку номеров: перед первой кнопкой с большим номером, иначе перед подписью «пусто» */
+      var next = Array.prototype.find.call(bar.querySelectorAll('[data-task-link]'), function (b) { return wanted[b.dataset.taskLink] > wanted[task]; });
+      bar.insertBefore(a, next || empty);
+    });
+    if (empty) empty.hidden = !!bar.querySelector('[data-task-link]');
+  }
   function apply(data) {
+    syncTaskLinks(data.tasks);
     var seen = {};
     data.states.forEach(function (state, i) {
       seen[state.assignment] = true;
