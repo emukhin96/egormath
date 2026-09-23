@@ -437,8 +437,14 @@ def corpus_push(request, draft_id):
             f'догружено рисунков: {attached}.')
     elif already:
         message = f'Листок «{worksheet.title}» уже в каталоге.'
+    elif info.get('collection'):
+        message = (f'Листок «{worksheet.title}» загружен в подборки '
+                   f'(раздел «{info["collection"].parent.worksheet.title}»).')
     else:
         message = f'Листок «{worksheet.title}» загружен в каталог.'
+    worksheet_url = (reverse('collection_detail', args=[info['collection'].pk])
+                     if info.get('collection')
+                     else reverse('worksheet_detail', args=[worksheet.pk]))
     if _is_ajax(request):
         return JsonResponse({
             'ok': True,
@@ -447,7 +453,7 @@ def corpus_push(request, draft_id):
             'status': draft.get('status'),
             'status_label': STATUS_LABELS.get(
                 draft.get('status'), draft.get('status') or ''),
-            'worksheet_url': reverse('worksheet_detail', args=[worksheet.pk]),
+            'worksheet_url': worksheet_url,
             'counts': _status_counts(),
         })
     messages.success(request, message)

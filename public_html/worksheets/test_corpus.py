@@ -634,8 +634,13 @@ class CorpusViewTests(TestCase):
         self.assertTrue(payload['ok'])
         self.assertEqual(load_draft(draft['id'])['status'], 'imported')
         ws = Worksheet.objects.get(title='Процент от числа')
+        # Листок сразу в подборках: в «Моих листках» его нет, возврат в
+        # корпус — со страницы подборки.
+        self.assertIn('/collections/', payload['worksheet_url'])
         listing = self.client.get(reverse('worksheet_list'))
-        self.assertContains(listing, 'Убрать из каталога')
+        self.assertNotContains(listing, 'Процент от числа')
+        page = self.client.get(payload['worksheet_url'])
+        self.assertContains(page, 'Вернуть в корпус')
         unpush = self.client.post(
             reverse('worksheet_corpus_unpush', args=[ws.pk]))
         self.assertEqual(unpush.status_code, 302)

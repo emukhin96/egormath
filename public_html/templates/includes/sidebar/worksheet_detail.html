@@ -23,6 +23,21 @@
     <a class="sidebar-action" href="{% url 'assignment_create' %}?worksheet={{ worksheet.pk }}">Выдать через мастер</a>
   </div>
 </section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Подборки</p>
+  {% if collection %}
+  <p class="sidebar-copy">Листок в подборках: <a href="{% url 'collection_detail' collection.pk %}">{{ collection.source }}</a>{% if collection.parent %} › {{ collection.parent.worksheet.title }}{% endif %}.</p>
+  {% if is_authored %}
+  {% include 'worksheets/_authored_controls.html' with next_url=request.path %}
+  {% endif %}
+  {% else %}
+  <p class="sidebar-copy">Законченный авторский листок удобнее хранить в подборках и брать из него задачи.</p>
+  <form method="post" action="{% url 'worksheet_to_collections' worksheet.pk %}" class="sidebar-actions">
+    {% csrf_token %}
+    <button type="submit" class="sidebar-action">В подборки</button>
+  </form>
+  {% endif %}
+</section>
 {% if assignments %}
 <section class="sidebar-section" id="worksheet-recipients">
   <p class="sidebar-kicker">Назначения</p>
