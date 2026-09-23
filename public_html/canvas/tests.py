@@ -509,8 +509,8 @@ class BoardsTests(CanvasBase):
         fourth = Task.objects.create(text_latex='Без досок')
         WorksheetItem.objects.create(worksheet=self.worksheet, task=fourth, order=4)
         html = self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk]), {'task': self.task.pk}).content.decode()
-        self.assertIn('href="?task=%d" aria-pressed="true"' % self.task.pk, html)
-        self.assertIn('href="?task=%d" aria-pressed="false"' % other.pk, html)
+        self.assertIn('href="?task=%d" aria-current="page" aria-label="Задача 1"' % self.task.pk, html)
+        self.assertIn('href="?task=%d" aria-label="Задача 2"' % other.pk, html)
         self.assertNotIn('task=%d"' % fourth.pk, html)
 
     def test_since_and_not_modified(self):
