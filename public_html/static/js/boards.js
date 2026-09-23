@@ -209,6 +209,8 @@
     if (el) openBoard(parseInt(el.dataset.board, 10));
   });
   root.addEventListener('keydown', function (e) {
+    /* Enter/Space на кнопке копирования — её собственный click, не открытие карточки */
+    if (e.target.closest('[data-board-copy]')) return;
     var el = e.target.closest('[data-board]');
     if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openBoard(parseInt(el.dataset.board, 10)); }
   });

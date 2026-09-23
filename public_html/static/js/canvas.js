@@ -2069,6 +2069,9 @@
   }
   function copyPage(raw, name) {
     var blobPromise = pageBlob(raw);
+    /* Promise уходит внутрь ClipboardItem без нашего обработчика — отметим отказ
+       обработанным, чтобы ошибка построения PNG не всплыла как unhandledrejection */
+    blobPromise.catch(function () {});
     if (navigator.clipboard && window.ClipboardItem) {
       var item;
       try {
@@ -2079,7 +2082,9 @@
         return navigator.clipboard.write([item])
           .then(function () { toast(true, 'Доска скопирована как картинка'); return true; })
           .catch(function () {
-            return blobPromise.then(function (blob) { downloadBlob(blob, name); toast(true, 'Буфер недоступен — картинка скачана'); return true; });
+            /* Буфер отказал — скачиваем; если не удалось само построение PNG, тост об ошибке */
+            return blobPromise.then(function (blob) { downloadBlob(blob, name); toast(true, 'Буфер недоступен — картинка скачана'); return true; })
+              .catch(function () { toast(false, 'Не удалось подготовить картинку'); return false; });
           });
       }
     }
