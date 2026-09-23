@@ -14,6 +14,7 @@
   var dialog = document.getElementById('boards-dialog');
   var since = null, etag = null, timer = null, lastActivity = Date.now(), stopped = false, busy = false;
   var latest = {};          /* assignment → последняя страница (payload) */
+  var COPY_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   var pagesOf = {};         /* assignment → {task: {task_no, canvas_url, count}} */
   var open = null;          /* {assignment, task} открытого диалога */
 
@@ -31,7 +32,8 @@
     el.className = 'board-card'; el.dataset.board = state.assignment; el.tabIndex = 0; el.setAttribute('role', 'button');
     el.innerHTML = '<div class="board-meta"><strong class="board-name"></strong><span class="board-state" data-board-state></span></div>'
       + '<canvas class="board-thumb" width="300" height="300" aria-hidden="true"></canvas>'
-      + '<div class="board-meta helptext"><span data-board-task>доски пока нет</span><span data-board-updated></span></div>';
+      + '<div class="board-meta helptext"><span data-board-task>доски пока нет</span><span data-board-updated></span>'
+      + '<button type="button" class="icon-btn board-copy" data-board-copy title="Скопировать доску как картинку" aria-label="Скопировать доску как картинку" hidden>' + COPY_ICON + '</button></div>';
     el.querySelector('.board-name').textContent = state.student;
     root.appendChild(el);
     return el;
@@ -43,6 +45,8 @@
     el.querySelector('[data-board-task]').textContent = (taskFilter ? '' : 'задача ' + page.task_no + ', ') + 'стр. ' + page.number;
     el.querySelector('[data-board-updated]').textContent = ago(page.updated);
     el.dataset.updated = page.updated;
+    var copyBtn = el.querySelector('[data-board-copy]');
+    if (copyBtn) copyBtn.hidden = false;
     el.classList.add('board-fresh');
     setTimeout(function () { el.classList.remove('board-fresh'); }, 4000);
   }
@@ -194,6 +198,13 @@
     poll();
   }
   root.addEventListener('click', function (e) {
+    var copyBtn = e.target.closest('[data-board-copy]');
+    if (copyBtn) {
+      e.stopPropagation();
+      var id = parseInt(copyBtn.closest('[data-board]').dataset.board, 10), page = latest[id], el0 = card(id);
+      if (page) EgorCanvas.copy(page, (el0.dataset.student || 'доска') + ' — задача ' + page.task_no + '.png');
+      return;
+    }
     var el = e.target.closest('[data-board]');
     if (el) openBoard(parseInt(el.dataset.board, 10));
   });
