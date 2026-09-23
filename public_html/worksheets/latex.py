@@ -209,6 +209,20 @@ def _resolve_taskpics(text, filenames, used):
     return TASKPIC_REF_RE.sub(repl, text)
 
 
+def _taskpic_command(name, sub_labels=None):
+    """\\taskpic для тела задачи; у рисунка подпункта — подпись с буквой.
+
+    Сам \\taskpic внутри подпункта egor подписал бы «К задаче 6б», но ссылки
+    переносятся в тело (см. task_to_tex), где буква теряется. Поэтому номер
+    задают явно: \\taskpic[\\arabic{enumi}б]{файл} — egor раскрывает
+    опциональный аргумент через \\edef, и \\arabic{enumi} даёт номер текущей
+    задачи. Рисунок к нескольким подпунктам: «К задаче 6б, в».
+    """
+    if not sub_labels:
+        return '\\taskpic{%s}' % name
+    return '\\taskpic[\\arabic{enumi}%s]{%s}' % (', '.join(sub_labels), name)
+
+
 def _keep_choice_statement(body):
     """Не отделяет систему/коэффициенты от вариантов ответа и их рисунков."""
     is_system = body.startswith('Укажите решение системы неравенств')
@@ -248,13 +262,18 @@ def task_to_tex(item, variant='teacher', *, statement=None, common_indices=()):
     used = set(body_used) | set(common_indices)
     sub_texts = []
     deferred_pics = set()
-    for subitem in subitem_objs:
+    # Номер картинки -> буквы подпунктов, где она упомянута
+    # (буквы — по позиции среди выбранных, как в сводном ответе).
+    pic_subitems = {}
+    for sub_index, subitem in enumerate(subitem_objs):
         subitem_used = set()
         sub_text = _resolve_taskpics(
             subitem.text_latex.strip(), filenames, subitem_used)
         # Пакет egor не выводит \\taskpic из опционального
         # аргумента подпунктов, поэтому переносим ссылки в тело.
         sub_text = re.sub(r'\s*\\taskpic\{[^{}]+\}', '', sub_text)
+        for i in subitem_used:
+            pic_subitems.setdefault(i, []).append(subitem_label(sub_index))
         deferred_pics.update(subitem_used)
         used.update(subitem_used)
         sub_texts.append(sub_text)
@@ -292,12 +311,24 @@ def task_to_tex(item, variant='teacher', *, statement=None, common_indices=()):
     if variant == 'teacher':
         deferred_pics.update(solution_used)
     used.update(solution_used)
+    # Рисунки, на которые ссылаются только невыбранные подпункты, в листок
+    # не попадают: самого подпункта в листке нет.
+    selected_ids = {s.pk for s in subitem_objs}
+    unselected_refs = set()
+    all_subitems = getattr(item, 'all_subitems', True)
+    for subitem in ([] if all_subitems else task.subitems.all()):
+        if subitem.pk not in selected_ids:
+            for text in (subitem.text_latex, subitem.effective_answer_latex,
+                         subitem.effective_solution_latex):
+                _resolve_taskpics(text or '', filenames, unselected_refs)
     # Рисунки из optional-аргументов и рисунки без ссылки
     # выводим один раз в основном теле задачи.
     for i, name in enumerate(filenames):
+        if i not in used and i in unselected_refs:
+            continue
         if ((i in deferred_pics and i not in body_used)
                 or i not in used):
-            body += '\n\\taskpic{%s}' % name
+            body += '\n' + _taskpic_command(name, pic_subitems.get(i))
     body = _keep_choice_statement(body)
     short_answer = (variant == 'teacher' and answer and not solution and not sub_lines
                     and len(body) < 400 and r'\begin' not in body and r'\taskpic' not in body)

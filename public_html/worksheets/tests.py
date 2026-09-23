@@ -367,10 +367,54 @@ class LatexGenerationTests(TestCase):
         TaskSubitem.objects.create(
             task=task, order=10, text_latex='пункт с рисунком \\taskpic{1}')
         tex = task_to_tex(make_item(self.worksheet, task))
-        # Ссылка из подпункта учтена — в конец условия не дублируется
-        self.assertEqual(tex.count('\\taskpic{a.png}'), 1)
-        self.assertLess(
-            tex.index(r"\taskpic{a.png}"), tex.index(r"[{\item"))
+        # Ссылка из подпункта учтена — в конец условия не дублируется,
+        # а подпись помнит букву подпункта: «К задаче Nа».
+        pic = r'\taskpic[\arabic{enumi}а]{a.png}'
+        self.assertEqual(tex.count('a.png'), 1)
+        self.assertIn(pic, tex)
+        self.assertLess(tex.index(pic), tex.index(r"[{\item"))
+
+    def test_taskpic_subitem_letter_follows_selection(self):
+        # Буква — по позиции среди выбранных подпунктов, как у egor и в ответах
+        task = Task.objects.create(text_latex='Постройте графики.')
+        task.images.create(image='task_images/common.png', order=10)
+        task.images.create(image='task_images/sub.png', order=20)
+        task.images.create(image='task_images/both.png', order=30)
+        TaskSubitem.objects.create(task=task, order=10, text_latex='$y=x$')
+        second = TaskSubitem.objects.create(
+            task=task, order=20, text_latex=r'$y=x^2$ \taskpic{2} \taskpic{3}')
+        third = TaskSubitem.objects.create(
+            task=task, order=30, text_latex=r'$y=|x|$ \taskpic{3}')
+        item = make_item(self.worksheet, task)
+        tex = task_to_tex(item)
+        self.assertIn(r'\taskpic{common.png}', tex)
+        self.assertIn(r'\taskpic[\arabic{enumi}б]{sub.png}', tex)
+        self.assertIn(r'\taskpic[\arabic{enumi}б, в]{both.png}', tex)
+        # Первый подпункт не выбран — второй становится «а)»
+        item.all_subitems = False
+        item.save()
+        item.subitems.set([second, third])
+        tex = task_to_tex(item)
+        self.assertIn(r'\taskpic[\arabic{enumi}а]{sub.png}', tex)
+        self.assertIn(r'\taskpic[\arabic{enumi}а, б]{both.png}', tex)
+
+    def test_taskpic_of_unselected_subitem_is_dropped(self):
+        # Рисунок невыбранного подпункта не печатается; общий — остаётся
+        task = Task.objects.create(text_latex='Постройте графики.')
+        task.images.create(image='task_images/common.png', order=10)
+        task.images.create(image='task_images/first.png', order=20)
+        task.images.create(image='task_images/shared.png', order=30)
+        first = TaskSubitem.objects.create(
+            task=task, order=10, text_latex=r'$y=x$ \taskpic{2} \taskpic{3}')
+        second = TaskSubitem.objects.create(
+            task=task, order=20, text_latex=r'$y=x^2$ \taskpic{3}')
+        item = make_item(self.worksheet, task, all_subitems=False)
+        item.subitems.set([second])
+        tex = task_to_tex(item)
+        self.assertIn(r'\taskpic{common.png}', tex)
+        self.assertNotIn('first.png', tex)
+        self.assertIn(r'\taskpic[\arabic{enumi}а]{shared.png}', tex)
+        self.assertIsNotNone(first.pk)
 
     def test_taskpic_ref_in_solution_moves_to_task_body(self):
         task = Task.objects.create(
