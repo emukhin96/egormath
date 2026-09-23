@@ -1608,6 +1608,9 @@ def textbook_import_review(request, batch_pk, pk):
     draft = get_object_or_404(
         TextbookTaskDraft.objects.select_related('topic', 'imported_task'),
         batch=batch, pk=pk)
+    if request.method == 'GET':
+        from .textbook_import import complete_deferred_answer_masks
+        complete_deferred_answer_masks(draft)
     original_subitems = [dict(item) for item in draft.subitems]
     if (request.method == 'POST'
             and draft.status == TextbookTaskDraft.STATUS_IMPORTED):

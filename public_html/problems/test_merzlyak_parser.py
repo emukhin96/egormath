@@ -116,6 +116,47 @@ class MerzlyakParserTests(TestCase):
         self.assertEqual(self.by_id['18.1'].source_path[-1],
                          '§ 18. Преобразование (отображение) фигур')
 
+    def test_algebra_legend_toc_and_subsection_task(self):
+        text = r'''
+\section*{Условные обозначения}
+5.6. Задания, рекомендованные для устной работы\\
+5.7. Задания, рекомендованные для домашней работы
+\section*{1 Квадратичная функция}
+\section*{§ 1 Функция}
+\item[1.1.] Найдите значение функции.
+\item[5.6.] Постройте график.
+\subsection*{9.31. Решите уравнение \(x^{2}=4\).}
+\item[26.1.] Найдите сумму первых членов прогрессии.
+\section*{Ответы и указания}
+1.1. 3. 5.6. См. рисунок. 9.31. 2. 26.1. 10.
+\section*{Оглавление}
+Глава 1. Квадратичная функция\\
+§ 1. Функция ..... 4
+§ 5. Построение графиков функций \(y=f(x)+b\)\\
+и \(y=f(x+a)\) ..... 46
+§ 9. Решение неравенств методом интервалов ..... 88
+Глава 5. Числовые последовательности\\
+§ 26. Сумма \(n\) первых членов арифметической прогрессии ..... 251
+'''
+        tasks, _ = parse_merzlyak(text)
+        by_id = {task.external_id: task for task in tasks}
+        self.assertEqual(list(by_id), ['1.1', '5.6', '9.31', '26.1'])
+        self.assertEqual(by_id['1.1'].source_path,
+                         ['Глава 1. Квадратичная функция', '§ 1. Функция'])
+        self.assertEqual(by_id['5.6'].source_path[-1],
+                         r'§ 5. Построение графиков функций \(y=f(x)+b\) и \(y=f(x+a)\)')
+        self.assertEqual(by_id['5.6'].text_latex, 'Постройте график.')
+        self.assertIn(r'x^{2}=4', by_id['9.31'].text_latex)
+        self.assertEqual(len(by_id['26.1'].source_path), 2)
+        self.assertEqual(by_id['26.1'].source_path[0],
+                         'Глава 5. Числовые последовательности')
+
+    def test_unknown_book_does_not_inherit_geometry_titles(self):
+        tasks, _ = parse_merzlyak(
+            r'\section*{§ 1 Функция}' '\n1.1. Найдите значение функции.\n'
+            r'\section*{Ответы и указания}' '\n1.1. 3.')
+        self.assertEqual(tasks[0].source_path, ['§ 1'])
+
     def test_theory_and_chapter_summary_do_not_leak_into_tasks(self):
         self.assertNotIn('Из первого признака', self.by_id['1.7'].text_latex)
         self.assertNotIn('Итоги главы', self.by_id['2.2'].text_latex)

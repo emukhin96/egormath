@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from problems.models import TextbookImportBatch
-from problems.textbook_import import (TextbookImportError,
+from problems.textbook_import import (DEFERRED_MASK_WARNING, TextbookImportError,
                                       _merge_author_fields,
                                       _merge_subitem_author_fields,
                                       fill_draft_answer_masks)
@@ -31,6 +31,7 @@ class Command(BaseCommand):
         for draft in drafts:
             before_parent = draft.answer_mask
             before_subitems = copy.deepcopy(draft.subitems)
+            before_warnings = list(draft.warnings)
             if draft.subitems:
                 targets += sum(bool(str(item.get('author_answer_latex') or '').strip())
                                for item in draft.subitems)
@@ -38,12 +39,14 @@ class Command(BaseCommand):
                 targets += bool(draft.author_answer_latex.strip())
 
             fill_draft_answer_masks(draft)
+            draft.warnings = [w for w in draft.warnings if w != DEFERRED_MASK_WARNING]
             current = ([str(item.get('answer_mask') or '').strip()
                         for item in draft.subitems]
                        if draft.subitems else [draft.answer_mask.strip()])
             masks += sum(bool(value) for value in current)
             if (draft.answer_mask != before_parent
-                    or draft.subitems != before_subitems):
+                    or draft.subitems != before_subitems
+                    or draft.warnings != before_warnings):
                 changed.append(draft)
                 if not before_parent and draft.answer_mask:
                     generated += 1
@@ -67,7 +70,7 @@ class Command(BaseCommand):
                 with transaction.atomic():
                     if changed:
                         type(drafts[0]).objects.bulk_update(
-                            changed, ['answer_mask', 'subitems'], batch_size=500)
+                            changed, ['answer_mask', 'subitems', 'warnings'], batch_size=500)
                     for draft in drafts:
                         if (draft.status != draft.STATUS_IMPORTED
                                 or not draft.imported_task_id):

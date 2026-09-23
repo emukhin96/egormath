@@ -14,6 +14,7 @@ import zipfile
 from dataclasses import asdict
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from time import monotonic
 
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -48,6 +49,9 @@ from .textbook_topics import apply_topic_suggestions, draft_topic_ids
 MAX_BUNDLE_TASKS = 10000
 IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.pdf'}
 IMAGE_WARNING_PREFIX = 'Требуется загрузить файлы изображений:'
+MASK_DRAFT_BUDGET_SECONDS = 2
+DEFERRED_MASK_WARNING = (
+    'Подбор маски ответа отложен до открытия задачи на сверку.')
 
 
 def normalize_image_stem(name):
@@ -144,14 +148,14 @@ def normalize_answer_mask(value, *, key='answer_mask'):
     return value
 
 
-def fill_draft_answer_masks(draft):
-    """Заполняет только безопасно распознанные пустые маски черновика."""
+def fill_draft_answer_masks(draft, *, deadline=None):
+    """Заполняет пустые маски; False — осталась работа после лимита времени."""
     from assignments.checks import draft_mask
     from assignments.checks.formats import oge_kind
     if (oge_kind(draft.exam_item_codes)
             or any(str(code).startswith('EGE_')
                    for code in draft.exam_item_codes or [])):
-        return
+        return True
     if draft.subitems:
         draft.answer_mask = ''
         for item in draft.subitems:
@@ -160,6 +164,8 @@ def fill_draft_answer_masks(draft):
             answer = str(item.get('author_answer_latex') or '').strip()
             if not answer:
                 continue
+            if deadline is not None and monotonic() >= deadline:
+                return False
             condition = '\n'.join(filter(None, (
                 draft.text_latex,
                 str(item.get('text_latex') or '').strip(),
@@ -169,12 +175,25 @@ def fill_draft_answer_masks(draft):
                 exam_codes=draft.exam_item_codes,
                 source_number=draft.external_id,
                 subitem_label=str(item.get('label') or ''))
-        return
+        return True
     if not draft.answer_mask and draft.author_answer_latex.strip():
+        if deadline is not None and monotonic() >= deadline:
+            return False
         draft.answer_mask = draft_mask(
             draft.author_answer_latex, draft.text_latex,
             exam_codes=draft.exam_item_codes,
             source_number=draft.external_id)
+    return True
+
+
+def complete_deferred_answer_masks(draft):
+    """Достраивает маски одной задачи при сверке, сохраняя ручные правки."""
+    if (DEFERRED_MASK_WARNING not in draft.warnings
+            or draft.status == TextbookTaskDraft.STATUS_IMPORTED):
+        return
+    fill_draft_answer_masks(draft)
+    draft.warnings = [w for w in draft.warnings if w != DEFERRED_MASK_WARNING]
+    draft.save(update_fields=['answer_mask', 'subitems', 'warnings'])
 
 
 def _confidence(value):
@@ -296,12 +315,16 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             tags=_string_list(row.get('tags'), 'tags'),
             status=status,
         ))
+    # Символьный подбор по всей книге может превысить таймаут WSGI.
+    # Проверяем бюджет перед каждой маской, остальные достроим на сверке.
+    mask_deadline = monotonic() + MASK_DRAFT_BUDGET_SECONDS
     for draft in drafts:
         try:
             apply_oge_metadata(draft, batch.profile)
             from .ege_metadata import apply_ege_metadata
             apply_ege_metadata(draft, batch.profile)
-            fill_draft_answer_masks(draft)
+            if not fill_draft_answer_masks(draft, deadline=mask_deadline):
+                draft.warnings = _append_warning(draft.warnings, DEFERRED_MASK_WARNING)
         except ValueError as exc:
             raise TextbookImportError(str(exc)) from exc
     apply_topic_suggestions(drafts)
