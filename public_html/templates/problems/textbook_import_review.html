@@ -16,7 +16,8 @@
 {% if draft.block_id %}<p class="page-subtitle">{{ draft.block.title }} · вопрос {{ draft.block_position }} из {{ draft.block.size }}. При загрузке и добавлении в листок вопросы блока сохраняются вместе.</p>{% endif %}
 {% if draft.imported_task %}<p class="msg">Эта задача уже в базе: <a href="{% url 'task_detail' draft.imported_task_id %}" target="_blank" rel="noopener">открыть сохранённую версию</a>.</p>{% endif %}
 {% if review_locked %}<p class="helptext">Черновик только для просмотра: после загрузки в каталог сверка его не меняет. Исправления — в карточке задачи.</p>{% endif %}
-{% if draft.warnings %}<div class="msg msg-warning"><strong>Требует внимания:</strong> {{ draft.warnings|join:'; ' }}</div>{% endif %}
+{% if content_warnings %}<div class="msg msg-warning"><strong>Требует внимания:</strong> {{ content_warnings|join:'; ' }}</div>{% endif %}
+{% if masks_pending %}<p class="helptext">Маски ответов будут подготовлены при загрузке задач в каталог. Это не мешает одобрению задачи.</p>{% endif %}
 <form method="post" class="import-review-grid">{% csrf_token %}
   <section class="card">
     <h2>Задача и привязка</h2>

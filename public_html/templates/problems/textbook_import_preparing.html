@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Подготовка задач — Математика{% endblock %}
+{% block extra_head %}<script defer src="{% static 'js/textbook_import_preparing.js' %}"></script>{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Подготовка задач к загрузке</h1>
+  <p>{{ batch.title }}</p>
+  <p>Подбираем маски ответов. Осталось задач: {{ remaining }}.</p>
+  <p class="helptext">Загрузка продолжится автоматически. Не закрывайте страницу. Если процесс прервался, снова нажмите загрузку в партии — подготовленные маски сохранятся.</p>
+  <form method="post" action="{{ action_url }}" id="import-prepare-form">
+    {% csrf_token %}
+    {% if section %}<input type="hidden" name="section" value="{{ section }}">{% endif %}
+    <div class="form-buttons"><button class="btn" type="submit">Продолжить загрузку</button></div>
+  </form>
+  <p><a class="btn btn-secondary" href="{% url 'textbook_import_detail' batch.pk %}">К партии</a></p>
+</section>
+{% endblock %}

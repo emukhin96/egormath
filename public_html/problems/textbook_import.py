@@ -50,6 +50,8 @@ MAX_BUNDLE_TASKS = 10000
 IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.pdf'}
 IMAGE_WARNING_PREFIX = 'Требуется загрузить файлы изображений:'
 MASK_DRAFT_BUDGET_SECONDS = 2
+# Сохраняем прежнюю строку для совместимости с уже созданными партиями.
+# В интерфейсе это состояние очереди, а не предупреждение об условии.
 DEFERRED_MASK_WARNING = (
     'Подбор маски ответа отложен до открытия задачи на сверку.')
 
@@ -187,13 +189,37 @@ def fill_draft_answer_masks(draft, *, deadline=None):
 
 
 def complete_deferred_answer_masks(draft):
-    """Достраивает маски одной задачи при сверке, сохраняя ручные правки."""
+    """Достраивает маски перед публикацией, сохраняя ручные правки."""
     if (DEFERRED_MASK_WARNING not in draft.warnings
             or draft.status == TextbookTaskDraft.STATUS_IMPORTED):
         return
     fill_draft_answer_masks(draft)
     draft.warnings = [w for w in draft.warnings if w != DEFERRED_MASK_WARNING]
     draft.save(update_fields=['answer_mask', 'subitems', 'warnings'])
+
+
+def content_warnings(draft):
+    """Техническая очередь подбора масок не является дефектом условия."""
+    return [w for w in draft.warnings if w != DEFERRED_MASK_WARNING]
+
+
+@transaction.atomic
+def prepare_batch_answer_masks(batch, *, draft_ids=None):
+    """Один короткий шаг подготовки публикации; возвращает остаток очереди."""
+    # Та же блокировка, что у публикации; два запроса не обрабатывают очередь вместе.
+    batch = TextbookImportBatch.objects.select_for_update().get(pk=batch.pk)
+    drafts = batch.drafts.filter(status=TextbookTaskDraft.STATUS_APPROVED)
+    if draft_ids is not None:
+        drafts = drafts.filter(pk__in=draft_ids)
+    pending = [d for d in drafts.order_by('pk') if DEFERRED_MASK_WARNING in d.warnings]
+    deadline = monotonic() + MASK_DRAFT_BUDGET_SECONDS
+    for index, draft in enumerate(pending):
+        # Хотя бы одна задача за запрос: поддерживаем продвижение и при
+        # дорогой единичной маске. Между шагами прогресс сохраняется в БД.
+        if index and monotonic() >= deadline:
+            return len(pending) - index
+        complete_deferred_answer_masks(draft)
+    return 0
 
 
 def _confidence(value):
@@ -316,7 +342,7 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             status=status,
         ))
     # Символьный подбор по всей книге может превысить таймаут WSGI.
-    # Проверяем бюджет перед каждой маской, остальные достроим на сверке.
+    # Проверяем бюджет перед каждой маской, остальные достроим при публикации.
     mask_deadline = monotonic() + MASK_DRAFT_BUDGET_SECONDS
     for draft in drafts:
         try:
@@ -1226,6 +1252,9 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         source=batch.source).count()
 
     for draft in approved.select_related('topic').order_by('pk'):
+        # Гарантия для всех путей: массовое одобрение, раздел, CLI и
+        # прямой вызов. HTTP заранее обрабатывает очередь короткими шагами.
+        complete_deferred_answer_masks(draft)
         try:
             if apply_oge_metadata(draft, batch.profile):
                 draft.save(update_fields=['exam_item_codes', 'tags'])

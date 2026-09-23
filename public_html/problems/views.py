@@ -1608,9 +1608,6 @@ def textbook_import_review(request, batch_pk, pk):
     draft = get_object_or_404(
         TextbookTaskDraft.objects.select_related('topic', 'imported_task'),
         batch=batch, pk=pk)
-    if request.method == 'GET':
-        from .textbook_import import complete_deferred_answer_masks
-        complete_deferred_answer_masks(draft)
     original_subitems = [dict(item) for item in draft.subitems]
     if (request.method == 'POST'
             and draft.status == TextbookTaskDraft.STATUS_IMPORTED):
@@ -1725,9 +1722,12 @@ def textbook_import_review(request, batch_pk, pk):
             'asset': assets.get(stem),
         })
     from .textbook_topics import candidate_reason_label
+    from .textbook_import import content_warnings, DEFERRED_MASK_WARNING
     context.update({
         'batch': batch,
         'draft': draft,
+        'content_warnings': content_warnings(draft),
+        'masks_pending': DEFERRED_MASK_WARNING in draft.warnings,
         'form': form,
         'review_subitems': review_subitems,
         'import_exam_items': ExamItem.objects.filter(code__in=draft.exam_item_codes),
@@ -1775,13 +1775,14 @@ def textbook_import_asset_file(request, batch_pk, pk):
 @teacher_required
 @require_POST
 def textbook_import_approve_clean(request, pk):
+    from .textbook_import import content_warnings
     batch = _own_import_batch(request, pk)
     drafts = list(batch.drafts.filter(
         status=TextbookTaskDraft.STATUS_REVIEW))
     approved = []
     now = timezone.now()
     for draft in drafts:
-        if not draft.warnings and draft.confidence == 1 and draft.topic_id:
+        if not content_warnings(draft) and draft.confidence == 1 and draft.topic_id:
             draft.status = TextbookTaskDraft.STATUS_APPROVED
             draft.reviewed_by = request.user
             draft.reviewed_at = now
@@ -1792,12 +1793,26 @@ def textbook_import_approve_clean(request, pk):
     return redirect('textbook_import_detail', pk=batch.pk)
 
 
+def _prepare_import_publication(request, batch, draft_ids=None):
+    """Повторные POST завершают подбор без длинного запроса на всю книгу."""
+    from .textbook_import import prepare_batch_answer_masks
+    remaining = prepare_batch_answer_masks(batch, draft_ids=draft_ids)
+    if remaining:
+        return render(request, 'problems/textbook_import_preparing.html', {
+            'batch': batch, 'remaining': remaining,
+            'action_url': request.path, 'section': request.POST.get('section', ''),
+        })
+
+
 @teacher_required
 @require_POST
 def textbook_import_commit(request, pk):
     from .textbook_import import TextbookImportError, commit_batch
     batch = _own_import_batch(request, pk)
     try:
+        preparing = _prepare_import_publication(request, batch)
+        if preparing is not None:
+            return preparing
         result = commit_batch(
             batch, user=request.user, require_complete=False)
     except TextbookImportError as exc:
@@ -1832,6 +1847,9 @@ def textbook_import_commit_section(request, pk):
         TextbookTaskDraft.STATUS_IMPORTED,
     ]).values_list('pk', flat=True))
     try:
+        preparing = _prepare_import_publication(request, batch, draft_ids)
+        if preparing is not None:
+            return preparing
         result = commit_batch(
             batch, user=request.user, draft_ids=draft_ids,
             require_complete=False)
