@@ -143,9 +143,11 @@ def _unit_word(match: re.Match) -> str:
     return unit
 
 
-def _known_titles() -> set[str]:
+def _known_titles(structure=None) -> set[str]:
     titles = set()
-    for chapter_title, paragraphs in MERZLYAK_GEOM9_STRUCTURE.values():
+    if structure is None:
+        structure = MERZLYAK_GEOM9_STRUCTURE
+    for chapter_title, paragraphs in structure.values():
         titles.add(_normalize_title(chapter_title))
         for title in paragraphs.values():
             titles.add(_normalize_title(re.sub(r"^§\s*\d+\.\s*", "", title)))
@@ -156,6 +158,38 @@ def _normalize_title(value: str) -> str:
     value = re.sub(r"\\\\|\\[a-zA-Z]+|[{}]", " ", str(value or ""))
     value = value.replace("ё", "е").replace("Ё", "Е")
     return re.sub(r"[\s.]+", " ", value).strip().lower()
+
+
+def _book_structure(text: str) -> dict:
+    """Оглавление текущей книги; геометрический справочник — только для неё."""
+    # Сохраняем сверенную структуру геометрии даже при неполном оглавлении.
+    known = _known_titles()
+    for match in SECTION_RE.finditer(text):
+        title = re.sub(r'^§\s*\d+\.?\s*', '', match.group('title'))
+        if _normalize_title(title) in known:
+            return MERZLYAK_GEOM9_STRUCTURE
+    toc = re.search(r"\\section\*?\{\s*Оглавление\s*\}", text, re.I)
+    structure = {}
+    if toc:
+        # Название параграфа может переноситься на следующую строку.
+        entries = re.compile(
+            r"(?m)^\s*(?:Глава\s+(?P<chapter>\d+)\.\s*(?P<title>[^\n]+)"
+            r"|§\s*(?P<paragraph>\d+)\.\s*(?P<name>.*?)\s*\.{2,}\s*\d+)",
+            re.S)
+        current = None
+        for match in entries.finditer(text[toc.end():]):
+            if match.group('chapter'):
+                current = int(match.group('chapter'))
+                title = clean(match.group('title')).rstrip('\\').strip()
+                structure[current] = (f'Глава {current}. {title}', {})
+            elif current is not None:
+                number = int(match.group('paragraph'))
+                title = clean(match.group('name').replace(r'\\', ' '))
+                title = re.sub(r'\s+', ' ', title).strip()
+                structure[current][1][number] = f'§ {number}. {title}'
+        if any(paragraphs for _, paragraphs in structure.values()):
+            return structure
+    return {}
 
 
 # --------------------------------------------------------------------------
@@ -242,7 +276,7 @@ def _unwrap_footnotes(text: str) -> str:
 
 def _unwrap_task_sections(text: str) -> str:
     """``\\section*{18.1. Отметим …}`` → строка «18.1. Отметим …»."""
-    pattern = re.compile(r"\\section\*?\{(?=\s*\d{1,2}\.\d{1,3}\.?\s)")
+    pattern = re.compile(r"\\(?:sub)*section\*?\{(?=\s*\d{1,2}\.\d{1,3}\.?\s)")
     out = []
     pos = 0
     for match in pattern.finditer(text):
@@ -739,9 +773,12 @@ def cut_task_body(body: str, known_titles: set[str],
     return "\n".join(kept), ""
 
 
-def _source_path(number: str, subsections: dict[str, str] | None = None) -> list[str]:
+def _source_path(number: str, subsections: dict[str, str] | None = None,
+                 structure=None) -> list[str]:
     paragraph = _task_key(number)[0]
-    for chapter_title, paragraphs in MERZLYAK_GEOM9_STRUCTURE.values():
+    if structure is None:
+        structure = MERZLYAK_GEOM9_STRUCTURE
+    for chapter_title, paragraphs in structure.values():
         if paragraph in paragraphs:
             path = [chapter_title]
             if paragraphs[paragraph] != chapter_title:
@@ -981,8 +1018,16 @@ def parse_merzlyak(text: str) -> tuple[list[TaskDraft], dict]:
             "Не найден раздел «Ответы и указания к упражнениям» Мерзляка")
     text, source_repairs = apply_source_repairs(text)
     prepared = prepare_merzlyak_text(text)
+    structure = _book_structure(prepared)
     heading = ANSWERS_HEADING_RE.search(prepared)
     task_text = prepared[:heading.start()]
+    # В легенде тоже встречаются номера («5.6. Задания для устной работы»).
+    # Иначе монотонный обход пропустит настоящие задачи первых параграфов.
+    legend = re.search(r"\\section\*?\{\s*Условные обозначения\s*\}", task_text, re.I)
+    if legend:
+        following = SECTION_RE.search(task_text, legend.end())
+        if following:
+            task_text = task_text[following.start():]
     answer_text = prepared[heading.end():]
     next_section = SECTION_RE.search(answer_text)
     if next_section:
@@ -990,12 +1035,13 @@ def parse_merzlyak(text: str) -> tuple[list[TaskDraft], dict]:
 
     task_text, figures = extract_figures(task_text)
     answer_text, answer_figures = extract_figures(answer_text)
-    known_titles = _known_titles()
+    known_titles = _known_titles(structure)
 
     markers = task_markers(task_text)
     answer_text = prepare_answers(
         answer_text, {marker.external_id for marker in markers})
-    subsections = _repetition_subsections(task_text, markers)
+    subsections = (_repetition_subsections(task_text, markers)
+                   if structure == MERZLYAK_GEOM9_STRUCTURE else {})
     tasks: list[TaskDraft] = []
     spans: list[tuple[int, int, str]] = []
     trimmed_tails = 0
@@ -1009,7 +1055,7 @@ def parse_merzlyak(text: str) -> tuple[list[TaskDraft], dict]:
                 trimmed_tails += 1
             body = _clean_task_body(body)
             task = task_from_block(
-                marker, body, _source_path(marker.external_id, subsections))
+                marker, body, _source_path(marker.external_id, subsections, structure))
             task.warnings = [
                 warning for warning in task.warnings
                 if "Несбалансированные" not in warning]

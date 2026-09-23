@@ -314,9 +314,15 @@ def match_topic_candidates(source_path, topic_original='', limit=3,
 def apply_topic_suggestions(drafts):
     """Записывает кандидатов; тему ставит только exact-совпадение."""
     index = _topic_index()
+    candidates_by_path = {}
     for draft in drafts:
-        candidates = match_topic_candidates(
-            draft.source_path, draft.topic_original, index=index)
+        # У сотен задач одного параграфа одинаковые входные данные.
+        # Кэш живёт только в этой партии: изменения рубрикатора не теряются.
+        key = (tuple(draft.source_path or []), draft.topic_original)
+        if key not in candidates_by_path:
+            candidates_by_path[key] = match_topic_candidates(
+                draft.source_path, draft.topic_original, index=index)
+        candidates = [dict(item) for item in candidates_by_path[key]]
         draft.topic_candidates = candidates
         exact = next((
             item for item in candidates

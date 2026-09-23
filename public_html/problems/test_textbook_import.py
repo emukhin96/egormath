@@ -1,6 +1,7 @@
 import io
 import json
 import zipfile
+from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -62,6 +63,80 @@ class TextbookImportTests(TestCase):
         return create_batch_from_bundle(
             payload or bundle(), user=self.teacher, title='Пробная партия',
             source_title='Тестовый задачник', source_author='Автор')
+
+    def test_mask_budget_defers_remaining_subitems_until_review(self):
+        from .textbook_import import DEFERRED_MASK_WARNING
+        payload = bundle(subitems=[
+            {'label': 'а', 'text_latex': 'Первый пункт',
+             'author_answer_latex': '$3$'},
+            {'label': 'б', 'text_latex': 'Второй пункт',
+             'author_answer_latex': '$7$'},
+            {'label': 'в', 'text_latex': 'Третий пункт',
+             'author_answer_latex': '$8$', 'answer_mask': '{{number: 8}}'},
+        ])
+        # Бюджет исчерпан между первым и вторым пунктами, без реального сна.
+        with patch('problems.textbook_import.monotonic', side_effect=[0, 0, 3]):
+            batch = self.create_batch(payload)
+        draft = batch.drafts.get()
+        self.assertEqual(draft.subitems[0]['answer_mask'], '{{number: 3}}')
+        self.assertEqual(draft.subitems[1]['answer_mask'], '')
+        self.assertEqual(draft.subitems[2]['answer_mask'], '{{number: 8}}')
+        self.assertIn(DEFERRED_MASK_WARNING, draft.warnings)
+        draft.warnings.append('Проверить рисунок')
+        draft.subitems[0]['answer_mask'] = '{{number: 4}}'
+        draft.save()
+        self.client.force_login(self.teacher)
+        url = reverse('textbook_import_review', args=[batch.pk, draft.pk])
+        self.assertEqual(self.client.get(url).status_code, 200)
+        draft.refresh_from_db()
+        self.assertEqual(draft.subitems[0]['answer_mask'], '{{number: 4}}')
+        self.assertEqual(draft.subitems[1]['answer_mask'], '{{number: 7}}')
+        self.assertNotIn(DEFERRED_MASK_WARNING, draft.warnings)
+        self.assertIn('Проверить рисунок', draft.warnings)
+        with patch('assignments.checks.draft_mask') as generate:
+            self.assertEqual(self.client.get(url).status_code, 200)
+            generate.assert_not_called()
+
+    def test_expired_mask_budget_preserves_answers_and_other_tasks(self):
+        from .textbook_import import DEFERRED_MASK_WARNING
+        payload = bundle(author_answer_latex='$42$')
+        payload['tasks'].append(dict(payload['tasks'][0], external_id='2'))
+        with patch('problems.textbook_import.MASK_DRAFT_BUDGET_SECONDS', 0), \
+                patch('assignments.checks.draft_mask') as generate:
+            batch = self.create_batch(payload)
+            generate.assert_not_called()
+        self.assertEqual(batch.drafts.count(), 2)
+        for draft in batch.drafts.all():
+            self.assertEqual(draft.author_answer_latex, '$42$')
+            self.assertEqual(draft.answer_mask, '')
+            self.assertIn(DEFERRED_MASK_WARNING, draft.warnings)
+
+    def test_topic_matching_is_reused_only_within_same_batch(self):
+        payload = bundle()
+        payload['tasks'].extend([
+            dict(payload['tasks'][0], external_id='2'),
+            dict(payload['tasks'][0], external_id='3', topic_original='Другая тема'),
+        ])
+        with patch('problems.textbook_topics.match_topic_candidates',
+                   wraps=match_topic_candidates) as match:
+            first = self.create_batch(payload)
+            self.assertEqual(match.call_count, 2)
+            self.create_batch(payload)
+            self.assertEqual(match.call_count, 4)
+        self.assertEqual(first.drafts.get(external_id='2').topic_candidates,
+                         first.drafts.order_by('pk').first().topic_candidates)
+
+    def test_backfill_clears_deferred_warning_only_when_applied(self):
+        from .textbook_import import DEFERRED_MASK_WARNING
+        with patch('problems.textbook_import.MASK_DRAFT_BUDGET_SECONDS', 0):
+            batch = self.create_batch(bundle(author_answer_latex='$7$'))
+        call_command('backfill_textbook_masks', batch.pk, stdout=io.StringIO())
+        self.assertIn(DEFERRED_MASK_WARNING, batch.drafts.get().warnings)
+        call_command('backfill_textbook_masks', batch.pk, apply=True,
+                     stdout=io.StringIO())
+        draft = batch.drafts.get()
+        self.assertEqual(draft.answer_mask, '{{number: 7}}')
+        self.assertNotIn(DEFERRED_MASK_WARNING, draft.warnings)
 
     def test_mask_is_generated_and_transferred_to_task(self):
         batch = self.create_batch(bundle(
