@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}{% if filters.kind == 'independent' %}Самостоятельные{% else %}Выданные задания{% endif %} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/assignment_list.html' %}{% endblock %}
 {% block content %}
@@ -105,6 +106,31 @@
   </div>
 </form>
 
+<form id="assignment-bulk-form" method="post" action="{% url 'assignment_bulk' %}" class="bulk-bar assignment-bulk" data-bulk hidden>
+  {% csrf_token %}
+  <input type="hidden" name="return_query" value="{{ return_query }}">
+  <input type="hidden" name="kind" value="{{ filters.kind }}">
+  <strong data-bulk-count>Выбрано: 0</strong>
+  <label class="inline-label">статус
+    <select name="status" class="quick-select">
+      <option value="">—</option>
+      {% for value, label in status_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="inline-label">срок
+    <select name="due_action" class="quick-select" data-due-action>
+      <option value="">не менять</option>
+      <option value="set">задать</option>
+      <option value="clear">убрать</option>
+    </select>
+  </label>
+  <input type="datetime-local" name="due_at" class="quick-select" aria-label="Новый срок" disabled>
+  <button type="submit" name="action" value="apply" class="btn btn-small">Применить</button>
+  <button type="submit" name="action" value="cart" class="btn btn-small btn-secondary" title="Задачи выбранных работ — в корзину, чтобы собрать новый листок">В корзину</button>
+  <button type="submit" name="action" value="independent" class="btn btn-small btn-secondary" title="Шаблон самостоятельной по листку одной выбранной выдачи">Самостоятельная по листку</button>
+  <button type="submit" name="action" value="delete" class="btn btn-small btn-danger" data-bulk-delete>Снять выдачу</button>
+</form>
+
 <div class="card assignment-catalog">
   <div class="table-summary">
     <span>Работ: <strong>{{ page.paginator.count }}</strong></span>
@@ -112,9 +138,11 @@
   </div>
   {% if worksheet_groups %}
   <div class="catalog-table-wrap"><table class="list assignment-sheet-table">
-    <thead><tr><th>Работа</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Учеников</th><th>На проверке</th><th>Проверено</th><th>Последняя выдача</th><th>Ближайший срок</th><th></th></tr></thead>
-    <tbody>{% for group in worksheet_groups %}<tr>
-      <td><a class="assignment-title" href="{% if group.progress_url %}{{ group.progress_url }}{% else %}{% url 'worksheet_progress' group.worksheet_id %}{% endif %}">{{ group.worksheet__title }}</a>{% if group.kind == "independent" %}<div class="muted">{{ group.kind_label }}</div>{% endif %}</td>
+    <thead><tr><th class="col-select"><input type="checkbox" data-bulk-all="assignment-bulk-form" title="Выбрать все работы на странице"></th><th>Работа</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Учеников</th><th>На проверке</th><th>Проверено</th><th>Последняя выдача</th><th>Ближайший срок</th><th></th></tr></thead>
+    <tbody>{% for group in worksheet_groups %}<tr data-assignment-row data-title="{{ group.worksheet__title }}" data-recipients="{% for row in group.recipient_rows %}{% if row.assignment %}{% if group.kind == 'independent' %}{{ row.student.get_full_name|default:row.student.username }}{% if row.locked %} ({{ row.assignment.state|lower }}){% endif %}{% else %}{{ row.profile.user.get_full_name|default:row.profile.user.username }} ({{ row.assignment.get_status_display|lower }}){% endif %}, {% endif %}{% endfor %}">
+      <td class="col-select"><input type="checkbox" class="row-select" name="ids" value="{{ group.key }}" form="assignment-bulk-form" title="Выбрать работу"></td>
+      <td><a class="assignment-title" href="{% if group.progress_url %}{{ group.progress_url }}{% else %}{% url 'worksheet_progress' group.worksheet_id %}{% endif %}">{{ group.worksheet__title }}</a>
+        <div class="muted assignment-links">{% if group.kind == "independent" %}{{ group.kind_label }} · <a href="{% url 'independentworks:edit' group.run.work_id %}">шаблон</a>{% if group.run.work.source_worksheet_id %} · <a href="{% url 'worksheet_detail' group.run.work.source_worksheet_id %}">исходный листок</a>{% endif %}{% else %}<a href="{% url 'worksheet_detail' group.worksheet_id %}">листок</a>{% endif %}</div></td>
       {% if request.user.is_superuser %}<td>{% if group.worksheet__owner__first_name or group.worksheet__owner__last_name %}{{ group.worksheet__owner__first_name }} {{ group.worksheet__owner__last_name }}{% else %}{{ group.worksheet__owner__username }}{% endif %}</td>{% endif %}
       <td>{{ group.students_total }}</td><td>{{ group.submitted_total }}</td><td>{{ group.reviewed_total }}</td><td>{{ group.last_assigned|date:'d.m.Y' }}</td><td>{{ group.nearest_due|date:'d.m.Y H:i'|default:'—' }}</td>
       <td><button type="button" class="btn btn-small btn-secondary" data-dialog-open="assignment-group-{{ group.key }}">Изменить</button></td>
@@ -157,11 +185,31 @@
   {% endif %}
 </div>
 {% include 'includes/pagination.html' with page=page query=request.GET %}
+<script defer src="{% static 'js/bulk.js' %}"></script>
 <script>
 document.addEventListener('submit', function (event) {
   var form = event.target.closest('[data-assignment-group-form]');
   if (!form || !form.querySelector('[data-existing]:not(:checked)')) return;
   if (!confirm('Убрать выбранных учеников? Их ответы и история проверки этого листка будут удалены.')) event.preventDefault();
+});
+document.addEventListener('change', function (event) {
+  if (!event.target.matches('[data-due-action]')) return;
+  event.target.form.elements.due_at.disabled = event.target.value !== 'set';
+});
+// Снятие выдачи: подтверждение перечисляет, что именно и кому выдано.
+document.addEventListener('submit', function (event) {
+  var form = event.target;
+  if (form.id !== 'assignment-bulk-form' || !event.submitter || event.submitter.value !== 'delete') return;
+  var rows = Array.prototype.filter.call(document.querySelectorAll('[data-assignment-row]'), function (row) {
+    var box = row.querySelector('input.row-select');
+    return box && box.checked;
+  });
+  var lines = rows.map(function (row) {
+    var who = row.dataset.recipients.replace(/,\s*$/, '');
+    return '• «' + row.dataset.title + '» — ' + (who || 'без получателей');
+  });
+  var text = 'Снять выдачу (' + rows.length + ')? Ответы учеников и история проверки будут удалены безвозвратно.\n\n' + lines.join('\n');
+  if (!confirm(text)) event.preventDefault();
 });
 </script>
 {% endblock %}

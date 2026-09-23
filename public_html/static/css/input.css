@@ -679,6 +679,10 @@
     margin-bottom: 0;
   }
 
+  .assignment-bulk input[type="datetime-local"] { width: auto; margin: 0; }
+  .assignment-links { font-size: 0.82rem; }
+  .assignment-links a { color: inherit; }
+
   .linklike {
     background: none;
     border: none;
