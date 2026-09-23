@@ -4715,6 +4715,8 @@
   .board-meta { display: flex; justify-content: space-between; gap: var(--space-2); align-items: baseline; font-size: 0.85rem; }
   .board-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .board-state { color: var(--muted); white-space: nowrap; }
+  .board-copy { width: 26px; height: 26px; min-height: 26px; padding: 4px; margin: 0 0 0 auto; flex: none; }
+  .board-copy svg { width: 16px; height: 16px; }
   .board-thumb { width: 100% !important; height: auto !important; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
   .boards-dialog { width: min(1100px, calc(100vw - 32px)); max-width: none; }
   .boards-dialog-tasks { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--space-2); }

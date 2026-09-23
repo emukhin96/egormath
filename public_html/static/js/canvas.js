@@ -81,6 +81,7 @@
     redo: '<path d="m15 4 6 6-6 6 M21 10H10a7 7 0 0 0 0 14" transform="translate(0 -2)"/>',
     trash: '<path d="M3 6h18 M9 6V3h6v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7"/>',
     clear: '<path d="m13 9 7-7 M3 15l6-6 6 6-6 6Z M5 17l4-4 M7 19l4-4 M15 21h7"/>',
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     group: '<rect x="3" y="3" width="12" height="12" rx="1"/><rect x="9" y="9" width="12" height="12" rx="1"/>',
     ungroup: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><path d="m14 3 7 7 M21 3l-7 7"/>',
     front: '<path d="m8 8 4-5 4 5 M12 3v12 M4 13v8h16v-8"/>',
@@ -995,7 +996,13 @@
     this.swatches = [];
     this.widthButtons = [];
     this.selectionButtons = [];
-    if (!editable) return;
+    if (!editable) {
+      /* Только просмотр: единственная кнопка — скопировать картинкой */
+      var view = el('div', 'canvas-toolbar-row');
+      view.appendChild(iconButton('copy', 'Скопировать страницу как картинку — вставится в чат, документ или презентацию', function () { self.copyPage(); }));
+      bar.appendChild(view);
+      return;
+    }
     var page = this.page();
     var row1 = el('div', 'canvas-toolbar-row'), row2 = el('div', 'canvas-toolbar-row');
     bar.appendChild(row1);
@@ -1038,6 +1045,7 @@
     history.appendChild(this.undoButton);
     history.appendChild(this.redoButton);
     history.appendChild(iconButton('clear', 'Очистить страницу — свой слой целиком; отменяется через Ctrl+Z', function () { self.clearPage(); }));
+    history.appendChild(iconButton('copy', 'Скопировать страницу как картинку — вставится в чат, документ или презентацию', function () { self.copyPage(); }));
 
     var colors = group(row2, 'canvas-colors');
     COLORS.forEach(function (_, i) {
@@ -2015,13 +2023,13 @@
 
   /* Чистый рендер страницы в любой canvas (миниатюры дашборда «Доски»):
      без панели, обработчиков и undo. size — сторона в CSS-пикселях. */
-  function renderPage(canvas, raw, size) {
+  function renderPage(canvas, raw, size, pixelRatio) {
     var page = {
       background: raw.background || 'grid', bgOptions: raw.background_options || {},
       layers: {student: {elements: raw.student ? raw.student.elements : []},
                teacher: {elements: raw.teacher ? raw.teacher.elements : []}},
     };
-    var dpr = Math.min(window.devicePixelRatio || 1, 2), scale = size / W;
+    var dpr = pixelRatio || Math.min(window.devicePixelRatio || 1, 2), scale = size / W;
     canvas.width = Math.round(size * dpr); canvas.height = Math.round(size * dpr);
     var ctx = canvas.getContext('2d');
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, offsetOf(page) * dpr * scale);
@@ -2030,11 +2038,65 @@
       page.layers[name].elements.forEach(function (element) { drawElement(ctx, element, page); });
     });
     pendingImages(page.layers.student.elements.concat(page.layers.teacher.elements)).forEach(function (url) {
-      whenImageSettles(url, function () { if (document.body.contains(canvas)) renderPage(canvas, raw, size); });
+      whenImageSettles(url, function () { if (document.body.contains(canvas)) renderPage(canvas, raw, size, pixelRatio); });
     });
   }
 
-  window.EgorCanvas = {Widget: Widget, init: initAll, render: renderPage,
+  /* ---------- копирование доски картинкой ----------
+     PNG 1500×1500 с фоном и обоими слоями — в буфер обмена, чтобы вставить
+     в чат, документ или презентацию; без Clipboard API (или если браузер
+     отказал) — скачивание файла. Картинки задач того же происхождения,
+     поэтому canvas не «портится» и toBlob доступен. */
+  var EXPORT_SIZE = 1500;
+  function pageBlob(raw) {
+    return new Promise(function (resolve, reject) {
+      var urls = pendingImages((raw.student ? raw.student.elements : []).concat(raw.teacher ? raw.teacher.elements : []));
+      var left = urls.length;
+      var draw = function () {
+        var canvas = document.createElement('canvas');
+        renderPage(canvas, raw, EXPORT_SIZE, 1);
+        canvas.toBlob(function (blob) { blob ? resolve(blob) : reject(new Error('toBlob')); }, 'image/png');
+      };
+      if (!left) { draw(); return; }
+      urls.forEach(function (url) { whenImageSettles(url, function () { if (--left === 0) draw(); }); });
+    });
+  }
+  function downloadBlob(blob, name) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+  }
+  function copyPage(raw, name) {
+    var blobPromise = pageBlob(raw);
+    if (navigator.clipboard && window.ClipboardItem) {
+      var item;
+      try {
+        /* Safari требует создать ClipboardItem синхронно в жесте — отдаём Promise<Blob> */
+        item = new ClipboardItem({'image/png': blobPromise});
+      } catch (e) { item = null; }
+      if (item) {
+        return navigator.clipboard.write([item])
+          .then(function () { toast(true, 'Доска скопирована как картинка'); return true; })
+          .catch(function () {
+            return blobPromise.then(function (blob) { downloadBlob(blob, name); toast(true, 'Буфер недоступен — картинка скачана'); return true; });
+          });
+      }
+    }
+    return blobPromise.then(function (blob) { downloadBlob(blob, name); toast(true, 'Картинка скачана'); return true; })
+      .catch(function () { toast(false, 'Не удалось подготовить картинку'); return false; });
+  }
+
+  Widget.prototype.copyPage = function () {
+    var page = this.page();
+    if (!page) return;
+    var raw = {background: page.background, background_options: page.bgOptions,
+      student: {elements: page.layers.student.elements},
+      teacher: {elements: this.visibleLayers(page).some(function (l) { return l.name === 'teacher'; }) ? page.layers.teacher.elements : []}};
+    copyPage(raw, 'доска-стр-' + page.number + '.png');
+  };
+
+  window.EgorCanvas = {Widget: Widget, init: initAll, render: renderPage, copy: copyPage, blob: pageBlob,
     image: {corners: imgCorners, handles: imgHandles, transform: imgTransform, inside: insideParallelogram,
             of: imageOf, settle: whenImageSettles, pending: pendingImages}};
 })();

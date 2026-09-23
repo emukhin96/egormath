@@ -18,7 +18,7 @@
   {% for a in assignments %}<article class="board-card" data-board="{{ a.pk }}" tabindex="0" role="button" aria-label="Доска: {{ a.student.get_full_name|default:a.student.username }}">
     <div class="board-meta"><strong class="board-name">{{ a.student.get_full_name|default:a.student.username }}</strong><span class="board-state" data-board-state>{{ a.get_status_display }}</span></div>
     <canvas class="board-thumb" width="300" height="300" aria-hidden="true"></canvas>
-    <div class="board-meta helptext"><span data-board-task>{% if task_id %}по задаче {{ task_no }} доски нет{% else %}доски пока нет{% endif %}</span><span data-board-updated></span></div>
+    <div class="board-meta helptext"><span data-board-task>{% if task_id %}по задаче {{ task_no }} доски нет{% else %}доски пока нет{% endif %}</span><span data-board-updated></span><button type="button" class="icon-btn board-copy" data-board-copy title="Скопировать доску как картинку" aria-label="Скопировать доску как картинку" hidden><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
   </article>{% empty %}<p class="helptext">Листок никому не назначен{% if group %} в этой группе{% endif %}.</p>{% endfor %}
 </div>
 <dialog class="dialog boards-dialog" id="boards-dialog">
