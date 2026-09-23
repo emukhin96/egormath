@@ -1098,6 +1098,15 @@ def _textbook_group_drafts(batch, group):
     return batch.drafts.filter(selector)
 
 
+def _filter_import_drafts(drafts, *, status='', answers=''):
+    """Общие фильтры таблицы и массового выбора по всем страницам."""
+    if status in dict(TextbookTaskDraft.STATUS_CHOICES):
+        drafts = drafts.filter(status=status)
+    if answers == ANSWERS_FILTER_NONE:
+        drafts = _filter_drafts_without_answers(drafts)
+    return drafts
+
+
 def _draft_taxonomy_json(draft):
     from .textbook_topics import draft_topic_ids
     ids = draft_topic_ids(draft)
@@ -1318,12 +1327,12 @@ def textbook_import_detail(request, pk):
     if selected_group:
         drafts = _textbook_group_drafts(batch, selected_group).select_related(
             'topic', 'imported_task')
-    if status in dict(TextbookTaskDraft.STATUS_CHOICES):
-        drafts = drafts.filter(status=status)
+    drafts = _filter_import_drafts(drafts, status=status)
     answers_filter = request.GET.get('answers', '')
     missing_answer_count = _filter_drafts_without_answers(drafts).count()
-    if answers_filter == ANSWERS_FILTER_NONE:
-        drafts = _filter_drafts_without_answers(drafts)
+    drafts = _filter_import_drafts(drafts, answers=answers_filter)
+    filtered_selectable_count = drafts.exclude(
+        status=TextbookTaskDraft.STATUS_IMPORTED).count()
     paginator = Paginator(drafts, 50)
     page = paginator.get_page(request.GET.get('page'))
     # Meta.ordering по external_id иначе попадает в GROUP BY: для каждого
@@ -1426,6 +1435,7 @@ def textbook_import_detail(request, pk):
         'collection_groups': collection_groups,
         'selected_group': selected_group,
         'selected_section': selected_token if selected_group else '',
+        'filtered_selectable_count': filtered_selectable_count,
         'selected_topic': selected_topic,
         'suggested_topic': suggested_topic,
         'ziv_variant_summary': ziv_summary,
@@ -1517,9 +1527,27 @@ def textbook_import_bulk(request, pk):
     if batch.status == TextbookImportBatch.STATUS_IMPORTED:
         messages.error(request, 'Загруженную партию нельзя изменять.')
         return redirect(next_url)
-    ids = request.POST.getlist('ids')
-    drafts = batch.drafts.filter(pk__in=ids).exclude(
-        status=TextbookTaskDraft.STATUS_IMPORTED)
+    scope = request.POST.get('selection_scope', 'page')
+    if scope == 'filtered':
+        filter_status = request.POST.get('filter_status', '')
+        filter_answers = request.POST.get('filter_answers', '')
+        section = request.POST.get('filter_section', '')
+        group = next((group for group in _textbook_collection_groups(batch)
+                      if group['token'] == section), None) if section else None
+        if ((filter_status and filter_status not in dict(TextbookTaskDraft.STATUS_CHOICES))
+                or filter_answers not in ('', ANSWERS_FILTER_NONE)
+                or (section and group is None)):
+            messages.error(request, 'Фильтры изменились. Обновите страницу и выберите задачи заново.')
+            return redirect(next_url)
+        drafts = _textbook_group_drafts(batch, group) if group else batch.drafts.all()
+        drafts = _filter_import_drafts(
+            drafts, status=filter_status, answers=filter_answers)
+    elif scope == 'page':
+        drafts = batch.drafts.filter(pk__in=request.POST.getlist('ids'))
+    else:
+        messages.error(request, 'Неизвестный режим выбора задач.')
+        return redirect(next_url)
+    drafts = drafts.exclude(status=TextbookTaskDraft.STATUS_IMPORTED)
     if not drafts.exists():
         messages.error(request, 'Не выбрано ни одной задачи.')
         return redirect(next_url)

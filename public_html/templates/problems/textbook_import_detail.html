@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load static task_extras %}
-{% block extra_head %}<script defer src="{% static 'js/bulk.js' %}"></script><script defer src="{% static 'js/textbook_import_detail.js' %}?v=2"></script>{% endblock %}
+{% block extra_head %}<script defer src="{% static 'js/bulk.js' %}?v=2"></script><script defer src="{% static 'js/textbook_import_detail.js' %}?v=2"></script>{% endblock %}
 {% block title %}{{ batch.title }} — Математика{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -107,9 +107,19 @@
     {% if approved_count or missing_collection_count %}<form method="post" action="{% url 'textbook_import_commit' batch.pk %}" onsubmit="return confirm('Загрузить {{ approved_count }} одобренных задач и добавить в подборки {{ missing_collection_count }} задач из базы? Непроверенные и конфликтные строки останутся в партии.');">{% csrf_token %}<button class="btn" type="submit">{% if approved_count %}Загрузить в каталог{% else %}Восстановить подборки{% endif %}</button></form>{% endif %}
   </div>
   {% if batch.status != 'imported' %}
+  {% if filtered_selectable_count %}
+  <div class="form-buttons">
+    <button type="button" class="btn btn-secondary" data-bulk-filtered="import-bulk-form" data-filtered-count="{{ filtered_selectable_count }}">Выбрать все найденные ({{ filtered_selectable_count }})</button>
+    <button type="button" class="btn btn-secondary" data-bulk-clear="import-bulk-form" hidden>Снять выделение</button>
+  </div>
+  {% endif %}
   <form id="import-bulk-form" method="post" action="{% url 'textbook_import_bulk' batch.pk %}" class="bulk-bar" data-bulk hidden>
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <input type="hidden" name="selection_scope" value="page">
+    <input type="hidden" name="filter_status" value="{{ status }}">
+    <input type="hidden" name="filter_section" value="{{ selected_section }}">
+    <input type="hidden" name="filter_answers" value="{{ answers_filter }}">
     <strong data-bulk-count>Выбрано: 0</strong>
     {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True selected_json='{"topics":[],"primary":null,"grades":[],"facets":[],"exams":[],"difficulty":null}' %}
     <button type="submit" name="apply" value="1" class="btn btn-small">Добавить темы</button>
