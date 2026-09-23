@@ -21,12 +21,19 @@
         document.querySelectorAll(
           'input[data-bulk-all="' + form.id + '"]'));
       var count = form.querySelector('[data-bulk-count]');
-      if (!boxes.length) return;
+      var scope = form.querySelector('[name="selection_scope"]');
+      var filteredButton = document.querySelector('[data-bulk-filtered="' + form.id + '"]');
+      var clearButton = document.querySelector('[data-bulk-clear="' + form.id + '"]');
+      if (!boxes.length && !filteredButton) return;
 
       function refresh() {
         var checked = boxes.filter(function (b) { return b.checked; });
-        form.hidden = checked.length === 0;
-        if (count) count.textContent = 'Выбрано: ' + checked.length;
+        var filtered = scope && scope.value === 'filtered';
+        var total = filtered ? Number(filteredButton.dataset.filteredCount) : checked.length;
+        form.hidden = total === 0;
+        if (count) count.textContent = 'Выбрано: ' + total + (filtered ? ' (все найденные)' : '');
+        if (filteredButton) filteredButton.disabled = filtered;
+        if (clearButton) clearButton.hidden = total === 0;
         allBoxes.forEach(function (all) {
           all.checked = boxes.length > 0 && checked.length === boxes.length;
           all.indeterminate = checked.length > 0 && checked.length < boxes.length;
@@ -34,14 +41,28 @@
       }
 
       boxes.forEach(function (box) {
-        box.addEventListener('change', refresh);
+        box.addEventListener('change', function () {
+          if (scope) scope.value = 'page';
+          refresh();
+        });
       });
       allBoxes.forEach(function (all) {
         all.addEventListener('change', function () {
+          if (scope) scope.value = 'page';
           boxes.forEach(function (box) { box.checked = all.checked; });
           allBoxes.forEach(function (other) { other.checked = all.checked; });
           refresh();
         });
+      });
+      if (filteredButton && scope) filteredButton.addEventListener('click', function () {
+        scope.value = 'filtered';
+        boxes.forEach(function (box) { box.checked = true; });
+        refresh();
+      });
+      if (clearButton) clearButton.addEventListener('click', function () {
+        if (scope) scope.value = 'page';
+        boxes.forEach(function (box) { box.checked = false; });
+        refresh();
       });
       refresh();
     });
