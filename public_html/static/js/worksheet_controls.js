@@ -145,6 +145,7 @@
         form.querySelector('button').textContent = result.is_active ? 'отключить' : 'включить';
         form.closest('.ws-share-link').querySelector('[data-share-disabled]').hidden = result.is_active;
       } else await refresh();
+      if (form.hasAttribute('data-reset-on-success')) form.reset();
       window.EgorAutosave.showSaved(true, result.message);
     } catch (error) {
       window.EgorAutosave.showSaved(false, saved

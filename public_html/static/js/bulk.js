@@ -1,70 +1,59 @@
 /* Массовое выделение строк в списках (задачи, листки).
    Чекбоксы строк привязаны к форме массового действия через form="…";
-   панель действий появляется, когда выбрана хотя бы одна строка. */
+   панель действий появляется, когда выбрана хотя бы одна строка.
+   Обработчики делегированы, поэтому строки, подгруженные живым поиском,
+   работают без повторной инициализации; EgorBulk.init() пересчитывает
+   панель после подмены результатов. */
 (function () {
   'use strict';
 
+  function positionBar() {
+    var header = document.querySelector('.topbar');
+    var height = header && getComputedStyle(header).position === 'sticky' ? header.getBoundingClientRect().height : 0;
+    document.documentElement.style.setProperty('--bulk-top', height + 'px');
+  }
+
+  function boxesFor(form) {
+    return Array.prototype.slice.call(
+      document.querySelectorAll('input.row-select[form="' + form.id + '"]'));
+  }
+
+  function refresh(form) {
+    var boxes = boxesFor(form);
+    var checked = boxes.filter(function (b) { return b.checked; });
+    form.hidden = checked.length === 0;
+    var count = form.querySelector('[data-bulk-count]');
+    if (count) count.textContent = 'Выбрано: ' + checked.length;
+    document.querySelectorAll('input[data-bulk-all="' + form.id + '"]').forEach(function (all) {
+      all.checked = boxes.length > 0 && checked.length === boxes.length;
+      all.indeterminate = checked.length > 0 && checked.length < boxes.length;
+    });
+  }
+
+  function init() {
+    positionBar();
+    document.querySelectorAll('form[data-bulk]').forEach(refresh);
+  }
+
+  document.addEventListener('change', function (event) {
+    var box = event.target;
+    if (box.matches('input.row-select[form]')) {
+      var form = document.getElementById(box.getAttribute('form'));
+      if (form) refresh(form);
+    } else if (box.matches('input[data-bulk-all]')) {
+      var target = document.getElementById(box.dataset.bulkAll);
+      if (!target) return;
+      boxesFor(target).forEach(function (b) { b.checked = box.checked; });
+      refresh(target);
+    }
+  });
+
   document.addEventListener('DOMContentLoaded', function () {
     var header = document.querySelector('.topbar');
-    function positionBar() {
-      var height = header && getComputedStyle(header).position === 'sticky' ? header.getBoundingClientRect().height : 0;
-      document.documentElement.style.setProperty('--bulk-top', height + 'px');
-    }
-    positionBar();
     if (header && window.ResizeObserver) new ResizeObserver(positionBar).observe(header);
     window.addEventListener('resize', positionBar);
-    document.querySelectorAll('form[data-bulk]').forEach(function (form) {
-      var boxes = Array.prototype.slice.call(
-        document.querySelectorAll(
-          'input.row-select[form="' + form.id + '"]'));
-      var allBoxes = Array.prototype.slice.call(
-        document.querySelectorAll(
-          'input[data-bulk-all="' + form.id + '"]'));
-      var count = form.querySelector('[data-bulk-count]');
-      var scope = form.querySelector('[name="selection_scope"]');
-      var filteredButton = document.querySelector('[data-bulk-filtered="' + form.id + '"]');
-      var clearButton = document.querySelector('[data-bulk-clear="' + form.id + '"]');
-      if (!boxes.length && !filteredButton) return;
-
-      function refresh() {
-        var checked = boxes.filter(function (b) { return b.checked; });
-        var filtered = scope && scope.value === 'filtered';
-        var total = filtered ? Number(filteredButton.dataset.filteredCount) : checked.length;
-        form.hidden = total === 0;
-        if (count) count.textContent = 'Выбрано: ' + total + (filtered ? ' (все найденные)' : '');
-        if (filteredButton) filteredButton.disabled = filtered;
-        if (clearButton) clearButton.hidden = total === 0;
-        allBoxes.forEach(function (all) {
-          all.checked = boxes.length > 0 && checked.length === boxes.length;
-          all.indeterminate = checked.length > 0 && checked.length < boxes.length;
-        });
-      }
-
-      boxes.forEach(function (box) {
-        box.addEventListener('change', function () {
-          if (scope) scope.value = 'page';
-          refresh();
-        });
-      });
-      allBoxes.forEach(function (all) {
-        all.addEventListener('change', function () {
-          if (scope) scope.value = 'page';
-          boxes.forEach(function (box) { box.checked = all.checked; });
-          allBoxes.forEach(function (other) { other.checked = all.checked; });
-          refresh();
-        });
-      });
-      if (filteredButton && scope) filteredButton.addEventListener('click', function () {
-        scope.value = 'filtered';
-        boxes.forEach(function (box) { box.checked = true; });
-        refresh();
-      });
-      if (clearButton) clearButton.addEventListener('click', function () {
-        if (scope) scope.value = 'page';
-        boxes.forEach(function (box) { box.checked = false; });
-        refresh();
-      });
-      refresh();
-    });
+    init();
   });
+
+  window.EgorBulk = {init: init};
 })();

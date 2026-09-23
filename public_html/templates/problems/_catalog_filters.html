@@ -1,14 +1,15 @@
+{# Общий поиск задач («finder»): база задач, подбор кандидатов самостоятельной, конструктор листка. Живой поиск — static/js/task_finder.js; результаты — элементы с data-finder-target #}
 <div class="card filter-card">
-  <form method="get" class="filters" id="task-filters">
+  <form method="get" class="filters task-finder" id="task-filters" data-finder{% if finder_anchor %} data-finder-anchor="{{ finder_anchor }}"{% endif %}>
     {% if position %}<input type="hidden" name="tab" value="catalog">{% endif %}
     {% if preparation_query %}<input type="hidden" name="resume" value="{{ params.resume }}">{% if params.parent %}<input type="hidden" name="parent" value="{{ params.parent }}"><input type="hidden" name="kind" value="{{ params.kind }}">{% endif %}{% endif %}
-    <div>
+    <div class="finder-search">
       <label for="f_q">Поиск</label>
-      <input type="text" name="q" id="f_q" value="{{ params.q|default:'' }}" placeholder="ключевые слова">
+      <input type="search" name="q" id="f_q" value="{{ params.q|default:'' }}" placeholder="ключевые слова или #id" autocomplete="off">
     </div>
     <div>
       <label for="f_grade">Класс</label>
-      <select name="grade" id="f_grade" class="quick-select" onchange="this.form.submit()">
+      <select name="grade" id="f_grade" class="quick-select" onchange="this.form.requestSubmit()">
         {% include 'includes/grade_options.html' with selected=params.grade empty_label='Любой' %}
       </select>
     </div>
@@ -22,7 +23,7 @@
     </div>
     {% endif %}
     <div><button type="submit" class="btn">Найти</button></div>
-    <div><a class="btn btn-secondary" href="{% if position %}{% url 'independentworks:pick' position.pk %}{% else %}{% url 'task_list' %}{% endif %}">Сбросить</a></div>
+    <div><a class="btn btn-secondary" href="{{ request.path }}{% if finder_anchor %}#{{ finder_anchor }}{% endif %}" data-finder-reset>Сбросить</a></div>
+    <span class="finder-status muted" data-finder-status aria-live="polite" hidden>Ищу…</span>
   </form>
 </div>
-
