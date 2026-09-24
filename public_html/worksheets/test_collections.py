@@ -202,3 +202,95 @@ class CollectionTests(TestCase):
         self.assertContains(second, '<span class="ws-num">26.</span>', html=True)
         self.assertContains(second, 'Задача 30.')
         self.assertNotContains(second, 'Задача 25.')
+
+
+class CollectionFlatViewTests(TestCase):
+    """Раздел «списком»: два уровня подборок на одной странице."""
+
+    def setUp(self):
+        self.owner = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        self.source = Source.objects.create(title='Банк')
+
+        def make(title, parent=None, tasks=0, published=True, owner=None):
+            worksheet = Worksheet.objects.create(
+                title=title, owner=owner or self.owner)
+            for i in range(tasks):
+                task = Task.objects.create(
+                    text_latex=f'{title}: задача {i + 1}.', created_by=self.owner)
+                WorksheetItem.objects.create(
+                    worksheet=worksheet, task=task, order=(i + 1) * 10)
+            return Collection.objects.create(
+                worksheet=worksheet, source=self.source, parent=parent,
+                locator=title, is_published=published)
+
+        self.make = make
+        self.root = make('№5. Уравнения')
+        self.sub_a = make('5.1 Линейные', self.root, tasks=1)
+        self.sub_b = make('5.2 Квадратные', self.root)
+        self.leaf_b1 = make('5.2.1 Прототип', self.sub_b, tasks=2)
+        self.leaf_b2 = make('5.2.2 Прототип', self.sub_b)
+        self.deep = make('5.2.2.1 Аналог', self.leaf_b2, tasks=1)
+
+    def test_section_shows_two_levels_with_tasks(self):
+        response = self.client.get(reverse('collection_detail', args=[self.root.pk]))
+        self.assertEqual(response.status_code, 200)
+        groups = response.context['flat_groups']
+        self.assertEqual(
+            [(g['collection'].pk, g['depth'], len(g['rows'])) for g in groups],
+            [(self.sub_a.pk, 1, 1), (self.sub_b.pk, 1, 0),
+             (self.leaf_b1.pk, 2, 2), (self.leaf_b2.pk, 2, 0)])
+        self.assertContains(response, '5.1 Линейные: задача 1.')
+        self.assertContains(response, '5.2.1 Прототип: задача 2.')
+        # Третий уровень — только ссылкой «открыть раздел».
+        self.assertNotContains(response, '5.2.2.1 Аналог: задача 1.')
+        self.assertContains(response, 'открыть раздел')
+        self.assertContains(response, 'Всё в корзину · 3')
+        self.assertContains(response, 'href="?view=tree"')
+
+    def test_tree_view_and_hidden_private_children(self):
+        other = make_teacher('teacher2')
+        self.make('5.3 Чужая закрытая', self.root, tasks=1,
+                  published=False, owner=other)
+        response = self.client.get(
+            reverse('collection_detail', args=[self.root.pk]), {'view': 'tree'})
+        self.assertIsNone(response.context['flat_groups'])
+        self.assertContains(response, 'Открыть подборку')
+        self.assertContains(response, 'Списком')
+        self.assertNotContains(response, '5.3 Чужая закрытая')
+        response = self.client.get(reverse('collection_detail', args=[self.root.pk]))
+        self.assertNotContains(response, 'Чужая закрытая: задача 1.')
+
+    def test_too_many_items_falls_back_to_tree(self):
+        from worksheets import views
+        with self.settings():
+            old = views.FLAT_ITEMS_LIMIT
+            views.FLAT_ITEMS_LIMIT = 2
+            try:
+                response = self.client.get(
+                    reverse('collection_detail', args=[self.root.pk]))
+            finally:
+                views.FLAT_ITEMS_LIMIT = old
+        self.assertIsNone(response.context['flat_groups'])
+        self.assertContains(response, 'слишком много задач')
+
+    def test_flat_limit_fits_cart_limit(self):
+        from worksheets import cart, views
+        self.assertLessEqual(views.FLAT_ITEMS_LIMIT, cart.CART_ADD_MANY_LIMIT)
+
+    def test_cart_add_many(self):
+        tasks = list(Task.objects.order_by('pk'))
+        response = self.client.post(reverse('cart_add_many'), {
+            'task_ids': [t.pk for t in tasks[:3]],
+            'next': reverse('collection_detail', args=[self.root.pk])})
+        self.assertRedirects(
+            response, reverse('collection_detail', args=[self.root.pk]))
+        self.assertEqual(self.client.session['cart_tasks'],
+                         [t.pk for t in tasks[:3]])
+        # Повтор не дублирует, чужой id пропускается.
+        self.client.post(reverse('cart_add_many'), {
+            'task_ids': [tasks[0].pk, 999999]}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(len(self.client.session['cart_tasks']), 3)
+        response = self.client.post(reverse('cart_add_many'), {},
+                                    HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 400)

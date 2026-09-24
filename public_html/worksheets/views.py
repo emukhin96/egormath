@@ -568,34 +568,35 @@ def _visible_collection(request, pk):
     return collection
 
 
-@teacher_required
-def collection_detail(request, pk):
-    """Страница подборки: ответы в рамке после задачи, скрыты тумблером."""
-    collection = _visible_collection(request, pk)
-    all_items = list(collection.worksheet.ordered_items())
-    page = Paginator(all_items, 25).get_page(request.GET.get('page'))
-    items = list(page.object_list)
+# Не больше, чем cart.CART_ADD_MANY_LIMIT: «Всё в корзину» отправляет все
+# задачи развёрнутого раздела одним запросом.
+FLAT_ITEMS_LIMIT = 400
+
+
+def _visible_children(request, collection):
+    """Дочерние подборки, которые вправе видеть учитель, с счётчиками."""
     children = collection.children.select_related('worksheet', 'source')
     if not request.user.is_superuser:
         children = children.filter(
             models.Q(is_published=True)
             | models.Q(worksheet__owner_id=request.user.pk))
     children = list(
-        children.annotate(items_total=models.Count(
-            'worksheet__items',
-            filter=models.Q(worksheet__items__deleted_at__isnull=True)))
+        children.annotate(
+            items_total=models.Count(
+                'worksheet__items',
+                filter=models.Q(worksheet__items__deleted_at__isnull=True),
+                distinct=True),
+            children_total=models.Count('children', distinct=True))
         .order_by('order', 'pk'))
     for child in children:
         child.catalog_title = _collection_title(child)
     children.sort(key=_collection_sort_key)
-    # Пустой технический раздел с единственным продолжением не заставляет
-    # пользователя проходить ещё один экран дерева.
-    if not all_items and len(children) == 1:
-        return redirect('collection_detail', pk=children[0].pk)
+    return children
+
+
+def _collection_rows(items, number=0):
+    """Строки задач подборки: номер, подпункты, общее условие блока."""
     rows = []
-    number = sum(
-        bool(item.task_id)
-        for item in all_items[:page.start_index() - 1])
     for item in items:
         if item.task_id:
             number += 1
@@ -606,9 +607,71 @@ def collection_detail(request, pk):
         })
     from .block_presentation import decorate_block_rows
     decorate_block_rows(rows)
+    return rows
+
+
+def _flat_groups(request, children):
+    """Раздел «списком»: два уровня вниз на одной странице.
+
+    Подборки первого и второго уровня показываются с задачами; у
+    подраздела второго уровня, где есть свои дети, — только ссылка.
+    Возвращает None, если задач слишком много для одной страницы.
+    """
+    groups = []
+    for child in children:
+        groups.append({'collection': child, 'depth': 1,
+                       'has_children': child.children_total > 0})
+        if child.children_total:
+            for grand in _visible_children(request, child):
+                groups.append({'collection': grand, 'depth': 2,
+                               'has_children': grand.children_total > 0})
+    total = sum(g['collection'].items_total for g in groups)
+    if not total or total > FLAT_ITEMS_LIMIT:
+        return None
+    by_worksheet = {}
+    items = (WorksheetItem.objects
+             .filter(worksheet_id__in=[g['collection'].worksheet_id for g in groups],
+                     deleted_at__isnull=True)
+             .select_related('task')
+             .prefetch_related('task__subitems', 'task__images', 'subitems')
+             .order_by('worksheet_id', 'order', 'id'))
+    for item in items:
+        by_worksheet.setdefault(item.worksheet_id, []).append(item)
+    for group in groups:
+        group['rows'] = _collection_rows(
+            by_worksheet.get(group['collection'].worksheet_id, []))
+    return groups
+
+
+@teacher_required
+def collection_detail(request, pk):
+    """Страница подборки: ответы в рамке после задачи, скрыты тумблером.
+
+    Раздел по умолчанию разворачивается «списком»: подборки двух уровней
+    с задачами на одной странице (?view=tree — прежняя таблица детей).
+    """
+    collection = _visible_collection(request, pk)
+    all_items = list(collection.worksheet.ordered_items())
+    page = Paginator(all_items, 25).get_page(request.GET.get('page'))
+    items = list(page.object_list)
+    children = _visible_children(request, collection)
+    # Пустой технический раздел с единственным продолжением не заставляет
+    # пользователя проходить ещё один экран дерева.
+    if not all_items and len(children) == 1:
+        return redirect('collection_detail', pk=children[0].pk)
+    rows = _collection_rows(
+        items, number=sum(bool(item.task_id)
+                          for item in all_items[:page.start_index() - 1]))
+    flat_groups = None
+    if children and request.GET.get('view') != 'tree':
+        flat_groups = _flat_groups(request, children)
+    page_tasks = [row['item'].task for row in rows if row['item'].task_id]
+    if flat_groups:
+        page_tasks += [row['item'].task for group in flat_groups
+                       for row in group['rows'] if row['item'].task_id]
+    cart_task_ids = [task.pk for task in page_tasks if not task.variant_of_id]
     from assignments.task_usage import attach_usage, audience_context
-    usage_ctx = audience_context(request, attach_usage(
-        request, [item.task for item in items if item.task_id]))
+    usage_ctx = audience_context(request, attach_usage(request, page_tasks))
     sources = _collection_catalog(request.user)
     selected_source = next(
         (row for row in sources if row['source'].pk == collection.source_id),
@@ -629,6 +692,11 @@ def collection_detail(request, pk):
         'rows': rows,
         'page': page,
         'children': children,
+        'flat_groups': flat_groups,
+        'tree_view': request.GET.get('view') == 'tree',
+        'flat_too_big': bool(children) and request.GET.get('view') != 'tree'
+        and flat_groups is None,
+        'cart_task_ids': cart_task_ids,
         'can_use': bool(all_items),
         'can_edit': (not children
                      and (collection.worksheet.owner_id == request.user.pk

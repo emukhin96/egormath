@@ -107,6 +107,50 @@ def cart_add(request):
     return _respond(request, True, message, True)
 
 
+# Столько же, сколько задач помещается в развёрнутый раздел подборок
+# (views.FLAT_ITEMS_LIMIT): кнопка «Всё в корзину» на такой странице
+# не должна упираться в лимит.
+CART_ADD_MANY_LIMIT = 400
+
+
+@teacher_required
+@require_POST
+def cart_add_many(request):
+    """Положить в корзину сразу список задач (страница подборки или раздела).
+
+    Локальные копии и несуществующие id пропускаются; блоки добавляются
+    целиком. Ограничение — CART_ADD_MANY_LIMIT задач за раз.
+    """
+    raw = [value for value in request.POST.getlist('task_ids') if value.isdigit()]
+    if not raw:
+        return _respond(request, False, 'Задачи не указаны.', False)
+    if len(raw) > CART_ADD_MANY_LIMIT:
+        return _respond(request, False,
+                        f'За раз можно положить не больше {CART_ADD_MANY_LIMIT} задач.', False)
+    wanted = [int(value) for value in raw]
+    tasks = Task.objects.filter(pk__in=wanted, variant_of__isnull=True).in_bulk()
+    ids = cart_ids(request)
+    added = 0
+    for pk in wanted:
+        task = tasks.get(pk)
+        if task is None:
+            continue
+        members = [pk]
+        if task.block_id:
+            try:
+                members = [t.pk for t in block_members(task)]
+            except ValueError:
+                continue
+        for member in members:
+            if member not in ids:
+                ids.append(member)
+                added += 1
+    _store(request, ids)
+    message = (f'В корзину добавлено задач: {added}.' if added
+               else 'Все эти задачи уже в корзине.')
+    return _respond(request, True, message, True, fallback='collection_list')
+
+
 @teacher_required
 @require_POST
 def cart_remove(request):

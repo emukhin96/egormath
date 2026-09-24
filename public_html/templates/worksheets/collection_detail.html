@@ -10,7 +10,7 @@
     <p class="page-subtitle">{{ collection.source }} · {{ collection.source_path|join:' › ' }}</p>
   </div>
   <div class="form-buttons collection-head-actions">
-    {% if rows %}
+    {% if rows or flat_groups %}
     <label class="ws-toggle" title="Показывать ответы и решения задач">
       <input type="checkbox" id="toggle-answers">
       <span class="ws-toggle-slider"></span>
@@ -33,6 +33,14 @@
     {% if is_authored and is_owner %}
     <div class="authored-controls">{% include 'worksheets/_authored_controls.html' with next_url=request.path %}</div>
     {% endif %}
+    {% if cart_task_ids %}
+    <form method="post" action="{% url 'cart_add_many' %}" title="Все задачи этой страницы — в корзину">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      {% for task_id in cart_task_ids %}<input type="hidden" name="task_ids" value="{{ task_id }}">{% endfor %}
+      <button class="btn btn-secondary" type="submit">Всё в корзину · {{ cart_task_ids|length }}</button>
+    </form>
+    {% endif %}
     {% if can_use %}
     <form method="post" action="{% url 'collection_use' collection.pk %}">
       {% csrf_token %}
@@ -44,7 +52,28 @@
 
 <div class="card worksheet-items-card">
   {% if children %}
-  <p class="helptext">Это раздел, который объединяет дочерние подборки. Выберите нужную подборку ниже.</p>
+  <div class="collection-view-switch">
+    {% if flat_groups %}
+    <span class="muted">Подборки раздела на одной странице (два уровня).</span>
+    <a class="btn btn-small btn-secondary" href="?view=tree">Деревом</a>
+    {% else %}
+    {% if flat_too_big %}<span class="muted">В разделе слишком много задач для одной страницы — откройте подраздел.</span>{% else %}<span class="muted">Это раздел, который объединяет дочерние подборки.</span>{% endif %}
+    {% if tree_view %}<a class="btn btn-small btn-secondary" href="{{ request.path }}">Списком</a>{% endif %}
+    {% endif %}
+  </div>
+  {% if flat_groups %}
+  <div id="ws-items" class="collection-flat" data-answers-key="collection-show-answers">
+    {% for group in flat_groups %}
+    <section class="collection-flat-group depth-{{ group.depth }}" id="collection-{{ group.collection.pk }}">
+      <h3 class="collection-flat-heading">
+        <a href="{% url 'collection_detail' group.collection.pk %}">{{ group.collection.catalog_title }}</a>
+        <span class="muted">· {{ group.collection.items_total }} эл.{% if group.has_children %} · <a href="{% url 'collection_detail' group.collection.pk %}">открыть раздел</a>{% endif %}</span>
+      </h3>
+      {% if group.rows %}{% include 'worksheets/_collection_rows.html' with rows=group.rows %}{% endif %}
+    </section>
+    {% endfor %}
+  </div>
+  {% else %}
   <table class="list">
     <tr><th>Подборка</th><th>Элементов</th><th></th></tr>
     {% for child in children %}
@@ -55,47 +84,11 @@
     </tr>
     {% endfor %}
   </table>
+  {% endif %}
   {% else %}
   {% if rows %}
   <div id="ws-items" data-answers-key="collection-show-answers">
-    {% for row in rows %}
-    {% with item=row.item %}
-    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}">
-      <div class="ws-body">
-        <div class="ws-content">
-          {% if item.task_id %}
-          {% include 'worksheets/_common_condition.html' %}
-          <div class="task-line">
-            <span class="ws-num">{{ row.number }}.</span>
-            <span class="math-content task-text">{{ row.statement|web_text }}</span>
-          </div>
-          {% if row.subitems %}
-          <ol class="subitems">
-            {% for subitem in row.subitems %}
-            <li>
-              <span class="math-content">{{ subitem.text_latex|web_text }}</span>{{ subitem.text_latex|subitem_tail:forloop.last }}
-            </li>
-            {% endfor %}
-          </ol>
-          {% endif %}
-          {% include 'problems/_task_images.html' with images=row.statement_images %}
-          {% include 'problems/_task_answers.html' with task=item.task subitems=row.subitems hide_answers=True %}
-          {% include 'includes/task_usage_badge.html' with task=item.task %}
-          <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
-          {% elif item.is_rubric %}
-          <h3>{{ item.rubric }}</h3>
-          {% if item.rubric_note %}<p>{{ item.rubric_note }}</p>{% endif %}
-          {% else %}
-          <div class="math-content">{{ item.text_latex|web_text|linebreaksbr }}</div>
-          {% endif %}
-        </div>
-        {% if item.task_id and not item.task.variant_of_id %}
-        <div class="ws-actions">{% include 'includes/cart_button.html' with task=item.task %}</div>
-        {% endif %}
-      </div>
-    </div>
-    {% endwith %}
-    {% endfor %}
+    {% include 'worksheets/_collection_rows.html' %}
   </div>
   {% else %}
   <p class="muted">Подборка пуста.</p>
