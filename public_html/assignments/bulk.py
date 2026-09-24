@@ -6,7 +6,8 @@
 
 - ``apply`` — статус и/или срок: обычным назначениям — статус (по правилам
   ``_set_assignment_status``) и ``due_at``; самостоятельным — только общее
-  окончание ``Run.deadline``, статус к ним не применим;
+  окончание ``Run.deadline`` с пересчётом личных сроков начатых попыток
+  (``services.set_deadline``), статус к ним не применим;
 - ``delete`` — снять выдачу: удаляются назначения листка со всеми ответами
   и историей проверки; проведение самостоятельной — вместе с попытками
   (подтверждение с перечислением получателей собирает страница);
@@ -166,8 +167,9 @@ def _apply(request, worksheets, runs):
                 assignment.save(update_fields=['due_at'])
             changed += 1
         if due_action in ('set', 'clear') and runs:
-            from independentworks.models import Run
-            Run.objects.filter(pk__in=[r.pk for r in runs]).update(deadline=due_at)
+            from independentworks import services as iw
+            for run in runs:
+                iw.set_deadline(run.pk, due_at)
             changed += len(runs)
     if changed:
         messages.success(request, f'Обновлено: {changed}.')

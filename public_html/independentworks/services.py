@@ -375,6 +375,26 @@ def finish_expired(attempt, now=None):
 
 
 @transaction.atomic
+def set_deadline(run_id, deadline):
+    """Меняет общее окончание проведения и пересчитывает срок начатых попыток.
+
+    Личный срок начатой попытки — старт + длительность, но не позже общего
+    окончания; при продлении ученик получает время, при сокращении работа
+    завершается по новому сроку. Сданные попытки не трогаются.
+    """
+    run = Run.objects.select_for_update().get(pk=run_id)
+    run.deadline = deadline
+    run.save(update_fields=['deadline'])
+    for attempt in run.attempts.select_for_update().filter(
+            started_at__isnull=False, submitted_at__isnull=True):
+        ends = attempt.started_at + timedelta(minutes=run.duration)
+        if deadline:
+            ends = min(ends, deadline)
+        Attempt.objects.filter(pk=attempt.pk).update(ends_at=ends)
+    return run
+
+
+@transaction.atomic
 def start(attempt_id):
     attempt = Attempt.objects.select_for_update().select_related('run').get(pk=attempt_id)
     if attempt.started_at:

@@ -132,6 +132,32 @@ class IndependentBulkTests(TestCase):
         self.post('delete')
         self.assertFalse(Run.objects.filter(pk=self.run.pk).exists())
 
+    def test_deadline_change_updates_started_attempts(self):
+        from independentworks.models import Attempt
+        now = timezone.now().replace(second=0, microsecond=0)
+        self.run.duration = 60
+        self.run.deadline = now + timedelta(minutes=30)
+        self.run.save()
+        attempt = Attempt.objects.get(run=self.run)
+        Attempt.objects.filter(pk=attempt.pk).update(
+            started_at=now, ends_at=now + timedelta(minutes=30))
+        later = timezone.localtime(now + timedelta(hours=2))
+        self.post('apply', due_action='set', due_at=later.strftime('%Y-%m-%dT%H:%M'))
+        attempt.refresh_from_db()
+        # Продление: личный срок — старт + длительность (60 мин), не 30.
+        self.assertEqual(attempt.ends_at, now + timedelta(minutes=60))
+        earlier = timezone.localtime(now + timedelta(minutes=10))
+        self.post('apply', due_action='set', due_at=earlier.strftime('%Y-%m-%dT%H:%M'))
+        attempt.refresh_from_db()
+        self.assertEqual(attempt.ends_at, now + timedelta(minutes=10))
+        # Сданная попытка не меняется.
+        Attempt.objects.filter(pk=attempt.pk).update(submitted_at=now + timedelta(minutes=5))
+        self.post('apply', due_action='clear')
+        attempt.refresh_from_db()
+        self.assertEqual(attempt.ends_at, now + timedelta(minutes=10))
+        self.run.refresh_from_db()
+        self.assertIsNone(self.run.deadline)
+
     def test_run_with_followup_is_protected(self):
         from independentworks.models import Attempt, Run
         attempt = Attempt.objects.get(run=self.run)
