@@ -25,7 +25,8 @@ from problems.models import Task, Topic, topic_tree
 from problems.rubricator import (GRADE_LEVEL_TO_CODE, apply_worksheet_taxonomy,
                                  dumps_state, filter_by_taxonomy,
                                  filter_state_from_params, parse_grade_choice,
-                                 set_grade_bands, taxonomy_page_context,
+                                 set_grade_bands, set_task_topics,
+                                 taxonomy_page_context,
                                  taxonomy_state_from_post,
                                  worksheet_taxonomy_state)
 from problems.views import filter_tasks
@@ -380,7 +381,7 @@ def worksheet_detail(request, pk):
     progress_people_rows = progress_people(point_groups, assignments)
 
     # Поиск задач для добавления (правая часть страницы)
-    search_active = any(request.GET.get(k) for k in ('q', 'topic', 'grade', 'tag'))
+    search_active = any(request.GET.get(k) for k in ('q', 'topic', 'grade', 'tag', 'who'))
     found_tasks = []
     if search_active:
         found_tasks = list(filter_tasks(request.GET).exclude(pk__in=task_ids)[:15])
@@ -403,6 +404,7 @@ def worksheet_detail(request, pk):
         request, [item.task for item in items if item.task_id] + list(found_tasks)))
     return render(request, 'worksheets/worksheet_detail.html', {
         **usage_ctx,
+        **taxonomy_page_context(filter_state_from_params(request.GET)),
         'is_authored': bool(collection and collection.source.title == AUTHORED_SOURCE
                             and not is_section(collection)),
         'corpus_key': corpus_key_from_comment(worksheet.comment),
@@ -1005,13 +1007,61 @@ def soft_remove_item(worksheet, item):
 
 
 def add_task_to_worksheet(request, worksheet_id, task):
-    """Добавляет задачу в конец листка (используется и из создания задачи)."""
+    """Добавляет задачу в конец листка (используется и из создания задачи).
+
+    Для fetch-запросов конструктора отвечает JSON, как остальные его
+    действия; повтор уже добавленной задачи — не ошибка, а подсказка.
+    """
     worksheet = get_object_or_404(
         Worksheet.visible_to(request.user), pk=worksheet_id)
     outcome, message = append_task(worksheet, task)
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'message': message,
+                             'outcome': outcome})
     (messages.info if outcome == 'exists' else messages.success)(
         request, message)
     return redirect('worksheet_detail', pk=worksheet.pk)
+
+
+@teacher_required
+@require_POST
+def worksheet_quick_task(request, pk):
+    """Быстрая задача из конструктора: условие, ответ, решение, звёзды.
+
+    Класс и темы берутся у листка. Дубликат по условию не создаётся —
+    вместо этого предлагается добавить существующую задачу.
+    """
+    worksheet = _own_worksheet(request, pk)
+    text = request.POST.get('text_latex', '').strip()
+    if not text:
+        return _builder_response(
+            request, pk, ok=False, message='Введите условие задачи.')
+    from .import_tex import find_existing_task
+    duplicate_pk = find_existing_task(text)
+    if duplicate_pk is not None:
+        return _builder_response(
+            request, pk, ok=False,
+            message=f'Такая задача уже есть в базе — #{duplicate_pk}. '
+                    f'Найдите её по «#{duplicate_pk}» и добавьте.')
+    stars = request.POST.get('stars', '1')
+    stars = int(stars) if stars.isdigit() and int(stars) in range(4) else 1
+    with transaction.atomic():
+        task = Task.objects.create(
+            text_latex=text,
+            answer_latex=request.POST.get('answer_latex', '').strip(),
+            solution_latex=request.POST.get('solution_latex', '').strip(),
+            stars=stars,
+            grade_level=worksheet.grade,
+            created_by=request.user)
+        code = GRADE_LEVEL_TO_CODE.get(worksheet.grade)
+        if code:
+            set_grade_bands(task, [code], sync_legacy=False)
+        topics = list(worksheet.topics.values_list('pk', flat=True))
+        if topics:
+            set_task_topics(task, topics, topics[0])
+        outcome, message = append_task(worksheet, task)
+    return _builder_response(
+        request, pk, message=f'Задача #{task.pk} создана. {message}')
 
 
 @teacher_required

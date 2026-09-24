@@ -170,9 +170,13 @@ def _book_structure(text: str) -> dict:
     toc = re.search(r"\\section\*?\{\s*Оглавление\s*\}", text, re.I)
     if toc:
         tail = text[toc.end():]
-        following = SECTION_RE.search(tail)
-        if following:
-            tail = tail[:following.start()]
+        # Mathpix может оформить очередную главу оглавления как section.
+        # Продолжаем её читать, но не захватываем справочник после оглавления.
+        for following in SECTION_RE.finditer(tail):
+            if not re.match(r'^[Гг]?лава\s+\d+\.', following.group('title').strip()):
+                tail = tail[:following.start()]
+                break
+        tail = SECTION_RE.sub(lambda match: match.group('title'), tail)
         structure = {}
         chapter = None
         pending = None
@@ -495,6 +499,7 @@ def prepare_merzlyak_text(text: str) -> str:
     text = _unwrap_footnotes(text)
     text = _renumber_enumerate(text)
     text = _flatten_lists(text)
+    text = re.sub(r"\\\\\[0pt\]", "", text)
     text = JUNK_LINE_RE.sub("", text)
     text = re.sub(r"(?m)^[ \t]*[◇○●■□•]+(?:\s*[◇○●■□•]+)*\s*(?:\\\\)?\s*$", "", text)
     # «в точках A, B, C, D, M, N: 1\) ) равные» — метка «1)» вклеена
@@ -511,7 +516,6 @@ def prepare_merzlyak_text(text: str) -> str:
     text = re.sub(r"\bс\s+м(?![а-яё])", "см", text)
     # «точка ( \(0 ;-8\) )» — скобки координат вынесены из формулы.
     text = re.sub(r"\(\s*\\\(([^()]*?)\\\)\s*\)", r"\\((\1)\\)", text)
-    text = re.sub(r"\\\\\[0pt\]", "", text)
     # Mathpix не сохранил файл: заглушка не должна стать «картинкой».
     text = re.sub(r"\\includegraphics(?:\[[^\]]*\])?\{image-not-found\}", "", text)
     text = _heal_ocr_words(text)
@@ -761,7 +765,9 @@ def _is_heading_line(line: str, known_titles: set[str]) -> bool:
     lowered = raw.lower()
     if any(lowered.startswith(word) for word in HEADING_STOP_WORDS):
         return True
-    if _normalize_title(raw) in known_titles:
+    # В OCR знак § и section иногда пропадают, но номер и название остаются.
+    unnumbered = re.sub(r"^(?:§\s*)?\d+\.?\s+", "", raw)
+    if _normalize_title(raw) in known_titles or _normalize_title(unnumbered) in known_titles:
         return True
     if raw[0].isupper() and raw[0].isalpha() and not re.search(r"[\d\\$(){}\[\]:;.,?!]", raw):
         words = raw.split()

@@ -294,12 +294,7 @@ def pick(request, pk):
     from problems.views import filter_tasks
     from problems.rubricator import taxonomy_page_context, filter_state_from_params
     query = request.GET.get('q', '')
-    params = request.GET.copy()
-    if query.isdigit():
-        params.pop('q', None)
-    tasks = filter_tasks(params).prefetch_related('analog_families', 'familymember_set__family')
-    if query.isdigit():
-        tasks = tasks.filter(pk=int(query))
+    tasks = filter_tasks(request.GET).prefetch_related('analog_families', 'familymember_set__family')
     recommended = tasks.none()
     same_topic = tasks.none()
     topic_names = []
