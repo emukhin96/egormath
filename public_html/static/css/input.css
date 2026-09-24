@@ -655,6 +655,52 @@
     accent-color: var(--accent);
   }
 
+  /* Складывающаяся таблица списка. Обёртка .catalog-table-wrap — контейнер
+     запроса, поэтому таблица складывается и в узкой карточке сетки, а не
+     только на узком экране: строка становится карточкой — чекбокс и
+     главная ячейка (.stack-primary) в первой строке, остальные ячейки
+     подписями «Метка: значение» (data-label) в строку с переносом; пустые
+     ячейки не показываются, .row-actions — отдельной строкой. */
+  .catalog-table-wrap { container-type: inline-size; }
+  .card > .catalog-table-wrap:has(> .table-stack) {
+    margin-inline: calc(var(--space-4) * -1);
+    padding-inline: var(--space-4);
+  }
+  @container (max-width: 640px) {
+    .table-stack thead,
+    .table-stack tr:has(> th) { display: none; }
+    .table-stack, .table-stack tbody { display: block; width: 100%; }
+    .table-stack tr {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 2px var(--space-3);
+      padding: var(--space-2) 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .table-stack tr:last-child { border-bottom: 0; }
+    .table-stack td {
+      display: block;
+      padding: 0 !important;
+      border: 0;
+      min-width: 0;
+      background: transparent !important;
+    }
+    .table-stack td.col-select { flex: 0 0 auto; width: auto; max-width: none; align-self: flex-start; padding-top: 2px !important; }
+    .table-stack td.stack-primary { flex: 1 1 60%; }
+    .table-stack td:not(.stack-primary):not(.col-select):not(.row-actions) { flex: 0 1 auto; font-size: 0.9rem; }
+    .table-stack td[data-label]:not(:empty)::before {
+      content: attr(data-label) ": ";
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+    .table-stack td.row-actions { flex: 1 0 100%; padding-top: var(--space-1) !important; white-space: normal; }
+    .table-stack td:empty { display: none; }
+    .table-stack .cell-sub { display: inline; white-space: normal; }
+    .table-stack .cell-sub::before { content: " · "; }
+    .table-stack td.num { text-align: left; }
+  }
+
   .bulk-bar {
     position: sticky;
     top: calc(var(--bulk-top, var(--topbar-height)) + var(--space-2));
@@ -4301,8 +4347,11 @@
     padding-top: var(--space-4);
   }
 
-  .assignment-catalog table.assignment-sheet-table th { white-space: normal; }
-  .assignment-sheet-table td:first-child { min-width: 170px; }
+  .assignment-sheet-table .assignment-title-cell { min-width: 12rem; }
+  .assignment-sheet-table .num { text-align: right; white-space: nowrap; }
+  .assignment-sheet-table th.num { text-align: right; }
+  .assignment-sheet-table .cell-sub { display: block; font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+  .assignment-sheet-table .cell-sub .badge { vertical-align: baseline; }
   .assignment-title {
     color: var(--accent-dark);
     font-weight: 600;
