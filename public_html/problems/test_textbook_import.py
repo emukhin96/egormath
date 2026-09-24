@@ -2233,6 +2233,39 @@ class TextbookImportTests(TestCase):
             self.assertEqual(
                 draft.topic_candidates[0]['reason'], 'exact-alias', heading)
 
+    def test_merzlyak_geometry_mixed_sections_get_broad_topics(self):
+        cases = [
+            (['Глава 6. Начальные сведения по стереометрии',
+              '§ 24. Прямая призма. Пирамида'], 'GEO.09'),
+            (['Глава 6. Начальные сведения по стереометрии',
+              '§ 25. Цилиндр. Конус. Шар'], 'GEO.10'),
+            (['§ 26. Упражнения для повторения курса планиметрии',
+              '1. Треугольники'], 'GEO.02'),
+            (['§ 26. Упражнения для повторения курса планиметрии',
+              '2. Четырехугольники. Многоугольники'], 'GEO.03'),
+            (['§ 26. Упражнения для повторения курса планиметрии',
+              '3. Окружность и её элементы'], 'GEO.04'),
+            (['§ 26. Упражнения для повторения курса планиметрии',
+              '4. Декартовы координаты. Векторы'], 'GEO.06'),
+            (['§ 26. Упражнения для повторения курса планиметрии',
+              '5. Геометрические преобразования'], 'GEO.05'),
+        ]
+        for index, (source_path, code) in enumerate(cases, 1):
+            topic = Topic.objects.get(code=code)
+            batch = self.create_batch(bundle(
+                external_id=f'merzlyak-mixed-{index}',
+                source_path=source_path,
+                topic_original=source_path[-1],
+                collection_key=f'merzlyak/mixed/{index}',
+                collection_title=source_path[-1],
+            ))
+            draft = batch.drafts.get()
+            self.assertEqual(draft.topic_id, topic.pk, source_path)
+            self.assertEqual(draft.topic_ids, [topic.pk], source_path)
+            self.assertEqual(
+                draft.topic_candidates[0]['reason'], 'exact-alias',
+                source_path)
+
     def test_ziv_variant_path_auto_assigns_section_topic(self):
         topic = Topic.objects.get(code='ALG.06.02')
         batch = self.create_batch(bundle(
