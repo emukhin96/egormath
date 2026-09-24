@@ -814,6 +814,7 @@ def repair_ziv_batch_leaks(batch):
     return diagnostics['ziv_leak_repair']
 
 
+@transaction.atomic
 def attach_image_archive(batch, upload, max_bytes=80 * 1024 * 1024):
     """Распаковывает ZIP и сопоставляет файлы с именами из черновиков."""
     raw = upload.read(max_bytes + 1)
@@ -853,6 +854,16 @@ def attach_image_archive(batch, upload, max_bytes=80 * 1024 * 1024):
     if not entries:
         raise TextbookImportError(
             'В архиве нет файлов PNG, JPEG или PDF.')
+    # Проверяем весь архив до первой записи: повреждённый поздний файл
+    # не должен частично заменить рисунки уже существующей партии.
+    for _stem, path, info in entries:
+        try:
+            with archive.open(info) as stream:
+                while stream.read(1024 * 1024):
+                    pass
+        except Exception as exc:
+            raise TextbookImportError(
+                f'Не удалось прочитать {path.name}: {exc}') from exc
     stored = 0
     for stem, path, info in entries:
         try:
