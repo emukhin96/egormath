@@ -1,0 +1,20 @@
+{# Кнопки авторской подборки для владельца: видимость, возврат в «Мои листки», возврат черновика в корпус. Контекст: collection, next_url, corpus_key #}
+<form method="post" action="{% url 'collection_publish' collection.pk %}" class="inline-form authored-publish">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ next_url }}">
+  <input type="hidden" name="published" value="{% if collection.is_published %}0{% else %}1{% endif %}">
+  <span class="muted">{% if collection.is_published %}Видна всем учителям{% else %}Видна только вам{% endif %}</span>
+  <button type="submit" class="link-btn">{% if collection.is_published %}скрыть от других{% else %}открыть всем учителям{% endif %}</button>
+</form>
+<form method="post" action="{% url 'collection_to_worksheets' collection.pk %}" class="inline-form"
+      onsubmit="return confirm('Вернуть «{{ collection.worksheet.title|escapejs }}» в мои листки? Из подборок он исчезнет.');">
+  {% csrf_token %}
+  <button type="submit" class="link-btn">Вернуть в мои листки</button>
+</form>
+{% if corpus_key %}
+<form method="post" action="{% url 'worksheet_corpus_unpush' collection.worksheet_id %}" class="inline-form"
+      onsubmit="return confirm('Убрать «{{ collection.worksheet.title|escapejs }}» из каталога? Листок будет удалён, черновик вернётся в корпус на сверку.');">
+  {% csrf_token %}
+  <button type="submit" class="link-btn">Вернуть в корпус</button>
+</form>
+{% endif %}

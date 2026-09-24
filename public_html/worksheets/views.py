@@ -397,13 +397,17 @@ def worksheet_detail(request, pk):
 
     from .recipients import assignment_sections
     assignment_groups, individual_assignments = assignment_sections(assignments, groups)
-    collection = Collection.objects.filter(worksheet=worksheet).first()
+    collection = Collection.objects.filter(worksheet=worksheet).select_related('source').first()
+    from .authored import SOURCE_TITLE as AUTHORED_SOURCE, is_section
     from assignments.task_usage import attach_usage, audience_context
     usage_ctx = audience_context(request, attach_usage(
         request, [item.task for item in items if item.task_id] + list(found_tasks)))
     return render(request, 'worksheets/worksheet_detail.html', {
         **usage_ctx,
         **taxonomy_page_context(filter_state_from_params(request.GET)),
+        'is_authored': bool(collection and collection.source.title == AUTHORED_SOURCE
+                            and not is_section(collection)),
+        'corpus_key': corpus_key_from_comment(worksheet.comment),
         'worksheet': worksheet,
         'mask_help': MASK_HELP,
         'collection': collection,
@@ -571,9 +575,13 @@ def collection_detail(request, pk):
     all_items = list(collection.worksheet.ordered_items())
     page = Paginator(all_items, 25).get_page(request.GET.get('page'))
     items = list(page.object_list)
+    children = collection.children.select_related('worksheet', 'source')
+    if not request.user.is_superuser:
+        children = children.filter(
+            models.Q(is_published=True)
+            | models.Q(worksheet__owner_id=request.user.pk))
     children = list(
-        collection.children.select_related('worksheet', 'source')
-        .annotate(items_total=models.Count(
+        children.annotate(items_total=models.Count(
             'worksheet__items',
             filter=models.Q(worksheet__items__deleted_at__isnull=True)))
         .order_by('order', 'pk'))
@@ -608,8 +616,14 @@ def collection_detail(request, pk):
     current_collection_row = next(
         (row for row in (selected_source['rows'] if selected_source else [])
          if row['collection'].pk == collection.pk), None)
+    from .authored import SOURCE_TITLE as AUTHORED_SOURCE, is_section
     return render(request, 'worksheets/collection_detail.html', {
         **usage_ctx,
+        'is_authored': (collection.source.title == AUTHORED_SOURCE
+                        and not is_section(collection)),
+        'is_owner': (collection.worksheet.owner_id == request.user.pk
+                     or request.user.is_superuser),
+        'corpus_key': corpus_key_from_comment(collection.worksheet.comment),
         'collection': collection,
         'worksheet': collection.worksheet,
         'rows': rows,
@@ -642,6 +656,63 @@ def collection_use(request, pk):
     messages.success(
         request, f'Подборка «{worksheet.title}» скопирована в мои листки.')
     return redirect('worksheet_detail', pk=worksheet.pk)
+
+
+@teacher_required
+@require_POST
+def worksheet_to_collections(request, pk):
+    """Свой листок → подборка в «Авторских листках»."""
+    from .authored import AuthoredError, move_to_collections
+    worksheet = _own_worksheet(request, pk)
+    try:
+        collection = move_to_collections(worksheet, request.user)
+    except AuthoredError as exc:
+        messages.error(request, str(exc))
+        return redirect('worksheet_detail', pk=worksheet.pk)
+    messages.success(
+        request, f'Листок «{worksheet.title}» перенесён в подборки '
+                 f'(раздел «{collection.parent.worksheet.title}»). '
+                 f'Пока он виден только вам.')
+    return redirect('collection_detail', pk=collection.pk)
+
+
+def _own_authored_collection(request, pk):
+    collection = get_object_or_404(
+        Collection.objects.select_related('worksheet', 'source'), pk=pk)
+    if (collection.worksheet.owner_id != request.user.pk
+            and not request.user.is_superuser):
+        raise PermissionDenied
+    return collection
+
+
+@teacher_required
+@require_POST
+def collection_to_worksheets(request, pk):
+    """Авторская подборка → обратно в «Мои листки»."""
+    from .authored import AuthoredError, move_to_worksheets
+    collection = _own_authored_collection(request, pk)
+    try:
+        worksheet = move_to_worksheets(collection)
+    except AuthoredError as exc:
+        messages.error(request, str(exc))
+        return redirect('collection_detail', pk=pk)
+    messages.success(
+        request, f'Листок «{worksheet.title}» возвращён в мои листки.')
+    return redirect('worksheet_detail', pk=worksheet.pk)
+
+
+@teacher_required
+@require_POST
+def collection_publish(request, pk):
+    """Переключает видимость подборки для других учителей."""
+    from .authored import set_published
+    collection = _own_authored_collection(request, pk)
+    set_published(collection, request.POST.get('published') == '1')
+    messages.success(
+        request, 'Подборка видна всем учителям.' if collection.is_published
+        else 'Подборка видна только вам.')
+    return redirect(request.POST.get('next') or reverse(
+        'collection_detail', args=[pk]))
 
 
 @teacher_required
@@ -723,6 +794,20 @@ def worksheet_bulk_update(request):
         return worksheet_bulk_delete(request)
     ids = request.POST.getlist('ids')
     worksheets = Worksheet.visible_to(request.user).filter(pk__in=ids)
+    if request.POST.get('to_collections'):
+        from .authored import AuthoredError, move_to_collections
+        moved, skipped = 0, []
+        for worksheet in worksheets:
+            try:
+                move_to_collections(worksheet, request.user)
+                moved += 1
+            except AuthoredError as exc:
+                skipped.append(f'«{worksheet.title}»: {exc}')
+        if moved:
+            messages.success(request, f'Перенесено в подборки: {moved}.')
+        for line in skipped:
+            messages.error(request, line)
+        return redirect('worksheet_list')
     fields = {}
     grade, grade_ok = parse_grade_choice(request.POST.get('grade', ''))
     if request.POST.get('grade', '').strip() and not grade_ok:

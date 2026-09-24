@@ -30,6 +30,9 @@
     {% if can_edit %}
     <a class="btn btn-secondary" href="{% url 'collection_edit' collection.pk %}">Редактировать</a>
     {% endif %}
+    {% if is_authored and is_owner %}
+    <div class="authored-controls">{% include 'worksheets/_authored_controls.html' with next_url=request.path %}</div>
+    {% endif %}
     {% if can_use %}
     <form method="post" action="{% url 'collection_use' collection.pk %}">
       {% csrf_token %}

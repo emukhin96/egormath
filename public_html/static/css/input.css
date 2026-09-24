@@ -916,6 +916,33 @@
     background: rgb(255 255 255 / 12%);
   }
 
+  button.sidebar-action {
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  /* Авторская подборка: видимость и возврат в листки */
+  .context-sidebar .authored-publish,
+  .context-sidebar .authored-publish + form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-2);
+    margin-top: var(--space-2);
+    font-size: 0.78rem;
+  }
+  .context-sidebar .authored-publish .link-btn,
+  .context-sidebar .authored-publish + form .link-btn { color: #e2ecf8; }
+  .authored-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.85rem;
+  }
+  .authored-controls form { display: inline-flex; align-items: center; gap: var(--space-1); margin: 0; }
+
   .sidebar-backdrop {
     display: none;
   }
