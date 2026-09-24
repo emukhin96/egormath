@@ -11,6 +11,14 @@
     <a class="btn btn-secondary" href="{% url 'textbook_import_list' %}">Все партии</a>
   </div>
 </div>
+{% if batch.diagnostics.missing_task_ids or batch.diagnostics.paragraphs_without_structure %}
+<div class="msg msg-warning">
+  <strong>Проверьте полноту разбора по книге.</strong>
+  {% if batch.diagnostics.missing_task_ids %}<p>Не найдены номера задач: {{ batch.diagnostics.missing_task_ids|join:', ' }}.</p>{% endif %}
+  {% if batch.diagnostics.paragraphs_without_structure %}<p>Не распознаны разделы оглавления: {{ batch.diagnostics.paragraphs_without_structure|join:', ' }}.</p>{% endif %}
+  <p>Пропущенные задачи не появятся в каталоге после одобрения остальных строк.</p>
+</div>
+{% endif %}
 {% if collection_groups %}
 <section class="card" id="collection-preview">
   <h2>Предпросмотр подборок и массовая тема</h2>

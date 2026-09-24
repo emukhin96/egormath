@@ -64,6 +64,58 @@ class TextbookImportTests(TestCase):
             payload or bundle(), user=self.teacher, title='Пробная партия',
             source_title='Тестовый задачник', source_author='Автор')
 
+    def test_corrupt_late_zip_member_does_not_replace_existing_assets(self):
+        import tempfile
+        from pathlib import Path
+        from .models import TextbookImportAsset
+
+        with tempfile.TemporaryDirectory() as media, self.settings(MEDIA_ROOT=media):
+            batch = self.create_batch()
+
+            def archive(first, second):
+                stream = io.BytesIO()
+                with zipfile.ZipFile(stream, 'w', zipfile.ZIP_STORED) as zip_file:
+                    zip_file.writestr('first.png', first)
+                    zip_file.writestr('second.png', second)
+                return stream.getvalue()
+
+            attach_image_archive(batch, SimpleUploadedFile(
+                'images.zip', archive(TINY_PNG, TINY_PNG)))
+            before = list(batch.assets.order_by('pk').values('pk', 'file'))
+            files_before = sorted(str(p) for p in Path(media).rglob('*') if p.is_file())
+            # Центральный каталог остаётся читаемым, CRC второго файла неверна.
+            damaged = archive(b'new-first-image', b'unique-second-image')
+            damaged = damaged.replace(b'unique-second-image', b'broken-second-image')
+            with self.assertRaisesMessage(TextbookImportError, 'second.png'):
+                attach_image_archive(batch, SimpleUploadedFile('images.zip', damaged))
+            self.assertEqual(list(batch.assets.order_by('pk').values('pk', 'file')), before)
+            self.assertEqual(sorted(str(p) for p in Path(media).rglob('*') if p.is_file()),
+                             files_before)
+            for asset in TextbookImportAsset.objects.filter(batch=batch):
+                self.assertEqual(Path(asset.file.path).read_bytes(), TINY_PNG)
+
+    def test_detail_exposes_missing_task_and_structure_diagnostics(self):
+        payload = bundle()
+        payload['diagnostics'] = {'missing_task_ids': ['1.1', '6.1'],
+                                  'paragraphs_without_structure': [23, 24]}
+        batch = self.create_batch(payload)
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse('textbook_import_detail', args=[batch.pk]))
+        self.assertContains(response, 'Не найдены номера задач: 1.1, 6.1')
+        self.assertContains(response, 'Не распознаны разделы оглавления: 23, 24')
+
+    def test_area_answer_units_survive_upload_and_repeated_normalization(self):
+        from .textbook_parser import apply_imported_answer
+        for answer in (r'$300$ см$^{2}$', r'$37,5$ см$^{2}$',
+                       r'$2$ м$^{3}$', r'$-12$ см$^{2}$'):
+            with self.subTest(answer=answer):
+                self.assertEqual(apply_imported_answer(answer), answer)
+                batch = self.create_batch(bundle(author_answer_latex=answer))
+                saved = batch.drafts.get().author_answer_latex
+                self.assertEqual(saved, answer)
+                self.assertEqual(apply_imported_answer(saved), answer)
+        self.assertEqual(apply_imported_answer(r'2$ км/ч$'), r'$2$ км/ч')
+
     def test_deferred_subitems_are_read_only_on_review_and_completed_on_commit(self):
         from .textbook_import import DEFERRED_MASK_WARNING
         payload = bundle(subitems=[
