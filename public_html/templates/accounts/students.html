@@ -92,7 +92,7 @@
     <button type="submit" name="action" value="remove" class="btn btn-small btn-secondary">Убрать</button>
     {% if current_group %}<button type="submit" name="action" value="move" class="btn btn-small btn-secondary">Переместить из «{{ current_group.name }}»</button>{% endif %}
   </form>
-  <table class="list">
+  <div class="catalog-table-wrap"><table class="list table-stack">
     <thead><tr>
       <th class="col-select"><input type="checkbox" data-bulk-all="students-bulk-form" title="Выбрать всех учеников"></th>
       <th>Ученик</th><th>Класс</th><th>Группы</th><th>Логин</th><th></th>
@@ -101,10 +101,10 @@
     {% for profile in student_profiles %}
     <tr>
       <td class="col-select"><input type="checkbox" class="row-select" name="ids" value="{{ profile.user_id }}" form="students-bulk-form" title="Выбрать ученика"></td>
-      <td><a href="{% url 'progress_overview' %}?student={{ profile.user_id }}">{{ profile.user.get_full_name|default:profile.user.username }}</a></td>
-      <td>{{ profile.grade|default:'—' }}</td>
-      <td>{% for group in profile.user.visible_groups %}{{ group.name }}{% if request.user.is_superuser %} <span class="muted">({{ group.teacher.get_full_name|default:group.teacher.username }})</span>{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
-      <td class="mono">{{ profile.user.username }}</td>
+      <td class="stack-primary"><a href="{% url 'progress_overview' %}?student={{ profile.user_id }}">{{ profile.user.get_full_name|default:profile.user.username }}</a></td>
+      <td data-label="Класс">{{ profile.grade|default:'—' }}</td>
+      <td data-label="Группы">{% for group in profile.user.visible_groups %}{{ group.name }}{% if request.user.is_superuser %} <span class="muted">({{ group.teacher.get_full_name|default:group.teacher.username }})</span>{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
+      <td class="mono" data-label="Логин">{{ profile.user.username }}</td>
       <td class="row-actions">
         <a class="btn btn-small btn-secondary" href="{% url 'student_edit' profile.user_id %}">Изменить</a>
         <button type="button" class="btn btn-small btn-secondary" data-dialog-open="reset-password-{{ profile.user_id }}">Сбросить пароль</button>
@@ -113,7 +113,7 @@
     </tr>
     {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% for profile in student_profiles %}
         <dialog class="dialog problem-dialog" id="reset-password-{{ profile.user_id }}" aria-labelledby="reset-password-title-{{ profile.user_id }}">
           <div class="dialog-heading">
@@ -147,19 +147,19 @@
     {% if group_form.errors %}<div class="errorlist">{{ group_form.errors }}</div>{% endif %}
   </form>
   {% if groups %}
-  <table class="list">
+  <div class="catalog-table-wrap"><table class="list table-stack">
     <thead><tr><th>Название</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Учеников</th><th></th></tr></thead>
     <tbody>
     {% for group in groups %}
     <tr>
-      <td>
+      <td class="stack-primary">
         <form method="post" action="{% url 'group_rename' group.pk %}" class="filters">
           {% csrf_token %}<input type="text" name="name" value="{{ group.name }}" maxlength="100" required>
           <button type="submit" class="btn btn-small btn-secondary">Переименовать</button>
         </form>
       </td>
-      {% if request.user.is_superuser %}<td>{{ group.teacher.get_full_name|default:group.teacher.username }}</td>{% endif %}
-      <td><a href="{% url 'students' %}?group={{ group.pk }}">{{ group.students.count }}</a></td>
+      {% if request.user.is_superuser %}<td data-label="Владелец">{{ group.teacher.get_full_name|default:group.teacher.username }}</td>{% endif %}
+      <td data-label="Учеников"><a href="{% url 'students' %}?group={{ group.pk }}">{{ group.students.count }}</a></td>
       <td class="row-actions"><a href="{% url 'progress_overview' %}?group={{ group.pk }}">Прогресс группы</a>
         <form method="post" action="{% url 'group_delete' group.pk %}" class="inline-form"
               onsubmit="return confirm('Удалить группу «{{ group.name|escapejs }}»? Ученики останутся.');">
@@ -169,7 +169,7 @@
     </tr>
     {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}<p class="muted">Групп пока нет.</p>{% endif %}
   <p class="helptext">Ученик может состоять в нескольких группах.</p>
 </div>

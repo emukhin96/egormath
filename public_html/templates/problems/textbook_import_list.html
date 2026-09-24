@@ -11,16 +11,16 @@
 </div>
 <div class="card">
 {% if batches %}
-<table class="list">
+<div class="catalog-table-wrap"><table class="list table-stack">
   <tr><th>Партия</th><th>Источник</th><th>Профиль</th><th>Задач</th><th>Статус</th><th>Создана</th></tr>
   {% for batch in batches %}
   <tr>
-    <td><a href="{% url 'textbook_import_detail' batch.pk %}">{{ batch.title }}</a></td>
-    <td>{{ batch.source }}</td><td>{{ batch.profile }}</td><td>{{ batch.total }}</td>
-    <td>{{ batch.get_status_display }}</td><td>{{ batch.created_at|date:'d.m.Y H:i' }}</td>
+    <td class="stack-primary"><a href="{% url 'textbook_import_detail' batch.pk %}">{{ batch.title }}</a></td>
+    <td data-label="Источник">{{ batch.source }}</td><td data-label="Профиль">{{ batch.profile }}</td><td data-label="Задач">{{ batch.total }}</td>
+    <td data-label="Статус">{{ batch.get_status_display }}</td><td data-label="Создана">{{ batch.created_at|date:'d.m.Y H:i' }}</td>
   </tr>
   {% endfor %}
-</table>
+</table></div>
 {% else %}<p class="muted">Партий пока нет.</p>{% endif %}
 </div>
 {% endblock %}

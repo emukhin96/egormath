@@ -74,16 +74,16 @@
     {% endfor %}
   </div>
   {% else %}
-  <table class="list">
+  <div class="catalog-table-wrap"><table class="list table-stack">
     <tr><th>Подборка</th><th>Элементов</th><th></th></tr>
     {% for child in children %}
     <tr>
-      <td><a href="{% url 'collection_detail' child.pk %}">{{ child.catalog_title }}</a></td>
-      <td>{{ child.items_total }}</td>
-      <td><a class="btn btn-small btn-secondary" href="{% url 'collection_detail' child.pk %}">{% if child.items_total %}Открыть подборку{% else %}Открыть раздел{% endif %}</a></td>
+      <td class="stack-primary"><a href="{% url 'collection_detail' child.pk %}">{{ child.catalog_title }}</a></td>
+      <td data-label="Элементов">{{ child.items_total }}</td>
+      <td class="row-actions"><a class="btn btn-small btn-secondary" href="{% url 'collection_detail' child.pk %}">{% if child.items_total %}Открыть подборку{% else %}Открыть раздел{% endif %}</a></td>
     </tr>
     {% endfor %}
-  </table>
+  </table></div>
   {% endif %}
   {% else %}
   {% if rows %}

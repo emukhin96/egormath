@@ -1,17 +1,17 @@
 {# Таблица заданий ученика: items — список Assignment, skip — задание, уже показанное в hero-карточке #}
 <div class="catalog-table-wrap" role="region" aria-label="Список заданий" tabindex="0">
-<table class="list">
+<table class="list table-stack">
   <tr><th>Листок</th><th>Учитель</th><th>Выдано</th><th>Срок</th><th>Статус</th><th>Результат</th><th></th></tr>
   {% for a in items %}
   {% if a != skip %}
   <tr>
-    <td>{{ a.worksheet.title }}{% if a.kind == "independent" %}<div class="muted">{{ a.kind_label }}</div>{% endif %}</td>
-    <td>{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>
-    <td>{{ a.assigned_at|date:'d.m.Y' }}</td>
-    <td>{% if a.due_at %}{{ a.due_at|date:'d.m.Y H:i' }}{% if a.is_overdue %} <span class="badge badge-returned">просрочено</span>{% endif %}{% else %}—{% endif %}</td>
-    <td><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span></td>
-    <td>{% if a.status == 'reviewed' %}{% with r=a.result %}{{ r.done }}/{{ r.total }} ({{ r.percent }}%){% endwith %}{% if a.cumulative %}<div class="muted">С исправлениями: {{ a.cumulative.percent }}%</div>{% endif %}{% else %}—{% endif %}</td>
-    <td><a class="btn btn-small btn-secondary" href="{% if a.detail_url %}{{ a.detail_url }}{% else %}{% url 'assignment_detail' a.pk %}{% endif %}">Открыть</a></td>
+    <td class="stack-primary">{{ a.worksheet.title }}{% if a.kind == "independent" %}<div class="muted">{{ a.kind_label }}</div>{% endif %}</td>
+    <td data-label="Учитель">{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>
+    <td data-label="Выдано">{{ a.assigned_at|date:'d.m.Y' }}</td>
+    <td data-label="Срок">{% if a.due_at %}{{ a.due_at|date:'d.m.Y H:i' }}{% if a.is_overdue %} <span class="badge badge-returned">просрочено</span>{% endif %}{% else %}—{% endif %}</td>
+    <td data-label="Статус"><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span></td>
+    <td data-label="Результат">{% if a.status == 'reviewed' %}{% with r=a.result %}{{ r.done }}/{{ r.total }} ({{ r.percent }}%){% endwith %}{% if a.cumulative %}<div class="muted">С исправлениями: {{ a.cumulative.percent }}%</div>{% endif %}{% else %}—{% endif %}</td>
+    <td class="row-actions"><a class="btn btn-small btn-secondary" href="{% if a.detail_url %}{{ a.detail_url }}{% else %}{% url 'assignment_detail' a.pk %}{% endif %}">Открыть</a></td>
   </tr>
   {% endif %}
   {% endfor %}

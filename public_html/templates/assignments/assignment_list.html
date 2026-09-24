@@ -15,13 +15,15 @@
 {% if filters.kind == 'independent' and draft_runs %}
 <div class="card assignment-catalog">
   <div class="table-summary"><strong>Черновики выдачи</strong><span>Сохранённые получатели и условия работы</span></div>
-  <div class="catalog-table-wrap"><table class="list assignment-sheet-table">
-    <thead><tr><th>Самостоятельная</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Учеников</th><th>Длительность</th><th>Срок</th><th>Сохранён</th><th></th></tr></thead>
+  <div class="catalog-table-wrap"><table class="list assignment-sheet-table table-stack">
+    <thead><tr><th>Самостоятельная</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th class="num">Учеников</th><th>Срок</th><th>Сохранён</th><th></th></tr></thead>
     <tbody>{% for run in draft_runs %}<tr>
-      <td><strong>{{ run.title }}</strong><div class="muted">{{ run.kind_label }}</div></td>
-      {% if request.user.is_superuser %}<td>{{ run.owner.get_full_name|default:run.owner.username }}</td>{% endif %}
-      <td>{{ run.plan.students|length }}</td><td>{{ run.duration }} мин.</td><td>{{ run.deadline|date:'d.m.Y H:i'|default:'—' }}</td><td>{{ run.created_at|date:'d.m.Y H:i' }}</td>
-      <td><a class="btn btn-small" href="{% url 'assignment_create' %}?mode=independent&amp;work={{ run.work_id }}&amp;resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Продолжить</a></td>
+      <td class="assignment-title-cell stack-primary"><strong>{{ run.title }}</strong><span class="cell-sub">{{ run.kind_label }} · {{ run.duration }} мин.</span></td>
+      {% if request.user.is_superuser %}<td data-label="Владелец">{{ run.owner.get_full_name|default:run.owner.username }}</td>{% endif %}
+      <td class="num" data-label="Учеников">{{ run.plan.students|length }}</td>
+      <td data-label="Срок">{{ run.deadline|date:'d.m.Y H:i'|default:'—' }}</td>
+      <td data-label="Сохранён">{{ run.created_at|date:'d.m.Y H:i' }}</td>
+      <td class="row-actions"><a class="btn btn-small" href="{% url 'assignment_create' %}?mode=independent&amp;work={{ run.work_id }}&amp;resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Продолжить</a></td>
     </tr>{% endfor %}</tbody>
   </table></div>
 </div>
@@ -137,15 +139,16 @@
     <span>Всего выдано: {{ stats.total }}</span>
   </div>
   {% if worksheet_groups %}
-  <div class="catalog-table-wrap"><table class="list assignment-sheet-table">
-    <thead><tr><th class="col-select"><input type="checkbox" data-bulk-all="assignment-bulk-form" title="Выбрать все работы на странице"></th><th>Работа</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Учеников</th><th>На проверке</th><th>Проверено</th><th>Последняя выдача</th><th>Ближайший срок</th><th></th></tr></thead>
+  <div class="catalog-table-wrap"><table class="list assignment-sheet-table table-stack">
+    <thead><tr><th class="col-select"><input type="checkbox" data-bulk-all="assignment-bulk-form" title="Выбрать все работы на странице"></th><th>Работа</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th class="num">Ученики</th><th>Выдано · срок</th><th></th></tr></thead>
     <tbody>{% for group in worksheet_groups %}<tr data-assignment-row data-title="{{ group.worksheet__title }}" data-recipients="{% for row in group.recipient_rows %}{% if row.assignment %}{% if group.kind == 'independent' %}{{ row.student.get_full_name|default:row.student.username }}{% if row.locked %} ({{ row.assignment.state|lower }}){% endif %}{% else %}{{ row.profile.user.get_full_name|default:row.profile.user.username }} ({{ row.assignment.get_status_display|lower }}){% endif %}, {% endif %}{% endfor %}">
       <td class="col-select"><input type="checkbox" class="row-select" name="ids" value="{{ group.key }}" form="assignment-bulk-form" title="Выбрать работу"></td>
-      <td><a class="assignment-title" href="{% if group.progress_url %}{{ group.progress_url }}{% else %}{% url 'worksheet_progress' group.worksheet_id %}{% endif %}">{{ group.worksheet__title }}</a>
+      <td class="assignment-title-cell stack-primary"><a class="assignment-title" href="{% if group.progress_url %}{{ group.progress_url }}{% else %}{% url 'worksheet_progress' group.worksheet_id %}{% endif %}">{{ group.worksheet__title }}</a>
         <div class="muted assignment-links">{% if group.kind == "independent" %}{{ group.kind_label }} · <a href="{% url 'independentworks:edit' group.run.work_id %}">шаблон</a>{% if group.run.work.source_worksheet_id %} · <a href="{% url 'worksheet_detail' group.run.work.source_worksheet_id %}">исходный листок</a>{% endif %}{% else %}<a href="{% url 'worksheet_detail' group.worksheet_id %}">листок</a>{% endif %}</div></td>
-      {% if request.user.is_superuser %}<td>{% if group.worksheet__owner__first_name or group.worksheet__owner__last_name %}{{ group.worksheet__owner__first_name }} {{ group.worksheet__owner__last_name }}{% else %}{{ group.worksheet__owner__username }}{% endif %}</td>{% endif %}
-      <td>{{ group.students_total }}</td><td>{{ group.submitted_total }}</td><td>{{ group.reviewed_total }}</td><td>{{ group.last_assigned|date:'d.m.Y' }}</td><td>{{ group.nearest_due|date:'d.m.Y H:i'|default:'—' }}</td>
-      <td><button type="button" class="btn btn-small btn-secondary" data-dialog-open="assignment-group-{{ group.key }}">Изменить</button></td>
+      {% if request.user.is_superuser %}<td data-label="Владелец">{% if group.worksheet__owner__first_name or group.worksheet__owner__last_name %}{{ group.worksheet__owner__first_name }} {{ group.worksheet__owner__last_name }}{% else %}{{ group.worksheet__owner__username }}{% endif %}</td>{% endif %}
+      <td class="num" data-label="Ученики"><strong>{{ group.students_total }}</strong><span class="cell-sub">{% if group.submitted_total %}<span class="badge badge-submitted" title="На проверке">{{ group.submitted_total }} на проверке</span>{% else %}0 на проверке{% endif %} · {{ group.reviewed_total }} проверено</span></td>
+      <td data-label="Выдано">{{ group.last_assigned|date:'d.m.Y' }}<span class="cell-sub" title="Ближайший срок">срок {{ group.nearest_due|date:'d.m.Y H:i'|default:'—' }}</span></td>
+      <td class="row-actions"><button type="button" class="btn btn-small btn-secondary" data-dialog-open="assignment-group-{{ group.key }}">Изменить</button></td>
     </tr>{% endfor %}</tbody>
   </table></div>
   {% for group in worksheet_groups %}
