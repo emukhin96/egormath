@@ -67,14 +67,38 @@ def section_for(worksheet):
     return MISC_SECTION
 
 
-def ensure_section(source, key, title, order, owner):
-    """Раздел-контейнер (пустой листок) — общий для всех учителей."""
+SECTIONS_USERNAME = 'authored-sections'
+
+
+def sections_owner():
+    """Системный владелец листков-контейнеров разделов.
+
+    Раздел общий для всех учителей, поэтому его листок не должен
+    принадлежать тому, кто перенёс первую подборку: иначе он мог бы
+    удалить или отредактировать контейнер через обычные view листка
+    (Worksheet.visible_to по владельцу) — с каскадом на чужие подборки.
+    Неактивный пользователь без профиля: войти им нельзя, в списках
+    учеников/учителей он не появляется.
+    """
+    from django.contrib.auth import get_user_model
+    user, _ = get_user_model().objects.get_or_create(
+        username=SECTIONS_USERNAME,
+        defaults={'is_active': False, 'first_name': 'Авторские',
+                  'last_name': 'листки'})
+    return user
+
+
+def ensure_section(source, key, title, order, owner=None):
+    """Раздел-контейнер (пустой листок) — общий для всех учителей.
+
+    ``owner`` не используется: контейнер всегда у системного владельца.
+    """
     locator = SECTION_PREFIX + key
     section = Collection.objects.filter(source=source, locator=locator).first()
     if section is not None:
         return section
     container = Worksheet.objects.create(
-        title=title, owner=owner, comment='authored-section')
+        title=title, owner=sections_owner(), comment='authored-section')
     return Collection.objects.create(
         worksheet=container, source=source, parent=None, locator=locator,
         source_path=[SOURCE_TITLE, title], order=order, is_published=True)
