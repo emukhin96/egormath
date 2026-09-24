@@ -1425,6 +1425,19 @@
     padding: var(--space-3);
   }
 
+  /* Общий поиск задач (finder): живые результаты и быстрая задача */
+  .task-finder .finder-search { flex: 1 1 14rem; }
+  .task-finder .finder-search input { max-width: none; width: 100%; }
+  .finder-status { align-self: center; font-size: 0.85rem; }
+  [data-finder-target].is-loading { opacity: 0.55; transition: opacity 0.15s; }
+  .finder-results td { vertical-align: top; }
+  .quick-task-form label { display: block; margin-top: var(--space-3); }
+  .quick-task-form textarea, .quick-task-form input[type="text"] { width: 100%; max-width: none; }
+  .quick-task-row { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: flex-end; }
+  .quick-task-row label:first-child { flex: 1 1 16rem; }
+  .quick-task-form .form-buttons { margin-top: var(--space-3); }
+  #add-tasks .worksheet-items-heading .linklike { margin-left: auto; font-size: 0.85rem; }
+
   @media (max-width: 600px) {
     .worksheet-catalog .catalog-table-wrap { overflow: visible; }
     .worksheet-catalog table, .worksheet-catalog tbody { display: block; width: 100%; }

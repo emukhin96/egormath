@@ -209,6 +209,56 @@ class MerzlyakParserTests(TestCase):
         self.assertEqual(diagnostics['paragraphs_without_structure'], [2])
         self.assertTrue(any('Параграф не найден' in w for w in tasks[1].warnings))
 
+    def test_toc_continues_through_chapter_section_but_stops_at_reference(self):
+        text = r'''\section*{оглавление}
+лава 4. Решение прямоугольных треугольников
+§ 22. Решение прямоугольных треугольников ..... 158
+Итоги главы 4 ..... 165
+\section*{лава 5. Площадь многоугольника}
+§ 23. Понятие площади многоугольника. Площадь прямоугольника ..... 167
+§ 24. Площадь параллелограмма ..... 172
+\section*{Справочник}
+§ 99. Это не оглавление ..... 999
+'''
+        structure = _book_structure(text)
+        self.assertEqual(set(structure), {4, 5})
+        self.assertEqual(set(structure[5][1]), {23, 24})
+        self.assertEqual(structure[5][0], 'Глава 5. Площадь многоугольника')
+
+    def test_plain_numbered_heading_stops_theory_tail(self):
+        body, tail = cut_task_body(
+            'Докажите равенство.\n\n'
+            '18 Второй и третий признаки подобия треугольников\n'
+            'Teopema 18.1\nТеория следующего параграфа.',
+            {'второй и третий признаки подобия треугольников'}, 17)
+        self.assertEqual(body.strip(), 'Докажите равенство.')
+        self.assertIn('Teopema 18.1', tail)
+
+    def test_ocr_zero_height_linebreak_does_not_keep_difficulty_diamonds(self):
+        text = prepare_merzlyak_text(r'''
+\textbackslash item[7.20.] Найдите углы.\\[0pt]
+\textbackslash item[] ◇ ◇\\[0pt]
+\textbackslash item[7.21.] Найдите стороны.\\[0pt]
+''')
+        self.assertNotIn('◇', text)
+        self.assertIn('7.20.', text)
+        self.assertIn('7.21.', text)
+
+    def test_geom8_repaired_missing_tasks_have_full_subitems(self):
+        import json
+        from .merzlyak_parser import REPAIRS_PATH
+        edition = next(e for e in json.loads(REPAIRS_PATH.read_text())['editions']
+                       if e['title'].startswith('merzlyak-8 geom'))
+        patches = {p['id']: p for p in edition['patches']}
+        text = patches['geom8-task-1.1']['after'] + ' Следующая задача.\n'
+        text += patches['geom8-task-6.1']['after'] + ' Следующая задача.\n'
+        text += r'\section*{Ответы и указания}'
+        tasks, _ = parse_merzlyak(text)
+        by_id = {t.external_id: t for t in tasks}
+        self.assertEqual(set(by_id), {'1.1', '1.2', '6.1', '6.2'})
+        self.assertEqual(len(by_id['1.1'].subitems), 3)
+        self.assertIn('четыре равных треугольника', by_id['6.1'].text_latex)
+
     def test_theory_and_chapter_summary_do_not_leak_into_tasks(self):
         self.assertNotIn('Из первого признака', self.by_id['1.7'].text_latex)
         self.assertNotIn('Итоги главы', self.by_id['2.2'].text_latex)

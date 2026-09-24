@@ -66,6 +66,8 @@ urlpatterns = [
     path('<int:pk>/tex/', views.worksheet_tex, name='worksheet_tex'),
     path('<int:pk>/add-task/', views.worksheet_add_task,
          name='worksheet_add_task'),
+    path('<int:pk>/quick-task/', views.worksheet_quick_task,
+         name='worksheet_quick_task'),
     path('<int:pk>/add-element/', views.worksheet_add_element,
          name='worksheet_add_element'),
     path('<int:pk>/reorder/', views.worksheet_reorder,

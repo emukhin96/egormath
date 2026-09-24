@@ -1,6 +1,6 @@
 {# Селект «кому смотрим историю»: audience_* из assignments.task_usage.audience_context; внутри GET-формы фильтра, autosubmit как у класса #}
 <label for="f_who">Задавалась ли</label>
-<select name="who" id="f_who" class="quick-select" onchange="this.form.submit()">
+<select name="who" id="f_who" class="quick-select" onchange="this.form.requestSubmit()">
   <option value="">— не отмечать —</option>
   {% if audience_groups %}<optgroup label="Группы">
     {% for group in audience_groups %}<option value="group:{{ group.pk }}"{% if audience_value == group.who_value %} selected{% endif %}>{{ group.name }}</option>{% endfor %}

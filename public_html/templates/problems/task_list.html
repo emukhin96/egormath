@@ -17,7 +17,6 @@
 
 {% include 'problems/_catalog_filters.html' %}
 
-{% if page.object_list %}
 <form id="task-bulk-form" method="post" action="{% url 'task_bulk_update' %}"
       class="bulk-bar" data-bulk hidden>
   {% csrf_token %}
@@ -38,6 +37,8 @@
   <button type="submit" name="delete" value="1" class="btn btn-small btn-danger"
           onclick="return confirm('Удалить выбранные задачи? Задачи из листков и с ответами учеников останутся.');">Удалить выбранные</button>
 </form>
+<div data-finder-target="results">
+{% if page.object_list %}
 <div class="card task-catalog">
 <h2>Задачи <span class="muted">({{ page.paginator.count }})</span>
 <label class="ws-toggle"><input type="checkbox" id="toggle-catalog-answers"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">ответы и решения</span></label>
@@ -63,7 +64,9 @@
 {% else %}
 <div class="card"><p class="muted">Задачи не найдены. Попробуйте изменить фильтры или <a href="{% url 'task_create' %}">создайте новую</a>.</p></div>
 {% endif %}
-<script defer src="{% static 'js/bulk.js' %}"></script>
+</div>
+<script defer src="{% static 'js/bulk.js' %}?v=3"></script>
+<script defer src="{% static 'js/task_finder.js' %}"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
 {% include 'problems/_mask_dialogs.html' %}
 <script defer src="{% static 'js/problem_editor.js' %}?v=2"></script>
