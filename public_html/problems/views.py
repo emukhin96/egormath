@@ -44,7 +44,10 @@ def filter_tasks(params):
                                'source_refs__source', 'subitems', 'images')
              .select_related('created_by').order_by('-created_at', '-pk'))
     q = params.get('q', '').strip()
-    if q:
+    if re.fullmatch(r'#?\d+', q):
+        # «#123» или «123» — задача по id
+        tasks = tasks.filter(pk=int(q.lstrip('#')))
+    elif q:
         tasks = tasks.filter(
             Q(text_plain__icontains=q) | Q(text_latex__icontains=q))
     tasks = filter_by_taxonomy(tasks, params, topics_lookups=('topics',))

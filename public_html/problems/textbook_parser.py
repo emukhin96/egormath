@@ -405,7 +405,17 @@ def _strip_empty_math_tail(value: str) -> str:
 
 def _heal_broken_unit_dollars(value: str) -> str:
     """Собирает ``2$ км/ч$`` обратно в ``$2$ км/ч``."""
-    return _BROKEN_UNIT_DOLLAR_RE.sub(r'$\g<num>$ \g<unit>', str(value or ''))
+    value = str(value or '')
+    spans = [match.span() for match in _MATH_SPAN_RE.finditer(value)]
+
+    def heal(match):
+        # В корректном «$300$ см$^{2}$» число уже обёрнуто: доллар перед
+        # степенью начинает другую формулу, а не закрывает единицу.
+        if any(start <= match.start() < end for start, end in spans):
+            return match.group(0)
+        return f"${match.group('num')}$ {match.group('unit')}"
+
+    return _BROKEN_UNIT_DOLLAR_RE.sub(heal, value)
 
 
 def _balance_odd_dollars(value: str) -> str:
