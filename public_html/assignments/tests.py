@@ -262,6 +262,24 @@ class AssignmentWorkspaceTests(TestCase):
             list(response.context['assignments']),
             [older_submitted, submitted])
 
+    def test_catalog_groups_are_ordered_by_last_assignment_date(self):
+        """Свежая выдача выше старой, даже если старая ждёт проверки."""
+        old_worksheet = make_worksheet(self.teacher, title='Старая на проверке')
+        old = Assignment.objects.create(
+            worksheet=old_worksheet, student=self.student,
+            assigned_by=self.teacher, status=Assignment.STATUS_SUBMITTED,
+            submitted_at=timezone.now())
+        Assignment.objects.filter(pk=old.pk).update(
+            assigned_at=timezone.now() - timedelta(days=3))
+        Assignment.objects.create(
+            worksheet=self.worksheet, student=self.student2,
+            assigned_by=self.teacher, status=Assignment.STATUS_ASSIGNED)
+
+        response = self.client.get(reverse('assignment_list'))
+        titles = [group['worksheet__title']
+                  for group in response.context['worksheet_groups']]
+        self.assertEqual(titles, [self.worksheet.title, 'Старая на проверке'])
+
     def test_catalog_dialog_updates_recipients_and_statuses(self):
         existing = Assignment.objects.create(
             worksheet=self.worksheet, student=self.student,
