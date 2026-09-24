@@ -667,8 +667,30 @@
     padding-inline: var(--space-4);
   }
   @container (max-width: 760px) {
-    .table-stack thead,
-    .table-stack tr:has(> th) { display: none; }
+    /* Шапка скрывается, но чекбокс «выбрать все» из неё остаётся
+       отдельной строкой с подписью — иначе на телефоне массовый выбор
+       возможен только по одной строке. */
+    .table-stack thead:not(:has(th.col-select)),
+    .table-stack tr:has(> th):not(:has(th.col-select)) { display: none; }
+    .table-stack thead, .table-stack thead tr { display: block; width: 100%; }
+    .table-stack thead th:not(.col-select) { display: none; }
+    .table-stack thead th.col-select {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      width: auto;
+      max-width: none;
+      padding: var(--space-2) 0 !important;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+    }
+    .table-stack thead th.col-select::after {
+      content: "Выбрать все";
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+    }
     .table-stack, .table-stack tbody { display: block; width: 100%; }
     .table-stack tr {
       display: flex;
