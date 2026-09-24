@@ -42,18 +42,18 @@
     </div>
   </div>
   {% if pending %}
-  <table class="list">
+  <div class="catalog-table-wrap"><table class="list table-stack">
     <tr><th>Листок</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Ученик</th><th>Отправлено</th><th></th></tr>
     {% for a in pending %}
     <tr>
-      <td>{{ a.worksheet.title }}</td>
-      {% if request.user.is_superuser %}<td>{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>{% endif %}
-      <td>{{ a.student.get_full_name|default:a.student.username }}</td>
-      <td>{{ a.submitted_at|date:'d.m.Y H:i' }}</td>
-      <td><a class="btn btn-small" href="{% url 'review_assignment' a.pk %}">Проверить</a></td>
+      <td class="stack-primary">{{ a.worksheet.title }}</td>
+      {% if request.user.is_superuser %}<td data-label="Владелец">{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>{% endif %}
+      <td data-label="Ученик">{{ a.student.get_full_name|default:a.student.username }}</td>
+      <td data-label="Отправлено">{{ a.submitted_at|date:'d.m.Y H:i' }}</td>
+      <td class="row-actions"><a class="btn btn-small" href="{% url 'review_assignment' a.pk %}">Проверить</a></td>
     </tr>
     {% endfor %}
-  </table>
+  </table></div>
   {% else %}
   <p class="muted">Нет работ, ожидающих проверки.</p>
   {% endif %}
@@ -63,23 +63,23 @@
   <div class="card">
     <h2>{% if request.user.is_superuser %}Все листки{% else %}Мои листки{% endif %}</h2>
     {% if worksheets %}
-    <table class="list">
+    <div class="catalog-table-wrap"><table class="list table-stack">
       <tr><th>Название</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Класс</th><th>Задач</th><th></th></tr>
       {% for w in worksheets %}
       <tr>
-        <td>
+        <td class="stack-primary">
           <a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a>
           {% if w.comment %}<div class="muted task-meta">{{ w.comment|truncatechars:80 }}</div>{% endif %}
         </td>
-        {% if request.user.is_superuser %}<td>{{ w.owner.get_full_name|default:w.owner.username }}</td>{% endif %}
-        <td>{{ w.grade_label }}</td>
-        <td>{{ w.items_total }}</td>
-        <td><a class="btn btn-small btn-secondary"
+        {% if request.user.is_superuser %}<td data-label="Владелец">{{ w.owner.get_full_name|default:w.owner.username }}</td>{% endif %}
+        <td data-label="Класс">{{ w.grade_label }}</td>
+        <td data-label="Задач">{{ w.items_total }}</td>
+        <td class="row-actions"><a class="btn btn-small btn-secondary"
                href="{% url 'worksheet_pdf_editor' w.pk %}"
                title="Предпросмотр и сборка PDF">PDF</a></td>
       </tr>
       {% endfor %}
-    </table>
+    </table></div>
     {% else %}
     <p class="muted">Листков пока нет.</p>
     {% endif %}
@@ -88,19 +88,19 @@
   <div class="card">
     <h2>Недавно проверенные</h2>
     {% if reviewed %}
-    <table class="list">
+    <div class="catalog-table-wrap"><table class="list table-stack">
       <tr><th>Листок</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Ученик</th><th>Проверено</th><th>Результат</th><th></th></tr>
       {% for a in reviewed %}
       <tr>
-        <td>{{ a.worksheet.title }}</td>
-        {% if request.user.is_superuser %}<td>{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>{% endif %}
-        <td>{{ a.student.get_full_name|default:a.student.username }}</td>
-        <td>{{ a.reviewed_at|date:'d.m.Y' }}</td>
-        <td>{% with r=a.result %}{{ r.done }}/{{ r.total }} ({{ r.percent }}%){% endwith %}</td>
-        <td><a class="btn btn-small btn-secondary" href="{% url 'review_assignment' a.pk %}">Открыть</a></td>
+        <td class="stack-primary">{{ a.worksheet.title }}</td>
+        {% if request.user.is_superuser %}<td data-label="Владелец">{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>{% endif %}
+        <td data-label="Ученик">{{ a.student.get_full_name|default:a.student.username }}</td>
+        <td data-label="Проверено">{{ a.reviewed_at|date:'d.m.Y' }}</td>
+        <td data-label="Результат">{% with r=a.result %}{{ r.done }}/{{ r.total }} ({{ r.percent }}%){% endwith %}</td>
+        <td class="row-actions"><a class="btn btn-small btn-secondary" href="{% url 'review_assignment' a.pk %}">Открыть</a></td>
       </tr>
       {% endfor %}
-    </table>
+    </table></div>
     {% else %}
     <p class="muted">Пока ничего не проверено.</p>
     {% endif %}
