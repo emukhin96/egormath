@@ -397,8 +397,13 @@ def corpus_key_from_comment(comment):
     return text[len(CORPUS_MARK):].splitlines()[0].strip()
 
 
-def push_draft(draft, owner):
-    """Одна кнопка: черновик корпуса → листок в каталоге."""
+def push_draft(draft, owner, *, to_collections=True):
+    """Одна кнопка: черновик корпуса → листок в каталоге.
+
+    По умолчанию новый листок сразу становится авторской подборкой
+    (раздел по классу или экзамену, виден только автору) — см. authored.py.
+    Уже загруженный листок не трогается, только догружаются рисунки.
+    """
     if draft.get('status') == 'skipped':
         raise ValueError('Пропущенный листок нельзя загрузить в каталог.')
     existing = find_imported_worksheet(owner, draft['id'])
@@ -406,7 +411,14 @@ def push_draft(draft, owner):
         _, info = reattach_draft_images(draft, owner)
         info['skipped'] = True
         return existing, info
-    return commit_draft(draft, owner, force=True)
+    worksheet, info = commit_draft(draft, owner, force=True)
+    if to_collections:
+        from .authored import AuthoredError, move_to_collections
+        try:
+            info['collection'] = move_to_collections(worksheet, owner)
+        except AuthoredError:
+            info['collection'] = None
+    return worksheet, info
 
 
 def unpush_worksheet(worksheet):

@@ -1,0 +1,40 @@
+{% load task_extras %}
+{# Строки подборки (задачи, рубрики, тексты). Контекст: rows, worksheet #}
+{% for row in rows %}
+{% with item=row.item %}
+<div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}">
+  <div class="ws-body">
+    <div class="ws-content">
+      {% if item.task_id %}
+      {% include 'worksheets/_common_condition.html' %}
+      <div class="task-line">
+        <span class="ws-num">{{ row.number }}.</span>
+        <span class="math-content task-text">{{ row.statement|web_text }}</span>
+      </div>
+      {% if row.subitems %}
+      <ol class="subitems">
+        {% for subitem in row.subitems %}
+        <li>
+          <span class="math-content">{{ subitem.text_latex|web_text }}</span>{{ subitem.text_latex|subitem_tail:forloop.last }}
+        </li>
+        {% endfor %}
+      </ol>
+      {% endif %}
+      {% include 'problems/_task_images.html' with images=row.statement_images %}
+      {% include 'problems/_task_answers.html' with task=item.task subitems=row.subitems hide_answers=True %}
+      {% include 'includes/task_usage_badge.html' with task=item.task %}
+      <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
+      {% elif item.is_rubric %}
+      <h3>{{ item.rubric }}</h3>
+      {% if item.rubric_note %}<p>{{ item.rubric_note }}</p>{% endif %}
+      {% else %}
+      <div class="math-content">{{ item.text_latex|web_text|linebreaksbr }}</div>
+      {% endif %}
+    </div>
+    {% if item.task_id and not item.task.variant_of_id %}
+    <div class="ws-actions">{% include 'includes/cart_button.html' with task=item.task %}</div>
+    {% endif %}
+  </div>
+</div>
+{% endwith %}
+{% endfor %}

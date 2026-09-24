@@ -86,6 +86,9 @@
     </select>
   </label>
   <button type="submit" name="apply" value="1" class="btn btn-small">Применить к выбранным</button>
+  <button type="submit" name="to_collections" value="1" class="btn btn-small btn-secondary"
+          title="Перенести в «Авторские листки» в подборках: содержимое и назначения не меняются"
+          onclick="return confirm('Перенести выбранные листки в подборки? Из «Моих листков» они исчезнут, назначения ученикам сохранятся.');">В подборки</button>
   <button type="submit" name="delete" value="1" class="btn btn-small btn-danger"
           onclick="return confirm('Удалить выбранные листки? Будут удалены и их назначения ученикам.');">Удалить выбранные</button>
 </form>
