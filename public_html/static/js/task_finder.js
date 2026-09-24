@@ -103,11 +103,18 @@
   });
 
   // Конструктор листка: после добавления задачи результаты перечитываются,
-  // чтобы добавленная строка исчезла из поиска.
+  // чтобы добавленная строка исчезла из поиска. Поиск активен, если задан
+  // любой из фильтров: текст, класс, тема или аудитория.
+  function searchActive() {
+    var params = new URLSearchParams(new FormData(form));
+    return ['q', 'grade', 'topic', 'who'].some(function (name) {
+      return params.getAll(name).some(function (value) { return value.trim() !== ''; });
+    });
+  }
   if (form.dataset.finderAnchor) {
     document.addEventListener('worksheet:updated', function (event) {
       if (event.detail && event.detail.finder) return;
-      if (form.querySelector('[name="q"]').value || form.querySelector('[name="grade"]').value) schedule(0);
+      if (searchActive()) schedule(0);
     });
   }
 })();
