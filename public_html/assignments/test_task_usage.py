@@ -107,6 +107,27 @@ class TaskUsageTests(TestCase):
             task_usage(self.teacher, self.tasks,
                        student_ids={self.student2.pk})[task.pk], [])
 
+    def test_independent_points_with_local_copy_count_for_original(self):
+        from independentworks.models import Attempt, Point, Run, Variant, Work
+        original = self.tasks[0]
+        copy = Task.objects.create(
+            text_latex=original.text_latex, variant_of=original,
+            created_by=self.teacher)
+        work = Work.objects.create(owner=self.teacher, title='СР')
+        run = Run.objects.create(
+            work=work, title='СР с аналогом', owner=self.teacher,
+            fingerprint='x', issued_at=timezone.now())
+        variant = Variant.objects.create(run=run, number=1, signature='s')
+        Point.objects.create(
+            variant=variant, position=1, label='1',
+            source_key=f't{copy.pk}', root_key='r', candidate_key='c')
+        Attempt.objects.create(run=run, variant=variant, student=self.student2)
+        for asked in ([original], [copy]):
+            usage = task_usage(self.teacher, asked)
+            self.assertEqual(
+                [(r.student, r.title) for r in usage[original.pk]],
+                [(self.student2, 'СР с аналогом')])
+
     def test_catalog_shows_badge_and_remembers_audience(self):
         self.assign(self.student)
         response = self.client.get(reverse('task_list'))
