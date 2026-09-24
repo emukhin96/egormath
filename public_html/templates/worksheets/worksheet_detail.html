@@ -273,42 +273,21 @@
 </div>
 
 <div class="card" id="add-tasks">
-  <h2>Добавить задачи</h2>
-  <form method="get" class="filters">
-    <div>
-      <label for="s_q">Поиск по базе</label>
-      <input type="text" name="q" id="s_q" value="{{ params.q|default:'' }}">
-    </div>
-    <div>
-      <label for="s_grade">Класс</label>
-      <input type="number" name="grade" id="s_grade" min="1" max="11" value="{{ params.grade|default:'' }}">
-    </div>
-    <div>
-      <label for="s_tag">Тег</label>
-      <input type="text" name="tag" id="s_tag" value="{{ params.tag|default:'' }}">
-    </div>
-    {% if audience_students or audience_groups %}
-    <div>
-      {% include 'includes/audience_select.html' %}
-    </div>
-    {% endif %}
-    <div><button type="submit" class="btn">Найти</button></div>
-    <div style="margin-left:auto">
-      <a class="btn" href="{% url 'task_create' %}?worksheet={{ worksheet.pk }}">Создать новую задачу</a>
-    </div>
-  </form>
+  <h2 class="worksheet-items-heading"><span>Добавить задачи</span><a class="linklike" href="#ws-items">↑ к задачам листка</a></h2>
+  {% include 'problems/_catalog_filters.html' with finder_anchor='add-tasks' %}
 
+  <div data-finder-target="results" id="finder-results">
   {% if search_active %}
     {% if found_tasks %}
-    <table class="list">
+    <table class="list finder-results">
       {% for task in found_tasks %}
-      <tr>
+      <tr data-task-row>
         <td>
           <div class="math-content task-text">{{ task.text_latex|web_text_preview:180 }}</div>
           <span class="task-meta"><a href="{% url 'task_detail' task.pk %}" title="Открыть задачу">#{{ task.pk }}</a>{% if task.grade_display %} · {{ task.grade_display }} класс{% endif %} {% include 'includes/task_usage_badge.html' %}</span>
         </td>
         <td style="white-space:nowrap">
-          <form method="post" action="{% url 'worksheet_add_task' worksheet.pk %}" class="inline-form">
+          <form method="post" action="{% url 'worksheet_add_task' worksheet.pk %}" class="inline-form" data-builder-action>
             {% csrf_token %}
             <input type="hidden" name="task_id" value="{{ task.pk }}">
             <button type="submit" class="btn btn-small">Добавить</button>
@@ -320,7 +299,37 @@
     {% else %}
     <p class="muted">Ничего не найдено.</p>
     {% endif %}
+  {% else %}
+    <p class="muted">Введите запрос, выберите класс или тему — результаты появятся здесь.</p>
   {% endif %}
+  </div>
+
+  <details class="ws-add-text quick-task" id="quick-task"{% if quick_task_open %} open{% endif %}>
+    <summary>+ Новая задача сразу в листок</summary>
+    <form method="post" action="{% url 'worksheet_quick_task' worksheet.pk %}" class="quick-task-form" data-builder-action data-reset-on-success>
+      {% csrf_token %}
+      <label>Условие (LaTeX)
+        <textarea name="text_latex" rows="3" required placeholder="Решите уравнение $x^2-5x+6=0$."></textarea>
+      </label>
+      <div class="quick-task-row">
+        <label>Ответ
+          <input type="text" name="answer_latex" placeholder="$2; 3$">
+        </label>
+        <label>Звёзды
+          <select name="stars" class="quick-select">{% for value, label in stars_choices %}<option value="{{ value }}"{% if value == 1 %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        </label>
+      </div>
+      <details class="ws-add-text">
+        <summary>Решение</summary>
+        <textarea name="solution_latex" rows="4"></textarea>
+      </details>
+      <p class="helptext">Класс и темы — как у листка. Подпункты, картинки и маски — в полном редакторе после добавления.</p>
+      <div class="form-buttons">
+        <button type="submit" class="btn">Добавить в листок</button>
+        <a class="btn btn-secondary" href="{% url 'task_create' %}?worksheet={{ worksheet.pk }}">Полный редактор</a>
+      </div>
+    </form>
+  </details>
 </div>
 
 <div class="card" id="assign-students">
@@ -426,7 +435,8 @@
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=3"></script>
 <script defer src="{% static 'js/builder.js' %}?v=9"></script>
-<script defer src="{% static 'js/worksheet_controls.js' %}?v=4"></script>
+<script defer src="{% static 'js/worksheet_controls.js' %}?v=5"></script>
+<script defer src="{% static 'js/task_finder.js' %}"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
 {% if assignments %}<script defer src="{% static 'js/teacher_progress.js' %}?v=6"></script>{% endif %}
 {% endblock %}
