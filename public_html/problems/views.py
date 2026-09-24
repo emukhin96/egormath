@@ -71,9 +71,11 @@ def task_list(request):
         'mask_help': MASK_HELP,
     })
     from assignments.checks import KINDS, PRESETS
+    from assignments.task_usage import attach_usage, audience_context
     ctx['mask_kinds'] = {**KINDS, **{k: k for k in PRESETS}}
     for task in page:
         task.taxonomy_json = dumps_state(task_taxonomy_state(task))
+    ctx.update(audience_context(request, attach_usage(request, page.object_list)))
     return render(request, 'problems/task_list.html', ctx)
 
 

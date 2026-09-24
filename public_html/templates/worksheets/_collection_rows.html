@@ -22,6 +22,7 @@
       {% endif %}
       {% include 'problems/_task_images.html' with images=row.statement_images %}
       {% include 'problems/_task_answers.html' with task=item.task subitems=row.subitems hide_answers=True %}
+      {% include 'includes/task_usage_badge.html' with task=item.task %}
       <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
       {% elif item.is_rubric %}
       <h3>{{ item.rubric }}</h3>

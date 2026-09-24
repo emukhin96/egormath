@@ -22,6 +22,11 @@
       <span class="ws-toggle-text">маски ответов</span>
     </label>
     {% endif %}
+    {% if rows and audience_students or rows and audience_groups %}
+    <form method="get" class="inline-form audience-form">
+      {% include 'includes/audience_select.html' %}
+    </form>
+    {% endif %}
     {% if can_edit %}
     <a class="btn btn-secondary" href="{% url 'collection_edit' collection.pk %}">Редактировать</a>
     {% endif %}

@@ -180,7 +180,7 @@ def assignment_list(request):
         students_total=Count('student', distinct=True), last_assigned=Max('assigned_at'), nearest_due=Min('due_at'),
         submitted_total=Count('pk', filter=Q(status=Assignment.STATUS_SUBMITTED)),
         reviewed_total=Count('pk', filter=Q(status=Assignment.STATUS_REVIEWED)),
-        queue_priority=Min('queue_order')).order_by('queue_priority', '-last_assigned', 'worksheet_id')
+        queue_priority=Min('queue_order')).order_by('-last_assigned', 'worksheet_id')
     from independentworks.integration import assignment_groups, assignment_runs
     from independentworks.models import Run, Work
     kind = request.GET.get('kind', '')
@@ -191,7 +191,9 @@ def assignment_list(request):
     independent_runs = assignment_runs(request.user, request.GET)
     independent_groups = assignment_groups(request.user, request.GET, runs=independent_runs)
     grouped += independent_groups
-    grouped.sort(key=lambda g: (g['queue_priority'], -g['last_assigned'].timestamp(), g['key']))
+    # Свежие выдачи сверху независимо от статуса: очередь проверки доступна
+    # плиткой «На проверке» и фильтром по статусу.
+    grouped.sort(key=lambda g: (-g['last_assigned'].timestamp(), g['key']))
     if kind == 'independent':
         stats = dict.fromkeys(stats, 0)
     for group in assignment_groups(request.user, {'kind': kind, 'owner': owner_id}, runs=independent_runs):

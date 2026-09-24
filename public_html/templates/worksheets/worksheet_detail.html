@@ -186,6 +186,7 @@
                   data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
                   title="Убрать все звёзды только в этом листке">сбросить звёзды</button></span>
         <span class="task-meta-item" data-mask-links></span>
+        <span class="task-meta-item">{% include 'includes/task_usage_badge.html' with task=item.task %}</span>
         <form method="post" class="inline-form task-meta-item" data-answer-policy-form
               action="{% url 'task_manage' item.task.pk %}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}">
           {% csrf_token %}
@@ -286,6 +287,11 @@
       <label for="s_tag">Тег</label>
       <input type="text" name="tag" id="s_tag" value="{{ params.tag|default:'' }}">
     </div>
+    {% if audience_students or audience_groups %}
+    <div>
+      {% include 'includes/audience_select.html' %}
+    </div>
+    {% endif %}
     <div><button type="submit" class="btn">Найти</button></div>
     <div style="margin-left:auto">
       <a class="btn" href="{% url 'task_create' %}?worksheet={{ worksheet.pk }}">Создать новую задачу</a>
@@ -299,7 +305,7 @@
       <tr>
         <td>
           <div class="math-content task-text">{{ task.text_latex|web_text_preview:180 }}</div>
-          <span class="task-meta"><a href="{% url 'task_detail' task.pk %}" title="Открыть задачу">#{{ task.pk }}</a>{% if task.grade_display %} · {{ task.grade_display }} класс{% endif %}</span>
+          <span class="task-meta"><a href="{% url 'task_detail' task.pk %}" title="Открыть задачу">#{{ task.pk }}</a>{% if task.grade_display %} · {{ task.grade_display }} класс{% endif %} {% include 'includes/task_usage_badge.html' %}</span>
         </td>
         <td style="white-space:nowrap">
           <form method="post" action="{% url 'worksheet_add_task' worksheet.pk %}" class="inline-form">

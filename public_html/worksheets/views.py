@@ -383,7 +383,7 @@ def worksheet_detail(request, pk):
     search_active = any(request.GET.get(k) for k in ('q', 'topic', 'grade', 'tag'))
     found_tasks = []
     if search_active:
-        found_tasks = filter_tasks(request.GET).exclude(pk__in=task_ids)[:15]
+        found_tasks = list(filter_tasks(request.GET).exclude(pk__in=task_ids)[:15])
 
     student_profiles = (Profile.students_for(request.user)
                         .select_related('user')
@@ -398,7 +398,11 @@ def worksheet_detail(request, pk):
     assignment_groups, individual_assignments = assignment_sections(assignments, groups)
     collection = Collection.objects.filter(worksheet=worksheet).select_related('source').first()
     from .authored import SOURCE_TITLE as AUTHORED_SOURCE, is_section
+    from assignments.task_usage import attach_usage, audience_context
+    usage_ctx = audience_context(request, attach_usage(
+        request, [item.task for item in items if item.task_id] + list(found_tasks)))
     return render(request, 'worksheets/worksheet_detail.html', {
+        **usage_ctx,
         'is_authored': bool(collection and collection.source.title == AUTHORED_SOURCE
                             and not is_section(collection)),
         'corpus_key': corpus_key_from_comment(worksheet.comment),
@@ -664,6 +668,8 @@ def collection_detail(request, pk):
         page_tasks += [row['item'].task for group in flat_groups
                        for row in group['rows'] if row['item'].task_id]
     cart_task_ids = [task.pk for task in page_tasks if not task.variant_of_id]
+    from assignments.task_usage import attach_usage, audience_context
+    usage_ctx = audience_context(request, attach_usage(request, page_tasks))
     sources = _collection_catalog(request.user)
     selected_source = next(
         (row for row in sources if row['source'].pk == collection.source_id),
@@ -673,6 +679,7 @@ def collection_detail(request, pk):
          if row['collection'].pk == collection.pk), None)
     from .authored import SOURCE_TITLE as AUTHORED_SOURCE, is_section
     return render(request, 'worksheets/collection_detail.html', {
+        **usage_ctx,
         'is_authored': (collection.source.title == AUTHORED_SOURCE
                         and not is_section(collection)),
         'is_owner': (collection.worksheet.owner_id == request.user.pk
