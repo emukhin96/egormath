@@ -383,7 +383,7 @@ def worksheet_detail(request, pk):
     search_active = any(request.GET.get(k) for k in ('q', 'topic', 'grade', 'tag'))
     found_tasks = []
     if search_active:
-        found_tasks = filter_tasks(request.GET).exclude(pk__in=task_ids)[:15]
+        found_tasks = list(filter_tasks(request.GET).exclude(pk__in=task_ids)[:15])
 
     student_profiles = (Profile.students_for(request.user)
                         .select_related('user')
@@ -397,7 +397,11 @@ def worksheet_detail(request, pk):
     from .recipients import assignment_sections
     assignment_groups, individual_assignments = assignment_sections(assignments, groups)
     collection = Collection.objects.filter(worksheet=worksheet).first()
+    from assignments.task_usage import attach_usage, audience_context
+    usage_ctx = audience_context(request, attach_usage(
+        request, [item.task for item in items if item.task_id] + list(found_tasks)))
     return render(request, 'worksheets/worksheet_detail.html', {
+        **usage_ctx,
         'worksheet': worksheet,
         'mask_help': MASK_HELP,
         'collection': collection,
@@ -592,6 +596,9 @@ def collection_detail(request, pk):
         })
     from .block_presentation import decorate_block_rows
     decorate_block_rows(rows)
+    from assignments.task_usage import attach_usage, audience_context
+    usage_ctx = audience_context(request, attach_usage(
+        request, [item.task for item in items if item.task_id]))
     sources = _collection_catalog(request.user)
     selected_source = next(
         (row for row in sources if row['source'].pk == collection.source_id),
@@ -600,6 +607,7 @@ def collection_detail(request, pk):
         (row for row in (selected_source['rows'] if selected_source else [])
          if row['collection'].pk == collection.pk), None)
     return render(request, 'worksheets/collection_detail.html', {
+        **usage_ctx,
         'collection': collection,
         'worksheet': collection.worksheet,
         'rows': rows,
