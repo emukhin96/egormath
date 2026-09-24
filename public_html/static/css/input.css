@@ -656,8 +656,8 @@
   }
 
   /* Складывающаяся таблица списка. Обёртка .catalog-table-wrap — контейнер
-     запроса, поэтому таблица складывается и в узкой карточке сетки, а не
-     только на узком экране: строка становится карточкой — чекбокс и
+     запроса (порог 760px), поэтому таблица складывается и в узкой карточке
+     сетки, и в контенте рядом с боковой панелью, а не только на телефоне: строка становится карточкой — чекбокс и
      главная ячейка (.stack-primary) в первой строке, остальные ячейки
      подписями «Метка: значение» (data-label) в строку с переносом; пустые
      ячейки не показываются, .row-actions — отдельной строкой. */
@@ -666,7 +666,7 @@
     margin-inline: calc(var(--space-4) * -1);
     padding-inline: var(--space-4);
   }
-  @container (max-width: 640px) {
+  @container (max-width: 760px) {
     .table-stack thead,
     .table-stack tr:has(> th) { display: none; }
     .table-stack, .table-stack tbody { display: block; width: 100%; }
@@ -696,8 +696,8 @@
     }
     .table-stack td.row-actions { flex: 1 0 100%; padding-top: var(--space-1) !important; white-space: normal; }
     .table-stack td:empty { display: none; }
-    .table-stack .cell-sub { display: inline; white-space: normal; }
-    .table-stack .cell-sub::before { content: " · "; }
+    .table-stack td .cell-sub { display: inline; white-space: normal; font-size: inherit; }
+    .table-stack td .cell-sub::before { content: " · "; }
     .table-stack td.num { text-align: left; }
   }
 
@@ -4350,7 +4350,7 @@
   .assignment-sheet-table .assignment-title-cell { min-width: 12rem; }
   .assignment-sheet-table .num { text-align: right; white-space: nowrap; }
   .assignment-sheet-table th.num { text-align: right; }
-  .assignment-sheet-table .cell-sub { display: block; font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+  .assignment-sheet-table .cell-sub { display: block; font-size: 0.8rem; color: var(--muted); }
   .assignment-sheet-table .cell-sub .badge { vertical-align: baseline; }
   .assignment-title {
     color: var(--accent-dark);
