@@ -274,6 +274,10 @@ class CollectionFlatViewTests(TestCase):
         self.assertIsNone(response.context['flat_groups'])
         self.assertContains(response, 'слишком много задач')
 
+    def test_flat_limit_fits_cart_limit(self):
+        from worksheets import cart, views
+        self.assertLessEqual(views.FLAT_ITEMS_LIMIT, cart.CART_ADD_MANY_LIMIT)
+
     def test_cart_add_many(self):
         tasks = list(Task.objects.order_by('pk'))
         response = self.client.post(reverse('cart_add_many'), {

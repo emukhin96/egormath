@@ -562,6 +562,8 @@ def _visible_collection(request, pk):
     return collection
 
 
+# Не больше, чем cart.CART_ADD_MANY_LIMIT: «Всё в корзину» отправляет все
+# задачи развёрнутого раздела одним запросом.
 FLAT_ITEMS_LIMIT = 400
 
 

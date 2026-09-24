@@ -107,7 +107,10 @@ def cart_add(request):
     return _respond(request, True, message, True)
 
 
-CART_ADD_MANY_LIMIT = 300
+# Столько же, сколько задач помещается в развёрнутый раздел подборок
+# (views.FLAT_ITEMS_LIMIT): кнопка «Всё в корзину» на такой странице
+# не должна упираться в лимит.
+CART_ADD_MANY_LIMIT = 400
 
 
 @teacher_required
