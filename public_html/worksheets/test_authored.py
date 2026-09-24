@@ -73,6 +73,31 @@ class AuthoredMoveTests(TestCase):
                 Worksheet.objects.create(title='Пустой', owner=self.teacher),
                 self.teacher)
 
+    def test_section_container_is_protected_from_teachers(self):
+        collection = move_to_collections(self.worksheet, self.teacher)
+        second = make_worksheet(self.other, title='Чужая')
+        second.grade = 6
+        second.save()
+        foreign = move_to_collections(second, self.other)
+        section = collection.parent
+        self.assertEqual(foreign.parent, section)
+        self.assertEqual(section.worksheet.owner.username, 'authored-sections')
+        self.assertFalse(section.worksheet.owner.is_active)
+        # Ни первый, ни второй учитель не могут удалить или править контейнер.
+        for username in ('teacher1', 'teacher2'):
+            self.client.login(username=username, password='pass12345')
+            response = self.client.post(
+                reverse('worksheet_delete', args=[section.worksheet_id]))
+            self.assertEqual(response.status_code, 404)
+            response = self.client.get(
+                reverse('worksheet_detail', args=[section.worksheet_id]))
+            self.assertEqual(response.status_code, 404)
+            response = self.client.get(
+                reverse('collection_edit', args=[section.pk]))
+            self.assertEqual(response.status_code, 403)
+        self.assertTrue(Collection.objects.filter(pk=section.pk).exists())
+        self.assertEqual(Collection.objects.filter(parent=section).count(), 2)
+
     def test_visibility_and_publish_toggle(self):
         collection = move_to_collections(self.worksheet, self.teacher)
         # Владелец видит, чужой учитель — нет; в «Моих листках» листка нет.
