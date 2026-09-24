@@ -169,11 +169,17 @@ def task_usage(teacher, tasks, *, student_ids=None):
                     url=reverse('worksheet_progress',
                                 args=[assignment.worksheet_id])))
 
-    # Самостоятельные: пункты варианта → попытки учеников.
+    # Самостоятельные: пункты варианта → попытки учеников. В source_key
+    # может стоять id локальной копии (аналог, созданный из подбора) —
+    # такие id ищем тоже и относим к оригиналу.
     from independentworks.models import Attempt, Point, Work
+    from problems.models import Task
+    to_root = {pk: pk for pk in root_ids}
+    to_root.update(dict(Task.objects.filter(variant_of_id__in=root_ids)
+                        .values_list('pk', 'variant_of_id')))
     key_filter = reduce(or_, (
         Q(source_key=f't{pk}') | Q(source_key__startswith=f't{pk}:')
-        for pk in root_ids))
+        for pk in to_root))
     points = list(Point.objects.filter(
         variant__run__work__in=Work.visible_to(teacher),
         variant__run__issued_at__isnull=False,
@@ -182,8 +188,9 @@ def task_usage(teacher, tasks, *, student_ids=None):
         variant_tasks = {}
         for variant_id, source_key in points:
             match = _POINT_TASK.match(source_key)
-            if match and int(match.group(1)) in root_ids:
-                variant_tasks.setdefault(variant_id, set()).add(int(match.group(1)))
+            root = to_root.get(int(match.group(1))) if match else None
+            if root is not None:
+                variant_tasks.setdefault(variant_id, set()).add(root)
         attempts = (Attempt.objects.filter(variant_id__in=variant_tasks)
                     .select_related('student', 'run'))
         if student_ids is not None:
