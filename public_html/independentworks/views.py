@@ -361,10 +361,14 @@ def pick(request, pk):
         task.pool_blocked, task.pool_partial = state['blocked'], state['partial']
         task.pool_used_parts = state['used']
         task.pool_label = ', '.join('№' + str(n) for n in sorted({numbers[c.position_id] for c in state['rows']}))
+    from assignments.task_usage import attach_usage, audience_context
+    selected_candidates = list(position.candidates.select_related('task').prefetch_related('task__subitems', 'task__images'))
     context = taxonomy_page_context(filter_state_from_params(request.GET))
+    context.update(audience_context(request, attach_usage(
+        request, recommended + same_topic + page.object_list + [c.task for c in selected_candidates])))
     context.update({'picker_tab': request.GET.get('tab', 'catalog' if any(k in request.GET for k in ('q', 'grade', 'topic')) or not base else 'recommended'), 'position': position, 'base': base, 'same_topic': same_topic[:30], 'topic_names': topic_names, 'recommended': recommended[:30], 'page': page, 'q': query,
                     'params': request.GET, 'preparation_query': preparation_query(request), 'grade_choices': Task.GRADE_CHOICES,
-                    'selected_candidates': position.candidates.select_related('task').prefetch_related('task__subitems', 'task__images')})
+                    'selected_candidates': selected_candidates})
     return render(request, 'independentworks/pick.html', context)
 
 

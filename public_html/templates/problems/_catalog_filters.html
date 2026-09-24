@@ -16,6 +16,11 @@
       <label>Тема</label>
       {% include 'includes/taxonomy_picker.html' with mode='filter' primary=False facets=False grades=False compact=True selected_json=selected_json %}
     </div>
+    {% if audience_students or audience_groups %}
+    <div>
+      {% include 'includes/audience_select.html' %}
+    </div>
+    {% endif %}
     <div><button type="submit" class="btn">Найти</button></div>
     <div><a class="btn btn-secondary" href="{% if position %}{% url 'independentworks:pick' position.pk %}{% else %}{% url 'task_list' %}{% endif %}">Сбросить</a></div>
   </form>
