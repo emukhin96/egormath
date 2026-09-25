@@ -395,6 +395,13 @@ class CollectionAnswerSourceTests(TestCase):
         response = self.page()
         self.assertNotContains(response, 'answer-alt')
 
+    def test_answer_comparison_keeps_case(self):
+        # «$A$» и «$a$» — разные ответы: редакторский вариант не теряется
+        self.add(author_answer_latex='$A$', answer_latex='$a$')
+        response = self.page()
+        self.assertContains(response, 'answer-alt')
+        self.assertContains(response, '$a$')
+
     def test_ai_only_answer_is_labelled_ai(self):
         self.add(answer_latex='Нет.', solution_latex='По чётности.')
         response = self.page()
