@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import IntegrityError, models, transaction
+from django.db.models import prefetch_related_objects
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -32,6 +33,7 @@ from problems.rubricator import (GRADE_LEVEL_TO_CODE, apply_worksheet_taxonomy,
                                  worksheet_taxonomy_state)
 from problems.views import filter_tasks
 
+from .collection_pages import build_chunks, section_pages
 from .corpus import corpus_key_from_comment
 from .forms import WorksheetForm
 from .import_tex import (TexImportError, create_worksheet,
@@ -618,8 +620,24 @@ def _visible_children(request, collection):
     return children
 
 
-def _collection_rows(items, number=0):
-    """Строки задач подборки: номер, подпункты, общее условие блока."""
+def _source_number(task, source_id):
+    """Номер задачи в задачнике подборки («3.15» у Мерзляка, «1.1» у ФИПИ)
+    из TaskSource; None, если ссылки на этот источник нет."""
+    if not source_id:
+        return None
+    for ref in task.source_refs.all():
+        if ref.source_id == source_id and ref.number.strip():
+            return ref.number.strip().lstrip('№').strip()
+    return None
+
+
+def _collection_rows(items, number=0, source_id=None):
+    """Строки задач подборки: номер, подпункты, общее условие блока.
+
+    ``label`` — то, что печатается перед условием: номер из задачника
+    (``source_id`` — источник подборки), а если его нет — сквозной
+    позиционный номер ``number``.
+    """
     rows = []
     for item in items:
         if item.task_id:
@@ -627,6 +645,8 @@ def _collection_rows(items, number=0):
         rows.append({
             'item': item,
             'number': number if item.task_id else None,
+            'label': ((_source_number(item.task, source_id) or str(number))
+                      if item.task_id else ''),
             'subitems': item.selected_subitems() if item.task_id else [],
         })
     from .block_presentation import decorate_block_rows
@@ -657,14 +677,33 @@ def _flat_groups(request, children):
              .filter(worksheet_id__in=[g['collection'].worksheet_id for g in groups],
                      deleted_at__isnull=True)
              .select_related('task')
-             .prefetch_related('task__subitems', 'task__images', 'subitems')
+             .prefetch_related('task__subitems', 'task__images', 'subitems',
+                               'task__source_refs')
              .order_by('worksheet_id', 'order', 'id'))
     for item in items:
         by_worksheet.setdefault(item.worksheet_id, []).append(item)
     for group in groups:
         group['rows'] = _collection_rows(
-            by_worksheet.get(group['collection'].worksheet_id, []))
+            by_worksheet.get(group['collection'].worksheet_id, []),
+            source_id=group['collection'].source_id)
     return groups
+
+
+def _section_nav(sections, chunks, source_id):
+    """Параграфы для боковой панели: страница и диапазон номеров задач."""
+    pages = section_pages(chunks)
+    nav, number = [], 0
+    for section in sections:
+        tasks = [item for item in section.items if item.task_id]
+        first = last = ''
+        if tasks:
+            first = _source_number(tasks[0].task, source_id) or str(number + 1)
+            last = (_source_number(tasks[-1].task, source_id)
+                    or str(number + len(tasks)))
+        number += len(tasks)
+        nav.append({'section': section, 'page': pages.get(section.index, 1),
+                    'first': first, 'last': last, 'total': len(tasks)})
+    return nav
 
 
 @teacher_required
@@ -677,16 +716,25 @@ def collection_detail(request, pk):
     collection = _visible_collection(request, pk)
     collection.catalog_title = _collection_title(collection)
     all_items = list(collection.worksheet.ordered_items())
-    page = Paginator(all_items, 25).get_page(request.GET.get('page'))
-    items = list(page.object_list)
+    prefetch_related_objects(all_items, 'task__source_refs')
+    # Страница — параграф (рубрика «§ N» и её задачи), а не 25 элементов
+    # подряд; без рубрик — прежние куски по 25.
+    sections, chunks = build_chunks(all_items)
+    page = Paginator(chunks or [None], 1).get_page(request.GET.get('page'))
+    chunk = page.object_list[0] if chunks else None
     children = _visible_children(request, collection)
     # Пустой технический раздел с единственным продолжением не заставляет
     # пользователя проходить ещё один экран дерева.
     if not all_items and len(children) == 1:
         return redirect('collection_detail', pk=children[0].pk)
-    rows = _collection_rows(
-        items, number=sum(bool(item.task_id)
-                          for item in all_items[:page.start_index() - 1]))
+    # Строки по блокам страницы (параграф или его часть — со своим заголовком)
+    page_blocks, number = [], chunk.first_task_number if chunk else 0
+    for block in (chunk.blocks if chunk else []):
+        block_rows = _collection_rows(
+            block.items, number=number, source_id=collection.source_id)
+        number += block.tasks_total
+        page_blocks.append({'block': block, 'rows': block_rows})
+    rows = [row for entry in page_blocks for row in entry['rows']]
     flat_groups = None
     if children and request.GET.get('view') != 'tree':
         flat_groups = _flat_groups(request, children)
@@ -715,9 +763,17 @@ def collection_detail(request, pk):
         'collection': collection,
         'worksheet': collection.worksheet,
         'rows': rows,
-        # Трёхзначные номера не помещаются в стандартную колонку 2rem
-        'wide_numbers': max(
-            (row['number'] or 0 for row in rows), default=0) >= 100,
+        'page_blocks': page_blocks,
+        'chunk': chunk,
+        'tasks_total': sum(1 for item in all_items if item.task_id),
+        'section_nav': (_section_nav(sections, chunks, collection.source_id)
+                        if any(s.heading is not None for s in sections)
+                        else []),
+        # Номера вроде «127» или «3.15» не помещаются в колонку 2rem
+        'wide_numbers': any(
+            len(row['label']) > 3
+            for row in rows + [r for g in (flat_groups or [])
+                               for r in g['rows']]),
         'page': page,
         'children': children,
         'flat_groups': flat_groups,
