@@ -17,6 +17,11 @@ def lock_assignment_pages(assignment, now=None):
     CanvasPage.objects.filter(
         submission__assignment=assignment, locked_at__isnull=True,
     ).update(locked_at=now or timezone.now())
+    # update() не даёт сигналов: доска ученика узнаёт о заморозке через файл-версию.
+    from livefile import files as livefiles
+    for task_id in CanvasPage.objects.filter(submission__assignment=assignment).values_list(
+            'submission__task_id', flat=True).distinct():
+        livefiles.touch('board', assignment.pk, task_id)
 
 
 def assignment_page_stats(assignment):

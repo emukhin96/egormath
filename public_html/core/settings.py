@@ -8,6 +8,8 @@
 """
 
 import os
+import sys
+import tempfile
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # public_html/
@@ -64,6 +66,7 @@ INSTALLED_APPS = [
     'independentworks',
     'workaudit',
     'canvas',
+    'livefile',
 ]
 
 MIDDLEWARE = [
@@ -167,6 +170,15 @@ if IS_PRODUCTION:
 # раздаются только через view с проверкой прав.
 MEDIA_ROOT = SITE_ROOT / 'media'
 MEDIA_URL = '/media/'
+
+# Файлы-версии живых страниц (см. livefile/files.py): лежат ВНУТРИ
+# public_html, чтобы на проде их отдавал Apache без запуска Django.
+# Содержимое — только метка времени; сами файлы в .gitignore.
+LIVE_FILE_DIR = BASE_DIR / 'live'
+if len(sys.argv) > 1 and sys.argv[1] == 'test':
+    # Тесты создают назначения и проведения пачками — их файлы-версии
+    # не должны засорять рабочий каталог.
+    LIVE_FILE_DIR = Path(tempfile.mkdtemp(prefix='egormath-live-'))
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

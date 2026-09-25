@@ -20,6 +20,7 @@ from accounts.decorators import get_role
 from accounts.models import Profile
 from assignments.models import Assignment
 from assignments.views import _get_or_create_submission, _visible_task_item
+from livefile import etags
 from problems.models import Task
 
 from . import services
@@ -88,7 +89,7 @@ def pages(request, pk, task_id):
     pages = _pages(assignment, task_id)
     images = services.task_images(task_id)
     etag = services.pages_etag(pages, access, images)
-    if request.headers.get('If-None-Match') == etag:
+    if etags.matches(request, etag):
         return HttpResponseNotModified()
     response = JsonResponse({
         'ok': True,

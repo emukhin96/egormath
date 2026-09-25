@@ -1,0 +1,6 @@
+# Файлы-версии живых страниц (livefile/files.py). Браузер опрашивает их
+# каждые несколько секунд, поэтому никакого кэширования: ни в браузере,
+# ни у промежуточных прокси. Сами *.txt в git не попадают (.gitignore).
+<IfModule mod_headers.c>
+    Header set Cache-Control "no-store, max-age=0"
+</IfModule>

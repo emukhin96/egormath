@@ -8,6 +8,7 @@ from django.template.loader import render_to_string
 from django.views.decorators.http import require_POST
 from django.views.decorators.cache import never_cache
 from accounts.decorators import teacher_required
+from livefile import etags
 from accounts.models import StudentGroup
 from worksheets.models import Worksheet
 from .models import Assignment, Review, Submission, SubmissionCheckAttempt
@@ -93,7 +94,7 @@ def task_attempts(request, pk, task_id):
     version = answer_versions(assignment, {item.pk}).get(str(item.pk), '') + str(point_id)
     grade = list(assignment.submissions.filter(task_id=task_id).values_list('review__grade', 'review__comment'))
     etag = '"' + hashlib.sha256((version + repr(grade)).encode()).hexdigest() + '"'
-    if request.headers.get('If-None-Match') == etag:
+    if etags.matches(request, etag):
         return HttpResponseNotModified()
     row = next((r for r in _assignment_rows(assignment, with_review=True, item_ids={item.pk}) if r['task']), None)
     if row is None:
@@ -174,7 +175,7 @@ def worksheet_progress(request, worksheet_id):
                  [(g['item'].pk, g['item'].task_id, g['item'].order, g['item'].task.updated_at,
                    [(c['owner'].pk, c['owner'].answer_mask, c['label']) for c in g['columns']]) for g in groups_of_points]]
         etag = '"' + hashlib.sha256(json.dumps(state, default=str).encode()).hexdigest() + '"'
-        if request.headers.get('If-None-Match') == etag:
+        if etags.matches(request, etag):
             return HttpResponseNotModified()
     people = progress_people(groups_of_points, assignments.order_by('student__last_name', 'student__username'))
     context = {'worksheet': worksheet, 'items': items, 'point_groups': groups_of_points, 'people': people,
@@ -219,7 +220,7 @@ def progress_overview(request):
     if request.GET.get('fragment') and student:
         html = render_to_string('assignments/_student_progress_tables.html', context, request=request)
         etag = '"' + hashlib.sha256(html.encode()).hexdigest() + '"'
-        if request.headers.get('If-None-Match') == etag:
+        if etags.matches(request, etag):
             return HttpResponseNotModified()
         from django.http import HttpResponse
         response = HttpResponse(html)

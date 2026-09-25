@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static task_extras %}
+{% load static task_extras livefile %}
 {% block title %}{{ worksheet.title }} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/worksheet_detail.html' %}{% endblock %}
 {% block content %}
@@ -341,7 +341,7 @@
 
   {% if assignments %}
   <h2><a href="{% url 'worksheet_progress' worksheet.pk %}">Прогресс</a></h2>
-  <div data-progress-table data-progress-url="{% url 'worksheet_progress' worksheet.pk %}?manage=1">
+  <div data-progress-table data-progress-url="{% url 'worksheet_progress' worksheet.pk %}?manage=1" data-live-file="{% live_file 'worksheet' worksheet.pk %}">
     {% include 'assignments/_progress_table.html' with people=progress_people point_groups=point_groups manage_status=True %}
   </div>
   {% include 'assignments/_progress_dialog.html' %}

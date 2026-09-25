@@ -21,6 +21,7 @@ from django.views.decorators.http import require_GET
 from accounts.decorators import teacher_required
 from accounts.models import StudentGroup
 from assignments.models import Assignment
+from livefile import etags
 from worksheets.models import Worksheet
 
 from . import services
@@ -143,7 +144,7 @@ def worksheet_boards_live(request, worksheet_id):
         sorted(per_task.items()),
     ]).encode()).hexdigest()
     etag = f'"{signature}"'
-    if request.headers.get('If-None-Match') == etag:
+    if etags.matches(request, etag):
         return HttpResponseNotModified()
     if since is None:
         # Первая загрузка: JSON рисунка только одной последней страницы — для миниатюры

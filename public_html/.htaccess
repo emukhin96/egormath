@@ -26,6 +26,11 @@ RewriteRule ^static/(.*)$ /staticfiles/$1 [L]
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
+# 2a) Файлы-версии живых страниц (live/<токен>.txt, см. livefile/files.py):
+#     существующие отдал пункт 2; отсутствующий — 404 сразу, без запуска
+#     Django. Заголовки для них — в live/.htaccess.
+RewriteRule ^live/ - [R=404,L]
+
 # 3) Предотвращаем зацикливание
 RewriteCond %{REQUEST_URI} !^/wsgi.py(?:/|$)
 

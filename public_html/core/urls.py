@@ -5,6 +5,7 @@ from django.urls import include, path
 from django.views.generic.base import RedirectView
 
 from accounts import views as accounts_views
+from livefile import views as livefile_views
 from worksheets import views as worksheets_views
 
 
@@ -33,4 +34,6 @@ urlpatterns = [
     path('independent-works/', include('independentworks.urls')),
     path('s/<str:token>/', worksheets_views.public_worksheet, name='public_worksheet'),
     path('s/<str:token>/pdf/', worksheets_views.public_worksheet_pdf, name='public_worksheet_pdf'),
+    # Файлы-версии живых страниц: на проде отдаёт Apache, это — для runserver.
+    path('live/<str:token>.txt', livefile_views.serve, name='live_file'),
 ]

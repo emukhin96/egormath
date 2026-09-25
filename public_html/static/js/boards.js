@@ -13,6 +13,8 @@
   var status = document.querySelector('[data-boards-status]');
   var dialog = document.getElementById('boards-dialog');
   var since = null, etag = null, timer = null, lastActivity = Date.now(), stopped = false, busy = false;
+  /* Файл-версия листка (data-live-file): пока он не менялся, boards_live не дёргаем. */
+  var watch = window.EgorLiveFile ? EgorLiveFile.watch(root) : null;
   var latest = {};          /* assignment → последняя страница (payload) */
   var COPY_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   var pagesOf = {};         /* assignment → {task: {task_no, canvas_url, count}} */
@@ -112,14 +114,11 @@
       el.querySelector('[data-board-updated]').textContent = ago(el.dataset.updated);
     });
   }
-  function poll() {
-    if (busy || stopped || document.hidden) return;
-    if (Date.now() - lastActivity > IDLE) { stop(); return; }
-    busy = true;
+  function fetchLive() {
     var url = liveUrl + (liveUrl.indexOf('?') >= 0 ? '&' : '?') + (since ? 'since=' + encodeURIComponent(since) : '');
     var headers = {'X-Requested-With': 'XMLHttpRequest'};
     if (etag) headers['If-None-Match'] = etag;
-    fetch(url, {credentials: 'same-origin', headers: headers})
+    return fetch(url, {credentials: 'same-origin', headers: headers})
       .then(function (r) {
         if (r.status === 304) return null;
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -128,6 +127,16 @@
       })
       .then(function (data) {
         if (data && data.ok) { apply(data); since = data.since; }
+        if (watch) watch.ack();
+      });
+  }
+  function poll() {
+    if (busy || stopped || document.hidden) return;
+    if (Date.now() - lastActivity > IDLE) { stop(); return; }
+    busy = true;
+    (watch ? watch.changed() : Promise.resolve(true))
+      .then(function (changed) { return changed ? fetchLive() : null; })
+      .then(function () {
         if (status) status.textContent = 'Доски обновляются каждые 5 секунд. Нажмите на доску, чтобы открыть её с инструментами.';
       })
       .catch(function () { if (status) status.textContent = 'Нет связи с сервером — попробуем снова через несколько секунд.'; })
