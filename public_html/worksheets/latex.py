@@ -169,12 +169,6 @@ def _combined_answer(task, subitems):
                     _for_task_opt(s.effective_answer_latex))
         for i, s in enumerate(subitems) if s.effective_answer_latex
     )
-    # shortstack не переносит длинный текст. Ширина minipage вычисляется
-    # при печати: в таблице ответов linewidth равен ширине её ячейки.
-    if any(len(part) > 70 for part in parts):
-        body = ' \\mbox{}\\\\\n'.join(parts)
-        return (r'\begin{minipage}[t]{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}'
-                '\n\\raggedright\n' + body + '\n\\end{minipage}')
     return _join_labeled(parts, 'stack')
 
 

@@ -1,12 +1,16 @@
 """Структура нового профиля и сохранность вариантов при загрузке."""
 from dataclasses import asdict
-from django.test import SimpleTestCase, TestCase
+import hashlib
+from unittest.mock import patch
+from django.test import RequestFactory, SimpleTestCase, TestCase
+from problems.feoktistov_parser import _answer_markers, _known_answer_work, _unbalanced_math
 from problems.forms import TextbookBundleUploadForm
 from problems.models import TextbookTaskDraft, Topic
 from problems.tests import make_teacher
 from problems.textbook_import import create_batch_from_bundle, commit_batch
 from problems.textbook_parser import bundle_from_text
 from worksheets.models import Collection
+from problems.views import _section_nav_rows
 
 SOURCE = r'''
 \section*{САМОСТОЯТЕЛЬНАЯ РАБОТА № 1 Свойства функций}
@@ -55,6 +59,82 @@ SOURCE = r'''
 '''
 
 class FeoktistovParserTests(SimpleTestCase):
+    def _three_tasks(self, answers):
+        return (r'\section*{САМОСТОЯТЕЛЬНАЯ РАБОТА № 1}'
+                '\nВариант 1\n1. Вычислите: а) x; б) y.\n'
+                '2. Найдите точку.\n3. Вычислите: а) x; б) y.\n'
+                r'\section*{ОТВЕТЫ}\section*{Самостоятельная работа № 1}'
+                '\nВариант 1. ' + answers)
+
+    def test_answer_numbers_after_line_break_keep_correct_offsets(self):
+        source = self._three_tasks(r'''1. а) \(x\); б) \(y\).\\
+2. (6; -3).\\
+3. а) \(1\);\\
+б) \(2\).''')
+        tasks = bundle_from_text('feoktistov', source).tasks
+        self.assertEqual(tasks[1].author_answer_latex, '(6; -3)')
+        self.assertEqual([s.author_answer_latex for s in tasks[2].subitems], ['$1$', '$2$'])
+        self.assertNotIn('(6; -3)', tasks[0].author_answer_latex)
+        formula = '1. ' + r'\(\begin{array}{l}x=1\\' + '\n2. y=2' + r'\end{array}\).'
+        self.assertEqual([m.external_id for m in _answer_markers(formula, {'1', '2'})], ['1'])
+
+    def test_missing_group_and_damaged_heading_are_reported(self):
+        source = SOURCE.replace('В ар и ант 1.', 'В ар и - ант 1.')
+        bundle = bundle_from_text('feoktistov', source)
+        self.assertIn('sr/01/v1: пустая группа авторских ответов',
+                      bundle.diagnostics['feoktistov_structure_issues'])
+        self.assertIn('sr/01/v1/001', bundle.diagnostics['feoktistov_missing_answer_ids'])
+        previous = next(t for t in bundle.tasks if t.external_id == 'sr/01/prep/001')
+        self.assertIn('В ответе остался обломок заголовка варианта', previous.warnings)
+
+    def test_duplicate_answer_group_is_not_overwritten(self):
+        source = SOURCE.replace('В ар и ант 1. 1. 5.', 'Вариант 1. 1. 5. Вариант 1. 1. 9.')
+        with self.assertRaisesMessage(ValueError, 'Повторная группа ответов: sr/01/v1'):
+            bundle_from_text('feoktistov', source)
+
+    def test_known_scan_repairs_are_hash_gated_and_preserve_original(self):
+        source = (r'\section*{САМОСТОЯТЕЛЬНАЯ РАБОТА № 17}'
+                  '\nВариант 3\n1. Найдите число.\n'
+                  r'\section*{ОТВЕТЫ}\section*{Самостоятельная работа № 17}'
+                  '\nВ а - риант 3. 1. 7.')
+        self.assertEqual(bundle_from_text('feoktistov', source).tasks[0].author_answer_latex, '')
+        with patch('problems.feoktistov_parser.SOURCE_SHA256', hashlib.sha256(source.encode()).hexdigest()):
+            bundle = bundle_from_text('feoktistov', source)
+        self.assertEqual(bundle.tasks[0].author_answer_latex, '7')
+        self.assertIn('В а - риант', bundle.diagnostics['feoktistov_original_answer_works']['sr/17'])
+        repaired = _known_answer_work('sr', 12, '')
+        self.assertFalse(_unbalanced_math(repaired))
+        self.assertEqual(repaired.count('\\begin{cases}'), 4)
+        source = (r'\section*{САМОСТОЯТЕЛЬНАЯ РАБОТА № 12}'
+                  '\nВариант 1\n4. Задайте систему.\n'
+                  r'\section*{ОТВЕТЫ}\section*{Самостоятельная работа № 12}'
+                  '\n' + repaired)
+        answer = bundle_from_text('feoktistov', source).tasks[0].author_answer_latex
+        self.assertIn(r'\begin{cases}', answer)
+        self.assertIn(r'\end{cases}$', answer)
+        self.assertNotIn(r'\right$', answer)
+
+    def test_unmatched_answer_labels_stay_outside_math(self):
+        source = self._three_tasks(r'1. а) \(\frac{x}{2}\); б) \(y\); в) \(z\).')
+        task = bundle_from_text('feoktistov', source).tasks[0]
+        self.assertIn('Не совпали подпункты условия и решения', task.warnings)
+        self.assertNotRegex(task.author_answer_latex, r'[а-я]\s*\$(?:\\displaystyle\s*)?\)')
+        self.assertIn('а)', task.author_answer_latex)
+        self.assertIn(r'\frac{x}{2}', task.author_answer_latex)
+
+    def test_suspect_following_number_inside_math_gets_specific_warning(self):
+        source = self._three_tasks(r'1. \(x=1. 2. y=2\).')
+        bundle = bundle_from_text('feoktistov', source)
+        self.assertIn('В ответе возможны следующие номера: 2', bundle.tasks[0].warnings)
+        self.assertEqual(bundle.diagnostics['feoktistov_missing_answers_by_work'], {'sr/01': 2})
+
+    def test_non_variant_navigation_keeps_compact_title(self):
+        for path in (['Глава 1', '§ 2', 'Квадратные уравнения'],
+                     ['Алгебра', 'Функции', 'Графики']):
+            leaf = {'path': path, 'title': path[-1], 'count': 1, 'is_leaf': True, 'token': 'test'}
+            row = _section_nav_rows([leaf], RequestFactory().get('/'), '')[0]
+            self.assertEqual(row['title'], path[-1])
+
     def test_local_numbers_theory_and_answer_choices(self):
         bundle = bundle_from_text('feoktistov', SOURCE)
         by_id = {t.external_id: t for t in bundle.tasks}
