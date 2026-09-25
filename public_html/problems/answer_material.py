@@ -23,10 +23,14 @@ def _clean(value):
 
 
 def _same(left, right):
-    """Одинаковые по сути ответы: «$0$» и «$0$.» — одно и то же."""
+    """Одинаковые по сути ответы: «$0$» и «$0$.» — одно и то же.
+
+    Регистр сохраняется: «$A$» и «$a$» — разные ответы, как и команды
+    LaTeX с заглавной буквой.
+    """
     def key(value):
         value = re.sub(r'\s+', ' ', _clean(value))
-        return value.rstrip('.').strip().casefold()
+        return value.rstrip('.').strip()
     return key(left) == key(right)
 
 
