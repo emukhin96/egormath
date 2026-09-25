@@ -141,6 +141,29 @@ class AssignmentSignalTests(LiveFileBase):
             page.save(update_fields=['teacher_elements', 'teacher_version', 'teacher_updated_at'])
         self.assertNotEqual(self.stamp(*board), board_before)
 
+    def test_assignment_status_change_touches_student_boards(self):
+        board = ('board', self.assignment.pk, self.task.pk)
+        files.url(*board)
+        board_before = self.stamp(*board)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assignment.status = Assignment.STATUS_RETURNED
+            self.assignment.save(update_fields=['status'])
+        self.assertNotEqual(self.stamp(*board), board_before, 'права на доске зависят от статуса')
+
+    def test_worksheet_structure_changes_touch_worksheet(self):
+        key = ('worksheet', self.worksheet.pk)
+        with self.captureOnCommitCallbacks(execute=True):
+            second = WorksheetItem.objects.create(worksheet=self.worksheet, task=Task.objects.create(
+                text_latex='Ещё задача', created_by=self.teacher), order=2)
+        added = self.stamp(*key)
+        self.assertNotEqual(added, self.before[key])
+        self.client.force_login(self.teacher)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(reverse('worksheet_reorder', args=[self.worksheet.pk]),
+                                        {'order': f'{second.pk},{self.item.pk}'})
+        self.assertEqual(response.status_code, 200, response.content[:200])
+        self.assertNotEqual(self.stamp(*key), added, 'bulk_update порядка идёт мимо сигналов')
+
     def test_worksheet_progress_fragment_returns_304_with_gzip_suffix(self):
         self.client.force_login(self.teacher)
         url = reverse('worksheet_progress', args=[self.worksheet.pk])

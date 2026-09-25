@@ -9,13 +9,15 @@
 - ``student:<user pk>`` — прогресс ученика на ``/assignments/progress/``;
 - ``board:<assignment pk>:<task pk>`` — слой учителя на доске ученика
   (меняется только когда учитель рисует, замораживает или удаляет
-  страницы, чтобы собственные штрихи ученика не гоняли его за JSON);
+  страницы либо меняется статус назначения — права на доске зависят от
+  него; собственные штрихи ученика его не трогают);
 - ``run:<pk>`` — прогресс самостоятельной. Исправления живут в другом
   проведении, но показываются в таблице исходного, поэтому трогаем и
   проведение корня попытки.
 
-Записи через ``QuerySet.update()`` сигналов не дают — для них ``touch``
-вызывается явно в сервисах (самостоятельные, заморозка страниц доски).
+Записи через ``QuerySet.update()``/``bulk_update()`` сигналов не дают —
+для них ``touch`` вызывается явно (самостоятельные, заморозка страниц
+доски, порядок и мягкое удаление элементов листка).
 """
 from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
@@ -24,6 +26,7 @@ from assignments.models import (Assignment, Review, Submission, SubmissionCheckA
                                 SubmissionPart, SubmissionPhoto)
 from canvas.models import CanvasPage
 from independentworks.models import Answer, AnswerCheckAttempt, Attempt, Photo, Run
+from worksheets.models import WorksheetItem
 
 from . import files
 
@@ -68,6 +71,21 @@ def _touch_attempt(attempt_id):
 @receiver([post_save, post_delete], sender=Assignment)
 def assignment_changed(sender, instance, **kwargs):
     files.touch_assignment(instance.pk, instance.worksheet_id, instance.student_id)
+    # Статус назначения (отправлено, возвращено, проверено) меняет права на
+    # доске ученика — открытая доска должна перечитать JSON.
+    touch_boards(instance.pk, instance.worksheet_id)
+
+
+def touch_boards(assignment_id, worksheet_id):
+    for task_id in WorksheetItem.objects.filter(worksheet_id=worksheet_id, task__isnull=False).values_list(
+            'task_id', flat=True).distinct():
+        files.touch('board', assignment_id, task_id)
+
+
+@receiver([post_save, post_delete], sender=WorksheetItem)
+def worksheet_item_changed(sender, instance, **kwargs):
+    """Состав и порядок задач — колонки обзора прогресса и дашборда досок."""
+    files.touch('worksheet', instance.worksheet_id)
 
 
 @receiver(m2m_changed, sender=Assignment.hidden_items.through)

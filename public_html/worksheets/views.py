@@ -19,6 +19,7 @@ from django.views.decorators.http import require_POST, require_http_methods
 from django.utils.dateparse import parse_date
 
 from accounts.decorators import get_role, teacher_required
+from livefile import files as livefiles
 from accounts.models import Profile, StudentGroup
 from assignments.models import Assignment, locked_check_visibility
 from problems.models import Task, Topic, topic_tree
@@ -1001,6 +1002,7 @@ def soft_remove_item(worksheet, item):
         if item.task_id and item.task.block_id:
             worksheet.items.filter(task__block_id=item.task.block_id).update(
                 deleted_at=timezone.now())
+            livefiles.touch('worksheet', worksheet.pk)
         else:
             item.deleted_at = timezone.now()
             item.save(update_fields=['deleted_at'])
@@ -1144,6 +1146,7 @@ def worksheet_move_item(request, pk, item_id, direction):
         for pos, it in enumerate(ordered, 1):
             it.order = pos * 10
         WorksheetItem.objects.bulk_update(ordered, ['order'])
+        livefiles.touch('worksheet', pk)
     return redirect('worksheet_detail', pk=pk)
 
 
@@ -1187,6 +1190,7 @@ def worksheet_reorder(request, pk):
             item.order = (pos + 1) * 10
             changed.append(item)
     WorksheetItem.objects.bulk_update(changed, ['order'])
+    livefiles.touch('worksheet', pk)
     return JsonResponse({'ok': True, 'updated': len(changed)})
 
 
@@ -1629,6 +1633,8 @@ def worksheet_recipient_visibility(request, pk, kind, recipient_id):
                 changes = settings_form.changes()
                 if changes:
                     worksheet.assignments.filter(pk__in=[a.pk for a in targets]).update(**changes)
+                    for target in targets:
+                        livefiles.touch_assignment(target.pk, worksheet.pk, target.student_id)
             for target in targets:
                 target.hidden_items.remove(*active_ids)
                 target.hidden_items.add(*hidden_ids)
