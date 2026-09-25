@@ -191,6 +191,7 @@ class TaskDraft:
     stars: int = 0
     subitems: list[SubitemDraft] = field(default_factory=list)
     author_answer_latex: str = ""
+    answer_mask: str = ""
     author_solution_latex: str = ""
     images: list[str] = field(default_factory=list)
     exam_item_codes: list[str] = field(default_factory=list)
@@ -3329,6 +3330,9 @@ def bundle_from_text(
     elif profile == "merzlyak":
         from .merzlyak_parser import parse_merzlyak
         tasks, diagnostics = parse_merzlyak(tasks_text)
+    elif profile == "feoktistov":
+        from .feoktistov_parser import parse_feoktistov
+        tasks, diagnostics = parse_feoktistov(tasks_text)
     elif profile == "ziv":
         tasks, diagnostics = parse_ziv(tasks_text)
     elif profile == "ostromogilsky":
@@ -3535,7 +3539,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--profile", required=True,
-        choices=("galitsky", "merzlyak", "ziv", "shestakov", "ostromogilsky",
+        choices=("galitsky", "merzlyak", "feoktistov", "ziv", "shestakov", "ostromogilsky",
                  "ostromogilsky_ege"))
     parser.add_argument("--tasks", required=True, type=Path)
     parser.add_argument("--solutions", type=Path)

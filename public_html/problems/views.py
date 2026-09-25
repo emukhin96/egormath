@@ -1039,6 +1039,10 @@ def _section_nav_rows(collection_groups, request, selected_token):
             continue
         work = leaf['path'][0]
         title = leaf['path'][-1] if len(leaf['path']) > 1 else leaf['title']
+        # Только варианты требуют уточнения работы; названия глав и
+        # параграфов остальных книг сохраняют прежний компактный вид.
+        if re.fullmatch(r'(?:Вариант\s+\d+|Подготовительный вариант)', title, re.I):
+            title = ' › '.join(leaf['path'][1:]) or title
         row = {
             'work': work,
             'title': title,
