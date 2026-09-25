@@ -76,21 +76,21 @@
   function stamp(){var status=document.querySelector('[data-live-status]');if(status)status.textContent='Обновлено в '+new Date().toLocaleTimeString();}
   /* Обратный отсчёт самостоятельной считается в браузере (data-remaining-until):
      иначе фрагмент менялся бы каждую секунду и ETag/файл-версия не работали бы.
-     Когда время вышло, состояние меняет сервер — просим полный опрос. */
+     Когда время вышло, состояние меняет сервер — просим полный опрос и
+     повторяем его, пока сервер не уберёт отсчёт (сбой запроса, расхождение часов). */
   function tickRemaining(){
     var now=Date.now();
     document.querySelectorAll('[data-remaining-until]').forEach(function(el){
-      var left=Math.max(0,Math.round((Date.parse(el.dataset.remainingUntil)-now)/1000));
+      var left=Math.max(0,Math.floor((Date.parse(el.dataset.remainingUntil)-now)/1000));
       if(isNaN(left))return;
       el.textContent=Math.floor(left/60)+':'+String(left%60).padStart(2,'0');
-      if(left===0&&!el.dataset.expired){el.dataset.expired='1';force=true;}
+      if(left===0)force=true;
     });
   }
   async function poll(){
     if(document.hidden||busy||grading)return;busy=true;var pollEpoch=gradeEpoch;
     try{
       if(watch&&!force&&!(await watch.changed())){stamp();return;}
-      force=false;
       var review=document.querySelector('[data-review-live-url]');
       if(review){var url=new URL(review.dataset.reviewLiveUrl,location.href);url.searchParams.set('versions',JSON.stringify(versions));var data=await(await request(url)).json();versions=data.versions||{};Object.entries(data.rows).forEach(([id,html])=>{document.querySelectorAll('[data-live-answer="'+id+'"]').forEach(root=>replace(root,html));});}
       var table=document.querySelector('[data-progress-overview]')||document.querySelector('[data-progress-table]');
@@ -100,6 +100,7 @@
         var polledDetail=detailUrl;var response=await request(polledDetail,{headers:etags[polledDetail]?{'If-None-Match':etags[polledDetail]}:{}});if(response.status!==304){var html=await response.text();if(dialog.open&&detailUrl===polledDetail&&!grading&&pollEpoch===gradeEpoch){replace(dialog.querySelector('[data-progress-detail]'),html);etags[polledDetail]=response.headers.get('ETag');}}
       }
       if(watch)watch.ack();
+      force=false;
       stamp();
     }catch(error){var status=document.querySelector('[data-live-status]');if(status)status.textContent='Связь прервана. Повторим обновление автоматически.';}finally{busy=false;}
   }

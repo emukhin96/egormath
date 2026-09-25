@@ -649,7 +649,7 @@
       .then(function (data) {
         if (!data || !data.ok) return false;
         return self.merge(data);
-      }).catch(function () { return false; })
+      }).catch(function () { return null; })   /* null — сбой сети/JSON, false — без изменений */
       .finally(function () { self.reloading = false; });
   };
 
@@ -2025,7 +2025,9 @@
       w.polling = true;
       w.watch.changed().then(function (changed) {
         if (!changed) return null;
-        return Promise.resolve(w.reload()).then(function () { w.watch.ack(); });
+        /* Версию подтверждаем только после удачного ответа: иначе сорвавшийся
+           запрос скрыл бы слой учителя до его следующего изменения. */
+        return Promise.resolve(w.reload()).then(function (result) { if (result !== null) w.watch.ack(); });
       }).catch(function () {}).finally(function () { w.polling = false; });
     });
   }
