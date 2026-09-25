@@ -906,7 +906,7 @@ def _leaf_collection_locator(collection_key, path):
     return _collection_locator(path)
 
 
-_VARIANT_TAIL_RE = re.compile(r'(?i)^вариант\s+\d+')
+_VARIANT_TAIL_RE = re.compile(r'(?i)^(?:вариант\s+\d+|подготовительный вариант$)')
 _CHAPTER_HEAD_RE = re.compile(r'(?i)^глава\s+\d+')
 
 
@@ -920,7 +920,7 @@ def _collection_layout(path, collection_key):
     if path and _VARIANT_TAIL_RE.match(path[-1]):
         headings.append(path[-1])
         path = path[:-1]
-        key = re.sub(r'(?i)/v\d+$', '', key)
+        key = re.sub(r'(?i)/(?:v\d+|prep)$', '', key)
 
     if len(path) >= 2 and _CHAPTER_HEAD_RE.match(path[0]):
         headings = path[1:] + headings

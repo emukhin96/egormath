@@ -200,6 +200,21 @@ class LatexGenerationTests(TestCase):
         # Ответы перенумерованы заново: а) и б)
         self.assertIn(r'[{\shortstack[l]{а)~2 \\ б)~6}}]', tex)
 
+    def test_long_answers_wrap_inside_page_and_table_cell(self):
+        task = Task.objects.create(text_latex='Опишите свойства функции.')
+        long_answer = 'Функция возрастает на указанном промежутке. ' * 6
+        TaskSubitem.objects.create(
+            task=task, order=10, text_latex='$f(x)$', answer_latex=long_answer)
+        TaskSubitem.objects.create(
+            task=task, order=20, text_latex='$g(x)$', answer_latex='Нет корней.')
+        item = make_item(self.worksheet, task)
+        for variant in ('teacher', 'answers'):
+            tex = task_to_tex(item, variant)
+            self.assertNotIn(r'\shortstack', tex)
+            self.assertIn(r'\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax', tex)
+            self.assertIn(long_answer.strip(), tex)
+            self.assertIn('\\mbox{}\\\\\nб)~Нет корней.', tex)
+
     def test_subitem_solutions_combined(self):
         # Решения подпунктов собираются в 6-й аргумент \task как ответы
         task = Task.objects.create(text_latex='Вычислите:')
