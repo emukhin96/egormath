@@ -18,6 +18,7 @@ from assignments.checks import parse_mask, collect_values, render_fragments
 from assignments.models import Review, SubmissionPhoto
 from accounts.decorators import get_role, teacher_required
 from accounts.models import Profile
+from livefile import etags
 from problems.models import Task, TaskSubitem
 from worksheets.models import Worksheet, Collection
 from .forms import WorkForm, RunForm
@@ -772,6 +773,7 @@ def reassign(request, pk):
     changed = Attempt.objects.filter(pk=pk, started_at__isnull=True).update(variant=variant)
     if not changed:
         raise svc.WorkError('Ученик уже начал работу.', 409)
+    svc.touch_attempt(attempt)
     return redirect('independentworks:progress', pk=attempt.run_id)
 
 
@@ -858,9 +860,7 @@ def progress_context(run):
                     status = 'ok' if row['answer'].credit == 1 else 'draft' if row['answer'].credit else 'wrong'
                 points.append({'detail_url': reverse('independentworks:point_detail', args=[a.pk, row['point'].pk]), 'label': row['point'].label, 'status': status, 'status_label': row['grade'] or ('На проверке' if row['pending'] else {'ok': 'Верно', 'wrong': 'Неверно'}.get(row['auto'], 'Ответ не введён')), 'mark': row['grade_symbol'], 'attempt_count': 0})
             cells.append({'item': {'pk': number}, 'owner': {'pk': number}, 'points': points, 'hidden': not points})
-        remaining = max(0, int((a.ends_at - timezone.now()).total_seconds())) if a.ends_at else 0
-        people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a), 'show_cumulative': bool(a.root_id or any(c.started_at for c in a.corrections.all())),
-                       'remaining': f'{remaining // 60}:{remaining % 60:02}'})
+        people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a), 'show_cumulative': bool(a.root_id or any(c.started_at for c in a.corrections.all()))})
         variant_stat = variant_stats.setdefault(a.variant_id, {
             'number': a.variant.number, 'count': 0, 'started': 0,
             'by_number': {}, 'points': 0, 'done': 0})
@@ -896,7 +896,7 @@ def progress(request, pk):
         from django.template.loader import render_to_string
         html = render_to_string('independentworks/_progress.html', context, request=request)
         etag = '"' + svc.digest(html) + '"'
-        response = HttpResponseNotModified() if request.headers.get('If-None-Match') == etag else HttpResponse(html)
+        response = HttpResponseNotModified() if etags.matches(request, etag) else HttpResponse(html)
         response['ETag'] = etag
         return response
     return render(request, 'independentworks/progress.html', context)

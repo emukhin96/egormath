@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static task_extras %}
+{% load static task_extras livefile %}
 {% block title %}{{ assignment.worksheet.title }} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/assignment_detail.html' %}{% endblock %}
 {% block content %}
@@ -149,7 +149,7 @@
 
     {% if canvas_enabled %}
     {# Панель доски открывается кнопкой в общем ряду действий задачи. #}
-    <div id="board-{{ row.item.pk }}" data-canvas data-url="{% url 'canvas:pages' assignment.pk row.task.pk %}" data-role="student" data-pages="{{ row.canvas_pages }}" data-nonempty="{% if row.canvas_answered %}1{% endif %}"></div>
+    <div id="board-{{ row.item.pk }}" data-canvas data-url="{% url 'canvas:pages' assignment.pk row.task.pk %}" data-role="student" data-live-file="{% live_file 'board' assignment.pk row.task.pk %}" data-pages="{{ row.canvas_pages }}" data-nonempty="{% if row.canvas_answered %}1{% endif %}"></div>
     {% endif %}
 
     {% if sub.review and not editable %}

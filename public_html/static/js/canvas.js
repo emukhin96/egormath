@@ -533,6 +533,8 @@
   function Widget(root) {
     this.root = root;
     this.url = root.dataset.url;
+    /* Файл-версия слоя учителя (data-live-file): опрос без запроса JSON, пока учитель не рисовал. */
+    this.watch = window.EgorLiveFile && root.dataset.liveFile ? EgorLiveFile.watch(root) : null;
     this.role = root.dataset.role || 'viewer';
     this.pages = [];
     this.index = 0;
@@ -2016,7 +2018,16 @@
   });
 
   function pollAll() {
-    Widget.all.forEach(function (w) { if (w.polls()) w.reload(); });
+    Widget.all.forEach(function (w) {
+      if (!w.polls()) return;
+      if (!w.watch) { w.reload(); return; }
+      if (w.polling) return;
+      w.polling = true;
+      w.watch.changed().then(function (changed) {
+        if (!changed) return null;
+        return Promise.resolve(w.reload()).then(function () { w.watch.ack(); });
+      }).catch(function () {}).finally(function () { w.polling = false; });
+    });
   }
   setInterval(pollAll, POLL);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) pollAll(); });

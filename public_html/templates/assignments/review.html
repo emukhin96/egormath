@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load task_extras static %}
+{% load task_extras static livefile %}
 {% block title %}Проверка: {{ assignment.worksheet.title }} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/review.html' %}{% endblock %}
 {% block content %}
@@ -92,4 +92,4 @@
   </div>
 </form>
 {% endblock %}
-{% block extra_js %}<script defer src="{% static 'js/work_history.js' %}"></script><div data-review-live-url="{% url 'assignment_live' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=3"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=2"></script>{% endif %}{% endblock %}
+{% block extra_js %}<script defer src="{% static 'js/work_history.js' %}"></script><div data-review-live-url="{% url 'assignment_live' assignment.pk %}" data-live-file="{% live_file 'assignment' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=3"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=2"></script>{% endif %}{% endblock %}

@@ -12,6 +12,7 @@ from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone
 from assignments.checks import parse_mask, check_mask, collect_values, filled_text, reference_text
+from livefile import files as livefiles
 from problems.models import Task
 from problems.task_images import taskpic_indices
 from .models import Work, Position, Candidate, Run, Variant, Point, Asset, Attempt, Answer
@@ -366,11 +367,21 @@ def _issue(run_id, confirm, written):
     return run
 
 
+def touch_attempt(attempt):
+    """Файл-версия прогресса проведения — для записей через update(), без сигналов."""
+    livefiles.touch('run', attempt.run_id)
+    if attempt.root_id:
+        root_run = Attempt.objects.filter(pk=attempt.root_id).values_list('run_id', flat=True).first()
+        if root_run and root_run != attempt.run_id:
+            livefiles.touch('run', root_run)
+
+
 def finish_expired(attempt, now=None):
     now = now or timezone.now()
     if attempt.ends_at and now >= attempt.ends_at and not attempt.submitted_at:
         Attempt.objects.filter(pk=attempt.pk, submitted_at__isnull=True).update(submitted_at=attempt.ends_at)
         attempt.submitted_at = attempt.ends_at
+        touch_attempt(attempt)
     return attempt
 
 
@@ -391,6 +402,7 @@ def set_deadline(run_id, deadline):
         if deadline:
             ends = min(ends, deadline)
         Attempt.objects.filter(pk=attempt.pk).update(ends_at=ends)
+    livefiles.touch('run', run.pk)
     return run
 
 
@@ -408,6 +420,7 @@ def start(attempt_id):
     # Условная запись защищает начало также на SQLite, где нет row lock.
     Attempt.objects.filter(pk=attempt.pk, started_at__isnull=True).update(started_at=now, ends_at=ends)
     attempt.refresh_from_db()
+    touch_attempt(attempt)
     return attempt
 
 
@@ -443,6 +456,7 @@ def save_answer(attempt_id, point_id, version, values):
         raise WorkError('Конфликт сохранения. Перезагрузите страницу.', 409)
     answer.refresh_from_db()
     record_revision(answer, snapshot_before)
+    touch_attempt(attempt)
     return answer
 
 
@@ -527,6 +541,7 @@ def update_recipients(run_id, students, choices):
     for student in students:
         if student in attempts:
             Attempt.objects.filter(pk=attempts[student].pk).update(variant_id=choices[student])
+            touch_attempt(attempts[student])
         else:
             Attempt.objects.create(run=run, student_id=student, variant_id=choices[student])
     run.plan = {**run.plan, 'students': {str(student): variants[choices[student]].number for student in sorted(students)}}

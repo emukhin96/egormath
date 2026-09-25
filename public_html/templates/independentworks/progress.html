@@ -1,12 +1,12 @@
 {% extends 'independentworks/base.html' %}
-{% load static %}
+{% load static livefile %}
 {% block content %}
 <div class="page-head">
   <h1>{{ run.title }} · прогресс</h1>
   <a class="btn btn-secondary" href="{% url 'independentworks:export' run.pk %}">Скачать XLSX</a>
 </div>
 <p class="helptext iw-live-status" data-live-status role="status">Обновляется каждые 5 секунд</p>
-<div data-progress-table data-progress-url="{% url 'independentworks:progress' run.pk %}">{% include 'independentworks/_progress.html' %}</div>
+<div data-progress-table data-progress-url="{% url 'independentworks:progress' run.pk %}" data-live-file="{% live_file 'run' run.pk %}">{% include 'independentworks/_progress.html' %}</div>
 
 {% if can_add_students %}
 <section class="card iw-section">

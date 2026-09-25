@@ -11,6 +11,9 @@ virtualenv.pyz
 db.sqlite3
 .cache/
 public_html/staticfiles/
+# Файлы-версии живых страниц (livefile): создаются на лету, .htaccess — в git
+public_html/live/*.txt
+public_html/live/.*.tmp
 var/imports/
 var/worksheets-import/
 var/deploy-batches/

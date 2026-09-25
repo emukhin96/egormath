@@ -1,4 +1,4 @@
-{% extends 'base.html' %}{% load static %}
+{% extends 'base.html' %}{% load static livefile %}
 {% block title %}Доски · {{ worksheet.title }}{% endblock %}
 {% block content %}
 <h1>{{ worksheet.title }} · доски</h1>
@@ -14,7 +14,7 @@
 {% if not canvas_enabled %}<p class="helptext">Доски для записей временно отключены.</p>{% else %}
 <p class="helptext boards-status" data-boards-status role="status">Доски обновляются каждые 5 секунд. Нажмите на доску, чтобы открыть её с инструментами и оставить пометки.</p>
 {% if overflow %}<p class="helptext boards-overflow">На экране {{ boards_max }} учеников с самой свежей активностью; ещё {{ overflow }} не поместились — выберите группу поменьше.</p>{% endif %}
-<div class="boards-grid" data-boards data-live-url="{{ live_url }}"{% if task_id %} data-task="{{ task_id }}"{% endif %}>
+<div class="boards-grid" data-boards data-live-url="{{ live_url }}" data-live-file="{% live_file 'worksheet' worksheet.pk %}"{% if task_id %} data-task="{{ task_id }}"{% endif %}>
   {% for a in assignments %}<article class="board-card" data-board="{{ a.pk }}" tabindex="0" role="button" aria-label="Доска: {{ a.student.get_full_name|default:a.student.username }}">
     <div class="board-meta"><strong class="board-name">{{ a.student.get_full_name|default:a.student.username }}</strong><span class="board-state" data-board-state>{{ a.get_status_display }}</span></div>
     <canvas class="board-thumb" width="300" height="300" aria-hidden="true"></canvas>
