@@ -1038,7 +1038,9 @@ def _section_nav_rows(collection_groups, request, selected_token):
         if not leaf['is_leaf']:
             continue
         work = leaf['path'][0]
-        title = leaf['path'][-1] if len(leaf['path']) > 1 else leaf['title']
+        # Для книг с работами и вариантами важен весь путь после раздела:
+        # иначе «Вариант 1» разных работ выглядит одинаково.
+        title = ' › '.join(leaf['path'][1:]) if len(leaf['path']) > 1 else leaf['title']
         row = {
             'work': work,
             'title': title,
