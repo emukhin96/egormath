@@ -63,7 +63,8 @@ class CollectionTests(TestCase):
         self.assertContains(detail, 'Использовать подборку')
         self.assertContains(detail, 'Поясните вычисление')
         self.assertContains(detail, 'toggle-answers')
-        self.assertContains(detail, 'показать ответы и решения')
+        self.assertContains(detail, 'ответы и решения')
+        self.assertContains(detail, 'id="toggle-author-only"')
         self.assertContains(detail, 'data-answers-key="collection-show-answers"')
         self.assertContains(detail, 'id="toggle-masks"')
         self.assertContains(detail, 'data-worksheet-mask')
@@ -141,7 +142,7 @@ class CollectionTests(TestCase):
         self.assertContains(catalog, '№10. Вероятности')
         self.assertNotContains(catalog, 'Готовая тема')
         self.assertContains(catalog, 'collection-source-card')
-        self.assertContains(catalog, '<strong>2</strong> элементов', html=True)
+        self.assertContains(catalog, '<strong>2</strong> задачи', html=True)
 
         detail = self.client.get(reverse(
             'collection_detail', args=[group.pk]), follow=True)
@@ -195,6 +196,9 @@ class CollectionTests(TestCase):
         self.assertContains(first, 'Задача 25.')
         self.assertNotContains(first, 'Задача 26.')
         self.assertContains(first, '?page=2')
+        # В корзину уходит только страница — так и написано на кнопке
+        self.assertContains(first, 'Страницу в корзину · 25')
+        self.assertContains(first, 'страница 1 из 2')
 
         second = self.client.get(
             reverse('collection_detail', args=[collection.pk]),
@@ -255,7 +259,7 @@ class CollectionFlatViewTests(TestCase):
         response = self.client.get(
             reverse('collection_detail', args=[self.root.pk]), {'view': 'tree'})
         self.assertIsNone(response.context['flat_groups'])
-        self.assertContains(response, 'Открыть подборку')
+        self.assertContains(response, '<th>Задач</th>', html=True)
         self.assertContains(response, 'Списком')
         self.assertNotContains(response, '5.3 Чужая закрытая')
         response = self.client.get(reverse('collection_detail', args=[self.root.pk]))
@@ -294,3 +298,142 @@ class CollectionFlatViewTests(TestCase):
         response = self.client.post(reverse('cart_add_many'), {},
                                     HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 400)
+
+
+class CollectionTitleTests(TestCase):
+    """Сортировка и заголовки дочерних подборок в разделе."""
+
+    def setUp(self):
+        self.owner = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        self.source = Source.objects.create(title='Банк')
+
+        def make(title, parent=None, tasks=1):
+            worksheet = Worksheet.objects.create(title=title, owner=self.owner)
+            for i in range(tasks):
+                task = Task.objects.create(
+                    text_latex=f'{title}: задача {i + 1}.',
+                    created_by=self.owner)
+                WorksheetItem.objects.create(
+                    worksheet=worksheet, task=task, order=(i + 1) * 10)
+            return Collection.objects.create(
+                worksheet=worksheet, source=self.source, parent=parent,
+                locator=title, is_published=True)
+
+        self.make = make
+        self.root = make('№1. Планиметрия 1', tasks=0)
+        for tail in ('1.10', '1.2', '1.1', '1.19', '1.20'):
+            make(f'№01. Планиметрия 1 — прототип {tail}', self.root)
+
+    def test_children_sorted_naturally_and_titled_without_parent(self):
+        response = self.client.get(
+            reverse('collection_detail', args=[self.root.pk]))
+        groups = response.context['flat_groups']
+        self.assertEqual(
+            [g['collection'].short_title for g in groups],
+            ['Прототип 1.1', 'Прототип 1.2', 'Прототип 1.10',
+             'Прототип 1.19', 'Прототип 1.20'])
+        # Заголовок раздела — из каталога, с двузначным номером
+        self.assertContains(response, '<h1>№01. Планиметрия 1</h1>', html=True)
+        self.assertContains(response, 'Прототип 1.1</a>')
+        self.assertContains(response, '· 1 задача')
+        self.assertContains(response, 'Всё в корзину · 5')
+        # Панель «На этой странице» различает пункты
+        sidebar = response.content.decode().split('На этой странице', 1)[1]
+        self.assertIn('Прототип 1.20', sidebar)
+
+    def test_rubric_math_is_rendered(self):
+        leaf = self.make('Глава 1', tasks=1)
+        WorksheetItem.objects.create(
+            worksheet=leaf.worksheet, order=5,
+            rubric='§ 4. Графики \\(y=f(kx)\\)')
+        response = self.client.get(
+            reverse('collection_detail', args=[leaf.pk]))
+        self.assertContains(
+            response, '<h3 class="math-content">§ 4. Графики \\(y=f(kx)\\)</h3>',
+            html=True)
+        self.assertContains(response, 'class="ws-collection"')
+
+
+class CollectionAnswerSourceTests(TestCase):
+    """Рамка «Ответ / Решение»: происхождение и второй вариант."""
+
+    def setUp(self):
+        self.owner = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        self.source = Source.objects.create(title='Задачник')
+        self.worksheet = Worksheet.objects.create(
+            title='Ответы', owner=self.owner)
+        self.collection = Collection.objects.create(
+            worksheet=self.worksheet, source=self.source,
+            locator='answers', is_published=True)
+
+    def add(self, **fields):
+        task = Task.objects.create(
+            text_latex='Задача.', created_by=self.owner, **fields)
+        WorksheetItem.objects.create(
+            worksheet=self.worksheet, task=task,
+            order=10 * (self.worksheet.items.count() + 1))
+        return task
+
+    def page(self):
+        return self.client.get(
+            reverse('collection_detail', args=[self.collection.pk]))
+
+    def test_author_answer_is_labelled_and_ai_variant_is_collapsed(self):
+        self.add(author_answer_latex='$2; 5$',
+                 answer_latex='Минимум $2$, максимум $5$')
+        response = self.page()
+        self.assertContains(response, 'data-src="author"')
+        self.assertContains(response, 'answer-src-author')
+        self.assertContains(response, '$2; 5$')
+        self.assertContains(response, 'Редакторский / AI-ответ')
+        self.assertContains(response, 'Минимум $2$, максимум $5$')
+
+    def test_same_answer_up_to_period_has_no_alternative(self):
+        self.add(author_answer_latex='$0$', answer_latex='$0$.')
+        response = self.page()
+        self.assertNotContains(response, 'answer-alt')
+
+    def test_answer_comparison_keeps_case(self):
+        # «$A$» и «$a$» — разные ответы: редакторский вариант не теряется
+        self.add(author_answer_latex='$A$', answer_latex='$a$')
+        response = self.page()
+        self.assertContains(response, 'answer-alt')
+        self.assertContains(response, '$a$')
+
+    def test_ai_only_answer_is_labelled_ai(self):
+        self.add(answer_latex='Нет.', solution_latex='По чётности.')
+        response = self.page()
+        self.assertContains(response, 'answer-box math-content" data-src="ai"')
+        self.assertContains(response, '>AI</span>')
+        self.assertNotContains(response, 'answer-src-author')
+
+    def test_mixed_subitems_are_labelled_per_row(self):
+        task = self.add()
+        TaskSubitem.objects.create(
+            task=task, order=10, text_latex='чётной',
+            author_answer_latex='$a=1$', answer_latex='$a=1$.')
+        TaskSubitem.objects.create(
+            task=task, order=20, text_latex='нечётной', answer_latex='$a=-1$')
+        response = self.page()
+        self.assertContains(response, 'answer-box math-content" data-src="mixed"')
+        self.assertContains(response, 'answer-row" data-src="author"')
+        self.assertContains(response, 'answer-row" data-src="ai"')
+
+    def test_author_hint_becomes_heading_and_keeps_full_ai_solution(self):
+        self.add(author_answer_latex='$a=1$',
+                 author_solution_latex='Указание. См. пример 3 в § 3.',
+                 solution_latex='Левая часть чётна, поэтому корень один.')
+        response = self.page()
+        self.assertContains(response, '<strong>Указание:</strong>', html=True)
+        self.assertContains(response, 'См. пример 3 в § 3.')
+        self.assertNotContains(response, 'Указание. См. пример')
+        self.assertContains(response, 'Полное решение от AI')
+        self.assertContains(response, 'Левая часть чётна')
+
+    def test_pdf_still_uses_author_material_only(self):
+        self.add(author_answer_latex='4', answer_latex='четыре')
+        tex = worksheet_to_tex(self.worksheet, 'answers')
+        self.assertIn('[{4}]', tex)
+        self.assertNotIn('четыре', tex)

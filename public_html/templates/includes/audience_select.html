@@ -1,5 +1,5 @@
 {# Селект «кому смотрим историю»: audience_* из assignments.task_usage.audience_context; внутри GET-формы фильтра, autosubmit как у класса #}
-<label for="f_who">Задавалась ли</label>
+<label for="f_who">{{ label|default:"Задавалась ли" }}</label>
 <select name="who" id="f_who" class="quick-select" onchange="this.form.requestSubmit()">
   <option value="">— не отмечать —</option>
   {% if audience_groups %}<optgroup label="Группы">

@@ -1,0 +1,2 @@
+{# Метка происхождения ответа / решения в рамке: source — author | ai #}
+{% if source == 'author' %}<span class="answer-src answer-src-author" title="Ответ из задачника">задачник</span>{% elif source == 'ai' %}<span class="answer-src answer-src-ai" title="Редакторский / AI-вариант, авторского в базе нет">AI</span>{% endif %}

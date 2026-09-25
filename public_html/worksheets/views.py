@@ -463,11 +463,33 @@ def _collection_title(collection):
     return title
 
 
+def _natural_key(text):
+    """Числа в названии сравниваются как числа: «прототип 1.2» раньше
+    «прототип 1.10», а не после «1.19», как при строковом сравнении."""
+    return tuple((0, int(part)) if part.isdigit() else (1, part.casefold())
+                 for part in re.split(r'(\d+)', text) if part)
+
+
 def _collection_sort_key(collection):
     title = _collection_title(collection)
     match = re.match(r'^№\s*(\d+)', title)
     return (int(match.group(1)) if match else 10_000,
-            collection.order, title.casefold(), collection.pk)
+            collection.order, _natural_key(title), collection.pk)
+
+
+def _child_title(child, parent):
+    """Название дочерней подборки без повтора родителя: «№01. Планиметрия 1 —
+    прототип 1.1» внутри раздела «№01. Планиметрия 1» — просто «Прототип 1.1»."""
+    title = child.catalog_title
+    prefixes = {_collection_title(parent), parent.worksheet.title.strip(),
+                getattr(parent, 'catalog_title', '')}
+    for prefix in sorted(filter(None, prefixes), key=len, reverse=True):
+        match = re.match(
+            r'^' + re.escape(prefix) + r'\s*(?:[—–:-]|\.)\s*(.+)$', title)
+        if match and match.group(1).strip():
+            tail = match.group(1).strip()
+            return tail[0].upper() + tail[1:]
+    return title
 
 
 def _collection_catalog(user):
@@ -591,6 +613,7 @@ def _visible_children(request, collection):
         .order_by('order', 'pk'))
     for child in children:
         child.catalog_title = _collection_title(child)
+        child.short_title = _child_title(child, collection)
     children.sort(key=_collection_sort_key)
     return children
 
@@ -652,6 +675,7 @@ def collection_detail(request, pk):
     с задачами на одной странице (?view=tree — прежняя таблица детей).
     """
     collection = _visible_collection(request, pk)
+    collection.catalog_title = _collection_title(collection)
     all_items = list(collection.worksheet.ordered_items())
     page = Paginator(all_items, 25).get_page(request.GET.get('page'))
     items = list(page.object_list)
@@ -691,6 +715,9 @@ def collection_detail(request, pk):
         'collection': collection,
         'worksheet': collection.worksheet,
         'rows': rows,
+        # Трёхзначные номера не помещаются в стандартную колонку 2rem
+        'wide_numbers': max(
+            (row['number'] or 0 for row in rows), default=0) >= 100,
         'page': page,
         'children': children,
         'flat_groups': flat_groups,
