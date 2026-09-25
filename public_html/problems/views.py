@@ -1038,9 +1038,11 @@ def _section_nav_rows(collection_groups, request, selected_token):
         if not leaf['is_leaf']:
             continue
         work = leaf['path'][0]
-        # Для книг с работами и вариантами важен весь путь после раздела:
-        # иначе «Вариант 1» разных работ выглядит одинаково.
-        title = ' › '.join(leaf['path'][1:]) if len(leaf['path']) > 1 else leaf['title']
+        title = leaf['path'][-1] if len(leaf['path']) > 1 else leaf['title']
+        # Только варианты требуют уточнения работы; названия глав и
+        # параграфов остальных книг сохраняют прежний компактный вид.
+        if re.fullmatch(r'(?:Вариант\s+\d+|Подготовительный вариант)', title, re.I):
+            title = ' › '.join(leaf['path'][1:]) or title
         row = {
             'work': work,
             'title': title,

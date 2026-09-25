@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import Counter
 
 from .textbook_parser import (
     Marker, TaskDraft, apply_imported_math, blocks, clean, finalize_draft_images,
@@ -166,6 +167,8 @@ def _test_choices(text):
 def _answer_markers(text, allowed):
     """Не режет формулы по цифрам. Сомнительные склейки остаются для сверки."""
     spans = [(m.start(), m.end()) for m in MATH_RE.finditer(text)]
+    # Сохраняем смещения: merge_solutions получает исходный текст.
+    scan = re.sub(r'\\\\(?=\s*\n)', '  ', text)
     result = []
     previous = 0
     for match in re.finditer(r'(?<![\w,;+-])(\d{1,2})\s*\.\s*(?!\d)', text):
@@ -174,7 +177,7 @@ def _answer_markers(text, allowed):
             continue
         if any(lo <= match.start() < hi for lo, hi in spans):
             continue
-        before = text[:match.start()].rstrip()
+        before = scan[:match.start()].rstrip()
         if before and not before.endswith(('.', r'\)', r'\]', '\n')):
             continue
         # Номер без тела — обычно сам числовой ответ предыдущего задания.
@@ -183,6 +186,74 @@ def _answer_markers(text, allowed):
         result.append(Marker(match.start(), match.end(), str(number)))
         previous = number
     return result
+
+
+def _known_answer_work(kind, number, body):
+    """Границы испорченных OCR-вариантов, сверенные на печатных с. 168–170."""
+    if kind != 'sr':
+        return body
+    if number == 12:
+        # OCR вписал ответы № 5–6 и заголовки внутрь строк систем № 4.
+        return r'''
+Подготовительный вариант.
+1. а) не является; б) является. 2. а) не пересекает; б) пересекает.
+4. \(\begin{cases}2x+3y\geqslant6\\x-2y\geqslant-4\\3x+y\leqslant9\end{cases}\).
+5. \(8\). 6. При \(b<8\).
+Вариант 1.
+1. а) является; б) является. 2. а) не пересекает; б) пересекает.
+4. \(\begin{cases}x+3y\geqslant-3\\2x+y\leqslant-1\\x-2y\geqslant-3\end{cases}\).
+5. \(8\). 6. При \(b>2\).
+Вариант 2.
+1. а) является; б) является. 2. а) не пересекает; б) пересекает.
+4. \(\begin{cases}3x-2y\geqslant-6\\2x+y\leqslant3\\x-3y\leqslant-2\end{cases}\).
+5. \(4\). 6. При \(b<18\).
+Вариант 3.
+1. а) не является; б) не является. 2. а) не пересекает; б) пересекает.
+4. \(\begin{cases}-x+2y\geqslant2\\x+y\leqslant1\\-2x+y\leqslant4\end{cases}\).
+5. \(4\). 6. При \(b<16\).
+'''
+    if number == 14:
+        start = body.index(r'В ар и aн \(\mathrm{T} 2.')
+        end = body.index('В ариант 3.', start)
+        return body[:start] + r'''
+Вариант 2. 1. \(14-14\sqrt{2}\). 2. \(-285\).
+3. \(26; a_{26}=0,1\). 4. \(8,5;13;17,5\). 5. \(1;6\).
+6. \(\frac{14}{25}\). 7. \(465718\). 8. При \(n=2\).
+''' + body[end:]
+    if number == 17:
+        return body.replace('В а - риант 3.', 'Вариант 3.')
+    return body
+
+
+def _answer_groups(text, known):
+    groups, originals = {}, {}
+    for kind, number, work in _work_spans(_headings(text)):
+        work = work.split(r'\begin{table}')[0]
+        repaired = _known_answer_work(kind, number, work) if known else work
+        if repaired != work:
+            originals[f'{kind}/{number:02d}'] = work
+        for variant, body in _variants(repaired):
+            key = (kind, number, variant)
+            if key in groups:
+                raise ValueError(f'Повторная группа ответов: {kind}/{number:02d}/{variant}')
+            groups[key] = body
+    return groups, originals
+
+
+def _answer_fields(task):
+    return [task.author_answer_latex, task.author_solution_latex] + [
+        value for item in task.subitems for value in
+        (item.author_answer_latex, item.author_solution_latex)]
+
+
+def _repair_answer_labels(task):
+    """Возвращает скобку метки за пределы формулы после общего OCR-healing."""
+    for item in [task, *task.subitems]:
+        for name in ('author_answer_latex', 'author_solution_latex'):
+            value = getattr(item, name)
+            value = re.sub(r'(?<![\w\\])([а-яa-d])\s*\$(\\displaystyle\s*)?\)\s*',
+                           lambda m: m[1] + ') $' + (m[2] or ''), value)
+            setattr(item, name, value)
 
 
 def _test_answers(text):
@@ -237,15 +308,16 @@ def parse_feoktistov(source):
             + r'\section*{САМОСТОЯТЕЛЬНАЯ РАБОТА № 1 Свойства функций}', 1)
     task_text, figures = _figures(task_text, known)
     task_text = _headings(task_text)
-    answer_groups = {(kind, number, variant): body
-                     for kind, number, work in _work_spans(_headings(answer_text))
-                     for variant, body in _variants(work.split(r'\begin{table}')[0])}
+    answer_groups, original_answer_works = _answer_groups(answer_text, known)
     test_answers = _test_answers(answer_text)
     tasks = []
     seen = set()
     counts = {}
     raw_answers = {}
     issues = []
+    missing_answers = []
+    missing_by_work = Counter()
+    answer_anomalies = {}
     for kind, number, work in _work_spans(task_text):
         first_variant = VARIANT_RE.search(work)
         if not first_variant:
@@ -318,22 +390,44 @@ def parse_feoktistov(source):
                 group_tasks.append(task)
             if kind != 'test':
                 answer = answer_groups.get((kind, number, variant), '')
+                if not answer.strip():
+                    issues.append(f'{group}: пустая группа авторских ответов')
                 # Исходный абзац всегда доступен для проверки границ ответов.
                 raw_answers[group] = answer
                 local = _answer_markers(answer, {t.source_number for t in group_tasks})
                 mapped = [Marker(m.start, m.end, f'{group}/{int(m.external_id):03d}') for m in local]
                 merge_solutions(group_tasks, answer, lambda _: mapped, missing_ok=True)
+                raw_blocks = {m.external_id: block for m, block in blocks(answer, mapped)}
                 for task in group_tasks:
                     task.warnings.append('Сверить границы авторского ответа с PDF Феоктистова')
+                    raw_block = raw_blocks.get(task.external_id, '')
+                    suspects = sorted({int(m[1]) for m in re.finditer(
+                        r'(?<![\w,;+-])(\d{1,2})\s*\.\s*(?!\d)', raw_block)
+                        if int(task.source_number) < int(m[1]) <= max(numbers, default=0)})
+                    if suspects:
+                        task.warnings.append('В ответе возможны следующие номера: '
+                                             + ', '.join(map(str, suspects)))
+                    if re.search(r'В\s*[аa]\s*(?:р\s*и|[-}]\s*р)', raw_block):
+                        task.warnings.append('В ответе остался обломок заголовка варианта')
+                    _repair_answer_labels(task)
             for task in group_tasks:
                 if known:
                     _known_answer_repairs(task)
+                if kind != 'test' and not any(_answer_fields(task)):
+                    missing_answers.append(task.external_id)
+                    missing_by_work[f'{kind}/{number:02d}'] += 1
+                    task.warnings.append('Не найден авторский ответ: сверить с PDF '
+                                         '(возможна задача без ответа)')
                 fields = [task.text_latex, task.author_answer_latex, task.author_solution_latex]
                 fields.extend(value for item in task.subitems for value in
                               (item.text_latex, item.author_answer_latex, item.author_solution_latex))
                 if any(_unbalanced_math(value) for value in fields):
                     task.warnings.append('Незакрытые разделители формулы: сверить с PDF')
                 finalize_draft_images(task)
+                specific = [w for w in task.warnings if w !=
+                            'Сверить границы авторского ответа с PDF Феоктистова']
+                if specific:
+                    answer_anomalies[task.external_id] = specific
                 tasks.append(task)
     if known:
         expected = {f'{kind}/{number:02d}/{variant}'
@@ -345,6 +439,7 @@ def parse_feoktistov(source):
         group = task.collection_key
         if kind_issues := [issue for issue in issues if group in issue]:
             task.warnings.extend(kind_issues)
+            answer_anomalies.setdefault(task.external_id, []).extend(kind_issues)
         if task.external_id.startswith('test/') and counts[group] != list(range(1, 7)):
             task.warnings.append('В варианте теста должно быть шесть вопросов')
     if not tasks:
@@ -353,6 +448,11 @@ def parse_feoktistov(source):
         'unique_tasks': len(tasks), 'feoktistov_variant_numbers': counts,
         'feoktistov_structure_issues': issues,
         'feoktistov_raw_answer_groups': raw_answers,
+        'feoktistov_original_answer_works': original_answer_works,
+        'feoktistov_missing_answer_count': len(missing_answers),
+        'feoktistov_missing_answers_by_work': dict(sorted(missing_by_work.items())),
+        'feoktistov_missing_answer_ids': missing_answers,
+        'feoktistov_answer_anomalies': answer_anomalies,
         'feoktistov_test_answer_count': len(test_answers),
         'feoktistov_known_scan': known,
         'feoktistov_required_recovered_assets': [FIGURE_13] if known else [],
