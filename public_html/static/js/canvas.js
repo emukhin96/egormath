@@ -635,9 +635,11 @@
      слой защищён версией и 409, чужой просто подменяется. Вызывается живым
      обзором учителя, опросом ученика и после сохранения, если сервер сообщил
      о новой версии чужого слоя. */
+  /* Результат: true — слой обновился, false — ответ без изменений (в т.ч. 304),
+     null — сбой сети/JSON, undefined — вызов пропущен (загрузка уже идёт). */
   Widget.prototype.reload = function () {
     var self = this;
-    if (!this.loaded || this.reloading) return Promise.resolve(false);
+    if (!this.loaded || this.reloading) return Promise.resolve(undefined);
     this.reloading = true;
     var headers = {'X-Requested-With': 'XMLHttpRequest'};
     if (this.etag) headers['If-None-Match'] = this.etag;
@@ -649,7 +651,7 @@
       .then(function (data) {
         if (!data || !data.ok) return false;
         return self.merge(data);
-      }).catch(function () { return null; })   /* null — сбой сети/JSON, false — без изменений */
+      }).catch(function () { return null; })
       .finally(function () { self.reloading = false; });
   };
 
@@ -2021,13 +2023,14 @@
     Widget.all.forEach(function (w) {
       if (!w.polls()) return;
       if (!w.watch) { w.reload(); return; }
-      if (w.polling) return;
+      if (w.polling || w.reloading) return;
       w.polling = true;
       w.watch.changed().then(function (changed) {
         if (!changed) return null;
-        /* Версию подтверждаем только после удачного ответа: иначе сорвавшийся
-           запрос скрыл бы слой учителя до его следующего изменения. */
-        return Promise.resolve(w.reload()).then(function (result) { if (result !== null) w.watch.ack(); });
+        /* Версию подтверждаем только по ответу этого запроса: сбой (null) или
+           пропуск из-за идущей загрузки (undefined) — версия остаётся новой, и
+           следующий тик перечитает слой. */
+        return w.reload().then(function (result) { if (result === true || result === false) w.watch.ack(); });
       }).catch(function () {}).finally(function () { w.polling = false; });
     });
   }
