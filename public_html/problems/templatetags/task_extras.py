@@ -1,5 +1,6 @@
 from django import template
 
+from problems.answer_material import answer_material as _answer_material
 from problems.task_images import images_for_group
 from problems.textbook_parser import (
     apply_imported_answer, cyrillic_item_label as _cyrillic_item_label,
@@ -14,6 +15,13 @@ register = template.Library()
 def task_images(task, group='statement'):
     """Картинки задачи: условие, ответы/решения или все."""
     return {'images': images_for_group(task, group)}
+
+
+@register.simple_tag
+def answer_material(task, subitems=None):
+    """Рамка «Ответ / Решение»: строки с происхождением (задачник / AI)
+    и расхождения между авторским и редакторским вариантами."""
+    return _answer_material(task, subitems)
 
 
 @register.filter
@@ -108,3 +116,27 @@ def subitem_tail(text, is_last):
     if text and text[-1] in ';,.!?:':
         return ''
     return '.' if is_last else ';'
+
+
+@register.filter
+def plural_ru(value, forms):
+    """Форма слова по числу: ``5|plural_ru:'задача,задачи,задач'`` → «задач»."""
+    one, few, many = [form.strip() for form in forms.split(',')]
+    try:
+        number = abs(int(value))
+    except (TypeError, ValueError):
+        return many
+    if number % 10 == 1 and number % 100 != 11:
+        return one
+    if 2 <= number % 10 <= 4 and not 12 <= number % 100 <= 14:
+        return few
+    return many
+
+
+@register.filter
+def sub(value, arg):
+    """Вычитание в шаблоне: ``topics|length|sub:limit``."""
+    try:
+        return int(value) - int(arg)
+    except (TypeError, ValueError):
+        return ''

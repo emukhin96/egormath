@@ -1,3 +1,4 @@
+{% load task_extras %}
 <section class="sidebar-section">
   <p class="sidebar-kicker">Подборки</p>
   <h2>{% if selected_source %}{{ selected_source.source.title|truncatechars:34 }}{% else %}Источники{% endif %}</h2>
@@ -14,7 +15,7 @@
   {% else %}
   <p class="sidebar-kicker">Доступные источники</p>
   <ul class="sidebar-list">
-    {% for group in collection_sources %}<li><a href="?source={{ group.source.pk }}">{{ group.source.title|truncatechars:34 }}</a><br><span>{{ group.leaf_total }} подборок</span></li>{% empty %}<li>Источники не добавлены</li>{% endfor %}
+    {% for group in collection_sources %}<li><a href="?source={{ group.source.pk }}">{{ group.source.title|truncatechars:34 }}</a><br><span>{{ group.leaf_total }} {{ group.leaf_total|plural_ru:'подборка,подборки,подборок' }}</span></li>{% empty %}<li>Источники не добавлены</li>{% endfor %}
   </ul>
   {% endif %}
 </section>
@@ -22,7 +23,7 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">На этой странице</p>
   <ul class="sidebar-list collection-sidebar-tree">
-    {% for group in flat_groups %}{% if group.depth == 1 %}<li style="--collection-depth: 0"><a href="#collection-{{ group.collection.pk }}">{{ group.collection.catalog_title|truncatechars:32 }}</a></li>{% endif %}{% endfor %}
+    {% for group in flat_groups %}{% if group.depth == 1 %}<li style="--collection-depth: 0"><a href="#collection-{{ group.collection.pk }}" title="{{ group.collection.catalog_title }}">{{ group.collection.short_title|truncatechars:40 }}</a></li>{% endif %}{% endfor %}
   </ul>
 </section>
 {% endif %}

@@ -1,30 +1,28 @@
 {% extends 'base.html' %}
 {% load static task_extras %}
-{% block title %}{{ worksheet.title }} — Математика{% endblock %}
+{% block title %}{{ collection.catalog_title }} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/collections.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <span class="page-eyebrow">{% if children %}Раздел подборок{% else %}Подборка{% endif %}</span>
-    <h1>{{ worksheet.title }}</h1>
-    <p class="page-subtitle">{{ collection.source }} · {{ collection.source_path|join:' › ' }}</p>
+    <span class="page-eyebrow">{{ collection.source }}{% for part in collection.source_path %}{% if not forloop.last %} · {{ part }}{% endif %}{% endfor %}</span>
+    <h1>{{ collection.catalog_title }}</h1>
+    <p class="page-subtitle">{% if children %}Раздел: {{ children|length }} {{ children|length|plural_ru:'подборка,подборки,подборок' }}{% if flat_groups %} · {{ cart_task_ids|length }} {{ cart_task_ids|length|plural_ru:'задача,задачи,задач' }}{% endif %}{% elif page.paginator.count %}{{ page.paginator.count }} {{ page.paginator.count|plural_ru:'элемент,элемента,элементов' }}{% if page.has_other_pages %} · страница {{ page.number }} из {{ page.paginator.num_pages }}{% endif %}{% else %}Подборка{% endif %}</p>
   </div>
+  {# Действия над подборкой — одна заливная кнопка; настройки просмотра ниже, отдельным рядом #}
   <div class="form-buttons collection-head-actions">
-    {% if rows or flat_groups %}
-    <label class="ws-toggle" title="Показывать ответы и решения задач">
-      <input type="checkbox" id="toggle-answers">
-      <span class="ws-toggle-slider"></span>
-      <span class="ws-toggle-text">показать ответы и решения</span>
-    </label>
-    <label class="ws-toggle" title="Показывать поля масок ответов">
-      <input type="checkbox" id="toggle-masks" data-storage-key="collection-masks">
-      <span class="ws-toggle-slider"></span>
-      <span class="ws-toggle-text">маски ответов</span>
-    </label>
+    {% if can_use %}
+    <form method="post" action="{% url 'collection_use' collection.pk %}">
+      {% csrf_token %}
+      <button class="btn" type="submit">Использовать подборку</button>
+    </form>
     {% endif %}
-    {% if rows and audience_students or rows and audience_groups %}
-    <form method="get" class="inline-form audience-form">
-      {% include 'includes/audience_select.html' %}
+    {% if cart_task_ids %}
+    <form method="post" action="{% url 'cart_add_many' %}" title="{% if page.has_other_pages %}Задачи этой страницы — в корзину{% else %}Все задачи — в корзину{% endif %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      {% for task_id in cart_task_ids %}<input type="hidden" name="task_ids" value="{{ task_id }}">{% endfor %}
+      <button class="btn btn-secondary" type="submit">{% if page.has_other_pages %}Страницу в корзину{% else %}Всё в корзину{% endif %} · {{ cart_task_ids|length }}</button>
     </form>
     {% endif %}
     {% if can_edit %}
@@ -33,22 +31,32 @@
     {% if is_authored and is_owner %}
     <div class="authored-controls">{% include 'worksheets/_authored_controls.html' with next_url=request.path %}</div>
     {% endif %}
-    {% if cart_task_ids %}
-    <form method="post" action="{% url 'cart_add_many' %}" title="Все задачи этой страницы — в корзину">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-      {% for task_id in cart_task_ids %}<input type="hidden" name="task_ids" value="{{ task_id }}">{% endfor %}
-      <button class="btn btn-secondary" type="submit">Всё в корзину · {{ cart_task_ids|length }}</button>
-    </form>
-    {% endif %}
-    {% if can_use %}
-    <form method="post" action="{% url 'collection_use' collection.pk %}">
-      {% csrf_token %}
-      <button class="btn" type="submit">Использовать подборку</button>
-    </form>
-    {% endif %}
   </div>
 </div>
+{% if rows or flat_groups %}
+<div class="collection-view-options">
+  <label class="ws-toggle" title="Показывать ответы и решения задач">
+    <input type="checkbox" id="toggle-answers">
+    <span class="ws-toggle-slider"></span>
+    <span class="ws-toggle-text">ответы и решения</span>
+  </label>
+  <label class="ws-toggle" title="Скрыть редакторские / AI-ответы и решения: только то, что есть в задачнике">
+    <input type="checkbox" id="toggle-author-only" data-storage-key="collection-author-only">
+    <span class="ws-toggle-slider"></span>
+    <span class="ws-toggle-text">только из задачника</span>
+  </label>
+  <label class="ws-toggle" title="Показывать поля масок ответов">
+    <input type="checkbox" id="toggle-masks" data-storage-key="collection-masks">
+    <span class="ws-toggle-slider"></span>
+    <span class="ws-toggle-text">маски ответов</span>
+  </label>
+  {% if rows and audience_students or rows and audience_groups %}
+  <form method="get" class="inline-form audience-form">
+    {% include 'includes/audience_select.html' with label='Отмечать задававшиеся' %}
+  </form>
+  {% endif %}
+</div>
+{% endif %}
 
 <div class="card worksheet-items-card">
   {% if children %}
@@ -62,12 +70,12 @@
     {% endif %}
   </div>
   {% if flat_groups %}
-  <div id="ws-items" class="collection-flat" data-answers-key="collection-show-answers">
+  <div id="ws-items" class="collection-flat ws-collection" data-answers-key="collection-show-answers">
     {% for group in flat_groups %}
     <section class="collection-flat-group depth-{{ group.depth }}" id="collection-{{ group.collection.pk }}">
       <h3 class="collection-flat-heading">
-        <a href="{% url 'collection_detail' group.collection.pk %}">{{ group.collection.catalog_title }}</a>
-        <span class="muted">· {{ group.collection.items_total }} эл.{% if group.has_children %} · <a href="{% url 'collection_detail' group.collection.pk %}">открыть раздел</a>{% endif %}</span>
+        <a href="{% url 'collection_detail' group.collection.pk %}" title="{{ group.collection.catalog_title }}">{{ group.collection.short_title }}</a>
+        <span class="muted">· {{ group.collection.items_total }} {{ group.collection.items_total|plural_ru:'задача,задачи,задач' }}{% if group.has_children %} · <a href="{% url 'collection_detail' group.collection.pk %}">открыть раздел</a>{% endif %}</span>
       </h3>
       {% if group.rows %}{% include 'worksheets/_collection_rows.html' with rows=group.rows %}{% endif %}
     </section>
@@ -75,19 +83,18 @@
   </div>
   {% else %}
   <div class="catalog-table-wrap"><table class="list table-stack">
-    <tr><th>Подборка</th><th>Элементов</th><th></th></tr>
+    <tr><th>Подборка</th><th>Задач</th></tr>
     {% for child in children %}
     <tr>
-      <td class="stack-primary"><a href="{% url 'collection_detail' child.pk %}">{{ child.catalog_title }}</a></td>
-      <td data-label="Элементов">{{ child.items_total }}</td>
-      <td class="row-actions"><a class="btn btn-small btn-secondary" href="{% url 'collection_detail' child.pk %}">{% if child.items_total %}Открыть подборку{% else %}Открыть раздел{% endif %}</a></td>
+      <td class="stack-primary"><a href="{% url 'collection_detail' child.pk %}" title="{{ child.catalog_title }}">{{ child.short_title }}</a>{% if child.children_total %} <span class="muted">· раздел</span>{% endif %}</td>
+      <td data-label="Задач">{{ child.items_total }}</td>
     </tr>
     {% endfor %}
   </table></div>
   {% endif %}
   {% else %}
   {% if rows %}
-  <div id="ws-items" data-answers-key="collection-show-answers">
+  <div id="ws-items" class="ws-collection{% if wide_numbers %} ws-num-wide{% endif %}" data-answers-key="collection-show-answers">
     {% include 'worksheets/_collection_rows.html' %}
   </div>
   {% else %}

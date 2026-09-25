@@ -1,5 +1,6 @@
 /* Тумблер «ответы и решения»: #toggle-answers переключает .show-answers
-   на #ws-items и атрибут hidden у блоков .ws-answers.
+   на #ws-items и атрибут hidden у блоков .ws-answers; #toggle-author-only
+   (если есть) — класс .author-only, скрывающий AI-варианты.
    Ключ localStorage — data-answers-key (у подборки свой, чтобы не
    подхватывать состояние конструктора). */
 (function () {
@@ -23,5 +24,18 @@
     apply();
     toggle.addEventListener('change', apply);
     document.addEventListener('worksheet:updated', apply);
+
+    // «Только из задачника»: #toggle-author-only прячет AI-ответы и решения
+    // (.author-only на #ws-items, правила в input.css). Ключ — data-storage-key.
+    var authorOnly = document.getElementById('toggle-author-only');
+    if (!authorOnly) return;
+    var AUTHOR_KEY = authorOnly.getAttribute('data-storage-key') || 'ws-author-only';
+    function applyAuthorOnly() {
+      list.classList.toggle('author-only', authorOnly.checked);
+      try { localStorage.setItem(AUTHOR_KEY, authorOnly.checked ? '1' : ''); } catch (e) {}
+    }
+    try { authorOnly.checked = localStorage.getItem(AUTHOR_KEY) === '1'; } catch (e) {}
+    applyAuthorOnly();
+    authorOnly.addEventListener('change', applyAuthorOnly);
   });
 })();

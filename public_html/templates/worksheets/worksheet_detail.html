@@ -35,6 +35,7 @@
   Это каталожная подборка из источника «{{ collection.source }}».
   Все изменения сразу меняют её backing-листок; личную копию создаёт кнопка
   «Использовать подборку» на странице каталога.
+  <a class="btn btn-small btn-secondary" href="{% url 'collection_detail' collection.pk %}">← К странице подборки</a>
 </div>
 {% endif %}
 <form id="title-inline-form" method="post" hidden
@@ -125,7 +126,7 @@
         <div class="ws-content">
           <details class="ws-rubric-edit">
             <summary>
-              <span class="ws-rubric-name">{{ item.rubric }}</span>
+              <span class="ws-rubric-name math-content">{{ item.rubric }}</span>
               {% if item.rubric_note %}<span class="muted"> — {{ item.rubric_note }}</span>{% endif %}
               <span class="ws-rubric-hint">править</span>
             </summary>
