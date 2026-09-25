@@ -512,6 +512,22 @@ class CollectionSectionPagesTests(TestCase):
         self.assertContains(third, 'Задача 7.70.')
         self.assertContains(third, 'ws-num-wide')
 
+    def test_empty_rubric_before_long_paragraph_shares_its_first_page(self):
+        self.add('Глава 1', tasks=0)
+        self.add('§ 7. Квадратичная функция', tasks=61, paragraph=7)
+        first = self.page()
+        self.assertContains(first, 'Глава 1')
+        self.assertContains(first, '§ 7. Квадратичная функция')
+        self.assertContains(first, 'Задача 7.1.')
+        self.assertNotContains(first, 'Подборка пуста')
+        self.assertContains(first, 'страница 1 из 3')
+
+    def test_collection_with_only_a_rubric_shows_it(self):
+        self.add('§ 1. Функция', tasks=0)
+        response = self.page()
+        self.assertContains(response, '§ 1. Функция')
+        self.assertNotContains(response, 'Подборка пуста')
+
     def test_management_command_reports_and_fixes_order(self):
         from io import StringIO
         from django.core.management import call_command

@@ -33,7 +33,7 @@
     {% endif %}
   </div>
 </div>
-{% if rows or flat_groups %}
+{% if tasks_total or flat_groups %}
 <div class="collection-view-options">
   <label class="ws-toggle" title="Показывать ответы и решения задач">
     <input type="checkbox" id="toggle-answers">
@@ -93,7 +93,7 @@
   </table></div>
   {% endif %}
   {% else %}
-  {% if rows %}
+  {% if page_blocks %}
   <div id="ws-items" class="ws-collection{% if wide_numbers %} ws-num-wide{% endif %}" data-answers-key="collection-show-answers">
     {% for entry in page_blocks %}
     {% if entry.block.section.heading %}

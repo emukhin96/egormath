@@ -122,13 +122,17 @@ def build_chunks(items):
     for section in sections:
         rows = section.items
         if len(rows) > SECTION_PAGE_SIZE:
-            if current:
+            # Рубрики без задач перед длинным параграфом — на его первой
+            # странице, а не отдельной пустой страницей.
+            if current_len:
                 pages.append(current)
-                current, current_len = [], 0
+                current = []
             pieces = [rows[i:i + SECTION_PART_SIZE]
                       for i in range(0, len(rows), SECTION_PART_SIZE)]
             for part, piece in enumerate(pieces, start=1):
-                pages.append([Block(section, part, len(pieces), piece)])
+                pages.append(current + [Block(section, part, len(pieces), piece)])
+                current = []
+            current_len = 0
             continue
         if current and current_len + len(rows) > SECTION_PAGE_SIZE:
             pages.append(current)
