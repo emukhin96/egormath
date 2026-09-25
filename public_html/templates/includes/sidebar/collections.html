@@ -27,6 +27,14 @@
   </ul>
 </section>
 {% endif %}
+{% if section_nav %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Параграфы</p>
+  <ul class="sidebar-list collection-sidebar-tree">
+    {% for entry in section_nav %}<li style="--collection-depth: 0"{% if page.has_other_pages and entry.section.index in chunk.section_indexes %} class="is-current"{% endif %}><a href="?page={{ entry.page }}#section-{{ entry.section.index }}" class="math-content">{% if entry.section.title %}{{ entry.section.title|truncatechars:44 }}{% else %}Без параграфа{% endif %}</a>{% if entry.total %}<br><span>{% if entry.first != entry.last %}{{ entry.first }}–{{ entry.last }}{% else %}{{ entry.first }}{% endif %} · {{ entry.total }} {{ entry.total|plural_ru:'задача,задачи,задач' }}</span>{% endif %}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
 {% if current_collection %}
 <section class="sidebar-section">
   <p class="sidebar-kicker">Темы раздела</p>

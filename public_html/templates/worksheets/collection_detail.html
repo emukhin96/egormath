@@ -7,7 +7,7 @@
   <div>
     <span class="page-eyebrow">{{ collection.source }}{% for part in collection.source_path %}{% if not forloop.last %} · {{ part }}{% endif %}{% endfor %}</span>
     <h1>{{ collection.catalog_title }}</h1>
-    <p class="page-subtitle">{% if children %}Раздел: {{ children|length }} {{ children|length|plural_ru:'подборка,подборки,подборок' }}{% if flat_groups %} · {{ cart_task_ids|length }} {{ cart_task_ids|length|plural_ru:'задача,задачи,задач' }}{% endif %}{% elif page.paginator.count %}{{ page.paginator.count }} {{ page.paginator.count|plural_ru:'элемент,элемента,элементов' }}{% if page.has_other_pages %} · страница {{ page.number }} из {{ page.paginator.num_pages }}{% endif %}{% else %}Подборка{% endif %}</p>
+    <p class="page-subtitle">{% if children %}Раздел: {{ children|length }} {{ children|length|plural_ru:'подборка,подборки,подборок' }}{% if flat_groups %} · {{ cart_task_ids|length }} {{ cart_task_ids|length|plural_ru:'задача,задачи,задач' }}{% endif %}{% elif tasks_total %}{{ tasks_total }} {{ tasks_total|plural_ru:'задача,задачи,задач' }}{% if section_nav %} · {{ section_nav|length }} {{ section_nav|length|plural_ru:'параграф,параграфа,параграфов' }}{% endif %}{% if page.has_other_pages %} · страница {{ page.number }} из {{ page.paginator.num_pages }}{% endif %}{% else %}Подборка{% endif %}</p>
   </div>
   {# Действия над подборкой — одна заливная кнопка; настройки просмотра ниже, отдельным рядом #}
   <div class="form-buttons collection-head-actions">
@@ -95,7 +95,18 @@
   {% else %}
   {% if rows %}
   <div id="ws-items" class="ws-collection{% if wide_numbers %} ws-num-wide{% endif %}" data-answers-key="collection-show-answers">
-    {% include 'worksheets/_collection_rows.html' %}
+    {% for entry in page_blocks %}
+    {% if entry.block.section.heading %}
+    {# Заголовок параграфа повторяется на каждой его странице #}
+    <div class="ws-item ws-item-rubric" id="section-{{ entry.block.section.index }}">
+      <div class="ws-body"><div class="ws-content">
+        <h3 class="math-content">{{ entry.block.section.heading.rubric }}{% if entry.block.continued %} <span class="muted collection-continued">· продолжение, часть {{ entry.block.part }} из {{ entry.block.parts }}</span>{% endif %}</h3>
+        {% if entry.block.section.heading.rubric_note and not entry.block.continued %}<p>{{ entry.block.section.heading.rubric_note }}</p>{% endif %}
+      </div></div>
+    </div>
+    {% endif %}
+    {% include 'worksheets/_collection_rows.html' with rows=entry.rows %}
+    {% endfor %}
   </div>
   {% else %}
   <p class="muted">Подборка пуста.</p>

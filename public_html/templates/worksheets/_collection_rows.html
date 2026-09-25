@@ -8,7 +8,7 @@
       {% if item.task_id %}
       {% include 'worksheets/_common_condition.html' %}
       <div class="task-line">
-        <span class="ws-num">{{ row.number }}.</span>
+        <span class="ws-num">{{ row.label }}.</span>
         <span class="math-content task-text">{{ row.statement|web_text }}</span>
       </div>
       {% if row.subitems %}

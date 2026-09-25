@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 
-from problems.models import Source, Task, TaskSubitem, Topic
+from problems.models import Source, Task, TaskSource, TaskSubitem, Topic
 from problems.tests import make_teacher
 from worksheets.latex import worksheet_to_tex
 from worksheets.models import Collection, Worksheet, WorksheetItem
@@ -430,3 +430,104 @@ class CollectionAnswerSourceTests(TestCase):
         tex = worksheet_to_tex(self.worksheet, 'answers')
         self.assertIn('[{4}]', tex)
         self.assertNotIn('четыре', tex)
+
+
+class CollectionSectionPagesTests(TestCase):
+    """Страница подборки — параграф; номера из задачника."""
+
+    def setUp(self):
+        self.owner = make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        self.source = Source.objects.create(title='Мерзляк-9')
+        self.worksheet = Worksheet.objects.create(title='Глава 1', owner=self.owner)
+        self.collection = Collection.objects.create(
+            worksheet=self.worksheet, source=self.source, locator='ch1',
+            source_path=['Глава 1'], is_published=True)
+        self.order = 0
+
+        def add(rubric=None, tasks=0, paragraph=None):
+            if rubric:
+                self.order += 10
+                WorksheetItem.objects.create(
+                    worksheet=self.worksheet, order=self.order, rubric=rubric)
+            for i in range(1, tasks + 1):
+                self.order += 10
+                task = Task.objects.create(
+                    text_latex=f'Задача {paragraph}.{i}.', created_by=self.owner)
+                TaskSource.objects.create(
+                    task=task, source=self.source, number=f'{paragraph}.{i}',
+                    locator=f'{paragraph}.{i}')
+                WorksheetItem.objects.create(
+                    worksheet=self.worksheet, task=task, order=self.order)
+
+        self.add = add
+
+    def page(self, number=None):
+        return self.client.get(
+            reverse('collection_detail', args=[self.collection.pk]),
+            {'page': number} if number else {})
+
+    def test_paragraphs_are_pages_with_book_numbers(self):
+        self.add('§ 3. Чётные функции', tasks=40, paragraph=3)
+        self.add('§ 1. Функция', tasks=30, paragraph=1)
+        self.add('§ 2. Возрастание', tasks=20, paragraph=2)
+        first = self.page()
+        self.assertContains(first, '<h3 class="math-content">§ 3. Чётные функции</h3>', html=True)
+        self.assertContains(first, '<span class="ws-num">3.1.</span>', html=True)
+        self.assertNotContains(first, 'Задача 1.1.')
+        self.assertContains(first, '90 задач · 3 параграфа · страница 1 из 2')
+        # Короткие параграфы подряд — на одной странице, каждый со своим заголовком
+        second = self.page(2)
+        self.assertContains(second, '§ 1. Функция')
+        self.assertContains(second, '§ 2. Возрастание')
+        self.assertContains(second, '<span class="ws-num">1.30.</span>', html=True)
+        self.assertContains(second, '<span class="ws-num">2.20.</span>', html=True)
+        self.assertNotContains(second, 'Задача 3.1.')
+        # Боковая панель: параграфы со страницей и диапазоном номеров
+        sidebar = second.content.decode().split('Параграфы', 1)[1].split('</section>')[0]
+        self.assertIn('href="?page=1#section-0"', sidebar)
+        self.assertIn('href="?page=2#section-2"', sidebar)
+        self.assertIn('3.1–3.40 · 40 задач', sidebar)
+        self.assertIn('2.1–2.20 · 20 задач', sidebar)
+        self.assertEqual(sidebar.count('is-current'), 2)
+
+    def test_short_variants_stay_on_one_page(self):
+        for variant in range(1, 9):
+            self.add(f'Вариант {variant}', tasks=8, paragraph=variant)
+        response = self.page()
+        self.assertContains(response, 'Вариант 1')
+        self.assertContains(response, 'Вариант 7')
+        self.assertNotContains(response, 'Задача 8.1.')
+        self.assertContains(response, 'страница 1 из 2')
+
+    def test_long_paragraph_is_split_with_repeated_heading(self):
+        self.add('§ 7. Квадратичная функция', tasks=70, paragraph=7)
+        first = self.page()
+        self.assertContains(first, 'Задача 7.30.')
+        self.assertNotContains(first, 'Задача 7.31.')
+        self.assertNotContains(first, 'продолжение')
+        third = self.page(3)
+        self.assertContains(third, '§ 7. Квадратичная функция')
+        self.assertContains(third, 'продолжение, часть 3 из 3')
+        self.assertContains(third, 'Задача 7.70.')
+        self.assertContains(third, 'ws-num-wide')
+
+    def test_management_command_reports_and_fixes_order(self):
+        from io import StringIO
+        from django.core.management import call_command
+        self.add('§ 3. Чётные функции', tasks=1, paragraph=3)
+        self.add('§ 1. Функция', tasks=2, paragraph=1)
+        self.add('§ 2. Возрастание', tasks=1, paragraph=2)
+        out = StringIO()
+        call_command('collection_sections', stdout=out)
+        self.assertIn('§ 3 1 2  НЕ ПО ПОРЯДКУ', out.getvalue())
+        self.assertIn(f'--fix {self.collection.pk}', out.getvalue())
+        out = StringIO()
+        call_command('collection_sections', fix=[self.collection.pk], stdout=out)
+        self.assertIn('§ 1 2 3', out.getvalue())
+        rubrics = [item.rubric for item in self.worksheet.ordered_items()
+                   if item.rubric]
+        self.assertEqual(rubrics, ['§ 1. Функция', '§ 2. Возрастание',
+                                   '§ 3. Чётные функции'])
+        self.assertContains(self.page(), '§ 1. Функция')
+        self.assertContains(self.page(3), 'Задача 3.1.')
