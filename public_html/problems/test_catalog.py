@@ -239,3 +239,49 @@ class TaxonomyCatalogCacheTests(TransactionTestCase):
         after = next(row['count'] for row in taxonomy_catalog()['topics']
                      if row['id'] == topic.pk)
         self.assertEqual(after, before + 1)
+
+
+class TaxonomyCatalogEndpointTests(TestCase):
+    """Каталог рубрикатора — отдельным кэшируемым ответом, не в каждой странице."""
+
+    def setUp(self):
+        self.teacher = make_teacher()
+        self.client.force_login(self.teacher)
+
+    def test_page_carries_link_not_catalog(self):
+        html = self.client.get(reverse('task_list')).content.decode()
+        url = reverse('taxonomy_catalog_json')
+        self.assertIn('id="taxonomy-catalog"', html)
+        self.assertIn(f'data-src="{url}"', html)
+        self.assertNotIn('"topics":', html)
+
+    def test_json_etag_and_cache(self):
+        url = reverse('taxonomy_catalog_json')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response['Content-Type'].startswith('application/json'))
+        data = response.json()
+        self.assertIn('topics', data)
+        self.assertTrue(data['topics'])
+        self.assertIn('max-age=', response['Cache-Control'])
+        again = self.client.get(url, HTTP_IF_NONE_MATCH=response['ETag'])
+        self.assertEqual(again.status_code, 304)
+        # Caddy дописывает суффикс сжатия внутри кавычек
+        zstd = response['ETag'][:-1] + '-zstd"'
+        self.assertEqual(self.client.get(url, HTTP_IF_NONE_MATCH=zstd).status_code, 304)
+
+    def test_counts_are_fresh_after_new_task(self):
+        url = reverse('taxonomy_catalog_json')
+        before = self.client.get(url)
+        topic = next(t for t in before.json()['topics'] if t['leaf'])
+        task = Task.objects.create(created_by=self.teacher, text_latex='Новая')
+        task.topics.add(topic['id'])
+        after = self.client.get(url, HTTP_IF_NONE_MATCH=before['ETag'])
+        self.assertEqual(after.status_code, 200)
+        count = next(t['count'] for t in after.json()['topics'] if t['id'] == topic['id'])
+        self.assertEqual(count, topic['count'] + 1)
+
+    def test_login_required(self):
+        self.client.logout()
+        response = self.client.get(reverse('taxonomy_catalog_json'))
+        self.assertEqual(response.status_code, 302)

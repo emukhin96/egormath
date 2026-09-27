@@ -692,9 +692,20 @@ def dumps_state(state):
     return json.dumps(state, ensure_ascii=False)
 
 
+def taxonomy_catalog_json():
+    """Каталог для виджета одним JSON-текстом и его ETag."""
+    text = json.dumps(taxonomy_catalog(), ensure_ascii=False,
+                      separators=(',', ':'))
+    etag = '"%s"' % hashlib.sha256(text.encode()).hexdigest()[:20]
+    return text, etag
+
+
 def taxonomy_page_context(state=None):
+    # Сам каталог (~120 КБ) в страницу не вставляется: виджет берёт его
+    # отдельным запросом (problems:taxonomy_catalog), браузер кэширует ответ.
+    from django.urls import reverse
     return {
-        'taxonomy_catalog': taxonomy_catalog(),
+        'taxonomy_catalog_url': reverse('taxonomy_catalog_json'),
         'selected_json': dumps_state(state or {
             'topics': [], 'primary': None, 'grades': [],
             'facets': [], 'exams': [], 'difficulty': None,
