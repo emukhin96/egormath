@@ -1,0 +1,9 @@
+# Локальная проверка стека (Docker Desktop / OrbStack), поверх compose.yaml:
+#   docker network create edge   # один раз
+#   DATA_DIR=$PWD/data docker compose --env-file .env \
+#     -f deploy/vps/compose.yaml -f deploy/vps/compose.local.yaml up -d --build
+# Сайт — http://localhost:8080 (в data/secrets/ALLOWED_HOSTS добавить localhost).
+services:
+  egormath-front:
+    ports:
+      - "127.0.0.1:8080:80"

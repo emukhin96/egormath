@@ -1,0 +1,9 @@
+# MySQL egormath на общем сервере: скромный буфер, чтобы уместиться
+# рядом с chemolymp и latex-api (контейнер ограничен 512 МБ).
+[mysqld]
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+innodb_buffer_pool_size = 256M
+performance_schema = OFF
+max_connections = 50
+skip-name-resolve

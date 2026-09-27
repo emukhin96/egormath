@@ -1,0 +1,93 @@
+# Стек egormath на общем сервере (chemolymp-demo, ADR-003 chemolymp).
+# Из /opt/egormath: docker compose --env-file .env -f deploy/vps/compose.yaml up -d
+# Обычно всё делает deploy/vps/deploy.sh. Подробности — deploy/VPS.md.
+#
+# Имена сервисов с префиксом egormath- обязательны: web и front состоят в общей
+# сети edge, где их видит Caddy chemolymp. Сервис с именем «web» в edge
+# перехватил бы трафик chemolymp (его Caddy ходит на web:8000).
+
+name: egormath
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "20m", max-file: "5" }
+
+services:
+  egormath-web:
+    image: egormath:latest
+    build:
+      context: ../..
+      args:
+        APP_UID: ${APP_UID:-1000}
+    restart: unless-stopped
+    environment:
+      DJANGO_ENV: production
+      DB_HOST: egormath-db
+      DB_PORT: "3306"
+      DB_NAME: ${MYSQL_DATABASE:-egormath}
+      DB_USER: ${MYSQL_USER:-egormath}
+      DB_PASSWORD: ${MYSQL_PASSWORD:?задайте MYSQL_PASSWORD в /opt/egormath/.env}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+    volumes:
+      - ${DATA_DIR:-/opt/egormath/data}/secrets:/app/.secrets:ro
+      - ${DATA_DIR:-/opt/egormath/data}/media:/app/media
+      - ${DATA_DIR:-/opt/egormath/data}/var:/app/var
+      - ${DATA_DIR:-/opt/egormath/data}/cache:/app/.cache
+      - ${DATA_DIR:-/opt/egormath/data}/live:/app/public_html/live
+      - ${DATA_DIR:-/opt/egormath/data}/staticfiles:/app/public_html/staticfiles
+    depends_on:
+      egormath-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "/app/deploy/vps/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    mem_limit: 700m
+    networks: [default, edge]
+    logging: *logging
+
+  # Отдаёт /static/ и /live/ с диска (без Django), остальное — в egormath-web.
+  egormath-front:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    volumes:
+      - ./Caddyfile.front:/etc/caddy/Caddyfile:ro
+      - ${DATA_DIR:-/opt/egormath/data}/staticfiles:/srv/staticfiles:ro
+      - ${DATA_DIR:-/opt/egormath/data}/live:/srv/live:ro
+    depends_on:
+      - egormath-web
+    mem_limit: 64m
+    networks: [default, edge]
+    logging: *logging
+
+  # Порт не публикуется: Docker открывает опубликованные порты в обход ufw.
+  # Дамп/заливка — через docker compose exec (backup.sh, import-db.sh).
+  egormath-db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-egormath}
+      MYSQL_USER: ${MYSQL_USER:-egormath}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?задайте MYSQL_PASSWORD в /opt/egormath/.env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?задайте MYSQL_ROOT_PASSWORD в /opt/egormath/.env}
+      TZ: UTC
+    volumes:
+      - ${DATA_DIR:-/opt/egormath/data}/mysql:/var/lib/mysql
+      - ./mysql.cnf:/etc/mysql/conf.d/egormath.cnf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    mem_limit: 512m
+    networks: [default]
+    logging: *logging
+
+networks:
+  # Общая сеть сервера: создаёт bootstrap chemolymp (docker network create edge).
+  edge:
+    external: true

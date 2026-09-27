@@ -228,6 +228,14 @@ SUBMISSION_PHOTO_MAX_COUNT = 6          # фото на одну задачу
 CANVAS_ENABLED = read_secret('CANVAS_ENABLED', '1').strip().lower() not in ('0', 'false', 'no', 'off')
 
 if IS_PRODUCTION:
+    # На VPS Django стоит за двумя Caddy (общий сервера → egormath-front),
+    # HTTPS снимается снаружи; схему запроса берём из X-Forwarded-Proto.
+    # На Timeweb (Apache, CGI) заголовок не приходит — ни на что не влияет.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # Постоянные процессы gunicorn переиспользуют соединение с MySQL между
+    # запросами; в CGI-процессе на Timeweb оно всё равно живёт один запрос.
+    DATABASES['default']['CONN_MAX_AGE'] = int(read_secret('DB_CONN_MAX_AGE', '60'))
+    DATABASES['default']['CONN_HEALTH_CHECKS'] = True
     CSRF_TRUSTED_ORIGINS = [
         'https://' + h for h in ALLOWED_HOSTS if not h.startswith('.')
     ]

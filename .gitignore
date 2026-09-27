@@ -24,6 +24,9 @@ public_html/core/local_settings.py
 
 # Secrets
 .secrets/
+# Стек VPS (deploy/vps): настройки и данные на сервере
+/.env
+/data/
 
 # OS / editors
 .DS_Store

@@ -1,0 +1,28 @@
+# В образ идёт только код. Данные и локальное окружение — мимо.
+.git
+.github
+.worktrees
+.claude
+.codex
+.cursor
+.ai-import-tmp
+venv
+**/__pycache__
+**/*.pyc
+.secrets
+.env
+.cache
+media
+var
+tmp
+artifacts
+codex-sandbox
+Claude outputs
+db.sqlite3
+public_html/db.sqlite3
+public_html/staticfiles
+public_html/live/*.txt
+tools/tailwindcss
+tools/tailwindcss.exe
+*.log
+.DS_Store

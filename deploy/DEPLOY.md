@@ -1,5 +1,9 @@
 # Деплой egormath-web на Timeweb
 
+> Идёт переезд на VPS (общий сервер с chemolymp): [VPS.md](VPS.md).
+> Этот документ описывает shared-хостинг и остаётся в силе до окончания
+> переезда и периода отката.
+
 Сайт: `https://math.emukhin.ru` (позже алиас `math.egor.am`).
 Каталог: `/home/c/cs13661/egormath` на том же аккаунте, что chgkmsu
 (`cs13661@vh426.timeweb.ru`). Django через CGI-WSGI

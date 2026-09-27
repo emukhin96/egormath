@@ -1,12 +1,14 @@
-"""Сравнение ETag с учётом правок Apache.
+"""Сравнение ETag с учётом правок Apache и Caddy.
 
 ``mod_deflate`` при сжатии дописывает к ETag ответа суффикс ``-gzip``,
 и браузер возвращает его в ``If-None-Match`` уже с суффиксом. Прямое
 сравнение строк никогда не совпадает — и все опросы получают полный
-ответ вместо 304. Здесь суффикс и слабый префикс ``W/`` отбрасываются.
+ответ вместо 304. Caddy на VPS (``encode zstd gzip``) делает то же самое
+с суффиксами ``-gzip`` и ``-zstd``, но внутри кавычек. Здесь суффикс
+и слабый префикс ``W/`` отбрасываются.
 """
 
-SUFFIXES = ('-gzip', '-br', '-deflate')
+SUFFIXES = ('-gzip', '-br', '-deflate', '-zstd')
 
 
 def normalize(value):
@@ -14,8 +16,11 @@ def normalize(value):
     if value.startswith('W/'):
         value = value[2:]
     for suffix in SUFFIXES:
-        if value.endswith(suffix):
+        if value.endswith(suffix):  # Apache: "abc"-gzip
             value = value[:-len(suffix)]
+            break
+        if value.endswith(suffix + '"'):  # Caddy: "abc-zstd"
+            value = value[:-len(suffix) - 1] + '"'
             break
     return value
 
