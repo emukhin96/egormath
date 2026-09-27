@@ -29,7 +29,11 @@ mkdir -p "$DATA_DIR"/{secrets,media,var,cache,live,staticfiles,mysql,backups,log
 docker network inspect edge >/dev/null 2>&1 || docker network create edge
 
 echo "==> Building image"
+# Каталог данных внутри репозитория не должен попадать в образ (секреты!).
+grep -qxF data .dockerignore || { echo "!! в .dockerignore нет строки data — сборка остановлена"; exit 1; }
 $COMPOSE build egormath-web
+# Старые слои образа (в т. ч. собранные до исправления .dockerignore) не копим.
+docker image prune -f --filter "label=com.docker.compose.project=egormath" >/dev/null 2>&1 || true
 
 echo "==> Database"
 $COMPOSE up -d --wait egormath-db
