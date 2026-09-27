@@ -1,0 +1,47 @@
+# Внутренний Caddy стека egormath (egormath-front): только HTTP внутри
+# docker-сетей. HTTPS и сертификаты — у общего Caddy chemolymp
+# (/opt/caddy/sites/egormath.caddy → egormath-front:80).
+{
+	admin off
+	auto_https off
+	servers {
+		# Общий Caddy — в частной docker-сети: его X-Forwarded-Proto: https
+		# передаём дальше, иначе Django решит, что запрос пришёл по http.
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
+	# Статика после collectstatic. Имена с хэшем содержимого не меняются —
+	# кэш на год; прочие (редкие) — на неделю, как было в .htaccess.
+	handle_path /static/* {
+		root * /srv/staticfiles
+		@hashed path_regexp \.[0-9a-f]{12}\.[A-Za-z0-9]+$
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		@plain not path_regexp \.[0-9a-f]{12}\.[A-Za-z0-9]+$
+		header @plain Cache-Control "public, max-age=604800"
+		file_server
+	}
+
+	# Файлы-версии живых страниц (livefile/files.py): опрашиваются каждые
+	# несколько секунд, поэтому без кэша и без Django. Отсутствующий файл,
+	# временный .tmp или что угодно кроме *.txt — сразу 404.
+	handle_path /live/* {
+		root * /srv/live
+		header Cache-Control "no-store, max-age=0"
+		@deny not path_regexp ^/[0-9a-f]+\.txt$
+		respond @deny 404
+		@missing not file
+		respond @missing 404
+		file_server
+	}
+
+	handle {
+		reverse_proxy egormath-web:8000 {
+			# На время пересоздания контейнера при деплое запрос ждёт,
+			# а не получает 502.
+			lb_try_duration 20s
+			lb_try_interval 500ms
+		}
+	}
+}

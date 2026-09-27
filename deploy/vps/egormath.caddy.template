@@ -1,0 +1,19 @@
+# Сайт egormath для общего Caddy (стек chemolymp, импорт /etc/caddy/sites/*.caddy).
+# Не править на сервере: deploy.sh собирает /opt/caddy/sites/egormath.caddy
+# из этого шаблона, подставляя EGORMATH_HOSTS из /opt/egormath/.env.
+__HOSTS__ {
+	encode zstd gzip
+
+	# Фото решений: до 6 файлов по 15 МБ за раз.
+	request_body {
+		max_size 100MB
+	}
+
+	reverse_proxy egormath-front:80
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}

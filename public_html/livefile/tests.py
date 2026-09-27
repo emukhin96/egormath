@@ -85,6 +85,12 @@ class EtagTests(TestCase):
         self.assertFalse(etags.matches(self.request(''), etag))
         self.assertFalse(etags.matches(self.request(None), etag))
 
+    def test_matches_caddy_suffix_inside_quotes(self):
+        etag = '"abc123"'
+        self.assertTrue(etags.matches(self.request('"abc123-zstd"'), etag), 'Caddy encode: суффикс внутри кавычек')
+        self.assertTrue(etags.matches(self.request('W/"abc123-gzip"'), etag))
+        self.assertFalse(etags.matches(self.request('"abc124-zstd"'), etag))
+
 
 class AssignmentSignalTests(LiveFileBase):
     def setUp(self):

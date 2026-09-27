@@ -5,6 +5,7 @@ from django.urls import include, path
 from django.views.generic.base import RedirectView
 
 from accounts import views as accounts_views
+from core import views as core_views
 from livefile import views as livefile_views
 from worksheets import views as worksheets_views
 
@@ -21,6 +22,7 @@ class FaviconRedirectView(RedirectView):
 
 urlpatterns = [
     path('favicon.ico', FaviconRedirectView.as_view(), name='favicon'),
+    path('healthz', core_views.healthz, name='healthz'),
     path('admin/', admin.site.urls),
     path('', accounts_views.index, name='index'),
     path('dashboard/', accounts_views.dashboard, name='dashboard'),
