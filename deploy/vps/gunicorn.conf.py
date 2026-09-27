@@ -25,5 +25,7 @@ forwarded_allow_ips = '*'
 
 accesslog = '-'
 errorlog = '-'
-# %(M)s — время ответа в миллисекундах (для сравнения с Timeweb).
-access_log_format = '%(h)s "%(r)s" %(s)s %(b)s %(M)sms'
+# Адрес посетителя — из X-Forwarded-For: сам запрос приходит от
+# egormath-front (172.x). Первый адрес в списке — клиент, дальше прокси.
+# %(M)s — время ответа в миллисекундах.
+access_log_format = '%({x-forwarded-for}i)s "%(r)s" %(s)s %(b)s %(M)sms'

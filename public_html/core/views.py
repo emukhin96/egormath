@@ -2,7 +2,7 @@ import os
 
 from django.conf import settings
 from django.db import connection
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.cache import never_cache
 
 
@@ -24,3 +24,16 @@ def healthz(request):
     status['live'] = 'ok' if os.path.isdir(live_dir) and os.access(live_dir, os.W_OK) else 'error'
     healthy = all(value == 'ok' for value in status.values())
     return JsonResponse(status, status=200 if healthy else 503)
+
+
+ROBOTS_TXT = (
+    '# Кабинеты учителей и учеников закрыты входом, ссылки на листки\n'
+    '# личные — индексировать на сайте нечего.\n'
+    'User-agent: *\n'
+    'Disallow: /\n'
+)
+
+
+def robots_txt(request):
+    """robots.txt: поисковикам сайт не нужен (раньше отдавался 404)."""
+    return HttpResponse(ROBOTS_TXT, content_type='text/plain; charset=utf-8')

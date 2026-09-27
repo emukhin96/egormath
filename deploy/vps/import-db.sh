@@ -16,7 +16,7 @@ fi
 $COMPOSE stop egormath-web
 
 echo "==> Пересоздание базы"
-$COMPOSE exec -T egormath-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "
+$COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -e "
   DROP DATABASE IF EXISTS \`$MYSQL_DATABASE\`;
   CREATE DATABASE \`$MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   GRANT ALL ON \`$MYSQL_DATABASE\`.* TO \"$MYSQL_USER\"@\"%\";"'
@@ -26,11 +26,11 @@ START=$(date +%s)
 case "$DUMP" in
   *.gz) gunzip -c "$DUMP" ;;
   *) cat "$DUMP" ;;
-esac | $COMPOSE exec -T egormath-db sh -c 'mysql --default-character-set=utf8mb4 -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'
+esac | $COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --default-character-set=utf8mb4 -uroot "$MYSQL_DATABASE"'
 echo "==> Готово за $(( $(date +%s) - START )) с"
 
 echo "==> Число строк в ключевых таблицах (сверить с Timeweb)"
-$COMPOSE exec -T egormath-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "
+$COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot "$MYSQL_DATABASE" -e "
   SELECT table_name, table_rows FROM information_schema.tables
   WHERE table_schema = DATABASE() ORDER BY table_rows DESC LIMIT 15;
   SELECT CONVERT_TZ(NOW(), \"UTC\", \"Europe/Moscow\") AS tz_check;"'

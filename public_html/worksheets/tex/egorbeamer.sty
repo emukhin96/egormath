@@ -228,6 +228,26 @@
 \setbeamertemplate{blocks}[rounded][shadow=false]
 \usebeamercolor[fg]{normal text}
 
+% --- Пометки egor.sty в тексте задач ---------------------------------
+% Тексты задач пишутся под egor.sty и могут содержать его пометки на
+% полях: \annot{2011}, \oge, \fipi, \rev, \complex, \home, \source{…}.
+% В презентации полей нет, а без определений сборка падала на
+% «Undefined control sequence». Выводим их мелкой плашкой в строке;
+% \providecommand — чтобы не спорить с egor.sty, если его подключат.
+\newcommand{\egorbmr@mark}[1]{%
+  \mbox{\footnotesize\color{egor@muted}#1}\enspace\ignorespaces}
+\providecommand{\annot}[1]{%
+  \egorbmr@mark{\fboxsep=1.5pt\fcolorbox{egor@border}{white}{#1}}}
+\providecommand{\annotnoframe}[1]{\egorbmr@mark{#1}}
+\providecommand{\oge}{\annot{ОГЭ}}
+\providecommand{\fipi}{\annot{ФИПИ}}
+\providecommand{\rev}{\annotnoframe{\ensuremath{\circlearrowright}}}
+\providecommand{\complex}{\annotnoframe{\ensuremath{\star}}}
+\providecommand{\starred}{\annotnoframe{\ensuremath{\star}}}
+\providecommand{\home}{\annotnoframe{д/з}}
+\providecommand{\source}[1]{{\footnotesize\color{egor@muted}(#1)}}
+\providecommand{\textbit}[1]{\textbf{\textit{#1}}}
+
 % --- Макросы содержимого ------------------------------------------
 % Звёзды сложности; при nostars команда пустая.
 % (Сетка переопределяет на \bigstar.)
