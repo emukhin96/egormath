@@ -32,7 +32,8 @@ class LatexCompileError(Exception):
 # Общий latex-api (ADR-003 chemolymp) ограничивает число одновременных
 # сборок и сверх лимита отвечает 503 с Retry-After (429 — на всякий случай).
 # Короткая очередь дешевле ошибки у учителя: ждём и повторяем, но не дольше
-# LATEX_API_RETRY_BUDGET секунд суммарно — запрос держит поток gunicorn.
+# LATEX_API_RETRY_BUDGET секунд на все попытки и паузы вместе — запрос
+# держит поток gunicorn (timeout 180 с).
 RETRY_STATUSES = (429, 503)
 
 
@@ -45,25 +46,29 @@ def _retry_delay(response, attempt):
 
 
 def _post_with_retry(url, payload):
-    waited = 0.0
+    # spent — время всех попыток и пауз: сам latex-api держит запрос до 30 с
+    # в своей очереди, прежде чем ответить 503, и это тоже в счёт бюджета.
+    spent = 0.0
     attempt = 0
     while True:
+        started = time.monotonic()
         try:
             response = requests.post(
                 url, json=payload, timeout=settings.LATEX_API_TIMEOUT)
         except requests.RequestException as exc:
             logger.error('LaTeX API недоступен: %s', exc)
             raise LatexCompileError(f'LaTeX API недоступен: {exc}')
+        spent += time.monotonic() - started
         if response.status_code not in RETRY_STATUSES:
             return response
         delay = _retry_delay(response, attempt)
         if (attempt >= settings.LATEX_API_RETRIES
-                or waited + delay > settings.LATEX_API_RETRY_BUDGET):
+                or spent + delay > settings.LATEX_API_RETRY_BUDGET):
             logger.warning('LaTeX API занят (HTTP %s), попыток: %d',
                            response.status_code, attempt + 1)
             return response
         attempt += 1
-        waited += delay
+        spent += delay
         logger.info('LaTeX API занят (HTTP %s), повтор %d через %.1f с',
                     response.status_code, attempt, delay)
         time.sleep(delay)

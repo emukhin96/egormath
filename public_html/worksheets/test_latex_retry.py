@@ -40,12 +40,13 @@ class LatexRetryTests(SimpleTestCase):
                 compile_latex('x')
         self.assertEqual(post.call_count, 5)  # первая попытка + 4 повтора
 
+    @override_settings(LATEX_API_RETRY_BUDGET=35)
     def test_budget_limits_total_wait(self, sleep):
         with mock.patch('worksheets.services.requests.post',
                         return_value=reply(503, retry_after=60)) as post:
             with self.assertRaises(LatexCompileError):
                 compile_latex('x')
-        # пауза обрезается до 10 с, бюджет 30 с — три повтора
+        # пауза обрезается до 10 с, бюджет 35 с — три повтора (4-я пауза дала бы 40)
         self.assertEqual(post.call_count, 4)
         self.assertEqual(sum(c.args[0] for c in sleep.call_args_list), 30.0)
 
@@ -56,3 +57,20 @@ class LatexRetryTests(SimpleTestCase):
                 compile_latex('x')
         self.assertEqual(post.call_count, 1)
         sleep.assert_not_called()
+
+
+@override_settings(LATEX_API_KEY='k', LATEX_API_URL='http://api',
+                   LATEX_API_RETRIES=4, LATEX_API_RETRY_MAX_DELAY=10,
+                   LATEX_API_RETRY_BUDGET=60)
+@mock.patch('worksheets.services.time.sleep')
+class LatexRetrySlowQueueTests(SimpleTestCase):
+    def test_time_in_server_queue_counts_toward_budget(self, sleep):
+        # каждая попытка висит в очереди latex-api 30 с и получает 503
+        clock = iter([0, 30, 32, 62, 64, 94])
+        with mock.patch('worksheets.services.time.monotonic', side_effect=lambda: next(clock)), \
+             mock.patch('worksheets.services.requests.post',
+                        return_value=reply(503, retry_after=2)) as post:
+            with self.assertRaises(LatexCompileError):
+                compile_latex('x')
+        # 30 с + пауза 2 → вторая попытка (ещё 30) → 62 + 2 > 60: хватит
+        self.assertEqual(post.call_count, 2)
