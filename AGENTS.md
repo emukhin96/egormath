@@ -15,7 +15,7 @@ Django-сайт (`public_html/`) для листков с задачами по 
 ## Локальный запуск и проверки
 
 ```bash
-python3.10 -m venv venv
+python3.12 -m venv venv   # подойдёт и 3.10–3.13
 ./venv/bin/pip install -r requirements.txt
 (cd public_html && ../venv/bin/python manage.py migrate)
 

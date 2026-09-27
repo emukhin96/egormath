@@ -17,7 +17,7 @@ egormath (`/opt/egormath`, этот документ). SSH: `ssh chemolymp-demo`
 
 | Сервис | Что делает |
 |---|---|
-| `egormath-web` | образ из `Dockerfile` (Python 3.10), gunicorn gthread 2×4, `timeout 180` (`deploy/vps/gunicorn.conf.py`) |
+| `egormath-web` | образ из `Dockerfile` (Python 3.12), gunicorn gthread 2×4, `timeout 180` (`deploy/vps/gunicorn.conf.py`) |
 | `egormath-front` | `caddy:2-alpine`: `/static/` и `/live/*.txt` с диска без Django, остальное — в web (`deploy/vps/Caddyfile.front`) |
 | `egormath-db` | `mysql:8.0`, порт не публикуется, 256 МБ buffer pool (`deploy/vps/mysql.cnf`) |
 

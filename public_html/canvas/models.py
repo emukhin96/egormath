@@ -74,7 +74,7 @@ class CanvasPage(models.Model):
             models.UniqueConstraint(
                 fields=['answer', 'number'], name='canvas_unique_answer_number'),
             models.CheckConstraint(
-                check=(Q(submission__isnull=False, answer__isnull=True)
+                condition=(Q(submission__isnull=False, answer__isnull=True)
                        | Q(submission__isnull=True, answer__isnull=False)),
                 name='canvas_exactly_one_owner'),
         ]
