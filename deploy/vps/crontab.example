@@ -3,3 +3,5 @@
 15 1 * * * /opt/egormath/deploy/vps/backup.sh >> /opt/egormath/data/logs/backup.log 2>&1
 # Очистка журнала работ (было в планировщике Timeweb): 03:20 UTC = 06:20 МСК
 20 3 * * * /opt/egormath/deploy/vps/manage.sh cleanup_work_activity >> /opt/egormath/data/logs/cleanup.log 2>&1
+# Недельная сводка по логу (понедельник 06:05 МСК) — читать перед решением о масштабировании
+5 3 * * 1 /opt/egormath/deploy/vps/log-report.sh 168h >> /opt/egormath/data/logs/weekly-report.log 2>&1

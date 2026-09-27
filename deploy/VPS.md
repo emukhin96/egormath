@@ -49,6 +49,7 @@ egormath (`/opt/egormath`, этот документ). SSH: `ssh chemolymp-demo`
 | Логи | `cd /opt/egormath && docker compose --env-file .env -f deploy/vps/compose.yaml logs -f --tail=100 egormath-web` |
 | Состояние, память | `docker compose … ps`, `docker stats --no-stream` |
 | Бэкап вручную | `/opt/egormath/deploy/vps/backup.sh` |
+| Сводка нагрузки | `/opt/egormath/deploy/vps/log-report.sh` (7 дней) или `… 24h`; еженедельно — `data/logs/weekly-report.log` |
 | Выключить холст | `echo 0 > /opt/egormath/data/secrets/CANVAS_ENABLED` и `docker compose … restart egormath-web` |
 
 `deploy.sh`: fetch → checkout → сборка образа → бэкап → `check --deploy` →
@@ -58,6 +59,40 @@ egormath (`/opt/egormath`, этот документ). SSH: `ssh chemolymp-demo`
 пользователи видят паузу, а не 502.
 
 Время ответа каждого запроса — в логе `egormath-web` (последнее поле, `…ms`).
+
+## Бэкапы вне сервера и мониторинг
+
+`backup.sh` каждую ночь кладёт дамп базы и архив media в
+`/opt/egormath/data/backups` (14 дней). Этого мало: при потере сервера
+пропадут и бэкапы. Копия в S3 Timeweb включается один раз:
+
+1. Панель Timeweb → S3-хранилище → создать приватный бакет, например
+   `egormath-backups`; в настройках бакета — ключи доступа (Access Key /
+   Secret Key).
+2. На сервере от root: `apt-get install -y rclone`.
+3. От `deploy`: `rclone config` → `n` (new remote) → имя `s3` → тип
+   `s3` → provider `Other` → ключи из п. 1 → endpoint
+   `https://s3.twcstorage.ru` → остальное по умолчанию. Проверка:
+   `rclone lsd s3:`.
+4. В `/opt/egormath/.env`: `BACKUP_RCLONE_REMOTE=s3:egormath-backups`.
+   Проверка: `/opt/egormath/deploy/vps/backup.sh` — в конце строка
+   `==> rclone -> s3:egormath-backups`, затем `rclone ls s3:egormath-backups`.
+
+Восстановление проверять раз в месяц: скачать свежий дамп
+(`rclone copy s3:egormath-backups/db-<дата>.sql.gz /tmp/`) и залить его
+на Mac в локальный MySQL или в копию стека.
+
+Мониторинг снаружи — любой бесплатный сервис проверки доступности
+(UptimeRobot, Healthchecks.io, BetterStack): HTTP-проверка
+`https://math.emukhin.ru/healthz` раз в 5 минут, ожидается код 200 и текст
+`"db": "ok"`; оповещение на почту или в Telegram.
+
+Решение о масштабировании — по недельной сводке `log-report.sh`
+(понедельник, `data/logs/weekly-report.log`): если в учебные часы p95
+тяжёлых страниц держится выше 1 с или «в среднем занято потоков»
+подходит к числу ядер, пора на отдельный сервер (разбор «egormath при
+кратном росте», ступень 1). Логи контейнера обнуляются при его
+пересоздании (`deploy.sh`), поэтому сводка по расписанию надёжнее ручной.
 
 ## Первичная установка
 
