@@ -1,7 +1,7 @@
 # Образ egormath для VPS (стек deploy/vps/compose.yaml).
-# Python 3.10 — как в CI и на Timeweb. Код лежит в образе, данные
+# Python 3.12 — как в CI. Код лежит в образе, данные
 # (media, секреты, файлы-версии live/, staticfiles/) монтируются снаружи.
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

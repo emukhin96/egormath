@@ -18,7 +18,7 @@ class ActivityEvent(models.Model):
     received_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
-        constraints = [models.CheckConstraint(name='audit_event_one_work', check=(
+        constraints = [models.CheckConstraint(name='audit_event_one_work', condition=(
             Q(assignment__isnull=False, attempt__isnull=True) |
             Q(assignment__isnull=True, attempt__isnull=False)))]
         indexes = [models.Index(fields=['assignment', 'received_at']), models.Index(fields=['attempt', 'received_at'])]
@@ -33,7 +33,7 @@ class AnswerRevision(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
-        constraints = [models.CheckConstraint(name='audit_revision_one_answer', check=(
+        constraints = [models.CheckConstraint(name='audit_revision_one_answer', condition=(
             Q(submission__isnull=False, part__isnull=True, answer__isnull=True) |
             Q(submission__isnull=True, part__isnull=False, answer__isnull=True) |
             Q(submission__isnull=True, part__isnull=True, answer__isnull=False)))]

@@ -47,7 +47,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='answerrevision',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('answer__isnull', True), ('part__isnull', True), ('submission__isnull', False)), models.Q(('answer__isnull', True), ('part__isnull', False), ('submission__isnull', True)), models.Q(('answer__isnull', False), ('part__isnull', True), ('submission__isnull', True)), _connector='OR'), name='audit_revision_one_answer'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('answer__isnull', True), ('part__isnull', True), ('submission__isnull', False)), models.Q(('answer__isnull', True), ('part__isnull', False), ('submission__isnull', True)), models.Q(('answer__isnull', False), ('part__isnull', True), ('submission__isnull', True)), _connector='OR'), name='audit_revision_one_answer'),
         ),
         migrations.AddIndex(
             model_name='activityevent',
@@ -59,6 +59,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='activityevent',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('assignment__isnull', False), ('attempt__isnull', True)), models.Q(('assignment__isnull', True), ('attempt__isnull', False)), _connector='OR'), name='audit_event_one_work'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('assignment__isnull', False), ('attempt__isnull', True)), models.Q(('assignment__isnull', True), ('attempt__isnull', False)), _connector='OR'), name='audit_event_one_work'),
         ),
     ]
