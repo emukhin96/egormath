@@ -26,12 +26,55 @@
     var src = el && el.getAttribute('data-src');
     if (!src) return Promise.resolve(null);
     if (!loading) {
+      // Неуспешный ответ (502/503 при деплое и т. п.) — такая же ошибка,
+      // как обрыв сети: loading сбрасывается, следующий init() запросит
+      // каталог заново.
       loading = fetch(src, {credentials: 'same-origin'})
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (data) { catalog = data; return data; })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          if (!data || !data.topics) throw new Error('bad catalog');
+          catalog = data;
+          return data;
+        })
         .catch(function () { loading = null; return null; });
     }
     return loading;
+  }
+
+  // Готовность рубрикатора: промис разрешается, когда каталог получен и
+  // виджеты созданы. Форма задачи ждёт его, прежде чем восстанавливать
+  // закреплённые темы/классы/метки — до этого EgorTaxonomy.set() некуда
+  // писать.
+  var readyResolve = null;
+  var readyPromise = new Promise(function (resolve) { readyResolve = resolve; });
+
+  function showLoadError() {
+    document.querySelectorAll('[data-tax-picker]').forEach(function (el) {
+      if (el.dataset.taxReady || el.querySelector('[data-tax-error]')) return;
+      var box = document.createElement('p');
+      box.className = 'tax-empty';
+      box.setAttribute('data-tax-error', '');
+      box.setAttribute('role', 'alert');
+      box.textContent = 'Не удалось загрузить рубрикатор. ';
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-secondary btn-small';
+      btn.textContent = 'Повторить';
+      btn.addEventListener('click', function () {
+        btn.disabled = true;
+        init();
+      });
+      box.appendChild(btn);
+      el.insertBefore(box, el.firstChild);
+    });
+  }
+
+  function clearLoadError() {
+    document.querySelectorAll('[data-tax-picker] [data-tax-error]')
+      .forEach(function (box) { box.remove(); });
   }
 
   function parseState(raw) {
@@ -796,19 +839,32 @@
 
   function init() {
     if (!loadCatalog()) {
-      fetchCatalog().then(function (data) { if (data) initPickers(); });
+      fetchCatalog().then(function (data) {
+        if (data) initPickers();
+        else showLoadError();
+      });
       return;
     }
     initPickers();
   }
 
   function initPickers() {
+    clearLoadError();
     pickers = pickers.filter(function (p) { return p.form && p.form.isConnected; });
+    var created = [];
     document.querySelectorAll('[data-tax-picker]').forEach(function (el) {
       if (el.dataset.taxReady) return;
       el.dataset.taxReady = '1';
-      pickers.push(new Picker(el));
+      var picker = new Picker(el);
+      pickers.push(picker);
+      created.push(picker);
     });
+    readyResolve();
+    if (created.length) {
+      document.dispatchEvent(new CustomEvent('egor:taxonomy-ready', {
+        detail: {forms: created.map(function (p) { return p.form; })}
+      }));
+    }
   }
 
   function findPicker(form, name) {
@@ -822,6 +878,7 @@
 
   window.EgorTaxonomy = {
     init: init,
+    ready: function () { return readyPromise; },
     get: function (form, name) {
       var p = findPicker(form, name);
       return p ? p.getField(name) : null;
