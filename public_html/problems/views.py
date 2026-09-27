@@ -7,13 +7,14 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Max, Q
-from django.http import FileResponse, Http404, JsonResponse
+from django.contrib.auth.decorators import login_required
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from accounts.decorators import teacher_required
 from assignments.checks import HELP as MASK_HELP
@@ -1907,3 +1908,29 @@ def textbook_import_commit_section(request, pk):
     if batch.status == TextbookImportBatch.STATUS_IMPORTED:
         return redirect('collection_list')
     return redirect(_textbook_detail_url(batch, section=section_token))
+
+
+# Сколько браузер держит каталог рубрикатора без перепроверки. Числа задач
+# у тем могут отставать на это время — для подсказок в фильтре не страшно.
+TAXONOMY_CATALOG_MAX_AGE = 60
+
+
+@login_required
+@require_GET
+def taxonomy_catalog_json(request):
+    """Каталог рубрикатора для виджета тем (static/js/taxonomy.js).
+
+    Раньше он целиком вставлялся в каждую страницу с выбором темы и был
+    около половины её HTML. Теперь страница несёт только ссылку, а ответ
+    кэшируется браузером; после истечения срока — 304 по ETag.
+    """
+    from livefile.etags import matches
+    from .rubricator import taxonomy_catalog_json as build
+    text, etag = build()
+    if matches(request, etag):
+        response = HttpResponse(status=304)
+    else:
+        response = HttpResponse(text, content_type='application/json; charset=utf-8')
+    response['ETag'] = etag
+    response['Cache-Control'] = 'private, max-age=%d' % TAXONOMY_CATALOG_MAX_AGE
+    return response

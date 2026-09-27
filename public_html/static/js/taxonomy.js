@@ -7,14 +7,31 @@
 
   var catalog = null;
   var pickers = [];
+  var loading = null;
 
+  // Каталог либо встроен в страницу (<script id="taxonomy-catalog">…JSON…),
+  // либо лежит по data-src и грузится один раз отдельным запросом —
+  // браузер кэширует его между страницами.
   function loadCatalog() {
     if (catalog) return catalog;
     var el = document.getElementById('taxonomy-catalog');
-    if (!el) return null;
+    if (!el || !el.textContent.trim()) return null;
     try { catalog = JSON.parse(el.textContent); }
     catch (e) { catalog = null; }
     return catalog;
+  }
+
+  function fetchCatalog() {
+    var el = document.getElementById('taxonomy-catalog');
+    var src = el && el.getAttribute('data-src');
+    if (!src) return Promise.resolve(null);
+    if (!loading) {
+      loading = fetch(src, {credentials: 'same-origin'})
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) { catalog = data; return data; })
+        .catch(function () { loading = null; return null; });
+    }
+    return loading;
   }
 
   function parseState(raw) {
@@ -778,7 +795,14 @@
   }
 
   function init() {
-    if (!loadCatalog()) return;
+    if (!loadCatalog()) {
+      fetchCatalog().then(function (data) { if (data) initPickers(); });
+      return;
+    }
+    initPickers();
+  }
+
+  function initPickers() {
     pickers = pickers.filter(function (p) { return p.form && p.form.isConnected; });
     document.querySelectorAll('[data-tax-picker]').forEach(function (el) {
       if (el.dataset.taxReady) return;
