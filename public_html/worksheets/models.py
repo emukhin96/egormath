@@ -237,7 +237,7 @@ class WorksheetItem(models.Model):
         ordering = ['order', 'id']
         constraints = [
             models.CheckConstraint(
-                check=(models.Q(task__isnull=False)
+                condition=(models.Q(task__isnull=False)
                        | ~models.Q(text_latex='')
                        | ~models.Q(rubric='')),
                 name='worksheetitem_task_or_text'),

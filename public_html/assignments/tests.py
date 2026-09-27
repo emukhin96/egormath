@@ -1,6 +1,7 @@
 import io
 import shutil
 import subprocess
+import tempfile
 from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 from unittest import mock
@@ -505,7 +506,7 @@ class AssignmentWorkspaceTests(TestCase):
         self.assertEqual(len(response.context['assignments']), 3)
 
 
-@override_settings(MEDIA_ROOT='/tmp/egormath-test-media')
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix='egormath-test-media-'))
 class StudentAnswerTests(TestCase):
     def setUp(self):
         self.teacher = make_teacher()

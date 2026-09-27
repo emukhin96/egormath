@@ -14,7 +14,7 @@ GitHub (`git@github.com:emukhin96/egormath.git`) через ветки и pull r
 Первый запуск:
 
 ```bash
-python3.10 -m venv venv
+python3.12 -m venv venv   # подойдёт и 3.10–3.13
 ./venv/bin/pip install -r requirements.txt
 cd public_html
 ../venv/bin/python manage.py migrate
@@ -259,7 +259,7 @@ tools/pr.sh reply <id> "Текст"          # ответ в треде заме
 
 `.github/workflows/ci.yml` на каждый push и pull request:
 
-1. Python 3.10, `pip install -r requirements.txt`
+1. Python 3.12 (как в CI и Docker-образе; код совместим с 3.10–3.13), `pip install -r requirements.txt`
 2. `manage.py test`
 3. Скачивание Tailwind CLI, пересборка CSS и `git diff --exit-code` по
   `app.css` — защита от забытого `make build-css`
