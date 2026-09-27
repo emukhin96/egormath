@@ -1,1 +1,1 @@
-{% if taxonomy_catalog %}{{ taxonomy_catalog|json_script:"taxonomy-catalog" }}{% endif %}
+{% comment %}Каталог рубрикатора грузит taxonomy.js по data-src (problems/taxonomy.json); встроенный JSON — для страниц, которые передают taxonomy_catalog сами.{% endcomment %}{% if taxonomy_catalog_url %}<script id="taxonomy-catalog" type="application/json" data-src="{{ taxonomy_catalog_url }}"></script>{% elif taxonomy_catalog %}{{ taxonomy_catalog|json_script:"taxonomy-catalog" }}{% endif %}

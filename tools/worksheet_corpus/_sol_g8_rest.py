@@ -30,7 +30,7 @@ add(D, 1, r'доказано',
     r'Равные хорды стягивают равные дуги, перпендикуляры из центра к хордам равны как высоты равнобедренных треугольников с равными боковыми.')
 add(D, 2, r'$60^\circ$',
     r'$AC=R$, треугольник $OAC$ равносторонний, $\angle AOC=60^\circ$, вписанный $\angle BAC=30^\circ$ (опирается на радиус-хорду; $AB$ — диаметр, $\angle ACB=90^\circ$, $AC=R=AB/2$, $\angle ABC=30^\circ$, $\angle BAC=60^\circ$). Исправление: $AC=R$, $AB=2R$, $\angle C=90^\circ$, $\angle BAC=60^\circ$.',
-    'При $AC=R$ и диаметре $AB$ угол $BAC=60^\circ$.')
+    'При $AC=R$ и диаметре $AB$ угол $BAC=60^\\circ$.')
 add(D, 3, r'$90^\circ$',
     r'Пусть хорда $AB=2x$, расстояние до центра $x$. Половинка хорды $x$, радиус $x\sqrt{2}$, центральный угол $90^\circ$.')
 add(D, 4, r'$\sqrt{2}$',
@@ -47,7 +47,7 @@ add(D, 9, r'$\sqrt{2}$', r'Та же задача, что #4.')
 add(D, 10, r'$12\sqrt{3}$', r'$\triangle AOB$ с $90^\circ$ при $B$ и $60^\circ$ при $O$, $AB=12\sqrt{3}$.')
 add(D, 11, r'$40^\circ$',
     r'$\angle OAB=20^\circ$, $OA\perp$ касательной, $\angle AOB=70^\circ$, $\angle AMB=180^\circ-2\cdot 20^\circ=140^\circ$? $OA=OB$, $\angle OAB=\angle OBA=20^\circ$, $\angle AOB=140^\circ$, $\angle AMB=180^\circ-140^\circ=40^\circ$ между касательными. Формула: угол между касательными $180^\circ-\angle AOB=40^\circ$.',
-    'Угол $AMB=40^\circ$.')
+    'Угол $AMB=40^\\circ$.')
 add(D, 12, r'$28^\circ$',
     r'Угол между касательными $56^\circ$, $\angle AOB=124^\circ$, $\angle ABO=28^\circ$. Нужен $\angle ABO$: $(180-124)/2=28^\circ$.')
 add(D, 13, r'$5$',
@@ -134,10 +134,10 @@ add(D, 9, r'$3\sqrt{6}$',
     r'$MK$ — сторона ортотреугольника / отрезок на $AC$. По формуле $MK=AC\cdot | \cos A |$ или координаты. $BK=2\sqrt{6}$, $BC=9\sqrt{2}$, $AC=12\sqrt{3}$. $AK=\sqrt{BC^2-BK^2}$ если $K$ на $AB$. $MK=3\sqrt{6}$.')
 add(D, 10, r'$5\sqrt{6}$; $5\sqrt{3}$',
     r'$\angle C=45^\circ$, $AB=15\cdot\sin 45/\sin 75$... $AB=BC\cdot\sin C/\sin A$? $AB=c=a\sin C/\sin A$ нет. $AB=15\cdot\sin 45^\circ/\sin 60^\circ=15\cdot \frac{\sqrt{2}/2}{\sqrt{3}/2}=5\sqrt{6}$. $R=a/(2\sin A)=15/(2\cdot \sqrt{3}/2)=5\sqrt{3}$? $R=AB/(2\sin C)=5\sqrt{6}/(2\cdot \frac{\sqrt{2}}{2})=5\sqrt{3}$. Пересчёт $R=a/(2\sin A)=15/(2\sin 60)=5\sqrt{3}$.',
-    ' $AB=5\sqrt{6}$, $R=5\sqrt{3}$.')
+    ' $AB=5\\sqrt{6}$, $R=5\\sqrt{3}$.')
 add(D, 11, r'$3{,}5$',
     r'Центры на биссектрисе, $O_1O_2=R_1+R_2$, $CO_1=R_1/\sin 30^\circ=2R_1=21$, $R_1=10{,}5$. Внешнее касание: $R_2=R_1/(\sqrt{3}+2)$ или $CO_2=2R_2$, $2R_1-2R_2=R_1+R_2$, $R_1=3R_2$, $R_2=3{,}5$.',
-    'При угле $60^\circ$ и внешнем касании $R_2=7/2$.')
+    'При угле $60^\\circ$ и внешнем касании $R_2=7/2$.')
 flush(D)
 
 # ---------- dist5 ----------

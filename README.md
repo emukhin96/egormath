@@ -12,7 +12,7 @@
 
 ## Стек
 
-Django 4.2 (Python 3.10), SQLite локально / MySQL на проде (Timeweb shared),
+Django 5.2 LTS (Python 3.12), SQLite локально / MySQL 8 на проде (VPS, Docker — `deploy/VPS.md`),
 PDF — внешний LaTeX API-сервер (LuaLaTeX), KaTeX для формул на сайте.
 Стили — Tailwind CSS v4 (standalone CLI): исходник
 `public_html/static/css/input.css`, собранный артефакт
@@ -36,7 +36,7 @@ make check       # сборка + тесты + проверка, что app.css 
 ## Локальный запуск
 
 ```bash
-python3.10 -m venv venv
+python3.12 -m venv venv   # подойдёт и 3.10–3.13
 ./venv/bin/pip install -r requirements.txt
 cd public_html
 ../venv/bin/python manage.py migrate

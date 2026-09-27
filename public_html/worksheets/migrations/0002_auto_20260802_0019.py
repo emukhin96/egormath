@@ -48,6 +48,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='worksheetitem',
-            constraint=models.CheckConstraint(check=models.Q(('task__isnull', False), models.Q(('text_latex', ''), _negated=True), _connector='OR'), name='worksheetitem_task_or_text'),
+            constraint=models.CheckConstraint(condition=models.Q(('task__isnull', False), models.Q(('text_latex', ''), _negated=True), _connector='OR'), name='worksheetitem_task_or_text'),
         ),
     ]

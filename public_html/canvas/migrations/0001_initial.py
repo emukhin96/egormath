@@ -52,6 +52,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='canvaspage',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('answer__isnull', True), ('submission__isnull', False)), models.Q(('answer__isnull', False), ('submission__isnull', True)), _connector='OR'), name='canvas_exactly_one_owner'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('answer__isnull', True), ('submission__isnull', False)), models.Q(('answer__isnull', False), ('submission__isnull', True)), _connector='OR'), name='canvas_exactly_one_owner'),
         ),
     ]

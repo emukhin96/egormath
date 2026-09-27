@@ -4,6 +4,8 @@ from . import views, editor
 
 urlpatterns = [
     path('', views.task_list, name='task_list'),
+    path('taxonomy.json', views.taxonomy_catalog_json,
+         name='taxonomy_catalog_json'),
     path('new/', views.task_create, name='task_create'),
     path('bulk-answers/', views.bulk_answers, name='bulk_answers'),
     path('bulk-update/', views.task_bulk_update, name='task_bulk_update'),
