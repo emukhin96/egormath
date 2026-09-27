@@ -23,6 +23,7 @@ class FaviconRedirectView(RedirectView):
 urlpatterns = [
     path('favicon.ico', FaviconRedirectView.as_view(), name='favicon'),
     path('healthz', core_views.healthz, name='healthz'),
+    path('robots.txt', core_views.robots_txt, name='robots_txt'),
     path('admin/', admin.site.urls),
     path('', accounts_views.index, name='index'),
     path('dashboard/', accounts_views.dashboard, name='dashboard'),

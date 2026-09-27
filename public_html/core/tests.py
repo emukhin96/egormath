@@ -39,3 +39,11 @@ class HealthzTests(TestCase):
             response = self.client.get('/healthz')
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()['live'], 'error')
+
+
+class RobotsTxtTests(SimpleTestCase):
+    def test_disallow_all(self):
+        response = self.client.get('/robots.txt')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response['Content-Type'].startswith('text/plain'))
+        self.assertIn('Disallow: /', response.content.decode())
