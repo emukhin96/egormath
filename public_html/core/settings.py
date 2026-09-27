@@ -196,6 +196,13 @@ SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
 LATEX_API_URL = read_secret('LATEX_API_URL', 'http://81.200.147.78:8000')
 LATEX_API_KEY = read_secret('LATEX_API_KEY', '')
 LATEX_API_TIMEOUT = int(read_secret('LATEX_API_TIMEOUT', '120'))
+# Повторы, когда общий latex-api занят (503/429 + Retry-After): не больше
+# LATEX_API_RETRIES раз, пауза не длиннее LATEX_API_RETRY_MAX_DELAY секунд;
+# новая попытка не начинается, если попытки и паузы уже заняли больше
+# LATEX_API_RETRY_BUDGET секунд (latex-api сам держит запрос в очереди до 30 с).
+LATEX_API_RETRIES = int(read_secret('LATEX_API_RETRIES', '4'))
+LATEX_API_RETRY_MAX_DELAY = float(read_secret('LATEX_API_RETRY_MAX_DELAY', '10'))
+LATEX_API_RETRY_BUDGET = float(read_secret('LATEX_API_RETRY_BUDGET', '60'))
 
 # Нейрогенерация ответов/решений (Gemini API). Без ключа кнопки на
 # импорте вернут понятную ошибку. Более сильная модель — одной

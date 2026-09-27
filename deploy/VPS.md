@@ -17,7 +17,7 @@ egormath (`/opt/egormath`, этот документ). SSH: `ssh chemolymp-demo`
 
 | Сервис | Что делает |
 |---|---|
-| `egormath-web` | образ из `Dockerfile` (Python 3.10), gunicorn gthread 2×4, `timeout 180` (`deploy/vps/gunicorn.conf.py`) |
+| `egormath-web` | образ из `Dockerfile` (Python 3.12), gunicorn gthread 2×4, `timeout 180` (`deploy/vps/gunicorn.conf.py`) |
 | `egormath-front` | `caddy:2-alpine`: `/static/` и `/live/*.txt` с диска без Django, остальное — в web (`deploy/vps/Caddyfile.front`) |
 | `egormath-db` | `mysql:8.0`, порт не публикуется, 256 МБ buffer pool (`deploy/vps/mysql.cnf`) |
 
@@ -187,6 +187,30 @@ docker compose --env-file .env -f deploy/vps/compose.yaml exec egormath-web \
 Перед переключением прогнать проверки из [DEPLOY.md](DEPLOY.md) §1.5–1.6a против
 нового адреса: колонтитул `2/2`, картинка `\taskpic`, Beamer, шрифты CMU и
 SchoolBook. Если чего-то не хватает — это правится в репозитории latex-api.
+
+### 5a. Переключение на общий latex-api (после проверок)
+
+Клиент повторяет запрос, если latex-api занят (503/429 с `Retry-After`,
+до 4 повторов и 30 с ожидания — `LATEX_API_RETRIES`, `…_MAX_DELAY`,
+`…_BUDGET`), так что очередь сборок сертификатов chemolymp не превращается
+у учителя в ошибку.
+
+```bash
+# на сервере, от deploy
+cd /opt/egormath
+C="docker compose --env-file .env -f deploy/vps/compose.yaml"
+# latex-api виден из egormath-web по имени в сети edge?
+$C exec -T egormath-web python -c "import requests; print(requests.get('http://latex-api:8000/health', timeout=5).text)"
+# сохранить старые настройки для отката
+cd data/secrets && cp LATEX_API_URL LATEX_API_URL.old && cp LATEX_API_KEY LATEX_API_KEY.old
+echo "http://latex-api:8000" > LATEX_API_URL
+grep '^LATEX_API_KEYS=' /opt/latex-api/.env | tr ',' '\n' | grep -o 'egormath:.*' | cut -d: -f2- | tr -d '"' > LATEX_API_KEY
+test -s LATEX_API_KEY && chmod 600 LATEX_API_URL LATEX_API_KEY && cd /opt/egormath && $C restart egormath-web
+```
+
+Проверка: собрать PDF листка с картинкой и презентацию. Откат —
+`mv LATEX_API_URL.old LATEX_API_URL; mv LATEX_API_KEY.old LATEX_API_KEY` в
+`data/secrets` и `restart egormath-web`.
 
 ## Переезд с Timeweb
 

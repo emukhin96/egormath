@@ -130,12 +130,14 @@
       return form.querySelectorAll('[name="' + name + '"]');
     }
 
+    // undefined — поля на форме ещё нет (рубрикатор не загрузился):
+    // такое значение не записываем, чтобы не затереть закреплённое.
     function getValue(name) {
       if (window.EgorTaxonomy && window.EgorTaxonomy.has(form, name)) {
         return window.EgorTaxonomy.get(form, name);
       }
       var els = fieldControls(name);
-      if (!els.length) return null;
+      if (!els.length) return undefined;
       var el = els[0];
       if (el.tagName === 'SELECT' && el.multiple) {
         return Array.prototype.filter.call(el.options, function (o) {
@@ -150,12 +152,14 @@
       return el.value;
     }
 
+    // true — значение применено; false — поля пока нет на форме.
     function setValue(name, value) {
       if (window.EgorTaxonomy && window.EgorTaxonomy.set(form, name, value)) {
-        return;
+        return true;
       }
       var els = fieldControls(name);
-      if (!els.length || value == null) return;
+      if (!els.length) return false;
+      if (value == null) return true;
       var el = els[0];
       if (el.tagName === 'SELECT' && el.multiple) {
         Array.prototype.forEach.call(el.options, function (o) {
@@ -166,6 +170,7 @@
           c.checked = value.indexOf(c.value) !== -1;
         });
       } else { el.value = value; }
+      return true;
     }
 
     var pins = readJSON(PINS_KEY);
@@ -184,27 +189,51 @@
         pins[name] = input.checked;
         writeJSON(PINS_KEY, pins);
         var values = readJSON(VALUES_KEY);
-        if (input.checked) values[name] = getValue(name);
-        else delete values[name];
+        if (input.checked) {
+          var current = getValue(name);
+          if (current !== undefined) values[name] = current;
+        } else {
+          delete values[name];
+        }
         writeJSON(VALUES_KEY, values);
         paintPin(input);
       });
     });
 
-    // Форма новой задачи: применяем закреплённые значения
+    // Форма новой задачи: применяем закреплённые значения. Темы, классы
+    // и метки живут в рубрикаторе, а его каталог может приходить отдельным
+    // запросом уже после DOMContentLoaded — такие поля применяем, когда
+    // рубрикатор сообщит о готовности виджетов этой формы.
     if (form.dataset.newTask) {
       var stored = readJSON(VALUES_KEY);
+      var pending = {};
       pinInputs.forEach(function (input) {
         var name = input.dataset.pin;
-        if (input.checked && name in stored) setValue(name, stored[name]);
+        if (!input.checked || !(name in stored)) return;
+        if (!setValue(name, stored[name])) pending[name] = stored[name];
       });
+      if (Object.keys(pending).length) {
+        var applyPending = function (e) {
+          var forms = e.detail && e.detail.forms || [];
+          if (forms.indexOf(form) === -1) return;
+          Object.keys(pending).forEach(function (name) {
+            if (setValue(name, pending[name])) delete pending[name];
+          });
+          if (!Object.keys(pending).length) {
+            document.removeEventListener('egor:taxonomy-ready', applyPending);
+          }
+        };
+        document.addEventListener('egor:taxonomy-ready', applyPending);
+      }
     }
 
     // Значения закреплённых полей запоминаем при изменении и при сохранении
     function storePinnedValues() {
       var values = readJSON(VALUES_KEY);
       pinInputs.forEach(function (input) {
-        if (input.checked) values[input.dataset.pin] = getValue(input.dataset.pin);
+        if (!input.checked) return;
+        var current = getValue(input.dataset.pin);
+        if (current !== undefined) values[input.dataset.pin] = current;
       });
       writeJSON(VALUES_KEY, values);
     }

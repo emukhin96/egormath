@@ -8,6 +8,7 @@ JSON {"api_key": ..., "tex_files": [{"team_id": ..., "tex_content": ...}]},
 import base64
 import hashlib
 import logging
+import time
 from pathlib import Path
 
 import requests
@@ -28,6 +29,51 @@ class LatexCompileError(Exception):
         self.log = log
 
 
+# Общий latex-api (ADR-003 chemolymp) ограничивает число одновременных
+# сборок и сверх лимита отвечает 503 с Retry-After (429 — на всякий случай).
+# Короткая очередь дешевле ошибки у учителя: ждём и повторяем, но не дольше
+# LATEX_API_RETRY_BUDGET секунд на все попытки и паузы вместе — запрос
+# держит поток gunicorn (timeout 180 с).
+RETRY_STATUSES = (429, 503)
+
+
+def _retry_delay(response, attempt):
+    try:
+        delay = float(response.headers.get('Retry-After', ''))
+    except ValueError:
+        delay = 2.0 * (attempt + 1)
+    return max(0.5, min(delay, settings.LATEX_API_RETRY_MAX_DELAY))
+
+
+def _post_with_retry(url, payload):
+    # spent — время всех попыток и пауз: сам latex-api держит запрос до 30 с
+    # в своей очереди, прежде чем ответить 503, и это тоже в счёт бюджета.
+    spent = 0.0
+    attempt = 0
+    while True:
+        started = time.monotonic()
+        try:
+            response = requests.post(
+                url, json=payload, timeout=settings.LATEX_API_TIMEOUT)
+        except requests.RequestException as exc:
+            logger.error('LaTeX API недоступен: %s', exc)
+            raise LatexCompileError(f'LaTeX API недоступен: {exc}')
+        spent += time.monotonic() - started
+        if response.status_code not in RETRY_STATUSES:
+            return response
+        delay = _retry_delay(response, attempt)
+        if (attempt >= settings.LATEX_API_RETRIES
+                or spent + delay > settings.LATEX_API_RETRY_BUDGET):
+            logger.warning('LaTeX API занят (HTTP %s), попыток: %d',
+                           response.status_code, attempt + 1)
+            return response
+        attempt += 1
+        spent += delay
+        logger.info('LaTeX API занят (HTTP %s), повтор %d через %.1f с',
+                    response.status_code, attempt, delay)
+        time.sleep(delay)
+
+
 def compile_latex(tex_content, doc_id='doc', assets=None):
     """Компилирует .tex через удалённый API, возвращает байты PDF.
 
@@ -46,13 +92,12 @@ def compile_latex(tex_content, doc_id='doc', assets=None):
         'tex_files': [tex_file],
     }
     url = settings.LATEX_API_URL.rstrip('/') + '/api/v1/compile-latex'
-    try:
-        response = requests.post(
-            url, json=payload, timeout=settings.LATEX_API_TIMEOUT)
-    except requests.RequestException as exc:
-        logger.error('LaTeX API недоступен: %s', exc)
-        raise LatexCompileError(f'LaTeX API недоступен: {exc}')
+    response = _post_with_retry(url, payload)
 
+    if response.status_code in RETRY_STATUSES:
+        raise LatexCompileError(
+            'LaTeX API занят другими сборками, попробуйте через минуту '
+            f'(HTTP {response.status_code}).')
     if response.status_code == 401:
         raise LatexCompileError('LaTeX API отклонил ключ (401).')
     try:

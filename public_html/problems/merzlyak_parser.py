@@ -405,7 +405,7 @@ def _tabular_to_array(text: str) -> str:
         joined = " \\\\\n".join(row for row in rows if row.strip())
         joined = re.sub(r"\\hline\s*$", "", joined).rstrip()
         return (r"\[\begin{array}{" + match.group("spec") + "}\n"
-                + joined + "\n\\hline\\end{array}\]")
+                + joined + "\n\\hline\\end{array}\\]")
 
     return pattern.sub(convert, text)
 
