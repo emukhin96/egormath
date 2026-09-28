@@ -121,10 +121,12 @@ jobs:
                 }
                 if (newLine === null) continue;
 
-                if (row.startsWith('+') && !row.startsWith('+++')) {
+                // Патч из pulls.listFiles начинается сразу с hunk-заголовка,
+                // без строк ---/+++, поэтому тип строки — только первый символ.
+                if (row.startsWith('+')) {
                   result.add(newLine);
                   newLine += 1;
-                } else if (row.startsWith('-') && !row.startsWith('---')) {
+                } else if (row.startsWith('-')) {
                   // A deletion does not advance the right-side line number.
                 } else if (!row.startsWith('\\')) {
                   newLine += 1;
@@ -189,11 +191,15 @@ jobs:
               const signature =
                 `<!-- claude-finding:${headSha}:${priority}:${encodeURIComponent(path)}:${line} -->`;
 
-              if (
-                previousInlineComments.some(comment =>
-                  String(comment.body || '').includes(signature)
-                )
-              ) {
+              // Место уже прокомментировано на этом коммите: тот же текст
+              // пропускаем, другой — выносим в сводку, чтобы не потерять.
+              const previous = previousInlineComments.find(comment =>
+                String(comment.body || '').includes(signature)
+              );
+              if (previous) {
+                if (!String(previous.body || '').includes(body)) {
+                  summaryOnly.push(`[${priority}] ${path}:${line} — ${body}`);
+                }
                 continue;
               }
 
