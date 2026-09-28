@@ -1,11 +1,11 @@
-name: Codex PR review
+name: Claude PR review
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
-  group: codex-review-${{ github.event.pull_request.number }}
+  group: claude-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -15,10 +15,12 @@ jobs:
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
+      pull-requests: read
     outputs:
-      final_message: ${{ steps.codex.outputs.final-message }}
+      final_message: ${{ steps.claude.outputs.structured_output }}
 
     steps:
       - name: Check out pull request merge commit
@@ -28,17 +30,31 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Run read-only Codex review
-        id: codex
-        uses: openai/codex-action@v1
+      - name: Load prompt and schema
+        id: config
+        run: |
+          {
+            echo 'prompt<<CLAUDE_PROMPT_EOF'
+            cat .github/claude/review.md
+            echo 'CLAUDE_PROMPT_EOF'
+            echo "schema=$(jq -c . .github/claude/review-schema.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      # Токен GitHub только на чтение: публикует комментарии job publish,
+      # а у модели нет прав менять что-либо в репозитории или PR.
+      - name: Run read-only Claude review
+        id: claude
+        uses: anthropics/claude-code-action@v1
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt-file: .github/codex/prompts/review.md
-          output-file: codex-review.json
-          output-schema-file: .github/codex/review-schema.json
-          sandbox: read-only
-          safety-strategy: drop-sudo
-          codex-args: '["--ephemeral"]'
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: ${{ steps.config.outputs.prompt }}
+          claude_args: |
+            --model claude-opus-5-5
+            --max-turns 40
+            --json-schema '${{ steps.config.outputs.schema }}'
+            --allowedTools "Read,Grep,Glob,LS,Bash(git diff:*),Bash(git show:*),Bash(git log:*),Bash(git status:*),Bash(git rev-parse:*)"
+            --disallowedTools "Edit,MultiEdit,Write,NotebookEdit,WebFetch,WebSearch"
 
   publish:
     name: Publish review comments
@@ -55,7 +71,7 @@ jobs:
       - name: Publish summary and inline comments
         uses: actions/github-script@v7
         env:
-          CODEX_FINAL_MESSAGE: ${{ needs.analyze.outputs.final_message }}
+          CLAUDE_FINAL_MESSAGE: ${{ needs.analyze.outputs.final_message }}
         with:
           github-token: ${{ github.token }}
           script: |
@@ -63,7 +79,7 @@ jobs:
             const repo = context.repo.repo;
             const pull_number = context.payload.pull_request.number;
             const headSha = context.payload.pull_request.head.sha;
-            const summaryMarker = '<!-- codex-automated-review -->';
+            const summaryMarker = '<!-- claude-automated-review -->';
 
             function parseResult(value) {
               let raw = String(value || '').trim();
@@ -109,9 +125,9 @@ jobs:
 
             let review;
             try {
-              review = parseResult(process.env.CODEX_FINAL_MESSAGE);
+              review = parseResult(process.env.CLAUDE_FINAL_MESSAGE);
             } catch (error) {
-              core.setFailed(`Codex returned invalid JSON: ${error.message}`);
+              core.setFailed(`Claude returned invalid JSON: ${error.message}`);
               return;
             }
 
@@ -160,7 +176,7 @@ jobs:
               seenInThisRun.add(findingKey);
 
               const signature =
-                `<!-- codex-finding:${headSha}:${priority}:${encodeURIComponent(path)}:${line} -->`;
+                `<!-- claude-finding:${headSha}:${priority}:${encodeURIComponent(path)}:${line} -->`;
 
               if (
                 previousInlineComments.some(comment =>
@@ -192,7 +208,7 @@ jobs:
                   pull_number,
                   commit_id: headSha,
                   event: 'COMMENT',
-                  body: `Automated Codex review for ${headSha.slice(0, 7)}.`,
+                  body: `Automated Claude review for ${headSha.slice(0, 7)}.`,
                   comments: inlineComments,
                 });
                 publishedInlineCount = inlineComments.length;
@@ -207,7 +223,7 @@ jobs:
 
             const summaryLines = [
               summaryMarker,
-              '## Codex review',
+              '## Claude review',
               '',
               review.summary.trim(),
               '',
