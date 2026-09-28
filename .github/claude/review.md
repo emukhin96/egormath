@@ -79,4 +79,4 @@ Write `summary` and every finding `body` in Russian.
 Return the result as structured output matching the supplied JSON Schema.
 
 When there are no actionable findings, return an empty `findings` array and set
-`summary` to `No actionable defects found.`
+`summary` to `Замечаний нет.`
