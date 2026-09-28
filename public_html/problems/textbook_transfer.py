@@ -20,11 +20,14 @@ from problems.models import (ExamItem, GradeBand, Source, Tag, TaskBlock,
                              TextbookTaskDraft, Topic)
 from problems.textbook_import import normalize_image_stem
 
-SCHEMA_VERSION = 2
+# 3 — добавлены редакторские поля и маска задачи; 1 и 2 читаются с пустыми.
+SCHEMA_VERSION = 3
+SUPPORTED_VERSIONS = (1, 2, SCHEMA_VERSION)
 DEFAULT_PROFILES = ('ziv', 'shestakov')
 FIELDS = ('external_id', 'source_number', 'source_path', 'collection_key',
           'collection_title', 'topic_original', 'text_latex', 'subitems',
           'images', 'author_answer_latex', 'author_solution_latex',
+          'answer_latex', 'solution_latex', 'answer_mask',
           'solution_source_external_id', 'warnings', 'status',
           'exam_item_codes', 'grade_band_codes', 'tags', 'block_position')
 MAX_BYTES = 2 * 1024 ** 3
@@ -177,7 +180,7 @@ def validate_package(root):
     if not manifest.is_file() or manifest.stat().st_size > 64 * 1024 ** 2:
         raise TextbookTransferError('Нет допустимого batches.json.')
     payload = json.loads(manifest.read_text())
-    if payload.get('schema_version') not in (1, SCHEMA_VERSION):
+    if payload.get('schema_version') not in SUPPORTED_VERSIONS:
         raise TextbookTransferError('Неподдерживаемая версия пакета переноса.')
     if not payload.get('batches'):
         raise TextbookTransferError('Пакет пуст.')
@@ -192,7 +195,7 @@ def validate_package(root):
             path = _safe_path(root, 'assets', row['key'], asset['filename'])
             if not path.is_file():
                 raise TextbookTransferError(f'Нет рисунка {asset["stem"]}.')
-            if payload['schema_version'] == 2 and (path.stat().st_size != asset['size'] or _sha(path) != asset['sha256']):
+            if payload['schema_version'] >= 2 and (path.stat().st_size != asset['size'] or _sha(path) != asset['sha256']):
                 raise TextbookTransferError(f'Неверная контрольная сумма рисунка {asset["stem"]}.')
             if asset['stem'] in stems:
                 raise TextbookTransferError('Повтор имени рисунка.')
@@ -219,7 +222,7 @@ def validate_package(root):
         for key, block in blocks.items():
             if sorted(positions[key]) != list(range(1, block['size'] + 1)):
                 raise TextbookTransferError(f'Неполный блок {key}.')
-        if row['profile'] == 'ostromogilsky' and payload['schema_version'] == 2:
+        if row['profile'] == 'ostromogilsky' and payload['schema_version'] >= 2:
             for d in row['drafts']:
                 from .oge_metadata import apply_oge_metadata
                 from types import SimpleNamespace
@@ -312,7 +315,7 @@ def import_batches(src, *, username=None, check_only=False):
                         obj.save()
                         if asset.get('sha256') and _sha(obj.file.path) != asset['sha256']:
                             raise TextbookTransferError('Контрольная сумма записанного рисунка не совпала.')
-                    if payload['schema_version'] == SCHEMA_VERSION:
+                    if payload['schema_version'] >= 2:
                         verify_batch(batch, row)
                     created.append(batch)
         except Exception:
