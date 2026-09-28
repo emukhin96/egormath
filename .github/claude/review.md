@@ -2,10 +2,11 @@
 
 Review only the changes introduced by the current pull request.
 
-The checkout is the pull request merge commit. Use the merge commit parents to
-identify the pull request diff (`HEAD^1` is the base and `HEAD^2` is the pull
-request head). Inspect surrounding repository code only when it is necessary to
-understand the changed behavior.
+The checkout is the pull request head commit (`HEAD`). The base branch and the
+exact command that shows the pull request diff are given at the end of this
+prompt; use that three-dot diff, not a two-dot diff against the base branch tip.
+Line numbers must refer to the files as they are at `HEAD`. Inspect surrounding
+repository code only when it is necessary to understand the changed behavior.
 
 ## Hard boundaries
 

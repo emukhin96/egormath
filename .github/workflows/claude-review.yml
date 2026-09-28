@@ -23,19 +23,28 @@ jobs:
       final_message: ${{ steps.claude.outputs.structured_output }}
 
     steps:
-      - name: Check out pull request merge commit
+      # Именно head PR, а не merge-коммит: номера строк должны совпадать
+      # с правой стороной патча, на которую publish ставит комментарии.
+      - name: Check out pull request head
         uses: actions/checkout@v5
         with:
-          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Load prompt and schema
         id: config
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           {
             echo 'prompt<<CLAUDE_PROMPT_EOF'
             cat .github/claude/review.md
+            echo
+            echo '## Pull request diff'
+            echo
+            echo "Base branch: \`origin/$BASE_REF\`. Show the pull request diff with"
+            echo "\`git diff origin/$BASE_REF...HEAD\` (add \`-- <path>\` for one file)."
             echo 'CLAUDE_PROMPT_EOF'
             echo "schema=$(jq -c . .github/claude/review-schema.json)"
           } >> "$GITHUB_OUTPUT"
@@ -193,11 +202,11 @@ jobs:
 
               // Место уже прокомментировано на этом коммите: тот же текст
               // пропускаем, другой — выносим в сводку, чтобы не потерять.
-              const previous = previousInlineComments.find(comment =>
+              const sameSpot = previousInlineComments.filter(comment =>
                 String(comment.body || '').includes(signature)
               );
-              if (previous) {
-                if (!String(previous.body || '').includes(body)) {
+              if (sameSpot.length > 0) {
+                if (!sameSpot.some(comment => String(comment.body || '').includes(body))) {
                   summaryOnly.push(`[${priority}] ${path}:${line} — ${body}`);
                 }
                 continue;
