@@ -190,7 +190,7 @@ make test        # только тесты
    вручную на localhost до того, как попадёт в PR (см. раздел
    «Сначала localhost, потом Git» в AGENTS.md).
 2. Ревью — inline-комментарии в PR: автоматические от
-  `.github/workflows/codex-review.yml` (метки `[P1]…[P3]`) плюс ручные
+  `.github/workflows/claude-review.yml` (метки `[P1]…[P3]`) плюс ручные
    от человека.
 3. Правки по ревью уходят **новыми коммитами в ту же ветку**. Не используем
   `--amend` и force-push: иначе комментарии ревьюера отвязываются от строк и
@@ -278,9 +278,12 @@ push напрямую, требовать зелёный CI (`test`) и мини
 merge. Закрепляет правила из раздела 5 на уровне GitHub, а не только
 договорённостью.
 - **Автоматический код-ревью PR** — уже работает:
-`.github/workflows/codex-review.yml` оставляет inline-комментарии
+`.github/workflows/claude-review.yml` оставляет inline-комментарии
 с находками (`[P1]…[P3]`). Охват: обычные PR из веток этого репозитория;
 draft-PR и PR из форков workflow пропускает (условие job `analyze`).
+Авторизация — секрет `CLAUDE_CODE_OAUTH_TOKEN` (подписка Claude, токен
+выпускается командой `claude setup-token`); промпт и схема ответа —
+в `.github/claude/`.
 Правки по ним — обычные новые коммиты в ветку PR.
 - **Авто-merge после апрува**: `gh pr merge --auto --squash` или GitHub
 "Auto-merge" на PR — сливает сам, как только выполнены required checks и
