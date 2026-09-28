@@ -56,6 +56,17 @@ jobs:
             --allowedTools "Read,Grep,Glob,LS,Bash(git diff:*),Bash(git show:*),Bash(git log:*),Bash(git status:*),Bash(git rev-parse:*)"
             --disallowedTools "Edit,MultiEdit,Write,NotebookEdit,WebFetch,WebSearch"
 
+      # Action скрывает текст ошибки Claude; выводим только итоговое сообщение,
+      # без переписки и содержимого файлов.
+      - name: Show Claude error
+        if: failure()
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file || format('{0}/claude-execution-output.json', runner.temp) }}
+        run: |
+          jq -r '[.[] | select(.type == "result")] | last
+            | "subtype=\(.subtype) is_error=\(.is_error) terminal_reason=\(.terminal_reason // "-") api_error_status=\(.api_error_status // "-")\n\(.result // "")"' \
+            "$EXECUTION_FILE" || true
+
   publish:
     name: Publish review comments
     needs: analyze
