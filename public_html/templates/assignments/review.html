@@ -87,7 +87,10 @@
               onclick="return confirm('Вернуть работу ученику на доработку?')">Вернуть на доработку</button>
       {% endif %}
     </div>
-    <a class="review-back" href="{% url 'assignment_list' %}{% if owner_filter %}?owner={{ owner_filter }}{% endif %}">Вернуться ко всем заданиям</a>
+    {# Перейти к следующей работе, не выставляя итог текущей (кнопки выше сначала завершают или возвращают её) #}
+    <p class="review-links">
+      {% if next_pending %}<a href="{% url 'review_assignment' next_pending.pk %}{% if owner_filter %}?owner={{ owner_filter }}{% endif %}">Следующая работа</a> · {% endif %}<a class="review-back" href="{% url 'assignment_list' %}{% if owner_filter %}?owner={{ owner_filter }}{% endif %}">Вернуться ко всем заданиям</a>
+    </p>
   </aside>
   </div>
 </form>
