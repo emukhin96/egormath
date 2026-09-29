@@ -1065,6 +1065,28 @@ class CatalogViewTests(TestCase):
         response = self.client.get(reverse('task_list'))
         self.assertEqual(response.status_code, 403)
 
+    def test_rubricator_counts_catalog_tasks_and_marks_current_block(self):
+        """Счётчик раздела — по каталогу (без локальных копий), с подтемами;
+        выбранный раздел подсвечен."""
+        child = Topic.objects.create(name='Обыкновенные дроби', parent=self.topic)
+        nested = Task.objects.create(text_latex='Задача подтемы', created_by=self.teacher)
+        nested.topics.add(child)
+        copy = Task.objects.create(
+            text_latex='Копия для листка', variant_of=self.task, created_by=self.teacher)
+        copy.topics.add(self.topic)
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('task_list'))
+        self.assertContains(
+            response,
+            f'<li><a href="?topic={self.topic.pk}">Дроби</a><span class="sidebar-count">2</span></li>',
+            html=True)
+        current = self.client.get(reverse('task_list'), {'topic': self.topic.pk})
+        self.assertContains(
+            current,
+            f'<li class="is-current"><a href="?topic={self.topic.pk}">Дроби</a>'
+            '<span class="sidebar-count">2</span></li>',
+            html=True)
+
     def test_catalog_pagination_uses_page_numbers(self):
         for index in range(26):
             Task.objects.create(

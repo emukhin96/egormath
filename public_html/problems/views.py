@@ -73,8 +73,10 @@ def _rubricator_blocks(topics_flat):
             blocks.append(topic)
         else:
             subtree_ids.append(topic.pk)
+    # Та же база, что у каталога (filter_tasks): локальные копии задач не считаем.
+    catalog = Task.objects.filter(variant_of__isnull=True)
     for block in blocks:
-        block.task_total = Task.objects.filter(topics__in=block.subtree_ids).distinct().count()
+        block.task_total = catalog.filter(topics__in=block.subtree_ids).distinct().count()
     return blocks
 
 
