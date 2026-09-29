@@ -5,9 +5,7 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <span class="page-eyebrow">Работы учеников</span>
     <h1>{% if filters.kind == 'independent' %}Самостоятельные{% else %}Выданные задания{% endif %}</h1>
-    <p class="page-subtitle">Выданные работы и общий прогресс учеников.</p>
   </div>
   {% if filters.kind == 'independent' %}<div class="form-buttons"><a class="btn" href="{% url 'independentworks:create' %}">Создать самостоятельную</a><a class="btn btn-secondary" href="{% url 'assignment_create' %}?mode=independent">Шаблоны · выдать</a></div>{% else %}<a class="btn" href="{% url 'assignment_create' %}">Выдать задание</a>{% endif %}
 </div>
@@ -29,7 +27,7 @@
 </div>
 {% endif %}
 
-<div class="stat-grid assignment-stats">
+<div class="stat-strip assignment-stats">
   <a class="stat" href="?status=submitted&amp;kind={{ filters.kind }}">
     <span class="stat-label">На проверке</span><span class="stat-value">{{ stats.submitted }}</span>
   </a>
@@ -102,7 +100,7 @@
     <div class="filter-actions">
       <button class="btn" type="submit">Применить</button>
       {% if filters.q or filters.status or filters.student or filters.worksheet or filters.due or filters.owner or filters.kind %}
-      <a class="btn btn-secondary" href="{% if filters.kind == 'independent' %}{% url 'independentworks:catalog' %}{% else %}{% url 'assignment_list' %}{% endif %}">Сбросить</a>
+      <a class="filter-reset" href="{% if filters.kind == 'independent' %}{% url 'independentworks:catalog' %}{% else %}{% url 'assignment_list' %}{% endif %}">Сбросить</a>
       {% endif %}
     </div>
   </div>

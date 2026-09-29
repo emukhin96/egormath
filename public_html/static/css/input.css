@@ -38,7 +38,6 @@
   --warn: #b26a00;
   --err: #c62828;
   --radius: 7px;
-  --panel-shadow: 0 1px 2px rgb(18 43 85 / 7%);
   --sidebar-width: 228px;
   --content-padding: clamp(20px, 3vw, 48px);
   --topbar-height: 58px;
@@ -358,7 +357,6 @@
     background: #fff;
     color: var(--text);
     border-bottom: 1px solid var(--border);
-    box-shadow: 0 1px 2px rgb(18 43 85 / 5%);
     position: sticky;
     top: 0;
     z-index: 60;
@@ -404,8 +402,74 @@
     display: flex;
     align-items: center;
     gap: var(--space-1);
-    overflow-x: auto;
-    scrollbar-width: none;
+  }
+
+  /* Группа раздела: ссылка + кнопка-шеврон с выпадающим списком подразделов */
+  .nav-group {
+    position: relative;
+    flex: none;
+    display: flex;
+    align-items: center;
+  }
+
+  .nav-group > a {
+    padding-right: var(--space-2);
+  }
+
+  .nav-more {
+    width: 22px;
+    height: 28px;
+    margin-left: -4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #53647b;
+    cursor: pointer;
+  }
+
+  .nav-more svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .nav-more:hover,
+  .nav-more[aria-expanded="true"] {
+    color: var(--accent);
+    background: #e4eef9;
+  }
+
+  /* Открытие — классом is-open, не атрибутом hidden: preflight делает
+     [hidden] display:none !important, а на узком экране меню нужно раскрыть в ряд */
+  .nav-menu {
+    display: none;
+    position: absolute;
+    left: 0;
+    top: calc(100% + 6px);
+    min-width: 200px;
+    padding: var(--space-1);
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgb(18 43 85 / 14%);
+    z-index: 70;
+  }
+
+  .nav-menu.is-open {
+    display: grid;
+  }
+
+  .topbar-nav .nav-menu a {
+    display: block;
+    white-space: nowrap;
+  }
+
+  .topbar-nav .nav-group.is-active > a {
+    color: var(--accent);
+    background: #e4eef9;
+    font-weight: 650;
   }
 
   .topbar-nav a {
@@ -1043,7 +1107,6 @@
     border-radius: var(--radius);
     padding: var(--space-4);
     margin-bottom: var(--space-4);
-    box-shadow: var(--panel-shadow);
   }
 
   /* Гасим внешние отступы по краям карточки, чтобы не было двойного воздуха */
@@ -1089,9 +1152,7 @@
   table.list th {
     color: var(--muted);
     font-weight: 600;
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
+    font-size: 0.82rem;
     background: #f7f9fc;
     white-space: nowrap;
   }
@@ -1492,13 +1553,12 @@
     margin: 0;
   }
 
+  /* Строка над заголовком — только путь (источник, раздел, вариант), не ярлык раздела */
   .page-eyebrow {
     display: block;
-    color: var(--accent);
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 500;
   }
 
   .page-subtitle {
@@ -1552,8 +1612,61 @@
     color: var(--text);
   }
 
-  .filter-card {
-    padding: var(--space-3);
+  /* Фильтры — плоская строка над таблицей, не карточка */
+  .card.filter-card {
+    padding: 0;
+    margin-bottom: var(--space-3);
+    border: 0;
+    background: transparent;
+  }
+
+  .filter-card .filters {
+    align-items: flex-start;
+  }
+
+  .filter-card label {
+    margin-bottom: var(--space-1);
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  /* Кнопки и статус без подписи опускаем на линию полей: высота подписи + её отступ */
+  .filter-card .filters > div:not(:has(label)),
+  .filter-card .filters > .finder-status {
+    padding-top: calc(0.82rem * 1.5 + var(--space-1));
+  }
+
+  .filter-card .filters > .finder-status {
+    align-self: flex-start;
+  }
+
+  .filter-reset {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    font-size: 0.88rem;
+  }
+
+  /* Компактный выбор темы в фильтрах: поле на общей линии, чипы под ним */
+  .filter-card .tax-picker-compact {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .filter-card .tax-picker-compact .tax-search-row {
+    order: -1;
+  }
+
+  .filter-card .tax-picker-compact .tax-chips {
+    min-height: 0;
+  }
+
+  .filter-card .tax-picker-compact .tax-chips:empty,
+  .filter-card .tax-picker-compact .tax-empty {
+    display: none;
   }
 
   /* Общий поиск задач (finder): живые результаты и быстрая задача */
@@ -1690,20 +1803,12 @@
     box-shadow: 0 2px 8px rgba(18, 43, 85, 0.14);
   }
 
-  /* Плитки счётчиков на главной учителя */
-  .stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: var(--space-4);
-    margin-bottom: var(--space-4);
-  }
-
+  /* Счётчик: подпись и число; в .stat-strip — строкой, без плитки */
   .stat {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: var(--space-3) var(--space-4);
-    box-shadow: var(--panel-shadow);
     display: grid;
     grid-template-columns: 1fr auto;
     align-items: center;
@@ -1724,6 +1829,34 @@
     font-weight: 700;
     line-height: 1.2;
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Счётчики строкой: число над подписью, без плиток */
+  .stat-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-6);
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat-strip .stat {
+    display: flex;
+    flex-direction: column-reverse;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .stat-strip .stat-value {
+    font-size: 1.5rem;
+    line-height: 1.15;
+  }
+
+  .stat-strip .stat-label {
+    font-size: 0.8rem;
   }
 
   .grid-2 {
@@ -1750,7 +1883,6 @@
     border-radius: var(--radius);
     padding: var(--space-4) var(--space-5);
     margin-bottom: var(--space-4);
-    box-shadow: var(--panel-shadow);
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -1864,7 +1996,6 @@
     background: var(--card);
     color: var(--accent-dark);
     font-weight: 600;
-    box-shadow: var(--panel-shadow);
   }
 
   .subitem-label {
@@ -3917,6 +4048,22 @@
       width: 100%;
       margin-inline: calc(var(--space-3) * -1);
       padding: 0 var(--space-3) var(--space-2);
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    /* Узкий экран: подразделы в общем ряду, без выпадающего меню */
+    .nav-group > a {
+      padding-right: 9px;
+    }
+
+    .nav-more {
+      display: none;
+    }
+
+    .nav-menu,
+    .nav-menu.is-open {
+      display: contents;
     }
 
     .topbar {
@@ -4026,6 +4173,23 @@
     .filters {
       flex-direction: column;
       align-items: stretch;
+    }
+
+    /* В колонке flex-basis (14rem у поиска и темы) стал бы высотой блока */
+    .filters > div,
+    .filters > div.tax-filter,
+    .task-finder .finder-search,
+    .assignment-filters .filter-search {
+      flex-basis: auto;
+    }
+
+    .filter-card .filters {
+      align-items: stretch;
+    }
+
+    .filter-card .filters > div:not(:has(label)),
+    .filter-card .filters > .finder-status {
+      padding-top: 0;
     }
 
     .filters input,
@@ -4458,9 +4622,8 @@
     text-decoration: none;
   }
 
-  .assignment-stats .stat:hover {
-    background: #f7f9fc;
-    border-color: #b9c9dc;
+  .assignment-stats .stat:hover .stat-value {
+    color: var(--accent);
   }
 
   .assignment-filters .filter-search {
@@ -4867,7 +5030,6 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--card);
-    box-shadow: var(--panel-shadow);
     color: var(--accent-dark);
     font-weight: 600;
     font-variant-numeric: tabular-nums;

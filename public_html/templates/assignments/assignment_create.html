@@ -4,7 +4,6 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <span class="page-eyebrow">Новая выдача</span>
     <h1>Выдать задание</h1>
     <p class="page-subtitle">{% if independent %}{% if kind == 'correction' %}Работа над ошибками.{% elif kind == 'retake' %}Пересдача.{% endif %} Самостоятельная с зафиксированными вариантами и серверным сроком.{% else %}Один листок — группе, нескольким группам или отдельным ученикам.{% endif %}</p>
     {% if independent %}<a class="page-back-link" href="{% url 'independentworks:catalog' %}" data-save-draft-before-leave>← К самостоятельным</a>{% endif %}

@@ -2,9 +2,8 @@
 {% block title %}{% if worksheet %}{{ worksheet.title }}{% else %}Новый листок{% endif %} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/worksheet_form.html' %}{% endblock %}
 {% block content %}
-<div class="page-head"><div><span class="page-eyebrow">Листки</span>
+<div class="page-head"><div>
   <h1>{% if worksheet %}Свойства листка{% else %}Новый листок{% endif %}</h1>
-  <p class="page-subtitle">Метаданные и шапка печатного документа.</p>
 </div></div>
 <div class="card">
   <form method="post">

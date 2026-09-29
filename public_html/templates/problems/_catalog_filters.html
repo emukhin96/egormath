@@ -23,7 +23,7 @@
     </div>
     {% endif %}
     <div><button type="submit" class="btn">Найти</button></div>
-    <div><a class="btn btn-secondary" href="{{ request.path }}{% if finder_anchor %}#{{ finder_anchor }}{% endif %}" data-finder-reset>Сбросить</a></div>
+    <div><a class="filter-reset" href="{{ request.path }}{% if finder_anchor %}#{{ finder_anchor }}{% endif %}" data-finder-reset>Сбросить</a></div>
     <span class="finder-status muted" data-finder-status aria-live="polite" hidden>Ищу…</span>
   </form>
 </div>

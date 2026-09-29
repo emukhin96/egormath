@@ -1,7 +1,7 @@
 {% load task_extras %}
 <div id="task-form" data-problem-editor data-task-id="{{ task.pk }}" data-manage-url="{% url 'task_manage' task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}">
   <div class="page-head">
-    <div><span class="page-eyebrow">База задач</span><h1>Задача #{{ task.pk }}</h1>
+    <div><h1>Задача #{{ task.pk }}</h1>
       {% if task.variant_of_id %}<span class="badge badge-returned">Локальная копия #{{ task.variant_of_id }}</span>{% endif %}
       {% if worksheet %}<a href="{% url 'worksheet_detail' worksheet.pk %}">Вернуться в листок «{{ worksheet.title }}»</a>{% endif %}
     </div>

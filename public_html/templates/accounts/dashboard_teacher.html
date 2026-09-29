@@ -4,9 +4,7 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <span class="page-eyebrow">Рабочая панель</span>
     <h1>Кабинет учителя</h1>
-    <p class="page-subtitle">Работы на проверке, листки и последние действия.</p>
   </div>
   <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'assignment_list' %}">Все задания</a>
@@ -14,7 +12,7 @@
   </div>
 </div>
 
-<div class="stat-grid">
+<div class="stat-strip">
   <div class="stat">
     <span class="stat-label">На проверке</span>
     <span class="stat-value">{{ pending|length }}</span>
@@ -35,7 +33,7 @@
 
 <div class="card panel-priority">
   <div class="card-head">
-    <div><span class="page-eyebrow">Приоритет</span><h2>Ожидают проверки</h2></div>
+    <h2>Ожидают проверки</h2>
     <div class="card-head-actions">
       <a href="{% url 'assignment_list' %}?status=submitted">Вся очередь</a>
       {% if pending %}<span class="counter">{{ pending|length }}</span>{% endif %}
