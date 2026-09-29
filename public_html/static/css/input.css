@@ -4865,9 +4865,9 @@
     margin-top: var(--space-3);
   }
 
-  .review-back {
-    display: block;
-    margin-top: var(--space-3);
+  /* Ссылки под формой проверки: следующая работа и возврат к списку */
+  .review-links {
+    margin: var(--space-3) 0 0;
     font-size: 0.85rem;
     text-align: center;
   }
