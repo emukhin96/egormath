@@ -2375,10 +2375,17 @@ def merge_solutions(
         (task.author_answer_latex, task.author_solution_latex,
          solution_images, solution_subitems, flattened_solution) = found
         distributed_to_subitems = False
+        common_author_material = None
         if solution_subitems:
             solution_pairs = _solution_subitem_pairs(
                 task.subitems, solution_subitems)
             if solution_pairs is not None:
+                if len(solution_pairs) == len(task.subitems):
+                    # Все метки уже сопоставлены: вводный текст не может
+                    # быть решением пропущенного пункта. Сохраняем общее
+                    # указание отдельно от распределённых решений.
+                    common_author_material = (
+                        task.author_answer_latex, task.author_solution_latex)
                 assigned = set()
                 for task_subitem, solution_subitem in solution_pairs:
                     task_subitem.author_answer_latex = (
@@ -2432,11 +2439,10 @@ def merge_solutions(
                 and redistribute_glued_subitem_answers(task)):
             distributed_to_subitems = True
         if task.subitems and distributed_to_subitems:
-            # У задачи с подпунктами авторские материалы принадлежат только
-            # подпунктам. Родительские поля иначе дублируются в интерфейсе и
-            # PDF.
-            task.author_answer_latex = ""
-            task.author_solution_latex = ""
+            # Убираем распределённый материал, но не общее введение,
+            # которое split_full_solution отделил от всех подпунктов.
+            (task.author_answer_latex, task.author_solution_latex) = (
+                common_author_material or ("", ""))
         elif (task.subitems and found and not any(
                 "Не совпали подпункты" in warning
                 for warning in task.warnings)):

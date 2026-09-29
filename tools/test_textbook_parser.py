@@ -940,6 +940,24 @@ class TextbookParserTests(unittest.TestCase):
             ["Первое решение.", "Второе решение."],
         )
 
+    def test_solution_preserves_common_instruction_before_all_subitems(self):
+        task_text = '\n'.join([
+            '1.1.A01 Вычислите:',
+            r'\item[а)] $2+2$;',
+            r'\item[б)] $3+3$.',
+        ])
+        instruction = 'Для обоих пунктов используйте распределительный закон.'
+        solution_text = '\n'.join([
+            '1.1.A01 ' + instruction,
+            r'\item[а)] Первое решение.',
+            r'\item[б)] Второе решение.',
+        ])
+        tasks, _ = parse_shestakov(task_text, solution_text)
+        self.assertEqual(tasks[0].author_solution_latex, instruction)
+        self.assertEqual(
+            [item.author_solution_latex for item in tasks[0].subitems],
+            ['Первое решение.', 'Второе решение.'])
+
     def test_solution_subitem_count_mismatch_is_not_distributed(self):
         task_text = "\n".join([
             "1.1.A01 Вычислите:",
