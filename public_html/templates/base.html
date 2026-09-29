@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=13">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=15">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
@@ -96,13 +96,8 @@
       <strong>Контекст</strong>
       <button type="button" class="sidebar-close" id="sidebar-close" aria-label="Закрыть панель">×</button>
     </div>
-    {% block sidebar %}
-      <section class="sidebar-section">
-        <p class="sidebar-kicker">Текущий раздел</p>
-        <h2>Рабочая область</h2>
-        <p class="sidebar-copy">Здесь появятся действия и сведения, относящиеся к открытой странице.</p>
-      </section>
-    {% endblock %}
+    {# Пустой блок — страница без контекста: панель и кнопка «Контекст» скрываются CSS (.context-sidebar без .sidebar-section) #}
+    {% block sidebar %}{% endblock %}
   </aside>
   <button type="button" class="sidebar-backdrop" id="sidebar-backdrop"
           aria-label="Закрыть контекстную панель" tabindex="-1"></button>

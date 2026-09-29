@@ -1,12 +1,4 @@
-<section class="sidebar-section">
-  <p class="sidebar-kicker">Задание</p>
-  <h2>{{ assignment.worksheet.title|truncatechars:34 }}</h2>
-  <ul class="sidebar-list">
-    <li><strong>Статус:</strong> {{ assignment.get_status_display }}</li>
-    <li><strong>Срок:</strong> {% if assignment.due_at %}{{ assignment.due_at|date:"d.m.Y H:i" }}{% if assignment.is_overdue %} — просрочено{% endif %}{% else %}не задан{% endif %}</li>
-    <li><strong>Учитель:</strong> {{ assignment.worksheet.owner.get_full_name|default:assignment.worksheet.owner.username }}</li>
-  </ul>
-</section>
+{# Статус, срок и PDF — в шапке страницы; здесь навигация по задачам и состояние работы #}
 <section class="sidebar-section">
   <p class="sidebar-kicker">Прогресс</p>
   {% if assignment.status == 'reviewed' %}
@@ -21,13 +13,9 @@
     {% endfor %}
   </ul>
 </section>
+{% if not editable %}
 <section class="sidebar-section">
   <p class="sidebar-kicker">Состояние</p>
-  {% if not editable %}
   <p class="sidebar-copy">Редактирование закрыто. Дождитесь проверки или возврата работы.</p>
-  {% endif %}
-  <div class="sidebar-actions">
-    <a class="sidebar-action" target="_blank" rel="noopener"
-       href="{% url 'worksheet_pdf' assignment.worksheet.pk %}?variant=student">Скачать PDF</a>
-  </div>
 </section>
+{% endif %}

@@ -733,7 +733,8 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'data-no-answer="1"')
         self.assertContains(response, 'Дописать AI-ответ к решениям')
         self.assertContains(response, 'Презентация')
-        self.assertContains(response, 'Собрать презентацию')
+        # Ссылка на презентацию — только в панели инструментов, в боковой панели дублей нет
+        self.assertNotContains(response, 'Собрать презентацию')
         self.assertContains(response, reverse(
             'worksheet_beamer_editor', args=[self.worksheet.pk]))
         self.assertContains(response, 'Добавить AI-решения и ответ')

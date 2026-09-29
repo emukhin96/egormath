@@ -3,8 +3,6 @@
   <h2>Редактор LaTeX</h2>
   {% if worksheet %}
   <p class="sidebar-copy">Задача открыта из листка «{{ worksheet.title|truncatechars:30 }}».</p>
-  {% else %}
-  <p class="sidebar-copy">После сохранения задача появится в общей базе.</p>
   {% endif %}
 </section>
 <section class="sidebar-section">
@@ -15,10 +13,3 @@
     <li>Закреплённые поля сохраняются для следующей задачи</li>
   </ul>
 </section>
-{% if worksheet %}
-<section class="sidebar-section">
-  <div class="sidebar-actions">
-    <a class="sidebar-action" href="{% url 'worksheet_detail' worksheet.pk %}">Вернуться к листку</a>
-  </div>
-</section>
-{% endif %}
