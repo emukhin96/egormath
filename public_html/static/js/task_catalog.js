@@ -16,7 +16,12 @@
 /* Класс и темы в строке каталога: текст сводки обновляется после правки в
    раскрытом блоке — класс по селекту, темы по чипам выбора темы. */
 (function () {
-  var CODE = /^[A-ZА-Я]+(\.\d+)+$/;
+  // Как в шаблоне строки: код темы, если он есть (ARI, ALG.03.02), иначе название до 28 символов.
+  var CODE = /^[A-ZА-Я]+(\.\d+)*$/;
+  var NAME_LIMIT = 28;
+  function truncate(text) {
+    return text.length > NAME_LIMIT ? text.slice(0, NAME_LIMIT - 1) + '…' : text;
+  }
   function refresh(details) {
     var grade = details.querySelector('select[name="grade_level"]');
     var gradeOut = details.querySelector('[data-row-edit-grade]');
@@ -32,7 +37,7 @@
     var labels = Array.prototype.map.call(details.querySelectorAll('.tax-chip-label'), function (el) {
       var full = el.textContent.trim();
       var code = full.split(' ')[0];
-      return CODE.test(code) ? code : full;
+      return CODE.test(code) ? code : truncate(full);
     }).filter(Boolean);
     topicsOut.textContent = labels.length ? labels.join(', ') : 'без темы';
   }
