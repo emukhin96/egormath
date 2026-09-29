@@ -266,15 +266,19 @@ class TransferScriptTests(TestCase):
             with patch.object(self.script, 'run', side_effect=lambda *a, **k: SimpleNamespace(stdout=next(outputs))) as run:
                 self.script.transfer(package, 'chemolymp-demo', '/opt/egormath', 'egor')
         commands = [call.args[0] for call in run.call_args_list]
+        # APP_DIR передаётся явно: lib.sh и manage.sh берут его из окружения.
+        self.assertIn('export APP_DIR=/opt/egormath && . /opt/egormath/deploy/vps/lib.sh', commands[1][-1])
         self.assertIn('mktemp -d', commands[1][-1])
         self.assertEqual(commands[2], ['scp', '-o', 'ConnectTimeout=20', str(package),
                                        f'chemolymp-demo:{temp_dir}/batch.zip'])
         self.assertIn('sha256sum', commands[3][-1])
         # Путь внутри контейнера: $DATA_DIR/var смонтирован как /app/var.
         container_file = '/app/var/transfers/egormath-transfer.ABC123/batch.zip'
-        self.assertEqual(commands[4][-1], '/opt/egormath/deploy/vps/manage.sh import_textbook_batches '
+        manage = 'env APP_DIR=/opt/egormath /opt/egormath/deploy/vps/manage.sh'
+        self.assertTrue(commands[0][-1].startswith(f'{manage} shell -c '))
+        self.assertEqual(commands[4][-1], f'{manage} import_textbook_batches '
                          f'{container_file} --username egor --check-only')
-        self.assertEqual(commands[5][-1], '/opt/egormath/deploy/vps/manage.sh import_textbook_batches '
+        self.assertEqual(commands[5][-1], f'{manage} import_textbook_batches '
                          f'{container_file} --username egor')
         self.assertEqual(commands[6][-1], f'rm -f {temp_dir}/batch.zip && rmdir {temp_dir}')
         self.assertFalse(any('deploy.sh' in str(c) or 'git pull' in str(c) for c in commands))
