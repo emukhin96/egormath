@@ -58,17 +58,37 @@ def filter_tasks(params):
     return tasks
 
 
+def _rubricator_blocks(topics_flat):
+    """Разделы рубрикатора (корневые темы) с числом задач в поддереве.
+
+    Поддеревья берутся из плоского списка topic_tree() (один запрос),
+    счётчик — по одному запросу на раздел; разделов несколько.
+    """
+    blocks = []
+    subtree_ids = []
+    for topic in topics_flat:
+        if topic.depth == 0:
+            subtree_ids = [topic.pk]
+            topic.subtree_ids = subtree_ids
+            blocks.append(topic)
+        else:
+            subtree_ids.append(topic.pk)
+    for block in blocks:
+        block.task_total = Task.objects.filter(topics__in=block.subtree_ids).distinct().count()
+    return blocks
+
+
 @teacher_required
 def task_list(request):
     tasks = filter_tasks(request.GET)
     paginator = Paginator(tasks, 25)
     page = paginator.get_page(request.GET.get('page'))
-    blocks = Topic.objects.filter(parent=None)
+    topics_flat = topic_tree()
     ctx = taxonomy_page_context(filter_state_from_params(request.GET))
     ctx.update({
         'page': page,
-        'topics': blocks,
-        'topics_flat': topic_tree(),
+        'topics': _rubricator_blocks(topics_flat),
+        'topics_flat': topics_flat,
         'sources': Source.objects.all(),
         'params': request.GET,
         'grade_choices': Task.GRADE_CHOICES,
