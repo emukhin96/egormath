@@ -1,6 +1,5 @@
 {% extends 'base.html' %}
 {% block title %}{% if worksheet %}{{ worksheet.title }}{% else %}Новый листок{% endif %} — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/worksheet_form.html' %}{% endblock %}
 {% block content %}
 <div class="page-head"><div>
   <h1>{% if worksheet %}Свойства листка{% else %}Новый листок{% endif %}</h1>

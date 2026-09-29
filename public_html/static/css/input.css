@@ -907,6 +907,19 @@
     display: none;
   }
 
+  /* Страница без контекста (блок sidebar пуст): панели и кнопки «Контекст» нет,
+     содержимое на всю ширину. Панель считается пустой, если в ней нет .sidebar-section.
+     :has() нельзя вкладывать в :has(), поэтому условие записано через :not(:has()) */
+  .app-shell:not(:has(.context-sidebar .sidebar-section)) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell:not(:has(.context-sidebar .sidebar-section)) > .context-sidebar,
+  .app-shell:not(:has(.context-sidebar .sidebar-section)) > .sidebar-backdrop,
+  .topbar:not(:has(+ .app-shell .context-sidebar .sidebar-section)) .context-toggle {
+    display: none;
+  }
+
   .sidebar-section + .sidebar-section {
     margin-top: var(--space-5);
     padding-top: var(--space-4);

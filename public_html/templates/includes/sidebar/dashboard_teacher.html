@@ -1,28 +1,13 @@
-<section class="sidebar-section">
-  <p class="sidebar-kicker">Сегодня</p>
-  <h2>Сводка кабинета</h2>
-  <div class="sidebar-stats">
-    <div class="sidebar-stat"><strong>{{ pending|length }}</strong><span>на проверке</span></div>
-    <div class="sidebar-stat"><strong>{{ worksheets_total }}</strong><span>листков</span></div>
-    <div class="sidebar-stat"><strong>{{ students_total }}</strong><span>учеников</span></div>
-  </div>
-</section>
-<section class="sidebar-section">
-  <p class="sidebar-kicker">Быстрые действия</p>
-  <div class="sidebar-actions">
-    <a class="sidebar-action" href="{% url 'worksheet_create' %}">Создать листок</a>
-    {% if pending.0 %}
-    <a class="sidebar-action" href="{% url 'review_assignment' pending.0.pk %}">Проверить первую работу</a>
-    {% endif %}
-  </div>
-</section>
-{% if worksheets %}
+{# В панели только контекст: недавние листки. Счётчики и действия — в содержимом страницы #}
 <section class="sidebar-section">
   <p class="sidebar-kicker">Недавние листки</p>
+  {% if worksheets %}
   <ul class="sidebar-list">
-    {% for worksheet in worksheets|slice:":4" %}
+    {% for worksheet in worksheets|slice:":6" %}
     <li><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title|truncatechars:32 }}</a></li>
     {% endfor %}
   </ul>
+  {% else %}
+  <p class="sidebar-copy">Листков пока нет.</p>
+  {% endif %}
 </section>
-{% endif %}
