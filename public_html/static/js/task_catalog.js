@@ -12,3 +12,52 @@
   }
   toggle.addEventListener('change', display); display();
 })();
+
+/* Класс и темы в строке каталога: текст сводки обновляется после правки в
+   раскрытом блоке — класс по селекту, темы по чипам выбора темы. */
+(function () {
+  var CODE = /^[A-ZА-Я]+(\.\d+)+$/;
+  function refresh(details) {
+    var grade = details.querySelector('select[name="grade_level"]');
+    var gradeOut = details.querySelector('[data-row-edit-grade]');
+    if (grade && gradeOut) {
+      var option = grade.options[grade.selectedIndex];
+      var text = option ? option.text.trim() : '';
+      gradeOut.textContent = (text && text !== '—') ? text : '—';
+    }
+    var topicsOut = details.querySelector('[data-row-edit-topics]');
+    if (!topicsOut) return;
+    // Пустой контейнер чипов — каталог тем ещё не загружен, сводку не трогаем.
+    if (!details.querySelector('.tax-chip, .tax-empty')) return;
+    var labels = Array.prototype.map.call(details.querySelectorAll('.tax-chip-label'), function (el) {
+      var full = el.textContent.trim();
+      var code = full.split(' ')[0];
+      return CODE.test(code) ? code : full;
+    }).filter(Boolean);
+    topicsOut.textContent = labels.length ? labels.join(', ') : 'без темы';
+  }
+  function watch(details) {
+    if (details.dataset.rowEditReady) return;
+    details.dataset.rowEditReady = '1';
+    details.addEventListener('change', function () { refresh(details); });
+    // За чипами следим только после раскрытия блока: серверная сводка не
+    // должна затираться первым рендером выбора темы до загрузки каталога.
+    details.addEventListener('toggle', function () {
+      if (!details.open || details.dataset.rowEditWatched) return;
+      details.dataset.rowEditWatched = '1';
+      var chips = details.querySelector('[data-tax-chips]');
+      if (chips && window.MutationObserver) {
+        new MutationObserver(function () { refresh(details); })
+          .observe(chips, {childList: true, subtree: true, characterData: true});
+      }
+    });
+  }
+  function init() {
+    document.querySelectorAll('[data-row-edit]').forEach(watch);
+  }
+  document.addEventListener('DOMContentLoaded', init);
+  // Живой поиск подменяет таблицу — наблюдаем за новыми строками.
+  if (window.MutationObserver) {
+    new MutationObserver(init).observe(document.documentElement, {childList: true, subtree: true});
+  }
+})();

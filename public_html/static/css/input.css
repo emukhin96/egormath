@@ -3621,6 +3621,54 @@
     flex: 0 1 200px;
   }
 
+  /* Класс и темы в строке каталога: текст с карандашом, контролы по клику */
+  .row-edit {
+    margin-top: var(--space-1);
+  }
+
+  .row-edit-summary {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  .row-edit-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .row-edit-summary:hover,
+  .row-edit-summary:hover .row-edit-pen {
+    color: var(--accent);
+  }
+
+  .row-edit-sep {
+    color: #b8c2cf;
+  }
+
+  .row-edit-pen {
+    margin-left: 2px;
+    color: #b8c2cf;
+    font-size: 0.8rem;
+  }
+
+  .row-edit[open] > .row-edit-summary {
+    margin-bottom: var(--space-2);
+  }
+
+  .row-edit[open] .row-edit-pen {
+    display: none;
+  }
+
+  .row-edit label {
+    font-weight: 500;
+    font-size: 0.85rem;
+  }
+
   .quick-classify {
     display: flex;
     flex-wrap: wrap;
