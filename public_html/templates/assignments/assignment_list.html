@@ -1,7 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block title %}{% if filters.kind == 'independent' %}Самостоятельные{% else %}Выданные задания{% endif %} — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/assignment_list.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>

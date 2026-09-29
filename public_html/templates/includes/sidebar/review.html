@@ -1,10 +1,8 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Проверка работы</p>
   <h2>{{ assignment.student.get_full_name|default:assignment.student.username }}</h2>
+  {# Листок, статус и время отправки — в шапке страницы #}
   <ul class="sidebar-list">
-    <li><strong>Листок:</strong> {{ assignment.worksheet.title|truncatechars:28 }}</li>
-    <li><strong>Статус:</strong> {{ assignment.get_status_display }}</li>
-    <li><strong>Отправлено:</strong> {{ assignment.submitted_at|date:"d.m.Y H:i" }}</li>
     <li><strong>Автосверка:</strong> {{ assignment.get_check_visibility_display|lower }}</li>
     <li><strong>С ответом:</strong> {{ answered_count }} из {{ task_count }} задач</li>
   </ul>
@@ -23,9 +21,8 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Действия</p>
   <p class="sidebar-copy">Черновик сохраняет отметки. Завершение открывает результат ученику, возврат снова разрешает редактирование.</p>
+  {# «Следующая работа» и возврат к заданиям — под формой проверки #}
   <div class="sidebar-actions">
-    <a class="sidebar-action" href="{% url 'assignment_list' %}{% if owner_filter %}?owner={{ owner_filter }}{% endif %}">Все задания</a>
-    {% if next_pending %}<a class="sidebar-action" href="{% url 'review_assignment' next_pending.pk %}{% if owner_filter %}?owner={{ owner_filter }}{% endif %}">Следующая работа</a>{% endif %}
     <a class="sidebar-action" href="{% url 'worksheet_detail' assignment.worksheet.pk %}">Открыть листок</a>
   </div>
 </section>
