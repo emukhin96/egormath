@@ -671,8 +671,12 @@
       var full = (topic.code ? topic.code + ' ' : '') + topic.name;
       var label = (!self.chipFull && self.compact && topic.code) ? topic.code : full;
       var isPrimary = self.usePrimary && self.state.primary === id;
+      // Код и название — в data-атрибутах: сводка строки каталога берёт их
+      // из данных, а не разбирает текст метки (task_catalog.js).
       html += '<span class="tax-chip' + (isPrimary ? ' is-primary' : '') + '"'
-        + ' title="' + escapeHtml(full) + '">';
+        + ' title="' + escapeHtml(full) + '"'
+        + ' data-topic-code="' + escapeHtml(topic.code || '') + '"'
+        + ' data-topic-name="' + escapeHtml(topic.name || '') + '">';
       if (self.usePrimary) {
         html += '<button type="button" class="tax-chip-star" data-tax-star="'
           + id + '" title="' + (isPrimary ? 'Снять основную тему' : 'Основная тема')
