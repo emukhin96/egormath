@@ -993,13 +993,9 @@ def _rubrics_to_append(current, headings):
         return []
     if current[-len(headings):] == headings:
         return []
-    if not current:
-        return headings
-    if current[-1] == headings[-1] and (
-            len(headings) == 1 or headings[0] in current):
-        return []
-    if headings[0] in current:
-        return [headings[-1]] if len(headings) > 1 else []
+    # Наличие рубрики где-то в истории не означает, что она действует
+    # в конце листка. При дозагрузке прежнего раздела восстанавливаем
+    # весь путь: одинаковые «Вариант 1» могут относиться к разным §.
     return headings
 
 

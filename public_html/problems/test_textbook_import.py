@@ -918,6 +918,49 @@ class TextbookImportTests(TestCase):
             ['Вариант 1', 'Вариант 2'])
         self.assertEqual(sum(1 for item in items if item.task_id), 2)
 
+    def test_partial_commit_restores_variant_heading_when_returning(self):
+        topic = Topic.objects.create(name='Тема дозагрузки')
+        payload = bundle()
+        payload['tasks'] = [dict(
+            payload['tasks'][0], external_id=f'sr/10/v{variant}/{number}',
+            source_number=str(number), collection_key=f'sr/10/v{variant}',
+            source_path=['Самостоятельные работы', 'Неравенства',
+                         f'Вариант {variant}'],
+            collection_title='Неравенства',
+        ) for variant, number in [(1, 1), (2, 1), (1, 2)]]
+        batch = self.create_batch(payload)
+        batch.drafts.update(status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        drafts = list(batch.drafts.order_by('pk'))
+        for draft in drafts:
+            commit_batch(batch, user=self.teacher, draft_ids=[draft.pk],
+                         require_complete=False)
+        worksheet = Collection.objects.get(is_published=True).worksheet
+        items = list(worksheet.items.order_by('order', 'pk'))
+        self.assertEqual([item.rubric for item in items if item.is_rubric],
+                         ['Вариант 1', 'Вариант 2', 'Вариант 1'])
+        self.assertEqual(len(items), 6)
+        commit_batch(batch, user=self.teacher)
+        self.assertEqual(worksheet.items.count(), 6)
+
+    def test_commit_restores_section_context_with_same_variant_name(self):
+        topic = Topic.objects.create(name='Тема возврата в параграф')
+        payload = bundle()
+        payload['tasks'] = [dict(
+            payload['tasks'][0], external_id=f'chapter/{index}',
+            source_path=['Глава 1. Алгебра', section, 'Вариант 1'],
+            collection_key=f'Глава 1. Алгебра/{section}/v1',
+        ) for index, section in enumerate(['§1. Числа', '§2. Дроби',
+                                           '§1. Числа', '§1. Числа'])]
+        batch = self.create_batch(payload)
+        batch.drafts.update(status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        commit_batch(batch, user=self.teacher)
+        worksheet = Collection.objects.get(is_published=True).worksheet
+        self.assertEqual(
+            list(worksheet.items.filter(task=None).order_by('order', 'pk')
+                 .values_list('rubric', flat=True)),
+            ['§1. Числа', 'Вариант 1', '§2. Дроби', 'Вариант 1',
+             '§1. Числа', 'Вариант 1'])
+
     def test_commit_chapter_uses_section_rubrics(self):
         topic = Topic.objects.create(name='Тема главы')
         payload = bundle(
