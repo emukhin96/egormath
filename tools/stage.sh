@@ -6,6 +6,9 @@
 #
 #   tools/stage.sh                 # последний дамп + media, worktree на ветке preview (или main)
 #   tools/stage.sh --fresh         # сначала снять новый дамп на сервере
+#   tools/stage.sh --s3            # дамп и media из копии в S3 (проверка бэкапа вне сервера,
+#                                  # deploy/VPS.md «Бэкапы»); заодно расшифровывает архив секретов,
+#                                  # если на Mac есть .secrets/BACKUP_SECRETS_PASSPHRASE
 #   tools/stage.sh --no-media      # без rsync media
 #   tools/stage.sh --branch ui/x   # ветка для worktree
 #   tools/stage.sh --run           # после подготовки запустить runserver
@@ -41,14 +44,15 @@ STAGE_DIR="$ROOT/.worktrees/stage"
 DUMPS="$ROOT/.stage"
 PYTHON="$ROOT/venv/bin/python"
 
-FRESH=0; MEDIA=1; RUN=0; BRANCH=""
+FRESH=0; MEDIA=1; RUN=0; BRANCH=""; S3=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --fresh) FRESH=1 ;;
+    --s3) S3=1 ;;
     --no-media) MEDIA=0 ;;
     --run) RUN=1 ;;
     --branch) BRANCH="${2:?--branch <ветка>}"; shift ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
     *) echo "Неизвестный аргумент: $1" >&2; exit 2 ;;
   esac
   shift
@@ -86,21 +90,57 @@ fi
 [ -e "$STAGE_DIR/tools/tailwindcss" ] || [ ! -e "$ROOT/tools/tailwindcss" ] \
   || ln -s "$ROOT/tools/tailwindcss" "$STAGE_DIR/tools/tailwindcss"
 
-# 2. дамп базы с сервера
+# 2. дамп базы с сервера (или набор бэкапа из S3 — через rclone на сервере:
+#    ключи S3 есть только там, а нам нужно убедиться, что копия вне сервера
+#    действительно восстанавливается)
 mkdir -p "$DUMPS"
 if [ "$FRESH" = 1 ]; then
   echo "==> backup.sh на $HOST"
   ssh "$HOST" "$APP_DIR/deploy/vps/backup.sh" >/dev/null
 fi
-LATEST="$(ssh "$HOST" "ls -t $APP_DIR/data/backups/db-*.sql.gz 2>/dev/null | head -n 1")"
-[ -n "$LATEST" ] || die "на $HOST нет дампов db-*.sql.gz в $APP_DIR/data/backups"
-DUMP="$DUMPS/$(basename "$LATEST")"
-if [ ! -s "$DUMP" ]; then
-  echo "==> $LATEST → .stage/"
-  scp -q "$HOST:$LATEST" "$DUMP"
+SECRETS_ENC=""
+if [ "$S3" = 1 ]; then
+  REMOTE="$(ssh "$HOST" "grep -E '^BACKUP_RCLONE_REMOTE=' $APP_DIR/.env | tail -n 1 | cut -d= -f2-")"
+  [ -n "$REMOTE" ] || die "на $HOST в $APP_DIR/.env пуст BACKUP_RCLONE_REMOTE — копии бэкапов вне сервера нет"
+  STAMP="$(ssh "$HOST" "rclone lsf $REMOTE --include 'db-*.sql.gz' | sort | tail -n 1")"
+  STAMP="${STAMP#db-}"; STAMP="${STAMP%.sql.gz}"
+  [ -n "$STAMP" ] || die "в $REMOTE нет дампов db-*.sql.gz"
+  echo "==> копия в $REMOTE: набор $STAMP"
+  S3_TMP="/tmp/egormath-stage-s3"
+  WANT="db-$STAMP.sql.gz"
+  [ "$MEDIA" = 1 ] && WANT="$WANT media-$STAMP.tar.gz"
+  if [ -s "$ROOT/.secrets/BACKUP_SECRETS_PASSPHRASE" ]; then
+    WANT="$WANT secrets-$STAMP.tar.gz.enc"
+  else
+    echo "    архив секретов не проверяю: нет $ROOT/.secrets/BACKUP_SECRETS_PASSPHRASE"
+  fi
+  for f in $WANT; do
+    if [ -s "$DUMPS/$f" ]; then echo "==> уже скачан: $f"; continue; fi
+    if ssh "$HOST" "mkdir -p $S3_TMP && rclone copyto $REMOTE/$f $S3_TMP/$f" 2>/dev/null; then
+      echo "==> $REMOTE/$f → .stage/"
+      scp -q "$HOST:$S3_TMP/$f" "$DUMPS/$f"
+    else
+      case "$f" in
+        db-*) die "в $REMOTE нет $f" ;;
+        *) echo "!! в $REMOTE нет $f" ;;
+      esac
+    fi
+  done
+  ssh "$HOST" "rm -rf $S3_TMP"
+  DUMP="$DUMPS/db-$STAMP.sql.gz"
+  [ -s "$DUMPS/secrets-$STAMP.tar.gz.enc" ] && SECRETS_ENC="$DUMPS/secrets-$STAMP.tar.gz.enc"
 else
-  echo "==> дамп уже скачан: $(basename "$DUMP")"
+  LATEST="$(ssh "$HOST" "ls -t $APP_DIR/data/backups/db-*.sql.gz 2>/dev/null | head -n 1")"
+  [ -n "$LATEST" ] || die "на $HOST нет дампов db-*.sql.gz в $APP_DIR/data/backups"
+  DUMP="$DUMPS/$(basename "$LATEST")"
+  if [ ! -s "$DUMP" ]; then
+    echo "==> $LATEST → .stage/"
+    scp -q "$HOST:$LATEST" "$DUMP"
+  else
+    echo "==> дамп уже скачан: $(basename "$DUMP")"
+  fi
 fi
+gzip -t "$DUMP" || die "дамп $DUMP повреждён"
 
 # 3. локальная база: пересоздать и залить
 echo "==> MySQL: пересоздать $DB и залить дамп"
@@ -114,10 +154,29 @@ if [ "$TZ_CHECK" = "NULL" ]; then
 fi
 
 # 4. media
-if [ "$MEDIA" = 1 ]; then
+if [ "$MEDIA" = 1 ] && [ "$S3" = 1 ] && [ -s "$DUMPS/media-$STAMP.tar.gz" ]; then
+  echo "==> media из архива → $STAGE_DIR/media/"
+  rm -rf "$STAGE_DIR/media"
+  tar -xzf "$DUMPS/media-$STAMP.tar.gz" -C "$STAGE_DIR"
+elif [ "$MEDIA" = 1 ]; then
   echo "==> media → $STAGE_DIR/media/"
   mkdir -p "$STAGE_DIR/media"
   rsync -az --delete "$HOST:$APP_DIR/data/media/" "$STAGE_DIR/media/"
+fi
+
+# 4a. архив секретов из бэкапа: расшифровывается паролем с Mac? (содержимое
+#     не печатаем — только имена файлов)
+if [ -n "$SECRETS_ENC" ]; then
+  SECRETS_TMP="$(mktemp -d)"
+  if BACKUP_PASS="$(tr -d '[:space:]' < "$ROOT/.secrets/BACKUP_SECRETS_PASSPHRASE")" \
+     openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_PASS \
+       -in "$SECRETS_ENC" 2>/dev/null | tar -xzf - -C "$SECRETS_TMP" 2>/dev/null; then
+    echo "==> архив секретов расшифрован: $(cd "$SECRETS_TMP" && find . -type f | sed 's|^\./||' | sort | tr '\n' ' ')"
+    [ -s "$SECRETS_TMP/secrets/DJANGO_SECRET_KEY" ] || echo "!! в архиве секретов нет secrets/DJANGO_SECRET_KEY"
+  else
+    echo "!! архив секретов $SECRETS_ENC не расшифровался: пароль в .secrets/BACKUP_SECRETS_PASSPHRASE не тот, что в .env на сервере?"
+  fi
+  rm -rf "$SECRETS_TMP"
 fi
 
 # 5. миграции ветки поверх дампа
@@ -134,7 +193,7 @@ LAN="$(ipconfig getifaddr en0 2>/dev/null || true)"
 HOSTS="localhost,127.0.0.1${LAN:+,$LAN}"
 cat <<MSG
 
-Стенд готов: $BRANCH ($(git -C "$STAGE_DIR" rev-parse --short HEAD)), база $DB, дамп $(basename "$DUMP").
+Стенд готов: $BRANCH ($(git -C "$STAGE_DIR" rev-parse --short HEAD)), база $DB, дамп $(basename "$DUMP")$( [ "$S3" = 1 ] && printf ' (из копии в S3: набор %s восстановился)' "$STAMP").
 Запуск (или tools/stage.sh --run):
   cd $STAGE_DIR/public_html && env $STAGE_ENV_SHOWN ALLOWED_HOSTS=$HOSTS \\
     $PYTHON manage.py runserver 0.0.0.0:$PORT

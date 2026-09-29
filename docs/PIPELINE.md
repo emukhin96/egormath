@@ -43,12 +43,16 @@ make watch-css
 ```bash
 tools/stage.sh                  # последний ночной дамп + media, worktree на ветке preview (или main)
 tools/stage.sh --fresh          # сначала снять новый дамп на сервере (backup.sh)
+tools/stage.sh --s3             # дамп и media из копии бэкапа в S3 — ежемесячная проверка, что
+                                # восстановление вне сервера работает (deploy/VPS.md, «Бэкапы»)
 tools/stage.sh --branch ui/x    # какую ветку показать
 tools/stage.sh --run            # сразу запустить runserver на порту 8003
 ```
 
 Что делает скрипт: копирует с VPS свежий `db-*.sql.gz` (и `rsync` каталога
-`media/`), пересоздаёт локальную базу `egormath_stage` в Homebrew MySQL и
+`media/`; с `--s3` — тянет набор из S3 через rclone на сервере, media из
+архива, и проверяет, что архив секретов расшифровывается паролем из
+`.secrets/BACKUP_SECRETS_PASSPHRASE`), пересоздаёт локальную базу `egormath_stage` в Homebrew MySQL и
 заливает дамп, при необходимости грузит таблицы часовых поясов, держит
 отдельный worktree `.worktrees/stage` (свои `media/`, `.secrets` — симлинк
 на рабочую копию) и прогоняет миграции ветки поверх дампа. Затем печатает

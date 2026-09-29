@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Залить дамп MySQL (.sql или .sql.gz) в базу egormath вместо текущей.
 #   deploy/vps/import-db.sh egormath-20260927.sql.gz [--yes]
-# Для переезда с Timeweb (репетиция и переключение) и восстановления из бэкапа.
-# Текущая база перед заливкой сохраняется через backup.sh.
+# Для переезда с Timeweb (репетиция и переключение) и восстановления из бэкапа
+# (restore.sh). Текущая база перед заливкой сохраняется через backup.sh.
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 DUMP="${1:?usage: import-db.sh <dump.sql[.gz]> [--yes]}"
@@ -12,8 +12,14 @@ if [ "${2:-}" != "--yes" ]; then
   [ "$ANSWER" = "yes" ] || { echo "Отменено."; exit 1; }
 fi
 
-"$(dirname "$0")/backup.sh" || echo "!! бэкап не удался (пустая база?) — продолжаю"
-$COMPOSE stop egormath-web
+$COMPOSE up -d --wait egormath-db
+# На свежем сервере (restore.sh) контейнера web ещё нет — тогда не трогаем.
+WEB_RUNNING=0
+if $COMPOSE ps --status running --services 2>/dev/null | grep -q '^egormath-web$'; then
+  WEB_RUNNING=1
+  "$(dirname "$0")/backup.sh" || echo "!! бэкап не удался (пустая база?) — продолжаю"
+  $COMPOSE stop egormath-web
+fi
 
 echo "==> Пересоздание базы"
 $COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -e "
@@ -29,10 +35,20 @@ case "$DUMP" in
 esac | $COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --default-character-set=utf8mb4 -uroot "$MYSQL_DATABASE"'
 echo "==> Готово за $(( $(date +%s) - START )) с"
 
-echo "==> Число строк в ключевых таблицах (сверить с Timeweb)"
+# Таблицы часовых поясов: в свежем контейнере mysql:8.0 они пустые, и
+# __date-выборки Django (CONVERT_TZ) дают NULL. В дамп базы egormath они
+# не входят — грузим из zoneinfo самого контейнера.
+TZ_CHECK="$($COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N -e "SELECT CONVERT_TZ(\"2026-01-01 00:00:00\",\"UTC\",\"Europe/Moscow\")"')"
+if [ "${TZ_CHECK%$'\r'}" = "NULL" ]; then
+  echo "==> Таблицы часовых поясов MySQL пусты — загружаю"
+  $COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql_tzinfo_to_sql /usr/share/zoneinfo 2>/dev/null | mysql -uroot mysql'
+fi
+
+echo "==> Число строк в ключевых таблицах (сверить с источником дампа)"
 $COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot "$MYSQL_DATABASE" -e "
   SELECT table_name, table_rows FROM information_schema.tables
   WHERE table_schema = DATABASE() ORDER BY table_rows DESC LIMIT 15;
   SELECT CONVERT_TZ(NOW(), \"UTC\", \"Europe/Moscow\") AS tz_check;"'
 
-$COMPOSE up -d egormath-web
+[ "$WEB_RUNNING" = 1 ] && $COMPOSE up -d egormath-web
+exit 0
