@@ -10,6 +10,36 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Выпадающие подразделы главного меню: шеврон открывает список, клик
+  // вне меню, Escape или второй клик закрывают. На узком экране кнопка
+  // скрыта CSS, а ссылки стоят в общем ряду.
+  const navButtons = Array.from(document.querySelectorAll("[data-nav-more]"));
+  const closeNavMenus = (except) => {
+    navButtons.forEach((button) => {
+      if (button === except) return;
+      button.setAttribute("aria-expanded", "false");
+      const menu = button.nextElementSibling;
+      if (menu) menu.classList.remove("is-open");
+    });
+  };
+  navButtons.forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const menu = button.nextElementSibling;
+      if (!menu) return;
+      const open = !menu.classList.contains("is-open");
+      closeNavMenus(button);
+      menu.classList.toggle("is-open", open);
+      button.setAttribute("aria-expanded", String(open));
+    });
+  });
+  if (navButtons.length) {
+    document.addEventListener("click", () => closeNavMenus());
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeNavMenus();
+    });
+  }
+
   const sidebar = document.getElementById("context-sidebar");
   const toggle = document.getElementById("context-toggle");
   const close = document.getElementById("sidebar-close");

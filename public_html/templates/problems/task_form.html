@@ -4,7 +4,7 @@
 {% block sidebar %}{% include 'includes/sidebar/task_form.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><span class="page-eyebrow">Редактор задачи</span>
+  <div>
     <h1>{% if analog_source %}Новый аналог задачи #{{ analog_source.pk }}{% elif task %}Задача #{{ task.pk }}{% else %}Новая задача{% endif %}</h1>
     {% if task.variant_of_id %}<span class="badge badge-returned">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}
   </div>

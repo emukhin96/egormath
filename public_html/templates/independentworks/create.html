@@ -1,6 +1,6 @@
 {% extends 'independentworks/base.html' %}{% load static %}
 {% block content %}
-<div class="page-head"><div><span class="page-eyebrow">Новый материал</span><h1>Новая самостоятельная</h1><p class="page-subtitle">Выберите основу. Получателей и время зададим после проверки состава.</p></div><a class="btn btn-secondary" href="{% url 'assignment_create' %}?mode=independent">К шаблонам</a></div>
+<div class="page-head"><div><h1>Новая самостоятельная</h1><p class="page-subtitle">Выберите основу. Получателей и время зададим после проверки состава.</p></div><a class="btn btn-secondary" href="{% url 'assignment_create' %}?mode=independent">К шаблонам</a></div>
 <div class="iw-workspace-split"><form method="post" class="card form-section" data-iw-source>{% csrf_token %}{{ form.as_p }}
 <h2>На основе чего создать</h2><div class="iw-source-options">
 <label class="iw-source-option"><input type="radio" name="source_mode" value="blank" {% if source_mode == 'blank' %}checked{% endif %}><span><strong>С нуля</strong><small>Добавить номера из базы задач.</small></span></label>

@@ -1169,7 +1169,7 @@ class TextbookImportTests(TestCase):
         self.assertContains(review, '$…$')
         self.assertNotContains(review, 'Взять решение у ключа')
         self.assertNotContains(review, 'Кандидаты с решениями')
-        self.assertContains(detail, '>Импорт<')
+        self.assertContains(detail, '>Импорт задачников<')
 
     def test_review_shows_two_column_subitems_in_letter_order(self):
         batch = self.create_batch(bundle(

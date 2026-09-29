@@ -5,9 +5,7 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <span class="page-eyebrow">Класс</span>
     <h1>{% if request.user.is_superuser %}Все ученики{% else %}Мои ученики{% endif %}</h1>
-    <p class="page-subtitle">Учётные данные, классы и учебные группы.</p>
   </div>
 </div>
 
@@ -62,7 +60,7 @@
       </select>
     </div>
     <div class="filter-actions"><button type="submit" class="btn">Применить</button></div>
-    {% if q or group_filter or teacher_filter %}<div><a class="btn btn-secondary" href="{% url 'students' %}">Сбросить</a></div>{% endif %}
+    {% if q or group_filter or teacher_filter %}<div><a class="filter-reset" href="{% url 'students' %}">Сбросить</a></div>{% endif %}
   </div>
 </form>
 

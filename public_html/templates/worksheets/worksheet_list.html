@@ -4,8 +4,8 @@
 {% block sidebar %}{% include 'includes/sidebar/worksheet_list.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><span class="page-eyebrow">Материалы</span><h1>{% if request.user.is_superuser %}Все листки{% else %}Мои листки{% endif %}</h1>
-    <p class="page-subtitle">Конструкторы, PDF и назначения ученикам.</p></div>
+  <div><h1>{% if request.user.is_superuser %}Все листки{% else %}Мои листки{% endif %}</h1>
+</div>
   <div class="form-buttons">
     <a class="btn" href="{% url 'worksheet_create' %}">Создать листок</a>
     <a class="btn btn-secondary" href="{% url 'worksheet_import' %}">Импорт из .tex</a>
@@ -64,7 +64,7 @@
       </select>
     </div>
     <div><button type="submit" class="btn">Применить</button></div>
-    <div><a class="btn btn-secondary" href="{% url 'worksheet_list' %}">Сбросить</a></div>
+    <div><a class="filter-reset" href="{% url 'worksheet_list' %}">Сбросить</a></div>
   </form>
 
 </div>
