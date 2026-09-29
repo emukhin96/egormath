@@ -26,7 +26,10 @@ def transfer(package, host, app_dir, username):
     if not re.fullmatch(r'/[\w/.-]+', app_dir):
         raise ValueError('Недопустимый каталог приложения на сервере.')
     ssh = ['ssh', '-o', 'ConnectTimeout=20', host]
-    manage = [app_dir + '/deploy/vps/manage.sh']
+    # lib.sh берёт APP_DIR из окружения (по умолчанию /opt/egormath), а не из
+    # пути к скрипту: без явной передачи .env, DATA_DIR и compose.yaml
+    # взялись бы из другого каталога, чем manage.sh.
+    manage = ['env', f'APP_DIR={app_dir}', app_dir + '/deploy/vps/manage.sh']
     # Запрос к новому столбцу обнаруживает неприменённую миграцию до отправки архива.
     preflight = ('from problems.textbook_transfer import SCHEMA_VERSION, _resolve_owner; '
                  'from problems.models import TextbookImportBatch; '
@@ -35,7 +38,8 @@ def transfer(package, host, app_dir, username):
                  'list(TextbookImportBatch.objects.values_list("transfer_key", flat=True)[:1])')
     run(ssh + [shlex.join(manage + ['shell', '-c', preflight])])
     # Каталог внутри $DATA_DIR/var, чтобы архив был виден из контейнера.
-    make_dir = (f'. {shlex.quote(app_dir + "/deploy/vps/lib.sh")} && '
+    make_dir = (f'export APP_DIR={shlex.quote(app_dir)} && '
+                f'. {shlex.quote(app_dir + "/deploy/vps/lib.sh")} && '
                 'mkdir -p "$DATA_DIR/var/transfers" && '
                 'mktemp -d "$DATA_DIR/var/transfers/egormath-transfer.XXXXXXXX"')
     remote_dir = run(ssh + [shlex.join(['bash', '-c', make_dir])], capture_output=True).stdout.strip()
