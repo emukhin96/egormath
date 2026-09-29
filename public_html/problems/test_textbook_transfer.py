@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 from decimal import Decimal
 from pathlib import Path
@@ -145,6 +146,36 @@ class TextbookTransferTests(TestCase):
             self.assertEqual(again.drafts.get(block_position=1).text_latex, 'Ручная правка')
             self.assertEqual(TextbookImportBatch.objects.count(), 2)
 
+    def test_editorial_fields_and_mask_survive_transfer(self):
+        with self.settings(MEDIA_ROOT=str(self.media)):
+            batch = self._make_batch(profile='ziv', title='Редакторские поля')
+            batch.drafts.update(
+                answer_latex='$x = 2$', solution_latex='Подставим $x$.',
+                answer_mask='$x = $ {{number: 2}}',
+                subitems=[{'label': 'а', 'text_latex': '$1+1$', 'answer_latex': '2',
+                           'answer_mask': '{{number: 2}}'}])
+            TextbookImportAsset.objects.create(batch=batch, stem='рис1', original_name='рис1.png',
+                                              file=ContentFile(TINY_PNG, name='рис1.png'))
+            dest = Path(self.tmp.name) / 'editorial.zip'
+            export_batches(dest, batches=[batch])
+            draft = import_batches(dest, username='prodadmin')[0].drafts.get()
+            self.assertEqual(draft.answer_latex, '$x = 2$')
+            self.assertEqual(draft.solution_latex, 'Подставим $x$.')
+            self.assertEqual(draft.answer_mask, '$x = $ {{number: 2}}')
+            self.assertEqual(draft.subitems[0]['answer_mask'], '{{number: 2}}')
+
+    def test_version_2_package_without_editorial_fields_is_read(self):
+        import json
+        with self.settings(MEDIA_ROOT=str(self.media)):
+            _, dest, payload = self._package(suffix='')
+            payload['schema_version'] = 2
+            for field in ('answer_latex', 'solution_latex', 'answer_mask'):
+                payload['batches'][0]['drafts'][0].pop(field)
+            (dest / 'batches.json').write_text(json.dumps(payload))
+            draft = import_batches(dest, username='prodadmin')[0].drafts.get()
+            self.assertEqual((draft.answer_latex, draft.solution_latex, draft.answer_mask), ('', '', ''))
+            self.assertEqual(draft.author_answer_latex, '20')
+
     def test_check_only_does_not_create_records(self):
         with self.settings(MEDIA_ROOT=str(self.media)):
             _, dest, _ = self._package()
@@ -210,9 +241,18 @@ class TransferScriptTests(TestCase):
         from unittest.mock import patch
         with patch.object(self.script, 'run', side_effect=subprocess.CalledProcessError(1, 'ssh')) as run:
             with self.assertRaises(subprocess.CalledProcessError):
-                self.script.transfer(Path('batch.zip'), 'teacher@example.com', '/srv/egormath', 'egor')
+                self.script.transfer(Path('batch.zip'), 'chemolymp-demo', '/opt/egormath', 'egor')
         self.assertEqual(run.call_count, 1)
+        self.assertIn('/opt/egormath/deploy/vps/manage.sh shell', run.call_args.args[0][-1])
         self.assertIn('SCHEMA_VERSION', run.call_args.args[0][-1])
+
+    def test_script_schema_matches_package_format(self):
+        from problems.textbook_transfer import SCHEMA_VERSION
+        self.assertEqual(self.script.SCHEMA_VERSION, SCHEMA_VERSION)
+
+    def test_rejects_host_that_looks_like_ssh_option(self):
+        with self.assertRaises(ValueError):
+            self.script.transfer(Path('batch.zip'), '-oProxyCommand=x', '/opt/egormath', 'egor')
 
     def test_transfer_checks_before_import_and_removes_only_its_temp_file(self):
         from types import SimpleNamespace
@@ -220,13 +260,40 @@ class TransferScriptTests(TestCase):
         with tempfile.TemporaryDirectory() as temp:
             package = Path(temp) / 'batch.zip'
             package.write_bytes(b'zip')
-            with patch.object(self.script, 'run', return_value=SimpleNamespace(stdout='/tmp/egormath-transfer.ABC123\n')) as run:
-                self.script.transfer(package, 'teacher@example.com', '/srv/egormath', 'egor')
+            temp_dir = '/opt/egormath/data/var/transfers/egormath-transfer.ABC123'
+            digest = hashlib.sha256(b'zip').hexdigest()
+            outputs = iter(['', temp_dir + '\n', '', f'{digest}  {temp_dir}/batch.zip\n', '', '', ''])
+            with patch.object(self.script, 'run', side_effect=lambda *a, **k: SimpleNamespace(stdout=next(outputs))) as run:
+                self.script.transfer(package, 'chemolymp-demo', '/opt/egormath', 'egor')
         commands = [call.args[0] for call in run.call_args_list]
-        self.assertEqual(commands[2][0], 'scp')
-        self.assertIn('sha256', commands[3][-1])
-        self.assertIn('--check-only', commands[4][-1])
-        self.assertIn('import_textbook_batches', commands[5][-1])
-        self.assertNotIn('--check-only', commands[5][-1])
-        self.assertEqual(commands[6][-1], 'rm -f /tmp/egormath-transfer.ABC123/batch.zip && rmdir /tmp/egormath-transfer.ABC123')
+        # APP_DIR передаётся явно: lib.sh и manage.sh берут его из окружения.
+        self.assertIn('export APP_DIR=/opt/egormath && . /opt/egormath/deploy/vps/lib.sh', commands[1][-1])
+        self.assertIn('mktemp -d', commands[1][-1])
+        self.assertEqual(commands[2], ['scp', '-o', 'ConnectTimeout=20', str(package),
+                                       f'chemolymp-demo:{temp_dir}/batch.zip'])
+        self.assertIn('sha256sum', commands[3][-1])
+        # Путь внутри контейнера: $DATA_DIR/var смонтирован как /app/var.
+        container_file = '/app/var/transfers/egormath-transfer.ABC123/batch.zip'
+        manage = 'env APP_DIR=/opt/egormath /opt/egormath/deploy/vps/manage.sh'
+        self.assertTrue(commands[0][-1].startswith(f'{manage} shell -c '))
+        self.assertEqual(commands[4][-1], f'{manage} import_textbook_batches '
+                         f'{container_file} --username egor --check-only')
+        self.assertEqual(commands[5][-1], f'{manage} import_textbook_batches '
+                         f'{container_file} --username egor')
+        self.assertEqual(commands[6][-1], f'rm -f {temp_dir}/batch.zip && rmdir {temp_dir}')
         self.assertFalse(any('deploy.sh' in str(c) or 'git pull' in str(c) for c in commands))
+
+    def test_corrupted_upload_is_not_imported_and_cleaned_up(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as temp:
+            package = Path(temp) / 'batch.zip'
+            package.write_bytes(b'zip')
+            temp_dir = '/opt/egormath/data/var/transfers/egormath-transfer.ABC123'
+            outputs = iter(['', temp_dir, '', '0' * 64 + '  x', ''])
+            with patch.object(self.script, 'run', side_effect=lambda *a, **k: SimpleNamespace(stdout=next(outputs))) as run:
+                with self.assertRaisesRegex(ValueError, 'повреждён'):
+                    self.script.transfer(package, 'chemolymp-demo', '/opt/egormath', 'egor')
+        commands = [call.args[0][-1] for call in run.call_args_list]
+        self.assertFalse(any('import_textbook_batches' in c for c in commands))
+        self.assertTrue(commands[-1].startswith('rm -f '))
