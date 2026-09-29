@@ -5,6 +5,8 @@
 Продакшен (Timeweb): секреты в <корень сайта>/.secrets/, MySQL.
 Переключение: файл .secrets/DJANGO_ENV со значением "production"
 или переменная окружения DJANGO_ENV=production.
+База в разработке — sqlite; DB_ENGINE=mysql подключает MySQL и без
+production (локальный стенд со слепком прода, tools/stage.sh).
 """
 
 import os
@@ -101,7 +103,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-if IS_PRODUCTION:
+# На проде всегда MySQL; в разработке — sqlite, либо MySQL при DB_ENGINE=mysql
+# (стенд со слепком прода). DB_SOCKET — unix-сокет локального MySQL: через
+# него caching_sha2_password не требует пакета cryptography, как TCP.
+DB_ENGINE = read_secret('DB_ENGINE', 'mysql' if IS_PRODUCTION else 'sqlite')
+if DB_ENGINE == 'mysql':
     import pymysql
 
     pymysql.install_as_MySQLdb()
@@ -119,6 +125,9 @@ if IS_PRODUCTION:
             },
         }
     }
+    DB_SOCKET = read_secret('DB_SOCKET', '')
+    if DB_SOCKET:
+        DATABASES['default']['OPTIONS']['unix_socket'] = DB_SOCKET
 else:
     DATABASES = {
         'default': {
