@@ -16,14 +16,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=11">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=13">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
   <script defer src="{% static 'js/math.js' %}?v=2"></script>
   <script defer src="{% static 'js/autosave.js' %}?v=6"></script>
   <script defer src="{% static 'js/livefile.js' %}"></script>
-  <script defer src="{% static 'js/shell.js' %}?v=2"></script>
+  <script defer src="{% static 'js/shell.js' %}?v=3"></script>
   <script defer src="{% static 'js/dialogs.js' %}"></script>
   <script defer src="{% static 'js/taxonomy.js' %}?v=2"></script>
   {# Как верхнее меню: суперпользователь без профиля тоже учитель (get_role). #}
@@ -39,15 +39,34 @@
   <div class="topbar-inner">
     <a class="brand" href="{% url 'index' %}">Математика</a>
     {% if user.is_authenticated %}
+      {# Пять пунктов: подразделы базы задач и заданий — в выпадающем меню у шеврона (shell.js); на узком экране все ссылки в одном ряду #}
       <nav class="topbar-nav" aria-label="Основные разделы">
         <a href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} class="is-active"{% endif %}>{% if is_teacher %}Главная{% else %}Задания{% endif %}</a>
         {% if is_teacher %}
-          <a href="{% url 'task_list' %}"{% if 'task' in request.resolver_match.url_name or request.resolver_match.url_name == 'bulk_answers' %} class="is-active"{% endif %}>База задач</a>
-          <a href="{% url 'textbook_import_list' %}"{% if 'textbook_import' in request.resolver_match.url_name %} class="is-active"{% endif %}>Импорт</a>
+          <div class="nav-group{% if 'task' in request.resolver_match.url_name or request.resolver_match.url_name == 'bulk_answers' or 'textbook_import' in request.resolver_match.url_name or 'collection' in request.resolver_match.url_name %} is-active{% endif %}">
+            <a href="{% url 'task_list' %}">База задач</a>
+            <button type="button" class="nav-more" aria-expanded="false" aria-haspopup="true" aria-label="Разделы базы задач" data-nav-more>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </button>
+            <div class="nav-menu">
+              <a href="{% url 'collection_list' %}"{% if 'collection' in request.resolver_match.url_name %} class="is-active"{% endif %}>Подборки</a>
+              <a href="{% url 'textbook_import_list' %}"{% if 'textbook_import' in request.resolver_match.url_name %} class="is-active"{% endif %}>Импорт задачников</a>
+            </div>
+          </div>
           <a href="{% url 'worksheet_list' %}"{% if 'worksheet' in request.resolver_match.url_name %} class="is-active"{% endif %}>Листки</a>
-          <a href="{% url 'collection_list' %}"{% if 'collection' in request.resolver_match.url_name %} class="is-active"{% endif %}>Подборки</a>
-          {% if independentworks_enabled %}<a href="{% url 'independentworks:catalog' %}"{% if request.resolver_match.namespace == 'independentworks' or request.GET.mode == 'independent' or request.GET.kind == 'independent' %} class="is-active"{% endif %}>Самостоятельные</a>{% endif %}
-          <a href="{% url 'assignment_list' %}?kind=ordinary"{% if request.resolver_match.namespace != 'independentworks' and request.GET.mode != 'independent' and request.GET.kind != 'independent' %}{% if 'assignment' in request.resolver_match.url_name or 'review' in request.resolver_match.url_name %} class="is-active"{% endif %}{% endif %}>Задания</a>
+          {% if independentworks_enabled %}
+          <div class="nav-group{% if request.resolver_match.namespace == 'independentworks' or request.GET.mode == 'independent' or request.GET.kind == 'independent' or 'assignment' in request.resolver_match.url_name or 'review' in request.resolver_match.url_name %} is-active{% endif %}">
+            <a href="{% url 'assignment_list' %}?kind=ordinary">Задания</a>
+            <button type="button" class="nav-more" aria-expanded="false" aria-haspopup="true" aria-label="Виды заданий" data-nav-more>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </button>
+            <div class="nav-menu">
+              <a href="{% url 'independentworks:catalog' %}"{% if request.resolver_match.namespace == 'independentworks' or request.GET.mode == 'independent' or request.GET.kind == 'independent' %} class="is-active"{% endif %}>Самостоятельные</a>
+            </div>
+          </div>
+          {% else %}
+          <a href="{% url 'assignment_list' %}?kind=ordinary"{% if 'assignment' in request.resolver_match.url_name or 'review' in request.resolver_match.url_name %} class="is-active"{% endif %}>Задания</a>
+          {% endif %}
           <a href="{% url 'students' %}"{% if 'student' in request.resolver_match.url_name or 'group' in request.resolver_match.url_name %} class="is-active"{% endif %}>Ученики</a>
         {% endif %}
       </nav>

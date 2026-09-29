@@ -2,9 +2,8 @@
 {% block title %}{{ profile.user.get_full_name }} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/student_edit.html' %}{% endblock %}
 {% block content %}
-<div class="page-head"><div><span class="page-eyebrow">Ученики</span>
+<div class="page-head"><div>
   <h1>{{ profile.user.get_full_name }}</h1>
-  <p class="page-subtitle">Личные данные, класс и учебные группы.</p>
 </div></div>
 <div class="card">
   <p class="task-meta">Логин: <span class="mono">{{ profile.user.username }}</span></p>

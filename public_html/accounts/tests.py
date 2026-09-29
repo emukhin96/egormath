@@ -477,6 +477,7 @@ const form = {
 const document = {
   cookie: 'csrftoken=initial-token',
   querySelector: () => form,
+  querySelectorAll: () => [],
   getElementById: () => null,
   addEventListener: (name, handler) => { if (name === 'DOMContentLoaded') handler(); },
 };
