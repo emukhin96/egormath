@@ -25,7 +25,7 @@
   <script defer src="{% static 'js/livefile.js' %}"></script>
   <script defer src="{% static 'js/shell.js' %}?v=3"></script>
   <script defer src="{% static 'js/dialogs.js' %}"></script>
-  <script defer src="{% static 'js/taxonomy.js' %}?v=2"></script>
+  <script defer src="{% static 'js/taxonomy.js' %}?v=3"></script>
   {# Как верхнее меню: суперпользователь без профиля тоже учитель (get_role). #}
   {% if user.profile.is_teacher or user.is_superuser %}
   <script>window.NEURO_SOLVE_URL = '{% url "task_neuro_solve" %}';</script>
