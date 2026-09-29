@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=16">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=19">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
@@ -70,6 +70,12 @@
           <a href="{% url 'students' %}"{% if 'student' in request.resolver_match.url_name or 'group' in request.resolver_match.url_name %} class="is-active"{% endif %}>Ученики</a>
         {% endif %}
       </nav>
+      {% if is_teacher and not minimal_page %}
+      <form class="topbar-search" method="get" action="{% url 'task_list' %}" role="search">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M13.5 13.5l-3-3"/></svg>
+        <input type="search" name="q" placeholder="Найти задачу или #id" aria-label="Поиск задач" autocomplete="off">
+      </form>
+      {% endif %}
       <div class="topbar-user">
         {% if is_teacher and not minimal_page %}{% include 'includes/cart_menu.html' %}{% endif %}
         {% if not minimal_page %}

@@ -29,6 +29,7 @@
 :root {
   --accent: #1765b5;
   --accent-dark: #102b55;
+  --accent-soft: #e4eef9;
   --bg: #eef2f6;
   --card: #ffffff;
   --text: #1c2430;
@@ -397,8 +398,9 @@
     color: #6393d3;
   }
 
+  /* Меню не сжимается под содержимое: место отдаёт поиск (flex-shrink у .topbar-search) */
   .topbar-nav {
-    min-width: 0;
+    flex: none;
     display: flex;
     align-items: center;
     gap: var(--space-1);
@@ -492,12 +494,86 @@
     font-weight: 650;
   }
 
+  /* Поиск задач в шапке: ведёт на базу задач с введённым запросом */
+  .topbar-search {
+    margin: 0 0 0 auto;
+    flex: 0 1 220px;
+    min-width: 120px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: 32px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: #f7f9fc;
+    color: var(--muted);
+  }
+
+  .topbar-search:focus-within {
+    border-color: var(--accent);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgb(36 86 166 / 20%);
+  }
+
+  .topbar-search svg {
+    width: 15px;
+    height: 15px;
+    flex: none;
+  }
+
+  .topbar-search input {
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 0.85rem;
+  }
+
+  .topbar-search input:focus {
+    outline: none;
+    box-shadow: none;
+    border: 0;
+  }
+
   .topbar-user {
     margin-left: auto;
     flex: none;
     display: flex;
     align-items: center;
     gap: var(--space-2);
+  }
+
+  .topbar-search + .topbar-user {
+    margin-left: 0;
+  }
+
+  /* На ноутбучной ширине бренд не тянется до ширины панели, чтобы поиск уместился рядом с меню */
+  @media (max-width: 1100px) {
+    .brand {
+      width: auto;
+      min-width: max-content;
+    }
+
+    .app-body .topbar-nav {
+      margin-left: 0;
+    }
+
+    .topbar-search {
+      flex-basis: 180px;
+      min-width: 96px;
+    }
+
+    .topbar-nav {
+      gap: 0;
+    }
+
+    .topbar-nav a {
+      padding: var(--space-2) 9px;
+      font-size: 0.86rem;
+    }
   }
 
   .topbar-user > .cart-menu {
@@ -897,10 +973,11 @@
     position: sticky;
     top: var(--topbar-height);
     height: calc(100vh - var(--topbar-height));
-    padding: var(--space-5) var(--space-4);
+    padding: var(--space-4) var(--space-4) var(--space-5);
     overflow-y: auto;
-    color: #dce7f5;
-    background: var(--accent-dark);
+    color: var(--text);
+    background: #fff;
+    border-right: 1px solid var(--border);
   }
 
   .sidebar-mobile-head {
@@ -921,9 +998,9 @@
   }
 
   .sidebar-section + .sidebar-section {
-    margin-top: var(--space-5);
+    margin-top: var(--space-4);
     padding-top: var(--space-4);
-    border-top: 1px solid rgb(255 255 255 / 12%);
+    border-top: 1px solid var(--border);
   }
 
   .sidebar-list + .sidebar-stat,
@@ -935,7 +1012,7 @@
 
   .sidebar-kicker {
     margin: 0 0 var(--space-2);
-    color: #7896bd;
+    color: var(--muted);
     font-size: 0.68rem;
     font-weight: 700;
     letter-spacing: 0.1em;
@@ -945,11 +1022,12 @@
   .context-sidebar h2,
   .context-sidebar h3 {
     margin: 0 0 var(--space-2);
-    color: #fff;
+    color: var(--text);
   }
 
   .context-sidebar h2 {
-    font-size: 1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
   }
 
   .context-sidebar h3 {
@@ -958,7 +1036,7 @@
 
   .sidebar-copy {
     margin: 0;
-    color: #b9c9de;
+    color: var(--muted);
     font-size: 0.8rem;
     line-height: 1.5;
   }
@@ -969,41 +1047,53 @@
     list-style: none;
   }
 
+  /* Строки списка без разделителей; строка-ссылка подсвечивается, текущая — мягким акцентом */
   .sidebar-list li {
-    padding-block: var(--space-2);
-    border-bottom: 1px solid rgb(255 255 255 / 8%);
-    color: #cbd8e9;
-    font-size: 0.78rem;
+    padding: 5px var(--space-2);
+    margin-inline: calc(-1 * var(--space-2));
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.82rem;
   }
 
-  .sidebar-list li:last-child {
-    border-bottom: 0;
+  .sidebar-list li:has(> a):hover {
+    background: #f2f6fc;
+  }
+
+  .sidebar-list li.is-current {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
   }
 
   .sidebar-list a {
-    color: #dce8f8;
+    color: var(--accent-dark);
     text-decoration: none;
   }
 
+  .sidebar-list li.is-current a,
   .sidebar-list a:hover {
-    color: #fff;
+    color: var(--accent);
+  }
+
+  .sidebar-list li span {
+    color: var(--muted);
+  }
+
+  .sidebar-count {
+    float: right;
+    margin-left: var(--space-2);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
   }
 
   .collection-sidebar-tree li {
-    padding-left: calc(var(--collection-depth, 0) * var(--space-3));
-  }
-
-  .collection-sidebar-tree li.is-current {
-    margin-inline: calc(-1 * var(--space-2));
-    padding-right: var(--space-2);
     padding-left: calc(var(--space-2) + var(--collection-depth, 0) * var(--space-3));
-    border-radius: 6px;
-    background: rgb(255 255 255 / 12%);
   }
 
   .sidebar-list strong,
   .sidebar-stat strong {
-    color: #fff;
+    color: var(--text);
   }
 
   .sidebar-stats {
@@ -1021,7 +1111,7 @@
     justify-content: center;
     padding: var(--space-2);
     border-radius: 6px;
-    background: rgb(255 255 255 / 7%);
+    background: #f7f9fc;
   }
 
   .sidebar-stats > .sidebar-stat {
@@ -1037,10 +1127,11 @@
 
   .sidebar-stat strong {
     font-size: 1.25rem;
+    color: var(--accent-dark);
   }
 
   .sidebar-stat span {
-    color: #9fb4d0;
+    color: var(--muted);
     font-size: 0.68rem;
   }
 
@@ -1049,25 +1140,28 @@
     gap: var(--space-2);
   }
 
+  /* Ссылка-кнопка в панели: как .btn-secondary, но компактнее */
   .sidebar-action {
     text-align: left;
-    padding: 8px 10px;
-    border: 1px solid rgb(255 255 255 / 16%);
+    padding: 7px 10px;
+    border: 1px solid var(--border);
     border-radius: 6px;
-    color: #e2ecf8;
-    background: rgb(255 255 255 / 7%);
+    color: var(--accent-dark);
+    background: #fff;
     text-decoration: none;
-    font-size: 0.78rem;
+    font-size: 0.8rem;
+    font-weight: 500;
   }
 
   .sidebar-action:hover {
-    color: #fff;
-    background: rgb(255 255 255 / 12%);
+    color: var(--accent);
+    background: #edf3f9;
   }
 
   button.sidebar-action {
     font: inherit;
-    font-size: 0.78rem;
+    font-size: 0.8rem;
+    font-weight: 500;
     cursor: pointer;
     width: 100%;
   }
@@ -1082,7 +1176,7 @@
     font-size: 0.78rem;
   }
   .context-sidebar .authored-publish .link-btn,
-  .context-sidebar .authored-publish + form .link-btn { color: #e2ecf8; }
+  .context-sidebar .authored-publish + form .link-btn { color: var(--accent); }
   .authored-controls {
     display: flex;
     flex-wrap: wrap;
@@ -1594,8 +1688,19 @@
     gap: var(--space-3);
   }
 
+  /* Заголовок карточки — ярлык: содержимое читается первым, ярлык только подписывает его.
+     Рубрики в .ws-view — содержимое, не ярлыки */
+  .card:not(.ws-view) > h2,
   .card-head h2 {
-    margin: var(--space-1) 0 0;
+    margin: 0 0 var(--space-3);
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .card-head h2 {
+    margin: 0;
   }
 
   .counter {
@@ -3578,22 +3683,22 @@
 
   .switch-group button {
     padding: 5px 10px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.07);
-    color: #dce8f8;
+    background: #fff;
+    color: var(--accent-dark);
     font-size: 0.78rem;
     cursor: pointer;
   }
 
   .switch-group button:hover {
-    background: rgba(255, 255, 255, 0.16);
+    background: #edf3f9;
   }
 
   .switch-group button.is-active {
-    background: #fff;
-    color: var(--accent-dark);
-    border-color: #fff;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent-soft);
     font-weight: 600;
   }
 
@@ -4090,7 +4195,8 @@
 
     .user-avatar,
     .user-name,
-    .cart-label {
+    .cart-label,
+    .topbar-search {
       display: none;
     }
 
@@ -4137,16 +4243,16 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      color: #fff;
+      color: var(--text);
     }
 
     .sidebar-close {
       width: 32px;
       height: 32px;
-      border: 1px solid rgb(255 255 255 / 18%);
+      border: 1px solid var(--border);
       border-radius: 6px;
-      color: #fff;
-      background: rgb(255 255 255 / 8%);
+      color: var(--text);
+      background: #fff;
       cursor: pointer;
       font-size: 1.3rem;
     }
