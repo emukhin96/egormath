@@ -25,7 +25,6 @@ _CHAIN_RE = re.compile(
     r'^(.+?)\s*' + _OP + r'\s*' + _VAR + r'\s*' + _OP + r'\s*(.+)$')
 _LEFT_RE = re.compile(r'^' + _VAR + r'\s*(<=|>=|<|>|!=)\s*(.+)$')
 _RIGHT_RE = re.compile(r'^(.+?)\s*(<=|>=|<|>|!=)\s*' + _VAR + r'$')
-_PAIR_GROUP_RE = re.compile(r'\(([^()]*)\)')
 
 INF = float('inf')
 
@@ -281,34 +280,133 @@ def sets_equal(a, b, tolerance=None):
         _unique_numbers(a, tolerance), _unique_numbers(b, tolerance), tolerance)
 
 
-def parse_pairs(text):
-    """``(2,5; -3); (5; -6)`` → список кортежей чисел одинаковой длины;
-    одна пара без скобок ``2; -3`` тоже допускается. None — не разобрано."""
-    text = normalize(text or '')
+def _pair_text(text):
+    """Снять оформление, сохранив координатные и десятичные запятые."""
+    text = text or ''
+    if len(text) > MAX_COLLECTION_LEN or '\x00' in text:
+        return None
+    text = text.replace('$', ' ')
+    for command in (r'\left', r'\right', r'\displaystyle',
+                    r'\,', r'\;', r'\:', r'\!', r'\ ', '~'):
+        text = text.replace(command, ' ')
+    brackets = _pair_brackets(text)
+    if brackets is None:
+        return None
+    for match in re.finditer(r'\\\{', text):
+        if any(start < match.start() < end for start, end in brackets.items()):
+            return None  # Явное множество внутри координаты/дроби — не число.
+    return text.replace(r'\{', '{').replace(r'\}', '}').strip()
+
+
+def _pair_brackets(text):
+    """Точные пары скобок; здесь смешанные скобки промежутков недопустимы."""
+    stack, ends = [], {}
+    opening = {')': '(', ']': '[', '}': '{'}
+    for i, char in enumerate(text):
+        if char in '({[':
+            stack.append((char, i))
+            if len(stack) > MAX_COLLECTION_DEPTH:
+                return None
+        elif char in ')}]':
+            if not stack or stack[-1][0] != opening[char]:
+                return None
+            _, start = stack.pop()
+            ends[start] = i
+    return None if stack else ends
+
+
+def _pair_coordinates(group, *, explicit, coordinate_comma):
+    """Разделить кортеж до normalize; имена x/y/z нельзя просто выкинуть."""
+    parts = _split_top(group, re.compile(';'))
+    if parts is not None and len(parts) == 1 and explicit and coordinate_comma:
+        parts = _split_top(group, re.compile(','))
+        if parts is not None and len(parts) != 2:
+            return None  # (2,5,-3) неоднозначно: не угадываем десятичную запятую.
+    if parts is None or not 2 <= len(parts) <= MAX_COLLECTION_ITEMS:
+        return None
+    if any(not p or len(p) > 300 for p in parts):
+        return None
+    # В координатах допустима только полная именованная запись x/y[/z].
+    # Например, (y=-4;x=3) — это (3;-4), а не (-4;3).
+    if any('=' in p for p in parts):
+        expected = ('x', 'y', 'z')[:len(parts)]
+        named = {}
+        for part in parts:
+            match = re.fullmatch(r'([xyz])\s*=\s*([^=]+)', part)
+            if not match or match[1] in named:
+                return None
+            named[match[1]] = match[2]
+        if len(parts) > 3 or set(named) != set(expected):
+            return None
+        parts = [named[name] for name in expected]
+    values = [numeric_value(p) for p in parts]
+    return tuple(values) if all(v is not None for v in values) else None
+
+
+def parse_pairs(text, *, coordinate_comma=True):
+    """Множество упорядоченных кортежей, включая {…} и A×B.
+
+    ``(2,5; -3)`` содержит десятичную запятую; ``(2.5,-3)`` —
+    координатную. Свободный автоподбор отключает второй вариант, поскольку
+    без контекста пары запятая может принадлежать промежутку или числу.
+    """
+    text = _pair_text(text)
     if not text:
         return None
-    groups = _PAIR_GROUP_RE.findall(text)
-    if groups:
-        leftover = _PAIR_GROUP_RE.sub(' ', text)
-        leftover = re.sub(r'[\s,;]+', '', leftover)
-        if leftover:
+    ends = _pair_brackets(text)
+    if ends is None:
+        return None
+    product = _split_top(text, re.compile(r'\\times(?![A-Za-z])|×'))
+    if product is None:
+        return None
+    if len(product) > 1:
+        if len(product) != 2:
             return None
-    else:
-        if ';' not in text:
+        factors = []
+        for factor in product:
+            brackets = _pair_brackets(factor)
+            if not factor.startswith('{') or brackets.get(0) != len(factor)-1 \
+                    or '=' in factor:
+                return None
+            values = parse_set(factor)
+            if values is None:
+                return None
+            factors.append(values)
+        if len(factors[0]) * len(factors[1]) > MAX_COLLECTION_ITEMS:
             return None
-        groups = [text]
+        return [(x, y) for x in factors[0] for y in factors[1]]
+    wrapped_set = text.startswith('{') and ends.get(0) == len(text)-1
+    if wrapped_set:
+        text = text[1:-1].strip()
+        if not text.startswith('('):
+            return None  # {1;2} — множество чисел, не упорядоченная пара.
+        ends = _pair_brackets(text)
+    if text.startswith('(') and ends.get(0) == len(text)-1:
+        pair = _pair_coordinates(text[1:-1], explicit=True,
+                                 coordinate_comma=coordinate_comma)
+        return [pair] if pair is not None else None
+    groups = _split_top(text, re.compile('[;,]'))
+    if groups is None or any(not group for group in groups):
+        return None
     pairs = []
     for group in groups:
-        parts = [p.strip() for p in group.split(';')]
-        if len(parts) < 2 or any(not p for p in parts):
-            return None
-        values = [numeric_value(p) for p in parts]
-        if any(v is None for v in values):
-            return None
-        pairs.append(tuple(values))
-    if len({len(p) for p in pairs}) != 1:
-        return None
-    return pairs
+        brackets = _pair_brackets(group)
+        if not group.startswith('(') or brackets.get(0) != len(group)-1:
+            # Единственный кортеж без внешних скобок: 2,5; -3.
+            if wrapped_set:
+                return None
+            pair = _pair_coordinates(text, explicit=False, coordinate_comma=False)
+            return [pair] if pair is not None else None
+        pair = _pair_coordinates(group[1:-1], explicit=True,
+                                 coordinate_comma=coordinate_comma)
+        if pair is None:
+            if wrapped_set:
+                return None
+            # Скобки могут окружать только число: (9/10); (0).
+            pair = _pair_coordinates(text, explicit=False, coordinate_comma=False)
+            return [pair] if pair is not None else None
+        pairs.append(pair)
+    return pairs if pairs and len({len(p) for p in pairs}) == 1 else None
 
 
 def _pair_equal(a, b, tolerance=None):
@@ -317,7 +415,13 @@ def _pair_equal(a, b, tolerance=None):
 
 
 def pairs_equal(a, b, tolerance=None):
-    return _multiset_equal(a, b, tolerance, equal=_pair_equal)
+    def unique(pairs):
+        out = []
+        for pair in pairs:
+            if not any(_pair_equal(pair, other, tolerance) for other in out):
+                out.append(pair)
+        return out
+    return _multiset_equal(unique(a), unique(b), tolerance, equal=_pair_equal)
 
 
 # --- числовые промежутки -------------------------------------------------------

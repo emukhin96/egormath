@@ -806,7 +806,7 @@ def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subi
             return f'{{{{{preset}: {low}}}}}'
     if sets.numeric_value(text) is not None and '=' not in text:
         return f'{{{{{NUMBER}: {text}}}}}'
-    if '(' in text and sets.parse_pairs(text):
+    if '(' in text and sets.parse_pairs(text, coordinate_comma=False):
         return f'{{{{{PAIR}: {text}}}}}'
     if re.search(r'[<>≤≥\[\]∪]|\\infty|\\le|\\ge|\\cup', text) \
             and sets.parse_range(text) is not None:

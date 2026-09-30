@@ -149,6 +149,7 @@ class MaskEndpointTests(TestCase):
         cases = {
             '10 см': '',
             '2,5': '{{number: 2,5}}',
+            '(1,2)': '{{number: (1,2)}}',
             '$\\frac{5}{2}$': '{{number: \\frac{5}{2}}}',
             '(3; -4); (4; -3)': '{{pair: (3; -4); (4; -3)}}',
             '(-\\infty; -1]': '{{range: (-\\infty; -1]}}',

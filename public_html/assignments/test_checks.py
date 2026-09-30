@@ -152,6 +152,66 @@ class MaskCheckTests(SimpleTestCase):
         self.assertEqual(check_slot(single, '3; -4'), OK)
         self.assertEqual(check_slot(single, '(x=3; y=-4)'), OK)
 
+    def test_pair_equivalent_notation(self):
+        s = slot('{{pair: (-5;0);(0;-4)}}')
+        for value in (r'\{(-5;0),(0;-4)\}', '(-5,0),(0,-4)',
+                      r'\left\{\left(0,-4\right);(-5,0)\right\}',
+                      '(-5;0);(0;-4);(-10/2;0)', '((0);(-8/2));((-5);0)'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        for value in ('(-5;0)', '(-5;0);(0;-4);(0;0)', '(0;-5);(-4;0)',
+                      '(y=-5;x=0);(y=0;x=-4)'):
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        self.assertEqual(check_slot(s, '(y=0;x=-5);(y=-4;x=0)'), OK)
+
+    def test_pair_decimal_comma_and_fraction(self):
+        s = slot('{{pair: (2,5;-3)}}')
+        for value in ('(2,5;-3)', '(2.5,-3)', '(2{,}5,-3)',
+                      r'(\frac{5}{2},-3)', '((5/2);-3)', '2,5;-3', '(5/2);(-3)'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        for value in ('(2,5,-3)', '2.5,-3', '(0,9,0)'):
+            self.assertEqual(check_slot(s, value), UNKNOWN, value)
+        self.assertEqual(check_slot(slot('{{pair: (2;5)}}'), '(2,5)'), OK)
+        self.assertEqual(check_slot(slot('{{pair: (0;0,5)}}'), '(0;0,5)'), OK)
+        exact = slot('{{pair: (1;2)}}')
+        self.assertEqual(check_slot(exact, '(1.0000000000000000001;2)'), WRONG)
+
+    def test_pair_cartesian_product(self):
+        s = slot('{{pair: (1;-1);(1;2);(5;-1);(5;2)}}')
+        for value in (r'\{1;5\}\times\{-1;2\}', '{5,1}×{2,-1}',
+                      r'\{1;1;5\}\times\{2;-1\}'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        self.assertEqual(check_slot(s, '{1;5}×{-1}'), WRONG)
+        self.assertEqual(check_slot(s, '{-1;2}×{1;5}'), WRONG)
+        self.assertEqual(check_slot(s, '{1;5}*{-1;2}'), UNKNOWN)
+        single = slot('{{pair: (1;2)}}')
+        for value in (r'\{\frac{\{1\}}{1}\}\times\{2\}',
+                      r'\{\{1\}\}\times\{2\}'):
+            self.assertEqual(check_slot(single, value), UNKNOWN, value)
+        axes = slot('{{pair: (-5;0);(0;-4)}}')
+        self.assertEqual(check_slot(axes, '{-5;0}×{0;-4}'), WRONG)
+
+    def test_pair_structure_and_named_coordinates(self):
+        for value in ('(1;2)+(3;4)', '2*(3;4)', r'\frac{(1;2)}{3}',
+                      '(1;2)text', '(1;2]', '(1;2);', '[(1;2)]', '{1;2}',
+                      r'\left\{1;2\right\}', r'(\{1\};2)',
+                      r'(\frac{\{1\}}{1};2)', '{(1);2}',
+                      '(x=1;y=2;y=3)', '(a=1;b=2)', '(x=1;2)', '(x=1;y=2=3)'):
+            self.assertIsNone(sets.parse_pairs(value), value)
+        self.assertEqual(sets.parse_pairs('(1;2;3)'), [(1, 2, 3)])
+        self.assertEqual(sets.parse_pairs('(z=3;x=1;y=2)'), [(1, 2, 3)])
+        self.assertIsNone(sets.parse_pairs('(1,2)', coordinate_comma=False))
+
+    def test_pair_limits_before_numeric_evaluation(self):
+        for value in ('(' + '1' * 5000 + ';2)', '(1;2)\x00',
+                      ';'.join(['(1;2)'] * 65),
+                      '(' + ';'.join(['1'] * 65) + ')',
+                      '(' * 17 + '1;2' + ')' * 17,
+                      '(' + '1' * 301 + ';2)',
+                      '{' + ';'.join(map(str, range(9))) + '}×{' +
+                      ';'.join(map(str, range(8))) + '}'):
+            self.assertIsNone(sets.parse_pairs(value), value[:80])
+        self.assertEqual(len(sets.parse_pairs(';'.join(['(1;2)'] * 64))), 64)
+
     def test_set(self):
         s = slot('{{set: -3; 3}}')
         for value in ('3; -3', r'\{-3;3\}', r'x=\pm3', r'\pm 3', '-3, 3'):
