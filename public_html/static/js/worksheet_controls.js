@@ -176,7 +176,8 @@
     var input = e.target;
     if (input.matches('[data-group-toggle]')) {
       members(input).forEach(function (box) { box.checked = input.checked; });
-      input.indeterminate = false;
+      // Пересчитать и соседние группы: ученик может состоять в нескольких
+      syncGroups(input.closest('dialog'));
     } else if (input.matches('dialog input[name="hide_assignments"]')) {
       syncGroups(input.closest('dialog'));
     }
