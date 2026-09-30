@@ -548,7 +548,6 @@ def group_point_rows(rows):
 
 
 def point_rows(attempt, teacher=False):
-    svc.recheck_unavailable(attempt)
     disclosure = svc.FLAGS if teacher else attempt.disclosure
     answers = {a.point_id: a for a in attempt.answers.all()}
     rows = []
@@ -596,6 +595,10 @@ def attempt_page(request, pk):
     attempt = own_attempt(request, pk, teacher=teacher)
     svc.finish_expired(attempt)
     accessible = teacher or bool(attempt.started_at)
+    if accessible and not teacher:
+        # Досверка только своей работы: общая сводка и экспорт ничего
+        # не вычисляют. За открытие страницы повторяем максимум один ответ.
+        svc.recheck_unavailable(attempt)
     return render(request, 'independentworks/attempt.html', {
         'attempt': attempt, 'teacher_view': teacher, 'rows': group_point_rows(point_rows(attempt, teacher)) if accessible else [],
         'editable': not teacher and bool(attempt.started_at) and not attempt.finished,
@@ -649,8 +652,7 @@ def check_answer(request, pk, point_id):
         # Сверка временно не состоялась: попытку не списываем
         return JsonResponse({'ok': False, 'checks': {},
                              'message': 'Проверка временно недоступна — попробуйте ещё раз через минуту',
-                             'version': answer.version, 'saved_at': answer.updated_at.isoformat()},
-                            status=503)
+                             'version': answer.version, 'saved_at': answer.updated_at.isoformat()})
     with transaction.atomic():
         answer = Answer.objects.select_for_update().get(pk=answer.pk)
         answer.check_revealed = True

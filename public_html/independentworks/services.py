@@ -450,7 +450,7 @@ def save_answer(attempt_id, point_id, version, values):
         auto, checks = check_mask(spec, values) if spec.is_valid else ('unknown', {})
     except FormulaUnavailable as error:
         # Вычислитель временно недоступен: ответ сохраняем без вердикта,
-        # сверка повторится при следующем показе (recheck_unavailable).
+        # сверка повторится при открытии учеником своей работы.
         auto, checks = '', {UNAVAILABLE_KEY: unavailable_count({}, error)}
     else:
         # Пустые поля пригодной маски дают нулевой зачёт, а не ручную очередь.
@@ -469,14 +469,15 @@ def save_answer(attempt_id, point_id, version, values):
 
 
 def recheck_unavailable(attempt):
-    """Досверить ответы, сохранённые без вердикта из-за недоступности вычислителя.
+    """Досверить один ответ при открытии учеником своей работы.
 
     Повторов не больше UNAVAILABLE_LIMIT на один ввод: после этого ответ
-    уходит в ручную проверку как unknown, а не перепроверяется при каждом
-    показе.
+    уходит в ручную проверку как unknown. Занятый вычислитель не ждём;
+    сводка учителя и экспорт эту функцию не вызывают.
     """
     from assignments.checks.formulas import (UNAVAILABLE_KEY, UNAVAILABLE_LIMIT,
-                                             FormulaUnavailable, unavailable_count)
+                                             FormulaUnavailable, unavailable_count,
+                                             without_worker_wait)
     for answer in attempt.answers.filter(auto_check='').select_related('point'):
         if not any((v or '').strip() for v in (answer.values or {}).values()):
             continue
@@ -484,18 +485,23 @@ def recheck_unavailable(attempt):
         if not spec.is_valid:
             continue
         try:
-            auto, checks = check_mask(spec, answer.values)
+            with without_worker_wait():
+                auto, checks = check_mask(spec, answer.values)
         except FormulaUnavailable as error:
             count = unavailable_count(answer.checks, error)
             fields = {'checks': {UNAVAILABLE_KEY: count}}
             if count >= UNAVAILABLE_LIMIT:
                 fields['auto_check'] = 'unknown'
             Answer.objects.filter(pk=answer.pk, version=answer.version).update(**fields)
-            continue
-        if not auto or (auto == 'unknown' and 'unknown' not in checks.values()):
-            auto = 'wrong'
-        Answer.objects.filter(pk=answer.pk, version=answer.version).update(
-            auto_check=auto, checks=checks)
+        else:
+            if not auto or (auto == 'unknown' and 'unknown' not in checks.values()):
+                auto = 'wrong'
+            Answer.objects.filter(pk=answer.pk, version=answer.version).update(
+                auto_check=auto, checks=checks)
+        # own_attempt предзагружает ответы: этот же показ и итог должны
+        # использовать свежий результат, а не старый экземпляр модели.
+        getattr(attempt, '_prefetched_objects_cache', {}).pop('answers', None)
+        break
 
 
 @transaction.atomic

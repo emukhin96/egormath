@@ -95,6 +95,58 @@ class IndependentWorkTests(TestCase):
     def url(self, name, *args):
         return reverse('independentworks:' + name, args=args)
 
+    def test_unavailable_self_check_returns_saved_version_and_allows_next_save(self):
+        from assignments.checks.formulas import FormulaBusy
+        attempt = self.begin(self_check=True)
+        point = attempt.variant.points.get()
+        self.client.force_login(self.student)
+        with patch.object(svc, 'check_mask', side_effect=FormulaBusy('занято')):
+            response = self.client.post(self.url('check_answer', attempt.pk, point.pk), {
+                'version': 0, f'p{point.pk}_s1': '4'})
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['version'], 1)
+        self.assertFalse(AnswerCheckAttempt.objects.filter(answer__attempt=attempt).exists())
+        response = self.client.post(self.url('save', attempt.pk, point.pk), {
+            'version': result['version'], f'p{point.pk}_s1': '3'})
+        self.assertEqual(response.status_code, 200)
+        answer = attempt.answers.get()
+        self.assertEqual((answer.version, answer.values), (2, {'s1': '3'}))
+
+    def test_teacher_pages_and_export_never_retry_formula_checks(self):
+        attempt = self.begin()
+        point = attempt.variant.points.get()
+        Answer.objects.create(attempt=attempt, point=point, values={'s1': '4'},
+                              version=1, auto_check='')
+        self.client.force_login(self.teacher)
+        with patch.object(svc, 'check_mask') as check:
+            for name, args in [('progress', [attempt.run_id]), ('export', [attempt.run_id]),
+                               ('attempt', [attempt.pk]), ('point_detail', [attempt.pk, point.pk])]:
+                with self.subTest(page=name):
+                    self.assertEqual(self.client.get(self.url(name, *args)).status_code, 200)
+            check.assert_not_called()
+
+    def test_student_page_retries_one_answer_without_wait_and_shows_fresh_result(self):
+        from assignments.checks import formulas
+        position = Position.objects.create(work=self.work, order=2)
+        other_task = Task.objects.create(text_latex='Три плюс один?', answer_mask='{{number: 4}}')
+        Candidate.objects.create(position=position, task=other_task)
+        attempt = self.begin()
+        for point in attempt.variant.points.all():
+            Answer.objects.create(attempt=attempt, point=point, values={'s1': '4'},
+                                  version=1, auto_check='')
+        def checked(spec, values):
+            self.assertEqual(formulas._worker_wait.get(), 0)
+            return 'ok', {'s1': 'ok'}
+        self.client.force_login(self.student)
+        with patch.object(svc, 'check_mask', side_effect=checked) as check:
+            response = self.client.get(self.url('attempt', attempt.pk))
+            check.assert_called_once()
+        self.assertEqual(response.status_code, 200)
+        self.assertCountEqual([row['answer'].auto_check for row in response.context['rows']], ['ok', ''])
+        self.assertIsNone(formulas._worker_wait.get())
+
     def test_manage_recipients_in_shared_dialog(self):
         a = self.issued()
         extra = get_user_model().objects.create_user('extra_recipient')
