@@ -127,8 +127,9 @@ fi
 # DB_PASSWORD передаётся всегда, даже пустым: в .secrets стенда DB_* нет,
 # поэтому пустое значение означает «без пароля».
 STAGE_ENV=(DB_ENGINE=mysql "DB_NAME=$DB" "DB_USER=$DB_USER" "DB_PASSWORD=$DB_PASSWORD" DB_HOST=localhost "DB_SOCKET=$SOCKET")
-# В подсказке пароль не показываем: вместо значения — имя переменной.
-STAGE_ENV_SHOWN="${STAGE_ENV[*]/DB_PASSWORD=$DB_PASSWORD/DB_PASSWORD=${DB_PASSWORD:+\$STAGE_DB_PASSWORD}}"
+# Строка для подсказки собирается отдельно: вместо пароля — имя переменной
+# (подстановка по образцу читала бы пароль как glob и могла его напечатать).
+STAGE_ENV_SHOWN="DB_ENGINE=mysql DB_NAME=$DB DB_USER=$DB_USER DB_PASSWORD=${DB_PASSWORD:+\$STAGE_DB_PASSWORD} DB_HOST=localhost DB_SOCKET=$SOCKET"
 echo "==> migrate"
 (cd "$STAGE_DIR/public_html" && env "${STAGE_ENV[@]}" "$PYTHON" manage.py migrate --no-input | tail -n 3)
 
