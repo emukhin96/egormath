@@ -26,6 +26,61 @@ def ratio(text):
     return a / b
 
 
+def proportion(text):
+    """Отношение числовых выражений: дроби допустимы в обеих частях."""
+    from decimal import DecimalException
+    from . import numeric
+    if len(text) > 601 or '=' in text:
+        return None
+    parts = text.split(':')
+    if len(parts) != 2:
+        return None
+    # Проверяем синтаксис обеих частей до возможного точного fallback.
+    parts = [numeric.prepare(part) for part in parts]
+    if any(part is None for part in parts):
+        return None
+    a, b = (numeric.parse(part) for part in parts)
+    if a is None or b is None:
+        return None
+    if b == 0:
+        return None
+    try:
+        result = numeric.calculate('div', a, b)
+    except numeric.Uncertain:
+        raise
+    except (ValueError, DecimalException, OverflowError, ZeroDivisionError):
+        return None
+    return result
+
+
+def check_proportion_exact(value, reference):
+    """Пограничная арифметика проверяется только в ограниченном процессе."""
+    from ..check_answer import OK, UNKNOWN, WRONG
+    from . import formulas, numeric
+    parts, expected = value.split(':'), reference.split(':')
+    if len(parts) != 2 or len(expected) != 2:
+        return WRONG
+    parts = [numeric.prepare(part) for part in parts]
+    expected = [numeric.prepare(part) for part in expected]
+    if any(part is None for part in (*parts, *expected)):
+        return WRONG
+    def quotient(pair):
+        return '(' + pair[0] + ')/(' + pair[1] + ')'
+    try:
+        parts = [numeric.worker_text(part) for part in parts]
+        expected = [numeric.worker_text(part) for part in expected]
+        spec, _ = formulas.parse_reference(quotient(expected))
+        direct = formulas.check(quotient(parts), spec)
+        if direct == OK:
+            return OK
+        # Перестановка не должна узаконить исходное деление на ноль.
+        reverse_text = quotient(parts[::-1]) + '+0/(' + parts[1] + ')'
+        reverse = formulas.check(reverse_text, spec)
+        return OK if reverse == OK else UNKNOWN if UNKNOWN in (direct, reverse) else WRONG
+    except (ValueError, formulas.FormulaUnavailable):
+        return UNKNOWN
+
+
 def oge_kind(codes):
     """Не угадывать формат при неоднозначных экзаменационных метках."""
     kinds = set()

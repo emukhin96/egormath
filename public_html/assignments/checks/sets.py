@@ -414,14 +414,23 @@ def _pair_equal(a, b, tolerance=None):
         numbers_equal(x, y, tolerance) for x, y in zip(a, b))
 
 
-def pairs_equal(a, b, tolerance=None):
+def pairs_equal(a, b, tolerance=None, *, unordered=False):
+    # Для длин сторон порядок внутри варианта не задан. Координаты
+    # остаются упорядоченными, пока редактор явно не включил эту опцию.
+    if unordered:
+        # Канонический порядок исключает зависимость жадного сравнения
+        # от ввода при близких float-значениях. Fraction остаются точными.
+        a = sorted(tuple(sorted(pair)) for pair in a)
+        b = sorted(tuple(sorted(pair)) for pair in b)
+    compare = _pair_equal
+
     def unique(pairs):
         out = []
         for pair in pairs:
-            if not any(_pair_equal(pair, other, tolerance) for other in out):
+            if not any(compare(pair, other, tolerance) for other in out):
                 out.append(pair)
         return out
-    return _multiset_equal(unique(a), unique(b), tolerance, equal=_pair_equal)
+    return _multiset_equal(unique(a), unique(b), tolerance, equal=compare)
 
 
 # --- числовые промежутки -------------------------------------------------------

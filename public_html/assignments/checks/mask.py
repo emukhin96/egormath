@@ -83,6 +83,7 @@ HELP = (
     ('{{expressions: a\\sqrt{3}; 2a | positive: a}}', 'все выражения через ; в любом порядке, с учётом кратности'),
     ('{{factor: 2(x-1)(x+1)}}', 'разложение на неприводимые множители, порядок любой'),
     ('{{pair: (2,5; -3); (5; -6)}}', 'упорядоченные пары через ; порядок пар не важен'),
+    ('{{pair: (8;12); (5;15) | unordered}}', 'варианты длин сторон; порядок внутри и между парами не важен'),
     ('{{set: -2; 1}}', 'множество чисел, порядок не важен; {{set: }} — «нет решений»'),
     ('{{equation: y=x+5}}', 'уравнение в приведённом виде (y-x=5 тоже верно, 2y=2x+10 — нет)'),
     ('{{range: 1; 4}}', 'корни уравнения: одно поле независимо от количества корней'),
@@ -124,6 +125,7 @@ class Slot:
     tolerance: object = None
     data: object = None
     error: str = ''
+    unordered_pair: bool = False
 
     @property
     def name(self):
@@ -143,6 +145,8 @@ class Slot:
 
     @property
     def label(self):
+        if self.kind == PAIR and self.unordered_pair:
+            return 'группы чисел (порядок не важен)'
         return KINDS.get(self.kind, self.kind)
 
     def shuffled(self, seed=''):
@@ -271,7 +275,12 @@ def _parse_format(slot, payload):
         value = formats.decimal(payload)
         hint = 'эталон: целое или десятичное число с запятой'
     else:
-        value = formats.ratio(payload)
+        from . import numeric
+        try:
+            value = (formats.proportion(payload) if slot.kind == PROPORTION
+                     else formats.ratio(payload))
+        except numeric.Uncertain:
+            value = None
         hint = 'эталон: два числа через двоеточие, второе не равно нулю'
     if value is None:
         slot.error = hint
@@ -293,6 +302,13 @@ def _parse_expression(slot, payload):
 
 
 def _parse_pair(slot, payload):
+    if len(payload) > sets.MAX_COLLECTION_LEN:
+        slot.error = 'слишком длинный эталон пар'
+        return
+    option = re.search(r'\|\s*unordered\s*$', payload)
+    if option:
+        payload = payload[:option.start()].strip()
+        slot.unordered_pair = True
     pairs = sets.parse_pairs(payload)
     if not pairs:
         slot.error = 'эталон: пары вида (a; b), несколько пар через ;'
@@ -434,10 +450,27 @@ def check_slot(slot, value):
     if kind == DECIMAL:
         student = formats.decimal(value)
         return OK if student is not None and student == slot.data else WRONG
-    if kind in (RATIO, PROPORTION):
+    if kind == PROPORTION:
+        from . import numeric
+        from fractions import Fraction
+        from decimal import DecimalException
+        try:
+            student = formats.proportion(value)
+        except numeric.Uncertain:
+            return formats.check_proportion_exact(value, slot.reference)
+        if student is None:
+            return WRONG
+        if student == 0 or slot.data == 0:
+            return OK if student == slot.data else WRONG
+        try:
+            equal = numeric.equal(student, slot.data) or numeric.equal(
+                numeric.calculate('div', Fraction(1), student), slot.data)
+        except (ValueError, DecimalException, OverflowError, ZeroDivisionError):
+            return WRONG
+        return OK if equal else WRONG
+    if kind == RATIO:
         student = formats.ratio(value)
-        equal = student is not None and (student == slot.data or (
-            kind == PROPORTION and student * slot.data == 1))
+        equal = student is not None and student == slot.data
         return OK if equal else WRONG
     if kind == CHOICE:
         if _compact(value).replace('ё', 'е') == _compact(slot.correct).replace('ё', 'е'):
@@ -452,7 +485,8 @@ def check_slot(slot, value):
         student = sets.parse_pairs(value)
         if student is None:
             return UNKNOWN
-        return OK if sets.pairs_equal(student, slot.data) else WRONG
+        return OK if sets.pairs_equal(
+            student, slot.data, unordered=slot.unordered_pair) else WRONG
     if kind == SET:
         student = sets.parse_set(value)
         if student is None:
