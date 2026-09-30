@@ -1924,7 +1924,8 @@
   .task-catalog .catalog-table col.col-topics { width: 25%; }
   /* Ячейки по базовой линии первой строки: номер, чекбокс и «+» на линии
      текста и при формулах KaTeX (по верху не сходится — у формул линия выше) */
-  .catalog-table td { overflow-wrap: anywhere; vertical-align: baseline; }
+  .catalog-table td { overflow-wrap: anywhere; }
+  table.catalog-table td { vertical-align: baseline; } /* специфичнее table.list td */
   .catalog-table .task-text { margin-bottom: var(--space-2); }
   .catalog-table .import-section-path { margin-bottom: var(--space-3); }
   .problem-columns label { display: block; }
