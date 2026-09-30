@@ -1697,20 +1697,97 @@ class AutoCheckFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Разминка')
 
-    def test_review_colors_answer_and_recomputes_after_reference_change(self):
+    def test_review_hides_stale_verdict_without_recomputing(self):
         self._save('0; 2')
         self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
         self.client.login(username='teacher1', password='pass12345')
         review_url = reverse('review_assignment', args=[self.assignment.pk])
         self.assertContains(self.client.get(review_url), 'class="mask-value" data-status="ok"')
-        # Учитель исправил маску — сверка пересчитывается при открытии проверки
+        # Учитель исправил маску — старый вердикт скрыт без вычислений
         self.task.answer_mask = 'Корни: {{set: 1; 3}}'
         self.task.save()
         response = self.client.get(review_url)
-        self.assertContains(response, 'class="mask-value" data-status="wrong"')
+        self.assertContains(response, 'class="mask-value" data-status=""')
+        self.assertContains(response, 'Сверка требует обновления')
+        self.assertFalse(response.context['rows'][0]['auto_ok'])
         submission = Submission.objects.get(
             assignment=self.assignment, task=self.task)
-        self.assertEqual(submission.auto_check, 'wrong')
+        self.assertEqual(submission.auto_check, 'ok')
+
+    def test_teacher_does_not_compute_stale_task_or_subitem_or_consume_limit(self):
+        from assignments.checks import formulas
+        for subitem in (False, True):
+            with self.subTest(subitem=subitem):
+                self.task.answer_mask = '{{expression: a+211}}'
+                self.task.save()
+                submission, _ = Submission.objects.get_or_create(
+                    assignment=self.assignment, task=self.task)
+                if subitem:
+                    part = TaskSubitem.objects.create(task=self.task, order=1,
+                        text_latex='а', answer_mask='{{expression: b+223}}')
+                    obj = SubmissionPart.objects.create(submission=submission, subitem=part)
+                else:
+                    obj = submission
+                obj.answer_json = {'s1': '211+a'}
+                obj.check_json = {formulas.UNAVAILABLE_KEY: 1}
+                obj.save()
+                self.client.force_login(self.teacher)
+                with mock.patch.object(formulas, '_run_worker') as worker:
+                    for _ in range(2):
+                        response = self.client.get(reverse('review_assignment', args=[self.assignment.pk]))
+                        self.assertContains(response, 'Сверка требует обновления')
+                    live = self.client.get(reverse('assignment_live', args=[self.assignment.pk]))
+                    self.assertIn('Сверка требует обновления', ''.join(live.json()['rows'].values()))
+                    worker.assert_not_called()
+                obj.refresh_from_db()
+                self.assertEqual(obj.check_json, {formulas.UNAVAILABLE_KEY: 1})
+                self.assertIsNone(obj.checked_at)
+
+    def test_student_refreshes_one_answer_across_subitems_and_tasks(self):
+        from assignments.checks import formulas
+        submission = Submission.objects.create(assignment=self.assignment, task=self.task)
+        parts = []
+        for i, value in enumerate((227, 229), start=1):
+            subitem = TaskSubitem.objects.create(task=self.task, order=i,
+                text_latex='а', answer_mask='{{expression: a+' + str(value) + '}}')
+            parts.append(SubmissionPart.objects.create(submission=submission, subitem=subitem,
+                answer_json={'s1': str(value) + '+a'}, check_revealed=True))
+        extra = Task.objects.create(text_latex='Другой ответ', answer_mask='{{expression: b+233}}')
+        WorksheetItem.objects.create(worksheet=self.assignment.worksheet, task=extra, order=50)
+        other = Submission.objects.create(assignment=self.assignment, task=extra,
+            answer_json={'s1': '233+b'}, check_revealed=True, auto_check='wrong',
+            check_json={'s1': 'wrong'}, checked_at=extra.updated_at - timedelta(seconds=1))
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker', wraps=formulas._run_worker) as worker:
+            response = self.client.get(self.detail)
+            self.assertEqual(worker.call_count, 1)
+            # Пропущенный старый вердикт скрыт только в представлении.
+            self.assertEqual(response.context['rows'][-1]['submission'].student_check, '')
+            parts[0].refresh_from_db(); parts[1].refresh_from_db(); other.refresh_from_db()
+            self.assertEqual(parts[0].auto_check, 'ok')
+            self.assertIsNone(parts[1].checked_at)
+            self.assertEqual(other.auto_check, 'wrong')
+            self.client.get(self.detail)
+            self.assertEqual(worker.call_count, 2)
+            self.client.get(self.detail)
+            self.assertEqual(worker.call_count, 3)
+        other.refresh_from_db()
+        self.assertEqual(other.auto_check, 'ok')
+
+    def test_student_refresh_does_not_wait_for_busy_formula_slot(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+239}}'
+        self.task.save()
+        submission = Submission.objects.create(assignment=self.assignment, task=self.task,
+            answer_json={'s1': '239+a'})
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_worker_slots') as slots:
+            slots.acquire.return_value = False
+            self.assertEqual(self.client.get(self.detail).status_code, 200)
+            slots.acquire.assert_called_once_with(timeout=0)
+        submission.refresh_from_db()
+        self.assertEqual(submission.check_json, {formulas.UNAVAILABLE_KEY: 0})
+        self.assertIsNone(submission.checked_at)
 
     def test_review_shows_filled_mask_with_result_and_reference(self):
         """Учителю — заполненная маска, цвета полей и авторский ответ;

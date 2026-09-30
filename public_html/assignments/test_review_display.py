@@ -2,6 +2,7 @@
 from django.template.loader import render_to_string
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from problems.models import Task, TaskSubitem
 from problems.tests import make_teacher, make_student
@@ -30,7 +31,7 @@ class ReviewDisplayTests(TestCase):
         submission = Submission.objects.create(assignment=self.assignment, task=self.task)
         SubmissionPart.objects.create(
             submission=submission, subitem=part, answer_json={'s1': '7'},
-            check_json={'s1': 'wrong'}, auto_check='wrong')
+            check_json={'s1': 'wrong'}, auto_check='wrong', checked_at=timezone.now())
         response = self.client.get(reverse('review_assignment', args=[self.assignment.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, '(эталон')

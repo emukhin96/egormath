@@ -575,6 +575,8 @@ def _assignment_rows(assignment, with_review=False, item_ids=None):
             row['canvas_answered'] = bool(answered)
             row['answered'] = row['answered'] or bool(answered)
             row['canvas_version'] = updated.isoformat() if updated else ''
+    if with_review:
+        _refresh_stale_checks(rows, for_teacher=True)
     from worksheets.block_presentation import decorate_block_rows
     return decorate_block_rows(rows)
 
@@ -774,35 +776,39 @@ def _persist_answers(assignment, post):
 
 
 def _refresh_stale_checks(rows, for_teacher=False):
-    """На экране проверки: пересчёт сверки, если эталон правили после неё."""
+    """Учителю показываем устаревшую сверку, ученику обновляем один ответ."""
+    from .checks.formulas import without_worker_wait
+
+    refreshed = False
     for row in rows:
-        # У рубрик и текстовых вставок нет ни задачи, ни ответа
         task = row.get('task')
         submission = row.get('submission')
         if task is None or submission is None or task.full_answer_only:
             continue
-        if row['subrows']:
-            for sr in row['subrows']:
-                part = sr['part']
-                if part and part.display_answer and part.check_is_stale(task):
-                    if part.checked_at is not None:
-                        part.check_json = {}
-                    part.run_check(sr['subitem'].effective_answer_latex,
-                                   spec=sr['subitem'].mask_spec)
-                    if getattr(part, 'check_unavailable', False):
-                        part.auto_check, part.checked_at = '', None
-                    part.save(update_fields=['auto_check', 'check_json', 'checked_at'])
-                    sr['fragments'] = _mask_fragments(
-                        sr['spec'], part, sr['prefix'], for_teacher)
-        elif submission.display_answer and submission.check_is_stale(task):
-            if submission.checked_at is not None:
-                submission.check_json = {}
-            submission.run_check(task.effective_answer_latex, spec=task.mask_spec)
-            if getattr(submission, 'check_unavailable', False):
-                submission.auto_check, submission.checked_at = '', None
-            submission.save(update_fields=['auto_check', 'check_json', 'checked_at'])
-            row['fragments'] = _mask_fragments(
-                row['spec'], submission, row['prefix'], for_teacher)
+        targets = [(sr, sr['part']) for sr in row['subrows']] \
+            if row['subrows'] else [(row, submission)]
+        for target, obj in targets:
+            spec = target['spec']
+            if (obj is None or spec is None or not spec.is_valid
+                    or not obj.display_answer or not obj.check_is_stale(task)):
+                continue
+            row['auto_ok'] = False
+            if not for_teacher and not refreshed:
+                if obj.checked_at is not None:
+                    obj.check_json = {}
+                with without_worker_wait():
+                    obj.run_check(spec=spec)
+                if getattr(obj, 'check_unavailable', False):
+                    obj.auto_check, obj.checked_at = '', None
+                obj.save(update_fields=['auto_check', 'check_json', 'checked_at'])
+                refreshed = True
+            else:
+                # Только представление: старые оценки и лимит сбоев в БД
+                # не меняем при просмотре учителем или пропуске по бюджету.
+                obj.auto_check, obj.check_json = '', {}
+                obj.check_stale = True
+            target['fragments'] = _mask_fragments(
+                spec, obj, target['prefix'], for_teacher)
 
 
 def _is_xhr(request):
@@ -1138,7 +1144,6 @@ def _review_queue_state(teacher, assignment, owner_id=''):
 def review_assignment(request, pk):
     assignment = _teacher_assignment(request, pk)
     rows = _assignment_rows(assignment, with_review=True)
-    _refresh_stale_checks(rows, for_teacher=True)
     owner_id = request.GET.get('owner', '').strip()
     if not request.user.is_superuser or not owner_id.isdigit():
         owner_id = ''
