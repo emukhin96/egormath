@@ -117,11 +117,12 @@ def compile_latex(tex_content, doc_id='doc', assets=None):
 
 # Пакеты презентаций лежат в репозитории и уходят asset'ами в каталог сборки
 # (API не ищет TEXMFLOCAL для неизвестных sty). Лимит API — 20 файлов.
+LATEX_API_ASSET_LIMIT = 20
 _BEAMER_TEX_DIR = Path(__file__).resolve().parent / 'tex'
 EGORBEAMER_STY = _BEAMER_TEX_DIR / 'egorbeamer.sty'
 EGORBEAMER_GRID_STY = _BEAMER_TEX_DIR / 'egorbeamer-grid.sty'
 BEAMER_STY_ASSETS = (EGORBEAMER_STY, EGORBEAMER_GRID_STY)
-BEAMER_IMAGE_ASSET_LIMIT = 20 - len(BEAMER_STY_ASSETS)
+BEAMER_IMAGE_ASSET_LIMIT = LATEX_API_ASSET_LIMIT - len(BEAMER_STY_ASSETS)
 INTER_FONT_DIR = _BEAMER_TEX_DIR / 'fonts'
 INTER_FONT_FILES = (
     'Inter-Regular.otf',
@@ -182,12 +183,16 @@ def collect_inter_font_assets(*, required=False):
     return assets
 
 
-def _egor_sty_assets():
+def _egor_sty_paths():
     """Локальный egor.sty, если он есть (иначе берётся из TEXMFLOCAL API)."""
     for path in _EGOR_STY_CANDIDATES:
         if path.is_file():
-            return [_sty_asset(path)]
+            return [path]
     return []
+
+
+def _egor_sty_assets():
+    return [_sty_asset(path) for path in _egor_sty_paths()]
 
 
 def collect_inter_package_assets():
@@ -234,15 +239,10 @@ def collect_font_assets(tex):
     return []
 
 
-def collect_assets(worksheet, exclude_ids=None, tex=''):
-    """Файлы картинок задач листка для передачи в LaTeX API.
-
-    exclude_ids — скрытые элементы: их картинки не уходят в сборку,
-    чтобы не подменять одноимённые файлы видимых задач и не раздувать запрос.
-    tex — исходник сборки: при font=inter/stix добавляются OTF и egor.sty.
-    """
+def _worksheet_images(worksheet, exclude_ids=None):
+    """Картинки задач листка без повторов имён, только существующие файлы."""
     exclude_ids = set(exclude_ids or ())
-    assets = []
+    images = []
     seen = set()
     for item in worksheet.ordered_items():
         if item.pk in exclude_ids or not item.task_id:
@@ -252,17 +252,41 @@ def collect_assets(worksheet, exclude_ids=None, tex=''):
             if name in seen or not image.image.storage.exists(image.image.name):
                 continue
             seen.add(name)
-            with image.image.open('rb') as f:
-                assets.append({
-                    'filename': name,
-                    'content_base64': base64.b64encode(f.read()).decode(),
-                })
+            images.append(image)
+    return images
+
+
+def font_asset_count(tex):
+    """Сколько файлов из лимита API займут шрифты профиля font= (без чтения)."""
+    if tex_wants_stix(tex):
+        return len(STIX_FONT_FILES) + len(_egor_sty_paths())
+    if tex_wants_inter(tex):
+        fonts = sum((INTER_FONT_DIR / name).is_file() for name in INTER_FONT_FILES)
+        return fonts + len(_egor_sty_paths())
+    return 0
+
+
+def collect_assets(worksheet, exclude_ids=None, tex=''):
+    """Файлы картинок задач листка для передачи в LaTeX API.
+
+    exclude_ids — скрытые элементы: их картинки не уходят в сборку,
+    чтобы не подменять одноимённые файлы видимых задач и не раздувать запрос.
+    tex — исходник сборки: при font=inter/stix добавляются OTF и egor.sty.
+    """
+    assets = []
+    for image in _worksheet_images(worksheet, exclude_ids):
+        with image.image.open('rb') as f:
+            assets.append({
+                'filename': image.filename,
+                'content_base64': base64.b64encode(f.read()).decode(),
+            })
     extra = collect_font_assets(tex)
     if extra:
-        if len(assets) + len(extra) > 20:
+        if len(assets) + len(extra) > LATEX_API_ASSET_LIMIT:
             raise LatexCompileError(
                 'Слишком много картинок для сборки с выбранным шрифтом '
-                f'(лимит {20 - len(extra)} вместе со шрифтами).')
+                f'(лимит {LATEX_API_ASSET_LIMIT - len(extra)} '
+                'вместе со шрифтами).')
         assets = extra + assets
     return assets
 
@@ -307,6 +331,17 @@ def get_worksheet_pdf(worksheet, variant, exclude_ids=None):
     if variant == WorksheetPdf.VARIANT_STUDENT and worksheet.student_pdf_options:
         from .latex import apply_pdf_options
         tex = apply_pdf_options(tex, worksheet.student_pdf_options)
+        # Шрифт выбран, когда картинок было мало; если потом их добавили и
+        # вместе со шрифтами они не влезают в лимит API — ученик получает
+        # листок на CM, а не ошибку сборки. Решаем до ключа кэша.
+        fonts = font_asset_count(tex)
+        if fonts and (len(_worksheet_images(worksheet, exclude_ids)) + fonts
+                      > LATEX_API_ASSET_LIMIT):
+            logger.warning(
+                'Листок %s: картинки не влезают в сборку со шрифтом %s, '
+                'PDF ученика собирается на CM', worksheet.pk,
+                worksheet.student_pdf_options.get('font'))
+            tex = apply_pdf_options(tex, {'font': 'cm'})
     content_hash = tex_hash(tex)
     cached = WorksheetPdf.objects.filter(
         worksheet=worksheet, variant=variant,

@@ -1435,6 +1435,31 @@ class WorksheetViewTests(TestCase):
         names = [a['filename'] for a in mocked.call_args.kwargs['assets']]
         self.assertIn('STIXTwoMath-Regular.otf', names)
 
+    @mock.patch('worksheets.services.collect_assets', return_value=[])
+    @mock.patch('worksheets.services.compile_latex',
+                return_value=b'%PDF-1.5 fake')
+    def test_student_pdf_stix_falls_back_to_cm_on_asset_limit(
+            self, mocked, _assets):
+        """Картинки добавили после выбора STIX: ученик получает PDF на CM."""
+        from .services import (LATEX_API_ASSET_LIMIT, font_asset_count,
+                               get_worksheet_pdf)
+        self.worksheet.student_pdf_options = {'font': 'stix'}
+        self.worksheet.save(update_fields=['student_pdf_options'])
+        fonts = font_asset_count(r'\usepackage[font=stix]{egor}')
+        fit = LATEX_API_ASSET_LIMIT - fonts
+        with mock.patch('worksheets.services._worksheet_images',
+                        return_value=[object()] * fit):
+            get_worksheet_pdf(self.worksheet, WorksheetPdf.VARIANT_STUDENT)
+        self.assertIn('font=stix', mocked.call_args.args[0])
+        with mock.patch('worksheets.services._worksheet_images',
+                        return_value=[object()] * (fit + 1)):
+            get_worksheet_pdf(self.worksheet, WorksheetPdf.VARIANT_STUDENT)
+        self.assertNotIn('font=stix', mocked.call_args.args[0])
+        self.assertEqual(mocked.call_count, 2)
+        # Опция учителя не теряется: вернётся, когда картинок станет меньше
+        self.worksheet.refresh_from_db()
+        self.assertEqual(self.worksheet.student_pdf_options, {'font': 'stix'})
+
     @mock.patch('worksheets.views.compile_latex', return_value=b'%PDF-1.5')
     def test_pdf_editor_compile_ships_stix_fonts(self, mocked):
         self.login_teacher()
