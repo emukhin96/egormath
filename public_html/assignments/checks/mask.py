@@ -300,10 +300,10 @@ def _parse_pair(slot, payload):
     slot.data, slot.reference = pairs, payload.strip()
 
 
-def _parse_formula(slot, payload):
+def _parse_formula(slot, payload, *, validate=False):
     try:
         slot.data, slot.reference = formulas.parse_reference(
-            payload, multiple=slot.kind == EXPRESSIONS)
+            payload, multiple=slot.kind == EXPRESSIONS, validate=validate)
     except ValueError as error:
         slot.error = str(error)
 
@@ -350,8 +350,13 @@ _PARSERS = {
 }
 
 
-def parse_mask(text):
-    """Текст маски → ``MaskSpec`` (фрагменты текста и слоты, ошибки)."""
+def parse_mask(text, *, validate_references=False):
+    """Текст маски → ``MaskSpec`` (фрагменты текста и слоты, ошибки).
+
+    При показе сохранённых expression-полей не запускаем вычислитель.
+    Формы сохранения и импорта передают validate_references=True, чтобы
+    проверить математический эталон до записи.
+    """
     text = text or ''
     spec = MaskSpec(source=text)
     pos = 0
@@ -376,7 +381,10 @@ def parse_mask(text):
         kind = CHOICE if name in PRESETS else name
         slot = Slot(index=index, kind=kind, raw=payload,
                     preset=name if name in PRESETS else None)
-        _PARSERS[kind](slot, payload)
+        if kind in (EXPRESSION, EXPRESSIONS):
+            _parse_formula(slot, payload, validate=validate_references)
+        else:
+            _PARSERS[kind](slot, payload)
         if slot.error:
             spec.errors.append(f'слот {index} ({{{{{name}: …}}}}): {slot.error}')
         spec.fragments.append(slot)

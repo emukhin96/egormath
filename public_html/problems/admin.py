@@ -1,9 +1,33 @@
 from django.contrib import admin
+from django import forms
+
+from .forms import clean_mask_text
 
 from .models import (ExamItem, ExamModel, FacetType, FacetValue, GradeBand,
                      Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
                      TextbookImportAsset, TextbookImportBatch,
                      TextbookTaskDraft, Topic)
+
+
+class MaskAdminForm(forms.ModelForm):
+    """Админка проверяет эталон так же, как основной редактор задачи."""
+
+    def clean_answer_mask(self):
+        return clean_mask_text(self.cleaned_data.get('answer_mask'))
+
+
+class DraftMaskAdminForm(MaskAdminForm):
+    def clean_subitems(self):
+        from .textbook_import import normalize_answer_mask, TextbookImportError
+        items = self.cleaned_data.get('subitems') or []
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+            raise forms.ValidationError('Подпункты должны быть списком объектов.')
+        for index, item in enumerate(items, 1):
+            try:
+                normalize_answer_mask(item.get('answer_mask'), key=f'подпункт {index}')
+            except TextbookImportError as error:
+                raise forms.ValidationError(str(error)) from error
+        return items
 
 
 @admin.register(Topic)
@@ -33,6 +57,7 @@ class TaskSourceInline(admin.TabularInline):
 
 class TaskSubitemInline(admin.TabularInline):
     model = TaskSubitem
+    form = MaskAdminForm
     extra = 0
 
 
@@ -51,6 +76,7 @@ class TaskImageInline(admin.TabularInline):
 
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
+    form = MaskAdminForm
     list_display = ('__str__', 'grade_level', 'stars',
                     'variant_of', 'created_by', 'created_at')
     list_filter = ('grade_level', 'stars',  'grade_bands')
@@ -106,6 +132,7 @@ class TextbookImportBatchAdmin(admin.ModelAdmin):
 
 @admin.register(TextbookTaskDraft)
 class TextbookTaskDraftAdmin(admin.ModelAdmin):
+    form = DraftMaskAdminForm
     list_display = ('external_id', 'batch', 'status', 'confidence', 'topic')
     list_filter = ('status', 'batch')
     search_fields = ('external_id', 'source_number', 'text_latex')

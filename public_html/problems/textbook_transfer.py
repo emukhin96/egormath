@@ -18,7 +18,8 @@ from django.utils.dateparse import parse_datetime
 from problems.models import (ExamItem, GradeBand, Source, Tag, TaskBlock,
                              TextbookImportAsset, TextbookImportBatch,
                              TextbookTaskDraft, Topic)
-from problems.textbook_import import normalize_image_stem
+from problems.textbook_import import (normalize_image_stem, normalize_answer_mask,
+                                      TextbookImportError)
 
 # 3 — добавлены редакторские поля и маска задачи; 1 и 2 читаются с пустыми.
 SCHEMA_VERSION = 3
@@ -204,6 +205,13 @@ def validate_package(root):
             if d['external_id'] in ids or d['status'] not in ('needs_review', 'approved', 'conflict', 'skipped'):
                 raise TextbookTransferError('Повтор ключа задачи или недопустимый статус.')
             ids.add(d['external_id'])
+            try:
+                normalize_answer_mask(d.get('answer_mask'), key=d['external_id'])
+                for index, subitem in enumerate(d.get('subitems', []), 1):
+                    normalize_answer_mask(subitem.get('answer_mask'),
+                        key=f'{d["external_id"]}, подпункт {index}')
+            except TextbookImportError as error:
+                raise TextbookTransferError(str(error)) from error
             required = set(d.get('topic_codes', [])) | {d.get('topic_code', '')}
             required |= {c.get('code', '') for c in d.get('topic_candidates', [])}
             missing = (required - {''}) - topics

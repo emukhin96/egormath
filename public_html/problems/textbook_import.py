@@ -149,7 +149,7 @@ def normalize_answer_mask(value, *, key='answer_mask'):
     if not value:
         return ''
     from assignments.checks import parse_mask
-    spec = parse_mask(value)
+    spec = parse_mask(value, validate_references=True)
     if spec.errors or not spec.slots:
         details = '; '.join(spec.errors) or 'нет полей ответа'
         raise TextbookImportError(f'Некорректная маска {key}: {details}.')

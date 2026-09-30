@@ -9,6 +9,8 @@ import json
 import re
 import subprocess
 import sys
+import threading
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -38,6 +40,13 @@ class FormulaSpec:
 
 
 WORKER_TIMEOUT = 3
+WORKER_RETRY_DELAY = 10
+_worker_retry_at = 0
+_worker_lock = threading.Lock()
+
+
+class FormulaUnavailable(ValueError):
+    """Временная недоступность вычислений, а не ошибка эталона или ответа."""
 
 
 def _run_worker(payload):
@@ -46,14 +55,28 @@ def _run_worker(payload):
     Gunicorn использует потоки, поэтому signal.alarm в HTTP-обработчике
     непригоден. Обмен только JSON, ввод не исполняется как Python.
     """
-    result = subprocess.run(
-        [sys.executable, '-m', 'assignments.checks.formula_worker'],
-        input=json.dumps(payload), capture_output=True, text=True,
-        cwd=Path(__file__).resolve().parents[2], timeout=WORKER_TIMEOUT,
-        check=False)
-    if result.returncode:
-        raise ValueError('не удалось проверить формулу за отведённое время')
-    return json.loads(result.stdout)
+    global _worker_retry_at
+    if time.monotonic() < _worker_retry_at or not _worker_lock.acquire(blocking=False):
+        raise FormulaUnavailable('проверка временно занята')
+    try:
+        result = subprocess.run(
+            [sys.executable, '-m', 'assignments.checks.formula_worker'],
+            input=json.dumps(payload), capture_output=True, text=True,
+            cwd=Path(__file__).resolve().parents[2], timeout=WORKER_TIMEOUT,
+            check=False)
+        if result.returncode:
+            raise FormulaUnavailable('не удалось проверить формулу за отведённое время')
+        response = json.loads(result.stdout)
+        if not isinstance(response, dict) or response.get('unavailable'):
+            raise FormulaUnavailable('временная недоступность проверки')
+        return response
+    except (subprocess.TimeoutExpired, OSError, ValueError) as error:
+        # Короткая пауза после сбоя предотвращает повторные форки под
+        # нагрузкой. Математический вердикт UNKNOWN в кэш не записываем.
+        _worker_retry_at = time.monotonic() + WORKER_RETRY_DELAY
+        raise FormulaUnavailable('проверка временно недоступна') from error
+    finally:
+        _worker_lock.release()
 
 
 @lru_cache(maxsize=256)
@@ -64,18 +87,24 @@ def _reference_response(payload, multiple):
     return result
 
 
-def parse_reference(payload, multiple=False):
+def parse_reference(payload, multiple=False, *, validate=False):
+    """Для показа поля достаточно структуры; вычисления — при сохранении.
+
+    Рендер сохранённой маски никогда не запускает subprocess и не зависит
+    от временной доступности символьного вычислителя.
+    """
     if len(payload) > MAX_EXPR_LEN:
         raise ValueError('слишком длинный эталон')
     texts, _ = _reference_parts(payload, multiple)
     spec = FormulaSpec(payload, multiple)
+    if not validate:
+        return spec, ';'.join(texts).strip()
     try:
         result = _reference_response(payload, multiple)
     except (subprocess.TimeoutExpired, OSError, ValueError):
-        # Временная нагрузка не делает сохранённую маску ошибочной и не
-        # лишает ученика полей ввода. Ответ проверится с результатом UNKNOWN;
-        # этот сбой не кэшируется, следующий запрос повторит проверку.
-        return spec, ';'.join(texts).strip()
+        # Новую маску нельзя сохранить с непроверенным эталоном. Уже
+        # сохранённые поля продолжают отображаться через ветку выше.
+        raise FormulaUnavailable('не удалось проверить эталон; повторите сохранение чуть позже') from None
     if result.get('error'):
         raise ValueError(result['error'])
     return spec, result['display']

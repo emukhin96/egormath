@@ -183,6 +183,34 @@ class TextbookTransferTests(TestCase):
             self.assertEqual(TextbookImportBatch.objects.count(), 1)
             self.assertEqual(TextbookImportAsset.objects.count(), 1)
 
+    def test_formula_reference_checked_before_transfer_writes(self):
+        import copy
+        import json
+        from unittest.mock import patch
+        from assignments.checks import formulas
+        from problems.textbook_transfer import TextbookTransferError
+        with self.settings(MEDIA_ROOT=str(self.media)):
+            _, dest, payload = self._package(suffix='')
+            for in_subitem in (False, True):
+                for mask, response in (
+                    ('{{expression: 1/0}}', {'error': 'неверный эталон'}),
+                    ('{{expression: a+61}}', {'unavailable': True}),
+                ):
+                    formulas._reference_response.cache_clear()
+                    data = copy.deepcopy(payload)
+                    draft = data['batches'][0]['drafts'][0]
+                    if in_subitem:
+                        draft['subitems'] = [{'text_latex': 'Подпункт', 'answer_mask': mask}]
+                    else:
+                        draft['answer_mask'] = mask
+                    (dest / 'batches.json').write_text(json.dumps(data))
+                    with patch.object(formulas, '_run_worker', return_value=response):
+                        with self.assertRaises(TextbookTransferError):
+                            import_batches(dest, username='prodadmin')
+                    self.assertEqual(TextbookImportBatch.objects.count(), 1)
+                    self.assertEqual(TextbookImportAsset.objects.count(), 1)
+            formulas._reference_response.cache_clear()
+
     def test_missing_or_corrupt_image_rejected_before_writes(self):
         from problems.textbook_transfer import TextbookTransferError
         with self.settings(MEDIA_ROOT=str(self.media)):

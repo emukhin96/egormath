@@ -481,7 +481,7 @@ def task_mask_preview(request):
     prefix = request.POST.get('prefix', 'preview')
     if not re.fullmatch(r'preview(?:_[0-9]+)?', prefix):
         return JsonResponse({'ok': False, 'message': 'Некорректный префикс'}, status=400)
-    spec = parse_mask(request.POST.get('mask', ''))
+    spec = parse_mask(request.POST.get('mask', ''), validate_references=True)
     payload = {'ok': spec.is_valid, 'errors': spec.errors,
                'slots': len(spec.slots)}
     if not spec.slots:

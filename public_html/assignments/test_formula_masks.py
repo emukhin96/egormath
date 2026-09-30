@@ -13,6 +13,12 @@ from assignments.checks import formulas
 
 
 class FormulaMaskTests(SimpleTestCase):
+    def setUp(self):
+        formulas._worker_retry_at = 0
+
+    def tearDown(self):
+        formulas._worker_retry_at = 0
+
     def slot(self, text):
         spec = parse_mask(text)
         self.assertTrue(spec.is_valid, spec.errors)
@@ -77,6 +83,11 @@ class FormulaMaskTests(SimpleTestCase):
             started = time.monotonic()
             self.assertEqual(formulas.check('17+a', reference), 'unknown')
             self.assertLess(time.monotonic() - started, 1)
+        with patch.object(formulas.subprocess, 'run') as worker:
+            self.assertEqual(formulas.check('17+a', reference), 'unknown')
+            worker.assert_not_called()
+        # После паузы временный сбой не подменяет правильный вердикт.
+        formulas._worker_retry_at = time.monotonic() - 1
         self.assertEqual(formulas.check('17+a', reference), 'ok')
         started = time.monotonic()
         self.assertIn(formulas.check('1/(a^97+a^13+3)', reference),
@@ -103,9 +114,48 @@ class FormulaMaskTests(SimpleTestCase):
             self.assertEqual(slot.reference, 'a+29')
             self.assertEqual(check_slot(slot, '29+a'), 'unknown')
         with patch.object(formulas, '_run_worker', return_value={'error': 'ошибка эталона'}) as worker:
-            self.assertFalse(parse_mask('{{expression: a+29 | positive: a}}').is_valid)
+            self.assertFalse(parse_mask('{{expression: a+29 | positive: a}}',
+                                        validate_references=True).is_valid)
             worker.assert_called_once()
         formulas._reference_response.cache_clear()
+
+    def test_render_of_cold_references_never_starts_worker(self):
+        formulas._reference_response.cache_clear()
+        with patch.object(formulas, '_run_worker') as worker:
+            spec = parse_mask(r'{{expression: |x-1|}}; '
+                              r'{{expressions: a\sqrt{3};2a | positive: a}}')
+            self.assertTrue(spec.is_valid)
+            html = render_to_string('assignments/_mask.html', {
+                'fragments': render_fragments(spec, 'cold'), 'editable': True})
+            self.assertEqual(html.count('<math-field'), 2)
+            worker.assert_not_called()
+
+    def test_reference_is_validated_before_save_and_failure_is_retryable(self):
+        from django.core.exceptions import ValidationError
+        from problems.forms import clean_mask_text
+        from problems.textbook_import import normalize_answer_mask, TextbookImportError
+        mask = '{{expression: a+43}}'
+        formulas._reference_response.cache_clear()
+        with patch.object(formulas, '_run_worker', return_value={'unavailable': True}):
+            with self.assertRaisesMessage(ValidationError, 'повторите сохранение'):
+                clean_mask_text(mask)
+            with self.assertRaisesMessage(TextbookImportError, 'повторите сохранение'):
+                normalize_answer_mask(mask)
+            self.assertTrue(parse_mask(mask).is_valid)
+        self.assertEqual(clean_mask_text(mask), mask)
+        with patch.object(formulas, '_run_worker') as worker:
+            self.assertEqual(clean_mask_text(mask), mask)
+            worker.assert_not_called()
+        for invalid in ('{{expression: 1/0}}', '{{expression: a | positive: b}}'):
+            with self.assertRaises(ValidationError):
+                clean_mask_text(invalid)
+
+    def test_busy_worker_does_not_queue_more_processes(self):
+        reference, _ = formulas.parse_reference('a+47')
+        with formulas._worker_lock, patch.object(formulas.subprocess, 'run') as worker:
+            self.assertEqual(formulas.check('47+a', reference), 'unknown')
+            worker.assert_not_called()
+        self.assertEqual(formulas.check('47+a', reference), 'ok')
 
     def test_parser_memory_failure_reaches_worker_as_temporary(self):
         from assignments.checks import expressions, formula_worker
@@ -157,7 +207,7 @@ class FormulaMaskTests(SimpleTestCase):
                      '{{expressions: a;;b}}', '{{expression: 1/0}}',
                      '{{expression: a | positive: a>0}}'):
             with self.subTest(mask=mask):
-                self.assertFalse(parse_mask(mask).is_valid)
+                self.assertFalse(parse_mask(mask, validate_references=True).is_valid)
         slot = self.slot('{{expression: a}}')
         self.assertEqual(check_slot(slot, '__import__("os").getcwd()'), 'unknown')
 

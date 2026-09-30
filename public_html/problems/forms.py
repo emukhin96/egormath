@@ -13,7 +13,7 @@ def clean_mask_text(text):
     text = (text or '').strip()
     if not text:
         return ''
-    spec = parse_mask(text)
+    spec = parse_mask(text, validate_references=True)
     if spec.errors:
         raise forms.ValidationError(spec.errors)
     return text
