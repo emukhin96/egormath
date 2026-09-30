@@ -705,6 +705,11 @@ def _persist_answers(assignment, post):
                      and previous.get(name, '') == current.get(name, '')}
         if changed or (obj.checked_at is not None and obj.check_is_stale(task)):
             # Счётчик сбоев относился к прежнему ответу или эталону.
+            from .checks.formulas import UNAVAILABLE_KEY, UNAVAILABLE_LIMIT
+            if (obj.check_json or {}).get(UNAVAILABLE_KEY, 0) >= UNAVAILABLE_LIMIT:
+                # unknown мог быть заглушкой для ещё не проверенной формулы.
+                # После изменения ответа такие вердикты не переиспользуем.
+                known = {}
             obj.check_json = {name: verdict for name, verdict in (obj.check_json or {}).items()
                               if not name.startswith('_')}
         obj.run_check(reference, spec=spec, known=known)

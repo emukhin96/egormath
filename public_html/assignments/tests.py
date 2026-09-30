@@ -1355,6 +1355,25 @@ class AutoCheckFlowTests(TestCase):
         submission.refresh_from_db()
         self.assertTrue(submission.check_revealed)
 
+    def test_editing_failed_formula_rechecks_other_previously_skipped_formulas(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+197}} {{expression: b+199}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        data = {self.field: '197+a', f'task{self.task.pk}_s2': '199+b'}
+        with mock.patch.object(formulas, '_run_worker', side_effect=formulas.FormulaUnavailable('сбой')) as worker:
+            self.client.post(self.url, data)
+            self.client.post(self.url, data)
+            # На каждом сбое вторая формула пропущена, а не вычислена.
+            self.assertEqual(worker.call_count, 2)
+        data[self.field] = 'a+197'
+        with mock.patch.object(formulas, '_run_worker', wraps=formulas._run_worker) as worker:
+            self.client.post(self.url, data)
+            self.assertEqual(worker.call_count, 2)
+        submission = Submission.objects.get(assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.auto_check, 'ok')
+        self.assertEqual(submission.check_json, {'s1': 'ok', 's2': 'ok'})
+
     def test_selected_unmasked_subitem_is_not_a_temporary_failure(self):
         a = TaskSubitem.objects.create(task=self.task, order=1, text_latex='а')
         TaskSubitem.objects.create(task=self.task, order=2, text_latex='б', answer_mask='{{number: 2}}')

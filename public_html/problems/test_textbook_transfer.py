@@ -224,6 +224,38 @@ class TextbookTransferTests(TestCase):
                 import_batches(dest, username='prodadmin')
             self.assertEqual(TextbookImportBatch.objects.count(), 1)
 
+    def test_busy_reference_reports_retry_before_writes_and_can_resume(self):
+        import copy
+        import json
+        from unittest.mock import patch
+        from assignments.checks import formulas
+        from problems.textbook_transfer import TextbookTransferUnavailable
+        with self.settings(MEDIA_ROOT=str(self.media)):
+            _, dest, payload = self._package(suffix='')
+            for in_subitem in (False, True):
+                formulas._reference_response.cache_clear()
+                data = copy.deepcopy(payload)
+                draft = data['batches'][0]['drafts'][0]
+                mask = '{{expression: a+211}}'
+                if in_subitem:
+                    draft['subitems'] = [{'text_latex': 'Подпункт', 'answer_mask': mask}]
+                else:
+                    draft['answer_mask'] = mask
+                (dest / 'batches.json').write_text(json.dumps(data))
+                with patch.object(formulas._worker_slots, 'acquire', return_value=False) as acquire:
+                    with self.assertRaises(TextbookTransferUnavailable) as error:
+                        import_batches(dest, username='prodadmin')
+                    acquire.assert_called_once_with(timeout=0)
+                self.assertIn('Повторите загрузку позже', str(error.exception))
+                self.assertNotIn('Некорректная маска', str(error.exception))
+                self.assertEqual(TextbookImportBatch.objects.count(), 1)
+                self.assertEqual(TextbookImportAsset.objects.count(), 1)
+            # Пакет тот же: после освобождения вычислителя перенос проходит.
+            imported = import_batches(dest, username='prodadmin')[0].drafts.get()
+            self.assertEqual(imported.subitems[0]['answer_mask'], mask)
+            self.assertEqual(imported.author_answer_latex, '20')
+            self.assertEqual(TextbookImportBatch.objects.count(), 2)
+
     def test_missing_dictionary_code_rejected(self):
         import json
         from problems.textbook_transfer import TextbookTransferError

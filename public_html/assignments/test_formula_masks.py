@@ -153,7 +153,7 @@ class FormulaMaskTests(SimpleTestCase):
         with patch.object(formulas, '_run_worker', return_value={'unavailable': True}):
             with self.assertRaisesMessage(ValidationError, 'повторите сохранение'):
                 clean_mask_text(mask)
-            with self.assertRaisesMessage(TextbookImportError, 'повторите сохранение'):
+            with self.assertRaisesMessage(TextbookImportError, 'Повторите загрузку позже'):
                 normalize_answer_mask(mask)
             self.assertTrue(parse_mask(mask).is_valid)
         self.assertEqual(clean_mask_text(mask), mask)

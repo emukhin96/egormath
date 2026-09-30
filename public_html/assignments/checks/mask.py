@@ -126,6 +126,7 @@ class Slot:
     data: object = None
     error: str = ''
     unordered_pair: bool = False
+    reference_unavailable: bool = False
 
     @property
     def name(self):
@@ -321,6 +322,9 @@ def _parse_formula(slot, payload, *, validate=False):
         slot.data, slot.reference = formulas.parse_reference(
             payload, multiple=slot.kind == EXPRESSIONS, validate=validate,
             mode=slot.kind if slot.kind in (SIMPLIFY, FACTOR) else 'expression')
+    except formulas.FormulaUnavailable as error:
+        slot.reference_unavailable = True
+        slot.error = str(error)
     except ValueError as error:
         slot.error = str(error)
 
