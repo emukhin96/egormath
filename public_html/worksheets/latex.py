@@ -127,6 +127,8 @@ KEEP_SHORT_ANSWER = r'''
 
 # Короткий ответ сохраняет естественную ширину; длинный переносится внутри
 # рамки или ячейки таблицы ответов. Ширину измеряем в месте вывода.
+# egor запрещает разрывы внутри формул глобально. В длинном ответе
+# возвращаем стандартные штрафы TeX, чтобы формулы помещались в ячейку.
 WRAPPING_ANSWERS = r'''
 \newsavebox{\egorMathAnswerBox}
 \newlength{\egorMathAnswerWidth}
@@ -135,7 +137,7 @@ WRAPPING_ANSWERS = r'''
   \setlength{\egorMathAnswerWidth}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}%
   \sbox{\egorMathAnswerBox}{\shortstack[l]{#1}}%
   \ifdim\wd\egorMathAnswerBox>\egorMathAnswerWidth
-    \parbox[t]{\egorMathAnswerWidth}{\raggedright #1}%
+    \parbox[t]{\egorMathAnswerWidth}{\raggedright\relpenalty=500\binoppenalty=700 #1}%
   \else\usebox{\egorMathAnswerBox}\fi
   \endgroup
 }
