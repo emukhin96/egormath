@@ -17,8 +17,9 @@
 #   STAGE_DB_USER=root             пользователь MySQL для заливки дампа и для Django
 #   STAGE_DB_PASSWORD=             его пароль (пусто — без пароля, как у Homebrew root);
 #                                  клиенту mysql уходит через MYSQL_PWD, в командах и выводе не показывается
-#   STAGE_MYSQL="mysql -uroot"     клиент для заливки дампа (по умолчанию mysql -u$DB_USER --socket=$SOCKET)
 #   STAGE_SOCKET=/tmp/mysql.sock   сокет локального MySQL (Homebrew); через него идут и заливка, и Django
+#   (клиент mysql для заливки собирается из этих трёх переменных — отдельно не переопределяется,
+#    чтобы дамп и Django не разъехались по серверам или пользователям)
 #   STAGE_PORT=8003                порт runserver
 set -euo pipefail
 
@@ -30,14 +31,10 @@ DB_USER="${STAGE_DB_USER:-root}"
 DB_PASSWORD="${STAGE_DB_PASSWORD:-}"
 SOCKET="${STAGE_SOCKET:-/tmp/mysql.sock}"
 # Клиент — массив слов, а не строка: аргументы с пробелами не разваливаются.
-# Тот же сокет, что у Django (DB_SOCKET): иначе при нестандартном сокете дамп
+# Тот же пользователь и сокет, что у Django (DB_USER, DB_SOCKET): иначе дамп
 # уйдёт в один сервер, а migrate/runserver — в другой. Пароль — через
 # MYSQL_PWD, как в deploy/vps/backup.sh: не виден в ps и не печатается.
-if [ -n "${STAGE_MYSQL:-}" ]; then
-  read -r -a MYSQL <<< "$STAGE_MYSQL"
-else
-  MYSQL=(mysql "-u$DB_USER" "--socket=$SOCKET")
-fi
+MYSQL=(mysql "-u$DB_USER" "--socket=$SOCKET")
 [ -z "$DB_PASSWORD" ] || export MYSQL_PWD="$DB_PASSWORD"
 PORT="${STAGE_PORT:-8003}"
 STAGE_DIR="$ROOT/.worktrees/stage"
