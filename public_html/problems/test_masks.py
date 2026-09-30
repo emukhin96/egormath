@@ -160,6 +160,17 @@ class MaskEndpointTests(TestCase):
         response = self.client.post(reverse('task_mask_preview'), {'mask': 'x'})
         self.assertNotEqual(response.status_code, 200)
 
+    def test_draft_skips_temporarily_unavailable_formula(self):
+        from unittest.mock import patch
+        from assignments.checks import formulas
+        formulas._checked.cache_clear()
+        with patch.object(formulas, '_run_worker',
+                          side_effect=formulas.FormulaUnavailable('сбой')):
+            response = self.client.post(reverse('task_mask_draft'), {'answer': 'a+167'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['mask'], '')
+        self.assertFalse(response.json()['ok'])
+
     def test_draft(self):
         cases = {
             '10 см': '',

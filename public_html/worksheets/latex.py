@@ -126,23 +126,22 @@ KEEP_SHORT_ANSWER = r'''
 
 
 # Короткий ответ сохраняет естественную ширину; длинный переносится внутри
-# рамки или ячейки таблицы ответов. Ширину измеряем в месте вывода.
+# рамки или ячейки таблицы ответов. varwidth набирает содержимое один раз:
+# измерение с последующим повторным набором удваивало счётчики и метки.
 # egor запрещает разрывы внутри формул глобально. В длинном ответе
 # возвращаем стандартные штрафы TeX, чтобы формулы помещались в ячейку.
 WRAPPING_ANSWERS = r'''
-\newsavebox{\egorMathAnswerBox}
+\RequirePackage{varwidth}
 \newlength{\egorMathAnswerWidth}
 \newcommand{\egorMathAnswer}[1]{%
   \begingroup
   \setlength{\egorMathAnswerWidth}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}%
-  \sbox{\egorMathAnswerBox}{\shortstack[l]{#1}}%
-  \ifdim\wd\egorMathAnswerBox>\egorMathAnswerWidth
-    \parbox[t]{\egorMathAnswerWidth}{\raggedright\relpenalty=500\binoppenalty=700 #1}%
-  \else\usebox{\egorMathAnswerBox}\fi
+  \begin{varwidth}[t]{\egorMathAnswerWidth}%
+    \raggedright\relpenalty=500\binoppenalty=700 #1%
+  \end{varwidth}%
   \endgroup
 }
-% Ответ с выносной формулой или окружением: \shortstack (LR-режим) его не
-% наберёт — сразу абзац на ширину рамки или ячейки, без двойного набора.
+% Ответ с выносной формулой или окружением занимает ширину рамки/ячейки.
 \newcommand{\egorMathAnswerBlock}[1]{%
   \begingroup
   \setlength{\egorMathAnswerWidth}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}%

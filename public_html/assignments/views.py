@@ -950,7 +950,8 @@ def check_task(request, pk, task_id):
             obj.save(update_fields=['check_revealed'])
             checks[prefix] = obj.auto_check
             for slot, status in (obj.check_json or {}).items():
-                checks[f'{prefix}_{slot}'] = status
+                if not slot.startswith('_'):
+                    checks[f'{prefix}_{slot}'] = status
 
         checks = {}
         if subitems:

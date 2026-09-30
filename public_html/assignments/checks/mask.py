@@ -870,15 +870,21 @@ def _mask_accepts_own_references(source):
     spec = parse_mask(source)
     if not spec.is_valid or not spec.slots:
         return False
-    for slot in spec.slots:
-        if slot.kind == CHOICE:
-            value = slot.correct
-        elif slot.kind == ORDER:
-            value = '|'.join(str(index) for index in range(len(slot.items)))
-        else:
-            value = slot.reference
-        if check_slot(slot, value) != OK:
-            return False
+    try:
+        # Черновик необязателен: занятый вычислитель не задерживает импорт
+        # и не превращает подсказку редактора в ошибку HTTP 500.
+        with formulas.without_worker_wait():
+            for slot in spec.slots:
+                if slot.kind == CHOICE:
+                    value = slot.correct
+                elif slot.kind == ORDER:
+                    value = '|'.join(str(index) for index in range(len(slot.items)))
+                else:
+                    value = slot.reference
+                if check_slot(slot, value) != OK:
+                    return False
+    except formulas.FormulaUnavailable:
+        return False
     return True
 
 

@@ -12,6 +12,8 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 
@@ -48,6 +50,7 @@ WORKER_RETRY_DELAY = 10
 WORKER_PARALLEL = 2
 WORKER_WAIT = 5
 _worker_slots = threading.BoundedSemaphore(WORKER_PARALLEL)
+_worker_wait = ContextVar('formula_worker_wait', default=None)
 # Пауза после сбоя — по конкретному входу, а не для всех проверок процесса:
 # один медленный ввод не должен выключать автопроверку остальным.
 _failed_inputs = {}
@@ -60,7 +63,20 @@ class FormulaUnavailable(ValueError):
 
 
 class FormulaBusy(FormulaUnavailable):
-    """Все слоты воркеров заняты: ввод ни при чём, повтор не считается сбоем."""
+    """Вычисление отложено без запуска: повтор не считается новым сбоем."""
+
+
+@contextmanager
+def without_worker_wait():
+    """Необязательный черновик пропускается, если вычислитель уже занят.
+
+    Настройка относится только к текущему вызову, а не к соседним запросам.
+    """
+    token = _worker_wait.set(0)
+    try:
+        yield
+    finally:
+        _worker_wait.reset(token)
 
 
 # Сколько раз один и тот же ввод может «временно» не сверяться, прежде чем
@@ -103,8 +119,9 @@ def _run_worker(payload):
     """
     key = json.dumps(payload, sort_keys=True)
     if _recently_failed(key):
-        raise FormulaUnavailable('проверка этого выражения недавно не удалась; повторите позже')
-    if not _worker_slots.acquire(timeout=WORKER_WAIT):
+        raise FormulaBusy('проверка этого выражения недавно не удалась; повторите позже')
+    wait = _worker_wait.get()
+    if not _worker_slots.acquire(timeout=WORKER_WAIT if wait is None else wait):
         raise FormulaBusy('проверка временно занята')
     try:
         result = subprocess.run(

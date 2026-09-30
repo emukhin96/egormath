@@ -1274,6 +1274,47 @@ class AutoCheckFlowTests(TestCase):
         self.assertFalse(submission.check_revealed)
         self.assertFalse(SubmissionCheckAttempt.objects.exists())
 
+    def test_cooldown_does_not_spend_retry_or_student_attempt(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+151}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        formulas._failed_inputs.clear()
+        self.addCleanup(formulas._failed_inputs.clear)
+        with mock.patch.object(formulas.subprocess, 'run',
+                               side_effect=subprocess.TimeoutExpired('worker', 3)) as worker:
+            self._save('151+a')
+            response = self._check('151+a')
+            self._save('151+a')
+            worker.assert_called_once()
+        submission = Submission.objects.get(assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.check_json, {formulas.UNAVAILABLE_KEY: 1})
+        self.assertEqual(submission.auto_check, '')
+        self.assertIsNone(submission.checked_at)
+        self.assertFalse(response.json()['ok'])
+        self.assertFalse(submission.check_revealed)
+        self.assertFalse(SubmissionCheckAttempt.objects.exists())
+        # После паузы действительно запускается повторная проверка.
+        formulas._failed_inputs.clear()
+        response = self._check('151+a')
+        self.assertEqual(response.json()['checks'],
+                         {f'task{self.task.pk}': 'ok', self.field: 'ok'})
+        self.assertEqual(SubmissionCheckAttempt.objects.count(), 1)
+
+    def test_manual_result_does_not_expose_internal_failure_counter(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+157}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker',
+                               side_effect=formulas.FormulaUnavailable('сбой')):
+            self._save('157+a')
+            response = self._check('157+a')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['checks'], {f'task{self.task.pk}': 'unknown'})
+        submission = Submission.objects.get(assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.check_json, {formulas.UNAVAILABLE_KEY: 2})
+
     def test_check_stored_on_save_but_attempts_count_button_presses(self):
         self._save('x=2; x=0')
         submission = Submission.objects.get(

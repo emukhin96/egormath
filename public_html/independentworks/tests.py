@@ -67,6 +67,31 @@ class IndependentWorkTests(TestCase):
             svc.recheck_unavailable(a)
             worker.assert_not_called()
 
+    def test_cooldown_does_not_count_as_another_failed_check(self):
+        import subprocess
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+163}}'
+        self.task.save()
+        attempt = self.begin()
+        point = attempt.variant.points.get()
+        formulas._checked.cache_clear()
+        formulas._failed_inputs.clear()
+        self.addCleanup(formulas._failed_inputs.clear)
+        with patch.object(formulas.subprocess, 'run',
+                          side_effect=subprocess.TimeoutExpired('worker', 3)) as worker:
+            answer = svc.save_answer(attempt.pk, point.pk, 0, {'s1': '163+a'})
+            svc.recheck_unavailable(attempt)
+            svc.recheck_unavailable(attempt)
+            worker.assert_called_once()
+        answer.refresh_from_db()
+        self.assertEqual(answer.auto_check, '')
+        self.assertEqual(answer.checks, {formulas.UNAVAILABLE_KEY: 1})
+        formulas._failed_inputs.clear()
+        svc.recheck_unavailable(attempt)
+        answer.refresh_from_db()
+        self.assertEqual(answer.auto_check, 'ok')
+        self.assertEqual(answer.checks, {'s1': 'ok'})
+
     def url(self, name, *args):
         return reverse('independentworks:' + name, args=args)
 

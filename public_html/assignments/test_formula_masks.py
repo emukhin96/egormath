@@ -183,6 +183,25 @@ class FormulaMaskTests(SimpleTestCase):
         # Занятость не запоминается как сбой ввода: следующая проверка идёт
         self.assertEqual(formulas.check('47+a', reference), 'ok')
 
+    def test_draft_wait_policy_is_local_and_restored(self):
+        from contextvars import Context
+        from assignments.checks.mask import draft_mask
+        formulas._checked.cache_clear()
+        formulas._failed_inputs.clear()
+        with patch.object(formulas, '_worker_slots') as slots, \
+                patch.object(formulas.subprocess, 'run') as worker:
+            slots.acquire.return_value = False
+            self.assertEqual(draft_mask('a+137'), '')
+            slots.acquire.assert_called_once_with(timeout=0)
+            with self.assertRaises(formulas.FormulaBusy):
+                formulas._run_worker({'payload': 'a+139'})
+            self.assertEqual(slots.acquire.call_args.kwargs, {'timeout': formulas.WORKER_WAIT})
+            with formulas.without_worker_wait():
+                with self.assertRaises(formulas.FormulaBusy):
+                    Context().run(formulas._run_worker, {'payload': 'a+149'})
+                self.assertEqual(slots.acquire.call_args.kwargs, {'timeout': formulas.WORKER_WAIT})
+            worker.assert_not_called()
+
     def test_unavailable_check_is_not_persisted_as_verdict(self):
         from django.utils import timezone
         from assignments.models import Submission
