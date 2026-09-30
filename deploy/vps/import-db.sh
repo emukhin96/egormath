@@ -1,13 +1,24 @@
 #!/usr/bin/env bash
 # Залить дамп MySQL (.sql или .sql.gz) в базу egormath вместо текущей.
-#   deploy/vps/import-db.sh egormath-20260927.sql.gz [--yes]
+#   deploy/vps/import-db.sh egormath-20260927.sql.gz [--yes] [--no-backup]
 # Для переезда с Timeweb (репетиция и переключение) и восстановления из бэкапа
-# (restore.sh). Текущая база перед заливкой сохраняется через backup.sh.
+# (restore.sh). Текущая база перед заливкой сохраняется через backup.sh;
+# если свежий дамп не появился — заливка отменяется. --no-backup — осознанно
+# продолжить без бэкапа (например, база заведомо мусорная).
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
-DUMP="${1:?usage: import-db.sh <dump.sql[.gz]> [--yes]}"
+DUMP="${1:?usage: import-db.sh <dump.sql[.gz]> [--yes] [--no-backup]}"
 [ -r "$DUMP" ] || { echo "Нет файла $DUMP" >&2; exit 1; }
-if [ "${2:-}" != "--yes" ]; then
+YES=0; NO_BACKUP=0
+shift
+for ARG in "$@"; do
+  case "$ARG" in
+    --yes) YES=1 ;;
+    --no-backup) NO_BACKUP=1 ;;
+    *) echo "Неизвестный аргумент: $ARG" >&2; exit 2 ;;
+  esac
+done
+if [ "$YES" != 1 ]; then
   read -r -p "Стереть базу egormath и залить $DUMP? [yes/N] " ANSWER
   [ "$ANSWER" = "yes" ] || { echo "Отменено."; exit 1; }
 fi
@@ -23,8 +34,20 @@ TABLES="${TABLES%$'\r'}"
 case "$TABLES" in
   ''|*[!0-9]*) echo "!! неожиданный ответ MySQL о числе таблиц: '$TABLES' — заливка отменена" >&2; exit 1 ;;
 esac
-if [ "$TABLES" != "0" ]; then
-  "$(dirname "$0")/backup.sh" || echo "!! бэкап не удался — продолжаю"
+if [ "$TABLES" != "0" ] && [ "$NO_BACKUP" = 1 ]; then
+  echo "!! --no-backup: база не пуста ($TABLES таблиц), бэкап перед заливкой пропущен по явному запросу"
+elif [ "$TABLES" != "0" ]; then
+  # Критерий — появился ли свежий дамп базы, а не код выхода backup.sh:
+  # тот падает и по причинам, не связанным с дампом (rclone, секреты).
+  BACKUPS="$DATA_DIR/backups"
+  BEFORE="$(ls -t "$BACKUPS"/db-*.sql.gz 2>/dev/null | head -n 1 || true)"
+  "$(dirname "$0")/backup.sh" || echo "!! backup.sh завершился с ошибкой — проверяю, снят ли дамп базы"
+  AFTER="$(ls -t "$BACKUPS"/db-*.sql.gz 2>/dev/null | head -n 1 || true)"
+  if [ -z "$AFTER" ] || [ "$AFTER" = "$BEFORE" ] || ! gzip -t "$AFTER" 2>/dev/null; then
+    echo "!! свежий дамп текущей базы не появился в $BACKUPS — заливка отменена (осознанно без бэкапа: --no-backup)" >&2
+    exit 1
+  fi
+  echo "==> бэкап текущей базы: $(basename "$AFTER")"
 fi
 # На свежем сервере (restore.sh) контейнера web ещё нет — тогда не трогаем.
 WEB_RUNNING=0
