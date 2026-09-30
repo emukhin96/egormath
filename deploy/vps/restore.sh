@@ -4,13 +4,15 @@
 # отката на ночной слепок. Порядок и подготовка нового сервера —
 # deploy/VPS.md, «Восстановление после потери сервера».
 #
-#   deploy/vps/restore.sh [--stamp YYYYMMDD-HHMMSS] [--from <откуда>] [--yes] [--no-deploy]
+#   deploy/vps/restore.sh [--stamp YYYYMMDD-HHMMSS] [--from <откуда>] [--yes] [--no-deploy] [--no-backup]
 #
 #   --from   каталог с файлами бэкапа или rclone-remote (по умолчанию
 #            BACKUP_RCLONE_REMOTE из .env, а если он пуст — data/backups)
 #   --stamp  какой набор брать (по умолчанию — самый свежий дамп базы)
 #   --yes    не спрашивать подтверждений
 #   --no-deploy  не запускать deploy.sh в конце
+#   --no-backup  залить базу, даже если бэкап текущей не снялся (import-db.sh
+#                иначе отменяет заливку без свежего дампа) — осознанно
 #
 # Набор бэкапа за одну отметку времени (backup.sh):
 #   db-<stamp>.sql.gz  media-<stamp>.tar.gz  var-<stamp>.tar.gz
@@ -27,13 +29,14 @@
 set -euo pipefail
 source "$(dirname "$(readlink -f "$0")")/lib.sh"
 
-STAMP=""; FROM=""; YES=0; DEPLOY=1
+STAMP=""; FROM=""; YES=0; DEPLOY=1; NO_BACKUP=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --stamp) STAMP="${2:?--stamp YYYYMMDD-HHMMSS}"; shift ;;
     --from) FROM="${2:?--from <каталог|remote:bucket>}"; shift ;;
     --yes) YES=1 ;;
     --no-deploy) DEPLOY=0 ;;
+    --no-backup) NO_BACKUP=--no-backup ;;
     -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
     *) echo "Неизвестный аргумент: $1" >&2; exit 2 ;;
   esac
@@ -112,7 +115,7 @@ fi
 [ -s "$DATA_DIR/secrets/DJANGO_SECRET_KEY" ] || echo "!! нет data/secrets/DJANGO_SECRET_KEY — deploy.sh упадёт на check --deploy"
 
 # 3. База
-"$APP_DIR/deploy/vps/import-db.sh" "$DB" --yes
+"$APP_DIR/deploy/vps/import-db.sh" "$DB" --yes $NO_BACKUP
 
 # 4. media и var
 unpack() {  # unpack <архив> <каталог в data/>
