@@ -26,7 +26,6 @@
 ###############################################################################
 set -euo pipefail
 source "$(dirname "$(readlink -f "$0")")/lib.sh"
-cd "$APP_DIR"
 
 STAMP=""; FROM=""; YES=0; DEPLOY=1
 while [ $# -gt 0 ]; do
@@ -40,6 +39,9 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+# Относительный --from считается от каталога запуска, а не от $APP_DIR.
+if [ -n "$FROM" ] && [ -d "$FROM" ]; then FROM="$(cd "$FROM" && pwd)"; fi
+cd "$APP_DIR"
 
 die() { echo "!! $*" >&2; exit 1; }
 confirm() {

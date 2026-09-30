@@ -154,7 +154,11 @@ if [ "$TZ_CHECK" = "NULL" ]; then
 fi
 
 # 4. media
-if [ "$MEDIA" = 1 ] && [ "$S3" = 1 ] && [ -s "$DUMPS/media-$STAMP.tar.gz" ]; then
+if [ "$MEDIA" = 1 ] && [ "$S3" = 1 ]; then
+  # Репетиция восстановления: без архива media в S3 отката на rsync с живого
+  # сервера нет — иначе отчёт «восстановился» был бы ложным.
+  [ -s "$DUMPS/media-$STAMP.tar.gz" ] \
+    || die "в S3 нет media-$STAMP.tar.gz — набор $STAMP из копии не восстанавливается (только базу: --s3 --no-media)"
   echo "==> media из архива → $STAGE_DIR/media/"
   rm -rf "$STAGE_DIR/media"
   tar -xzf "$DUMPS/media-$STAMP.tar.gz" -C "$STAGE_DIR"
