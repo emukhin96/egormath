@@ -1155,6 +1155,10 @@ class CatalogViewTests(TestCase):
         copy = Task.objects.create(text_latex='Копия', variant_of=self.task,
                                    created_by=self.teacher)
         set_grade_bands(copy, ['GRADE_8'])
+        # Старая запись без полосы классов, только grade_level: фильтр
+        # ?grade=8 её показывает — счётчик обязан её учесть.
+        Task.objects.create(text_latex='Старая восьмая', grade_level=8,
+                            created_by=self.teacher)
         source = Source.objects.create(title='Задачник фасетов')
         TaskSource.objects.create(task=self.task, source=source, number='1')
         TaskSource.objects.create(task=copy, source=source, number='1')
@@ -1164,7 +1168,7 @@ class CatalogViewTests(TestCase):
         self.assertContains(
             response,
             '<li><a class="sidebar-row sidebar-row-count" href="?grade=8">'
-            '8 класс<span class="sidebar-count">1</span></a></li>',
+            '8 класс<span class="sidebar-count">2</span></a></li>',
             html=True)
         self.assertContains(
             response,
@@ -1180,7 +1184,7 @@ class CatalogViewTests(TestCase):
         self.assertContains(
             by_grade,
             '<li class="is-current"><a class="sidebar-row sidebar-row-count" href="?grade=8">'
-            '8 класс<span class="sidebar-count">1</span></a></li>',
+            '8 класс<span class="sidebar-count">2</span></a></li>',
             html=True)
         by_source = self.client.get(reverse('task_list'), {'source': source.pk})
         self.assertContains(by_source, 'class="is-current"><a class="sidebar-row sidebar-row-count" '

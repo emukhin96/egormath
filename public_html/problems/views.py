@@ -104,17 +104,19 @@ def _rubricator_blocks(topics_flat, active_topic=None):
 def _catalog_facets(params):
     """Классы и источники для панели каталога — с числом задач и текущим выбором."""
     catalog = Task.objects.filter(variant_of__isnull=True)
-    by_code = {
-        row['grade_bands__code']: row['n']
-        for row in catalog.values('grade_bands__code').annotate(n=Count('id', distinct=True))
-        if row['grade_bands__code']}
+    # Условие то же, что у фильтра ?grade=N (filter_by_taxonomy): полоса
+    # классов ИЛИ старое поле grade_level — иначе счётчик расходится с выдачей.
+    levels_of = {level: [10, 11] if level == 10 else [level]
+                 for level in GRADE_LEVEL_TO_CODE if level != 11}
+    counts = catalog.aggregate(**{
+        f'g{level}': Count('id', distinct=True, filter=(
+            Q(grade_bands__code=GRADE_LEVEL_TO_CODE[level]) | Q(grade_level__in=levels)))
+        for level, levels in levels_of.items()})
     labels = dict(Task.GRADE_CHOICES)
     current_grade, _ = parse_grade_choice(params.get('grade'))
     grades = []
-    for level, code in sorted(GRADE_LEVEL_TO_CODE.items()):
-        if level == 11:
-            continue  # 10 и 11 — одна метка 10–11
-        count = by_code.get(code, 0)
+    for level in sorted(levels_of):
+        count = counts[f'g{level}']
         if count:
             grades.append({'value': level, 'label': labels.get(level, str(level)),
                            'count': count, 'is_current': current_grade == level})
