@@ -1088,6 +1088,104 @@ class CatalogViewTests(TestCase):
             'Дроби<span class="sidebar-count">2</span></a></li>',
             html=True)
 
+    def test_rubricator_expands_subtopics_of_current_block(self):
+        """При выбранной теме раскрываются подтемы её раздела со счётчиками по
+        поддереву; без темы подтем нет."""
+        child = Topic.objects.create(name='Обыкновенные дроби', parent=self.topic)
+        grandchild = Topic.objects.create(name='Сложение дробей', parent=child)
+        for topic in (child, grandchild):
+            task = Task.objects.create(text_latex=f'Задача: {topic.name}',
+                                       created_by=self.teacher)
+            task.topics.add(topic)
+        self.client.login(username='teacher1', password='pass12345')
+        plain = self.client.get(reverse('task_list'))
+        self.assertNotContains(plain, 'sidebar-sublist')
+        deep = self.client.get(reverse('task_list'), {'topic': grandchild.pk})
+        self.assertContains(deep, 'sidebar-sublist')
+        # Раздел: три задачи (корень, подтема, внук); подтема: две (с внуком), текущая
+        self.assertContains(
+            deep,
+            f'<li><a class="sidebar-row sidebar-row-count" href="?topic={self.topic.pk}">'
+            'Дроби<span class="sidebar-count">3</span></a></li>',
+            html=True)
+        self.assertContains(
+            deep,
+            f'<li class="is-current"><a class="sidebar-row sidebar-row-count" href="?topic={child.pk}">'
+            'Обыкновенные дроби<span class="sidebar-count">2</span></a></li>',
+            html=True)
+
+    def test_source_filter_returns_only_that_source_without_duplicates(self):
+        from .models import Source, TaskSource
+        first = Source.objects.create(title='Первый задачник')
+        second = Source.objects.create(title='Второй задачник')
+        twice = Task.objects.create(text_latex='Задача с двумя ссылками',
+                                    created_by=self.teacher)
+        # Ссылки на оба задачника: по первому задача должна попасть один раз
+        TaskSource.objects.create(task=twice, source=first, number='1')
+        TaskSource.objects.create(task=twice, source=second, number='2')
+        other = Task.objects.create(text_latex='Задача второго задачника',
+                                    created_by=self.teacher)
+        TaskSource.objects.create(task=other, source=second, number='7')
+        copy = Task.objects.create(text_latex='Локальная копия',
+                                   variant_of=twice, created_by=self.teacher)
+        TaskSource.objects.create(task=copy, source=first, number='1')
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('task_list'), {'source': first.pk})
+        self.assertContains(response, 'Задача с двумя ссылками', count=1)
+        self.assertNotContains(response, 'Задача второго задачника')
+        # Локальная копия не выводится строкой каталога (упоминание в строке
+        # оригинала как вариант допустимо)
+        self.assertNotContains(
+            response, f'<a class="task-id" href="/problems/{copy.pk}/">#{copy.pk}</a>', html=True)
+        self.assertContains(
+            response, f'<a class="task-id" href="/problems/{twice.pk}/">#{twice.pk}</a>', html=True)
+        self.assertNotContains(response, 'Сократите дробь')
+        # Параметр источника сохраняется в форме живого поиска
+        self.assertContains(
+            response, f'<input type="hidden" name="source" value="{first.pk}">', html=True)
+
+    def test_catalog_facets_count_catalog_tasks_and_mark_current(self):
+        from .models import GradeBand, Source, TaskSource
+        from .rubricator import set_grade_bands
+        GradeBand.objects.get_or_create(code='GRADE_8', defaults={'name': '8', 'order': 8})
+        GradeBand.objects.get_or_create(code='GRADE_10_11', defaults={'name': '10–11', 'order': 10})
+        set_grade_bands(self.task, ['GRADE_8'])
+        senior = Task.objects.create(text_latex='Старшая задача', created_by=self.teacher)
+        set_grade_bands(senior, ['GRADE_10_11'])
+        copy = Task.objects.create(text_latex='Копия', variant_of=self.task,
+                                   created_by=self.teacher)
+        set_grade_bands(copy, ['GRADE_8'])
+        source = Source.objects.create(title='Задачник фасетов')
+        TaskSource.objects.create(task=self.task, source=source, number='1')
+        TaskSource.objects.create(task=copy, source=source, number='1')
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('task_list'))
+        # Копии (variant_of) не считаются
+        self.assertContains(
+            response,
+            '<li><a class="sidebar-row sidebar-row-count" href="?grade=8">'
+            '8 класс<span class="sidebar-count">1</span></a></li>',
+            html=True)
+        self.assertContains(
+            response,
+            '<li><a class="sidebar-row sidebar-row-count" href="?grade=10">'
+            '10–11 класс<span class="sidebar-count">1</span></a></li>',
+            html=True)
+        self.assertContains(
+            response,
+            f'<li><a class="sidebar-row sidebar-row-count" href="?source={source.pk}" '
+            f'title="Задачник фасетов">Задачник фасетов<span class="sidebar-count">1</span></a></li>',
+            html=True)
+        by_grade = self.client.get(reverse('task_list'), {'grade': 8})
+        self.assertContains(
+            by_grade,
+            '<li class="is-current"><a class="sidebar-row sidebar-row-count" href="?grade=8">'
+            '8 класс<span class="sidebar-count">1</span></a></li>',
+            html=True)
+        by_source = self.client.get(reverse('task_list'), {'source': source.pk})
+        self.assertContains(by_source, 'class="is-current"><a class="sidebar-row sidebar-row-count" '
+                            f'href="?source={source.pk}"')
+
     def test_catalog_pagination_uses_page_numbers(self):
         for index in range(26):
             Task.objects.create(
