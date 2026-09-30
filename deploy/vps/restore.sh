@@ -17,9 +17,12 @@
 #   secrets-<stamp>.tar.gz.enc  (data/secrets, .env, crontab, rclone.conf;
 #   расшифровывается паролем BACKUP_SECRETS_PASSPHRASE из .env)
 #
-# Что делает: скачивает набор → секреты в data/secrets (если там пусто) →
-# import-db.sh → media и var из архивов → deploy.sh (образ, миграции,
-# collectstatic, контейнеры, Caddy).
+# Что делает: скачивает набор в data/restore-<stamp> → секреты в
+# data/secrets (если там пусто) → import-db.sh → media и var из архивов →
+# deploy.sh (образ, миграции, collectstatic, контейнеры, Caddy).
+# Набор кладётся не в data/backups: import-db.sh перед заливкой снимает
+# бэкап текущей базы, а backup.sh чистит data/backups по mtime — старый
+# набор (rclone сохраняет время файлов из S3) удалился бы до заливки.
 ###############################################################################
 set -euo pipefail
 source "$(dirname "$(readlink -f "$0")")/lib.sh"
@@ -44,24 +47,24 @@ confirm() {
   read -r -p "$1 [yes/N] " ANSWER; [ "$ANSWER" = "yes" ]
 }
 
-DIR="$DATA_DIR/backups"
-mkdir -p "$DIR" "$DATA_DIR"/{secrets,media,var,live,cache,staticfiles,mysql,logs}
+BACKUPS="$DATA_DIR/backups"
+mkdir -p "$BACKUPS" "$DATA_DIR"/{secrets,media,var,live,cache,staticfiles,mysql,logs}
 [ -n "$FROM" ] || FROM="$(env_get BACKUP_RCLONE_REMOTE)"
-[ -n "$FROM" ] || FROM="$DIR"
+[ -n "$FROM" ] || FROM="$BACKUPS"
 
 # 1. Набор файлов: из S3 (rclone) или из каталога
 if [ -d "$FROM" ]; then
   SRC_DIR="$FROM"
   [ -n "$STAMP" ] || STAMP="$(ls "$SRC_DIR"/db-*.sql.gz 2>/dev/null | sed -E 's/.*db-([0-9]{8}-[0-9]{6})\.sql\.gz/\1/' | sort | tail -n 1)"
   [ -n "$STAMP" ] || die "в $SRC_DIR нет дампов db-*.sql.gz"
-  if [ "$SRC_DIR" != "$DIR" ]; then
-    cp "$SRC_DIR"/*-"$STAMP".* "$DIR/"
-  fi
+  DIR="$DATA_DIR/restore-$STAMP"; mkdir -p "$DIR"
+  cp "$SRC_DIR"/*-"$STAMP".* "$DIR/"
 else
   command -v rclone >/dev/null || die "нет rclone: apt-get install -y rclone, затем rclone config (deploy/VPS.md)"
   rclone lsd "$FROM" >/dev/null 2>&1 || die "rclone не видит $FROM — проверьте rclone config и BACKUP_RCLONE_REMOTE"
   [ -n "$STAMP" ] || STAMP="$(rclone lsf "$FROM" --include 'db-*.sql.gz' | sed -E 's/db-([0-9]{8}-[0-9]{6})\.sql\.gz/\1/' | sort | tail -n 1)"
   [ -n "$STAMP" ] || die "в $FROM нет дампов db-*.sql.gz"
+  DIR="$DATA_DIR/restore-$STAMP"; mkdir -p "$DIR"
   echo "==> $FROM -> $DIR: набор $STAMP"
   rclone copy "$FROM" "$DIR" --include "*-$STAMP.*"
 fi
@@ -126,4 +129,5 @@ if [ "$DEPLOY" = 1 ]; then
 else
   echo "==> Осталось: $APP_DIR/deploy/vps/deploy.sh"
 fi
+rm -rf "$DIR"   # копия набора больше не нужна: источник (S3 или каталог) цел
 echo "===== Restore $STAMP done ====="
