@@ -15,10 +15,13 @@ def main():
     try:
         # JSON экранирует символы как \\uXXXX: запас на два поля и метаданные.
         data = json.loads(sys.stdin.read(16 * MAX_EXPR_LEN + 1024))
+        mode = data.get('mode', 'expression')
+        if mode not in ('expression', 'simplify', 'factor') or (data['multiple'] and mode != 'expression'):
+            raise ValueError('неизвестный режим проверки формулы')
         reference, display = _parse_reference(data['payload'], data['multiple'])
         result = {'display': display}
         if 'value' in data:
-            result['status'] = _check(data['value'], reference, data['multiple'])
+            result['status'] = _check(data['value'], reference, data['multiple'], mode)
     except MemoryError:
         result = {'unavailable': True}
     except Exception as error:

@@ -286,11 +286,14 @@ def _quotient_reducible(node):
     """У дроби числитель и знаменатель имеют общий множитель
     (числовой или многочленный) либо знаменатель равен ±1."""
     from sympy import gcd
-    subs = _subtrees(node)
+    # Листья a/a и a/1 — токены, а не поддеревья. Их нельзя терять.
+    subs = [c for c in node.children if _is_tree(c) or _is_symbol_token(c)
+            or getattr(c, 'type', '') == 'DIGIT']
     if len(subs) != 2:
         return False
-    num = evaluate(resolve(subs[0]))
-    den = evaluate(resolve(subs[1]))
+    def operand(child):
+        return evaluate(resolve(child)) if _is_tree(child) else parse_expr(str(child))
+    num, den = map(operand, subs)
     if num is None or den is None:
         return False
     try:
@@ -352,6 +355,14 @@ def reducible(node):
         return True
     if node.data == 'square_root' and _perfect_square_root(node):
         return True
+    if node.data == 'superscript':
+        operands = [c for c in node.children if _is_tree(c) or _is_symbol_token(c)
+                    or getattr(c, 'type', '') == 'DIGIT']
+        if len(operands) == 2:
+            child = operands[1]
+            exponent = evaluate(resolve(child)) if _is_tree(child) else parse_expr(str(child))
+            if getattr(exponent, 'is_zero', None) is True:
+                return True
     if node.data in ('add', 'sub') and not _is_unary_minus(node) \
             and _has_like_terms(node):
         return True
@@ -369,9 +380,13 @@ def _product_factors(node, out):
     """Множители верхнего уровня произведения (сквозь унарный минус)."""
     node = _unwrap(node)
     if not _is_tree(node):
+        if _is_symbol_token(node):
+            out.append(node)
         return
     if node.data in _PRODUCT_NODES:
-        for child in _subtrees(node):
+        for child in node.children:
+            if not (_is_tree(child) or _is_symbol_token(child)):
+                continue
             _product_factors(child, out)
     elif _is_unary_minus(node):
         _product_factors(_subtrees(node)[0], out)
@@ -386,7 +401,7 @@ def _factor_ok(node):
     переменная — токен, и ``_subtrees()`` её отбрасывает."""
     from sympy import Pow, factor_list
     node = _unwrap(node)
-    expr = evaluate(resolve(node))
+    expr = evaluate(resolve(node)) if _is_tree(node) else parse_expr(str(node))
     if expr is None:
         return False
     while isinstance(expr, Pow) and expr.exp.is_integer and expr.exp > 0:

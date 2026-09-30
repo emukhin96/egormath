@@ -319,7 +319,8 @@ def _parse_pair(slot, payload):
 def _parse_formula(slot, payload, *, validate=False):
     try:
         slot.data, slot.reference = formulas.parse_reference(
-            payload, multiple=slot.kind == EXPRESSIONS, validate=validate)
+            payload, multiple=slot.kind == EXPRESSIONS, validate=validate,
+            mode=slot.kind if slot.kind in (SIMPLIFY, FACTOR) else 'expression')
     except ValueError as error:
         slot.error = str(error)
 
@@ -359,8 +360,8 @@ def _parse_order(slot, payload):
 _PARSERS = {
     DIGITS: _parse_format, DECIMAL: _parse_format,
     RATIO: _parse_format, PROPORTION: _parse_format,
-    NUMBER: _parse_number, CHOICE: _parse_choice, SIMPLIFY: _parse_expression,
-    FACTOR: _parse_expression, EQUATION: _parse_expression, PAIR: _parse_pair,
+    NUMBER: _parse_number, CHOICE: _parse_choice, SIMPLIFY: _parse_formula,
+    FACTOR: _parse_formula, EQUATION: _parse_expression, PAIR: _parse_pair,
     SET: _parse_set, RANGE: _parse_range, SERIES: _parse_series, ORDER: _parse_order,
     EXPRESSION: _parse_formula, EXPRESSIONS: _parse_formula,
 }
@@ -397,7 +398,7 @@ def parse_mask(text, *, validate_references=False):
         kind = CHOICE if name in PRESETS else name
         slot = Slot(index=index, kind=kind, raw=payload,
                     preset=name if name in PRESETS else None)
-        if kind in (EXPRESSION, EXPRESSIONS):
+        if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
             _parse_formula(slot, payload, validate=validate_references)
         else:
             _PARSERS[kind](slot, payload)
@@ -501,12 +502,8 @@ def check_slot(slot, value):
         student = series.parse(value)
         equal = series.equal(student, slot.data)
         return UNKNOWN if equal is None else (OK if equal else WRONG)
-    if kind == SIMPLIFY:
-        return expressions.check_simplified(value, slot.data)
-    if kind in (EXPRESSION, EXPRESSIONS):
+    if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
         return formulas.check(value, slot.data, multiple=kind == EXPRESSIONS)
-    if kind == FACTOR:
-        return expressions.check_factored(value, slot.data)
     if kind == EQUATION:
         return expressions.check_equation(value, slot.data)
     if kind == ORDER:

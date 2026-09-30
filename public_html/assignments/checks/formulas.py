@@ -24,6 +24,7 @@ class Formula:
     expression: object
     denominators: tuple
     components: tuple
+    tree: object
 
 
 @dataclass
@@ -37,6 +38,7 @@ class Reference:
 class FormulaSpec:
     payload: str
     multiple: bool
+    mode: str = 'expression'
 
 
 WORKER_TIMEOUT = 3
@@ -80,14 +82,14 @@ def _run_worker(payload):
 
 
 @lru_cache(maxsize=256)
-def _reference_response(payload, multiple):
-    result = _run_worker({'payload': payload, 'multiple': multiple})
+def _reference_response(payload, multiple, mode='expression'):
+    result = _run_worker({'payload': payload, 'multiple': multiple, 'mode': mode})
     if result.get('unavailable'):
         raise ValueError('временная недоступность проверки')
     return result
 
 
-def parse_reference(payload, multiple=False, *, validate=False):
+def parse_reference(payload, multiple=False, *, validate=False, mode='expression'):
     """Для показа поля достаточно структуры; вычисления — при сохранении.
 
     Рендер сохранённой маски никогда не запускает subprocess и не зависит
@@ -95,12 +97,14 @@ def parse_reference(payload, multiple=False, *, validate=False):
     """
     if len(payload) > MAX_EXPR_LEN:
         raise ValueError('слишком длинный эталон')
+    if mode not in ('expression', 'simplify', 'factor') or (multiple and mode != 'expression'):
+        raise ValueError('неизвестный режим проверки формулы')
     texts, _ = _reference_parts(payload, multiple)
-    spec = FormulaSpec(payload, multiple)
+    spec = FormulaSpec(payload, multiple, mode)
     if not validate:
         return spec, ';'.join(texts).strip()
     try:
-        result = _reference_response(payload, multiple)
+        result = _reference_response(payload, multiple, mode)
     except (subprocess.TimeoutExpired, OSError, ValueError):
         # Новую маску нельзя сохранить с непроверенным эталоном. Уже
         # сохранённые поля продолжают отображаться через ветку выше.
@@ -113,7 +117,8 @@ def parse_reference(payload, multiple=False, *, validate=False):
 @lru_cache(maxsize=1024)
 def _checked(value, reference):
     result = _run_worker({'payload': reference.payload,
-                          'multiple': reference.multiple, 'value': value})
+                          'multiple': reference.multiple, 'mode': reference.mode,
+                          'value': value})
     status = result.get('status')
     if status not in (OK, WRONG):
         # Таймауты и неопределённые результаты не остаются в кэше.
@@ -169,13 +174,21 @@ def _denominators(tree):
         return []
     tree = expressions.resolve(tree)
     result = []
-    if tree.data in ('fraction', 'div'):
+    if tree.data in ('fraction', 'div', 'superscript'):
         operands = [c for c in tree.children if expressions._is_tree(c)
-                    or expressions._is_symbol_token(c)]
+                    or expressions._is_symbol_token(c)
+                    or getattr(c, 'type', '') == 'DIGIT']
         if len(operands) == 2:
             child = operands[1]
+            if tree.data == 'superscript':
+                exponent = (expressions.evaluate(child) if expressions._is_tree(child)
+                            else expressions.parse_expr(str(child)))
+                # В школьной записи нулевая и отрицательная степени
+                # требуют ненулевого основания, даже если SymPy уже
+                # превратил a^0 в единицу.
+                child = operands[0] if getattr(exponent, 'is_nonpositive', None) is True else None
             value = (expressions.evaluate(child) if expressions._is_tree(child)
-                     else expressions.parse_expr(str(child)))
+                     else expressions.parse_expr(str(child)) if child is not None else None)
             if value is not None:
                 result.append(value)
     for child in tree.children:
@@ -208,7 +221,7 @@ def _parse(text, positive=()):
                        Symbol(str(s), real=True)) for s in symbols}
     return Formula(value.xreplace(replacements),
                    tuple(d.xreplace(replacements) for d in denominators),
-                   tuple(c.xreplace(replacements) for c in components))
+                   tuple(c.xreplace(replacements) for c in components), tree)
 
 
 def _reference_parts(payload, multiple=False):
@@ -257,6 +270,8 @@ def _defined(item, reference):
         return False
     if any(c.is_real is False for c in (value, *item.components)):
         return False
+    if any(d.is_zero is True for d in item.denominators):
+        return False
     if len(reference.symbols) == 1:
         symbol = reference.symbols[0]
         domain = Interval.open(0, oo) if symbol.is_positive else S.Reals
@@ -276,11 +291,76 @@ def _defined(item, reference):
             return (allowed - valid).is_empty
         except (NotImplementedError, ValueError, TypeError):
             return None
-    # Для нескольких независимых параметров утверждаем только доказанное.
-    if (all(d.is_nonzero is True for d in item.denominators)
-            and all(c.is_real is True for c in (value, *item.components))):
+    # Для нескольких параметров доказываем достаточное включение областей.
+    # Рациональные преобразования допустимы, если каждый новый знаменатель
+    # делит многочлен, ненулевой на исходной области. Пробные значения не
+    # используются как доказательство отсутствия разрывов.
+    from sympy import cancel
+    originals = tuple(c for original in reference.items
+                      for c in (original.expression, *original.components))
+    original_denominators = [d for original in reference.items
+                             for d in original.denominators]
+    original_denominators.extend(c.as_numer_denom()[1] for c in originals
+                                 if c.is_rational_function(*reference.symbols))
+
+    def nonzero_on_original(d):
+        if d.is_nonzero is True or d in original_denominators:
+            return True
+        if d.is_polynomial(*reference.symbols):
+            for original in original_denominators:
+                numerator = original.as_numer_denom()[0]
+                if (numerator.is_polynomial(*reference.symbols)
+                        and cancel(numerator / d).is_polynomial(*reference.symbols)):
+                    return True
+        return False
+
+    def real_on_original(c):
+        if c.is_real is True or c in originals:
+            return True
+        if c.is_rational_function(*reference.symbols):
+            numerator, denominator = c.as_numer_denom()
+            return (numerator.is_real is True and denominator.is_real is True
+                    and nonzero_on_original(denominator))
+        return False
+
+    if (all(nonzero_on_original(d) for d in item.denominators)
+            and all(real_on_original(c) for c in (value, *item.components))):
         return True
+    if _domain_counterexample(item, reference):
+        return False
     return None
+
+
+def _domain_counterexample(item, reference):
+    """Точная допустимая точка может доказать наличие лишнего разрыва.
+
+    Отсутствие контрпримера ничего не доказывает: вызывающий код возвращает
+    UNKNOWN, если включение областей не установлено аналитически.
+    """
+    from sympy import S
+    baseline = {symbol: S.One for symbol in reference.symbols}
+    values_to_try = [baseline]
+    for symbol in reference.symbols:
+        for number in (-2, -1, 0, 1, 2):
+            if symbol.is_positive and number <= 0:
+                continue
+            values_to_try.append({**baseline, symbol: S(number)})
+    for values in values_to_try:
+        allowed = all(
+            all((v := component.subs(values)).is_real is True and v.is_finite is True
+                for component in (original.expression, *original.components))
+            and all(denominator.subs(values).is_zero is False
+                    for denominator in original.denominators)
+            for original in reference.items)
+        if not allowed:
+            continue
+        if any(denominator.subs(values).is_zero is True for denominator in item.denominators):
+            return True
+        for component in (item.expression, *item.components):
+            value = component.subs(values)
+            if value.has(S.NaN, S.ComplexInfinity, S.Infinity, S.NegativeInfinity) or value.is_real is False:
+                return True
+    return False
 
 
 def _counterexample(difference, reference):
@@ -309,7 +389,7 @@ def _counterexample(difference, reference):
     return False
 
 
-def _check(value, reference, multiple=False):
+def _check(value, reference, multiple=False, mode='expression'):
     from sympy import factor, simplify
     if len(value) > MAX_EXPR_LEN:
         return UNKNOWN
@@ -347,4 +427,15 @@ def _check(value, reference, multiple=False):
             uncertain |= same is None
         else:
             return UNKNOWN if uncertain else WRONG
+    # Равносильность уже доказана с исходными областями и предположениями.
+    # Повторное сравнение без positive/π потеряло бы этот контекст. По сырому
+    # дереву отдельно проверяем только требуемый вид записи.
+    if mode == 'simplify':
+        item = student[0]
+        if (expressions.reducible(item.tree)
+                or expressions._size(item.expression) > 2 * expressions._size(reference.items[0].expression) + 4):
+            return WRONG
+    elif mode == 'factor':
+        if not expressions.fully_factored(expressions.resolve(student[0].tree)):
+            return WRONG
     return OK

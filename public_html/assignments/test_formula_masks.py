@@ -194,6 +194,72 @@ class FormulaMaskTests(SimpleTestCase):
         self.assertEqual(check_slot(slot, 'a+1'), 'ok')
         self.assertEqual(check_slot(slot, '(a+1)(a-2)/(a-2)'), 'wrong')
 
+    def test_simplification_preserves_endpoints_and_structural_requirement(self):
+        slot = self.slot(r'{{simplify: 1+\sqrt{a-3}}}')
+        for value in (r'\sqrt{a-3}+1', '(a-3)^{1/2}+1'):
+            self.assertEqual(check_slot(slot, value), 'ok', value)
+        for value in (r'1+(a-3)/\sqrt{a-3}', r'\sqrt{a-3}+a/a',
+                      r'1+\sqrt{a-3}+1/(a-4)-1/(a-4)'):
+            self.assertEqual(check_slot(slot, value), 'wrong', value)
+        # Одинаковая формула в разных режимах не должна делить кэш вердиктов.
+        free = self.slot('{{expression: 3x}}')
+        strict = self.slot('{{simplify: 3x}}')
+        self.assertEqual(check_slot(free, 'x+2x'), 'ok')
+        self.assertEqual(check_slot(strict, 'x+2x'), 'wrong')
+
+    def test_factoring_does_not_cancel_a_forbidden_point(self):
+        slot = self.slot('{{factor: (x-1)(x+1)}}')
+        self.assertEqual(check_slot(slot, '(x+1)(x-1)'), 'ok')
+        self.assertEqual(check_slot(slot, 'x^2-1'), 'wrong')
+        self.assertEqual(check_slot(slot, '((x-1)(x-2)/(x-2))(x+1)'), 'wrong')
+        product = self.slot('{{factor: a*b}}')
+        self.assertEqual(check_slot(product, 'a*b'), 'ok')
+        self.assertEqual(check_slot(product, 'b*a'), 'ok')
+
+    def test_multiple_parameter_rational_domains(self):
+        for reference, value in (('a/b', 'a/b'), ('a/b+1', '(a+b)/b'),
+                                 ('a/(b*c)', 'a/b/c'), ('a*b^{-1}', 'a/b')):
+            slot = self.slot('{{simplify: ' + reference + '}}')
+            self.assertEqual(check_slot(slot, value), 'ok', (reference, value))
+        slot = self.slot('{{expression: a/b}}')
+        self.assertEqual(check_slot(slot, 'a*(a-1)/(b*(a-1))'), 'wrong')
+        for kind, reference, value in (
+                ('factor', '(a+b)*(a-b)', r'(a+b+\frac0a)*(a-b)'),
+                ('expression', 'a+b', r'a+b+\frac0a'),
+                ('expression', 'a', r'a+\frac0a')):
+            slot = self.slot('{{' + kind + ': ' + reference + '}}')
+            self.assertEqual(check_slot(slot, value), 'wrong', value)
+
+    def test_strict_expression_render_is_lightweight_and_save_validates(self):
+        formulas._reference_response.cache_clear()
+        with patch.object(formulas, '_run_worker') as worker:
+            spec = parse_mask('{{simplify: 1/(a+b)}};{{factor: (x-1)(x+1)}}')
+            self.assertTrue(spec.is_valid)
+            html = render_to_string('assignments/_mask.html', {
+                'fragments': render_fragments(spec, 'strict'), 'editable': True})
+            self.assertEqual(html.count('<math-field'), 2)
+            worker.assert_not_called()
+        for kind in ('simplify', 'factor'):
+            self.assertFalse(parse_mask('{{' + kind + ': 1/0}}',
+                                        validate_references=True).is_valid)
+
+    def test_strict_structure_keeps_assumptions_and_pi(self):
+        for reference, value in ((r'\sqrt{a^2}+b | positive: a,b', 'a+b'),
+                                 (r'\pi*a', r'a*\pi')):
+            slot = self.slot('{{simplify: ' + reference + '}}')
+            self.assertEqual(check_slot(slot, value), 'ok', value)
+
+    def test_zero_power_keeps_school_domain_before_evaluation(self):
+        for kind in ('expression', 'simplify'):
+            slot = self.slot('{{' + kind + ': a+b+1}}')
+            self.assertEqual(check_slot(slot, 'a^0+a+b'), 'wrong')
+            self.assertFalse(parse_mask('{{' + kind + ': 0^0}}',
+                                        validate_references=True).is_valid)
+        free = self.slot('{{expression: a+1 | positive: a}}')
+        strict = self.slot('{{simplify: a+1 | positive: a}}')
+        self.assertEqual(check_slot(free, 'a+a^0'), 'ok')
+        self.assertEqual(check_slot(strict, 'a+a^0'), 'wrong')
+
     def test_multiple_positive_parameters_and_pi(self):
         slot = self.slot(r'{{expression: a*b/2 | positive: a,b}}')
         self.assertEqual(check_slot(slot, 'b*a/2'), 'ok')
