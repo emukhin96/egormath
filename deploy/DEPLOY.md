@@ -40,7 +40,7 @@ GitHub Actions по SSH на Timeweb не работает.
 | `egor.sty`                         | `~/…/LaTEX/egormath/egor.sty`                             | `TEXMFLOCAL/.../egor/egor.sty`      | **Обязательно**                                   |
 | CMU Serif/Sans/Typewriter (`.otf`) | `~/Library/Fonts/cmun*.otf` **или** TeX Live `cm-unicode` | системные шрифты + luaotfload       | **Обязательно** (профиль `font=cm`, дефолт сайта) |
 | SchoolBookC + TextBookC (`.ttf`)   | `~/Library/Fonts/SchoolBookC*.ttf`, `TextBookC*.ttf`      | `/usr/local/share/fonts/egor/`      | Опционально (`font=school` / `font=palatino`)     |
-| STIX Two Text + Math (`.otf`)      | `public_html/worksheets/tex/fonts/STIXTwo*.otf`           | asset каждой сборки (сайт шлёт сам) | Для `font=stix`: нужен только `egor.sty` ≥ v1.3 на API |
+| STIX Two Text + Math (`.otf`)      | `public_html/worksheets/tex/fonts/STIXTwo*.otf`           | asset каждой сборки (сайт шлёт сам) | Для `font=stix`; `egor.sty` уходит тем же asset из `worksheets/tex/`, на API ничего не нужно (§ 1.2a) |
 | `chem.sty`                         | `LaTEX/egormath/chem.sty`                                 | рядом с `egor.sty`                  | Опционально (опция `[chem]`)                      |
 | TeX Live `beamer`                  | коллекция `collection-latexextra` / пакет `beamer`        | дерево TeX Live на VPS              | **Обязательно для презентаций** (`beamer.cls`)    |
 | `egorbeamer.sty`                   | `public_html/worksheets/tex/egorbeamer.sty`               | asset каждой сборки; опционально TEXMFLOCAL | Сайт шлёт sty сам; на TEXMFLOCAL — чтобы не занимать слот assets |

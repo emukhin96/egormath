@@ -694,6 +694,13 @@ class BeamerGenerationTests(TestCase):
         for name in STIX_FONT_FILES:
             self.assertIn(name, names)
         self.assertNotIn('Inter-Regular.otf', names)
+        # Главное для font=stix: egor.sty из репозитория уходит вместе со
+        # шрифтами (иначе на API возьмётся старый sty без опции font=stix)
+        # и занимает слот в лимите assets.
+        from .services import font_asset_count
+        self.assertIn('egor.sty', names)
+        self.assertEqual(font_asset_count(r'\usepackage[font=stix]{egor}'),
+                         len(STIX_FONT_FILES) + 1)
 
     def test_collect_assets_requires_stix_fonts(self):
         from pathlib import Path
