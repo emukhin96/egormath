@@ -39,9 +39,17 @@ def _create_assignments(*, worksheet, teacher, students, check_visibility,
     """Создать назначения без дублей; используется обеими точками выдачи."""
     created = 0
     memberships = {}
+    # Задачи, скрытые «для группы целиком» (у всех прежних назначений этой
+    # группы по листку), наследует и тот, кого выдали через группу позже.
+    group_hidden = {}
     for group in groups:
         for student_id in group.students.values_list('pk', flat=True):
             memberships.setdefault(student_id, []).append(group.pk)
+        hidden_sets = [
+            set(a.hidden_items.values_list('pk', flat=True))
+            for a in Assignment.objects.filter(worksheet=worksheet, source_groups=group)]
+        if hidden_sets:
+            group_hidden[group.pk] = set.intersection(*hidden_sets)
     individual_ids = {int(pk) for pk in individual_ids}
     for student in students:
         assignment, was_created = Assignment.objects.get_or_create(
@@ -55,7 +63,11 @@ def _create_assignments(*, worksheet, teacher, students, check_visibility,
                 'due_at': due_at,
             })
         if was_created and student.pk not in individual_ids:
-            assignment.source_groups.set(memberships.get(student.pk, []))
+            group_ids = memberships.get(student.pk, [])
+            assignment.source_groups.set(group_ids)
+            inherited = set().union(*(group_hidden.get(g, set()) for g in group_ids))
+            if inherited:
+                assignment.hidden_items.add(*inherited)
         created += was_created
     return created
 
