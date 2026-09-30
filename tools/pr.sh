@@ -92,31 +92,50 @@ else: print("GitHub: %s %s" % (d.get("message"), d.get("errors", ""))); sys.exit
 }
 
 cmd_status() {
-  local info num
-  # Первая строка — номер PR для запросов ниже, остальные — для пользователя (stdout)
+  local info num author
+  # Первые две строки — номер PR и логин автора для запросов ниже,
+  # остальные — для пользователя (stdout)
   info=$(pr_json | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
 if not (isinstance(d, list) and d): sys.exit(0)
 pr = d[0]
 print(pr["number"])
+print(pr["user"]["login"])
 print("PR #%s %s [%s] %s" % (pr["number"], pr["title"], pr["state"], pr["html_url"]))
 print("ветка %s → %s, head %s%s" % (pr["head"]["ref"], pr["base"]["ref"], pr["head"]["sha"][:7], ", draft" if pr["draft"] else ""))')
   if [ -z "$info" ]; then echo "открытого PR для ветки $BRANCH нет"; return 0; fi
   num=${info%%$'\n'*}
+  info=${info#*$'\n'}
+  author=${info%%$'\n'*}
   printf '%s\n' "${info#*$'\n'}"
   api GET "/pulls/$num/reviews?per_page=100" | python3 -c '
 import json, sys
 for r in json.load(sys.stdin):
     if r["state"] != "COMMENTED" or (r.get("body") or "").strip():
         print("ревью: %s — %s %s" % (r["user"]["login"], r["state"], (r.get("body") or "")[:120].replace("\n", " ")))'
+  # Тред без ответа — тот, где последнее слово не за автором PR: по пайплайну
+  # автор обязан ответить в каждом (что и в каком коммите исправлено или почему нет).
   api GET "/pulls/$num/comments?per_page=100" | python3 -c '
 import json, sys
+author = sys.argv[1]
 cs = json.load(sys.stdin)
-print("замечаний в коде: %d" % len(cs))
+roots = [c for c in cs if not c.get("in_reply_to_id")]
+last = {}
+for c in sorted(cs, key=lambda c: c["created_at"]):
+    last[c.get("in_reply_to_id") or c["id"]] = c["user"]["login"]
+unanswered = [c["id"] for c in roots if last.get(c["id"]) != author]
+print("замечаний в коде: %d, без ответа: %d" % (len(roots), len(unanswered)))
 for c in cs:
-    tag = "    ↳" if c.get("in_reply_to_id") else "  #%s" % c["id"]
-    print("%s %s %s:%s — %s" % (tag, c["user"]["login"], c["path"], c.get("line") or c.get("original_line"), c["body"].strip().splitlines()[0][:110]))'
+    if c.get("in_reply_to_id"):
+        tag = "    ↳"
+    else:
+        tag = "  #%s%s" % (c["id"], " ⚠ без ответа" if c["id"] in unanswered else "")
+    # Первая содержательная строка: маркер <!-- claude-finding … --> автоматического ревью пропускаем
+    lines = [l for l in c["body"].strip().splitlines() if l.strip() and not l.strip().startswith("<!--")]
+    print("%s %s %s:%s — %s" % (tag, c["user"]["login"], c["path"], c.get("line") or c.get("original_line"), (lines or [""])[0][:110]))
+if unanswered:
+    print("ответьте в каждом треде: tools/pr.sh reply <id> \"...\" — id: %s" % " ".join(map(str, unanswered)))' "$author"
   api GET "/issues/$num/comments?per_page=100" | python3 -c '
 import json, sys
 cs = json.load(sys.stdin)
