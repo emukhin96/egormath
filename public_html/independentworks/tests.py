@@ -62,7 +62,7 @@ class IndependentWorkTests(TestCase):
         answer.refresh_from_db()
         # Повторный сбой того же ввода — в ручную проверку, без вечных досверок
         self.assertEqual(answer.auto_check, 'unknown')
-        self.assertEqual(answer.checks, {formulas.UNAVAILABLE_KEY: 2})
+        self.assertEqual(answer.checks, {'s1': 'unknown', formulas.UNAVAILABLE_KEY: 2})
         with patch.object(formulas, '_run_worker') as worker:
             svc.recheck_unavailable(a)
             worker.assert_not_called()
@@ -113,6 +113,32 @@ class IndependentWorkTests(TestCase):
         self.assertEqual(response.status_code, 200)
         answer = attempt.answers.get()
         self.assertEqual((answer.version, answer.values), (2, {'s1': '3'}))
+
+    def test_same_input_cannot_reset_failure_limit_by_saving_or_checking(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{number: 4}} {{expression: a+191}} {{number: 7}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        attempt = self.begin(self_check=True)
+        point = attempt.variant.points.get()
+        values = {'s1': '4', 's2': '191+a', 's3': '8'}
+        with patch.object(formulas, '_run_worker', side_effect=formulas.FormulaUnavailable('сбой')) as worker:
+            answer = svc.save_answer(attempt.pk, point.pk, 0, values)
+            answer = svc.save_answer(attempt.pk, point.pk, answer.version, values)
+            self.assertEqual(answer.auto_check, 'unknown')
+            self.assertEqual(answer.checks, {'s1': 'ok', 's2': 'unknown', 's3': 'wrong', formulas.UNAVAILABLE_KEY: 2})
+            answer = svc.save_answer(attempt.pk, point.pk, answer.version, values)
+            self.client.force_login(self.student)
+            response = self.client.post(self.url('check_answer', attempt.pk, point.pk), {
+                'version': answer.version, **{f'p{point.pk}_{k}': v for k, v in values.items()}})
+            self.assertTrue(response.json()['ok'])
+            self.assertEqual(worker.call_count, 2)
+            # Изменение ввода сбрасывает счётчик и действительно запускает проверку.
+            answer.refresh_from_db()
+            values['s2'] = 'a+192'
+            answer = svc.save_answer(attempt.pk, point.pk, answer.version, values)
+            self.assertEqual(worker.call_count, 3)
+            self.assertEqual(answer.checks, {formulas.UNAVAILABLE_KEY: 1})
 
     def test_teacher_pages_and_export_never_retry_formula_checks(self):
         attempt = self.begin()

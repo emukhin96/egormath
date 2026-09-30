@@ -243,7 +243,7 @@ class FormulaMaskTests(SimpleTestCase):
             self.assertTrue(submission.run_check(spec=spec))
         self.assertFalse(submission.check_unavailable)
         self.assertEqual(submission.auto_check, 'unknown')
-        self.assertEqual(submission.check_json, {formulas.UNAVAILABLE_KEY: 2})
+        self.assertEqual(submission.check_json, {'s1': 'unknown', formulas.UNAVAILABLE_KEY: 2})
         self.assertIsNotNone(submission.checked_at)
 
     def test_check_mask_reuses_results_of_unchanged_slots(self):

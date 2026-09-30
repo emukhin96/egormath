@@ -1311,9 +1311,78 @@ class AutoCheckFlowTests(TestCase):
             self._save('157+a')
             response = self._check('157+a')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['checks'], {f'task{self.task.pk}': 'unknown'})
+        self.assertEqual(response.json()['checks'], {f'task{self.task.pk}': 'unknown', self.field: 'unknown'})
         submission = Submission.objects.get(assignment=self.assignment, task=self.task)
-        self.assertEqual(submission.check_json, {formulas.UNAVAILABLE_KEY: 2})
+        self.assertEqual(submission.check_json, {'s1': 'unknown', formulas.UNAVAILABLE_KEY: 2})
+
+    def test_failure_limit_preserves_slots_and_latches_until_answer_or_reference_changes(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{number: 4}} {{expression: a+181}} {{number: 7}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        data = {self.field: '4', f'task{self.task.pk}_s2': '181+a', f'task{self.task.pk}_s3': '8'}
+        with mock.patch.object(formulas, '_run_worker', side_effect=formulas.FormulaUnavailable('сбой')) as worker:
+            self.client.post(self.url, data)
+            self.client.post(self.url, data)
+            self.assertEqual(worker.call_count, 2)
+            # Неизменное автосохранение и кнопка проверки уже не вычисляют.
+            self.client.post(self.url, data)
+            response = self.client.post(reverse('check_task', args=[self.assignment.pk, self.task.pk]),
+                                        data, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+            self.assertEqual(worker.call_count, 2)
+        checks = response.json()['checks']
+        self.assertEqual([checks[f'task{self.task.pk}_s{i}'] for i in (1, 2, 3)], ['ok', 'unknown', 'wrong'])
+        # Изменённый ввод возвращает право на вычисление.
+        data[f'task{self.task.pk}_s2'] = 'a+182'
+        with mock.patch.object(formulas, '_run_worker', side_effect=formulas.FormulaUnavailable('сбой')) as worker:
+            self.client.post(self.url, data)
+            self.client.post(self.url, data)
+            self.assertEqual(worker.call_count, 2)
+        # Новый эталон тоже отменяет старый окончательный unknown.
+        self.task.answer_mask = '{{number: 4}} {{expression: a+182}} {{number: 8}}'
+        self.task.save()
+        self.client.post(self.url, data)
+        submission = Submission.objects.get(assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.auto_check, 'ok')
+        self.assertNotIn(formulas.UNAVAILABLE_KEY, submission.check_json)
+
+    def test_legacy_empty_verdict_is_not_reported_as_temporary_failure(self):
+        submission = Submission.objects.create(assignment=self.assignment, task=self.task,
+                                               answer_text='свободный исторический ответ')
+        response = self._check()
+        self.assertTrue(response.json()['ok'])
+        self.assertNotIn('временно недоступна', response.json()['message'])
+        submission.refresh_from_db()
+        self.assertTrue(submission.check_revealed)
+
+    def test_selected_unmasked_subitem_is_not_a_temporary_failure(self):
+        a = TaskSubitem.objects.create(task=self.task, order=1, text_latex='а')
+        TaskSubitem.objects.create(task=self.task, order=2, text_latex='б', answer_mask='{{number: 2}}')
+        submission = Submission.objects.create(assignment=self.assignment, task=self.task)
+        part = SubmissionPart.objects.create(submission=submission, subitem=a, answer_text='свободный ответ')
+        response = self.client.post(reverse('check_task', args=[self.assignment.pk, self.task.pk]),
+                                    {'check_subitem': str(a.pk)}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertTrue(response.json()['ok'])
+        self.assertNotIn('временно недоступна', response.json()['message'])
+        part.refresh_from_db()
+        self.assertTrue(part.check_revealed)
+
+    def test_changed_reference_on_page_resets_limit_once_and_hides_old_verdict(self):
+        from assignments.checks import formulas
+        self._save('0; 2')
+        self.task.answer_mask = '{{expression: a+193}}'
+        self.task.save()
+        with mock.patch.object(formulas, '_run_worker', side_effect=formulas.FormulaUnavailable('сбой')) as worker:
+            self.client.get(self.detail)
+            submission = Submission.objects.get(assignment=self.assignment, task=self.task)
+            self.assertEqual(submission.auto_check, '')
+            self.assertIsNone(submission.checked_at)
+            self.client.get(self.detail)
+            self.client.get(self.detail)
+            self.assertEqual(worker.call_count, 2)
+        submission.refresh_from_db()
+        self.assertEqual(submission.auto_check, 'unknown')
+        self.assertEqual(submission.check_json, {'s1': 'unknown', formulas.UNAVAILABLE_KEY: 2})
 
     def test_check_stored_on_save_but_attempts_count_button_presses(self):
         self._save('x=2; x=0')

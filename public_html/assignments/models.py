@@ -229,6 +229,11 @@ class AnswerFields(models.Model):
         by_mask = (spec is not None and spec.is_valid
                    and (self.has_mask_values or not self.legacy_answer))
         if by_mask:
+            if ((self.check_json or {}).get(UNAVAILABLE_KEY, 0) >= UNAVAILABLE_LIMIT
+                    and known is not None):
+                # Все значения и эталон прежние: окончательный результат
+                # после лимита сбоев не запускает вычислитель снова.
+                return False
             try:
                 result, per_slot = check_mask(spec, self.answer_json or {}, known=known)
             except FormulaUnavailable as error:
@@ -238,7 +243,8 @@ class AnswerFields(models.Model):
                     # недоступность, а непосильное выражение: в ручную проверку.
                     changed = self.auto_check != self.CHECK_UNKNOWN
                     self.auto_check = self.CHECK_UNKNOWN
-                    self.check_json = {UNAVAILABLE_KEY: count}
+                    self.check_json = {**getattr(error, 'slot_checks', {}),
+                                       UNAVAILABLE_KEY: count}
                     self.checked_at = timezone.now()
                     return changed
                 # Вычислитель временно недоступен: прежний вердикт и

@@ -703,8 +703,8 @@ def _persist_answers(assignment, post):
             known = {name: verdict for name, verdict in (obj.check_json or {}).items()
                      if not name.startswith('_')
                      and previous.get(name, '') == current.get(name, '')}
-        if changed:
-            # Счётчик сбоев сверки относился к прежнему ответу.
+        if changed or (obj.checked_at is not None and obj.check_is_stale(task)):
+            # Счётчик сбоев относился к прежнему ответу или эталону.
             obj.check_json = {name: verdict for name, verdict in (obj.check_json or {}).items()
                               if not name.startswith('_')}
         obj.run_check(reference, spec=spec, known=known)
@@ -780,13 +780,21 @@ def _refresh_stale_checks(rows, for_teacher=False):
             for sr in row['subrows']:
                 part = sr['part']
                 if part and part.display_answer and part.check_is_stale(task):
+                    if part.checked_at is not None:
+                        part.check_json = {}
                     part.run_check(sr['subitem'].effective_answer_latex,
                                    spec=sr['subitem'].mask_spec)
+                    if getattr(part, 'check_unavailable', False):
+                        part.auto_check, part.checked_at = '', None
                     part.save(update_fields=['auto_check', 'check_json', 'checked_at'])
                     sr['fragments'] = _mask_fragments(
                         sr['spec'], part, sr['prefix'], for_teacher)
         elif submission.display_answer and submission.check_is_stale(task):
+            if submission.checked_at is not None:
+                submission.check_json = {}
             submission.run_check(task.effective_answer_latex, spec=task.mask_spec)
+            if getattr(submission, 'check_unavailable', False):
+                submission.auto_check, submission.checked_at = '', None
             submission.save(update_fields=['auto_check', 'check_json', 'checked_at'])
             row['fragments'] = _mask_fragments(
                 row['spec'], submission, row['prefix'], for_teacher)
@@ -941,7 +949,7 @@ def check_task(request, pk, task_id):
 
         def _reveal(obj, prefix):
             """Раскрыть результат: итог по полю и по слотам маски."""
-            if not obj.auto_check:
+            if not obj.auto_check and '_unavailable' in (obj.check_json or {}):
                 # Сверка не состоялась (вычислитель временно недоступен):
                 # нечего раскрывать и не за что списывать попытку.
                 unavailable.append(prefix)

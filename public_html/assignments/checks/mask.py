@@ -521,11 +521,27 @@ def check_mask(spec, values, known=None):
     ``known`` — готовые результаты слотов, чьё значение не менялось: их не
     пересчитываем (формульные слоты стоят дочернего процесса)."""
     results = {}
+    unavailable = None
     for slot in spec.slots:
         if known and slot.name in known:
             results[slot.name] = known[slot.name]
             continue
-        results[slot.name] = check_slot(slot, values.get(slot.name, ''))
+        if unavailable is not None and slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION):
+            # После сбоя не ждём вычислитель заново для каждой формулы;
+            # продолжаем только дешёвые проверки остальных полей.
+            results[slot.name] = UNKNOWN
+            continue
+        try:
+            results[slot.name] = check_slot(slot, values.get(slot.name, ''))
+        except formulas.FormulaUnavailable as error:
+            results[slot.name] = UNKNOWN
+            # Собираем и остальные поля: сбой формулы не должен стирать
+            # вердикты числовых полей до или после неё.
+            if unavailable is None or isinstance(unavailable, formulas.FormulaBusy):
+                unavailable = error
+    if unavailable is not None:
+        unavailable.slot_checks = results
+        raise unavailable
     verdicts = list(results.values())
     if not any(verdicts):
         return '', results

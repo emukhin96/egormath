@@ -444,14 +444,21 @@ def save_answer(attempt_id, point_id, version, values):
         raise WorkError('Некорректный ответ.')
     from workaudit.services import answer_snapshot, record_revision
     snapshot_before = answer_snapshot(answer)
-    from assignments.checks.formulas import (UNAVAILABLE_KEY, FormulaUnavailable,
+    from assignments.checks.formulas import (UNAVAILABLE_KEY, UNAVAILABLE_LIMIT, FormulaUnavailable,
                                              unavailable_count)
+    previous_checks = answer.checks if answer.values == values else {}
     try:
-        auto, checks = check_mask(spec, values) if spec.is_valid else ('unknown', {})
+        if previous_checks.get(UNAVAILABLE_KEY, 0) >= UNAVAILABLE_LIMIT:
+            auto, checks = 'unknown', previous_checks
+        else:
+            auto, checks = check_mask(spec, values) if spec.is_valid else ('unknown', {})
     except FormulaUnavailable as error:
         # Вычислитель временно недоступен: ответ сохраняем без вердикта,
         # сверка повторится при открытии учеником своей работы.
-        auto, checks = '', {UNAVAILABLE_KEY: unavailable_count({}, error)}
+        count = unavailable_count(previous_checks, error)
+        auto, checks = '', {UNAVAILABLE_KEY: count}
+        if count >= UNAVAILABLE_LIMIT:
+            auto, checks = 'unknown', {**getattr(error, 'slot_checks', {}), UNAVAILABLE_KEY: count}
     else:
         # Пустые поля пригодной маски дают нулевой зачёт, а не ручную очередь.
         if spec.is_valid and (not auto or (auto == 'unknown' and 'unknown' not in checks.values())):
@@ -492,6 +499,7 @@ def recheck_unavailable(attempt):
             fields = {'checks': {UNAVAILABLE_KEY: count}}
             if count >= UNAVAILABLE_LIMIT:
                 fields['auto_check'] = 'unknown'
+                fields['checks'].update(getattr(error, 'slot_checks', {}))
             Answer.objects.filter(pk=answer.pk, version=answer.version).update(**fields)
         else:
             if not auto or (auto == 'unknown' and 'unknown' not in checks.values()):
