@@ -123,6 +123,14 @@ class LatexGenerationTests(TestCase):
         tex = task_to_tex(make_item(self.worksheet, task))
         self.assertNotIn('[', tex.replace('\\[', ''))
 
+    def test_answer_with_display_math_is_a_block_not_a_shortstack(self):
+        # \[…\] и окружения не набираются в LR-боксе \shortstack — сразу абзац
+        task = Task.objects.create(
+            text_latex='Уравнение', answer_latex=r'\[x=\frac{1}{2}\]')
+        tex = task_to_tex(make_item(self.worksheet, task))
+        self.assertIn(r'[{\egorMathAnswerBlock{\[x=\frac{1}{2}\]}}]', tex)
+        self.assertNotIn(r'\egorMathAnswer{\[', tex)
+
     def test_answer_with_brackets_is_protected(self):
         task = Task.objects.create(
             text_latex='Неравенство', answer_latex='$x \\in [1; 2]$')

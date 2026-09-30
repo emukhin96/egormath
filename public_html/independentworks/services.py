@@ -444,10 +444,17 @@ def save_answer(attempt_id, point_id, version, values):
         raise WorkError('Некорректный ответ.')
     from workaudit.services import answer_snapshot, record_revision
     snapshot_before = answer_snapshot(answer)
-    auto, checks = check_mask(spec, values) if spec.is_valid else ('unknown', {})
-    # Пустые поля пригодной маски дают нулевой зачёт, а не ручную очередь.
-    if spec.is_valid and (not auto or (auto == 'unknown' and 'unknown' not in checks.values())):
-        auto = 'wrong'
+    from assignments.checks.formulas import FormulaUnavailable
+    try:
+        auto, checks = check_mask(spec, values) if spec.is_valid else ('unknown', {})
+    except FormulaUnavailable:
+        # Вычислитель временно недоступен: ответ сохраняем без вердикта,
+        # сверка повторится при следующем показе (recheck_unavailable).
+        auto, checks = '', {}
+    else:
+        # Пустые поля пригодной маски дают нулевой зачёт, а не ручную очередь.
+        if spec.is_valid and (not auto or (auto == 'unknown' and 'unknown' not in checks.values())):
+            auto = 'wrong'
     editable(attempt)
     changed = Answer.objects.filter(pk=answer.pk, version=version).update(
         values=values, auto_check=auto, checks=checks, check_revealed=False,
@@ -458,6 +465,25 @@ def save_answer(attempt_id, point_id, version, values):
     record_revision(answer, snapshot_before)
     touch_attempt(attempt)
     return answer
+
+
+def recheck_unavailable(attempt):
+    """Досверить ответы, сохранённые без вердикта из-за недоступности вычислителя."""
+    from assignments.checks.formulas import FormulaUnavailable
+    for answer in attempt.answers.filter(auto_check='').select_related('point'):
+        if not any((v or '').strip() for v in (answer.values or {}).values()):
+            continue
+        spec = parse_mask(answer.point.snapshot['mask'])
+        if not spec.is_valid:
+            continue
+        try:
+            auto, checks = check_mask(spec, answer.values)
+        except FormulaUnavailable:
+            continue
+        if not auto or (auto == 'unknown' and 'unknown' not in checks.values()):
+            auto = 'wrong'
+        Answer.objects.filter(pk=answer.pk, version=answer.version).update(
+            auto_check=auto, checks=checks)
 
 
 @transaction.atomic

@@ -307,6 +307,20 @@ class MaskCheckTests(SimpleTestCase):
             self.assertIsNone(sets.parse_pairs(value), value[:80])
         self.assertEqual(len(sets.parse_pairs(';'.join(['(1;2)'] * 64))), 64)
 
+    def test_decimal_comma_inside_braces_with_semicolons(self):
+        # «;» уже разделяет элементы — запятая в \{-2,5; 1\} десятичная
+        s = slot(r'{{set: \{-2,5; 1\}}}')
+        for value in ('-2,5; 1', r'\{-2,5; 1\}', '{1; -2.5}'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        self.assertEqual(check_slot(s, '-2; 5; 1'), WRONG)
+        # Без «;» запятая по-прежнему разделяет элементы явного множества
+        self.assertEqual(check_slot(slot('{{set: 0; 1}}'), '{0,1}'), OK)
+
+    def test_interval_bound_allows_space_after_sign(self):
+        s = slot(r'{{range: (-\infty; 3]}}')
+        for value in (r'(- \infty; 3]', '(- ∞; 3]', r'(-\infty;3]'):
+            self.assertEqual(check_slot(s, value), OK, value)
+
     def test_set(self):
         s = slot('{{set: -3; 3}}')
         for value in ('3; -3', r'\{-3;3\}', r'x=\pm3', r'\pm 3', '-3, 3'):

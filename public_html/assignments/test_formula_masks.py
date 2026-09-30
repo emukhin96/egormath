@@ -79,29 +79,42 @@ class FormulaMaskTests(SimpleTestCase):
     def test_slow_input_is_bounded_and_timeout_does_not_poison_cache(self):
         reference, _ = formulas.parse_reference('a+17')
         formulas._checked.cache_clear()
+        formulas._failed_inputs.clear()
         with patch.object(formulas, 'WORKER_TIMEOUT', 0.001):
             started = time.monotonic()
-            self.assertEqual(formulas.check('17+a', reference), 'unknown')
+            # Таймаут — временная недоступность, а не вердикт
+            with self.assertRaises(formulas.FormulaUnavailable):
+                formulas.check('17+a', reference)
             self.assertLess(time.monotonic() - started, 1)
+        # Пауза после сбоя — только для этого ввода: тот же ввод не форкает
+        # процесс заново, другой ввод проверяется сразу.
         with patch.object(formulas.subprocess, 'run') as worker:
-            self.assertEqual(formulas.check('17+a', reference), 'unknown')
+            with self.assertRaises(formulas.FormulaUnavailable):
+                formulas.check('17+a', reference)
             worker.assert_not_called()
+        self.assertEqual(formulas.check('a+17', reference), 'ok')
         # После паузы временный сбой не подменяет правильный вердикт.
-        formulas._worker_retry_at = time.monotonic() - 1
+        formulas._failed_inputs.clear()
         self.assertEqual(formulas.check('17+a', reference), 'ok')
         started = time.monotonic()
-        self.assertIn(formulas.check('1/(a^97+a^13+3)', reference),
-                      ('unknown', 'wrong'))
+        try:
+            slow = formulas.check('1/(a^97+a^13+3)', reference)
+        except formulas.FormulaUnavailable:
+            slow = 'unavailable'
+        self.assertIn(slow, ('unknown', 'wrong', 'unavailable'))
         self.assertLess(time.monotonic() - started, formulas.WORKER_TIMEOUT + 1)
 
     def test_worker_failure_is_not_a_wrong_mathematical_answer(self):
         reference, _ = formulas.parse_reference('a+23')
         with patch.object(formulas, '_run_worker',
                           side_effect=subprocess.TimeoutExpired('worker', 3)):
-            self.assertEqual(formulas.check('a+23', reference), 'unknown')
+            # Сбой вычислителя — не «unknown», а недоступность: вердикт не сохраняется
+            with self.assertRaises(formulas.FormulaUnavailable):
+                formulas.check('a+23', reference)
             slot = self.slot('{{expression: a+24}}')
             self.assertEqual(slot.reference, 'a+24')
-            self.assertEqual(check_slot(slot, '24+a'), 'unknown')
+            with self.assertRaises(formulas.FormulaUnavailable):
+                check_slot(slot, '24+a')
             html = render_to_string('assignments/_mask.html', {
                 'fragments': render_fragments(parse_mask('{{expression: a+24}}'), 'busy'),
                 'editable': True})
@@ -112,7 +125,8 @@ class FormulaMaskTests(SimpleTestCase):
         with patch.object(formulas, '_run_worker', return_value={'unavailable': True}):
             slot = self.slot('{{expression: a+29 | positive: a}}')
             self.assertEqual(slot.reference, 'a+29')
-            self.assertEqual(check_slot(slot, '29+a'), 'unknown')
+            with self.assertRaises(formulas.FormulaUnavailable):
+                check_slot(slot, '29+a')
         with patch.object(formulas, '_run_worker', return_value={'error': 'ошибка эталона'}) as worker:
             self.assertFalse(parse_mask('{{expression: a+29 | positive: a}}',
                                         validate_references=True).is_valid)
@@ -150,12 +164,42 @@ class FormulaMaskTests(SimpleTestCase):
             with self.assertRaises(ValidationError):
                 clean_mask_text(invalid)
 
-    def test_busy_worker_does_not_queue_more_processes(self):
+    def test_busy_worker_waits_then_reports_unavailable(self):
         reference, _ = formulas.parse_reference('a+47')
-        with formulas._worker_lock, patch.object(formulas.subprocess, 'run') as worker:
-            self.assertEqual(formulas.check('47+a', reference), 'unknown')
-            worker.assert_not_called()
+        formulas._failed_inputs.clear()
+        # Все слоты заняты: ждём не дольше WORKER_WAIT и отказываем как
+        # временно недоступную проверку, не запуская новый процесс.
+        for _ in range(formulas.WORKER_PARALLEL):
+            self.assertTrue(formulas._worker_slots.acquire(blocking=False))
+        try:
+            with patch.object(formulas, 'WORKER_WAIT', 0.05), \
+                    patch.object(formulas.subprocess, 'run') as worker:
+                with self.assertRaises(formulas.FormulaUnavailable):
+                    formulas.check('47+a', reference)
+                worker.assert_not_called()
+        finally:
+            for _ in range(formulas.WORKER_PARALLEL):
+                formulas._worker_slots.release()
+        # Занятость не запоминается как сбой ввода: следующая проверка идёт
         self.assertEqual(formulas.check('47+a', reference), 'ok')
+
+    def test_unavailable_check_is_not_persisted_as_verdict(self):
+        from django.utils import timezone
+        from assignments.models import Submission
+        spec = parse_mask('{{expression: a+24}}')
+        name = spec.slots[0].name
+        submission = Submission(answer_json={name: '24+a'})
+        submission.auto_check, submission.check_json = 'ok', {name: 'ok'}
+        checked_at = timezone.now()
+        submission.checked_at = checked_at
+        formulas._checked.cache_clear()
+        with patch.object(formulas, '_run_worker',
+                          side_effect=subprocess.TimeoutExpired('worker', 3)):
+            self.assertFalse(submission.run_check(spec=spec))
+        self.assertEqual(submission.auto_check, 'ok')
+        self.assertEqual(submission.check_json, {name: 'ok'})
+        self.assertEqual(submission.checked_at, checked_at)
+        self.assertTrue(submission.check_unavailable)
 
     def test_parser_memory_failure_reaches_worker_as_temporary(self):
         from assignments.checks import expressions, formula_worker

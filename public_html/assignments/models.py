@@ -219,11 +219,20 @@ class AnswerFields(models.Model):
         from django.utils import timezone
 
         from .checks import check_mask
+        from .checks.formulas import FormulaUnavailable
+        # Флаг для вызывающего кода: сверка не состоялась по временной причине
+        self.check_unavailable = False
         # Старую оценку не пересчитываем, пока ученик не заполнил слоты.
         by_mask = (spec is not None and spec.is_valid
                    and (self.has_mask_values or not self.legacy_answer))
         if by_mask:
-            result, per_slot = check_mask(spec, self.answer_json or {})
+            try:
+                result, per_slot = check_mask(spec, self.answer_json or {})
+            except FormulaUnavailable:
+                # Вычислитель временно недоступен: прежний вердикт и
+                # checked_at не трогаем, проверка повторится как устаревшая.
+                self.check_unavailable = True
+                return False
         else:
             # Исторический свободный ответ сохраняет прежнюю оценку.
             return False

@@ -548,6 +548,7 @@ def group_point_rows(rows):
 
 
 def point_rows(attempt, teacher=False):
+    svc.recheck_unavailable(attempt)
     disclosure = svc.FLAGS if teacher else attempt.disclosure
     answers = {a.point_id: a for a in attempt.answers.all()}
     rows = []
@@ -644,6 +645,12 @@ def check_answer(request, pk, point_id):
     if not any(values.values()):
         return JsonResponse({'ok': True, 'message': 'Сначала введите ответ', 'checks': {}})
     answer = svc.save_answer(pk, point_id, version, values)
+    if not answer.auto_check:
+        # Сверка временно не состоялась: попытку не списываем
+        return JsonResponse({'ok': False, 'checks': {},
+                             'message': 'Проверка временно недоступна — попробуйте ещё раз через минуту',
+                             'version': answer.version, 'saved_at': answer.updated_at.isoformat()},
+                            status=503)
     with transaction.atomic():
         answer = Answer.objects.select_for_update().get(pk=answer.pk)
         answer.check_revealed = True

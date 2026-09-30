@@ -43,12 +43,38 @@ class FormulaSpec:
 
 WORKER_TIMEOUT = 3
 WORKER_RETRY_DELAY = 10
-_worker_retry_at = 0
-_worker_lock = threading.Lock()
+# Одновременно не больше WORKER_PARALLEL дочерних процессов на процесс
+# gunicorn; остальные ждут освобождения до WORKER_WAIT секунд.
+WORKER_PARALLEL = 2
+WORKER_WAIT = 5
+_worker_slots = threading.BoundedSemaphore(WORKER_PARALLEL)
+# Пауза после сбоя — по конкретному входу, а не для всех проверок процесса:
+# один медленный ввод не должен выключать автопроверку остальным.
+_failed_inputs = {}
+_failed_lock = threading.Lock()
+_FAILED_LIMIT = 256
 
 
 class FormulaUnavailable(ValueError):
     """Временная недоступность вычислений, а не ошибка эталона или ответа."""
+
+
+def _remember_failure(key):
+    with _failed_lock:
+        if len(_failed_inputs) >= _FAILED_LIMIT:
+            _failed_inputs.clear()
+        _failed_inputs[key] = time.monotonic() + WORKER_RETRY_DELAY
+
+
+def _recently_failed(key):
+    with _failed_lock:
+        until = _failed_inputs.get(key)
+        if until is None:
+            return False
+        if time.monotonic() >= until:
+            del _failed_inputs[key]
+            return False
+        return True
 
 
 def _run_worker(payload):
@@ -57,13 +83,15 @@ def _run_worker(payload):
     Gunicorn использует потоки, поэтому signal.alarm в HTTP-обработчике
     непригоден. Обмен только JSON, ввод не исполняется как Python.
     """
-    global _worker_retry_at
-    if time.monotonic() < _worker_retry_at or not _worker_lock.acquire(blocking=False):
+    key = json.dumps(payload, sort_keys=True)
+    if _recently_failed(key):
+        raise FormulaUnavailable('проверка этого выражения недавно не удалась; повторите позже')
+    if not _worker_slots.acquire(timeout=WORKER_WAIT):
         raise FormulaUnavailable('проверка временно занята')
     try:
         result = subprocess.run(
             [sys.executable, '-m', 'assignments.checks.formula_worker'],
-            input=json.dumps(payload), capture_output=True, text=True,
+            input=key, capture_output=True, text=True,
             cwd=Path(__file__).resolve().parents[2], timeout=WORKER_TIMEOUT,
             check=False)
         if result.returncode:
@@ -73,12 +101,12 @@ def _run_worker(payload):
             raise FormulaUnavailable('временная недоступность проверки')
         return response
     except (subprocess.TimeoutExpired, OSError, ValueError) as error:
-        # Короткая пауза после сбоя предотвращает повторные форки под
-        # нагрузкой. Математический вердикт UNKNOWN в кэш не записываем.
-        _worker_retry_at = time.monotonic() + WORKER_RETRY_DELAY
+        # Сбой запоминается только для этого входа: повторные форки того же
+        # выражения под нагрузкой не нужны, остальные проверки продолжаются.
+        _remember_failure(key)
         raise FormulaUnavailable('проверка временно недоступна') from error
     finally:
-        _worker_lock.release()
+        _worker_slots.release()
 
 
 @lru_cache(maxsize=256)
@@ -119,6 +147,8 @@ def _checked(value, reference):
     result = _run_worker({'payload': reference.payload,
                           'multiple': reference.multiple, 'mode': reference.mode,
                           'value': value})
+    if result.get('unavailable'):
+        raise FormulaUnavailable('временная недоступность проверки')
     status = result.get('status')
     if status not in (OK, WRONG):
         # Таймауты и неопределённые результаты не остаются в кэше.
@@ -127,11 +157,21 @@ def _checked(value, reference):
 
 
 def check(value, reference, multiple=False):
+    """OK/WRONG/UNKNOWN — математический вердикт.
+
+    Временная недоступность вычислителя (занят, таймаут, сбой процесса)
+    поднимается как FormulaUnavailable: это не вердикт, сохранять и
+    засчитывать его нельзя — проверку нужно повторить позже.
+    """
     if len(value) > MAX_EXPR_LEN:
         return UNKNOWN
     try:
         return _checked(value, reference)
-    except (subprocess.TimeoutExpired, OSError, ValueError):
+    except FormulaUnavailable:
+        raise
+    except (subprocess.TimeoutExpired, OSError) as error:
+        raise FormulaUnavailable('проверка временно недоступна') from error
+    except ValueError:
         return UNKNOWN
 
 

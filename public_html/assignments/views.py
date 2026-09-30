@@ -695,6 +695,11 @@ def _persist_answers(assignment, post):
         obj.run_check(reference, spec=spec)
         if obj.display_answer != before:
             obj.check_revealed = False
+            if getattr(obj, 'check_unavailable', False):
+                # Ответ изменился, а сверка временно не состоялась: старый
+                # вердикт не относится к новому ответу; checked_at=None
+                # помечает сверку устаревшей — она повторится позже.
+                obj.auto_check, obj.check_json, obj.checked_at = '', {}, None
         obj.save(update_fields=[*fields, 'auto_check', 'check_json', 'checked_at',
                                 'check_revealed', 'updated_at'])
         record_revision(obj, snapshot_before)
@@ -914,8 +919,15 @@ def check_task(request, pk, task_id):
         submission = (Submission.objects.select_for_update()
                       .prefetch_related('parts').get(pk=submission.pk))
 
+        unavailable = []
+
         def _reveal(obj, prefix):
             """Раскрыть результат: итог по полю и по слотам маски."""
+            if not obj.auto_check:
+                # Сверка не состоялась (вычислитель временно недоступен):
+                # нечего раскрывать и не за что списывать попытку.
+                unavailable.append(prefix)
+                return
             obj.check_revealed = True
             obj.save(update_fields=['check_revealed'])
             checks[prefix] = obj.auto_check
@@ -944,11 +956,14 @@ def check_task(request, pk, task_id):
             submission.check_attempts = number
             submission.save(update_fields=['check_attempts'])
             message = 'Проверено'
+        elif unavailable:
+            message = 'Проверка временно недоступна — попробуйте ещё раз через минуту'
         else:
             message = 'Сначала введите ответ'
 
     if _is_xhr(request):
-        return JsonResponse({'ok': True, 'message': message, 'checks': checks})
+        return JsonResponse({'ok': not (unavailable and not checks),
+                             'message': message, 'checks': checks})
     messages.info(request, message)
     number = _visible_task_number(assignment, item)
     return redirect(f"{reverse('assignment_detail', args=[pk])}#task-{number}")

@@ -183,19 +183,37 @@ def _collection_text(text):
             if i in explicit and stack and stack[-1][0] == '{' and not stack[-1][1]:
                 return None  # Множество внутри числителя/знаменателя — не число.
             is_set = char == '{' and (i in explicit or bool(_SET_START_RE.search(text[:i])))
-            stack.append((char, is_set))
+            # Если элементы уже разделены «;», запятая внутри — десятичная:
+            # \{-2,5; 1\} — это {-2,5; 1}, а не {-2; 5; 1}.
+            comma_separates = is_set and not _has_top_level_semicolon(text, i)
+            stack.append((char, is_set, comma_separates))
             if len(stack) > MAX_COLLECTION_DEPTH:
                 return None
         elif char in '})]':
             if not stack or (char == '}') != (stack[-1][0] == '{'):
                 return None
             stack.pop()
-        elif char == ',' and stack and stack[-1] == ('{', True):
+        elif char == ',' and stack and stack[-1][:2] == ('{', True) and stack[-1][2]:
             if text[max(0, i-1):i+2] != '{,}':
                 chars[i] = ';'
     if stack:
         return None
     return normalize(''.join(chars))
+
+
+def _has_top_level_semicolon(text, start):
+    """Есть ли «;» на верхнем уровне скобки, открытой в позиции start."""
+    depth = 0
+    for char in text[start:]:
+        if char in '{([':
+            depth += 1
+        elif char in '})]':
+            depth -= 1
+            if depth == 0:
+                return False
+        elif char == ';' and depth == 1:
+            return True
+    return False
 
 
 def _split_top(text, separator):
@@ -444,8 +462,10 @@ def _bound_value(text):
     text = normalize(text)
     if '=' in text:
         return None
-    if re.fullmatch(r'[+-]?(?:\\infty|inf|бесконечность|беск)', text, re.I):
-        return -INF if text.startswith('-') else INF
+    # «- \infty» с пробелом после знака — та же бесконечность
+    compact = re.sub(r'\s+', '', text)
+    if re.fullmatch(r'[+-]?(?:\\infty|inf|бесконечность|беск)', compact, re.I):
+        return -INF if compact.startswith('-') else INF
     return numeric_value(text)
 
 

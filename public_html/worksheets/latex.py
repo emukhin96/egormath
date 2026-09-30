@@ -141,7 +141,18 @@ WRAPPING_ANSWERS = r'''
   \else\usebox{\egorMathAnswerBox}\fi
   \endgroup
 }
+% Ответ с выносной формулой или окружением: \shortstack (LR-режим) его не
+% наберёт — сразу абзац на ширину рамки или ячейки, без двойного набора.
+\newcommand{\egorMathAnswerBlock}[1]{%
+  \begingroup
+  \setlength{\egorMathAnswerWidth}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}%
+  \parbox[t]{\egorMathAnswerWidth}{\raggedright\relpenalty=500\binoppenalty=700 #1}%
+  \endgroup
+}
 '''
+
+# Выносная математика и окружения не набираются в LR-боксе \shortstack.
+DISPLAY_ANSWER_RE = re.compile(r'\\\[|\$\$|\\begin\{|\\item\b')
 
 # Метки подпунктов как у \asbuk (без ё, й, ъ, ы, ь) — для сводного ответа
 CYRILLIC_LABELS = 'абвгдежзиклмнопрстуфхцчшщэюя'
@@ -180,6 +191,8 @@ def _join_labeled(parts, wrapper='stack'):
     if wrapper == 'flow':
         return ' \\mbox{}\\\\ '.join(parts)
     body = ' \\\\ '.join(parts)
+    if DISPLAY_ANSWER_RE.search(body):
+        return '\\egorMathAnswerBlock{%s}' % body
     return '\\egorMathAnswer{%s}' % body
 
 
