@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Локальный стенд со слепком прода: ночной дамп базы и media с VPS → MySQL на
-# Mac, отдельный worktree .worktrees/stage с веткой для просмотра. Прод не
+# Mac, отдельный worktree с веткой для просмотра. Дампы, media и worktree
+# лежат в STAGE_DATA вне репозитория: репозиторий синхронизируется Dropbox,
+# а в дампах — персональные данные учеников и хэши паролей. Прод не
 # меняется: с сервера только читаем (при --fresh запускаем backup.sh).
 # Подробности — docs/PIPELINE.md, «Локальный стенд со слепком прода».
 #
@@ -16,6 +18,7 @@
 #                                  # (стенд с прод-данными и DEBUG — только в доверенной сети)
 #
 # Переменные окружения (значения по умолчанию):
+#   STAGE_DATA=~/Library/Caches/egormath-stage   дампы, SECRET_KEY, worktree стенда (с media) — вне Dropbox
 #   STAGE_HOST=chemolymp-demo      SSH-хост из ~/.ssh/config
 #   STAGE_APP_DIR=/opt/egormath    каталог стека на сервере (данные в $APP_DIR/data)
 #   STAGE_DB=egormath_stage        локальная база; пересоздаётся при каждом запуске
@@ -42,8 +45,9 @@ SOCKET="${STAGE_SOCKET:-/tmp/mysql.sock}"
 MYSQL=(mysql "-u$DB_USER" "--socket=$SOCKET")
 [ -z "$DB_PASSWORD" ] || export MYSQL_PWD="$DB_PASSWORD"
 PORT="${STAGE_PORT:-8003}"
-STAGE_DIR="$ROOT/.worktrees/stage"
-DUMPS="$ROOT/.stage"
+STAGE_DATA="${STAGE_DATA:-$HOME/Library/Caches/egormath-stage}"
+STAGE_DIR="$STAGE_DATA/worktree"
+DUMPS="$STAGE_DATA/dumps"
 PYTHON="$ROOT/venv/bin/python"
 
 FRESH=0; MEDIA=1; RUN=0; LAN_MODE=0; BRANCH=""; S3=0
@@ -55,7 +59,7 @@ while [ $# -gt 0 ]; do
     --run) RUN=1 ;;
     --lan) LAN_MODE=1 ;;
     --branch) BRANCH="${2:?--branch <ветка>}"; shift ;;
-    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 0 ;;
     *) echo "Неизвестный аргумент: $1" >&2; exit 2 ;;
   esac
   shift
@@ -66,6 +70,20 @@ die() { echo "!! $*" >&2; exit 1; }
 command -v mysql >/dev/null || die "нет клиента mysql (brew install mysql)"
 [ -S "$SOCKET" ] || die "MySQL не запущен: нет сокета $SOCKET (brew services start mysql)"
 "${MYSQL[@]}" -e 'SELECT 1' >/dev/null 2>&1 || die "не подключиться как $DB_USER (STAGE_DB_USER / STAGE_DB_PASSWORD)"
+
+# Стенд первой версии скрипта жил внутри репозитория (.stage/, .worktrees/stage)
+# и уходил в Dropbox — переносим в STAGE_DATA.
+mkdir -p "$STAGE_DATA" "$DUMPS"
+if [ -d "$ROOT/.stage" ]; then
+  echo "==> перенос $ROOT/.stage → $DUMPS"
+  mv -n "$ROOT/.stage"/* "$DUMPS"/ 2>/dev/null || true
+  [ -s "$DUMPS/DJANGO_SECRET_KEY" ] && mv -f "$DUMPS/DJANGO_SECRET_KEY" "$STAGE_DATA/DJANGO_SECRET_KEY"
+  rmdir "$ROOT/.stage" 2>/dev/null || echo "!! в $ROOT/.stage что-то осталось — проверьте и удалите вручную"
+fi
+if [ -d "$ROOT/.worktrees/stage" ] && [ ! -d "$STAGE_DIR" ]; then
+  echo "==> перенос worktree $ROOT/.worktrees/stage → $STAGE_DIR"
+  git -C "$ROOT" worktree move "$ROOT/.worktrees/stage" "$STAGE_DIR"
+fi
 
 # 1. worktree со стендовой веткой
 if [ -z "$BRANCH" ]; then
@@ -84,6 +102,12 @@ grep -q "DB_ENGINE" "$STAGE_DIR/public_html/core/settings.py" \
   || die "ветка $BRANCH не знает DB_ENGINE (settings.py): нужна ветка с PR «Локальный стенд» или новее"
 # Секреты — только API-ключи из рабочей копии, по одному симлинку: DB_* и
 # DJANGO_ENV туда не попадают, база стенда задаётся переменными окружения.
+# Симлинк .secrets целиком (первая версия скрипта) заменяется настоящим
+# каталогом — иначе ссылки легли бы в .secrets рабочей копии.
+if [ -L "$STAGE_DIR/.secrets" ]; then
+  echo "==> .secrets стенда был симлинком на рабочую копию — заменяю каталогом"
+  rm "$STAGE_DIR/.secrets"
+fi
 if [ ! -d "$STAGE_DIR/.secrets" ]; then
   mkdir -p "$STAGE_DIR/.secrets"
   for name in LATEX_API_KEY LATEX_API_URL GEMINI_API_KEY GEMINI_API_BASE GEMINI_PROXY_SECRET; do
@@ -93,20 +117,19 @@ fi
 [ -e "$STAGE_DIR/tools/tailwindcss" ] || [ ! -e "$ROOT/tools/tailwindcss" ] \
   || ln -s "$ROOT/tools/tailwindcss" "$STAGE_DIR/tools/tailwindcss"
 # Свой SECRET_KEY стенда: dev-ключ по умолчанию лежит в репозитории, а в
-# базе — слепок прода. Генерируется один раз в .stage/ (в .gitignore),
-# читается settings.py из .secrets стенда как обычный секрет.
-mkdir -p "$DUMPS"
-if [ ! -s "$DUMPS/DJANGO_SECRET_KEY" ]; then
-  "$PYTHON" -c 'import secrets; print(secrets.token_urlsafe(50))' > "$DUMPS/DJANGO_SECRET_KEY"
-  chmod 600 "$DUMPS/DJANGO_SECRET_KEY"
+# базе — слепок прода. Генерируется один раз в STAGE_DATA, читается
+# settings.py из .secrets стенда как обычный секрет.
+if [ ! -s "$STAGE_DATA/DJANGO_SECRET_KEY" ]; then
+  "$PYTHON" -c 'import secrets; print(secrets.token_urlsafe(50))' > "$STAGE_DATA/DJANGO_SECRET_KEY"
+  chmod 600 "$STAGE_DATA/DJANGO_SECRET_KEY"
 fi
+[ -d "$STAGE_DIR/.secrets" ] && [ ! -L "$STAGE_DIR/.secrets" ] || die "$STAGE_DIR/.secrets должен быть настоящим каталогом"
 [ -e "$STAGE_DIR/.secrets/DJANGO_SECRET_KEY" ] \
-  || ln -s "$DUMPS/DJANGO_SECRET_KEY" "$STAGE_DIR/.secrets/DJANGO_SECRET_KEY"
+  || ln -s "$STAGE_DATA/DJANGO_SECRET_KEY" "$STAGE_DIR/.secrets/DJANGO_SECRET_KEY"
 
 # 2. дамп базы с сервера (или набор бэкапа из S3 — через rclone на сервере:
 #    ключи S3 есть только там, а нам нужно убедиться, что копия вне сервера
 #    действительно восстанавливается)
-mkdir -p "$DUMPS"
 if [ "$FRESH" = 1 ]; then
   echo "==> backup.sh на $HOST"
   ssh "$HOST" "$APP_DIR/deploy/vps/backup.sh" >/dev/null
@@ -130,7 +153,7 @@ if [ "$S3" = 1 ]; then
   for f in $WANT; do
     if [ -s "$DUMPS/$f" ]; then echo "==> уже скачан: $f"; continue; fi
     if ssh "$HOST" "mkdir -p $S3_TMP && rclone copyto $REMOTE/$f $S3_TMP/$f" 2>/dev/null; then
-      echo "==> $REMOTE/$f → .stage/"
+      echo "==> $REMOTE/$f → $DUMPS/"
       scp -q "$HOST:$S3_TMP/$f" "$DUMPS/$f"
     else
       case "$f" in
@@ -202,7 +225,9 @@ fi
 STAGE_ENV=(DB_ENGINE=mysql "DB_NAME=$DB" "DB_USER=$DB_USER" "DB_PASSWORD=$DB_PASSWORD" DB_HOST=localhost "DB_SOCKET=$SOCKET")
 # Строка для подсказки собирается отдельно: вместо пароля — имя переменной
 # (подстановка по образцу читала бы пароль как glob и могла его напечатать).
-STAGE_ENV_SHOWN="DB_ENGINE=mysql DB_NAME=$DB DB_USER=$DB_USER DB_PASSWORD=${DB_PASSWORD:+\$STAGE_DB_PASSWORD} DB_HOST=localhost DB_SOCKET=$SOCKET"
+# DB_PASSWORD — аргумент env, не присваивание: в кавычках, чтобы пароль с
+# пробелом или * не разбился на слова при копировании команды.
+STAGE_ENV_SHOWN="DB_ENGINE=mysql DB_NAME=$DB DB_USER=$DB_USER \"DB_PASSWORD=${DB_PASSWORD:+\$STAGE_DB_PASSWORD}\" DB_HOST=localhost DB_SOCKET=$SOCKET"
 echo "==> migrate"
 (cd "$STAGE_DIR/public_html" && env "${STAGE_ENV[@]}" "$PYTHON" manage.py migrate --no-input | tail -n 3)
 

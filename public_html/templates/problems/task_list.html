@@ -52,10 +52,14 @@
 <div class="task-meta"><span data-mask-links></span><form class="inline-form" method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn">дублировать</button></form></div>
 </td>
 <td><div class="import-section-path">{% for ref in task.source_refs.all %}<div>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}</div>{% for part in ref.source_path %}<div class="import-section-part">{{ part|heading_dot }}</div>{% endfor %}{% endfor %}</div>
+{# Класс и темы показаны текстом; контролы раскрываются по клику (task_catalog.js обновляет текст после правки) #}
+<details class="row-edit" data-row-edit>
+<summary class="row-edit-summary" title="Изменить класс и темы"><span data-row-edit-grade>{{ task.grade_display|default:'—' }}</span><span class="row-edit-sep">·</span><span data-row-edit-topics>{% for topic in task.topics.all %}{% if topic.code %}{{ topic.code }}{% else %}{{ topic.name|truncatechars:28 }}{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}без темы{% endfor %}</span><span class="row-edit-pen" aria-hidden="true">✎</span></summary>
 <form method="post" action="{% url 'task_quick_update' task.pk %}" data-autosave="change">{% csrf_token %}
 <label>Класс<select name="grade_level" class="quick-select">{% include 'includes/grade_options.html' with selected=task.grade_option %}</select></label>
 {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True chip_full=True selected_json=task.taxonomy_json %}
-</form></td><td class="col-cart">{% include 'includes/cart_button.html' with task=task %}</td></tr>{% endfor %}
+</form>
+</details></td><td class="col-cart">{% include 'includes/cart_button.html' with task=task %}</td></tr>{% endfor %}
 </tbody></table></div></div>
 
 {% include 'includes/pagination.html' with page=page query=params %}
@@ -69,5 +73,5 @@
 {% include 'problems/_mask_dialogs.html' %}
 <script defer src="{% static 'js/problem_editor.js' %}?v=2"></script>
 {% include 'problems/_mask_scripts.html' %}
-<script defer src="{% static 'js/task_catalog.js' %}?v=2"></script>
+<script defer src="{% static 'js/task_catalog.js' %}?v=5"></script>
 {% endblock %}

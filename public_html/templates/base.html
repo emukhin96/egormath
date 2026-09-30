@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=19">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=20">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
@@ -25,7 +25,7 @@
   <script defer src="{% static 'js/livefile.js' %}"></script>
   <script defer src="{% static 'js/shell.js' %}?v=3"></script>
   <script defer src="{% static 'js/dialogs.js' %}"></script>
-  <script defer src="{% static 'js/taxonomy.js' %}?v=2"></script>
+  <script defer src="{% static 'js/taxonomy.js' %}?v=3"></script>
   {# Как верхнее меню: суперпользователь без профиля тоже учитель (get_role). #}
   {% if user.profile.is_teacher or user.is_superuser %}
   <script>window.NEURO_SOLVE_URL = '{% url "task_neuro_solve" %}';</script>
