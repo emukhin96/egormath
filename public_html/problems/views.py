@@ -58,25 +58,42 @@ def filter_tasks(params):
     return tasks
 
 
-def _rubricator_blocks(topics_flat):
+def _rubricator_blocks(topics_flat, active_topic=None):
     """Разделы рубрикатора (корневые темы) с числом задач в поддереве.
 
     Поддеревья берутся из плоского списка topic_tree() (один запрос),
-    счётчик — по одному запросу на раздел; разделов несколько.
+    счётчик — по одному запросу на раздел; разделов несколько. У раздела,
+    в котором лежит выбранная тема, раскрываются подтемы первого уровня
+    (тоже со счётчиками), чтобы панель вела дальше по дереву.
     """
     blocks = []
     subtree_ids = []
+    children = []
     for topic in topics_flat:
         if topic.depth == 0:
             subtree_ids = [topic.pk]
+            children = []
             topic.subtree_ids = subtree_ids
+            topic.children_topics = children
+            topic.children_visible = []
             blocks.append(topic)
         else:
             subtree_ids.append(topic.pk)
+            if topic.depth == 1:
+                topic.subtree_ids = [topic.pk]
+                children.append(topic)
+            elif children:
+                children[-1].subtree_ids.append(topic.pk)
     # Та же база, что у каталога (filter_tasks): локальные копии задач не считаем.
     catalog = Task.objects.filter(variant_of__isnull=True)
     for block in blocks:
         block.task_total = catalog.filter(topics__in=block.subtree_ids).distinct().count()
+        block.is_current = active_topic == block.pk
+        if active_topic in block.subtree_ids:
+            for child in block.children_topics:
+                child.task_total = catalog.filter(topics__in=child.subtree_ids).distinct().count()
+                child.is_current = active_topic in child.subtree_ids
+            block.children_visible = block.children_topics
     return blocks
 
 
@@ -86,10 +103,12 @@ def task_list(request):
     paginator = Paginator(tasks, 25)
     page = paginator.get_page(request.GET.get('page'))
     topics_flat = topic_tree()
+    active_topic = request.GET.get('topic', '')
+    active_topic = int(active_topic) if active_topic.isdigit() else None
     ctx = taxonomy_page_context(filter_state_from_params(request.GET))
     ctx.update({
         'page': page,
-        'topics': _rubricator_blocks(topics_flat),
+        'topics': _rubricator_blocks(topics_flat, active_topic),
         'topics_flat': topics_flat,
         'sources': Source.objects.all(),
         'params': request.GET,

@@ -22,8 +22,6 @@
       {% include 'includes/audience_select.html' %}
     </div>
     {% endif %}
-    <div><button type="submit" class="btn">Найти</button></div>
-    <div><a class="filter-reset" href="{{ request.path }}{% if finder_anchor %}#{{ finder_anchor }}{% endif %}" data-finder-reset>Сбросить</a></div>
-    <span class="finder-status muted" data-finder-status aria-live="polite" hidden>Ищу…</span>
+    <div class="filter-actions"><button type="submit" class="btn">Найти</button><a class="filter-reset" href="{{ request.path }}{% if finder_anchor %}#{{ finder_anchor }}{% endif %}" data-finder-reset>Сбросить</a><span class="finder-status muted" data-finder-status aria-live="polite" hidden>Ищу…</span></div>
   </form>
 </div>

@@ -3,7 +3,14 @@
   <p class="sidebar-kicker">Рубрикатор</p>
   <ul class="sidebar-list">
     {% for topic in topics %}
-    <li{% if params.topic == topic.pk|stringformat:'s' %} class="is-current"{% endif %}><a href="?topic={{ topic.pk }}">{{ topic.name }}</a><span class="sidebar-count">{{ topic.task_total }}</span></li>
+    <li{% if topic.is_current %} class="is-current"{% endif %}><a href="?topic={{ topic.pk }}">{{ topic.name }}</a><span class="sidebar-count">{{ topic.task_total }}</span></li>
+    {% if topic.children_visible %}
+    <li class="sidebar-sublist-wrap"><ul class="sidebar-sublist">
+      {% for child in topic.children_visible %}
+      <li{% if child.is_current %} class="is-current"{% endif %}><a href="?topic={{ child.pk }}">{{ child.name }}</a><span class="sidebar-count">{{ child.task_total }}</span></li>
+      {% endfor %}
+    </ul></li>
+    {% endif %}
     {% empty %}
     <li>Темы ещё не добавлены</li>
     {% endfor %}

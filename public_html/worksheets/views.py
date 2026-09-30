@@ -774,6 +774,12 @@ def collection_detail(request, pk):
             len(row['label']) > 3
             for row in rows + [r for g in (flat_groups or [])
                                for r in g['rows']]),
+        # Ширина колонки номера — по самому длинному номеру страницы («26.149»):
+        # шаблон задаёт --task-num-col, чтобы номер не наползал на текст.
+        'number_width': max(
+            [len(row['label']) for row in rows + [r for g in (flat_groups or [])
+                               for r in g['rows']])]
+            or [2]),
         'page': page,
         'children': children,
         'flat_groups': flat_groups,

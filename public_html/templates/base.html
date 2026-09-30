@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=19">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=21">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
@@ -37,22 +37,23 @@
 <body class="{% if user.is_authenticated and not minimal_page %}app-body{% else %}minimal-body{% endif %} {% block body_class %}{% endblock %}">
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="{% url 'index' %}">Математика</a>
+    <a class="brand" href="{% url 'index' %}" title="Кабинет">Математика</a>
     {% if user.is_authenticated %}
       {# Пять пунктов: подразделы базы задач и заданий — в выпадающем меню у шеврона (shell.js); на узком экране все ссылки в одном ряду #}
       <nav class="topbar-nav" aria-label="Основные разделы">
-        <a href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} class="is-active"{% endif %}>{% if is_teacher %}Главная{% else %}Задания{% endif %}</a>
+        {# Учителю пункт «Главная» не нужен: в кабинет ведёт логотип #}
+        {% if not is_teacher %}<a href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} class="is-active"{% endif %}>Задания</a>{% endif %}
         {% if is_teacher %}
-          <div class="nav-group{% if 'task' in request.resolver_match.url_name or request.resolver_match.url_name == 'bulk_answers' or 'textbook_import' in request.resolver_match.url_name or 'collection' in request.resolver_match.url_name %} is-active{% endif %}">
+          <div class="nav-group{% if 'task' in request.resolver_match.url_name or request.resolver_match.url_name == 'bulk_answers' or 'textbook_import' in request.resolver_match.url_name %} is-active{% endif %}">
             <a href="{% url 'task_list' %}">База задач</a>
             <button type="button" class="nav-more" aria-expanded="false" aria-haspopup="true" aria-label="Разделы базы задач" data-nav-more>
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
             </button>
             <div class="nav-menu">
-              <a href="{% url 'collection_list' %}"{% if 'collection' in request.resolver_match.url_name %} class="is-active"{% endif %}>Подборки</a>
               <a href="{% url 'textbook_import_list' %}"{% if 'textbook_import' in request.resolver_match.url_name %} class="is-active"{% endif %}>Импорт задачников</a>
             </div>
           </div>
+          <a href="{% url 'collection_list' %}"{% if 'collection' in request.resolver_match.url_name %} class="is-active"{% endif %}>Подборки</a>
           <a href="{% url 'worksheet_list' %}"{% if 'worksheet' in request.resolver_match.url_name %} class="is-active"{% endif %}>Листки</a>
           {% if independentworks_enabled %}
           <div class="nav-group{% if request.resolver_match.namespace == 'independentworks' or request.GET.mode == 'independent' or request.GET.kind == 'independent' or 'assignment' in request.resolver_match.url_name or 'review' in request.resolver_match.url_name %} is-active{% endif %}">

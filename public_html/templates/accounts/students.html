@@ -59,8 +59,7 @@
         {% endfor %}
       </select>
     </div>
-    <div class="filter-actions"><button type="submit" class="btn">Применить</button></div>
-    {% if q or group_filter or teacher_filter %}<div><a class="filter-reset" href="{% url 'students' %}">Сбросить</a></div>{% endif %}
+    <div class="filter-actions"><button type="submit" class="btn">Применить</button>{% if q or group_filter or teacher_filter %}<a class="filter-reset" href="{% url 'students' %}">Сбросить</a>{% endif %}</div>
   </div>
 </form>
 

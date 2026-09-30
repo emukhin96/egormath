@@ -63,8 +63,7 @@
         <option value="-title" {% if order == '-title' %}selected{% endif %}>Название Я–А</option>
       </select>
     </div>
-    <div><button type="submit" class="btn">Применить</button></div>
-    <div><a class="filter-reset" href="{% url 'worksheet_list' %}">Сбросить</a></div>
+    <div class="filter-actions"><button type="submit" class="btn">Применить</button><a class="filter-reset" href="{% url 'worksheet_list' %}">Сбросить</a></div>
   </form>
 
 </div>
