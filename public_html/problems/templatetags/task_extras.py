@@ -1,6 +1,7 @@
 from django import template
 
-from problems.answer_material import answer_material as _answer_material
+from problems.answer_material import (answer_material as _answer_material,
+                                     solution_texts)
 from problems.task_images import images_for_group
 from problems.textbook_parser import (
     apply_imported_answer, cyrillic_item_label as _cyrillic_item_label,
@@ -22,6 +23,16 @@ def answer_material(task, subitems=None):
     """Рамка «Ответ / Решение»: строки с происхождением (задачник / AI)
     и расхождения между авторским и редакторским вариантами."""
     return _answer_material(task, subitems)
+
+
+@register.filter
+def complete_solutions(owner):
+    """Авторское указание и полное решение для редактора и проверки работ."""
+    texts = solution_texts(owner)
+    if len(texts) > 1:
+        # Источник в вебе подписывает шаблон; TeX-заголовок нужен только PDF.
+        texts[1] = texts[1].removeprefix(r'\textit{Полное решение от AI.} ')
+    return texts
 
 
 @register.filter

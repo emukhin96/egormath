@@ -10,6 +10,32 @@ from .tests import make_student, make_teacher
 
 
 class AuthorPriorityTests(TestCase):
+    def test_author_hint_is_followed_by_rendered_full_solution(self):
+        teacher = make_teacher()
+        self.client.force_login(teacher)
+        for subitem in (False, True):
+            with self.subTest(subitem=subitem):
+                task = Task.objects.create(created_by=teacher, text_latex='Докажите.')
+                owner = (task.subitems.create(order=1, text_latex='Пункт')
+                         if subitem else task)
+                owner.author_solution_latex = 'Указание. Проведите диагональ.'
+                owner.solution_latex = 'Полное доказательство: $x=1$.'
+                owner.save()
+                worksheet = Worksheet.objects.create(owner=teacher, title='Указание')
+                WorksheetItem.objects.create(worksheet=worksheet, task=task, order=1)
+                assignment = Assignment.objects.create(worksheet=worksheet,
+                    student=make_student(teacher, username='hint-student-' + str(subitem)),
+                    assigned_by=teacher)
+                editor = self.client.get(reverse('task_detail', args=[task.pk]))
+                self.assertContains(editor,
+                    '<div class="math-content">Указание. Проведите диагональ.</div>', html=True)
+                # Проверяем отрисованный текст, а не исходник в textarea формы.
+                self.assertContains(editor,
+                    '<div class="math-content">Полное доказательство: $x=1$.</div>', html=True)
+                review = self.client.get(reverse('review_assignment', args=[assignment.pk]))
+                self.assertContains(review, 'Указание. Проведите диагональ.')
+                self.assertContains(review, 'Полное доказательство: $x=1$.')
+
     def test_priority_and_blank_fallback_for_task_and_subitem(self):
         for model in (Task, TaskSubitem):
             for author in (' Авторское ', '', ' \n '):

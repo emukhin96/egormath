@@ -53,10 +53,10 @@
     {% if row.subrows %}{% for sr in row.subrows %}{% if sr.part %}<p>Подпункт {{ forloop.counter }}</p>{% include 'workaudit/revisions.html' with kind='part' object=sr.part %}{% endif %}{% endfor %}{% else %}{% include 'workaudit/revisions.html' with kind='submission' object=row.submission %}{% endif %}
     {% if row.has_solution %}
     <details class="review-solution"><summary>Ответ и решение</summary>
-      {% if row.task.effective_solution_latex %}<div class="solution-box math-content">{{ row.task.effective_solution_latex|web_text }}</div>{% endif %}
-      {% for sr in row.subrows %}{% if sr.subitem.effective_solution_latex %}
-      <div class="solution-box math-content"><strong>{{ forloop.counter0|subitem_label }})</strong> {{ sr.subitem.effective_solution_latex|web_text }}</div>
-      {% endif %}{% endfor %}
+      {% for text in row.task|complete_solutions %}<div class="solution-box math-content">{% if not forloop.first %}<p class="helptext">Полное решение от AI</p>{% endif %}{{ text|web_text|linebreaksbr }}</div>{% endfor %}
+      {% for sr in row.subrows %}{% with label=forloop.counter0|subitem_label %}{% for text in sr.subitem|complete_solutions %}
+      <div class="solution-box math-content">{% if forloop.first %}<strong>{{ label }})</strong> {% else %}<p class="helptext">Полное решение от AI</p>{% endif %}{{ text|web_text|linebreaksbr }}</div>
+      {% endfor %}{% endwith %}{% endfor %}
     </details>
     {% endif %}
     <p>{% include 'assignments/_grade_scale.html' %}</p>

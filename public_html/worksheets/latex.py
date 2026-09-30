@@ -144,15 +144,13 @@ def _join_labeled(parts, wrapper='stack'):
 
     Голый \\\\ в answers=table завершает строку таблицы пакета egor.
     Ответы короткие — \\shortstack по ширине содержимого.
-    Решения могут быть с абзацами и display-формулами — minipage.
+    Решения с абзацами и display-формулами должны переноситься по страницам.
     """
     if not parts:
         return ''
     needs_wrap = len(parts) > 1 or any('\\\\' in p for p in parts)
-    if wrapper == 'mini':
-        # Всегда minipage: после «Решение.» идёт перенос, блок на всю строку
-        body = ' \\mbox{}\\\\ '.join(parts)
-        return '\\begin{minipage}[t]{\\linewidth}%%\n%s%%\n\\end{minipage}' % body
+    if wrapper == 'flow':
+        return ' \\mbox{}\\\\ '.join(parts)
     body = ' \\\\ '.join(parts)
     if not needs_wrap:
         return parts[0]
@@ -183,12 +181,12 @@ def _combined_solution(task, subitems):
         for number, text in enumerate(texts):
             prefix = '%s)~' % subitem_label(index) if number == 0 else ''
             parts.append(prefix + _for_task_opt(text))
-    text = _join_labeled(parts, 'mini')
+    text = _join_labeled(parts, 'flow')
     if not text:
         return ''
-    # egor печатает «\textit{Решение}. #1» в одной строке — перенос, чтобы
-    # minipage не сдвигался на ширину слова
-    return '\\mbox{}\\\\ %s' % text
+    # Заголовок остаётся с первой строкой, а само решение может занимать
+    # несколько страниц: не запираем его целиком в minipage.
+    return '\\mbox{}\\\\* %s' % text
 
 
 # Ссылка на картинку в тексте задачи: \taskpic{N}, N — номер по порядку
@@ -428,6 +426,8 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
         ARRAY_BIDI_SHIM,
         BREAKABLE_PICTURES if has_images else '',
         KEEP_SHORT_ANSWER,
+        # Не оставляем первую или последнюю строку абзаца на другой странице.
+        r'\clubpenalty=10000\widowpenalty=10000',
         '',
         '\\begin{document}',
     ]
@@ -500,8 +500,9 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
         lines.append('\\end{enumerate}')
     if has_images:
         lines.append('')
-        # На A5 длинная общая строка делает чертежи и подписи нечитаемыми.
-        lines.append('\\picsperrow{3}')
+        # На A5 даже два составных чертежа в ряд уменьшают буквы до 3–4 pt.
+        # Выбор делаем в TeX, чтобы он учитывал изменение формата в редакторе.
+        lines.append(r'\ifdim\textwidth<160mm\picsperrow{1}\else\picsperrow{2}\fi')
         lines.append('\\flushpics')
     lines.append('')
     lines.append('\\end{document}')

@@ -116,9 +116,7 @@ class LatexGenerationTests(TestCase):
         self.assertIn('\\task{1}{2}{%', tex)
         self.assertIn('[{\\item $2+2$;}]', tex)
         self.assertIn('[{4}]', tex)
-        self.assertIn(
-            '[{\\mbox{}\\\\ \\begin{minipage}[t]{\\linewidth}%\n'
-            'Очевидно.%\n\\end{minipage}}]', tex)
+        self.assertIn('[{\\mbox{}\\\\* Очевидно.}]', tex)
 
     def test_task_to_tex_omits_trailing_args(self):
         task = Task.objects.create(text_latex='Просто задача')
@@ -212,18 +210,17 @@ class LatexGenerationTests(TestCase):
         item = make_item(self.worksheet, task)
         tex = task_to_tex(item)
         self.assertIn(
-            '\\mbox{}\\\\ \\begin{minipage}[t]{\\linewidth}%\n'
-            'а)~Складываем единицы \\mbox{}\\\\ б)~Складываем двойки%\n'
-            '\\end{minipage}', tex)
+            '\\mbox{}\\\\* а)~Складываем единицы '
+            '\\mbox{}\\\\ б)~Складываем двойки', tex)
         # Общее решение задачи идёт перед решениями подпунктов
         task.solution_latex = 'Общий план.\n\nСначала оценки.'
         task.save()
         tex = task_to_tex(item)
-        self.assertIn('\\begin{minipage}[t]{\\linewidth}', tex)
+        self.assertNotIn('\\begin{minipage}', tex)
         self.assertIn(
             'Общий план. \\mbox{}\\\\ Сначала оценки. \\mbox{}\\\\ '
             'а)~Складываем', tex)
-        self.assertIn('\\end{minipage}', tex)
+        self.assertNotIn('\\end{minipage}', tex)
 
     def test_array_bidi_shim(self):
         # Заглушка после \usepackage{egor}: иначе array в \plaintext
@@ -338,7 +335,8 @@ class LatexGenerationTests(TestCase):
         self.assertIn('\\taskpic{pic1.png}', tex)
         self.assertIn('\\taskpic{pic2.jpg}', tex)
         ws_tex = worksheet_to_tex(self.worksheet, 'student')
-        self.assertIn('\\picsperrow{3}', ws_tex)
+        self.assertIn(
+            r'\ifdim\textwidth<160mm\picsperrow{1}\else\picsperrow{2}\fi', ws_tex)
         self.assertIn('\\flushpics', ws_tex)
         self.assertLess(ws_tex.index('\\end{enumerate}'),
                         ws_tex.rindex('\\flushpics'))
@@ -427,7 +425,7 @@ class LatexGenerationTests(TestCase):
         self.assertIn('Чертеж:', tex)
         self.assertLess(
             tex.index(r'\taskpic{solution.png}'),
-            tex.index(r'[{\mbox{}\\ \begin{minipage}'))
+            tex.index(r'[{\mbox{}\\* '))
 
     def test_taskpic_ref_in_ai_answer_moves_to_task_body(self):
         task = Task.objects.create(
