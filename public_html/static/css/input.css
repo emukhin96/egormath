@@ -1071,7 +1071,8 @@
     font-size: 0.82rem;
   }
 
-  .sidebar-list li:has(> a):hover {
+  .sidebar-list li:has(> a):hover,
+  .sidebar-list li:has(> a):focus-within {
     background: #f2f6fc;
   }
 
@@ -1095,7 +1096,9 @@
     color: var(--muted);
   }
 
-  /* Ссылка на всю строку списка: кликабельна вся плашка, не только текст */
+  /* Ссылка на всю строку списка: кликабельна вся плашка, не только текст.
+     Ссылка растягивается на всю строку li (компенсирует его внутренний отступ). */
+  .sidebar-list li > a:only-child,
   .sidebar-list a.sidebar-row {
     display: block;
     margin: -5px calc(-1 * var(--space-2));
@@ -1103,12 +1106,29 @@
     border-radius: 6px;
   }
 
-  .sidebar-list a.sidebar-row span {
-    display: block;
+  .collection-sidebar-tree li > a:only-child,
+  .collection-sidebar-tree a.sidebar-row {
+    margin-left: calc(-1 * (var(--space-2) + var(--collection-depth, 0) * var(--space-3)));
+    padding-left: calc(var(--space-2) + var(--collection-depth, 0) * var(--space-3));
   }
 
-  .sidebar-list a.sidebar-row:hover {
-    background: #f2f6fc;
+  .sidebar-list a.sidebar-row > span:not(.sidebar-count) {
+    display: block;
+    color: var(--muted);
+  }
+
+  /* Строка со счётчиком: число строго в правой колонке, название переносится */
+  .sidebar-list a.sidebar-row-count {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-2);
+  }
+
+  .sidebar-list a.sidebar-row-count .sidebar-count {
+    float: none;
+    flex: none;
+    margin-left: 0;
   }
 
   /* Подтемы раскрытого раздела рубрикатора */
@@ -1128,6 +1148,11 @@
     margin-inline: calc(-1 * var(--space-2)) 0;
     border-radius: 6px;
     font-size: 0.8rem;
+  }
+
+  .sidebar-sublist li > a.sidebar-row {
+    margin: -4px calc(-1 * var(--space-2));
+    padding: 4px var(--space-2);
   }
 
   .sidebar-count {
@@ -1898,6 +1923,9 @@
   .task-catalog col.col-key { width: 5rem; }
   .task-catalog .catalog-table col.col-topics { width: 25%; }
   .catalog-table td { overflow-wrap: anywhere; vertical-align: top; }
+  /* Каталог: номер, чекбокс и «+» на базовой линии первой строки текста
+     (у формул KaTeX линия выше обычной, поэтому по верху не сходится) */
+  .task-catalog td { vertical-align: baseline; }
   .catalog-table .task-text { margin-bottom: var(--space-2); }
   .catalog-table .import-section-path { margin-bottom: var(--space-3); }
   .problem-columns label { display: block; }
@@ -1975,21 +2003,6 @@
     white-space: nowrap;
   }
 
-  /* Строка каталога: номер, чекбокс и «+» на первой строке текста задачи
-     (у текста line-height 1.55, у формул KaTeX линия выше обычной) */
-  .task-catalog td .task-id {
-    display: inline-block;
-    line-height: 1.55;
-  }
-
-  .task-catalog td.col-select input[type="checkbox"],
-  .task-catalog td:first-child input[type="checkbox"] {
-    margin-top: 5px;
-  }
-
-  .task-catalog td.col-cart .cart-btn {
-    margin-top: -2px;
-  }
 
   .task-id:hover {
     color: var(--accent-dark);
@@ -2112,16 +2125,25 @@
     font-size: 0.9rem;
   }
 
+  /* Маркер «а)» — своим псевдоэлементом фиксированной ширины: текст и
+     чекбоксы пунктов стоят на одной вертикали независимо от ширины буквы */
   ol.subitems {
     --subitem-marker: 1.35rem;
-    list-style: lower-alpha;
-    list-style: cyrillic-lower;
+    list-style: none;
+    counter-reset: subitem;
     margin: 4px 0 4px 26px;
     padding: 0;
   }
 
-  ol.subitems li {
+  ol.subitems > li {
     margin: 2px 0;
+  }
+
+  ol.subitems > li::before {
+    counter-increment: subitem;
+    content: counter(subitem, cyrillic-lower) ")";
+    display: inline-block;
+    min-width: var(--subitem-marker);
   }
 
   /* Стили текстовых элементов листка — веб-аналоги боксов egor.sty

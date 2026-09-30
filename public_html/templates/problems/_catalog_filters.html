@@ -2,6 +2,7 @@
 <div class="card filter-card">
   <form method="get" class="filters task-finder" id="task-filters" data-finder{% if finder_anchor %} data-finder-anchor="{{ finder_anchor }}"{% endif %}>
     {% if position %}<input type="hidden" name="tab" value="catalog">{% endif %}
+    {% if params.source %}<input type="hidden" name="source" value="{{ params.source }}">{% endif %}
     {% if preparation_query %}<input type="hidden" name="resume" value="{{ params.resume }}">{% if params.parent %}<input type="hidden" name="parent" value="{{ params.parent }}"><input type="hidden" name="kind" value="{{ params.kind }}">{% endif %}{% endif %}
     <div class="finder-search">
       <label for="f_q">Поиск</label>

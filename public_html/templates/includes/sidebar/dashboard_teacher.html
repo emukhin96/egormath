@@ -4,7 +4,7 @@
   {% if worksheets %}
   <ul class="sidebar-list">
     {% for worksheet in worksheets|slice:":6" %}
-    <li><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title|truncatechars:32 }}</a></li>
+    <li><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a></li>
     {% endfor %}
   </ul>
   {% else %}

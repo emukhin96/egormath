@@ -55,6 +55,10 @@ def filter_tasks(params):
     tag = params.get('tag')
     if tag:
         tasks = tasks.filter(tags__name=tag)
+    # Источник (задачник) — ссылки из панели каталога
+    source = (params.get('source') or '').strip()
+    if source.isdigit():
+        tasks = tasks.filter(source_refs__source_id=int(source)).distinct()
     return tasks
 
 
@@ -97,6 +101,34 @@ def _rubricator_blocks(topics_flat, active_topic=None):
     return blocks
 
 
+def _catalog_facets(params):
+    """Классы и источники для панели каталога — с числом задач и текущим выбором."""
+    catalog = Task.objects.filter(variant_of__isnull=True)
+    by_code = {
+        row['grade_bands__code']: row['n']
+        for row in catalog.values('grade_bands__code').annotate(n=Count('id', distinct=True))
+        if row['grade_bands__code']}
+    labels = dict(Task.GRADE_CHOICES)
+    current_grade, _ = parse_grade_choice(params.get('grade'))
+    grades = []
+    for level, code in sorted(GRADE_LEVEL_TO_CODE.items()):
+        if level == 11:
+            continue  # 10 и 11 — одна метка 10–11
+        count = by_code.get(code, 0)
+        if count:
+            grades.append({'value': level, 'label': labels.get(level, str(level)),
+                           'count': count, 'is_current': current_grade == level})
+    current_source = (params.get('source') or '').strip()
+    sources = [
+        {'pk': row['source_id'], 'title': row['source__title'], 'count': row['n'],
+         'is_current': current_source == str(row['source_id'])}
+        for row in (TaskSource.objects.filter(task__variant_of__isnull=True)
+                    .values('source_id', 'source__title')
+                    .annotate(n=Count('task_id', distinct=True))
+                    .order_by('-n', 'source__title')[:12])]
+    return grades, sources
+
+
 @teacher_required
 def task_list(request):
     tasks = filter_tasks(request.GET)
@@ -105,10 +137,13 @@ def task_list(request):
     topics_flat = topic_tree()
     active_topic = request.GET.get('topic', '')
     active_topic = int(active_topic) if active_topic.isdigit() else None
+    grade_facets, source_facets = _catalog_facets(request.GET)
     ctx = taxonomy_page_context(filter_state_from_params(request.GET))
     ctx.update({
         'page': page,
         'topics': _rubricator_blocks(topics_flat, active_topic),
+        'grade_facets': grade_facets,
+        'source_facets': source_facets,
         'topics_flat': topics_flat,
         'sources': Source.objects.all(),
         'params': request.GET,

@@ -1,13 +1,13 @@
-{# В панели только навигация по рубрикатору: фильтры и их сброс — в строке над таблицей, действия — в шапке страницы #}
+{# В панели только навигация: рубрикатор с подтемами выбранного раздела, классы и источники; фильтры — в строке над таблицей, действия — в шапке #}
 <section class="sidebar-section">
   <p class="sidebar-kicker">Рубрикатор</p>
   <ul class="sidebar-list">
     {% for topic in topics %}
-    <li{% if topic.is_current %} class="is-current"{% endif %}><a href="?topic={{ topic.pk }}">{{ topic.name }}</a><span class="sidebar-count">{{ topic.task_total }}</span></li>
+    <li{% if topic.is_current %} class="is-current"{% endif %}><a class="sidebar-row sidebar-row-count" href="?topic={{ topic.pk }}">{{ topic.name }}<span class="sidebar-count">{{ topic.task_total }}</span></a></li>
     {% if topic.children_visible %}
     <li class="sidebar-sublist-wrap"><ul class="sidebar-sublist">
       {% for child in topic.children_visible %}
-      <li{% if child.is_current %} class="is-current"{% endif %}><a href="?topic={{ child.pk }}">{{ child.name }}</a><span class="sidebar-count">{{ child.task_total }}</span></li>
+      <li{% if child.is_current %} class="is-current"{% endif %}><a class="sidebar-row sidebar-row-count" href="?topic={{ child.pk }}">{{ child.name }}<span class="sidebar-count">{{ child.task_total }}</span></a></li>
       {% endfor %}
     </ul></li>
     {% endif %}
@@ -16,3 +16,23 @@
     {% endfor %}
   </ul>
 </section>
+{% if grade_facets %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Классы</p>
+  <ul class="sidebar-list">
+    {% for facet in grade_facets %}
+    <li{% if facet.is_current %} class="is-current"{% endif %}><a class="sidebar-row sidebar-row-count" href="?grade={{ facet.value }}">{{ facet.label }} класс<span class="sidebar-count">{{ facet.count }}</span></a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% if source_facets %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Источники</p>
+  <ul class="sidebar-list">
+    {% for facet in source_facets %}
+    <li{% if facet.is_current %} class="is-current"{% endif %}><a class="sidebar-row sidebar-row-count" href="?source={{ facet.pk }}" title="{{ facet.title }}">{{ facet.title }}<span class="sidebar-count">{{ facet.count }}</span></a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}

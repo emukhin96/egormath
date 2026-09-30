@@ -1,7 +1,7 @@
 {% load task_extras %}
 <section class="sidebar-section">
   <p class="sidebar-kicker">Подборки</p>
-  <h2>{% if selected_source %}{{ selected_source.source.title|truncatechars:34 }}{% else %}Источники{% endif %}</h2>
+  <h2>{% if selected_source %}{{ selected_source.source.title }}{% else %}Источники{% endif %}</h2>
   {% if selected_source %}<div class="sidebar-actions"><a class="sidebar-action" href="{% url 'collection_list' %}">Все источники</a></div>{% endif %}
 </section>
 <section class="sidebar-section">
@@ -9,13 +9,13 @@
   <p class="sidebar-kicker">Структура источника</p>
   <ul class="sidebar-list collection-sidebar-tree">
     {% for row in selected_source.roots %}
-    <li style="--collection-depth: {{ row.depth }}"{% if current_collection.pk == row.collection.pk %} class="is-current"{% endif %}><a href="{% url 'collection_detail' row.collection.pk %}">{{ row.collection.catalog_title|truncatechars:32 }}</a></li>
+    <li style="--collection-depth: {{ row.depth }}"{% if current_collection.pk == row.collection.pk %} class="is-current"{% endif %}><a href="{% url 'collection_detail' row.collection.pk %}">{{ row.collection.catalog_title }}</a></li>
     {% endfor %}
   </ul>
   {% else %}
   <p class="sidebar-kicker">Доступные источники</p>
   <ul class="sidebar-list">
-    {% for group in collection_sources %}<li><a class="sidebar-row" href="?source={{ group.source.pk }}">{{ group.source.title|truncatechars:34 }}<span>{{ group.leaf_total }} {{ group.leaf_total|plural_ru:'подборка,подборки,подборок' }}</span></a></li>{% empty %}<li>Источники не добавлены</li>{% endfor %}
+    {% for group in collection_sources %}<li><a class="sidebar-row" href="?source={{ group.source.pk }}">{{ group.source.title }}<span>{{ group.leaf_total }} {{ group.leaf_total|plural_ru:'подборка,подборки,подборок' }}</span></a></li>{% empty %}<li>Источники не добавлены</li>{% endfor %}
   </ul>
   {% endif %}
 </section>
@@ -23,7 +23,7 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">На этой странице</p>
   <ul class="sidebar-list collection-sidebar-tree">
-    {% for group in flat_groups %}{% if group.depth == 1 %}<li style="--collection-depth: 0"><a href="#collection-{{ group.collection.pk }}" title="{{ group.collection.catalog_title }}">{{ group.collection.short_title|truncatechars:40 }}</a></li>{% endif %}{% endfor %}
+    {% for group in flat_groups %}{% if group.depth == 1 %}<li style="--collection-depth: 0"><a href="#collection-{{ group.collection.pk }}" title="{{ group.collection.catalog_title }}">{{ group.collection.short_title }}</a></li>{% endif %}{% endfor %}
   </ul>
 </section>
 {% endif %}
@@ -31,7 +31,7 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Параграфы</p>
   <ul class="sidebar-list collection-sidebar-tree">
-    {% for entry in section_nav %}<li style="--collection-depth: 0"{% if page.has_other_pages and entry.section.index in chunk.section_indexes %} class="is-current"{% endif %}><a href="?page={{ entry.page }}#section-{{ entry.section.index }}" class="math-content">{% if entry.section.title %}{{ entry.section.title|truncatechars:44 }}{% else %}Без параграфа{% endif %}</a>{% if entry.total %}<br><span>{% if entry.first != entry.last %}{{ entry.first }}–{{ entry.last }}{% else %}{{ entry.first }}{% endif %} · {{ entry.total }} {{ entry.total|plural_ru:'задача,задачи,задач' }}</span>{% endif %}</li>{% endfor %}
+    {% for entry in section_nav %}<li style="--collection-depth: 0"{% if page.has_other_pages and entry.section.index in chunk.section_indexes %} class="is-current"{% endif %}><a href="?page={{ entry.page }}#section-{{ entry.section.index }}" class="sidebar-row math-content">{% if entry.section.title %}{{ entry.section.title }}{% else %}Без параграфа{% endif %}{% if entry.total %}<span>{% if entry.first != entry.last %}{{ entry.first }}–{{ entry.last }}{% else %}{{ entry.first }}{% endif %} · {{ entry.total }} {{ entry.total|plural_ru:'задача,задачи,задач' }}</span>{% endif %}</a></li>{% endfor %}
   </ul>
 </section>
 {% endif %}

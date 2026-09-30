@@ -1078,13 +1078,14 @@ class CatalogViewTests(TestCase):
         response = self.client.get(reverse('task_list'))
         self.assertContains(
             response,
-            f'<li><a href="?topic={self.topic.pk}">Дроби</a><span class="sidebar-count">2</span></li>',
+            f'<li><a class="sidebar-row sidebar-row-count" href="?topic={self.topic.pk}">'
+            'Дроби<span class="sidebar-count">2</span></a></li>',
             html=True)
         current = self.client.get(reverse('task_list'), {'topic': self.topic.pk})
         self.assertContains(
             current,
-            f'<li class="is-current"><a href="?topic={self.topic.pk}">Дроби</a>'
-            '<span class="sidebar-count">2</span></li>',
+            f'<li class="is-current"><a class="sidebar-row sidebar-row-count" href="?topic={self.topic.pk}">'
+            'Дроби<span class="sidebar-count">2</span></a></li>',
             html=True)
 
     def test_catalog_pagination_uses_page_numbers(self):
