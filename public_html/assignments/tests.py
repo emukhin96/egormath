@@ -1248,6 +1248,32 @@ class AutoCheckFlowTests(TestCase):
             reverse('check_task', args=[self.assignment.pk, self.task.pk]),
             data, **extra)
 
+    def test_check_after_reference_change_with_unavailable_checker_reveals_nothing(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+29}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        self._save('29+a')
+        submission = Submission.objects.get(assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.auto_check, 'ok')
+        # Учитель поправил эталон — сверка устарела; ученик жмёт «Проверить»
+        # с тем же ответом, а вычислитель недоступен: прежний вердикт по
+        # старому эталону не раскрывается и попытка не списывается.
+        self.task.answer_mask = '{{expression: a+30}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        formulas._failed_inputs.clear()
+        with mock.patch.object(formulas, '_run_worker',
+                               side_effect=subprocess.TimeoutExpired('worker', 3)):
+            response = self._check('29+a')
+        self.assertFalse(response.json()['ok'])
+        self.assertIn('временно недоступна', response.json()['message'])
+        submission.refresh_from_db()
+        self.assertEqual(submission.auto_check, '')
+        self.assertIsNone(submission.checked_at)
+        self.assertFalse(submission.check_revealed)
+        self.assertFalse(SubmissionCheckAttempt.objects.exists())
+
     def test_check_stored_on_save_but_attempts_count_button_presses(self):
         self._save('x=2; x=0')
         submission = Submission.objects.get(

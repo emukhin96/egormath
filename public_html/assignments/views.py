@@ -710,13 +710,14 @@ def _persist_answers(assignment, post):
         obj.run_check(reference, spec=spec, known=known)
         if changed:
             obj.check_revealed = False
-            if getattr(obj, 'check_unavailable', False):
-                # Ответ изменился, а сверка временно не состоялась: старый
-                # вердикт не относится к новому ответу; checked_at=None
-                # помечает сверку устаревшей — она повторится позже.
-                obj.auto_check, obj.checked_at = '', None
-                obj.check_json = {name: count for name, count in obj.check_json.items()
-                                  if name.startswith('_')}
+        if getattr(obj, 'check_unavailable', False) and (changed or obj.check_is_stale(task)):
+            # Ответ изменился или эталон правили, а сверка временно не
+            # состоялась: старый вердикт не относится к новому ответу или
+            # эталону — «Проверить» не должно раскрыть его и списать попытку.
+            # checked_at=None помечает сверку устаревшей, она повторится позже.
+            obj.auto_check, obj.checked_at = '', None
+            obj.check_json = {name: count for name, count in obj.check_json.items()
+                              if name.startswith('_')}
         obj.save(update_fields=[*fields, 'auto_check', 'check_json', 'checked_at',
                                 'check_revealed', 'updated_at'])
         record_revision(obj, snapshot_before)
