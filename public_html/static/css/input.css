@@ -417,7 +417,9 @@
     border-radius: 6px;
   }
 
-  .nav-group > a {
+  /* Специфичность выше, чем у .topbar-nav a: иначе ссылка сохраняет полный
+     радиус и между ней и шевроном остаётся шов */
+  .topbar-nav .nav-group > a {
     padding-right: var(--space-1);
     border-radius: 6px 0 0 6px;
   }
@@ -435,7 +437,7 @@
     cursor: pointer;
   }
 
-  .nav-group:hover > a,
+  .topbar-nav .nav-group:hover > a,
   .nav-group:hover > .nav-more,
   .nav-group.is-active > .nav-more {
     background: #e4eef9;
