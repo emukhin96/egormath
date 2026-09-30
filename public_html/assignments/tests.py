@@ -565,6 +565,26 @@ class StudentAnswerTests(TestCase):
             assignment=self.assignment, task=task)
         self.assertEqual(submission.answer_json['s1'], 'x = 2')
 
+    def test_autosave_reuses_check_of_unchanged_formula_slot(self):
+        from assignments.checks import formulas
+        task = self.tasks[0]
+        task.answer_mask = '{{expression: a+27}}'
+        task.save()
+        formulas._checked.cache_clear()
+        url = reverse('save_answers', args=[self.assignment.pk])
+        self.client.post(url, {f'task{task.pk}_s1': '27+a'})
+        submission = Submission.objects.get(assignment=self.assignment, task=task)
+        self.assertEqual(submission.auto_check, 'ok')
+        # Форма приходит целиком при каждом автосохранении: слот с прежним
+        # значением не запускает дочерний процесс под блокировкой задания.
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker') as worker:
+            self.client.post(url, {f'task{task.pk}_s1': '27+a'})
+            worker.assert_not_called()
+        submission.refresh_from_db()
+        self.assertEqual(submission.auto_check, 'ok')
+        self.assertEqual(submission.check_json, {'s1': 'ok'})
+
         response = self.client.post(
             reverse('submit_assignment', args=[self.assignment.pk]))
         self.assignment.refresh_from_db()

@@ -197,9 +197,45 @@ class FormulaMaskTests(SimpleTestCase):
                           side_effect=subprocess.TimeoutExpired('worker', 3)):
             self.assertFalse(submission.run_check(spec=spec))
         self.assertEqual(submission.auto_check, 'ok')
-        self.assertEqual(submission.check_json, {name: 'ok'})
+        # Прежний вердикт цел, к нему добавлен только счётчик сбоев ввода
+        self.assertEqual(submission.check_json, {name: 'ok', formulas.UNAVAILABLE_KEY: 1})
         self.assertEqual(submission.checked_at, checked_at)
         self.assertTrue(submission.check_unavailable)
+
+    def test_repeated_failure_of_same_input_goes_to_manual_check(self):
+        from assignments.models import Submission
+        spec = parse_mask('{{expression: a+25}}')
+        name = spec.slots[0].name
+        submission = Submission(answer_json={name: '25+a'})
+        formulas._checked.cache_clear()
+        formulas._failed_inputs.clear()
+        # Занятость воркеров — не сбой ввода: счётчик не растёт
+        with patch.object(formulas, '_run_worker', side_effect=formulas.FormulaBusy('занято')):
+            self.assertFalse(submission.run_check(spec=spec))
+        self.assertTrue(submission.check_unavailable)
+        self.assertEqual(submission.check_json, {formulas.UNAVAILABLE_KEY: 0})
+        with patch.object(formulas, '_run_worker',
+                          side_effect=subprocess.TimeoutExpired('worker', 3)):
+            self.assertFalse(submission.run_check(spec=spec))
+            self.assertEqual(submission.check_json, {formulas.UNAVAILABLE_KEY: 1})
+            self.assertIsNone(submission.checked_at)
+            # Повторный сбой того же ввода — не временная недоступность:
+            # ответ уходит в ручную проверку и больше не пересверяется.
+            self.assertTrue(submission.run_check(spec=spec))
+        self.assertFalse(submission.check_unavailable)
+        self.assertEqual(submission.auto_check, 'unknown')
+        self.assertEqual(submission.check_json, {formulas.UNAVAILABLE_KEY: 2})
+        self.assertIsNotNone(submission.checked_at)
+
+    def test_check_mask_reuses_results_of_unchanged_slots(self):
+        from assignments.checks import check_mask
+        spec = parse_mask('{{expression: a+26}}; {{number: 3}}')
+        formulas._checked.cache_clear()
+        with patch.object(formulas, '_run_worker') as worker:
+            overall, per_slot = check_mask(spec, {'s1': '26+a', 's2': '3'},
+                                           known={'s1': 'wrong'})
+            worker.assert_not_called()
+        self.assertEqual((overall, per_slot), ('wrong', {'s1': 'wrong', 's2': 'ok'}))
 
     def test_parser_memory_failure_reaches_worker_as_temporary(self):
         from assignments.checks import expressions, formula_worker

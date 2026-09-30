@@ -44,6 +44,29 @@ class IndependentWorkTests(TestCase):
     def begin(self, **kwargs):
         return svc.start(self.issued(**kwargs).pk)
 
+    def test_unavailable_check_is_retried_limited_times_then_manual(self):
+        import subprocess
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+28}}'
+        self.task.save()
+        a = self.begin()
+        point = a.variant.points.get()
+        formulas._checked.cache_clear()
+        formulas._failed_inputs.clear()
+        with patch.object(formulas, '_run_worker',
+                          side_effect=subprocess.TimeoutExpired('worker', 3)):
+            answer = svc.save_answer(a.pk, point.pk, 0, {'s1': '28+a'})
+            self.assertEqual(answer.auto_check, '')
+            self.assertEqual(answer.checks, {formulas.UNAVAILABLE_KEY: 1})
+            svc.recheck_unavailable(a)
+        answer.refresh_from_db()
+        # Повторный сбой того же ввода — в ручную проверку, без вечных досверок
+        self.assertEqual(answer.auto_check, 'unknown')
+        self.assertEqual(answer.checks, {formulas.UNAVAILABLE_KEY: 2})
+        with patch.object(formulas, '_run_worker') as worker:
+            svc.recheck_unavailable(a)
+            worker.assert_not_called()
+
     def url(self, name, *args):
         return reverse('independentworks:' + name, args=args)
 

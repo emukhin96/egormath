@@ -143,6 +143,26 @@ class MaskCheckTests(SimpleTestCase):
             self.assertEqual(check_slot(zero, value), WRONG, value)
         self.assertEqual(check_slot(zero, '0:2'), OK)
 
+    def test_proportion_checker_unavailability_is_not_a_verdict(self):
+        from unittest.mock import patch
+        from .checks import formulas
+        from .checks import formats
+        # Пограничная арифметика уходит в воркер; его недоступность — не
+        # unknown, а исключение наверх: вердикт не сохраняется, сверка повторится.
+        with patch.object(formulas, 'check',
+                          side_effect=formulas.FormulaUnavailable('занято')):
+            with self.assertRaises(formulas.FormulaUnavailable):
+                formats.check_proportion_exact('2:1', '2:1')
+        with patch.object(formulas, 'check', side_effect=ValueError('эталон')):
+            self.assertEqual(formats.check_proportion_exact('2:1', '2:1'), UNKNOWN)
+        # То же через слот: сумма с разницей порядков идёт в точную проверку
+        s = slot('{{proportion: 2:1}}')
+        with patch.object(formulas, 'check',
+                          side_effect=formulas.FormulaUnavailable('занято')) as worker:
+            with self.assertRaises(formulas.FormulaUnavailable):
+                check_slot(s, r'(\sqrt2+10^{-60}):1')
+            worker.assert_called()
+
     def test_proportion_small_scales_and_irrational_cancellation(self):
         tiny = slot('{{proportion: 1:10^{20}}}')
         self.assertEqual(check_slot(tiny, r'\sqrt{2}:10^{20}'), WRONG)

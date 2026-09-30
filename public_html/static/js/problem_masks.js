@@ -161,7 +161,7 @@
       });
       var result=await api.request(config.previewUrl,data);
       if(window.EgorCheckBadge)window.EgorCheckBadge.apply(f,result.checks||{});
-      f.querySelector('[data-trial-result]').textContent=({ok:'Верно',wrong:'Неверно',unknown:'Не все поля заполнены или ответ не разобран'})[result.overall]||'Введите пробный ответ';
+      f.querySelector('[data-trial-result]').textContent=result.unavailable?result.message:(({ok:'Верно',wrong:'Неверно',unknown:'Не все поля заполнены или ответ не разобран'})[result.overall]||'Введите пробный ответ');
     }catch(error){f.querySelector('[data-trial-result]').textContent=error.message;}
   });
   var toggle=document.getElementById('toggle-masks');

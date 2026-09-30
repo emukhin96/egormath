@@ -682,24 +682,41 @@ def _persist_answers(assignment, post):
     hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     existing = {s.task_id: s for s in assignment.submissions.all()}
 
-    def _apply(obj, fields, reference, spec):
+    def _apply(obj, task, fields, reference, spec):
         from workaudit.services import answer_snapshot, record_revision
         snapshot_before = answer_snapshot(obj)
         before = obj.display_answer
+        previous = dict(obj.answer_json or {})
         for name, value in fields.items():
             if name == 'answer_json':
                 merged = dict(obj.answer_json or {})
                 merged.update(value)
                 value = merged
             setattr(obj, name, value)
-        obj.run_check(reference, spec=spec)
-        if obj.display_answer != before:
+        current = obj.answer_json or {}
+        changed = obj.display_answer != before
+        # Автосохранение шлёт всю форму: слоты с прежним значением и свежей
+        # сверкой не пересчитываем — формульный слот стоит дочернего процесса,
+        # а всё это идёт под блокировкой задания.
+        known = {}
+        if obj.checked_at is not None and not obj.check_is_stale(task):
+            known = {name: verdict for name, verdict in (obj.check_json or {}).items()
+                     if not name.startswith('_')
+                     and previous.get(name, '') == current.get(name, '')}
+        if changed:
+            # Счётчик сбоев сверки относился к прежнему ответу.
+            obj.check_json = {name: verdict for name, verdict in (obj.check_json or {}).items()
+                              if not name.startswith('_')}
+        obj.run_check(reference, spec=spec, known=known)
+        if changed:
             obj.check_revealed = False
             if getattr(obj, 'check_unavailable', False):
                 # Ответ изменился, а сверка временно не состоялась: старый
                 # вердикт не относится к новому ответу; checked_at=None
                 # помечает сверку устаревшей — она повторится позже.
-                obj.auto_check, obj.check_json, obj.checked_at = '', {}, None
+                obj.auto_check, obj.checked_at = '', None
+                obj.check_json = {name: count for name, count in obj.check_json.items()
+                                  if name.startswith('_')}
         obj.save(update_fields=[*fields, 'auto_check', 'check_json', 'checked_at',
                                 'check_revealed', 'updated_at'])
         record_revision(obj, snapshot_before)
@@ -736,7 +753,7 @@ def _persist_answers(assignment, post):
             for subitem, (fields, spec) in part_fields.items():
                 part, _ = SubmissionPart.objects.get_or_create(
                     submission=submission, subitem=subitem)
-                _apply(part, fields, subitem.effective_answer_latex, spec)
+                _apply(part, task, fields, subitem.effective_answer_latex, spec)
             continue
         fields, spec = _answer_payload(task, post, prefix)
         if not fields:
@@ -747,7 +764,7 @@ def _persist_answers(assignment, post):
                 submission, _ = Submission.objects.get_or_create(
                     assignment=assignment, task=task)
                 existing[task.pk] = submission
-            _apply(submission, fields, task.effective_answer_latex, spec)
+            _apply(submission, task, fields, task.effective_answer_latex, spec)
 
 
 def _refresh_stale_checks(rows, for_teacher=False):

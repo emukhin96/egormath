@@ -444,13 +444,14 @@ def save_answer(attempt_id, point_id, version, values):
         raise WorkError('Некорректный ответ.')
     from workaudit.services import answer_snapshot, record_revision
     snapshot_before = answer_snapshot(answer)
-    from assignments.checks.formulas import FormulaUnavailable
+    from assignments.checks.formulas import (UNAVAILABLE_KEY, FormulaUnavailable,
+                                             unavailable_count)
     try:
         auto, checks = check_mask(spec, values) if spec.is_valid else ('unknown', {})
-    except FormulaUnavailable:
+    except FormulaUnavailable as error:
         # Вычислитель временно недоступен: ответ сохраняем без вердикта,
         # сверка повторится при следующем показе (recheck_unavailable).
-        auto, checks = '', {}
+        auto, checks = '', {UNAVAILABLE_KEY: unavailable_count({}, error)}
     else:
         # Пустые поля пригодной маски дают нулевой зачёт, а не ручную очередь.
         if spec.is_valid and (not auto or (auto == 'unknown' and 'unknown' not in checks.values())):
@@ -468,8 +469,14 @@ def save_answer(attempt_id, point_id, version, values):
 
 
 def recheck_unavailable(attempt):
-    """Досверить ответы, сохранённые без вердикта из-за недоступности вычислителя."""
-    from assignments.checks.formulas import FormulaUnavailable
+    """Досверить ответы, сохранённые без вердикта из-за недоступности вычислителя.
+
+    Повторов не больше UNAVAILABLE_LIMIT на один ввод: после этого ответ
+    уходит в ручную проверку как unknown, а не перепроверяется при каждом
+    показе.
+    """
+    from assignments.checks.formulas import (UNAVAILABLE_KEY, UNAVAILABLE_LIMIT,
+                                             FormulaUnavailable, unavailable_count)
     for answer in attempt.answers.filter(auto_check='').select_related('point'):
         if not any((v or '').strip() for v in (answer.values or {}).values()):
             continue
@@ -478,7 +485,12 @@ def recheck_unavailable(attempt):
             continue
         try:
             auto, checks = check_mask(spec, answer.values)
-        except FormulaUnavailable:
+        except FormulaUnavailable as error:
+            count = unavailable_count(answer.checks, error)
+            fields = {'checks': {UNAVAILABLE_KEY: count}}
+            if count >= UNAVAILABLE_LIMIT:
+                fields['auto_check'] = 'unknown'
+            Answer.objects.filter(pk=answer.pk, version=answer.version).update(**fields)
             continue
         if not auto or (auto == 'unknown' and 'unknown' not in checks.values()):
             auto = 'wrong'

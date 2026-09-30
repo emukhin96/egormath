@@ -661,7 +661,8 @@ def check_answer(request, pk, point_id):
             answer=answer, number=latest + 1, result=answer.auto_check,
             snapshot={'values': answer.values, 'checks': answer.checks})
     checks = {f'p{point.pk}': answer.auto_check}
-    checks.update({f'p{point.pk}_{name}': status for name, status in answer.checks.items()})
+    checks.update({f'p{point.pk}_{name}': status for name, status in answer.checks.items()
+                   if not name.startswith('_')})
     return JsonResponse({'ok': True, 'message': 'Проверено', 'checks': checks,
                          'version': answer.version, 'saved_at': answer.updated_at.isoformat()})
 

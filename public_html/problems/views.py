@@ -487,11 +487,17 @@ def task_mask_preview(request):
     if not spec.slots:
         payload['html'] = ''
         return JsonResponse(payload)
+    from assignments.checks.formulas import FormulaUnavailable
     values = collect_values(request.POST, prefix, spec)
     checks = {}
     if values:
-        overall, checks = check_mask(spec, values)
-        payload['overall'] = overall
+        try:
+            overall, checks = check_mask(spec, values)
+        except FormulaUnavailable:
+            payload['unavailable'] = True
+            payload['message'] = 'Проверка временно недоступна — попробуйте ещё раз через минуту'
+        else:
+            payload['overall'] = overall
         payload['checks'] = {f'{prefix}_{k}': v for k, v in checks.items()}
     payload['html'] = render_to_string('assignments/_mask.html', {
         'fragments': render_fragments(spec, prefix, values, checks, seed=prefix),

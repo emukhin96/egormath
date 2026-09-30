@@ -140,6 +140,21 @@ class MaskEndpointTests(TestCase):
                          {'preview_s1': 'ok', 'preview_s2': 'wrong'})
         self.assertIn('value="10,0"', data['html'])
 
+    def test_preview_reports_temporarily_unavailable_checker(self):
+        from unittest.mock import patch
+        from assignments.checks import formulas
+        with patch.object(formulas, 'check',
+                          side_effect=formulas.FormulaUnavailable('занято')):
+            response = self.client.post(reverse('task_mask_preview'), {
+                'mask': '{{number: 10}} и {{simplify: \\frac{2}{a+3}}}',
+                'preview_s1': '10', 'preview_s2': '4/(2a+6)'})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['unavailable'])
+        self.assertIn('временно недоступна', data['message'])
+        self.assertNotIn('overall', data)
+        self.assertIn('name="preview_s2"', data['html'])
+
     def test_preview_requires_teacher(self):
         self.client.logout()
         response = self.client.post(reverse('task_mask_preview'), {'mask': 'x'})

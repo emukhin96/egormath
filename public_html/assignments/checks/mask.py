@@ -514,12 +514,17 @@ def check_slot(slot, value):
     return UNKNOWN
 
 
-def check_mask(spec, values):
+def check_mask(spec, values, known=None):
     """Все слоты → (итог по задаче, {имя слота: результат}).
     Итог: ``ok`` — все слоты верны; ``wrong`` — хоть один неверен;
-    ``unknown`` — что-то не разобрано или не заполнено; '' — пусто."""
+    ``unknown`` — что-то не разобрано или не заполнено; '' — пусто.
+    ``known`` — готовые результаты слотов, чьё значение не менялось: их не
+    пересчитываем (формульные слоты стоят дочернего процесса)."""
     results = {}
     for slot in spec.slots:
+        if known and slot.name in known:
+            results[slot.name] = known[slot.name]
+            continue
         results[slot.name] = check_slot(slot, values.get(slot.name, ''))
     verdicts = list(results.values())
     if not any(verdicts):

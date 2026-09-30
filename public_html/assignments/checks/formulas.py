@@ -59,6 +59,24 @@ class FormulaUnavailable(ValueError):
     """Временная недоступность вычислений, а не ошибка эталона или ответа."""
 
 
+class FormulaBusy(FormulaUnavailable):
+    """Все слоты воркеров заняты: ввод ни при чём, повтор не считается сбоем."""
+
+
+# Сколько раз один и тот же ввод может «временно» не сверяться, прежде чем
+# он уйдёт в ручную проверку как unknown: детерминированно тяжёлое выражение
+# иначе перепроверялось бы при каждом показе бесконечно.
+UNAVAILABLE_LIMIT = 2
+# Ключ счётчика сбоев в словаре результатов по слотам (имена слотов — s1, s2…).
+UNAVAILABLE_KEY = '_unavailable'
+
+
+def unavailable_count(checks, error):
+    """Новое значение счётчика сбоев после ``error`` для словаря ``checks``."""
+    count = (checks or {}).get(UNAVAILABLE_KEY, 0)
+    return count if isinstance(error, FormulaBusy) else count + 1
+
+
 def _remember_failure(key):
     with _failed_lock:
         if len(_failed_inputs) >= _FAILED_LIMIT:
@@ -87,7 +105,7 @@ def _run_worker(payload):
     if _recently_failed(key):
         raise FormulaUnavailable('проверка этого выражения недавно не удалась; повторите позже')
     if not _worker_slots.acquire(timeout=WORKER_WAIT):
-        raise FormulaUnavailable('проверка временно занята')
+        raise FormulaBusy('проверка временно занята')
     try:
         result = subprocess.run(
             [sys.executable, '-m', 'assignments.checks.formula_worker'],

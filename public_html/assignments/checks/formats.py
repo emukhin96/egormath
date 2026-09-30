@@ -77,7 +77,10 @@ def check_proportion_exact(value, reference):
         reverse_text = quotient(parts[::-1]) + '+0/(' + parts[1] + ')'
         reverse = formulas.check(reverse_text, spec)
         return OK if reverse == OK else UNKNOWN if UNKNOWN in (direct, reverse) else WRONG
-    except (ValueError, formulas.FormulaUnavailable):
+    except formulas.FormulaUnavailable:
+        # Недоступность вычислителя — не вердикт: наверх, сверка повторится.
+        raise
+    except ValueError:
         return UNKNOWN
 
 
