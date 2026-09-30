@@ -14,7 +14,9 @@
 #   STAGE_HOST=chemolymp-demo      SSH-хост из ~/.ssh/config
 #   STAGE_APP_DIR=/opt/egormath    каталог стека на сервере (данные в $APP_DIR/data)
 #   STAGE_DB=egormath_stage        локальная база; пересоздаётся при каждом запуске
-#   STAGE_MYSQL="mysql -uroot"     клиент для заливки дампа
+#   STAGE_DB_USER=root             пользователь MySQL для заливки дампа и для Django
+#   STAGE_DB_PASSWORD=             его пароль (пусто — без пароля, как у Homebrew root)
+#   STAGE_MYSQL="mysql -uroot"     клиент для заливки дампа (по умолчанию из STAGE_DB_USER/PASSWORD)
 #   STAGE_SOCKET=/tmp/mysql.sock   сокет локального MySQL (Homebrew)
 #   STAGE_PORT=8003                порт runserver
 set -euo pipefail
@@ -23,7 +25,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOST="${STAGE_HOST:-chemolymp-demo}"
 APP_DIR="${STAGE_APP_DIR:-/opt/egormath}"
 DB="${STAGE_DB:-egormath_stage}"
-MYSQL="${STAGE_MYSQL:-mysql -uroot}"
+DB_USER="${STAGE_DB_USER:-root}"
+DB_PASSWORD="${STAGE_DB_PASSWORD:-}"
+MYSQL="${STAGE_MYSQL:-mysql -u$DB_USER${DB_PASSWORD:+ -p$DB_PASSWORD}}"
 SOCKET="${STAGE_SOCKET:-/tmp/mysql.sock}"
 PORT="${STAGE_PORT:-8003}"
 STAGE_DIR="$ROOT/.worktrees/stage"
@@ -47,7 +51,7 @@ die() { echo "!! $*" >&2; exit 1; }
 [ -x "$PYTHON" ] || die "нет $PYTHON — создайте venv (README, «Локальный запуск»)"
 command -v mysql >/dev/null || die "нет клиента mysql (brew install mysql)"
 [ -S "$SOCKET" ] || die "MySQL не запущен: нет сокета $SOCKET (brew services start mysql)"
-$MYSQL -e 'SELECT 1' >/dev/null 2>&1 || die "не подключиться: $MYSQL (STAGE_MYSQL=\"mysql -uroot -p…\")"
+$MYSQL -e 'SELECT 1' >/dev/null 2>&1 || die "не подключиться как $DB_USER (STAGE_DB_USER / STAGE_DB_PASSWORD)"
 
 # 1. worktree со стендовой веткой
 if [ -z "$BRANCH" ]; then
@@ -64,8 +68,14 @@ else
 fi
 grep -q "DB_ENGINE" "$STAGE_DIR/public_html/core/settings.py" \
   || die "ветка $BRANCH не знает DB_ENGINE (settings.py): нужна ветка с PR «Локальный стенд» или новее"
-# Секреты (LATEX_API_KEY, GEMINI_*) — те же, что у рабочей копии.
-[ -e "$STAGE_DIR/.secrets" ] || ln -s "$ROOT/.secrets" "$STAGE_DIR/.secrets"
+# Секреты — только API-ключи из рабочей копии, по одному симлинку: DB_* и
+# DJANGO_ENV туда не попадают, база стенда задаётся переменными окружения.
+if [ ! -d "$STAGE_DIR/.secrets" ]; then
+  mkdir -p "$STAGE_DIR/.secrets"
+  for name in LATEX_API_KEY LATEX_API_URL GEMINI_API_KEY GEMINI_API_BASE GEMINI_PROXY_SECRET; do
+    [ -e "$ROOT/.secrets/$name" ] && ln -s "$ROOT/.secrets/$name" "$STAGE_DIR/.secrets/$name"
+  done
+fi
 [ -e "$STAGE_DIR/tools/tailwindcss" ] || [ ! -e "$ROOT/tools/tailwindcss" ] \
   || ln -s "$ROOT/tools/tailwindcss" "$STAGE_DIR/tools/tailwindcss"
 
@@ -104,7 +114,9 @@ if [ "$MEDIA" = 1 ]; then
 fi
 
 # 5. миграции ветки поверх дампа
-STAGE_ENV=(DB_ENGINE=mysql "DB_NAME=$DB" DB_USER=root DB_HOST=localhost "DB_SOCKET=$SOCKET")
+# DB_PASSWORD передаётся всегда, даже пустым: в .secrets стенда DB_* нет,
+# поэтому пустое значение означает «без пароля».
+STAGE_ENV=(DB_ENGINE=mysql "DB_NAME=$DB" "DB_USER=$DB_USER" "DB_PASSWORD=$DB_PASSWORD" DB_HOST=localhost "DB_SOCKET=$SOCKET")
 echo "==> migrate"
 (cd "$STAGE_DIR/public_html" && env "${STAGE_ENV[@]}" "$PYTHON" manage.py migrate --no-input | tail -n 3)
 
