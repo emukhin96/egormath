@@ -13,11 +13,16 @@ if [ "${2:-}" != "--yes" ]; then
 fi
 
 $COMPOSE up -d --wait egormath-db
+# Бэкап текущей базы — по её состоянию, а не по состоянию web: если в базе
+# есть таблицы, сохраняем её и при остановленном или упавшем web.
+TABLES="$($COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = \"$MYSQL_DATABASE\""' 2>/dev/null || echo 0)"
+if [ "${TABLES%$'\r'}" != "0" ]; then
+  "$(dirname "$0")/backup.sh" || echo "!! бэкап не удался — продолжаю"
+fi
 # На свежем сервере (restore.sh) контейнера web ещё нет — тогда не трогаем.
 WEB_RUNNING=0
 if $COMPOSE ps --status running --services 2>/dev/null | grep -q '^egormath-web$'; then
   WEB_RUNNING=1
-  "$(dirname "$0")/backup.sh" || echo "!! бэкап не удался (пустая база?) — продолжаю"
   $COMPOSE stop egormath-web
 fi
 
@@ -41,7 +46,8 @@ echo "==> Готово за $(( $(date +%s) - START )) с"
 TZ_CHECK="$($COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N -e "SELECT CONVERT_TZ(\"2026-01-01 00:00:00\",\"UTC\",\"Europe/Moscow\")"')"
 if [ "${TZ_CHECK%$'\r'}" = "NULL" ]; then
   echo "==> Таблицы часовых поясов MySQL пусты — загружаю"
-  $COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql_tzinfo_to_sql /usr/share/zoneinfo 2>/dev/null | mysql -uroot mysql'
+  # export: пароль нужен второй команде конвейера (mysql), а не mysql_tzinfo_to_sql
+  $COMPOSE exec -T egormath-db sh -c 'export MYSQL_PWD="$MYSQL_ROOT_PASSWORD"; mysql_tzinfo_to_sql /usr/share/zoneinfo 2>/dev/null | mysql -uroot mysql'
 fi
 
 echo "==> Число строк в ключевых таблицах (сверить с источником дампа)"
