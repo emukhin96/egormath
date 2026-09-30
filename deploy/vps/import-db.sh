@@ -63,5 +63,7 @@ $COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroo
   WHERE table_schema = DATABASE() ORDER BY table_rows DESC LIMIT 15;
   SELECT CONVERT_TZ(NOW(), \"UTC\", \"Europe/Moscow\") AS tz_check;"'
 
-[ "$WEB_RUNNING" = 1 ] && $COMPOSE up -d egormath-web
-exit 0
+# Не список «&& …; exit 0»: ошибка запуска web должна стать кодом выхода скрипта.
+if [ "$WEB_RUNNING" = 1 ]; then
+  $COMPOSE up -d egormath-web
+fi
