@@ -1789,6 +1789,33 @@ class AutoCheckFlowTests(TestCase):
         self.assertEqual(submission.check_json, {formulas.UNAVAILABLE_KEY: 0})
         self.assertIsNone(submission.checked_at)
 
+    def test_refresh_skips_legacy_answer_and_checks_mask_answer(self):
+        """Исторический текст без значений маски не занимает слот бюджета."""
+        from assignments.checks import formulas
+        self.assignment.check_visibility = Assignment.CHECK_TEACHER
+        self.assignment.save()
+        submission = Submission.objects.create(assignment=self.assignment, task=self.task)
+        legacy_item = TaskSubitem.objects.create(task=self.task, order=1,
+            text_latex='а', answer_mask='{{number: 5}}')
+        legacy = SubmissionPart.objects.create(submission=submission, subitem=legacy_item,
+            answer_text='5')
+        masked_item = TaskSubitem.objects.create(task=self.task, order=2,
+            text_latex='б', answer_mask='{{expression: a+311}}')
+        masked = SubmissionPart.objects.create(submission=submission, subitem=masked_item,
+            answer_json={'s1': '311+a'})
+        self.client.force_login(self.teacher)
+        review_url = reverse('review_assignment', args=[self.assignment.pk])
+        refresh_url = reverse('refresh_assignment_check', args=[self.assignment.pk])
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker', wraps=formulas._run_worker) as worker:
+            self.assertRedirects(self.client.post(refresh_url), review_url)
+            self.assertEqual(worker.call_count, 1)
+        masked.refresh_from_db(); legacy.refresh_from_db()
+        self.assertEqual(masked.auto_check, 'ok')
+        self.assertIsNotNone(masked.checked_at)
+        self.assertIsNone(legacy.checked_at)
+        self.assertNotContains(self.client.get(review_url), 'Обновить сверку')
+
     def test_teacher_explicitly_refreshes_one_answer_in_hidden_mode(self):
         from assignments.checks import formulas
         self.assignment.check_visibility = Assignment.CHECK_TEACHER

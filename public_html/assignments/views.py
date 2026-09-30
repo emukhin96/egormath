@@ -792,6 +792,11 @@ def _refresh_stale_checks(rows, for_teacher=False):
             if (obj is None or spec is None or not spec.is_valid
                     or not obj.display_answer or not obj.check_is_stale(task)):
                 continue
+            # Исторический свободный ответ (текст без значений маски) по
+            # маске не сверяется — run_check его пропускает, так что он не
+            # устаревший и не должен занимать единственный слот бюджета.
+            if not (obj.has_mask_values or not obj.legacy_answer):
+                continue
             row['auto_ok'] = False
             if not for_teacher and not refreshed:
                 previous = {key: getattr(obj, key) for key in (
