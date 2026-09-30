@@ -3422,7 +3422,7 @@
     cursor: pointer;
   }
   .ws-recipient-link span { color: var(--muted); }
-  .ws-recipient-link:hover { text-decoration: underline; }
+  .ws-recipient-link:hover { color: var(--accent); }
   #recipient-visibility-dialog { max-width: 640px; max-height: calc(100dvh - 32px); overflow-y: auto; }
   .ws-assignment-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .ws-assignment-settings p { margin: 0; }
