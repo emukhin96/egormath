@@ -778,7 +778,7 @@ def collection_detail(request, pk):
         # шаблон задаёт --task-num-col, чтобы номер не наползал на текст.
         'number_width': max(
             [len(row['label']) for row in rows + [r for g in (flat_groups or [])
-                               for r in g['rows']])]
+                                                  for r in g['rows']]]
             or [2]),
         'page': page,
         'children': children,
