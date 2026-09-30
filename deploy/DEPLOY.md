@@ -164,9 +164,12 @@ fc-list | grep -i 'CMU Serif' | head
 
 Ставить шрифты на сервер не нужно: при `font=stix` сайт прикладывает к
 сборке пять OTF из `public_html/worksheets/tex/fonts/` (≈2 МБ, лицензия
-SIL OFL — `STIX-OFL.txt` там же). Профиль собран на `fontspec` +
-`unicode-math` и работает под тем же xelatex. На API нужен только
-`egor.sty` версии 1.3 (2026/09/30) или новее — обновить по § 1.1.
+SIL OFL — `STIX-OFL.txt` там же) и свой `egor.sty` из
+`public_html/worksheets/tex/` (версия 1.3, 2026/09/30). Профиль собран на
+`fontspec` + `unicode-math` и работает под тем же xelatex. Обновлять
+`egor.sty` на API для этого профиля не требуется; для остальных профилей
+по-прежнему используется копия из TEXMFLOCAL (§ 1.1). Новые версии
+`egor.sty` кладите в обе точки.
 Если на сервере есть пакет TeX Live `stix2-otf`, `egor.sty` найдёт
 шрифты и сам, по тем же именам файлов.
 
