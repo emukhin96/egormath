@@ -15,9 +15,10 @@
 #   STAGE_APP_DIR=/opt/egormath    каталог стека на сервере (данные в $APP_DIR/data)
 #   STAGE_DB=egormath_stage        локальная база; пересоздаётся при каждом запуске
 #   STAGE_DB_USER=root             пользователь MySQL для заливки дампа и для Django
-#   STAGE_DB_PASSWORD=             его пароль (пусто — без пароля, как у Homebrew root)
-#   STAGE_MYSQL="mysql -uroot"     клиент для заливки дампа (по умолчанию из STAGE_DB_USER/PASSWORD)
-#   STAGE_SOCKET=/tmp/mysql.sock   сокет локального MySQL (Homebrew)
+#   STAGE_DB_PASSWORD=             его пароль (пусто — без пароля, как у Homebrew root);
+#                                  клиенту mysql уходит через MYSQL_PWD, в командах и выводе не показывается
+#   STAGE_MYSQL="mysql -uroot"     клиент для заливки дампа (по умолчанию mysql -u$DB_USER --socket=$SOCKET)
+#   STAGE_SOCKET=/tmp/mysql.sock   сокет локального MySQL (Homebrew); через него идут и заливка, и Django
 #   STAGE_PORT=8003                порт runserver
 set -euo pipefail
 
@@ -27,8 +28,17 @@ APP_DIR="${STAGE_APP_DIR:-/opt/egormath}"
 DB="${STAGE_DB:-egormath_stage}"
 DB_USER="${STAGE_DB_USER:-root}"
 DB_PASSWORD="${STAGE_DB_PASSWORD:-}"
-MYSQL="${STAGE_MYSQL:-mysql -u$DB_USER${DB_PASSWORD:+ -p$DB_PASSWORD}}"
 SOCKET="${STAGE_SOCKET:-/tmp/mysql.sock}"
+# Клиент — массив слов, а не строка: аргументы с пробелами не разваливаются.
+# Тот же сокет, что у Django (DB_SOCKET): иначе при нестандартном сокете дамп
+# уйдёт в один сервер, а migrate/runserver — в другой. Пароль — через
+# MYSQL_PWD, как в deploy/vps/backup.sh: не виден в ps и не печатается.
+if [ -n "${STAGE_MYSQL:-}" ]; then
+  read -r -a MYSQL <<< "$STAGE_MYSQL"
+else
+  MYSQL=(mysql "-u$DB_USER" "--socket=$SOCKET")
+fi
+[ -z "$DB_PASSWORD" ] || export MYSQL_PWD="$DB_PASSWORD"
 PORT="${STAGE_PORT:-8003}"
 STAGE_DIR="$ROOT/.worktrees/stage"
 DUMPS="$ROOT/.stage"
@@ -51,7 +61,7 @@ die() { echo "!! $*" >&2; exit 1; }
 [ -x "$PYTHON" ] || die "нет $PYTHON — создайте venv (README, «Локальный запуск»)"
 command -v mysql >/dev/null || die "нет клиента mysql (brew install mysql)"
 [ -S "$SOCKET" ] || die "MySQL не запущен: нет сокета $SOCKET (brew services start mysql)"
-$MYSQL -e 'SELECT 1' >/dev/null 2>&1 || die "не подключиться как $DB_USER (STAGE_DB_USER / STAGE_DB_PASSWORD)"
+"${MYSQL[@]}" -e 'SELECT 1' >/dev/null 2>&1 || die "не подключиться как $DB_USER (STAGE_DB_USER / STAGE_DB_PASSWORD)"
 
 # 1. worktree со стендовой веткой
 if [ -z "$BRANCH" ]; then
@@ -97,13 +107,13 @@ fi
 
 # 3. локальная база: пересоздать и залить
 echo "==> MySQL: пересоздать $DB и залить дамп"
-$MYSQL -e "DROP DATABASE IF EXISTS \`$DB\`; CREATE DATABASE \`$DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-gunzip -c "$DUMP" | $MYSQL "$DB"
+"${MYSQL[@]}" -e "DROP DATABASE IF EXISTS \`$DB\`; CREATE DATABASE \`$DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+gunzip -c "$DUMP" | "${MYSQL[@]}" "$DB"
 # Таблицы часовых поясов: без них __date-выборки Django дают NULL.
-TZ_CHECK="$($MYSQL -N -e "SELECT CONVERT_TZ('2026-01-01 00:00:00','UTC','Europe/Moscow')")"
+TZ_CHECK="$("${MYSQL[@]}" -N -e "SELECT CONVERT_TZ('2026-01-01 00:00:00','UTC','Europe/Moscow')")"
 if [ "$TZ_CHECK" = "NULL" ]; then
   echo "==> таблицы часовых поясов MySQL"
-  mysql_tzinfo_to_sql /usr/share/zoneinfo 2>/dev/null | $MYSQL mysql
+  mysql_tzinfo_to_sql /usr/share/zoneinfo 2>/dev/null | "${MYSQL[@]}" mysql
 fi
 
 # 4. media
@@ -117,6 +127,8 @@ fi
 # DB_PASSWORD передаётся всегда, даже пустым: в .secrets стенда DB_* нет,
 # поэтому пустое значение означает «без пароля».
 STAGE_ENV=(DB_ENGINE=mysql "DB_NAME=$DB" "DB_USER=$DB_USER" "DB_PASSWORD=$DB_PASSWORD" DB_HOST=localhost "DB_SOCKET=$SOCKET")
+# В подсказке пароль не показываем: вместо значения — имя переменной.
+STAGE_ENV_SHOWN="${STAGE_ENV[*]/DB_PASSWORD=$DB_PASSWORD/DB_PASSWORD=${DB_PASSWORD:+\$STAGE_DB_PASSWORD}}"
 echo "==> migrate"
 (cd "$STAGE_DIR/public_html" && env "${STAGE_ENV[@]}" "$PYTHON" manage.py migrate --no-input | tail -n 3)
 
@@ -126,7 +138,7 @@ cat <<MSG
 
 Стенд готов: $BRANCH ($(git -C "$STAGE_DIR" rev-parse --short HEAD)), база $DB, дамп $(basename "$DUMP").
 Запуск (или tools/stage.sh --run):
-  cd $STAGE_DIR/public_html && env ${STAGE_ENV[*]} ALLOWED_HOSTS=$HOSTS \\
+  cd $STAGE_DIR/public_html && env $STAGE_ENV_SHOWN ALLOWED_HOSTS=$HOSTS \\
     $PYTHON manage.py runserver 0.0.0.0:$PORT
   → http://127.0.0.1:$PORT${LAN:+  (с телефона: http://$LAN:$PORT)}
 Вход — своим обычным логином и паролем (хэши из дампа).
