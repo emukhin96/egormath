@@ -1798,6 +1798,17 @@ class ShareLinkTests(TestCase):
         self.assertNotContains(
             response, reverse('task_image_file', args=[image.pk]))
 
+    def test_public_page_hides_ai_solution_image_behind_author_hint(self):
+        first = self.worksheet.items.filter(task__isnull=False).order_by('order').first()
+        first.task.text_latex = 'Докажите утверждение.'
+        first.task.author_solution_latex = 'Указание. Рассмотрите два треугольника.'
+        first.task.solution_latex = r'Полное доказательство.\taskpic{1}'
+        first.task.save()
+        image = first.task.images.create(image='task_images/hidden-ai-proof.png', order=10)
+        response = self.client.get(reverse('public_worksheet', args=[self.link.token]))
+        self.assertNotContains(response, reverse('task_image_file', args=[image.pk]))
+        self.assertNotContains(response, 'Полное доказательство.')
+
     def test_public_subtitle_skips_empty_parts(self):
         # Пустые grade_label/subtitle не оставляют «висячих» разделителей
         self.worksheet.grade_label = ''

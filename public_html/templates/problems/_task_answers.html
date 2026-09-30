@@ -12,12 +12,11 @@
   <div class="answer-box math-content" data-src="{{ block.source }}">
     <div class="answer-head"><strong>Ответ:</strong>{% if block.source != 'mixed' %}{% include 'problems/_answer_source.html' with source=block.source %}{% endif %}</div>
     {% for row in block.rows %}
-    <div class="answer-row" data-src="{{ row.source }}">{% if row.label %}{{ row.label }})&nbsp;{% endif %}{{ row.text|web_answer }}{% if block.source == 'mixed' %}{% include 'problems/_answer_source.html' with source=row.source %}{% endif %}</div>
+    <div class="answer-row" data-src="{{ row.source }}">{% if row.label %}{{ row.label }})&nbsp;{% endif %}{{ row.text|web_answer }}{% if block.source == 'mixed' %}{% include 'problems/_answer_source.html' with source=row.source %}{% endif %}{% include 'problems/_task_images.html' with images=row.images only %}</div>
     {% endfor %}
-    {% task_images task 'answers' %}
     {% if block.alts %}
     <details class="answer-alt" data-src="ai"><summary>Редакторский / AI-ответ</summary>
-      {% for row in block.alts %}<div>{% if row.label %}{{ row.label }})&nbsp;{% endif %}{{ row.alt|web_answer }}</div>{% endfor %}
+      {% for row in block.alts %}<div>{% if row.label %}{{ row.label }})&nbsp;{% endif %}{{ row.alt|web_answer }}{% include 'problems/_task_images.html' with images=row.alt_images only %}</div>{% endfor %}
     </details>
     {% endif %}
   </div>
@@ -26,12 +25,11 @@
   <div class="solution-box math-content" data-src="{{ block.source }}">
     <div class="answer-head"><strong>{{ block.heading }}:</strong>{% if block.source != 'mixed' %}{% include 'problems/_answer_source.html' with source=block.source %}{% endif %}</div>
     {% for row in block.rows %}
-    <div class="answer-row" data-src="{{ row.source }}">{% if row.label %}{{ row.label }})&nbsp;{% endif %}{{ row.text|web_text|linebreaksbr }}{% if block.source == 'mixed' %}{% include 'problems/_answer_source.html' with source=row.source %}{% endif %}</div>
+    <div class="answer-row" data-src="{{ row.source }}">{% if row.label %}{{ row.label }})&nbsp;{% endif %}{{ row.text|web_text|linebreaksbr }}{% if block.source == 'mixed' %}{% include 'problems/_answer_source.html' with source=row.source %}{% endif %}{% include 'problems/_task_images.html' with images=row.images only %}</div>
     {% endfor %}
-    {% if not material.answer %}{% task_images task 'answers' %}{% endif %}
     {% if block.alts %}
     <details class="answer-alt" data-src="ai"><summary>{{ block.alt_title }}</summary>
-      {% for row in block.alts %}<div>{% if row.label %}{{ row.label }})&nbsp;{% endif %}{{ row.alt|web_text|linebreaksbr }}</div>{% endfor %}
+      {% for row in block.alts %}<div>{% if row.label %}{{ row.label }})&nbsp;{% endif %}{{ row.alt|web_text|linebreaksbr }}{% include 'problems/_task_images.html' with images=row.alt_images only %}</div>{% endfor %}
     </details>
     {% endif %}
   </div>

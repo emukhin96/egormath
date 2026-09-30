@@ -10,6 +10,7 @@
 import re
 
 from worksheets.latex import subitem_label
+from .task_images import classify_task_images, taskpic_indices
 
 SOURCE_AUTHOR = 'author'
 SOURCE_AI = 'ai'
@@ -47,6 +48,39 @@ def _row(owner, label, author_field, ai_field):
     }
 
 
+def solution_texts(owner):
+    """Авторское указание дополняем полным AI-решением, сохраняя оба текста."""
+    row = _row(owner, '', 'author_solution_latex', 'solution_latex')
+    if not row:
+        return []
+    texts = [row['text']]
+    if row['source'] == SOURCE_AUTHOR and _HINT_RE.match(row['text']) and row['alt']:
+        texts.append(r'\textit{Полное решение от AI.} ' + row['alt'])
+    return texts
+
+
+def _attach_images(task, blocks):
+    """Каждый рисунок — у своего текста, с приоритетом авторского материала."""
+    images = list(task.images.all())
+    _, material_images = classify_task_images(task)
+    available = {image.pk for image in material_images}
+    assignments = []
+    for block in blocks:
+        if not block:
+            continue
+        for row in block['rows']:
+            row['images'], row['alt_images'] = [], []
+            priority = 0 if row['source'] == SOURCE_AUTHOR else 1
+            assignments.append((priority, row, 'text', 'images'))
+            if row['alt']:
+                assignments.append((2, row, 'alt', 'alt_images'))
+    for _, row, field, image_field in sorted(assignments, key=lambda item: item[0]):
+        for index in sorted(taskpic_indices(row[field])):
+            if 0 <= index < len(images) and images[index].pk in available:
+                row[image_field].append(images[index])
+                available.remove(images[index].pk)
+
+
 def _block(task, subitems, author_field, ai_field):
     rows = [_row(task, '', author_field, ai_field)]
     rows += [_row(sub, subitem_label(index), author_field, ai_field)
@@ -74,6 +108,7 @@ def answer_material(task, subitems=None):
     answer = _block(task, subitems, 'author_answer_latex', 'answer_latex')
     solution = _block(task, subitems, 'author_solution_latex',
                       'solution_latex')
+    _attach_images(task, (answer, solution))
     if solution:
         # Авторское «Указание. …» из задачника — заголовок рамки, а не
         # часть текста; полное AI-решение при этом остаётся под спойлером.

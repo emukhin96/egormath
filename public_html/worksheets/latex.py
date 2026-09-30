@@ -174,14 +174,15 @@ def _combined_answer(task, subitems):
 
 def _combined_solution(task, subitems):
     """Общее решение задачи + решения подпунктов (каждый с новой строки)."""
-    parts = []
-    if task.effective_solution_latex:
-        parts.append(_for_task_opt(task.effective_solution_latex))
-    parts.extend(
-        '%s)~%s' % (subitem_label(i),
-                    _for_task_opt(s.effective_solution_latex))
-        for i, s in enumerate(subitems) if s.effective_solution_latex
-    )
+    # Локальный импорт: веб-представление использует subitem_label.
+    from problems.answer_material import solution_texts
+
+    parts = [_for_task_opt(text) for text in solution_texts(task)]
+    for index, subitem in enumerate(subitems):
+        texts = solution_texts(subitem)
+        for number, text in enumerate(texts):
+            prefix = '%s)~' % subitem_label(index) if number == 0 else ''
+            parts.append(prefix + _for_task_opt(text))
     text = _join_labeled(parts, 'mini')
     if not text:
         return ''
@@ -311,6 +312,12 @@ def task_to_tex(item, variant='teacher', *, statement=None, common_indices=()):
     if variant == 'teacher':
         deferred_pics.update(solution_used)
     used.update(solution_used)
+    # Скрытый AI-вариант не делает свой рисунок бесхозным. Резервируем
+    # ссылки всех материалов, но печатаем только выбранные выше.
+    from problems.task_images import material_indices
+    used.update(material_indices(task))
+    for subitem in task.subitems.all():
+        used.update(material_indices(subitem))
     # Рисунки, на которые ссылаются только невыбранные подпункты, в листок
     # не попадают: самого подпункта в листке нет.
     selected_ids = {s.pk for s in subitem_objs}
