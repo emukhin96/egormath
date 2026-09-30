@@ -55,8 +55,11 @@ mkdir -p "$BACKUPS" "$DATA_DIR"/{secrets,media,var,live,cache,staticfiles,mysql,
 # 1. Набор файлов: из S3 (rclone) или из каталога
 if [ -d "$FROM" ]; then
   SRC_DIR="$FROM"
-  [ -n "$STAMP" ] || STAMP="$(ls "$SRC_DIR"/db-*.sql.gz 2>/dev/null | sed -E 's/.*db-([0-9]{8}-[0-9]{6})\.sql\.gz/\1/' | sort | tail -n 1)"
+  # «|| true»: при пустом каталоге ls падает, и pipefail с set -e молча
+  # завершил бы скрипт до понятного die ниже.
+  [ -n "$STAMP" ] || STAMP="$(ls "$SRC_DIR"/db-*.sql.gz 2>/dev/null | sed -E 's/.*db-([0-9]{8}-[0-9]{6})\.sql\.gz/\1/' | sort | tail -n 1 || true)"
   [ -n "$STAMP" ] || die "в $SRC_DIR нет дампов db-*.sql.gz"
+  [ -r "$SRC_DIR/db-$STAMP.sql.gz" ] || die "в $SRC_DIR нет db-$STAMP.sql.gz (набор $STAMP)"
   DIR="$DATA_DIR/restore-$STAMP"; mkdir -p "$DIR"
   cp "$SRC_DIR"/*-"$STAMP".* "$DIR/"
 else
