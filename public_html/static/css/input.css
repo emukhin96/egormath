@@ -1072,7 +1072,9 @@
   }
 
   .sidebar-list li:has(> a):hover,
-  .sidebar-list li:has(> a):focus-within {
+  .sidebar-list li:has(> a):focus-within,
+  .sidebar-list li:has(> button):hover,
+  .sidebar-list li:has(> button):focus-within {
     background: #f2f6fc;
   }
 
@@ -3405,7 +3407,21 @@
   .ws-share-url { overflow-wrap: anywhere; }
   .ws-share-comment { margin-top: var(--space-2); }
   .ws-share-comment input { width: min(100%, 32rem); margin: 0; }
-  .ws-recipient-link { color: inherit; text-align: left; cursor: pointer; width: 100%; }
+  /* Строка назначения в панели — кнопка на всю плашку, как ссылка-строка */
+  .ws-recipient-link {
+    display: block;
+    width: calc(100% + 2 * var(--space-2));
+    margin: -5px calc(-1 * var(--space-2));
+    padding: 5px var(--space-2);
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .ws-recipient-link span { color: var(--muted); }
   .ws-recipient-link:hover { text-decoration: underline; }
   #recipient-visibility-dialog { max-width: 640px; max-height: calc(100dvh - 32px); overflow-y: auto; }
   .ws-assignment-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
