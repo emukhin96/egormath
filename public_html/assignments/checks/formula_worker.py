@@ -19,8 +19,10 @@ def main():
         result = {'display': display}
         if 'value' in data:
             result['status'] = _check(data['value'], reference, data['multiple'])
+    except MemoryError:
+        result = {'unavailable': True}
     except Exception as error:
-        result = {'error': str(error)}
+        result = {'error': str(error) or type(error).__name__}
     print(json.dumps(result))
 
 

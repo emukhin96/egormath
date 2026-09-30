@@ -115,7 +115,7 @@ class LatexGenerationTests(TestCase):
         tex = task_to_tex(item)
         self.assertIn('\\task{1}{2}{%', tex)
         self.assertIn('[{\\item $2+2$;}]', tex)
-        self.assertIn('[{4}]', tex)
+        self.assertIn('[{\\egorMathAnswer{4}}]', tex)
         self.assertIn('[{\\mbox{}\\\\* Очевидно.}]', tex)
 
     def test_task_to_tex_omits_trailing_args(self):
@@ -127,7 +127,7 @@ class LatexGenerationTests(TestCase):
         task = Task.objects.create(
             text_latex='Неравенство', answer_latex='$x \\in [1; 2]$')
         tex = task_to_tex(make_item(self.worksheet, task))
-        self.assertIn('[{$x \\in [1; 2]$}]', tex)
+        self.assertIn('[{\\egorMathAnswer{$x \\in [1; 2]$}}]', tex)
 
     def test_overrides(self):
         task = Task.objects.create(text_latex='Задача', stars=1, columns=0)
@@ -157,7 +157,7 @@ class LatexGenerationTests(TestCase):
             text_latex='Задача', columns=2, answer_latex='7')
         tex = task_to_tex(make_item(self.worksheet, task))
         self.assertIn('\\task{0}{0}{%', tex)
-        self.assertIn('[{}][{7}]', tex)
+        self.assertIn('[{}][{\\egorMathAnswer{7}}]', tex)
 
     def test_subitem_punctuation(self):
         # В базе подпункты без знаков препинания — система расставляет
@@ -196,7 +196,7 @@ class LatexGenerationTests(TestCase):
         self.assertNotIn('$2+2$', tex)
         self.assertIn('\\item $3+3$;', tex)
         # Ответы перенумерованы заново: а) и б)
-        self.assertIn(r'[{\shortstack[l]{а)~2 \\ б)~6}}]', tex)
+        self.assertIn(r'[{\egorMathAnswer{а)~2 \\ б)~6}}]', tex)
 
     def test_subitem_solutions_combined(self):
         # Решения подпунктов собираются в 6-й аргумент \task как ответы
@@ -439,7 +439,7 @@ class LatexGenerationTests(TestCase):
         # Одна и та же ссылка в body и answer не дублируется.
         self.assertLess(
             tex.index(r'\taskpic{answer.png}'),
-            tex.index(r'[{Ответ по рисунку'))
+            tex.index(r'[{\egorMathAnswer{Ответ по рисунку'))
 
     def test_answer_and_solution_pictures_follow_pdf_variant(self):
         task = Task.objects.create(

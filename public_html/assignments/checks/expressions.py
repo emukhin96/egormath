@@ -110,7 +110,11 @@ def raw_tree(text):
     parser, _ = _lark()
     try:
         return parser.doparse(text)
-    except Exception:  # noqa: BLE001 — любой сбой парсера = «не разобрано»
+    except MemoryError:
+        raise
+    except Exception as error:  # noqa: BLE001 — синтаксический сбой = «не разобрано»
+        if isinstance(getattr(error, 'orig_exc', None), MemoryError):
+            raise error.orig_exc from error
         return None
 
 
@@ -130,6 +134,8 @@ def resolve(tree):
             try:
                 if not _has_undefined_functions(evaluate(cand)):
                     return cand
+            except MemoryError:
+                raise
             except Exception:  # noqa: BLE001
                 continue
         return candidates[0]
@@ -143,7 +149,11 @@ def evaluate(tree):
     _, transformer = _lark()
     try:
         result = transformer.transform(tree)
-    except Exception:  # noqa: BLE001
+    except MemoryError:
+        raise
+    except Exception as error:  # noqa: BLE001
+        if isinstance(getattr(error, 'orig_exc', None), MemoryError):
+            raise error.orig_exc from error
         return None
     if _is_tree(result):
         return None

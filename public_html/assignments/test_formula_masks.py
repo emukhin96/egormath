@@ -1,5 +1,8 @@
 """Контекстная эквивалентность длин, площадей и наборов диагоналей."""
 from unittest.mock import patch
+from contextlib import redirect_stdout
+from io import StringIO
+import json
 import subprocess
 import time
 from django.test import SimpleTestCase
@@ -54,6 +57,19 @@ class FormulaMaskTests(SimpleTestCase):
         slot = self.slot('{{expression: |a-1|}}')
         self.assertEqual(check_slot(slot, 'a-1'), 'wrong')
 
+    def test_expanded_square_under_root_keeps_absolute_value_and_domain(self):
+        slot = self.slot('{{expression: |x-1|}}')
+        for value in (r'\sqrt{x^2-2x+1}', 'sqrt(x^2-2x+1)',
+                      'sqrt((x-1)^2)', r'\sqrt{4x^2-8x+4}/2'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+        for value in ('x-1', r'-\sqrt{x^2-2x+1}',
+                      r'\sqrt{x^2-2x+1}+1/(x-1)-1/(x-1)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+        positive = self.slot('{{expression: x | positive: x}}')
+        self.assertEqual(check_slot(positive, 'sqrt(sqrt(x^4))'), 'ok')
+
     def test_slow_input_is_bounded_and_timeout_does_not_poison_cache(self):
         reference, _ = formulas.parse_reference('a+17')
         formulas._checked.cache_clear()
@@ -72,8 +88,44 @@ class FormulaMaskTests(SimpleTestCase):
         with patch.object(formulas, '_run_worker',
                           side_effect=subprocess.TimeoutExpired('worker', 3)):
             self.assertEqual(formulas.check('a+23', reference), 'unknown')
-            with self.assertRaises(ValueError):
-                formulas.parse_reference('a+24')
+            slot = self.slot('{{expression: a+24}}')
+            self.assertEqual(slot.reference, 'a+24')
+            self.assertEqual(check_slot(slot, '24+a'), 'unknown')
+            html = render_to_string('assignments/_mask.html', {
+                'fragments': render_fragments(parse_mask('{{expression: a+24}}'), 'busy'),
+                'editable': True})
+            self.assertIn('<math-field', html)
+        self.assertEqual(check_slot(slot, '24+a'), 'ok')
+
+    def test_reference_resource_failure_is_retried_without_hiding_fields(self):
+        with patch.object(formulas, '_run_worker', return_value={'unavailable': True}):
+            slot = self.slot('{{expression: a+29 | positive: a}}')
+            self.assertEqual(slot.reference, 'a+29')
+            self.assertEqual(check_slot(slot, '29+a'), 'unknown')
+        with patch.object(formulas, '_run_worker', return_value={'error': 'ошибка эталона'}) as worker:
+            self.assertFalse(parse_mask('{{expression: a+29 | positive: a}}').is_valid)
+            worker.assert_called_once()
+        formulas._reference_response.cache_clear()
+
+    def test_parser_memory_failure_reaches_worker_as_temporary(self):
+        from assignments.checks import expressions, formula_worker
+        from lark.exceptions import VisitError
+        parser, transformer = expressions._lark()
+        for target, method, error in (
+            (parser, 'doparse', MemoryError()),
+            (transformer, 'transform', MemoryError()),
+            (transformer, 'transform', VisitError('add', None, MemoryError())),
+        ):
+            with self.subTest(method=method, error=type(error).__name__):
+                output = StringIO()
+                # Тестируем протокол настоящего worker без изменения лимитов
+                # текущего тестового процесса на Linux.
+                with patch.object(formula_worker.sys, 'platform', 'test'), \
+                     patch.object(formula_worker.sys, 'stdin', StringIO(json.dumps({
+                         'payload': 'a+31', 'multiple': False}))), \
+                     patch.object(target, method, side_effect=error), redirect_stdout(output):
+                    formula_worker.main()
+                self.assertEqual(json.loads(output.getvalue()), {'unavailable': True})
 
     def test_cancellation_cannot_hide_missing_parameter_values(self):
         slot = self.slot('{{expression: a | positive: a}}')

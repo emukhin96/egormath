@@ -92,3 +92,26 @@ class MaterialImageTests(TestCase):
             self.assertNotIn('author-hint.png', tex)
             self.assertNotIn('ai-proof.png', tex)
             self.assertNotIn('Из равенства треугольников', tex)
+
+    def test_graph_only_answer_points_to_picture_without_changing_author(self):
+        task = Task.objects.create(text_latex='Постройте график.',
+                                   author_answer_latex=r'\taskpic{1}')
+        task.images.create(image='task_images/graph-only.png', order=1)
+        worksheet = Worksheet.objects.create(title='График', owner=make_teacher())
+        WorksheetItem.objects.create(worksheet=worksheet, task=task, order=1)
+        for variant in ('answers', 'teacher'):
+            tex = worksheet_to_tex(worksheet, variant)
+            self.assertIn('См. рисунок.', tex)
+            self.assertEqual(tex.count('graph-only.png'), 1)
+        self.assertNotIn('graph-only.png', worksheet_to_tex(worksheet, 'student'))
+        task.refresh_from_db()
+        self.assertEqual(task.author_answer_latex, r'\taskpic{1}')
+
+    def test_graph_reference_after_inequality_stays_outside_web_formula(self):
+        task = Task.objects.create(text_latex='Постройте график.',
+            answer_latex=r'Луч $y=x$, $x\ge1$.\taskpic{1}')
+        picture = task.images.create(image='task_images/ray.png', order=1)
+        html = render_to_string('problems/_task_answers.html', {'task': task})
+        self.assertNotIn(r'\taskpic', html)
+        self.assertIn(r'$x\ge1$', html)
+        self.assertEqual(html.count(reverse('task_image_file', args=[picture.pk])), 1)

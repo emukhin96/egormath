@@ -57,16 +57,28 @@ def _run_worker(payload):
 
 
 @lru_cache(maxsize=256)
+def _reference_response(payload, multiple):
+    result = _run_worker({'payload': payload, 'multiple': multiple})
+    if result.get('unavailable'):
+        raise ValueError('временная недоступность проверки')
+    return result
+
+
 def parse_reference(payload, multiple=False):
     if len(payload) > MAX_EXPR_LEN:
         raise ValueError('слишком длинный эталон')
+    texts, _ = _reference_parts(payload, multiple)
+    spec = FormulaSpec(payload, multiple)
     try:
-        result = _run_worker({'payload': payload, 'multiple': multiple})
-    except (subprocess.TimeoutExpired, OSError, ValueError) as error:
-        raise ValueError('не удалось проверить эталон за отведённое время') from error
+        result = _reference_response(payload, multiple)
+    except (subprocess.TimeoutExpired, OSError, ValueError):
+        # Временная нагрузка не делает сохранённую маску ошибочной и не
+        # лишает ученика полей ввода. Ответ проверится с результатом UNKNOWN;
+        # этот сбой не кэшируется, следующий запрос повторит проверку.
+        return spec, ';'.join(texts).strip()
     if result.get('error'):
         raise ValueError(result['error'])
-    return FormulaSpec(payload, multiple), result['display']
+    return spec, result['display']
 
 
 @lru_cache(maxsize=1024)
@@ -90,6 +102,19 @@ def check(value, reference, multiple=False):
 
 
 def _prepare(text):
+    # Вставленный текст sqrt(...) означает корень, а не произведение s*q*r*t.
+    # Обходим изнутри наружу, сохраняя вложенные скобки без eval/sympify.
+    while matches := list(re.finditer(r'(?<![A-Za-z\\])sqrt\s*\(', text)):
+        match = matches[-1]
+        depth = 1
+        end = match.end()
+        while end < len(text) and depth:
+            depth += (text[end] == '(') - (text[end] == ')')
+            end += 1
+        if depth:
+            break
+        text = (text[:match.start()] + r'\sqrt{' + text[match.end():end-1]
+                + '}' + text[end:])
     # Lark не понимает соседство степени и корня: a²√3.
     text = re.sub(r'(\^(?:\{[^{}]+\}|[+-]?\d+))\s*(?=[A-Za-z]|\\(?:sqrt|frac|pi)\b)',
                   r'\1\\cdot ', text)
@@ -157,7 +182,7 @@ def _parse(text, positive=()):
                    tuple(c.xreplace(replacements) for c in components))
 
 
-def _parse_reference(payload, multiple=False):
+def _reference_parts(payload, multiple=False):
     # Вертикальные черты модулей являются частью выражения. Опцию
     # отделяем только | перед завершающей опцией positive.
     parts = re.split(r'\|\s*(?=positive\s*:)', payload)
@@ -172,6 +197,11 @@ def _parse_reference(payload, multiple=False):
     texts = parts[0].split(';') if multiple else [parts[0]]
     if not texts or len(texts) > 20 or any(not t.strip() for t in texts):
         raise ValueError('укажите от 1 до 20 выражений через ;')
+    return texts, positive
+
+
+def _parse_reference(payload, multiple=False):
+    texts, positive = _reference_parts(payload, multiple)
     items = tuple(_parse(t.strip(), positive) for t in texts)
     if any(x is None for x in items):
         raise ValueError('эталон не разобран как выражение')
@@ -185,7 +215,7 @@ def _parse_reference(payload, multiple=False):
     reference = Reference(items, positive, tuple(sorted(symbols, key=str)))
     if any(_defined(item, reference) is False for item in items):
         raise ValueError('эталон не определён на указанной области параметров')
-    return reference, parts[0].strip()
+    return reference, ';'.join(texts).strip()
 
 
 def _defined(item, reference):
@@ -251,7 +281,7 @@ def _counterexample(difference, reference):
 
 
 def _check(value, reference, multiple=False):
-    from sympy import simplify
+    from sympy import factor, simplify
     if len(value) > MAX_EXPR_LEN:
         return UNKNOWN
     texts = value.split(';') if multiple else [value]
@@ -275,7 +305,10 @@ def _check(value, reference, multiple=False):
     for item in student:
         uncertain = False
         for index, expected in enumerate(remaining):
-            difference = simplify(item.expression - expected.expression)
+            # Полный квадрат под корнем может быть раскрыт: sqrt(x²-2x+1).
+            # factor сохраняет реальный модуль, в отличие от принудительного
+            # извлечения корня; исходные области уже проверены отдельно.
+            difference = simplify(factor(item.expression) - factor(expected.expression))
             same = difference == 0 or difference.equals(0)
             if same is None and _counterexample(difference, reference):
                 same = False

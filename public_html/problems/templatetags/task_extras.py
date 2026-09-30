@@ -2,7 +2,7 @@ from django import template
 
 from problems.answer_material import (answer_material as _answer_material,
                                      solution_texts)
-from problems.task_images import images_for_group
+from problems.task_images import TASKPIC_NUM_RE, images_for_group
 from problems.textbook_parser import (
     apply_imported_answer, cyrillic_item_label as _cyrillic_item_label,
     normalize_imported_text, order_letter_subitems, strip_heading_dot)
@@ -58,7 +58,14 @@ def web_text(text):
 @register.filter
 def web_answer(text):
     """Авторский ответ: голый TeX вроде ``\\{-2;1\\}`` оборачивается для KaTeX."""
-    return tex_to_web_html(apply_imported_answer(text))
+    # Рисунки выводит шаблон. Убираем ссылки до OCR-нормализации, иначе
+    # ссылка после неравенства может ошибочно попасть внутрь формулы.
+    text, pictures = TASKPIC_NUM_RE.subn('', text or '')
+    result = apply_imported_answer(text)
+    # «См. рис.» перед рисунком — сокращение, его точка остаётся на месте.
+    if pictures and text.rstrip().endswith('.') and not result.rstrip().endswith('.'):
+        result += '.'
+    return tex_to_web_html(result)
 
 
 @register.filter
