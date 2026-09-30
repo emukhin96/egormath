@@ -218,11 +218,12 @@ GEMINI_RATE_PER_MINUTE = int(read_secret('GEMINI_RATE_PER_MINUTE', '20'))
 # Профили шрифтов, доступные в PDF-редакторе (опция font= пакета egor).
 # school и palatino требуют подготовленного LaTeX API: xelatex + mathspec
 # + шрифты SchoolBookC/TextBookC/Palatino (сервер настроен, см.
-# deploy/patch_latex_api_egormath.py). Если окружение без шрифтов —
-# сузить, например PDF_EDITOR_FONTS=cm
+# deploy/patch_latex_api_egormath.py). stix (STIX Two Text + Math через
+# unicode-math) — OTF из worksheets/tex/fonts/ уходят вместе со сборкой.
+# Если окружение без шрифтов — сузить, например PDF_EDITOR_FONTS=cm
 PDF_EDITOR_FONTS = [
     f.strip()
-    for f in read_secret('PDF_EDITOR_FONTS', 'cm,school,palatino').split(',')
+    for f in read_secret('PDF_EDITOR_FONTS', 'cm,school,palatino,stix').split(',')
     if f.strip()]
 
 # Ограничения на фото решений

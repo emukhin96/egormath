@@ -5,7 +5,7 @@
   'use strict';
 
   // Шрифт и режим переключаются штатными опциями пакета egor:
-  // \usepackage[font=cm|school|palatino,diagn]{egor} (см. egor.sty).
+  // \usepackage[font=cm|school|palatino|stix,diagn]{egor} (см. egor.sty).
   var EGOR_RE = /\\usepackage(?:\[([^\]]*)\])?\{egor\}/;
 
   function egorOptions(tex) {
@@ -31,7 +31,7 @@
   }
 
   function getEgorFont(tex) {
-    var m = egorOptions(tex).join(',').match(/font=(cm|school|palatino)/);
+    var m = egorOptions(tex).join(',').match(/font=(cm|school|palatino|stix)/);
     return m ? m[1] : 'cm';
   }
 

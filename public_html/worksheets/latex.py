@@ -19,7 +19,7 @@ VARIANT_OPTIONS = {
 PDF_OPTION_VALUES = {
     'size': {'10pt', '11pt', '12pt'},
     'paper': {'a4paper', 'a5paper'},
-    'font': {'cm', 'school', 'palatino'},
+    'font': {'cm', 'school', 'palatino', 'stix'},
     'diagn': {'off', 'on'},
 }
 EGOR_PACKAGE_RE = re.compile(r'\\usepackage(?:\[([^\]]*)\])?\{egor\}')

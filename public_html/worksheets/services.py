@@ -15,7 +15,7 @@ import requests
 from django.conf import settings
 from django.core.files.base import ContentFile
 
-from .latex import tex_hash, worksheet_to_tex
+from .latex import EGOR_PACKAGE_RE, tex_hash, worksheet_to_tex
 from .models import WorksheetPdf
 
 logger = logging.getLogger(__name__)
@@ -129,7 +129,18 @@ INTER_FONT_FILES = (
     'Inter-Italic.otf',
     'Inter-BoldItalic.otf',
 )
-# Локальная копия пакета листков (вне репозитория) — чтобы font=inter
+# STIX Two (OFL, из TeX Live stix2-otf): текст + OpenType-математика для
+# профиля font=stix пакета egor (fontspec + unicode-math). Имена файлов —
+# как в TeX Live, чтобы egor.sty находил их и в сборке, и в texmf.
+STIX_FONT_DIR = INTER_FONT_DIR
+STIX_FONT_FILES = (
+    'STIXTwoText-Regular.otf',
+    'STIXTwoText-Italic.otf',
+    'STIXTwoText-Bold.otf',
+    'STIXTwoText-BoldItalic.otf',
+    'STIXTwoMath-Regular.otf',
+)
+# Локальная копия пакета листков (вне репозитория) — чтобы font=inter/stix
 # доезжал до API до обновления TEXMFLOCAL.
 _EGOR_STY_CANDIDATES = (
     _BEAMER_TEX_DIR / 'egor.sty',
@@ -171,14 +182,56 @@ def collect_inter_font_assets(*, required=False):
     return assets
 
 
-def collect_inter_package_assets():
-    """Inter OTF + egor.sty с опцией font=inter."""
-    assets = collect_inter_font_assets()
+def _egor_sty_assets():
+    """Локальный egor.sty, если он есть (иначе берётся из TEXMFLOCAL API)."""
     for path in _EGOR_STY_CANDIDATES:
         if path.is_file():
+            return [_sty_asset(path)]
+    return []
+
+
+def collect_inter_package_assets():
+    """Inter OTF + egor.sty с опцией font=inter."""
+    return collect_inter_font_assets() + _egor_sty_assets()
+
+
+def tex_wants_stix(tex):
+    """True, если в \\usepackage[...]{egor} выбран профиль font=stix."""
+    match = EGOR_PACKAGE_RE.search(tex or '')
+    options = ((match.group(1) if match else '') or '').split(',')
+    return 'font=stix' in {opt.strip().replace(' ', '') for opt in options}
+
+
+def collect_stix_package_assets():
+    """OTF STIX Two + egor.sty с опцией font=stix.
+
+    Шрифты обязательны: без них xelatex на API не найдёт STIX Two
+    (если на сервере нет пакета stix2-otf) и сборка упадёт с невнятной
+    ошибкой fontspec — лучше сказать об этом до отправки.
+    """
+    assets = []
+    missing = []
+    for name in STIX_FONT_FILES:
+        path = STIX_FONT_DIR / name
+        if path.is_file():
             assets.append(_sty_asset(path))
-            break
-    return assets
+        else:
+            missing.append(name)
+    if missing:
+        raise LatexCompileError(
+            'Для шрифта STIX Two нужны файлы '
+            + ', '.join(missing)
+            + ' в worksheets/tex/fonts/.')
+    return assets + _egor_sty_assets()
+
+
+def collect_font_assets(tex):
+    """Шрифты (и egor.sty) для профиля font= пакета egor, если они нужны."""
+    if tex_wants_stix(tex):
+        return collect_stix_package_assets()
+    if tex_wants_inter(tex):
+        return collect_inter_package_assets()
+    return []
 
 
 def collect_assets(worksheet, exclude_ids=None, tex=''):
@@ -186,7 +239,7 @@ def collect_assets(worksheet, exclude_ids=None, tex=''):
 
     exclude_ids — скрытые элементы: их картинки не уходят в сборку,
     чтобы не подменять одноимённые файлы видимых задач и не раздувать запрос.
-    tex — исходник черновой сборки: при font=inter добавляются OTF и egor.sty.
+    tex — исходник сборки: при font=inter/stix добавляются OTF и egor.sty.
     """
     exclude_ids = set(exclude_ids or ())
     assets = []
@@ -204,11 +257,11 @@ def collect_assets(worksheet, exclude_ids=None, tex=''):
                     'filename': name,
                     'content_base64': base64.b64encode(f.read()).decode(),
                 })
-    if tex_wants_inter(tex):
-        extra = collect_inter_package_assets()
+    extra = collect_font_assets(tex)
+    if extra:
         if len(assets) + len(extra) > 20:
             raise LatexCompileError(
-                'Слишком много картинок для сборки с Inter '
+                'Слишком много картинок для сборки с выбранным шрифтом '
                 f'(лимит {20 - len(extra)} вместе со шрифтами).')
         assets = extra + assets
     return assets
@@ -265,7 +318,7 @@ def get_worksheet_pdf(worksheet, variant, exclude_ids=None):
     suffix = f'-{filter_key}' if filter_key else ''
     pdf_bytes = compile_latex(
         tex, doc_id=f'ws{worksheet.pk}-{variant}{suffix}',
-        assets=collect_assets(worksheet, exclude_ids=exclude_ids))
+        assets=collect_assets(worksheet, exclude_ids=exclude_ids, tex=tex))
 
     stale = WorksheetPdf.objects.filter(
         worksheet=worksheet, variant=variant, filter_key=filter_key)
