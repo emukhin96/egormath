@@ -9,6 +9,8 @@
 #   tools/stage.sh --no-media      # без rsync media
 #   tools/stage.sh --branch ui/x   # ветка для worktree
 #   tools/stage.sh --run           # после подготовки запустить runserver
+#   tools/stage.sh --lan           # слушать 0.0.0.0 и пустить LAN-IP Mac в ALLOWED_HOSTS
+#                                  # (стенд с прод-данными и DEBUG — только в доверенной сети)
 #
 # Переменные окружения (значения по умолчанию):
 #   STAGE_HOST=chemolymp-demo      SSH-хост из ~/.ssh/config
@@ -41,12 +43,13 @@ STAGE_DIR="$ROOT/.worktrees/stage"
 DUMPS="$ROOT/.stage"
 PYTHON="$ROOT/venv/bin/python"
 
-FRESH=0; MEDIA=1; RUN=0; BRANCH=""
+FRESH=0; MEDIA=1; RUN=0; LAN_MODE=0; BRANCH=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --fresh) FRESH=1 ;;
     --no-media) MEDIA=0 ;;
     --run) RUN=1 ;;
+    --lan) LAN_MODE=1 ;;
     --branch) BRANCH="${2:?--branch <ветка>}"; shift ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "Неизвестный аргумент: $1" >&2; exit 2 ;;
@@ -85,6 +88,16 @@ if [ ! -d "$STAGE_DIR/.secrets" ]; then
 fi
 [ -e "$STAGE_DIR/tools/tailwindcss" ] || [ ! -e "$ROOT/tools/tailwindcss" ] \
   || ln -s "$ROOT/tools/tailwindcss" "$STAGE_DIR/tools/tailwindcss"
+# Свой SECRET_KEY стенда: dev-ключ по умолчанию лежит в репозитории, а в
+# базе — слепок прода. Генерируется один раз в .stage/ (в .gitignore),
+# читается settings.py из .secrets стенда как обычный секрет.
+mkdir -p "$DUMPS"
+if [ ! -s "$DUMPS/DJANGO_SECRET_KEY" ]; then
+  "$PYTHON" -c 'import secrets; print(secrets.token_urlsafe(50))' > "$DUMPS/DJANGO_SECRET_KEY"
+  chmod 600 "$DUMPS/DJANGO_SECRET_KEY"
+fi
+[ -e "$STAGE_DIR/.secrets/DJANGO_SECRET_KEY" ] \
+  || ln -s "$DUMPS/DJANGO_SECRET_KEY" "$STAGE_DIR/.secrets/DJANGO_SECRET_KEY"
 
 # 2. дамп базы с сервера
 mkdir -p "$DUMPS"
@@ -130,18 +143,28 @@ STAGE_ENV_SHOWN="DB_ENGINE=mysql DB_NAME=$DB DB_USER=$DB_USER DB_PASSWORD=${DB_P
 echo "==> migrate"
 (cd "$STAGE_DIR/public_html" && env "${STAGE_ENV[@]}" "$PYTHON" manage.py migrate --no-input | tail -n 3)
 
-LAN="$(ipconfig getifaddr en0 2>/dev/null || true)"
-HOSTS="localhost,127.0.0.1${LAN:+,$LAN}"
+# По умолчанию стенд слушает только 127.0.0.1: в базе персональные данные и
+# хэши паролей с прода, а DEBUG включён. Сеть — только явно, флагом --lan.
+BIND=127.0.0.1; HOSTS="localhost,127.0.0.1"; LAN=""
+if [ "$LAN_MODE" = 1 ]; then
+  BIND=0.0.0.0
+  LAN="$(ipconfig getifaddr en0 2>/dev/null || true)"
+  HOSTS="$HOSTS${LAN:+,$LAN}"
+fi
 cat <<MSG
 
 Стенд готов: $BRANCH ($(git -C "$STAGE_DIR" rev-parse --short HEAD)), база $DB, дамп $(basename "$DUMP").
 Запуск (или tools/stage.sh --run):
   cd $STAGE_DIR/public_html && env $STAGE_ENV_SHOWN ALLOWED_HOSTS=$HOSTS \\
-    $PYTHON manage.py runserver 0.0.0.0:$PORT
+    $PYTHON manage.py runserver $BIND:$PORT
   → http://127.0.0.1:$PORT${LAN:+  (с телефона: http://$LAN:$PORT)}
-Вход — своим обычным логином и паролем (хэши из дампа).
+${DB_PASSWORD:+  STAGE_DB_PASSWORD в этой команде берётся из оболочки — экспортируйте его (export STAGE_DB_PASSWORD=…) или запускайте tools/stage.sh --run.
+}Вход — своим обычным логином и паролем (хэши из дампа).
 MSG
+if [ "$LAN_MODE" = 1 ]; then
+  echo "!! --lan: стенд с данными прода и DEBUG=True открыт всей сети${LAN:+ (http://$LAN:$PORT)} — только в доверенной сети." >&2
+fi
 if [ "$RUN" = 1 ]; then
   cd "$STAGE_DIR/public_html"
-  exec env "${STAGE_ENV[@]}" "ALLOWED_HOSTS=$HOSTS" "$PYTHON" manage.py runserver "0.0.0.0:$PORT"
+  exec env "${STAGE_ENV[@]}" "ALLOWED_HOSTS=$HOSTS" "$PYTHON" manage.py runserver "$BIND:$PORT"
 fi
