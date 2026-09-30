@@ -1,9 +1,12 @@
 """Контекстная эквивалентность длин, площадей и наборов диагоналей."""
 from unittest.mock import patch
+import subprocess
+import time
 from django.test import SimpleTestCase
 from django.template.loader import render_to_string
 
 from assignments.checks.mask import check_slot, parse_mask, render_fragments
+from assignments.checks import formulas
 
 
 class FormulaMaskTests(SimpleTestCase):
@@ -38,7 +41,39 @@ class FormulaMaskTests(SimpleTestCase):
         self.assertEqual(check_slot(positive, r'\sqrt{a^2}'), 'ok')
         self.assertEqual(check_slot(real, r'\sqrt{a^2}'), 'wrong')
         with patch('sympy.core.expr.Expr.equals', return_value=None):
-            self.assertEqual(check_slot(real, r'\sqrt{a^2}'), 'wrong')
+            reference, _ = formulas._parse_reference('a')
+            self.assertEqual(formulas._check(r'\sqrt{a^2}', reference), 'wrong')
+
+    def test_absolute_value_bars_are_not_option_separators(self):
+        for reference, value in ((r'|a-1|', r'\sqrt{(a-1)^2}'),
+                                 (r'\left|x\right|', r'\sqrt{x^2}'),
+                                 (r'|a| | positive: a', 'a')):
+            with self.subTest(reference=reference):
+                slot = self.slot('{{expression: ' + reference + '}}')
+                self.assertEqual(check_slot(slot, value), 'ok')
+        slot = self.slot('{{expression: |a-1|}}')
+        self.assertEqual(check_slot(slot, 'a-1'), 'wrong')
+
+    def test_slow_input_is_bounded_and_timeout_does_not_poison_cache(self):
+        reference, _ = formulas.parse_reference('a+17')
+        formulas._checked.cache_clear()
+        with patch.object(formulas, 'WORKER_TIMEOUT', 0.001):
+            started = time.monotonic()
+            self.assertEqual(formulas.check('17+a', reference), 'unknown')
+            self.assertLess(time.monotonic() - started, 1)
+        self.assertEqual(formulas.check('17+a', reference), 'ok')
+        started = time.monotonic()
+        self.assertIn(formulas.check('1/(a^97+a^13+3)', reference),
+                      ('unknown', 'wrong'))
+        self.assertLess(time.monotonic() - started, formulas.WORKER_TIMEOUT + 1)
+
+    def test_worker_failure_is_not_a_wrong_mathematical_answer(self):
+        reference, _ = formulas.parse_reference('a+23')
+        with patch.object(formulas, '_run_worker',
+                          side_effect=subprocess.TimeoutExpired('worker', 3)):
+            self.assertEqual(formulas.check('a+23', reference), 'unknown')
+            with self.assertRaises(ValueError):
+                formulas.parse_reference('a+24')
 
     def test_cancellation_cannot_hide_missing_parameter_values(self):
         slot = self.slot('{{expression: a | positive: a}}')

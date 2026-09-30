@@ -5,8 +5,13 @@
 Исходные знаменатели сохраняются до упрощения: сокращение дроби не должно
 скрывать запрещённое значение параметра.
 """
+import json
 import re
+import subprocess
+import sys
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
 from ..check_answer import MAX_EXPR_LEN, OK, UNKNOWN, WRONG
 from . import expressions
@@ -24,6 +29,64 @@ class Reference:
     items: tuple
     positive: tuple
     symbols: tuple
+
+
+@dataclass(frozen=True)
+class FormulaSpec:
+    payload: str
+    multiple: bool
+
+
+WORKER_TIMEOUT = 3
+
+
+def _run_worker(payload):
+    """Вычисления в отдельном процессе: таймаут убивает и убирает ребёнка.
+
+    Gunicorn использует потоки, поэтому signal.alarm в HTTP-обработчике
+    непригоден. Обмен только JSON, ввод не исполняется как Python.
+    """
+    result = subprocess.run(
+        [sys.executable, '-m', 'assignments.checks.formula_worker'],
+        input=json.dumps(payload), capture_output=True, text=True,
+        cwd=Path(__file__).resolve().parents[2], timeout=WORKER_TIMEOUT,
+        check=False)
+    if result.returncode:
+        raise ValueError('не удалось проверить формулу за отведённое время')
+    return json.loads(result.stdout)
+
+
+@lru_cache(maxsize=256)
+def parse_reference(payload, multiple=False):
+    if len(payload) > MAX_EXPR_LEN:
+        raise ValueError('слишком длинный эталон')
+    try:
+        result = _run_worker({'payload': payload, 'multiple': multiple})
+    except (subprocess.TimeoutExpired, OSError, ValueError) as error:
+        raise ValueError('не удалось проверить эталон за отведённое время') from error
+    if result.get('error'):
+        raise ValueError(result['error'])
+    return FormulaSpec(payload, multiple), result['display']
+
+
+@lru_cache(maxsize=1024)
+def _checked(value, reference):
+    result = _run_worker({'payload': reference.payload,
+                          'multiple': reference.multiple, 'value': value})
+    status = result.get('status')
+    if status not in (OK, WRONG):
+        # Таймауты и неопределённые результаты не остаются в кэше.
+        raise ValueError('проверка не завершена')
+    return status
+
+
+def check(value, reference, multiple=False):
+    if len(value) > MAX_EXPR_LEN:
+        return UNKNOWN
+    try:
+        return _checked(value, reference)
+    except (subprocess.TimeoutExpired, OSError, ValueError):
+        return UNKNOWN
 
 
 def _prepare(text):
@@ -94,8 +157,10 @@ def _parse(text, positive=()):
                    tuple(c.xreplace(replacements) for c in components))
 
 
-def parse_reference(payload, multiple=False):
-    parts = payload.split('|')
+def _parse_reference(payload, multiple=False):
+    # Вертикальные черты модулей являются частью выражения. Опцию
+    # отделяем только | перед завершающей опцией positive.
+    parts = re.split(r'\|\s*(?=positive\s*:)', payload)
     if len(parts) > 2:
         raise ValueError('допустима одна опция positive: a,R')
     positive = ()
@@ -185,7 +250,7 @@ def _counterexample(difference, reference):
     return False
 
 
-def check(value, reference, multiple=False):
+def _check(value, reference, multiple=False):
     from sympy import simplify
     if len(value) > MAX_EXPR_LEN:
         return UNKNOWN
