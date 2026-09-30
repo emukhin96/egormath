@@ -400,6 +400,13 @@ def worksheet_detail(request, pk):
 
     from .recipients import assignment_sections
     assignment_groups, individual_assignments = assignment_sections(assignments, groups)
+    # Диалог видимости задачи: группа отмечена, если задача скрыта у всех её учеников
+    for row in rows:
+        hidden = row.get('hidden_assignments') or set()
+        row['hidden_groups'] = {
+            section['group'].pk for section in assignment_groups
+            if section['assignments']
+            and all(a.pk in hidden for a in section['assignments'])}
     collection = Collection.objects.filter(worksheet=worksheet).select_related('source').first()
     from .authored import SOURCE_TITLE as AUTHORED_SOURCE, is_section
     from assignments.task_usage import attach_usage, audience_context
@@ -1346,6 +1353,18 @@ def worksheet_item_visibility(request, pk, item_id):
             link.hidden_items.remove(*members)
     hide_assignments = {int(x) for x in request.POST.getlist(
         'hide_assignments') if x.isdigit()}
+    # Группа целиком: скрыть у всех её учеников из назначений листка
+    hide_groups = {int(x) for x in request.POST.getlist('hide_groups')
+                   if x.isdigit()}
+    if hide_groups:
+        from .recipients import assignment_sections
+        sections, _ = assignment_sections(
+            list(worksheet.assignments.select_related('student')
+                 .prefetch_related('source_groups')),
+            StudentGroup.visible_to(request.user).prefetch_related('students'))
+        for section in sections:
+            if section['group'].pk in hide_groups:
+                hide_assignments.update(a.pk for a in section['assignments'])
     for assignment in worksheet.assignments.all():
         if assignment.pk in hide_assignments:
             assignment.hidden_items.add(*members)
