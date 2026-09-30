@@ -317,6 +317,8 @@ class AnswerFields(models.Model):
         на доработку check_revealed не ставился, и прятать сверку нельзя.
         """
         assignment = self.assignment_of
+        if not assignment.student_sees_checks:
+            return False
         if assignment.check_visibility == Assignment.CHECK_LIVE:
             return self.check_revealed or not assignment.is_editable_by_student
         return True

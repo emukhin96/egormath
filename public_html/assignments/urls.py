@@ -33,5 +33,6 @@ urlpatterns = [
     path('<int:pk>/review/', views.review_assignment,
          name='review_assignment'),
     path('<int:pk>/review/save/', views.save_review, name='save_review'),
+    path('<int:pk>/review/refresh-check/', views.refresh_assignment_check, name='refresh_assignment_check'),
     path('photo/<int:photo_id>/', views.photo_file, name='photo_file'),
 ]

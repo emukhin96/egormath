@@ -1789,6 +1789,87 @@ class AutoCheckFlowTests(TestCase):
         self.assertEqual(submission.check_json, {formulas.UNAVAILABLE_KEY: 0})
         self.assertIsNone(submission.checked_at)
 
+    def test_teacher_explicitly_refreshes_one_answer_in_hidden_mode(self):
+        from assignments.checks import formulas
+        self.assignment.check_visibility = Assignment.CHECK_TEACHER
+        self.assignment.save()
+        submission = Submission.objects.create(assignment=self.assignment, task=self.task)
+        parts = []
+        for i, value in enumerate((257, 263), start=1):
+            subitem = TaskSubitem.objects.create(task=self.task, order=i,
+                text_latex='а', answer_mask='{{expression: a+' + str(value) + '}}')
+            parts.append(SubmissionPart.objects.create(submission=submission, subitem=subitem,
+                answer_json={'s1': str(value) + '+a'}))
+        self.client.force_login(self.teacher)
+        review_url = reverse('review_assignment', args=[self.assignment.pk])
+        refresh_url = reverse('refresh_assignment_check', args=[self.assignment.pk])
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker', wraps=formulas._run_worker) as worker:
+            self.assertContains(self.client.get(review_url), 'Обновить сверку')
+            worker.assert_not_called()
+            self.assertRedirects(self.client.post(refresh_url), review_url)
+            self.assertEqual(worker.call_count, 1)
+            parts[0].refresh_from_db(); parts[1].refresh_from_db()
+            self.assertEqual(parts[0].auto_check, 'ok')
+            self.assertIsNone(parts[1].checked_at)
+            self.assertContains(self.client.get(review_url), 'Обновить сверку')
+            self.client.post(refresh_url)
+            self.assertEqual(worker.call_count, 2)
+        self.assertNotContains(self.client.get(review_url), 'Обновить сверку')
+        self.assertFalse(Review.objects.filter(submission=submission).exists())
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.status, Assignment.STATUS_ASSIGNED)
+
+    def test_hidden_student_check_refreshes_without_revealing_result(self):
+        from assignments.checks import formulas
+        self.assignment.check_visibility = Assignment.CHECK_TEACHER
+        self.assignment.save()
+        self.task.answer_mask = '{{expression: a+269}}'
+        self.task.save()
+        obj = Submission.objects.create(assignment=self.assignment, task=self.task,
+            answer_json={'s1': '269+a'}, check_revealed=True)
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker', wraps=formulas._run_worker) as worker:
+            response = self.client.get(self.detail)
+            self.assertEqual(worker.call_count, 1)
+        obj.refresh_from_db()
+        self.assertEqual(obj.auto_check, 'ok')
+        self.assertEqual(obj.student_check, '')
+        self.assertEqual(obj.student_slot_checks, {})
+        self.assertNotContains(response, '✓ верно')
+        self.assignment.status = Assignment.STATUS_SUBMITTED
+        self.assignment.save()
+        response = self.client.get(self.detail)
+        self.assertNotContains(response, 'data-status="ok"')
+
+    def test_explicit_refresh_has_teacher_ownership_and_post_guards(self):
+        refresh_url = reverse('refresh_assignment_check', args=[self.assignment.pk])
+        self.assertEqual(self.client.post(refresh_url).status_code, 403)
+        other = make_teacher('other_refresh_teacher')
+        self.client.force_login(other)
+        self.assertEqual(self.client.post(refresh_url).status_code, 404)
+        self.client.force_login(self.teacher)
+        self.assertEqual(self.client.get(refresh_url).status_code, 405)
+
+    def test_refresh_does_not_overwrite_new_answer_saved_during_computation(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+271}}'
+        self.task.save()
+        obj = Submission.objects.create(assignment=self.assignment, task=self.task,
+            answer_json={'s1': '271+a'})
+        original = formulas._run_worker
+        def save_new_answer(*args, **kwargs):
+            Submission.objects.filter(pk=obj.pk).update(answer_json={'s1': '272+a'},
+                auto_check='wrong', check_json={'s1': 'wrong'}, checked_at=timezone.now())
+            return original(*args, **kwargs)
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker', side_effect=save_new_answer):
+            self.client.get(self.detail)
+        obj.refresh_from_db()
+        self.assertEqual(obj.answer_json, {'s1': '272+a'})
+        self.assertEqual(obj.auto_check, 'wrong')
+        self.assertEqual(obj.check_json, {'s1': 'wrong'})
+
     def test_review_shows_filled_mask_with_result_and_reference(self):
         """Учителю — заполненная маска, цвета полей и авторский ответ;
         формула из math-field показывается как $…$, а не кодом."""

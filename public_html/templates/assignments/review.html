@@ -14,6 +14,14 @@
 </p>
 </div></div>
 
+{% if has_stale_checks %}
+<form method="post" action="{% url 'refresh_assignment_check' assignment.pk %}">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-secondary">Обновить сверку</button>
+  <span class="helptext">Обновляет один ответ за нажатие.</span>
+</form>
+{% endif %}
+
 {% include 'workaudit/panel.html' with kind='assignment' object=assignment %}
 <form method="post" action="{% url 'save_review' assignment.pk %}" id="review-form">
   {% csrf_token %}<input type="hidden" name="grade_interface" value="1">

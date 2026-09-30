@@ -612,8 +612,7 @@ def assignment_detail(request, pk):
     assignment = _student_assignment(request, pk)
     rows = _assignment_rows(assignment)
     show_checks = assignment.student_sees_checks
-    if show_checks:
-        _refresh_stale_checks(rows)
+    _refresh_stale_checks(rows)
     editable = assignment.is_editable_by_student
     context = {
         'assignment': assignment,
@@ -780,6 +779,7 @@ def _refresh_stale_checks(rows, for_teacher=False):
     from .checks.formulas import without_worker_wait
 
     refreshed = False
+    refreshed_obj = None
     for row in rows:
         task = row.get('task')
         submission = row.get('submission')
@@ -794,13 +794,24 @@ def _refresh_stale_checks(rows, for_teacher=False):
                 continue
             row['auto_ok'] = False
             if not for_teacher and not refreshed:
+                previous = {key: getattr(obj, key) for key in (
+                    'answer_json', 'updated_at', 'checked_at', 'check_json')}
                 if obj.checked_at is not None:
                     obj.check_json = {}
                 with without_worker_wait():
                     obj.run_check(spec=spec)
                 if getattr(obj, 'check_unavailable', False):
                     obj.auto_check, obj.checked_at = '', None
-                obj.save(update_fields=['auto_check', 'check_json', 'checked_at'])
+                # За время вычисления ученик мог сохранить другой ответ.
+                # В таком случае результат старого ввода не записываем.
+                owner_filter = 'subitem__task__updated_at' if isinstance(obj, SubmissionPart) else 'task__updated_at'
+                changed = type(obj).objects.filter(
+                    pk=obj.pk, **previous, **{owner_filter: task.updated_at}).update(
+                        auto_check=obj.auto_check, check_json=obj.check_json,
+                        checked_at=obj.checked_at)
+                if not changed:
+                    obj.refresh_from_db()
+                refreshed_obj = obj
                 refreshed = True
             else:
                 # Только представление: старые оценки и лимит сбоев в БД
@@ -809,6 +820,7 @@ def _refresh_stale_checks(rows, for_teacher=False):
                 obj.check_stale = True
             target['fragments'] = _mask_fragments(
                 spec, obj, target['prefix'], for_teacher)
+    return refreshed_obj
 
 
 def _is_xhr(request):
@@ -1157,9 +1169,27 @@ def review_assignment(request, pk):
         'next_pending': next_pending,
         'owner_filter': owner_id,
         'grade_choices': Review.grade_options(),
+        'has_stale_checks': any(
+            getattr(obj, 'check_stale', False) for row in rows
+            for obj in [row.get('submission'), *[sr['part'] for sr in row.get('subrows', [])]]),
     }
     context.update(_progress(rows))
     return render(request, 'assignments/review.html', context)
+
+
+@teacher_required
+@require_POST
+def refresh_assignment_check(request, pk):
+    """По явному действию учителя обновить один ответ, даже в скрытом режиме."""
+    assignment = _teacher_assignment(request, pk)
+    obj = _refresh_stale_checks(_assignment_rows(assignment))
+    if obj is None:
+        messages.info(request, 'Нет ответов, требующих обновления сверки.')
+    elif obj.checked_at is None:
+        messages.info(request, 'Сверка временно недоступна. Повторите позже.')
+    else:
+        messages.success(request, 'Сверка одного ответа обновлена.')
+    return redirect('review_assignment', pk=pk)
 
 
 @teacher_required
