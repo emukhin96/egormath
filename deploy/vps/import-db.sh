@@ -15,8 +15,15 @@ fi
 $COMPOSE up -d --wait egormath-db
 # Бэкап текущей базы — по её состоянию, а не по состоянию web: если в базе
 # есть таблицы, сохраняем её и при остановленном или упавшем web.
-TABLES="$($COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = \"$MYSQL_DATABASE\""' 2>/dev/null || echo 0)"
-if [ "${TABLES%$'\r'}" != "0" ]; then
+# Не узнали состояние (пароль root, mysql ещё не принимает соединения) —
+# останавливаемся: без ответа «0» пропускать бэкап перед DROP DATABASE нельзя.
+TABLES="$($COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = \"$MYSQL_DATABASE\""')" \
+  || { echo "!! не удалось запросить состояние базы — бэкап не снят, заливка отменена" >&2; exit 1; }
+TABLES="${TABLES%$'\r'}"
+case "$TABLES" in
+  ''|*[!0-9]*) echo "!! неожиданный ответ MySQL о числе таблиц: '$TABLES' — заливка отменена" >&2; exit 1 ;;
+esac
+if [ "$TABLES" != "0" ]; then
   "$(dirname "$0")/backup.sh" || echo "!! бэкап не удался — продолжаю"
 fi
 # На свежем сервере (restore.sh) контейнера web ещё нет — тогда не трогаем.
