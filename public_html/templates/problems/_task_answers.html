@@ -28,6 +28,7 @@
     {% for row in block.rows %}
     <div class="answer-row" data-src="{{ row.source }}">{% if row.label %}{{ row.label }})&nbsp;{% endif %}{{ row.text|web_text|linebreaksbr }}{% if block.source == 'mixed' %}{% include 'problems/_answer_source.html' with source=row.source %}{% endif %}</div>
     {% endfor %}
+    {% if not material.answer %}{% task_images task 'answers' %}{% endif %}
     {% if block.alts %}
     <details class="answer-alt" data-src="ai"><summary>{{ block.alt_title }}</summary>
       {% for row in block.alts %}<div>{% if row.label %}{{ row.label }})&nbsp;{% endif %}{{ row.alt|web_text|linebreaksbr }}</div>{% endfor %}

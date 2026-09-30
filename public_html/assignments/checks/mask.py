@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass, field
 
 from ..check_answer import OK, UNKNOWN, WRONG, _compact, normalize
-from . import expressions, sets, formats, series
+from . import expressions, sets, formats, series, formulas
 
 NUMBER = 'number'
 DIGITS = 'digits'
@@ -32,6 +32,8 @@ EQUATION = 'equation'
 RANGE = 'range'
 SERIES = 'series'
 ORDER = 'order'
+EXPRESSION = 'expression'
+EXPRESSIONS = 'expressions'
 
 KINDS = {
     NUMBER: 'число',
@@ -48,6 +50,8 @@ KINDS = {
     RANGE: 'числовое множество',
     SERIES: 'периодическое множество кратных π',
     ORDER: 'расставить в порядке',
+    EXPRESSION: 'эквивалентное выражение',
+    EXPRESSIONS: 'выражения в любом порядке',
 }
 
 # Пресеты — готовые списки вариантов для choice: имя → варианты
@@ -75,6 +79,8 @@ HELP = (
     ('{{parity: чётная}}', 'пресет чётная / нечётная / общего вида '
                            '(к любому пресету можно дописать свои варианты через |)'),
     ('{{simplify: \\frac{2}{a+3}}}', 'выражение: эквивалентно эталону и не менее упрощено'),
+    ('{{expression: 2a | positive: a}}', 'любое эквивалентное выражение; a — положительный параметр'),
+    ('{{expressions: a\\sqrt{3}; 2a | positive: a}}', 'все выражения через ; в любом порядке, с учётом кратности'),
     ('{{factor: 2(x-1)(x+1)}}', 'разложение на неприводимые множители, порядок любой'),
     ('{{pair: (2,5; -3); (5; -6)}}', 'упорядоченные пары через ; порядок пар не важен'),
     ('{{set: -2; 1}}', 'множество чисел, порядок не важен; {{set: }} — «нет решений»'),
@@ -133,7 +139,7 @@ class Slot:
 
     @property
     def uses_math_field(self):
-        return self.kind in (SIMPLIFY, FACTOR, EQUATION)
+        return self.kind in (SIMPLIFY, FACTOR, EQUATION, EXPRESSION, EXPRESSIONS)
 
     @property
     def label(self):
@@ -294,6 +300,14 @@ def _parse_pair(slot, payload):
     slot.data, slot.reference = pairs, payload.strip()
 
 
+def _parse_formula(slot, payload):
+    try:
+        slot.data, slot.reference = formulas.parse_reference(
+            payload, multiple=slot.kind == EXPRESSIONS)
+    except ValueError as error:
+        slot.error = str(error)
+
+
 def _parse_set(slot, payload):
     values = sets.parse_set(payload) if payload.strip() else []
     if values is None:
@@ -332,6 +346,7 @@ _PARSERS = {
     NUMBER: _parse_number, CHOICE: _parse_choice, SIMPLIFY: _parse_expression,
     FACTOR: _parse_expression, EQUATION: _parse_expression, PAIR: _parse_pair,
     SET: _parse_set, RANGE: _parse_range, SERIES: _parse_series, ORDER: _parse_order,
+    EXPRESSION: _parse_formula, EXPRESSIONS: _parse_formula,
 }
 
 
@@ -446,6 +461,8 @@ def check_slot(slot, value):
         return UNKNOWN if equal is None else (OK if equal else WRONG)
     if kind == SIMPLIFY:
         return expressions.check_simplified(value, slot.data)
+    if kind in (EXPRESSION, EXPRESSIONS):
+        return formulas.check(value, slot.data, multiple=kind == EXPRESSIONS)
     if kind == FACTOR:
         return expressions.check_factored(value, slot.data)
     if kind == EQUATION:

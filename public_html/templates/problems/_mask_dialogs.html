@@ -17,13 +17,16 @@
         <option value="series">Периодическая серия</option>
         <option value="yesno">Да / нет</option><option value="parity">Чётность</option>
         <option value="set">Набор чисел</option><option value="pair">Пары чисел</option>
-        <option value="simplify">Выражение</option><option value="factor">Разложение на множители</option>
+        <option value="expression">Эквивалентное выражение</option>
+        <option value="expressions">Выражения в любом порядке</option>
+        <option value="simplify">Упростить выражение</option><option value="factor">Разложение на множители</option>
         <option value="equation">Уравнение</option><option value="choice">Выбор из вариантов</option>
         <option value="order">Расставить по порядку</option><option value="compare">Сравнение</option>
         <option value="sign">Знак</option><option value="truefalse">Верно / неверно</option>
       </select></label>
       <p><label>Правильный ответ<input name="reference" type="text"></label></p>
       <p class="helptext">Варианты выбора: а|*б (звёздочкой отмечен правильный). Порядок: значения через |. Набор чисел: через ;. Серия: вводите обычным текстом, например <code>πn</code> или <code>\pi*n</code>.</p>
+      <p class="helptext">Выражения в любом порядке: через ;. Положительные параметры для выражений: допишите <code>| positive: a,R</code> после эталона, если это следует из условия.</p>
       <p><label>Подпись перед полем<input name="prefix" type="text" placeholder="Например: a ∈"></label></p>
       <div class="form-buttons"><button type="button" class="btn btn-secondary" data-mask-insert>Добавить поле в маску</button></div>
     </details>

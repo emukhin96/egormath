@@ -1,0 +1,223 @@
+"""Свободно эквивалентные формулы и наборы формул без требования упрощения.
+
+Ввод разбирается той же безопасной Lark-грамматикой, что и остальные маски.
+Положительные параметры указываются явно: ``... | positive: a,R``.
+Исходные знаменатели сохраняются до упрощения: сокращение дроби не должно
+скрывать запрещённое значение параметра.
+"""
+import re
+from dataclasses import dataclass
+
+from ..check_answer import MAX_EXPR_LEN, OK, UNKNOWN, WRONG
+from . import expressions
+
+
+@dataclass
+class Formula:
+    expression: object
+    denominators: tuple
+    components: tuple
+
+
+@dataclass
+class Reference:
+    items: tuple
+    positive: tuple
+    symbols: tuple
+
+
+def _prepare(text):
+    # Lark не понимает соседство степени и корня: a²√3.
+    text = re.sub(r'(\^(?:\{[^{}]+\}|[+-]?\d+))\s*(?=[A-Za-z]|\\(?:sqrt|frac|pi)\b)',
+                  r'\1\\cdot ', text)
+    text = re.sub(r'(\^\{[^{}]+\})\s*(?=\()', r'\1\\cdot ', text)
+    return re.sub(r'([})])\s*(?=\\(?:sqrt|frac|pi)\b)', r'\1\\cdot ', text)
+
+
+def _components(tree):
+    """Сохраняет области подвыражений до сокращения корней и степеней."""
+    if not expressions._is_tree(tree):
+        return []
+    tree = expressions.resolve(tree)
+    value = expressions.evaluate(tree)
+    result = [value] if value is not None and hasattr(value, 'free_symbols') else []
+    for child in tree.children:
+        result.extend(_components(child))
+    return result
+
+
+def _denominators(tree):
+    """Знаменатели в сыром дереве, включая полностью сокращённые дроби."""
+    if not expressions._is_tree(tree):
+        return []
+    tree = expressions.resolve(tree)
+    result = []
+    if tree.data in ('fraction', 'div'):
+        operands = [c for c in tree.children if expressions._is_tree(c)
+                    or expressions._is_symbol_token(c)]
+        if len(operands) == 2:
+            child = operands[1]
+            value = (expressions.evaluate(child) if expressions._is_tree(child)
+                     else expressions.parse_expr(str(child)))
+            if value is not None:
+                result.append(value)
+    for child in tree.children:
+        result.extend(_denominators(child))
+    return result
+
+
+def _parse(text, positive=()):
+    from sympy import Expr, Symbol, pi
+    if not text.strip() or len(text) > MAX_EXPR_LEN:
+        return None
+    text = _prepare(text)
+    # Константа π не поддерживается штатной Lark-грамматикой.
+    marker = next((c for c in 'QZXVW' if c not in text), None)
+    has_pi = bool(re.search(r'\\pi\b|π', text))
+    if has_pi:
+        if marker is None:
+            return None
+        text = re.sub(r'\\pi\b|π', marker, text)
+    tree, value = expressions.parse(text)
+    if tree is None or not isinstance(value, Expr):
+        return None
+    denominators = _denominators(tree)
+    components = _components(tree)
+    symbols = set(value.free_symbols)
+    for component in (*denominators, *components):
+        symbols.update(component.free_symbols)
+    replacements = {s: (pi if has_pi and str(s) == marker else
+                       Symbol(str(s), positive=True) if str(s) in positive else
+                       Symbol(str(s), real=True)) for s in symbols}
+    return Formula(value.xreplace(replacements),
+                   tuple(d.xreplace(replacements) for d in denominators),
+                   tuple(c.xreplace(replacements) for c in components))
+
+
+def parse_reference(payload, multiple=False):
+    parts = payload.split('|')
+    if len(parts) > 2:
+        raise ValueError('допустима одна опция positive: a,R')
+    positive = ()
+    if len(parts) == 2:
+        match = re.fullmatch(r'\s*positive\s*:\s*([A-Za-z](?:\s*,\s*[A-Za-z])*)\s*', parts[1])
+        if not match:
+            raise ValueError('положительные параметры: positive: a,R')
+        positive = tuple(x.strip() for x in match[1].split(','))
+    texts = parts[0].split(';') if multiple else [parts[0]]
+    if not texts or len(texts) > 20 or any(not t.strip() for t in texts):
+        raise ValueError('укажите от 1 до 20 выражений через ;')
+    items = tuple(_parse(t.strip(), positive) for t in texts)
+    if any(x is None for x in items):
+        raise ValueError('эталон не разобран как выражение')
+    symbols = set()
+    for item in items:
+        symbols.update(item.expression.free_symbols)
+        for component in (*item.denominators, *item.components):
+            symbols.update(component.free_symbols)
+    if set(positive) - {str(s) for s in symbols}:
+        raise ValueError('positive содержит параметр, которого нет в эталоне')
+    reference = Reference(items, positive, tuple(sorted(symbols, key=str)))
+    if any(_defined(item, reference) is False for item in items):
+        raise ValueError('эталон не определён на указанной области параметров')
+    return reference, parts[0].strip()
+
+
+def _defined(item, reference):
+    """Отсекает лишние разрывы и невещественные значения на области эталона."""
+    from sympy import S, Interval, solveset, oo
+    from sympy.calculus.util import continuous_domain
+    value = item.expression
+    if any(c.has(S.NaN, S.ComplexInfinity, S.Infinity, S.NegativeInfinity)
+           for c in (value, *item.components)):
+        return False
+    if any(c.is_real is False for c in (value, *item.components)):
+        return False
+    if len(reference.symbols) == 1:
+        symbol = reference.symbols[0]
+        domain = Interval.open(0, oo) if symbol.is_positive else S.Reals
+        try:
+            # Допустимая область включает ограничения исходной формулы.
+            allowed = domain
+            for original in reference.items:
+                for component in (original.expression, *original.components):
+                    allowed = allowed.intersect(continuous_domain(component, symbol, domain))
+                for denominator in original.denominators:
+                    allowed = allowed - solveset(denominator, symbol, domain=domain)
+            valid = continuous_domain(value, symbol, domain)
+            for component in item.components:
+                valid = valid.intersect(continuous_domain(component, symbol, domain))
+            for denominator in item.denominators:
+                valid = valid - solveset(denominator, symbol, domain=domain)
+            return (allowed - valid).is_empty
+        except (NotImplementedError, ValueError, TypeError):
+            return None
+    # Для нескольких независимых параметров утверждаем только доказанное.
+    if (all(d.is_nonzero is True for d in item.denominators)
+            and all(c.is_real is True for c in (value, *item.components))):
+        return True
+    return None
+
+
+def _counterexample(difference, reference):
+    """Точная допустимая подстановка может опровергнуть, но не доказать равенство.
+
+    SymPy.equals иногда не решает Abs(a)-a из-за случайных проб. Проверяем
+    знаки параметров детерминированно; неизвестные результаты не принимаем.
+    """
+    from sympy import S
+
+    baseline = {symbol: S.One for symbol in reference.symbols}
+    for symbol in reference.symbols:
+        for number in (-2, -1, 1, 2):
+            if symbol.is_positive and number <= 0:
+                continue
+            values = {**baseline, symbol: S(number)}
+            valid = True
+            for original in reference.items:
+                for component in (original.expression, *original.components):
+                    value = component.subs(values)
+                    valid &= value.is_real is True and value.is_finite is True
+                for denominator in original.denominators:
+                    valid &= denominator.subs(values).is_zero is False
+            if valid and difference.subs(values).is_zero is False:
+                return True
+    return False
+
+
+def check(value, reference, multiple=False):
+    from sympy import simplify
+    if len(value) > MAX_EXPR_LEN:
+        return UNKNOWN
+    texts = value.split(';') if multiple else [value]
+    if len(texts) != len(reference.items) or any(not t.strip() for t in texts):
+        return WRONG
+    student = tuple(_parse(t.strip(), reference.positive) for t in texts)
+    if any(item is None for item in student):
+        return UNKNOWN
+    allowed_symbols = set(reference.symbols)
+    for item in student:
+        if item.expression.free_symbols - allowed_symbols:
+            return WRONG
+        for component in (*item.denominators, *item.components):
+            if component.free_symbols - allowed_symbols:
+                return WRONG
+        defined = _defined(item, reference)
+        if defined is not True:
+            return WRONG if defined is False else UNKNOWN
+    # Сохраняем кратность: лишняя или повторная длина не заменяет другую.
+    remaining = list(reference.items)
+    for item in student:
+        uncertain = False
+        for index, expected in enumerate(remaining):
+            difference = simplify(item.expression - expected.expression)
+            same = difference == 0 or difference.equals(0)
+            if same is None and _counterexample(difference, reference):
+                same = False
+            if same is True:
+                remaining.pop(index)
+                break
+            uncertain |= same is None
+        else:
+            return UNKNOWN if uncertain else WRONG
+    return OK
