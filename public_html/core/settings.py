@@ -103,10 +103,16 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-# На проде всегда MySQL; в разработке — sqlite, либо MySQL при DB_ENGINE=mysql
-# (стенд со слепком прода). DB_SOCKET — unix-сокет локального MySQL: через
-# него caching_sha2_password не требует пакета cryptography, как TCP.
-DB_ENGINE = read_secret('DB_ENGINE', 'mysql' if IS_PRODUCTION else 'sqlite')
+# На проде всегда MySQL (DB_ENGINE там не читается); в разработке — sqlite,
+# либо MySQL при DB_ENGINE=mysql (стенд со слепком прода). Неизвестное
+# значение — ошибка конфигурации, а не тихий уход на sqlite. DB_SOCKET —
+# unix-сокет локального MySQL: через него caching_sha2_password не требует
+# пакета cryptography, как TCP.
+DB_ENGINE = 'mysql' if IS_PRODUCTION else read_secret('DB_ENGINE', 'sqlite')
+if DB_ENGINE not in ('mysql', 'sqlite'):
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured(
+        f'DB_ENGINE={DB_ENGINE!r}: допустимы только "mysql" и "sqlite"')
 if DB_ENGINE == 'mysql':
     import pymysql
 
