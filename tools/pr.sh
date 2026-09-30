@@ -116,15 +116,28 @@ for r in json.load(sys.stdin):
         print("ревью: %s — %s %s" % (r["user"]["login"], r["state"], (r.get("body") or "")[:120].replace("\n", " ")))'
   # Тред без ответа — тот, где последнее слово не за автором PR: по пайплайну
   # автор обязан ответить в каждом (что и в каком коммите исправлено или почему нет).
+  # Замечание, опубликованное с аккаунта автора (ревью, запущенное вручную:
+  # маркер [P1]…[P3] или claude-finding), — тоже тред, пока под ним нет ответа.
   api GET "/pulls/$num/comments?per_page=100" | python3 -c '
-import json, sys
+import json, re, sys
 author = sys.argv[1]
 cs = json.load(sys.stdin)
 roots = [c for c in cs if not c.get("in_reply_to_id")]
+replies = {}
 last = {}
 for c in sorted(cs, key=lambda c: c["created_at"]):
-    last[c.get("in_reply_to_id") or c["id"]] = c["user"]["login"]
-unanswered = [c["id"] for c in roots if last.get(c["id"]) != author]
+    root = c.get("in_reply_to_id") or c["id"]
+    last[root] = c["user"]["login"]
+    if c.get("in_reply_to_id"):
+        replies.setdefault(root, []).append(c["user"]["login"])
+FINDING = re.compile(r"\[P[1-3]\]|claude-finding")
+def is_unanswered(c):
+    if last.get(c["id"]) != author:
+        return True
+    if c["user"]["login"] == author and FINDING.search(c["body"] or ""):
+        return author not in replies.get(c["id"], [])
+    return False
+unanswered = [c["id"] for c in roots if is_unanswered(c)]
 print("замечаний в коде: %d, без ответа: %d" % (len(roots), len(unanswered)))
 for c in cs:
     if c.get("in_reply_to_id"):
