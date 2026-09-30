@@ -1118,14 +1118,14 @@
   }
 
   /* Строка со счётчиком: число строго в правой колонке, название переносится */
-  .sidebar-list a.sidebar-row-count {
+  .sidebar-list li > a.sidebar-row-count {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     gap: var(--space-2);
   }
 
-  .sidebar-list a.sidebar-row-count .sidebar-count {
+  .sidebar-list li > a.sidebar-row-count .sidebar-count {
     float: none;
     flex: none;
     margin-left: 0;
@@ -1922,10 +1922,9 @@
   .task-catalog .catalog-table { min-width: 680px; }
   .task-catalog col.col-key { width: 5rem; }
   .task-catalog .catalog-table col.col-topics { width: 25%; }
-  .catalog-table td { overflow-wrap: anywhere; vertical-align: top; }
-  /* Каталог: номер, чекбокс и «+» на базовой линии первой строки текста
-     (у формул KaTeX линия выше обычной, поэтому по верху не сходится) */
-  .task-catalog td { vertical-align: baseline; }
+  /* Ячейки по базовой линии первой строки: номер, чекбокс и «+» на линии
+     текста и при формулах KaTeX (по верху не сходится — у формул линия выше) */
+  .catalog-table td { overflow-wrap: anywhere; vertical-align: baseline; }
   .catalog-table .task-text { margin-bottom: var(--space-2); }
   .catalog-table .import-section-path { margin-bottom: var(--space-3); }
   .problem-columns label { display: block; }
