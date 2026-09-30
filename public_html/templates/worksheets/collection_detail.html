@@ -70,7 +70,7 @@
     {% endif %}
   </div>
   {% if flat_groups %}
-  <div id="ws-items" class="collection-flat ws-collection" data-answers-key="collection-show-answers">
+  <div id="ws-items" style="--task-num-col: calc({{ number_width }}ch + 1.1rem)" class="collection-flat ws-collection" data-answers-key="collection-show-answers">
     {% for group in flat_groups %}
     <section class="collection-flat-group depth-{{ group.depth }}" id="collection-{{ group.collection.pk }}">
       <h3 class="collection-flat-heading">
