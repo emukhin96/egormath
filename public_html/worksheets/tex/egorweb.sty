@@ -76,7 +76,8 @@
   \begingroup
   \setlength{\egorMathAnswerWidth}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}%
   \begin{varwidth}[t]{\egorMathAnswerWidth}%
-    \raggedright\relpenalty=500\binoppenalty=700 #1%
+    % Глубина последней строки нужна рамке и таблице, даже без нижних выносных.
+    \raggedright\relpenalty=500\binoppenalty=700 #1\strut%
   \end{varwidth}%
   \endgroup
 }
