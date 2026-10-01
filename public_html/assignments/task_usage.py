@@ -8,19 +8,23 @@
   имеет вид ``t<task_pk>`` или ``t<task_pk>:s<owner_pk>``.
 
 Локальная копия задачи (``Task.variant_of``) засчитывается оригиналу.
+В списке выдачи сворачиваются по группам (``usage_events``): листок,
+выданный группе, — одна строка с названием группы, а не по строке на
+каждого ученика.
 «Аудитория» — ученик или группа, для которых нужна история; она
 берётся из GET-параметров ``student``/``group`` и запоминается в
 сессии, чтобы каталог, подбор кандидатов и подборки показывали одно
 и то же, пока учитель не сменит выбор.
 """
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from functools import reduce
 from operator import or_
 
 from django.db.models import Q
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import Profile, StudentGroup
 from worksheets.models import WorksheetItem
@@ -38,10 +42,45 @@ class UsageRow:
     kind: str          # 'assignment' | 'independent'
     title: str
     url: str
+    source_id: int = None    # листок или запуск самостоятельной
+    groups: tuple = ()       # группы, через которые выдано (если известно)
 
     @property
     def student_name(self):
-        return self.student.get_full_name() or self.student.username
+        return _student_name(self.student)
+
+
+def _student_name(student):
+    return student.get_full_name() or student.username
+
+
+@dataclass
+class UsageEvent:
+    """Одна выдача в списке: листок/самостоятельная в один день.
+
+    ``groups`` — группы, получившие выдачу целиком, ``students`` — ученики
+    вне этих групп (по именам).
+    """
+    date: datetime     # последняя выдача за этот день
+    kind: str
+    title: str
+    url: str
+    groups: list = field(default_factory=list)
+    students: list = field(default_factory=list)
+
+    SHOWN_STUDENTS = 5  # дальше — «и ещё N», полный список в подсказке
+
+    @property
+    def shown_students(self):
+        return [_student_name(s) for s in self.students[:self.SHOWN_STUDENTS]]
+
+    @property
+    def more_students(self):
+        return max(len(self.students) - self.SHOWN_STUDENTS, 0)
+
+    @property
+    def all_students(self):
+        return ', '.join(_student_name(s) for s in self.students)
 
 
 @dataclass
@@ -153,21 +192,42 @@ def task_usage(teacher, tasks, *, student_ids=None):
         assignments = (Assignment.visible_to(teacher)
                        .filter(worksheet_id__in=tasks_by_worksheet)
                        .select_related('student', 'worksheet')
-                       .prefetch_related('hidden_items'))
-        if student_ids is not None:
-            assignments = assignments.filter(student_id__in=student_ids)
+                       .prefetch_related('hidden_items', 'source_groups'))
+        # Группа, у части учеников которой задача скрыта, получила её
+        # не целиком: (задача, листок, день, группа) — такую группу у строк
+        # убираем, и ученики показываются по именам. Скрытие ищем у всех
+        # учеников группы, поэтому аудиторию фильтруем только при сборе строк.
+        partial = set()
         for assignment in assignments:
             hidden = {item.pk for item in assignment.hidden_items.all()}
+            groups = tuple(assignment.source_groups.all())
+            in_audience = student_ids is None or assignment.student_id in student_ids
             seen = set()
             for item_pk, root in tasks_by_worksheet[assignment.worksheet_id]:
                 if item_pk in hidden or root in seen:
                     continue
                 seen.add(root)
+                if not in_audience:
+                    continue
                 usage[root].append(UsageRow(
                     student=assignment.student, date=assignment.assigned_at,
                     kind='assignment', title=assignment.worksheet.title,
                     url=reverse('worksheet_progress',
-                                args=[assignment.worksheet_id])))
+                                args=[assignment.worksheet_id]),
+                    source_id=assignment.worksheet_id, groups=groups))
+            if groups:
+                day = timezone.localdate(assignment.assigned_at)
+                for _, root in tasks_by_worksheet[assignment.worksheet_id]:
+                    if root not in seen:
+                        partial.update((root, assignment.worksheet_id, day, group.pk)
+                                       for group in groups)
+        if partial:
+            for root, rows in usage.items():
+                for row in rows:
+                    day = timezone.localdate(row.date)
+                    row.groups = tuple(
+                        group for group in row.groups
+                        if (root, row.source_id, day, group.pk) not in partial)
 
     # Самостоятельные: пункты варианта → попытки учеников. В source_key
     # может стоять id локальной копии (аналог, созданный из подбора) —
@@ -202,18 +262,76 @@ def task_usage(teacher, tasks, *, student_ids=None):
                     date=attempt.run.issued_at or attempt.run.created_at,
                     kind='independent', title=attempt.run.title,
                     url=reverse('independentworks:progress',
-                                args=[attempt.run_id])))
+                                args=[attempt.run_id]),
+                    source_id=attempt.run_id))
 
     for rows in usage.values():
         rows.sort(key=lambda row: row.date, reverse=True)
     return usage
 
 
+def _group_members(teacher):
+    """Группы учителя с составом: [(группа, {id учеников}), …], крупные первыми."""
+    groups = [(group, frozenset(s.pk for s in group.students.all()))
+              for group in StudentGroup.visible_to(teacher)
+              .prefetch_related('students')]
+    groups = [(group, members) for group, members in groups if members]
+    groups.sort(key=lambda pair: (-len(pair[1]), pair[0].name))
+    return groups
+
+
+def usage_events(rows, group_members):
+    """Сворачивает строки истории в выдачи: один листок или запуск за день.
+
+    Группа ставится вместо учеников, если выдача шла через неё (``groups``
+    у задания; ``task_usage`` убирает группу, если у кого-то из неё задача
+    скрыта) и через неё прошло больше половины нынешнего состава группы,
+    или если её получил весь текущий состав — так видны и самостоятельные,
+    где группа при выдаче не хранится, и старые задания. Довыдача новичку
+    группы и аудитория «один ученик» остаются по именам, как и все
+    остальные ученики. Порядок — по убыванию даты.
+    """
+    sizes = {group.pk: len(members) for group, members in group_members}
+    by_key = {}
+    for row in rows:
+        key = (row.kind, row.source_id, timezone.localdate(row.date))
+        entry = by_key.get(key)
+        if entry is None:
+            entry = by_key[key] = {
+                'event': UsageEvent(date=row.date, kind=row.kind,
+                                    title=row.title, url=row.url),
+                'students': {}, 'via': {}}
+        entry['students'].setdefault(row.student.pk, row.student)
+        for group in row.groups:
+            entry['via'].setdefault(group.pk, (group, set()))[1].add(row.student.pk)
+    events = []
+    for entry in by_key.values():
+        event, students = entry['event'], entry['students']
+        explicit = [(group, via) for group, via in entry['via'].values()
+                    if 2 * len(via) > sizes.get(group.pk, 0)]
+        event.groups = sorted((group for group, _ in explicit), key=lambda g: g.name)
+        covered = set().union(*(via for _, via in explicit))
+        # Без явной группы — ищем группы, целиком получившие выдачу; вложенная
+        # в уже показанную группа не повторяется.
+        rest = set(students) - covered
+        for group, members in group_members:
+            if group not in event.groups and members <= rest and not members <= covered:
+                event.groups.append(group)
+                covered |= members
+        event.students = sorted(
+            (student for pk, student in students.items() if pk not in covered),
+            key=_student_name)
+        events.append(event)
+    events.sort(key=lambda event: event.date, reverse=True)
+    return events
+
+
 def attach_usage(request, tasks, *, audience=None):
     """Навешивает ``task.usage`` на каждую задачу списка одним проходом.
 
     ``task.usage`` — словарь для ``includes/task_usage_badge.html``:
-    строки истории, аудитория и число разных учеников.
+    строки истории, выдачи (свёрнутые по группам), аудитория и число
+    разных учеников.
     """
     tasks = [task for task in tasks if task is not None]
     if not tasks:
@@ -221,10 +339,13 @@ def attach_usage(request, tasks, *, audience=None):
     if audience is None:
         audience = resolve_audience(request)
     usage = task_usage(request.user, tasks, student_ids=audience.student_ids)
+    group_members = (_group_members(request.user)
+                     if any(usage.values()) else [])
     for task in tasks:
         rows = usage.get(task.variant_of_id or task.pk, [])
         task.usage = {
             'rows': rows,
+            'events': usage_events(rows, group_members),
             'audience': audience,
             'students_total': len({row.student.pk for row in rows}),
             'audience_total': (len(audience.student_ids)

@@ -1497,8 +1497,10 @@
     left: 0;
     top: calc(100% + 4px);
     z-index: 30;
+    /* По ширине строки «группа — листок · дата», а не по узкому бейджу */
+    width: max-content;
     min-width: 280px;
-    max-width: min(560px, 80vw);
+    max-width: min(720px, 80vw);
     margin: 0;
     padding: var(--space-2) var(--space-3);
     list-style: none;
@@ -1510,6 +1512,7 @@
     box-shadow: 0 8px 24px rgb(18 43 85 / 14%);
   }
   .usage-list li + li { margin-top: var(--space-1); }
+  .usage-group { font-weight: 600; }
   .audience-form { display: flex; align-items: center; gap: var(--space-2); }
   .audience-form label { margin: 0; white-space: nowrap; }
 
@@ -2496,8 +2499,9 @@
     list-style-position: inside;
   }
 
-  /* Подборка: подпункты, картинки, ответы и решения — на линии основного
-     текста задачи, как в просмотре листка; «а)» тоже на этой линии. */
+  /* Подборка: подпункты, картинки, ответы, решения и маски ответов — на
+     линии основного текста задачи, как в просмотре листка; «а)» тоже на
+     этой линии. */
   #ws-items.ws-collection {
     --task-num-col: 2rem;
     --task-indent: calc(var(--task-num-col) + 6px);
@@ -2519,7 +2523,8 @@
 
   #ws-items.ws-collection .ws-content > .ws-answers,
   #ws-items.ws-collection .ws-content > .task-images,
-  #ws-items.ws-collection .ws-content > .usage-badge {
+  #ws-items.ws-collection .ws-content > .usage-badge,
+  #ws-items.ws-collection .ws-content > [data-worksheet-mask] {
     margin-left: var(--task-indent);
   }
 
