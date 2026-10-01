@@ -5,6 +5,8 @@
 Продакшен (Timeweb): секреты в <корень сайта>/.secrets/, MySQL.
 Переключение: файл .secrets/DJANGO_ENV со значением "production"
 или переменная окружения DJANGO_ENV=production.
+База в разработке — sqlite; DB_ENGINE=mysql подключает MySQL и без
+production (локальный стенд со слепком прода, tools/stage.sh).
 """
 
 import os
@@ -101,7 +103,17 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-if IS_PRODUCTION:
+# На проде всегда MySQL (DB_ENGINE там не читается); в разработке — sqlite,
+# либо MySQL при DB_ENGINE=mysql (стенд со слепком прода). Неизвестное
+# значение — ошибка конфигурации, а не тихий уход на sqlite. DB_SOCKET —
+# unix-сокет локального MySQL: через него caching_sha2_password не требует
+# пакета cryptography, как TCP.
+DB_ENGINE = 'mysql' if IS_PRODUCTION else read_secret('DB_ENGINE', 'sqlite')
+if DB_ENGINE not in ('mysql', 'sqlite'):
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured(
+        f'DB_ENGINE={DB_ENGINE!r}: допустимы только "mysql" и "sqlite"')
+if DB_ENGINE == 'mysql':
     import pymysql
 
     pymysql.install_as_MySQLdb()
@@ -119,6 +131,9 @@ if IS_PRODUCTION:
             },
         }
     }
+    DB_SOCKET = read_secret('DB_SOCKET', '')
+    if DB_SOCKET:
+        DATABASES['default']['OPTIONS']['unix_socket'] = DB_SOCKET
 else:
     DATABASES = {
         'default': {

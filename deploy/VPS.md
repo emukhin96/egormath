@@ -31,7 +31,7 @@ egormath (`/opt/egormath`, этот документ). SSH: `ssh chemolymp-demo`
 | `staticfiles/` | `/app/public_html/staticfiles` | результат `collectstatic` |
 | `var/`, `cache/` | `/app/var`, `/app/.cache` | корпус, партии; файловый кэш рубрикатора |
 | `mysql/` | `/var/lib/mysql` | база |
-| `backups/`, `logs/` | — | дампы и логи cron |
+| `backups/`, `logs/` | — | наборы бэкапа (раздел «Бэкапы») и логи cron |
 
 Настройки стека — `/opt/egormath/.env` (образец — `deploy/vps/env.example`).
 
@@ -49,6 +49,7 @@ egormath (`/opt/egormath`, этот документ). SSH: `ssh chemolymp-demo`
 | Логи | `cd /opt/egormath && docker compose --env-file .env -f deploy/vps/compose.yaml logs -f --tail=100 egormath-web` |
 | Состояние, память | `docker compose … ps`, `docker stats --no-stream` |
 | Бэкап вручную | `/opt/egormath/deploy/vps/backup.sh` |
+| Откат базы/файлов на ночной слепок | `/opt/egormath/deploy/vps/restore.sh --stamp <YYYYMMDD-HHMMSS>` (см. «Восстановление после потери сервера») |
 | Сводка нагрузки | `/opt/egormath/deploy/vps/log-report.sh` (7 дней) или `… 24h`; еженедельно — `data/logs/weekly-report.log` |
 | Выключить холст | `echo 0 > /opt/egormath/data/secrets/CANVAS_ENABLED` и `docker compose … restart egormath-web` |
 
@@ -62,25 +63,61 @@ egormath (`/opt/egormath`, этот документ). SSH: `ssh chemolymp-demo`
 
 ## Бэкапы вне сервера и мониторинг
 
-`backup.sh` каждую ночь кладёт дамп базы и архив media в
-`/opt/egormath/data/backups` (14 дней). Этого мало: при потере сервера
-пропадут и бэкапы. Копия в S3 Timeweb включается один раз:
+`backup.sh` каждую ночь (cron, 01:15 UTC) кладёт в `/opt/egormath/data/backups`
+набор с одной отметкой времени и копирует его в S3 Timeweb (rclone,
+`BACKUP_RCLONE_REMOTE`):
 
-1. Панель Timeweb → S3-хранилище → создать приватный бакет, например
-   `egormath-backups`; в настройках бакета — ключи доступа (Access Key /
-   Secret Key).
-2. На сервере от root: `apt-get install -y rclone`.
-3. От `deploy`: `rclone config` → `n` (new remote) → имя `s3` → тип
-   `s3` → provider `Other` → ключи из п. 1 → endpoint
-   `https://s3.twcstorage.ru` → остальное по умолчанию. Проверка:
-   `rclone lsd s3:`.
-4. В `/opt/egormath/.env`: `BACKUP_RCLONE_REMOTE=s3:egormath-backups`.
-   Проверка: `/opt/egormath/deploy/vps/backup.sh` — в конце строка
-   `==> rclone -> s3:egormath-backups`, затем `rclone ls s3:egormath-backups`.
+| Файл | Что внутри |
+|---|---|
+| `db-<stamp>.sql.gz` | дамп MySQL (`--single-transaction --routines`) |
+| `media-<stamp>.tar.gz` | `data/media`: картинки задач, фото решений, кэш PDF |
+| `var-<stamp>.tar.gz` | `data/var`: корпус листков и партии задачников, ещё не загруженные в каталог |
+| `secrets-<stamp>.tar.gz.enc` | `data/secrets`, `.env`, `crontab -l`, `rclone.conf` — AES-256 паролем `BACKUP_SECRETS_PASSPHRASE` |
 
-Восстановление проверять раз в месяц: скачать свежий дамп
-(`rclone copy s3:egormath-backups/db-<дата>.sql.gz /tmp/`) и залить его
-на Mac в локальный MySQL или в копию стека.
+На диске и в S3 хранится `RETENTION_DAYS` (14) дней; в S3 бессрочно остаются
+дампы базы за 1-е число месяца и дампы Timeweb (`timeweb*.sql.gz`).
+Без пароля секретов архив не создаётся (скрипт пишет `!!` в
+`data/logs/backup.log`) — и после потери сервера пропадут `DJANGO_SECRET_KEY`
+(сессии, токены форм), ключи API и `.env`.
+
+Включается один раз:
+
+1. S3: Панель Timeweb → S3-хранилище → приватный бакет `egormath-backups`,
+   ключи доступа (Access Key / Secret Key). На сервере от root:
+   `apt-get install -y rclone`; от `deploy`: `rclone config` → `n` → имя `s3`
+   → тип `s3` → provider `Other` → ключи → endpoint `https://s3.twcstorage.ru`.
+   Проверка: `rclone lsd s3:`. В `.env`: `BACKUP_RCLONE_REMOTE=s3:egormath-backups`.
+   (Сделано 27.09.2026.)
+2. Пароль секретов — на сервере и на Mac, значение одно и то же:
+
+   ```bash
+   # на сервере, от deploy
+   P=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+   echo "BACKUP_SECRETS_PASSPHRASE=$P" >> /opt/egormath/.env
+   # на Mac, из корня репозитория: то же значение в .secrets/
+   ssh chemolymp-demo "grep ^BACKUP_SECRETS_PASSPHRASE= /opt/egormath/.env | cut -d= -f2-" \
+     > .secrets/BACKUP_SECRETS_PASSPHRASE && chmod 600 .secrets/BACKUP_SECRETS_PASSPHRASE
+   ```
+
+   Пароль нужен только при восстановлении: на новом сервере его вписывают
+   в `.env` с Mac. Потерять пароль = потерять секреты, поэтому копия ещё и в
+   менеджере паролей.
+3. Тревога, если бэкап перестал проходить: чек на Healthchecks.io (период
+   1 день, льгота 2 ч), его URL — в `.env`: `BACKUP_PING_URL=…`. Пинг уходит
+   только после успешного `backup.sh`; молчание = письмо.
+4. Проверка: `/opt/egormath/deploy/vps/backup.sh` — четыре файла и строка
+   `==> rclone -> s3:egormath-backups`; `rclone ls s3:egormath-backups`.
+
+**Раз в месяц** — репетиция восстановления из копии вне сервера, на Mac:
+
+```bash
+tools/stage.sh --s3     # ~1–2 мин: набор из S3 → локальный MySQL + media, расшифровка архива секретов
+```
+
+Успех — строка «(из копии в S3: набор … восстановился)» и
+«==> архив секретов расшифрован: …» без `!!`; затем открыть стенд
+(`--run`, http://127.0.0.1:8003) и посмотреть дашборд и базу задач.
+Полное восстановление с нуля — раздел «Восстановление после потери сервера».
 
 Мониторинг снаружи — любой бесплатный сервис проверки доступности
 (UptimeRobot, Healthchecks.io, BetterStack): HTTP-проверка
@@ -93,6 +130,68 @@ egormath (`/opt/egormath`, этот документ). SSH: `ssh chemolymp-demo`
 подходит к числу ядер, пора на отдельный сервер (разбор «egormath при
 кратном росте», ступень 1). Логи контейнера обнуляются при его
 пересоздании (`deploy.sh`), поэтому сводка по расписанию надёжнее ручной.
+
+## Восстановление после потери сервера
+
+Репетиция 30.09.2026 (набор из S3 → Mac): база 3 МБ заливается за 3 с, все
+6657 ссылок на файлы из базы нашлись в `media-*.tar.gz`, миграции совпали с
+`main`, страницы учителя и ученика открываются. Что нужно иметь вне сервера:
+
+| Что | Где |
+|---|---|
+| Код | GitHub `emukhin96/egormath`, ветка `main` (прод всегда на `origin/main`) |
+| База, media, var, секреты | S3 Timeweb, бакет `egormath-backups` (ключи — в панели Timeweb) |
+| Пароль архива секретов | Mac, `.secrets/BACKUP_SECRETS_PASSPHRASE` (и менеджер паролей) |
+| DNS `math.emukhin.ru` | панель Timeweb → Домены |
+| Всё остальное | воссоздаётся: `.env` (новые пароли MySQL), deploy key GitHub, crontab (`crontab.example`), `staticfiles`, `live/`, кэш |
+
+Сервер общий: сначала поднимается стек chemolymp (Caddy на 80/443, сеть
+`edge`, `/opt/caddy/sites`) и общий latex-api по их RUNBOOK / ADR-003 —
+без них у egormath нет HTTPS и сборки PDF. `LATEX_API_KEY` в восстановленных
+секретах — от старого latex-api; после его переустановки повторить §5a.
+
+Теряется всё после последнего ночного дампа (до суток): выдачи, ответы,
+доски, фото за день. Если `DJANGO_SECRET_KEY` восстановлен из архива,
+сессии и ссылки `/s/<token>/` живы; если нет — всех разлогинит, а
+`livefile` сгенерирует новые имена файлов сам.
+
+Порядок (по разделу «Первичная установка», отличия — здесь):
+
+1. §1 от root; дополнительно `apt-get install -y rclone`.
+2. §2 — новый deploy key к репозиторию, `git clone … /opt/egormath`.
+3. `rclone config` с ключами S3 из панели Timeweb (как в «Бэкапы», п. 1),
+   проверка: `rclone ls s3:egormath-backups`.
+4. `.env` из `deploy/vps/env.example`: новые `MYSQL_PASSWORD` /
+   `MYSQL_ROOT_PASSWORD` (старые не нужны — дамп несёт данные, а не
+   пользователей MySQL), `EGORMATH_HOSTS`, `BACKUP_RCLONE_REMOTE=s3:egormath-backups`,
+   `BACKUP_SECRETS_PASSPHRASE` — с Mac.
+5. Восстановление одной командой:
+
+   ```bash
+   /opt/egormath/deploy/vps/restore.sh                            # самый свежий набор из S3
+   /opt/egormath/deploy/vps/restore.sh --stamp 20260929-011501    # конкретный набор
+   ```
+
+   Скрипт скачивает набор во временный `data/restore-<stamp>/` (не в
+   `data/backups`: его чистит по возрасту файлов `backup.sh`, который
+   `import-db.sh` запускает перед заливкой), расшифровывает секреты в
+   `data/secrets` (только если каталог пуст), заливает базу (`import-db.sh`, с таблицами часовых
+   поясов), распаковывает media и var и запускает `deploy.sh` (образ,
+   `check --deploy`, миграции, `collectstatic`, контейнеры, сайт в Caddy).
+   Старые `.env` и crontab лежат в `data/restored-secrets-<stamp>/` — сверить
+   и удалить каталог.
+6. `crontab -e` — строки из `deploy/vps/crontab.example`.
+7. DNS: A-запись `math` → IP нового сервера.
+8. Проверить: `https://math.emukhin.ru/healthz` → `"db": "ok"`, вход, база
+   задач, PDF листка (latex-api), фото решения; следующей ночью — что
+   `backup.sh` прошёл (`data/logs/backup.log`, Healthchecks).
+
+Откат на ночной слепок на работающем сервере — тот же `restore.sh --stamp …`:
+перед заливкой `import-db.sh` сам снимает текущий бэкап и отменяет заливку,
+если свежий `db-*.sql.gz` не появился (продолжить без бэкапа — только явно,
+`restore.sh --stamp … --no-backup`, чтобы выполнились и остальные шаги:
+media/var, `deploy.sh`); на вопрос про непустые `media`/`var` можно
+ответить `N` (архивы только дописывают файлы, ничего не удаляют).
 
 ## Первичная установка
 
@@ -278,7 +377,8 @@ test -s LATEX_API_KEY && chmod 600 LATEX_API_URL LATEX_API_KEY && cd /opt/egorma
 ### После переезда
 
 - Убрать задание очистки из планировщика Timeweb, вернуть TTL 3600.
-- rclone на хост + `BACKUP_RCLONE_REMOTE` (S3 Timeweb, как в RUNBOOK chemolymp §3).
+- rclone + `BACKUP_RCLONE_REMOTE` — сделано 27.09; осталось `BACKUP_SECRETS_PASSPHRASE`
+  и `BACKUP_PING_URL` (раздел «Бэкапы»).
 - Внешний мониторинг `https://math.emukhin.ru/healthz`.
 - Удалить CGI-обвязку (`public_html/wsgi.py`, `.htaccess`, `deploy/deploy.sh`) и
   обновить `CLAUDE.md`/`AGENTS.md` — отдельным PR после отказа от отката.
