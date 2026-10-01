@@ -15,7 +15,7 @@ import requests
 from django.conf import settings
 from django.core.files.base import ContentFile
 
-from .latex import EGOR_PACKAGE_RE, tex_hash, worksheet_to_tex
+from .latex import tex_hash, worksheet_to_tex
 from .models import WorksheetPdf
 
 logger = logging.getLogger(__name__)
@@ -115,128 +115,32 @@ def compile_latex(tex_content, doc_id='doc', assets=None):
     return base64.b64decode(data['pdf_base64'])
 
 
-# Пакеты презентаций лежат в репозитории и уходят asset'ами в каталог сборки
-# (API не ищет TEXMFLOCAL для неизвестных sty). Лимит API — 20 файлов.
+# Наши пакеты и шрифты (worksheets/tex/) лежат на latex-api: .sty — в
+# data/assets/egormath/ (виден через TEXINPUTS), OTF — в data/fonts/egormath/.
+# Раскладывает их deploy/vps/deploy.sh, поэтому в запросе остаются только
+# картинки задач. Лимит API — 20 файлов на документ.
 LATEX_API_ASSET_LIMIT = 20
-_BEAMER_TEX_DIR = Path(__file__).resolve().parent / 'tex'
-EGORBEAMER_STY = _BEAMER_TEX_DIR / 'egorbeamer.sty'
-EGORBEAMER_GRID_STY = _BEAMER_TEX_DIR / 'egorbeamer-grid.sty'
-BEAMER_STY_ASSETS = (EGORBEAMER_STY, EGORBEAMER_GRID_STY)
-BEAMER_IMAGE_ASSET_LIMIT = LATEX_API_ASSET_LIMIT - len(BEAMER_STY_ASSETS)
-INTER_FONT_DIR = _BEAMER_TEX_DIR / 'fonts'
-INTER_FONT_FILES = (
-    'Inter-Regular.otf',
-    'Inter-Bold.otf',
-    'Inter-Italic.otf',
-    'Inter-BoldItalic.otf',
-)
-# STIX Two (OFL, из TeX Live stix2-otf): текст + OpenType-математика для
-# профиля font=stix пакета egor (fontspec + unicode-math). Имена файлов —
-# как в TeX Live, чтобы egor.sty находил их и в сборке, и в texmf.
-STIX_FONT_DIR = INTER_FONT_DIR
-STIX_FONT_FILES = (
-    'STIXTwoText-Regular.otf',
-    'STIXTwoText-Italic.otf',
-    'STIXTwoText-Bold.otf',
-    'STIXTwoText-BoldItalic.otf',
-    'STIXTwoMath-Regular.otf',
-)
-# Локальная копия пакета листков (вне репозитория) — чтобы font=inter/stix
-# доезжал до API до обновления TEXMFLOCAL.
-_EGOR_STY_CANDIDATES = (
-    _BEAMER_TEX_DIR / 'egor.sty',
-    Path.home() / 'Library/CloudStorage/Dropbox/code/LaTEX/egormath/egor.sty',
-)
+TEX_DIR = Path(__file__).resolve().parent / 'tex'
+WORKSHEET_STY_FILES = ('egor.sty', 'egorweb.sty')
+BEAMER_STY_FILES = ('egorbeamer.sty', 'egorbeamer-grid.sty')
 
 
-def _sty_asset(path):
+def _file_asset(path):
     return {
         'filename': path.name,
         'content_base64': base64.b64encode(path.read_bytes()).decode(),
     }
 
 
-def tex_wants_inter(tex):
-    """True, если в исходнике выбран профиль font=inter."""
-    return 'font=inter' in (tex or '').replace(' ', '')
+def _local_sty_assets(names):
+    """Пакеты из worksheets/tex/ — только при LATEX_SEND_STY (разработка).
 
-
-def collect_inter_font_assets(*, required=False):
-    """OTF Inter из worksheets/tex/fonts/.
-
-    required=True — не молчать, если файлов нет: иначе font=inter
-    уходит на API без шрифтов и sty тихо остаётся на CMU.
+    Так правки .sty видны на localhost до деплоя; на проде пакеты берутся
+    с сервера и места в лимите файлов не занимают.
     """
-    assets = []
-    missing = []
-    for name in INTER_FONT_FILES:
-        path = INTER_FONT_DIR / name
-        if path.is_file():
-            assets.append(_sty_asset(path))
-        else:
-            missing.append(name)
-    if required and missing:
-        raise LatexCompileError(
-            'Для шрифта Inter нужны файлы '
-            + ', '.join(INTER_FONT_FILES)
-            + ' в worksheets/tex/fonts/.')
-    return assets
-
-
-def _egor_sty_paths():
-    """Локальный egor.sty, если он есть (иначе берётся из TEXMFLOCAL API)."""
-    for path in _EGOR_STY_CANDIDATES:
-        if path.is_file():
-            return [path]
-    return []
-
-
-def _egor_sty_assets():
-    return [_sty_asset(path) for path in _egor_sty_paths()]
-
-
-def collect_inter_package_assets():
-    """Inter OTF + egor.sty с опцией font=inter."""
-    return collect_inter_font_assets() + _egor_sty_assets()
-
-
-def tex_wants_stix(tex):
-    """True, если в \\usepackage[...]{egor} выбран профиль font=stix."""
-    match = EGOR_PACKAGE_RE.search(tex or '')
-    options = ((match.group(1) if match else '') or '').split(',')
-    return 'font=stix' in {opt.strip().replace(' ', '') for opt in options}
-
-
-def collect_stix_package_assets():
-    """OTF STIX Two + egor.sty с опцией font=stix.
-
-    Шрифты обязательны: без них xelatex на API не найдёт STIX Two
-    (если на сервере нет пакета stix2-otf) и сборка упадёт с невнятной
-    ошибкой fontspec — лучше сказать об этом до отправки.
-    """
-    assets = []
-    missing = []
-    for name in STIX_FONT_FILES:
-        path = STIX_FONT_DIR / name
-        if path.is_file():
-            assets.append(_sty_asset(path))
-        else:
-            missing.append(name)
-    if missing:
-        raise LatexCompileError(
-            'Для шрифта STIX Two нужны файлы '
-            + ', '.join(missing)
-            + ' в worksheets/tex/fonts/.')
-    return assets + _egor_sty_assets()
-
-
-def collect_font_assets(tex):
-    """Шрифты (и egor.sty) для профиля font= пакета egor, если они нужны."""
-    if tex_wants_stix(tex):
-        return collect_stix_package_assets()
-    if tex_wants_inter(tex):
-        return collect_inter_package_assets()
-    return []
+    if not settings.LATEX_SEND_STY:
+        return []
+    return [_file_asset(TEX_DIR / name) for name in names]
 
 
 def _worksheet_images(worksheet, exclude_ids=None):
@@ -256,57 +160,42 @@ def _worksheet_images(worksheet, exclude_ids=None):
     return images
 
 
-def font_asset_count(tex):
-    """Сколько файлов из лимита API займут шрифты профиля font= (без чтения)."""
-    if tex_wants_stix(tex):
-        return len(STIX_FONT_FILES) + len(_egor_sty_paths())
-    if tex_wants_inter(tex):
-        fonts = sum((INTER_FONT_DIR / name).is_file() for name in INTER_FONT_FILES)
-        return fonts + len(_egor_sty_paths())
-    return 0
+def _image_assets(worksheet, exclude_ids, sty_assets):
+    """Картинки листка после .sty; сверх лимита API — ошибка до сборки.
 
-
-def collect_assets(worksheet, exclude_ids=None, tex=''):
-    """Файлы картинок задач листка для передачи в LaTeX API.
-
-    exclude_ids — скрытые элементы: их картинки не уходят в сборку,
-    чтобы не подменять одноимённые файлы видимых задач и не раздувать запрос.
-    tex — исходник сборки: при font=inter/stix добавляются OTF и egor.sty.
+    Молча отбрасывать файлы нельзя: TeX сослался бы на отсутствующий рисунок.
     """
-    assets = []
-    for image in _worksheet_images(worksheet, exclude_ids):
+    images = _worksheet_images(worksheet, exclude_ids)
+    limit = LATEX_API_ASSET_LIMIT - len(sty_assets)
+    if len(images) > limit:
+        raise LatexCompileError(
+            f'Слишком много картинок для одной сборки: {len(images)}, '
+            f'лимит LaTeX API — {limit}.')
+    assets = list(sty_assets)
+    for image in images:
         with image.image.open('rb') as f:
             assets.append({
                 'filename': image.filename,
                 'content_base64': base64.b64encode(f.read()).decode(),
             })
-    extra = collect_font_assets(tex)
-    if extra:
-        if len(assets) + len(extra) > LATEX_API_ASSET_LIMIT:
-            raise LatexCompileError(
-                'Слишком много картинок для сборки с выбранным шрифтом '
-                f'(лимит {LATEX_API_ASSET_LIMIT - len(extra)} '
-                'вместе со шрифтами).')
-        assets = extra + assets
     return assets
 
 
-def collect_beamer_assets(worksheet, exclude_ids=None, tex=''):
-    """Картинки листка + sty презентаций для компиляции.
+def collect_assets(worksheet, exclude_ids=None):
+    """Файлы для сборки листка: картинки задач (и .sty при разработке).
 
-    Два sty занимают слоты из 20 на стороне API. Если картинок больше
-    лимита — ошибка до сборки, без молчаливого отбрасывания файлов
-    (иначе TeX ссылается на отсутствующие изображения).
-    При font=inter дополнительно уходят OTF Inter.
+    exclude_ids — скрытые элементы: их картинки не уходят в сборку,
+    чтобы не подменять одноимённые файлы видимых задач и не раздувать запрос.
     """
-    extra = collect_inter_font_assets(required=True) if tex_wants_inter(tex) else []
-    images = collect_assets(worksheet, exclude_ids=exclude_ids)
-    limit = BEAMER_IMAGE_ASSET_LIMIT - len(extra)
-    if len(images) > limit:
-        raise LatexCompileError(
-            'Слишком много картинок для презентации '
-            f'(лимит {limit} вместе со стилевыми файлами).')
-    return [_sty_asset(path) for path in BEAMER_STY_ASSETS] + extra + images
+    return _image_assets(
+        worksheet, exclude_ids,
+        _local_sty_assets(WORKSHEET_STY_FILES))
+
+
+def collect_beamer_assets(worksheet, exclude_ids=None):
+    """Файлы для сборки презентации: картинки (и egorbeamer*.sty при разработке)."""
+    return _image_assets(
+        worksheet, exclude_ids, _local_sty_assets(BEAMER_STY_FILES))
 
 
 def _pdf_filter_key(exclude_ids):
@@ -331,17 +220,6 @@ def get_worksheet_pdf(worksheet, variant, exclude_ids=None):
     if variant == WorksheetPdf.VARIANT_STUDENT and worksheet.student_pdf_options:
         from .latex import apply_pdf_options
         tex = apply_pdf_options(tex, worksheet.student_pdf_options)
-        # Шрифт выбран, когда картинок было мало; если потом их добавили и
-        # вместе со шрифтами они не влезают в лимит API — ученик получает
-        # листок на CM, а не ошибку сборки. Решаем до ключа кэша.
-        fonts = font_asset_count(tex)
-        if fonts and (len(_worksheet_images(worksheet, exclude_ids)) + fonts
-                      > LATEX_API_ASSET_LIMIT):
-            logger.warning(
-                'Листок %s: картинки не влезают в сборку со шрифтом %s, '
-                'PDF ученика собирается на CM', worksheet.pk,
-                worksheet.student_pdf_options.get('font'))
-            tex = apply_pdf_options(tex, {'font': 'cm'})
     content_hash = tex_hash(tex)
     cached = WorksheetPdf.objects.filter(
         worksheet=worksheet, variant=variant,
@@ -353,7 +231,7 @@ def get_worksheet_pdf(worksheet, variant, exclude_ids=None):
     suffix = f'-{filter_key}' if filter_key else ''
     pdf_bytes = compile_latex(
         tex, doc_id=f'ws{worksheet.pk}-{variant}{suffix}',
-        assets=collect_assets(worksheet, exclude_ids=exclude_ids, tex=tex))
+        assets=collect_assets(worksheet, exclude_ids=exclude_ids))
 
     stale = WorksheetPdf.objects.filter(
         worksheet=worksheet, variant=variant, filter_key=filter_key)

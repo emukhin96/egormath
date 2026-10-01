@@ -287,6 +287,25 @@ docker compose --env-file .env -f deploy/vps/compose.yaml exec egormath-web \
 нового адреса: колонтитул `2/2`, картинка `\taskpic`, Beamer, шрифты CMU и
 SchoolBook. Если чего-то не хватает — это правится в репозитории latex-api.
 
+**Пакеты и шрифты egormath лежат на latex-api, а не в запросе.** Всё из
+`public_html/worksheets/tex/` раскладывает `deploy/vps/latex-files.sh`
+(его вызывает `deploy.sh` перед перезапуском контейнеров):
+
+| Из репозитория | На сервере | В контейнере latex-api |
+|---|---|---|
+| `tex/*.sty` (`egor`, `egorweb`, `egorbeamer`, `egorbeamer-grid`) | `/opt/latex-api/data/assets/egormath/` | `TEXINPUTS` (`assets//`) |
+| `tex/fonts/*` (Inter, STIX Two) | `/opt/latex-api/data/fonts/egormath/` | fontconfig + `OSFONTDIR` |
+
+Листок подключает `\usepackage{egor}` и `\usepackage{egorweb}` (правки egor
+для сайта — бывшие вставки в преамбулу каждого `.tex`), в запросе уходят
+только картинки задач — все 20 мест лимита API. Перезапускать latex-api не
+нужно. Скрипт останавливает деплой, если одноимённый пакет лежит в другой
+папке `assets/` (выбор версии стал бы случайным) или если `LATEX_API_URL`
+указывает не на общий latex-api, а `LATEX_SEND_STY` не включён. При
+разработке (`DEBUG`) сайт по-прежнему шлёт свои `.sty` в каждую сборку —
+правки пакетов видны на localhost до деплоя; включить/выключить явно —
+`LATEX_SEND_STY=1/0` в `.secrets/`.
+
 ### 5a. Переключение на общий latex-api (после проверок)
 
 Клиент повторяет запрос, если latex-api занят (503/429 с `Retry-After`,

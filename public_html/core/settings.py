@@ -211,6 +211,11 @@ SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
 LATEX_API_URL = read_secret('LATEX_API_URL', 'http://81.200.147.78:8000')
 LATEX_API_KEY = read_secret('LATEX_API_KEY', '')
 LATEX_API_TIMEOUT = int(read_secret('LATEX_API_TIMEOUT', '120'))
+# Слать ли пакеты worksheets/tex/*.sty в каждую сборку. На проде — нет:
+# их (и шрифты) кладёт на latex-api deploy/vps/deploy.sh, и все 20 мест
+# запроса остаются картинкам. При разработке — да, чтобы правки egor.sty,
+# egorweb.sty и egorbeamer*.sty проверялись на localhost до деплоя.
+LATEX_SEND_STY = read_secret('LATEX_SEND_STY', '1' if DEBUG else '0') == '1'
 # Повторы, когда общий latex-api занят (503/429 + Retry-After): не больше
 # LATEX_API_RETRIES раз, пауза не длиннее LATEX_API_RETRY_MAX_DELAY секунд;
 # новая попытка не начинается, если попытки и паузы уже заняли больше
@@ -234,10 +239,9 @@ GEMINI_RATE_PER_MINUTE = int(read_secret('GEMINI_RATE_PER_MINUTE', '20'))
 # school и palatino требуют подготовленного LaTeX API: xelatex + mathspec
 # + шрифты SchoolBookC/TextBookC/Palatino (сервер настроен, см.
 # deploy/patch_latex_api_egormath.py). stix (STIX Two Text + Math через
-# unicode-math) — OTF из worksheets/tex/fonts/ и egor.sty ≥ 1.3 из
-# worksheets/tex/ уходят вместе со сборкой, поэтому не зависят от версии
-# egor.sty на API. Если окружение без шрифтов — сузить, например
-# PDF_EDITOR_FONTS=cm
+# unicode-math) — OTF из worksheets/tex/fonts/, их вместе с egor.sty
+# раскладывает на latex-api deploy/vps/deploy.sh. Если окружение без
+# шрифтов — сузить, например PDF_EDITOR_FONTS=cm
 PDF_EDITOR_FONTS = [
     f.strip()
     for f in read_secret('PDF_EDITOR_FONTS', 'cm,school,palatino,stix').split(',')

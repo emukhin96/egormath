@@ -40,10 +40,11 @@ GitHub Actions по SSH на Timeweb не работает.
 | `egor.sty`                         | `~/…/LaTEX/egormath/egor.sty`                             | `TEXMFLOCAL/.../egor/egor.sty`      | **Обязательно**                                   |
 | CMU Serif/Sans/Typewriter (`.otf`) | `~/Library/Fonts/cmun*.otf` **или** TeX Live `cm-unicode` | системные шрифты + luaotfload       | **Обязательно** (профиль `font=cm`, дефолт сайта) |
 | SchoolBookC + TextBookC (`.ttf`)   | `~/Library/Fonts/SchoolBookC*.ttf`, `TextBookC*.ttf`      | `/usr/local/share/fonts/egor/`      | Опционально (`font=school` / `font=palatino`)     |
-| STIX Two Text + Math (`.otf`)      | `public_html/worksheets/tex/fonts/STIXTwo*.otf`           | asset каждой сборки (сайт шлёт сам) | Для `font=stix`; `egor.sty` уходит тем же asset из `worksheets/tex/`, на API ничего не нужно (§ 1.2a) |
+| STIX Two Text + Math (`.otf`)      | `public_html/worksheets/tex/fonts/STIXTwo*.otf`           | на VPS — `deploy/vps/latex-files.sh` | Для `font=stix`; с 01.10 сайт шрифты не шлёт (см. `deploy/VPS.md` § 5) |
 | `chem.sty`                         | `LaTEX/egormath/chem.sty`                                 | рядом с `egor.sty`                  | Опционально (опция `[chem]`)                      |
 | TeX Live `beamer`                  | коллекция `collection-latexextra` / пакет `beamer`        | дерево TeX Live на VPS              | **Обязательно для презентаций** (`beamer.cls`)    |
 | `egorbeamer.sty`                   | `public_html/worksheets/tex/egorbeamer.sty`               | asset каждой сборки; опционально TEXMFLOCAL | Сайт шлёт sty сам; на TEXMFLOCAL — чтобы не занимать слот assets |
+| `egorweb.sty`                      | `public_html/worksheets/tex/egorweb.sty`                  | рядом с `egor.sty`                  | **Обязательно** с 01.10 (правки egor для листков сайта); на VPS — `latex-files.sh` |
 | `home.jpeg`, `kolba-round.png`     | если есть у вас                                           | `/opt/latex-api/compile/` или TEXMF | Опционально (`\home`, `\kolba`)                   |
 
 
