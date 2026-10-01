@@ -207,8 +207,10 @@ LOGOUT_REDIRECT_URL = '/accounts/login/'
 # Школьников не разлогиниваем месяц
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
 
-# LaTeX API (тот же сервер, что у chgkmsu)
-LATEX_API_URL = read_secret('LATEX_API_URL', 'http://81.200.147.78:8000')
+# LaTeX API — общий latex-api на VPS (ADR-003 chemolymp). Старый сервер
+# 81.200.147.78 выключен; на проде адрес внутренней сети задаётся в
+# data/secrets/LATEX_API_URL (http://latex-api:8000).
+LATEX_API_URL = read_secret('LATEX_API_URL', 'https://latex.emukhin.ru')
 LATEX_API_KEY = read_secret('LATEX_API_KEY', '')
 LATEX_API_TIMEOUT = int(read_secret('LATEX_API_TIMEOUT', '120'))
 # Слать ли пакеты worksheets/tex/*.sty в каждую сборку. На общий latex-api
