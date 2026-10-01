@@ -63,6 +63,37 @@ class FormulaMaskTests(SimpleTestCase):
         slot = self.slot('{{expression: |a-1|}}')
         self.assertEqual(check_slot(slot, 'a-1'), 'wrong')
 
+    def test_greek_positive_angle_accepts_roots_and_rejects_extra_holes(self):
+        slot = self.slot(r'{{expression: 2\alpha | positive: \alpha}}')
+        for value in (r'\alpha+\alpha', r'2\sqrt{\alpha^2}',
+                      r'2\alpha^2/\alpha'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+        self.assertEqual(check_slot(slot, r'-2\alpha'), 'wrong')
+        self.assertEqual(check_slot(slot, r'2\alpha*(\alpha-1)/(\alpha-1)'), 'wrong')
+        real = self.slot(r'{{expression: 2\alpha}}')
+        self.assertEqual(check_slot(real, r'2\sqrt{\alpha^2}'), 'wrong')
+
+    def test_greek_parameter_aliases_use_the_parsed_symbol_name(self):
+        reference, _ = formulas._parse_reference(r'\varphi | positive: \varphi')
+        self.assertEqual(reference.positive, ('phi',))
+        self.assertEqual(formulas._check(r'\sqrt{\varphi^2}', reference), 'ok')
+        mixed, _ = formulas._parse_reference(r'a+\alpha | positive: a,\alpha')
+        self.assertEqual(mixed.positive, ('a', 'alpha'))
+        self.assertEqual(formulas._check(r'\sqrt{a^2}+\sqrt{\alpha^2}', mixed), 'ok')
+
+    def test_positive_parameter_names_reject_constants_and_expressions(self):
+        for option in (r'\pi', r'\sin', r'\unknown', 'a+0', 'a,a+', '', 'alpha'):
+            with self.subTest(option=option):
+                self.assertFalse(parse_mask(r'{{expression: a | positive: ' + option + '}}').is_valid)
+        # При отображении сохранённой маски проверяется только структура.
+        # Неиспользуемый параметр запрещается при проверке перед сохранением.
+        with self.assertRaisesRegex(ValueError, 'которого нет в эталоне'):
+            formulas._parse_reference(r'\alpha | positive: \beta')
+        self.assertFalse(parse_mask(
+            r'{{expression: \alpha | positive: \beta}}',
+            validate_references=True).is_valid)
+
     def test_expanded_square_under_root_keeps_absolute_value_and_domain(self):
         slot = self.slot('{{expression: |x-1|}}')
         for value in (r'\sqrt{x^2-2x+1}', 'sqrt(x^2-2x+1)',
