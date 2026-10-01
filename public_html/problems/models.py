@@ -209,7 +209,7 @@ class Source(models.Model):
 
     def __str__(self):
         if self.author:
-            return f'{self.author}. {self.title}'
+            return f"{self.author.rstrip('.')}. {self.title}"
         return self.title
 
 

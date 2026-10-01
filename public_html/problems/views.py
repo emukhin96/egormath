@@ -55,29 +55,80 @@ def filter_tasks(params):
     tag = params.get('tag')
     if tag:
         tasks = tasks.filter(tags__name=tag)
+    # Источник (задачник) — ссылки из панели каталога
+    source = (params.get('source') or '').strip()
+    if source.isdigit():
+        tasks = tasks.filter(source_refs__source_id=int(source)).distinct()
     return tasks
 
 
-def _rubricator_blocks(topics_flat):
+def _rubricator_blocks(topics_flat, active_topic=None):
     """Разделы рубрикатора (корневые темы) с числом задач в поддереве.
 
     Поддеревья берутся из плоского списка topic_tree() (один запрос),
-    счётчик — по одному запросу на раздел; разделов несколько.
+    счётчик — по одному запросу на раздел; разделов несколько. У раздела,
+    в котором лежит выбранная тема, раскрываются подтемы первого уровня
+    (тоже со счётчиками), чтобы панель вела дальше по дереву.
     """
     blocks = []
     subtree_ids = []
+    children = []
     for topic in topics_flat:
         if topic.depth == 0:
             subtree_ids = [topic.pk]
+            children = []
             topic.subtree_ids = subtree_ids
+            topic.children_topics = children
+            topic.children_visible = []
             blocks.append(topic)
         else:
             subtree_ids.append(topic.pk)
+            if topic.depth == 1:
+                topic.subtree_ids = [topic.pk]
+                children.append(topic)
+            elif children:
+                children[-1].subtree_ids.append(topic.pk)
     # Та же база, что у каталога (filter_tasks): локальные копии задач не считаем.
     catalog = Task.objects.filter(variant_of__isnull=True)
     for block in blocks:
         block.task_total = catalog.filter(topics__in=block.subtree_ids).distinct().count()
+        block.is_current = active_topic == block.pk
+        if active_topic in block.subtree_ids:
+            for child in block.children_topics:
+                child.task_total = catalog.filter(topics__in=child.subtree_ids).distinct().count()
+                child.is_current = active_topic in child.subtree_ids
+            block.children_visible = block.children_topics
     return blocks
+
+
+def _catalog_facets(params):
+    """Классы и источники для панели каталога — с числом задач и текущим выбором."""
+    catalog = Task.objects.filter(variant_of__isnull=True)
+    # Условие то же, что у фильтра ?grade=N (filter_by_taxonomy): полоса
+    # классов ИЛИ старое поле grade_level — иначе счётчик расходится с выдачей.
+    levels_of = {level: [10, 11] if level == 10 else [level]
+                 for level in GRADE_LEVEL_TO_CODE if level != 11}
+    counts = catalog.aggregate(**{
+        f'g{level}': Count('id', distinct=True, filter=(
+            Q(grade_bands__code=GRADE_LEVEL_TO_CODE[level]) | Q(grade_level__in=levels)))
+        for level, levels in levels_of.items()})
+    labels = dict(Task.GRADE_CHOICES)
+    current_grade, _ = parse_grade_choice(params.get('grade'))
+    grades = []
+    for level in sorted(levels_of):
+        count = counts[f'g{level}']
+        if count:
+            grades.append({'value': level, 'label': labels.get(level, str(level)),
+                           'count': count, 'is_current': current_grade == level})
+    current_source = (params.get('source') or '').strip()
+    sources = [
+        {'pk': row['source_id'], 'title': row['source__title'], 'count': row['n'],
+         'is_current': current_source == str(row['source_id'])}
+        for row in (TaskSource.objects.filter(task__variant_of__isnull=True)
+                    .values('source_id', 'source__title')
+                    .annotate(n=Count('task_id', distinct=True))
+                    .order_by('-n', 'source__title')[:12])]
+    return grades, sources
 
 
 @teacher_required
@@ -86,10 +137,15 @@ def task_list(request):
     paginator = Paginator(tasks, 25)
     page = paginator.get_page(request.GET.get('page'))
     topics_flat = topic_tree()
+    active_topic = request.GET.get('topic', '')
+    active_topic = int(active_topic) if active_topic.isdigit() else None
+    grade_facets, source_facets = _catalog_facets(request.GET)
     ctx = taxonomy_page_context(filter_state_from_params(request.GET))
     ctx.update({
         'page': page,
-        'topics': _rubricator_blocks(topics_flat),
+        'topics': _rubricator_blocks(topics_flat, active_topic),
+        'grade_facets': grade_facets,
+        'source_facets': source_facets,
         'topics_flat': topics_flat,
         'sources': Source.objects.all(),
         'params': request.GET,
