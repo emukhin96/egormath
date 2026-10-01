@@ -85,7 +85,8 @@ class FormulaMaskTests(SimpleTestCase):
     def test_positive_parameter_names_reject_constants_and_expressions(self):
         for option in (r'\pi', r'\sin', r'\unknown', 'a+0', 'a,a+', '', 'alpha'):
             with self.subTest(option=option):
-                self.assertFalse(parse_mask(r'{{expression: a | positive: ' + option + '}}').is_valid)
+                self.assertFalse(parse_mask(r'{{expression: a | positive: ' + option + '}}',
+                                            validate_references=True).is_valid)
         # При отображении сохранённой маски проверяется только структура.
         # Неиспользуемый параметр запрещается при проверке перед сохранением.
         with self.assertRaisesRegex(ValueError, 'которого нет в эталоне'):
@@ -166,14 +167,18 @@ class FormulaMaskTests(SimpleTestCase):
 
     def test_render_of_cold_references_never_starts_worker(self):
         formulas._reference_response.cache_clear()
-        with patch.object(formulas, '_run_worker') as worker:
+        with patch.object(formulas, '_run_worker') as worker, \
+                patch.object(formulas, '_parse', side_effect=AssertionError('тяжёлый разбор при рендере')) as parser:
             spec = parse_mask(r'{{expression: |x-1|}}; '
-                              r'{{expressions: a\sqrt{3};2a | positive: a}}')
+                              r'{{expressions: a\sqrt{3};2a | positive: a}}; '
+                              r'{{expression: a+\alpha | positive: a,\alpha}}; '
+                              r'{{expression: \varphi | positive: \varphi}}')
             self.assertTrue(spec.is_valid)
             html = render_to_string('assignments/_mask.html', {
                 'fragments': render_fragments(spec, 'cold'), 'editable': True})
-            self.assertEqual(html.count('<math-field'), 2)
+            self.assertEqual(html.count('<math-field'), 4)
             worker.assert_not_called()
+            parser.assert_not_called()
 
     def test_reference_is_validated_before_save_and_failure_is_retryable(self):
         from django.core.exceptions import ValidationError
