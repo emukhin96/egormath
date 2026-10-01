@@ -10,7 +10,8 @@ from worksheets.models import Worksheet, WorksheetItem
 from worksheets.tests import make_worksheet
 
 from .models import Assignment
-from .task_usage import SESSION_KEY, attach_usage, task_usage
+from .task_usage import (
+    SESSION_KEY, _group_members, attach_usage, task_usage, usage_events)
 
 
 class TaskUsageTests(TestCase):
@@ -154,3 +155,106 @@ class TaskUsageTests(TestCase):
         attach_usage(request, self.tasks)
         self.assertEqual(self.tasks[0].usage['students_total'], 1)
         self.assertIsNone(self.tasks[0].usage['audience_total'])
+
+
+class UsageEventsTests(TestCase):
+    """Список «исп.»: выдача группе — одной строкой с названием группы."""
+
+    def setUp(self):
+        self.teacher = make_teacher()
+        self.students = [make_student(self.teacher, f'student{i}')
+                         for i in range(1, 5)]
+        for i, student in enumerate(self.students, start=1):
+            student.first_name, student.last_name = f'Ученик{i}', ''
+            student.save()
+        self.worksheet = make_worksheet(self.teacher)
+        self.task = self.worksheet.ordered_items()[0].task
+        self.group = StudentGroup.objects.create(
+            teacher=self.teacher, name='8А')
+        self.group.students.add(*self.students[:3])
+
+    def events(self):
+        rows = task_usage(self.teacher, [self.task])[self.task.pk]
+        return usage_events(rows, _group_members(self.teacher))
+
+    def assign(self, student, *, groups=()):
+        assignment = Assignment.objects.create(
+            worksheet=self.worksheet, student=student,
+            assigned_by=self.teacher, recipient_origin_known=True)
+        assignment.source_groups.set(groups)
+        return assignment
+
+    def test_group_assignment_is_one_line(self):
+        for student in self.students[:3]:
+            self.assign(student, groups=[self.group])
+        self.assign(self.students[3])
+        [event] = self.events()
+        self.assertEqual(event.groups, [self.group])
+        self.assertEqual(event.students, [self.students[3]])
+
+    def test_source_group_wins_over_current_membership(self):
+        # В группу добавили ученика уже после выдачи — выдача всё равно
+        # групповая.
+        for student in self.students[:3]:
+            self.assign(student, groups=[self.group])
+        self.group.students.add(self.students[3])
+        [event] = self.events()
+        self.assertEqual((event.groups, event.students), ([self.group], []))
+
+    def test_full_group_without_origin_is_inferred(self):
+        # Самостоятельная группу не хранит: весь состав группы получил
+        # работу — показываем группой, остальных по именам.
+        from independentworks.models import Attempt, Point, Run, Variant, Work
+        work = Work.objects.create(owner=self.teacher, title='СР')
+        run = Run.objects.create(
+            work=work, title='СР 1', owner=self.teacher, fingerprint='x',
+            issued_at=timezone.now())
+        variant = Variant.objects.create(run=run, number=1, signature='s')
+        Point.objects.create(
+            variant=variant, position=1, label='1',
+            source_key=f't{self.task.pk}', root_key='r', candidate_key='c')
+        for student in self.students:
+            Attempt.objects.create(run=run, variant=variant, student=student)
+        [event] = self.events()
+        self.assertEqual(event.kind, 'independent')
+        self.assertEqual(event.groups, [self.group])
+        self.assertEqual(event.students, [self.students[3]])
+
+    def test_partial_group_stays_by_names(self):
+        for student in self.students[:2]:
+            self.assign(student)
+        [event] = self.events()
+        self.assertEqual(event.groups, [])
+        self.assertEqual(event.students, self.students[:2])
+
+    def test_different_days_are_separate_lines(self):
+        for student in self.students[:3]:
+            self.assign(student, groups=[self.group])
+        late = self.assign(self.students[3])
+        Assignment.objects.filter(pk=late.pk).update(
+            assigned_at=timezone.now() - timezone.timedelta(days=3))
+        events = self.events()
+        self.assertEqual([(e.groups, e.students) for e in events],
+                         [([self.group], []), ([], [self.students[3]])])
+
+    def test_long_list_of_names_is_shortened(self):
+        many = [make_student(self.teacher, f'extra{i}') for i in range(7)]
+        for student in many:
+            self.assign(student)
+        [event] = self.events()
+        self.assertEqual(len(event.shown_students), 5)
+        self.assertEqual(event.more_students, 2)
+
+    def test_badge_lists_group_once(self):
+        for student in self.students[:3]:
+            self.assign(student, groups=[self.group])
+        self.client.login(username='teacher1', password='pass12345')
+        html = self.client.get(reverse('task_list')).content.decode()
+        lists = [part.split('</ul>')[0]
+                 for part in html.split('<ul class="usage-list">')[1:]]
+        self.assertTrue(lists)
+        # В каждом бейдже группа одной строкой, без учеников по именам.
+        for usage_list in lists:
+            self.assertEqual(usage_list.count('<li'), 1)
+            self.assertIn('<span class="usage-group">8А</span> — ', usage_list)
+            self.assertNotIn('Ученик1', usage_list)
