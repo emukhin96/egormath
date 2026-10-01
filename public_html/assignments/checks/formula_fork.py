@@ -15,23 +15,42 @@ import json
 
 _startup_lock = threading.Lock()
 _ready = False
+_failed_until = 0
+STARTUP_RETRY_DELAY = 10
+
+
+class FormulaStartupUnavailable(RuntimeError):
+    """Парсер не готов; ученический ввод ещё не запускался."""
 
 
 def warmup():
-    """Один доверенный эталон до начала проверки ученического ввода.
+    """Доверенный прогрев без очереди запросов и без блокировки их ввода.
 
-    Прогрев ограничен десятью секундами и не содержит пользовательских
-    данных. При сбое готовность не кешируется: следующий вызов повторит
-    попытку. Каждый реальный ввод получает отдельный прежний таймаут.
+    При отказе следующая попытка возможна через десять секунд. Запросы,
+    пришедшие во время прогрева, сразу получают временную недоступность.
     """
-    global _ready
-    with _startup_lock:
+    global _ready, _failed_until
+    if _ready:
+        return
+    if not _startup_lock.acquire(blocking=False):
+        raise FormulaStartupUnavailable('парсер формул запускается')
+    try:
         if _ready:
             return
-        result = _run_process(json.dumps({'payload': 'x', 'multiple': False}), 10)
-        if result.returncode or not json.loads(result.stdout).get('display'):
-            raise ValueError('не удалось загрузить парсер формул')
+        if time.monotonic() < _failed_until:
+            raise FormulaStartupUnavailable('повторный запуск парсера отложен')
+        try:
+            result = _run_process(json.dumps({'payload': 'x', 'multiple': False}), 10)
+            response = json.loads(result.stdout)
+            if result.returncode or not isinstance(response, dict) or not response.get('display'):
+                raise ValueError('не удалось загрузить парсер формул')
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+            _failed_until = time.monotonic() + STARTUP_RETRY_DELAY
+            raise FormulaStartupUnavailable('парсер формул пока не готов') from error
         _ready = True
+        _failed_until = 0
+    finally:
+        _startup_lock.release()
 
 
 def _calculate(payload, connection):
