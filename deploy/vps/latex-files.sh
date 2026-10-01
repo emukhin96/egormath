@@ -34,10 +34,10 @@ setting() {  # значение из data/secrets/<имя> (как read_secret �
 api_url="$(setting LATEX_API_URL)"
 send_sty="$(setting LATEX_SEND_STY)"
 case "$api_url" in
-  http://latex-api:8000*|https://latex.emukhin.ru*) ;;
+  ''|http://latex-api:8000*|https://latex.emukhin.ru*) ;;  # пусто — умолчание settings.py, общий API
   *)
     if [ "$send_sty" = 0 ]; then
-      echo "!! LATEX_API_URL=${api_url:-<умолчание settings.py>} — не общий latex-api этого сервера,"
+      echo "!! LATEX_API_URL=$api_url — не общий latex-api этого сервера,"
       echo "   а LATEX_SEND_STY=0: листки не найдут egorweb.sty."
       echo "   Переключитесь на общий latex-api (deploy/VPS.md §5a) или уберите"
       echo "   $DATA_DIR/secrets/LATEX_SEND_STY (шрифты Inter/STIX тогда нужны на старом API)"
