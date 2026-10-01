@@ -464,6 +464,47 @@ class FormulaForkTests(SimpleTestCase):
                              subprocess.CompletedProcess('worker', 0, '{"display":"ok"}')):
             self.assertEqual(formulas._run_worker(payload), {'display': 'ok'})
 
+    def test_start_failure_is_normalized_and_closes_connections(self):
+        from assignments.checks import formula_fork
+        for error in (EOFError('unexpected EOF'), RuntimeError('forkserver')):
+            with self.subTest(error=type(error).__name__):
+                context = Mock()
+                receiver, sender, child = Mock(), Mock(), Mock()
+                context.Pipe.return_value = (receiver, sender)
+                context.Process.return_value = child
+                child.start.side_effect = error
+                with patch.object(formula_fork.multiprocessing, 'get_context', return_value=context):
+                    with self.assertRaises(OSError) as failure:
+                        formula_fork._run_process('{}', 3)
+                self.assertIs(failure.exception.__cause__, error)
+                receiver.close.assert_called_once()
+                sender.close.assert_called_once()
+                child.close.assert_called_once()
+                child.kill.assert_not_called()
+                child.join.assert_not_called()
+
+    def test_forkserver_eof_during_warmup_is_busy_and_retryable(self):
+        from assignments.checks import formula_fork
+        context = Mock()
+        receiver, sender, child = Mock(), Mock(), Mock()
+        context.Pipe.return_value = (receiver, sender)
+        context.Process.return_value = child
+        child.start.side_effect = EOFError('unexpected EOF')
+        with patch.object(formulas.sys, 'platform', 'linux'), \
+                patch.object(formula_fork, '_ready', False), \
+                patch.object(formula_fork, '_failed_until', 0), \
+                patch.object(formula_fork.time, 'monotonic', return_value=100), \
+                patch.object(formula_fork.multiprocessing, 'get_context', return_value=context), \
+                patch.object(formulas, '_worker_slots') as slots, \
+                patch.object(formulas, '_remember_failure') as remember:
+            with self.assertRaises(formulas.FormulaBusy) as failure:
+                formulas._run_worker({'payload': 'x', 'multiple': False})
+            self.assertEqual(formulas.unavailable_count({}, failure.exception), 0)
+            self.assertFalse(formula_fork._ready)
+            self.assertEqual(formula_fork._failed_until, 110)
+            slots.acquire.assert_not_called()
+            remember.assert_not_called()
+
     def test_timeout_kills_and_reaps_the_child(self):
         from assignments.checks import formula_fork
         context = Mock()

@@ -79,7 +79,12 @@ def _run_process(payload, timeout):
     deadline = time.monotonic() + timeout
     started = False
     try:
-        process.start()
+        try:
+            process.start()
+        except (EOFError, RuntimeError) as error:
+            # Forkserver может исчезнуть до передачи PID ребёнка. Приводим
+            # этот отказ к общему протоколу ошибок запуска, как у subprocess.
+            raise OSError('не удалось запустить процесс проверки формул') from error
         started = True
         sender.close()
         remaining = max(0, deadline - time.monotonic())
