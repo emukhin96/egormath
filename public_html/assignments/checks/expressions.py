@@ -88,9 +88,13 @@ def prepare(text):
 def _lark():
     global _parser, _transformer
     if _parser is None:
-        from sympy.parsing.latex.lark import LarkLaTeXParser
-        _parser = LarkLaTeXParser(transform=False)
-        _transformer = LarkLaTeXParser().transformer
+        from sympy.parsing.latex.lark import latex_parser
+        # Импорт SymPy уже создаёт эту грамматику. Повторные экземпляры
+        # тратят CPU при каждом запуске ограниченного вычислителя.
+        _parser = getattr(latex_parser, '_lark_latex_parser', None)
+        if _parser is None:
+            _parser = latex_parser.LarkLaTeXParser(transform=False)
+        _transformer = _parser.transformer
     return _parser, _transformer
 
 
@@ -109,7 +113,9 @@ def raw_tree(text):
         return None
     parser, _ = _lark()
     try:
-        return parser.doparse(text)
+        # Сырое дерево нужно независимо от transform_expr общего парсера.
+        # Его настройки не меняем: им пользуется и parse_latex SymPy.
+        return parser.parser.parse(text)
     except MemoryError:
         raise
     except Exception as error:  # noqa: BLE001 — синтаксический сбой = «не разобрано»

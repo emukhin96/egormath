@@ -124,11 +124,15 @@ def _run_worker(payload):
     if not _worker_slots.acquire(timeout=WORKER_WAIT if wait is None else wait):
         raise FormulaBusy('проверка временно занята')
     try:
-        result = subprocess.run(
-            [sys.executable, '-m', 'assignments.checks.formula_worker'],
-            input=key, capture_output=True, text=True,
-            cwd=Path(__file__).resolve().parents[2], timeout=WORKER_TIMEOUT,
-            check=False)
+        if sys.platform == 'linux':
+            from .formula_fork import run_worker
+            result = run_worker(key, WORKER_TIMEOUT)
+        else:
+            result = subprocess.run(
+                [sys.executable, '-m', 'assignments.checks.formula_worker'],
+                input=key, capture_output=True, text=True,
+                cwd=Path(__file__).resolve().parents[2], timeout=WORKER_TIMEOUT,
+                check=False)
         if result.returncode:
             raise FormulaUnavailable('не удалось проверить формулу за отведённое время')
         response = json.loads(result.stdout)
@@ -283,7 +287,11 @@ def _parse(text, positive=()):
         if marker is None:
             return None
         text = re.sub(r'\\pi\b|π', marker, text)
-    tree, value = expressions.parse(text)
+    # Выбираем одну ветвь неоднозначной грамматики до анализа областей.
+    # Повторный разбор альтернатив в каждом поддереве тратит время и
+    # может подставить области от другой интерпретации того же ввода.
+    tree = expressions.resolve(expressions.raw_tree(text))
+    value = expressions.evaluate(tree)
     if tree is None or not isinstance(value, Expr):
         return None
     denominators = _denominators(tree)
@@ -347,6 +355,21 @@ def _defined(item, reference):
         return False
     if any(d.is_zero is True for d in item.denominators):
         return False
+    # Если каждое исходное подвыражение вещественно и конечно при данных
+    # предположениях, а исходные знаменатели доказанно ненулевые, формула
+    # определена на всей области параметров. Решать те же простые области
+    # заново через continuous_domain не требуется. Неизвестные свойства
+    # сюда не попадают: сокращённый (a-1)/(a-1) всё ещё проверяется ниже.
+    def everywhere(component):
+        return component.is_real is True and component.is_finite is True
+
+    if (all(everywhere(c) for c in (value, *item.components))
+            and all(d.is_nonzero is True for d in item.denominators)):
+        return True
+    # Допустимая точная точка с новым разрывом уже опровергает ввод;
+    # трудное построение всей области определения после неё не нужно.
+    if _domain_counterexample(item, reference):
+        return False
     if len(reference.symbols) == 1:
         symbol = reference.symbols[0]
         domain = Interval.open(0, oo) if symbol.is_positive else S.Reals
@@ -355,14 +378,18 @@ def _defined(item, reference):
             allowed = domain
             for original in reference.items:
                 for component in (original.expression, *original.components):
-                    allowed = allowed.intersect(continuous_domain(component, symbol, domain))
+                    if not everywhere(component):
+                        allowed = allowed.intersect(continuous_domain(component, symbol, domain))
                 for denominator in original.denominators:
-                    allowed = allowed - solveset(denominator, symbol, domain=domain)
-            valid = continuous_domain(value, symbol, domain)
+                    if denominator.is_nonzero is not True:
+                        allowed = allowed - solveset(denominator, symbol, domain=domain)
+            valid = domain if everywhere(value) else continuous_domain(value, symbol, domain)
             for component in item.components:
-                valid = valid.intersect(continuous_domain(component, symbol, domain))
+                if not everywhere(component):
+                    valid = valid.intersect(continuous_domain(component, symbol, domain))
             for denominator in item.denominators:
-                valid = valid - solveset(denominator, symbol, domain=domain)
+                if denominator.is_nonzero is not True:
+                    valid = valid - solveset(denominator, symbol, domain=domain)
             return (allowed - valid).is_empty
         except (NotImplementedError, ValueError, TypeError):
             return None
