@@ -201,6 +201,22 @@ class UsageEventsTests(TestCase):
         [event] = self.events()
         self.assertEqual((event.groups, event.students), ([self.group], []))
 
+    def test_group_with_hidden_task_falls_back_to_names(self):
+        # Листок выдан группе, но у одного ученика задача скрыта — строка
+        # «8А» ввела бы в заблуждение, поэтому получившие — по именам.
+        assignments = [self.assign(student, groups=[self.group])
+                       for student in self.students[:3]]
+        item = self.worksheet.ordered_items()[0]
+        assignments[2].hidden_items.add(item)
+        [event] = self.events()
+        self.assertEqual(event.groups, [])
+        self.assertEqual(event.students, self.students[:2])
+        # Остальные задачи листка группа получила целиком.
+        other = self.worksheet.ordered_items()[1].task
+        rows = task_usage(self.teacher, [other])[other.pk]
+        [other_event] = usage_events(rows, _group_members(self.teacher))
+        self.assertEqual(other_event.groups, [self.group])
+
     def test_full_group_without_origin_is_inferred(self):
         # Самостоятельная группу не хранит: весь состав группы получил
         # работу — показываем группой, остальных по именам.

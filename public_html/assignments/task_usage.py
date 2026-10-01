@@ -195,6 +195,10 @@ def task_usage(teacher, tasks, *, student_ids=None):
                        .prefetch_related('hidden_items', 'source_groups'))
         if student_ids is not None:
             assignments = assignments.filter(student_id__in=student_ids)
+        # Группа, у части учеников которой задача скрыта, получила её
+        # не целиком: (задача, листок, день, группа) — такую группу у строк
+        # убираем, и ученики показываются по именам.
+        partial = set()
         for assignment in assignments:
             hidden = {item.pk for item in assignment.hidden_items.all()}
             groups = tuple(assignment.source_groups.all())
@@ -209,6 +213,19 @@ def task_usage(teacher, tasks, *, student_ids=None):
                     url=reverse('worksheet_progress',
                                 args=[assignment.worksheet_id]),
                     source_id=assignment.worksheet_id, groups=groups))
+            if groups:
+                day = timezone.localdate(assignment.assigned_at)
+                for _, root in tasks_by_worksheet[assignment.worksheet_id]:
+                    if root not in seen:
+                        partial.update((root, assignment.worksheet_id, day, group.pk)
+                                       for group in groups)
+        if partial:
+            for root, rows in usage.items():
+                for row in rows:
+                    day = timezone.localdate(row.date)
+                    row.groups = tuple(
+                        group for group in row.groups
+                        if (root, row.source_id, day, group.pk) not in partial)
 
     # Самостоятельные: пункты варианта → попытки учеников. В source_key
     # может стоять id локальной копии (аналог, созданный из подбора) —
@@ -265,7 +282,8 @@ def usage_events(rows, group_members):
     """Сворачивает строки истории в выдачи: один листок или запуск за день.
 
     Группа ставится вместо учеников, если выдача шла через неё (``groups``
-    у задания) или если её получил весь текущий состав группы — так видны
+    у задания; ``task_usage`` убирает группу, если у кого-то из неё задача
+    скрыта) или если её получил весь текущий состав группы — так видны
     и самостоятельные, где группа при выдаче не хранится, и старые задания.
     Остальные ученики остаются по именам. Порядок — по убыванию даты.
     """
