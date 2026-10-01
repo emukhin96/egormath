@@ -390,6 +390,30 @@ class AssignmentWorkspaceTests(TestCase):
             assignments.get(student=self.student).check_visibility,
             Assignment.CHECK_LIVE)
 
+    def test_new_group_member_inherits_tasks_hidden_for_whole_group(self):
+        """Задача, скрытая «для группы целиком», скрыта и у добавленного позже."""
+        item = self.worksheet.items.filter(task__isnull=False).first()
+        self.group.students.set([self.student])
+        self.client.post(reverse('assignment_create'), {
+            'worksheet': self.worksheet.pk, 'groups': [self.group.pk],
+            'check_visibility': Assignment.CHECK_LIVE})
+        first = Assignment.objects.get(worksheet=self.worksheet, student=self.student)
+        first.hidden_items.add(item)
+        # В группу добавили ученика и снова выдали листок группе
+        self.group.students.add(self.student2)
+        self.client.post(reverse('assignment_create'), {
+            'worksheet': self.worksheet.pk, 'groups': [self.group.pk],
+            'check_visibility': Assignment.CHECK_LIVE})
+        second = Assignment.objects.get(worksheet=self.worksheet, student=self.student2)
+        self.assertEqual(list(second.source_groups.all()), [self.group])
+        self.assertEqual(list(second.hidden_items.all()), [item])
+        # Индивидуальная выдача группу не наследует и задачи не скрывает
+        third = make_student(self.teacher, 'student3')
+        self.client.post(reverse('assignment_create'), {
+            'worksheet': self.worksheet.pk, 'students': [third.pk],
+            'check_visibility': Assignment.CHECK_LIVE})
+        self.assertFalse(Assignment.objects.get(student=third).hidden_items.exists())
+
     def test_locked_check_mode_is_visible_and_used_for_new_student(self):
         Assignment.objects.create(
             worksheet=self.worksheet, student=self.student,

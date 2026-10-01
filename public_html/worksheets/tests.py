@@ -1865,6 +1865,40 @@ class ShareLinkTests(TestCase):
         self.client.post(url, {})
         self.assertEqual(self.link.hidden_items.count(), 0)
 
+    def test_visibility_hide_group_hides_all_its_students(self):
+        from accounts.models import StudentGroup
+        from assignments.models import Assignment
+        first_student = make_student(self.teacher)
+        second_student = make_student(self.teacher, 'student2')
+        group = StudentGroup.objects.create(teacher=self.teacher, name='8А')
+        group.students.add(first_student, second_student)
+        assignments = []
+        for student in (first_student, second_student):
+            assignment = Assignment.objects.create(
+                worksheet=self.worksheet, student=student,
+                assigned_by=self.teacher, recipient_origin_known=True)
+            assignment.source_groups.add(group)
+            assignments.append(assignment)
+        self.client.login(username='teacher1', password='pass12345')
+        first = self.worksheet.items.order_by('order').first()
+        url = reverse('worksheet_item_visibility',
+                      args=[self.worksheet.pk, first.pk])
+        self.client.post(url, {'hide_groups': [group.pk]})
+        for assignment in assignments:
+            self.assertEqual(set(assignment.hidden_items.all()), {first})
+        # В диалоге группа отмечена: задача скрыта у всех её учеников
+        response = self.client.get(
+            reverse('worksheet_detail', args=[self.worksheet.pk]))
+        self.assertRegex(
+            response.content.decode(),
+            rf'name="hide_groups" value="{group.pk}"\s+'
+            rf'data-group-toggle="({assignments[0].pk},{assignments[1].pk}'
+            rf'|{assignments[1].pk},{assignments[0].pk})"\s+checked')
+        # Снятие галочки группы (POST без hide_groups) снова показывает задачу
+        self.client.post(url, {})
+        for assignment in assignments:
+            self.assertEqual(assignment.hidden_items.count(), 0)
+
     def test_visibility_buttons_without_share_links(self):
         # Кнопки «скрыть» есть и у свежего листка, ещё без ссылок
         worksheet = make_worksheet(self.teacher)

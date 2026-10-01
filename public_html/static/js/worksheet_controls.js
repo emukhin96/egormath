@@ -153,3 +153,40 @@
     } finally { busy = false; if (button) button.disabled = false; }
   });
 })();
+
+/* Диалог видимости задачи: галочка группы отмечает её учеников, а по
+   ученикам группа показывает состояние (все / часть / никто). */
+(function () {
+  function members(toggle) {
+    var dialog = toggle.closest('dialog');
+    if (!dialog) return [];
+    return String(toggle.dataset.groupToggle || '').split(',').map(function (id) {
+      return dialog.querySelector('input[name="hide_assignments"][value="' + id.trim() + '"]');
+    }).filter(Boolean);
+  }
+  function syncGroups(dialog) {
+    dialog.querySelectorAll('[data-group-toggle]').forEach(function (toggle) {
+      var boxes = members(toggle);
+      var checked = boxes.filter(function (box) { return box.checked; }).length;
+      toggle.checked = boxes.length > 0 && checked === boxes.length;
+      toggle.indeterminate = checked > 0 && checked < boxes.length;
+    });
+  }
+  document.addEventListener('change', function (e) {
+    var input = e.target;
+    if (input.matches('[data-group-toggle]')) {
+      members(input).forEach(function (box) { box.checked = input.checked; });
+      // Пересчитать и соседние группы: ученик может состоять в нескольких
+      syncGroups(input.closest('dialog'));
+    } else if (input.matches('dialog input[name="hide_assignments"]')) {
+      syncGroups(input.closest('dialog'));
+    }
+  });
+  document.addEventListener('click', function (e) {
+    var button = e.target.closest('.vis-btn, [data-dialog-open^="vis-"]');
+    if (!button) return;
+    setTimeout(function () {
+      document.querySelectorAll('dialog[id^="vis-"][open]').forEach(syncGroups);
+    }, 0);
+  });
+})();
