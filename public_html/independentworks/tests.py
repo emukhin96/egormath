@@ -77,7 +77,7 @@ class IndependentWorkTests(TestCase):
         formulas._checked.cache_clear()
         formulas._failed_inputs.clear()
         self.addCleanup(formulas._failed_inputs.clear)
-        with patch.object(formulas.subprocess, 'run',
+        with patch.object(formulas, '_spawn',
                           side_effect=subprocess.TimeoutExpired('worker', 3)) as worker:
             answer = svc.save_answer(attempt.pk, point.pk, 0, {'s1': '163+a'})
             svc.recheck_unavailable(attempt)

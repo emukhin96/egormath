@@ -1305,7 +1305,7 @@ class AutoCheckFlowTests(TestCase):
         formulas._checked.cache_clear()
         formulas._failed_inputs.clear()
         self.addCleanup(formulas._failed_inputs.clear)
-        with mock.patch.object(formulas.subprocess, 'run',
+        with mock.patch.object(formulas, '_spawn',
                                side_effect=subprocess.TimeoutExpired('worker', 3)) as worker:
             self._save('151+a')
             response = self._check('151+a')

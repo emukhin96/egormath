@@ -88,7 +88,7 @@ class FormulaMaskTests(SimpleTestCase):
             self.assertLess(time.monotonic() - started, 1)
         # Пауза после сбоя — только для этого ввода: тот же ввод не форкает
         # процесс заново, другой ввод проверяется сразу.
-        with patch.object(formulas.subprocess, 'run') as worker:
+        with patch.object(formulas, '_spawn') as worker:
             with self.assertRaises(formulas.FormulaUnavailable):
                 formulas.check('17+a', reference)
             worker.assert_not_called()
@@ -173,7 +173,7 @@ class FormulaMaskTests(SimpleTestCase):
             self.assertTrue(formulas._worker_slots.acquire(blocking=False))
         try:
             with patch.object(formulas, 'WORKER_WAIT', 0.05), \
-                    patch.object(formulas.subprocess, 'run') as worker:
+                    patch.object(formulas, '_spawn') as worker:
                 with self.assertRaises(formulas.FormulaUnavailable):
                     formulas.check('47+a', reference)
                 worker.assert_not_called()
@@ -189,7 +189,7 @@ class FormulaMaskTests(SimpleTestCase):
         formulas._checked.cache_clear()
         formulas._failed_inputs.clear()
         with patch.object(formulas, '_worker_slots') as slots, \
-                patch.object(formulas.subprocess, 'run') as worker:
+                patch.object(formulas, '_spawn') as worker:
             slots.acquire.return_value = False
             self.assertEqual(draft_mask('a+137'), '')
             slots.acquire.assert_called_once_with(timeout=0)
