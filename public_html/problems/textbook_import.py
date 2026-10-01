@@ -979,17 +979,32 @@ def missing_imported_collection_draft_ids(batch, drafts=None):
     }
 
 
-def _rubrics_to_append(current, headings):
-    """Какие заголовки дописать, чтобы контекст листа стал headings."""
+def _rubrics_to_append(current, headings, heading_paths=()):
+    """Дописывает путь с первого уровня, отличного от действующего контекста."""
     headings = list(headings)
     if not headings:
         return []
-    if current[-len(headings):] == headings:
-        return []
-    # Наличие рубрики где-то в истории не означает, что она действует
-    # в конце листка. При дозагрузке прежнего раздела восстанавливаем
-    # весь путь: одинаковые «Вариант 1» могут относиться к разным §.
-    return headings
+    # Уровни берём из путей задач, а не угадываем по названиям рубрик.
+    # Неизвестные и неоднозначные рубрики сбрасывают контекст: безопаснее
+    # восстановить путь целиком, чем отнести задачу к чужому параграфу.
+    levels = {}
+    for path in [*heading_paths, headings]:
+        for depth, title in enumerate(path):
+            levels.setdefault(title[:190], set()).add(depth)
+    active = []
+    for title in current:
+        depths = levels.get(title, set())
+        if len(depths) != 1:
+            active = []
+            continue
+        depth = next(iter(depths))
+        active = active[:depth]
+        if len(active) == depth:
+            active.append(title)
+    for depth, title in enumerate(headings):
+        if depth >= len(active) or active[depth] != title[:190]:
+            return headings[depth:]
+    return []
 
 
 def _next_worksheet_order(worksheet):
@@ -997,7 +1012,7 @@ def _next_worksheet_order(worksheet):
         max_order=Max('order'))['max_order'] or 0) + 10
 
 
-def _ensure_import_rubrics(worksheet, headings):
+def _ensure_import_rubrics(worksheet, headings, source):
     """Добавляет хвостовые рубрики, не дублируя уже стоящий контекст."""
     from worksheets.models import WorksheetItem
 
@@ -1006,7 +1021,12 @@ def _ensure_import_rubrics(worksheet, headings):
         .exclude(rubric='')
         .order_by('order', 'pk')
         .values_list('rubric', flat=True))
-    to_add = _rubrics_to_append(current, headings)
+    paths = TaskSource.objects.filter(
+        source=source,
+        task_id__in=worksheet.items.filter(deleted_at=None)
+        .exclude(task=None).values('task_id')).values_list('source_path', flat=True)
+    heading_paths = [_collection_layout(path, '')[1] for path in paths]
+    to_add = _rubrics_to_append(current, headings, heading_paths)
     order = _next_worksheet_order(worksheet)
     for title in to_add:
         WorksheetItem.objects.create(
@@ -1098,7 +1118,7 @@ def _add_draft_task_to_collection(batch, draft, task, cache):
         set_grade_bands(worksheet, grade_codes)
     if worksheet.items.filter(task=task, deleted_at=None).exists():
         return worksheet, False
-    order = _ensure_import_rubrics(worksheet, headings)
+    order = _ensure_import_rubrics(worksheet, headings, batch.source)
     WorksheetItem.objects.create(worksheet=worksheet, task=task, order=order)
     return worksheet, True
 
