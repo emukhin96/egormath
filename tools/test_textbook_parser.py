@@ -958,6 +958,45 @@ class TextbookParserTests(unittest.TestCase):
             [item.author_solution_latex for item in tasks[0].subitems],
             ['Первое решение.', 'Второе решение.'])
 
+    def test_distributed_material_discards_empty_parent_headings(self):
+        from problems.textbook_parser import merge_solutions
+
+        for full_solutions in (True, False):
+            for prefix in ('Ответ:', 'Решение.', 'Указание:', '.',
+                           'Ответ: Решение. Указание:', 'ответ:'):
+                with self.subTest(full=full_solutions, prefix=prefix):
+                    task = task_from_block(
+                        Marker(0, 0, '1'), 'Вычислите: а) $2+2$; б) $3+3$.', [])
+                    merge_solutions([task], f'1. {prefix} а) 4; б) 6.',
+                                    lambda text: [Marker(0, 3, '1')],
+                                    full_solutions=full_solutions)
+                    self.assertEqual(task.author_answer_latex, '')
+                    self.assertEqual(task.author_solution_latex, '')
+                    material = [item.author_solution_latex if full_solutions
+                                else item.author_answer_latex
+                                for item in task.subitems]
+                    self.assertEqual(material, ['4', '6'])
+
+    def test_distributed_material_preserves_meaningful_parent(self):
+        from problems.textbook_parser import merge_solutions
+
+        for full_solutions in (True, False):
+            for prefix in ('Указание: раскройте скобки.', 'Ответ: $0$.',
+                           'Решение. Используйте общий рисунок.'):
+                with self.subTest(full=full_solutions, prefix=prefix):
+                    task = task_from_block(
+                        Marker(0, 0, '1'), 'Вычислите: а) $2+2$; б) $3+3$.', [])
+                    merge_solutions([task], f'1. {prefix} а) 4; б) 6.',
+                                    lambda text: [Marker(0, 3, '1')],
+                                    full_solutions=full_solutions)
+                    self.assertEqual(
+                        task.author_answer_latex,
+                        '$0$' if prefix.startswith('Ответ:') else '')
+                    self.assertEqual(
+                        task.author_solution_latex,
+                        prefix if full_solutions or not prefix.startswith('Ответ:')
+                        else '')
+
     def test_solution_subitem_count_mismatch_is_not_distributed(self):
         task_text = "\n".join([
             "1.1.A01 Вычислите:",

@@ -961,6 +961,42 @@ class TextbookImportTests(TestCase):
             ['§1. Числа', 'Вариант 1', '§2. Дроби', 'Вариант 1',
              '§1. Числа', 'Вариант 1'])
 
+    def test_commit_chapter_does_not_repeat_section_for_sibling_variants(self):
+        self._check_chapter_sibling_variants(partial=False)
+
+    def test_partial_commit_chapter_does_not_repeat_section_for_sibling_variants(self):
+        self._check_chapter_sibling_variants(partial=True)
+
+    def _check_chapter_sibling_variants(self, *, partial):
+        topic = Topic.objects.create(name='Тема соседних вариантов')
+        payload = bundle()
+        sequence = [('§1. Числа', 1), ('§1. Числа', 2),
+                    ('§2. Дроби', 1), ('§2. Дроби', 2),
+                    ('§1. Числа', 1)]
+        payload['tasks'] = [dict(
+            payload['tasks'][0], external_id=f'chapter/{index}',
+            source_path=['Глава 1. Алгебра', section, f'Вариант {variant}'],
+            collection_key=f'Глава 1. Алгебра/{section}/v{variant}',
+        ) for index, (section, variant) in enumerate(sequence)]
+        batch = self.create_batch(payload)
+        batch.drafts.update(status=TextbookTaskDraft.STATUS_APPROVED, topic=topic)
+        if partial:
+            for draft in batch.drafts.order_by('pk'):
+                commit_batch(batch, user=self.teacher, draft_ids=[draft.pk],
+                             require_complete=False)
+        else:
+            commit_batch(batch, user=self.teacher)
+        worksheet = Collection.objects.get(is_published=True).worksheet
+        self.assertEqual(
+            list(worksheet.items.filter(task=None).order_by('order', 'pk')
+                 .values_list('rubric', flat=True)),
+            ['§1. Числа', 'Вариант 1', 'Вариант 2',
+             '§2. Дроби', 'Вариант 1', 'Вариант 2',
+             '§1. Числа', 'Вариант 1'])
+        count = worksheet.items.count()
+        commit_batch(batch, user=self.teacher)
+        self.assertEqual(worksheet.items.count(), count)
+
     def test_commit_chapter_uses_section_rubrics(self):
         topic = Topic.objects.create(name='Тема главы')
         payload = bundle(

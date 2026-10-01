@@ -2313,6 +2313,20 @@ def redistribute_glued_subitem_answers(task) -> bool:
     return changed
 
 
+def _meaningful_common_author_material(text: str) -> str:
+    """Не сохраняет пустую метку ответа/решения как общее введение."""
+    remaining = text.strip()
+    while remaining:
+        remaining = remaining.lstrip(' \t\n.:;,!?—–-…')
+        without_heading = re.sub(
+            r'(?i)^(?:ответ|решение|указани[ея])\b\s*[:.]?\s*',
+            '', remaining)
+        if without_heading == remaining:
+            break
+        remaining = without_heading
+    return text if remaining else ''
+
+
 def merge_solutions(
         tasks: list[TaskDraft], solution_text: str, marker_factory,
         *, full_solutions: bool = False, missing_ok: bool = False) -> dict:
@@ -2385,7 +2399,10 @@ def merge_solutions(
                     # быть решением пропущенного пункта. Сохраняем общее
                     # указание отдельно от распределённых решений.
                     common_author_material = (
-                        task.author_answer_latex, task.author_solution_latex)
+                        _meaningful_common_author_material(
+                            task.author_answer_latex),
+                        _meaningful_common_author_material(
+                            task.author_solution_latex))
                 assigned = set()
                 for task_subitem, solution_subitem in solution_pairs:
                     task_subitem.author_answer_latex = (
@@ -2440,7 +2457,7 @@ def merge_solutions(
             distributed_to_subitems = True
         if task.subitems and distributed_to_subitems:
             # Убираем распределённый материал, но не общее введение,
-            # которое split_full_solution отделил от всех подпунктов.
+            # которое парсер отделил от всех подпунктов.
             (task.author_answer_latex, task.author_solution_latex) = (
                 common_author_material or ("", ""))
         elif (task.subitems and found and not any(
