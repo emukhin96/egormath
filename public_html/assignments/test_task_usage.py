@@ -216,6 +216,12 @@ class UsageEventsTests(TestCase):
         rows = task_usage(self.teacher, [other])[other.pk]
         [other_event] = usage_events(rows, _group_members(self.teacher))
         self.assertEqual(other_event.groups, [self.group])
+        # Аудитория «один ученик» не прячет скрытие у другого ученика группы.
+        rows = task_usage(self.teacher, [item.task],
+                          student_ids={self.students[0].pk})[item.task.pk]
+        [event] = usage_events(rows, _group_members(self.teacher))
+        self.assertEqual((event.groups, event.students),
+                         ([], [self.students[0]]))
 
     def test_full_group_without_origin_is_inferred(self):
         # Самостоятельная группу не хранит: весь состав группы получил

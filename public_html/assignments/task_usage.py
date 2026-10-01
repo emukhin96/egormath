@@ -193,20 +193,22 @@ def task_usage(teacher, tasks, *, student_ids=None):
                        .filter(worksheet_id__in=tasks_by_worksheet)
                        .select_related('student', 'worksheet')
                        .prefetch_related('hidden_items', 'source_groups'))
-        if student_ids is not None:
-            assignments = assignments.filter(student_id__in=student_ids)
         # Группа, у части учеников которой задача скрыта, получила её
         # не целиком: (задача, листок, день, группа) — такую группу у строк
-        # убираем, и ученики показываются по именам.
+        # убираем, и ученики показываются по именам. Скрытие ищем у всех
+        # учеников группы, поэтому аудиторию фильтруем только при сборе строк.
         partial = set()
         for assignment in assignments:
             hidden = {item.pk for item in assignment.hidden_items.all()}
             groups = tuple(assignment.source_groups.all())
+            in_audience = student_ids is None or assignment.student_id in student_ids
             seen = set()
             for item_pk, root in tasks_by_worksheet[assignment.worksheet_id]:
                 if item_pk in hidden or root in seen:
                     continue
                 seen.add(root)
+                if not in_audience:
+                    continue
                 usage[root].append(UsageRow(
                     student=assignment.student, date=assignment.assigned_at,
                     kind='assignment', title=assignment.worksheet.title,
