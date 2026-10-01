@@ -1923,13 +1923,32 @@
   .catalog-table-wrap { overflow-x: auto; }
   .task-catalog .catalog-table { min-width: 680px; }
   .task-catalog col.col-key { width: 5rem; }
-  .task-catalog .catalog-table col.col-topics { width: 25%; }
+  /* Справа только «класс · темы» (источник — строкой под условием) */
+  .task-catalog .catalog-table col.col-topics { width: 12rem; }
   /* Ячейки по базовой линии первой строки: номер, чекбокс и «+» на линии
      текста и при формулах KaTeX (по верху не сходится — у формул линия выше) */
   .catalog-table td { overflow-wrap: anywhere; }
   table.catalog-table td { vertical-align: baseline; } /* специфичнее table.list td */
   .catalog-table .task-text { margin-bottom: var(--space-2); }
-  .catalog-table .import-section-path { margin-bottom: var(--space-3); }
+  /* Нижняя строка задачи: источник слева, «дублировать» и маски — справа */
+  .catalog-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 var(--space-3);
+    font-size: 0.78rem;
+    line-height: 1.35;
+  }
+  .catalog-source { flex: 1 1 18rem; min-width: 0; }
+  .catalog-source > span + span::before { content: ' · '; }
+  .catalog-row-actions {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  .catalog-row-actions [data-mask-links]:empty { display: none; }
   .problem-columns label { display: block; }
   .problem-columns .ws-toggle { display: inline-flex; margin-left: 0; }
   .problem-columns .inline-label, .problem-columns .label-row label { display: inline-flex; }
@@ -2249,12 +2268,35 @@
     border-bottom: none;
   }
 
-  /* Рубрика — один уровень оформления, без вложенной «плашки» */
+  /* Рубрика — тонкий заголовок раздела: акцентная черта слева и лёгкий
+     фон вместо толстой серой плашки; заголовок без собственных отступов. */
+  .ws-item-rubric,
+  .ws-item-rubric:hover {
+    background: var(--accent-soft);
+  }
+
   .ws-item-rubric {
-    background: #eef2f6;
-    border-radius: 6px;
     border-bottom: none;
-    margin-block: var(--space-1);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 6px var(--space-3);
+    margin-block: var(--space-3) var(--space-1);
+  }
+
+  .ws-item-rubric:first-child {
+    margin-top: 0;
+  }
+
+  .ws-item-rubric h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--accent-dark);
+  }
+
+  .ws-item-rubric p {
+    margin: 2px 0 0;
+    font-size: 0.85rem;
+    color: var(--muted);
   }
 
   .ws-rubric-name {

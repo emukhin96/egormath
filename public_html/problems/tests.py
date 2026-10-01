@@ -1223,7 +1223,7 @@ class CatalogViewTests(TestCase):
     def test_catalog_grade_column_matches_bands(self):
         self.client.login(username='teacher1', password='pass12345')
         response = self.client.get(reverse('task_list'))
-        self.assertContains(response, 'Раздел и темы')
+        self.assertContains(response, 'Класс и темы')
         self.assertContains(response, 'name="grade_level"')
         self.assertEqual(
             [g for g, _ in response.context['grade_choices']],
