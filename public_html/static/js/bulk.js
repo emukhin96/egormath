@@ -7,8 +7,9 @@
    подгруженные живым поиском, работают без повторной инициализации;
    EgorBulk.init() пересчитывает панели после подмены результатов.
    Одна запись может стоять в нескольких строках (ученик в блоках разных
-   групп): копии чекбокса с тем же value отмечаются вместе, а «Выбрано»
-   считает разные значения, а не чекбоксы. */
+   групп): копии чекбокса с тем же явным value отмечаются вместе, а
+   «Выбрано» считает разные значения. Чекбокс без атрибута value (строки
+   импорта .tex) — отдельная запись: у всех таких value «on». */
 (function () {
   'use strict';
 
@@ -33,8 +34,12 @@
 
   function distinct(boxes) {
     var seen = {};
-    boxes.forEach(function (b) { seen[b.value] = true; });
-    return Object.keys(seen).length;
+    var single = 0;
+    boxes.forEach(function (b) {
+      if (b.hasAttribute('value')) seen[b.getAttribute('value')] = true;
+      else single += 1;
+    });
+    return Object.keys(seen).length + single;
   }
 
   function refresh(form) {
@@ -69,9 +74,11 @@
     if (box.matches('input.row-select[form]')) {
       var form = document.getElementById(box.getAttribute('form'));
       if (!form) return;
-      boxesFor(form).forEach(function (b) {
-        if (b.value === box.value) b.checked = box.checked;
-      });
+      if (box.hasAttribute('value')) {
+        boxesFor(form).forEach(function (b) {
+          if (b.getAttribute('value') === box.getAttribute('value')) b.checked = box.checked;
+        });
+      }
       setScope(form, 'page');
       refresh(form);
     } else if (box.matches('input[data-bulk-all]')) {
