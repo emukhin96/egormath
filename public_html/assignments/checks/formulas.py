@@ -19,6 +19,7 @@ from pathlib import Path
 
 from ..check_answer import MAX_EXPR_LEN, OK, UNKNOWN, WRONG
 from . import expressions
+from .formula_fork import FormulaStartupUnavailable
 
 
 @dataclass
@@ -146,6 +147,10 @@ def _run_worker(payload):
         if not isinstance(response, dict) or response.get('unavailable'):
             raise FormulaUnavailable('временная недоступность проверки')
         return response
+    except FormulaStartupUnavailable as error:
+        # Forkserver мог исчезнуть уже после успешного доверенного прогрева.
+        # Такой отказ окружения не расходует попытку ученического ответа.
+        raise FormulaBusy('парсер формул пока не готов') from error
     except (subprocess.TimeoutExpired, OSError, ValueError) as error:
         # Сбой запоминается только для этого входа: повторные форки того же
         # выражения под нагрузкой не нужны, остальные проверки продолжаются.

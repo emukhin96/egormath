@@ -72,20 +72,25 @@ def run_worker(payload, timeout):
 
 def _run_process(payload, timeout):
     """JSON-протокол; процесс всегда убирается, в том числе при таймауте."""
+    global _ready, _failed_until
     context = multiprocessing.get_context('forkserver')
     context.set_forkserver_preload(['assignments.checks.formula_preload'])
     receiver, sender = context.Pipe(duplex=False)
     process = context.Process(target=_calculate, args=(payload, sender))
-    deadline = time.monotonic() + timeout
     started = False
     try:
         try:
             process.start()
-        except (EOFError, RuntimeError) as error:
+        except (EOFError, RuntimeError, OSError) as error:
             # Forkserver может исчезнуть до передачи PID ребёнка. Приводим
             # этот отказ к общему протоколу ошибок запуска, как у subprocess.
-            raise OSError('не удалось запустить процесс проверки формул') from error
+            _ready = False
+            _failed_until = time.monotonic() + STARTUP_RETRY_DELAY
+            raise FormulaStartupUnavailable('не удалось запустить процесс проверки формул') from error
         started = True
+        # Перезапуск forkserver загружает только доверенную грамматику.
+        # Лимит реального ввода отсчитывается после успешного запуска ребёнка.
+        deadline = time.monotonic() + timeout
         sender.close()
         remaining = max(0, deadline - time.monotonic())
         if not remaining or not receiver.poll(remaining):
