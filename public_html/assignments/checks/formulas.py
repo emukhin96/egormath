@@ -120,6 +120,13 @@ def _run_worker(payload):
     key = json.dumps(payload, sort_keys=True)
     if _recently_failed(key):
         raise FormulaBusy('проверка этого выражения недавно не удалась; повторите позже')
+    if sys.platform == 'linux':
+        from .formula_fork import warmup
+        try:
+            # Прогрев не занимает слот вычислений и не помечает ввод сбойным.
+            warmup()
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+            raise FormulaUnavailable('парсер формул пока не готов') from error
     wait = _worker_wait.get()
     if not _worker_slots.acquire(timeout=WORKER_WAIT if wait is None else wait):
         raise FormulaBusy('проверка временно занята')
@@ -366,6 +373,17 @@ def _defined(item, reference):
     if (all(everywhere(c) for c in (value, *item.components))
             and all(d.is_nonzero is True for d in item.denominators)):
         return True
+    # Область эталона уже включает ограничения его исходных компонентов.
+    # Если ввод не добавляет ни одного такого ограничения, включение
+    # доказано непосредственно, без повторного решения тех же областей.
+    originals = {c for original in reference.items
+                 for c in (original.expression, *original.components)}
+    original_denominators = {d for original in reference.items
+                             for d in original.denominators}
+    if (all(c in originals or everywhere(c) for c in (value, *item.components))
+            and all(d in original_denominators or d.is_nonzero is True
+                    for d in item.denominators)):
+        return True
     # Допустимая точная точка с новым разрывом уже опровергает ввод;
     # трудное построение всей области определения после неё не нужно.
     if _domain_counterexample(item, reference):
@@ -442,6 +460,17 @@ def _domain_counterexample(item, reference):
     from sympy import S
     baseline = {symbol: S.One for symbol in reference.symbols}
     values_to_try = [baseline]
+    if len(reference.symbols) == 1:
+        symbol = reference.symbols[0]
+        # Точный ноль исходного линейного знаменателя — кандидат на разрыв.
+        # Он используется только для опровержения и проверяется на области
+        # эталона ниже; отсутствие такого нуля ничего не доказывает.
+        for denominator in item.denominators:
+            polynomial = denominator.as_poly(symbol)
+            if polynomial is not None and polynomial.degree() == 1:
+                root = -polynomial.nth(0) / polynomial.nth(1)
+                if root.is_real is True and (not symbol.is_positive or root.is_positive is True):
+                    values_to_try.append({symbol: root})
     for symbol in reference.symbols:
         for number in (-2, -1, 0, 1, 2):
             if symbol.is_positive and number <= 0:

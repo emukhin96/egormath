@@ -408,18 +408,57 @@ class FormulaForkTests(SimpleTestCase):
                 self.assertEqual(result.returncode, 0)
                 self.assertEqual(json.loads(result.stdout)['status'], expected)
 
-    def test_failed_warmup_is_retried(self):
+    def test_failed_warmup_waits_then_retries(self):
         from assignments.checks import formula_fork
         with patch.object(formula_fork, '_ready', False), \
+                patch.object(formula_fork, '_failed_until', 0), \
+                patch.object(formula_fork.time, 'monotonic', side_effect=[100, 100, 105, 111]), \
                 patch.object(formula_fork, '_run_process', side_effect=[
                     subprocess.CompletedProcess('worker', 0, '{"unavailable":true}'),
                     subprocess.CompletedProcess('worker', 0, '{"display":"x"}')]) as run:
-            with self.assertRaises(ValueError):
+            with self.assertRaises(formula_fork.FormulaStartupUnavailable):
                 formula_fork.warmup()
             self.assertFalse(formula_fork._ready)
+            with self.assertRaises(formula_fork.FormulaStartupUnavailable):
+                formula_fork.warmup()
+            self.assertEqual(run.call_count, 1)
             formula_fork.warmup()
             self.assertTrue(formula_fork._ready)
             self.assertEqual(run.call_count, 2)
+
+    def test_requests_do_not_queue_behind_warmup(self):
+        from assignments.checks import formula_fork
+        with patch.object(formula_fork, '_ready', False), \
+                patch.object(formula_fork, '_run_process') as run:
+            with formula_fork._startup_lock:
+                with self.assertRaises(formula_fork.FormulaStartupUnavailable):
+                    formula_fork.warmup()
+            run.assert_not_called()
+
+    def test_startup_failure_does_not_block_input_or_take_worker_slot(self):
+        from assignments.checks import formula_fork
+        payload = {'payload': '3a/4', 'multiple': False}
+        for error in (OSError('forkserver'), ValueError('json'),
+                      subprocess.TimeoutExpired('startup', 10),
+                      formula_fork.FormulaStartupUnavailable('startup')):
+            with self.subTest(error=type(error).__name__), \
+                    patch.object(formulas.sys, 'platform', 'linux'), \
+                    patch.object(formula_fork, 'warmup', side_effect=error), \
+                    patch.object(formula_fork, 'run_worker') as run, \
+                    patch.object(formulas, '_worker_slots') as slots, \
+                    patch.object(formulas, '_remember_failure') as remember:
+                with self.assertRaises(formulas.FormulaUnavailable):
+                    formulas._run_worker(payload)
+                slots.acquire.assert_not_called()
+                slots.release.assert_not_called()
+                remember.assert_not_called()
+                run.assert_not_called()
+                self.assertFalse(formulas._recently_failed(json.dumps(payload, sort_keys=True)))
+        with patch.object(formulas.sys, 'platform', 'linux'), \
+                patch.object(formula_fork, 'warmup'), \
+                patch.object(formula_fork, 'run_worker', return_value=
+                             subprocess.CompletedProcess('worker', 0, '{"display":"ok"}')):
+            self.assertEqual(formulas._run_worker(payload), {'display': 'ok'})
 
     def test_timeout_kills_and_reaps_the_child(self):
         from assignments.checks import formula_fork
