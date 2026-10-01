@@ -1,5 +1,5 @@
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{egor}[2026/09/30 v1.3 school math and chemistry task sheets]
+\ProvidesPackage{egor}[2026/10/01 v1.3.1 school math and chemistry task sheets]
 
 %%==========================================================================
 %% egor.sty — пакет для оформления списков задач по математике и химии.
@@ -185,19 +185,26 @@
   \RequirePackage[main=russian]{babel}%
   \RequirePackage{amsmath}%
   \RequirePackage{mathspec}%
-  \setmainfont{Palatino}[
-    BoldFont={Palatino Bold},
-    ItalicFont={Palatino Italic},
-    BoldItalicFont={Palatino Bold Italic}
+  % macOS: системный Palatino (имена Palatino, Palatino Bold, …). latex-api (Linux): файлы
+  % Palatino Linotype от Microsoft — fontconfig и XeTeX знают только полные имена.
+  \IfFontExistsTF{Palatino Linotype}
+    {\def\egor@pal{Palatino Linotype}\def\egor@palb{Palatino Linotype Bold}%
+     \def\egor@pali{Palatino Linotype Italic}\def\egor@palbi{Palatino Linotype Bold Italic}}
+    {\def\egor@pal{Palatino}\def\egor@palb{Palatino Bold}%
+     \def\egor@pali{Palatino Italic}\def\egor@palbi{Palatino Bold Italic}}%
+  \setmainfont{\egor@pal}[
+    BoldFont={\egor@palb},
+    ItalicFont={\egor@pali},
+    BoldItalicFont={\egor@palbi}
   ]%
-  \setmathsfont(Digits,Latin){Palatino}%
+  \setmathsfont(Digits,Latin){\egor@pal}%
   \DeclareSymbolFont{punctuation}{\encodingdefault}{\familydefault}{m}{n}%
   \SetSymbolFont{punctuation}{bold}{\encodingdefault}{\familydefault}{b}{n}%
   \DeclareMathSymbol{,}{\mathpunct}{punctuation}{`,}%
   \DeclareMathSymbol{.}{\mathord}{punctuation}{`.}%
   \DeclareMathSymbol{;}{\mathpunct}{punctuation}{`;}%
-  \setmathrm{Palatino}%
-  \setboldmathrm{Palatino Bold}%
+  \setmathrm{\egor@pal}%
+  \setboldmathrm{\egor@palb}%
   \setsansfont{TextBookC}\setmonofont{CMU Typewriter Text}%
   \RequirePackage{pifont}%
   \newfontfamily\cmserif{CMU Serif}%
