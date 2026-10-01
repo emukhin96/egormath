@@ -1234,6 +1234,15 @@ class WorksheetViewTests(TestCase):
         self.assertEqual(
             WorksheetPdf.objects.filter(worksheet=self.worksheet).count(), 1)
 
+        # Правка egor.sty/egorweb.sty (их кладёт на latex-api деплой) в .tex
+        # не видна, но тоже сбрасывает кэш
+        with mock.patch('worksheets.services.packages_fingerprint',
+                        return_value='другая версия пакетов'):
+            response = self.client.get(url, {'variant': 'student'})
+        self.assertEqual(mocked.call_count, 3)
+        self.assertEqual(
+            WorksheetPdf.objects.filter(worksheet=self.worksheet).count(), 1)
+
     def test_pdf_editor_page(self):
         self.login_teacher()
         response = self.client.get(

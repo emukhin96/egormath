@@ -6,6 +6,7 @@ JSON {"api_key": ..., "tex_files": [{"team_id": ..., "tex_content": ...}]},
 """
 
 import base64
+import functools
 import hashlib
 import logging
 import time
@@ -143,6 +144,21 @@ def _local_sty_assets(names):
     return [_file_asset(TEX_DIR / name) for name in names]
 
 
+@functools.lru_cache(maxsize=1)
+def packages_fingerprint():
+    """Хэш egor.sty + egorweb.sty для ключа кэша PDF листка.
+
+    Правки egor для сайта раньше стояли прямо в .tex и меняли его хэш;
+    теперь в .tex только \\usepackage{egorweb}. Те же файлы деплой кладёт
+    на latex-api, поэтому их правка должна сбрасывать кэш, как раньше.
+    Файлы меняются только с деплоем (перезапуск процесса) — кэшируем.
+    """
+    digest = hashlib.sha256()
+    for name in WORKSHEET_STY_FILES:
+        digest.update((TEX_DIR / name).read_bytes())
+    return digest.hexdigest()
+
+
 def _worksheet_images(worksheet, exclude_ids=None):
     """Картинки задач листка без повторов имён, только существующие файлы."""
     exclude_ids = set(exclude_ids or ())
@@ -220,7 +236,7 @@ def get_worksheet_pdf(worksheet, variant, exclude_ids=None):
     if variant == WorksheetPdf.VARIANT_STUDENT and worksheet.student_pdf_options:
         from .latex import apply_pdf_options
         tex = apply_pdf_options(tex, worksheet.student_pdf_options)
-    content_hash = tex_hash(tex)
+    content_hash = tex_hash(tex + '\n% egor: ' + packages_fingerprint())
     cached = WorksheetPdf.objects.filter(
         worksheet=worksheet, variant=variant,
         filter_key=filter_key, content_hash=content_hash,
