@@ -24,9 +24,10 @@ SRC=public_html/worksheets/tex
 STY_DIR="$LATEX_DATA/assets/egormath"
 FONT_DIR="$LATEX_DATA/fonts/egormath"
 
-# Файлы видит только общий latex-api этого сервера. Если сайт ещё ходит на
-# старый API (deploy/VPS.md §5a), egorweb.sty там нет — пусть сайт шлёт
-# пакеты сам (LATEX_SEND_STY=1), иначе новые листки не соберутся.
+# Файлы видит только общий latex-api этого сервера. На другой API (старый
+# сервер) сайт по умолчанию шлёт пакеты сам (settings.LATEX_SEND_STY);
+# останавливаемся, только если это явно выключено — иначе листки не
+# найдут egorweb.sty.
 setting() {  # значение из data/secrets/<имя> (как read_secret в settings.py)
   if [ -f "$DATA_DIR/secrets/$1" ]; then tr -d '[:space:]' < "$DATA_DIR/secrets/$1"; fi
 }
@@ -35,13 +36,14 @@ send_sty="$(setting LATEX_SEND_STY)"
 case "$api_url" in
   http://latex-api:8000*|https://latex.emukhin.ru*) ;;
   *)
-    if [ "$send_sty" != 1 ]; then
+    if [ "$send_sty" = 0 ]; then
       echo "!! LATEX_API_URL=${api_url:-<умолчание settings.py>} — не общий latex-api этого сервера,"
-      echo "   а LATEX_SEND_STY не включён: листки не найдут egorweb.sty."
-      echo "   Переключитесь на общий latex-api (deploy/VPS.md §5a) или временно:"
-      echo "   echo 1 > $DATA_DIR/secrets/LATEX_SEND_STY  (шрифты Inter/STIX тогда нужны на старом API)"
+      echo "   а LATEX_SEND_STY=0: листки не найдут egorweb.sty."
+      echo "   Переключитесь на общий latex-api (deploy/VPS.md §5a) или уберите"
+      echo "   $DATA_DIR/secrets/LATEX_SEND_STY (шрифты Inter/STIX тогда нужны на старом API)"
       exit 1
     fi
+    echo "   LATEX_API_URL не общий latex-api: сайт шлёт пакеты в каждой сборке"
     ;;
 esac
 
