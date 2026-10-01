@@ -285,10 +285,13 @@ def usage_events(rows, group_members):
 
     Группа ставится вместо учеников, если выдача шла через неё (``groups``
     у задания; ``task_usage`` убирает группу, если у кого-то из неё задача
-    скрыта) или если её получил весь текущий состав группы — так видны
-    и самостоятельные, где группа при выдаче не хранится, и старые задания.
-    Остальные ученики остаются по именам. Порядок — по убыванию даты.
+    скрыта) и через неё прошло больше половины нынешнего состава группы,
+    или если её получил весь текущий состав — так видны и самостоятельные,
+    где группа при выдаче не хранится, и старые задания. Довыдача новичку
+    группы и аудитория «один ученик» остаются по именам, как и все
+    остальные ученики. Порядок — по убыванию даты.
     """
+    sizes = {group.pk: len(members) for group, members in group_members}
     by_key = {}
     for row in rows:
         key = (row.kind, row.source_id, timezone.localdate(row.date))
@@ -297,20 +300,22 @@ def usage_events(rows, group_members):
             entry = by_key[key] = {
                 'event': UsageEvent(date=row.date, kind=row.kind,
                                     title=row.title, url=row.url),
-                'students': {}, 'groups': {}, 'covered': set()}
+                'students': {}, 'via': {}}
         entry['students'].setdefault(row.student.pk, row.student)
         for group in row.groups:
-            entry['groups'].setdefault(group.pk, group)
-            entry['covered'].add(row.student.pk)
+            entry['via'].setdefault(group.pk, (group, set()))[1].add(row.student.pk)
     events = []
     for entry in by_key.values():
-        event, students, covered = entry['event'], entry['students'], entry['covered']
-        event.groups = sorted(entry['groups'].values(), key=lambda g: g.name)
+        event, students = entry['event'], entry['students']
+        explicit = [(group, via) for group, via in entry['via'].values()
+                    if 2 * len(via) > sizes.get(group.pk, 0)]
+        event.groups = sorted((group for group, _ in explicit), key=lambda g: g.name)
+        covered = set().union(*(via for _, via in explicit))
         # Без явной группы — ищем группы, целиком получившие выдачу; вложенная
         # в уже показанную группа не повторяется.
         rest = set(students) - covered
         for group, members in group_members:
-            if group.pk not in entry['groups'] and members <= rest and not members <= covered:
+            if group not in event.groups and members <= rest and not members <= covered:
                 event.groups.append(group)
                 covered |= members
         event.students = sorted(

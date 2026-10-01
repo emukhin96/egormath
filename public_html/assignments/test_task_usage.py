@@ -201,6 +201,28 @@ class UsageEventsTests(TestCase):
         [event] = self.events()
         self.assertEqual((event.groups, event.students), ([self.group], []))
 
+    def test_late_addition_via_group_is_by_name(self):
+        # Группа получила листок раньше, новичку его довыдали через группу
+        # сегодня — сегодняшняя строка не выглядит выдачей всей группе.
+        earlier = [self.assign(student, groups=[self.group])
+                   for student in self.students[:3]]
+        Assignment.objects.filter(pk__in=[a.pk for a in earlier]).update(
+            assigned_at=timezone.now() - timezone.timedelta(days=3))
+        self.group.students.add(self.students[3])
+        self.assign(self.students[3], groups=[self.group])
+        events = self.events()
+        self.assertEqual([(e.groups, e.students) for e in events],
+                         [([], [self.students[3]]), ([self.group], [])])
+
+    def test_single_student_audience_is_by_name(self):
+        for student in self.students[:3]:
+            self.assign(student, groups=[self.group])
+        rows = task_usage(self.teacher, [self.task],
+                          student_ids={self.students[0].pk})[self.task.pk]
+        [event] = usage_events(rows, _group_members(self.teacher))
+        self.assertEqual((event.groups, event.students),
+                         ([], [self.students[0]]))
+
     def test_group_with_hidden_task_falls_back_to_names(self):
         # Листок выдан группе, но у одного ученика задача скрыта — строка
         # «8А» ввела бы в заблуждение, поэтому получившие — по именам.
