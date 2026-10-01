@@ -287,6 +287,42 @@ class StudentGroupTests(TestCase):
             })
         self.assertNotIn(self.student, group.students.all())
 
+    def test_list_is_split_by_groups(self):
+        # Без фильтра — блоки по группам; ученик из двух групп в обеих,
+        # в строке — только другая его группа; без группы — последним блоком.
+        group_a = StudentGroup.objects.create(teacher=self.teacher, name='8А')
+        group_b = StudentGroup.objects.create(teacher=self.teacher, name='8Б')
+        other = User.objects.create_user(
+            username='student2', password='pass12345',
+            first_name='Вася', last_name='Другов')
+        Profile.objects.create(user=other, role=Profile.ROLE_STUDENT,
+                               teacher=self.teacher)
+        lonely = User.objects.create_user(
+            username='student3', password='pass12345',
+            first_name='Оля', last_name='Одинокова')
+        Profile.objects.create(user=lonely, role=Profile.ROLE_STUDENT,
+                               teacher=self.teacher)
+        group_a.students.add(self.student, other)
+        group_b.students.add(self.student)
+        response = self.client.get(reverse('students'))
+        sections = response.context['student_sections']
+        self.assertEqual(
+            [(s['group'], [p.user for p, _ in s['rows']]) for s in sections],
+            [(group_a, [other, self.student]), (group_b, [self.student]),
+             (None, [lonely])])
+        self.assertEqual(dict((p.user, groups) for p, groups in sections[0]['rows']),
+                         {other: [], self.student: [group_b]})
+        self.assertContains(response, 'class="student-group-head"', 3)
+        self.assertContains(response, 'Без группы</span>')
+        # Счётчик и диалоги сброса пароля — по разным ученикам, без повторов.
+        self.assertContains(response, 'id="reset-password-%d"' % self.student.pk, 1)
+
+    def test_list_without_groups_is_flat(self):
+        response = self.client.get(reverse('students'))
+        self.assertIsNone(response.context['student_sections'])
+        self.assertNotContains(response, 'student-group-head')
+        self.assertContains(response, 'Ученик')
+
     def test_filter_by_group(self):
         group = StudentGroup.objects.create(teacher=self.teacher, name='8А')
         other = User.objects.create_user(
