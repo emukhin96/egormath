@@ -112,6 +112,22 @@ def _recently_failed(key):
         return True
 
 
+def _spawn(key):
+    """Один запуск вычислителя: на Linux — из forkserver, иначе subprocess.
+
+    Единственная точка запуска процесса: тесты подменяют её, и сценарии
+    сбоев проверяются одинаково на macOS и на Linux (в CI).
+    """
+    if sys.platform == 'linux':
+        from .formula_fork import run_worker
+        return run_worker(key, WORKER_TIMEOUT)
+    return subprocess.run(
+        [sys.executable, '-m', 'assignments.checks.formula_worker'],
+        input=key, capture_output=True, text=True,
+        cwd=Path(__file__).resolve().parents[2], timeout=WORKER_TIMEOUT,
+        check=False)
+
+
 def _run_worker(payload):
     """Вычисления в отдельном процессе: таймаут убивает и убирает ребёнка.
 
@@ -132,15 +148,7 @@ def _run_worker(payload):
     if not _worker_slots.acquire(timeout=WORKER_WAIT if wait is None else wait):
         raise FormulaBusy('проверка временно занята')
     try:
-        if sys.platform == 'linux':
-            from .formula_fork import run_worker
-            result = run_worker(key, WORKER_TIMEOUT)
-        else:
-            result = subprocess.run(
-                [sys.executable, '-m', 'assignments.checks.formula_worker'],
-                input=key, capture_output=True, text=True,
-                cwd=Path(__file__).resolve().parents[2], timeout=WORKER_TIMEOUT,
-                check=False)
+        result = _spawn(key)
         if result.returncode:
             raise FormulaUnavailable('не удалось проверить формулу за отведённое время')
         response = json.loads(result.stdout)
