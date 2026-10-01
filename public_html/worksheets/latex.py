@@ -148,6 +148,32 @@ WRAPPING_ANSWERS = r'''
   \parbox[t]{\egorMathAnswerWidth}{\raggedright\relpenalty=500\binoppenalty=700 #1}%
   \endgroup
 }
+% Подпункты не запираем в общую рамку или одну строку longtable:
+% каждая часть получает собственную рамку/строку с тем же номером задачи.
+% Разделяем токены до набора, без раскрытия содержимого ответов.
+\newcommand{\egorAnswerSeparator}{\par}
+\makeatletter
+\NewCommandCopy{\egorOriginalRecordAnswer}{\egor@recordanswer}
+\ExplSyntaxOn
+\seq_new:N \l__egormath_answer_parts_seq
+\RenewDocumentCommand{\ans}{m}{%
+  \ifbool{ans}{%
+    \group_begin:
+    \seq_set_split:Nnn \l__egormath_answer_parts_seq {\egorAnswerSeparator} {#1}
+    \seq_map_inline:Nn \l__egormath_answer_parts_seq
+      {\ifblank{##1}{}{\par\cfbox{black}{##1}}}
+    \group_end:
+  }{}%
+}
+\renewcommand{\egor@recordanswer}[2]{%
+  \group_begin:
+  \seq_set_split:Nnn \l__egormath_answer_parts_seq {\egorAnswerSeparator} {#2}
+  \seq_map_inline:Nn \l__egormath_answer_parts_seq
+    {\egorOriginalRecordAnswer{#1}{##1}}
+  \group_end:
+}
+\ExplSyntaxOff
+\makeatother
 '''
 
 # Выносная математика и окружения не набираются в LR-боксе \shortstack.
@@ -189,10 +215,12 @@ def _join_labeled(parts, wrapper='stack'):
         return ''
     if wrapper == 'flow':
         return ' \\mbox{}\\\\ '.join(parts)
-    body = ' \\\\ '.join(parts)
-    if DISPLAY_ANSWER_RE.search(body):
-        return '\\egorMathAnswerBlock{%s}' % body
-    return '\\egorMathAnswer{%s}' % body
+    blocks = []
+    for part in parts:
+        command = ('egorMathAnswerBlock' if DISPLAY_ANSWER_RE.search(part)
+                   else 'egorMathAnswer')
+        blocks.append('\\%s{%s}' % (command, part))
+    return ' \\egorAnswerSeparator '.join(blocks)
 
 
 def _combined_answer(task, subitems):

@@ -204,7 +204,34 @@ class LatexGenerationTests(TestCase):
         self.assertNotIn('$2+2$', tex)
         self.assertIn('\\item $3+3$;', tex)
         # Ответы перенумерованы заново: а) и б)
-        self.assertIn(r'[{\egorMathAnswer{а)~2 \\ б)~6}}]', tex)
+        self.assertIn(r'[{\egorMathAnswer{а)~2} \egorAnswerSeparator '
+                      r'\egorMathAnswer{б)~6}}]', tex)
+
+    def test_many_long_subitem_answers_have_page_break_boundaries(self):
+        # Геометрия 8, 4.2: единая рамка/строка таблицы обрезала 15 ответов.
+        task = Task.objects.create(text_latex='Сформулируйте утверждения:')
+        for index in range(15):
+            TaskSubitem.objects.create(
+                task=task, order=index, text_latex=f'Утверждение {index + 1}',
+                answer_latex=('Если прямые параллельны, то соответствующие '
+                              'углы равны. Обратное утверждение верно.'))
+        item = make_item(self.worksheet, task)
+        for variant in ('student', 'answers', 'teacher'):
+            with self.subTest(variant=variant):
+                tex = task_to_tex(item, variant)
+                self.assertEqual(tex.count(r'\egorAnswerSeparator'), 14)
+                self.assertEqual(tex.count(r'\egorMathAnswer{'), 15)
+                self.assertIn(r'\egorMathAnswer{п)~Если прямые', tex)
+
+    def test_subitem_display_answer_keeps_its_own_block(self):
+        task = Task.objects.create(text_latex='Вычислите:')
+        for index, answer in enumerate(('2', r'\[x=\frac12\]')):
+            TaskSubitem.objects.create(
+                task=task, order=index, text_latex='Выражение',
+                answer_latex=answer)
+        tex = task_to_tex(make_item(self.worksheet, task))
+        self.assertIn(r'\egorMathAnswer{а)~2} \egorAnswerSeparator '
+                      r'\egorMathAnswerBlock{б)~\[x=\frac12\]}', tex)
 
     def test_subitem_solutions_combined(self):
         # Решения подпунктов собираются в 6-й аргумент \task как ответы
