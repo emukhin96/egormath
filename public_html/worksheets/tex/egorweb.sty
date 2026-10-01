@@ -72,13 +72,20 @@
 % возвращаем стандартные штрафы TeX, чтобы формулы помещались в ячейку.
 \RequirePackage{varwidth}
 \newlength{\egorMathAnswerWidth}
+\newsavebox{\egorMathAnswerBox}
 \newcommand{\egorMathAnswer}[1]{%
   \begingroup
   \setlength{\egorMathAnswerWidth}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}%
-  \begin{varwidth}[t]{\egorMathAnswerWidth}%
-    % Глубина последней строки нужна рамке и таблице, даже без нижних выносных.
-    \raggedright\relpenalty=500\binoppenalty=700 #1\strut%
-  \end{varwidth}%
+  \sbox{\egorMathAnswerBox}{%
+    \begin{varwidth}[t]{\egorMathAnswerWidth}%
+      % Сохраняем глубину последней строки без нижних выносных.
+      \raggedright\relpenalty=500\binoppenalty=700 #1\strut%
+    \end{varwidth}%
+  }%
+  % Отступы добавляются к естественным размерам, в том числе высокой дроби.
+  % Содержимое набирается один раз; счётчики и метки не дублируются.
+  \raisebox{0pt}[\dimexpr\ht\egorMathAnswerBox+.5ex\relax]%
+    [\dimexpr\dp\egorMathAnswerBox+.5ex\relax]{\usebox{\egorMathAnswerBox}}%
   \endgroup
 }
 % Ответ с выносной формулой или окружением занимает ширину рамки/ячейки.
