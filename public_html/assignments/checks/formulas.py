@@ -335,10 +335,22 @@ def _reference_parts(payload, multiple=False):
         raise ValueError('допустима одна опция positive: a,R')
     positive = ()
     if len(parts) == 2:
-        match = re.fullmatch(r'\s*positive\s*:\s*([A-Za-z](?:\s*,\s*[A-Za-z])*)\s*', parts[1])
+        match = re.fullmatch(r'\s*positive\s*:\s*(.*?)\s*', parts[1])
         if not match:
-            raise ValueError('положительные параметры: positive: a,R')
-        positive = tuple(x.strip() for x in match[1].split(','))
+            raise ValueError(r'положительные параметры: positive: a,R,\alpha')
+        names = []
+        for token in match[1].split(','):
+            token = token.strip()
+            # Только одна буква или LaTeX-команда символа. Формулы,
+            # функции и константы не являются именами параметров.
+            if not re.fullmatch(r'(?:[A-Za-z]|\\[A-Za-z]+)', token):
+                raise ValueError(r'положительные параметры: positive: a,R,\alpha')
+            parsed = _parse(token)
+            if parsed is None or not getattr(parsed.expression, 'is_Symbol', False):
+                raise ValueError(r'положительные параметры: positive: a,R,\alpha')
+            # Имена вариантов могут совпадать: \varphi разбирается как phi.
+            names.append(str(parsed.expression))
+        positive = tuple(dict.fromkeys(names))
     texts = parts[0].split(';') if multiple else [parts[0]]
     if not texts or len(texts) > 20 or any(not t.strip() for t in texts):
         raise ValueError('укажите от 1 до 20 выражений через ;')
