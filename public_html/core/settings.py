@@ -211,11 +211,17 @@ SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
 LATEX_API_URL = read_secret('LATEX_API_URL', 'http://81.200.147.78:8000')
 LATEX_API_KEY = read_secret('LATEX_API_KEY', '')
 LATEX_API_TIMEOUT = int(read_secret('LATEX_API_TIMEOUT', '120'))
-# Слать ли пакеты worksheets/tex/*.sty в каждую сборку. На проде — нет:
-# их (и шрифты) кладёт на latex-api deploy/vps/deploy.sh, и все 20 мест
-# запроса остаются картинкам. При разработке — да, чтобы правки egor.sty,
-# egorweb.sty и egorbeamer*.sty проверялись на localhost до деплоя.
-LATEX_SEND_STY = read_secret('LATEX_SEND_STY', '1' if DEBUG else '0') == '1'
+# Слать ли пакеты worksheets/tex/*.sty в каждую сборку. На общий latex-api
+# прода — нет: их (и шрифты) кладёт туда deploy/vps/latex-files.sh, и все
+# 20 мест запроса остаются картинкам. При разработке — да, чтобы правки
+# egor.sty, egorweb.sty и egorbeamer*.sty проверялись на localhost до
+# деплоя. На любой другой API (старый сервер, откат) — тоже да: там
+# egorweb.sty нет, без него листки не соберутся.
+SHARED_LATEX_API_URLS = ('http://latex-api:8000', 'https://latex.emukhin.ru')
+LATEX_SEND_STY = read_secret(
+    'LATEX_SEND_STY',
+    '1' if DEBUG or not LATEX_API_URL.startswith(SHARED_LATEX_API_URLS) else '0',
+) == '1'
 # Повторы, когда общий latex-api занят (503/429 + Retry-After): не больше
 # LATEX_API_RETRIES раз, пауза не длиннее LATEX_API_RETRY_MAX_DELAY секунд;
 # новая попытка не начинается, если попытки и паузы уже заняли больше

@@ -6,7 +6,6 @@ JSON {"api_key": ..., "tex_files": [{"team_id": ..., "tex_content": ...}]},
 """
 
 import base64
-import functools
 import hashlib
 import logging
 import time
@@ -144,14 +143,14 @@ def _local_sty_assets(names):
     return [_file_asset(TEX_DIR / name) for name in names]
 
 
-@functools.lru_cache(maxsize=1)
 def packages_fingerprint():
     """Хэш egor.sty + egorweb.sty для ключа кэша PDF листка.
 
     Правки egor для сайта раньше стояли прямо в .tex и меняли его хэш;
     теперь в .tex только \\usepackage{egorweb}. Те же файлы деплой кладёт
     на latex-api, поэтому их правка должна сбрасывать кэш, как раньше.
-    Файлы меняются только с деплоем (перезапуск процесса) — кэшируем.
+    Не кэшируем: runserver не перезапускается при правке .sty, а чтение
+    двух файлов (~55 КБ) дешевле любой сборки.
     """
     digest = hashlib.sha256()
     for name in WORKSHEET_STY_FILES:
