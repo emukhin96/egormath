@@ -126,7 +126,7 @@ def _run_worker(payload):
             # Прогрев не занимает слот вычислений и не помечает ввод сбойным.
             warmup()
         except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
-            raise FormulaUnavailable('парсер формул пока не готов') from error
+            raise FormulaBusy('парсер формул пока не готов') from error
     wait = _worker_wait.get()
     if not _worker_slots.acquire(timeout=WORKER_WAIT if wait is None else wait):
         raise FormulaBusy('проверка временно занята')

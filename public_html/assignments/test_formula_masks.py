@@ -447,8 +447,12 @@ class FormulaForkTests(SimpleTestCase):
                     patch.object(formula_fork, 'run_worker') as run, \
                     patch.object(formulas, '_worker_slots') as slots, \
                     patch.object(formulas, '_remember_failure') as remember:
-                with self.assertRaises(formulas.FormulaUnavailable):
+                with self.assertRaises(formulas.FormulaBusy) as failure:
                     formulas._run_worker(payload)
+                # Отложенный запуск не расходует попытки автоматической
+                # проверки и не отправляет неизменённый ответ на ручную.
+                self.assertEqual(formulas.unavailable_count({}, failure.exception), 0)
+                self.assertEqual(formulas.unavailable_count({'_unavailable': 1}, failure.exception), 1)
                 slots.acquire.assert_not_called()
                 slots.release.assert_not_called()
                 remember.assert_not_called()
