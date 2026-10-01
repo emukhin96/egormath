@@ -589,6 +589,26 @@ class StudentAnswerTests(TestCase):
             assignment=self.assignment, task=task)
         self.assertEqual(submission.answer_json['s1'], 'x = 2')
 
+    def test_autosave_reuses_check_of_unchanged_formula_slot(self):
+        from assignments.checks import formulas
+        task = self.tasks[0]
+        task.answer_mask = '{{expression: a+27}}'
+        task.save()
+        formulas._checked.cache_clear()
+        url = reverse('save_answers', args=[self.assignment.pk])
+        self.client.post(url, {f'task{task.pk}_s1': '27+a'})
+        submission = Submission.objects.get(assignment=self.assignment, task=task)
+        self.assertEqual(submission.auto_check, 'ok')
+        # Форма приходит целиком при каждом автосохранении: слот с прежним
+        # значением не запускает дочерний процесс под блокировкой задания.
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker') as worker:
+            self.client.post(url, {f'task{task.pk}_s1': '27+a'})
+            worker.assert_not_called()
+        submission.refresh_from_db()
+        self.assertEqual(submission.auto_check, 'ok')
+        self.assertEqual(submission.check_json, {'s1': 'ok'})
+
         response = self.client.post(
             reverse('submit_assignment', args=[self.assignment.pk]))
         self.assignment.refresh_from_db()
@@ -1252,6 +1272,161 @@ class AutoCheckFlowTests(TestCase):
             reverse('check_task', args=[self.assignment.pk, self.task.pk]),
             data, **extra)
 
+    def test_check_after_reference_change_with_unavailable_checker_reveals_nothing(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+29}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        self._save('29+a')
+        submission = Submission.objects.get(assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.auto_check, 'ok')
+        # Учитель поправил эталон — сверка устарела; ученик жмёт «Проверить»
+        # с тем же ответом, а вычислитель недоступен: прежний вердикт по
+        # старому эталону не раскрывается и попытка не списывается.
+        self.task.answer_mask = '{{expression: a+30}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        formulas._failed_inputs.clear()
+        with mock.patch.object(formulas, '_run_worker',
+                               side_effect=subprocess.TimeoutExpired('worker', 3)):
+            response = self._check('29+a')
+        self.assertFalse(response.json()['ok'])
+        self.assertIn('временно недоступна', response.json()['message'])
+        submission.refresh_from_db()
+        self.assertEqual(submission.auto_check, '')
+        self.assertIsNone(submission.checked_at)
+        self.assertFalse(submission.check_revealed)
+        self.assertFalse(SubmissionCheckAttempt.objects.exists())
+
+    def test_cooldown_does_not_spend_retry_or_student_attempt(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+151}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        formulas._failed_inputs.clear()
+        self.addCleanup(formulas._failed_inputs.clear)
+        with mock.patch.object(formulas.subprocess, 'run',
+                               side_effect=subprocess.TimeoutExpired('worker', 3)) as worker:
+            self._save('151+a')
+            response = self._check('151+a')
+            self._save('151+a')
+            worker.assert_called_once()
+        submission = Submission.objects.get(assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.check_json, {formulas.UNAVAILABLE_KEY: 1})
+        self.assertEqual(submission.auto_check, '')
+        self.assertIsNone(submission.checked_at)
+        self.assertFalse(response.json()['ok'])
+        self.assertFalse(submission.check_revealed)
+        self.assertFalse(SubmissionCheckAttempt.objects.exists())
+        # После паузы действительно запускается повторная проверка.
+        formulas._failed_inputs.clear()
+        response = self._check('151+a')
+        self.assertEqual(response.json()['checks'],
+                         {f'task{self.task.pk}': 'ok', self.field: 'ok'})
+        self.assertEqual(SubmissionCheckAttempt.objects.count(), 1)
+
+    def test_manual_result_does_not_expose_internal_failure_counter(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+157}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker',
+                               side_effect=formulas.FormulaUnavailable('сбой')):
+            self._save('157+a')
+            response = self._check('157+a')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['checks'], {f'task{self.task.pk}': 'unknown', self.field: 'unknown'})
+        submission = Submission.objects.get(assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.check_json, {'s1': 'unknown', formulas.UNAVAILABLE_KEY: 2})
+
+    def test_failure_limit_preserves_slots_and_latches_until_answer_or_reference_changes(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{number: 4}} {{expression: a+181}} {{number: 7}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        data = {self.field: '4', f'task{self.task.pk}_s2': '181+a', f'task{self.task.pk}_s3': '8'}
+        with mock.patch.object(formulas, '_run_worker', side_effect=formulas.FormulaUnavailable('сбой')) as worker:
+            self.client.post(self.url, data)
+            self.client.post(self.url, data)
+            self.assertEqual(worker.call_count, 2)
+            # Неизменное автосохранение и кнопка проверки уже не вычисляют.
+            self.client.post(self.url, data)
+            response = self.client.post(reverse('check_task', args=[self.assignment.pk, self.task.pk]),
+                                        data, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+            self.assertEqual(worker.call_count, 2)
+        checks = response.json()['checks']
+        self.assertEqual([checks[f'task{self.task.pk}_s{i}'] for i in (1, 2, 3)], ['ok', 'unknown', 'wrong'])
+        # Изменённый ввод возвращает право на вычисление.
+        data[f'task{self.task.pk}_s2'] = 'a+182'
+        with mock.patch.object(formulas, '_run_worker', side_effect=formulas.FormulaUnavailable('сбой')) as worker:
+            self.client.post(self.url, data)
+            self.client.post(self.url, data)
+            self.assertEqual(worker.call_count, 2)
+        # Новый эталон тоже отменяет старый окончательный unknown.
+        self.task.answer_mask = '{{number: 4}} {{expression: a+182}} {{number: 8}}'
+        self.task.save()
+        self.client.post(self.url, data)
+        submission = Submission.objects.get(assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.auto_check, 'ok')
+        self.assertNotIn(formulas.UNAVAILABLE_KEY, submission.check_json)
+
+    def test_legacy_empty_verdict_is_not_reported_as_temporary_failure(self):
+        submission = Submission.objects.create(assignment=self.assignment, task=self.task,
+                                               answer_text='свободный исторический ответ')
+        response = self._check()
+        self.assertTrue(response.json()['ok'])
+        self.assertNotIn('временно недоступна', response.json()['message'])
+        submission.refresh_from_db()
+        self.assertTrue(submission.check_revealed)
+
+    def test_editing_failed_formula_rechecks_other_previously_skipped_formulas(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+197}} {{expression: b+199}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        data = {self.field: '197+a', f'task{self.task.pk}_s2': '199+b'}
+        with mock.patch.object(formulas, '_run_worker', side_effect=formulas.FormulaUnavailable('сбой')) as worker:
+            self.client.post(self.url, data)
+            self.client.post(self.url, data)
+            # На каждом сбое вторая формула пропущена, а не вычислена.
+            self.assertEqual(worker.call_count, 2)
+        data[self.field] = 'a+197'
+        with mock.patch.object(formulas, '_run_worker', wraps=formulas._run_worker) as worker:
+            self.client.post(self.url, data)
+            self.assertEqual(worker.call_count, 2)
+        submission = Submission.objects.get(assignment=self.assignment, task=self.task)
+        self.assertEqual(submission.auto_check, 'ok')
+        self.assertEqual(submission.check_json, {'s1': 'ok', 's2': 'ok'})
+
+    def test_selected_unmasked_subitem_is_not_a_temporary_failure(self):
+        a = TaskSubitem.objects.create(task=self.task, order=1, text_latex='а')
+        TaskSubitem.objects.create(task=self.task, order=2, text_latex='б', answer_mask='{{number: 2}}')
+        submission = Submission.objects.create(assignment=self.assignment, task=self.task)
+        part = SubmissionPart.objects.create(submission=submission, subitem=a, answer_text='свободный ответ')
+        response = self.client.post(reverse('check_task', args=[self.assignment.pk, self.task.pk]),
+                                    {'check_subitem': str(a.pk)}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertTrue(response.json()['ok'])
+        self.assertNotIn('временно недоступна', response.json()['message'])
+        part.refresh_from_db()
+        self.assertTrue(part.check_revealed)
+
+    def test_changed_reference_on_page_resets_limit_once_and_hides_old_verdict(self):
+        from assignments.checks import formulas
+        self._save('0; 2')
+        self.task.answer_mask = '{{expression: a+193}}'
+        self.task.save()
+        with mock.patch.object(formulas, '_run_worker', side_effect=formulas.FormulaUnavailable('сбой')) as worker:
+            self.client.get(self.detail)
+            submission = Submission.objects.get(assignment=self.assignment, task=self.task)
+            self.assertEqual(submission.auto_check, '')
+            self.assertIsNone(submission.checked_at)
+            self.client.get(self.detail)
+            self.client.get(self.detail)
+            self.assertEqual(worker.call_count, 2)
+        submission.refresh_from_db()
+        self.assertEqual(submission.auto_check, 'unknown')
+        self.assertEqual(submission.check_json, {'s1': 'unknown', formulas.UNAVAILABLE_KEY: 2})
+
     def test_check_stored_on_save_but_attempts_count_button_presses(self):
         self._save('x=2; x=0')
         submission = Submission.objects.get(
@@ -1546,20 +1721,205 @@ class AutoCheckFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Разминка')
 
-    def test_review_colors_answer_and_recomputes_after_reference_change(self):
+    def test_review_hides_stale_verdict_without_recomputing(self):
         self._save('0; 2')
         self.client.post(reverse('submit_assignment', args=[self.assignment.pk]))
         self.client.login(username='teacher1', password='pass12345')
         review_url = reverse('review_assignment', args=[self.assignment.pk])
         self.assertContains(self.client.get(review_url), 'class="mask-value" data-status="ok"')
-        # Учитель исправил маску — сверка пересчитывается при открытии проверки
+        # Учитель исправил маску — старый вердикт скрыт без вычислений
         self.task.answer_mask = 'Корни: {{set: 1; 3}}'
         self.task.save()
         response = self.client.get(review_url)
-        self.assertContains(response, 'class="mask-value" data-status="wrong"')
+        self.assertContains(response, 'class="mask-value" data-status=""')
+        self.assertContains(response, 'Сверка требует обновления')
+        self.assertFalse(response.context['rows'][0]['auto_ok'])
         submission = Submission.objects.get(
             assignment=self.assignment, task=self.task)
-        self.assertEqual(submission.auto_check, 'wrong')
+        self.assertEqual(submission.auto_check, 'ok')
+
+    def test_teacher_does_not_compute_stale_task_or_subitem_or_consume_limit(self):
+        from assignments.checks import formulas
+        for subitem in (False, True):
+            with self.subTest(subitem=subitem):
+                self.task.answer_mask = '{{expression: a+211}}'
+                self.task.save()
+                submission, _ = Submission.objects.get_or_create(
+                    assignment=self.assignment, task=self.task)
+                if subitem:
+                    part = TaskSubitem.objects.create(task=self.task, order=1,
+                        text_latex='а', answer_mask='{{expression: b+223}}')
+                    obj = SubmissionPart.objects.create(submission=submission, subitem=part)
+                else:
+                    obj = submission
+                obj.answer_json = {'s1': '211+a'}
+                obj.check_json = {formulas.UNAVAILABLE_KEY: 1}
+                obj.save()
+                self.client.force_login(self.teacher)
+                with mock.patch.object(formulas, '_run_worker') as worker:
+                    for _ in range(2):
+                        response = self.client.get(reverse('review_assignment', args=[self.assignment.pk]))
+                        self.assertContains(response, 'Сверка требует обновления')
+                    live = self.client.get(reverse('assignment_live', args=[self.assignment.pk]))
+                    self.assertIn('Сверка требует обновления', ''.join(live.json()['rows'].values()))
+                    worker.assert_not_called()
+                obj.refresh_from_db()
+                self.assertEqual(obj.check_json, {formulas.UNAVAILABLE_KEY: 1})
+                self.assertIsNone(obj.checked_at)
+
+    def test_student_refreshes_one_answer_across_subitems_and_tasks(self):
+        from assignments.checks import formulas
+        submission = Submission.objects.create(assignment=self.assignment, task=self.task)
+        parts = []
+        for i, value in enumerate((227, 229), start=1):
+            subitem = TaskSubitem.objects.create(task=self.task, order=i,
+                text_latex='а', answer_mask='{{expression: a+' + str(value) + '}}')
+            parts.append(SubmissionPart.objects.create(submission=submission, subitem=subitem,
+                answer_json={'s1': str(value) + '+a'}, check_revealed=True))
+        extra = Task.objects.create(text_latex='Другой ответ', answer_mask='{{expression: b+233}}')
+        WorksheetItem.objects.create(worksheet=self.assignment.worksheet, task=extra, order=50)
+        other = Submission.objects.create(assignment=self.assignment, task=extra,
+            answer_json={'s1': '233+b'}, check_revealed=True, auto_check='wrong',
+            check_json={'s1': 'wrong'}, checked_at=extra.updated_at - timedelta(seconds=1))
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker', wraps=formulas._run_worker) as worker:
+            response = self.client.get(self.detail)
+            self.assertEqual(worker.call_count, 1)
+            # Пропущенный старый вердикт скрыт только в представлении.
+            self.assertEqual(response.context['rows'][-1]['submission'].student_check, '')
+            parts[0].refresh_from_db(); parts[1].refresh_from_db(); other.refresh_from_db()
+            self.assertEqual(parts[0].auto_check, 'ok')
+            self.assertIsNone(parts[1].checked_at)
+            self.assertEqual(other.auto_check, 'wrong')
+            self.client.get(self.detail)
+            self.assertEqual(worker.call_count, 2)
+            self.client.get(self.detail)
+            self.assertEqual(worker.call_count, 3)
+        other.refresh_from_db()
+        self.assertEqual(other.auto_check, 'ok')
+
+    def test_student_refresh_does_not_wait_for_busy_formula_slot(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+239}}'
+        self.task.save()
+        submission = Submission.objects.create(assignment=self.assignment, task=self.task,
+            answer_json={'s1': '239+a'})
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_worker_slots') as slots:
+            slots.acquire.return_value = False
+            self.assertEqual(self.client.get(self.detail).status_code, 200)
+            slots.acquire.assert_called_once_with(timeout=0)
+        submission.refresh_from_db()
+        self.assertEqual(submission.check_json, {formulas.UNAVAILABLE_KEY: 0})
+        self.assertIsNone(submission.checked_at)
+
+    def test_refresh_skips_legacy_answer_and_checks_mask_answer(self):
+        """Исторический текст без значений маски не занимает слот бюджета."""
+        from assignments.checks import formulas
+        self.assignment.check_visibility = Assignment.CHECK_TEACHER
+        self.assignment.save()
+        submission = Submission.objects.create(assignment=self.assignment, task=self.task)
+        legacy_item = TaskSubitem.objects.create(task=self.task, order=1,
+            text_latex='а', answer_mask='{{number: 5}}')
+        legacy = SubmissionPart.objects.create(submission=submission, subitem=legacy_item,
+            answer_text='5')
+        masked_item = TaskSubitem.objects.create(task=self.task, order=2,
+            text_latex='б', answer_mask='{{expression: a+311}}')
+        masked = SubmissionPart.objects.create(submission=submission, subitem=masked_item,
+            answer_json={'s1': '311+a'})
+        self.client.force_login(self.teacher)
+        review_url = reverse('review_assignment', args=[self.assignment.pk])
+        refresh_url = reverse('refresh_assignment_check', args=[self.assignment.pk])
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker', wraps=formulas._run_worker) as worker:
+            self.assertRedirects(self.client.post(refresh_url), review_url)
+            self.assertEqual(worker.call_count, 1)
+        masked.refresh_from_db(); legacy.refresh_from_db()
+        self.assertEqual(masked.auto_check, 'ok')
+        self.assertIsNotNone(masked.checked_at)
+        self.assertIsNone(legacy.checked_at)
+        self.assertNotContains(self.client.get(review_url), 'Обновить сверку')
+
+    def test_teacher_explicitly_refreshes_one_answer_in_hidden_mode(self):
+        from assignments.checks import formulas
+        self.assignment.check_visibility = Assignment.CHECK_TEACHER
+        self.assignment.save()
+        submission = Submission.objects.create(assignment=self.assignment, task=self.task)
+        parts = []
+        for i, value in enumerate((257, 263), start=1):
+            subitem = TaskSubitem.objects.create(task=self.task, order=i,
+                text_latex='а', answer_mask='{{expression: a+' + str(value) + '}}')
+            parts.append(SubmissionPart.objects.create(submission=submission, subitem=subitem,
+                answer_json={'s1': str(value) + '+a'}))
+        self.client.force_login(self.teacher)
+        review_url = reverse('review_assignment', args=[self.assignment.pk])
+        refresh_url = reverse('refresh_assignment_check', args=[self.assignment.pk])
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker', wraps=formulas._run_worker) as worker:
+            self.assertContains(self.client.get(review_url), 'Обновить сверку')
+            worker.assert_not_called()
+            self.assertRedirects(self.client.post(refresh_url), review_url)
+            self.assertEqual(worker.call_count, 1)
+            parts[0].refresh_from_db(); parts[1].refresh_from_db()
+            self.assertEqual(parts[0].auto_check, 'ok')
+            self.assertIsNone(parts[1].checked_at)
+            self.assertContains(self.client.get(review_url), 'Обновить сверку')
+            self.client.post(refresh_url)
+            self.assertEqual(worker.call_count, 2)
+        self.assertNotContains(self.client.get(review_url), 'Обновить сверку')
+        self.assertFalse(Review.objects.filter(submission=submission).exists())
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.status, Assignment.STATUS_ASSIGNED)
+
+    def test_hidden_student_check_refreshes_without_revealing_result(self):
+        from assignments.checks import formulas
+        self.assignment.check_visibility = Assignment.CHECK_TEACHER
+        self.assignment.save()
+        self.task.answer_mask = '{{expression: a+269}}'
+        self.task.save()
+        obj = Submission.objects.create(assignment=self.assignment, task=self.task,
+            answer_json={'s1': '269+a'}, check_revealed=True)
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker', wraps=formulas._run_worker) as worker:
+            response = self.client.get(self.detail)
+            self.assertEqual(worker.call_count, 1)
+        obj.refresh_from_db()
+        self.assertEqual(obj.auto_check, 'ok')
+        self.assertEqual(obj.student_check, '')
+        self.assertEqual(obj.student_slot_checks, {})
+        self.assertNotContains(response, '✓ верно')
+        self.assignment.status = Assignment.STATUS_SUBMITTED
+        self.assignment.save()
+        response = self.client.get(self.detail)
+        self.assertNotContains(response, 'data-status="ok"')
+
+    def test_explicit_refresh_has_teacher_ownership_and_post_guards(self):
+        refresh_url = reverse('refresh_assignment_check', args=[self.assignment.pk])
+        self.assertEqual(self.client.post(refresh_url).status_code, 403)
+        other = make_teacher('other_refresh_teacher')
+        self.client.force_login(other)
+        self.assertEqual(self.client.post(refresh_url).status_code, 404)
+        self.client.force_login(self.teacher)
+        self.assertEqual(self.client.get(refresh_url).status_code, 405)
+
+    def test_refresh_does_not_overwrite_new_answer_saved_during_computation(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+271}}'
+        self.task.save()
+        obj = Submission.objects.create(assignment=self.assignment, task=self.task,
+            answer_json={'s1': '271+a'})
+        original = formulas._run_worker
+        def save_new_answer(*args, **kwargs):
+            Submission.objects.filter(pk=obj.pk).update(answer_json={'s1': '272+a'},
+                auto_check='wrong', check_json={'s1': 'wrong'}, checked_at=timezone.now())
+            return original(*args, **kwargs)
+        formulas._checked.cache_clear()
+        with mock.patch.object(formulas, '_run_worker', side_effect=save_new_answer):
+            self.client.get(self.detail)
+        obj.refresh_from_db()
+        self.assertEqual(obj.answer_json, {'s1': '272+a'})
+        self.assertEqual(obj.auto_check, 'wrong')
+        self.assertEqual(obj.check_json, {'s1': 'wrong'})
 
     def test_review_shows_filled_mask_with_result_and_reference(self):
         """Учителю — заполненная маска, цвета полей и авторский ответ;

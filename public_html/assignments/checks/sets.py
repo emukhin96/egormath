@@ -6,8 +6,7 @@ import math
 import re
 from fractions import Fraction
 
-from ..check_answer import (_endpoint, _expand_pm, _strip_var, normalize,
-                            parse_interval, parse_number)
+from ..check_answer import _strip_var, normalize, parse_number
 
 EMPTY_WORDS = ('∅', '{}', 'нет', 'нет решений', 'решений нет', 'нет корней',
                'корней нет', 'пустое множество', 'none')
@@ -26,7 +25,6 @@ _CHAIN_RE = re.compile(
     r'^(.+?)\s*' + _OP + r'\s*' + _VAR + r'\s*' + _OP + r'\s*(.+)$')
 _LEFT_RE = re.compile(r'^' + _VAR + r'\s*(<=|>=|<|>|!=)\s*(.+)$')
 _RIGHT_RE = re.compile(r'^(.+?)\s*(<=|>=|<|>|!=)\s*' + _VAR + r'$')
-_PAIR_GROUP_RE = re.compile(r'\(([^()]*)\)')
 
 INF = float('inf')
 
@@ -45,18 +43,31 @@ def numeric_value(text):
     value = parse_number(text)
     if value is not None:
         return value
-    from .expressions import parse_expr
+    from . import expressions
     # Lark-грамматика не распознаёт константу π: вводим свободный
     # временный символ и заменяем его константой после безопасного разбора.
     pi_pattern = r'\\pi(?![A-Za-z])|π|\bpi\b'
+    marker = None
     if re.search(pi_pattern, text):
         from sympy import Symbol, pi
         marker = next((c for c in 'QPXYZABC' if c not in text), None)
-        expr = parse_expr(re.sub(pi_pattern, marker, text)) if marker else None
-        if expr is not None:
-            expr = expr.subs(Symbol(marker), pi)
-    else:
-        expr = parse_expr(text)
+        if marker is None:
+            return None
+        text = re.sub(pi_pattern, marker, text)
+    tree = expressions.raw_tree(text)
+    if tree is None:
+        return None
+    # Сокращение x/x не превращает запись с переменной в числовую границу.
+    pending = [tree]
+    while pending:
+        node = pending.pop()
+        if expressions._is_tree(node):
+            pending.extend(node.children)
+        elif expressions._is_symbol_token(node) and str(node) != marker:
+            return None
+    expr = expressions.evaluate(expressions.resolve(tree))
+    if marker and expr is not None:
+        expr = expr.subs(Symbol(marker), pi)
     if expr is None or not getattr(expr, 'is_number', False):
         return None
     try:
@@ -129,26 +140,156 @@ def _multiset_equal(items_a, items_b, tolerance=None, equal=numbers_equal):
 
 # --- множество чисел и пары ----------------------------------------------------
 
+MAX_COLLECTION_LEN = 2000
+MAX_COLLECTION_ITEMS = 64
+MAX_COLLECTION_DEPTH = 16
+_SET_START_RE = re.compile(
+    r'(?:^|∪|\\cup|[,;({]|\bили|\bor|\bи|\band|'
+    r'\\setminus|\\backslash|∖|\\in|∈|=)\s*$', re.I)
+_DIFFERENCE_RE = re.compile(
+    r'^(?:r|ℝ|\\mathbb\s*(?:\{r\}|r))\s*'
+    r'(?:\\setminus|\\backslash|∖)\s*(\{.*\})$', re.I)
+
+
+def _collection_text(text):
+    """Сохранить разделители явного множества до десятичной нормализации.
+
+    В {0,1} запятая разделяет элементы; во вложенной дроби или MathLive
+    {,} она остаётся десятичной. Аргументы команд LaTeX — не множества.
+    """
+    text = (text or '').replace('$', ' ')
+    if len(text) > MAX_COLLECTION_LEN or '\x00' in text:
+        return None
+    for command in (r'\left', r'\right', r'\displaystyle'):
+        text = text.replace(command, '')
+    for command in (r'\,', r'\;', r'\:', r'\!', r'\ ', '~'):
+        text = text.replace(command, ' ')
+    # Сохраняем происхождение явных скобок \{…\}, даже внутри LaTeX.
+    explicit, out = set(), []
+    i = 0
+    while i < len(text):
+        if text[i:i+2] in (r'\{', r'\}'):
+            if text[i+1] == '{':
+                explicit.add(len(out))
+            out.append(text[i+1])
+            i += 2
+        else:
+            out.append(text[i])
+            i += 1
+    text = ''.join(out)
+    chars, stack = list(text), []
+    for i, char in enumerate(text):
+        if char in '{([':
+            if i in explicit and stack and stack[-1][0] == '{' and not stack[-1][1]:
+                return None  # Множество внутри числителя/знаменателя — не число.
+            is_set = char == '{' and (i in explicit or bool(_SET_START_RE.search(text[:i])))
+            # Если элементы уже разделены «;», запятая внутри — десятичная:
+            # \{-2,5; 1\} — это {-2,5; 1}, а не {-2; 5; 1}.
+            comma_separates = is_set and not _has_top_level_semicolon(text, i)
+            stack.append((char, is_set, comma_separates))
+            if len(stack) > MAX_COLLECTION_DEPTH:
+                return None
+        elif char in '})]':
+            if not stack or (char == '}') != (stack[-1][0] == '{'):
+                return None
+            stack.pop()
+        elif char == ',' and stack and stack[-1][:2] == ('{', True) and stack[-1][2]:
+            if text[max(0, i-1):i+2] != '{,}':
+                chars[i] = ';'
+    if stack:
+        return None
+    return normalize(''.join(chars))
+
+
+def _has_top_level_semicolon(text, start):
+    """Есть ли «;» на верхнем уровне скобки, открытой в позиции start."""
+    depth = 0
+    for char in text[start:]:
+        if char in '{([':
+            depth += 1
+        elif char in '})]':
+            depth -= 1
+            if depth == 0:
+                return False
+        elif char == ';' and depth == 1:
+            return True
+    return False
+
+
+def _split_top(text, separator):
+    """Делить только вне скобок, с ограничением вложенности и числа частей."""
+    parts, start, depth = [], 0, 0
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if char in '({[':
+            depth += 1
+            if depth > MAX_COLLECTION_DEPTH:
+                return None
+        elif char in ')}]':
+            depth -= 1
+            if depth < 0:
+                return None
+        if depth == 0:
+            match = separator.match(text, i)
+            if match:
+                parts.append(text[start:i].strip())
+                if len(parts) >= MAX_COLLECTION_ITEMS:
+                    return None
+                i = match.end()
+                start = i
+                continue
+        i += 1
+    if depth:
+        return None
+    parts.append(text[start:].strip())
+    return parts
+
+
 def _split_items(text):
     text = text.strip()
+    unwrapped = text
+    while unwrapped.startswith('(') and unwrapped.endswith(')'):
+        depth = 0
+        for i, char in enumerate(unwrapped):
+            depth += (char == '(') - (char == ')')
+            if depth == 0:
+                break
+        if i != len(unwrapped)-1:
+            break
+        unwrapped = unwrapped[1:-1].strip()
+    if unwrapped.startswith('{') and unwrapped.endswith('}'):
+        text = unwrapped
     if text.startswith('{') and text.endswith('}'):
         text = text[1:-1].strip()
     if not text or text.lower() in EMPTY_WORDS:
         return []
-    parts = re.split(r'[;,]', text) if (';' in text or ',' in text) else [text]
-    return [p.strip() for p in parts if p.strip()]
+    parts = _split_top(text, re.compile(r'[;,]'))
+    return [p for p in parts if p] if parts is not None else None
 
 
 def parse_set(text):
-    """Конечное множество чисел: ``-2; 1``, ``\\{-2;1\\}``, ``x=\\pm3``,
-    ``нет корней`` → список значений (пустой = нет решений); None — не разобрано."""
-    text = normalize(text or '')
+    """Конечное множество чисел; один ± в элементе означает обе ветви."""
+    text = _collection_text(text)
     if not text:
         return None
-    items = _expand_pm([_strip_var(i) for i in _split_items(text)])
-    values = [numeric_value(i) for i in items]
-    if any(v is None for v in values):
+    items = _split_items(text)
+    if items is None:
         return None
+    values = []
+    for item in items:
+        item = _strip_var(item).replace('±', r'\pm')
+        count = item.count(r'\pm')
+        if count > 1 or len(item) > 300:
+            return None
+        branches = [item.replace(r'\pm', sign) for sign in ('+', '-')] if count else [item]
+        for branch in branches:
+            value = numeric_value(branch)
+            if value is None:
+                return None
+            values.append(value)
+            if len(values) > MAX_COLLECTION_ITEMS:
+                return None
     return _unique_numbers(values)
 
 
@@ -157,34 +298,133 @@ def sets_equal(a, b, tolerance=None):
         _unique_numbers(a, tolerance), _unique_numbers(b, tolerance), tolerance)
 
 
-def parse_pairs(text):
-    """``(2,5; -3); (5; -6)`` → список кортежей чисел одинаковой длины;
-    одна пара без скобок ``2; -3`` тоже допускается. None — не разобрано."""
-    text = normalize(text or '')
+def _pair_text(text):
+    """Снять оформление, сохранив координатные и десятичные запятые."""
+    text = text or ''
+    if len(text) > MAX_COLLECTION_LEN or '\x00' in text:
+        return None
+    text = text.replace('$', ' ')
+    for command in (r'\left', r'\right', r'\displaystyle',
+                    r'\,', r'\;', r'\:', r'\!', r'\ ', '~'):
+        text = text.replace(command, ' ')
+    brackets = _pair_brackets(text)
+    if brackets is None:
+        return None
+    for match in re.finditer(r'\\\{', text):
+        if any(start < match.start() < end for start, end in brackets.items()):
+            return None  # Явное множество внутри координаты/дроби — не число.
+    return text.replace(r'\{', '{').replace(r'\}', '}').strip()
+
+
+def _pair_brackets(text):
+    """Точные пары скобок; здесь смешанные скобки промежутков недопустимы."""
+    stack, ends = [], {}
+    opening = {')': '(', ']': '[', '}': '{'}
+    for i, char in enumerate(text):
+        if char in '({[':
+            stack.append((char, i))
+            if len(stack) > MAX_COLLECTION_DEPTH:
+                return None
+        elif char in ')}]':
+            if not stack or stack[-1][0] != opening[char]:
+                return None
+            _, start = stack.pop()
+            ends[start] = i
+    return None if stack else ends
+
+
+def _pair_coordinates(group, *, explicit, coordinate_comma):
+    """Разделить кортеж до normalize; имена x/y/z нельзя просто выкинуть."""
+    parts = _split_top(group, re.compile(';'))
+    if parts is not None and len(parts) == 1 and explicit and coordinate_comma:
+        parts = _split_top(group, re.compile(','))
+        if parts is not None and len(parts) != 2:
+            return None  # (2,5,-3) неоднозначно: не угадываем десятичную запятую.
+    if parts is None or not 2 <= len(parts) <= MAX_COLLECTION_ITEMS:
+        return None
+    if any(not p or len(p) > 300 for p in parts):
+        return None
+    # В координатах допустима только полная именованная запись x/y[/z].
+    # Например, (y=-4;x=3) — это (3;-4), а не (-4;3).
+    if any('=' in p for p in parts):
+        expected = ('x', 'y', 'z')[:len(parts)]
+        named = {}
+        for part in parts:
+            match = re.fullmatch(r'([xyz])\s*=\s*([^=]+)', part)
+            if not match or match[1] in named:
+                return None
+            named[match[1]] = match[2]
+        if len(parts) > 3 or set(named) != set(expected):
+            return None
+        parts = [named[name] for name in expected]
+    values = [numeric_value(p) for p in parts]
+    return tuple(values) if all(v is not None for v in values) else None
+
+
+def parse_pairs(text, *, coordinate_comma=True):
+    """Множество упорядоченных кортежей, включая {…} и A×B.
+
+    ``(2,5; -3)`` содержит десятичную запятую; ``(2.5,-3)`` —
+    координатную. Свободный автоподбор отключает второй вариант, поскольку
+    без контекста пары запятая может принадлежать промежутку или числу.
+    """
+    text = _pair_text(text)
     if not text:
         return None
-    groups = _PAIR_GROUP_RE.findall(text)
-    if groups:
-        leftover = _PAIR_GROUP_RE.sub(' ', text)
-        leftover = re.sub(r'[\s,;]+', '', leftover)
-        if leftover:
+    ends = _pair_brackets(text)
+    if ends is None:
+        return None
+    product = _split_top(text, re.compile(r'\\times(?![A-Za-z])|×'))
+    if product is None:
+        return None
+    if len(product) > 1:
+        if len(product) != 2:
             return None
-    else:
-        if ';' not in text:
+        factors = []
+        for factor in product:
+            brackets = _pair_brackets(factor)
+            if not factor.startswith('{') or brackets.get(0) != len(factor)-1 \
+                    or '=' in factor:
+                return None
+            values = parse_set(factor)
+            if values is None:
+                return None
+            factors.append(values)
+        if len(factors[0]) * len(factors[1]) > MAX_COLLECTION_ITEMS:
             return None
-        groups = [text]
+        return [(x, y) for x in factors[0] for y in factors[1]]
+    wrapped_set = text.startswith('{') and ends.get(0) == len(text)-1
+    if wrapped_set:
+        text = text[1:-1].strip()
+        if not text.startswith('('):
+            return None  # {1;2} — множество чисел, не упорядоченная пара.
+        ends = _pair_brackets(text)
+    if text.startswith('(') and ends.get(0) == len(text)-1:
+        pair = _pair_coordinates(text[1:-1], explicit=True,
+                                 coordinate_comma=coordinate_comma)
+        return [pair] if pair is not None else None
+    groups = _split_top(text, re.compile('[;,]'))
+    if groups is None or any(not group for group in groups):
+        return None
     pairs = []
     for group in groups:
-        parts = [p.strip() for p in group.split(';')]
-        if len(parts) < 2 or any(not p for p in parts):
-            return None
-        values = [numeric_value(p) for p in parts]
-        if any(v is None for v in values):
-            return None
-        pairs.append(tuple(values))
-    if len({len(p) for p in pairs}) != 1:
-        return None
-    return pairs
+        brackets = _pair_brackets(group)
+        if not group.startswith('(') or brackets.get(0) != len(group)-1:
+            # Единственный кортеж без внешних скобок: 2,5; -3.
+            if wrapped_set:
+                return None
+            pair = _pair_coordinates(text, explicit=False, coordinate_comma=False)
+            return [pair] if pair is not None else None
+        pair = _pair_coordinates(group[1:-1], explicit=True,
+                                 coordinate_comma=coordinate_comma)
+        if pair is None:
+            if wrapped_set:
+                return None
+            # Скобки могут окружать только число: (9/10); (0).
+            pair = _pair_coordinates(text, explicit=False, coordinate_comma=False)
+            return [pair] if pair is not None else None
+        pairs.append(pair)
+    return pairs if pairs and len({len(p) for p in pairs}) == 1 else None
 
 
 def _pair_equal(a, b, tolerance=None):
@@ -192,8 +432,23 @@ def _pair_equal(a, b, tolerance=None):
         numbers_equal(x, y, tolerance) for x, y in zip(a, b))
 
 
-def pairs_equal(a, b, tolerance=None):
-    return _multiset_equal(a, b, tolerance, equal=_pair_equal)
+def pairs_equal(a, b, tolerance=None, *, unordered=False):
+    # Для длин сторон порядок внутри варианта не задан. Координаты
+    # остаются упорядоченными, пока редактор явно не включил эту опцию.
+    if unordered:
+        # Канонический порядок исключает зависимость жадного сравнения
+        # от ввода при близких float-значениях. Fraction остаются точными.
+        a = sorted(tuple(sorted(pair)) for pair in a)
+        b = sorted(tuple(sorted(pair)) for pair in b)
+    compare = _pair_equal
+
+    def unique(pairs):
+        out = []
+        for pair in pairs:
+            if not any(compare(pair, other, tolerance) for other in out):
+                out.append(pair)
+        return out
+    return _multiset_equal(unique(a), unique(b), tolerance, equal=compare)
 
 
 # --- числовые промежутки -------------------------------------------------------
@@ -204,9 +459,13 @@ _INTERVAL_PARSE_RE = re.compile(
 
 def _bound_value(text):
     """Конец промежутка: Fraction, float (иррациональное) или ±inf; None."""
-    value = _endpoint(text)
-    if value is not None:
-        return value
+    text = normalize(text)
+    if '=' in text:
+        return None
+    # «- \infty» с пробелом после знака — та же бесконечность
+    compact = re.sub(r'\s+', '', text)
+    if re.fullmatch(r'[+-]?(?:\\infty|inf|бесконечность|беск)', compact, re.I):
+        return -INF if compact.startswith('-') else INF
     return numeric_value(text)
 
 
@@ -231,9 +490,159 @@ def _bound(op, value, is_low):
     return value, ']' if closed else ')'
 
 
+_AFFINE_TOKEN_RE = re.compile(r'\\frac|[0-9]+(?:\.[0-9]+)?|[a-zA-Zа-яА-Я]|[()+*/{}-]')
+_COMPARE_RE = re.compile(r'(<=|>=|!=|<|>|=)')
+
+
+class _AffineParser:
+    """Малый парсер a*x+b на Fraction, без символьного вычислителя."""
+
+    def __init__(self, text):
+        compact = re.sub(r'\s+', '', text)
+        self.tokens = _AFFINE_TOKEN_RE.findall(compact)
+        if ''.join(self.tokens) != compact or len(compact) > 300 or len(self.tokens) > 128:
+            raise ValueError
+        self.index = 0
+        self.variables = set()
+
+    def peek(self):
+        return self.tokens[self.index] if self.index < len(self.tokens) else ''
+
+    def take(self):
+        token = self.peek()
+        if not token:
+            raise ValueError
+        self.index += 1
+        return token
+
+    @staticmethod
+    def bounded(value):
+        if any(max(v.numerator.bit_length(), v.denominator.bit_length()) > 2048 for v in value):
+            raise ValueError
+        return value
+
+    def expression(self, depth=0):
+        if depth > MAX_COLLECTION_DEPTH:
+            raise ValueError
+        value = self.product(depth+1)
+        while self.peek() in ('+', '-'):
+            op = self.take()
+            other = self.product(depth+1)
+            sign = 1 if op == '+' else -1
+            value = self.bounded(tuple(a+sign*b for a, b in zip(value, other)))
+        return value
+
+    def product(self, depth):
+        value = self.factor(depth)
+        while self.peek() and self.peek() not in ('+', '-', ')', '}'):
+            op = self.take() if self.peek() in ('*', '/') else '*'
+            other = self.factor(depth)
+            if op == '/':
+                if other[0] or not other[1]:
+                    raise ValueError
+                value = (value[0]/other[1], value[1]/other[1])
+            else:
+                if value[0] and other[0]:
+                    raise ValueError
+                value = (value[0]*other[1]+value[1]*other[0], value[1]*other[1])
+            value = self.bounded(value)
+        return value
+
+    def argument(self, depth):
+        """Аргумент \\frac: группа либо один символ (в том числе \\frac24)."""
+        if self.peek() == '{':
+            return self.factor(depth+1)
+        token = self.peek()
+        if token and token[0].isdigit():
+            first = token[0]
+            if len(token) > 1:
+                self.tokens[self.index] = token[1:]
+            else:
+                self.take()
+            return Fraction(0), Fraction(first)
+        if token and token.isalpha() and len(token) == 1:
+            return self.factor(depth+1)
+        raise ValueError
+
+    def factor(self, depth):
+        if depth > MAX_COLLECTION_DEPTH:
+            raise ValueError
+        token = self.take()
+        if token in ('+', '-'):
+            value = self.factor(depth+1)
+            return value if token == '+' else tuple(-v for v in value)
+        if token in ('(', '{'):
+            value = self.expression(depth+1)
+            if self.take() != (')' if token == '(' else '}'):
+                raise ValueError
+            return value
+        if token == r'\frac':
+            numerator = self.argument(depth+1)
+            denominator = self.argument(depth+1)
+            if denominator[0] or not denominator[1]:
+                raise ValueError
+            return self.bounded(tuple(v/denominator[1] for v in numerator))
+        if token.isalpha() and len(token) == 1:
+            self.variables.add(token)
+            return Fraction(1), Fraction(0)
+        try:
+            return self.bounded((Fraction(0), Fraction(token)))
+        except (ValueError, ZeroDivisionError):
+            raise ValueError from None
+
+    def parse(self):
+        value = self.expression()
+        if self.peek():
+            raise ValueError
+        return value
+
+
+def _affine_inequality(piece):
+    """Линейная запись с одной переменной, включая цепочки неравенств."""
+    parts = _COMPARE_RE.split(piece)
+    if len(parts) < 3 or len(parts) > 17:
+        return None
+    values, variables = [], set()
+    try:
+        for text in parts[::2]:
+            parser = _AffineParser(text)
+            values.append(parser.parse())
+            variables.update(parser.variables)
+        if len(variables) != 1:
+            return None
+    except (ValueError, ZeroDivisionError, OverflowError):
+        return None
+    result = [(-INF, INF, '(', ')')]
+    for i, op in enumerate(parts[1::2]):
+        a = values[i][0]-values[i+1][0]
+        b = values[i][1]-values[i+1][1]
+        if not a:
+            truth = {'<': b < 0, '<=': b <= 0, '>': b > 0, '>=': b >= 0,
+                     '!=': b != 0, '=': b == 0}[op]
+            one = [(-INF, INF, '(', ')')] if truth else []
+        else:
+            bound = -b/a
+            if a < 0:
+                op = {'<': '>', '<=': '>=', '>': '<', '>=': '<=',
+                      '!=': '!=', '=': '='}[op]
+            if op == '=':
+                one = [(bound, bound, '[', ']')]
+            elif op == '!=':
+                one = [(-INF, bound, '(', ')'), (bound, INF, '(', ')')]
+            elif op.startswith('>'):
+                one = [(bound, INF, '[' if op == '>=' else '(', ')')]
+            else:
+                one = [(-INF, bound, '(', ']' if op == '<=' else ')')]
+        result = _intersect_lists(result, one)
+    return result
+
+
 def _inequality(piece):
     """Одно неравенство → список промежутков или None."""
     piece = piece.strip()
+    affine = _affine_inequality(piece)
+    if affine is not None:
+        return affine
     m = _CHAIN_RE.match(piece)
     if m:
         a, op1, op2, b = m.group(1), m.group(2), m.group(3), m.group(4)
@@ -320,10 +729,20 @@ def _parse_range_atom(piece, tokens):
         return None
     m = re.fullmatch(r'\x00(\d+)\x00', piece)
     if m:
-        parsed = _parse_interval_token(tokens[int(m.group(1))])
-        if parsed is None:
-            parsed = parse_interval(tokens[int(m.group(1))])
+        index = int(m.group(1))
+        if index >= len(tokens):
+            return None
+        parsed = _parse_interval_token(tokens[index])
         return None if parsed is None else [parsed]
+    if piece.lower() in ALL_WORDS:
+        return [(-INF, INF, '(', ')')]
+    difference = _DIFFERENCE_RE.fullmatch(piece)
+    if difference:
+        values = parse_set(difference.group(1))
+        if values is None:
+            return None
+        bounds = [-INF] + sorted(values) + [INF]
+        return [(lo, hi, '(', ')') for lo, hi in zip(bounds, bounds[1:])]
     inequality = _inequality(piece)
     if inequality is not None:
         return inequality
@@ -335,7 +754,7 @@ def parse_range(text):
     """Числовое множество: скобочная запись, объединения, неравенства
     (``x>5, x<-5``; ``1<x<4``; ``x \\le -5 или x>5``), «нет решений», R.
     Возвращает нормализованное множество промежутков; None — не разобрано."""
-    text = normalize(text or '')
+    text = _collection_text(text)
     if not text:
         return None
     text = _IN_RE.sub('', text).strip()
@@ -356,8 +775,14 @@ def parse_range(text):
     rest = _INTERVAL_TOKEN_RE.sub(_stash, text)
     intervals = []
     saw_atom = False
-    for union_part in _UNION_RE.split(rest):
-        and_parts = [p for p in _AND_RE.split(union_part) if p.strip()]
+    union_parts = _split_top(rest, _UNION_RE)
+    if union_parts is None:
+        return None
+    for union_part in union_parts:
+        and_parts = _split_top(union_part, _AND_RE)
+        if and_parts is None:
+            return None
+        and_parts = [p for p in and_parts if p.strip()]
         if not and_parts:
             continue
         acc = None
@@ -368,6 +793,8 @@ def parse_range(text):
             saw_atom = True
             acc = parsed if acc is None else _intersect_lists(acc, parsed)
         intervals.extend(acc)
+        if len(intervals) > MAX_COLLECTION_ITEMS:
+            return None
     if not saw_atom:
         return None
     return _normalize_intervals(intervals)

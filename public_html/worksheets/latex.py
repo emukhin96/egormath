@@ -86,6 +86,16 @@ ARRAY_BIDI_SHIM = (
 # страницу без Overfull. Разрешаем переносы между рядами, сохраняя подписи.
 BREAKABLE_PICTURES = r'''
 \makeatletter
+\renewcommand{\egor@fitpic}[1]{%
+  \sbox{\egor@picbox}{\includegraphics{#1}}%
+  \ifdim\wd\egor@picbox>\linewidth
+    \includegraphics[width=\linewidth,height=.8\textheight,keepaspectratio]{#1}%
+  \else
+    \ifdim\ht\egor@picbox>.8\textheight
+      \includegraphics[width=\linewidth,height=.8\textheight,keepaspectratio]{#1}%
+    \else\usebox{\egor@picbox}\fi
+  \fi
+}
 \patchcmd{\egor@emitpicaux}{\\[3mm]}{\par\vspace{3mm}\noindent}{}{
   \PackageError{egormath}{Unsupported egor picture rows}{Update the picture adapter}}
 \NewCommandCopy{\egorOriginalFlushpics}{\flushpics}
@@ -113,6 +123,35 @@ KEEP_SHORT_ANSWER = r'''
 }
 \newcommand{\egorKeepAnswer}{\let\task\egorCompactTask}
 '''
+
+
+# Короткий ответ сохраняет естественную ширину; длинный переносится внутри
+# рамки или ячейки таблицы ответов. varwidth набирает содержимое один раз:
+# измерение с последующим повторным набором удваивало счётчики и метки.
+# egor запрещает разрывы внутри формул глобально. В длинном ответе
+# возвращаем стандартные штрафы TeX, чтобы формулы помещались в ячейку.
+WRAPPING_ANSWERS = r'''
+\RequirePackage{varwidth}
+\newlength{\egorMathAnswerWidth}
+\newcommand{\egorMathAnswer}[1]{%
+  \begingroup
+  \setlength{\egorMathAnswerWidth}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}%
+  \begin{varwidth}[t]{\egorMathAnswerWidth}%
+    \raggedright\relpenalty=500\binoppenalty=700 #1%
+  \end{varwidth}%
+  \endgroup
+}
+% Ответ с выносной формулой или окружением занимает ширину рамки/ячейки.
+\newcommand{\egorMathAnswerBlock}[1]{%
+  \begingroup
+  \setlength{\egorMathAnswerWidth}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}%
+  \parbox[t]{\egorMathAnswerWidth}{\raggedright\relpenalty=500\binoppenalty=700 #1}%
+  \endgroup
+}
+'''
+
+# Выносная математика и окружения не набираются в LR-боксе \shortstack.
+DISPLAY_ANSWER_RE = re.compile(r'\\\[|\$\$|\\begin\{|\\item\b')
 
 # Метки подпунктов как у \asbuk (без ё, й, ъ, ы, ь) — для сводного ответа
 CYRILLIC_LABELS = 'абвгдежзиклмнопрстуфхцчшщэюя'
@@ -143,30 +182,34 @@ def _join_labeled(parts, wrapper='stack'):
     """Склеивает куски ответа/решения, каждый на своей строке.
 
     Голый \\\\ в answers=table завершает строку таблицы пакета egor.
-    Ответы короткие — \\shortstack по ширине содержимого.
-    Решения могут быть с абзацами и display-формулами — minipage.
+    Ответы оборачиваем с учётом ширины рамки или ячейки таблицы.
+    Решения с абзацами и display-формулами должны переноситься по страницам.
     """
     if not parts:
         return ''
-    needs_wrap = len(parts) > 1 or any('\\\\' in p for p in parts)
-    if wrapper == 'mini':
-        # Всегда minipage: после «Решение.» идёт перенос, блок на всю строку
-        body = ' \\mbox{}\\\\ '.join(parts)
-        return '\\begin{minipage}[t]{\\linewidth}%%\n%s%%\n\\end{minipage}' % body
+    if wrapper == 'flow':
+        return ' \\mbox{}\\\\ '.join(parts)
     body = ' \\\\ '.join(parts)
-    if not needs_wrap:
-        return parts[0]
-    return '\\shortstack[l]{%s}' % body
+    if DISPLAY_ANSWER_RE.search(body):
+        return '\\egorMathAnswerBlock{%s}' % body
+    return '\\egorMathAnswer{%s}' % body
 
 
 def _combined_answer(task, subitems):
     """Общий ответ задачи + ответы выбранных подпунктов (каждый с новой строки)."""
+    def content(owner):
+        text = owner.effective_answer_latex
+        indices = set(TASKPIC_REF_RE.findall(text))
+        if indices and not TASKPIC_REF_RE.sub('', text).strip(' \n.;'):
+            text = ('См. рисунок.' if len(indices) == 1 else 'См. рисунки.') + text
+        return _for_task_opt(text)
+
     parts = []
     if task.effective_answer_latex:
-        parts.append(_for_task_opt(task.effective_answer_latex))
+        parts.append(content(task))
     parts.extend(
         '%s)~%s' % (subitem_label(i),
-                    _for_task_opt(s.effective_answer_latex))
+                    content(s))
         for i, s in enumerate(subitems) if s.effective_answer_latex
     )
     return _join_labeled(parts, 'stack')
@@ -174,20 +217,21 @@ def _combined_answer(task, subitems):
 
 def _combined_solution(task, subitems):
     """Общее решение задачи + решения подпунктов (каждый с новой строки)."""
-    parts = []
-    if task.effective_solution_latex:
-        parts.append(_for_task_opt(task.effective_solution_latex))
-    parts.extend(
-        '%s)~%s' % (subitem_label(i),
-                    _for_task_opt(s.effective_solution_latex))
-        for i, s in enumerate(subitems) if s.effective_solution_latex
-    )
-    text = _join_labeled(parts, 'mini')
+    # Локальный импорт: веб-представление использует subitem_label.
+    from problems.answer_material import solution_texts
+
+    parts = [_for_task_opt(text) for text in solution_texts(task)]
+    for index, subitem in enumerate(subitems):
+        texts = solution_texts(subitem)
+        for number, text in enumerate(texts):
+            prefix = '%s)~' % subitem_label(index) if number == 0 else ''
+            parts.append(prefix + _for_task_opt(text))
+    text = _join_labeled(parts, 'flow')
     if not text:
         return ''
-    # egor печатает «\textit{Решение}. #1» в одной строке — перенос, чтобы
-    # minipage не сдвигался на ширину слова
-    return '\\mbox{}\\\\ %s' % text
+    # Заголовок остаётся с первой строкой, а само решение может занимать
+    # несколько страниц: не запираем его целиком в minipage.
+    return '\\mbox{}\\\\* %s' % text
 
 
 # Ссылка на картинку в тексте задачи: \taskpic{N}, N — номер по порядку
@@ -311,6 +355,12 @@ def task_to_tex(item, variant='teacher', *, statement=None, common_indices=()):
     if variant == 'teacher':
         deferred_pics.update(solution_used)
     used.update(solution_used)
+    # Скрытый AI-вариант не делает свой рисунок бесхозным. Резервируем
+    # ссылки всех материалов, но печатаем только выбранные выше.
+    from problems.task_images import material_indices
+    used.update(material_indices(task))
+    for subitem in task.subitems.all():
+        used.update(material_indices(subitem))
     # Рисунки, на которые ссылаются только невыбранные подпункты, в листок
     # не попадают: самого подпункта в листке нет.
     selected_ids = {s.pk for s in subitem_objs}
@@ -421,6 +471,9 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
         ARRAY_BIDI_SHIM,
         BREAKABLE_PICTURES if has_images else '',
         KEEP_SHORT_ANSWER,
+        WRAPPING_ANSWERS,
+        # Не оставляем первую или последнюю строку абзаца на другой странице.
+        r'\clubpenalty=10000\widowpenalty=10000',
         '',
         '\\begin{document}',
     ]
@@ -493,8 +546,9 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
         lines.append('\\end{enumerate}')
     if has_images:
         lines.append('')
-        # На A5 длинная общая строка делает чертежи и подписи нечитаемыми.
-        lines.append('\\picsperrow{3}')
+        # На A5 даже два составных чертежа в ряд уменьшают буквы до 3–4 pt.
+        # Выбор делаем в TeX, чтобы он учитывал изменение формата в редакторе.
+        lines.append(r'\ifdim\textwidth<160mm\picsperrow{1}\else\picsperrow{2}\fi')
         lines.append('\\flushpics')
     lines.append('')
     lines.append('\\end{document}')

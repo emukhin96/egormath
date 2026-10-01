@@ -115,6 +115,84 @@ class MaskGrammarTests(SimpleTestCase):
 
 
 class MaskCheckTests(SimpleTestCase):
+    def test_proportion_accepts_numeric_expressions_without_relaxing_ratio(self):
+        s = slot('{{proportion: 2:1}}')
+        for value in ('1/2:1', r'\frac12:1', '1:2', '4:2',
+                      '0,5:1', r'2\sqrt{2}:\sqrt{2}', '{1}:2',
+                      r'1\frac{1}{2}:3', r'\pi:(\pi/2)', 'π:π/2', 'pi:pi/2'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        for value in ('3:1', '1:0', '1:2:3', '0,5', 'x:x', r'\{1\}:2',
+                      'x=1:y=2', '1:y=2'):
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        strict = slot('{{ratio: 2:1}}')
+        self.assertEqual(check_slot(strict, '1:2'), WRONG)
+        self.assertEqual(check_slot(strict, '1/2:1/4'), WRONG)
+
+    def test_proportion_preserves_definedness_and_limits_computation(self):
+        s = slot('{{proportion: 2:1}}')
+        for value in (r'(2+1/(1/0)):1', r'2:(1+0/(1/0))',
+                      r'(2+0*\sqrt{-1}):1', r'2^{1000000000}:1',
+                      r'2^{2^{1000}}:1', r'2^{0^0}:1'):
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        for value in (r'\sqrt[3]{-8}:-1', r'\sqrt{16}:2',
+                      r'2^{-1}:1', r'(-8)^{1/3}:-1'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        zero = slot('{{proportion: 0:1}}')
+        for value in (r'\sqrt2/10^{20}:1', r'\sqrt2/10^{400}:1',
+                      r'(1/\sqrt2)^{1000}:1'):
+            self.assertEqual(check_slot(zero, value), WRONG, value)
+        self.assertEqual(check_slot(zero, '0:2'), OK)
+
+    def test_proportion_checker_unavailability_is_not_a_verdict(self):
+        from unittest.mock import patch
+        from .checks import formulas
+        from .checks import formats
+        # Пограничная арифметика уходит в воркер; его недоступность — не
+        # unknown, а исключение наверх: вердикт не сохраняется, сверка повторится.
+        with patch.object(formulas, 'check',
+                          side_effect=formulas.FormulaUnavailable('занято')):
+            with self.assertRaises(formulas.FormulaUnavailable):
+                formats.check_proportion_exact('2:1', '2:1')
+        with patch.object(formulas, 'check', side_effect=ValueError('эталон')):
+            self.assertEqual(formats.check_proportion_exact('2:1', '2:1'), UNKNOWN)
+        # То же через слот: сумма с разницей порядков идёт в точную проверку
+        s = slot('{{proportion: 2:1}}')
+        with patch.object(formulas, 'check',
+                          side_effect=formulas.FormulaUnavailable('занято')) as worker:
+            with self.assertRaises(formulas.FormulaUnavailable):
+                check_slot(s, r'(\sqrt2+10^{-60}):1')
+            worker.assert_called()
+
+    def test_proportion_small_scales_and_irrational_cancellation(self):
+        tiny = slot('{{proportion: 1:10^{20}}}')
+        self.assertEqual(check_slot(tiny, r'\sqrt{2}:10^{20}'), WRONG)
+        self.assertEqual(check_slot(tiny, r'2:2*10^{20}'), OK)
+        for reference in ('2:1', '0:1'):
+            s = slot('{{proportion: ' + reference + '}}')
+            tail = '+2' if reference == '2:1' else ''
+            value = r'(10^{20}+\sqrt{2}-10^{20}' + tail + '):1'
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        self.assertEqual(check_slot(slot('{{proportion: 2:1}}'),
+                                   r'(10^{20}+\sqrt{4}-10^{20}):1'), OK)
+        self.assertEqual(check_slot(tiny, r'\sqrt2:10^{20}'), WRONG)
+        self.assertEqual(check_slot(slot('{{proportion: 0:1}}'),
+                                   r'(\sqrt{2}*\sqrt{2}-2):1'), OK)
+        self.assertEqual(check_slot(slot('{{proportion: 2:1}}'),
+                                   r'(2+1/(\sqrt{2}*\sqrt{2}-2)):1'), WRONG)
+        self.assertEqual(check_slot(slot('{{proportion: 0:1}}'),
+                                   r'1:(\sqrt{2}*\sqrt{2}-2)'), WRONG)
+        self.assertEqual(check_slot(slot('{{proportion: 0:1}}'),
+                                   r'(\sqrt{2+1/10^{100}}-\sqrt{2}):1'), WRONG)
+        mixed = r'((\sqrt{2}*\sqrt{2}-2)+1):1\frac{1}{2}'
+        self.assertEqual(check_slot(slot('{{proportion: 2:1}}'), mixed), WRONG)
+        self.assertEqual(check_slot(slot('{{proportion: 2:3}}'), mixed), OK)
+        self.assertEqual(check_slot(slot('{{proportion: 0:1}}'),
+                                   r'(\sqrt{2}*\sqrt{2}-2):\{1\}'), WRONG)
+        for value in (r'((\sqrt{2}*\sqrt{2}-2)-2):\sqrt[3]{-1}',
+                      r'((\sqrt{2}*\sqrt{2}-2)+\sqrt[3]{-8}):-1',
+                      r'((\sqrt{2}*\sqrt{2}-2)+(-8)^{1/3}):-1'):
+            self.assertEqual(check_slot(slot('{{proportion: 2:1}}'), value), OK, value)
+
     def test_overall_verdict(self):
         spec = parse_mask('{{number: 10}} и {{number: 30}}')
         self.assertEqual(check_mask(spec, {})[0], '')
@@ -151,6 +229,117 @@ class MaskCheckTests(SimpleTestCase):
         single = slot('{{pair: (3; -4)}}')
         self.assertEqual(check_slot(single, '3; -4'), OK)
         self.assertEqual(check_slot(single, '(x=3; y=-4)'), OK)
+
+    def test_pair_equivalent_notation(self):
+        s = slot('{{pair: (-5;0);(0;-4)}}')
+        for value in (r'\{(-5;0),(0;-4)\}', '(-5,0),(0,-4)',
+                      r'\left\{\left(0,-4\right);(-5,0)\right\}',
+                      '(-5;0);(0;-4);(-10/2;0)', '((0);(-8/2));((-5);0)'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        for value in ('(-5;0)', '(-5;0);(0;-4);(0;0)', '(0;-5);(-4;0)',
+                      '(y=-5;x=0);(y=0;x=-4)'):
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        self.assertEqual(check_slot(s, '(y=0;x=-5);(y=-4;x=0)'), OK)
+
+    def test_pair_unordered_side_lengths(self):
+        s = slot('{{pair: (8;12);(5;15) | unordered}}')
+        for value in ('(12;8);(15;5)', '(5;15);(8;12)',
+                      r'\{(15,5);(12,8)\}', '(16/2;12);(30/2;5)',
+                      '(12;8);(8;12);(5;15)'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        for value in ('(8;15);(5;12)', '(8;12)', '(8;12);(5;15);(0;0)',
+                      '(8;8;12);(5;15;15)'):
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        self.assertEqual(s.reference, '(8;12);(5;15)')
+        self.assertNotIn('unordered', reference_text(parse_mask(
+            '{{pair: (8;12);(5;15) | unordered}}')))
+
+    def test_pair_unordered_preserves_repeated_lengths(self):
+        s = slot('{{pair: (5;5);(8;12) | unordered}}')
+        self.assertEqual(check_slot(s, '(12;8);(5;5)'), OK)
+        self.assertEqual(check_slot(s, '(12;8);(5;8)'), WRONG)
+        self.assertEqual(check_slot(s, '(5);(8;12)'), UNKNOWN)
+        ordered = slot('{{pair: (8;12);(5;15)}}')
+        self.assertEqual(check_slot(ordered, '(12;8);(15;5)'), WRONG)
+
+    def test_pair_unordered_requires_explicit_valid_option(self):
+        for text in ('{{pair: (8;12) | random}}',
+                     '{{pair: (8;12) | unordered | unordered}}',
+                     '{{pair: | unordered}}',
+                     '{{pair: (8;12)' + ' ' * 2000 + '| unordered}}'):
+            self.assertFalse(parse_mask(text).is_valid, text[:80])
+
+    def test_pair_unordered_close_irrationals_and_large_fractions(self):
+        s = slot(r'{{pair: (\sqrt{2};\sqrt{2}+2/10^9) | unordered}}')
+        for value in (r'(\sqrt{2}+1/10^9;\sqrt{2})',
+                      r'(\sqrt{2};\sqrt{2}+1/10^9)'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        large = slot(r'{{pair: (10^{200};1) | unordered}}')
+        self.assertEqual(check_slot(large, r'(1;10^{200})'), OK)
+        self.assertEqual(check_slot(large, r'(1;10^{200}+1)'), WRONG)
+
+    def test_pair_decimal_comma_and_fraction(self):
+        s = slot('{{pair: (2,5;-3)}}')
+        for value in ('(2,5;-3)', '(2.5,-3)', '(2{,}5,-3)',
+                      r'(\frac{5}{2},-3)', '((5/2);-3)', '2,5;-3', '(5/2);(-3)'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        for value in ('(2,5,-3)', '2.5,-3', '(0,9,0)'):
+            self.assertEqual(check_slot(s, value), UNKNOWN, value)
+        self.assertEqual(check_slot(slot('{{pair: (2;5)}}'), '(2,5)'), OK)
+        self.assertEqual(check_slot(slot('{{pair: (0;0,5)}}'), '(0;0,5)'), OK)
+        exact = slot('{{pair: (1;2)}}')
+        self.assertEqual(check_slot(exact, '(1.0000000000000000001;2)'), WRONG)
+
+    def test_pair_cartesian_product(self):
+        s = slot('{{pair: (1;-1);(1;2);(5;-1);(5;2)}}')
+        for value in (r'\{1;5\}\times\{-1;2\}', '{5,1}×{2,-1}',
+                      r'\{1;1;5\}\times\{2;-1\}'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        self.assertEqual(check_slot(s, '{1;5}×{-1}'), WRONG)
+        self.assertEqual(check_slot(s, '{-1;2}×{1;5}'), WRONG)
+        self.assertEqual(check_slot(s, '{1;5}*{-1;2}'), UNKNOWN)
+        single = slot('{{pair: (1;2)}}')
+        for value in (r'\{\frac{\{1\}}{1}\}\times\{2\}',
+                      r'\{\{1\}\}\times\{2\}'):
+            self.assertEqual(check_slot(single, value), UNKNOWN, value)
+        axes = slot('{{pair: (-5;0);(0;-4)}}')
+        self.assertEqual(check_slot(axes, '{-5;0}×{0;-4}'), WRONG)
+
+    def test_pair_structure_and_named_coordinates(self):
+        for value in ('(1;2)+(3;4)', '2*(3;4)', r'\frac{(1;2)}{3}',
+                      '(1;2)text', '(1;2]', '(1;2);', '[(1;2)]', '{1;2}',
+                      r'\left\{1;2\right\}', r'(\{1\};2)',
+                      r'(\frac{\{1\}}{1};2)', '{(1);2}',
+                      '(x=1;y=2;y=3)', '(a=1;b=2)', '(x=1;2)', '(x=1;y=2=3)'):
+            self.assertIsNone(sets.parse_pairs(value), value)
+        self.assertEqual(sets.parse_pairs('(1;2;3)'), [(1, 2, 3)])
+        self.assertEqual(sets.parse_pairs('(z=3;x=1;y=2)'), [(1, 2, 3)])
+        self.assertIsNone(sets.parse_pairs('(1,2)', coordinate_comma=False))
+
+    def test_pair_limits_before_numeric_evaluation(self):
+        for value in ('(' + '1' * 5000 + ';2)', '(1;2)\x00',
+                      ';'.join(['(1;2)'] * 65),
+                      '(' + ';'.join(['1'] * 65) + ')',
+                      '(' * 17 + '1;2' + ')' * 17,
+                      '(' + '1' * 301 + ';2)',
+                      '{' + ';'.join(map(str, range(9))) + '}×{' +
+                      ';'.join(map(str, range(8))) + '}'):
+            self.assertIsNone(sets.parse_pairs(value), value[:80])
+        self.assertEqual(len(sets.parse_pairs(';'.join(['(1;2)'] * 64))), 64)
+
+    def test_decimal_comma_inside_braces_with_semicolons(self):
+        # «;» уже разделяет элементы — запятая в \{-2,5; 1\} десятичная
+        s = slot(r'{{set: \{-2,5; 1\}}}')
+        for value in ('-2,5; 1', r'\{-2,5; 1\}', '{1; -2.5}'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        self.assertEqual(check_slot(s, '-2; 5; 1'), WRONG)
+        # Без «;» запятая по-прежнему разделяет элементы явного множества
+        self.assertEqual(check_slot(slot('{{set: 0; 1}}'), '{0,1}'), OK)
+
+    def test_interval_bound_allows_space_after_sign(self):
+        s = slot(r'{{range: (-\infty; 3]}}')
+        for value in (r'(- \infty; 3]', '(- ∞; 3]', r'(-\infty;3]'):
+            self.assertEqual(check_slot(s, value), OK, value)
 
     def test_set(self):
         s = slot('{{set: -3; 3}}')

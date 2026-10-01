@@ -140,15 +140,42 @@ class MaskEndpointTests(TestCase):
                          {'preview_s1': 'ok', 'preview_s2': 'wrong'})
         self.assertIn('value="10,0"', data['html'])
 
+    def test_preview_reports_temporarily_unavailable_checker(self):
+        from unittest.mock import patch
+        from assignments.checks import formulas
+        with patch.object(formulas, 'check',
+                          side_effect=formulas.FormulaUnavailable('занято')):
+            response = self.client.post(reverse('task_mask_preview'), {
+                'mask': '{{number: 10}} и {{simplify: \\frac{2}{a+3}}}',
+                'preview_s1': '10', 'preview_s2': '4/(2a+6)'})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['unavailable'])
+        self.assertIn('временно недоступна', data['message'])
+        self.assertNotIn('overall', data)
+        self.assertIn('name="preview_s2"', data['html'])
+
     def test_preview_requires_teacher(self):
         self.client.logout()
         response = self.client.post(reverse('task_mask_preview'), {'mask': 'x'})
         self.assertNotEqual(response.status_code, 200)
 
+    def test_draft_skips_temporarily_unavailable_formula(self):
+        from unittest.mock import patch
+        from assignments.checks import formulas
+        formulas._checked.cache_clear()
+        with patch.object(formulas, '_run_worker',
+                          side_effect=formulas.FormulaUnavailable('сбой')):
+            response = self.client.post(reverse('task_mask_draft'), {'answer': 'a+167'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['mask'], '')
+        self.assertFalse(response.json()['ok'])
+
     def test_draft(self):
         cases = {
             '10 см': '',
             '2,5': '{{number: 2,5}}',
+            '(1,2)': '{{number: (1,2)}}',
             '$\\frac{5}{2}$': '{{number: \\frac{5}{2}}}',
             '(3; -4); (4; -3)': '{{pair: (3; -4); (4; -3)}}',
             '(-\\infty; -1]': '{{range: (-\\infty; -1]}}',

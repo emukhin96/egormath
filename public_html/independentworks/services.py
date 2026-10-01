@@ -444,10 +444,25 @@ def save_answer(attempt_id, point_id, version, values):
         raise WorkError('Некорректный ответ.')
     from workaudit.services import answer_snapshot, record_revision
     snapshot_before = answer_snapshot(answer)
-    auto, checks = check_mask(spec, values) if spec.is_valid else ('unknown', {})
-    # Пустые поля пригодной маски дают нулевой зачёт, а не ручную очередь.
-    if spec.is_valid and (not auto or (auto == 'unknown' and 'unknown' not in checks.values())):
-        auto = 'wrong'
+    from assignments.checks.formulas import (UNAVAILABLE_KEY, UNAVAILABLE_LIMIT, FormulaUnavailable,
+                                             unavailable_count)
+    previous_checks = answer.checks if answer.values == values else {}
+    try:
+        if previous_checks.get(UNAVAILABLE_KEY, 0) >= UNAVAILABLE_LIMIT:
+            auto, checks = 'unknown', previous_checks
+        else:
+            auto, checks = check_mask(spec, values) if spec.is_valid else ('unknown', {})
+    except FormulaUnavailable as error:
+        # Вычислитель временно недоступен: ответ сохраняем без вердикта,
+        # сверка повторится при открытии учеником своей работы.
+        count = unavailable_count(previous_checks, error)
+        auto, checks = '', {UNAVAILABLE_KEY: count}
+        if count >= UNAVAILABLE_LIMIT:
+            auto, checks = 'unknown', {**getattr(error, 'slot_checks', {}), UNAVAILABLE_KEY: count}
+    else:
+        # Пустые поля пригодной маски дают нулевой зачёт, а не ручную очередь.
+        if spec.is_valid and (not auto or (auto == 'unknown' and 'unknown' not in checks.values())):
+            auto = 'wrong'
     editable(attempt)
     changed = Answer.objects.filter(pk=answer.pk, version=version).update(
         values=values, auto_check=auto, checks=checks, check_revealed=False,
@@ -458,6 +473,43 @@ def save_answer(attempt_id, point_id, version, values):
     record_revision(answer, snapshot_before)
     touch_attempt(attempt)
     return answer
+
+
+def recheck_unavailable(attempt):
+    """Досверить один ответ при открытии учеником своей работы.
+
+    Повторов не больше UNAVAILABLE_LIMIT на один ввод: после этого ответ
+    уходит в ручную проверку как unknown. Занятый вычислитель не ждём;
+    сводка учителя и экспорт эту функцию не вызывают.
+    """
+    from assignments.checks.formulas import (UNAVAILABLE_KEY, UNAVAILABLE_LIMIT,
+                                             FormulaUnavailable, unavailable_count,
+                                             without_worker_wait)
+    for answer in attempt.answers.filter(auto_check='').select_related('point'):
+        if not any((v or '').strip() for v in (answer.values or {}).values()):
+            continue
+        spec = parse_mask(answer.point.snapshot['mask'])
+        if not spec.is_valid:
+            continue
+        try:
+            with without_worker_wait():
+                auto, checks = check_mask(spec, answer.values)
+        except FormulaUnavailable as error:
+            count = unavailable_count(answer.checks, error)
+            fields = {'checks': {UNAVAILABLE_KEY: count}}
+            if count >= UNAVAILABLE_LIMIT:
+                fields['auto_check'] = 'unknown'
+                fields['checks'].update(getattr(error, 'slot_checks', {}))
+            Answer.objects.filter(pk=answer.pk, version=answer.version).update(**fields)
+        else:
+            if not auto or (auto == 'unknown' and 'unknown' not in checks.values()):
+                auto = 'wrong'
+            Answer.objects.filter(pk=answer.pk, version=answer.version).update(
+                auto_check=auto, checks=checks)
+        # own_attempt предзагружает ответы: этот же показ и итог должны
+        # использовать свежий результат, а не старый экземпляр модели.
+        getattr(attempt, '_prefetched_objects_cache', {}).pop('answers', None)
+        break
 
 
 @transaction.atomic

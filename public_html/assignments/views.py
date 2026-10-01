@@ -587,6 +587,8 @@ def _assignment_rows(assignment, with_review=False, item_ids=None):
             row['canvas_answered'] = bool(answered)
             row['answered'] = row['answered'] or bool(answered)
             row['canvas_version'] = updated.isoformat() if updated else ''
+    if with_review:
+        _refresh_stale_checks(rows, for_teacher=True)
     from worksheets.block_presentation import decorate_block_rows
     return decorate_block_rows(rows)
 
@@ -622,8 +624,7 @@ def assignment_detail(request, pk):
     assignment = _student_assignment(request, pk)
     rows = _assignment_rows(assignment)
     show_checks = assignment.student_sees_checks
-    if show_checks:
-        _refresh_stale_checks(rows)
+    _refresh_stale_checks(rows)
     editable = assignment.is_editable_by_student
     context = {
         'assignment': assignment,
@@ -694,19 +695,47 @@ def _persist_answers(assignment, post):
     hidden = set(assignment.hidden_items.values_list('pk', flat=True))
     existing = {s.task_id: s for s in assignment.submissions.all()}
 
-    def _apply(obj, fields, reference, spec):
+    def _apply(obj, task, fields, reference, spec):
         from workaudit.services import answer_snapshot, record_revision
         snapshot_before = answer_snapshot(obj)
         before = obj.display_answer
+        previous = dict(obj.answer_json or {})
         for name, value in fields.items():
             if name == 'answer_json':
                 merged = dict(obj.answer_json or {})
                 merged.update(value)
                 value = merged
             setattr(obj, name, value)
-        obj.run_check(reference, spec=spec)
-        if obj.display_answer != before:
+        current = obj.answer_json or {}
+        changed = obj.display_answer != before
+        # Автосохранение шлёт всю форму: слоты с прежним значением и свежей
+        # сверкой не пересчитываем — формульный слот стоит дочернего процесса,
+        # а всё это идёт под блокировкой задания.
+        known = {}
+        if obj.checked_at is not None and not obj.check_is_stale(task):
+            known = {name: verdict for name, verdict in (obj.check_json or {}).items()
+                     if not name.startswith('_')
+                     and previous.get(name, '') == current.get(name, '')}
+        if changed or (obj.checked_at is not None and obj.check_is_stale(task)):
+            # Счётчик сбоев относился к прежнему ответу или эталону.
+            from .checks.formulas import UNAVAILABLE_KEY, UNAVAILABLE_LIMIT
+            if (obj.check_json or {}).get(UNAVAILABLE_KEY, 0) >= UNAVAILABLE_LIMIT:
+                # unknown мог быть заглушкой для ещё не проверенной формулы.
+                # После изменения ответа такие вердикты не переиспользуем.
+                known = {}
+            obj.check_json = {name: verdict for name, verdict in (obj.check_json or {}).items()
+                              if not name.startswith('_')}
+        obj.run_check(reference, spec=spec, known=known)
+        if changed:
             obj.check_revealed = False
+        if getattr(obj, 'check_unavailable', False) and (changed or obj.check_is_stale(task)):
+            # Ответ изменился или эталон правили, а сверка временно не
+            # состоялась: старый вердикт не относится к новому ответу или
+            # эталону — «Проверить» не должно раскрыть его и списать попытку.
+            # checked_at=None помечает сверку устаревшей, она повторится позже.
+            obj.auto_check, obj.checked_at = '', None
+            obj.check_json = {name: count for name, count in obj.check_json.items()
+                              if name.startswith('_')}
         obj.save(update_fields=[*fields, 'auto_check', 'check_json', 'checked_at',
                                 'check_revealed', 'updated_at'])
         record_revision(obj, snapshot_before)
@@ -743,7 +772,7 @@ def _persist_answers(assignment, post):
             for subitem, (fields, spec) in part_fields.items():
                 part, _ = SubmissionPart.objects.get_or_create(
                     submission=submission, subitem=subitem)
-                _apply(part, fields, subitem.effective_answer_latex, spec)
+                _apply(part, task, fields, subitem.effective_answer_latex, spec)
             continue
         fields, spec = _answer_payload(task, post, prefix)
         if not fields:
@@ -754,31 +783,61 @@ def _persist_answers(assignment, post):
                 submission, _ = Submission.objects.get_or_create(
                     assignment=assignment, task=task)
                 existing[task.pk] = submission
-            _apply(submission, fields, task.effective_answer_latex, spec)
+            _apply(submission, task, fields, task.effective_answer_latex, spec)
 
 
 def _refresh_stale_checks(rows, for_teacher=False):
-    """На экране проверки: пересчёт сверки, если эталон правили после неё."""
+    """Учителю показываем устаревшую сверку, ученику обновляем один ответ."""
+    from .checks.formulas import without_worker_wait
+
+    refreshed = False
+    refreshed_obj = None
     for row in rows:
-        # У рубрик и текстовых вставок нет ни задачи, ни ответа
         task = row.get('task')
         submission = row.get('submission')
         if task is None or submission is None or task.full_answer_only:
             continue
-        if row['subrows']:
-            for sr in row['subrows']:
-                part = sr['part']
-                if part and part.display_answer and part.check_is_stale(task):
-                    part.run_check(sr['subitem'].effective_answer_latex,
-                                   spec=sr['subitem'].mask_spec)
-                    part.save(update_fields=['auto_check', 'check_json', 'checked_at'])
-                    sr['fragments'] = _mask_fragments(
-                        sr['spec'], part, sr['prefix'], for_teacher)
-        elif submission.display_answer and submission.check_is_stale(task):
-            submission.run_check(task.effective_answer_latex, spec=task.mask_spec)
-            submission.save(update_fields=['auto_check', 'check_json', 'checked_at'])
-            row['fragments'] = _mask_fragments(
-                row['spec'], submission, row['prefix'], for_teacher)
+        targets = [(sr, sr['part']) for sr in row['subrows']] \
+            if row['subrows'] else [(row, submission)]
+        for target, obj in targets:
+            spec = target['spec']
+            if (obj is None or spec is None or not spec.is_valid
+                    or not obj.display_answer or not obj.check_is_stale(task)):
+                continue
+            # Исторический свободный ответ (текст без значений маски) по
+            # маске не сверяется — run_check его пропускает, так что он не
+            # устаревший и не должен занимать единственный слот бюджета.
+            if not (obj.has_mask_values or not obj.legacy_answer):
+                continue
+            row['auto_ok'] = False
+            if not for_teacher and not refreshed:
+                previous = {key: getattr(obj, key) for key in (
+                    'answer_json', 'updated_at', 'checked_at', 'check_json')}
+                if obj.checked_at is not None:
+                    obj.check_json = {}
+                with without_worker_wait():
+                    obj.run_check(spec=spec)
+                if getattr(obj, 'check_unavailable', False):
+                    obj.auto_check, obj.checked_at = '', None
+                # За время вычисления ученик мог сохранить другой ответ.
+                # В таком случае результат старого ввода не записываем.
+                owner_filter = 'subitem__task__updated_at' if isinstance(obj, SubmissionPart) else 'task__updated_at'
+                changed = type(obj).objects.filter(
+                    pk=obj.pk, **previous, **{owner_filter: task.updated_at}).update(
+                        auto_check=obj.auto_check, check_json=obj.check_json,
+                        checked_at=obj.checked_at)
+                if not changed:
+                    obj.refresh_from_db()
+                refreshed_obj = obj
+                refreshed = True
+            else:
+                # Только представление: старые оценки и лимит сбоев в БД
+                # не меняем при просмотре учителем или пропуске по бюджету.
+                obj.auto_check, obj.check_json = '', {}
+                obj.check_stale = True
+            target['fragments'] = _mask_fragments(
+                spec, obj, target['prefix'], for_teacher)
+    return refreshed_obj
 
 
 def _is_xhr(request):
@@ -926,13 +985,21 @@ def check_task(request, pk, task_id):
         submission = (Submission.objects.select_for_update()
                       .prefetch_related('parts').get(pk=submission.pk))
 
+        unavailable = []
+
         def _reveal(obj, prefix):
             """Раскрыть результат: итог по полю и по слотам маски."""
+            if not obj.auto_check and '_unavailable' in (obj.check_json or {}):
+                # Сверка не состоялась (вычислитель временно недоступен):
+                # нечего раскрывать и не за что списывать попытку.
+                unavailable.append(prefix)
+                return
             obj.check_revealed = True
             obj.save(update_fields=['check_revealed'])
             checks[prefix] = obj.auto_check
             for slot, status in (obj.check_json or {}).items():
-                checks[f'{prefix}_{slot}'] = status
+                if not slot.startswith('_'):
+                    checks[f'{prefix}_{slot}'] = status
 
         checks = {}
         if subitems:
@@ -956,11 +1023,14 @@ def check_task(request, pk, task_id):
             submission.check_attempts = number
             submission.save(update_fields=['check_attempts'])
             message = 'Проверено'
+        elif unavailable:
+            message = 'Проверка временно недоступна — попробуйте ещё раз через минуту'
         else:
             message = 'Сначала введите ответ'
 
     if _is_xhr(request):
-        return JsonResponse({'ok': True, 'message': message, 'checks': checks})
+        return JsonResponse({'ok': not (unavailable and not checks),
+                             'message': message, 'checks': checks})
     messages.info(request, message)
     number = _visible_task_number(assignment, item)
     return redirect(f"{reverse('assignment_detail', args=[pk])}#task-{number}")
@@ -1103,7 +1173,6 @@ def _review_queue_state(teacher, assignment, owner_id=''):
 def review_assignment(request, pk):
     assignment = _teacher_assignment(request, pk)
     rows = _assignment_rows(assignment, with_review=True)
-    _refresh_stale_checks(rows, for_teacher=True)
     owner_id = request.GET.get('owner', '').strip()
     if not request.user.is_superuser or not owner_id.isdigit():
         owner_id = ''
@@ -1117,9 +1186,27 @@ def review_assignment(request, pk):
         'next_pending': next_pending,
         'owner_filter': owner_id,
         'grade_choices': Review.grade_options(),
+        'has_stale_checks': any(
+            getattr(obj, 'check_stale', False) for row in rows
+            for obj in [row.get('submission'), *[sr['part'] for sr in row.get('subrows', [])]]),
     }
     context.update(_progress(rows))
     return render(request, 'assignments/review.html', context)
+
+
+@teacher_required
+@require_POST
+def refresh_assignment_check(request, pk):
+    """По явному действию учителя обновить один ответ, даже в скрытом режиме."""
+    assignment = _teacher_assignment(request, pk)
+    obj = _refresh_stale_checks(_assignment_rows(assignment))
+    if obj is None:
+        messages.info(request, 'Нет ответов, требующих обновления сверки.')
+    elif obj.checked_at is None:
+        messages.info(request, 'Сверка временно недоступна. Повторите позже.')
+    else:
+        messages.success(request, 'Сверка одного ответа обновлена.')
+    return redirect('review_assignment', pk=pk)
 
 
 @teacher_required

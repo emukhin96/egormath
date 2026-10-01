@@ -30,13 +30,13 @@ class CollectionTests(TestCase):
 
     def test_author_content_falls_back_in_pdf(self):
         tex = worksheet_to_tex(self.worksheet, 'teacher')
-        self.assertIn('[{4}]', tex)
+        self.assertIn('[{\\egorMathAnswer{4}}]', tex)
         self.assertIn('$2+2=4$.', tex)
         self.task.answer_latex = 'редакторский ответ'
         self.task.save(update_fields=['answer_latex'])
         tex = worksheet_to_tex(self.worksheet, 'answers')
         self.assertNotIn('редакторский ответ', tex)
-        self.assertIn('[{4}]', tex)
+        self.assertIn('[{\\egorMathAnswer{4}}]', tex)
 
     def test_use_collection_copies_all_worksheet_elements(self):
         self.client.login(username='teacher2', password='pass12345')
@@ -435,7 +435,7 @@ class CollectionAnswerSourceTests(TestCase):
     def test_pdf_still_uses_author_material_only(self):
         self.add(author_answer_latex='4', answer_latex='четыре')
         tex = worksheet_to_tex(self.worksheet, 'answers')
-        self.assertIn('[{4}]', tex)
+        self.assertIn('[{\\egorMathAnswer{4}}]', tex)
         self.assertNotIn('четыре', tex)
 
 

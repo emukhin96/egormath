@@ -18,7 +18,8 @@ from django.utils.dateparse import parse_datetime
 from problems.models import (ExamItem, GradeBand, Source, Tag, TaskBlock,
                              TextbookImportAsset, TextbookImportBatch,
                              TextbookTaskDraft, Topic)
-from problems.textbook_import import normalize_image_stem
+from problems.textbook_import import (normalize_image_stem, normalize_answer_mask,
+                                      TextbookImportError, TextbookImportUnavailable)
 
 # 3 — добавлены редакторские поля и маска задачи; 1 и 2 читаются с пустыми.
 SCHEMA_VERSION = 3
@@ -35,6 +36,10 @@ MAX_BYTES = 2 * 1024 ** 3
 
 class TextbookTransferError(ValueError):
     pass
+
+
+class TextbookTransferUnavailable(TextbookTransferError):
+    """Временный отказ проверки до любых записей; перенос можно повторить."""
 
 
 def _canonical(value):
@@ -175,6 +180,7 @@ def package_root(src):
 
 def validate_package(root):
     """Все проверки до первой записи: рисунки, справочники и полнота блоков."""
+    from assignments.checks.formulas import without_worker_wait
     root = Path(root)
     manifest = root / 'batches.json'
     if not manifest.is_file() or manifest.stat().st_size > 64 * 1024 ** 2:
@@ -204,6 +210,19 @@ def validate_package(root):
             if d['external_id'] in ids or d['status'] not in ('needs_review', 'approved', 'conflict', 'skipped'):
                 raise TextbookTransferError('Повтор ключа задачи или недопустимый статус.')
             ids.add(d['external_id'])
+            try:
+                # Перенос не ждёт очередь вычислителя: при нагрузке можно
+                # повторить команду; непроверенные эталоны не записываются.
+                with without_worker_wait():
+                    normalize_answer_mask(d.get('answer_mask'), key=d['external_id'])
+                    for index, subitem in enumerate(d.get('subitems', []), 1):
+                        normalize_answer_mask(subitem.get('answer_mask'),
+                            key=f'{d["external_id"]}, подпункт {index}')
+            except TextbookImportUnavailable as error:
+                raise TextbookTransferUnavailable(
+                    f'{error} Перенос отложен, данные не записаны.') from error
+            except TextbookImportError as error:
+                raise TextbookTransferError(str(error)) from error
             required = set(d.get('topic_codes', [])) | {d.get('topic_code', '')}
             required |= {c.get('code', '') for c in d.get('topic_candidates', [])}
             missing = (required - {''}) - topics

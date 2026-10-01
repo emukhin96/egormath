@@ -108,7 +108,7 @@ class CommonBlockOutputTests(TestCase):
             self.assertEqual(tex.count('План показывает'), 4)
             self.assertEqual(tex.count('\\task{'), 5)
             for n in range(1, 6):
-                self.assertIn('[{%s}]' % n, tex)
+                self.assertIn('[{\\egorMathAnswer{%s}}]' % n, tex)
 
     def test_partial_block_keeps_the_complete_condition(self):
         from worksheets.latex import worksheet_to_tex
@@ -131,7 +131,8 @@ class CommonBlockOutputTests(TestCase):
                 task.text_latex = '\\taskpic{1}\n\\\\\n' + task.text_latex
                 task.save(update_fields=['text_latex'])
             tex = worksheet_to_tex(self.ws)
-            self.assertEqual(tex.count('\\includegraphics['), 1)
+            body = tex.split('\\begin{document}', 1)[1]
+            self.assertEqual(body.count('\\includegraphics['), 1)
             self.assertNotIn('\\par\n\\\\', tex)
             self.assertNotIn('\\taskpic{plan-', tex)
             Path(root, 'plan-3.png').write_bytes(b'different-image')

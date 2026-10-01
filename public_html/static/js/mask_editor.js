@@ -108,7 +108,8 @@
         }
         if (window.EgorCheckBadge) EgorCheckBadge.apply(container, res.checks || {});
         var overall = res.overall || '';
-        result.textContent = overall === 'ok' ? 'Итог: верно'
+        result.textContent = res.unavailable ? res.message
+          : overall === 'ok' ? 'Итог: верно'
           : overall === 'wrong' ? 'Итог: неверно'
           : overall === 'unknown' ? 'Итог: не разобрано (или не все слоты заполнены)'
           : 'Введите пробный ответ в поля превью';

@@ -20,7 +20,7 @@
   <details class="problem-solution" {% if owner.effective_solution_latex %}open{% endif %}>
     <summary>Решение</summary>
     <p class="helptext">Авторские ответ и решение имеют приоритет. Если авторское поле пустое, используется редакторская / AI-версия.</p>
-    <div class="math-content">{{ owner.effective_solution_latex|default:'Решение пока не добавлено.'|web_text|linebreaksbr }}</div>
+    {% for text in owner|complete_solutions %}{% if not forloop.first %}<p class="helptext">Полное решение от AI</p>{% endif %}<div class="math-content">{{ text|web_text|linebreaksbr }}</div>{% empty %}<div class="math-content">Решение пока не добавлено.</div>{% endfor %}
     <details class="ws-add-text"><summary>Править решение</summary>
       {% include 'problems/_editor_form.html' with form=solution_form block='solution' %}
     </details>

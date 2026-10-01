@@ -1638,6 +1638,22 @@ class TemplateHygieneTests(TestCase):
 class TaskImageClassifyTests(TestCase):
     """На вебе рисунки из ответа не смешиваются с условием."""
 
+    def test_proof_image_is_visible_without_short_answer(self):
+        from django.template.loader import render_to_string
+
+        task = Task.objects.create(
+            text_latex='Докажите равенство сторон.',
+            solution_latex=r'Треугольники равны.\taskpic{1}')
+        image = task.images.create(image='task_images/proof.png', order=0)
+        image_src = f'src="{reverse("task_image_file", args=[image.pk])}"'
+        html = render_to_string('problems/_task_answers.html', {'task': task})
+        self.assertEqual(html.count(image_src), 1)
+        self.assertNotIn('<strong>Ответ:</strong>', html)
+
+        task.answer_latex = '$AD=CD$'
+        html = render_to_string('problems/_task_answers.html', {'task': task})
+        self.assertEqual(html.count(image_src), 1)
+
     def test_answer_and_unreferenced_images(self):
         from problems.task_images import classify_task_images, images_for_group
 

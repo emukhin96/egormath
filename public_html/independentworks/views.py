@@ -595,6 +595,10 @@ def attempt_page(request, pk):
     attempt = own_attempt(request, pk, teacher=teacher)
     svc.finish_expired(attempt)
     accessible = teacher or bool(attempt.started_at)
+    if accessible and not teacher:
+        # Досверка только своей работы: общая сводка и экспорт ничего
+        # не вычисляют. За открытие страницы повторяем максимум один ответ.
+        svc.recheck_unavailable(attempt)
     return render(request, 'independentworks/attempt.html', {
         'attempt': attempt, 'teacher_view': teacher, 'rows': group_point_rows(point_rows(attempt, teacher)) if accessible else [],
         'editable': not teacher and bool(attempt.started_at) and not attempt.finished,
@@ -644,6 +648,11 @@ def check_answer(request, pk, point_id):
     if not any(values.values()):
         return JsonResponse({'ok': True, 'message': 'Сначала введите ответ', 'checks': {}})
     answer = svc.save_answer(pk, point_id, version, values)
+    if not answer.auto_check:
+        # Сверка временно не состоялась: попытку не списываем
+        return JsonResponse({'ok': False, 'checks': {},
+                             'message': 'Проверка временно недоступна — попробуйте ещё раз через минуту',
+                             'version': answer.version, 'saved_at': answer.updated_at.isoformat()})
     with transaction.atomic():
         answer = Answer.objects.select_for_update().get(pk=answer.pk)
         answer.check_revealed = True
@@ -654,7 +663,8 @@ def check_answer(request, pk, point_id):
             answer=answer, number=latest + 1, result=answer.auto_check,
             snapshot={'values': answer.values, 'checks': answer.checks})
     checks = {f'p{point.pk}': answer.auto_check}
-    checks.update({f'p{point.pk}_{name}': status for name, status in answer.checks.items()})
+    checks.update({f'p{point.pk}_{name}': status for name, status in answer.checks.items()
+                   if not name.startswith('_')})
     return JsonResponse({'ok': True, 'message': 'Проверено', 'checks': checks,
                          'version': answer.version, 'saved_at': answer.updated_at.isoformat()})
 

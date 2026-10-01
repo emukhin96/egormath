@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass, field
 
 from ..check_answer import OK, UNKNOWN, WRONG, _compact, normalize
-from . import expressions, sets, formats, series
+from . import expressions, sets, formats, series, formulas
 
 NUMBER = 'number'
 DIGITS = 'digits'
@@ -32,6 +32,8 @@ EQUATION = 'equation'
 RANGE = 'range'
 SERIES = 'series'
 ORDER = 'order'
+EXPRESSION = 'expression'
+EXPRESSIONS = 'expressions'
 
 KINDS = {
     NUMBER: 'число',
@@ -48,6 +50,8 @@ KINDS = {
     RANGE: 'числовое множество',
     SERIES: 'периодическое множество кратных π',
     ORDER: 'расставить в порядке',
+    EXPRESSION: 'эквивалентное выражение',
+    EXPRESSIONS: 'выражения в любом порядке',
 }
 
 # Пресеты — готовые списки вариантов для choice: имя → варианты
@@ -75,8 +79,11 @@ HELP = (
     ('{{parity: чётная}}', 'пресет чётная / нечётная / общего вида '
                            '(к любому пресету можно дописать свои варианты через |)'),
     ('{{simplify: \\frac{2}{a+3}}}', 'выражение: эквивалентно эталону и не менее упрощено'),
+    ('{{expression: 2a | positive: a}}', 'любое эквивалентное выражение; a — положительный параметр'),
+    ('{{expressions: a\\sqrt{3}; 2a | positive: a}}', 'все выражения через ; в любом порядке, с учётом кратности'),
     ('{{factor: 2(x-1)(x+1)}}', 'разложение на неприводимые множители, порядок любой'),
     ('{{pair: (2,5; -3); (5; -6)}}', 'упорядоченные пары через ; порядок пар не важен'),
+    ('{{pair: (8;12); (5;15) | unordered}}', 'варианты длин сторон; порядок внутри и между парами не важен'),
     ('{{set: -2; 1}}', 'множество чисел, порядок не важен; {{set: }} — «нет решений»'),
     ('{{equation: y=x+5}}', 'уравнение в приведённом виде (y-x=5 тоже верно, 2y=2x+10 — нет)'),
     ('{{range: 1; 4}}', 'корни уравнения: одно поле независимо от количества корней'),
@@ -118,6 +125,8 @@ class Slot:
     tolerance: object = None
     data: object = None
     error: str = ''
+    unordered_pair: bool = False
+    reference_unavailable: bool = False
 
     @property
     def name(self):
@@ -133,10 +142,12 @@ class Slot:
 
     @property
     def uses_math_field(self):
-        return self.kind in (SIMPLIFY, FACTOR, EQUATION)
+        return self.kind in (SIMPLIFY, FACTOR, EQUATION, EXPRESSION, EXPRESSIONS)
 
     @property
     def label(self):
+        if self.kind == PAIR and self.unordered_pair:
+            return 'группы чисел (порядок не важен)'
         return KINDS.get(self.kind, self.kind)
 
     def shuffled(self, seed=''):
@@ -265,7 +276,12 @@ def _parse_format(slot, payload):
         value = formats.decimal(payload)
         hint = 'эталон: целое или десятичное число с запятой'
     else:
-        value = formats.ratio(payload)
+        from . import numeric
+        try:
+            value = (formats.proportion(payload) if slot.kind == PROPORTION
+                     else formats.ratio(payload))
+        except numeric.Uncertain:
+            value = None
         hint = 'эталон: два числа через двоеточие, второе не равно нулю'
     if value is None:
         slot.error = hint
@@ -287,11 +303,30 @@ def _parse_expression(slot, payload):
 
 
 def _parse_pair(slot, payload):
+    if len(payload) > sets.MAX_COLLECTION_LEN:
+        slot.error = 'слишком длинный эталон пар'
+        return
+    option = re.search(r'\|\s*unordered\s*$', payload)
+    if option:
+        payload = payload[:option.start()].strip()
+        slot.unordered_pair = True
     pairs = sets.parse_pairs(payload)
     if not pairs:
         slot.error = 'эталон: пары вида (a; b), несколько пар через ;'
         return
     slot.data, slot.reference = pairs, payload.strip()
+
+
+def _parse_formula(slot, payload, *, validate=False):
+    try:
+        slot.data, slot.reference = formulas.parse_reference(
+            payload, multiple=slot.kind == EXPRESSIONS, validate=validate,
+            mode=slot.kind if slot.kind in (SIMPLIFY, FACTOR) else 'expression')
+    except formulas.FormulaUnavailable as error:
+        slot.reference_unavailable = True
+        slot.error = str(error)
+    except ValueError as error:
+        slot.error = str(error)
 
 
 def _parse_set(slot, payload):
@@ -329,14 +364,20 @@ def _parse_order(slot, payload):
 _PARSERS = {
     DIGITS: _parse_format, DECIMAL: _parse_format,
     RATIO: _parse_format, PROPORTION: _parse_format,
-    NUMBER: _parse_number, CHOICE: _parse_choice, SIMPLIFY: _parse_expression,
-    FACTOR: _parse_expression, EQUATION: _parse_expression, PAIR: _parse_pair,
+    NUMBER: _parse_number, CHOICE: _parse_choice, SIMPLIFY: _parse_formula,
+    FACTOR: _parse_formula, EQUATION: _parse_expression, PAIR: _parse_pair,
     SET: _parse_set, RANGE: _parse_range, SERIES: _parse_series, ORDER: _parse_order,
+    EXPRESSION: _parse_formula, EXPRESSIONS: _parse_formula,
 }
 
 
-def parse_mask(text):
-    """Текст маски → ``MaskSpec`` (фрагменты текста и слоты, ошибки)."""
+def parse_mask(text, *, validate_references=False):
+    """Текст маски → ``MaskSpec`` (фрагменты текста и слоты, ошибки).
+
+    При показе сохранённых expression-полей не запускаем вычислитель.
+    Формы сохранения и импорта передают validate_references=True, чтобы
+    проверить математический эталон до записи.
+    """
     text = text or ''
     spec = MaskSpec(source=text)
     pos = 0
@@ -361,7 +402,10 @@ def parse_mask(text):
         kind = CHOICE if name in PRESETS else name
         slot = Slot(index=index, kind=kind, raw=payload,
                     preset=name if name in PRESETS else None)
-        _PARSERS[kind](slot, payload)
+        if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
+            _parse_formula(slot, payload, validate=validate_references)
+        else:
+            _PARSERS[kind](slot, payload)
         if slot.error:
             spec.errors.append(f'слот {index} ({{{{{name}: …}}}}): {slot.error}')
         spec.fragments.append(slot)
@@ -411,10 +455,27 @@ def check_slot(slot, value):
     if kind == DECIMAL:
         student = formats.decimal(value)
         return OK if student is not None and student == slot.data else WRONG
-    if kind in (RATIO, PROPORTION):
+    if kind == PROPORTION:
+        from . import numeric
+        from fractions import Fraction
+        from decimal import DecimalException
+        try:
+            student = formats.proportion(value)
+        except numeric.Uncertain:
+            return formats.check_proportion_exact(value, slot.reference)
+        if student is None:
+            return WRONG
+        if student == 0 or slot.data == 0:
+            return OK if student == slot.data else WRONG
+        try:
+            equal = numeric.equal(student, slot.data) or numeric.equal(
+                numeric.calculate('div', Fraction(1), student), slot.data)
+        except (ValueError, DecimalException, OverflowError, ZeroDivisionError):
+            return WRONG
+        return OK if equal else WRONG
+    if kind == RATIO:
         student = formats.ratio(value)
-        equal = student is not None and (student == slot.data or (
-            kind == PROPORTION and student * slot.data == 1))
+        equal = student is not None and student == slot.data
         return OK if equal else WRONG
     if kind == CHOICE:
         if _compact(value).replace('ё', 'е') == _compact(slot.correct).replace('ё', 'е'):
@@ -429,7 +490,8 @@ def check_slot(slot, value):
         student = sets.parse_pairs(value)
         if student is None:
             return UNKNOWN
-        return OK if sets.pairs_equal(student, slot.data) else WRONG
+        return OK if sets.pairs_equal(
+            student, slot.data, unordered=slot.unordered_pair) else WRONG
     if kind == SET:
         student = sets.parse_set(value)
         if student is None:
@@ -444,10 +506,8 @@ def check_slot(slot, value):
         student = series.parse(value)
         equal = series.equal(student, slot.data)
         return UNKNOWN if equal is None else (OK if equal else WRONG)
-    if kind == SIMPLIFY:
-        return expressions.check_simplified(value, slot.data)
-    if kind == FACTOR:
-        return expressions.check_factored(value, slot.data)
+    if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
+        return formulas.check(value, slot.data, multiple=kind == EXPRESSIONS)
     if kind == EQUATION:
         return expressions.check_equation(value, slot.data)
     if kind == ORDER:
@@ -458,13 +518,34 @@ def check_slot(slot, value):
     return UNKNOWN
 
 
-def check_mask(spec, values):
+def check_mask(spec, values, known=None):
     """Все слоты → (итог по задаче, {имя слота: результат}).
     Итог: ``ok`` — все слоты верны; ``wrong`` — хоть один неверен;
-    ``unknown`` — что-то не разобрано или не заполнено; '' — пусто."""
+    ``unknown`` — что-то не разобрано или не заполнено; '' — пусто.
+    ``known`` — готовые результаты слотов, чьё значение не менялось: их не
+    пересчитываем (формульные слоты стоят дочернего процесса)."""
     results = {}
+    unavailable = None
     for slot in spec.slots:
-        results[slot.name] = check_slot(slot, values.get(slot.name, ''))
+        if known and slot.name in known:
+            results[slot.name] = known[slot.name]
+            continue
+        if unavailable is not None and slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION):
+            # После сбоя не ждём вычислитель заново для каждой формулы;
+            # продолжаем только дешёвые проверки остальных полей.
+            results[slot.name] = UNKNOWN
+            continue
+        try:
+            results[slot.name] = check_slot(slot, values.get(slot.name, ''))
+        except formulas.FormulaUnavailable as error:
+            results[slot.name] = UNKNOWN
+            # Собираем и остальные поля: сбой формулы не должен стирать
+            # вердикты числовых полей до или после неё.
+            if unavailable is None or isinstance(unavailable, formulas.FormulaBusy):
+                unavailable = error
+    if unavailable is not None:
+        unavailable.slot_checks = results
+        raise unavailable
     verdicts = list(results.values())
     if not any(verdicts):
         return '', results
@@ -781,7 +862,7 @@ def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subi
             return f'{{{{{preset}: {low}}}}}'
     if sets.numeric_value(text) is not None and '=' not in text:
         return f'{{{{{NUMBER}: {text}}}}}'
-    if '(' in text and sets.parse_pairs(text):
+    if '(' in text and sets.parse_pairs(text, coordinate_comma=False):
         return f'{{{{{PAIR}: {text}}}}}'
     if re.search(r'[<>≤≥\[\]∪]|\\infty|\\le|\\ge|\\cup', text) \
             and sets.parse_range(text) is not None:
@@ -809,15 +890,21 @@ def _mask_accepts_own_references(source):
     spec = parse_mask(source)
     if not spec.is_valid or not spec.slots:
         return False
-    for slot in spec.slots:
-        if slot.kind == CHOICE:
-            value = slot.correct
-        elif slot.kind == ORDER:
-            value = '|'.join(str(index) for index in range(len(slot.items)))
-        else:
-            value = slot.reference
-        if check_slot(slot, value) != OK:
-            return False
+    try:
+        # Черновик необязателен: занятый вычислитель не задерживает импорт
+        # и не превращает подсказку редактора в ошибку HTTP 500.
+        with formulas.without_worker_wait():
+            for slot in spec.slots:
+                if slot.kind == CHOICE:
+                    value = slot.correct
+                elif slot.kind == ORDER:
+                    value = '|'.join(str(index) for index in range(len(slot.items)))
+                else:
+                    value = slot.reference
+                if check_slot(slot, value) != OK:
+                    return False
+    except formulas.FormulaUnavailable:
+        return False
     return True
 
 

@@ -44,8 +44,134 @@ class IndependentWorkTests(TestCase):
     def begin(self, **kwargs):
         return svc.start(self.issued(**kwargs).pk)
 
+    def test_unavailable_check_is_retried_limited_times_then_manual(self):
+        import subprocess
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+28}}'
+        self.task.save()
+        a = self.begin()
+        point = a.variant.points.get()
+        formulas._checked.cache_clear()
+        formulas._failed_inputs.clear()
+        with patch.object(formulas, '_run_worker',
+                          side_effect=subprocess.TimeoutExpired('worker', 3)):
+            answer = svc.save_answer(a.pk, point.pk, 0, {'s1': '28+a'})
+            self.assertEqual(answer.auto_check, '')
+            self.assertEqual(answer.checks, {formulas.UNAVAILABLE_KEY: 1})
+            svc.recheck_unavailable(a)
+        answer.refresh_from_db()
+        # Повторный сбой того же ввода — в ручную проверку, без вечных досверок
+        self.assertEqual(answer.auto_check, 'unknown')
+        self.assertEqual(answer.checks, {'s1': 'unknown', formulas.UNAVAILABLE_KEY: 2})
+        with patch.object(formulas, '_run_worker') as worker:
+            svc.recheck_unavailable(a)
+            worker.assert_not_called()
+
+    def test_cooldown_does_not_count_as_another_failed_check(self):
+        import subprocess
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{expression: a+163}}'
+        self.task.save()
+        attempt = self.begin()
+        point = attempt.variant.points.get()
+        formulas._checked.cache_clear()
+        formulas._failed_inputs.clear()
+        self.addCleanup(formulas._failed_inputs.clear)
+        with patch.object(formulas.subprocess, 'run',
+                          side_effect=subprocess.TimeoutExpired('worker', 3)) as worker:
+            answer = svc.save_answer(attempt.pk, point.pk, 0, {'s1': '163+a'})
+            svc.recheck_unavailable(attempt)
+            svc.recheck_unavailable(attempt)
+            worker.assert_called_once()
+        answer.refresh_from_db()
+        self.assertEqual(answer.auto_check, '')
+        self.assertEqual(answer.checks, {formulas.UNAVAILABLE_KEY: 1})
+        formulas._failed_inputs.clear()
+        svc.recheck_unavailable(attempt)
+        answer.refresh_from_db()
+        self.assertEqual(answer.auto_check, 'ok')
+        self.assertEqual(answer.checks, {'s1': 'ok'})
+
     def url(self, name, *args):
         return reverse('independentworks:' + name, args=args)
+
+    def test_unavailable_self_check_returns_saved_version_and_allows_next_save(self):
+        from assignments.checks.formulas import FormulaBusy
+        attempt = self.begin(self_check=True)
+        point = attempt.variant.points.get()
+        self.client.force_login(self.student)
+        with patch.object(svc, 'check_mask', side_effect=FormulaBusy('занято')):
+            response = self.client.post(self.url('check_answer', attempt.pk, point.pk), {
+                'version': 0, f'p{point.pk}_s1': '4'})
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['version'], 1)
+        self.assertFalse(AnswerCheckAttempt.objects.filter(answer__attempt=attempt).exists())
+        response = self.client.post(self.url('save', attempt.pk, point.pk), {
+            'version': result['version'], f'p{point.pk}_s1': '3'})
+        self.assertEqual(response.status_code, 200)
+        answer = attempt.answers.get()
+        self.assertEqual((answer.version, answer.values), (2, {'s1': '3'}))
+
+    def test_same_input_cannot_reset_failure_limit_by_saving_or_checking(self):
+        from assignments.checks import formulas
+        self.task.answer_mask = '{{number: 4}} {{expression: a+191}} {{number: 7}}'
+        self.task.save()
+        formulas._checked.cache_clear()
+        attempt = self.begin(self_check=True)
+        point = attempt.variant.points.get()
+        values = {'s1': '4', 's2': '191+a', 's3': '8'}
+        with patch.object(formulas, '_run_worker', side_effect=formulas.FormulaUnavailable('сбой')) as worker:
+            answer = svc.save_answer(attempt.pk, point.pk, 0, values)
+            answer = svc.save_answer(attempt.pk, point.pk, answer.version, values)
+            self.assertEqual(answer.auto_check, 'unknown')
+            self.assertEqual(answer.checks, {'s1': 'ok', 's2': 'unknown', 's3': 'wrong', formulas.UNAVAILABLE_KEY: 2})
+            answer = svc.save_answer(attempt.pk, point.pk, answer.version, values)
+            self.client.force_login(self.student)
+            response = self.client.post(self.url('check_answer', attempt.pk, point.pk), {
+                'version': answer.version, **{f'p{point.pk}_{k}': v for k, v in values.items()}})
+            self.assertTrue(response.json()['ok'])
+            self.assertEqual(worker.call_count, 2)
+            # Изменение ввода сбрасывает счётчик и действительно запускает проверку.
+            answer.refresh_from_db()
+            values['s2'] = 'a+192'
+            answer = svc.save_answer(attempt.pk, point.pk, answer.version, values)
+            self.assertEqual(worker.call_count, 3)
+            self.assertEqual(answer.checks, {formulas.UNAVAILABLE_KEY: 1})
+
+    def test_teacher_pages_and_export_never_retry_formula_checks(self):
+        attempt = self.begin()
+        point = attempt.variant.points.get()
+        Answer.objects.create(attempt=attempt, point=point, values={'s1': '4'},
+                              version=1, auto_check='')
+        self.client.force_login(self.teacher)
+        with patch.object(svc, 'check_mask') as check:
+            for name, args in [('progress', [attempt.run_id]), ('export', [attempt.run_id]),
+                               ('attempt', [attempt.pk]), ('point_detail', [attempt.pk, point.pk])]:
+                with self.subTest(page=name):
+                    self.assertEqual(self.client.get(self.url(name, *args)).status_code, 200)
+            check.assert_not_called()
+
+    def test_student_page_retries_one_answer_without_wait_and_shows_fresh_result(self):
+        from assignments.checks import formulas
+        position = Position.objects.create(work=self.work, order=2)
+        other_task = Task.objects.create(text_latex='Три плюс один?', answer_mask='{{number: 4}}')
+        Candidate.objects.create(position=position, task=other_task)
+        attempt = self.begin()
+        for point in attempt.variant.points.all():
+            Answer.objects.create(attempt=attempt, point=point, values={'s1': '4'},
+                                  version=1, auto_check='')
+        def checked(spec, values):
+            self.assertEqual(formulas._worker_wait.get(), 0)
+            return 'ok', {'s1': 'ok'}
+        self.client.force_login(self.student)
+        with patch.object(svc, 'check_mask', side_effect=checked) as check:
+            response = self.client.get(self.url('attempt', attempt.pk))
+            check.assert_called_once()
+        self.assertEqual(response.status_code, 200)
+        self.assertCountEqual([row['answer'].auto_check for row in response.context['rows']], ['ok', ''])
+        self.assertIsNone(formulas._worker_wait.get())
 
     def test_manage_recipients_in_shared_dialog(self):
         a = self.issued()

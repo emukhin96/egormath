@@ -209,21 +209,50 @@ class AnswerFields(models.Model):
     class Meta:
         abstract = True
 
-    def run_check(self, reference=None, spec=None):
+    def run_check(self, reference=None, spec=None, known=None):
         """Пересчитать auto_check; возвращает True, если результат изменился.
 
         С рабочей маской (``spec``) сверяются слоты ``answer_json`` — итог и
-        результат по каждому слоту (``check_json``). Исторические свободные
-        ответы сохраняют прежнюю оценку; reference оставлен для совместимости.
+        результат по каждому слоту (``check_json``); ``known`` — результаты
+        слотов, чьё значение не менялось, их не пересчитываем. Исторические
+        свободные ответы сохраняют прежнюю оценку; reference оставлен для
+        совместимости.
         """
         from django.utils import timezone
 
         from .checks import check_mask
+        from .checks.formulas import (UNAVAILABLE_KEY, UNAVAILABLE_LIMIT,
+                                      FormulaUnavailable, unavailable_count)
+        # Флаг для вызывающего кода: сверка не состоялась по временной причине
+        self.check_unavailable = False
         # Старую оценку не пересчитываем, пока ученик не заполнил слоты.
         by_mask = (spec is not None and spec.is_valid
                    and (self.has_mask_values or not self.legacy_answer))
         if by_mask:
-            result, per_slot = check_mask(spec, self.answer_json or {})
+            if ((self.check_json or {}).get(UNAVAILABLE_KEY, 0) >= UNAVAILABLE_LIMIT
+                    and known is not None):
+                # Все значения и эталон прежние: окончательный результат
+                # после лимита сбоев не запускает вычислитель снова.
+                return False
+            try:
+                result, per_slot = check_mask(spec, self.answer_json or {}, known=known)
+            except FormulaUnavailable as error:
+                count = unavailable_count(self.check_json, error)
+                if count >= UNAVAILABLE_LIMIT:
+                    # Тот же ввод не сверился повторно — это не временная
+                    # недоступность, а непосильное выражение: в ручную проверку.
+                    changed = self.auto_check != self.CHECK_UNKNOWN
+                    self.auto_check = self.CHECK_UNKNOWN
+                    self.check_json = {**getattr(error, 'slot_checks', {}),
+                                       UNAVAILABLE_KEY: count}
+                    self.checked_at = timezone.now()
+                    return changed
+                # Вычислитель временно недоступен: прежний вердикт и
+                # checked_at не трогаем, проверка повторится как устаревшая;
+                # счётчик сбоев этого ввода — в check_json.
+                self.check_unavailable = True
+                self.check_json = {**(self.check_json or {}), UNAVAILABLE_KEY: count}
+                return False
         else:
             # Исторический свободный ответ сохраняет прежнюю оценку.
             return False
@@ -288,6 +317,8 @@ class AnswerFields(models.Model):
         на доработку check_revealed не ставился, и прятать сверку нельзя.
         """
         assignment = self.assignment_of
+        if not assignment.student_sees_checks:
+            return False
         if assignment.check_visibility == Assignment.CHECK_LIVE:
             return self.check_revealed or not assignment.is_editable_by_student
         return True

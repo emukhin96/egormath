@@ -64,6 +64,21 @@ class TextbookImportTests(TestCase):
             payload or bundle(), user=self.teacher, title='Пробная партия',
             source_title='Тестовый задачник', source_author='Автор')
 
+    def test_formula_worker_failure_does_not_interrupt_batch_drafts(self):
+        from assignments.checks import formulas
+        payload = bundle(text_latex='Упростите выражение.', author_answer_latex='$a+173$')
+        payload['tasks'].append({**payload['tasks'][0], 'external_id': '1.2.38',
+                                 'source_number': '38', 'author_answer_latex': '$4$'})
+        formulas._checked.cache_clear()
+        with patch.object(formulas, '_run_worker',
+                          side_effect=formulas.FormulaUnavailable('сбой')):
+            batch = self.create_batch(payload)
+        drafts = list(batch.drafts.order_by('source_number'))
+        self.assertEqual(len(drafts), 2)
+        self.assertEqual(drafts[0].author_answer_latex, '$a+173$')
+        self.assertEqual(drafts[0].answer_mask, '')
+        self.assertEqual(drafts[1].answer_mask, '{{number: 4}}')
+
     def test_corrupt_late_zip_member_does_not_replace_existing_assets(self):
         import tempfile
         from pathlib import Path

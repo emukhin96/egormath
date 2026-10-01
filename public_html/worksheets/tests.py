@@ -115,21 +115,27 @@ class LatexGenerationTests(TestCase):
         tex = task_to_tex(item)
         self.assertIn('\\task{1}{2}{%', tex)
         self.assertIn('[{\\item $2+2$;}]', tex)
-        self.assertIn('[{4}]', tex)
-        self.assertIn(
-            '[{\\mbox{}\\\\ \\begin{minipage}[t]{\\linewidth}%\n'
-            'Очевидно.%\n\\end{minipage}}]', tex)
+        self.assertIn('[{\\egorMathAnswer{4}}]', tex)
+        self.assertIn('[{\\mbox{}\\\\* Очевидно.}]', tex)
 
     def test_task_to_tex_omits_trailing_args(self):
         task = Task.objects.create(text_latex='Просто задача')
         tex = task_to_tex(make_item(self.worksheet, task))
         self.assertNotIn('[', tex.replace('\\[', ''))
 
+    def test_answer_with_display_math_is_a_block_not_a_shortstack(self):
+        # \[…\] и окружения не набираются в LR-боксе \shortstack — сразу абзац
+        task = Task.objects.create(
+            text_latex='Уравнение', answer_latex=r'\[x=\frac{1}{2}\]')
+        tex = task_to_tex(make_item(self.worksheet, task))
+        self.assertIn(r'[{\egorMathAnswerBlock{\[x=\frac{1}{2}\]}}]', tex)
+        self.assertNotIn(r'\egorMathAnswer{\[', tex)
+
     def test_answer_with_brackets_is_protected(self):
         task = Task.objects.create(
             text_latex='Неравенство', answer_latex='$x \\in [1; 2]$')
         tex = task_to_tex(make_item(self.worksheet, task))
-        self.assertIn('[{$x \\in [1; 2]$}]', tex)
+        self.assertIn('[{\\egorMathAnswer{$x \\in [1; 2]$}}]', tex)
 
     def test_overrides(self):
         task = Task.objects.create(text_latex='Задача', stars=1, columns=0)
@@ -159,7 +165,7 @@ class LatexGenerationTests(TestCase):
             text_latex='Задача', columns=2, answer_latex='7')
         tex = task_to_tex(make_item(self.worksheet, task))
         self.assertIn('\\task{0}{0}{%', tex)
-        self.assertIn('[{}][{7}]', tex)
+        self.assertIn('[{}][{\\egorMathAnswer{7}}]', tex)
 
     def test_subitem_punctuation(self):
         # В базе подпункты без знаков препинания — система расставляет
@@ -198,7 +204,7 @@ class LatexGenerationTests(TestCase):
         self.assertNotIn('$2+2$', tex)
         self.assertIn('\\item $3+3$;', tex)
         # Ответы перенумерованы заново: а) и б)
-        self.assertIn(r'[{\shortstack[l]{а)~2 \\ б)~6}}]', tex)
+        self.assertIn(r'[{\egorMathAnswer{а)~2 \\ б)~6}}]', tex)
 
     def test_subitem_solutions_combined(self):
         # Решения подпунктов собираются в 6-й аргумент \task как ответы
@@ -212,18 +218,17 @@ class LatexGenerationTests(TestCase):
         item = make_item(self.worksheet, task)
         tex = task_to_tex(item)
         self.assertIn(
-            '\\mbox{}\\\\ \\begin{minipage}[t]{\\linewidth}%\n'
-            'а)~Складываем единицы \\mbox{}\\\\ б)~Складываем двойки%\n'
-            '\\end{minipage}', tex)
+            '\\mbox{}\\\\* а)~Складываем единицы '
+            '\\mbox{}\\\\ б)~Складываем двойки', tex)
         # Общее решение задачи идёт перед решениями подпунктов
         task.solution_latex = 'Общий план.\n\nСначала оценки.'
         task.save()
         tex = task_to_tex(item)
-        self.assertIn('\\begin{minipage}[t]{\\linewidth}', tex)
+        self.assertNotIn('\\begin{minipage}', tex)
         self.assertIn(
             'Общий план. \\mbox{}\\\\ Сначала оценки. \\mbox{}\\\\ '
             'а)~Складываем', tex)
-        self.assertIn('\\end{minipage}', tex)
+        self.assertNotIn('\\end{minipage}', tex)
 
     def test_array_bidi_shim(self):
         # Заглушка после \usepackage{egor}: иначе array в \plaintext
@@ -338,7 +343,8 @@ class LatexGenerationTests(TestCase):
         self.assertIn('\\taskpic{pic1.png}', tex)
         self.assertIn('\\taskpic{pic2.jpg}', tex)
         ws_tex = worksheet_to_tex(self.worksheet, 'student')
-        self.assertIn('\\picsperrow{3}', ws_tex)
+        self.assertIn(
+            r'\ifdim\textwidth<160mm\picsperrow{1}\else\picsperrow{2}\fi', ws_tex)
         self.assertIn('\\flushpics', ws_tex)
         self.assertLess(ws_tex.index('\\end{enumerate}'),
                         ws_tex.rindex('\\flushpics'))
@@ -427,7 +433,7 @@ class LatexGenerationTests(TestCase):
         self.assertIn('Чертеж:', tex)
         self.assertLess(
             tex.index(r'\taskpic{solution.png}'),
-            tex.index(r'[{\mbox{}\\ \begin{minipage}'))
+            tex.index(r'[{\mbox{}\\* '))
 
     def test_taskpic_ref_in_ai_answer_moves_to_task_body(self):
         task = Task.objects.create(
@@ -441,7 +447,7 @@ class LatexGenerationTests(TestCase):
         # Одна и та же ссылка в body и answer не дублируется.
         self.assertLess(
             tex.index(r'\taskpic{answer.png}'),
-            tex.index(r'[{Ответ по рисунку'))
+            tex.index(r'[{\egorMathAnswer{Ответ по рисунку'))
 
     def test_answer_and_solution_pictures_follow_pdf_variant(self):
         task = Task.objects.create(
@@ -1797,6 +1803,17 @@ class ShareLinkTests(TestCase):
             reverse('public_worksheet', args=[self.link.token]))
         self.assertNotContains(
             response, reverse('task_image_file', args=[image.pk]))
+
+    def test_public_page_hides_ai_solution_image_behind_author_hint(self):
+        first = self.worksheet.items.filter(task__isnull=False).order_by('order').first()
+        first.task.text_latex = 'Докажите утверждение.'
+        first.task.author_solution_latex = 'Указание. Рассмотрите два треугольника.'
+        first.task.solution_latex = r'Полное доказательство.\taskpic{1}'
+        first.task.save()
+        image = first.task.images.create(image='task_images/hidden-ai-proof.png', order=10)
+        response = self.client.get(reverse('public_worksheet', args=[self.link.token]))
+        self.assertNotContains(response, reverse('task_image_file', args=[image.pk]))
+        self.assertNotContains(response, 'Полное доказательство.')
 
     def test_public_subtitle_skips_empty_parts(self):
         # Пустые grade_label/subtitle не оставляют «висячих» разделителей
