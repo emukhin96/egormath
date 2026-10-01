@@ -687,6 +687,45 @@ class BeamerGenerationTests(TestCase):
                     tex='\\usepackage[font=inter]{egorbeamer}')
         self.assertIn('Inter', str(ctx.exception))
 
+    def test_collect_assets_includes_stix_fonts(self):
+        from .services import STIX_FONT_FILES, collect_assets, tex_wants_stix
+        self.assertTrue(tex_wants_stix('\\usepackage[answers=table, font=stix]{egor}'))
+        self.assertFalse(tex_wants_stix('\\usepackage[font=school]{egor}'))
+        self.assertFalse(tex_wants_stix('\\usepackage[font=stix]{egorbeamer}'))
+        self.assertEqual(collect_assets(self.worksheet,
+                                        tex='\\usepackage{egor}'), [])
+        assets = collect_assets(self.worksheet,
+                                tex='\\usepackage[font=stix]{egor}')
+        names = [item['filename'] for item in assets]
+        for name in STIX_FONT_FILES:
+            self.assertIn(name, names)
+        self.assertNotIn('Inter-Regular.otf', names)
+        # Главное для font=stix: egor.sty из репозитория уходит вместе со
+        # шрифтами (иначе на API возьмётся старый sty без опции font=stix)
+        # и занимает слот в лимите assets.
+        from .services import font_asset_count
+        self.assertIn('egor.sty', names)
+        self.assertEqual(font_asset_count(r'\usepackage[font=stix]{egor}'),
+                         len(STIX_FONT_FILES) + 1)
+
+    def test_collect_assets_requires_stix_fonts(self):
+        from pathlib import Path
+        from .services import collect_assets
+        with mock.patch('worksheets.services.STIX_FONT_DIR',
+                        Path('/tmp/egormath-no-stix-fonts')):
+            with self.assertRaises(LatexCompileError) as ctx:
+                collect_assets(self.worksheet,
+                               tex='\\usepackage[font=stix]{egor}')
+        self.assertIn('STIX', str(ctx.exception))
+
+    def test_pdf_options_accept_stix(self):
+        from .latex import apply_pdf_options, pdf_options_from_tex
+        tex = ('\\documentclass[a5paper,10pt]{article}\n'
+               '\\usepackage[answers=table]{egor}')
+        tex = apply_pdf_options(tex, {'font': 'stix'})
+        self.assertIn('\\usepackage[answers=table,font=stix]{egor}', tex)
+        self.assertEqual(pdf_options_from_tex(tex)['font'], 'stix')
+
     def test_collect_beamer_assets_rejects_too_many_images(self):
         from .services import (BEAMER_IMAGE_ASSET_LIMIT, collect_beamer_assets)
         fake = [{'filename': f'p{i}.png', 'content_base64': 'eA=='}
@@ -1208,6 +1247,7 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'data-value="cm"')
         self.assertContains(response, 'data-value="school"')
         self.assertContains(response, 'data-value="palatino"')
+        self.assertContains(response, 'data-value="stix"')
         # Переключатель режима диагностики (опция diagn пакета egor)
         self.assertContains(response, 'data-switch="diagn"')
         self.assertContains(response, 'id="sidebar-compile-btn"')
@@ -1388,6 +1428,64 @@ class WorksheetViewTests(TestCase):
         # Вариант с ответами ученику запрещён
         response = self.client.get(url, {'variant': 'teacher'})
         self.assertEqual(response.status_code, 403)
+
+    @mock.patch('worksheets.services.compile_latex',
+                return_value=b'%PDF-1.5 fake')
+    def test_student_pdf_with_stix_ships_fonts(self, mocked):
+        """Сохранённый font=stix: шрифты уходят и в кэшируемую сборку."""
+        from assignments.models import Assignment
+        self.worksheet.student_pdf_options = {'font': 'stix'}
+        self.worksheet.save(update_fields=['student_pdf_options'])
+        Assignment.objects.create(
+            worksheet=self.worksheet, student=self.student,
+            assigned_by=self.teacher)
+        self.client.login(username='student1', password='pass12345')
+        response = self.client.get(
+            reverse('worksheet_pdf', args=[self.worksheet.pk]),
+            {'variant': 'student'})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('font=stix', mocked.call_args.args[0])
+        names = [a['filename'] for a in mocked.call_args.kwargs['assets']]
+        self.assertIn('STIXTwoMath-Regular.otf', names)
+
+    @mock.patch('worksheets.services.collect_assets', return_value=[])
+    @mock.patch('worksheets.services.compile_latex',
+                return_value=b'%PDF-1.5 fake')
+    def test_student_pdf_stix_falls_back_to_cm_on_asset_limit(
+            self, mocked, _assets):
+        """Картинки добавили после выбора STIX: ученик получает PDF на CM."""
+        from .services import (LATEX_API_ASSET_LIMIT, font_asset_count,
+                               get_worksheet_pdf)
+        self.worksheet.student_pdf_options = {'font': 'stix'}
+        self.worksheet.save(update_fields=['student_pdf_options'])
+        fonts = font_asset_count(r'\usepackage[font=stix]{egor}')
+        fit = LATEX_API_ASSET_LIMIT - fonts
+        with mock.patch('worksheets.services._worksheet_images',
+                        return_value=[object()] * fit):
+            get_worksheet_pdf(self.worksheet, WorksheetPdf.VARIANT_STUDENT)
+        self.assertIn('font=stix', mocked.call_args.args[0])
+        with mock.patch('worksheets.services._worksheet_images',
+                        return_value=[object()] * (fit + 1)):
+            get_worksheet_pdf(self.worksheet, WorksheetPdf.VARIANT_STUDENT)
+        self.assertNotIn('font=stix', mocked.call_args.args[0])
+        self.assertEqual(mocked.call_count, 2)
+        # Опция учителя не теряется: вернётся, когда картинок станет меньше
+        self.worksheet.refresh_from_db()
+        self.assertEqual(self.worksheet.student_pdf_options, {'font': 'stix'})
+
+    @mock.patch('worksheets.views.compile_latex', return_value=b'%PDF-1.5')
+    def test_pdf_editor_compile_ships_stix_fonts(self, mocked):
+        self.login_teacher()
+        tex = (r'\documentclass[a5paper,10pt]{article}' '\n'
+               r'\usepackage[font=stix]{egor}')
+        response = self.client.post(
+            reverse('worksheet_pdf_compile', args=[self.worksheet.pk]),
+            {'variant': 'student', 'tex': tex})
+        self.assertEqual(response.status_code, 200)
+        names = [a['filename'] for a in mocked.call_args.kwargs['assets']]
+        self.assertIn('STIXTwoText-Regular.otf', names)
+        self.worksheet.refresh_from_db()
+        self.assertEqual(self.worksheet.student_pdf_options['font'], 'stix')
 
     @mock.patch('worksheets.services.compile_latex',
                 side_effect=LatexCompileError(

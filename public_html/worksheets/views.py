@@ -1469,11 +1469,13 @@ def worksheet_pdf(request, pk):
 
 
 # Профили font= пакета egor; в редакторе показываются только включённые
-# в settings.PDF_EDITOR_FONTS (school/palatino требуют подготовки сервера)
+# в settings.PDF_EDITOR_FONTS (school/palatino требуют подготовки сервера,
+# stix уходит в сборку со своими OTF — см. services.collect_font_assets)
 PDF_EDITOR_FONT_LABELS = (
     ('cm', 'Computer Modern'),
     ('school', 'Schoolbook'),
     ('palatino', 'Palatino'),
+    ('stix', 'STIX Two'),
 )
 
 
@@ -1589,7 +1591,7 @@ def worksheet_pdf_compile(request, pk):
         request, worksheet, tex,
         doc_id=f'ws{worksheet.pk}-editor',
         filename=worksheet.pdf_filename(variant),
-        collect=lambda: collect_assets(worksheet),
+        collect=lambda: collect_assets(worksheet, tex=tex),
         on_success=remember_student_options)
 
 

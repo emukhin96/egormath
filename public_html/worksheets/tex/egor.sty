@@ -1,0 +1,1198 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{egor}[2026/09/30 v1.3 school math and chemistry task sheets]
+
+%%==========================================================================
+%% egor.sty — пакет для оформления списков задач по математике и химии.
+%% Преемник egormath.sty (совместим с ним по командам), вобравший функционал
+%% mathneo.sty (режим diagn) и chem.sty (опция chem, режимы домашки).
+%% Компилятор: xelatex.
+%%==========================================================================
+
+\RequirePackage{etoolbox}
+
+%%---------------------------------------------------------------------------
+%% 1. ОПЦИИ ПАКЕТА
+%%---------------------------------------------------------------------------
+%% font=cm|school|palatino|inter|stix — шрифтовой профиль
+%% labelstyle=cyrillic|latin — метки списков 2-го уровня
+%% answers=none|inline|table — режим показа ответов (унифицированный)
+%% solutions / solutions=true|false — показывать решения
+%% diagn — режим диагностической работы (номера задач в рамках)
+%% chem  — химический инструментарий (mhchem, chemfig, \numr, \dtask, ...)
+%% Легаси-алиасы: ans, ans=true|false, resh, resh=true|false, reshans, tasks,
+%%                class-student, class-teacher, homework-student, homework-teacher
+
+\newcommand{\egor@font}{cm}
+\newcommand{\egor@labelstyle}{cyrillic}
+\newcommand{\egor@answersmode}{none}
+% solutions=none|inline|table; булев egor@solutions означает «инлайн-печать»
+\newcommand{\egor@solutionsmode}{none}
+\newbool{egor@solutions}
+\newcommand{\egor@setsolutions}[1]{%
+  \renewcommand{\egor@solutionsmode}{#1}%
+  \ifstrequal{#1}{inline}{\booltrue{egor@solutions}}{\boolfalse{egor@solutions}}%
+}
+\newbool{egor@diagn}
+\newbool{egor@chem}
+\newbool{egor@dz}
+% annot=true (по умолчанию) — слева зарезервировано место под аннотации
+% (\oge, \fipi, звёздочки); annot=false — резерв убирается, номер задачи
+% начинается вровень с левой границей рамки \bighead.
+\newbool{egor@annot}
+\booltrue{egor@annot}
+
+\DeclareOption{font=cm}{\renewcommand{\egor@font}{cm}}
+\DeclareOption{font=school}{\renewcommand{\egor@font}{school}}
+\DeclareOption{font=palatino}{\renewcommand{\egor@font}{palatino}}
+\DeclareOption{font=inter}{\renewcommand{\egor@font}{inter}}
+\DeclareOption{font=stix}{\renewcommand{\egor@font}{stix}}
+\DeclareOption{labelstyle=cyrillic}{\renewcommand{\egor@labelstyle}{cyrillic}}
+\DeclareOption{labelstyle=latin}{\renewcommand{\egor@labelstyle}{latin}}
+
+\DeclareOption{answers=none}{\renewcommand{\egor@answersmode}{none}}
+\DeclareOption{answers=inline}{\renewcommand{\egor@answersmode}{inline}}
+\DeclareOption{answers=table}{\renewcommand{\egor@answersmode}{table}}
+\DeclareOption{solutions}{\egor@setsolutions{inline}}
+\DeclareOption{solutions=true}{\egor@setsolutions{inline}}
+\DeclareOption{solutions=false}{\egor@setsolutions{none}}
+\DeclareOption{solutions=none}{\egor@setsolutions{none}}
+\DeclareOption{solutions=inline}{\egor@setsolutions{inline}}
+\DeclareOption{solutions=table}{\egor@setsolutions{table}}
+
+\DeclareOption{diagn}{\booltrue{egor@diagn}}
+\DeclareOption{chem}{\booltrue{egor@chem}}
+\DeclareOption{annot=true}{\booltrue{egor@annot}}
+\DeclareOption{annot=false}{\boolfalse{egor@annot}}
+
+% --- Легаси-алиасы (egormath/mathneo). Работают, но подсказывают новый синтаксис.
+\newcommand{\egor@legacyinfo}[2]{%
+  \PackageInfo{egor}{Option '#1' is a legacy alias; prefer '#2'}}
+\DeclareOption{ans}{\renewcommand{\egor@answersmode}{inline}\egor@legacyinfo{ans}{answers=inline}}
+\DeclareOption{ans=true}{\renewcommand{\egor@answersmode}{inline}\egor@legacyinfo{ans=true}{answers=inline}}
+\DeclareOption{ans=false}{\renewcommand{\egor@answersmode}{none}}
+\DeclareOption{resh}{\egor@setsolutions{inline}\egor@legacyinfo{resh}{solutions=inline}}
+\DeclareOption{resh=true}{\egor@setsolutions{inline}\egor@legacyinfo{resh=true}{solutions=inline}}
+\DeclareOption{resh=false}{\egor@setsolutions{none}}
+\DeclareOption{reshans}{\renewcommand{\egor@answersmode}{inline}\egor@setsolutions{inline}%
+  \egor@legacyinfo{reshans}{answers=inline, solutions=inline}}
+\DeclareOption{tasks}{\renewcommand{\egor@answersmode}{none}\egor@setsolutions{none}}
+
+% --- Легаси-алиасы (chem): классная/домашняя работа, ученик/учитель
+\DeclareOption{class-student}{\boolfalse{egor@dz}\egor@setsolutions{none}}
+\DeclareOption{class-teacher}{\boolfalse{egor@dz}\egor@setsolutions{inline}}
+\DeclareOption{homework-student}{\booltrue{egor@dz}\egor@setsolutions{none}}
+\DeclareOption{homework-teacher}{\booltrue{egor@dz}\egor@setsolutions{inline}}
+\DeclareOption{homework}{\booltrue{egor@dz}}
+
+\DeclareOption*{%
+  \PackageError{egor}{Unknown option '\CurrentOption'}%
+   {Valid options: font=cm|school|palatino|inter|stix, labelstyle=cyrillic|latin,\MessageBreak
+    answers=none|inline|table, solutions=none|inline|table,\MessageBreak
+    annot=true|false, diagn, chem, homework,\MessageBreak
+    legacy: ans, resh, reshans, tasks, class-student, class-teacher,\MessageBreak
+    homework-student, homework-teacher.}}
+\ProcessOptions\relax
+
+%%---------------------------------------------------------------------------
+%% 2. ДИАГНОСТИКА КОНФЛИКТОВ С ЛЕГАСИ-ПАКЕТАМИ
+%%---------------------------------------------------------------------------
+\@ifpackageloaded{egormath}{%
+  \PackageError{egor}{Package 'egormath' is already loaded.\MessageBreak
+    egor replaces egormath; they cannot be used together}%
+   {Remove \string\usepackage{egormath} from the preamble and keep only
+    \string\usepackage{egor}.}}{}
+\@ifpackageloaded{mathneo}{%
+  \PackageError{egor}{Package 'mathneo' is already loaded.\MessageBreak
+    egor replaces mathneo; they cannot be used together}%
+   {Remove \string\usepackage{mathneo} from the preamble and keep only
+    \string\usepackage{egor}.}}{}
+\ifcsdef{numr}{%
+  \PackageError{egor}{It looks like chem.sty is already loaded\MessageBreak
+    (command \string\numr\space is defined). egor replaces chem.sty}%
+   {Remove \string\usepackage{chem} from the preamble and use
+    \string\usepackage[chem]{egor} instead.}}{}
+\ifcsdef{task}{%
+  \PackageError{egor}{Command \string\task\space is already defined by another
+    package or by the document}%
+   {egor defines its own \string\task. Remove the conflicting definition or
+    load egor first.}}{}
+% Перехват попытки загрузить легаси-пакет ПОСЛЕ egor: останавливаемся с
+% понятным сообщением до того, как посыплются ошибки о переопределениях.
+\AddToHook{package/egormath/before}{\PackageError{egor}%
+  {Do not load 'egormath' together with 'egor'}%
+  {Remove \string\usepackage{egormath}: package egor already provides
+   everything from egormath.}}
+\AddToHook{package/mathneo/before}{\PackageError{egor}%
+  {Do not load 'mathneo' together with 'egor'}%
+  {Remove \string\usepackage{mathneo}: package egor already provides
+   everything from mathneo (use option 'diagn' for the diagnostic mode).}}
+\AddToHook{package/chem/before}{\PackageError{egor}%
+  {Do not load 'chem' together with 'egor'}%
+  {Remove \string\usepackage{chem} and use \string\usepackage[chem]{egor}
+   instead.}}
+
+%%---------------------------------------------------------------------------
+%% 3. БАЗОВЫЕ ПАКЕТЫ И ГЕОМЕТРИЯ
+%%---------------------------------------------------------------------------
+\RequirePackage{geometry}
+% Компактный верхний колонтитул: одна строка, минимальные отступы.
+\geometry{left=1.8cm,right=1.2cm,top=1.5cm,bottom=1cm,headheight=12pt,headsep=6pt}
+
+\RequirePackage{xcolor}
+\RequirePackage{tcolorbox}
+\tcbuselibrary{skins,breakable,most}
+\RequirePackage{tikz}
+\usetikzlibrary{positioning,shapes.misc,calc}
+\RequirePackage{enumitem}
+\RequirePackage{multicol}
+\RequirePackage{fancyhdr}
+\RequirePackage{graphicx}
+
+%%---------------------------------------------------------------------------
+%% 4. ШРИФТОВЫЕ ПРОФИЛИ (применяются в конце загрузки пакета)
+%%---------------------------------------------------------------------------
+\newcommand*\egor@apply@school{%
+  \RequirePackage[main=russian]{babel}%
+  \RequirePackage{amsmath}%
+  \RequirePackage{mathspec}%
+  \setmainfont{SchoolBookC}[BoldFont={SchoolBookC Bold},ItalicFont={SchoolBookC Italic},BoldItalicFont={SchoolBookC Bold Italic}]%
+  \setmathsfont(Digits,Latin){SchoolBookC}%
+  \DeclareSymbolFont{punctuation}{\encodingdefault}{\familydefault}{m}{n}%
+  \SetSymbolFont{punctuation}{bold}{\encodingdefault}{\familydefault}{b}{n}%
+  \DeclareMathSymbol{,}{\mathpunct}{punctuation}{`,}%
+  \DeclareMathSymbol{.}{\mathord}{punctuation}{`.}%
+  \DeclareMathSymbol{;}{\mathpunct}{punctuation}{`;}%
+  \setmathrm{SchoolBookC}\setboldmathrm{SchoolBookC Bold}%
+  \setsansfont{TextBookC}\setmonofont{CMU Typewriter Text}%
+  \RequirePackage{pifont}%
+  \newfontfamily\cmserif{CMU Serif}%
+  \let\oldsffamily\sffamily
+  \renewcommand{\sffamily}{\oldsffamily\everymath{\sfmathsetup}}%
+  \newcommand{\sfmathsetup}{\mathsf}%
+}
+\newcommand*\egor@apply@cm{%
+  \RequirePackage[main=russian]{babel}%
+  \RequirePackage{amsmath}%
+  \RequirePackage{fontspec}%
+  \defaultfontfeatures{Ligatures={TeX},Renderer=Basic}%
+  \setmainfont{CMU Serif}%
+  \setmainfont[Ligatures={TeX,Historic}]{CMU Serif}%
+  \setsansfont{CMU Sans Serif}\setmonofont{CMU Typewriter Text}%
+  \RequirePackage{pifont}%
+  \newfontfamily\cmserif{CMU Serif}%
+}
+\newcommand*\egor@apply@palatino{%
+  \RequirePackage[main=russian]{babel}%
+  \RequirePackage{amsmath}%
+  \RequirePackage{mathspec}%
+  \setmainfont{Palatino}[
+    BoldFont={Palatino Bold},
+    ItalicFont={Palatino Italic},
+    BoldItalicFont={Palatino Bold Italic}
+  ]%
+  \setmathsfont(Digits,Latin){Palatino}%
+  \DeclareSymbolFont{punctuation}{\encodingdefault}{\familydefault}{m}{n}%
+  \SetSymbolFont{punctuation}{bold}{\encodingdefault}{\familydefault}{b}{n}%
+  \DeclareMathSymbol{,}{\mathpunct}{punctuation}{`,}%
+  \DeclareMathSymbol{.}{\mathord}{punctuation}{`.}%
+  \DeclareMathSymbol{;}{\mathpunct}{punctuation}{`;}%
+  \setmathrm{Palatino}%
+  \setboldmathrm{Palatino Bold}%
+  \setsansfont{TextBookC}\setmonofont{CMU Typewriter Text}%
+  \RequirePackage{pifont}%
+  \newfontfamily\cmserif{CMU Serif}%
+  \let\oldsffamily\sffamily
+  \renewcommand{\sffamily}{\oldsffamily\everymath{\sfmathsetup}}%
+  \newcommand{\sfmathsetup}{\mathsf}%
+}
+\newcommand*\egor@apply@inter{%
+  \RequirePackage[main=russian]{babel}%
+  \RequirePackage{amsmath}%
+  \RequirePackage{mathspec}%
+  \IfFontExistsTF{Inter}{%
+    \setmainfont{Inter}[BoldFont={Inter Bold},ItalicFont={Inter Italic},BoldItalicFont={Inter Bold Italic}]%
+    \setmathsfont(Digits,Latin){Inter}%
+    \setmathrm{Inter}\setboldmathrm{Inter Bold}%
+    \setsansfont{Inter}%
+  }{%
+    \setmainfont{Inter-Regular.otf}[BoldFont=Inter-Bold.otf,ItalicFont=Inter-Italic.otf,BoldItalicFont=Inter-BoldItalic.otf]%
+    \setmathsfont(Digits,Latin){Inter-Regular.otf}%
+    \setmathrm{Inter-Regular.otf}\setboldmathrm{Inter-Bold.otf}%
+    \setsansfont{Inter-Regular.otf}[BoldFont=Inter-Bold.otf,ItalicFont=Inter-Italic.otf,BoldItalicFont=Inter-BoldItalic.otf]%
+  }%
+  \DeclareSymbolFont{punctuation}{\encodingdefault}{\familydefault}{m}{n}%
+  \SetSymbolFont{punctuation}{bold}{\encodingdefault}{\familydefault}{b}{n}%
+  \DeclareMathSymbol{,}{\mathpunct}{punctuation}{`,}%
+  \DeclareMathSymbol{.}{\mathord}{punctuation}{`.}%
+  \DeclareMathSymbol{;}{\mathpunct}{punctuation}{`;}%
+  \setmonofont{CMU Typewriter Text}%
+  \RequirePackage{pifont}%
+  \newfontfamily\cmserif{CMU Serif}%
+  \let\oldsffamily\sffamily
+  \renewcommand{\sffamily}{\oldsffamily\everymath{\sfmathsetup}}%
+  \newcommand{\sfmathsetup}{\mathsf}%
+}
+% STIX Two Text + STIX Two Math через unicode-math (не mathspec): у STIX
+% полноценный OpenType-математический шрифт, текст и формулы одного рисунка.
+% Имена шрифтов — если STIX Two установлен в систему; иначе файлы OTF
+% (TeX Live stix2-otf или файлы, приложенные к сборке рядом с .tex).
+\newcommand*\egor@apply@stix{%
+  \RequirePackage[main=russian]{babel}%
+  \RequirePackage{amsmath}%
+  \RequirePackage{fontspec}%
+  \RequirePackage[math-style=TeX,bold-style=TeX]{unicode-math}%
+  \IfFontExistsTF{STIX Two Text}{%
+    \setmainfont{STIX Two Text}[Ligatures=TeX]%
+  }{%
+    \setmainfont{STIXTwoText}[
+      Extension=.otf,
+      UprightFont=*-Regular,
+      ItalicFont=*-Italic,
+      BoldFont=*-Bold,
+      BoldItalicFont=*-BoldItalic,
+      Ligatures=TeX]%
+  }%
+  \IfFontExistsTF{STIX Two Math}{%
+    \setmathfont{STIX Two Math}%
+  }{%
+    \setmathfont{STIXTwoMath-Regular.otf}%
+  }%
+  % icomma читает \mathcode запятой в \begin{document}, а unicode-math
+  % задаёт её через \Umathcode — сохраняем настоящий код заранее и
+  % возвращаем после хуков icomma (begindocument/end идёт после них)
+  \Umathcharnumdef\egor@mathcomma=\Umathcodenum`\,\relax
+  \AddToHook{begindocument/end}{\let\mathcomma\egor@mathcomma}%
+  \setsansfont{CMU Sans Serif}\setmonofont{CMU Typewriter Text}%
+  \RequirePackage{pifont}%
+  \newfontfamily\cmserif{CMU Serif}%
+}
+\newcommand*\egor@applyfonts{%
+  \edef\egor@val{\egor@font}%
+  \@ifundefined{egor@apply@\egor@val}{%
+    \PackageError{egor}{Unknown value for font=\egor@font}{Allowed: cm, school, palatino, inter, stix.}%
+  }{%
+    \csname egor@apply@\egor@val\endcsname
+  }%
+}
+\AtEndOfPackage{\egor@applyfonts}
+
+%%---------------------------------------------------------------------------
+%% 5. ПУБЛИЧНЫЕ БУЛИ (совместимость с egormath/mathneo)
+%%---------------------------------------------------------------------------
+\newbool{class}
+\newbool{resh}
+\newbool{ans}
+\AtBeginDocument{%
+  \ifdefstring{\egor@answersmode}{inline}{\booltrue{ans}}{\boolfalse{ans}}%
+  \ifbool{egor@solutions}{\booltrue{resh}}{\boolfalse{resh}}%
+}
+
+%%---------------------------------------------------------------------------
+%% 6. ОСТАЛЬНЫЕ ЗАВИСИМОСТИ
+%%---------------------------------------------------------------------------
+\RequirePackage{amssymb,icomma}
+\RequirePackage{eso-pic}
+\RequirePackage{indentfirst}
+\RequirePackage{lastpage}
+\RequirePackage{ifthen}
+\RequirePackage{longtable,array}
+\RequirePackage{changepage}
+
+\parindent=0cm
+\setlength{\marginparwidth}{3cm}
+\reversemarginpar
+
+\newcounter{count}
+\newcounter{numrubr}
+
+% Знак градуса
+\newcommand{\degr}{^\circ}
+% Полужирный курсив
+\newcommand{\textbit}[1]{\textbf{\textit{#1}}}
+
+% Универсальная обёртка: сдвигает содержимое к левому полю полосы.
+\newenvironment{unindent}
+  {\begin{adjustwidth}{-\@totalleftmargin}{0pt}}
+  {\end{adjustwidth}}
+
+%%%%% Типографика разрывов строк
+\relpenalty=10000
+\binoppenalty=10000
+\emergencystretch=2em
+\tolerance=4000
+\pretolerance=40
+\sloppy
+
+%%---------------------------------------------------------------------------
+%% 7. ЦВЕТА И РАМКИ
+%%---------------------------------------------------------------------------
+\definecolor{dark-color}{HTML}{1d2b64}
+\definecolor{light-color}{HTML}{f8cdda}
+\definecolor{light-gray}{gray}{0.95}
+\definecolor{block-gray}{gray}{0.90}
+
+% ===== Автоуменьшение шрифта до попадания в \textwidth =====
+\newsavebox{\autosizebox}
+\newif\ifautosizedone
+\newcommand{\AutosizeStep}[1]{%
+  \ifautosizedone\relax
+  \else
+    \sbox{\autosizebox}{{#1 \autosize@text}}%
+    \ifdim\wd\autosizebox>\textwidth
+    \else
+      {#1 \autosize@text\par}%
+      \autosizedonetrue
+    \fi
+  \fi
+}
+\newcommand{\autosize}[1]{%
+  \begingroup
+    \def\autosize@text{#1}%
+    \autosizedonefalse
+    \AutosizeStep{\Large}%
+    \AutosizeStep{\large}%
+    \AutosizeStep{\normalsize}%
+    \AutosizeStep{\small}%
+    \AutosizeStep{\footnotesize}%
+    \AutosizeStep{\scriptsize}%
+    \AutosizeStep{\tiny}%
+    \ifautosizedone\else {\tiny \autosize@text\par}\fi
+  \endgroup
+}
+
+% Рамочки для коммента слева и для источника задания
+\newtcbox{\sourcebox}{enhanced, on line, colback=light-gray,boxrule=0pt,boxsep=1pt,size=fbox}
+\newtcbox{\commentbox}{
+    enhanced,
+    on line,
+    colback=white,
+    colframe=black,
+    boxrule=0pt,
+    boxsep=1pt,
+    size=fbox,
+    halign=center,
+    valign=center,
+    fontupper=\sffamily\scriptsize
+}
+
+%%---------------------------------------------------------------------------
+%% 8. КОМПАКТНАЯ МАТЕМАТИКА В КОЛОНКАХ
+%%---------------------------------------------------------------------------
+\newcommand{\columnedTightMathSetup}{%
+  \setlength{\abovedisplayskip}{3pt}%
+  \setlength{\belowdisplayskip}{0pt}%
+  \setlength{\abovedisplayshortskip}{0pt}%
+  \setlength{\belowdisplayshortskip}{0pt}%
+  \setlength{\jot}{2pt}%
+}
+\newcommand{\columnedActivateTightMath}{%
+  \let\colSavedNormalSize\normalsize
+  \def\normalsize{\colSavedNormalSize\columnedTightMathSetup}%
+  \let\colSavedSmall\small
+  \def\small{\colSavedSmall\columnedTightMathSetup}%
+  \let\colSavedFootnotesize\footnotesize
+  \def\footnotesize{\colSavedFootnotesize\columnedTightMathSetup}%
+  \let\colSavedScriptsize\scriptsize
+  \def\scriptsize{\colSavedScriptsize\columnedTightMathSetup}%
+  \let\colSavedTiny\tiny
+  \def\tiny{\colSavedTiny\columnedTightMathSetup}%
+  \let\colSavedLarge\large
+  \def\large{\colSavedLarge\columnedTightMathSetup}%
+  \let\colSavedLargeA\Large
+  \def\Large{\colSavedLargeA\columnedTightMathSetup}%
+  \let\colSavedLargeB\LARGE
+  \def\LARGE{\colSavedLargeB\columnedTightMathSetup}%
+  \let\colSavedHuge\huge
+  \def\huge{\colSavedHuge\columnedTightMathSetup}%
+  \let\colSavedHugeA\Huge
+  \def\Huge{\colSavedHugeA\columnedTightMathSetup}%
+  \normalsize
+}
+\newcommand{\columnedPostDisplay}{\par\nobreak}
+\newcommand{\columnedSetupEverydisplay}{%
+  \everydisplay\expandafter{\the\everydisplay \aftergroup\columnedPostDisplay}%
+}
+
+%%---------------------------------------------------------------------------
+%% 9. \columned И КОМАНДЫ ЗАДАЧ
+%%---------------------------------------------------------------------------
+% При columns=0 четвёртый аргумент \task не печатается. Тем не менее
+% \taskpic внутри него должен сработать: выполняем аргумент в выброшенном
+% боксе, нейтрализуя \item (его опциональную метку всё же раскрываем —
+% там тоже может стоять \taskpic).
+\newsavebox{\egor@harvestbox}
+\newcommand{\egor@harvestpics}[1]{%
+  \ifblank{#1}{}{%
+    \setbox\egor@harvestbox=\vbox{%
+      \everypar{}%
+      \renewcommand\item[1][]{##1}%
+      #1%
+    }%
+  }%
+}
+
+\NewDocumentCommand{\columned}{m +m +m}{%
+  % #1 = число колонок, #2 = текст перед списком, #3 = содержимое списка
+  \begingroup
+  \columnedActivateTightMath
+  \columnedSetupEverydisplay
+  \ifthenelse{\equal{#1}{0}}{%
+    #2%
+    \egor@harvestpics{#3}%
+  }{%
+    \ifthenelse{\equal{#1}{1}}{%
+      #2%
+      \begin{enumerate}[
+        leftmargin=0pt,
+        labelsep=0pt,
+        labelindent=0pt,
+        labelwidth=1.35em,
+        itemindent=!,
+        widest*={9},
+        align=left,
+        ] #3\end{enumerate}%
+    }{%
+      #2%
+      \begin{multicols}{#1}%
+        \begin{enumerate}[
+        leftmargin=0pt,
+        labelsep=0pt,
+        labelindent=0pt,
+        labelwidth=1.35em,
+        itemindent=!,
+        widest*={9},
+        align=left
+        ]
+        \ignorespaces #3\end{enumerate}%
+      \end{multicols}%
+    }%
+  }%
+  \endgroup
+}
+
+% Задание: \task{звёздочки}{колонки}{условие}[подпункты][ответ][решение]
+% В режиме homework (chem) обычные задачи скрываются, показываются \dtask.
+\NewDocumentCommand{\task}{m m +m O{} O{} O{}}{%
+  \ifbool{egor@dz}{}{%
+    \item\stars{#1}%
+         \columned{#2}{#3}{#4}%
+         \ans{#5}\answer{#5}\resh{#6}%
+  }%
+}
+
+% Задание только для домашней работы (аналог \dtask из chem.sty)
+\NewDocumentCommand{\dtask}{m m +m O{} O{} O{}}{%
+  \ifbool{egor@dz}{%
+    \item\stars{#1}%
+         \columned{#2}{#3}{#4}%
+         \ans{#5}\answer{#5}\resh{#6}%
+  }{}%
+}
+
+% Задание с обязательным (всегда видимым) ответом
+\NewDocumentCommand{\taskans}{m m +m O{} O{} O{}}{%
+  \item\stars{#1}%
+       \columned{#2}{#3}{#4}%
+  \par\cfbox{black}{#5}\answer{#5}\resh{#6}%
+}
+
+% Ответ сразу после задачи (виден в режиме answers=inline)
+\NewDocumentCommand{\ans}{m}{%
+  \ifbool{ans}{\ifblank{#1}{}{\par \cfbox{black}{#1}}}{}%
+}
+
+% Решение: в режиме solutions=inline печатается после задачи,
+% в режиме solutions=table копится и печатается в конце документа.
+\NewDocumentCommand{\resh}{m}{%
+  \ifbool{resh}{\ifblank{#1}{}{\par \textit{Решение}. #1}}{}%
+  \ifdefstring{\egor@solutionsmode}{table}{%
+    \ifblank{#1}{}{%
+      \edef\egor@solnum{\arabic{enumi}}%
+      \expandafter\egor@recordsolution\expandafter{\egor@solnum}{#1}%
+    }%
+  }{}%
+}
+
+%%---------------------------------------------------------------------------
+%% 10. КОММЕНТЫ СЛЕВА ОТ ЗАДАЧ
+%%---------------------------------------------------------------------------
+\newcommand{\annot}[1]{%
+    \begin{tikzpicture}[overlay,remember picture]
+        \node[anchor=west, yshift=0.25\baselineskip, text width=\linewidth] (itemtext) {};
+        \node[left=\the\labelwidth of itemtext.west, anchor=east, font=\scshape, align=right, text width=1cm] {\commentbox{#1}};
+    \end{tikzpicture}%
+    }
+\newcommand{\annotnoframe}[1]{%
+    \begin{tikzpicture}[overlay,remember picture]
+        \node[anchor=west, yshift=0.25\baselineskip, text width=\linewidth] (itemtext) {};
+        \node[left=\the\labelwidth of itemtext.west, anchor=east, font=\scshape, align=right, text width=1cm] {#1};
+    \end{tikzpicture}%
+    }
+\newcommand{\complex}{\annotnoframe{\Large $\star$}}
+\newcommand{\home}{\annotnoframe{\includegraphics[height=3mm]{home.jpeg}}}
+\newcommand{\oge}{\annot{ОГЭ}}
+\newcommand{\fipi}{\annot{ФИПИ}}
+\newcommand{\rev}{\annotnoframe{$\circlearrowright$}}
+\newcommand{\starred}{\annotnoframe{\Large $\star$}}
+
+% Источник задания inline
+\newcommand{\source}[1]{%
+\sourcebox{\small{#1}}\:%
+}
+
+%%---------------------------------------------------------------------------
+%% 11. ЗАГОЛОВОК И КОЛОНТИТУЛЫ
+%%---------------------------------------------------------------------------
+\newtcolorbox{bigheadbox}{
+        enhanced,
+        colback=white,
+        colframe=black,
+        boxrule=0.8pt,
+        sharp corners,
+        auto outer arc,
+        left skip=-0.6cm,
+    }
+\newcommand{\globalhead}{}
+
+% Заголовки-продолжения определены всегда; \bighead их перенастраивает.
+\newcommand{\homeworkhead}{%
+    \newpage
+    \begin{center}\Large Домашнее задание\end{center}}
+\newcommand{\anshead}{%
+    \newpage
+    \begin{center}\Large Ответы\end{center}}
+\newcommand{\solhead}{%
+    \newpage
+    \begin{center}\Large Решения\end{center}}
+
+\NewDocumentCommand{\bighead}{m m m O{\vspace{-5mm}}}{%
+   \pagestyle{fancy}%
+   \newpage
+   \thispagestyle{empty}%
+   \setcounter{numrubr}{0}%
+   \setcounter{enumi}{0}%
+   % ВАЖНО: счётчик страниц НЕ сбрасывается (в egormath сбрасывался, из-за
+   % чего колонтитул «2/N» показывал неверное N при наличии домашки/ответов).
+   \noindent
+   % top=1.5cm вместо прежних 2cm, поэтому компенсация -15mm вместо -20mm:
+   % визуальное положение шапки на первой странице не меняется.
+   \vspace{-15mm}%
+   \begin{center}
+   \begin{bigheadbox}
+        \hbox to 1\textwidth { {\small\sffamily #2 \hfill #3} }
+      \vspace{3mm}
+      \hbox to 1\textwidth { {\Large \hfill \autosize{#1} \hfill} }
+      \vspace{2mm}
+      {\begin{center} \sffamily{#4} \end{center}}
+   \end{bigheadbox}
+   \end{center}
+   \title{#1}%
+   \renewcommand{\globalhead}{#2. #1}%
+   \renewcommand{\homeworkhead}{\bighead{#1}{#2}{#3}[Домашнее задание]}%
+   \renewcommand{\anshead}{\bighead{#1}{#2}{#3}[Ответы]}%
+   \renewcommand{\solhead}{\bighead{#1}{#2}{#3}[Решения]}%
+   }
+
+% Закрыть список задач, если он открыт (см. блок 13)
+\newcommand{\egor@closelist}{\ifbool{egor@listopen}{\end{enumerate}}{}}
+
+% Быстрый заголовок для домашки
+\newcommand{\hwork}{\egor@closelist\homeworkhead}
+% ... с открытием списка после
+\newcommand{\hw}{\egor@closelist\homeworkhead\begin{enumerate}}
+
+%%%%% Чёрная рамочка для ответа %%%%%
+\newcommand{\cfbox}[2]{%
+    \colorlet{currentcolor}{.}%
+    {\color{#1}%
+    \fbox{\color{currentcolor}#2}}%
+}
+
+% Колонтитулы: страница 1 — пустая (\bighead ставит \thispagestyle{empty}),
+% страницы 2+ — только номер страницы вверху справа в формате «2/5».
+% Нумерация страниц сквозная по всему документу (в отличие от egormath,
+% \bighead больше не сбрасывает счётчик страниц), поэтому \pageref{LastPage}
+% всегда показывает настоящее число страниц.
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyhead[R]{\cmserif\small\thepage/\pageref{LastPage}}
+\pagenumbering{arabic}
+
+\author{Е.А. Мухин}
+\date{}
+
+%%---------------------------------------------------------------------------
+%% 12. РУБРИКИ И РАМКИ ПРАВИЛ
+%%---------------------------------------------------------------------------
+\newtcolorbox{rubrbox}[1][]{
+    enhanced,
+    sharpish corners,
+    colframe=block-gray,
+    left skip=-0.6cm,
+    colback=block-gray,
+    grow to right by=\dimexpr 1in\relax,
+    rightrule=\dimexpr 1in+0.6cm\relax,
+    grow to left by=\dimexpr 1in\relax,
+    leftrule=\dimexpr 1in-0.6cm\relax,
+    boxsep=0pt,
+    breakable,
+    halign=left,
+    valign=center,
+    top=1mm,
+    bottom=1mm,
+}
+
+\newcommand*\circled[1]{\tikz[baseline=(char.base)]{
+    \node[shape=circle,draw,inner sep=2pt] (char) {#1};}}
+
+\newtcolorbox{memorybox}{
+  enhanced,
+  breakable,
+  width=\linewidth,
+  colback=white,
+  colframe=gray,
+  rightrule=0mm,
+  toprule=0.15mm,
+  bottomrule=0.15mm,
+  rounded corners,
+  left skip=-0.6cm,
+  before skip=0cm,
+  after skip=0cm,
+  size=small,
+  leftrule=4mm,
+  fontupper=\footnotesize,
+  top=1mm,
+  bottom=1mm,
+  left=1.5mm,
+  right=3mm,
+  overlay={
+        \node[font=\Huge,color=white,xshift=2mm] at (frame.west) {!};
+  },
+}
+\newtcolorbox{rulebox}{
+  enhanced,
+  breakable,
+  width=\linewidth,
+  colback=light-gray,
+  colframe=light-gray,
+  rightrule=0mm,
+  sharp corners,
+  left skip=-0.6cm,
+  before skip=0cm,
+  after skip=0cm,
+  size=small,
+  leftrule=4mm,
+  fontupper=\footnotesize,
+  top=1mm,
+  bottom=1mm,
+  left=1.5mm,
+  right=3mm,
+  borderline west={1mm}{0pt}{black},
+}
+\newtcolorbox{ruleboxrubr}{
+  enhanced, breakable,
+  width=\linewidth,
+  fontupper=\footnotesize,
+  colback=white, colframe=white,
+  left skip=-15.649pt,
+  leftrule=15.649pt,
+  borderline west={1mm}{0pt}{gray!40},
+  before skip=2mm,
+  after skip=3mm,
+  top=-1mm,
+  bottom=-1mm,
+  left=0mm,
+  right=3mm,
+}
+\newtcolorbox{ruleboxitem}{
+  enhanced,
+  breakable,
+  width=\linewidth,
+  colback=light-gray,
+  colframe=light-gray,
+  leftrule=\dimexpr\leftmargin\relax,
+  rightrule=0mm,
+  toprule=0mm,
+  bottomrule=0mm,
+  sharp corners,
+  left skip=\dimexpr-\leftmargin\relax,
+  before skip=0.2cm,
+  after skip=0.2cm,
+  fontupper=\footnotesize,
+  top=1mm,
+  bottom=1mm,
+  left=0mm,
+  right=3mm,
+  borderline west={1mm}{0pt}{black},
+}
+\newtcolorbox{lightbox}{
+  enhanced, breakable,
+  width=\linewidth,
+  fontupper=\footnotesize,
+  colback=white, colframe=white,
+  left skip=-15.649pt,
+  leftrule=15.649pt,
+  borderline west={0.3mm}{0pt}{black},
+  before skip=5mm,
+  after skip=5mm,
+  top=-1mm,
+  bottom=-1mm,
+  left=0mm,
+  right=3mm,
+  sharp corners,
+}
+
+\newcommand{\memotext}[1]{%
+\begin{memorybox}
+#1
+\end{memorybox}
+}
+
+\ExplSyntaxOn
+\NewDocumentCommand{\ruletext}{+m}{%
+  \tl_if_blank:nF {#1} {\begin{rulebox}#1\end{rulebox} }%
+}
+\NewDocumentCommand{\ruletextitem}{+m}{%
+  \tl_if_blank:nF {#1} {\begin{ruleboxitem}#1\end{ruleboxitem} }%
+}
+\NewDocumentCommand{\ruletextrubr}{+m}{%
+  \tl_if_blank:nF {#1} {\begin{unindent}\begin{ruleboxrubr}#1\end{ruleboxrubr}\end{unindent}}%
+}
+\NewDocumentCommand{\lighttext}{+m}{%
+  \tl_if_blank:nF {#1} {\begin{unindent}\begin{lightbox}#1\end{lightbox}\end{unindent} }%
+}
+% Обычный текст во всю ширину полосы внутри списка задач: без рамок,
+% нумерацию списка не трогает.
+\NewDocumentCommand{\plaintext}{+m}{%
+  \tl_if_blank:nF {#1} {%
+    \begin{unindent}\vspace{1mm}\noindent #1\par\vspace{1mm}\end{unindent}%
+  }%
+}
+\ExplSyntaxOff
+
+%%---------------------------------------------------------------------------
+%% 13. СПИСКИ ЗАДАЧ: АВТОСТАРТ ЧЕРЕЗ \rubr
+%%---------------------------------------------------------------------------
+% Явный флаг «открыт ли список задач 1-го уровня» — надёжнее, чем проверка
+% счётчика enumi. Флаг обновляется на любом enumerate 1-го уровня,
+% в том числе открытом или закрытом вручную.
+\newbool{egor@listopen}
+\AtBeginEnvironment{enumerate}{\ifnum\@enumdepth=0 \global\booltrue{egor@listopen}\fi}
+\AtEndEnvironment{enumerate}{\ifnum\@enumdepth=1 \global\boolfalse{egor@listopen}\fi}
+
+%%%%% Команда для «рубрик» %%%%%
+% \rubr{Название}[текст-правило]. Если список задач ещё не открыт, открывает
+% его; если открыт — продолжает нумерацию. В режиме homework (chem) рубрика
+% не печатается, но списком управляет по-прежнему.
+\NewDocumentCommand{\rubr}{m O{}}{%
+  \ifbool{egor@dz}{}{%
+    \stepcounter{numrubr}%
+    \vspace{0.4em}%
+  }%
+  \egor@closelist
+  \ifbool{egor@dz}{}{%
+    \begin{rubrbox} \circled{\sf \small \arabic{numrubr}} \; \sf #1 \end{rubrbox}\vspace{-0.4em}%
+  }%
+  \ifnum\value{enumi}=0
+    \begin{enumerate}[before=\ruletextrubr{#2}]
+  \else
+    \begin{enumerate}[resume,before=\ruletextrubr{#2}]
+  \fi
+}
+
+% Совместимость: рубрика с продолжением нумерации (требует открытого списка)
+\newcommand{\rubro}[1]{\egor@closelist\rubr{#1}}
+
+% Дружелюбная проверка в конце документа: незакрытый список закрываем сами,
+% но предупреждаем автора.
+\AtEndDocument{%
+  \ifbool{egor@listopen}{%
+    \PackageWarningNoLine{egor}{The task list was still open at \string\end{document}.
+      I closed it for you, but please add \string\end{enumerate} at the end of
+      the document}%
+    \end{enumerate}%
+  }{}%
+}
+
+%%---------------------------------------------------------------------------
+%% 14. МЕТКИ СПИСКОВ
+%%---------------------------------------------------------------------------
+\newcommand{\cyrilliclabel}[1]{\protect\cyrillicnumeral{#1})}
+\newcommand{\cyrillicnumeral}[1]{%
+  \ifcase#1\or а\or б\or в\or г\or д\or е\or ж\or з\or и\or к\or л\or м\or н\or о\or п\or р\or с\or т\or у\or ф\or х\or ц\or ч\or ш\or щ\or э\or ю\or я\fi
+}
+\newcommand{\latinlabel}[1]{\textbf{\protect\latinumeral{#1}})}
+\newcommand{\latinumeral}[1]{%
+  \ifcase#1\or a\or b\or c\or d\or e\or f\or g\or h\or i\or j\or k\or l\or m\or n\or o\or p\or q\or r\or s\or t\or u\or v\or w\or x\or y\or z\fi
+}
+
+\ifbool{egor@annot}{%
+  \setlist[enumerate,1]{label=\textbf{\arabic*.},leftmargin=5.5mm}%
+}{%
+  % annot=false: номер начинается на 6 мм левее полосы — вровень
+  % с левой границей рамки \bighead (left skip=-0.6cm).
+  \setlist[enumerate,1]{label=\textbf{\arabic*.},align=left,
+    labelindent=-6mm,leftmargin=*}%
+}
+% \egor@subnumeral — буква подпункта по счётчику (для подписей \taskpic и т.п.)
+\ifthenelse{\equal{\egor@labelstyle}{cyrillic}}{%
+  \setlist[enumerate,2]{label=\cyrilliclabel{\arabic*},leftmargin=\the\labelwidth,topsep=0pt}%
+  \let\egor@subnumeral\cyrillicnumeral
+}{%
+  \ifthenelse{\equal{\egor@labelstyle}{latin}}{%
+    \setlist[enumerate,2]{label=\latinlabel{\arabic*},leftmargin=\the\labelwidth,topsep=0pt}%
+    \let\egor@subnumeral\latinumeral
+  }{%
+    \PackageError{egor}{Unknown value for labelstyle=\egor@labelstyle}{Allowed: cyrillic, latin.}%
+  }%
+}
+
+\setlength{\multicolsep}{5pt}
+
+%%---------------------------------------------------------------------------
+%% 15. ЗВЁЗДОЧКИ СЛОЖНОСТИ
+%%---------------------------------------------------------------------------
+\newcommand{\starskip}{\hspace{-1.25mm}}
+\newcommand{\starrating}[1]{%
+  \ifnum#1>0 \ding{72} \else \starskip\ding{73} \fi
+  \ifnum#1>1 \starskip\ding{72} \else \starskip\ding{73} \fi
+  \ifnum#1>2 \starskip\ding{72} \else \starskip\ding{73} \fi
+}
+\newcommand{\stars}[1]{\ifthenelse{\equal{#1}{0}}{}{\annotnoframe{\color{gray}\scriptsize\starrating{#1}}}}
+
+%%---------------------------------------------------------------------------
+%% 16. СИСТЕМА ОТВЕТОВ: ЗАПИСЬ И ТАБЛИЦА
+%%---------------------------------------------------------------------------
+% \answer{текст} запоминает пару «номер задачи + ответ». Пустые ответы не
+% записываются, поэтому нумерация в таблице всегда совпадает с номерами задач.
+\newcounter{rowcount}% (совместимость)
+\newcommand{\egor@answerlist}{}
+\newbool{egor@ansprinted}
+
+\newcommand{\answer}[1]{%
+    \ifblank{#1}{}{%
+      \stepcounter{rowcount}%
+      \edef\egor@ansnum{\arabic{enumi}}%
+      \expandafter\egor@recordanswer\expandafter{\egor@ansnum}{#1}%
+    }%
+}
+\newcommand{\egor@recordanswer}[2]{%
+    \listgadd{\egor@answerlist}{{#1}{#2}}%
+}
+
+% Совместимость со старым именем списка
+\newcommand{\answers}{}
+
+\newcommand{\egor@ansrow}[1]{\egor@ansrowaux#1}
+\newcommand{\egor@ansrowaux}[2]{#1 & #2 \tabularnewline\hline}
+
+% Печать таблицы ответов. В режиме answers=table вызывается автоматически
+% в конце документа; ручной вызов тоже работает (второго раза не будет).
+\newcommand{\printanswers}{%
+    \ifbool{egor@ansprinted}{}{%
+      \global\booltrue{egor@ansprinted}%
+      \newpage
+      \anshead
+      \renewcommand{\arraystretch}{1.5}%
+      \begin{longtable}{|c|p{0.5\linewidth}|}
+        \hline
+        \textbf{№} & \textbf{Ответ} \\
+        \hline
+        \endfirsthead
+        \hline
+        \textbf{№} & \textbf{Ответ} \\
+        \hline
+        \endhead
+        \forlistloop{\egor@ansrow}{\egor@answerlist}%
+      \end{longtable}
+    }%
+}
+
+\AtEndDocument{%
+  \ifdefstring{\egor@answersmode}{table}{%
+    \ifdefempty{\egor@answerlist}{}{\printanswers}%
+  }{}%
+}
+
+%%---------------------------------------------------------------------------
+%% 16б. РЕШЕНИЯ НА ОТДЕЛЬНОЙ СТРАНИЦЕ (solutions=table)
+%%---------------------------------------------------------------------------
+% \resh копит пары «номер задачи + решение»; в конце документа они
+% автоматически печатаются на отдельной странице с шапкой «Решения»
+% простым списком (не таблицей). Ручной вызов \printsolutions тоже работает,
+% повторной печати не будет. При answers=table + solutions=table сначала
+% печатаются ответы, затем решения (порядок хуков \AtEndDocument).
+\newcommand{\egor@solutionlist}{}
+\newbool{egor@solprinted}
+\newcommand{\egor@recordsolution}[2]{%
+    \listgadd{\egor@solutionlist}{{#1}{#2}}%
+}
+\newcommand{\egor@solitem}[1]{\egor@solitemaux#1}
+\newcommand{\egor@solitemaux}[2]{%
+    \par\textbf{Решение задачи #1.} #2\par\vspace{2mm}%
+}
+\newcommand{\printsolutions}{%
+    \ifbool{egor@solprinted}{}{%
+      \global\booltrue{egor@solprinted}%
+      \newpage
+      \solhead
+      \forlistloop{\egor@solitem}{\egor@solutionlist}%
+    }%
+}
+\AtEndDocument{%
+  \ifdefstring{\egor@solutionsmode}{table}{%
+    \ifdefempty{\egor@solutionlist}{}{\printsolutions}%
+  }{}%
+}
+
+%%---------------------------------------------------------------------------
+%% 17. РЕЖИМ diagn (из mathneo): номера задач в рамочках
+%%---------------------------------------------------------------------------
+\ifbool{egor@diagn}{%
+  \AddEnumerateCounter{\tikzMarker}{\Alph}{}%
+  % Рамка строится от базовой линии цифры (text height/depth фиксированы),
+  % поэтому базовая линия номера совпадает с базовой линией текста задачи.
+  \newcommand*\tikzMarker[1]{%
+    \begin{tikzpicture}[baseline=(char.base)]
+      \node[%
+          shape=rectangle,
+          draw,
+          inner xsep=2pt,
+          inner ysep=2.5pt,
+          minimum width=25pt,
+          text height=6.5pt,
+          text depth=0pt,
+          text=black,
+          fill=white,
+          font=\bfseries\small,
+      ] (char) {#1};
+    \end{tikzpicture}%
+  }%
+  \ifbool{egor@annot}{%
+    \setlist[enumerate,1]{%
+      label=\protect\tikzMarker{\arabic*},
+      ref=\arabic*,
+      leftmargin=5.5mm,
+    }%
+  }{%
+    \setlist[enumerate,1]{%
+      label=\protect\tikzMarker{\arabic*},
+      ref=\arabic*,
+      align=left, labelindent=-6mm, leftmargin=*,
+    }%
+  }%
+  % В диагностической работе значки слева (звёздочки) не показываются
+  \AtBeginDocument{\renewcommand{\stars}[1]{}}%
+}{}
+
+%%---------------------------------------------------------------------------
+%% 18. ОПЦИЯ chem: химический инструментарий (из chem.sty)
+%%---------------------------------------------------------------------------
+\ifbool{egor@chem}{%
+  \RequirePackage[version=4]{mhchem}%
+  \RequirePackage{chemfig}%
+  % Абзац с отбивкой
+  \newcommand{\parr}{\par\vspace{2mm}}%
+  % Счётчик реакций в цепочке. По умолчанию номер под стрелкой печатается
+  % без обводки; \numrcircled возвращает кружок (как в chem.sty),
+  % \numrplain — снова без обводки.
+  \newcounter{rnum}%
+  \setcounter{rnum}{1}%
+  \newbool{egor@numrcircle}%
+  \newcommand{\numrcircled}{\booltrue{egor@numrcircle}}%
+  \newcommand{\numrplain}{\boolfalse{egor@numrcircle}}%
+  \newcommand{\egor@numrlabel}{%
+    \ifbool{egor@numrcircle}{\tiny\circled{\arabic{rnum}}}{\scriptsize\arabic{rnum}}}%
+  \newcommand{\numr}{%
+    \ce{$\underset{\egor@numrlabel}{\ce{->}}$}\stepcounter{rnum}%
+  }%
+  % Быстрые пометки слева (как в chem.sty, через механизм \annot)
+  \newcommand{\kolba}{\annotnoframe{\includegraphics[height=5mm]{kolba-round.png}}}%
+  \newcommand{\povt}{\annotnoframe{\circled{\small П}}}%
+  % Рамка «Домашнее задание» (пересобрана на tcolorbox вместо mdframed)
+  \newtcolorbox{dom}[1][Домашнее задание]{%
+    enhanced, breakable,
+    colback=white, colframe=black,
+    boxrule=0.7pt, sharp corners,
+    top=3mm, bottom=2mm, left=2mm, right=2mm,
+    attach boxed title to top center={yshift=-2.2mm},
+    boxed title style={colback=black, rounded corners, boxrule=0pt,
+                       top=1pt, bottom=1pt, left=5pt, right=5pt},
+    coltitle=white, fonttitle=\cmserif\footnotesize,
+    title={#1},
+  }%
+  \newcommand{\domashka}[2][Домашнее задание]{\begin{dom}[#1]#2\end{dom}}%
+}{}
+
+%%---------------------------------------------------------------------------
+%% 19. ГРАФИКИ TIKZ (из tikz-apo.tex, доработано)
+%%---------------------------------------------------------------------------
+% Координатная плоскость по координатам углов:
+%   \xoy[опции tikz][xvar][yvar]{x1}{y1}{x2}{y2}{код}
+% Подписи осей по умолчанию x и y; размер шрифта подписей наследуется от
+% текущего кегля документа (масштаб tikz на текст не влияет).
+\NewDocumentCommand{\xoy}{O{} O{x} O{y} m m m m +m}{%
+\begin{tikzpicture}[#1]
+    % Фон и клетка (клетка на 1 внутрь, фон на 1 наружу)
+    \fill[white, opacity=1] (#4-1,#5-1) rectangle (#6+1,#7+1);
+    \draw[very thin, gray, step=1] (#4+1,#5+1) grid (#6-1,#7-1);
+    % Оси
+    \draw[thick,->, line width=0.5mm] (#4,0) -- (#6,0) node[below, yshift=-2pt] {$#2$};
+    \draw[thick,->, line width=0.5mm] (0,#5) -- (0,#7) node[anchor=west, xshift=3pt, yshift=-3pt] {$#3$};
+    % Единичные отрезки
+    \draw[black, thick] (1,-0.1) -- (1,0.1) node[below, yshift=-2pt, font=\small] {1};
+    \draw[black, thick] (-0.1,1) -- (0.1,1) node[left, xshift=-2pt, font=\small] {1};
+    #8
+\end{tikzpicture}%
+}
+
+% Кусок графика одной строкой (внутри \xoy или tikzpicture):
+% \graphplot[доп. опции]{domain}{формула от \x}
+\NewDocumentCommand{\graphplot}{O{} m m}{%
+  \draw[black, line width=0.8mm, samples=120, domain=#2, #1] plot (\x, {#3});%
+}
+
+% Координатная прямая: \numline[опции tikz][var]{от}{до}{точки}
+% Штрихи и подписи целых чисел расставляются автоматически.
+% Точки: список через запятую; «2» — закрашенная, «2/o» — выколотая.
+% Второй необязательный аргумент — переменная оси (по умолчанию x).
+\NewDocumentCommand{\numline}{O{} O{x} m m +m}{%
+\begin{tikzpicture}[#1]
+    \draw[thick,->, line width=0.5mm] (#3-0.6,0) -- (#4+1,0)
+        node[below, font=\small, yshift=-5pt] {$#2$};
+    \foreach \n in {#3,...,#4}{%
+        \draw[black, thick] (\n,-0.1) -- (\n,0.1)
+            node[below, yshift=-7pt, font=\small] {$\n$};
+    }%
+    \ifblank{#5}{}{%
+      \foreach \p/\t in {#5}{%
+        \ifdefstring{\t}{o}%
+          {\filldraw[fill=white, draw=black, thick] (\p,0) circle (3pt);}%
+          {\filldraw[black] (\p,0) circle (3pt);}%
+      }%
+    }%
+\end{tikzpicture}%
+}
+
+%%---------------------------------------------------------------------------
+%% 20. КАРТИНКИ ВНИЗУ СТРАНИЦЫ: \taskpic + \flushpics
+%%---------------------------------------------------------------------------
+% \taskpic{file}  — внутри условия или подпунктов: запоминает картинку,
+%                   подпись «К задаче N» берётся из номера текущей задачи.
+%                   Работает и в четвёртом аргументе \task при columns=0
+%                   (аргумент не печатается, картинка всё равно копится).
+% \taskpic[7]{file} — номер задачи можно задать вручную.
+% \flushpics      — выпускает накопленные картинки одним блоком внизу
+%                   страницы (float [b]); ширина каждой считается сама.
+% \flushpics[2]   — не больше 2 картинок в ряду (то же глобально: \picsperrow{2}).
+\newcommand{\taskpicname}{К задаче}
+\newcommand{\egor@piclist}{}
+\newcommand{\egor@maxpicsperrow}{0}
+\newcommand{\picsperrow}[1]{\gdef\egor@maxpicsperrow{#1}}
+\newlength{\egor@picsep}
+\setlength{\egor@picsep}{5mm}
+\newlength{\egor@picwidth}
+\newcounter{egorpictotal}
+\newcounter{egorpiccnt}
+\newcounter{egorpicinrow}
+\newcommand{\egor@k}{1}
+
+\NewDocumentCommand{\taskpic}{o m}{%
+  \IfNoValueTF{#1}%
+    {% Внутри подпункта (2-й уровень enumerate) к номеру задачи
+     % добавляется буква подпункта: «К задаче 2б».
+     \ifnum\@enumdepth>1
+       \edef\egor@ansnum{\arabic{enumi}\egor@subnumeral{\value{enumii}}}%
+     \else
+       \edef\egor@ansnum{\arabic{enumi}}%
+     \fi}%
+    {\edef\egor@ansnum{#1}}%
+  \expandafter\egor@addpic\expandafter{\egor@ansnum}{#2}%
+}
+\newcommand{\egor@addpic}[2]{%
+  \listgadd{\egor@piclist}{{#1}{#2}}%
+}
+\newcommand{\egor@countpic}[1]{\stepcounter{egorpictotal}}
+% Картинка не растягивается больше натуральной ширины.
+\newsavebox{\egor@picbox}
+\newcommand{\egor@fitpic}[1]{%
+  \sbox{\egor@picbox}{\includegraphics{#1}}%
+  \ifdim\wd\egor@picbox>\linewidth
+    \includegraphics[width=\linewidth]{#1}%
+  \else
+    \usebox{\egor@picbox}%
+  \fi
+}
+\newcommand{\egor@emitpic}[1]{\egor@emitpicaux#1}
+\newcommand{\egor@emitpicaux}[2]{%
+  \stepcounter{egorpiccnt}%
+  \stepcounter{egorpicinrow}%
+  \begin{minipage}[t]{\egor@picwidth}%
+    \centering
+    {\itshape\small \taskpicname~#1}\\[1.8mm]
+    \egor@fitpic{#2}%
+  \end{minipage}%
+  \ifnum\value{egorpicinrow}<\egor@k\relax
+    \ifnum\value{egorpiccnt}<\value{egorpictotal}\hspace{\egor@picsep}\fi
+  \else
+    \setcounter{egorpicinrow}{0}%
+    \ifnum\value{egorpiccnt}<\value{egorpictotal}\\[3mm]\fi
+  \fi\ignorespaces
+}
+
+\NewDocumentCommand{\flushpics}{O{0}}{%
+  \ifdefempty{\egor@piclist}{}{%
+    \setcounter{egorpictotal}{0}%
+    \forlistloop{\egor@countpic}{\egor@piclist}%
+    \ifnum#1>0
+      \edef\egor@k{#1}%
+    \else
+      \ifnum\egor@maxpicsperrow>0
+        \ifnum\value{egorpictotal}>\egor@maxpicsperrow
+          \edef\egor@k{\egor@maxpicsperrow}%
+        \else
+          \edef\egor@k{\arabic{egorpictotal}}%
+        \fi
+      \else
+        \edef\egor@k{\arabic{egorpictotal}}%
+      \fi
+    \fi
+    % [!b] — игнорируем лимит \bottomfraction, иначе блок из нескольких
+    % картинок легко уезжает на отдельную страницу-вкладку.
+    \begin{figure}[!b]
+      \centering
+      % Небольшой запас (1pt на картинку), чтобы ряд из k картинок,
+      % заполняющий строку впритык, не разваливался из-за округления.
+      \setlength{\egor@picwidth}{\dimexpr(\linewidth - \egor@picsep*\numexpr\egor@k-1\relax)/\egor@k - 1pt\relax}%
+      \setcounter{egorpiccnt}{0}\setcounter{egorpicinrow}{0}%
+      \forlistloop{\egor@emitpic}{\egor@piclist}%
+    \end{figure}%
+    \gdef\egor@piclist{}%
+  }%
+}
+
+% Забытые картинки выпускаем сами в конце документа
+\AtEndDocument{%
+  \ifdefempty{\egor@piclist}{}{%
+    \PackageWarningNoLine{egor}{There were task pictures left unflushed.
+      I emitted them at the end; add \string\flushpics\space where you want
+      them placed}%
+    \flushpics
+  }%
+}
+
+%%---------------------------------------------------------------------------
+%% 21. ПРОЧЕЕ
+%%---------------------------------------------------------------------------
+\newcommand{\showbaselines}{%
+\AddToShipoutPicture{%
+  \begin{tikzpicture}[overlay,remember picture]
+      \foreach \i in {0,...,\the\numexpr\paperheight/\baselineskip\relax} {
+          \draw [blue, ultra thin] ([yshift=-\i*\baselineskip]current page.north west) -- ([yshift=-\i*\baselineskip]current page.north east);
+      }
+  \end{tikzpicture}%
+}%
+}
+
+\endinput

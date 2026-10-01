@@ -40,6 +40,7 @@ GitHub Actions по SSH на Timeweb не работает.
 | `egor.sty`                         | `~/…/LaTEX/egormath/egor.sty`                             | `TEXMFLOCAL/.../egor/egor.sty`      | **Обязательно**                                   |
 | CMU Serif/Sans/Typewriter (`.otf`) | `~/Library/Fonts/cmun*.otf` **или** TeX Live `cm-unicode` | системные шрифты + luaotfload       | **Обязательно** (профиль `font=cm`, дефолт сайта) |
 | SchoolBookC + TextBookC (`.ttf`)   | `~/Library/Fonts/SchoolBookC*.ttf`, `TextBookC*.ttf`      | `/usr/local/share/fonts/egor/`      | Опционально (`font=school` / `font=palatino`)     |
+| STIX Two Text + Math (`.otf`)      | `public_html/worksheets/tex/fonts/STIXTwo*.otf`           | asset каждой сборки (сайт шлёт сам) | Для `font=stix`; `egor.sty` уходит тем же asset из `worksheets/tex/`, на API ничего не нужно (§ 1.2a) |
 | `chem.sty`                         | `LaTEX/egormath/chem.sty`                                 | рядом с `egor.sty`                  | Опционально (опция `[chem]`)                      |
 | TeX Live `beamer`                  | коллекция `collection-latexextra` / пакет `beamer`        | дерево TeX Live на VPS              | **Обязательно для презентаций** (`beamer.cls`)    |
 | `egorbeamer.sty`                   | `public_html/worksheets/tex/egorbeamer.sty`               | asset каждой сборки; опционально TEXMFLOCAL | Сайт шлёт sty сам; на TEXMFLOCAL — чтобы не занимать слот assets |
@@ -158,6 +159,19 @@ fc-list | grep -i 'CMU Serif' | head
 ```
 
 
+
+### 1.2a. Профиль `font=stix` (STIX Two Text + STIX Two Math)
+
+Ставить шрифты на сервер не нужно: при `font=stix` сайт прикладывает к
+сборке пять OTF из `public_html/worksheets/tex/fonts/` (≈2 МБ, лицензия
+SIL OFL — `STIX-OFL.txt` там же) и свой `egor.sty` из
+`public_html/worksheets/tex/` (версия 1.3, 2026/09/30). Профиль собран на
+`fontspec` + `unicode-math` и работает под тем же xelatex. Обновлять
+`egor.sty` на API для этого профиля не требуется; для остальных профилей
+по-прежнему используется копия из TEXMFLOCAL (§ 1.1). Новые версии
+`egor.sty` кладите в обе точки.
+Если на сервере есть пакет TeX Live `stix2-otf`, `egor.sty` найдёт
+шрифты и сам, по тем же именам файлов.
 
 ### 1.3. Шрифты SchoolBookC / TextBookC (опционально)
 
