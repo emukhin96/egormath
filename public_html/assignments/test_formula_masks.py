@@ -1,5 +1,5 @@
 """Контекстная эквивалентность длин, площадей и наборов диагоналей."""
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from contextlib import redirect_stdout
 from io import StringIO
 import json
@@ -261,7 +261,7 @@ class FormulaMaskTests(SimpleTestCase):
         from lark.exceptions import VisitError
         parser, transformer = expressions._lark()
         for target, method, error in (
-            (parser, 'doparse', MemoryError()),
+            (parser.parser, 'parse', MemoryError()),
             (transformer, 'transform', MemoryError()),
             (transformer, 'transform', VisitError('add', None, MemoryError())),
         ):
@@ -275,6 +275,14 @@ class FormulaMaskTests(SimpleTestCase):
                      patch.object(target, method, side_effect=error), redirect_stdout(output):
                     formula_worker.main()
                 self.assertEqual(json.loads(output.getvalue()), {'unavailable': True})
+
+    def test_raw_tree_does_not_change_sympy_parser_transformation(self):
+        from assignments.checks import expressions
+        from sympy.parsing.latex import parse_latex
+        from sympy import Symbol
+        self.assertEqual(parse_latex('x+1', backend='lark'), Symbol('x') + 1)
+        self.assertTrue(expressions._is_tree(expressions.raw_tree('x+1')))
+        self.assertEqual(parse_latex('x+1', backend='lark'), Symbol('x') + 1)
 
     def test_cancellation_cannot_hide_missing_parameter_values(self):
         slot = self.slot('{{expression: a | positive: a}}')
@@ -384,3 +392,61 @@ class FormulaMaskTests(SimpleTestCase):
         self.assertIn('выражения в любом порядке', html)
         self.assertNotIn('positive:', html)
         self.assertNotIn(r'\sqrt{3}', html)
+
+
+class FormulaForkTests(SimpleTestCase):
+    def test_preloaded_process_preserves_equivalence_and_missing_points(self):
+        from assignments.checks import formula_fork
+        cases = (('6a/8', 'ok'), ('0.75a', 'ok'), ('3sqrt(a^2)/4', 'ok'),
+                 ('3a^2/(4a)', 'ok'), ('3a*(a-1)/(4*(a-1))', 'wrong'),
+                 ('3a/2', 'wrong'))
+        for value, expected in cases:
+            with self.subTest(value=value):
+                result = formula_fork.run_worker(json.dumps({
+                    'payload': '3a/4 | positive: a', 'multiple': False,
+                    'mode': 'expression', 'value': value}), 3)
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(json.loads(result.stdout)['status'], expected)
+
+    def test_failed_warmup_is_retried(self):
+        from assignments.checks import formula_fork
+        with patch.object(formula_fork, '_ready', False), \
+                patch.object(formula_fork, '_run_process', side_effect=[
+                    subprocess.CompletedProcess('worker', 0, '{"unavailable":true}'),
+                    subprocess.CompletedProcess('worker', 0, '{"display":"x"}')]) as run:
+            with self.assertRaises(ValueError):
+                formula_fork.warmup()
+            self.assertFalse(formula_fork._ready)
+            formula_fork.warmup()
+            self.assertTrue(formula_fork._ready)
+            self.assertEqual(run.call_count, 2)
+
+    def test_timeout_kills_and_reaps_the_child(self):
+        from assignments.checks import formula_fork
+        context = Mock()
+        receiver, sender, child = Mock(), Mock(), Mock()
+        context.Pipe.return_value = (receiver, sender)
+        context.Process.return_value = child
+        receiver.poll.return_value = False
+        child.is_alive.return_value = True
+        with patch.object(formula_fork.multiprocessing, 'get_context', return_value=context):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                formula_fork._run_process('{}', 0.01)
+        child.kill.assert_called_once()
+        child.join.assert_called_once()
+        child.close.assert_called_once()
+        receiver.close.assert_called_once()
+
+    def test_child_keeps_original_linux_resource_limits(self):
+        from assignments.checks import formula_worker
+        resource = Mock()
+        with patch.object(formula_worker.sys, 'platform', 'linux'), \
+                patch.dict('sys.modules', {'resource': resource}), \
+                patch.object(formula_worker.sys, 'stdin', StringIO('{"payload":"x","multiple":false}')), \
+                patch.object(formulas, '_parse_reference', return_value=(None, 'x')), \
+                redirect_stdout(StringIO()):
+            formula_worker.main()
+        self.assertEqual(resource.setrlimit.call_args_list[0].args,
+                         (resource.RLIMIT_AS, (512 * 1024**2, 512 * 1024**2)))
+        self.assertEqual(resource.setrlimit.call_args_list[1].args,
+                         (resource.RLIMIT_CPU, (2, 3)))
