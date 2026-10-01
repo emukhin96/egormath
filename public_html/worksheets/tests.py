@@ -4,7 +4,7 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.http import HttpResponse
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -257,17 +257,18 @@ class LatexGenerationTests(TestCase):
             'а)~Складываем', tex)
         self.assertNotIn('\\end{minipage}', tex)
 
-    def test_array_bidi_shim(self):
-        # Заглушка после \usepackage{egor}: иначе array в \plaintext
-        # (и tabular/cases) падают на TeX Live 2025 + bidi/xelatex
-        from .latex import ARRAY_BIDI_SHIM
+    def test_preamble_uses_egorweb(self):
+        # Правки egor (заглушка array/bidi, ответы, рисунки) — пакетом
+        # egorweb после \usepackage{egor}, а не вставками в каждый .tex
         worksheet = make_worksheet(self.teacher)
         tex = worksheet_to_tex(worksheet, 'student')
         pos_pkg = tex.index('\\usepackage{egor}')
-        pos_shim = tex.index(ARRAY_BIDI_SHIM)
+        pos_web = tex.index('\\usepackage{egorweb}')
         pos_begin = tex.index('\\begin{document}')
-        self.assertLess(pos_pkg, pos_shim)
-        self.assertLess(pos_shim, pos_begin)
+        self.assertLess(pos_pkg, pos_web)
+        self.assertLess(pos_web, pos_begin)
+        self.assertNotIn('\\makeatletter', tex[:pos_begin])
+        self.assertNotIn('\\ExplSyntaxOn', tex[:pos_begin])
 
     def test_worksheet_variants(self):
         worksheet = make_worksheet(self.teacher)
@@ -516,12 +517,20 @@ class LatexGenerationTests(TestCase):
                 image.image.save('схема.png', ContentFile(buf.getvalue()),
                                  save=True)
                 item = make_item(self.worksheet, task)
-                assets = collect_assets(self.worksheet)
-                hidden = collect_assets(self.worksheet, exclude_ids={item.pk})
+                with override_settings(LATEX_SEND_STY=False):
+                    assets = collect_assets(self.worksheet)
+                    hidden = collect_assets(self.worksheet,
+                                            exclude_ids={item.pk})
+                with override_settings(LATEX_SEND_STY=True):
+                    dev = collect_assets(self.worksheet)
+        # Прод: только картинки — пакеты и шрифты лежат на latex-api
         self.assertEqual(len(assets), 1)
         self.assertEqual(assets[0]['filename'], image.filename)
         self.assertTrue(assets[0]['content_base64'])
         self.assertEqual(hidden, [])
+        # Разработка: локальные egor.sty и egorweb.sty перед картинками
+        self.assertEqual([a['filename'] for a in dev],
+                         ['egor.sty', 'egorweb.sty', image.filename])
 
     def test_header_escaping(self):
         worksheet = Worksheet.objects.create(
@@ -679,71 +688,31 @@ class BeamerGenerationTests(TestCase):
         self.assertNotIn('Задача', tex)
         self.assertIn('\\egortitle', tex)
 
-    def test_collect_beamer_assets_includes_sty(self):
-        from .services import (EGORBEAMER_GRID_STY, EGORBEAMER_STY,
-                               collect_beamer_assets)
-        assets = collect_beamer_assets(self.worksheet)
-        self.assertEqual(assets[0]['filename'], 'egorbeamer.sty')
-        self.assertEqual(assets[1]['filename'], 'egorbeamer-grid.sty')
-        self.assertTrue(assets[0]['content_base64'])
-        self.assertTrue(EGORBEAMER_STY.is_file())
-        self.assertTrue(EGORBEAMER_GRID_STY.is_file())
-
-    def test_collect_beamer_assets_includes_inter_fonts(self):
-        from .services import collect_beamer_assets, tex_wants_inter
-        self.assertTrue(tex_wants_inter(
-            '\\usepackage[theme=light,font=inter,stars]{egorbeamer}'))
-        self.assertFalse(tex_wants_inter(
-            '\\usepackage[font=school]{egorbeamer}'))
-        assets = collect_beamer_assets(
-            self.worksheet,
-            tex='\\usepackage[font=inter]{egorbeamer}')
-        names = [item['filename'] for item in assets]
-        self.assertEqual(names[:2], ['egorbeamer.sty', 'egorbeamer-grid.sty'])
-        self.assertIn('Inter-Regular.otf', names)
-        self.assertIn('Inter-Bold.otf', names)
-
-    def test_collect_beamer_assets_requires_inter_fonts(self):
-        from pathlib import Path
+    @override_settings(LATEX_SEND_STY=True)
+    def test_collect_beamer_assets_sends_sty_in_dev(self):
         from .services import collect_beamer_assets
-        with mock.patch('worksheets.services.INTER_FONT_DIR',
-                        Path('/tmp/egormath-no-inter-fonts')):
-            with self.assertRaises(LatexCompileError) as ctx:
-                collect_beamer_assets(
-                    self.worksheet,
-                    tex='\\usepackage[font=inter]{egorbeamer}')
-        self.assertIn('Inter', str(ctx.exception))
+        assets = collect_beamer_assets(self.worksheet)
+        self.assertEqual([a['filename'] for a in assets],
+                         ['egorbeamer.sty', 'egorbeamer-grid.sty'])
+        self.assertTrue(assets[0]['content_base64'])
 
-    def test_collect_assets_includes_stix_fonts(self):
-        from .services import STIX_FONT_FILES, collect_assets, tex_wants_stix
-        self.assertTrue(tex_wants_stix('\\usepackage[answers=table, font=stix]{egor}'))
-        self.assertFalse(tex_wants_stix('\\usepackage[font=school]{egor}'))
-        self.assertFalse(tex_wants_stix('\\usepackage[font=stix]{egorbeamer}'))
-        self.assertEqual(collect_assets(self.worksheet,
-                                        tex='\\usepackage{egor}'), [])
-        assets = collect_assets(self.worksheet,
-                                tex='\\usepackage[font=stix]{egor}')
-        names = [item['filename'] for item in assets]
-        for name in STIX_FONT_FILES:
-            self.assertIn(name, names)
-        self.assertNotIn('Inter-Regular.otf', names)
-        # Главное для font=stix: egor.sty из репозитория уходит вместе со
-        # шрифтами (иначе на API возьмётся старый sty без опции font=stix)
-        # и занимает слот в лимите assets.
-        from .services import font_asset_count
-        self.assertIn('egor.sty', names)
-        self.assertEqual(font_asset_count(r'\usepackage[font=stix]{egor}'),
-                         len(STIX_FONT_FILES) + 1)
+    @override_settings(LATEX_SEND_STY=False)
+    def test_collect_beamer_assets_without_sty_on_prod(self):
+        from .services import collect_beamer_assets
+        self.assertEqual(collect_beamer_assets(self.worksheet), [])
 
-    def test_collect_assets_requires_stix_fonts(self):
-        from pathlib import Path
-        from .services import collect_assets
-        with mock.patch('worksheets.services.STIX_FONT_DIR',
-                        Path('/tmp/egormath-no-stix-fonts')):
-            with self.assertRaises(LatexCompileError) as ctx:
-                collect_assets(self.worksheet,
-                               tex='\\usepackage[font=stix]{egor}')
-        self.assertIn('STIX', str(ctx.exception))
+    def test_server_tex_files_in_repo(self):
+        # deploy/vps/latex-files.sh раскладывает worksheets/tex/ на latex-api;
+        # egor.sty/egorbeamer.sty ищут шрифты по именам файлов.
+        from .services import BEAMER_STY_FILES, TEX_DIR, WORKSHEET_STY_FILES
+        for name in WORKSHEET_STY_FILES + BEAMER_STY_FILES:
+            self.assertTrue((TEX_DIR / name).is_file(), name)
+        for name in ('Inter-Regular.otf', 'Inter-Bold.otf',
+                     'Inter-Italic.otf', 'Inter-BoldItalic.otf',
+                     'STIXTwoText-Regular.otf', 'STIXTwoText-Italic.otf',
+                     'STIXTwoText-Bold.otf', 'STIXTwoText-BoldItalic.otf',
+                     'STIXTwoMath-Regular.otf'):
+            self.assertTrue((TEX_DIR / 'fonts' / name).is_file(), name)
 
     def test_pdf_options_accept_stix(self):
         from .latex import apply_pdf_options, pdf_options_from_tex
@@ -754,13 +723,16 @@ class BeamerGenerationTests(TestCase):
         self.assertEqual(pdf_options_from_tex(tex)['font'], 'stix')
 
     def test_collect_beamer_assets_rejects_too_many_images(self):
-        from .services import (BEAMER_IMAGE_ASSET_LIMIT, collect_beamer_assets)
-        fake = [{'filename': f'p{i}.png', 'content_base64': 'eA=='}
-                for i in range(BEAMER_IMAGE_ASSET_LIMIT + 1)]
-        with mock.patch('worksheets.services.collect_assets', return_value=fake):
-            with self.assertRaises(LatexCompileError) as ctx:
+        from .services import LATEX_API_ASSET_LIMIT, collect_beamer_assets
+        fake = [object()] * (LATEX_API_ASSET_LIMIT - 1)
+        with mock.patch('worksheets.services._worksheet_images',
+                        return_value=fake):
+            # Без .sty все 20 мест — картинкам (19 влезают, файлы не читаем)
+            with override_settings(LATEX_SEND_STY=True), \
+                    self.assertRaises(LatexCompileError) as ctx:
                 collect_beamer_assets(self.worksheet)
         self.assertIn('картинок', str(ctx.exception))
+        self.assertIn('лимит LaTeX API — 18', str(ctx.exception))
 
     def test_beamer_filename(self):
         self.worksheet.pdf_basename = 'alg8-drobi'
@@ -1389,6 +1361,7 @@ class WorksheetViewTests(TestCase):
             reverse('worksheet_beamer_editor', args=[self.worksheet.pk]))
         self.assertEqual(response.status_code, 404)
 
+    @override_settings(LATEX_SEND_STY=True)
     @mock.patch('worksheets.views.compile_latex',
                 return_value=b'%PDF-1.5 fake')
     def test_beamer_editor_compile(self, mocked):
@@ -1458,8 +1431,8 @@ class WorksheetViewTests(TestCase):
 
     @mock.patch('worksheets.services.compile_latex',
                 return_value=b'%PDF-1.5 fake')
-    def test_student_pdf_with_stix_ships_fonts(self, mocked):
-        """Сохранённый font=stix: шрифты уходят и в кэшируемую сборку."""
+    def test_student_pdf_with_stix(self, mocked):
+        """Сохранённый font=stix попадает и в кэшируемую сборку."""
         from assignments.models import Assignment
         self.worksheet.student_pdf_options = {'font': 'stix'}
         self.worksheet.save(update_fields=['student_pdf_options'])
@@ -1472,36 +1445,11 @@ class WorksheetViewTests(TestCase):
             {'variant': 'student'})
         self.assertEqual(response.status_code, 200)
         self.assertIn('font=stix', mocked.call_args.args[0])
-        names = [a['filename'] for a in mocked.call_args.kwargs['assets']]
-        self.assertIn('STIXTwoMath-Regular.otf', names)
 
-    @mock.patch('worksheets.services.collect_assets', return_value=[])
-    @mock.patch('worksheets.services.compile_latex',
-                return_value=b'%PDF-1.5 fake')
-    def test_student_pdf_stix_falls_back_to_cm_on_asset_limit(
-            self, mocked, _assets):
-        """Картинки добавили после выбора STIX: ученик получает PDF на CM."""
-        from .services import (LATEX_API_ASSET_LIMIT, font_asset_count,
-                               get_worksheet_pdf)
-        self.worksheet.student_pdf_options = {'font': 'stix'}
-        self.worksheet.save(update_fields=['student_pdf_options'])
-        fonts = font_asset_count(r'\usepackage[font=stix]{egor}')
-        fit = LATEX_API_ASSET_LIMIT - fonts
-        with mock.patch('worksheets.services._worksheet_images',
-                        return_value=[object()] * fit):
-            get_worksheet_pdf(self.worksheet, WorksheetPdf.VARIANT_STUDENT)
-        self.assertIn('font=stix', mocked.call_args.args[0])
-        with mock.patch('worksheets.services._worksheet_images',
-                        return_value=[object()] * (fit + 1)):
-            get_worksheet_pdf(self.worksheet, WorksheetPdf.VARIANT_STUDENT)
-        self.assertNotIn('font=stix', mocked.call_args.args[0])
-        self.assertEqual(mocked.call_count, 2)
-        # Опция учителя не теряется: вернётся, когда картинок станет меньше
-        self.worksheet.refresh_from_db()
-        self.assertEqual(self.worksheet.student_pdf_options, {'font': 'stix'})
-
+    @override_settings(LATEX_SEND_STY=False)
     @mock.patch('worksheets.views.compile_latex', return_value=b'%PDF-1.5')
-    def test_pdf_editor_compile_ships_stix_fonts(self, mocked):
+    def test_pdf_editor_compile_stix_without_fonts_in_request(self, mocked):
+        # Шрифты STIX лежат на latex-api — в запросе их нет
         self.login_teacher()
         tex = (r'\documentclass[a5paper,10pt]{article}' '\n'
                r'\usepackage[font=stix]{egor}')
@@ -1509,8 +1457,7 @@ class WorksheetViewTests(TestCase):
             reverse('worksheet_pdf_compile', args=[self.worksheet.pk]),
             {'variant': 'student', 'tex': tex})
         self.assertEqual(response.status_code, 200)
-        names = [a['filename'] for a in mocked.call_args.kwargs['assets']]
-        self.assertIn('STIXTwoText-Regular.otf', names)
+        self.assertEqual(mocked.call_args.kwargs['assets'], [])
         self.worksheet.refresh_from_db()
         self.assertEqual(self.worksheet.student_pdf_options['font'], 'stix')
 

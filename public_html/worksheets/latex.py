@@ -70,111 +70,11 @@ def apply_pdf_options(tex, options):
 
     return EGOR_PACKAGE_RE.sub(replace_package, tex, count=1)
 
-# TeX Live 2025-11 убрал \tbl_save_outer_table_cols: из ядра, а bidi
-# (xelatex, его подтягивает egor) всё ещё вставляет вызов в \@@array.
-# Без заглушки падают array/tabular/cases — в том числе формулы систем
-# в \plaintext после импорта Word/TeX. Определяем команду, только если
-# её нет: на старых ядрах оставляем настоящую реализацию.
-ARRAY_BIDI_SHIM = (
-    '\\ExplSyntaxOn\n'
-    '\\cs_if_exist:NF \\tbl_save_outer_table_cols:\n'
-    '  {\\cs_gset_eq:NN \\tbl_save_outer_table_cols: \\scan_stop:}\n'
-    '\\ExplSyntaxOff'
-)
-
-# egor складывает всю очередь в один figure: сотня чертежей выходит за
-# страницу без Overfull. Разрешаем переносы между рядами, сохраняя подписи.
-BREAKABLE_PICTURES = r'''
-\makeatletter
-\renewcommand{\egor@fitpic}[1]{%
-  \sbox{\egor@picbox}{\includegraphics{#1}}%
-  \ifdim\wd\egor@picbox>\linewidth
-    \includegraphics[width=\linewidth,height=.8\textheight,keepaspectratio]{#1}%
-  \else
-    \ifdim\ht\egor@picbox>.8\textheight
-      \includegraphics[width=\linewidth,height=.8\textheight,keepaspectratio]{#1}%
-    \else\usebox{\egor@picbox}\fi
-  \fi
-}
-\patchcmd{\egor@emitpicaux}{\\[3mm]}{\par\vspace{3mm}\noindent}{}{
-  \PackageError{egormath}{Unsupported egor picture rows}{Update the picture adapter}}
-\NewCommandCopy{\egorOriginalFlushpics}{\flushpics}
-\RenewDocumentCommand{\flushpics}{O{0}}{%
-  \begingroup
-  \renewenvironment{figure}[1][]{\par\noindent\ignorespaces}{\unskip\par}%
-  \egorOriginalFlushpics[#1]%
-  \endgroup
-}
-\makeatother
-'''
-
-
-# Сохраняем обычную сигнатуру task для обратного импорта .tex: меняется
-# только способ печати следующего короткого учительского задания.
-KEEP_SHORT_ANSWER = r'''
-\NewCommandCopy{\egorOriginalTask}{\task}
-\NewDocumentCommand{\egorCompactTask}{m m +m O{} O{} O{}}{%
-  \egorOriginalTask{#1}{0}{%
-    \begin{minipage}[t]{\linewidth}%
-    #3\par\ans{#5}\par\resh{#6}%
-    \end{minipage}\par}%
-  \answer{#5}%
-  \let\task\egorOriginalTask
-}
-\newcommand{\egorKeepAnswer}{\let\task\egorCompactTask}
-'''
-
-
-# Короткий ответ сохраняет естественную ширину; длинный переносится внутри
-# рамки или ячейки таблицы ответов. varwidth набирает содержимое один раз:
-# измерение с последующим повторным набором удваивало счётчики и метки.
-# egor запрещает разрывы внутри формул глобально. В длинном ответе
-# возвращаем стандартные штрафы TeX, чтобы формулы помещались в ячейку.
-WRAPPING_ANSWERS = r'''
-\RequirePackage{varwidth}
-\newlength{\egorMathAnswerWidth}
-\newcommand{\egorMathAnswer}[1]{%
-  \begingroup
-  \setlength{\egorMathAnswerWidth}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}%
-  \begin{varwidth}[t]{\egorMathAnswerWidth}%
-    \raggedright\relpenalty=500\binoppenalty=700 #1%
-  \end{varwidth}%
-  \endgroup
-}
-% Ответ с выносной формулой или окружением занимает ширину рамки/ячейки.
-\newcommand{\egorMathAnswerBlock}[1]{%
-  \begingroup
-  \setlength{\egorMathAnswerWidth}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}%
-  \parbox[t]{\egorMathAnswerWidth}{\raggedright\relpenalty=500\binoppenalty=700 #1}%
-  \endgroup
-}
-% Подпункты не запираем в общую рамку или одну строку longtable:
-% каждая часть получает собственную рамку/строку с тем же номером задачи.
-% Разделяем токены до набора, без раскрытия содержимого ответов.
-\newcommand{\egorAnswerSeparator}{\par}
-\makeatletter
-\NewCommandCopy{\egorOriginalRecordAnswer}{\egor@recordanswer}
-\ExplSyntaxOn
-\seq_new:N \l__egormath_answer_parts_seq
-\RenewDocumentCommand{\ans}{m}{%
-  \ifbool{ans}{%
-    \group_begin:
-    \seq_set_split:Nnn \l__egormath_answer_parts_seq {\egorAnswerSeparator} {#1}
-    \seq_map_inline:Nn \l__egormath_answer_parts_seq
-      {\ifblank{##1}{}{\par\cfbox{black}{##1}}}
-    \group_end:
-  }{}%
-}
-\renewcommand{\egor@recordanswer}[2]{%
-  \group_begin:
-  \seq_set_split:Nnn \l__egormath_answer_parts_seq {\egorAnswerSeparator} {#2}
-  \seq_map_inline:Nn \l__egormath_answer_parts_seq
-    {\egorOriginalRecordAnswer{#1}{##1}}
-  \group_end:
-}
-\ExplSyntaxOff
-\makeatother
-'''
+# Правки egor для сайта (заглушка array/bidi, переносимая очередь рисунков,
+# короткий ответ, переносы в ответах, висячие строки) — в пакете egorweb
+# (worksheets/tex/egorweb.sty). Он лежит на latex-api рядом с egor.sty,
+# поэтому в каждом .tex остаётся одна строка \usepackage{egorweb}.
+WEB_PACKAGE = '\\usepackage{egorweb}'
 
 # Выносная математика и окружения не набираются в LR-боксе \shortstack.
 DISPLAY_ANSWER_RE = re.compile(r'\\\[|\$\$|\\begin\{|\\item\b')
@@ -496,12 +396,7 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
     lines = [
         '\\documentclass[a5paper,10pt]{article}',
         usepackage,
-        ARRAY_BIDI_SHIM,
-        BREAKABLE_PICTURES if has_images else '',
-        KEEP_SHORT_ANSWER,
-        WRAPPING_ANSWERS,
-        # Не оставляем первую или последнюю строку абзаца на другой странице.
-        r'\clubpenalty=10000\widowpenalty=10000',
+        WEB_PACKAGE,
         '',
         '\\begin{document}',
     ]

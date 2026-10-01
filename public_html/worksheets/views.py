@@ -1469,8 +1469,8 @@ def worksheet_pdf(request, pk):
 
 
 # Профили font= пакета egor; в редакторе показываются только включённые
-# в settings.PDF_EDITOR_FONTS (school/palatino требуют подготовки сервера,
-# stix уходит в сборку со своими OTF — см. services.collect_font_assets)
+# в settings.PDF_EDITOR_FONTS (school/palatino требуют подготовки сервера;
+# OTF Inter и STIX Two раскладывает на latex-api deploy/vps/deploy.sh)
 PDF_EDITOR_FONT_LABELS = (
     ('cm', 'Computer Modern'),
     ('school', 'Schoolbook'),
@@ -1591,7 +1591,7 @@ def worksheet_pdf_compile(request, pk):
         request, worksheet, tex,
         doc_id=f'ws{worksheet.pk}-editor',
         filename=worksheet.pdf_filename(variant),
-        collect=lambda: collect_assets(worksheet, tex=tex),
+        collect=lambda: collect_assets(worksheet),
         on_success=remember_student_options)
 
 
@@ -1616,7 +1616,7 @@ def worksheet_beamer_compile(request, pk):
         request, worksheet, tex,
         doc_id=f'ws{worksheet.pk}-beamer',
         filename=worksheet.beamer_filename(),
-        collect=lambda: collect_beamer_assets(worksheet, tex=tex))
+        collect=lambda: collect_beamer_assets(worksheet))
 
 
 @teacher_required

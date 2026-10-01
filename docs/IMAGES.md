@@ -97,7 +97,10 @@
 LaTeX компилируется на удалённом сервере (LuaLaTeX). Файлы картинок
 передаются в запросе как `assets`:
 `worksheets/services.collect_assets(worksheet)` собирает по всем задачам
-листка `{'filename': …, 'content_base64': …}` без дубликатов.
+листка `{'filename': …, 'content_base64': …}` без дубликатов. Лимит API —
+20 файлов; пакеты и шрифты на проде лежат на сервере
+(`deploy/vps/latex-files.sh`) и места не занимают, при разработке
+(`LATEX_SEND_STY`) `.sty` уходят вместе с картинками.
 `\includegraphics` в LuaLaTeX понимает и растровые файлы, и векторный PDF.
 
 ### Импорт

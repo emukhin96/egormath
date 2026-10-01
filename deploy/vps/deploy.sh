@@ -4,8 +4,8 @@
 #   ssh chemolymp-demo '/opt/egormath/deploy/vps/deploy.sh [git-ref]'   (по умолчанию main)
 #
 # fetch → checkout → сборка образа → бэкап → check --deploy → migrate →
-# seed_rubricator → collectstatic → пересоздание контейнеров → сайт в общем
-# Caddy → healthz. По образцу scripts/deploy.sh chemolymp.
+# seed_rubricator → collectstatic → пакеты и шрифты LaTeX в latex-api →
+# пересоздание контейнеров → сайт в общем Caddy → healthz. По образцу scripts/deploy.sh chemolymp.
 ###############################################################################
 set -euo pipefail
 
@@ -51,6 +51,10 @@ echo "==> seed_rubricator"
 $RUN seed_rubricator
 echo "==> collectstatic"
 $RUN collectstatic --noinput
+
+echo "==> LaTeX packages and fonts → latex-api"
+# До перезапуска web: новый код рассчитывает на свежие egor*.sty на сервере.
+"$APP_DIR/deploy/vps/latex-files.sh"
 
 echo "==> Starting services"
 $COMPOSE up -d --remove-orphans
