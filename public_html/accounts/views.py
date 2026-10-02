@@ -184,9 +184,12 @@ def students(request):
         .distinct().order_by(
             'user__last_name', 'user__first_name', 'user__username'))
     # Без фильтра по группе список делится на блоки по группам — в общем
-    # списке иначе трудно найти своих; при выборе группы блок один.
+    # списке иначе трудно найти своих; при выборе группы блок один. Блоки —
+    # по тем же группам, что фильтр (filter_groups): при ?teacher=X у
+    # суперпользователя группа чужого учителя блоком не становится, а
+    # «Без группы» совпадает с фильтром group=ungrouped.
     student_sections = (None if current_group or group_id == 'ungrouped'
-                        else _student_sections(student_profiles, bulk_groups))
+                        else _student_sections(student_profiles, groups))
     teacher_choices = []
     if request.user.is_superuser:
         teacher_choices = (User.objects.filter(
