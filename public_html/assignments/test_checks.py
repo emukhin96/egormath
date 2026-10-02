@@ -115,7 +115,7 @@ class MaskGrammarTests(SimpleTestCase):
 
 
 class MaskCheckTests(SimpleTestCase):
-    def test_proportion_accepts_numeric_expressions_without_relaxing_ratio(self):
+    def test_proportion_accepts_numeric_expressions_without_reversing_ratio(self):
         s = slot('{{proportion: 2:1}}')
         for value in ('1/2:1', r'\frac12:1', '1:2', '4:2',
                       '0,5:1', r'2\sqrt{2}:\sqrt{2}', '{1}:2',
@@ -126,7 +126,80 @@ class MaskCheckTests(SimpleTestCase):
             self.assertEqual(check_slot(s, value), WRONG, value)
         strict = slot('{{ratio: 2:1}}')
         self.assertEqual(check_slot(strict, '1:2'), WRONG)
-        self.assertEqual(check_slot(strict, '1/2:1/4'), WRONG)
+        self.assertEqual(check_slot(strict, '1/2:1/4'), OK)
+
+    def test_ratio_accepts_equivalent_forms_and_preserves_order(self):
+        s = slot('{{ratio: 3:8}}')
+        for value in ('6:16', '6/2:8', r'\frac{3}{2}:4', '1.5:4',
+                      '1,5:4', '(1+2):8', r'3\sqrt2:8\sqrt2',
+                      r'3\pi:8\pi', '-3:-8', r'1\frac12:4'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        for value in ('8:3', '16:6', '8/2:1.5', r'8\sqrt2:3\sqrt2',
+                      '0.375', '3:0', '3:8:1', 'x:x', r'\{3\}:8'):
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        # Маски13.15/13.22: дробная запись и общий иррациональный множитель.
+        for reference, values in (
+                ('3:2', (r'\frac32:1', r'3\sqrt2:2\sqrt2', '1.5:1')),
+                ('1:12', (r'\frac1{12}:1', r'\sqrt2:12\sqrt2'))):
+            for value in values:
+                self.assertEqual(check_slot(slot('{{ratio: '+reference+'}}'), value), OK)
+
+    def test_ratio_is_exact_for_irrational_reference_and_small_scales(self):
+        s = slot(r'{{ratio: \sqrt2:1}}')
+        for value in (r'\sqrt8:2', r'2:\sqrt2'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        for value in (r'(\sqrt2+10^{-10}):1', '1.4142135623730951:1',
+                      r'1:\sqrt2'):
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        tiny = slot('{{ratio: 1:10^{20}}}')
+        self.assertEqual(check_slot(tiny, r'\sqrt2:10^{20}'), WRONG)
+        self.assertEqual(check_slot(tiny, r'2:2*10^{20}'), OK)
+        zero = slot('{{ratio: 0:1}}')
+        self.assertEqual(check_slot(zero, r'(\sqrt2*\sqrt2-2):1'), OK)
+        self.assertEqual(check_slot(zero, r'(\sqrt{2+1/10^{100}}-\sqrt2):1'), WRONG)
+
+    def test_ratio_preserves_definedness_and_computation_limits(self):
+        s = slot('{{ratio: 2:1}}')
+        for value in (r'(2+0*(1/0)):1', r'2:(1+0*\sqrt{-1})',
+                      r'2^{1000000000}:1', r'2^{2^{1000}}:1',
+                      r'2^{0^0}:1', r'2:(\sqrt2*\sqrt2-2)',
+                      r'(2+1/(\sqrt2*\sqrt2-2)):1', '1'*301+':1'):
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        for value in (r'\sqrt[3]{-8}:-1', r'\sqrt{16}:2',
+                      r'(-8)^{1/3}:-1'):
+            self.assertEqual(check_slot(s, value), OK, value)
+
+    def test_ratio_checker_unavailability_does_not_save_a_verdict(self):
+        from unittest.mock import patch
+        from .checks import formulas
+        s = slot('{{ratio: 2:1}}')
+        with patch.object(formulas, 'check',
+                          side_effect=formulas.FormulaUnavailable('занято')) as worker:
+            for value in (r'2\sqrt2:\sqrt2', r'(\sqrt2+10^{-60}):1'):
+                with self.assertRaises(formulas.FormulaUnavailable):
+                    check_slot(s, value)
+            self.assertEqual(worker.call_count, 2)
+
+    def test_ratio_drafting_does_not_raise_for_uncertain_reference(self):
+        from .checks import draft_mask
+        from .checks.ege_policy import ege_draft
+        value = r'(\sqrt2+10^{-60}):1'
+        self.assertEqual(draft_mask(value), '')
+        self.assertEqual(ege_draft(value, '', ['EGE_PROFILE_2027_15']), '')
+        self.assertEqual(draft_mask('6/2:8'), '{{ratio: 6/2:8}}')
+
+    def test_ratio_stops_waiting_after_unavailable_worker_and_keeps_numbers(self):
+        from unittest.mock import patch
+        from .checks import formulas
+        spec = parse_mask('{{ratio: 2:1}}; {{ratio: 3:2}}; {{number: 5}}')
+        with patch.object(formulas, 'check',
+                          side_effect=formulas.FormulaUnavailable('занято')) as worker:
+            with self.assertRaises(formulas.FormulaUnavailable) as failure:
+                check_mask(spec, {'s1': r'2\sqrt2:\sqrt2',
+                                  's2': r'3\sqrt2:2\sqrt2', 's3': '5'})
+            worker.assert_called_once()
+        self.assertEqual(failure.exception.slot_checks,
+                         {'s1': UNKNOWN, 's2': UNKNOWN, 's3': OK})
 
     def test_proportion_preserves_definedness_and_limits_computation(self):
         s = slot('{{proportion: 2:1}}')

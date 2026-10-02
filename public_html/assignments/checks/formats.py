@@ -17,13 +17,8 @@ def decimal(text):
 
 
 def ratio(text):
-    parts = text.split(':')
-    if len(parts) != 2:
-        return None
-    a, b = (decimal(p.strip()) for p in parts)
-    if a is None or b is None or b == 0:
-        return None
-    return a / b
+    """Числовые выражения в обеих частях; порядок проверяет слот."""
+    return proportion(text)
 
 
 def proportion(text):
@@ -53,7 +48,7 @@ def proportion(text):
     return result
 
 
-def check_proportion_exact(value, reference):
+def check_ratio_exact(value, reference, *, allow_reverse=False):
     """Пограничная арифметика проверяется только в ограниченном процессе."""
     from ..check_answer import OK, UNKNOWN, WRONG
     from . import formulas, numeric
@@ -71,8 +66,8 @@ def check_proportion_exact(value, reference):
         expected = [numeric.worker_text(part) for part in expected]
         spec, _ = formulas.parse_reference(quotient(expected))
         direct = formulas.check(quotient(parts), spec)
-        if direct == OK:
-            return OK
+        if direct == OK or not allow_reverse:
+            return direct
         # Перестановка не должна узаконить исходное деление на ноль.
         reverse_text = quotient(parts[::-1]) + '+0/(' + parts[1] + ')'
         reverse = formulas.check(reverse_text, spec)
@@ -82,6 +77,11 @@ def check_proportion_exact(value, reference):
         raise
     except ValueError:
         return UNKNOWN
+
+
+def check_proportion_exact(value, reference):
+    """Точная проверка отношения, допускающего перестановку частей."""
+    return check_ratio_exact(value, reference, allow_reverse=True)
 
 
 def oge_kind(codes):
