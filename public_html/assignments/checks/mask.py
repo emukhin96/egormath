@@ -67,7 +67,7 @@ PRESETS = {
 HELP = (
     ('{{digits: 234}}', 'только цифры в точном порядке, без пробелов; 234,00 и 468/2 не принимаются'),
     ('{{decimal: -0,5}}', 'целое или десятичное число с запятой; дроби и выражения не принимаются'),
-    ('{{ratio: 1:2}}', 'отношение: 2:4 и 8:16 верны; 2:1 и 0,5 неверны'),
+    ('{{ratio: 1:2}}', 'отношение: 2:4, 1/2:1 и √2:2√2 верны; 2:1 и 0,5 неверны'),
     ('{{proportion: 1:2}}', 'отношение с перестановкой: 1:2, 2:1 и 4:2 верны; 0,5 неверно'),
     ('{{number: 10}}', 'число; принимается любая численно равная запись '
                        '(2,5 / 5/2 / \\frac{5}{2}); допуск — {{number: 3,14 ~ 0,01}}'),
@@ -474,9 +474,18 @@ def check_slot(slot, value):
             return WRONG
         return OK if equal else WRONG
     if kind == RATIO:
-        student = formats.ratio(value)
-        equal = student is not None and student == slot.data
-        return OK if equal else WRONG
+        from fractions import Fraction
+        from . import numeric
+        try:
+            student = formats.ratio(value)
+        except numeric.Uncertain:
+            return formats.check_ratio_exact(value, slot.reference)
+        if student is None:
+            return WRONG
+        if isinstance(student, Fraction) and isinstance(slot.data, Fraction):
+            return OK if student == slot.data else WRONG
+        # При корнях и π приближение не доказывает точное равенство.
+        return formats.check_ratio_exact(value, slot.reference)
     if kind == CHOICE:
         if _compact(value).replace('ё', 'е') == _compact(slot.correct).replace('ё', 'е'):
             return OK

@@ -27,8 +27,8 @@ class StrictFormatsTests(SimpleTestCase):
         self.check_values('{{decimal: 234}}', ['234', '234,00'], ['468/2'])
 
     def test_ratio_order_and_scaling(self):
-        self.check_values('{{ratio: 1:2}}', ['1:2', '2:4', '8:16', '1,5 : 3', '-1:-2'],
-                          ['2:1', '0,5', '1/2', '1:0', '0:0', '1:2:3', '1:2+0'])
+        self.check_values('{{ratio: 1:2}}', ['1:2', '2:4', '8:16', '1,5 : 3', '-1:-2', '1:2+0'],
+                          ['2:1', '0,5', '1/2', '1:0', '0:0', '1:2:3', '1:3+0'])
         self.check_values('{{proportion: 1:2}}', ['1:2', '2:1', '8:16', '16:8'],
                           ['0,5', '2', '1:3', '1:0', '0:0'])
         self.check_values('{{ratio: 0:2}}', ['0:3'], ['1:0', '0'])
