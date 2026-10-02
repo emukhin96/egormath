@@ -235,19 +235,7 @@ def check(value, reference, multiple=False):
 
 
 def _prepare(text):
-    # Вставленный текст sqrt(...) означает корень, а не произведение s*q*r*t.
-    # Обходим изнутри наружу, сохраняя вложенные скобки без eval/sympify.
-    while matches := list(re.finditer(r'(?<![A-Za-z\\])sqrt\s*\(', text)):
-        match = matches[-1]
-        depth = 1
-        end = match.end()
-        while end < len(text) and depth:
-            depth += (text[end] == '(') - (text[end] == ')')
-            end += 1
-        if depth:
-            break
-        text = (text[:match.start()] + r'\sqrt{' + text[match.end():end-1]
-                + '}' + text[end:])
+    text = expressions.normalize_roots(text)
     # Степень переменной и следующая функция — отдельные множители.
     # В sin² x степень относится к функции, умножение туда не вставляем.
     functions = r'(?:sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|arccot|arcsec|arccsc|sinh|cosh|tanh|asinh|acosh|atanh)'

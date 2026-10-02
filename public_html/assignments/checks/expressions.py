@@ -57,7 +57,7 @@ def _closes_script(text, close_idx):
 
 
 def _insert_cdot_after_group(text):
-    """``}x`` / ``}(`` → ``}\\cdot ``, кроме индексов и степеней."""
+    """``}x`` / ``}2`` / ``}(`` → ``}\\cdot ``, кроме индексов и степеней."""
     out = []
     i = 0
     n = len(text)
@@ -66,7 +66,7 @@ def _insert_cdot_after_group(text):
             j = i + 1
             while j < n and text[j].isspace():
                 j += 1
-            if (j < n and (text[j] == '(' or text[j].isalpha())
+            if (j < n and (text[j] == '(' or text[j].isalnum())
                     and not _closes_script(text, i)):
                 out.append('}\\cdot ')
                 i = j
@@ -76,9 +76,28 @@ def _insert_cdot_after_group(text):
     return ''.join(out)
 
 
+def normalize_roots(text):
+    """Корни sqrt(...) и односимвольные аргументы LaTeX без смены смысла."""
+    if len(text) > MAX_EXPR_LEN:
+        return text
+    # Вложенные sqrt разбираем изнутри; никакой пользовательский код не исполняется.
+    while matches := list(re.finditer(r'(?<![A-Za-z\\])sqrt\s*\(', text)):
+        match = matches[-1]
+        depth, end = 1, match.end()
+        while end < len(text) and depth:
+            depth += (text[end] == '(') - (text[end] == ')')
+            end += 1
+        if depth:
+            break
+        text = (text[:match.start()] + r'\sqrt{' + text[match.end():end-1]
+                + '}' + text[end:])
+    # \sqrt12 означает sqrt(1)*2, а sqrt(12) — корень из двенадцати.
+    return re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text)
+
+
 def prepare(text):
     """Нормализация школьной записи + явное умножение перед скобкой."""
-    text = normalize(text)
+    text = normalize_roots(normalize(text))
     text = _insert_cdot_after_group(text)
     for rx in _IMPLICIT_MUL_RES:
         text = rx.sub(r'\\cdot ', text)

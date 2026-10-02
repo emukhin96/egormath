@@ -63,6 +63,15 @@ def numeric_value(text):
         node = pending.pop()
         if expressions._is_tree(node):
             pending.extend(node.children)
+            # Сокращение 0*sqrt(-1) не устраняет недопустимый вещественный корень.
+            # Проверяем каждый исходный корень до вычисления всего выражения.
+            if node.data == 'square_root':
+                root = expressions.evaluate(expressions.resolve(node))
+                if marker and root is not None:
+                    root = root.subs(Symbol(marker), pi)
+                if (root is None or root.is_real is not True
+                        or root.is_finite is not True):
+                    return None
         elif expressions._is_symbol_token(node) and str(node) != marker:
             return None
     expr = expressions.evaluate(expressions.resolve(tree))
