@@ -92,24 +92,25 @@
   <div class="catalog-table-wrap"><table class="list table-stack">
     <thead><tr>
       <th class="col-select"><input type="checkbox" data-bulk-all="students-bulk-form" title="Выбрать всех учеников"></th>
-      <th>Ученик</th><th>Класс</th><th>Группы</th><th>Логин</th><th></th>
+      <th>Ученик</th><th>Класс</th><th>{% if student_sections %}Другие группы{% else %}Группы{% endif %}</th><th>Логин</th><th></th>
     </tr></thead>
-    <tbody>
-    {% for profile in student_profiles %}
-    <tr>
-      <td class="col-select"><input type="checkbox" class="row-select" name="ids" value="{{ profile.user_id }}" form="students-bulk-form" title="Выбрать ученика"></td>
-      <td class="stack-primary"><a href="{% url 'progress_overview' %}?student={{ profile.user_id }}">{{ profile.user.get_full_name|default:profile.user.username }}</a></td>
-      <td data-label="Класс">{{ profile.grade|default:'—' }}</td>
-      <td data-label="Группы">{% for group in profile.user.visible_groups %}{{ group.name }}{% if request.user.is_superuser %} <span class="muted">({{ group.teacher.get_full_name|default:group.teacher.username }})</span>{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
-      <td class="mono" data-label="Логин">{{ profile.user.username }}</td>
-      <td class="row-actions">
-        <a class="btn btn-small btn-secondary" href="{% url 'student_edit' profile.user_id %}">Изменить</a>
-        <button type="button" class="btn btn-small btn-secondary" data-dialog-open="reset-password-{{ profile.user_id }}">Сбросить пароль</button>
-
-      </td>
-    </tr>
-    {% endfor %}
+    {% if student_sections %}
+    {% for section in student_sections %}
+    <tbody class="student-group">
+      {# Заголовок группы — ячейка, а не th: в сложенной таблице строки с th скрываются #}
+      <tr class="student-group-head"><td colspan="6" class="stack-primary">
+        <span class="student-group-title">{% if section.group %}{{ section.group.name }}{% if request.user.is_superuser %} <span class="muted">— {{ section.group.teacher.get_full_name|default:section.group.teacher.username }}</span>{% endif %}{% else %}Без группы{% endif %}</span>
+        <span class="muted">· {{ section.profiles|length }}</span>
+        {% if section.group %}<span class="student-group-links"><a href="?group={{ section.group.pk }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if teacher_filter %}&amp;teacher={{ teacher_filter }}{% endif %}">только эта группа</a> · <a href="{% url 'progress_overview' %}?group={{ section.group.pk }}">прогресс</a></span>{% endif %}
+      </td></tr>
+      {% for profile, row_groups in section.rows %}{% include 'accounts/_student_row.html' %}{% endfor %}
     </tbody>
+    {% endfor %}
+    {% else %}
+    <tbody>
+    {% for profile in student_profiles %}{% include 'accounts/_student_row.html' with row_groups=profile.user.visible_groups %}{% endfor %}
+    </tbody>
+    {% endif %}
   </table></div>
   {% for profile in student_profiles %}
         <dialog class="dialog problem-dialog" id="reset-password-{{ profile.user_id }}" aria-labelledby="reset-password-title-{{ profile.user_id }}">
@@ -171,5 +172,5 @@
   <p class="helptext">Ученик может состоять в нескольких группах.</p>
 </div>
 
-<script defer src="{% static 'js/bulk.js' %}?v=3"></script>
+<script defer src="{% static 'js/bulk.js' %}?v=4"></script>
 {% endblock %}

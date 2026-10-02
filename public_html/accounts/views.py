@@ -183,6 +183,13 @@ def students(request):
         to_attr='visible_groups'))
         .distinct().order_by(
             'user__last_name', 'user__first_name', 'user__username'))
+    # Без фильтра по группе список делится на блоки по группам — в общем
+    # списке иначе трудно найти своих; при выборе группы блок один. Блоки —
+    # по тем же группам, что фильтр (filter_groups): при ?teacher=X у
+    # суперпользователя группа чужого учителя блоком не становится, а
+    # «Без группы» совпадает с фильтром group=ungrouped.
+    student_sections = (None if current_group or group_id == 'ungrouped'
+                        else _student_sections(student_profiles, groups))
     teacher_choices = []
     if request.user.is_superuser:
         teacher_choices = (User.objects.filter(
@@ -192,6 +199,7 @@ def students(request):
         'form': form,
         'group_form': group_form,
         'student_profiles': student_profiles,
+        'student_sections': student_sections,
         'groups': groups,
         'bulk_groups': bulk_groups,
         'current_group': current_group,
@@ -201,6 +209,36 @@ def students(request):
         'teacher_choices': teacher_choices,
         'new_credentials': new_credentials,
     })
+
+
+def _student_sections(profiles, groups):
+    """Ученики блоками по группам в порядке ``groups``, «без группы» — последним.
+
+    Ученик из нескольких групп виден в каждой; ``rows`` — пары (профиль,
+    другие его группы), группа блока в строке не повторяется. Если ни у кого
+    нет группы — ``None``, список выводится одной таблицей.
+    """
+    sections = {group.pk: {'group': group, 'profiles': []} for group in groups}
+    ungrouped = []
+    for profile in profiles:
+        own = [group for group in profile.user.visible_groups
+               if group.pk in sections]
+        for group in own:
+            sections[group.pk]['profiles'].append(profile)
+        if not own:
+            ungrouped.append(profile)
+    result = [section for section in sections.values() if section['profiles']]
+    if not result:
+        return None
+    for section in result:
+        section['rows'] = [
+            (profile, [g for g in profile.user.visible_groups
+                       if g.pk != section['group'].pk])
+            for profile in section['profiles']]
+    if ungrouped:
+        result.append({'group': None, 'profiles': ungrouped,
+                       'rows': [(profile, []) for profile in ungrouped]})
+    return result
 
 
 def _students_redirect(data):

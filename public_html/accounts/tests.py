@@ -287,6 +287,42 @@ class StudentGroupTests(TestCase):
             })
         self.assertNotIn(self.student, group.students.all())
 
+    def test_list_is_split_by_groups(self):
+        # Без фильтра — блоки по группам; ученик из двух групп в обеих,
+        # в строке — только другая его группа; без группы — последним блоком.
+        group_a = StudentGroup.objects.create(teacher=self.teacher, name='8А')
+        group_b = StudentGroup.objects.create(teacher=self.teacher, name='8Б')
+        other = User.objects.create_user(
+            username='student2', password='pass12345',
+            first_name='Вася', last_name='Другов')
+        Profile.objects.create(user=other, role=Profile.ROLE_STUDENT,
+                               teacher=self.teacher)
+        lonely = User.objects.create_user(
+            username='student3', password='pass12345',
+            first_name='Оля', last_name='Одинокова')
+        Profile.objects.create(user=lonely, role=Profile.ROLE_STUDENT,
+                               teacher=self.teacher)
+        group_a.students.add(self.student, other)
+        group_b.students.add(self.student)
+        response = self.client.get(reverse('students'))
+        sections = response.context['student_sections']
+        self.assertEqual(
+            [(s['group'], [p.user for p, _ in s['rows']]) for s in sections],
+            [(group_a, [other, self.student]), (group_b, [self.student]),
+             (None, [lonely])])
+        self.assertEqual(dict((p.user, groups) for p, groups in sections[0]['rows']),
+                         {other: [], self.student: [group_b]})
+        self.assertContains(response, 'class="student-group-head"', 3)
+        self.assertContains(response, 'Без группы</span>')
+        # Счётчик и диалоги сброса пароля — по разным ученикам, без повторов.
+        self.assertContains(response, 'id="reset-password-%d"' % self.student.pk, 1)
+
+    def test_list_without_groups_is_flat(self):
+        response = self.client.get(reverse('students'))
+        self.assertIsNone(response.context['student_sections'])
+        self.assertNotContains(response, 'student-group-head')
+        self.assertContains(response, 'Ученик')
+
     def test_filter_by_group(self):
         group = StudentGroup.objects.create(teacher=self.teacher, name='8А')
         other = User.objects.create_user(
@@ -373,6 +409,39 @@ class StudentGroupTests(TestCase):
             'target_group': foreign_group.pk,
         })
         self.assertFalse(foreign_group.students.exists())
+
+    def test_superuser_teacher_filter_splits_by_that_teacher_groups_only(self):
+        # Ученик учителя X состоит в группе учителя Y: при ?teacher=X блока
+        # группы Y нет, ученик — «без группы», как и в фильтре group=ungrouped.
+        other_teacher = User.objects.create_user(
+            username='teacher2', password='pass12345',
+            first_name='Мария', last_name='Учитель')
+        Profile.objects.create(user=other_teacher, role=Profile.ROLE_TEACHER)
+        own_group = StudentGroup.objects.create(teacher=self.teacher, name='8А')
+        foreign_group = StudentGroup.objects.create(teacher=other_teacher, name='Чужая')
+        foreign_group.students.add(self.student)
+        classmate = User.objects.create_user(
+            username='student2', password='pass12345',
+            first_name='Вася', last_name='Другов')
+        Profile.objects.create(user=classmate, role=Profile.ROLE_STUDENT,
+                               teacher=self.teacher)
+        own_group.students.add(classmate)
+        User.objects.create_superuser('admin', 'admin@example.com', 'pass12345')
+        self.client.login(username='admin', password='pass12345')
+        response = self.client.get(reverse('students'), {'teacher': self.teacher.pk})
+        sections = response.context['student_sections']
+        self.assertEqual(
+            [(s['group'], [p.user for p, _ in s['rows']]) for s in sections],
+            [(own_group, [classmate]), (None, [self.student])])
+        # Чужая группа видна только как «другие группы» в строке, не блоком
+        self.assertNotContains(response, '?group=%d&amp;teacher=' % foreign_group.pk)
+        ungrouped = self.client.get(
+            reverse('students'), {'teacher': self.teacher.pk, 'group': 'ungrouped'})
+        self.assertEqual([p.user for p in ungrouped.context['student_profiles']],
+                         [self.student])
+        # Без фильтра по учителю чужая группа — обычный блок
+        response = self.client.get(reverse('students'))
+        self.assertIn(foreign_group, [s['group'] for s in response.context['student_sections']])
 
     def test_superuser_controls_foreign_groups(self):
         other_teacher = User.objects.create_user(

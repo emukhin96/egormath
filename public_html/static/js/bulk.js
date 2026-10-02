@@ -5,7 +5,11 @@
    переводит скрытое поле selection_scope в filtered, [data-bulk-clear]
    снимает выделение. Обработчики делегированы, поэтому строки,
    подгруженные живым поиском, работают без повторной инициализации;
-   EgorBulk.init() пересчитывает панели после подмены результатов. */
+   EgorBulk.init() пересчитывает панели после подмены результатов.
+   Одна запись может стоять в нескольких строках (ученик в блоках разных
+   групп): копии чекбокса с тем же явным value отмечаются вместе, а
+   «Выбрано» считает разные значения. Чекбокс без атрибута value (строки
+   импорта .tex) — отдельная запись: у всех таких value «on». */
 (function () {
   'use strict';
 
@@ -28,12 +32,22 @@
     };
   }
 
+  function distinct(boxes) {
+    var seen = {};
+    var single = 0;
+    boxes.forEach(function (b) {
+      if (b.hasAttribute('value')) seen[b.getAttribute('value')] = true;
+      else single += 1;
+    });
+    return Object.keys(seen).length + single;
+  }
+
   function refresh(form) {
     var boxes = boxesFor(form);
     var c = controls(form);
     var checked = boxes.filter(function (b) { return b.checked; });
     var filtered = !!(c.scope && c.scope.value === 'filtered' && c.filteredButton);
-    var total = filtered ? Number(c.filteredButton.dataset.filteredCount) : checked.length;
+    var total = filtered ? Number(c.filteredButton.dataset.filteredCount) : distinct(checked);
     form.hidden = total === 0;
     var count = form.querySelector('[data-bulk-count]');
     if (count) count.textContent = 'Выбрано: ' + total + (filtered ? ' (все найденные)' : '');
@@ -60,6 +74,11 @@
     if (box.matches('input.row-select[form]')) {
       var form = document.getElementById(box.getAttribute('form'));
       if (!form) return;
+      if (box.hasAttribute('value')) {
+        boxesFor(form).forEach(function (b) {
+          if (b.getAttribute('value') === box.getAttribute('value')) b.checked = box.checked;
+        });
+      }
       setScope(form, 'page');
       refresh(form);
     } else if (box.matches('input[data-bulk-all]')) {
