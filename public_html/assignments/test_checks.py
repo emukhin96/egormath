@@ -3,7 +3,7 @@ from fractions import Fraction
 
 from django.test import SimpleTestCase, TestCase
 
-from .check_answer import OK, UNKNOWN, WRONG, check_answer
+from .check_answer import OK, UNKNOWN, WRONG, check_answer, parse_number
 from .checks import (Slot, check_mask, check_slot, collect_values, filled_text,
                      parse_mask, reference_text)
 from .checks import expressions, sets
@@ -218,6 +218,28 @@ class MaskCheckTests(SimpleTestCase):
         s = slot('{{number: 3,14 ~ 0,01}}')
         self.assertEqual(check_slot(s, '3,14159'), OK)
         self.assertEqual(check_slot(s, '3,1'), WRONG)
+
+    def test_number_accepts_signed_denominators_exactly(self):
+        # Положительное отношение может быть записано двумя отрицательными числами.
+        positive = slot('{{number: 2/5}}')
+        for value in ('-2/-5', '2/+5', r'\frac{-2}{-5}', r'\frac-2-5',
+                      r'-\frac{2}{-5}', r'\frac{2}{+5}'):
+            with self.subTest(value=value):
+                self.assertEqual(parse_number(value), Fraction(2, 5))
+                self.assertEqual(check_slot(positive, value), OK)
+        negative = slot('{{number: -2/5}}')
+        for value in ('2/-5', r'\frac{2}{-5}', r'-\frac{-2}{-5}'):
+            with self.subTest(value=value):
+                self.assertEqual(parse_number(value), Fraction(-2, 5))
+                self.assertEqual(check_slot(negative, value), OK)
+                self.assertEqual(check_slot(positive, value), WRONG)
+        for value in ('2/-0', '2/+0', r'\frac{2}{-0}', r'\frac{2}{+0}'):
+            with self.subTest(value=value):
+                self.assertIsNone(parse_number(value))
+                self.assertNotEqual(check_slot(positive, value), OK)
+        large = '-20000000000000000000000000000000000000002/-5'
+        self.assertEqual(parse_number(large), Fraction(20000000000000000000000000000000000000002, 5))
+        self.assertEqual(sets.numeric_value(large), parse_number(large))
 
     def test_pair(self):
         s = slot('{{pair: (2,5; -3); (5; -6)}}')

@@ -41,9 +41,9 @@ _RELATIONS = {'leqslant': '<=', 'geqslant': '>=', 'leq': '<=', 'le': '<=', 'geq'
               'neq': '!=', 'ne': '!='}
 _VAR_EQ_RE = re.compile(r'^[a-zA-Zа-яА-Я](?:_\{?\d+\}?)?\s*=\s*(.+)$')
 _NUMBER_RE = re.compile(r'^[+-]?\d+(?:\.\d+)?$')
-_SIMPLE_FRAC_RE = re.compile(r'^([+-])?\s*(\d+)\s*/\s*(\d+)$')
+_SIMPLE_FRAC_RE = re.compile(r'^([+-])?\s*(\d+)\s*/\s*([+-]?\d+)$')
 _TEX_FRAC_RE = re.compile(
-    r'^([+-])?\s*\\frac\s*(?:\{([+-]?\d+)\}|([+-]?\d))\s*(?:\{(\d+)\}|(\d))$')
+    r'^([+-])?\s*\\frac\s*(?:\{([+-]?\d+)\}|([+-]?\d))\s*(?:\{([+-]?\d+)\}|([+-]?\d))$')
 _MIXED_FRAC_RE = re.compile(r'^([+-])?(\d+)\s*\\frac\{(\d+)\}\{(\d+)\}$')
 _INTERVAL_RE = re.compile(r'^([(\[])\s*([^;]+?)\s*;\s*([^;]+?)\s*([)\]])$')
 _PM_RE = re.compile(r'^\\pm\s*(.+)$')
