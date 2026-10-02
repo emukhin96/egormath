@@ -16,8 +16,10 @@ def decimal(text):
     return Fraction(text.replace(',', '.'))
 
 
-def ratio(text):
+def ratio(text, *, allow_quotient=False):
     """Числовые выражения в обеих частях; порядок проверяет слот."""
+    if allow_quotient and ':' not in text:
+        text += ':1'
     return proportion(text)
 
 
@@ -48,10 +50,12 @@ def proportion(text):
     return result
 
 
-def check_ratio_exact(value, reference, *, allow_reverse=False):
+def check_ratio_exact(value, reference, *, allow_reverse=False, allow_quotient=False):
     """Пограничная арифметика проверяется только в ограниченном процессе."""
     from ..check_answer import OK, UNKNOWN, WRONG
     from . import formulas, numeric
+    if allow_quotient and ':' not in value:
+        value += ':1'
     parts, expected = value.split(':'), reference.split(':')
     if len(parts) != 2 or len(expected) != 2:
         return WRONG

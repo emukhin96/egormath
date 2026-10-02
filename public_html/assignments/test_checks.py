@@ -569,7 +569,7 @@ class ExpressionHelpersTests(SimpleTestCase):
         self.assertEqual(expressions.prepare('x^2(x+1)'), r'x^2\cdot (x+1)')
         self.assertEqual(expressions.prepare('2x(x+1)'), r'2x\cdot (x+1)')
         self.assertEqual(expressions.prepare(r'\sin(x)'), r'\sin(x)')
-        self.assertEqual(expressions.prepare(r'2\sqrt{2}x'), r'2\sqrt{2}\cdot x')
+        self.assertEqual(expressions.prepare(r'2\sqrt{2}x'), r'2\cdot \sqrt{2}\cdot x')
         self.assertEqual(expressions.prepare(r'\log_{2}x'), r'\log_{2}x')
         self.assertEqual(expressions.prepare(r'\sin^{2}x'), r'\sin^{2}x')
         self.assertEqual(expressions.prepare(r'\log_{2}(x)'), r'\log_{2}(x)')

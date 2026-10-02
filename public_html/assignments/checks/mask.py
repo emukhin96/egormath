@@ -68,6 +68,7 @@ HELP = (
     ('{{digits: 234}}', 'только цифры в точном порядке, без пробелов; 234,00 и 468/2 не принимаются'),
     ('{{decimal: -0,5}}', 'целое или десятичное число с запятой; дроби и выражения не принимаются'),
     ('{{ratio: 1:2}}', 'отношение: 2:4, 1/2:1 и √2:2√2 верны; 2:1 и 0,5 неверны'),
+    ('{{ratio: 6:7 | quotient}}', 'отношение или его значение: 6:7 и 6/7 верны; 7:6 и 7/6 неверны'),
     ('{{proportion: 1:2}}', 'отношение с перестановкой: 1:2, 2:1 и 4:2 верны; 0,5 неверно'),
     ('{{number: 10}}', 'число; принимается любая численно равная запись '
                        '(2,5 / 5/2 / \\frac{5}{2}); допуск — {{number: 3,14 ~ 0,01}}'),
@@ -126,6 +127,7 @@ class Slot:
     data: object = None
     error: str = ''
     unordered_pair: bool = False
+    allow_quotient: bool = False
     reference_unavailable: bool = False
 
     @property
@@ -146,6 +148,8 @@ class Slot:
 
     @property
     def label(self):
+        if self.kind == RATIO and self.allow_quotient:
+            return 'отношение с заданным порядком или его значение'
         if self.kind == PAIR and self.unordered_pair:
             return 'группы чисел (порядок не важен)'
         return KINDS.get(self.kind, self.kind)
@@ -269,6 +273,11 @@ def _parse_number(slot, payload):
 
 
 def _parse_format(slot, payload):
+    # Парные |...| принадлежат модулю числа, опция — только в конце.
+    option = re.search(r'\|\s*quotient\s*$', payload) if slot.kind == RATIO else None
+    if option:
+        payload = payload[:option.start()].strip()
+        slot.allow_quotient = True
     if slot.kind == DIGITS:
         value = payload if formats.digits(payload) else None
         hint = 'эталон должен содержать только цифры 0–9 без пробелов'
@@ -477,15 +486,17 @@ def check_slot(slot, value):
         from fractions import Fraction
         from . import numeric
         try:
-            student = formats.ratio(value)
+            student = formats.ratio(value, allow_quotient=slot.allow_quotient)
         except numeric.Uncertain:
-            return formats.check_ratio_exact(value, slot.reference)
+            return formats.check_ratio_exact(value, slot.reference,
+                                             allow_quotient=slot.allow_quotient)
         if student is None:
             return WRONG
         if isinstance(student, Fraction) and isinstance(slot.data, Fraction):
             return OK if student == slot.data else WRONG
         # При корнях и π приближение не доказывает точное равенство.
-        return formats.check_ratio_exact(value, slot.reference)
+        return formats.check_ratio_exact(value, slot.reference,
+                                         allow_quotient=slot.allow_quotient)
     if kind == CHOICE:
         if _compact(value).replace('ё', 'е') == _compact(slot.correct).replace('ё', 'е'):
             return OK

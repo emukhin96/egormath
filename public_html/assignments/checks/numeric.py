@@ -134,6 +134,9 @@ def prepare(text):
     text = normalize(text)
     text = _MIXED.sub(lambda m: '(' + m[1] + '+\\frac{'
                       + (m[2] or m[3]) + '}{' + (m[4] or m[5]) + '})', text)
+    # Здесь функции и переменные уже запрещены: } после степени завершает
+    # числовой множитель, а не степень sin или индекс log.
+    text = expressions._insert_cdot_after_group(text, allow_script_products=True)
     text = re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text)
     return text if len(text) <= 300 else None
 

@@ -30,6 +30,8 @@ _NUMERIC_OPS = ('add', 'sub', 'mul', 'adjacent_expressions', 'superscript')
 # После ``}`` — только если это не индекс/степень ``_{…}`` / ``^{…}``
 # (иначе ``\log_{2}x`` и ``\sin^{2}x`` ломаются).
 _IMPLICIT_MUL_RES = (
+    # Числовой коэффициент перед корнем — множитель, в том числе перед /.
+    re.compile(r'(?<=[0-9])\s*(?=\\sqrt(?:\[|\{))'),
     re.compile(r'(?<=\))\s*(?=\()'),
     re.compile(r'(?<=\))\s*(?=[0-9a-zA-Z])'),
     re.compile(r'(?<=\^\d)\s*(?=\()'),
@@ -56,7 +58,7 @@ def _closes_script(text, close_idx):
     return False
 
 
-def _insert_cdot_after_group(text):
+def _insert_cdot_after_group(text, *, allow_script_products=False):
     """``}x`` / ``}2`` / ``}(`` → ``}\\cdot ``, кроме индексов и степеней."""
     out = []
     i = 0
@@ -66,8 +68,9 @@ def _insert_cdot_after_group(text):
             j = i + 1
             while j < n and text[j].isspace():
                 j += 1
-            if (j < n and (text[j] == '(' or text[j].isalnum())
-                    and not _closes_script(text, i)):
+            if (j < n and (text[j] == '(' or text[j].isalnum()
+                           or text.startswith(r'\sqrt', j))
+                    and (allow_script_products or not _closes_script(text, i))):
                 out.append('}\\cdot ')
                 i = j
                 continue
@@ -91,6 +94,9 @@ def normalize_roots(text):
             break
         text = (text[:match.start()] + r'\sqrt{' + text[match.end():end-1]
                 + '}' + text[end:])
+    # В текстовом sqrt2 однозначен один знак; для sqrt16 нужны скобки.
+    text = re.sub(r'(?<![A-Za-z\\])sqrt\s*([0-9])(?![0-9.])',
+                  lambda m: r'\sqrt{' + m[1] + '}', text)
     # \sqrt12 означает sqrt(1)*2, а sqrt(12) — корень из двенадцати.
     return re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text)
 
