@@ -2575,9 +2575,9 @@
 
   /* Заголовок и пояснение рубрики — по левому краю основного текста задач
      (колонка номера плюс зазор .task-line, как у подпунктов и ответов),
-     сама плашка остаётся во всю ширину. */
-  #ws-items.ws-collection .ws-item-rubric h3,
-  #ws-items.ws-collection .ws-item-rubric p {
+     сама плашка остаётся во всю ширину. Отступ — на обёртке с базовым
+     шрифтом: колонка задана в ch, а у h3 и p свой размер шрифта. */
+  #ws-items.ws-collection .ws-item-rubric .ws-content {
     margin-left: var(--task-indent);
   }
 
