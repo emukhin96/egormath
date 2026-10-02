@@ -180,6 +180,27 @@ class MaskCheckTests(SimpleTestCase):
                     check_slot(s, value)
             self.assertEqual(worker.call_count, 2)
 
+    def test_ratio_drafting_does_not_raise_for_uncertain_reference(self):
+        from .checks import draft_mask
+        from .checks.ege_policy import ege_draft
+        value = r'(\sqrt2+10^{-60}):1'
+        self.assertEqual(draft_mask(value), '')
+        self.assertEqual(ege_draft(value, '', ['EGE_PROFILE_2027_15']), '')
+        self.assertEqual(draft_mask('6/2:8'), '{{ratio: 6/2:8}}')
+
+    def test_ratio_stops_waiting_after_unavailable_worker_and_keeps_numbers(self):
+        from unittest.mock import patch
+        from .checks import formulas
+        spec = parse_mask('{{ratio: 2:1}}; {{ratio: 3:2}}; {{number: 5}}')
+        with patch.object(formulas, 'check',
+                          side_effect=formulas.FormulaUnavailable('занято')) as worker:
+            with self.assertRaises(formulas.FormulaUnavailable) as failure:
+                check_mask(spec, {'s1': r'2\sqrt2:\sqrt2',
+                                  's2': r'3\sqrt2:2\sqrt2', 's3': '5'})
+            worker.assert_called_once()
+        self.assertEqual(failure.exception.slot_checks,
+                         {'s1': UNKNOWN, 's2': UNKNOWN, 's3': OK})
+
     def test_proportion_preserves_definedness_and_limits_computation(self):
         s = slot('{{proportion: 2:1}}')
         for value in (r'(2+1/(1/0)):1', r'2:(1+0/(1/0))',

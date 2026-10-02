@@ -539,7 +539,7 @@ def check_mask(spec, values, known=None):
         if known and slot.name in known:
             results[slot.name] = known[slot.name]
             continue
-        if unavailable is not None and slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION):
+        if unavailable is not None and slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION, RATIO):
             # После сбоя не ждём вычислитель заново для каждой формулы;
             # продолжаем только дешёвые проверки остальных полей.
             results[slot.name] = UNKNOWN
@@ -838,8 +838,15 @@ def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subi
     if coordinates:
         return coordinates
     ratio_text = answer.replace('$', '').strip()
-    if ':' in ratio_text and formats.ratio(ratio_text) is not None:
-        return f'{{{{{RATIO}: {ratio_text}}}}}'
+    if ':' in ratio_text:
+        from . import numeric
+        try:
+            ratio = formats.ratio(ratio_text)
+        except numeric.Uncertain:
+            # Черновик не должен падать или предлагать непроверенный эталон.
+            return ''
+        if ratio is not None:
+            return f'{{{{{RATIO}: {ratio_text}}}}}'
     from .drafting import contextual_draft
     contextual = contextual_draft(answer, condition)
     if contextual:

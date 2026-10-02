@@ -64,8 +64,14 @@ def ege_draft(answer, condition='', exam_codes=None, *, source_number='', subite
         # нормализованного LaTeX защищены {,}.
         values = text.replace('{,}', '\x00').replace(',', ';').replace('\x00', '{,}')
         return slot('number', values) if sets.numeric_value(values) is not None else slot('range', values)
-    if ':' in text and formats.ratio(text.replace('{,}', ',')) is not None:
-        return slot('ratio', text.replace('{,}', ','))
+    if ':' in text:
+        from . import numeric
+        try:
+            ratio = formats.ratio(text.replace('{,}', ','))
+        except numeric.Uncertain:
+            return ''
+        if ratio is not None:
+            return slot('ratio', text.replace('{,}', ','))
     if sets.numeric_value(text) is not None:
         return slot('number', text)
     if number == 20:
