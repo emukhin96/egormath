@@ -248,11 +248,31 @@ def _prepare(text):
             break
         text = (text[:match.start()] + r'\sqrt{' + text[match.end():end-1]
                 + '}' + text[end:])
-    # Lark не понимает соседство степени и корня: a²√3.
-    text = re.sub(r'(\^(?:\{[^{}]+\}|[+-]?\d+))\s*(?=[A-Za-z]|\\(?:sqrt|frac|pi)\b)',
+    # Степень переменной и следующая функция — отдельные множители.
+    # В sin² x степень относится к функции, умножение туда не вставляем.
+    functions = r'(?:sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|arccot|arcsec|arccsc|sinh|cosh|tanh|asinh|acosh|atanh)'
+
+    def after_power(match):
+        if re.search(r'\\' + functions + r'$', text[:match.start()]):
+            return match.group(1)
+        return match.group(1) + r'\cdot '
+
+    text = re.sub(
+        r'(\^(?:\{[^{}]+\}|[+-]?\d+))\s*(?=[A-Za-z]|\\(?:sqrt|frac|pi|' + functions + r')\b)',
+        after_power, text)
+    text = re.sub(r'(\^\{[^{}]+\})\s*(?=\()', after_power, text)
+    def after_group(match):
+        if match.group(1) == '}' and expressions._closes_script(text, match.start()):
+            return match.group(1)
+        return match.group(1) + r'\cdot '
+
+    text = re.sub(r'([})])\s*(?=\\(?:sqrt|frac|pi|' + functions + r')\b)',
+                  after_group, text)
+    # α cos α — произведение; команда самой функции не является множителем.
+    greek = r'(?:alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|omicron|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega)'
+    return re.sub(r'(\\' + greek + r')\s*(?=\\' + functions + r'\b)',
                   r'\1\\cdot ', text)
-    text = re.sub(r'(\^\{[^{}]+\})\s*(?=\()', r'\1\\cdot ', text)
-    return re.sub(r'([})])\s*(?=\\(?:sqrt|frac|pi)\b)', r'\1\\cdot ', text)
+
 
 
 def _components(tree):

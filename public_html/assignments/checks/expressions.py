@@ -31,7 +31,7 @@ _NUMERIC_OPS = ('add', 'sub', 'mul', 'adjacent_expressions', 'superscript')
 # (иначе ``\log_{2}x`` и ``\sin^{2}x`` ломаются).
 _IMPLICIT_MUL_RES = (
     re.compile(r'(?<=\))\s*(?=\()'),
-    re.compile(r'(?<=\))\s*(?=\d)'),
+    re.compile(r'(?<=\))\s*(?=[0-9a-zA-Z])'),
     re.compile(r'(?<=\^\d)\s*(?=\()'),
     re.compile(r'(?<![\\a-zA-Z][a-zA-Z])(?<=[a-zA-Z])\s*(?=\()'),
 )
@@ -129,13 +129,69 @@ def _has_undefined_functions(expr):
     return hasattr(expr, 'atoms') and bool(expr.atoms(AppliedUndef))
 
 
+# Скобки функции задают весь её аргумент. Операция за закрывающей
+# скобкой и следующая самостоятельная функция относятся к внешнему выражению.
+_TRIG_NODES = frozenset((
+    'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
+    'arcsin', 'arccos', 'arctan', 'arccot', 'arcsec', 'arccsc',
+    'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh',
+))
+_FUNCTION_GROUPS = ('group_round_parentheses', 'group_curly_parentheses',
+                    'group_square_brackets')
+
+
+def _starts_with_group(node):
+    """Явно сгруппированный аргумент нельзя расширить операцией после группы."""
+    if not _is_tree(node):
+        return False
+    if node.data in _FUNCTION_GROUPS:
+        return True
+    if node.data in ('mul', 'div', 'add', 'sub', 'adjacent_expressions', 'superscript'):
+        return bool(node.children) and _starts_with_group(node.children[0])
+    return False
+
+
+def _contains_trig(node):
+    return (_is_tree(node) and
+            (node.data in _TRIG_NODES or str(node.data).removesuffix('_power') in _TRIG_NODES
+             or any(_contains_trig(c) for c in node.children)))
+
+
+def _valid_function_scopes(node):
+    """Отсекает альтернативы Lark, поглотившие внешний множитель или делитель."""
+    if not _is_tree(node):
+        return True
+    kind = str(node.data)
+    if kind in _TRIG_NODES or kind.removesuffix('_power') in _TRIG_NODES:
+        argument = node.children[-1]
+        if _is_tree(argument) and argument.data not in _FUNCTION_GROUPS:
+            if _starts_with_group(argument):
+                return False
+            if argument.data in ('mul', 'div', 'add'):
+                return False
+            if argument.data == 'sub' and len(argument.children) > 2:
+                return False
+            if argument.data == 'adjacent_expressions' and _contains_trig(argument):
+                return False
+    if node.data == 'superscript':
+        base = node.children[0]
+        # sin x² = sin(x²); для квадрата синуса пишут sin² x или sin(x)².
+        if (_is_tree(base) and base.data in _TRIG_NODES
+                and not (_is_tree(base.children[-1])
+                         and base.children[-1].data in _FUNCTION_GROUPS)):
+            return False
+    return all(_valid_function_scopes(c) for c in node.children)
+
+
 def resolve(tree):
-    """Копия дерева без узлов ``_ambig``: из альтернатив предпочитается та,
-    где ``x(x+1)`` прочитано как произведение, а не как вызов функции ``x``."""
+    """Выбирает произведение вместо неизвестной функции и сохраняет границы
+    аргументов тригонометрических функций. Если допустимого разбора нет,
+    возвращает None: неверный смысл нельзя использовать для оценки ответа."""
     if not _is_tree(tree):
         return tree
     if tree.data == '_ambig':
         candidates = [resolve(c) for c in tree.children]
+        candidates = [c for c in candidates if c is not None]
         for cand in candidates:
             try:
                 if not _has_undefined_functions(evaluate(cand)):
@@ -144,8 +200,12 @@ def resolve(tree):
                 raise
             except Exception:  # noqa: BLE001
                 continue
-        return candidates[0]
-    return tree.__class__(tree.data, [resolve(c) for c in tree.children])
+        return candidates[0] if candidates else None
+    children = [resolve(c) for c in tree.children]
+    if any(c is None for c in children):
+        return None
+    result = tree.__class__(tree.data, children)
+    return result if _valid_function_scopes(result) else None
 
 
 def evaluate(tree):
