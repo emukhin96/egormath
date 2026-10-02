@@ -354,6 +354,23 @@ class CollectionTitleTests(TestCase):
             html=True)
         self.assertContains(response, 'class="ws-collection"')
 
+    def test_rubric_note_is_rendered_as_tex_text(self):
+        # Пояснение рубрики — тот же tex, что и условия: текстовые команды в
+        # HTML, формулы остаются для KaTeX (класс math-content).
+        leaf = self.make('Глава 1', tasks=1)
+        WorksheetItem.objects.create(
+            worksheet=leaf.worksheet, order=5, rubric='Чётность',
+            rubric_note='Функция $y=f(x)$ называется \\textbit{чётной}, '
+                        'если $f(-x)=f(x)$.\\\\ Вторая строка.')
+        response = self.client.get(
+            reverse('collection_detail', args=[leaf.pk]))
+        self.assertContains(
+            response,
+            '<p class="math-content">Функция $y=f(x)$ называется '
+            '<b><i>чётной</i></b>, если $f(-x)=f(x)$.<br> Вторая строка.</p>',
+            html=True)
+        self.assertNotContains(response, 'textbit')
+
 
 class CollectionAnswerSourceTests(TestCase):
     """Рамка «Ответ / Решение»: происхождение и второй вариант."""
