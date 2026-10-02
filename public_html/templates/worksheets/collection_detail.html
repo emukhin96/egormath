@@ -101,7 +101,7 @@
     <div class="ws-item ws-item-rubric" id="section-{{ entry.block.section.index }}">
       <div class="ws-body"><div class="ws-content">
         <h3 class="math-content">{{ entry.block.section.heading.rubric }}{% if entry.block.continued %} <span class="muted collection-continued">· продолжение, часть {{ entry.block.part }} из {{ entry.block.parts }}</span>{% endif %}</h3>
-        {% if entry.block.section.heading.rubric_note and not entry.block.continued %}<p>{{ entry.block.section.heading.rubric_note }}</p>{% endif %}
+        {% if entry.block.section.heading.rubric_note and not entry.block.continued %}<p class="math-content">{{ entry.block.section.heading.rubric_note|web_text }}</p>{% endif %}
       </div></div>
     </div>
     {% endif %}

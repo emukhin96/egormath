@@ -27,7 +27,7 @@
       {% elif item.is_rubric %}
       {# Формулы в названии рубрики рендерит KaTeX (math.js); web_text здесь не нужен — он режет хвост «Вариант N» #}
       <h3 class="math-content">{{ item.rubric }}</h3>
-      {% if item.rubric_note %}<p>{{ item.rubric_note }}</p>{% endif %}
+      {% if item.rubric_note %}<p class="math-content">{{ item.rubric_note|web_text }}</p>{% endif %}
       {% else %}
       <div class="math-content">{{ item.text_latex|web_text|linebreaksbr }}</div>
       {% endif %}
