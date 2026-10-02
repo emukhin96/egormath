@@ -1,5 +1,5 @@
 """Контекстная эквивалентность длин, площадей и наборов диагоналей."""
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from contextlib import redirect_stdout
 from io import StringIO
 import json
@@ -63,6 +63,38 @@ class FormulaMaskTests(SimpleTestCase):
         slot = self.slot('{{expression: |a-1|}}')
         self.assertEqual(check_slot(slot, 'a-1'), 'wrong')
 
+    def test_greek_positive_angle_accepts_roots_and_rejects_extra_holes(self):
+        slot = self.slot(r'{{expression: 2\alpha | positive: \alpha}}')
+        for value in (r'\alpha+\alpha', r'2\sqrt{\alpha^2}',
+                      r'2\alpha^2/\alpha'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+        self.assertEqual(check_slot(slot, r'-2\alpha'), 'wrong')
+        self.assertEqual(check_slot(slot, r'2\alpha*(\alpha-1)/(\alpha-1)'), 'wrong')
+        real = self.slot(r'{{expression: 2\alpha}}')
+        self.assertEqual(check_slot(real, r'2\sqrt{\alpha^2}'), 'wrong')
+
+    def test_greek_parameter_aliases_use_the_parsed_symbol_name(self):
+        reference, _ = formulas._parse_reference(r'\varphi | positive: \varphi')
+        self.assertEqual(reference.positive, ('phi',))
+        self.assertEqual(formulas._check(r'\sqrt{\varphi^2}', reference), 'ok')
+        mixed, _ = formulas._parse_reference(r'a+\alpha | positive: a,\alpha')
+        self.assertEqual(mixed.positive, ('a', 'alpha'))
+        self.assertEqual(formulas._check(r'\sqrt{a^2}+\sqrt{\alpha^2}', mixed), 'ok')
+
+    def test_positive_parameter_names_reject_constants_and_expressions(self):
+        for option in (r'\pi', r'\sin', r'\unknown', 'a+0', 'a,a+', '', 'alpha'):
+            with self.subTest(option=option):
+                self.assertFalse(parse_mask(r'{{expression: a | positive: ' + option + '}}',
+                                            validate_references=True).is_valid)
+        # При отображении сохранённой маски проверяется только структура.
+        # Неиспользуемый параметр запрещается при проверке перед сохранением.
+        with self.assertRaisesRegex(ValueError, 'которого нет в эталоне'):
+            formulas._parse_reference(r'\alpha | positive: \beta')
+        self.assertFalse(parse_mask(
+            r'{{expression: \alpha | positive: \beta}}',
+            validate_references=True).is_valid)
+
     def test_expanded_square_under_root_keeps_absolute_value_and_domain(self):
         slot = self.slot('{{expression: |x-1|}}')
         for value in (r'\sqrt{x^2-2x+1}', 'sqrt(x^2-2x+1)',
@@ -88,7 +120,7 @@ class FormulaMaskTests(SimpleTestCase):
             self.assertLess(time.monotonic() - started, 1)
         # Пауза после сбоя — только для этого ввода: тот же ввод не форкает
         # процесс заново, другой ввод проверяется сразу.
-        with patch.object(formulas.subprocess, 'run') as worker:
+        with patch.object(formulas, '_spawn') as worker:
             with self.assertRaises(formulas.FormulaUnavailable):
                 formulas.check('17+a', reference)
             worker.assert_not_called()
@@ -135,14 +167,18 @@ class FormulaMaskTests(SimpleTestCase):
 
     def test_render_of_cold_references_never_starts_worker(self):
         formulas._reference_response.cache_clear()
-        with patch.object(formulas, '_run_worker') as worker:
+        with patch.object(formulas, '_run_worker') as worker, \
+                patch.object(formulas, '_parse', side_effect=AssertionError('тяжёлый разбор при рендере')) as parser:
             spec = parse_mask(r'{{expression: |x-1|}}; '
-                              r'{{expressions: a\sqrt{3};2a | positive: a}}')
+                              r'{{expressions: a\sqrt{3};2a | positive: a}}; '
+                              r'{{expression: a+\alpha | positive: a,\alpha}}; '
+                              r'{{expression: \varphi | positive: \varphi}}')
             self.assertTrue(spec.is_valid)
             html = render_to_string('assignments/_mask.html', {
                 'fragments': render_fragments(spec, 'cold'), 'editable': True})
-            self.assertEqual(html.count('<math-field'), 2)
+            self.assertEqual(html.count('<math-field'), 4)
             worker.assert_not_called()
+            parser.assert_not_called()
 
     def test_reference_is_validated_before_save_and_failure_is_retryable(self):
         from django.core.exceptions import ValidationError
@@ -173,7 +209,7 @@ class FormulaMaskTests(SimpleTestCase):
             self.assertTrue(formulas._worker_slots.acquire(blocking=False))
         try:
             with patch.object(formulas, 'WORKER_WAIT', 0.05), \
-                    patch.object(formulas.subprocess, 'run') as worker:
+                    patch.object(formulas, '_spawn') as worker:
                 with self.assertRaises(formulas.FormulaUnavailable):
                     formulas.check('47+a', reference)
                 worker.assert_not_called()
@@ -189,7 +225,7 @@ class FormulaMaskTests(SimpleTestCase):
         formulas._checked.cache_clear()
         formulas._failed_inputs.clear()
         with patch.object(formulas, '_worker_slots') as slots, \
-                patch.object(formulas.subprocess, 'run') as worker:
+                patch.object(formulas, '_spawn') as worker:
             slots.acquire.return_value = False
             self.assertEqual(draft_mask('a+137'), '')
             slots.acquire.assert_called_once_with(timeout=0)
@@ -261,7 +297,7 @@ class FormulaMaskTests(SimpleTestCase):
         from lark.exceptions import VisitError
         parser, transformer = expressions._lark()
         for target, method, error in (
-            (parser, 'doparse', MemoryError()),
+            (parser.parser, 'parse', MemoryError()),
             (transformer, 'transform', MemoryError()),
             (transformer, 'transform', VisitError('add', None, MemoryError())),
         ):
@@ -275,6 +311,14 @@ class FormulaMaskTests(SimpleTestCase):
                      patch.object(target, method, side_effect=error), redirect_stdout(output):
                     formula_worker.main()
                 self.assertEqual(json.loads(output.getvalue()), {'unavailable': True})
+
+    def test_raw_tree_does_not_change_sympy_parser_transformation(self):
+        from assignments.checks import expressions
+        from sympy.parsing.latex import parse_latex
+        from sympy import Symbol
+        self.assertEqual(parse_latex('x+1', backend='lark'), Symbol('x') + 1)
+        self.assertTrue(expressions._is_tree(expressions.raw_tree('x+1')))
+        self.assertEqual(parse_latex('x+1', backend='lark'), Symbol('x') + 1)
 
     def test_cancellation_cannot_hide_missing_parameter_values(self):
         slot = self.slot('{{expression: a | positive: a}}')
@@ -384,3 +428,189 @@ class FormulaMaskTests(SimpleTestCase):
         self.assertIn('выражения в любом порядке', html)
         self.assertNotIn('positive:', html)
         self.assertNotIn(r'\sqrt{3}', html)
+
+
+class FormulaForkTests(SimpleTestCase):
+    def test_preloaded_process_preserves_equivalence_and_missing_points(self):
+        from assignments.checks import formula_fork
+        cases = (('6a/8', 'ok'), ('0.75a', 'ok'), ('3sqrt(a^2)/4', 'ok'),
+                 ('3a^2/(4a)', 'ok'), ('3a*(a-1)/(4*(a-1))', 'wrong'),
+                 ('3a/2', 'wrong'))
+        for value, expected in cases:
+            with self.subTest(value=value):
+                result = formula_fork.run_worker(json.dumps({
+                    'payload': '3a/4 | positive: a', 'multiple': False,
+                    'mode': 'expression', 'value': value}), 3)
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(json.loads(result.stdout)['status'], expected)
+
+    def test_failed_warmup_waits_then_retries(self):
+        from assignments.checks import formula_fork
+        with patch.object(formula_fork, '_ready', False), \
+                patch.object(formula_fork, '_failed_until', 0), \
+                patch.object(formula_fork.time, 'monotonic', side_effect=[100, 100, 105, 111]), \
+                patch.object(formula_fork, '_run_process', side_effect=[
+                    subprocess.CompletedProcess('worker', 0, '{"unavailable":true}'),
+                    subprocess.CompletedProcess('worker', 0, '{"display":"x"}')]) as run:
+            with self.assertRaises(formula_fork.FormulaStartupUnavailable):
+                formula_fork.warmup()
+            self.assertFalse(formula_fork._ready)
+            with self.assertRaises(formula_fork.FormulaStartupUnavailable):
+                formula_fork.warmup()
+            self.assertEqual(run.call_count, 1)
+            formula_fork.warmup()
+            self.assertTrue(formula_fork._ready)
+            self.assertEqual(run.call_count, 2)
+
+    def test_requests_do_not_queue_behind_warmup(self):
+        from assignments.checks import formula_fork
+        with patch.object(formula_fork, '_ready', False), \
+                patch.object(formula_fork, '_run_process') as run:
+            with formula_fork._startup_lock:
+                with self.assertRaises(formula_fork.FormulaStartupUnavailable):
+                    formula_fork.warmup()
+            run.assert_not_called()
+
+    def test_startup_failure_does_not_block_input_or_take_worker_slot(self):
+        from assignments.checks import formula_fork
+        payload = {'payload': '3a/4', 'multiple': False}
+        for error in (OSError('forkserver'), ValueError('json'),
+                      subprocess.TimeoutExpired('startup', 10),
+                      formula_fork.FormulaStartupUnavailable('startup')):
+            with self.subTest(error=type(error).__name__), \
+                    patch.object(formulas.sys, 'platform', 'linux'), \
+                    patch.object(formula_fork, 'warmup', side_effect=error), \
+                    patch.object(formula_fork, 'run_worker') as run, \
+                    patch.object(formulas, '_worker_slots') as slots, \
+                    patch.object(formulas, '_remember_failure') as remember:
+                with self.assertRaises(formulas.FormulaBusy) as failure:
+                    formulas._run_worker(payload)
+                # Отложенный запуск не расходует попытки автоматической
+                # проверки и не отправляет неизменённый ответ на ручную.
+                self.assertEqual(formulas.unavailable_count({}, failure.exception), 0)
+                self.assertEqual(formulas.unavailable_count({'_unavailable': 1}, failure.exception), 1)
+                slots.acquire.assert_not_called()
+                slots.release.assert_not_called()
+                remember.assert_not_called()
+                run.assert_not_called()
+                self.assertFalse(formulas._recently_failed(json.dumps(payload, sort_keys=True)))
+        with patch.object(formulas.sys, 'platform', 'linux'), \
+                patch.object(formula_fork, 'warmup'), \
+                patch.object(formula_fork, 'run_worker', return_value=
+                             subprocess.CompletedProcess('worker', 0, '{"display":"ok"}')):
+            self.assertEqual(formulas._run_worker(payload), {'display': 'ok'})
+
+    def test_start_failure_is_normalized_and_closes_connections(self):
+        from assignments.checks import formula_fork
+        for error in (EOFError('unexpected EOF'), RuntimeError('forkserver')):
+            with self.subTest(error=type(error).__name__):
+                context = Mock()
+                receiver, sender, child = Mock(), Mock(), Mock()
+                context.Pipe.return_value = (receiver, sender)
+                context.Process.return_value = child
+                child.start.side_effect = error
+                with patch.object(formula_fork.multiprocessing, 'get_context', return_value=context), \
+                        patch.object(formula_fork, '_ready', True), \
+                        patch.object(formula_fork, '_failed_until', 0):
+                    with self.assertRaises(formula_fork.FormulaStartupUnavailable) as failure:
+                        formula_fork._run_process('{}', 3)
+                self.assertIs(failure.exception.__cause__, error)
+                receiver.close.assert_called_once()
+                sender.close.assert_called_once()
+                child.close.assert_called_once()
+                child.kill.assert_not_called()
+                child.join.assert_not_called()
+
+    def test_forkserver_eof_during_warmup_is_busy_and_retryable(self):
+        from assignments.checks import formula_fork
+        context = Mock()
+        receiver, sender, child = Mock(), Mock(), Mock()
+        context.Pipe.return_value = (receiver, sender)
+        context.Process.return_value = child
+        child.start.side_effect = EOFError('unexpected EOF')
+        with patch.object(formulas.sys, 'platform', 'linux'), \
+                patch.object(formula_fork, '_ready', False), \
+                patch.object(formula_fork, '_failed_until', 0), \
+                patch.object(formula_fork.time, 'monotonic', return_value=100), \
+                patch.object(formula_fork.multiprocessing, 'get_context', return_value=context), \
+                patch.object(formulas, '_worker_slots') as slots, \
+                patch.object(formulas, '_remember_failure') as remember:
+            with self.assertRaises(formulas.FormulaBusy) as failure:
+                formulas._run_worker({'payload': 'x', 'multiple': False})
+            self.assertEqual(formulas.unavailable_count({}, failure.exception), 0)
+            self.assertFalse(formula_fork._ready)
+            self.assertEqual(formula_fork._failed_until, 110)
+            slots.acquire.assert_not_called()
+            remember.assert_not_called()
+
+    def test_failed_restart_does_not_remember_or_count_the_answer(self):
+        from assignments.checks import formula_fork
+        context = Mock()
+        receiver, sender, child = Mock(), Mock(), Mock()
+        context.Pipe.return_value = (receiver, sender)
+        context.Process.return_value = child
+        child.start.side_effect = EOFError('unexpected EOF')
+        with patch.object(formulas.sys, 'platform', 'linux'), \
+                patch.object(formula_fork, '_ready', True), \
+                patch.object(formula_fork, '_failed_until', 0), \
+                patch.object(formula_fork.time, 'monotonic', return_value=100), \
+                patch.object(formula_fork.multiprocessing, 'get_context', return_value=context), \
+                patch.object(formulas, '_worker_slots') as slots, \
+                patch.object(formulas, '_remember_failure') as remember:
+            with self.assertRaises(formulas.FormulaBusy) as failure:
+                formulas._run_worker({'payload': 'x', 'multiple': False})
+            self.assertEqual(formulas.unavailable_count({'_unavailable': 1}, failure.exception), 1)
+            self.assertFalse(formula_fork._ready)
+            self.assertEqual(formula_fork._failed_until, 110)
+            slots.acquire.assert_called_once()
+            slots.release.assert_called_once()
+            remember.assert_not_called()
+
+    def test_server_restart_time_does_not_consume_calculation_budget(self):
+        from assignments.checks import formula_fork
+        context = Mock()
+        receiver, sender, child = Mock(), Mock(), Mock()
+        context.Pipe.return_value = (receiver, sender)
+        context.Process.return_value = child
+        now = [100]
+        child.start.side_effect = lambda: now.__setitem__(0, now[0] + 5)
+        child.is_alive.return_value = False
+        child.exitcode = 0
+        receiver.poll.return_value = True
+        receiver.recv.return_value = '{"display":"x"}'
+        with patch.object(formula_fork.multiprocessing, 'get_context', return_value=context), \
+                patch.object(formula_fork.time, 'monotonic', side_effect=lambda: now[0]):
+            result = formula_fork._run_process('{}', 3)
+        self.assertEqual(result.returncode, 0)
+        receiver.poll.assert_called_once_with(3)
+        self.assertEqual(child.join.call_args_list[0].args, (3,))
+
+    def test_timeout_kills_and_reaps_the_child(self):
+        from assignments.checks import formula_fork
+        context = Mock()
+        receiver, sender, child = Mock(), Mock(), Mock()
+        context.Pipe.return_value = (receiver, sender)
+        context.Process.return_value = child
+        receiver.poll.return_value = False
+        child.is_alive.return_value = True
+        with patch.object(formula_fork.multiprocessing, 'get_context', return_value=context):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                formula_fork._run_process('{}', 0.01)
+        child.kill.assert_called_once()
+        child.join.assert_called_once()
+        child.close.assert_called_once()
+        receiver.close.assert_called_once()
+
+    def test_child_keeps_original_linux_resource_limits(self):
+        from assignments.checks import formula_worker
+        resource = Mock()
+        with patch.object(formula_worker.sys, 'platform', 'linux'), \
+                patch.dict('sys.modules', {'resource': resource}), \
+                patch.object(formula_worker.sys, 'stdin', StringIO('{"payload":"x","multiple":false}')), \
+                patch.object(formulas, '_parse_reference', return_value=(None, 'x')), \
+                redirect_stdout(StringIO()):
+            formula_worker.main()
+        self.assertEqual(resource.setrlimit.call_args_list[0].args,
+                         (resource.RLIMIT_AS, (512 * 1024**2, 512 * 1024**2)))
+        self.assertEqual(resource.setrlimit.call_args_list[1].args,
+                         (resource.RLIMIT_CPU, (2, 3)))

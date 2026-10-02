@@ -100,12 +100,25 @@ class CatalogTests(TestCase):
 
     def test_catalog_has_toggles_without_quick_answer_or_badge(self):
         response = self.client.get(reverse('task_list'))
-        self.assertContains(response, 'Раздел и темы')
+        self.assertContains(response, 'Класс и темы')
         self.assertContains(response, 'toggle-catalog-answers')
         self.assertContains(response, 'toggle-masks')
         self.assertNotContains(response, 'textarea name="answer_latex"')
         self.assertNotContains(response, 'badge-mask')
         self.assertContains(response, 'ws-answers" hidden')
+
+    def test_catalog_source_is_one_line_under_statement(self):
+        # Источник, № и раздел — одной строкой под условием рядом с
+        # «дублировать», а не столбиком в колонке «Класс и темы».
+        ref = self.task.source_refs.get()
+        ref.source_path = ['Глава 1. Дроби', '§ 2. Сокращение']
+        ref.save(update_fields=['source_path'])
+        response = self.client.get(reverse('task_list'))
+        html = response.content.decode()
+        meta = html.split('class="task-meta catalog-row-meta"', 1)[1].split('</td>', 1)[0]
+        self.assertIn('Книга · № 7 › Глава 1. Дроби › § 2. Сокращение', meta)
+        self.assertIn('дублировать', meta)
+        self.assertNotIn('import-section-path', html)
 
     def test_builder_answers_are_hidden_before_scripts_run(self):
         worksheet = Worksheet.objects.create(owner=self.teacher, title='Листок')

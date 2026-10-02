@@ -19,6 +19,7 @@ from pathlib import Path
 
 from ..check_answer import MAX_EXPR_LEN, OK, UNKNOWN, WRONG
 from . import expressions
+from .formula_fork import FormulaStartupUnavailable
 
 
 @dataclass
@@ -111,6 +112,22 @@ def _recently_failed(key):
         return True
 
 
+def _spawn(key):
+    """Один запуск вычислителя: на Linux — из forkserver, иначе subprocess.
+
+    Единственная точка запуска процесса: тесты подменяют её, и сценарии
+    сбоев проверяются одинаково на macOS и на Linux (в CI).
+    """
+    if sys.platform == 'linux':
+        from .formula_fork import run_worker
+        return run_worker(key, WORKER_TIMEOUT)
+    return subprocess.run(
+        [sys.executable, '-m', 'assignments.checks.formula_worker'],
+        input=key, capture_output=True, text=True,
+        cwd=Path(__file__).resolve().parents[2], timeout=WORKER_TIMEOUT,
+        check=False)
+
+
 def _run_worker(payload):
     """Вычисления в отдельном процессе: таймаут убивает и убирает ребёнка.
 
@@ -120,21 +137,28 @@ def _run_worker(payload):
     key = json.dumps(payload, sort_keys=True)
     if _recently_failed(key):
         raise FormulaBusy('проверка этого выражения недавно не удалась; повторите позже')
+    if sys.platform == 'linux':
+        from .formula_fork import warmup
+        try:
+            # Прогрев не занимает слот вычислений и не помечает ввод сбойным.
+            warmup()
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+            raise FormulaBusy('парсер формул пока не готов') from error
     wait = _worker_wait.get()
     if not _worker_slots.acquire(timeout=WORKER_WAIT if wait is None else wait):
         raise FormulaBusy('проверка временно занята')
     try:
-        result = subprocess.run(
-            [sys.executable, '-m', 'assignments.checks.formula_worker'],
-            input=key, capture_output=True, text=True,
-            cwd=Path(__file__).resolve().parents[2], timeout=WORKER_TIMEOUT,
-            check=False)
+        result = _spawn(key)
         if result.returncode:
             raise FormulaUnavailable('не удалось проверить формулу за отведённое время')
         response = json.loads(result.stdout)
         if not isinstance(response, dict) or response.get('unavailable'):
             raise FormulaUnavailable('временная недоступность проверки')
         return response
+    except FormulaStartupUnavailable as error:
+        # Forkserver мог исчезнуть уже после успешного доверенного прогрева.
+        # Такой отказ окружения не расходует попытку ученического ответа.
+        raise FormulaBusy('парсер формул пока не готов') from error
     except (subprocess.TimeoutExpired, OSError, ValueError) as error:
         # Сбой запоминается только для этого входа: повторные форки того же
         # выражения под нагрузкой не нужны, остальные проверки продолжаются.
@@ -283,7 +307,11 @@ def _parse(text, positive=()):
         if marker is None:
             return None
         text = re.sub(r'\\pi\b|π', marker, text)
-    tree, value = expressions.parse(text)
+    # Выбираем одну ветвь неоднозначной грамматики до анализа областей.
+    # Повторный разбор альтернатив в каждом поддереве тратит время и
+    # может подставить области от другой интерпретации того же ввода.
+    tree = expressions.resolve(expressions.raw_tree(text))
+    value = expressions.evaluate(tree)
     if tree is None or not isinstance(value, Expr):
         return None
     denominators = _denominators(tree)
@@ -307,10 +335,20 @@ def _reference_parts(payload, multiple=False):
         raise ValueError('допустима одна опция positive: a,R')
     positive = ()
     if len(parts) == 2:
-        match = re.fullmatch(r'\s*positive\s*:\s*([A-Za-z](?:\s*,\s*[A-Za-z])*)\s*', parts[1])
+        match = re.fullmatch(r'\s*positive\s*:\s*(.*?)\s*', parts[1])
         if not match:
-            raise ValueError('положительные параметры: positive: a,R')
-        positive = tuple(x.strip() for x in match[1].split(','))
+            raise ValueError(r'положительные параметры: positive: a,R,\alpha')
+        names = []
+        for token in match[1].split(','):
+            token = token.strip()
+            # Только одна буква или LaTeX-команда символа. Формулы,
+            # функции и константы не являются именами параметров.
+            if not re.fullmatch(r'(?:[A-Za-z]|\\[A-Za-z]+)', token):
+                raise ValueError(r'положительные параметры: positive: a,R,\alpha')
+            # Рендер проверяет только структуру: SymPy и Lark загружаются
+            # исключительно в ограниченном вычислительном процессе.
+            names.append(token)
+        positive = tuple(dict.fromkeys(names))
     texts = parts[0].split(';') if multiple else [parts[0]]
     if not texts or len(texts) > 20 or any(not t.strip() for t in texts):
         raise ValueError('укажите от 1 до 20 выражений через ;')
@@ -318,7 +356,15 @@ def _reference_parts(payload, multiple=False):
 
 
 def _parse_reference(payload, multiple=False):
-    texts, positive = _reference_parts(payload, multiple)
+    texts, tokens = _reference_parts(payload, multiple)
+    names = []
+    for token in tokens:
+        parsed = _parse(token)
+        if parsed is None or not getattr(parsed.expression, 'is_Symbol', False):
+            raise ValueError(r'положительные параметры: positive: a,R,\alpha')
+        # Имена вариантов могут совпадать: \varphi разбирается как phi.
+        names.append(str(parsed.expression))
+    positive = tuple(dict.fromkeys(names))
     items = tuple(_parse(t.strip(), positive) for t in texts)
     if any(x is None for x in items):
         raise ValueError('эталон не разобран как выражение')
@@ -347,6 +393,32 @@ def _defined(item, reference):
         return False
     if any(d.is_zero is True for d in item.denominators):
         return False
+    # Если каждое исходное подвыражение вещественно и конечно при данных
+    # предположениях, а исходные знаменатели доказанно ненулевые, формула
+    # определена на всей области параметров. Решать те же простые области
+    # заново через continuous_domain не требуется. Неизвестные свойства
+    # сюда не попадают: сокращённый (a-1)/(a-1) всё ещё проверяется ниже.
+    def everywhere(component):
+        return component.is_real is True and component.is_finite is True
+
+    if (all(everywhere(c) for c in (value, *item.components))
+            and all(d.is_nonzero is True for d in item.denominators)):
+        return True
+    # Область эталона уже включает ограничения его исходных компонентов.
+    # Если ввод не добавляет ни одного такого ограничения, включение
+    # доказано непосредственно, без повторного решения тех же областей.
+    originals = {c for original in reference.items
+                 for c in (original.expression, *original.components)}
+    original_denominators = {d for original in reference.items
+                             for d in original.denominators}
+    if (all(c in originals or everywhere(c) for c in (value, *item.components))
+            and all(d in original_denominators or d.is_nonzero is True
+                    for d in item.denominators)):
+        return True
+    # Допустимая точная точка с новым разрывом уже опровергает ввод;
+    # трудное построение всей области определения после неё не нужно.
+    if _domain_counterexample(item, reference):
+        return False
     if len(reference.symbols) == 1:
         symbol = reference.symbols[0]
         domain = Interval.open(0, oo) if symbol.is_positive else S.Reals
@@ -355,14 +427,18 @@ def _defined(item, reference):
             allowed = domain
             for original in reference.items:
                 for component in (original.expression, *original.components):
-                    allowed = allowed.intersect(continuous_domain(component, symbol, domain))
+                    if not everywhere(component):
+                        allowed = allowed.intersect(continuous_domain(component, symbol, domain))
                 for denominator in original.denominators:
-                    allowed = allowed - solveset(denominator, symbol, domain=domain)
-            valid = continuous_domain(value, symbol, domain)
+                    if denominator.is_nonzero is not True:
+                        allowed = allowed - solveset(denominator, symbol, domain=domain)
+            valid = domain if everywhere(value) else continuous_domain(value, symbol, domain)
             for component in item.components:
-                valid = valid.intersect(continuous_domain(component, symbol, domain))
+                if not everywhere(component):
+                    valid = valid.intersect(continuous_domain(component, symbol, domain))
             for denominator in item.denominators:
-                valid = valid - solveset(denominator, symbol, domain=domain)
+                if denominator.is_nonzero is not True:
+                    valid = valid - solveset(denominator, symbol, domain=domain)
             return (allowed - valid).is_empty
         except (NotImplementedError, ValueError, TypeError):
             return None
@@ -415,6 +491,17 @@ def _domain_counterexample(item, reference):
     from sympy import S
     baseline = {symbol: S.One for symbol in reference.symbols}
     values_to_try = [baseline]
+    if len(reference.symbols) == 1:
+        symbol = reference.symbols[0]
+        # Точный ноль исходного линейного знаменателя — кандидат на разрыв.
+        # Он используется только для опровержения и проверяется на области
+        # эталона ниже; отсутствие такого нуля ничего не доказывает.
+        for denominator in item.denominators:
+            polynomial = denominator.as_poly(symbol)
+            if polynomial is not None and polynomial.degree() == 1:
+                root = -polynomial.nth(0) / polynomial.nth(1)
+                if root.is_real is True and (not symbol.is_positive or root.is_positive is True):
+                    values_to_try.append({symbol: root})
     for symbol in reference.symbols:
         for number in (-2, -1, 0, 1, 2):
             if symbol.is_positive and number <= 0:
