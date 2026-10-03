@@ -35,6 +35,8 @@ class Reference:
     items: tuple
     positive: tuple
     symbols: tuple
+    input_symbols: tuple = ()
+    substitutions: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -186,7 +188,9 @@ def parse_reference(payload, multiple=False, *, validate=False, mode='expression
         raise ValueError('слишком длинный эталон')
     if mode not in ('expression', 'simplify', 'factor') or (multiple and mode != 'expression'):
         raise ValueError('неизвестный режим проверки формулы')
-    texts, _ = _reference_parts(payload, multiple)
+    texts, _, domain = _reference_context(payload, multiple)
+    if domain and mode != 'expression':
+        raise ValueError('domain поддерживается только для expression')
     spec = FormulaSpec(payload, multiple, mode)
     if not validate:
         return spec, ';'.join(texts).strip()
@@ -266,6 +270,10 @@ def _prepare(text):
 def _components(tree):
     """Сохраняет области подвыражений до сокращения корней и степеней."""
     if not expressions._is_tree(tree):
+        # Символ-лист не должен исчезнуть в 0*z: проверяем исходные имена.
+        if expressions._is_symbol_token(tree):
+            value = expressions.parse_expr(str(tree))
+            return [value] if value is not None and hasattr(value, 'free_symbols') else []
         return []
     tree = expressions.resolve(tree)
     value = expressions.evaluate(tree)
@@ -335,36 +343,66 @@ def _parse(text, positive=()):
                    tuple(c.xreplace(replacements) for c in components), tree)
 
 
-def _reference_parts(payload, multiple=False):
-    # Вертикальные черты модулей являются частью выражения. Опцию
-    # отделяем только | перед завершающей опцией positive.
-    parts = re.split(r'\|\s*(?=positive\s*:)', payload)
-    if len(parts) > 2:
-        raise ValueError('допустима одна опция positive: a,R')
+def _reference_context(payload, multiple=False):
+    """Разделяет именованные опции, сохраняя парные черты модулей.
+
+    Первая версия области — одна строгая связь x<k*y при положительных
+    x,y и положительном рациональном k. Рендер не загружает SymPy/Lark.
+    """
+    parts = re.split(r'\|\s*(?=[A-Za-z]+\s*:)', payload)
+    options = {}
+    for part in parts[1:]:
+        match = re.fullmatch(r'\s*(positive|domain)\s*:\s*(.*?)\s*', part)
+        if not match or match[1] in options:
+            raise ValueError('допустимы однократные опции positive и domain')
+        options[match[1]] = match[2]
     positive = ()
-    if len(parts) == 2:
-        match = re.fullmatch(r'\s*positive\s*:\s*(.*?)\s*', parts[1])
-        if not match:
-            raise ValueError(r'положительные параметры: positive: a,R,\alpha')
+    token_re = r'(?:[A-Za-z]|\\[A-Za-z]+)'
+    if 'positive' in options:
         names = []
-        for token in match[1].split(','):
+        for token in options['positive'].split(','):
             token = token.strip()
-            # Только одна буква или LaTeX-команда символа. Формулы,
-            # функции и константы не являются именами параметров.
-            if not re.fullmatch(r'(?:[A-Za-z]|\\[A-Za-z]+)', token):
+            if not re.fullmatch(token_re, token):
                 raise ValueError(r'положительные параметры: positive: a,R,\alpha')
-            # Рендер проверяет только структуру: SymPy и Lark загружаются
-            # исключительно в ограниченном вычислительном процессе.
             names.append(token)
         positive = tuple(dict.fromkeys(names))
+    domain = None
+    if 'domain' in options:
+        # Длина коэффициента ограничена до загрузки символьного вычислителя.
+        match = re.fullmatch(
+            rf'\s*({token_re})\s*<\s*(?:(\d{{1,6}}(?:/\d{{1,6}})?)\s*\*?\s*)?({token_re})\s*',
+            options['domain'])
+        if not match or multiple:
+            raise ValueError('область expression: domain: a<2b')
+        left, coefficient, right = match.groups()
+        coefficient = coefficient or '1'
+        numbers = coefficient.split('/')
+        if (any(int(n) == 0 for n in numbers) or left == right
+                or left not in positive or right not in positive):
+            raise ValueError('domain требует два различных положительных параметра')
+        domain = (left, coefficient, right)
     texts = parts[0].split(';') if multiple else [parts[0]]
     if not texts or len(texts) > 20 or any(not t.strip() for t in texts):
         raise ValueError('укажите от 1 до 20 выражений через ;')
+    return texts, positive, domain
+
+
+def _reference_parts(payload, multiple=False):
+    texts, positive, _ = _reference_context(payload, multiple)
     return texts, positive
 
 
+def _in_context(item, substitutions):
+    """Переносит исходные ограничения, а не только сокращённую формулу."""
+    replacements = dict(substitutions)
+    return Formula(item.expression.xreplace(replacements),
+                   tuple(d.xreplace(replacements) for d in item.denominators),
+                   tuple(c.xreplace(replacements) for c in item.components),
+                   item.tree)
+
+
 def _parse_reference(payload, multiple=False):
-    texts, tokens = _reference_parts(payload, multiple)
+    texts, tokens, domain = _reference_context(payload, multiple)
     names = []
     for token in tokens:
         parsed = _parse(token)
@@ -383,7 +421,28 @@ def _parse_reference(payload, multiple=False):
             symbols.update(component.free_symbols)
     if set(positive) - {str(s) for s in symbols}:
         raise ValueError('positive содержит параметр, которого нет в эталоне')
-    reference = Reference(items, positive, tuple(sorted(symbols, key=str)))
+    input_symbols = tuple(sorted(symbols, key=str))
+    substitutions = ()
+    if domain:
+        from sympy import Dummy, Rational
+        left_token, coefficient, right_token = domain
+        left_name = str(_parse(left_token).expression)
+        right_name = str(_parse(right_token).expression)
+        if left_name == right_name:
+            raise ValueError('domain требует различные параметры после разбора имён')
+        by_name = {str(symbol): symbol for symbol in symbols}
+        left, right = by_name[left_name], by_name[right_name]
+        k = Rational(coefficient)
+        u, v = Dummy('domain_u', positive=True), Dummy('domain_v', positive=True)
+        # x=k*u,y=u+v — биекция: u=x/k>0,v=y-x/k>0.
+        # Она точно задаёт x>0,y>0,x<k*y без пробных приближений.
+        substitutions = ((left, k*u), (right, u+v))
+        items = tuple(_in_context(item, substitutions) for item in items)
+        symbols = set().union(*(component.free_symbols
+                              for item in items
+                              for component in (item.expression, *item.denominators, *item.components)))
+    reference = Reference(items, positive, tuple(sorted(symbols, key=str)),
+                          input_symbols, substitutions)
     if any(_defined(item, reference) is False for item in items):
         raise ValueError('эталон не определён на указанной области параметров')
     return reference, ';'.join(texts).strip()
@@ -499,17 +558,24 @@ def _domain_counterexample(item, reference):
     from sympy import S
     baseline = {symbol: S.One for symbol in reference.symbols}
     values_to_try = [baseline]
-    if len(reference.symbols) == 1:
-        symbol = reference.symbols[0]
-        # Точный ноль исходного линейного знаменателя — кандидат на разрыв.
-        # Он используется только для опровержения и проверяется на области
-        # эталона ниже; отсутствие такого нуля ничего не доказывает.
+    # Проверяем точные корни по каждому параметру при остальных=1.
+    # Это только поиск контрпримера; отсутствие корня не доказывает область.
+    for symbol in reference.symbols:
+        others = {s: n for s, n in baseline.items() if s != symbol}
         for denominator in item.denominators:
-            polynomial = denominator.as_poly(symbol)
-            if polynomial is not None and polynomial.degree() == 1:
-                root = -polynomial.nth(0) / polynomial.nth(1)
+            polynomial = denominator.subs(others).as_poly(symbol)
+            if polynomial is None or not 1 <= polynomial.degree() <= 8:
+                continue
+            # Составная дробь сохраняет произведение исходных знаменателей.
+            # Ищем линейные множители небольшого точного полинома: например,
+            # (3u+v)(u-3v) имеет допустимый разрыв u=3 при v=1.
+            factors = polynomial.factor_list()[1]
+            for factor, _ in factors:
+                if factor.degree() != 1:
+                    continue
+                root = -factor.nth(0) / factor.nth(1)
                 if root.is_real is True and (not symbol.is_positive or root.is_positive is True):
-                    values_to_try.append({symbol: root})
+                    values_to_try.append({**baseline, symbol: root})
     for symbol in reference.symbols:
         for number in (-2, -1, 0, 1, 2):
             if symbol.is_positive and number <= 0:
@@ -569,13 +635,17 @@ def _check(value, reference, multiple=False, mode='expression'):
     student = tuple(_parse(t.strip(), reference.positive) for t in texts)
     if any(item is None for item in student):
         return UNKNOWN
-    allowed_symbols = set(reference.symbols)
+    if reference.substitutions and (multiple or mode != 'expression'):
+        return UNKNOWN
+    allowed_symbols = set(reference.input_symbols or reference.symbols)
     for item in student:
         if item.expression.free_symbols - allowed_symbols:
             return WRONG
         for component in (*item.denominators, *item.components):
             if component.free_symbols - allowed_symbols:
                 return WRONG
+    student = tuple(_in_context(item, reference.substitutions) for item in student)
+    for item in student:
         defined = _defined(item, reference)
         if defined is not True:
             return WRONG if defined is False else UNKNOWN

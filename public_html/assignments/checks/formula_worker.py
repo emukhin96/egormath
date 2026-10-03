@@ -19,6 +19,8 @@ def main():
         if mode not in ('expression', 'simplify', 'factor') or (data['multiple'] and mode != 'expression'):
             raise ValueError('неизвестный режим проверки формулы')
         reference, display = _parse_reference(data['payload'], data['multiple'])
+        if reference.substitutions and mode != 'expression':
+            raise ValueError('domain поддерживается только для expression')
         result = {'display': display}
         if 'value' in data:
             result['status'] = _check(data['value'], reference, data['multiple'], mode)
