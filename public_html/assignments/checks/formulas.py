@@ -39,6 +39,7 @@ class Reference:
     input_symbols: tuple = ()
     substitutions: tuple = ()
     angle: tuple = ()
+    bounds: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -192,8 +193,8 @@ def parse_reference(payload, multiple=False, *, validate=False, mode='expression
         raise ValueError('слишком длинный эталон')
     if mode not in ('expression', 'simplify', 'factor') or (multiple and mode != 'expression'):
         raise ValueError('неизвестный режим проверки формулы')
-    texts, _, domain, angle = _reference_context(payload, multiple)
-    if (domain or angle) and mode != 'expression':
+    texts, _, domain, angle, bounds = _reference_context(payload, multiple)
+    if (domain or angle or bounds) and mode != 'expression':
         raise ValueError('области поддерживаются только для expression/expressions')
     spec = FormulaSpec(payload, multiple, mode)
     if not validate:
@@ -376,10 +377,12 @@ def _reference_context(payload, multiple=False):
     parts = re.split(r'\|\s*(?=[A-Za-z]+\s*:)', payload)
     options = {}
     for part in parts[1:]:
-        match = re.fullmatch(r'\s*(positive|domain|angle)\s*:\s*(.*?)\s*', part)
+        match = re.fullmatch(r'\s*(positive|domain|angle|range)\s*:\s*(.*?)\s*', part)
         if not match or match[1] in options:
-            raise ValueError('допустимы однократные опции positive, domain и angle')
+            raise ValueError('допустимы однократные опции positive, domain, angle и range')
         options[match[1]] = match[2]
+    if sum(name in options for name in ('domain', 'angle', 'range')) > 1:
+        raise ValueError('domain, angle и range несовместимы друг с другом')
     positive = ()
     token_re = r'(?:[A-Za-z]|\\[A-Za-z]+)'
     if 'positive' in options:
@@ -419,16 +422,30 @@ def _reference_context(payload, multiple=False):
                 or not 0 <= lower < upper <= 360):
             raise ValueError(r'angle: \alpha<90 или 90<\beta<180; границы 0..360°, positive, без domain')
         angle = (match[2], lower, upper)
+    bounds = ()
+    if 'range' in options:
+        number = r'\d{1,6}(?:\.\d{1,6}|/\d{1,6})?'
+        match = re.fullmatch(
+            rf'\s*(?:({number})\s*<\s*)?({token_re})\s*<\s*({number})\s*', options['range'])
+        try:
+            lower = Fraction(match[1] or '0') if match else None
+            upper = Fraction(match[3]) if match else None
+        except (ValueError, ZeroDivisionError):
+            lower = upper = None
+        if (not match or match[2] not in positive or lower is None
+                or not 0 <= lower < upper):
+            raise ValueError(r'range: \alpha<180 или 10<\alpha<45; положительный параметр, открытые рациональные границы')
+        bounds = (match[2], lower, upper)
     # LaTeX-пробел \; не разделяет эталонный список. Исходный текст
     # сохраняем для отображения; математический парсер сам его нормализует.
     texts = re.split(r'(?<!\\);', parts[0]) if multiple else [parts[0]]
     if not texts or len(texts) > 20 or any(not t.strip() for t in texts):
         raise ValueError('укажите от 1 до 20 выражений через ;')
-    return texts, positive, domain, angle
+    return texts, positive, domain, angle, bounds
 
 
 def _reference_parts(payload, multiple=False):
-    texts, positive, _, _ = _reference_context(payload, multiple)
+    texts, positive, _, _, _ = _reference_context(payload, multiple)
     return texts, positive
 
 
@@ -564,7 +581,7 @@ def _in_context(item, substitutions, *, angular=False):
 
 
 def _parse_reference(payload, multiple=False, *, numeric=False):
-    texts, tokens, domain, angle = _reference_context(payload, multiple)
+    texts, tokens, domain, angle, bounds = _reference_context(payload, multiple)
     names = []
     for token in tokens:
         parsed = _parse(token)
@@ -618,8 +635,22 @@ def _parse_reference(payload, multiple=False, *, numeric=False):
         symbols = set().union(*(component.free_symbols
                               for item in items
                               for component in (item.expression, *item.denominators, *item.components)))
+    if bounds:
+        from sympy import Dummy, Rational
+        token, lower, upper = bounds
+        name = str(_parse(token).expression)
+        symbol = next(s for s in input_symbols if str(s) == name)
+        lower, upper = Rational(str(lower)), Rational(str(upper))
+        u = Dummy('range_u', positive=True)
+        # x=L+(U-L)u/(1+u) — биекция (0,∞) на (L,U).
+        # Числовое значение и его единицы сохраняются, включая градусы.
+        substitutions = ((symbol, lower+(upper-lower)*u/(1+u)),)
+        items = tuple(_in_context(item, substitutions) for item in items)
+        symbols = set().union(*(component.free_symbols
+                              for item in items
+                              for component in (item.expression, *item.denominators, *item.components)))
     reference = Reference(items, positive, tuple(sorted(symbols, key=str)),
-                          input_symbols, substitutions, angle)
+                          input_symbols, substitutions, angle, bounds)
     if any(_defined(item, reference) is False for item in items):
         raise ValueError('эталон не определён на указанной области параметров')
     return reference, ';'.join(texts).strip()
@@ -770,8 +801,18 @@ def _domain_counterexample(item, reference):
     # Это только поиск контрпримера; отсутствие корня не доказывает область.
     for symbol in reference.symbols:
         others = {s: n for s, n in baseline.items() if s != symbol}
-        for denominator in item.denominators:
-            polynomial = denominator.subs(others).as_poly(symbol)
+        candidates = list(item.denominators)
+        if reference.bounds:
+            # В рациональной карте корни и деления имеют рациональные
+            # аргументы. Корень их числителя и соседние точные точки
+            # могут опровергнуть скрытый разрыв/невещественный корень.
+            candidates.extend(c.args[0] for c in item.components
+                              if c.is_Pow and c.exp.is_Rational and not c.exp.is_Integer)
+        for candidate in candidates:
+            value = candidate.subs(others)
+            if reference.bounds:
+                value = cancel(value).as_numer_denom()[0]
+            polynomial = value.as_poly(symbol)
             if polynomial is None or not 1 <= polynomial.degree() <= 8:
                 continue
             # Составная дробь сохраняет произведение исходных знаменателей.
@@ -784,6 +825,9 @@ def _domain_counterexample(item, reference):
                 root = -factor.nth(0) / factor.nth(1)
                 if root.is_real is True and (not symbol.is_positive or root.is_positive is True):
                     values_to_try.append({**baseline, symbol: root})
+                    if reference.bounds and root.is_positive is True:
+                        values_to_try.extend(({**baseline, symbol: root/2},
+                                              {**baseline, symbol: 2*root}))
     for symbol in reference.symbols:
         for number in (-2, -1, 0, 1, 2):
             if symbol.is_positive and number <= 0:
@@ -850,7 +894,7 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
     student = tuple(_parse(t.strip(), reference.positive, numeric=numeric) for t in texts)
     if any(item is None for item in student):
         return UNKNOWN
-    if reference.substitutions and (mode != 'expression' or (multiple and not reference.angle)):
+    if reference.substitutions and (mode != 'expression' or (multiple and not (reference.angle or reference.bounds))):
         return UNKNOWN
     allowed_symbols = set(reference.input_symbols or reference.symbols)
     for item in student:
