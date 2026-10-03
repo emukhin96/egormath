@@ -70,6 +70,7 @@ HELP = (
     ('{{ratio: 1:2}}', 'отношение: 2:4, 1/2:1 и √2:2√2 верны; 2:1 и 0,5 неверны'),
     ('{{ratio: 6:7 | quotient}}', 'отношение или его значение: 6:7 и 6/7 верны; 7:6 и 7/6 неверны'),
     ('{{proportion: 1:2}}', 'отношение с перестановкой: 1:2, 2:1 и 4:2 верны; 0,5 неверно'),
+    ('{{proportion: 2:3 | quotient}}', 'отношение с перестановкой или его значение: 2:3, 3:2, 2/3 и 3/2 верны'),
     ('{{number: 10}}', 'число; принимается любая численно равная запись '
                        '(2,5 / 5/2 / \\frac{5}{2}); допуск — {{number: 3,14 ~ 0,01}}'),
     ('{{choice: мальчиков|*девочек}}', 'выпадающий список, правильный вариант со звёздочкой'),
@@ -153,6 +154,8 @@ class Slot:
     def label(self):
         if self.kind == RATIO and self.allow_quotient:
             return 'отношение с заданным порядком или его значение'
+        if self.kind == PROPORTION and self.allow_quotient:
+            return 'отношение в любом порядке или его значение'
         if self.kind == PAIR and self.unordered_pair:
             return 'группы чисел (порядок не важен)'
         return KINDS.get(self.kind, self.kind)
@@ -278,7 +281,8 @@ def _parse_number(slot, payload):
 
 def _parse_format(slot, payload):
     # Парные |...| принадлежат модулю числа, опция — только в конце.
-    option = re.search(r'\|\s*quotient\s*$', payload) if slot.kind == RATIO else None
+    option = (re.search(r'\|\s*quotient\s*$', payload)
+              if slot.kind in (RATIO, PROPORTION) else None)
     if option:
         payload = payload[:option.start()].strip()
         slot.allow_quotient = True
@@ -488,15 +492,17 @@ def check_slot(slot, value):
         from . import numeric
         from fractions import Fraction
         try:
-            student = formats.proportion(value)
+            student = formats.ratio(value, allow_quotient=slot.allow_quotient)
         except numeric.Uncertain:
-            return formats.check_proportion_exact(value, slot.reference)
+            return formats.check_proportion_exact(
+                value, slot.reference, allow_quotient=slot.allow_quotient)
         if student is None:
             return WRONG
         if isinstance(student, Fraction) and isinstance(slot.data, Fraction):
             equal = student == slot.data or student != 0 and 1 / student == slot.data
             return OK if equal else WRONG
-        return formats.check_proportion_exact(value, slot.reference)
+        return formats.check_proportion_exact(
+            value, slot.reference, allow_quotient=slot.allow_quotient)
     if kind == RATIO:
         from fractions import Fraction
         from . import numeric

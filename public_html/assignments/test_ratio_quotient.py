@@ -14,8 +14,8 @@ class RatioQuotientTests(SimpleTestCase):
         with formulas._failed_lock:
             formulas._failed_inputs.clear()
 
-    def slot(self, reference='6:7'):
-        spec = parse_mask('{{ratio: ' + reference + ' | quotient}}',
+    def slot(self, reference='6:7', kind='ratio'):
+        spec = parse_mask('{{' + kind + ': ' + reference + ' | quotient}}',
                           validate_references=True)
         self.assertTrue(spec.is_valid, spec.errors)
         return spec.slots[0]
@@ -59,8 +59,50 @@ class RatioQuotientTests(SimpleTestCase):
         for mask in ('{{ratio: 6/7 | quotient}}',
                      '{{ratio: 6:7 | unknown}}',
                      '{{ratio: 6:7 | quotient | quotient}}',
-                     '{{proportion: 6:7 | quotient}}'):
+                     '{{proportion: 6/7 | quotient}}',
+                     '{{proportion: 6:7 | quotient | quotient}}'):
             self.assertFalse(parse_mask(mask).is_valid, mask)
+
+    def test_unordered_area_ratio_accepts_values_in_either_direction(self):
+        slot = self.slot('2:3', kind='proportion')
+        self.assertEqual(slot.reference, '2:3')
+        self.assertEqual(slot.label, 'отношение в любом порядке или его значение')
+        for value in ('2:3', '3:2', '4:6', '6:4', '2/3', '3/2',
+                      r'\frac{4}{6}', '-2/-3', '2sqrt(2):3sqrt(2)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+        for value in ('2:2', '0:3', '2:0', '-2:3', '2:3:4',
+                      '0.6666666666666666', '2/3+1/1000000000000'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+        self.assertEqual(check_slot(slot, ''), '')
+
+    def test_unordered_irrational_value_requires_exact_equality(self):
+        slot = self.slot(r'\sqrt2:1', kind='proportion')
+        for value in (r'\sqrt2', r'1/\sqrt2', r'\sqrt8/2',
+                      r'\sqrt2:1', r'1:\sqrt2'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+        for value in ('1.4142135623730951', '0.7071067811865476',
+                      r'\sqrt2+10^{-10}'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+
+    def test_unordered_value_does_not_hide_undefined_subexpressions(self):
+        slot = self.slot('0:1', kind='proportion')
+        self.assertEqual(check_slot(slot, '0'), 'ok')
+        for value in ('1:0', '0/0', '0*(1/0)', '0*sqrt(-1)', '0^0'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+
+    def test_unordered_value_worker_failure_remains_retryable(self):
+        from unittest.mock import patch
+        slot = self.slot(r'\sqrt2:1', kind='proportion')
+        formulas._checked.cache_clear()
+        with patch.object(formulas, '_spawn',
+                          side_effect=formulas.FormulaUnavailable('занято')):
+            with self.assertRaises(formulas.FormulaUnavailable):
+                check_slot(slot, r'1/\sqrt2')
 
     def test_worker_unavailability_remains_retryable(self):
         from unittest.mock import patch

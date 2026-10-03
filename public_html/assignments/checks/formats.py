@@ -83,9 +83,10 @@ def check_ratio_exact(value, reference, *, allow_reverse=False, allow_quotient=F
         return UNKNOWN
 
 
-def check_proportion_exact(value, reference):
+def check_proportion_exact(value, reference, *, allow_quotient=False):
     """Точная проверка отношения, допускающего перестановку частей."""
-    return check_ratio_exact(value, reference, allow_reverse=True)
+    return check_ratio_exact(value, reference, allow_reverse=True,
+                             allow_quotient=allow_quotient)
 
 
 def check_number_exact(value, reference):
