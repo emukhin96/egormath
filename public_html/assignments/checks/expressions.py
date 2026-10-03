@@ -131,7 +131,16 @@ def _lark():
         _parser = getattr(latex_parser, '_lark_latex_parser', None)
         if _parser is None:
             _parser = latex_parser.LarkLaTeXParser(transform=False)
-        _transformer = _parser.transformer
+        # Десятичные числа в любом режиме точны до выполнения операций.
+        # Общий трансформер SymPy не меняем: его могут использовать другие
+        # модули, а восстановление дробей после Float уже теряет точность.
+        class ExactTransformer(type(_parser.transformer)):
+            def number(self, tokens):
+                if tokens[0].type == 'CMD_IMAGINARY_UNIT':
+                    return super().number(tokens)
+                from sympy import Rational
+                return Rational(str(tokens[0]))
+        _transformer = ExactTransformer()
     return _parser, _transformer
 
 
@@ -331,8 +340,8 @@ def evaluate(tree, *, numeric=False, pi_marker=None):
     if numeric:
         global _numeric_transformer
         if _numeric_transformer is None:
-            # Только числовой режим: десятичные записи — точные дроби,
-            # нечётные корни и рациональные степени имеют вещественный смысл.
+            # Только числовой режим: нечётные корни и рациональные
+            # степени имеют вещественный смысл.
             class NumericTransformer(type(transformer)):
                 def __init__(self, pi_marker=None):
                     super().__init__()
@@ -343,12 +352,6 @@ def evaluate(tree, *, numeric=False, pi_marker=None):
                     # Константа известна до вычисления корней и степеней,
                     # а пользовательские переменные остаются символами.
                     return pi if str(token) == self.pi_marker else Symbol(str(token))
-
-                def number(self, tokens):
-                    if tokens[0].type == 'CMD_IMAGINARY_UNIT':
-                        return super().number(tokens)
-                    from sympy import Rational
-                    return Rational(str(tokens[0]))
 
                 def square_root(self, tokens):
                     if len(tokens) == 3:

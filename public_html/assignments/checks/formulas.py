@@ -676,10 +676,10 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
             if component.free_symbols - allowed_symbols:
                 return WRONG
     student = tuple(_in_context(item, reference.substitutions) for item in student)
-    for item in student:
-        defined = _defined(item, reference)
-        if defined is not True:
-            return WRONG if defined is False else UNKNOWN
+    # Доказуемо неверную формулу можно отклонить до трудного анализа
+    # области. Для принятия ответа проверка всех исходных ограничений
+    # остаётся обязательной, даже после сокращения к эталону.
+    uncertain_comparison = False
     # Сохраняем кратность: лишняя или повторная длина не заменяет другую.
     remaining = list(reference.items)
     for item in student:
@@ -697,7 +697,16 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
                 break
             uncertain |= same is None
         else:
-            return UNKNOWN if uncertain else WRONG
+            if not uncertain:
+                return WRONG
+            uncertain_comparison = True
+            break
+    for item in student:
+        defined = _defined(item, reference)
+        if defined is not True:
+            return WRONG if defined is False else UNKNOWN
+    if uncertain_comparison:
+        return UNKNOWN
     # Равносильность уже доказана с исходными областями и предположениями.
     # Повторное сравнение без positive/π потеряло бы этот контекст. По сырому
     # дереву отдельно проверяем только требуемый вид записи.

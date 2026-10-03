@@ -26,12 +26,15 @@ class AbsoluteAdjacencyTests(SimpleTestCase):
                       '|a|b/(a+b)*(2a-3b)/(2a-3b)'):
             self.assertEqual(check_slot(slot, value), 'wrong')
         unrestricted = self.slot('ab/(a+b)')
-        # Без положительности a модуль нельзя удалить. Общая область
-        # рационального эталона пока неопределённа; ложного OK быть не должно.
-        self.assertEqual(check_slot(unrestricted, '|a|b/(a+b)'), 'unknown')
+        # Без положительности a модуль нельзя удалить: при a=-2,b=3
+        # ответ равен 6, а эталон -6. Этот контрпример позволяет отклонить
+        # ввод до трудного анализа общей рациональной области.
+        self.assertEqual(check_slot(unrestricted, '|a|b/(a+b)'), 'wrong')
         raw = formulas._parse('|a|b/(a+b)')
         names = {str(s): s for s in raw.expression.free_symbols}
         self.assertEqual(raw.expression.subs({names['a']: -2, names['b']: 3}), 6)
+        expected = formulas._parse('ab/(a+b)')
+        self.assertEqual(expected.expression.subs({names['a']: -2, names['b']: 3}), -6)
         # Деление не захватывает следующий множитель в знаменатель.
         slot = self.slot('2a')
         self.assertEqual(check_slot(slot, '2/|a|a^2'), 'wrong')
@@ -117,6 +120,8 @@ class AbsoluteAdjacencyTests(SimpleTestCase):
         self.assertEqual(count_abs(raw.tree), 2)
         names = {str(s): s for s in raw.expression.free_symbols}
         self.assertEqual(raw.expression.subs({names['a']: -2, names['b']: 3}), 6)
+        expected = formulas._parse('ab/(a+b)')
+        self.assertEqual(expected.expression.subs({names['a']: -2, names['b']: 3}), -6)
         self.assertEqual(check_slot(slot, '| |a|b/(a+b)'), 'unknown')
         combined = self.slot('2ab/(a+b) | positive: a,b | domain: a<2b')
         for value in ('||a||2b/(a+b)', '|a|2|b|/(a+b)',
