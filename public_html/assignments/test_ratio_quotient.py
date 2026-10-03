@@ -111,3 +111,34 @@ class RatioQuotientTests(SimpleTestCase):
                           validate_references=True)
         self.assertTrue(spec.is_valid, spec.errors)
         self.assertEqual(check_slot(spec.slots[0], r'\sin^{2}\sqrt2'), 'ok')
+
+    def test_bare_function_scripts_keep_the_following_root_as_argument(self):
+        from .checks import expressions
+        for value in (r'\log_2\sqrt{8}', r'\sin^2\sqrt{x}',
+                      r'\cos^2 \sqrt{x}', r'\sin^2(\sqrt{x})',
+                      r'\sin^ 2\sqrt{x}', r'\log_ 2\sqrt8'):
+            with self.subTest(value=value):
+                self.assertNotIn(r'\cdot', expressions.prepare(value))
+        for payload, value in ((r'3/2', r'\log_2\sqrt{8}'),
+                               (r'\sin^{2}(\sqrt{x}) | positive: x', r'\sin^2\sqrt{x}'),
+                               (r'\cos^{2}(\sqrt{x}) | positive: x', r'\cos^2\sqrt{x}'),
+                               (r'3/2', r'\log_ 2\sqrt8'),
+                               (r'\sin^{2}(\sqrt{x}) | positive: x', r'\sin^2(\sqrt{x})'),
+                               (r'\cos^{2}(\sqrt{x}) | positive: x', r'\cos^ 2\sqrt{x}')):
+            spec = parse_mask('{{expression: '+payload+'}}', validate_references=True)
+            self.assertTrue(spec.is_valid, spec.errors)
+            self.assertEqual(check_slot(spec.slots[0], value), 'ok')
+        spec = parse_mask(r'{{equation: y=3/2}}')
+        self.assertTrue(spec.is_valid, spec.errors)
+        self.assertEqual(check_slot(spec.slots[0], r'y=\log_2\sqrt{8}'), 'ok')
+
+    def test_numeric_bare_power_still_multiplies_the_root(self):
+        slot = self.slot(r'4\sqrt2:1')
+        self.assertEqual(check_slot(slot, r'2^2\sqrt2'), 'ok')
+        self.assertEqual(check_slot(slot, r'2^{2}\sqrt2'), 'ok')
+        for value in (r'(2^2)\sqrt2', r'(2^{2})\sqrt2', r'(4)\sqrt2'):
+            self.assertEqual(check_slot(slot, value), 'ok')
+        spec = parse_mask(r'{{expression: \sin^{2}(\sqrt{x})*\sqrt{x} | positive: x}}', validate_references=True)
+        self.assertTrue(spec.is_valid, spec.errors)
+        self.assertEqual(check_slot(spec.slots[0], r'\sin^2(\sqrt{x})\sqrt{x}'), 'ok')
+        self.assertEqual(check_slot(spec.slots[0], r'\sin^2(\sqrt{x}*\sqrt{x})'), 'wrong')

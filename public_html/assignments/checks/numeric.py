@@ -137,6 +137,8 @@ def prepare(text):
     # Здесь функции и переменные уже запрещены: } после степени завершает
     # числовой множитель, а не степень sin или индекс log.
     text = expressions._insert_cdot_after_group(text, allow_script_products=True)
+    # В числовом пути однозначная степень тоже завершает множитель.
+    text = re.sub(r'(?<=[0-9])\s*(?=\\sqrt(?:\[|\{))', r'\\cdot ', text)
     text = re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text)
     return text if len(text) <= 300 else None
 

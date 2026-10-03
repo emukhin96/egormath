@@ -59,19 +59,20 @@ def _closes_script(text, close_idx):
 
 
 def _insert_cdot_after_group(text, *, allow_script_products=False):
-    """``}x`` / ``}2`` / ``}(`` → ``}\\cdot ``, кроме индексов и степеней."""
+    """Явное умножение после группы, кроме индексов и степеней функций."""
     out = []
     i = 0
     n = len(text)
     while i < n:
-        if text[i] == '}':
+        if text[i] in '})':
             j = i + 1
             while j < n and text[j].isspace():
                 j += 1
             if (j < n and (text[j] == '(' or text[j].isalnum()
                            or text.startswith(r'\sqrt', j))
-                    and (allow_script_products or not _closes_script(text, i))):
-                out.append('}\\cdot ')
+                    and (allow_script_products or text[i] != '}'
+                         or not _closes_script(text, i))):
+                out.append(text[i] + '\\cdot ')
                 i = j
                 continue
         out.append(text[i])
@@ -105,8 +106,18 @@ def prepare(text):
     """Нормализация школьной записи + явное умножение перед скобкой."""
     text = normalize_roots(normalize(text))
     text = _insert_cdot_after_group(text)
+    def product(match):
+        # Цифра завершает индекс/степень функции, а корень или скобка —
+        # её аргумент. Пробелы после _/^ не меняют эту связь.
+        script = re.search(
+            r'\\([A-Za-z]+)\s*(?:[_^]\s*(?:[+-]?[0-9A-Za-z]|\{[^{}]+\}))+\s*$',
+            text[:match.start()])
+        if script and script[1] in _TRIG_NODES | {'log', 'ln', 'lg'}:
+            return match[0]
+        return r'\cdot '
+
     for rx in _IMPLICIT_MUL_RES:
-        text = rx.sub(r'\\cdot ', text)
+        text = rx.sub(product, text)
     return text.strip()
 
 
