@@ -151,7 +151,21 @@ def raw_tree(text):
     try:
         # Сырое дерево нужно независимо от transform_expr общего парсера.
         # Его настройки не меняем: им пользуется и parse_latex SymPy.
-        return parser.parser.parse(text)
+        try:
+            return parser.parser.parse(text)
+        except MemoryError:
+            raise
+        except Exception:
+            # Грамматика понимает a|b|, но не |a|b. Только одна пара
+            # черт: вложенные/соседние модули могут иметь иной разбор.
+            # Нормализация применяется после неудачного исходного разбора.
+            if text.count('|') != 2:
+                raise
+            close = text.rfind('|')
+            suffix = text[close + 1:]
+            if not re.match(r'\s*(?:[0-9a-zA-Z(]|\\[A-Za-z]+)', suffix):
+                raise
+            return parser.parser.parse(text[:close + 1] + r'\cdot ' + suffix)
     except MemoryError:
         raise
     except Exception as error:  # noqa: BLE001 — синтаксический сбой = «не разобрано»

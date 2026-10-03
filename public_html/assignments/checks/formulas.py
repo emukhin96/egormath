@@ -629,6 +629,10 @@ def _check(value, reference, multiple=False, mode='expression'):
     from sympy import factor, simplify
     if len(value) > MAX_EXPR_LEN:
         return UNKNOWN
+    # Поле одного выражения не допускает список, даже с верным первым
+    # элементом. В режиме expressions разделитель остаётся допустимым.
+    if not multiple and ';' in value:
+        return WRONG
     texts = value.split(';') if multiple else [value]
     if len(texts) != len(reference.items) or any(not t.strip() for t in texts):
         return WRONG
