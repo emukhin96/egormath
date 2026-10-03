@@ -88,6 +88,12 @@ def check_proportion_exact(value, reference):
     return check_ratio_exact(value, reference, allow_reverse=True)
 
 
+def check_number_exact(value, reference):
+    """Точное вещественное число; исходные области проверяет вычислитель."""
+    from . import formulas
+    return formulas.check(value, formulas.FormulaSpec(reference, False, numeric=True))
+
+
 def oge_kind(codes):
     """Не угадывать формат при неоднозначных экзаменационных метках."""
     kinds = set()

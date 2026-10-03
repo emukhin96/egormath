@@ -46,9 +46,10 @@ class RadicalNotationTests(SimpleTestCase):
 
     def test_undefined_and_variable_roots_are_not_numeric_answers(self):
         slot = self.slot('{{number: 1}}')
-        for value in ('sqrt(-1)', 'sqrt(x^2)', 'sqrt(1', 'sqrt(1/0)'):
+        for value in ('sqrt(-1)', 'sqrt(x^2)', 'sqrt(1/0)'):
             with self.subTest(value=value):
-                self.assertEqual(check_slot(slot, value), 'unknown')
+                self.assertEqual(check_slot(slot, value), 'wrong')
+        self.assertEqual(check_slot(slot, 'sqrt(1'), 'unknown')
 
     def test_cancellation_cannot_hide_nonreal_numeric_roots(self):
         for reference, value in (('0', '0*sqrt(-1)'), ('1', '1+0*sqrt(-1)'),
@@ -56,7 +57,7 @@ class RadicalNotationTests(SimpleTestCase):
                                  ('1', '1+sqrt(-1)-sqrt(-1)')):
             with self.subTest(value=value):
                 self.assertEqual(check_slot(self.slot('{{number: ' + reference + '}}'),
-                                            value), 'unknown')
+                                            value), 'wrong')
         self.assertEqual(check_slot(self.slot('{{number: 0}}'), '0*sqrt(1)'), 'ok')
 
     def test_symbolic_normalization_preserves_extra_domain_holes(self):

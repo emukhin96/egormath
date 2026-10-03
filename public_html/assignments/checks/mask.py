@@ -504,6 +504,17 @@ def check_slot(slot, value):
             return OK
         return WRONG if value in slot.options else UNKNOWN
     if kind == NUMBER:
+        if slot.tolerance is None or slot.tolerance == 0:
+            from ..check_answer import MAX_EXPR_LEN, parse_number, normalize
+            if len(value) > MAX_EXPR_LEN:
+                return UNKNOWN
+            # Целые и школьные дроби не требуют процесса. Для выражений
+            # запрещённые промежуточные операции нельзя скрыть сокращением.
+            student_literal = parse_number(normalize(sets._strip_var(value)))
+            reference_literal = parse_number(normalize(slot.reference))
+            if student_literal is not None and reference_literal is not None:
+                return OK if student_literal == reference_literal else WRONG
+            return formats.check_number_exact(value, slot.reference)
         student = sets.numeric_value(value)
         if student is None:
             return UNKNOWN

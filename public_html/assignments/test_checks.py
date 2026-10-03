@@ -273,6 +273,11 @@ class MaskCheckTests(SimpleTestCase):
         self.assertEqual(check_mask(spec, {'s1': '10', 's2': '30'})[0], OK)
         self.assertEqual(check_mask(spec, {'s1': '10', 's2': '31'})[0], WRONG)
         overall, per_slot = check_mask(spec, {'s1': 'abc', 's2': '30'})
+        self.assertEqual(overall, WRONG)
+        self.assertEqual(per_slot, {'s1': WRONG, 's2': OK})
+        # Буквенное выражение не является числовым ответом; текст, который
+        # не разобран математической грамматикой, остаётся на ручную проверку.
+        overall, per_slot = check_mask(spec, {'s1': 'не знаю', 's2': '30'})
         self.assertEqual(overall, UNKNOWN)
         self.assertEqual(per_slot, {'s1': UNKNOWN, 's2': OK})
 

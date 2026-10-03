@@ -19,6 +19,7 @@ from ..check_answer import MAX_EXPR_LEN, OK, UNKNOWN, WRONG, normalize
 
 _parser = None
 _transformer = None
+_numeric_transformer = None
 
 # Узлы lark-грамматики sympy (sympy/parsing/latex/lark/grammar/latex.lark)
 _PRODUCT_NODES = ('mul', 'adjacent_expressions')
@@ -258,11 +259,44 @@ def resolve(tree):
     return result if _valid_function_scopes(result) else None
 
 
-def evaluate(tree):
+def evaluate(tree, *, numeric=False):
     """Поддерево → sympy-выражение (или None)."""
     if tree is None:
         return None
     _, transformer = _lark()
+    if numeric:
+        global _numeric_transformer
+        if _numeric_transformer is None:
+            # Только числовой режим: десятичные записи — точные дроби,
+            # нечётные корни и рациональные степени имеют вещественный смысл.
+            class NumericTransformer(type(transformer)):
+                def number(self, tokens):
+                    if tokens[0].type == 'CMD_IMAGINARY_UNIT':
+                        return super().number(tokens)
+                    from sympy import Rational
+                    return Rational(str(tokens[0]))
+
+                def square_root(self, tokens):
+                    if len(tokens) == 3:
+                        degree, value = tokens[1:]
+                        if (getattr(degree, 'is_Integer', False) and degree > 0
+                                and degree.is_odd and value.is_real is True):
+                            from sympy import real_root
+                            return real_root(value, degree)
+                    return super().square_root(tokens)
+
+                def superscript(self, tokens):
+                    if len(tokens) in (3, 5):
+                        base = tokens[0]
+                        exponent = tokens[2 if len(tokens) == 3 else 3]
+                        if (getattr(exponent, 'is_Rational', False)
+                                and exponent.q > 1 and exponent.q % 2
+                                and base.is_real is True):
+                            from sympy import real_root
+                            return real_root(base, exponent.q) ** exponent.p
+                    return super().superscript(tokens)
+            _numeric_transformer = NumericTransformer()
+        transformer = _numeric_transformer
     try:
         result = transformer.transform(tree)
     except MemoryError:

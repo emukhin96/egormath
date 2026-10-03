@@ -16,14 +16,19 @@ def main():
         # JSON экранирует символы как \\uXXXX: запас на два поля и метаданные.
         data = json.loads(sys.stdin.read(16 * MAX_EXPR_LEN + 1024))
         mode = data.get('mode', 'expression')
+        numeric = data.get('numeric', False)
+        if not isinstance(numeric, bool) or (numeric and (data['multiple'] or mode != 'expression')):
+            raise ValueError('числовая проверка поддерживает одно выражение')
         if mode not in ('expression', 'simplify', 'factor') or (data['multiple'] and mode != 'expression'):
             raise ValueError('неизвестный режим проверки формулы')
-        reference, display = _parse_reference(data['payload'], data['multiple'])
+        reference, display = _parse_reference(data['payload'], data['multiple'], numeric=numeric)
+        if numeric and (reference.input_symbols or reference.positive or reference.substitutions):
+            raise ValueError('числовой эталон не должен содержать параметры')
         if reference.substitutions and mode != 'expression':
             raise ValueError('domain поддерживается только для expression')
         result = {'display': display}
         if 'value' in data:
-            result['status'] = _check(data['value'], reference, data['multiple'], mode)
+            result['status'] = _check(data['value'], reference, data['multiple'], mode, numeric=numeric)
     except MemoryError:
         result = {'unavailable': True}
     except Exception as error:

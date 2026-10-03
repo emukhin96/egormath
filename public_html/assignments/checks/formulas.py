@@ -44,6 +44,7 @@ class FormulaSpec:
     payload: str
     multiple: bool
     mode: str = 'expression'
+    numeric: bool = False
 
 
 WORKER_TIMEOUT = 3
@@ -207,9 +208,11 @@ def parse_reference(payload, multiple=False, *, validate=False, mode='expression
 
 @lru_cache(maxsize=1024)
 def _checked(value, reference):
-    result = _run_worker({'payload': reference.payload,
-                          'multiple': reference.multiple, 'mode': reference.mode,
-                          'value': value})
+    payload = {'payload': reference.payload, 'multiple': reference.multiple,
+               'mode': reference.mode, 'value': value}
+    if reference.numeric:
+        payload['numeric'] = True
+    result = _run_worker(payload)
     if result.get('unavailable'):
         raise FormulaUnavailable('временная недоступность проверки')
     status = result.get('status')
@@ -267,7 +270,7 @@ def _prepare(text):
 
 
 
-def _components(tree):
+def _components(tree, *, numeric=False):
     """Сохраняет области подвыражений до сокращения корней и степеней."""
     if not expressions._is_tree(tree):
         # Символ-лист не должен исчезнуть в 0*z: проверяем исходные имена.
@@ -276,14 +279,14 @@ def _components(tree):
             return [value] if value is not None and hasattr(value, 'free_symbols') else []
         return []
     tree = expressions.resolve(tree)
-    value = expressions.evaluate(tree)
+    value = expressions.evaluate(tree, numeric=numeric)
     result = [value] if value is not None and hasattr(value, 'free_symbols') else []
     for child in tree.children:
-        result.extend(_components(child))
+        result.extend(_components(child, numeric=numeric))
     return result
 
 
-def _denominators(tree):
+def _denominators(tree, *, numeric=False):
     """Знаменатели в сыром дереве, включая полностью сокращённые дроби."""
     if not expressions._is_tree(tree):
         return []
@@ -296,25 +299,36 @@ def _denominators(tree):
         if len(operands) == 2:
             child = operands[1]
             if tree.data == 'superscript':
-                exponent = (expressions.evaluate(child) if expressions._is_tree(child)
+                exponent = (expressions.evaluate(child, numeric=numeric) if expressions._is_tree(child)
                             else expressions.parse_expr(str(child)))
                 # В школьной записи нулевая и отрицательная степени
                 # требуют ненулевого основания, даже если SymPy уже
                 # превратил a^0 в единицу.
                 child = operands[0] if getattr(exponent, 'is_nonpositive', None) is True else None
-            value = (expressions.evaluate(child) if expressions._is_tree(child)
+            value = (expressions.evaluate(child, numeric=numeric) if expressions._is_tree(child)
                      else expressions.parse_expr(str(child)) if child is not None else None)
             if value is not None:
                 result.append(value)
     for child in tree.children:
-        result.extend(_denominators(child))
+        result.extend(_denominators(child, numeric=numeric))
     return result
 
 
-def _parse(text, positive=()):
+def _parse(text, positive=(), *, numeric=False):
     from sympy import Expr, Symbol, pi
     if not text.strip() or len(text) > MAX_EXPR_LEN:
         return None
+    if numeric:
+        from ..check_answer import parse_number
+        from .sets import _strip_var
+        text = normalize(_strip_var(text))
+        text = re.sub(r'\\operatorname\{arctg\}|\\arctg\b', r'\\arctan', text)
+        text = re.sub(r'(?<![A-Za-z\\])pi(?![A-Za-z])', r'\\pi ', text)
+        literal = parse_number(text)
+        if literal is not None:
+            # Здесь знаменатель уже проверен как ненулевое целое; можно
+            # убрать ведущий плюс и знак знаменателя без потери области.
+            text = str(literal)
     text = _prepare(text)
     # Константа π не поддерживается штатной Lark-грамматикой.
     marker = next((c for c in 'QZXVW' if c not in text), None)
@@ -327,11 +341,11 @@ def _parse(text, positive=()):
     # Повторный разбор альтернатив в каждом поддереве тратит время и
     # может подставить области от другой интерпретации того же ввода.
     tree = expressions.resolve(expressions.raw_tree(text))
-    value = expressions.evaluate(tree)
+    value = expressions.evaluate(tree, numeric=numeric)
     if tree is None or not isinstance(value, Expr):
         return None
-    denominators = _denominators(tree)
-    components = _components(tree)
+    denominators = _denominators(tree, numeric=numeric)
+    components = _components(tree, numeric=numeric)
     symbols = set(value.free_symbols)
     for component in (*denominators, *components):
         symbols.update(component.free_symbols)
@@ -403,7 +417,7 @@ def _in_context(item, substitutions):
                    item.tree)
 
 
-def _parse_reference(payload, multiple=False):
+def _parse_reference(payload, multiple=False, *, numeric=False):
     texts, tokens, domain = _reference_context(payload, multiple)
     names = []
     for token in tokens:
@@ -413,7 +427,7 @@ def _parse_reference(payload, multiple=False):
         # Имена вариантов могут совпадать: \varphi разбирается как phi.
         names.append(str(parsed.expression))
     positive = tuple(dict.fromkeys(names))
-    items = tuple(_parse(t.strip(), positive) for t in texts)
+    items = tuple(_parse(t.strip(), positive, numeric=numeric) for t in texts)
     if any(x is None for x in items):
         raise ValueError('эталон не разобран как выражение')
     symbols = set()
@@ -627,7 +641,7 @@ def _counterexample(difference, reference):
     return False
 
 
-def _check(value, reference, multiple=False, mode='expression'):
+def _check(value, reference, multiple=False, mode='expression', *, numeric=False):
     from sympy import factor, simplify
     if len(value) > MAX_EXPR_LEN:
         return UNKNOWN
@@ -641,7 +655,7 @@ def _check(value, reference, multiple=False, mode='expression'):
     texts = value.split(';') if multiple else [value]
     if len(texts) != len(reference.items) or any(not t.strip() for t in texts):
         return WRONG
-    student = tuple(_parse(t.strip(), reference.positive) for t in texts)
+    student = tuple(_parse(t.strip(), reference.positive, numeric=numeric) for t in texts)
     if any(item is None for item in student):
         return UNKNOWN
     if reference.substitutions and (multiple or mode != 'expression'):
