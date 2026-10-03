@@ -129,3 +129,25 @@ class AbsoluteAdjacencyTests(SimpleTestCase):
             self.assertEqual(check_slot(slot, value), 'ok', value)
         for value in ('||8||2+0*0^0', '|8|2+0/0', '|8|2+0sqrt(-1)'):
             self.assertEqual(check_slot(slot, value), 'wrong', value)
+
+    def test_latex_operators_after_nested_absolute_are_not_factors(self):
+        slot = self.slot('a/b | positive: a,b')
+        for value in (r'||a||\div b', r'|||a|||\div b'):
+            self.assertEqual(check_slot(slot, value), 'ok', value)
+        for value in (r'||a||\div b+1', r'||a||\div 0'):
+            self.assertEqual(check_slot(slot, value), 'wrong', value)
+        half = self.slot('a/(2b) | positive: a,b')
+        self.assertEqual(check_slot(half, r'||a||\div(||b||2)'), 'ok')
+        doubled = self.slot('2a/b | positive: a,b')
+        self.assertEqual(check_slot(doubled, r'||a||\div |b|2'), 'ok')
+        self.assertEqual(check_slot(half, r'||a||\div |b|2'), 'wrong')
+        product = self.slot('ab | positive: a,b')
+        for command in (r'\cdot', r'\times'):
+            self.assertEqual(check_slot(product, '||a||'+command+' b'), 'ok')
+        # ±/∓ — операторы, не множители; одиночный слот не выбирает
+        # одну из двух альтернатив, но нормализация не портит запись.
+        for command in (r'\div', r'\pm', r'\mp', r'\cdot', r'\times'):
+            normalized = expressions._absolute_products('||a||'+command+' b')
+            self.assertEqual(normalized, '|(|(a)|)|'+command+' b')
+        self.assertEqual(expressions._absolute_products(r'||a|\pm 1|'),
+                         r'|(|(a)|\pm 1)|')

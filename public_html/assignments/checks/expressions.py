@@ -165,13 +165,13 @@ def _absolute_products(text):
                 while following < len(text) and text[following].isspace():
                     following += 1
                 suffix = text[following:]
-                if (re.match(r'(?:[0-9a-zA-Z(]|\\[A-Za-z]+)', suffix)
+                if (re.match(r'(?:[0-9a-zA-Z(]|\\(?!cdot\b|times\b|div\b|pm\b|mp\b)[A-Za-z]+)', suffix)
                         or suffix.startswith('|') and not depth):
                     out.append(r'\cdot ')
                     # После явного умножения 2b/2(b+c) разделяем на
                     # множители; существующий знак операции не дублируем.
                     coefficient = re.match(
-                        r'\d+(?:\.\d+)?\s*(?=[A-Za-z(|]|\\(?!cdot\b|times\b|div\b)[A-Za-z]+)',
+                        r'\d+(?:\.\d+)?\s*(?=[A-Za-z(|]|\\(?!cdot\b|times\b|div\b|pm\b|mp\b)[A-Za-z]+)',
                         suffix)
                     if coefficient:
                         out.append(coefficient[0].strip() + r'\cdot ')
@@ -183,7 +183,7 @@ def _absolute_products(text):
             if command:
                 out.append(command[0])
                 operand = command[1] in _TRIG_NODES | {
-                    'cdot', 'times', 'div', 'frac', 'dfrac', 'tfrac',
+                    'cdot', 'times', 'div', 'pm', 'mp', 'frac', 'dfrac', 'tfrac',
                     'sqrt', 'log', 'ln', 'lg'}
                 i += command.end()
                 continue
