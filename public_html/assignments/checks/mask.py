@@ -482,21 +482,16 @@ def check_slot(slot, value):
     if kind == PROPORTION:
         from . import numeric
         from fractions import Fraction
-        from decimal import DecimalException
         try:
             student = formats.proportion(value)
         except numeric.Uncertain:
             return formats.check_proportion_exact(value, slot.reference)
         if student is None:
             return WRONG
-        if student == 0 or slot.data == 0:
-            return OK if student == slot.data else WRONG
-        try:
-            equal = numeric.equal(student, slot.data) or numeric.equal(
-                numeric.calculate('div', Fraction(1), student), slot.data)
-        except (ValueError, DecimalException, OverflowError, ZeroDivisionError):
-            return WRONG
-        return OK if equal else WRONG
+        if isinstance(student, Fraction) and isinstance(slot.data, Fraction):
+            equal = student == slot.data or student != 0 and 1 / student == slot.data
+            return OK if equal else WRONG
+        return formats.check_proportion_exact(value, slot.reference)
     if kind == RATIO:
         from fractions import Fraction
         from . import numeric
@@ -532,16 +527,10 @@ def check_slot(slot, value):
             return UNKNOWN
         return OK if sets.numbers_equal(student, slot.data, slot.tolerance) else WRONG
     if kind == PAIR:
-        student = sets.parse_pairs(value)
-        if student is None:
-            return UNKNOWN
-        return OK if sets.pairs_equal(
-            student, slot.data, unordered=slot.unordered_pair) else WRONG
+        return formats.check_collection_exact(value, slot.reference, kind='pair',
+                                              unordered=slot.unordered_pair)
     if kind == SET:
-        student = sets.parse_set(value)
-        if student is None:
-            return UNKNOWN
-        return OK if sets.sets_equal(student, slot.data) else WRONG
+        return formats.check_collection_exact(value, slot.reference, kind='set')
     if kind == RANGE:
         student = sets.parse_range(value)
         if student is None:
@@ -577,7 +566,9 @@ def check_mask(spec, values, known=None):
             continue
         if unavailable is not None and (
                 slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION, RATIO)
-                or slot.kind == NUMBER and _number_needs_worker(slot, values.get(slot.name, ''))):
+                or slot.kind == NUMBER and _number_needs_worker(slot, values.get(slot.name, ''))
+                or slot.kind in (SET, PAIR) and formats.collection_needs_worker(
+                    values.get(slot.name, ''), slot.reference, kind=slot.kind)):
             # После сбоя не ждём вычислитель заново для каждой формулы;
             # продолжаем только дешёвые проверки остальных полей.
             results[slot.name] = UNKNOWN

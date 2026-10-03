@@ -68,7 +68,7 @@ def check_ratio_exact(value, reference, *, allow_reverse=False, allow_quotient=F
     try:
         parts = [numeric.worker_text(part) for part in parts]
         expected = [numeric.worker_text(part) for part in expected]
-        spec, _ = formulas.parse_reference(quotient(expected))
+        spec = formulas.FormulaSpec(quotient(expected), False, numeric=True)
         direct = formulas.check(quotient(parts), spec)
         if direct == OK or not allow_reverse:
             return direct
@@ -92,6 +92,37 @@ def check_number_exact(value, reference):
     """Точное вещественное число; исходные области проверяет вычислитель."""
     from . import formulas
     return formulas.check(value, formulas.FormulaSpec(reference, False, numeric=True))
+
+
+def _collection_literals(value, reference, kind):
+    from . import sets, numeric_collections
+    parser = sets.parse_set if kind == 'set' else sets.parse_pairs
+    return (parser(reference, value_parser=numeric_collections.literal),
+            parser(value, value_parser=numeric_collections.literal))
+
+
+def collection_needs_worker(value, reference, *, kind):
+    """Тот же быстрый путь для проверки и пропуска после сбоя процесса."""
+    from . import sets
+    if not (value or '').strip() or len(value) > sets.MAX_COLLECTION_LEN:
+        return False
+    return any(item is None for item in _collection_literals(value, reference, kind))
+
+
+def check_collection_exact(value, reference, *, kind, unordered=False):
+    """Числовые списки: точные дроби сразу, арифметика в вычислителе."""
+    from . import formulas, sets
+    from ..check_answer import OK, UNKNOWN, WRONG
+    if len(value) > sets.MAX_COLLECTION_LEN:
+        return UNKNOWN
+    expected, student = _collection_literals(value, reference, kind)
+    if expected is not None and student is not None:
+        same = (sets.sets_equal(expected, student) if kind == 'set'
+                else sets.pairs_equal(expected, student, unordered=unordered))
+        return OK if same else WRONG
+    mode = kind if not unordered else 'pair-unordered'
+    return formulas.check(value, formulas.FormulaSpec(reference, False, mode=mode,
+                                                      numeric=True))
 
 
 def oge_kind(codes):

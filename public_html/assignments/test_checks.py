@@ -373,6 +373,9 @@ class MaskCheckTests(SimpleTestCase):
         s = slot(r'{{pair: (\sqrt{2};\sqrt{2}+2/10^9) | unordered}}')
         for value in (r'(\sqrt{2}+1/10^9;\sqrt{2})',
                       r'(\sqrt{2};\sqrt{2}+1/10^9)'):
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        for value in (r'(\sqrt{2}+2/10^9;\sqrt{2})',
+                      r'(\sqrt{2};\sqrt{2}+2/10^9)'):
             self.assertEqual(check_slot(s, value), OK, value)
         large = slot(r'{{pair: (10^{200};1) | unordered}}')
         self.assertEqual(check_slot(large, r'(1;10^{200})'), OK)

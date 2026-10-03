@@ -229,7 +229,11 @@ def check(value, reference, multiple=False):
     поднимается как FormulaUnavailable: это не вердикт, сохранять и
     засчитывать его нельзя — проверку нужно повторить позже.
     """
-    if len(value) > MAX_EXPR_LEN:
+    limit = MAX_EXPR_LEN
+    if reference.numeric and reference.mode in ('set', 'pair', 'pair-unordered'):
+        from .sets import MAX_COLLECTION_LEN
+        limit = MAX_COLLECTION_LEN
+    if len(value) > limit:
         return UNKNOWN
     try:
         return _checked(value, reference)
