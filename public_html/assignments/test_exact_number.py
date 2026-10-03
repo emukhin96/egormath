@@ -4,7 +4,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 
 from .checks import formulas
-from .checks.mask import check_slot, parse_mask, render_fragments
+from .checks.mask import check_slot, check_mask, parse_mask, render_fragments
 
 
 class ExactNumberTests(SimpleTestCase):
@@ -87,3 +87,29 @@ class ExactNumberTests(SimpleTestCase):
             self.assertEqual(check_slot(self.slot('54'), '+54'), 'ok')
             self.assertEqual(check_slot(self.slot('54'), '9' * 10000), 'unknown')
             spawn.assert_not_called()
+
+    def test_failed_worker_skips_remaining_expressions_but_checks_literals(self):
+        spec = parse_mask(r'{{number: \sqrt2}} {{number: \sqrt3}} {{number: 54}} '
+                          '{{number: 7 ~ 0.1}} {{number: 54}} {{number: 15}} '
+                          '{{number: 54}}')
+        self.assertTrue(spec.is_valid, spec.errors)
+        values = {'s1': r'2/\sqrt2', 's2': r'\sqrt{12}/2', 's3': '+54',
+                  's4': '7.05', 's5': '55', 's6': '', 's7': '9'*10000}
+        with patch.object(formulas, '_spawn',
+                          side_effect=formulas.FormulaUnavailable('занято')) as spawn:
+            with self.assertRaises(formulas.FormulaUnavailable) as caught:
+                check_mask(spec, values)
+            spawn.assert_called_once()
+        self.assertEqual(caught.exception.slot_checks,
+                         {'s1': 'unknown', 's2': 'unknown', 's3': 'ok', 's4': 'ok',
+                          's5': 'wrong', 's6': '', 's7': 'unknown'})
+
+    def test_pi_is_real_before_odd_roots_and_powers_are_evaluated(self):
+        slot = self.slot(r'-\sqrt[3]{\pi}')
+        for value in (r'\sqrt[3]{-\pi}', r'(-\pi)^{1/3}',
+                      r'-\sqrt[3]{3.141592653589793238462643383279}'):
+            self.assertEqual(check_slot(slot, value),
+                             'wrong' if '3.14159' in value else 'ok', value)
+        for value in (r'\sqrt[3]{-\pi}+0/0', r'\sqrt[3]{-\pi}+0*sqrt(-1)',
+                      r'\sqrt[3]{-\pi}+Q-Q'):
+            self.assertEqual(check_slot(slot, value), 'wrong', value)

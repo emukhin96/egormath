@@ -455,6 +455,19 @@ def _parse_order_value(value, count):
     return chosen
 
 
+def _number_literals(value, reference):
+    from ..check_answer import parse_number
+    return (parse_number(normalize(sets._strip_var(value))),
+            parse_number(normalize(reference)))
+
+
+def _number_needs_worker(slot, value):
+    from ..check_answer import MAX_EXPR_LEN
+    if slot.tolerance not in (None, 0) or not value.strip() or len(value) > MAX_EXPR_LEN:
+        return False
+    return any(number is None for number in _number_literals(value, slot.reference))
+
+
 def check_slot(slot, value):
     """Значение ученика для одного слота → '' / ok / wrong / unknown."""
     value = (value or '').strip()
@@ -505,13 +518,12 @@ def check_slot(slot, value):
         return WRONG if value in slot.options else UNKNOWN
     if kind == NUMBER:
         if slot.tolerance is None or slot.tolerance == 0:
-            from ..check_answer import MAX_EXPR_LEN, parse_number, normalize
+            from ..check_answer import MAX_EXPR_LEN
             if len(value) > MAX_EXPR_LEN:
                 return UNKNOWN
             # Целые и школьные дроби не требуют процесса. Для выражений
             # запрещённые промежуточные операции нельзя скрыть сокращением.
-            student_literal = parse_number(normalize(sets._strip_var(value)))
-            reference_literal = parse_number(normalize(slot.reference))
+            student_literal, reference_literal = _number_literals(value, slot.reference)
             if student_literal is not None and reference_literal is not None:
                 return OK if student_literal == reference_literal else WRONG
             return formats.check_number_exact(value, slot.reference)
@@ -563,7 +575,9 @@ def check_mask(spec, values, known=None):
         if known and slot.name in known:
             results[slot.name] = known[slot.name]
             continue
-        if unavailable is not None and slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION, RATIO):
+        if unavailable is not None and (
+                slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION, RATIO)
+                or slot.kind == NUMBER and _number_needs_worker(slot, values.get(slot.name, ''))):
             # После сбоя не ждём вычислитель заново для каждой формулы;
             # продолжаем только дешёвые проверки остальных полей.
             results[slot.name] = UNKNOWN

@@ -259,7 +259,7 @@ def resolve(tree):
     return result if _valid_function_scopes(result) else None
 
 
-def evaluate(tree, *, numeric=False):
+def evaluate(tree, *, numeric=False, pi_marker=None):
     """Поддерево → sympy-выражение (или None)."""
     if tree is None:
         return None
@@ -270,6 +270,16 @@ def evaluate(tree, *, numeric=False):
             # Только числовой режим: десятичные записи — точные дроби,
             # нечётные корни и рациональные степени имеют вещественный смысл.
             class NumericTransformer(type(transformer)):
+                def __init__(self, pi_marker=None):
+                    super().__init__()
+                    self.pi_marker = pi_marker
+
+                def SYMBOL(self, token):
+                    from sympy import Symbol, pi
+                    # Константа известна до вычисления корней и степеней,
+                    # а пользовательские переменные остаются символами.
+                    return pi if str(token) == self.pi_marker else Symbol(str(token))
+
                 def number(self, tokens):
                     if tokens[0].type == 'CMD_IMAGINARY_UNIT':
                         return super().number(tokens)
@@ -296,7 +306,8 @@ def evaluate(tree, *, numeric=False):
                             return real_root(base, exponent.q) ** exponent.p
                     return super().superscript(tokens)
             _numeric_transformer = NumericTransformer()
-        transformer = _numeric_transformer
+        transformer = (_numeric_transformer.__class__(pi_marker=pi_marker)
+                       if pi_marker else _numeric_transformer)
     try:
         result = transformer.transform(tree)
     except MemoryError:

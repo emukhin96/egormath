@@ -270,7 +270,7 @@ def _prepare(text):
 
 
 
-def _components(tree, *, numeric=False):
+def _components(tree, *, numeric=False, pi_marker=None):
     """Сохраняет области подвыражений до сокращения корней и степеней."""
     if not expressions._is_tree(tree):
         # Символ-лист не должен исчезнуть в 0*z: проверяем исходные имена.
@@ -279,14 +279,14 @@ def _components(tree, *, numeric=False):
             return [value] if value is not None and hasattr(value, 'free_symbols') else []
         return []
     tree = expressions.resolve(tree)
-    value = expressions.evaluate(tree, numeric=numeric)
+    value = expressions.evaluate(tree, numeric=numeric, pi_marker=pi_marker)
     result = [value] if value is not None and hasattr(value, 'free_symbols') else []
     for child in tree.children:
-        result.extend(_components(child, numeric=numeric))
+        result.extend(_components(child, numeric=numeric, pi_marker=pi_marker))
     return result
 
 
-def _denominators(tree, *, numeric=False):
+def _denominators(tree, *, numeric=False, pi_marker=None):
     """Знаменатели в сыром дереве, включая полностью сокращённые дроби."""
     if not expressions._is_tree(tree):
         return []
@@ -299,18 +299,18 @@ def _denominators(tree, *, numeric=False):
         if len(operands) == 2:
             child = operands[1]
             if tree.data == 'superscript':
-                exponent = (expressions.evaluate(child, numeric=numeric) if expressions._is_tree(child)
+                exponent = (expressions.evaluate(child, numeric=numeric, pi_marker=pi_marker) if expressions._is_tree(child)
                             else expressions.parse_expr(str(child)))
                 # В школьной записи нулевая и отрицательная степени
                 # требуют ненулевого основания, даже если SymPy уже
                 # превратил a^0 в единицу.
                 child = operands[0] if getattr(exponent, 'is_nonpositive', None) is True else None
-            value = (expressions.evaluate(child, numeric=numeric) if expressions._is_tree(child)
+            value = (expressions.evaluate(child, numeric=numeric, pi_marker=pi_marker) if expressions._is_tree(child)
                      else expressions.parse_expr(str(child)) if child is not None else None)
             if value is not None:
                 result.append(value)
     for child in tree.children:
-        result.extend(_denominators(child, numeric=numeric))
+        result.extend(_denominators(child, numeric=numeric, pi_marker=pi_marker))
     return result
 
 
@@ -341,11 +341,12 @@ def _parse(text, positive=(), *, numeric=False):
     # Повторный разбор альтернатив в каждом поддереве тратит время и
     # может подставить области от другой интерпретации того же ввода.
     tree = expressions.resolve(expressions.raw_tree(text))
-    value = expressions.evaluate(tree, numeric=numeric)
+    numeric_pi = marker if numeric and has_pi else None
+    value = expressions.evaluate(tree, numeric=numeric, pi_marker=numeric_pi)
     if tree is None or not isinstance(value, Expr):
         return None
-    denominators = _denominators(tree, numeric=numeric)
-    components = _components(tree, numeric=numeric)
+    denominators = _denominators(tree, numeric=numeric, pi_marker=numeric_pi)
+    components = _components(tree, numeric=numeric, pi_marker=numeric_pi)
     symbols = set(value.free_symbols)
     for component in (*denominators, *components):
         symbols.update(component.free_symbols)
