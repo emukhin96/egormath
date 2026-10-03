@@ -140,6 +140,27 @@ def _lark():
                     return super().number(tokens)
                 from sympy import Rational
                 return Rational(str(tokens[0]))
+
+            def square_root(self, tokens):
+                if len(tokens) == 3:
+                    degree, value = tokens[1:]
+                    if (getattr(degree, 'is_Integer', False) and degree > 0
+                            and degree.is_odd):
+                        from sympy import real_root
+                        # Для ещё неизвестного символа сохраняется условная
+                        # ветвь; вещественные предположения задаёт проверка.
+                        return real_root(value, degree)
+                return super().square_root(tokens)
+
+            def superscript(self, tokens):
+                if len(tokens) in (3, 5):
+                    base = tokens[0]
+                    exponent = tokens[2 if len(tokens) == 3 else 3]
+                    if (getattr(exponent, 'is_Rational', False)
+                            and exponent.q > 1 and exponent.q % 2):
+                        from sympy import real_root
+                        return real_root(base, exponent.q) ** exponent.p
+                return super().superscript(tokens)
         _transformer = ExactTransformer()
     return _parser, _transformer
 
@@ -340,8 +361,8 @@ def evaluate(tree, *, numeric=False, pi_marker=None):
     if numeric:
         global _numeric_transformer
         if _numeric_transformer is None:
-            # Только числовой режим: нечётные корни и рациональные
-            # степени имеют вещественный смысл.
+            # Числовой режим узнаёт константу π до операций;
+            # школьные нечётные корни наследуются от точного трансформера.
             class NumericTransformer(type(transformer)):
                 def __init__(self, pi_marker=None):
                     super().__init__()
@@ -353,25 +374,6 @@ def evaluate(tree, *, numeric=False, pi_marker=None):
                     # а пользовательские переменные остаются символами.
                     return pi if str(token) == self.pi_marker else Symbol(str(token))
 
-                def square_root(self, tokens):
-                    if len(tokens) == 3:
-                        degree, value = tokens[1:]
-                        if (getattr(degree, 'is_Integer', False) and degree > 0
-                                and degree.is_odd and value.is_real is True):
-                            from sympy import real_root
-                            return real_root(value, degree)
-                    return super().square_root(tokens)
-
-                def superscript(self, tokens):
-                    if len(tokens) in (3, 5):
-                        base = tokens[0]
-                        exponent = tokens[2 if len(tokens) == 3 else 3]
-                        if (getattr(exponent, 'is_Rational', False)
-                                and exponent.q > 1 and exponent.q % 2
-                                and base.is_real is True):
-                            from sympy import real_root
-                            return real_root(base, exponent.q) ** exponent.p
-                    return super().superscript(tokens)
             _numeric_transformer = NumericTransformer()
         transformer = (_numeric_transformer.__class__(pi_marker=pi_marker)
                        if pi_marker else _numeric_transformer)

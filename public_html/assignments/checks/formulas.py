@@ -363,9 +363,23 @@ def _parse(text, positive=(), *, numeric=False):
     replacements = {s: (pi if has_pi and str(s) == marker else
                        Symbol(str(s), positive=True) if str(s) in positive else
                        Symbol(str(s), real=True)) for s in symbols}
-    return Formula(value.xreplace(replacements),
-                   tuple(d.xreplace(replacements) for d in denominators),
-                   tuple(c.xreplace(replacements) for c in components), tree)
+    def move(component):
+        from sympy import sign, simplify
+        component = component.xreplace(replacements)
+        if component.has(sign):
+            # sign(x^(2n+1))=sign(x) и при x=0. Отрицательные
+            # показатели сюда не входят: их разрыв сохраняется отдельно.
+            normalized = component.replace(
+                lambda node: node.func == sign and node.args[0].is_Pow
+                and node.args[0].base.is_real is True
+                and node.args[0].exp.is_Integer
+                and node.args[0].exp.is_positive and node.args[0].exp.is_odd,
+                lambda node: sign(node.args[0].base))
+            if normalized != component:
+                component = simplify(normalized)
+        return component
+    return Formula(move(value), tuple(move(d) for d in denominators),
+                   tuple(move(c) for c in components), tree)
 
 
 def _reference_context(payload, multiple=False):
@@ -569,11 +583,25 @@ def _in_context(item, substitutions, *, angular=False):
             # в точные рациональные выражения; ограничения каждого
             # исходного подвыражения переносятся отдельно.
             from sympy import expand_trig, factor
-            from sympy import Abs
+            from sympy import Abs, Dummy, S, sign, sin, cos, tan, cot
             value = factor(expand_trig(value))
             value = value.replace(
                 lambda node: node.func == Abs and _angular_sign(node.args[0], substitutions) in (-1, 0, 1),
                 lambda node: _angular_sign(node.args[0], substitutions)*node.args[0])
+            value = value.replace(
+                lambda node: node.func == sign and _angular_sign(node.args[0], substitutions) in (-1, 0, 1),
+                lambda node: S(_angular_sign(node.args[0], substitutions)))
+            # Знак этих функций доказан на всём открытом интервале.
+            # Временный положительный символ разрешает сокращать нечётные
+            # корни степеней; неизвестные знаки и исходные области не меняем.
+            proven, restore = {}, {}
+            for node in value.atoms(sin, cos, tan, cot):
+                polarity = _angular_sign(node, substitutions)
+                if polarity in (-1, 1):
+                    magnitude = Dummy('proved_trig_magnitude', positive=True)
+                    proven[node] = polarity*magnitude
+                    restore[magnitude] = polarity*node
+            value = value.xreplace(proven).xreplace(restore)
         return value
     return Formula(move(item.expression),
                    tuple(move(d) for d in item.denominators),
