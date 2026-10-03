@@ -17,7 +17,7 @@ from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 
-from ..check_answer import MAX_EXPR_LEN, OK, UNKNOWN, WRONG
+from ..check_answer import MAX_EXPR_LEN, OK, UNKNOWN, WRONG, normalize
 from . import expressions
 from .formula_fork import FormulaStartupUnavailable
 
@@ -381,7 +381,9 @@ def _reference_context(payload, multiple=False):
                 or left not in positive or right not in positive):
             raise ValueError('domain требует два различных положительных параметра')
         domain = (left, coefficient, right)
-    texts = parts[0].split(';') if multiple else [parts[0]]
+    # LaTeX-пробел \; не разделяет эталонный список. Исходный текст
+    # сохраняем для отображения; математический парсер сам его нормализует.
+    texts = re.split(r'(?<!\\);', parts[0]) if multiple else [parts[0]]
     if not texts or len(texts) > 20 or any(not t.strip() for t in texts):
         raise ValueError('укажите от 1 до 20 выражений через ;')
     return texts, positive, domain
@@ -629,6 +631,9 @@ def _check(value, reference, multiple=False, mode='expression'):
     from sympy import factor, simplify
     if len(value) > MAX_EXPR_LEN:
         return UNKNOWN
+    # Команды \;, \,, \: и \! — пробелы, а не элементы списка.
+    # Та же нормализация применяется при разборе отдельного выражения.
+    value = normalize(value)
     # Поле одного выражения не допускает список, даже с верным первым
     # элементом. В режиме expressions разделитель остаётся допустимым.
     if not multiple and ';' in value:

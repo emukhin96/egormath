@@ -58,3 +58,30 @@ class AbsoluteAdjacencyTests(SimpleTestCase):
         self.assertEqual(check_slot(slot, 'x+1;x'), 'ok')
         self.assertEqual(check_slot(slot, 'x;x+1;1'), 'wrong')
         self.assertEqual(check_slot(slot, ''), '')
+
+    def test_latex_spacing_is_not_an_extra_list_element(self):
+        cases = (('expression', 'x+1', r'x\;+\;1'),
+                 ('simplify', 'x+1', r'x\;+\;1'),
+                 ('factor', '(x-1)(x+1)', r'(x\;-1)(x\;+1)'),
+                 ('expression', 'ab/(a+b) | positive: a,b | domain: a<2b',
+                  r'\frac{ab}{a\;+\;b}'))
+        for kind, payload, value in cases:
+            slot = self.slot(payload, kind)
+            with self.subTest(kind=kind, value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+                self.assertEqual(check_slot(slot, value+';0'), 'wrong')
+        slot = self.slot('x+1')
+        for spacing in (r'\;', r'\,', r'\:', r'\!', r'\ '):
+            self.assertEqual(check_slot(slot, 'x'+spacing+'+'+spacing+'1'), 'ok')
+            self.assertEqual(check_slot(slot, 'x'+spacing+'+'+spacing+'2'), 'wrong')
+        slot = self.slot('ab/(a+b) | positive: a,b | domain: a<2b')
+        self.assertEqual(check_slot(slot, r'ab/(a\;+b)+0/(a\;-b)'), 'wrong')
+
+    def test_latex_spacing_preserves_list_count_reference_and_order(self):
+        payload = r'x\;+1;x'
+        slot = self.slot(payload, 'expressions')
+        self.assertEqual(slot.reference, payload)
+        for value in (r'x;x\;+1', r'x\;+1;x', r'x\,+1;x'):
+            self.assertEqual(check_slot(slot, value), 'ok')
+        for value in (r'x;x\;+1;2', r'x\;+1;', r'x\;+1;x;x', r'x;x\;+2'):
+            self.assertEqual(check_slot(slot, value), 'wrong')
