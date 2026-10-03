@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
+from fractions import Fraction
 from pathlib import Path
 
 from ..check_answer import MAX_EXPR_LEN, OK, UNKNOWN, WRONG, normalize
@@ -37,6 +38,7 @@ class Reference:
     symbols: tuple
     input_symbols: tuple = ()
     substitutions: tuple = ()
+    angle: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -190,9 +192,9 @@ def parse_reference(payload, multiple=False, *, validate=False, mode='expression
         raise ValueError('слишком длинный эталон')
     if mode not in ('expression', 'simplify', 'factor') or (multiple and mode != 'expression'):
         raise ValueError('неизвестный режим проверки формулы')
-    texts, _, domain = _reference_context(payload, multiple)
-    if domain and mode != 'expression':
-        raise ValueError('domain поддерживается только для expression')
+    texts, _, domain, angle = _reference_context(payload, multiple)
+    if (domain or angle) and mode != 'expression':
+        raise ValueError('области поддерживаются только для expression/expressions')
     spec = FormulaSpec(payload, multiple, mode)
     if not validate:
         return spec, ';'.join(texts).strip()
@@ -374,9 +376,9 @@ def _reference_context(payload, multiple=False):
     parts = re.split(r'\|\s*(?=[A-Za-z]+\s*:)', payload)
     options = {}
     for part in parts[1:]:
-        match = re.fullmatch(r'\s*(positive|domain)\s*:\s*(.*?)\s*', part)
+        match = re.fullmatch(r'\s*(positive|domain|angle)\s*:\s*(.*?)\s*', part)
         if not match or match[1] in options:
-            raise ValueError('допустимы однократные опции positive и domain')
+            raise ValueError('допустимы однократные опции positive, domain и angle')
         options[match[1]] = match[2]
     positive = ()
     token_re = r'(?:[A-Za-z]|\\[A-Za-z]+)'
@@ -403,30 +405,166 @@ def _reference_context(payload, multiple=False):
                 or left not in positive or right not in positive):
             raise ValueError('domain требует два различных положительных параметра')
         domain = (left, coefficient, right)
+    angle = ()
+    if 'angle' in options:
+        degree = r'\d{1,3}(?:\.\d{1,3}|/\d{1,3})?'
+        match = re.fullmatch(
+            rf'\s*(?:({degree})\s*<\s*)?({token_re})\s*<\s*({degree})\s*', options['angle'])
+        try:
+            lower = Fraction(match[1] or '0') if match else None
+            upper = Fraction(match[3]) if match else None
+        except (ValueError, ZeroDivisionError):
+            lower = upper = None
+        if (not match or match[2] not in positive or domain or lower is None
+                or not 0 <= lower < upper <= 360):
+            raise ValueError(r'angle: \alpha<90 или 90<\beta<180; границы 0..360°, positive, без domain')
+        angle = (match[2], lower, upper)
     # LaTeX-пробел \; не разделяет эталонный список. Исходный текст
     # сохраняем для отображения; математический парсер сам его нормализует.
     texts = re.split(r'(?<!\\);', parts[0]) if multiple else [parts[0]]
     if not texts or len(texts) > 20 or any(not t.strip() for t in texts):
         raise ValueError('укажите от 1 до 20 выражений через ;')
-    return texts, positive, domain
+    return texts, positive, domain, angle
 
 
 def _reference_parts(payload, multiple=False):
-    texts, positive, _ = _reference_context(payload, multiple)
+    texts, positive, _, _ = _reference_context(payload, multiple)
     return texts, positive
 
 
-def _in_context(item, substitutions):
+
+def _angular_range(value, substitutions):
+    """Точные границы аффинного выражения от atan(u), u>0; обе открыты."""
+    from sympy import Dummy, atan, pi
+    atoms = set().union(*(v.atoms(atan) for _, v in substitutions))
+    for atom in atoms:
+        if not value.has(atom):
+            continue
+        t = Dummy('angle_atom', real=True)
+        polynomial = value.xreplace({atom: t}).as_poly(t)
+        if polynomial is None or polynomial.degree() != 1:
+            continue
+        coefficient, constant = polynomial.nth(1), polynomial.nth(0)
+        if coefficient.is_positive is True:
+            return constant, constant+coefficient*pi/2
+        if coefficient.is_negative is True:
+            return constant+coefficient*pi/2, constant
+    return None
+
+
+def _angular_sign(value, substitutions):
+    """Знак доказывается интервалом и алгеброй, а не пробными значениями."""
+    from sympy import Abs, Add, Mul, Pow, Rational, sin, cos, tan, cot, pi, floor, simplify
+    if value.is_positive is True:
+        return 1
+    if value.is_negative is True:
+        return -1
+    if value.is_zero is True:
+        return 0
+    bounds = _angular_range(value, substitutions)
+    if bounds:
+        lower, upper = bounds
+        if lower.is_nonnegative is True:
+            return 1
+        if upper.is_nonpositive is True:
+            return -1
+    if value.func in (sin, cos):
+        bounds = _angular_range(value.args[0], substitutions)
+        if bounds:
+            lower, upper = (simplify(x/pi) for x in bounds)
+            if lower.is_Rational and upper.is_Rational:
+                shift = 2*floor(lower/2)
+                lower, upper = lower-shift, upper-shift
+                if value.func == sin:
+                    if 0 <= lower < upper <= 1:
+                        return 1
+                    if 1 <= lower < upper <= 2:
+                        return -1
+                else:
+                    if (0 <= lower < upper <= Rational(1, 2)
+                            or Rational(3, 2) <= lower < upper <= Rational(5, 2)):
+                        return 1
+                    if Rational(1, 2) <= lower < upper <= Rational(3, 2):
+                        return -1
+    if value.func in (tan, cot):
+        sine = _angular_sign(sin(value.args[0]), substitutions)
+        cosine = _angular_sign(cos(value.args[0]), substitutions)
+        if sine in (-1, 1) and cosine in (-1, 1):
+            return sine*cosine
+    if value.func in (Add, Mul):
+        signs = [_angular_sign(x, substitutions) for x in value.args]
+        if any(x is None for x in signs):
+            return None
+        if value.func == Mul:
+            result = 1
+            for sign in signs:
+                result *= sign
+            return result
+        if all(x >= 0 for x in signs) and any(x > 0 for x in signs):
+            return 1
+        if all(x <= 0 for x in signs) and any(x < 0 for x in signs):
+            return -1
+    if value.func == Pow:
+        base, exponent = value.args
+        sign = _angular_sign(base, substitutions)
+        if sign in (-1, 1) and exponent.is_Integer:
+            return sign if exponent.is_odd else 1
+        if sign == 1 and exponent.is_Rational:
+            return 1
+    if value.func == Abs:
+        sign = _angular_sign(value.args[0], substitutions)
+        if sign is not None:
+            return abs(sign)
+    return None
+
+
+def _angular_everywhere(value, substitutions):
+    """Достаточное доказательство вещественности и конечности компонента."""
+    from sympy import Add, Mul, Pow, sin, cos, atan, tan, cot
+    if value.is_real is True and value.is_finite is True:
+        return True
+    if value.func in (Add, Mul):
+        return all(_angular_everywhere(x, substitutions) for x in value.args)
+    if value.func == Pow:
+        base, exponent = value.args
+        if not exponent.is_Rational or not _angular_everywhere(base, substitutions):
+            return False
+        sign = _angular_sign(base, substitutions)
+        if exponent.is_Integer:
+            return exponent >= 0 or sign in (-1, 1)
+        return sign == 1
+    if value.func in (sin, cos, atan, tan, cot):
+        if not _angular_everywhere(value.args[0], substitutions):
+            return False
+        if value.func in (tan, cot):
+            denominator = cos(value.args[0]) if value.func == tan else sin(value.args[0])
+            return _angular_sign(denominator, substitutions) in (-1, 1)
+        return True
+    return False
+
+def _in_context(item, substitutions, *, angular=False):
     """Переносит исходные ограничения, а не только сокращённую формулу."""
     replacements = dict(substitutions)
-    return Formula(item.expression.xreplace(replacements),
-                   tuple(d.xreplace(replacements) for d in item.denominators),
-                   tuple(c.xreplace(replacements) for c in item.components),
-                   item.tree)
+    def move(value):
+        value = value.xreplace(replacements)
+        if angular:
+            # Формулы двойного угла переводят sin/cos(2*atan(u))
+            # в точные рациональные выражения; ограничения каждого
+            # исходного подвыражения переносятся отдельно.
+            from sympy import expand_trig, factor
+            from sympy import Abs
+            value = factor(expand_trig(value))
+            value = value.replace(
+                lambda node: node.func == Abs and _angular_sign(node.args[0], substitutions) in (-1, 0, 1),
+                lambda node: _angular_sign(node.args[0], substitutions)*node.args[0])
+        return value
+    return Formula(move(item.expression),
+                   tuple(move(d) for d in item.denominators),
+                   tuple(move(c) for c in item.components), item.tree)
 
 
 def _parse_reference(payload, multiple=False, *, numeric=False):
-    texts, tokens, domain = _reference_context(payload, multiple)
+    texts, tokens, domain, angle = _reference_context(payload, multiple)
     names = []
     for token in tokens:
         parsed = _parse(token)
@@ -465,8 +603,23 @@ def _parse_reference(payload, multiple=False, *, numeric=False):
         symbols = set().union(*(component.free_symbols
                               for item in items
                               for component in (item.expression, *item.denominators, *item.components)))
+    if angle:
+        from sympy import Dummy, Rational, atan, pi
+        token, lower, upper = angle
+        name = str(_parse(token).expression)
+        symbol = next(s for s in input_symbols if str(s) == name)
+        u = Dummy('angle_u', positive=True)
+        # atan(u) биективно задаёт (0,π/2). Сдвиг и масштаб точно
+        # переводят его в заданный открытый интервал угла.
+        # Границы — в градусах, внутреннее представление — радианное.
+        lower, upper = Rational(str(lower)), Rational(str(upper))
+        substitutions = ((symbol, lower*pi/180 + (upper-lower)*atan(u)/90),)
+        items = tuple(_in_context(item, substitutions, angular=True) for item in items)
+        symbols = set().union(*(component.free_symbols
+                              for item in items
+                              for component in (item.expression, *item.denominators, *item.components)))
     reference = Reference(items, positive, tuple(sorted(symbols, key=str)),
-                          input_symbols, substitutions)
+                          input_symbols, substitutions, angle)
     if any(_defined(item, reference) is False for item in items):
         raise ValueError('эталон не определён на указанной области параметров')
     return reference, ';'.join(texts).strip()
@@ -490,10 +643,15 @@ def _defined(item, reference):
     # заново через continuous_domain не требуется. Неизвестные свойства
     # сюда не попадают: сокращённый (a-1)/(a-1) всё ещё проверяется ниже.
     def everywhere(component):
-        return component.is_real is True and component.is_finite is True
+        return ((component.is_real is True and component.is_finite is True)
+                or bool(reference.angle) and _angular_everywhere(component, reference.substitutions))
+
+    def nonzero(component):
+        return (component.is_nonzero is True
+                or bool(reference.angle) and _angular_sign(component, reference.substitutions) in (-1, 1))
 
     if (all(everywhere(c) for c in (value, *item.components))
-            and all(d.is_nonzero is True for d in item.denominators)):
+            and all(nonzero(d) for d in item.denominators)):
         return True
     # Область эталона уже включает ограничения его исходных компонентов.
     # Если ввод не добавляет ни одного такого ограничения, включение
@@ -503,7 +661,7 @@ def _defined(item, reference):
     original_denominators = {d for original in reference.items
                              for d in original.denominators}
     if (all(c in originals or everywhere(c) for c in (value, *item.components))
-            and all(d in original_denominators or d.is_nonzero is True
+            and all(d in original_denominators or nonzero(d)
                     for d in item.denominators)):
         return True
     # Допустимая точная точка с новым разрывом уже опровергает ввод;
@@ -546,7 +704,7 @@ def _defined(item, reference):
                                  if c.is_rational_function(*reference.symbols))
 
     def nonzero_on_original(d):
-        if d.is_nonzero is True or d in original_denominators:
+        if nonzero(d) or d in original_denominators:
             return True
         if d.is_polynomial(*reference.symbols):
             for original in original_denominators:
@@ -579,9 +737,35 @@ def _domain_counterexample(item, reference):
     Отсутствие контрпримера ничего не доказывает: вызывающий код возвращает
     UNKNOWN, если включение областей не установлено аналитически.
     """
-    from sympy import S
+    from sympy import S, Rational, atan, pi, tan, cancel
     baseline = {symbol: S.One for symbol in reference.symbols}
     values_to_try = [baseline]
+    if reference.angle:
+        # Точные внутренние точки и корни нужны лишь для опровержения.
+        # Принятие ответа по-прежнему требует доказательства всей области.
+        for _, replacement in reference.substitutions:
+            for atom in replacement.atoms(atan):
+                symbol = atom.args[0]
+                others = {s: n for s, n in baseline.items() if s != symbol}
+                values_to_try.extend({**baseline, symbol: number}
+                                     for number in (Rational(1, 2), Rational(1, 3)))
+                for denominator in item.denominators:
+                    reduced = denominator.subs(others)
+                    t = symbol.as_dummy()
+                    affine = reduced.xreplace({atom: t}).as_poly(t)
+                    if affine is not None and affine.degree() == 1:
+                        theta = -affine.nth(0)/affine.nth(1)
+                        if (not theta.has(symbol) and theta.is_positive is True
+                                and (pi/2-theta).is_positive is True):
+                            root = tan(theta)
+                            if root.is_positive is True and root.is_finite is True:
+                                values_to_try.append({**baseline, symbol: root})
+                    polynomial = cancel(reduced).as_numer_denom()[0].as_poly(symbol)
+                    if (polynomial is not None and 1 <= polynomial.degree() <= 4
+                            and all(c.is_Rational for c in polynomial.all_coeffs())):
+                        for root in polynomial.all_roots():
+                            if root.is_positive is True:
+                                values_to_try.append({**baseline, symbol: root})
     # Проверяем точные корни по каждому параметру при остальных=1.
     # Это только поиск контрпримера; отсутствие корня не доказывает область.
     for symbol in reference.symbols:
@@ -666,7 +850,7 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
     student = tuple(_parse(t.strip(), reference.positive, numeric=numeric) for t in texts)
     if any(item is None for item in student):
         return UNKNOWN
-    if reference.substitutions and (multiple or mode != 'expression'):
+    if reference.substitutions and (mode != 'expression' or (multiple and not reference.angle)):
         return UNKNOWN
     allowed_symbols = set(reference.input_symbols or reference.symbols)
     for item in student:
@@ -675,7 +859,7 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
         for component in (*item.denominators, *item.components):
             if component.free_symbols - allowed_symbols:
                 return WRONG
-    student = tuple(_in_context(item, reference.substitutions) for item in student)
+    student = tuple(_in_context(item, reference.substitutions, angular=bool(reference.angle)) for item in student)
     # Доказуемо неверную формулу можно отклонить до трудного анализа
     # области. Для принятия ответа проверка всех исходных ограничений
     # остаётся обязательной, даже после сокращения к эталону.
