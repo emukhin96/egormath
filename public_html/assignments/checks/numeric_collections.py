@@ -29,8 +29,11 @@ def _number(text):
 
 
 def _equal(a, b, tolerance=None):
-    from sympy import simplify
-    difference = simplify(a-b)
+    from sympy import simplify, sympify
+    difference = sympify(a)-sympify(b)
+    if difference.is_zero is not None:
+        return bool(difference.is_zero)
+    difference = simplify(difference)
     same = difference == 0 or difference.equals(0)
     if same is None:
         raise ValueError('равенство не установлено')
@@ -81,13 +84,20 @@ def check(value, reference, *, kind, unordered=False):
     parser = sets.parse_set if kind == 'set' else sets.parse_pairs
     if len(reference) > sets.MAX_COLLECTION_LEN:
         raise ValueError('слишком длинный эталон')
-    expected = parser(reference, value_parser=_number, equal=_equal)
+    # Эталон и ответ часто повторяют одни и те же выражения. Кэш
+    # живёт только в этом вызове, не сохраняет ввод между задачами.
+    parsed = {}
+    def number(text):
+        if text not in parsed:
+            parsed[text] = _number(text)
+        return parsed[text]
+    expected = parser(reference, value_parser=number, equal=_equal)
     if expected is None:
         raise ValueError('числовой эталон не разобран')
     if len(value) > sets.MAX_COLLECTION_LEN:
         return UNKNOWN
     try:
-        student = parser(value, value_parser=_number, equal=_equal)
+        student = parser(value, value_parser=number, equal=_equal)
     except InvalidNumeric:
         return WRONG
     if student is None:

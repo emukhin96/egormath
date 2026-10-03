@@ -23,6 +23,13 @@ def main():
                 raise ValueError('числовая коллекция проверяется в отдельном режиме')
             from .numeric_collections import check
             result = {'display': data['payload']}
+            if 'value' not in data:
+                # Сохранение эталона проверяет весь путь сравнения,
+                # включая исходные области и стоимость коллекции.
+                if check(data['payload'], data['payload'],
+                         kind='set' if mode == 'set' else 'pair',
+                         unordered=mode == 'pair-unordered') != 'ok':
+                    raise ValueError('эталон коллекции не прошёл проверку')
             if 'value' in data:
                 result['status'] = check(data['value'], data['payload'],
                                        kind='set' if mode == 'set' else 'pair',

@@ -126,6 +126,21 @@ def collection_needs_worker(value, reference, *, kind):
     return any(item is None for item in _collection_literals(value, reference, kind))
 
 
+def validate_collection_reference(reference, *, kind, unordered=False):
+    """Нелитеральный эталон должен пройти тот же ограниченный вычислитель."""
+    from . import formulas
+    expected, _ = _collection_literals(reference, reference, kind)
+    if expected is not None:
+        return
+    mode = 'pair-unordered' if unordered else kind
+    result = formulas._run_worker({'payload': reference, 'multiple': False,
+                                   'mode': mode, 'numeric': True})
+    if result.get('error'):
+        raise ValueError(result['error'])
+    if result.get('display') != reference:
+        raise formulas.FormulaUnavailable('не удалось проверить эталон коллекции')
+
+
 def check_collection_exact(value, reference, *, kind, unordered=False):
     """Числовые списки: точные дроби сразу, арифметика в вычислителе."""
     from . import formulas, sets

@@ -421,6 +421,19 @@ def parse_mask(text, *, validate_references=False):
                     preset=name if name in PRESETS else None)
         if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
             _parse_formula(slot, payload, validate=validate_references)
+        elif kind in (SET, PAIR) and validate_references:
+            option = re.search(r'\|\s*unordered\s*$', payload) if kind == PAIR else None
+            reference = payload[:option.start()].strip() if option else payload.strip()
+            reference = reference or '∅'
+            try:
+                formats.validate_collection_reference(reference, kind=kind,
+                                                      unordered=bool(option))
+                _PARSERS[kind](slot, payload)
+            except formulas.FormulaUnavailable as error:
+                slot.reference_unavailable = True
+                slot.error = str(error)
+            except ValueError as error:
+                slot.error = str(error)
         else:
             _PARSERS[kind](slot, payload)
         if slot.error:

@@ -324,6 +324,74 @@ def _denominators(tree, *, numeric=False, pi_marker=None):
     return result
 
 
+_DEGREE_MARKER = r'(?:\^\s*(?:\{\s*\\circ\s*\}|\\circ\b)|°)'
+
+
+def _numeric_degree_arguments(text):
+    """Градусы в числовом аргументе sin/cos/tan/cot/sec/csc: точно в радианы.
+
+    Обрабатывает числа и круглые/квадратные группы внутри аргумента.
+    Маркеры за пределами функции и незакрытые группы не исправляются.
+    """
+    intervals, replacements = [], {}
+    functions = (r'\\(?:sin|cos|tan|cot|sec|csc)(?![A-Za-z])'
+                 r'(?:\s*\^\s*(?:\{\s*\d+\s*\}|\d))?\s*')
+    for m in re.finditer(functions, text):
+        start = m.end()
+        if start < len(text) and text[start] in '({[':
+            stack = []
+            for end in range(start, len(text)):
+                c = text[end]
+                if c in '({[':
+                    stack.append(c)
+                elif c in ')}]':
+                    if not stack or stack.pop() != {')': '(', ']': '[', '}': '{'}[c]:
+                        break
+                    if not stack:
+                        intervals.append((start + 1, end))
+                        break
+        else:
+            bare = re.match(r'[+-]?\d+(?:\.\d+)?\s*' + _DEGREE_MARKER, text[start:])
+            if bare:
+                number = re.match(r'[+-]?\d+(?:\.\d+)?', bare[0])[0]
+                replacements[(start, start + bare.end())] = '(' + number + r'\cdot\pi/180)'
+    for m in re.finditer(_DEGREE_MARKER, text):
+        if any(a <= m.start() and m.end() <= b for a, b in replacements):
+            continue
+        if not any(a <= m.start() and m.end() <= b for a, b in intervals):
+            continue
+        end = m.start()
+        while end and text[end - 1].isspace():
+            end -= 1
+        if end and text[end - 1] in ')]':
+            stack, start = [], None
+            for pos in range(end - 1, -1, -1):
+                c = text[pos]
+                if c in ')}]':
+                    stack.append(c)
+                elif c in '({[':
+                    if not stack or stack.pop() != {'(': ')', '[': ']', '{': '}'}[c]:
+                        break
+                    if not stack:
+                        start = pos
+                        break
+            if start is None:
+                continue
+        else:
+            number = re.search(r'(?<![A-Za-z0-9_.])\d+(?:\.\d+)?$', text[:end])
+            if not number:
+                continue
+            start = number.start()
+        if re.search(_DEGREE_MARKER, text[start:end]):
+            continue
+        if any(a < m.end() and start < b for a, b in replacements):
+            continue
+        replacements[(start, m.end())] = '(' + text[start:end] + r'\cdot\pi/180)'
+    for (a, b), value in sorted(replacements.items(), reverse=True):
+        text = text[:a] + value + text[b:]
+    return text
+
+
 def _parse(text, positive=(), *, numeric=False):
     from sympy import Expr, Symbol, pi
     if not text.strip() or len(text) > MAX_EXPR_LEN:
@@ -331,7 +399,7 @@ def _parse(text, positive=(), *, numeric=False):
     if numeric:
         from ..check_answer import parse_number
         from .sets import _strip_var
-        text = normalize(_strip_var(text))
+        text = _numeric_degree_arguments(normalize(_strip_var(text)))
         text = re.sub(r'\\operatorname\{arctg\}|\\arctg\b', r'\\arctan', text)
         text = re.sub(r'(?<![A-Za-z\\])pi(?![A-Za-z])', r'\\pi ', text)
         literal = parse_number(text)
