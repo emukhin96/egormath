@@ -28,7 +28,7 @@ _NUMERIC_OPS = ('add', 'sub', 'mul', 'adjacent_expressions', 'superscript')
 
 # lark-грамматика sympy не понимает соседство скобок ``)(``, ``^2(``,
 # ``\sqrt{2}x`` и читает ``x(x+1)`` как вызов функции — ставим явное умножение.
-# После ``}`` — только если это не индекс/степень ``_{…}`` / ``^{…}``
+# После ``}`` — кроме первого аргумента frac/binom и индекса/степени функции
 # (иначе ``\log_{2}x`` и ``\sin^{2}x`` ломаются).
 _IMPLICIT_MUL_RES = (
     # Числовой коэффициент перед корнем — множитель, в том числе перед /.
@@ -59,6 +59,19 @@ def _closes_script(text, close_idx):
     return False
 
 
+def _closes_first_argument(text, close_idx):
+    """Первый аргумент frac/binom: следующий токен — второй аргумент."""
+    depth = 0
+    for i in range(close_idx, -1, -1):
+        if text[i] == '}':
+            depth += 1
+        elif text[i] == '{':
+            depth -= 1
+            if depth == 0:
+                return re.search(r'\\(?:dfrac|tfrac|frac|binom)\s*$', text[:i]) is not None
+    return False
+
+
 def _insert_cdot_after_group(text, *, allow_script_products=False):
     """Явное умножение после группы, кроме индексов и степеней функций."""
     out = []
@@ -71,6 +84,7 @@ def _insert_cdot_after_group(text, *, allow_script_products=False):
                 j += 1
             if (j < n and (text[j] == '(' or text[j].isalnum()
                            or text.startswith(r'\sqrt', j))
+                    and (text[i] != '}' or not _closes_first_argument(text, i))
                     and (allow_script_products or text[i] != '}'
                          or not _closes_script(text, i))):
                 out.append(text[i] + '\\cdot ')
