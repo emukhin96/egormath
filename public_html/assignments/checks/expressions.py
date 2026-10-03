@@ -150,14 +150,19 @@ def _absolute_products(text):
     остаётся узлом сырого дерева; соседние модули сохраняются множителями.
     """
     out, depth, operand, i = [], 0, True, 0
+    groups = []
     while i < len(text):
         char = text[i]
         if char == '|':
             if operand or not depth:
                 out.append('|(')
+                groups.append('|')
                 depth += 1
                 operand = True
             else:
+                if not groups or groups[-1] != '|':
+                    return None
+                groups.pop()
                 out.append(')|')
                 depth -= 1
                 operand = False
@@ -189,13 +194,21 @@ def _absolute_products(text):
                 continue
             out.append(char)
         else:
+            # Вставленные скобки не должны исправлять ошибочный ввод:
+            # группы нельзя закрывать через границу открытого модуля.
+            if char in '({[':
+                groups.append(char)
+            elif char in ')}]':
+                if not groups or groups[-1] != {')': '(', '}': '{', ']': '['}[char]:
+                    return None
+                groups.pop()
             out.append(char)
             if char in '+-*/^_({[':
                 operand = True
             elif char in ')}]' or char.isalnum() or char == '.':
                 operand = False
         i += 1
-    return None if depth else ''.join(out)
+    return None if depth or groups else ''.join(out)
 
 
 def raw_tree(text):

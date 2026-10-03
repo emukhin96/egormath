@@ -151,3 +151,17 @@ class AbsoluteAdjacencyTests(SimpleTestCase):
             self.assertEqual(normalized, '|(|(a)|)|'+command+' b')
         self.assertEqual(expressions._absolute_products(r'||a|\pm 1|'),
                          r'|(|(a)|\pm 1)|')
+
+
+    def test_fallback_does_not_repair_unbalanced_student_groups(self):
+        for payload, malformed in (
+                ('a+b | positive: a,b', '|a)+(b|'),
+                ('ab | positive: a,b', '|a)(b|'),
+                ('a+b | positive: a,b', '|a}+{b|'),
+                ('a+b | positive: a,b', '|a]+[b|'),
+                ('a | positive: a', '(|a)|'),
+                ('ab | positive: a,b', '|a|2(b/2')):
+            self.assertEqual(check_slot(self.slot(payload), malformed), 'unknown', malformed)
+        slot = self.slot('a+b | positive: a,b')
+        for value in ('||a+(b)||', '||a+(b)||2/2', '||a+{b}||2/2'):
+            self.assertEqual(check_slot(slot, value), 'ok', value)
