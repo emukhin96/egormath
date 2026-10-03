@@ -143,6 +143,61 @@ def _subtrees(node):
     return [c for c in node.children if _is_tree(c)]
 
 
+def _absolute_products(text):
+    """Скобки для вложенных модулей и умножение после закрывающей черты.
+
+    Ожидаемый операнд отличает открытие модуля от закрытия. Каждый модуль
+    остаётся узлом сырого дерева; соседние модули сохраняются множителями.
+    """
+    out, depth, operand, i = [], 0, True, 0
+    while i < len(text):
+        char = text[i]
+        if char == '|':
+            if operand or not depth:
+                out.append('|(')
+                depth += 1
+                operand = True
+            else:
+                out.append(')|')
+                depth -= 1
+                operand = False
+                following = i + 1
+                while following < len(text) and text[following].isspace():
+                    following += 1
+                suffix = text[following:]
+                if (re.match(r'(?:[0-9a-zA-Z(]|\\[A-Za-z]+)', suffix)
+                        or suffix.startswith('|') and not depth):
+                    out.append(r'\cdot ')
+                    # После явного умножения 2b/2(b+c) разделяем на
+                    # множители; существующий знак операции не дублируем.
+                    coefficient = re.match(
+                        r'\d+(?:\.\d+)?\s*(?=[A-Za-z(|]|\\(?!cdot\b|times\b|div\b)[A-Za-z]+)',
+                        suffix)
+                    if coefficient:
+                        out.append(coefficient[0].strip() + r'\cdot ')
+                        following += coefficient.end()
+                    i, operand = following, True
+                    continue
+        elif char == '\\':
+            command = re.match(r'\\([A-Za-z]+)', text[i:])
+            if command:
+                out.append(command[0])
+                operand = command[1] in _TRIG_NODES | {
+                    'cdot', 'times', 'div', 'frac', 'dfrac', 'tfrac',
+                    'sqrt', 'log', 'ln', 'lg'}
+                i += command.end()
+                continue
+            out.append(char)
+        else:
+            out.append(char)
+            if char in '+-*/^_({[':
+                operand = True
+            elif char in ')}]' or char.isalnum() or char == '.':
+                operand = False
+        i += 1
+    return None if depth else ''.join(out)
+
+
 def raw_tree(text):
     """Сырое дерево разбора подготовленной строки; None — не разобралось."""
     text = prepare(text)
@@ -157,16 +212,12 @@ def raw_tree(text):
         except MemoryError:
             raise
         except Exception:
-            # Грамматика понимает a|b|, но не |a|b. Только одна пара
-            # черт: вложенные/соседние модули могут иметь иной разбор.
-            # Нормализация применяется после неудачного исходного разбора.
-            if text.count('|') != 2:
+            # Исходные корректные деревья и аргументы функций не меняем.
+            # Нормализация добавляет только скобки и знаки умножения.
+            grouped = _absolute_products(text) if '|' in text else None
+            if grouped is None or grouped == text:
                 raise
-            close = text.rfind('|')
-            suffix = text[close + 1:]
-            if not re.match(r'\s*(?:[0-9a-zA-Z(]|\\[A-Za-z]+)', suffix):
-                raise
-            return parser.parser.parse(text[:close + 1] + r'\cdot ' + suffix)
+            return parser.parser.parse(grouped)
     except MemoryError:
         raise
     except Exception as error:  # noqa: BLE001 — синтаксический сбой = «не разобрано»

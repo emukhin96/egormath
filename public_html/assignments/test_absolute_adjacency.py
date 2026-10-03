@@ -85,3 +85,47 @@ class AbsoluteAdjacencyTests(SimpleTestCase):
             self.assertEqual(check_slot(slot, value), 'ok')
         for value in (r'x;x\;+1;2', r'x\;+1;', r'x\;+1;x;x', r'x;x\;+2'):
             self.assertEqual(check_slot(slot, value), 'wrong')
+
+    def test_numeric_coefficient_after_absolute_factor(self):
+        slot = self.slot('2ab/(a+b) | positive: a,b | domain: a<2b')
+        for value in ('|a|2b/(a+b)', '|a| 2 b/(a+b)',
+                      '|a|2(b)/(a+b)', r'\left|a\right|2b/(a+b)',
+                      r'|a|2\frac{b}{a+b}'):
+            self.assertEqual(check_slot(slot, value), 'ok', value)
+        for value in ('|a|3b/(a+b)', '|a|2b/(a+b)+0/(a-b)',
+                      '|a|2b/(a+b)+0*sqrt(a-2b)', '|a|2z/(a+b)'):
+            self.assertEqual(check_slot(slot, value), 'wrong', value)
+        # Минус после модуля остаётся вычитанием, а не коэффициентом.
+        expected = expressions.parse_expr('|a|-2*b')
+        self.assertIsNotNone(expected)
+        self.assertEqual(expressions.parse_expr('|a|-2b'), expected)
+
+    def test_nested_absolute_products_keep_structure_and_domain(self):
+        slot = self.slot('ab/(a+b) | positive: a,b | domain: a<2b')
+        for value in ('||a||b/(a+b)', '| |a| | b/(a+b)',
+                      r'\left|\left|a\right|\right|b/(a+b)',
+                      '|||a|||b/(a+b)', '|-|a||b/(a+b)'):
+            self.assertEqual(check_slot(slot, value), 'ok', value)
+        for value in ('||a||b/(a+b)+1', '||a||b/(a+b)+0/(a-b)',
+                      '||a||b/(a+b)+0*sqrt(a-2b)', '||a||z/(a+b)'):
+            self.assertEqual(check_slot(slot, value), 'wrong', value)
+        raw = formulas._parse('||a||b/(a+b)')
+        self.assertIsNotNone(raw)
+        def count_abs(tree):
+            return (int(str(tree.data) == 'abs')
+                    + sum(count_abs(c) for c in tree.children if expressions._is_tree(c)))
+        self.assertEqual(count_abs(raw.tree), 2)
+        names = {str(s): s for s in raw.expression.free_symbols}
+        self.assertEqual(raw.expression.subs({names['a']: -2, names['b']: 3}), 6)
+        self.assertEqual(check_slot(slot, '| |a|b/(a+b)'), 'unknown')
+        combined = self.slot('2ab/(a+b) | positive: a,b | domain: a<2b')
+        for value in ('||a||2b/(a+b)', '|a|2|b|/(a+b)',
+                      '(|a|b+|b|a)/(a+b)'):
+            self.assertEqual(check_slot(combined, value), 'ok', value)
+
+    def test_numeric_absolute_products_keep_original_invalid_actions(self):
+        slot = self.slot('16', kind='number')
+        for value in ('|8|2', '||8||2', '|4|2(2)'):
+            self.assertEqual(check_slot(slot, value), 'ok', value)
+        for value in ('||8||2+0*0^0', '|8|2+0/0', '|8|2+0sqrt(-1)'):
+            self.assertEqual(check_slot(slot, value), 'wrong', value)
