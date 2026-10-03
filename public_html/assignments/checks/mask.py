@@ -131,6 +131,7 @@ class Slot:
     unordered_pair: bool = False
     allow_quotient: bool = False
     reference_unavailable: bool = False
+    tolerance_reference: str = ''
 
     @property
     def name(self):
@@ -267,6 +268,7 @@ def _parse_number(slot, payload):
         if tolerance is None or tolerance < 0:
             slot.error = 'допуск после ~ должен быть числом'
             return
+        slot.tolerance_reference = tol_text.strip()
     value = sets.numeric_value(payload)
     if value is None:
         slot.error = 'эталон не разобран как число'
@@ -462,10 +464,13 @@ def _number_literals(value, reference):
 
 
 def _number_needs_worker(slot, value):
-    from ..check_answer import MAX_EXPR_LEN
-    if slot.tolerance not in (None, 0) or not value.strip() or len(value) > MAX_EXPR_LEN:
+    from ..check_answer import MAX_EXPR_LEN, parse_number
+    if not (value or '').strip() or len(value) > MAX_EXPR_LEN:
         return False
-    return any(number is None for number in _number_literals(value, slot.reference))
+    literals = _number_literals(value, slot.reference)
+    if slot.tolerance not in (None, 0):
+        literals += (parse_number(normalize(slot.tolerance_reference)),)
+    return any(number is None for number in literals)
 
 
 def check_slot(slot, value):
@@ -522,10 +527,8 @@ def check_slot(slot, value):
             if student_literal is not None and reference_literal is not None:
                 return OK if student_literal == reference_literal else WRONG
             return formats.check_number_exact(value, slot.reference)
-        student = sets.numeric_value(value)
-        if student is None:
-            return UNKNOWN
-        return OK if sets.numbers_equal(student, slot.data, slot.tolerance) else WRONG
+        return formats.check_number_with_tolerance(value, slot.reference,
+                                                  slot.tolerance_reference)
     if kind == PAIR:
         return formats.check_collection_exact(value, slot.reference, kind='pair',
                                               unordered=slot.unordered_pair)

@@ -1,4 +1,4 @@
-"""Точные числа в множествах и кортежах; вызывается внутри вычислителя."""
+"""Точные числа в коллекциях и проверке допуска; вызывается внутри вычислителя."""
 from ..check_answer import OK, UNKNOWN, WRONG, normalize, parse_number
 from . import sets
 
@@ -35,6 +35,31 @@ def _equal(a, b, tolerance=None):
     if same is None:
         raise ValueError('равенство не установлено')
     return bool(same)
+
+
+def check_number_with_tolerance(value, reference, tolerance):
+    """Включённая граница допуска проверяется без промежуточного округления."""
+    from sympy import simplify, sympify
+    from ..check_answer import MAX_EXPR_LEN
+    if len(reference) > MAX_EXPR_LEN or len(tolerance) > MAX_EXPR_LEN:
+        raise ValueError('слишком длинный эталон или допуск')
+    expected, limit = _number(reference), _number(tolerance)
+    if expected is None or limit is None or sympify(limit).is_nonnegative is not True:
+        raise ValueError('эталон или допуск не разобран как допустимое число')
+    if len(value) > MAX_EXPR_LEN:
+        return UNKNOWN
+    try:
+        student = _number(value)
+    except InvalidNumeric:
+        return WRONG
+    if student is None:
+        return UNKNOWN
+    distance = simplify(abs(student-expected)-limit)
+    if distance.is_nonpositive is True:
+        return OK
+    if distance.is_positive is True:
+        return WRONG
+    return UNKNOWN
 
 
 def _pairs_equal(a, b, *, unordered=False):

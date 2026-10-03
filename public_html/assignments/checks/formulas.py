@@ -45,6 +45,7 @@ class FormulaSpec:
     multiple: bool
     mode: str = 'expression'
     numeric: bool = False
+    tolerance: str = None
 
 
 WORKER_TIMEOUT = 3
@@ -212,6 +213,8 @@ def _checked(value, reference):
                'mode': reference.mode, 'value': value}
     if reference.numeric:
         payload['numeric'] = True
+    if reference.tolerance is not None:
+        payload['tolerance'] = reference.tolerance
     result = _run_worker(payload)
     if result.get('unavailable'):
         raise FormulaUnavailable('временная недоступность проверки')

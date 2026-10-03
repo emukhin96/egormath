@@ -94,6 +94,22 @@ def check_number_exact(value, reference):
     return formulas.check(value, formulas.FormulaSpec(reference, False, numeric=True))
 
 
+def check_number_with_tolerance(value, reference, tolerance):
+    """Точные дроби без процесса; числовые выражения с исходными областями."""
+    from . import formulas, numeric_collections
+    from ..check_answer import MAX_EXPR_LEN, OK, UNKNOWN, WRONG
+    if len(value) > MAX_EXPR_LEN:
+        return UNKNOWN
+    values = [numeric_collections.literal(text) for text in (value, reference, tolerance)]
+    if all(number is not None for number in values):
+        student, expected, limit = values
+        if limit < 0:
+            return UNKNOWN
+        return OK if abs(student-expected) <= limit else WRONG
+    return formulas.check(value, formulas.FormulaSpec(reference, False, numeric=True,
+                                                      tolerance=tolerance))
+
+
 def _collection_literals(value, reference, kind):
     from . import sets, numeric_collections
     parser = sets.parse_set if kind == 'set' else sets.parse_pairs

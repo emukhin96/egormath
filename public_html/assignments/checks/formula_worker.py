@@ -33,6 +33,16 @@ def main():
             raise ValueError('числовая проверка поддерживает одно выражение')
         if mode not in ('expression', 'simplify', 'factor') or (data['multiple'] and mode != 'expression'):
             raise ValueError('неизвестный режим проверки формулы')
+        if 'tolerance' in data:
+            if numeric is not True or not isinstance(data['tolerance'], str):
+                raise ValueError('допуск поддерживается только для числового ответа')
+            from .numeric_collections import check_number_with_tolerance
+            result = {'display': data['payload']}
+            if 'value' in data:
+                result['status'] = check_number_with_tolerance(
+                    data['value'], data['payload'], data['tolerance'])
+            print(json.dumps(result))
+            return
         reference, display = _parse_reference(data['payload'], data['multiple'], numeric=numeric)
         if numeric and (reference.input_symbols or reference.positive or reference.substitutions):
             raise ValueError('числовой эталон не должен содержать параметры')
