@@ -136,6 +136,44 @@ def prepare(text):
     return text.strip()
 
 
+def _bounded_odd_root(value, degree, power=1):
+    """Ограничивает рост до real_root, включая вложенные степени основания."""
+    from sympy import Pow, real_root
+    from .numeric import MAX_BITS, MAX_DEPTH, MAX_NODES
+    if not 1 <= degree <= 1000 or abs(power) > 1000 * degree:
+        raise ValueError('слишком большой показатель корня или степени')
+    remaining = MAX_NODES
+
+    def bits(node, depth=0):
+        nonlocal remaining
+        remaining -= 1
+        if remaining < 0 or depth > MAX_DEPTH:
+            raise ValueError('слишком сложное основание корня')
+        if node.is_Rational:
+            size = max(int(node.p).bit_length(), int(node.q).bit_length(), 1)
+        elif node.is_Pow:
+            exponent = node.exp
+            if (not exponent.is_Rational or exponent.q > 1000
+                    or abs(exponent.p) > 1000 * exponent.q):
+                raise ValueError('неограниченная степень в основании корня')
+            size = (bits(node.base, depth + 1) * abs(exponent.p)
+                    + exponent.q - 1) // exponent.q + 1
+        else:
+            children = [bits(child, depth + 1) for child in node.args]
+            size = (max(children) + len(children).bit_length()
+                    if node.is_Add and children else sum(children) or 1)
+        if size > MAX_BITS:
+            raise ValueError('слишком большое основание корня')
+        return size
+
+    size = bits(value)
+    if size * abs(power) > MAX_BITS * degree:
+        raise ValueError('слишком большая степень корня')
+    root = real_root(value, degree)
+    # Большая дробная степень не раскрывается в Integer при построении.
+    return root if power == 1 else Pow(root, power, evaluate=False)
+
+
 def _lark():
     global _parser, _transformer
     if _parser is None:
@@ -160,10 +198,9 @@ def _lark():
                     degree, value = tokens[1:]
                     if (getattr(degree, 'is_Integer', False) and degree > 0
                             and degree.is_odd):
-                        from sympy import real_root
                         # Для ещё неизвестного символа сохраняется условная
                         # ветвь; вещественные предположения задаёт проверка.
-                        return real_root(value, degree)
+                        return _bounded_odd_root(value, degree)
                 return super().square_root(tokens)
 
             def superscript(self, tokens):
@@ -172,8 +209,7 @@ def _lark():
                     exponent = tokens[2 if len(tokens) == 3 else 3]
                     if (getattr(exponent, 'is_Rational', False)
                             and exponent.q > 1 and exponent.q % 2):
-                        from sympy import real_root
-                        return real_root(base, exponent.q) ** exponent.p
+                        return _bounded_odd_root(base, exponent.q, exponent.p)
                 return super().superscript(tokens)
         _transformer = ExactTransformer()
     return _parser, _transformer
