@@ -1007,6 +1007,15 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
     # Сохраняем кратность: лишняя или повторная длина не заменяет другую.
     remaining = list(reference.items)
     for item in student:
+        # Сначала ищем уже совпавшее выражение: при перестановке диагоналей
+        # сравнение с другой диагональю может зря исчерпать бюджет SymPy.
+        # Все исходные знаменатели и компоненты проверяются ниже даже
+        # после этого совпадения; сокращение не скрывает дырку в области.
+        exact = next((index for index, expected in enumerate(remaining)
+                      if item.expression == expected.expression), None)
+        if exact is not None:
+            remaining.pop(exact)
+            continue
         uncertain = False
         for index, expected in enumerate(remaining):
             # Полный квадрат под корнем может быть раскрыт: sqrt(x²-2x+1).

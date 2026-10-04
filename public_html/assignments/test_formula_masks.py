@@ -60,6 +60,20 @@ class FormulaMaskTests(SimpleTestCase):
         self.assertEqual(check_slot(product, r'a*cb^2'), 'ok')
         self.assertEqual(check_slot(product, r'a*(cb)^2'), 'wrong')
 
+    def test_rhombus_diagonal_permutations_keep_multiplicity_and_domains(self):
+        slot = self.slot(r'{{expressions: 2r/\sin(\alpha/2);2r/\cos(\alpha/2) '
+                         r'| positive: r,\alpha | angle: \alpha<90}}')
+        for value in (r'2*(2r/\cos(\alpha/2))/2;2*(2r/\sin(\alpha/2))/2',
+                      r'4r/(2\cos(\alpha/2));4r/(2\sin(\alpha/2))'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+        for value in (r'2r/\sin(\alpha/2);2r/\sin(\alpha/2)',
+                      r'2r/\cos(\alpha/2);2r/\sin(\alpha/2);2r/\cos(\alpha/2)',
+                      r'2r/\cos(\alpha/2)+1/(r-1)-1/(r-1);'
+                      r'2r/\sin(\alpha/2)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+
     def test_assumptions_do_not_leak_between_tasks(self):
         positive = self.slot('{{expression: a | positive: a}}')
         real = self.slot('{{expression: a}}')
