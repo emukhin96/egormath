@@ -83,6 +83,31 @@ class FormulaMaskTests(SimpleTestCase):
             reference, _ = formulas._parse_reference('a')
             self.assertEqual(formulas._check(r'\sqrt{a^2}', reference), 'wrong')
 
+    def test_scaled_multivariate_roots_keep_original_domains(self):
+        slot = self.slot(r'{{expressions: \sqrt{m^2+n^2+m*n};'
+                         r'\sqrt{m^2+n^2-m*n} | positive: m,n}}')
+        self.assertEqual(check_slot(slot, r'2*\sqrt{m^2+n^2-m*n}/2;'
+                                    r'2*\sqrt{m^2+n^2+m*n}/2'), 'ok')
+        for value in (r'\sqrt{m^2+n^2+m*n}+1/(m-n)-1/(m-n);'
+                      r'\sqrt{m^2+n^2-m*n}',
+                      r'\sqrt{m^2+n^2+m*n}+\sqrt{m-n}^2-(m-n);'
+                      r'\sqrt{m^2+n^2-m*n}'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+        slot = self.slot(r'{{expressions: \sqrt{a^2+b^2+a*b*\sqrt{2}}/2;'
+                         r'\sqrt{a^2+b^2-a*b*\sqrt{2}}/2 | positive: a,b}}')
+        self.assertEqual(check_slot(slot,
+                                    r'\sqrt{4*a^2+4*b^2+4*a*b*\sqrt{2}}/4;'
+                                    r'\sqrt{4*a^2+4*b^2-4*a*b*\sqrt{2}}/4'), 'ok')
+
+    def test_scaled_root_keeps_boundary_zero_in_reference_domain(self):
+        slot = self.slot(r'{{expression: \sqrt{a^2-2*a*b+b^2}}}')
+        self.assertEqual(check_slot(slot, r'\sqrt{4*a^2-8*a*b+4*b^2}/2'), 'ok')
+        for value in (r'(a^2-2*a*b+b^2)/\sqrt{a^2-2*a*b+b^2}',
+                      r'\sqrt{a^2-2*a*b+b^2}+1/(a-b)-1/(a-b)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+
     def test_absolute_value_bars_are_not_option_separators(self):
         for reference, value in ((r'|a-1|', r'\sqrt{(a-1)^2}'),
                                  (r'\left|x\right|', r'\sqrt{x^2}'),

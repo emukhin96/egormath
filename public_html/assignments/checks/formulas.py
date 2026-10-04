@@ -787,7 +787,23 @@ def _defined(item, reference):
                  for c in (original.expression, *original.components)}
     original_denominators = {d for original in reference.items
                              for d in original.denominators}
-    if (all(c in originals or everywhere(c) for c in (value, *item.components))
+    @lru_cache(maxsize=None)
+    def real_from_original(component):
+        if component in originals or everywhere(component):
+            return True
+        # Суммы и произведения конечных вещественных выражений сохраняют
+        # область. Извлечение положительного числового множителя из корня
+        # даёт, например, sqrt(4*f)=2*sqrt(f), уже допустимого в эталоне.
+        # Исходные компоненты и знаменатели ниже проверяются все: это
+        # доказательство не разрешает сокращать дополнительный разрыв.
+        from sympy import factor_terms
+        reduced = factor_terms(component)
+        if reduced in originals or everywhere(reduced):
+            return True
+        return ((reduced.is_Add or reduced.is_Mul)
+                and all(real_from_original(arg) for arg in reduced.args))
+
+    if (all(real_from_original(c) for c in (value, *item.components))
             and all(d in original_denominators or nonzero(d)
                     for d in item.denominators)):
         return True
