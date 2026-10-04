@@ -19,6 +19,7 @@ from ..check_answer import MAX_EXPR_LEN, OK, UNKNOWN, WRONG, normalize
 
 _parser = None
 _transformer = None
+_numeric_transformer = None
 
 # Узлы lark-грамматики sympy (sympy/parsing/latex/lark/grammar/latex.lark)
 _PRODUCT_NODES = ('mul', 'adjacent_expressions')
@@ -27,11 +28,13 @@ _NUMERIC_OPS = ('add', 'sub', 'mul', 'adjacent_expressions', 'superscript')
 
 # lark-грамматика sympy не понимает соседство скобок ``)(``, ``^2(``,
 # ``\sqrt{2}x`` и читает ``x(x+1)`` как вызов функции — ставим явное умножение.
-# После ``}`` — только если это не индекс/степень ``_{…}`` / ``^{…}``
+# После ``}`` — кроме первого аргумента frac/binom и индекса/степени функции
 # (иначе ``\log_{2}x`` и ``\sin^{2}x`` ломаются).
 _IMPLICIT_MUL_RES = (
+    # Числовой коэффициент перед корнем — множитель, в том числе перед /.
+    re.compile(r'(?<=[0-9])\s*(?=\\sqrt(?:\[|\{))'),
     re.compile(r'(?<=\))\s*(?=\()'),
-    re.compile(r'(?<=\))\s*(?=\d)'),
+    re.compile(r'(?<=\))\s*(?=[0-9a-zA-Z])'),
     re.compile(r'(?<=\^\d)\s*(?=\()'),
     re.compile(r'(?<![\\a-zA-Z][a-zA-Z])(?<=[a-zA-Z])\s*(?=\()'),
 )
@@ -56,19 +59,35 @@ def _closes_script(text, close_idx):
     return False
 
 
-def _insert_cdot_after_group(text):
-    """``}x`` / ``}(`` → ``}\\cdot ``, кроме индексов и степеней."""
+def _closes_first_argument(text, close_idx):
+    """Первый аргумент frac/binom: следующий токен — второй аргумент."""
+    depth = 0
+    for i in range(close_idx, -1, -1):
+        if text[i] == '}':
+            depth += 1
+        elif text[i] == '{':
+            depth -= 1
+            if depth == 0:
+                return re.search(r'\\(?:dfrac|tfrac|frac|binom)\s*$', text[:i]) is not None
+    return False
+
+
+def _insert_cdot_after_group(text, *, allow_script_products=False):
+    """Явное умножение после группы, кроме индексов и степеней функций."""
     out = []
     i = 0
     n = len(text)
     while i < n:
-        if text[i] == '}':
+        if text[i] in '})':
             j = i + 1
             while j < n and text[j].isspace():
                 j += 1
-            if (j < n and (text[j] == '(' or text[j].isalpha())
-                    and not _closes_script(text, i)):
-                out.append('}\\cdot ')
+            if (j < n and (text[j] == '(' or text[j].isalnum()
+                           or text.startswith(r'\sqrt', j))
+                    and (text[i] != '}' or not _closes_first_argument(text, i))
+                    and (allow_script_products or text[i] != '}'
+                         or not _closes_script(text, i))):
+                out.append(text[i] + '\\cdot ')
                 i = j
                 continue
         out.append(text[i])
@@ -76,13 +95,83 @@ def _insert_cdot_after_group(text):
     return ''.join(out)
 
 
+def normalize_roots(text):
+    """Корни sqrt(...) и односимвольные аргументы LaTeX без смены смысла."""
+    if len(text) > MAX_EXPR_LEN:
+        return text
+    # Вложенные sqrt разбираем изнутри; никакой пользовательский код не исполняется.
+    while matches := list(re.finditer(r'(?<![A-Za-z\\])sqrt\s*\(', text)):
+        match = matches[-1]
+        depth, end = 1, match.end()
+        while end < len(text) and depth:
+            depth += (text[end] == '(') - (text[end] == ')')
+            end += 1
+        if depth:
+            break
+        text = (text[:match.start()] + r'\sqrt{' + text[match.end():end-1]
+                + '}' + text[end:])
+    # В текстовом sqrt2 однозначен один знак; для sqrt16 нужны скобки.
+    text = re.sub(r'(?<![A-Za-z\\])sqrt\s*([0-9])(?![0-9.])',
+                  lambda m: r'\sqrt{' + m[1] + '}', text)
+    # \sqrt12 означает sqrt(1)*2, а sqrt(12) — корень из двенадцати.
+    return re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text)
+
+
 def prepare(text):
     """Нормализация школьной записи + явное умножение перед скобкой."""
-    text = normalize(text)
+    text = normalize_roots(normalize(text))
     text = _insert_cdot_after_group(text)
+    def product(match):
+        # Цифра завершает индекс/степень функции, а корень или скобка —
+        # её аргумент. Пробелы после _/^ не меняют эту связь.
+        script = re.search(
+            r'\\([A-Za-z]+)\s*(?:[_^]\s*(?:[+-]?[0-9A-Za-z]|\{[^{}]+\}))+\s*$',
+            text[:match.start()])
+        if script and script[1] in _TRIG_NODES | {'log', 'ln', 'lg'}:
+            return match[0]
+        return r'\cdot '
+
     for rx in _IMPLICIT_MUL_RES:
-        text = rx.sub(r'\\cdot ', text)
+        text = rx.sub(product, text)
     return text.strip()
+
+
+def _bounded_odd_root(value, degree, power=1):
+    """Ограничивает рост до real_root, включая вложенные степени основания."""
+    from sympy import Pow, real_root
+    from .numeric import MAX_BITS, MAX_DEPTH, MAX_NODES
+    if not 1 <= degree <= 1000 or abs(power) > 1000 * degree:
+        raise ValueError('слишком большой показатель корня или степени')
+    remaining = MAX_NODES
+
+    def bits(node, depth=0):
+        nonlocal remaining
+        remaining -= 1
+        if remaining < 0 or depth > MAX_DEPTH:
+            raise ValueError('слишком сложное основание корня')
+        if node.is_Rational:
+            size = max(int(node.p).bit_length(), int(node.q).bit_length(), 1)
+        elif node.is_Pow:
+            exponent = node.exp
+            if (not exponent.is_Rational or exponent.q > 1000
+                    or abs(exponent.p) > 1000 * exponent.q):
+                raise ValueError('неограниченная степень в основании корня')
+            size = (bits(node.base, depth + 1) * abs(exponent.p)
+                    + exponent.q - 1) // exponent.q + 1
+        else:
+            children = [bits(child, depth + 1) for child in node.args]
+            size = (max(children) + len(children).bit_length()
+                    if node.is_Add and children else sum(children) or 1)
+        if size > MAX_BITS:
+            raise ValueError('слишком большое основание корня')
+        return size
+
+    size = bits(value)
+    if size * abs(power) > MAX_BITS * degree:
+        raise ValueError('слишком большая степень корня')
+    root = real_root(value, degree)
+    # Большая дробная степень не раскрывается в Integer при построении.
+    return root if power == 1 else Pow(root, power, evaluate=False)
 
 
 def _lark():
@@ -94,7 +183,35 @@ def _lark():
         _parser = getattr(latex_parser, '_lark_latex_parser', None)
         if _parser is None:
             _parser = latex_parser.LarkLaTeXParser(transform=False)
-        _transformer = _parser.transformer
+        # Десятичные числа в любом режиме точны до выполнения операций.
+        # Общий трансформер SymPy не меняем: его могут использовать другие
+        # модули, а восстановление дробей после Float уже теряет точность.
+        class ExactTransformer(type(_parser.transformer)):
+            def number(self, tokens):
+                if tokens[0].type == 'CMD_IMAGINARY_UNIT':
+                    return super().number(tokens)
+                from sympy import Rational
+                return Rational(str(tokens[0]))
+
+            def square_root(self, tokens):
+                if len(tokens) == 3:
+                    degree, value = tokens[1:]
+                    if (getattr(degree, 'is_Integer', False) and degree > 0
+                            and degree.is_odd):
+                        # Для ещё неизвестного символа сохраняется условная
+                        # ветвь; вещественные предположения задаёт проверка.
+                        return _bounded_odd_root(value, degree)
+                return super().square_root(tokens)
+
+            def superscript(self, tokens):
+                if len(tokens) in (3, 5):
+                    base = tokens[0]
+                    exponent = tokens[2 if len(tokens) == 3 else 3]
+                    if (getattr(exponent, 'is_Rational', False)
+                            and exponent.q > 1 and exponent.q % 2):
+                        return _bounded_odd_root(base, exponent.q, exponent.p)
+                return super().superscript(tokens)
+        _transformer = ExactTransformer()
     return _parser, _transformer
 
 
@@ -106,6 +223,74 @@ def _subtrees(node):
     return [c for c in node.children if _is_tree(c)]
 
 
+def _absolute_products(text):
+    """Скобки для вложенных модулей и умножение после закрывающей черты.
+
+    Ожидаемый операнд отличает открытие модуля от закрытия. Каждый модуль
+    остаётся узлом сырого дерева; соседние модули сохраняются множителями.
+    """
+    out, depth, operand, i = [], 0, True, 0
+    groups = []
+    while i < len(text):
+        char = text[i]
+        if char == '|':
+            if operand or not depth:
+                out.append('|(')
+                groups.append('|')
+                depth += 1
+                operand = True
+            else:
+                if not groups or groups[-1] != '|':
+                    return None
+                groups.pop()
+                out.append(')|')
+                depth -= 1
+                operand = False
+                following = i + 1
+                while following < len(text) and text[following].isspace():
+                    following += 1
+                suffix = text[following:]
+                if (re.match(r'(?:[0-9a-zA-Z(]|\\(?!cdot\b|times\b|div\b|pm\b|mp\b)[A-Za-z]+)', suffix)
+                        or suffix.startswith('|') and not depth):
+                    out.append(r'\cdot ')
+                    # После явного умножения 2b/2(b+c) разделяем на
+                    # множители; существующий знак операции не дублируем.
+                    coefficient = re.match(
+                        r'\d+(?:\.\d+)?\s*(?=[A-Za-z(|]|\\(?!cdot\b|times\b|div\b|pm\b|mp\b)[A-Za-z]+)',
+                        suffix)
+                    if coefficient:
+                        out.append(coefficient[0].strip() + r'\cdot ')
+                        following += coefficient.end()
+                    i, operand = following, True
+                    continue
+        elif char == '\\':
+            command = re.match(r'\\([A-Za-z]+)', text[i:])
+            if command:
+                out.append(command[0])
+                operand = command[1] in _TRIG_NODES | {
+                    'cdot', 'times', 'div', 'pm', 'mp', 'frac', 'dfrac', 'tfrac',
+                    'sqrt', 'log', 'ln', 'lg'}
+                i += command.end()
+                continue
+            out.append(char)
+        else:
+            # Вставленные скобки не должны исправлять ошибочный ввод:
+            # группы нельзя закрывать через границу открытого модуля.
+            if char in '({[':
+                groups.append(char)
+            elif char in ')}]':
+                if not groups or groups[-1] != {')': '(', '}': '{', ']': '['}[char]:
+                    return None
+                groups.pop()
+            out.append(char)
+            if char in '+-*/^_({[':
+                operand = True
+            elif char in ')}]' or char.isalnum() or char == '.':
+                operand = False
+        i += 1
+    return None if depth or groups else ''.join(out)
+
+
 def raw_tree(text):
     """Сырое дерево разбора подготовленной строки; None — не разобралось."""
     text = prepare(text)
@@ -115,7 +300,17 @@ def raw_tree(text):
     try:
         # Сырое дерево нужно независимо от transform_expr общего парсера.
         # Его настройки не меняем: им пользуется и parse_latex SymPy.
-        return parser.parser.parse(text)
+        try:
+            return parser.parser.parse(text)
+        except MemoryError:
+            raise
+        except Exception:
+            # Исходные корректные деревья и аргументы функций не меняем.
+            # Нормализация добавляет только скобки и знаки умножения.
+            grouped = _absolute_products(text) if '|' in text else None
+            if grouped is None or grouped == text:
+                raise
+            return parser.parser.parse(grouped)
     except MemoryError:
         raise
     except Exception as error:  # noqa: BLE001 — синтаксический сбой = «не разобрано»
@@ -129,13 +324,69 @@ def _has_undefined_functions(expr):
     return hasattr(expr, 'atoms') and bool(expr.atoms(AppliedUndef))
 
 
+# Скобки функции задают весь её аргумент. Операция за закрывающей
+# скобкой и следующая самостоятельная функция относятся к внешнему выражению.
+_TRIG_NODES = frozenset((
+    'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
+    'arcsin', 'arccos', 'arctan', 'arccot', 'arcsec', 'arccsc',
+    'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh',
+))
+_FUNCTION_GROUPS = ('group_round_parentheses', 'group_curly_parentheses',
+                    'group_square_brackets')
+
+
+def _starts_with_group(node):
+    """Явно сгруппированный аргумент нельзя расширить операцией после группы."""
+    if not _is_tree(node):
+        return False
+    if node.data in _FUNCTION_GROUPS:
+        return True
+    if node.data in ('mul', 'div', 'add', 'sub', 'adjacent_expressions', 'superscript'):
+        return bool(node.children) and _starts_with_group(node.children[0])
+    return False
+
+
+def _contains_trig(node):
+    return (_is_tree(node) and
+            (node.data in _TRIG_NODES or str(node.data).removesuffix('_power') in _TRIG_NODES
+             or any(_contains_trig(c) for c in node.children)))
+
+
+def _valid_function_scopes(node):
+    """Отсекает альтернативы Lark, поглотившие внешний множитель или делитель."""
+    if not _is_tree(node):
+        return True
+    kind = str(node.data)
+    if kind in _TRIG_NODES or kind.removesuffix('_power') in _TRIG_NODES:
+        argument = node.children[-1]
+        if _is_tree(argument) and argument.data not in _FUNCTION_GROUPS:
+            if _starts_with_group(argument):
+                return False
+            if argument.data in ('mul', 'div', 'add'):
+                return False
+            if argument.data == 'sub' and len(argument.children) > 2:
+                return False
+            if argument.data == 'adjacent_expressions' and _contains_trig(argument):
+                return False
+    if node.data == 'superscript':
+        base = node.children[0]
+        # sin x² = sin(x²); для квадрата синуса пишут sin² x или sin(x)².
+        if (_is_tree(base) and base.data in _TRIG_NODES
+                and not (_is_tree(base.children[-1])
+                         and base.children[-1].data in _FUNCTION_GROUPS)):
+            return False
+    return all(_valid_function_scopes(c) for c in node.children)
+
+
 def resolve(tree):
-    """Копия дерева без узлов ``_ambig``: из альтернатив предпочитается та,
-    где ``x(x+1)`` прочитано как произведение, а не как вызов функции ``x``."""
+    """Выбирает произведение вместо неизвестной функции и сохраняет границы
+    аргументов тригонометрических функций. Если допустимого разбора нет,
+    возвращает None: неверный смысл нельзя использовать для оценки ответа."""
     if not _is_tree(tree):
         return tree
     if tree.data == '_ambig':
         candidates = [resolve(c) for c in tree.children]
+        candidates = [c for c in candidates if c is not None]
         for cand in candidates:
             try:
                 if not _has_undefined_functions(evaluate(cand)):
@@ -144,15 +395,38 @@ def resolve(tree):
                 raise
             except Exception:  # noqa: BLE001
                 continue
-        return candidates[0]
-    return tree.__class__(tree.data, [resolve(c) for c in tree.children])
+        return candidates[0] if candidates else None
+    children = [resolve(c) for c in tree.children]
+    if any(c is None for c in children):
+        return None
+    result = tree.__class__(tree.data, children)
+    return result if _valid_function_scopes(result) else None
 
 
-def evaluate(tree):
+def evaluate(tree, *, numeric=False, pi_marker=None):
     """Поддерево → sympy-выражение (или None)."""
     if tree is None:
         return None
     _, transformer = _lark()
+    if numeric:
+        global _numeric_transformer
+        if _numeric_transformer is None:
+            # Числовой режим узнаёт константу π до операций;
+            # школьные нечётные корни наследуются от точного трансформера.
+            class NumericTransformer(type(transformer)):
+                def __init__(self, pi_marker=None):
+                    super().__init__()
+                    self.pi_marker = pi_marker
+
+                def SYMBOL(self, token):
+                    from sympy import Symbol, pi
+                    # Константа известна до вычисления корней и степеней,
+                    # а пользовательские переменные остаются символами.
+                    return pi if str(token) == self.pi_marker else Symbol(str(token))
+
+            _numeric_transformer = NumericTransformer()
+        transformer = (_numeric_transformer.__class__(pi_marker=pi_marker)
+                       if pi_marker else _numeric_transformer)
     try:
         result = transformer.transform(tree)
     except MemoryError:

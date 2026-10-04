@@ -125,6 +125,7 @@ def prepare(text):
     """Одинаковый смысл смешанных чисел в быстром и точном вычислителях."""
     if len(text) > 300 or r'\{' in text or r'\}' in text or '=' in text:
         return None
+    text = expressions.normalize_roots(text)
     text = re.sub(r'π|(?<!\\)\bpi\b', lambda _: r'\pi', text)
     # Не допускаем грамматически сложные функции, переменные и множества.
     lexical = re.sub(r'\\(?:dfrac|tfrac|frac|sqrt|pi|left|right|cdot|times|displaystyle)(?![A-Za-z])', '', text)
@@ -133,6 +134,11 @@ def prepare(text):
     text = normalize(text)
     text = _MIXED.sub(lambda m: '(' + m[1] + '+\\frac{'
                       + (m[2] or m[3]) + '}{' + (m[4] or m[5]) + '})', text)
+    # Здесь функции и переменные уже запрещены: } после степени завершает
+    # числовой множитель, а не степень sin или индекс log.
+    text = expressions._insert_cdot_after_group(text, allow_script_products=True)
+    # В числовом пути однозначная степень тоже завершает множитель.
+    text = re.sub(r'(?<=[0-9])\s*(?=\\sqrt(?:\[|\{))', r'\\cdot ', text)
     text = re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text)
     return text if len(text) <= 300 else None
 

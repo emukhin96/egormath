@@ -273,6 +273,11 @@ class MaskCheckTests(SimpleTestCase):
         self.assertEqual(check_mask(spec, {'s1': '10', 's2': '30'})[0], OK)
         self.assertEqual(check_mask(spec, {'s1': '10', 's2': '31'})[0], WRONG)
         overall, per_slot = check_mask(spec, {'s1': 'abc', 's2': '30'})
+        self.assertEqual(overall, WRONG)
+        self.assertEqual(per_slot, {'s1': WRONG, 's2': OK})
+        # Буквенное выражение не является числовым ответом; текст, который
+        # не разобран математической грамматикой, остаётся на ручную проверку.
+        overall, per_slot = check_mask(spec, {'s1': 'не знаю', 's2': '30'})
         self.assertEqual(overall, UNKNOWN)
         self.assertEqual(per_slot, {'s1': UNKNOWN, 's2': OK})
 
@@ -368,6 +373,9 @@ class MaskCheckTests(SimpleTestCase):
         s = slot(r'{{pair: (\sqrt{2};\sqrt{2}+2/10^9) | unordered}}')
         for value in (r'(\sqrt{2}+1/10^9;\sqrt{2})',
                       r'(\sqrt{2};\sqrt{2}+1/10^9)'):
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        for value in (r'(\sqrt{2}+2/10^9;\sqrt{2})',
+                      r'(\sqrt{2};\sqrt{2}+2/10^9)'):
             self.assertEqual(check_slot(s, value), OK, value)
         large = slot(r'{{pair: (10^{200};1) | unordered}}')
         self.assertEqual(check_slot(large, r'(1;10^{200})'), OK)
@@ -569,7 +577,7 @@ class ExpressionHelpersTests(SimpleTestCase):
         self.assertEqual(expressions.prepare('x^2(x+1)'), r'x^2\cdot (x+1)')
         self.assertEqual(expressions.prepare('2x(x+1)'), r'2x\cdot (x+1)')
         self.assertEqual(expressions.prepare(r'\sin(x)'), r'\sin(x)')
-        self.assertEqual(expressions.prepare(r'2\sqrt{2}x'), r'2\sqrt{2}\cdot x')
+        self.assertEqual(expressions.prepare(r'2\sqrt{2}x'), r'2\cdot \sqrt{2}\cdot x')
         self.assertEqual(expressions.prepare(r'\log_{2}x'), r'\log_{2}x')
         self.assertEqual(expressions.prepare(r'\sin^{2}x'), r'\sin^{2}x')
         self.assertEqual(expressions.prepare(r'\log_{2}(x)'), r'\log_{2}(x)')
