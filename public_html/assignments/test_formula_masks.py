@@ -44,6 +44,22 @@ class FormulaMaskTests(SimpleTestCase):
             with self.subTest(value=value):
                 self.assertEqual(check_slot(slot, value), 'wrong')
 
+    def test_radical_before_adjacent_parameters_preserves_products_and_domains(self):
+        slot = self.slot(r'{{simplify: \sqrt{a^2+b^2+ab\sqrt{2}} | positive: a,b}}')
+        for value in (r'\sqrt{b^2+a^2+\sqrt{2}ba}',
+                      r'\sqrt{a^2+b^2+\sqrt{2}ab}',
+                      r'sqrt(b^2+a^2+sqrt(2)ba)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+        for value in (r'\sqrt{a^2+b^2-\sqrt{2}ba}',
+                      r'\sqrt{a^2+b^2+\sqrt{2}b^2a}',
+                      r'\sqrt{a^2+b^2+\sqrt{2}ba}+1/(a-b)-1/(a-b)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+        product = self.slot(r'{{expression: ab^2c | positive: a,b,c}}')
+        self.assertEqual(check_slot(product, r'a*cb^2'), 'ok')
+        self.assertEqual(check_slot(product, r'a*(cb)^2'), 'wrong')
+
     def test_assumptions_do_not_leak_between_tasks(self):
         positive = self.slot('{{expression: a | positive: a}}')
         real = self.slot('{{expression: a}}')
