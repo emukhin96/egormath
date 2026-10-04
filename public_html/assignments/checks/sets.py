@@ -124,11 +124,12 @@ def numbers_equal(a, b, tolerance=None):
         return False
 
 
-def _unique_numbers(values, tolerance=None):
+def _unique_numbers(values, tolerance=None, *, equal=None):
     """Убрать численно равные повторы: ``±0`` и ``0; 0`` — одно число."""
+    equal = equal or numbers_equal
     out = []
     for value in values:
-        if not any(numbers_equal(value, other, tolerance) for other in out):
+        if not any(equal(value, other, tolerance) for other in out):
             out.append(value)
     return out
 
@@ -277,8 +278,9 @@ def _split_items(text):
     return [p for p in parts if p] if parts is not None else None
 
 
-def parse_set(text):
+def parse_set(text, *, value_parser=None, equal=None):
     """Конечное множество чисел; один ± в элементе означает обе ветви."""
+    value_parser = value_parser or numeric_value
     text = _collection_text(text)
     if not text:
         return None
@@ -293,13 +295,13 @@ def parse_set(text):
             return None
         branches = [item.replace(r'\pm', sign) for sign in ('+', '-')] if count else [item]
         for branch in branches:
-            value = numeric_value(branch)
+            value = value_parser(branch)
             if value is None:
                 return None
             values.append(value)
             if len(values) > MAX_COLLECTION_ITEMS:
                 return None
-    return _unique_numbers(values)
+    return _unique_numbers(values, equal=equal)
 
 
 def sets_equal(a, b, tolerance=None):
@@ -342,7 +344,7 @@ def _pair_brackets(text):
     return None if stack else ends
 
 
-def _pair_coordinates(group, *, explicit, coordinate_comma):
+def _pair_coordinates(group, *, explicit, coordinate_comma, value_parser=None):
     """Разделить кортеж до normalize; имена x/y/z нельзя просто выкинуть."""
     parts = _split_top(group, re.compile(';'))
     if parts is not None and len(parts) == 1 and explicit and coordinate_comma:
@@ -366,11 +368,12 @@ def _pair_coordinates(group, *, explicit, coordinate_comma):
         if len(parts) > 3 or set(named) != set(expected):
             return None
         parts = [named[name] for name in expected]
-    values = [numeric_value(p) for p in parts]
+    value_parser = value_parser or numeric_value
+    values = [value_parser(p) for p in parts]
     return tuple(values) if all(v is not None for v in values) else None
 
 
-def parse_pairs(text, *, coordinate_comma=True):
+def parse_pairs(text, *, coordinate_comma=True, value_parser=None, equal=None):
     """Множество упорядоченных кортежей, включая {…} и A×B.
 
     ``(2,5; -3)`` содержит десятичную запятую; ``(2.5,-3)`` —
@@ -395,7 +398,7 @@ def parse_pairs(text, *, coordinate_comma=True):
             if not factor.startswith('{') or brackets.get(0) != len(factor)-1 \
                     or '=' in factor:
                 return None
-            values = parse_set(factor)
+            values = parse_set(factor, value_parser=value_parser, equal=equal)
             if values is None:
                 return None
             factors.append(values)
@@ -410,7 +413,7 @@ def parse_pairs(text, *, coordinate_comma=True):
         ends = _pair_brackets(text)
     if text.startswith('(') and ends.get(0) == len(text)-1:
         pair = _pair_coordinates(text[1:-1], explicit=True,
-                                 coordinate_comma=coordinate_comma)
+                                 coordinate_comma=coordinate_comma, value_parser=value_parser)
         return [pair] if pair is not None else None
     groups = _split_top(text, re.compile('[;,]'))
     if groups is None or any(not group for group in groups):
@@ -422,15 +425,17 @@ def parse_pairs(text, *, coordinate_comma=True):
             # Единственный кортеж без внешних скобок: 2,5; -3.
             if wrapped_set:
                 return None
-            pair = _pair_coordinates(text, explicit=False, coordinate_comma=False)
+            pair = _pair_coordinates(text, explicit=False, coordinate_comma=False,
+                                     value_parser=value_parser)
             return [pair] if pair is not None else None
         pair = _pair_coordinates(group[1:-1], explicit=True,
-                                 coordinate_comma=coordinate_comma)
+                                 coordinate_comma=coordinate_comma, value_parser=value_parser)
         if pair is None:
             if wrapped_set:
                 return None
             # Скобки могут окружать только число: (9/10); (0).
-            pair = _pair_coordinates(text, explicit=False, coordinate_comma=False)
+            pair = _pair_coordinates(text, explicit=False, coordinate_comma=False,
+                                     value_parser=value_parser)
             return [pair] if pair is not None else None
         pairs.append(pair)
     return pairs if pairs and len({len(p) for p in pairs}) == 1 else None

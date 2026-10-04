@@ -70,6 +70,7 @@ HELP = (
     ('{{ratio: 1:2}}', 'отношение: 2:4, 1/2:1 и √2:2√2 верны; 2:1 и 0,5 неверны'),
     ('{{ratio: 6:7 | quotient}}', 'отношение или его значение: 6:7 и 6/7 верны; 7:6 и 7/6 неверны'),
     ('{{proportion: 1:2}}', 'отношение с перестановкой: 1:2, 2:1 и 4:2 верны; 0,5 неверно'),
+    ('{{proportion: 2:3 | quotient}}', 'отношение с перестановкой или его значение: 2:3, 3:2, 2/3 и 3/2 верны'),
     ('{{number: 10}}', 'число; принимается любая численно равная запись '
                        '(2,5 / 5/2 / \\frac{5}{2}); допуск — {{number: 3,14 ~ 0,01}}'),
     ('{{choice: мальчиков|*девочек}}', 'выпадающий список, правильный вариант со звёздочкой'),
@@ -81,6 +82,8 @@ HELP = (
                            '(к любому пресету можно дописать свои варианты через |)'),
     ('{{simplify: \\frac{2}{a+3}}}', 'выражение: эквивалентно эталону и не менее упрощено'),
     ('{{expression: 2a | positive: a}}', 'любое эквивалентное выражение; a — положительный параметр'),
+    ('{{expression: ab/(a+b) | positive: a,b | domain: a<2b}}',
+     'эквивалентное выражение при 0<a<2b; параметры и область берутся из условия задачи'),
     ('{{expressions: a\\sqrt{3}; 2a | positive: a}}', 'все выражения через ; в любом порядке, с учётом кратности'),
     ('{{factor: 2(x-1)(x+1)}}', 'разложение на неприводимые множители, порядок любой'),
     ('{{pair: (2,5; -3); (5; -6)}}', 'упорядоченные пары через ; порядок пар не важен'),
@@ -129,6 +132,7 @@ class Slot:
     unordered_pair: bool = False
     allow_quotient: bool = False
     reference_unavailable: bool = False
+    tolerance_reference: str = ''
 
     @property
     def name(self):
@@ -150,6 +154,8 @@ class Slot:
     def label(self):
         if self.kind == RATIO and self.allow_quotient:
             return 'отношение с заданным порядком или его значение'
+        if self.kind == PROPORTION and self.allow_quotient:
+            return 'отношение в любом порядке или его значение'
         if self.kind == PAIR and self.unordered_pair:
             return 'группы чисел (порядок не важен)'
         return KINDS.get(self.kind, self.kind)
@@ -265,6 +271,7 @@ def _parse_number(slot, payload):
         if tolerance is None or tolerance < 0:
             slot.error = 'допуск после ~ должен быть числом'
             return
+        slot.tolerance_reference = tol_text.strip()
     value = sets.numeric_value(payload)
     if value is None:
         slot.error = 'эталон не разобран как число'
@@ -274,7 +281,8 @@ def _parse_number(slot, payload):
 
 def _parse_format(slot, payload):
     # Парные |...| принадлежат модулю числа, опция — только в конце.
-    option = re.search(r'\|\s*quotient\s*$', payload) if slot.kind == RATIO else None
+    option = (re.search(r'\|\s*quotient\s*$', payload)
+              if slot.kind in (RATIO, PROPORTION) else None)
     if option:
         payload = payload[:option.start()].strip()
         slot.allow_quotient = True
@@ -453,6 +461,22 @@ def _parse_order_value(value, count):
     return chosen
 
 
+def _number_literals(value, reference):
+    from ..check_answer import parse_number
+    return (parse_number(normalize(sets._strip_var(value))),
+            parse_number(normalize(reference)))
+
+
+def _number_needs_worker(slot, value):
+    from ..check_answer import MAX_EXPR_LEN, parse_number
+    if not (value or '').strip() or len(value) > MAX_EXPR_LEN:
+        return False
+    literals = _number_literals(value, slot.reference)
+    if slot.tolerance not in (None, 0):
+        literals += (parse_number(normalize(slot.tolerance_reference)),)
+    return any(number is None for number in literals)
+
+
 def check_slot(slot, value):
     """Значение ученика для одного слота → '' / ok / wrong / unknown."""
     value = (value or '').strip()
@@ -467,21 +491,18 @@ def check_slot(slot, value):
     if kind == PROPORTION:
         from . import numeric
         from fractions import Fraction
-        from decimal import DecimalException
         try:
-            student = formats.proportion(value)
+            student = formats.ratio(value, allow_quotient=slot.allow_quotient)
         except numeric.Uncertain:
-            return formats.check_proportion_exact(value, slot.reference)
+            return formats.check_proportion_exact(
+                value, slot.reference, allow_quotient=slot.allow_quotient)
         if student is None:
             return WRONG
-        if student == 0 or slot.data == 0:
-            return OK if student == slot.data else WRONG
-        try:
-            equal = numeric.equal(student, slot.data) or numeric.equal(
-                numeric.calculate('div', Fraction(1), student), slot.data)
-        except (ValueError, DecimalException, OverflowError, ZeroDivisionError):
-            return WRONG
-        return OK if equal else WRONG
+        if isinstance(student, Fraction) and isinstance(slot.data, Fraction):
+            equal = student == slot.data or student != 0 and 1 / student == slot.data
+            return OK if equal else WRONG
+        return formats.check_proportion_exact(
+            value, slot.reference, allow_quotient=slot.allow_quotient)
     if kind == RATIO:
         from fractions import Fraction
         from . import numeric
@@ -502,21 +523,23 @@ def check_slot(slot, value):
             return OK
         return WRONG if value in slot.options else UNKNOWN
     if kind == NUMBER:
-        student = sets.numeric_value(value)
-        if student is None:
-            return UNKNOWN
-        return OK if sets.numbers_equal(student, slot.data, slot.tolerance) else WRONG
+        if slot.tolerance is None or slot.tolerance == 0:
+            from ..check_answer import MAX_EXPR_LEN
+            if len(value) > MAX_EXPR_LEN:
+                return UNKNOWN
+            # Целые и школьные дроби не требуют процесса. Для выражений
+            # запрещённые промежуточные операции нельзя скрыть сокращением.
+            student_literal, reference_literal = _number_literals(value, slot.reference)
+            if student_literal is not None and reference_literal is not None:
+                return OK if student_literal == reference_literal else WRONG
+            return formats.check_number_exact(value, slot.reference)
+        return formats.check_number_with_tolerance(value, slot.reference,
+                                                  slot.tolerance_reference)
     if kind == PAIR:
-        student = sets.parse_pairs(value)
-        if student is None:
-            return UNKNOWN
-        return OK if sets.pairs_equal(
-            student, slot.data, unordered=slot.unordered_pair) else WRONG
+        return formats.check_collection_exact(value, slot.reference, kind='pair',
+                                              unordered=slot.unordered_pair)
     if kind == SET:
-        student = sets.parse_set(value)
-        if student is None:
-            return UNKNOWN
-        return OK if sets.sets_equal(student, slot.data) else WRONG
+        return formats.check_collection_exact(value, slot.reference, kind='set')
     if kind == RANGE:
         student = sets.parse_range(value)
         if student is None:
@@ -550,7 +573,11 @@ def check_mask(spec, values, known=None):
         if known and slot.name in known:
             results[slot.name] = known[slot.name]
             continue
-        if unavailable is not None and slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION, RATIO):
+        if unavailable is not None and (
+                slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION, RATIO)
+                or slot.kind == NUMBER and _number_needs_worker(slot, values.get(slot.name, ''))
+                or slot.kind in (SET, PAIR) and formats.collection_needs_worker(
+                    values.get(slot.name, ''), slot.reference, kind=slot.kind)):
             # После сбоя не ждём вычислитель заново для каждой формулы;
             # продолжаем только дешёвые проверки остальных полей.
             results[slot.name] = UNKNOWN

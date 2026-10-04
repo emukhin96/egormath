@@ -68,7 +68,7 @@ def check_ratio_exact(value, reference, *, allow_reverse=False, allow_quotient=F
     try:
         parts = [numeric.worker_text(part) for part in parts]
         expected = [numeric.worker_text(part) for part in expected]
-        spec, _ = formulas.parse_reference(quotient(expected))
+        spec = formulas.FormulaSpec(quotient(expected), False, numeric=True)
         direct = formulas.check(quotient(parts), spec)
         if direct == OK or not allow_reverse:
             return direct
@@ -83,9 +83,63 @@ def check_ratio_exact(value, reference, *, allow_reverse=False, allow_quotient=F
         return UNKNOWN
 
 
-def check_proportion_exact(value, reference):
+def check_proportion_exact(value, reference, *, allow_quotient=False):
     """Точная проверка отношения, допускающего перестановку частей."""
-    return check_ratio_exact(value, reference, allow_reverse=True)
+    return check_ratio_exact(value, reference, allow_reverse=True,
+                             allow_quotient=allow_quotient)
+
+
+def check_number_exact(value, reference):
+    """Точное вещественное число; исходные области проверяет вычислитель."""
+    from . import formulas
+    return formulas.check(value, formulas.FormulaSpec(reference, False, numeric=True))
+
+
+def check_number_with_tolerance(value, reference, tolerance):
+    """Точные дроби без процесса; числовые выражения с исходными областями."""
+    from . import formulas, numeric_collections
+    from ..check_answer import MAX_EXPR_LEN, OK, UNKNOWN, WRONG
+    if len(value) > MAX_EXPR_LEN:
+        return UNKNOWN
+    values = [numeric_collections.literal(text) for text in (value, reference, tolerance)]
+    if all(number is not None for number in values):
+        student, expected, limit = values
+        if limit < 0:
+            return UNKNOWN
+        return OK if abs(student-expected) <= limit else WRONG
+    return formulas.check(value, formulas.FormulaSpec(reference, False, numeric=True,
+                                                      tolerance=tolerance))
+
+
+def _collection_literals(value, reference, kind):
+    from . import sets, numeric_collections
+    parser = sets.parse_set if kind == 'set' else sets.parse_pairs
+    return (parser(reference, value_parser=numeric_collections.literal),
+            parser(value, value_parser=numeric_collections.literal))
+
+
+def collection_needs_worker(value, reference, *, kind):
+    """Тот же быстрый путь для проверки и пропуска после сбоя процесса."""
+    from . import sets
+    if not (value or '').strip() or len(value) > sets.MAX_COLLECTION_LEN:
+        return False
+    return any(item is None for item in _collection_literals(value, reference, kind))
+
+
+def check_collection_exact(value, reference, *, kind, unordered=False):
+    """Числовые списки: точные дроби сразу, арифметика в вычислителе."""
+    from . import formulas, sets
+    from ..check_answer import OK, UNKNOWN, WRONG
+    if len(value) > sets.MAX_COLLECTION_LEN:
+        return UNKNOWN
+    expected, student = _collection_literals(value, reference, kind)
+    if expected is not None and student is not None:
+        same = (sets.sets_equal(expected, student) if kind == 'set'
+                else sets.pairs_equal(expected, student, unordered=unordered))
+        return OK if same else WRONG
+    mode = kind if not unordered else 'pair-unordered'
+    return formulas.check(value, formulas.FormulaSpec(reference, False, mode=mode,
+                                                      numeric=True))
 
 
 def oge_kind(codes):
