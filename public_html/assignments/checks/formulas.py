@@ -641,7 +641,7 @@ def _angular_everywhere(value, substitutions):
         return True
     return False
 
-def _in_context(item, substitutions, *, angular=False):
+def _in_context(item, substitutions, *, angular=False, algebraic=False):
     """Переносит исходные ограничения, а не только сокращённую формулу."""
     replacements = dict(substitutions)
     def move(value):
@@ -670,6 +670,14 @@ def _in_context(item, substitutions, *, angular=False):
                     proven[node] = polarity*magnitude
                     restore[magnitude] = polarity*node
             value = value.xreplace(proven).xreplace(restore)
+        elif algebraic:
+            # Алгебраическая область x<k*y задаёт положительные u,v.
+            # Раскрытый радиканд (u+v)^2-u^2 скрывает положительность;
+            # факторизация v*(2*u+v) доказывает её без пробных значений.
+            # Каждый исходный компонент и знаменатель переносится отдельно,
+            # поэтому сокращённая формула не скрывает добавленный разрыв.
+            from sympy import factor
+            value = factor(value)
         return value
     return Formula(move(item.expression),
                    tuple(move(d) for d in item.denominators),
@@ -712,7 +720,7 @@ def _parse_reference(payload, multiple=False, *, numeric=False):
         # x=k*u,y=u+v — биекция: u=x/k>0,v=y-x/k>0.
         # Она точно задаёт x>0,y>0,x<k*y без пробных приближений.
         substitutions = ((left, k*u), (right, u+v))
-        items = tuple(_in_context(item, substitutions) for item in items)
+        items = tuple(_in_context(item, substitutions, algebraic=True) for item in items)
         symbols = set().union(*(component.free_symbols
                               for item in items
                               for component in (item.expression, *item.denominators, *item.components)))
@@ -1015,7 +1023,10 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
         for component in (*item.denominators, *item.components):
             if component.free_symbols - allowed_symbols:
                 return WRONG
-    student = tuple(_in_context(item, reference.substitutions, angular=bool(reference.angle)) for item in student)
+    student = tuple(_in_context(
+        item, reference.substitutions, angular=bool(reference.angle),
+        algebraic=bool(reference.substitutions) and not (reference.angle or reference.bounds),
+    ) for item in student)
     # Доказуемо неверную формулу можно отклонить до трудного анализа
     # области. Для принятия ответа проверка всех исходных ограничений
     # остаётся обязательной, даже после сокращения к эталону.

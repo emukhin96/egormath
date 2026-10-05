@@ -108,6 +108,46 @@ class FormulaMaskTests(SimpleTestCase):
             with self.subTest(value=value):
                 self.assertEqual(check_slot(slot, value), 'wrong')
 
+    def test_regular_polygon_inradius_accepts_equivalent_radicals_on_full_domain(self):
+        slot = self.slot(r'{{expression: \sqrt{R^2-a^2/4} '
+                         r'| positive: a,R | domain: a<2R}}')
+        for value in (r'R\sqrt{1-a^2/(4R^2)}',
+                      r'(R^2-a^2/4)/\sqrt{R^2-a^2/4}',
+                      r'\sqrt{(4R^2-a^2)^2}/(2\sqrt{4R^2-a^2})'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+
+    def test_regular_polygon_side_accepts_equivalent_radicals_on_full_domain(self):
+        slot = self.slot(r'{{expression: 2\sqrt{R^2-r^2} '
+                         r'| positive: r,R | domain: r<R}}')
+        for value in (r'2R\sqrt{1-r^2/R^2}',
+                      r'2(R^2-r^2)/\sqrt{R^2-r^2}',
+                      r'2\sqrt{(R^2-r^2)^2}/\sqrt{R^2-r^2}'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+
+    def test_factored_positive_domain_preserves_extra_poles(self):
+        for text, values in (
+            (r'{{expression: \sqrt{R^2-a^2/4} '
+             r'| positive: a,R | domain: a<2R}}',
+             (r'\sqrt{R^2-a^2/4}*(a-R)/(a-R)',
+              r'\sqrt{R^2-a^2/4}+(a-R)/(a-R)-1',
+              r'-\sqrt{R^2-a^2/4}')),
+            (r'{{expression: 2\sqrt{R^2-r^2} '
+             r'| positive: r,R | domain: r<R}}',
+             (r'2\sqrt{R^2-r^2}*(2r-R)/(2r-R)',
+              r'2\sqrt{R^2-r^2}+(2r-R)/(2r-R)-1',
+              r'-2\sqrt{R^2-r^2}')),
+        ):
+            slot = self.slot(text)
+            for value in values:
+                with self.subTest(text=text, value=value):
+                    self.assertEqual(check_slot(slot, value), 'wrong')
+
+    def test_radical_denominator_without_strict_domain_keeps_zero_boundary(self):
+        slot = self.slot(r'{{expression: \sqrt{R^2-a^2/4} | positive: a,R}}')
+        self.assertEqual(check_slot(slot, r'(R^2-a^2/4)/\sqrt{R^2-a^2/4}'), 'wrong')
+
     def test_absolute_value_bars_are_not_option_separators(self):
         for reference, value in ((r'|a-1|', r'\sqrt{(a-1)^2}'),
                                  (r'\left|x\right|', r'\sqrt{x^2}'),
