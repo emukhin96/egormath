@@ -81,6 +81,18 @@ class DegreeArgumentsTests(SimpleTestCase):
         self.assertTrue(spec.is_valid, spec.errors)
         self.assertEqual(check_slot(spec.slots[0], '2R'), 'ok')
 
+    def test_degree_marker_does_not_convert_a_power_exponent(self):
+        for value in (r'\sin(R^2°)', r'\sin(R^{2}°)',
+                      r'\sin(R^ 2°)', r'\sin(R^+2°)',
+                      r'\sin(R^ -2°)', r'\sin(R^2\degree)',
+                      r'\sin(R^2^{\circ})', r'\sin(2^3°)'):
+            with self.subTest(value=value):
+                for numeric in (False, True):
+                    self.assertIsNone(formulas._parse(value, numeric=numeric))
+        # Явно сгруппированный числовой угол по-прежнему допустим.
+        self.assertEqual(formulas._parse(r'\sin((2^3)°)').expression,
+                         sp.sin(2*sp.pi/45))
+
     def test_real_worker_accepts_book_values_and_rejects_wrong_angles(self):
         slot = self.slot(r'9/\sin(70\pi/180) ~ 0.05')
         for value in (r'9/\sin(70^{\circ})', r'9/\sin70°'):
