@@ -324,7 +324,7 @@ def _denominators(tree, *, numeric=False, pi_marker=None):
     return result
 
 
-_DEGREE_MARKER = r'(?:\^\s*(?:\{\s*\\circ\s*\}|\\circ\b)|°)'
+_DEGREE_MARKER = r'(?:\^\s*(?:\{\s*\\circ\s*\}|\\circ\b)|°|\\degree\b)'
 
 
 def _numeric_degree_arguments(text):
@@ -407,6 +407,11 @@ def _parse(text, positive=(), *, numeric=False):
             # Здесь знаменатель уже проверен как ненулевое целое; можно
             # убрать ведущий плюс и знак знаменателя без потери области.
             text = str(literal)
+    else:
+        # Числовой угол в градусах допустим и в формуле с параметрами:
+        # R*sin(30°) = R/2. Символьные angle/range остаются отдельным
+        # контекстом; преобразуются только явные числовые аргументы.
+        text = _numeric_degree_arguments(normalize(text))
     text = _prepare(text)
     # Константа π не поддерживается штатной Lark-грамматикой.
     marker = next((c for c in 'QZXVW' if c not in text), None)

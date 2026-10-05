@@ -36,8 +36,50 @@ class DegreeArgumentsTests(SimpleTestCase):
         for value in (r'30°', r'\sin(30)°', r'\sin(30°)+1°',
                       r'\sin(30°', r'\sin(30°))', r'\sin(30°)^\circ'):
             self.assertIsNone(formulas._parse(value, numeric=True), value)
-        # Параметры angle обрабатываются прежним отдельным контекстом.
-        self.assertIsNone(formulas._parse(r'\sin(30°)'))
+        # Числовые градусы допустимы и внутри формул с параметрами;
+        # символьные градусы требуют отдельного контекста angle.
+        self.assertEqual(formulas._parse(r'\sin(30°)').expression,
+                         sp.Rational(1, 2))
+        self.assertIsNone(formulas._parse(r'\sin(alpha°)'))
+
+    def test_mathlive_degree_macro_is_numeric_angle_only(self):
+        for value in (r'\sin(30\degree)', r'\sin30\degree',
+                      r'\sin((90/3)\degree)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(self.slot('1/2'), value), 'ok')
+        for value in (r'30\degree', r'\sin(30)\degree',
+                      r'\sin(alpha\degree)'):
+            self.assertIsNone(formulas._parse(value, numeric=True), value)
+
+    def test_symbolic_formula_accepts_equivalent_numeric_degree_angles(self):
+        slot = parse_mask('{{expression: R | positive:R}}').slots[0]
+        for value in (r'2R(\sin(54^{\circ})-\sin(18^{\circ}))',
+                      r'2R(\sin54°-\sin18°)',
+                      r'2R\sin\left(30^{\circ}\right)',
+                      r'2R\sin(30\degree)',
+                      r'R/\tan(45°)',
+                      r'4R\sin^2(30°)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+        self.assertEqual(check_slot(slot, r'2R\sin(60°)'), 'wrong')
+        # Без маркера градусов прежний смысл радианного угла сохранён.
+        self.assertEqual(check_slot(slot, r'2R\sin(30)'), 'wrong')
+
+    def test_symbolic_degree_formula_preserves_original_undefined_operations(self):
+        slot = parse_mask('{{expression: R | positive:R}}').slots[0]
+        for value in (r'2R\sin(30°)+0/(R-R)',
+                      r'2R\sin(30\degree)+0/(R-R)',
+                      r'2R\sin(30°)+0*sqrt(-R)',
+                      r'2R\sin(30°)+0*(0^0)',
+                      r'R/\sin(0°)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+
+    def test_symbolic_reference_can_contain_numeric_degrees(self):
+        spec = parse_mask(r'{{expression: R/\sin(30°) | positive:R}}',
+                          validate_references=True)
+        self.assertTrue(spec.is_valid, spec.errors)
+        self.assertEqual(check_slot(spec.slots[0], '2R'), 'ok')
 
     def test_real_worker_accepts_book_values_and_rejects_wrong_angles(self):
         slot = self.slot(r'9/\sin(70\pi/180) ~ 0.05')
