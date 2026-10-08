@@ -390,11 +390,11 @@ def _numeric_degree_arguments(text):
             if not number:
                 continue
             start = number.start()
-            # Не переводить в радианы только показатель степени:
-            # R^2° не означает R^(2*pi/180). Пробел и знак у
-            # показателя также не должны обходить эту границу.
-            if re.search(r'\^\s*[+-]?\s*$', text[:start]):
-                continue
+        # Не переводить в радианы только показатель степени:
+        # R^2° и R^(2)° не означают R^(2*pi/180). Пробел,
+        # знак и скобки не должны обходить эту границу.
+        if re.search(r'\^\s*[+-]?\s*$', text[:start]):
+            continue
         if re.search(_DEGREE_MARKER, text[start:end]):
             continue
         if any(a < m.end() and start < b for a, b in replacements):
