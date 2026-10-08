@@ -563,7 +563,9 @@ def check_slot(slot, value):
     if kind == CHOICE:
         if _compact(value).replace('ё', 'е') == _compact(slot.correct).replace('ё', 'е'):
             return OK
-        return WRONG if value in slot.options else UNKNOWN
+        # Непустое значение вне конечного списка вариантов недопустимо.
+        # Его нельзя считать неопределённым математическим вычислением.
+        return WRONG
     if kind == NUMBER:
         if slot.tolerance is None or slot.tolerance == 0:
             from ..check_answer import MAX_EXPR_LEN

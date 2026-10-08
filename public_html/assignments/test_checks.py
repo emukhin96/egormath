@@ -86,6 +86,20 @@ class MaskGrammarTests(SimpleTestCase):
         self.assertEqual(check_slot(s, 'мальчиков'), WRONG)
         self.assertEqual(check_slot(s, ''), '')
 
+    def test_choice_rejects_nonempty_values_outside_available_options(self):
+        for payload, correct, wrong in [
+            ('{{yesno: нет}}', 'НЕТ', 'да'),
+            ('{{choice: чётная|*нечётная}}', 'НЕЧЕТНАЯ', 'чётная'),
+            ('{{compare: >}}', '>', '<'),
+        ]:
+            with self.subTest(payload=payload):
+                s = slot(payload)
+                self.assertEqual(check_slot(s, correct), OK)
+                self.assertEqual(check_slot(s, wrong), WRONG)
+                self.assertEqual(check_slot(s, ''), '')
+                for invalid in ('0', 'нет;да', 'неизвестно', '>' * 1000):
+                    self.assertEqual(check_slot(s, invalid), WRONG)
+
     def test_display(self):
         spec = parse_mask('Ответ: {{number: 10}} см, {{order: a|b|c}}, {{set: }}')
         self.assertEqual(
