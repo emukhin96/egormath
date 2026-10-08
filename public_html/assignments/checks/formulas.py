@@ -377,6 +377,14 @@ def _numeric_degree_arguments(text):
                         break
             if start is None:
                 continue
+            # В группе допустимы только числовые операции и константы.
+            # Даже сокращающиеся параметры (R-R+30) сохраняют исходный
+            # символьный контекст: общий маркер градусов не меняет его.
+            group = re.sub(
+                r'\\(?:pi|frac|dfrac|tfrac|sqrt|cdot|times|div|sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|log|ln|exp)\b'
+                r'|(?<![A-Za-z])pi(?![A-Za-z])', '', text[start:end])
+            if re.search(r'[^0-9.\s+*/^_{}\[\]()π-]', group):
+                continue
         else:
             number = re.search(r'(?<![A-Za-z0-9_.^])\d+(?:\.\d+)?$', text[:end])
             if not number:

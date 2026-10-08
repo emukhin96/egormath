@@ -106,3 +106,47 @@ class DegreeArgumentsTests(SimpleTestCase):
         for value in (r'\sin(30°)+0/(1-1)', r'\sin(30°)+0*sqrt(-1)',
                       r'\sin(30°)+0*(0^0)', r'1/\sin(0°)'):
             self.assertEqual(check_slot(slot, value), 'wrong', value)
+
+
+    def test_symbolic_degree_groups_remain_unparsed(self):
+        for group in (r'(90-\alpha)', r'(\alpha)', r'[\alpha]',
+                      '(R-R+30)', '(alpha)', '(90-α)'):
+            for marker in ('°', r'\degree', r'^{\circ}'):
+                value = r'\sin(' + group + marker + ')'
+                with self.subTest(value=value):
+                    for numeric in (False, True):
+                        self.assertIsNone(formulas._parse(value, numeric=numeric))
+
+
+    def test_numeric_degree_groups_allow_commands_and_constants(self):
+        for value, expected in ((r'\sin((\sqrt{900})°)', sp.Rational(1, 2)),
+                                (r'\cos((\frac{180}{3})°)', sp.Rational(1, 2)),
+                                (r'\sin((\pi)°)', sp.sin(sp.pi**2/180))):
+            for numeric in (False, True):
+                with self.subTest(value=value, numeric=numeric):
+                    parsed = formulas._parse(value, numeric=numeric)
+                    self.assertIsNotNone(parsed)
+                    self.assertEqual(sp.simplify(parsed.expression-expected), 0)
+
+
+    def test_symbolic_degree_groups_do_not_receive_wrong_verdict(self):
+        references = (r'{{expression: \cos\alpha}}',
+                      r'{{expression: \cos\alpha | positive: \alpha | angle: \alpha<90}}',
+                      r'{{expression: 90-\alpha | positive: \alpha | range: \alpha<90}}',
+                      '{{number: 1/2}}')
+        for reference in references:
+            spec = parse_mask(reference, validate_references=True)
+            self.assertTrue(spec.is_valid, spec.errors)
+            for value in (r'\sin((90-\alpha)°)', r'\sin((\alpha)°)'):
+                with self.subTest(reference=reference, value=value):
+                    self.assertEqual(check_slot(spec.slots[0], value), 'unknown')
+        slot = parse_mask(references[1]).slots[0]
+        self.assertEqual(check_slot(slot, r'\sin(90°-\alpha)'), 'ok')
+
+
+    def test_numeric_degree_group_does_not_hide_undefined_operations(self):
+        for value in (r'\sin((30+0/(1-1))°)',
+                      r'\sin((30+0*\sqrt{-1})°)',
+                      r'\sin((30+0*(0^0))°)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(self.slot('1/2'), value), 'wrong')
