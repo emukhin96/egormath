@@ -133,6 +133,7 @@ class Slot:
     allow_quotient: bool = False
     reference_unavailable: bool = False
     tolerance_reference: str = ''
+    degree_unit: bool = False
 
     @property
     def name(self):
@@ -388,6 +389,32 @@ _PARSERS = {
 }
 
 
+# Единица относится только к непосредственно предшествующему полю.
+_DEGREE_UNIT = r'(?:°|\^\s*(?:\{\s*\\circ\s*\}|\\circ\b)|\\degree\b)'
+_DEGREE_SUFFIX_RE = re.compile(r'^\s*(?:\$|\\\(|\\\[)?\s*' + _DEGREE_UNIT)
+_DEGREE_END_RE = re.compile(_DEGREE_UNIT + r'\s*$')
+
+
+def _degree_input(slot, value):
+    """Повторённые градусы в числовом поле угла, без смены смысла формул."""
+    from ..check_answer import MAX_EXPR_LEN
+    from . import numeric
+    if not slot.degree_unit or slot.kind not in (NUMBER, EXPRESSIONS):
+        return value
+    if len(value) > MAX_EXPR_LEN:
+        return value
+    # Пробельные команды LaTeX не должны стать разделителями списка.
+    parts = normalize(value).split(';') if slot.kind == EXPRESSIONS else [normalize(value)]
+    out = []
+    for part in parts:
+        match = _DEGREE_END_RE.search(part)
+        bare = part[:match.start()].strip() if match else part
+        # sin 30° — градусы аргумента функции, а не единица всего ответа.
+        # Чистую арифметику проверим дальше вместе с исходными делениями.
+        out.append(bare if match and numeric.prepare(bare) is not None else part)
+    return ';'.join(out)
+
+
 def parse_mask(text, *, validate_references=False):
     """Текст маски → ``MaskSpec`` (фрагменты текста и слоты, ошибки).
 
@@ -418,7 +445,8 @@ def parse_mask(text, *, validate_references=False):
         index += 1
         kind = CHOICE if name in PRESETS else name
         slot = Slot(index=index, kind=kind, raw=payload,
-                    preset=name if name in PRESETS else None)
+                    preset=name if name in PRESETS else None,
+                    degree_unit=bool(_DEGREE_SUFFIX_RE.match(text[end + 2:])))
         if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
             _parse_formula(slot, payload, validate=validate_references)
         elif kind in (SET, PAIR) and validate_references:
@@ -484,7 +512,7 @@ def _number_needs_worker(slot, value):
     from ..check_answer import MAX_EXPR_LEN, parse_number
     if not (value or '').strip() or len(value) > MAX_EXPR_LEN:
         return False
-    literals = _number_literals(value, slot.reference)
+    literals = _number_literals(_degree_input(slot, value), slot.reference)
     if slot.tolerance not in (None, 0):
         literals += (parse_number(normalize(slot.tolerance_reference)),)
     return any(number is None for number in literals)
@@ -495,6 +523,7 @@ def check_slot(slot, value):
     value = (value or '').strip()
     if not value or not slot.is_valid:
         return ''
+    value = _degree_input(slot, value)
     kind = slot.kind
     if kind == DIGITS:
         return OK if formats.digits(value) and value == slot.data else WRONG

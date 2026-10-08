@@ -125,3 +125,16 @@ class StrictFormatsTests(SimpleTestCase):
         self.assertEqual(
             draft_mask('Не могут.', 'Могут ли точки совпадать?'),
             '{{yesno: нет}}')
+
+    def test_ratio_trigonometric_numbers_keep_order_and_domains(self):
+        self.check_values('{{ratio: 4:1 | quotient}}',
+                          [r'4\sin(90^{\circ})', r'8\sin(30^{\circ})',
+                           r'8\sin(30^{\circ}):1', r'4:\cos(0)',
+                           r'\sqrt[3]{-8}:-0.5'],
+                          [r'4\sin(30^{\circ})', r'1:4\sin(90^{\circ})',
+                           r'4:\sin(0)', r'4+0/\sin(0)', r'4+0*\tan(90^{\circ})',
+                           r'4+\sin(x)-\sin(x)', r'4+\sqrt{-1}-\sqrt{-1}',
+                           r'4\sin(90^{\circ})=4', r'4:1:1'])
+        self.check_values('{{proportion: 4:1 | quotient}}',
+                          [r'\cos(0):4', r'\cos(0)/4', r'4:\cos(0)'],
+                          [r'0:\sin(0)', r'\sin(0):4', r'4:\sin(0)'])

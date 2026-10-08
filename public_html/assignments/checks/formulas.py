@@ -257,8 +257,13 @@ def _prepare(text):
     # В sin² x степень относится к функции, умножение туда не вставляем.
     functions = r'(?:sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|arccot|arcsec|arccsc|sinh|cosh|tanh|asinh|acosh|atanh)'
 
+    # Lark трактует d перед функцией, корнем или дробью как дифференциал.
+    # В школьной формуле одиночная d здесь является множителем.
+    text = re.sub(r'(?<![A-Za-z\\])d\s*(?=\\(?:' + functions + r'|sqrt|frac|dfrac|tfrac)\b)',
+                  r'd\\cdot ', text)
+
     def after_power(match):
-        if re.search(r'\\' + functions + r'$', text[:match.start()]):
+        if re.search(r'\\' + functions + r'$', text[:match.start()].rstrip()):
             return match.group(1)
         return match.group(1) + r'\cdot '
 
@@ -333,6 +338,21 @@ def _numeric_degree_arguments(text):
     Обрабатывает числа и круглые/квадратные группы внутри аргумента.
     Маркеры за пределами функции и незакрытые группы не исправляются.
     """
+    # Явные школьные и SymPy-обозначения функций приводим к LaTeX-командам.
+    # Меняем только известные команды целиком; имена переменных не трогаем.
+    # MathLive оборачивает имена школьных функций ещё и в \mathrm.
+    # Снимаем только эту оболочку у известных имён, сохраняя аргумент
+    # и показатель степени функции (\cos^245 — квадрат косинуса 45).
+    text = re.sub(
+        r'\\operatorname\s*\{\s*\\mathrm\s*\{\s*'
+        r'(sin|cos|tan|tg|cot|ctg|sec|csc|asin|acos|atan)\s*\}\s*\}',
+        lambda m: r'\operatorname{' + m[1] + '}', text)
+    text = re.sub(
+        r'\\operatorname\s*\{\s*(sin|cos|tan|tg|cot|ctg|sec|csc|asin|acos|atan)\s*\}'
+        r'|\\(tg|ctg)(?![A-Za-z])',
+        lambda m: '\\' + {'tg': 'tan', 'ctg': 'cot',
+                            'asin': 'arcsin', 'acos': 'arccos', 'atan': 'arctan'}.get(
+            m[1] or m[2], m[1] or m[2]), text)
     intervals, replacements = [], {}
     functions = (r'\\(?:sin|cos|tan|cot|sec|csc)(?![A-Za-z])'
                  r'(?:\s*\^\s*(?:\{\s*\d+\s*\}|\d))?\s*')
@@ -376,6 +396,14 @@ def _numeric_degree_arguments(text):
                         start = pos
                         break
             if start is None:
+                continue
+            # В группе допустимы только числовые операции и константы.
+            # Даже сокращающиеся параметры (R-R+30) сохраняют исходный
+            # символьный контекст: общий маркер градусов не меняет его.
+            group = re.sub(
+                r'\\(?:pi|frac|dfrac|tfrac|sqrt|cdot|times|div|sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|log|ln|exp)\b'
+                r'|(?<![A-Za-z])pi(?![A-Za-z])', '', text[start:end])
+            if re.search(r'[^0-9.\s+*/^_{}\[\]()π-]', group):
                 continue
         else:
             number = re.search(r'(?<![A-Za-z0-9_.^])\d+(?:\.\d+)?$', text[:end])
@@ -651,6 +679,54 @@ def _angular_everywhere(value, substitutions):
         return True
     return False
 
+def _angular_half_angles(value):
+    """Точные половинные углы atan(u), u>0, с доказанным знаком корней."""
+    from sympy import S, atan, sin, cos, tan, cot, sqrt, expand_trig, factor
+
+    def half_angle(node):
+        if node.func not in (sin, cos, tan, cot):
+            return False
+        doubled = 2*node.args[0]
+        return doubled.func == atan and doubled.args[0].is_positive is True
+
+    def replace_half_angle(node):
+        u = (2*node.args[0]).args[0]
+        length = sqrt(1+u*u)
+        # 0<atan(u)/2<π/4: все четыре значения положительны.
+        # Эта запись синуса не оставляет неопределённый знак sqrt(length-1).
+        if node.func == sin:
+            return u/sqrt(2*length*(length+1))
+        if node.func == cos:
+            return sqrt((length+1)/(2*length))
+        if node.func == tan:
+            return u/(length+1)
+        return (length+1)/u
+
+    value = factor(expand_trig(value.replace(half_angle, replace_half_angle)))
+
+    def positive_radical_difference(node):
+        if not node.is_Add or len(node.args) != 2:
+            return False
+        for radical in node.args:
+            if radical.is_Pow and radical.exp == S.Half:
+                other = radical-node
+                if (other.is_positive is True
+                        and (radical.base-other*other).is_positive is True):
+                    return True
+        return False
+
+    def rationalize_positive_difference(node):
+        radical = next(term for term in node.args
+                       if term.is_Pow and term.exp == S.Half)
+        other = radical-node
+        # sqrt(b)-c=(b-c²)/(sqrt(b)+c), c>0, b-c²>0.
+        # Новый знаменатель строго положителен; знак не предполагается.
+        return (radical.base-other*other)/(radical+other)
+
+    return factor(value.replace(positive_radical_difference,
+                                rationalize_positive_difference))
+
+
 def _in_context(item, substitutions, *, angular=False, algebraic=False):
     """Переносит исходные ограничения, а не только сокращённую формулу."""
     replacements = dict(substitutions)
@@ -660,9 +736,8 @@ def _in_context(item, substitutions, *, angular=False, algebraic=False):
             # Формулы двойного угла переводят sin/cos(2*atan(u))
             # в точные рациональные выражения; ограничения каждого
             # исходного подвыражения переносятся отдельно.
-            from sympy import expand_trig, factor
             from sympy import Abs, Dummy, S, sign, sin, cos, tan, cot
-            value = factor(expand_trig(value))
+            value = _angular_half_angles(value)
             value = value.replace(
                 lambda node: node.func == Abs and _angular_sign(node.args[0], substitutions) in (-1, 0, 1),
                 lambda node: _angular_sign(node.args[0], substitutions)*node.args[0])
