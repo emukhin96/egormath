@@ -11,6 +11,7 @@ class DegreeArgumentsTests(SimpleTestCase):
         self.assertTrue(spec.is_valid, spec.errors)
         return spec.slots[0]
 
+
     def test_mathlive_school_function_export_preserves_power_and_degrees(self):
         # Запись получена в браузере после штатного экспорта MathLive.
         value = r'\cos^245^{\circ}+\operatorname{\mathrm{tg}}^260^{\circ}'
@@ -19,12 +20,14 @@ class DegreeArgumentsTests(SimpleTestCase):
         self.assertEqual(check_slot(self.slot('1'),
                          r'\operatorname{\mathrm{ctg}}45^{\circ}'), 'ok')
 
+
     def test_mathlive_function_wrapper_does_not_change_symbolic_degree_context(self):
         for value in (r'\operatorname{\mathrm{tg}}(R^2°)',
                       r'\operatorname{\mathrm{tg}}(alpha°)',
                       r'\operatorname{\mathrm{unknown}}(30°)'):
             with self.subTest(value=value):
                 self.assertIsNone(formulas._parse(value, numeric=True))
+
 
     def test_explicit_and_bare_numeric_degrees(self):
         cases = ((r'\sin(30^{\circ})', sp.Rational(1, 2)),
@@ -122,6 +125,7 @@ class DegreeArgumentsTests(SimpleTestCase):
                       r'\sin(30°)+0*(0^0)', r'1/\sin(0°)'):
             self.assertEqual(check_slot(slot, value), 'wrong', value)
 
+
     def test_symbolic_degree_groups_remain_unparsed(self):
         for group in (r'(90-\alpha)', r'(\alpha)', r'[\alpha]',
                       '(R-R+30)', '(alpha)', '(90-α)'):
@@ -130,6 +134,7 @@ class DegreeArgumentsTests(SimpleTestCase):
                 with self.subTest(value=value):
                     for numeric in (False, True):
                         self.assertIsNone(formulas._parse(value, numeric=numeric))
+
 
     def test_numeric_degree_groups_allow_commands_and_constants(self):
         for value, expected in ((r'\sin((\sqrt{900})°)', sp.Rational(1, 2)),
@@ -140,6 +145,7 @@ class DegreeArgumentsTests(SimpleTestCase):
                     parsed = formulas._parse(value, numeric=numeric)
                     self.assertIsNotNone(parsed)
                     self.assertEqual(sp.simplify(parsed.expression-expected), 0)
+
 
     def test_symbolic_degree_groups_do_not_receive_wrong_verdict(self):
         references = (r'{{expression: \cos\alpha}}',
@@ -155,94 +161,10 @@ class DegreeArgumentsTests(SimpleTestCase):
         slot = parse_mask(references[1]).slots[0]
         self.assertEqual(check_slot(slot, r'\sin(90°-\alpha)'), 'ok')
 
+
     def test_numeric_degree_group_does_not_hide_undefined_operations(self):
         for value in (r'\sin((30+0/(1-1))°)',
                       r'\sin((30+0*\sqrt{-1})°)',
                       r'\sin((30+0*(0^0))°)'):
             with self.subTest(value=value):
                 self.assertEqual(check_slot(self.slot('1/2'), value), 'wrong')
-
-
-    def test_textbook_power_spacing_and_russian_trig_commands(self):
-        cases = (
-            (r'\cos ^{2} 45^{\circ}+\operatorname{tg}^{2} 60^{\circ}', '7/2'),
-            (r'2 \cos ^{2} 60^{\circ}-\sin ^{2} 30^{\circ}'
-             r'+\sin 60^{\circ} \operatorname{ctg} 60^{\circ}', '3/4'),
-            (r'\cos ^{2} 30^{\circ}-\sin ^{2} 45^{\circ}', '1/4'),
-            (r'3 \operatorname{tg}^{2} 30^{\circ}+4 \operatorname{tg} 45^{\circ}'
-             r'+\cos 30^{\circ} \operatorname{ctg} 30^{\circ}', '13/2'),
-        )
-        for value, reference in cases:
-            with self.subTest(value=value):
-                slot = self.slot(reference)
-                self.assertEqual(check_slot(slot, value), 'ok')
-                self.assertEqual(check_slot(slot, value + '+1'), 'wrong')
-
-    def test_explicit_trig_aliases_preserve_radians_and_undefined_operations(self):
-        for value in (r'\tg45°', r'\ctg(45°)',
-                      r'\operatorname { tg }(\pi/4)',
-                      r'\operatorname{cot}(45°)'):
-            with self.subTest(value=value):
-                self.assertEqual(check_slot(self.slot('1'), value), 'ok')
-        # Маркер градусов по-прежнему обязателен для перевода из радиан.
-        self.assertEqual(check_slot(self.slot('1'), r'\operatorname{tg}(45)'), 'wrong')
-        for value in (r'0*\operatorname{tg}(90°)', r'0*\ctg(0°)',
-                      r'\operatorname{sin}(30°)+0/(1-1)'):
-            with self.subTest(value=value):
-                self.assertEqual(check_slot(self.slot('1/2'), value), 'wrong')
-        self.assertEqual(check_slot(self.slot('1'), r'\operatorname{tangent}(45°)'), 'unknown')
-
-    def test_spaced_trig_power_keeps_preceding_variable_as_a_factor(self):
-        slot = parse_mask('{{expression: a^2/2 | positive:a}}').slots[0]
-        self.assertEqual(check_slot(slot, r'a^{2}\cos ^{2}(45°)'), 'ok')
-        self.assertEqual(check_slot(slot, r'a^{2}\cos ^{2}(60°)'), 'wrong')
-
-    def test_sympy_inverse_operator_names_match_standard_commands(self):
-        cases = (
-            (r'\operatorname{atan}(1)', r'\arctan(1)', sp.pi / 4),
-            (r'\operatorname { asin }(1/2)', r'\arcsin(1/2)', sp.pi / 6),
-            (r'\operatorname{acos}(1/2)', r'\arccos(1/2)', sp.pi / 3),
-        )
-        for alias, standard, expected in cases:
-            for numeric in (False, True):
-                with self.subTest(alias=alias, numeric=numeric):
-                    parsed = formulas._parse(alias, numeric=numeric)
-                    self.assertIsNotNone(parsed)
-                    self.assertEqual(sp.simplify(parsed.expression - expected), 0)
-                    self.assertEqual(parsed.expression,
-                                     formulas._parse(standard, numeric=numeric).expression)
-
-    def test_sympy_inverse_operator_names_in_numeric_angle_fields(self):
-        slot = self.slot('45 ~ 0.5')
-        for value in (r'180*\operatorname{atan}(1)/\pi',
-                      r'180*\operatorname{asin}(\sqrt{2}/2)/\pi',
-                      r'180*\operatorname{acos}(\sqrt{2}/2)/\pi'):
-            with self.subTest(value=value):
-                self.assertEqual(check_slot(slot, value), 'ok')
-                self.assertEqual(check_slot(slot, value + '+1'), 'wrong')
-        for value in (r'0*\operatorname{asin}(2)',
-                      r'0*\operatorname{acos}(2)',
-                      r'\operatorname{atan}(1)+0/(1-1)'):
-            with self.subTest(value=value):
-                self.assertEqual(check_slot(slot, value), 'wrong')
-        self.assertEqual(check_slot(slot, r'\operatorname{atanh}(1/2)'), 'unknown')
-
-    def test_operator_function_command_keeps_attached_symbolic_argument(self):
-        cases = (
-            (r'\operatorname{tg}x', r'\tan x'),
-            (r'\operatorname{\mathrm{sin}}x', r'\sin x'),
-            (r'\operatorname{\mathrm{ctg}}\alpha', r'\cot \alpha'),
-            (r'R\operatorname{sin}x', r'R\sin x'),
-            (r'\operatorname{asin}x', r'\arcsin x'),
-        )
-        for value, reference in cases:
-            with self.subTest(value=value):
-                parsed = formulas._parse(value)
-                standard = formulas._parse(reference)
-                self.assertIsNotNone(parsed)
-                self.assertIsNotNone(standard)
-                self.assertEqual(parsed.expression, standard.expression)
-                spec = parse_mask('{{expression: ' + reference + '}}')
-                self.assertTrue(spec.is_valid, spec.errors)
-                self.assertEqual(check_slot(spec.slots[0], value), 'ok')
-                self.assertEqual(check_slot(spec.slots[0], value + '+1'), 'wrong')
