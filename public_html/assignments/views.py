@@ -707,6 +707,10 @@ def _persist_answers(assignment, post):
         snapshot_before = answer_snapshot(obj)
         before = obj.display_answer
         previous = dict(obj.answer_json or {})
+        if spec is None and fields['answer_text'] == obj.legacy_answer:
+            # Общая форма присылает также неизменённый старый ответ.
+            # Сохраняем его структуру, вердикт и историю до реальной правки.
+            return
         if (spec is None and not fields['answer_text']
                 and obj.has_mask_values and not obj.legacy_answer):
             # Пустое новое поле полного решения в общей форме не должно

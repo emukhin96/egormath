@@ -2337,6 +2337,26 @@
   }
 
   /* Формула — неделимый блок: не разрывается при переносе строк */
+  /* Длинные вычисления прокручиваются внутри ответа, не растягивая страницу. */
+  .ws-answers :not(.katex-display) > .katex {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    vertical-align: middle;
+    padding-block: 0.15em;
+  }
+
+  .ws-answers .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-block: 0.2em;
+  }
+
+  .ws-answers .katex-display > .katex {
+    width: max-content;
+    min-width: 100%;
+  }
+
   .math-content .katex {
     display: inline-block;
   }

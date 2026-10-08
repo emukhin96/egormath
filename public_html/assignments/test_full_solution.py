@@ -4,6 +4,7 @@ from unittest import mock
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils.html import escape
+from django.utils import timezone
 
 from problems.models import TaskSubitem
 from problems.tests import make_student, make_teacher
@@ -248,3 +249,45 @@ class FullSolutionFallbackTests(TestCase):
                 self.assertContains(response, '<span class="math-content answer-readonly">[90]</span>',
                                     count=1, html=True)
                 self.assertContains(response, 'нет ответа')
+
+
+    def test_unchanged_legacy_answers_preserve_structure_checks_and_history(self):
+        checked = timezone.now()
+        for with_part in (False, True):
+            worksheet = make_worksheet(self.teacher, n_tasks=1)
+            task = worksheet.ordered_items()[0].task
+            task.answer_mask = ''
+            task.save()
+            assignment = Assignment.objects.create(worksheet=worksheet, student=self.student,
+                                                   assigned_by=self.teacher, allow_photos=False)
+            submission = Submission.objects.create(assignment=assignment, task=task)
+            owner = submission
+            field = f'task{task.pk}_solution'
+            if with_part:
+                proof = TaskSubitem.objects.create(task=task, order=10, text_latex='Докажите.')
+                owner = SubmissionPart.objects.create(submission=submission, subitem=proof)
+                field = f'task{task.pk}_sub{proof.pk}_solution'
+            for values in ({'answer_text': 'Старое доказательство'},
+                           {'answer_number': '17'},
+                           {'interval_low': '1', 'interval_high': '2'}):
+                with self.subTest(with_part=with_part, values=values):
+                    for name in ('answer_text', 'answer_number', 'interval_low', 'interval_high'):
+                        setattr(owner, name, values.get(name, ''))
+                    owner.answer_json = {}
+                    owner.auto_check = 'ok'
+                    owner.checked_at = checked
+                    owner.check_revealed = True
+                    owner.check_json = {'legacy': 'ok'}
+                    owner.save()
+                    before = {name: getattr(owner, name) for name in
+                              ('answer_text', 'answer_number', 'interval_low', 'interval_high',
+                               'answer_json', 'auto_check', 'checked_at', 'check_revealed',
+                               'check_json', 'updated_at')}
+                    revisions = AnswerRevision.objects.count()
+                    response = self.client.post(reverse('save_answers', args=[assignment.pk]),
+                                                {field: owner.legacy_answer},
+                                                HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+                    self.assertEqual(response.status_code, 200)
+                    owner.refresh_from_db()
+                    self.assertEqual({name: getattr(owner, name) for name in before}, before)
+                    self.assertEqual(AnswerRevision.objects.count(), revisions)
