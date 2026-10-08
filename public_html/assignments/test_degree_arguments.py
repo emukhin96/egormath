@@ -226,3 +226,23 @@ class DegreeArgumentsTests(SimpleTestCase):
             with self.subTest(value=value):
                 self.assertEqual(check_slot(slot, value), 'wrong')
         self.assertEqual(check_slot(slot, r'\operatorname{atanh}(1/2)'), 'unknown')
+
+    def test_operator_function_command_keeps_attached_symbolic_argument(self):
+        cases = (
+            (r'\operatorname{tg}x', r'\tan x'),
+            (r'\operatorname{\mathrm{sin}}x', r'\sin x'),
+            (r'\operatorname{\mathrm{ctg}}\alpha', r'\cot \alpha'),
+            (r'R\operatorname{sin}x', r'R\sin x'),
+            (r'\operatorname{asin}x', r'\arcsin x'),
+        )
+        for value, reference in cases:
+            with self.subTest(value=value):
+                parsed = formulas._parse(value)
+                standard = formulas._parse(reference)
+                self.assertIsNotNone(parsed)
+                self.assertIsNotNone(standard)
+                self.assertEqual(parsed.expression, standard.expression)
+                spec = parse_mask('{{expression: ' + reference + '}}')
+                self.assertTrue(spec.is_valid, spec.errors)
+                self.assertEqual(check_slot(spec.slots[0], value), 'ok')
+                self.assertEqual(check_slot(spec.slots[0], value + '+1'), 'wrong')

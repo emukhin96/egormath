@@ -61,3 +61,25 @@ class DegreeUnitMaskTests(SimpleTestCase):
         with patch.object(formulas, '_spawn') as spawn:
             self.assertEqual(check_slot(slot, '1' * 301 + '°;110°'), 'unknown')
         spawn.assert_not_called()
+
+    def test_nonangular_units_in_angle_fields_are_wrong_without_worker(self):
+        for payload, values in [
+            (r'{{number: 180}}$^{\circ}$',
+             ('180см', '180 см', r'180\text{см}', r'180\mathrm{см}',
+              '180м²', r'180\text{м}^2', '180км', '(90+90)см')),
+            (r'{{expressions: 70; 110}}$^{\circ}$',
+             ('70см;110', '70;110м', r'70;110\text{мм}')),
+        ]:
+            slot = parse_mask(payload).slots[0]
+            with patch.object(formulas, '_spawn') as spawn:
+                for value in values:
+                    with self.subTest(payload=payload, value=value):
+                        self.assertEqual(check_slot(slot, value), 'wrong')
+            spawn.assert_not_called()
+
+    def test_wrong_angle_unit_is_still_checked_after_worker_failure(self):
+        spec = parse_mask(r'{{expression: x}}; {{number: 180}}$^{\circ}$')
+        with patch.object(formulas, 'check', side_effect=formulas.FormulaUnavailable('сбой')):
+            with self.assertRaises(formulas.FormulaUnavailable) as caught:
+                check_mask(spec, {'s1': 'x', 's2': '180см'})
+        self.assertEqual(caught.exception.slot_checks, {'s1': 'unknown', 's2': 'wrong'})

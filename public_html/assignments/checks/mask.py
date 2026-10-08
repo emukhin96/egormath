@@ -393,6 +393,28 @@ _PARSERS = {
 _DEGREE_UNIT = r'(?:°|\^\s*(?:\{\s*\\circ\s*\}|\\circ\b)|\\degree\b)'
 _DEGREE_SUFFIX_RE = re.compile(r'^\s*(?:\$|\\\(|\\\[)?\s*' + _DEGREE_UNIT)
 _DEGREE_END_RE = re.compile(_DEGREE_UNIT + r'\s*$')
+# Единица длины, площади или объёма не является единицей угла.
+_NONANGULAR_UNIT_END_RE = re.compile(
+    r'(?:\\(?:text|mathrm)\s*\{\s*(?:мм|см|дм|км|м)\s*\}|(?:мм|см|дм|км|м))'
+    r'(?:\^\s*(?:\{\s*[23]\s*\}|[23])|[²³])?\s*$', re.I)
+
+
+def _wrong_angle_unit(slot, value):
+    """Явная единица не того вида после числовой величины угла."""
+    from ..check_answer import MAX_EXPR_LEN
+    from . import numeric
+    if (not slot.degree_unit or slot.kind not in (NUMBER, EXPRESSIONS)
+            or len(value) > MAX_EXPR_LEN):
+        return False
+    parts = normalize(value).split(';') if slot.kind == EXPRESSIONS else [normalize(value)]
+    for part in parts:
+        match = _NONANGULAR_UNIT_END_RE.search(part)
+        # Не делаем вывод о размерности выражений с переменными или
+        # сокращающимися единицами: здесь распознаётся только числовая часть.
+        if match and numeric.prepare(part[:match.start()].strip()) is not None:
+            return True
+    return False
+
 
 
 def _degree_input(slot, value):
@@ -523,6 +545,8 @@ def check_slot(slot, value):
     value = (value or '').strip()
     if not value or not slot.is_valid:
         return ''
+    if _wrong_angle_unit(slot, value):
+        return WRONG
     value = _degree_input(slot, value)
     kind = slot.kind
     if kind == DIGITS:
@@ -617,7 +641,8 @@ def check_mask(spec, values, known=None):
         if known and slot.name in known:
             results[slot.name] = known[slot.name]
             continue
-        if unavailable is not None and (
+        if unavailable is not None and not _wrong_angle_unit(
+                slot, (values.get(slot.name, '') or '').strip()) and (
                 slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION, RATIO)
                 or slot.kind == NUMBER and _number_needs_worker(slot, values.get(slot.name, ''))
                 or slot.kind in (SET, PAIR) and formats.collection_needs_worker(
