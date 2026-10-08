@@ -16,9 +16,14 @@ def decimal(text):
     return Fraction(text.replace(',', '.'))
 
 
+_RATIO_OPERATOR_NAMES = r'(?:sin|cos|tan|tg|cot|ctg|sec|csc|asin|acos|atan)'
 _RATIO_TRIG = re.compile(
-    r'\\(?:sin|cos|tan|cot|arcsin|arccos|arctan)(?![A-Za-z])'
-    r'|(?<![A-Za-z\\])(?:sin|cos|tan|cot|arcsin|arccos|arctan)\b')
+    r'(?:\\operatorname\s*\{\s*'
+    rf'(?:{_RATIO_OPERATOR_NAMES}\s*|'
+    rf'\\mathrm\s*\{{\s*{_RATIO_OPERATOR_NAMES}\s*\}}\s*)\}}'
+    r'|\\(?:sin|cos|tan|tg|cot|ctg|sec|csc|arcsin|arccos|arctan)(?![A-Za-z])'
+    r'|(?<![A-Za-z\\])(?:sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan)\b)'
+    r'(?:\s*\^\s*(?:\{\s*\d+\s*\}|\d))?')
 
 
 def _ratio_part(text):
@@ -31,7 +36,7 @@ def _ratio_part(text):
     # вещественную область проверит ограниченный числовой вычислитель.
     # Удаление имён здесь не подменяет выражение при вычислении.
     skeleton, count = _RATIO_TRIG.subn('', text)
-    skeleton = skeleton.replace(r'\circ', '').replace('°', '')
+    skeleton = skeleton.replace(r'\circ', '').replace(r'\degree', '').replace('°', '')
     if not count or numeric.prepare(skeleton) is None:
         return None
     return text
