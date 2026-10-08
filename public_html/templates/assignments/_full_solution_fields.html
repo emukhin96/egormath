@@ -8,7 +8,9 @@
 {% if editable %}
 <textarea id="{{ prefix }}_solution" name="{{ prefix }}_solution" rows="6">{{ obj.legacy_answer|default:'' }}</textarea>
 <p class="helptext">Опишите доказательство, ход построения или решение. Его проверит учитель.</p>
-{% else %}
+{% elif obj.legacy_answer %}
 {% include 'assignments/_answer_fields.html' with obj=obj editable=False %}
+{% else %}
+<span class="muted">нет ответа</span>
 {% endif %}
 </div>

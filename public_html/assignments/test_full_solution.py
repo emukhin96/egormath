@@ -226,3 +226,25 @@ class FullSolutionFallbackTests(TestCase):
         self.assertEqual(old.answer_number, '')
         self.assertTrue(AnswerRevision.objects.filter(submission=old, initial=True,
                                                      snapshot__answer_number='Исторический ответ').exists())
+
+    def test_submitted_historical_mask_is_not_shown_as_full_solution(self):
+        self.task.answer_mask = '{{number: 90}}'
+        self.task.full_answer_only = True
+        self.task.save()
+        self.assignment.status = Assignment.STATUS_SUBMITTED
+        self.assignment.save()
+        submission = Submission.objects.create(
+            assignment=self.assignment, task=self.task, answer_json={'s1': '90'})
+        for subitem in (False, True):
+            with self.subTest(subitem=subitem):
+                if subitem:
+                    part = TaskSubitem.objects.create(
+                        task=self.task, order=10, text_latex='Докажите.',
+                        answer_mask='{{number: 90}}')
+                    SubmissionPart.objects.create(
+                        submission=submission, subitem=part, answer_json={'s1': '90'})
+                response = self.client.get(self.detail)
+                self.assertContains(response, 'Ранее сохранённый короткий ответ')
+                self.assertContains(response, '<span class="math-content answer-readonly">[90]</span>',
+                                    count=1, html=True)
+                self.assertContains(response, 'нет ответа')
