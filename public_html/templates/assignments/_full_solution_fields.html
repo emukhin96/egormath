@@ -1,0 +1,14 @@
+{# Полное решение для учителя, когда фото и доска недоступны. #}
+<div class="text-answer">
+{% if obj.has_mask_values and not obj.legacy_answer %}
+<p class="helptext">Ранее сохранённый короткий ответ:</p>
+{% include 'assignments/_answer_fields.html' with obj=obj editable=False %}
+{% endif %}
+<label for="{{ prefix }}_solution">Развёрнутое решение</label>
+{% if editable %}
+<textarea id="{{ prefix }}_solution" name="{{ prefix }}_solution" rows="6">{{ obj.legacy_answer|default:'' }}</textarea>
+<p class="helptext">Опишите доказательство, ход построения или решение. Его проверит учитель.</p>
+{% else %}
+{% include 'assignments/_answer_fields.html' with obj=obj editable=False %}
+{% endif %}
+</div>

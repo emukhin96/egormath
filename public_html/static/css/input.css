@@ -2631,6 +2631,11 @@
     max-width: 640px;
   }
 
+  /* Переносы строк полного решения сохраняются при чтении учителем. */
+  .answer-readonly {
+    white-space: pre-wrap;
+  }
+
   .text-answer-row {
     display: flex;
     align-items: flex-start;

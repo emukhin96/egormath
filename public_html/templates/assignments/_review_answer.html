@@ -2,7 +2,7 @@
 <div class="review-answer-row">
   {% if label %}<span>{{ label|add:'-1'|subitem_label }})</span>{% endif %}
   {% if fragments %}{% include 'assignments/_mask.html' with editable=False show_checks=False %}
-  {% else %}<span class="math-content">{{ obj.display_answer|default:'—'|web_answer }}</span>{% endif %}
+  {% else %}<span class="math-content answer-readonly">{{ obj.display_answer|default:'—'|web_answer }}</span>{% endif %}
   {% if obj.check_stale %}<span class="helptext">Сверка требует обновления</span>{% endif %}
   {% if reference or mask_reference %}<span class="review-reference">Ответ: <span class="math-content">{{ reference|default:mask_reference|web_answer }}</span></span>{% endif %}
 </div>
