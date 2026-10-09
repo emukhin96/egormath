@@ -133,3 +133,45 @@ class StrictFormatsTests(SimpleTestCase):
         self.assertEqual(
             draft_mask('Не могут.', 'Могут ли точки совпадать?'),
             '{{yesno: нет}}')
+
+    def test_ratio_trigonometric_numbers_keep_order_and_domains(self):
+        self.check_values('{{ratio: 4:1 | quotient}}',
+                          [r'4\sin(90^{\circ})', r'8\sin(30^{\circ})',
+                           r'8\sin(30^{\circ}):1', r'4:\cos(0)',
+                           r'\sqrt[3]{-8}:-0.5'],
+                          [r'4\sin(30^{\circ})', r'1:4\sin(90^{\circ})',
+                           r'4:\sin(0)', r'4+0/\sin(0)', r'4+0*\tan(90^{\circ})',
+                           r'4+\sin(x)-\sin(x)', r'4+\sqrt{-1}-\sqrt{-1}',
+                           r'4\sin(90^{\circ})=4', r'4:1:1'])
+        self.check_values('{{proportion: 4:1 | quotient}}',
+                          [r'\cos(0):4', r'\cos(0)/4', r'4:\cos(0)'],
+                          [r'0:\sin(0)', r'\sin(0):4', r'4:\sin(0)'])
+
+    def test_ratio_mathlive_function_aliases_and_degree_macro(self):
+        self.check_values('{{ratio: 4:1 | quotient}}',
+                          [r'4\operatorname{tg}(45^{\circ}):1',
+                           r'8\sin(30\degree):1', r'4\tg(45°):1',
+                           r'4\operatorname{ctg}(45°):1',
+                           r'4\operatorname{\mathrm{tg}}45^{\circ}:1',
+                           r'4\operatorname{\mathrm{ctg}}45^{\circ}:1',
+                           r'2\sec(60°):1', r'2\csc(30°):1'],
+                          [r'4\operatorname{tg}(30°):1',
+                           r'1:4\operatorname{tg}(45°)',
+                           r'4\operatorname{tg}(90°):1',
+                           r'4+0*\operatorname{ctg}(0°):1',
+                           r'4+0/\sin(0\degree):1',
+                           r'4+\operatorname{tg}(x)-\operatorname{tg}(x):1',
+                           r'4\operatorname{unknown}(45°):1',
+                           r'4\tga(45°):1'])
+        self.check_values('{{proportion: 4:1 | quotient}}',
+                          [r'1:4\operatorname{tg}(45°)',
+                           r'\operatorname{\mathrm{ctg}}45°/4'],
+                          [r'0:\operatorname{tg}(0°)',
+                           r'4:\operatorname{tg}(0°)'])
+
+    def test_ratio_function_power_keeps_original_domain(self):
+        self.check_values('{{ratio: 7:2}}',
+                          [r'\cos^245^{\circ}+\operatorname{\mathrm{tg}}^260^{\circ}:1',
+                           r'\cos^{2}(45\degree)+\tg^{2}(60\degree):1'],
+                          [r'\cos^245^{\circ}+\tg^260^{\circ}:2',
+                           r'7/2+0*\tg^{2}(90°):1'])

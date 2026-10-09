@@ -257,8 +257,13 @@ def _prepare(text):
     # В sin² x степень относится к функции, умножение туда не вставляем.
     functions = r'(?:sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|arccot|arcsec|arccsc|sinh|cosh|tanh|asinh|acosh|atanh)'
 
+    # Lark трактует d перед функцией, корнем или дробью как дифференциал.
+    # В школьной формуле одиночная d здесь является множителем.
+    text = re.sub(r'(?<![A-Za-z\\])d\s*(?=\\(?:' + functions + r'|sqrt|frac|dfrac|tfrac)\b)',
+                  r'd\\cdot ', text)
+
     def after_power(match):
-        if re.search(r'\\' + functions + r'$', text[:match.start()]):
+        if re.search(r'\\' + functions + r'$', text[:match.start()].rstrip()):
             return match.group(1)
         return match.group(1) + r'\cdot '
 
@@ -324,7 +329,7 @@ def _denominators(tree, *, numeric=False, pi_marker=None):
     return result
 
 
-_DEGREE_MARKER = r'(?:\^\s*(?:\{\s*\\circ\s*\}|\\circ\b)|°)'
+_DEGREE_MARKER = r'(?:\^\s*(?:\{\s*\\circ\s*\}|\\circ\b)|°|\\degree\b)'
 
 
 def _numeric_degree_arguments(text):
@@ -333,6 +338,21 @@ def _numeric_degree_arguments(text):
     Обрабатывает числа и круглые/квадратные группы внутри аргумента.
     Маркеры за пределами функции и незакрытые группы не исправляются.
     """
+    # Явные школьные и SymPy-обозначения функций приводим к LaTeX-командам.
+    # Меняем только известные команды целиком; имена переменных не трогаем.
+    # MathLive оборачивает имена школьных функций ещё и в \mathrm.
+    # Снимаем только эту оболочку у известных имён, сохраняя аргумент
+    # и показатель степени функции (\cos^245 — квадрат косинуса 45).
+    text = re.sub(
+        r'\\operatorname\s*\{\s*\\mathrm\s*\{\s*'
+        r'(sin|cos|tan|tg|cot|ctg|sec|csc|asin|acos|atan)\s*\}\s*\}',
+        lambda m: r'\operatorname{' + m[1] + '}', text)
+    text = re.sub(
+        r'\\operatorname\s*\{\s*(sin|cos|tan|tg|cot|ctg|sec|csc|asin|acos|atan)\s*\}'
+        r'|\\(tg|ctg)(?![A-Za-z])',
+        lambda m: '\\' + {'tg': 'tan', 'ctg': 'cot',
+                            'asin': 'arcsin', 'acos': 'arccos', 'atan': 'arctan'}.get(
+            m[1] or m[2], m[1] or m[2]), text)
     intervals, replacements = [], {}
     functions = (r'\\(?:sin|cos|tan|cot|sec|csc)(?![A-Za-z])'
                  r'(?:\s*\^\s*(?:\{\s*\d+\s*\}|\d))?\s*')
@@ -377,11 +397,24 @@ def _numeric_degree_arguments(text):
                         break
             if start is None:
                 continue
+            # В группе допустимы только числовые операции и константы.
+            # Даже сокращающиеся параметры (R-R+30) сохраняют исходный
+            # символьный контекст: общий маркер градусов не меняет его.
+            group = re.sub(
+                r'\\(?:pi|frac|dfrac|tfrac|sqrt|cdot|times|div|sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|log|ln|exp)\b'
+                r'|(?<![A-Za-z])pi(?![A-Za-z])', '', text[start:end])
+            if re.search(r'[^0-9.\s+*/^_{}\[\]()π-]', group):
+                continue
         else:
-            number = re.search(r'(?<![A-Za-z0-9_.])\d+(?:\.\d+)?$', text[:end])
+            number = re.search(r'(?<![A-Za-z0-9_.^])\d+(?:\.\d+)?$', text[:end])
             if not number:
                 continue
             start = number.start()
+        # Не переводить в радианы только показатель степени:
+        # R^2° и R^(2)° не означают R^(2*pi/180). Пробел,
+        # знак и скобки не должны обходить эту границу.
+        if re.search(r'\^\s*[+-]?\s*$', text[:start]):
+            continue
         if re.search(_DEGREE_MARKER, text[start:end]):
             continue
         if any(a < m.end() and start < b for a, b in replacements):
@@ -407,6 +440,11 @@ def _parse(text, positive=(), *, numeric=False):
             # Здесь знаменатель уже проверен как ненулевое целое; можно
             # убрать ведущий плюс и знак знаменателя без потери области.
             text = str(literal)
+    else:
+        # Числовой угол в градусах допустим и в формуле с параметрами:
+        # R*sin(30°) = R/2. Символьные angle/range остаются отдельным
+        # контекстом; преобразуются только явные числовые аргументы.
+        text = _numeric_degree_arguments(normalize(text))
     text = _prepare(text)
     # Константа π не поддерживается штатной Lark-грамматикой.
     marker = next((c for c in 'QZXVW' if c not in text), None)
@@ -641,7 +679,55 @@ def _angular_everywhere(value, substitutions):
         return True
     return False
 
-def _in_context(item, substitutions, *, angular=False):
+def _angular_half_angles(value):
+    """Точные половинные углы atan(u), u>0, с доказанным знаком корней."""
+    from sympy import S, atan, sin, cos, tan, cot, sqrt, expand_trig, factor
+
+    def half_angle(node):
+        if node.func not in (sin, cos, tan, cot):
+            return False
+        doubled = 2*node.args[0]
+        return doubled.func == atan and doubled.args[0].is_positive is True
+
+    def replace_half_angle(node):
+        u = (2*node.args[0]).args[0]
+        length = sqrt(1+u*u)
+        # 0<atan(u)/2<π/4: все четыре значения положительны.
+        # Эта запись синуса не оставляет неопределённый знак sqrt(length-1).
+        if node.func == sin:
+            return u/sqrt(2*length*(length+1))
+        if node.func == cos:
+            return sqrt((length+1)/(2*length))
+        if node.func == tan:
+            return u/(length+1)
+        return (length+1)/u
+
+    value = factor(expand_trig(value.replace(half_angle, replace_half_angle)))
+
+    def positive_radical_difference(node):
+        if not node.is_Add or len(node.args) != 2:
+            return False
+        for radical in node.args:
+            if radical.is_Pow and radical.exp == S.Half:
+                other = radical-node
+                if (other.is_positive is True
+                        and (radical.base-other*other).is_positive is True):
+                    return True
+        return False
+
+    def rationalize_positive_difference(node):
+        radical = next(term for term in node.args
+                       if term.is_Pow and term.exp == S.Half)
+        other = radical-node
+        # sqrt(b)-c=(b-c²)/(sqrt(b)+c), c>0, b-c²>0.
+        # Новый знаменатель строго положителен; знак не предполагается.
+        return (radical.base-other*other)/(radical+other)
+
+    return factor(value.replace(positive_radical_difference,
+                                rationalize_positive_difference))
+
+
+def _in_context(item, substitutions, *, angular=False, algebraic=False):
     """Переносит исходные ограничения, а не только сокращённую формулу."""
     replacements = dict(substitutions)
     def move(value):
@@ -650,9 +736,8 @@ def _in_context(item, substitutions, *, angular=False):
             # Формулы двойного угла переводят sin/cos(2*atan(u))
             # в точные рациональные выражения; ограничения каждого
             # исходного подвыражения переносятся отдельно.
-            from sympy import expand_trig, factor
             from sympy import Abs, Dummy, S, sign, sin, cos, tan, cot
-            value = factor(expand_trig(value))
+            value = _angular_half_angles(value)
             value = value.replace(
                 lambda node: node.func == Abs and _angular_sign(node.args[0], substitutions) in (-1, 0, 1),
                 lambda node: _angular_sign(node.args[0], substitutions)*node.args[0])
@@ -670,6 +755,14 @@ def _in_context(item, substitutions, *, angular=False):
                     proven[node] = polarity*magnitude
                     restore[magnitude] = polarity*node
             value = value.xreplace(proven).xreplace(restore)
+        elif algebraic:
+            # Алгебраическая область x<k*y задаёт положительные u,v.
+            # Раскрытый радиканд (u+v)^2-u^2 скрывает положительность;
+            # факторизация v*(2*u+v) доказывает её без пробных значений.
+            # Каждый исходный компонент и знаменатель переносится отдельно,
+            # поэтому сокращённая формула не скрывает добавленный разрыв.
+            from sympy import factor
+            value = factor(value)
         return value
     return Formula(move(item.expression),
                    tuple(move(d) for d in item.denominators),
@@ -712,7 +805,7 @@ def _parse_reference(payload, multiple=False, *, numeric=False):
         # x=k*u,y=u+v — биекция: u=x/k>0,v=y-x/k>0.
         # Она точно задаёт x>0,y>0,x<k*y без пробных приближений.
         substitutions = ((left, k*u), (right, u+v))
-        items = tuple(_in_context(item, substitutions) for item in items)
+        items = tuple(_in_context(item, substitutions, algebraic=True) for item in items)
         symbols = set().union(*(component.free_symbols
                               for item in items
                               for component in (item.expression, *item.denominators, *item.components)))
@@ -787,7 +880,23 @@ def _defined(item, reference):
                  for c in (original.expression, *original.components)}
     original_denominators = {d for original in reference.items
                              for d in original.denominators}
-    if (all(c in originals or everywhere(c) for c in (value, *item.components))
+    @lru_cache(maxsize=None)
+    def real_from_original(component):
+        if component in originals or everywhere(component):
+            return True
+        # Суммы и произведения конечных вещественных выражений сохраняют
+        # область. Извлечение положительного числового множителя из корня
+        # даёт, например, sqrt(4*f)=2*sqrt(f), уже допустимого в эталоне.
+        # Исходные компоненты и знаменатели ниже проверяются все: это
+        # доказательство не разрешает сокращать дополнительный разрыв.
+        from sympy import factor_terms
+        reduced = factor_terms(component)
+        if reduced in originals or everywhere(reduced):
+            return True
+        return ((reduced.is_Add or reduced.is_Mul)
+                and all(real_from_original(arg) for arg in reduced.args))
+
+    if (all(real_from_original(c) for c in (value, *item.components))
             and all(d in original_denominators or nonzero(d)
                     for d in item.denominators)):
         return True
@@ -1012,7 +1121,10 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
         for component in (*item.denominators, *item.components):
             if component.free_symbols - allowed_symbols:
                 return WRONG
-    student = tuple(_in_context(item, reference.substitutions, angular=bool(reference.angle)) for item in student)
+    student = tuple(_in_context(
+        item, reference.substitutions, angular=bool(reference.angle),
+        algebraic=bool(reference.substitutions) and not (reference.angle or reference.bounds),
+    ) for item in student)
     # Доказуемо неверную формулу можно отклонить до трудного анализа
     # области. Для принятия ответа проверка всех исходных ограничений
     # остаётся обязательной, даже после сокращения к эталону.
@@ -1020,6 +1132,15 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
     # Сохраняем кратность: лишняя или повторная длина не заменяет другую.
     remaining = list(reference.items)
     for item in student:
+        # Сначала ищем уже совпавшее выражение: при перестановке диагоналей
+        # сравнение с другой диагональю может зря исчерпать бюджет SymPy.
+        # Все исходные знаменатели и компоненты проверяются ниже даже
+        # после этого совпадения; сокращение не скрывает дырку в области.
+        exact = next((index for index, expected in enumerate(remaining)
+                      if item.expression == expected.expression), None)
+        if exact is not None:
+            remaining.pop(exact)
+            continue
         uncertain = False
         for index, expected in enumerate(remaining):
             # Полный квадрат под корнем может быть раскрыт: sqrt(x²-2x+1).
@@ -1050,9 +1171,10 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
     if mode == 'simplify':
         item = student[0]
         if (expressions.reducible(item.tree)
-                or expressions._size(item.expression) > 2 * expressions._size(reference.items[0].expression) + 4):
+                or expressions.unsimplified(item.expression, reference.items[0].expression)):
             return WRONG
     elif mode == 'factor':
-        if not expressions.fully_factored(expressions.resolve(student[0].tree)):
+        if not expressions.fully_factored(expressions.resolve(student[0].tree),
+                                          expressions.resolve(reference.items[0].tree)):
             return WRONG
     return OK

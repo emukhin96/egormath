@@ -44,6 +44,36 @@ class FormulaMaskTests(SimpleTestCase):
             with self.subTest(value=value):
                 self.assertEqual(check_slot(slot, value), 'wrong')
 
+    def test_radical_before_adjacent_parameters_preserves_products_and_domains(self):
+        slot = self.slot(r'{{simplify: \sqrt{a^2+b^2+ab\sqrt{2}} | positive: a,b}}')
+        for value in (r'\sqrt{b^2+a^2+\sqrt{2}ba}',
+                      r'\sqrt{a^2+b^2+\sqrt{2}ab}',
+                      r'sqrt(b^2+a^2+sqrt(2)ba)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+        for value in (r'\sqrt{a^2+b^2-\sqrt{2}ba}',
+                      r'\sqrt{a^2+b^2+\sqrt{2}b^2a}',
+                      r'\sqrt{a^2+b^2+\sqrt{2}ba}+1/(a-b)-1/(a-b)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+        product = self.slot(r'{{expression: ab^2c | positive: a,b,c}}')
+        self.assertEqual(check_slot(product, r'a*cb^2'), 'ok')
+        self.assertEqual(check_slot(product, r'a*(cb)^2'), 'wrong')
+
+    def test_rhombus_diagonal_permutations_keep_multiplicity_and_domains(self):
+        slot = self.slot(r'{{expressions: 2r/\sin(\alpha/2);2r/\cos(\alpha/2) '
+                         r'| positive: r,\alpha | angle: \alpha<90}}')
+        for value in (r'2*(2r/\cos(\alpha/2))/2;2*(2r/\sin(\alpha/2))/2',
+                      r'4r/(2\cos(\alpha/2));4r/(2\sin(\alpha/2))'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+        for value in (r'2r/\sin(\alpha/2);2r/\sin(\alpha/2)',
+                      r'2r/\cos(\alpha/2);2r/\sin(\alpha/2);2r/\cos(\alpha/2)',
+                      r'2r/\cos(\alpha/2)+1/(r-1)-1/(r-1);'
+                      r'2r/\sin(\alpha/2)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+
     def test_assumptions_do_not_leak_between_tasks(self):
         positive = self.slot('{{expression: a | positive: a}}')
         real = self.slot('{{expression: a}}')
@@ -52,6 +82,71 @@ class FormulaMaskTests(SimpleTestCase):
         with patch('sympy.core.expr.Expr.equals', return_value=None):
             reference, _ = formulas._parse_reference('a')
             self.assertEqual(formulas._check(r'\sqrt{a^2}', reference), 'wrong')
+
+    def test_scaled_multivariate_roots_keep_original_domains(self):
+        slot = self.slot(r'{{expressions: \sqrt{m^2+n^2+m*n};'
+                         r'\sqrt{m^2+n^2-m*n} | positive: m,n}}')
+        self.assertEqual(check_slot(slot, r'2*\sqrt{m^2+n^2-m*n}/2;'
+                                    r'2*\sqrt{m^2+n^2+m*n}/2'), 'ok')
+        for value in (r'\sqrt{m^2+n^2+m*n}+1/(m-n)-1/(m-n);'
+                      r'\sqrt{m^2+n^2-m*n}',
+                      r'\sqrt{m^2+n^2+m*n}+\sqrt{m-n}^2-(m-n);'
+                      r'\sqrt{m^2+n^2-m*n}'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+        slot = self.slot(r'{{expressions: \sqrt{a^2+b^2+a*b*\sqrt{2}}/2;'
+                         r'\sqrt{a^2+b^2-a*b*\sqrt{2}}/2 | positive: a,b}}')
+        self.assertEqual(check_slot(slot,
+                                    r'\sqrt{4*a^2+4*b^2+4*a*b*\sqrt{2}}/4;'
+                                    r'\sqrt{4*a^2+4*b^2-4*a*b*\sqrt{2}}/4'), 'ok')
+
+    def test_scaled_root_keeps_boundary_zero_in_reference_domain(self):
+        slot = self.slot(r'{{expression: \sqrt{a^2-2*a*b+b^2}}}')
+        self.assertEqual(check_slot(slot, r'\sqrt{4*a^2-8*a*b+4*b^2}/2'), 'ok')
+        for value in (r'(a^2-2*a*b+b^2)/\sqrt{a^2-2*a*b+b^2}',
+                      r'\sqrt{a^2-2*a*b+b^2}+1/(a-b)-1/(a-b)'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'wrong')
+
+    def test_regular_polygon_inradius_accepts_equivalent_radicals_on_full_domain(self):
+        slot = self.slot(r'{{expression: \sqrt{R^2-a^2/4} '
+                         r'| positive: a,R | domain: a<2R}}')
+        for value in (r'R\sqrt{1-a^2/(4R^2)}',
+                      r'(R^2-a^2/4)/\sqrt{R^2-a^2/4}',
+                      r'\sqrt{(4R^2-a^2)^2}/(2\sqrt{4R^2-a^2})'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+
+    def test_regular_polygon_side_accepts_equivalent_radicals_on_full_domain(self):
+        slot = self.slot(r'{{expression: 2\sqrt{R^2-r^2} '
+                         r'| positive: r,R | domain: r<R}}')
+        for value in (r'2R\sqrt{1-r^2/R^2}',
+                      r'2(R^2-r^2)/\sqrt{R^2-r^2}',
+                      r'2\sqrt{(R^2-r^2)^2}/\sqrt{R^2-r^2}'):
+            with self.subTest(value=value):
+                self.assertEqual(check_slot(slot, value), 'ok')
+
+    def test_factored_positive_domain_preserves_extra_poles(self):
+        for text, values in (
+            (r'{{expression: \sqrt{R^2-a^2/4} '
+             r'| positive: a,R | domain: a<2R}}',
+             (r'\sqrt{R^2-a^2/4}*(a-R)/(a-R)',
+              r'\sqrt{R^2-a^2/4}+(a-R)/(a-R)-1',
+              r'-\sqrt{R^2-a^2/4}')),
+            (r'{{expression: 2\sqrt{R^2-r^2} '
+             r'| positive: r,R | domain: r<R}}',
+             (r'2\sqrt{R^2-r^2}*(2r-R)/(2r-R)',
+              r'2\sqrt{R^2-r^2}+(2r-R)/(2r-R)-1',
+              r'-2\sqrt{R^2-r^2}')),
+        ):
+            slot = self.slot(text)
+            for value in values:
+                with self.subTest(text=text, value=value):
+                    self.assertEqual(check_slot(slot, value), 'wrong')
+
+    def test_radical_denominator_without_strict_domain_keeps_zero_boundary(self):
+        slot = self.slot(r'{{expression: \sqrt{R^2-a^2/4} | positive: a,R}}')
+        self.assertEqual(check_slot(slot, r'(R^2-a^2/4)/\sqrt{R^2-a^2/4}'), 'wrong')
 
     def test_absolute_value_bars_are_not_option_separators(self):
         for reference, value in ((r'|a-1|', r'\sqrt{(a-1)^2}'),
