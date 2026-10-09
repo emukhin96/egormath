@@ -218,9 +218,11 @@ def _renumber_enumerate(text: str) -> str:
     math_re = re.compile(r"\$\$.*?\$\$|\$[^$]*\$", re.S)
 
     def labels_in(segment: str) -> list[int]:
-        """Метки «k)» вне формул: «(-2 ; 2)» внутри $…$ — не метка."""
-        return [int(found) for found in label_re.findall(
-            math_re.sub(" $ ", segment))]
+        """Метки «k)» вне формул и скобок: «(-2 ; 2)», «[-1; 0)» — не метки."""
+        plain = math_re.sub(" $ ", segment)
+        return [int(found.group(1)) for found in label_re.finditer(plain)
+                if found.group(1) != "0"
+                and _open_paren_depth(plain[:found.start(1)]) == 0]
     for match in token_re.finditer(text):
         segment = text[pos:match.start()]
         out.append(segment)
@@ -315,6 +317,7 @@ def prepare_shabunin_text(text: str) -> str:
         + m.group("number") + ". ", text)
     text = TASK_MARKER_RE.sub(
         lambda m: m.group(0).translate(_ROMAN_FIX), text)
+    text = re.sub(r"\\hspace\{0pt\}\s*", "", text)
     text = _renumber_enumerate(text)
     text = _flatten_lists(text)
     text = _heal_item_labels(text)
@@ -627,7 +630,7 @@ def _wrap_bare_intervals(text: str) -> str:
 
 def prepare_answers(text: str, roman: str = "") -> str:
     # «$E(f)=\\{0\\} ;$ 2) …» — разделитель пунктов ушёл внутрь формулы.
-    text = re.sub(r"\s*([;,])\s*\$(?=\s+[1-9]\d?\)\s)", r"$\1", text)
+    text = re.sub(r"\s*([;,])\s*(?:\\quad\s*)*\$(?=\s+[1-9]\d?\)\s)", r"$\1", text)
     text = _wrap_bare_intervals(text)
     text = re.sub(r"(?<![A-Za-zА-Яа-яЁё])" + ROMAN + r"(?=\s*\.\s*\d)",
                   _normalize_roman, text)
@@ -729,7 +732,25 @@ def _finish_value(value: str) -> str:
     return normalize_cyrillic_units(value)
 
 
+_ANY_MATH_RE = re.compile(r"\$\$.*?\$\$|\$[^$]*\$|\\\[.*?\\\]", re.S)
+
+
+def _join_answer_lines(value: str) -> str:
+    """Перенос строки OCR «\\\\» посреди ответа вне формул — пробел."""
+    out = []
+    pos = 0
+    for match in _ANY_MATH_RE.finditer(value or ""):
+        out.append(re.sub(r"\s*\\\\\s*", " ", value[pos:match.start()]))
+        out.append(match.group(0))
+        pos = match.end()
+    out.append(re.sub(r"\s*\\\\\s*", " ", (value or "")[pos:]))
+    return "".join(out).strip()
+
+
 def _normalize_task_units(task: TaskDraft) -> None:
+    task.author_answer_latex = _join_answer_lines(task.author_answer_latex)
+    for item in task.subitems:
+        item.author_answer_latex = _join_answer_lines(item.author_answer_latex)
     for attr in ("text_latex", "author_answer_latex", "author_solution_latex"):
         setattr(task, attr, _finish_value(getattr(task, attr)))
     for item in task.subitems:
