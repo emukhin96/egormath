@@ -116,6 +116,17 @@ class FactorTests(SimpleTestCase):
         self.assertEqual(check(reference, reference, 'factor'), OK)
         self.assertEqual(check(reference, 'x^{6/7}-6', 'factor'), WRONG)
 
+    def test_repeated_factor_written_as_power_counts_multiplicity(self):
+        # Эталон с повтором множителя: степень — то же разложение.
+        self.assertEqual(check('(x-3)(x-3)', '(x-3)^2', 'factor'), OK)
+        self.assertEqual(check('(x-3)^2', '(x-3)(x-3)', 'factor'), OK)
+        self.assertEqual(check('x\\cdot x(x+1)', 'x^2(x+1)', 'factor'), OK)
+        self.assertEqual(check('2(x-1)^2(x+1)', '2(x-1)(x+1)(x-1)', 'factor'), OK)
+        self.assertEqual(check('(x-3)^2', 'x^2-6x+9', 'factor'), WRONG)
+        tree = expressions.resolve(expressions.raw_tree('x^2(x+1)'))
+        self.assertEqual(expressions.factor_count(tree), 3)
+        self.assertEqual(expressions.factor_count(expressions.resolve(expressions.raw_tree('(x-3)(x-3)'))), 2)
+
     def test_polynomial_cases_still_hold(self):
         for value, expected in (('2(x-1)(x+1)', OK), ('(x+1)(x-1)2', OK),
                                 ('-2(1-x)(x+1)', OK), ('(2x-2)(x+1)', WRONG),

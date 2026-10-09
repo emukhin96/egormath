@@ -794,10 +794,18 @@ def _factor_ok(node):
 
 
 def factor_count(tree):
-    """Число нечисловых множителей верхнего уровня записи."""
+    """Суммарная кратность нечисловых множителей верхнего уровня записи:
+    ``(x-3)^2`` и ``(x-3)(x-3)`` дают 2, ``x^2(x+1)`` и ``x\\cdot x(x+1)`` — 3."""
     factors = []
     _product_factors(tree, factors)
-    return sum(1 for node in factors if not _all_numeric(node))
+    total = 0
+    for node in factors:
+        if _all_numeric(node):
+            continue
+        expr = _operand_value(_unwrap(node))
+        exponent = expr.as_base_exp()[1] if expr is not None and hasattr(expr, 'as_base_exp') else None
+        total += int(exponent) if exponent is not None and exponent.is_Integer and exponent > 0 else 1
+    return total
 
 
 def fully_factored(tree, reference=None):
