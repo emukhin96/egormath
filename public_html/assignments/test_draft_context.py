@@ -109,6 +109,12 @@ class NamedQuantityDraftTests(SimpleTestCase):
                          '{{number: 24}}, {{number: 20}}')
         # Единственное число величины — не однородный набор.
         self.assertEqual(draft_mask('$24$, $20$', 'Найдите площадь.'), '{{number: 24}}, {{number: 20}}')
+        # Родительный единственного после управляющего слова — по порядку.
+        for condition in ('Найдите значения скорости при $t=1$ и $t=2$.',
+                          'Найдите значения площади $S(x)$ при $x=1$ и $x=2$.',
+                          'Найдите изменение длины при нагреве и охлаждении.'):
+            with self.subTest(condition=condition):
+                self.assertEqual(draft_mask('$3$, $5$', condition), '{{number: 3}}, {{number: 5}}')
         # Родительный множественный и вопрос без слова-величины — тоже набор.
         for condition in ('Найдите величины углов треугольника.',
                           'Найдите градусные меры углов параллелограмма.',
@@ -130,6 +136,11 @@ class InequalityAndRangeDraftTests(SimpleTestCase):
                          r'$x \in${{range: (-\infty;-2)\cup(3;+\infty)}}')
         self.assertEqual(draft_mask('$(-2; 1)$', 'При каких значениях $a$ уравнение имеет корни?'),
                          '{{range: (-2; 1)}}')
+        # Два параметра — ответ (2; 3) остаётся парой значений.
+        self.assertEqual(draft_mask('$(2; 3)$', 'При каких значениях $k$ и $b$ прямая $y=kx+b$ проходит через точки $A$ и $B$?'),
+                         '{{pair: (2; 3)}}')
+        self.assertEqual(draft_mask('$(2; 3)$', 'При каких значениях параметров $a$, $b$ система имеет решение?'),
+                         '{{pair: (2; 3)}}')
         self.assertEqual(draft_mask('$(-2; 1)$', 'Найдите координаты точки пересечения.'),
                          '{{pair: (-2; 1)}}')
         self.assertEqual(draft_mask('$-3; -1; 2$', 'Решите уравнение $x(x^2+2x+1)=6(x+1)$.'),

@@ -821,6 +821,12 @@ _QUANTITY_PLURAL_RE = re.compile(
     r'\b(?:сторон[ы]?|угл(?:ы|ов)|отрезк(?:и|ов)|основани[яй]|диагонал(?:и|ей)'
     r'|катет(?:ы|ов)|высот[ы]?|радиус(?:ы|ов)|медиан[ы]?|биссектрис[ы]?|хорд[ы]?|дуг[и]?'
     r'|длин[ы]?|скорост(?:и|ей)|периметр(?:ы|ов)|площад(?:и|ей)|объ[её]м(?:ы|ов))\b', re.I)
+# Формы, совпадающие с родительным падежом единственного числа.
+_AMBIGUOUS_PLURAL_RE = re.compile(
+    r'(?:стороны|диагонали|высоты|медианы|биссектрисы|хорды|дуги|длины|скорости|площади)', re.I)
+_GOVERNING_NOUN_RE = re.compile(
+    r'(?:значени|изменени|величин|мер|модул|знак|сумм|разност|произведени|отношени|квадрат)'
+    r'[а-яё]*\s+$', re.I)
 # «Меньший и больший катеты», «острый и тупой углы»: порядок задан прилагательными.
 _ORDERING_ADJECTIVES_RE = re.compile(
     r'\b(?:меньш|больш|остр|туп|перв|втор|одн|друг|наибольш|наименьш|внутренн|внешн'
@@ -838,7 +844,13 @@ def _homogeneous_question(question):
     first = re.compile(_QUANTITY_WORDS, re.I).search(question, start)
     if not first or not _QUANTITY_PLURAL_RE.fullmatch(first.group(0)):
         return False
-    if _ORDERING_ADJECTIVES_RE.search(question[start:first.start()]):
+    before = question[start:first.start()]
+    if _ORDERING_ADJECTIVES_RE.search(before):
+        return False
+    # «Значения скорости при t=1 и t=2»: форма на -и/-ы совпадает с
+    # родительным единственного числа — управляющее существительное
+    # перед ней означает одну величину в нескольких точках, по порядку.
+    if _AMBIGUOUS_PLURAL_RE.fullmatch(first.group(0)) and _GOVERNING_NOUN_RE.search(before):
         return False
     return not _QUANTITY_ENUM_RE.search(question, first.start())
 _OBJECT_NAME = r'(?:\\angle\s*)?[A-Z](?:[A-Z]{1,2}|_\{?\d\}?)?'
@@ -1086,7 +1098,13 @@ def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subi
             return f'{{{{{preset}: {low}}}}}'
     if sets.numeric_value(text) is not None and '=' not in text:
         return f'{{{{{NUMBER}: {text}}}}}'
-    interval = bool(_INTERVAL_CONTEXT_RE.search(condition or '')
+    # «При каких значениях k и b …» — два параметра: ответ (2; 3) — пара,
+    # а не промежуток одной переменной.
+    parameters = re.search(
+        r'при каких значениях\s+(?:параметр[а-яё]*\s+)?((?:\$?\\?[a-z]\$?)(?:\s*(?:,|и)\s*\$?\\?[a-z]\$?)*)',
+        condition or '', re.I)
+    several = bool(parameters and len(re.findall(r'[a-z]', parameters.group(1))) > 1)
+    interval = bool(_INTERVAL_CONTEXT_RE.search(condition or '') and not several
                     and re.fullmatch(r'[(\[][^;()]+;[^;()]+[)\]]', text))
     if interval and sets.parse_range(text) is not None:
         # Промежуток-ответ неравенства, а не координаты точки.
