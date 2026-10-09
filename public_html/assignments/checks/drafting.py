@@ -8,6 +8,9 @@ import re
 from . import sets
 
 _SOLVE = re.compile(r'реши\w*\s+(?:следующ\w*\s+)?(?:уравнен|неравенств|систем)|найди\w*\s+(?:все\s+)?корни', re.I)
+_AGGREGATE_RE = re.compile(
+    r'(?:укажите|найдите|запишите|вычислите)[^.?!]*?'
+    r'(?:наибольш|наименьш|сумм|количеств|числ[оа]\b|произведени|длин[ау]\s+промежутк)', re.I)
 _EQUATION_REQUEST = re.compile(
     r'(?:состав|запиш|напиш)\w*.{0,40}уравнен', re.I)
 _ASSIGNMENT = re.compile(r'(?<![A-Za-z\\])([a-z](?:_\{?\d+\}?)?)\s*=\s*', re.I)
@@ -135,6 +138,10 @@ def contextual_draft(answer, condition):
     if not condition:
         return None
     if _SOLVE.search(condition):
+        # «Решите неравенство … В ответе укажите наибольшее целое решение /
+        # сумму целых решений»: ответ — число, а не множество решений.
+        if _AGGREGATE_RE.search(condition) and sets.numeric_value(answer) is not None:
+            return None
         return _equation(answer, condition)
     if _EQUATION_REQUEST.search(condition) and '=' in answer:
         return _slot('equation', answer)

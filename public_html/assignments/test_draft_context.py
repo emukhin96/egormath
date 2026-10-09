@@ -148,6 +148,12 @@ class InequalityAndRangeDraftTests(SimpleTestCase):
         # Ответ-неравенство остаётся без подписи «x ∈»; ответ-равенство — с «x =».
         self.assertEqual(draft_mask('$x<2$', 'Решите неравенство $3x-1<5$.'), '{{range: x<2}}')
         self.assertEqual(draft_mask('$x=2$', r'Решите неравенство $(x-2)^2\le 0$.'), '$x =${{range: 2}}')
+        # Вопрос про число по решениям — обычное числовое поле.
+        for condition in (r'Решите неравенство $x^2-5x+4\le0$. В ответе укажите наибольшее целое решение.',
+                          r'Решите неравенство $x^2-5x+4\le0$. Найдите сумму целых решений.',
+                          'Решите уравнение $x^2-5x+4=0$. В ответе укажите наибольший корень.'):
+            with self.subTest(condition=condition):
+                self.assertEqual(draft_mask('$4$', condition), '{{number: 4}}')
         self.assertEqual(draft_mask(r'$x\le -1$ или $x\ge 3$', 'Решите неравенство $x^2-2x-3\ge0$.'),
                          r'{{range: x\le -1; x\ge 3}}')
         # \left( — не \le: скобочная запись Mathpix сохраняет подпись.
@@ -171,6 +177,11 @@ class RatioAndRadicalDraftTests(SimpleTestCase):
                          '{{ratio: 2 : 3}}')
         self.assertEqual(draft_mask('$2 : 3$', 'Как относятся площади трапеций?'),
                          '{{proportion: 2 : 3}}')
+        # Перечисление объектов в вопросе задаёт порядок частей.
+        self.assertEqual(draft_mask('$2:3$', 'Как относятся площади треугольников $ABD$ и $CBD$?'),
+                         '{{ratio: 2:3}}')
+        self.assertEqual(draft_mask(r'$\frac{2}{3}$', 'Как относятся отрезки $AO$ и $OC$?'),
+                         '{{ratio: 2:3 | quotient}}')
         self.assertEqual(draft_mask(r'$\frac{6}{7}$', 'Найдите отношение $CK:BD$.'),
                          '{{ratio: 6:7 | quotient}}')
         self.assertEqual(draft_mask('$6/7$', 'Как относятся площади частей?'),
