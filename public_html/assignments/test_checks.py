@@ -121,9 +121,11 @@ class MaskCheckTests(SimpleTestCase):
                       '0,5:1', r'2\sqrt{2}:\sqrt{2}', '{1}:2',
                       r'1\frac{1}{2}:3', r'\pi:(\pi/2)', 'π:π/2', 'pi:pi/2'):
             self.assertEqual(check_slot(s, value), OK, value)
-        for value in ('3:1', '1:0', '1:2:3', '0,5', 'x:x', r'\{1\}:2',
+        for value in ('3:1', '1:0', '1:2:3', 'x:x', r'\{1\}:2',
                       'x=1:y=2', '1:y=2'):
             self.assertEqual(check_slot(s, value), WRONG, value)
+        # Без двоеточия — ошибка записи, а не значения.
+        self.assertEqual(check_slot(s, '0,5'), 'format')
         strict = slot('{{ratio: 2:1}}')
         self.assertEqual(check_slot(strict, '1:2'), WRONG)
         self.assertEqual(check_slot(strict, '1/2:1/4'), OK)
@@ -135,8 +137,9 @@ class MaskCheckTests(SimpleTestCase):
                       r'3\pi:8\pi', '-3:-8', r'1\frac12:4'):
             self.assertEqual(check_slot(s, value), OK, value)
         for value in ('8:3', '16:6', '8/2:1.5', r'8\sqrt2:3\sqrt2',
-                      '0.375', '3:0', '3:8:1', 'x:x', r'\{3\}:8'):
+                      '3:0', '3:8:1', 'x:x', r'\{3\}:8'):
             self.assertEqual(check_slot(s, value), WRONG, value)
+        self.assertEqual(check_slot(s, '0.375'), 'format')
         # Маски13.15/13.22: дробная запись и общий иррациональный множитель.
         for reference, values in (
                 ('3:2', (r'\frac32:1', r'3\sqrt2:2\sqrt2', '1.5:1')),
@@ -496,7 +499,9 @@ class MaskCheckTests(SimpleTestCase):
         self.assertEqual(check_slot(s, r'x \ge \sqrt{2}'), OK)
         s = slot(r'{{range: [\sqrt{2}; 3]}}')
         self.assertEqual(check_slot(s, r'[\sqrt{2}; 3]'), OK)
-        self.assertEqual(check_slot(s, '[1.4142135623730951; 3]'), OK)
+        self.assertEqual(check_slot(s, r'[\sqrt8/2; 3]'), OK)
+        # Границы сравниваются точно, как в set и pair: приближение не равно корню.
+        self.assertEqual(check_slot(s, '[1.4142135623730951; 3]'), WRONG)
         self.assertEqual(check_slot(s, '[1.41; 3]'), WRONG)
         self.assertEqual(check_slot(s, r'(\sqrt{2}; 3]'), WRONG)
         s = slot(r'{{range: [\frac{7}{3}; 5]}}')
@@ -513,13 +518,25 @@ class MaskCheckTests(SimpleTestCase):
 
     def test_equation(self):
         s = slot('{{equation: y=x+5}}')
-        for value in ('y=x+5', 'y-x=5', 'x+5=y', 'y-x-5=0'):
+        # По умолчанию — любая равносильная запись той же прямой.
+        for value in ('y=x+5', 'y-x=5', 'x+5=y', 'y-x-5=0', 'y-2=x+3', '2y=2x+10', 'x=y-5'):
             self.assertEqual(check_slot(s, value), OK, value)
-        for value in ('y-2=x+3', '2y=2x+10', 'y=x+6', 'y=2x'):
+        for value in ('y=x+6', 'y=2x', 'y=-x-5'):
             self.assertEqual(check_slot(s, value), WRONG, value)
         self.assertEqual(check_slot(s, 'x+5'), UNKNOWN)
         s = slot('{{equation: x=2}}')
         self.assertEqual(check_slot(s, '2=x'), OK)
+        self.assertEqual(check_slot(s, '2x=4'), OK)
+        self.assertEqual(check_slot(s, 'x=3'), WRONG)
+        # | strict — только приведённый вид.
+        s = slot('{{equation: y=x+5 | strict}}')
+        self.assertTrue(s.strict_equation)
+        self.assertEqual(s.reference, 'y=x+5')
+        for value in ('y=x+5', 'y-x=5', 'x+5=y', 'y-x-5=0'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        for value in ('y-2=x+3', '2y=2x+10', 'y=x+6', 'y=2x'):
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        s = slot('{{equation: x=2 | strict}}')
         self.assertEqual(check_slot(s, '2x=4'), WRONG)
 
     def test_simplify(self):

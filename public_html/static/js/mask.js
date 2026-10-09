@@ -151,6 +151,31 @@
     return value.replace(/\{,\}/g, ',').replace(/\\colon\s*/g, ':').trim();
   }
 
+  /* Формат бланка (digits/decimal/ratio): та же проверка, что
+     formats.wrong_format на сервере, — подсказка появляется при вводе,
+     до нажатия «Проверить» и списания попытки. */
+  var FORMATS = {
+    digits: /^[0-9]+$/,
+    decimal: /^-?[0-9]+(?:,[0-9]+)?$/,
+  };
+
+  function wrongFormat(field, value) {
+    var kind = field.dataset.maskFormat;
+    if (!value) return false;
+    if (FORMATS[kind]) return !FORMATS[kind].test(value);
+    if (kind === 'ratio' || kind === 'proportion') return value.indexOf(':') < 0 && !field.dataset.maskQuotient;
+    return false;
+  }
+
+  function showFormatHint(field, wrap, value) {
+    var hint = wrap.querySelector('[data-mask-format-hint]');
+    if (!hint) return;
+    var bad = wrongFormat(field, value);
+    hint.textContent = bad ? (field.dataset.maskHint || 'Запись не как на бланке') : '';
+    hint.hidden = !bad;
+    wrap.classList.toggle('mask-format-bad', bad);
+  }
+
   function bindMathMirrors(root) {
     root.querySelectorAll('math-field[data-mirror]').forEach(function (field) {
       if (field.dataset.mirrorBound) return;
@@ -161,6 +186,7 @@
       field.dataset.mirrorBound = '1';
       function sync(type) {
         hidden.value = mirrorValue(field);
+        if (field.dataset.maskFormat) showFormatHint(field, wrap, hidden.value);
         if (type) hidden.dispatchEvent(new Event(type, {bubbles: true}));
       }
       field.addEventListener('input', function () { sync(); });

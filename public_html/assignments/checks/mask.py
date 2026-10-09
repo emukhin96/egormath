@@ -15,7 +15,7 @@ import random
 import re
 from dataclasses import dataclass, field
 
-from ..check_answer import OK, UNKNOWN, WRONG, _compact, normalize
+from ..check_answer import FORMAT, OK, UNKNOWN, WRONG, _compact, normalize
 from . import expressions, sets, formats, series, formulas
 
 NUMBER = 'number'
@@ -89,7 +89,9 @@ HELP = (
     ('{{pair: (2,5; -3); (5; -6)}}', 'упорядоченные пары через ; порядок пар не важен'),
     ('{{pair: (8;12); (5;15) | unordered}}', 'варианты длин сторон; порядок внутри и между парами не важен'),
     ('{{set: -2; 1}}', 'множество чисел, порядок не важен; {{set: }} — «нет решений»'),
-    ('{{equation: y=x+5}}', 'уравнение в приведённом виде (y-x=5 тоже верно, 2y=2x+10 — нет)'),
+    ('{{equation: y=x+5}}', 'уравнение: любая равносильная запись (y-x=5, 2y=2x+10, '
+                            'x=y-5 верны); {{equation: y=x+5 | strict}} — только приведённый '
+                            'вид (2y=2x+10 и y-2=x+3 — нет)'),
     ('{{range: 1; 4}}', 'корни уравнения: одно поле независимо от количества корней'),
     ('{{series: \\pi+2\\pi*n}}', 'периодическое множество рациональных кратных π'),
     ('{{range: (-\\infty;-5)\\cup(5;+\\infty)}}', 'числовое множество; неравенства '
@@ -131,6 +133,7 @@ class Slot:
     error: str = ''
     unordered_pair: bool = False
     allow_quotient: bool = False
+    strict_equation: bool = False
     reference_unavailable: bool = False
     tolerance_reference: str = ''
 
@@ -149,6 +152,11 @@ class Slot:
     @property
     def uses_math_field(self):
         return self.kind in (SIMPLIFY, FACTOR, EQUATION, EXPRESSION, EXPRESSIONS)
+
+    @property
+    def format_hint(self):
+        """Подсказка о записи для строгих полей бланка (digits/decimal/ratio)."""
+        return formats.format_hint(self.kind, allow_quotient=self.allow_quotient)
 
     @property
     def label(self):
@@ -308,6 +316,11 @@ def _parse_format(slot, payload):
 
 def _parse_expression(slot, payload):
     from sympy import Eq, Expr
+    if slot.kind == EQUATION:
+        option = re.search(r'\|\s*strict\s*$', payload)
+        if option:
+            payload = payload[:option.start()].strip()
+            slot.strict_equation = True
     expr = expressions.parse_expr(payload)
     if slot.kind == EQUATION:
         if not isinstance(expr, Eq):
@@ -421,19 +434,22 @@ def parse_mask(text, *, validate_references=False):
                     preset=name if name in PRESETS else None)
         if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
             _parse_formula(slot, payload, validate=validate_references)
-        elif kind in (SET, PAIR) and validate_references:
+        elif kind in (SET, PAIR, RANGE) and validate_references:
             option = re.search(r'\|\s*unordered\s*$', payload) if kind == PAIR else None
             reference = payload[:option.start()].strip() if option else payload.strip()
-            reference = reference or '∅'
-            try:
-                formats.validate_collection_reference(reference, kind=kind,
-                                                      unordered=bool(option))
-                _PARSERS[kind](slot, payload)
-            except formulas.FormulaUnavailable as error:
-                slot.reference_unavailable = True
-                slot.error = str(error)
-            except ValueError as error:
-                slot.error = str(error)
+            reference = reference or ('∅' if kind == SET else reference)
+            # Сначала синтаксис (понятное сообщение об ошибке), затем
+            # нелитеральный эталон проходит тот же вычислитель, что и ответ.
+            _PARSERS[kind](slot, payload)
+            if not slot.error:
+                try:
+                    formats.validate_collection_reference(reference, kind=kind,
+                                                          unordered=bool(option))
+                except formulas.FormulaUnavailable as error:
+                    slot.reference_unavailable = True
+                    slot.error = str(error)
+                except ValueError as error:
+                    slot.error = str(error)
         else:
             _PARSERS[kind](slot, payload)
         if slot.error:
@@ -496,11 +512,15 @@ def check_slot(slot, value):
     if not value or not slot.is_valid:
         return ''
     kind = slot.kind
+    if kind in (DIGITS, DECIMAL, RATIO, PROPORTION) and formats.wrong_format(
+            kind, value, allow_quotient=slot.allow_quotient):
+        # Запись не как на бланке: для отметки это «неверно», но ученику
+        # нужна подсказка о формате, а не о значении.
+        return FORMAT
     if kind == DIGITS:
-        return OK if formats.digits(value) and value == slot.data else WRONG
+        return OK if value == slot.data else WRONG
     if kind == DECIMAL:
-        student = formats.decimal(value)
-        return OK if student is not None and student == slot.data else WRONG
+        return OK if formats.decimal(value) == slot.data else WRONG
     if kind == PROPORTION:
         from . import numeric
         from fractions import Fraction
@@ -554,10 +574,7 @@ def check_slot(slot, value):
     if kind == SET:
         return formats.check_collection_exact(value, slot.reference, kind='set')
     if kind == RANGE:
-        student = sets.parse_range(value)
-        if student is None:
-            return UNKNOWN
-        return OK if sets.ranges_equal(student, slot.data) else WRONG
+        return formats.check_collection_exact(value, slot.reference, kind='range')
     if kind == SERIES:
         student = series.parse(value)
         equal = series.equal(student, slot.data)
@@ -565,7 +582,7 @@ def check_slot(slot, value):
     if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
         return formulas.check(value, slot.data, multiple=kind == EXPRESSIONS)
     if kind == EQUATION:
-        return expressions.check_equation(value, slot.data)
+        return expressions.check_equation(value, slot.data, strict=slot.strict_equation)
     if kind == ORDER:
         order = _parse_order_value(value, len(slot.items))
         if order is None:
@@ -589,7 +606,7 @@ def check_mask(spec, values, known=None):
         if unavailable is not None and (
                 slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION, RATIO)
                 or slot.kind == NUMBER and _number_needs_worker(slot, values.get(slot.name, ''))
-                or slot.kind in (SET, PAIR) and formats.collection_needs_worker(
+                or slot.kind in (SET, PAIR, RANGE) and formats.collection_needs_worker(
                     values.get(slot.name, ''), slot.reference, kind=slot.kind)):
             # После сбоя не ждём вычислитель заново для каждой формулы;
             # продолжаем только дешёвые проверки остальных полей.
@@ -609,7 +626,7 @@ def check_mask(spec, values, known=None):
     verdicts = list(results.values())
     if not any(verdicts):
         return '', results
-    if WRONG in verdicts:
+    if WRONG in verdicts or FORMAT in verdicts:
         return WRONG, results
     if UNKNOWN in verdicts or '' in verdicts:
         return UNKNOWN, results

@@ -81,7 +81,7 @@ def _pairs_equal(a, b, *, unordered=False):
 
 
 def check(value, reference, *, kind, unordered=False):
-    parser = sets.parse_set if kind == 'set' else sets.parse_pairs
+    parser = {'set': sets.parse_set, 'range': sets.parse_range}.get(kind, sets.parse_pairs)
     if len(reference) > sets.MAX_COLLECTION_LEN:
         raise ValueError('слишком длинный эталон')
     # Эталон и ответ часто повторяют одни и те же выражения. Кэш
@@ -102,6 +102,11 @@ def check(value, reference, *, kind, unordered=False):
         return WRONG
     if student is None:
         return UNKNOWN
-    same = (sets._multiset_equal(expected, student, equal=_equal)
-            if kind == 'set' else _pairs_equal(expected, student, unordered=unordered))
+    if kind == 'set':
+        same = sets._multiset_equal(expected, student, equal=_equal)
+    elif kind == 'range':
+        # Границы промежутков сравниваются точно: 1.6457513110645906 ≠ √7−1.
+        same = sets.ranges_equal(expected, student, equal=_equal)
+    else:
+        same = _pairs_equal(expected, student, unordered=unordered)
     return OK if same else WRONG

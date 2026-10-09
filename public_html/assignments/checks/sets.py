@@ -256,6 +256,10 @@ def _split_top(text, separator):
     return parts
 
 
+# Элементы конечного набора: «;», «,» и союзы «2 и 18», «2 или 18».
+_ITEM_SEP_RE = re.compile(r'[;,]|\s+(?:и|или|and|or)\s+', re.I)
+
+
 def _split_items(text):
     text = text.strip()
     unwrapped = text
@@ -274,7 +278,7 @@ def _split_items(text):
         text = text[1:-1].strip()
     if not text or text.lower() in EMPTY_WORDS:
         return []
-    parts = _split_top(text, re.compile(r'[;,]'))
+    parts = _split_top(text, _ITEM_SEP_RE)
     return [p for p in parts if p] if parts is not None else None
 
 
@@ -369,8 +373,25 @@ def _pair_coordinates(group, *, explicit, coordinate_comma, value_parser=None):
             return None
         parts = [named[name] for name in expected]
     value_parser = value_parser or numeric_value
-    values = [value_parser(p) for p in parts]
-    return tuple(values) if all(v is not None for v in values) else None
+    # Один ± в координате — обе точки: (-2; ±4√3) = (-2; 4√3); (-2; -4√3).
+    branches = [()]
+    for part in parts:
+        item = part.replace('±', r'\pm')
+        count = item.count(r'\pm')
+        if count > 1:
+            return None
+        options = ([item.replace(r'\pm', sign) for sign in ('+', '-')]
+                   if count else [item])
+        branches = [branch + (option,) for branch in branches for option in options]
+        if len(branches) > MAX_COLLECTION_ITEMS:
+            return None
+    pairs = []
+    for branch in branches:
+        values = [value_parser(p) for p in branch]
+        if any(v is None for v in values):
+            return None
+        pairs.append(tuple(values))
+    return pairs
 
 
 def parse_pairs(text, *, coordinate_comma=True, value_parser=None, equal=None):
@@ -412,10 +433,9 @@ def parse_pairs(text, *, coordinate_comma=True, value_parser=None, equal=None):
             return None  # {1;2} — множество чисел, не упорядоченная пара.
         ends = _pair_brackets(text)
     if text.startswith('(') and ends.get(0) == len(text)-1:
-        pair = _pair_coordinates(text[1:-1], explicit=True,
+        return _pair_coordinates(text[1:-1], explicit=True,
                                  coordinate_comma=coordinate_comma, value_parser=value_parser)
-        return [pair] if pair is not None else None
-    groups = _split_top(text, re.compile('[;,]'))
+    groups = _split_top(text, _ITEM_SEP_RE)
     if groups is None or any(not group for group in groups):
         return None
     pairs = []
@@ -425,19 +445,19 @@ def parse_pairs(text, *, coordinate_comma=True, value_parser=None, equal=None):
             # Единственный кортеж без внешних скобок: 2,5; -3.
             if wrapped_set:
                 return None
-            pair = _pair_coordinates(text, explicit=False, coordinate_comma=False,
+            return _pair_coordinates(text, explicit=False, coordinate_comma=False,
                                      value_parser=value_parser)
-            return [pair] if pair is not None else None
         pair = _pair_coordinates(group[1:-1], explicit=True,
                                  coordinate_comma=coordinate_comma, value_parser=value_parser)
         if pair is None:
             if wrapped_set:
                 return None
             # Скобки могут окружать только число: (9/10); (0).
-            pair = _pair_coordinates(text, explicit=False, coordinate_comma=False,
+            return _pair_coordinates(text, explicit=False, coordinate_comma=False,
                                      value_parser=value_parser)
-            return [pair] if pair is not None else None
-        pairs.append(pair)
+        pairs.extend(pair)
+        if len(pairs) > MAX_COLLECTION_ITEMS:
+            return None
     return pairs if pairs and len({len(p) for p in pairs}) == 1 else None
 
 
@@ -471,8 +491,9 @@ _INTERVAL_PARSE_RE = re.compile(
     r'^([(\[])\s*(.+?)\s*;\s*(.+?)\s*([)\]])$')
 
 
-def _bound_value(text):
-    """Конец промежутка: Fraction, float (иррациональное) или ±inf; None."""
+def _bound_value(text, value_parser=None):
+    """Конец промежутка: Fraction, float (иррациональное) или ±inf; None.
+    ``value_parser`` подменяет разбор числа (точные значения в вычислителе)."""
     text = normalize(text)
     if '=' in text:
         return None
@@ -480,15 +501,15 @@ def _bound_value(text):
     compact = re.sub(r'\s+', '', text)
     if re.fullmatch(r'[+-]?(?:\\infty|inf|бесконечность|беск)', compact, re.I):
         return -INF if compact.startswith('-') else INF
-    return numeric_value(text)
+    return (value_parser or numeric_value)(text)
 
 
-def _parse_interval_token(token):
+def _parse_interval_token(token, value_parser=None):
     """Скобочная запись с дробями и иррациональными концами."""
     m = _INTERVAL_PARSE_RE.match(token.strip())
     if not m:
         return None
-    lo, hi = _bound_value(m.group(2)), _bound_value(m.group(3))
+    lo, hi = _bound_value(m.group(2), value_parser), _bound_value(m.group(3), value_parser)
     if lo is None or hi is None:
         return None
     left = '(' if lo == -INF else m.group(1)
@@ -651,7 +672,7 @@ def _affine_inequality(piece):
     return result
 
 
-def _inequality(piece):
+def _inequality(piece, value_parser=None):
     """Одно неравенство → список промежутков или None."""
     piece = piece.strip()
     affine = _affine_inequality(piece)
@@ -662,8 +683,8 @@ def _inequality(piece):
         a, op1, op2, b = m.group(1), m.group(2), m.group(3), m.group(4)
         if op1[0] != op2[0]:
             return None
-        lo, hi = (_bound_value(a), _bound_value(b)) if op1[0] == '<' \
-            else (_bound_value(b), _bound_value(a))
+        lo, hi = (_bound_value(a, value_parser), _bound_value(b, value_parser)) if op1[0] == '<' \
+            else (_bound_value(b, value_parser), _bound_value(a, value_parser))
         lo_op, hi_op = (op1, op2) if op1[0] == '<' else (op2, op1)
         if lo is None or hi is None:
             return None
@@ -671,12 +692,12 @@ def _inequality(piece):
                  ']' if hi_op.endswith('=') else ')')]
     m = _LEFT_RE.match(piece)
     if m:
-        op, value = m.group(1), _bound_value(m.group(2))
+        op, value = m.group(1), _bound_value(m.group(2), value_parser)
     else:
         m = _RIGHT_RE.match(piece)
         if not m:
             return None
-        value, op = _bound_value(m.group(1)), m.group(2)
+        value, op = _bound_value(m.group(1), value_parser), m.group(2)
         # ``5 < x`` — то же, что ``x > 5``
         op = {'<': '>', '<=': '>=', '>': '<', '>=': '<=', '!=': '!='}[op]
     if value is None:
@@ -737,7 +758,7 @@ def _intersect_lists(left, right):
     return out
 
 
-def _parse_range_atom(piece, tokens):
+def _parse_range_atom(piece, tokens, value_parser=None, equal=None):
     piece = piece.strip()
     if not piece:
         return None
@@ -746,28 +767,29 @@ def _parse_range_atom(piece, tokens):
         index = int(m.group(1))
         if index >= len(tokens):
             return None
-        parsed = _parse_interval_token(tokens[index])
+        parsed = _parse_interval_token(tokens[index], value_parser)
         return None if parsed is None else [parsed]
     if piece.lower() in ALL_WORDS:
         return [(-INF, INF, '(', ')')]
     difference = _DIFFERENCE_RE.fullmatch(piece)
     if difference:
-        values = parse_set(difference.group(1))
+        values = parse_set(difference.group(1), value_parser=value_parser, equal=equal)
         if values is None:
             return None
         bounds = [-INF] + sorted(values) + [INF]
         return [(lo, hi, '(', ')') for lo, hi in zip(bounds, bounds[1:])]
-    inequality = _inequality(piece)
+    inequality = _inequality(piece, value_parser)
     if inequality is not None:
         return inequality
-    values = parse_set(piece)
+    values = parse_set(piece, value_parser=value_parser, equal=equal)
     return [(v, v, '[', ']') for v in values] if values is not None else None
 
 
-def parse_range(text):
+def parse_range(text, *, value_parser=None, equal=None):
     """Числовое множество: скобочная запись, объединения, неравенства
     (``x>5, x<-5``; ``1<x<4``; ``x \\le -5 или x>5``), «нет решений», R.
-    Возвращает нормализованное множество промежутков; None — не разобрано."""
+    Возвращает нормализованное множество промежутков; None — не разобрано.
+    ``value_parser``/``equal`` — точные значения и сравнение в вычислителе."""
     text = _collection_text(text)
     if not text:
         return None
@@ -777,7 +799,7 @@ def parse_range(text):
         return frozenset()
     if low in ALL_WORDS:
         return frozenset({(-INF, INF, '(', ')')})
-    finite = parse_set(text)
+    finite = parse_set(text, value_parser=value_parser, equal=equal)
     if finite is not None:
         return _normalize_intervals([(v, v, '[', ']') for v in finite])
     tokens = []
@@ -801,7 +823,7 @@ def parse_range(text):
             continue
         acc = None
         for part in and_parts:
-            parsed = _parse_range_atom(part, tokens)
+            parsed = _parse_range_atom(part, tokens, value_parser, equal)
             if parsed is None:
                 return None
             saw_atom = True
@@ -814,23 +836,24 @@ def parse_range(text):
     return _normalize_intervals(intervals)
 
 
-def _bound_equal(a, b, tolerance=None):
-    """Конечные границы — через ``numbers_equal`` (Fraction и float √2);
-    бесконечности сравниваются точно."""
+def _bound_equal(a, b, tolerance=None, equal=None):
+    """Конечные границы — через ``numbers_equal`` (Fraction и float √2) либо
+    точное ``equal`` вычислителя; бесконечности сравниваются точно."""
     if a in (-INF, INF) or b in (-INF, INF):
         return a == b
-    return numbers_equal(a, b, tolerance)
+    return (equal or numbers_equal)(a, b, tolerance)
 
 
-def _interval_equal(a, b, tolerance=None):
+def _interval_equal(a, b, tolerance=None, equal=None):
     return (a[2] == b[2] and a[3] == b[3]
-            and _bound_equal(a[0], b[0], tolerance)
-            and _bound_equal(a[1], b[1], tolerance))
+            and _bound_equal(a[0], b[0], tolerance, equal)
+            and _bound_equal(a[1], b[1], tolerance, equal))
 
 
-def ranges_equal(a, b, tolerance=None):
+def ranges_equal(a, b, tolerance=None, *, equal=None):
     if a is None or b is None:
         return False
     if a == b:
         return True
-    return _multiset_equal(list(a), list(b), tolerance, equal=_interval_equal)
+    return _multiset_equal(list(a), list(b), tolerance,
+                           equal=lambda x, y, tol: _interval_equal(x, y, tol, equal))
