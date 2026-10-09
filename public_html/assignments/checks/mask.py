@@ -772,18 +772,21 @@ def _numeric_math_set(answer, condition=''):
         return ''
     degree = all(degrees)
     suffix = '°' if degree else (f' {units[0]}' if units else '')
+    question = ' '.join(_question_sentences(condition))
     named = _named_objects(condition)
     if named and not has_or:
         # «Найдите углы ACB и ACD» → ответ «50°, 60°» отвечает каждому углу
         # по порядку; множество потеряло бы соответствие и приняло бы
-        # перепутанные значения. При ином числе имён не угадываем.
-        if len(named) != len(values):
+        # перепутанные значения. При ином числе имён или несоответствии
+        # вида (углы — градусы, отрезки — длины) не угадываем.
+        angles = all(label.startswith('\\angle') for label in named)
+        if len(named) != len(values) or degree != angles:
             return ''
         candidate = '; '.join(
             f'${label} =$ {{{{{NUMBER}: {value}}}}}{suffix}'
             for label, value in zip(named, values))
-    elif (re.search(_QUANTITY_WORDS, condition or '', re.I) and not has_or
-          and not _QUANTITY_ENUM_RE.search(' '.join(_question_sentences(condition)))):
+    elif (re.search(_QUANTITY_WORDS, question, re.I) and not has_or
+          and not _QUANTITY_ENUM_RE.search(question)):
         # Однородные величины без имён («углы параллелограмма», «катеты»):
         # порядок любой, но кратность важна — 56; 56; 68 не равно 56; 68.
         # Перечисление разных объектов («радиусы вписанной и описанной»,
@@ -825,20 +828,38 @@ _INTERVAL_CONTEXT_RE = re.compile(
 _UNORDERED_RATIO_RE = re.compile(r'как относятся|в каком отношении', re.I)
 
 
+_QUESTION_RE = re.compile(
+    r'найдите|вычислите|определите|чему равн|как относ|в каком отношени'
+    r'|каков|какой|какие|какую|сколько', re.I)
+# Придаточное с данными: «…, если катеты AC и BC равны 3 и 3√3».
+_CLAUSE_RE = re.compile(r',\s*(?:если|при условии|когда|где|причём|зная)\b', re.I)
+
+
 def _question_sentences(condition):
-    """Предложения-вопросы условия без математических разделителей;
-    имена вида «A C B» (Mathpix) склеены в «ACB»."""
+    """Предложения-вопросы условия без математических разделителей и без
+    придаточных с данными; имена вида «A C B» (Mathpix) склеены в «ACB»."""
     plain = re.sub(r'\\[()\[\]]|\$', ' ', condition or '')
     plain = re.sub(r'(?<=[A-Z])\s+(?=[A-Z])', '', plain)
-    return [s for s in re.split(r'[.?!]\s+', plain)
-            if re.search(r'найдите|вычислите|определите|чему равн', s, re.I)]
+    out = []
+    for sentence in re.split(r'(?<=[.?!])\s+', plain):
+        sentence = sentence.strip()
+        if not (_QUESTION_RE.search(sentence) or sentence.endswith('?')):
+            continue
+        clause = _CLAUSE_RE.search(sentence)
+        if clause and _QUESTION_RE.search(sentence[:clause.start()]):
+            sentence = sentence[:clause.start()]
+        out.append(sentence)
+    return out
 
 
 def _named_objects(condition):
     """Имена объектов из вопроса: «углы ACB и ACD» → ['\\angle ACB', '\\angle ACD'],
     «стороны AB и BC» → ['AB', 'BC']. Пусто — объекты не названы."""
     for sentence in _question_sentences(condition):
-        match = _NAMED_LIST_RE.search(sentence) or _PLAIN_LIST_RE.search(sentence)
+        verb = _QUESTION_RE.search(sentence)
+        # Имена — только после глагола вопроса, не в данных перед ним.
+        match = (_NAMED_LIST_RE.search(sentence, verb.start()) if verb
+                 else None) or _PLAIN_LIST_RE.search(sentence)
         if not match:
             continue
         angle = match.group(0).lower().startswith('угл')
@@ -961,7 +982,10 @@ def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subi
     if coordinates:
         return coordinates
     ratio_text = answer.replace('$', '').strip()
-    unordered_ratio = bool(_UNORDERED_RATIO_RE.search(condition or '')
+    # Смысл отношения берём из вопроса, а не из данных («стороны
+    # относятся как 3:4:5» ничего не говорит о виде ответа).
+    question = ' '.join(_question_sentences(condition))
+    unordered_ratio = bool(_UNORDERED_RATIO_RE.search(question)
                            and not re.search(r'считая от', condition or '', re.I))
     if ':' in ratio_text:
         from . import numeric
@@ -976,7 +1000,7 @@ def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subi
             kind = PROPORTION if unordered_ratio else RATIO
             return f'{{{{{kind}: {ratio_text}}}}}'
     fraction = re.fullmatch(r'\\[dt]?frac\{(\d+)\}\{(\d+)\}|(\d+)/(\d+)', ratio_text)
-    if fraction and re.search(r'отношени|относ[яи]тся', condition or '', re.I):
+    if fraction and re.search(r'отношени|относ[яи]тся', question, re.I):
         # Авторский ответ дробью на «найдите отношение»: принимаем и
         # отношение через двоеточие, и его значение.
         numerator, denominator = [g for g in fraction.groups() if g is not None]

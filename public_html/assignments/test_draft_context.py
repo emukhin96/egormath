@@ -23,6 +23,30 @@ class NamedQuantityDraftTests(SimpleTestCase):
         self.assertEqual(_named_objects('Найдите углы параллелограмма.'), [])
         self.assertEqual(_named_objects('Дано: углы $A$ и $B$ равны. Найдите периметр.'), [])
 
+    def test_names_in_data_clause_and_wrong_object_kind_are_ignored(self):
+        # Имена из придаточного «если катеты AC и BC…» не подписывают углы.
+        self.assertEqual(draft_mask(
+            r'$30^{\circ}$, $60^{\circ}$',
+            r'Найдите острые углы треугольника, если катеты $AC$ и $BC$ равны $3$ и $3\sqrt3$.'),
+            '{{expressions: 30; 60}}°')
+        # Градусы не подписываются именами отрезков и наоборот.
+        self.assertEqual(draft_mask(r'$30^{\circ}$, $60^{\circ}$', 'Найдите стороны $AB$ и $BC$.'), '')
+        self.assertEqual(draft_mask('$3$ см, $4$ см', 'Найдите углы $A$ и $B$.'), '')
+        self.assertEqual(_named_objects('Катеты $AC$ и $BC$ равны 3 и 4. Найдите углы треугольника.'), [])
+        self.assertEqual(_named_objects('Найдите углы $A$ и $B$, если $AB=5$ и $BC=3$.'),
+                         [r'\angle A', r'\angle B'])
+
+    def test_quantity_and_ratio_words_only_in_the_question(self):
+        self.assertEqual(draft_mask('$2$ ч, $3$ ч',
+                                    'Скорость лодки 10 км/ч. Найдите время движения туда и обратно.'),
+                         '{{number: 2}} ч, {{number: 3}} ч')
+        self.assertEqual(draft_mask(r'$\frac{3}{5}$',
+                                    'Стороны относятся как $3:4:5$. Найдите синус угла $A$.'),
+                         r'{{number: \frac{3}{5}}}')
+        self.assertEqual(draft_mask('$2 : 3$',
+                                    'Площади относятся как 2:3. В каком отношении точка делит отрезок, считая от A?'),
+                         '{{ratio: 2 : 3}}')
+
     def test_name_count_mismatch_abstains(self):
         self.assertEqual(draft_mask(
             r'$60^{\circ}$, $120^{\circ}$, $60^{\circ}$, $120^{\circ}$',
