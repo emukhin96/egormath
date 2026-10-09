@@ -611,9 +611,15 @@ _INTERVAL_CHAIN_RE = re.compile(
     _INTERVAL + r"(?:\s*(?:U|∪|\\cup)\s*" + _INTERVAL + r")*")
 
 
+_NUM = r"[-+]?\s*\d+(?:,\d+)?"
+_TUPLE_RE = re.compile(r"\(\s*" + _NUM + r"(?:\s*;\s*" + _NUM + r"){2,}\s*\)")
+
+
 def _wrap_bare_intervals(text: str) -> str:
     """«[-5; -3] U [3; 5]» вне формулы → ``$[-5; -3] \\cup [3; 5]$``."""
     def wrap(chunk: str) -> str:
+        # Тройки и пары координат «(2;3;5)» — целиком одна формула.
+        chunk = _TUPLE_RE.sub(lambda m: "$" + m.group(0) + "$", chunk)
         return _INTERVAL_CHAIN_RE.sub(
             lambda m: "$" + re.sub(r"\s*(?:U|∪)\s*", r" \\cup ", m.group(0)) + "$",
             chunk)
