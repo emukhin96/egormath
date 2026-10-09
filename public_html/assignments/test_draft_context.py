@@ -29,9 +29,13 @@ class NamedQuantityDraftTests(SimpleTestCase):
             r'$30^{\circ}$, $60^{\circ}$',
             r'Найдите острые углы треугольника, если катеты $AC$ и $BC$ равны $3$ и $3\sqrt3$.'),
             '{{expressions: 30; 60}}°')
-        # Градусы не подписываются именами отрезков и наоборот.
+        # Градусы не подписываются именами отрезков и наоборот; дуги — в градусах.
         self.assertEqual(draft_mask(r'$30^{\circ}$, $60^{\circ}$', 'Найдите стороны $AB$ и $BC$.'), '')
         self.assertEqual(draft_mask('$3$ см, $4$ см', 'Найдите углы $A$ и $B$.'), '')
+        self.assertEqual(draft_mask(r'$100^{\circ}$, $260^{\circ}$', 'Найдите дуги $AB$ и $BC$.'),
+                         '$AB =$ {{number: 100}}°; $BC =$ {{number: 260}}°')
+        self.assertEqual(_named_objects('Найдите дуги $AB$ и $BC$.', with_measure=True),
+                         (['AB', 'BC'], 'angular'))
         self.assertEqual(_named_objects('Катеты $AC$ и $BC$ равны 3 и 4. Найдите углы треугольника.'), [])
         self.assertEqual(_named_objects('Найдите углы $A$ и $B$, если $AB=5$ и $BC=3$.'),
                          [r'\angle A', r'\angle B'])
@@ -92,6 +96,10 @@ class InequalityAndRangeDraftTests(SimpleTestCase):
                          '{{pair: (-2; 1)}}')
         self.assertEqual(draft_mask('$-3; -1; 2$', 'Решите уравнение $x(x^2+2x+1)=6(x+1)$.'),
                          '$x =${{range: -3; -1; 2}}')
+        # Ответ-неравенство остаётся без подписи «x ∈».
+        self.assertEqual(draft_mask('$x<2$', 'Решите неравенство $3x-1<5$.'), '{{range: x<2}}')
+        self.assertEqual(draft_mask(r'$x\le -1$ или $x\ge 3$', 'Решите неравенство $x^2-2x-3\ge0$.'),
+                         r'{{range: x\le -1; x\ge 3}}')
 
     def test_set_braces_and_multi_variable_ranges(self):
         self.assertEqual(draft_mask(r'$\{3\}$', ''), '{{set: 3}}')

@@ -70,6 +70,9 @@ def _equation(answer, condition):
     value = re.sub(r'\s+(?:и|или)\s+', '; ', answer)
     if sets.parse_range(value) is None:
         return ''
+    if re.search(r'[<>≤≥]|\\le|\\ge', value):
+        # Ответ сам записан неравенством (x<2): подпись «x ∈» неуместна.
+        return _slot('range', value)
     return f'${variables[0]}{relation}$' + _slot('range', value)
 
 

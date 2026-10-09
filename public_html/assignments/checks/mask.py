@@ -829,14 +829,13 @@ def _numeric_math_set(answer, condition=''):
     degree = all(degrees)
     suffix = '°' if degree else (f' {units[0]}' if units else '')
     question = ' '.join(_question_sentences(condition))
-    named = _named_objects(condition)
+    named, measure = _named_objects(condition, with_measure=True)
     if named and not has_or:
         # «Найдите углы ACB и ACD» → ответ «50°, 60°» отвечает каждому углу
         # по порядку; множество потеряло бы соответствие и приняло бы
         # перепутанные значения. При ином числе имён или несоответствии
-        # вида (углы — градусы, отрезки — длины) не угадываем.
-        angles = all(label.startswith('\\angle') for label in named)
-        if len(named) != len(values) or degree != angles:
+        # вида (углы и дуги — градусы, отрезки — длины) не угадываем.
+        if len(named) != len(values) or degree != (measure == 'angular'):
             return ''
         candidate = '; '.join(
             f'${label} =$ {{{{{NUMBER}: {value}}}}}{suffix}'
@@ -908,9 +907,11 @@ def _question_sentences(condition):
     return out
 
 
-def _named_objects(condition):
+def _named_objects(condition, *, with_measure=False):
     """Имена объектов из вопроса: «углы ACB и ACD» → ['\\angle ACB', '\\angle ACD'],
-    «стороны AB и BC» → ['AB', 'BC']. Пусто — объекты не названы."""
+    «стороны AB и BC» → ['AB', 'BC']. Пусто — объекты не названы.
+    С ``with_measure`` — ещё и вид величины: 'angular' (углы и дуги, градусы)
+    или 'length'."""
     for sentence in _question_sentences(condition):
         verb = _QUESTION_RE.search(sentence)
         # Имена — только после глагола вопроса, не в данных перед ним.
@@ -918,15 +919,17 @@ def _named_objects(condition):
                  else None) or _PLAIN_LIST_RE.search(sentence)
         if not match:
             continue
-        angle = match.group(0).lower().startswith('угл')
+        keyword = match.group(0).lower()
+        angle = keyword.startswith('угл')
+        measure = 'angular' if angle or keyword.startswith('дуг') else 'length'
         names = []
         for name in re.split(r'\s*(?:,|и)\s*', match.group(1)):
             name = re.sub(r'\\angle\s*', '', name.strip())
             name = re.sub(r'_\{?(\d)\}?', r'_\1', name)
             names.append((r'\angle ' + name) if angle else name)
         if len(names) == len(set(names)):
-            return names
-    return []
+            return (names, measure) if with_measure else names
+    return ([], None) if with_measure else []
 
 
 def _free_letters(text):
