@@ -1,6 +1,7 @@
 """Черновик маски из ответа: именованные величины, неравенства, отношения."""
 from django.test import SimpleTestCase
 
+from .checks import sets
 from .checks.mask import _draft_mask, _named_objects, draft_mask
 
 
@@ -156,6 +157,12 @@ class InequalityAndRangeDraftTests(SimpleTestCase):
                 self.assertEqual(draft_mask('$4$', condition), '{{number: 4}}')
         self.assertEqual(draft_mask(r'$x\le -1$ или $x\ge 3$', 'Решите неравенство $x^2-2x-3\ge0$.'),
                          r'{{range: x\le -1; x\ge 3}}')
+        # «и» в решении неравенства — пересечение, а не перечисление корней.
+        self.assertEqual(draft_mask('$x>-3$ и $x<3$', 'Решите неравенство $|x|<3$.'),
+                         '{{range: x>-3 и x<3}}')
+        self.assertTrue(sets.ranges_equal(sets.parse_range('x>-3 и x<3'), sets.parse_range('(-3;3)')))
+        self.assertEqual(draft_mask('$x=1$ и $x=2$', 'Решите уравнение $x^2-3x+2=0$.'),
+                         '$x =${{range: 1; 2}}')
         # \left( — не \le: скобочная запись Mathpix сохраняет подпись.
         self.assertEqual(draft_mask(r'$\left(-2; 1\right)$', 'Решите неравенство $|x^2-x-3|<9$.'),
                          r'$x \in${{range: \left(-2; 1\right)}}')

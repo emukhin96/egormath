@@ -72,7 +72,10 @@ def _equation(answer, condition):
         return '$(' + '; '.join(variables) + ') =$' + _slot('pair', answer)
     if len(variables) != 1:
         return ''
-    value = re.sub(r'\s+(?:и|или)\s+', '; ', answer)
+    # У корней уравнения «и» перечисляет (x=1 и x=2 → 1; 2); в решении
+    # неравенства «и» — пересечение (x>-3 и x<3), его оставляем parse_range.
+    inequality = bool(re.search(r'неравенств', condition, re.I))
+    value = re.sub(r'\s+или\s+' if inequality else r'\s+(?:и|или)\s+', '; ', answer)
     if sets.parse_range(value) is None:
         return ''
     if re.search(r'[<>≤≥]|\\(?:le|ge)(?:q|qslant)?(?![A-Za-z])', value):
