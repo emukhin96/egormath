@@ -34,8 +34,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .merzlyak_parser import (
-    _finish_fields, _flatten_lists, _heal_ocr_words, _join_hyphenation,
-    _tabular_to_array)
+    _finish_fields, _flatten_lists, _heal_ocr_words, _tabular_to_array)
 from .textbook_parser import (
     Marker, TaskDraft, _open_paren_depth, blocks, clean, finalize_draft_images,
     inline_numeric_markers, merge_solutions, numeric_subitem_labels,
@@ -187,6 +186,11 @@ def _unwrap_range_sections(text: str) -> str:
     return re.sub(
         r"\\section\*?\{(?P<title>[^{}]*\(\s*" + ROMAN + r"\s*\.\s*\d[^{}]*)\}",
         lambda match: "\n" + match.group("title").strip() + "\n", text)
+
+
+def _join_hyphenation(text: str) -> str:
+    """«Указа- ние» — перенос OCR; «пяти- и шестизначные» — нет."""
+    return re.sub(r"(?<=[а-яё])-\s+(?=[а-яё])(?!(?:и|или)\s)", "", text)
 
 
 def _join_page_breaks(text: str) -> str:
@@ -718,6 +722,8 @@ def _finish_value(value: str) -> str:
     # «$\\taskpic{2}$» — рисунок не формула (иначе после финальной обработки
     # рисунков остаётся висячий «$»).
     value = re.sub(r"\$\s*(\\taskpic\{[^{}]+\})\s*\$", r"\1", value or "")
+    # «$… . \\quad$» — хвост разделителя OCR в конце формулы.
+    value = re.sub(r"\s*\.?\s*(?:\\quad\s*)+\$(?=\s*[.;,]?\s*$)", "$", value)
     # «1)\\ -8» — перенос строки сразу после метки пункта.
     value = re.sub(r"^\s*(?:\\\\\s*)+", "", value)
     return normalize_cyrillic_units(value)
