@@ -318,6 +318,8 @@ def prepare_shabunin_text(text: str) -> str:
     text = TASK_MARKER_RE.sub(
         lambda m: m.group(0).translate(_ROMAN_FIX), text)
     text = re.sub(r"\\hspace\{0pt\}\s*", "", text)
+    # «в точке ( $1 ;-8$ )» — скобки координат вынесены из формулы.
+    text = re.sub(r"(?<![\w\\])\(\s*\$([^$\n]+)\$\s*\)", r"$(\1)$", text)
     text = _renumber_enumerate(text)
     text = _flatten_lists(text)
     text = _heal_item_labels(text)
