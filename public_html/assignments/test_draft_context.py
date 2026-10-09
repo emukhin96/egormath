@@ -40,6 +40,12 @@ class NamedQuantityDraftTests(SimpleTestCase):
                          '{{expressions: 56; 56; 68}}°')
         self.assertEqual(draft_mask('$2$ см или $18$ см', 'Найдите расстояние между основаниями.'),
                          '{{set: 2; 18}} см')
+        # Перечисление разных объектов задаёт порядок: поля по порядку.
+        self.assertEqual(draft_mask(r'$\frac{3}{2}$ см, $\frac{25}{8}$ см',
+                                    'Найдите радиусы вписанной и описанной окружностей.'),
+                         r'{{number: \frac{3}{2}}} см, {{number: \frac{25}{8}}} см')
+        self.assertEqual(draft_mask('$4$ см, $9$ см', 'Найдите катеты, если гипотенуза равна 5 и один катет больше.'),
+                         '{{expressions: 4; 9}} см')
         # Повтор без геометрического контекста по-прежнему не угадывается.
         self.assertEqual(draft_mask('$3$, $3$', 'Найдите значения.'), '')
 
@@ -58,7 +64,8 @@ class InequalityAndRangeDraftTests(SimpleTestCase):
                          '$x =${{range: -3; -1; 2}}')
 
     def test_set_braces_and_multi_variable_ranges(self):
-        self.assertEqual(draft_mask(r'$\{3\}$', ''), r'{{range: \{3\}}}')
+        self.assertEqual(draft_mask(r'$\{3\}$', ''), '{{set: 3}}')
+        self.assertEqual(draft_mask(r'$\{-2;1\}$', ''), '{{set: -2;1}}')
         self.assertEqual(draft_mask(r'$\{3\}$', r'Решите неравенство $\frac13x^2-2x+3\le0$.'),
                          r'$x \in${{range: \{3\}}}')
         self.assertEqual(draft_mask('$a>0, b<0, c<0$', 'Определите знаки коэффициентов a, b, c.'), '')

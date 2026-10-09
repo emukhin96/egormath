@@ -838,9 +838,12 @@ def _numeric_math_set(answer, condition=''):
         candidate = '; '.join(
             f'${label} =$ {{{{{NUMBER}: {value}}}}}{suffix}'
             for label, value in zip(named, values))
-    elif re.search(_QUANTITY_WORDS, condition or '', re.I) and not has_or:
-        # Однородные величины без имён («углы параллелограмма», «стороны»):
+    elif (re.search(_QUANTITY_WORDS, condition or '', re.I) and not has_or
+          and not _QUANTITY_ENUM_RE.search(' '.join(_question_sentences(condition)))):
+        # Однородные величины без имён («углы параллелограмма», «катеты»):
         # порядок любой, но кратность важна — 56; 56; 68 не равно 56; 68.
+        # Перечисление разных объектов («радиусы вписанной и описанной»,
+        # «скорости лодки и течения») задаёт порядок — поля по порядку ниже.
         candidate = f'{{{{{EXPRESSIONS}: {"; ".join(values)}}}}}{suffix}'
     elif repeated:
         return ''
@@ -857,6 +860,11 @@ def _numeric_math_set(answer, condition=''):
 
 _QUANTITY_WORDS = (r'\b(?:сторон|угл|отрезк|основани|диагонал|катет|высот|радиус'
                    r'|медиан|биссектрис|хорд|дуг|длин|периметр|площад)[а-яё]*\b')
+# «радиусы вписанной и описанной окружностей»: союз «и» сразу в именной
+# группе после слова-величины перечисляет разные объекты по порядку.
+_QUANTITY_ENUM_RE = re.compile(
+    r'\b(?:сторон|угл|отрезк|основани|диагонал|катет|высот|радиус|медиан|биссектрис|хорд'
+    r'|дуг|длин|скорост|площад)[а-яё]*(?:\s+[а-яё-]+){0,3}\s+и\s+[а-яё]', re.I)
 _OBJECT_NAME = r'(?:\\angle\s*)?[A-Z](?:[A-Z]{1,2}|_\{?\d\}?)?'
 _NAMED_LIST_RE = re.compile(
     r'(?:угл|сторон|отрезк|основани|диагонал|катет|высот|радиус|медиан|биссектрис|хорд|дуг)'
@@ -872,14 +880,19 @@ _INTERVAL_CONTEXT_RE = re.compile(
 _UNORDERED_RATIO_RE = re.compile(r'как относятся|в каком отношении', re.I)
 
 
+def _question_sentences(condition):
+    """Предложения-вопросы условия без математических разделителей;
+    имена вида «A C B» (Mathpix) склеены в «ACB»."""
+    plain = re.sub(r'\\[()\[\]]|\$', ' ', condition or '')
+    plain = re.sub(r'(?<=[A-Z])\s+(?=[A-Z])', '', plain)
+    return [s for s in re.split(r'[.?!]\s+', plain)
+            if re.search(r'найдите|вычислите|определите|чему равн', s, re.I)]
+
+
 def _named_objects(condition):
     """Имена объектов из вопроса: «углы ACB и ACD» → ['\\angle ACB', '\\angle ACD'],
     «стороны AB и BC» → ['AB', 'BC']. Пусто — объекты не названы."""
-    plain = re.sub(r'\\[()\[\]]|\$', ' ', condition or '')
-    plain = re.sub(r'(?<=[A-Z])\s+(?=[A-Z])', '', plain)  # A C B → ACB (Mathpix)
-    sentences = [s for s in re.split(r'[.?!]\s+', plain)
-                 if re.search(r'найдите|вычислите|определите|чему равн', s, re.I)]
-    for sentence in sentences:
+    for sentence in _question_sentences(condition):
         match = _NAMED_LIST_RE.search(sentence) or _PLAIN_LIST_RE.search(sentence)
         if not match:
             continue
@@ -1034,9 +1047,11 @@ def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subi
             r'найди\w*\s+(?:все\s+)?корни', condition or '', re.I):
         return ''
     stripped = re.sub(r'\s+', ' ', answer.replace('$', ' ')).strip().rstrip('.')
-    if re.fullmatch(r'\\?\{.*\\?\}', stripped) and sets.parse_range(stripped) is not None:
-        # Ответ-множество {3} или {-1; 8}: поле множества, а не число.
-        return f'{{{{{RANGE}: {stripped}}}}}'
+    if (re.fullmatch(r'\\?\{[^;,{}]*\\?\}', stripped) and sets.parse_set(stripped)
+            and sets.numeric_value(stripped) is not None):
+        # Ответ-множество из одного элемента {3}: поле множества, а не число;
+        # несколько элементов {-2;1} разбирает общая ветка set ниже.
+        return f'{{{{{SET}: {_unwrap_set_braces(stripped)}}}}}'
     if (_SIMPLIFY_CONTEXT_RE.search(condition or '') and re.search(r'\\sqrt|\^', stripped)
             and '=' not in stripped and sets.numeric_value(stripped) is not None):
         # «Вынесите множитель из-под знака корня»: число совпадает и у
