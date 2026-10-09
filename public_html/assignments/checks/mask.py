@@ -1090,8 +1090,12 @@ def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subi
     # Смысл отношения берём из вопроса, а не из данных («стороны
     # относятся как 3:4:5» ничего не говорит о виде ответа).
     question = ' '.join(_question_sentences(condition))
+    # «Как относятся площади треугольников ABD и CBD?» — порядок задан
+    # перечислением объектов; без имён и перечисления порядок свободный.
     unordered_ratio = bool(_UNORDERED_RATIO_RE.search(question)
-                           and not re.search(r'считая от', condition or '', re.I))
+                           and not re.search(r'считая от', condition or '', re.I)
+                           and not _QUANTITY_ENUM_RE.search(question)
+                           and not _named_objects(condition))
     if ':' in ratio_text:
         from . import numeric
         try:
