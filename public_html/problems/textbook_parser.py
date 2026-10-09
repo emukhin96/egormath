@@ -742,11 +742,12 @@ def path_at(all_sections: Sequence[Section], pos: int) -> list[str]:
 
 
 def _open_paren_depth(prefix: str) -> int:
+    """Глубина незакрытых скобок; промежутки «(a; b]» и «[a; b)» закрыты."""
     depth = 0
     for char in prefix:
-        if char == "(":
+        if char in "([":
             depth += 1
-        elif char == ")" and depth:
+        elif char in ")]" and depth:
             depth -= 1
     return depth
 
@@ -3353,6 +3354,9 @@ def bundle_from_text(
     elif profile == "merzlyak":
         from .merzlyak_parser import parse_merzlyak
         tasks, diagnostics = parse_merzlyak(tasks_text)
+    elif profile == "shabunin":
+        from .shabunin_parser import parse_shabunin
+        tasks, diagnostics = parse_shabunin(tasks_text)
     elif profile == "feoktistov":
         from .feoktistov_parser import parse_feoktistov
         tasks, diagnostics = parse_feoktistov(tasks_text)
@@ -3562,7 +3566,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--profile", required=True,
-        choices=("galitsky", "merzlyak", "feoktistov", "ziv", "shestakov", "ostromogilsky",
+        choices=("galitsky", "merzlyak", "shabunin", "feoktistov", "ziv", "shestakov", "ostromogilsky",
                  "ostromogilsky_ege"))
     parser.add_argument("--tasks", required=True, type=Path)
     parser.add_argument("--solutions", type=Path)

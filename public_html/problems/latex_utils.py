@@ -348,8 +348,26 @@ def ensure_displaystyle_fractions(text):
     return _MATH_SPAN_RE.sub(repl, text)
 
 
-_BROKEN_LEFT_DOLLAR_RE = re.compile(r'\\left[^$]*\$')
-_BROKEN_SET_DOLLAR_RE = re.compile(r'\\\{[^$}]*\$')
+_INLINE_DOLLAR_SPAN_RE = re.compile(r'(?<!\$)\$(?!\$)[^$]*\$')
+_LEFT_RE = re.compile(r'\\left(?![a-zA-Z])')
+_RIGHT_RE = re.compile(r'\\right(?![a-zA-Z])')
+_OPEN_SET_RE = re.compile(r'(?<!\\left)\\\{')
+_CLOSE_SET_RE = re.compile(r'(?<!\\right)\\\}')
+
+
+def _has_split_math_pair(text):
+    """Есть ли формула ``$…$`` с разорванной парой ``\\left…\\right``/``\\{…\\}``.
+
+    Целая формула ``$\\left(x\\right)$`` разрывом не считается: снимать
+    в ней доллары нельзя, иначе повторная обёртка порежет её на куски.
+    """
+    for match in _INLINE_DOLLAR_SPAN_RE.finditer(text):
+        span = match.group(0)
+        if len(_LEFT_RE.findall(span)) != len(_RIGHT_RE.findall(span)):
+            return True
+        if len(_OPEN_SET_RE.findall(span)) != len(_CLOSE_SET_RE.findall(span)):
+            return True
+    return False
 
 
 def heal_split_math_dollars(text):
@@ -361,8 +379,7 @@ def heal_split_math_dollars(text):
     text = str(text or '')
     if '$' not in text:
         return text
-    if not (_BROKEN_LEFT_DOLLAR_RE.search(text)
-            or _BROKEN_SET_DOLLAR_RE.search(text)):
+    if not _has_split_math_pair(text):
         return text
     return text.replace('$', '')
 

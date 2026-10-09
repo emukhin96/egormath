@@ -1,0 +1,29 @@
+{
+ "comment": "Сверенные с бумажной книгой (PDF = страница книги + 1) правки OCR задачника Шабунина. Применяются только к TEX с указанным sha256.",
+ "editions": [
+  {
+   "source_sha256": "28f34958b3d9779073bc8a696453fc5df023f8e536536cb0f1bc0b6351ca165f",
+   "source": "Шабунин 10-11 OCR.tex (Mathpix)",
+   "patches": [
+    {
+     "id": "XIV.111-number",
+     "page": "292",
+     "before": "XIV.MII.",
+     "after": "XIV.111."
+    },
+    {
+     "id": "XIV.117-number",
+     "page": "293",
+     "before": "XIV.M17.",
+     "after": "XIV.117."
+    },
+    {
+     "id": "XIX.3-number",
+     "page": "364",
+     "before": "\nxix.3.\n",
+     "after": "\nXIX.3.\n"
+    }
+   ]
+  }
+ ]
+}
