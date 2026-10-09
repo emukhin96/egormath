@@ -774,13 +774,13 @@ def _numeric_math_set(answer, condition=''):
     suffix = '°' if degree else (f' {units[0]}' if units else '')
     question = ' '.join(_question_sentences(condition))
     named, measure = _named_objects(condition, with_measure=True)
-    if named and not has_or:
+    if (named and not has_or and len(named) == len(values)
+            and degree == (measure == 'angular')):
         # «Найдите углы ACB и ACD» → ответ «50°, 60°» отвечает каждому углу
         # по порядку; множество потеряло бы соответствие и приняло бы
         # перепутанные значения. При ином числе имён или несоответствии
-        # вида (углы и дуги — градусы, отрезки — длины) не угадываем.
-        if len(named) != len(values) or degree != (measure == 'angular'):
-            return ''
+        # вида (углы и дуги — градусы, отрезки — длины) имена не подходят —
+        # ниже обычные ветки: однородный набор или поля по порядку.
         candidate = '; '.join(
             f'${label} =$ {{{{{NUMBER}: {value}}}}}{suffix}'
             for label, value in zip(named, values))
@@ -887,8 +887,12 @@ def _named_objects(condition, *, with_measure=False):
     или 'length'."""
     for sentence in _question_sentences(condition):
         verb = _QUESTION_RE.search(sentence)
-        # Имена — только после глагола вопроса, не в данных перед ним.
-        match = (_NAMED_LIST_RE.search(sentence, verb.start()) if verb
+        start = verb.end() if verb else 0
+        # Имена — только в именной группе искомой величины: у первого
+        # слова-величины после глагола вопроса. «Найдите углы, на которые
+        # высота BH делит угол B» имён искомых углов не содержит.
+        first = re.compile(_QUANTITY_WORDS, re.I).search(sentence, start)
+        match = (_NAMED_LIST_RE.match(sentence, first.start()) if first
                  else None) or _PLAIN_LIST_RE.search(sentence)
         if not match:
             continue
