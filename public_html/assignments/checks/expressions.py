@@ -479,8 +479,15 @@ def _unwrap(node):
     return node
 
 
+def _operands(node):
+    """Операнды узла: поддеревья и буквы-токены; знаки операций не считаются.
+    Буква ``x`` в ``13-x`` — токен, а не поддерево, поэтому считать только
+    поддеревья нельзя: бинарное вычитание приняли бы за унарный минус."""
+    return [c for c in node.children if _is_tree(c) or _is_symbol_token(c)]
+
+
 def _is_unary_minus(node):
-    return _is_tree(node) and node.data == 'sub' and len(_subtrees(node)) == 1
+    return _is_tree(node) and node.data == 'sub' and len(_operands(node)) == 1
 
 
 def _number_value(node):
@@ -494,7 +501,7 @@ def _number_value(node):
         except (ValueError, ArithmeticError):
             return None
     if _is_unary_minus(node):
-        value = _number_value(_subtrees(node)[0])
+        value = _number_value(_operands(node)[0])
         return None if value is None else -value
     if node.data == 'group_round_parentheses' and len(_subtrees(node)) == 1:
         return _number_value(_subtrees(node)[0])
@@ -519,7 +526,8 @@ def _all_numeric(node):
     if any(_is_symbol_token(c) for c in node.children):
         return False
     if node.data in _NUMERIC_OPS + _QUOTIENT_NODES + (
-            'group_round_parentheses', 'square_root', 'group_curly_parentheses'):
+            'group_round_parentheses', 'square_root', 'group_curly_parentheses',
+            'group_square_brackets'):
         subs = _subtrees(node)
         return bool(subs) and all(_all_numeric(c) for c in subs)
     return False
@@ -542,7 +550,7 @@ def _chain_literals(node, nums, dens, inverted=False):
             _chain_literals(subs[0], nums, dens, inverted)
             _chain_literals(subs[1], nums, dens, not inverted)
     elif _is_unary_minus(node):
-        _chain_literals(_subtrees(node)[0], nums, dens, inverted)
+        _chain_literals(_operands(node)[0], nums, dens, inverted)
     elif node.data == 'number':
         value = _number_value(node)
         if value is not None:
@@ -613,27 +621,113 @@ def _has_like_terms(node):
         return False
 
 
-def _perfect_square_root(node):
+def _operand_value(child):
+    return evaluate(resolve(child)) if _is_tree(child) else parse_expr(str(child))
+
+
+def _radical_reducible(node):
+    """Корень записан не в простейшем виде: из-под него выносится множитель
+    или сокращается дробь (``\\sqrt{8}``, ``\\sqrt[3]{16}``, ``\\sqrt{1/4}``,
+    ``\\sqrt{4Rr}``). SymPy сам приводит такие корни к ``2\\sqrt{2}``, поэтому
+    признак — вычисленное значение перестало быть «корень из подкоренного»."""
+    from sympy import Rational
     subs = _subtrees(node)
-    if len(subs) != 1:
+    if not 1 <= len(subs) <= 2:
         return False
-    value = _number_value(subs[0])
-    if value is None or value < 0 or value.denominator != 1:
+    degree = Fraction(2)
+    if len(subs) == 2:
+        # Показатель корня лежит в квадратных скобках: \sqrt[3]{16}.
+        index = _subtrees(subs[0]) if subs[0].data == 'group_square_brackets' else [subs[0]]
+        degree = _number_value(index[0]) if len(index) == 1 else None
+    if degree is None or degree.denominator != 1 or degree < 2:
         return False
-    root = int(value.numerator ** 0.5)
-    return root * root == value.numerator
+    degree = int(degree)
+    value = evaluate(resolve(node))
+    inner = evaluate(resolve(subs[-1]))
+    if value is None or inner is None or not hasattr(value, 'is_Pow'):
+        return False
+    if _all_numeric(subs[-1]):
+        if value.is_Rational:
+            return True
+        exponent = Rational(1, degree)
+        if value.is_Pow and value.exp == exponent and value.base == inner:
+            return False
+        # -\sqrt[3]{2} вместо \sqrt[3]{-2}: знак вынесен, а не множитель.
+        if (value.is_Mul and len(value.args) == 2 and value.args[0] == -1
+                and value.args[1].is_Pow and value.args[1].exp == exponent
+                and value.args[1].base == -inner):
+            return False
+        return True
+    # Символьный радикал: \sqrt{4Rr} = 2\sqrt{Rr} — числовой множитель
+    # выносится без знания знаков; нечётные корни оставляем вычислителю.
+    return bool(degree % 2 == 0 and value.is_Mul
+                and any(f.is_Rational and f != 1 for f in value.args))
+
+
+def _numeric_node_reducible(node):
+    """Числовое действие, которое ученик мог выполнить: ``2\\cdot3``, ``2+3``,
+    ``2^3``, ``\\sqrt2\\sqrt8``, ``\\sqrt2\\sqrt3``, ``8^{1/3}``, ``2^{4/3}``.
+    Произведение числа и одного несократимого корня (``2\\sqrt{2}``) и сумма
+    вроде ``1+\\sqrt{2}`` — простейший вид, а не невыполненное действие."""
+    value = evaluate(resolve(node))
+    if value is None or not hasattr(value, 'is_Rational'):
+        return False
+    if value.is_Rational:
+        return True
+    if node.data in _PRODUCT_NODES:
+        factors = []
+        _product_factors(node, factors)
+        radicals = [f for f in factors if _is_tree(f)
+                    and _unwrap(f).data in ('square_root', 'superscript')]
+        return len(radicals) > 1
+    if node.data == 'superscript':
+        operands = _operands(node)
+        if len(operands) != 2:
+            return False
+        base, exponent = (_operand_value(c) for c in operands)
+        if base is None or exponent is None:
+            return False
+        return not (value.is_Pow and value.base == base and value.exp == exponent)
+    # Суммы: подобные слагаемые и равные корни ловит _has_like_terms.
+    return False
+
+
+def _plain(expr):
+    """Параметры как положительные символы: школьные нечётные корни и
+    рациональные степени теряют служебный Piecewise вещественной ветви, и
+    число операций отражает запись, а не представление вычислителя."""
+    from sympy import Symbol
+    try:
+        return expr.xreplace({s: Symbol(s.name, positive=True) for s in expr.free_symbols})
+    except Exception:  # noqa: BLE001
+        return expr
+
+
+def unsimplified(expr, reference):
+    """Запись длиннее эталона и сворачивается раскрытием скобок (``x(x+1)-x^2``,
+    ``(b^{0,4}+3)^2-6b^{0,4}``) либо существенно длиннее эталона."""
+    from sympy import expand
+    student, expected = _plain(expr), _plain(reference)
+    size, limit = _size(student), _size(expected)
+    if size > max(2 * limit, limit + 2):
+        return True
+    try:
+        return size > limit and _size(expand(student)) < size
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def reducible(node):
-    """В записи есть невыполненное числовое действие или сокращаемая дробь."""
+    """В записи есть невыполненное числовое действие, сокращаемая дробь или
+    корень, из-под которого выносится множитель."""
     if not _is_tree(node):
         return False
     if node.data == '_ambig':
         return any(reducible(c) for c in node.children)
     if node.data in _NUMERIC_OPS and not _is_unary_minus(node) \
-            and _all_numeric(node):
+            and _all_numeric(node) and _numeric_node_reducible(node):
         return True
-    if node.data == 'square_root' and _perfect_square_root(node):
+    if node.data == 'square_root' and _radical_reducible(node):
         return True
     if node.data == 'superscript':
         operands = [c for c in node.children if _is_tree(c) or _is_symbol_token(c)
@@ -669,7 +763,7 @@ def _product_factors(node, out):
                 continue
             _product_factors(child, out)
     elif _is_unary_minus(node):
-        _product_factors(_subtrees(node)[0], out)
+        _product_factors(_operands(node)[0], out)
     else:
         out.append(node)
 
@@ -684,7 +778,11 @@ def _factor_ok(node):
     expr = evaluate(resolve(node)) if _is_tree(node) else parse_expr(str(node))
     if expr is None:
         return False
-    while isinstance(expr, Pow) and expr.exp.is_integer and expr.exp > 0:
+    # Дробные степени (m^{1/5}) вычислитель хранит вещественной ветвью с
+    # Piecewise; на положительных символах factor_list видит многочлен от
+    # m^{1/5} и различает разложение и разность кубов.
+    expr = _plain(expr)
+    while isinstance(expr, Pow) and expr.exp.is_rational and expr.exp > 0:
         expr = expr.base
     if not expr.free_symbols:
         return False
@@ -695,8 +793,21 @@ def _factor_ok(node):
         return False
 
 
-def fully_factored(tree):
-    """Произведение не более чем одного числа и неприводимых множителей."""
+def factor_count(tree):
+    """Число нечисловых множителей верхнего уровня записи."""
+    factors = []
+    _product_factors(tree, factors)
+    return sum(1 for node in factors if not _all_numeric(node))
+
+
+def fully_factored(tree, reference=None):
+    """Произведение не более чем одного числа и неприводимых множителей.
+
+    ``reference`` — дерево эталона: если эталон разложен на несколько
+    множителей, а ученик оставил меньше, разложение не выполнено, даже когда
+    factor_list не умеет раскладывать над нужным расширением
+    (``x^{6/7}-6`` против ``(x^{2/7}-\\sqrt[3]{6})(\\dots)``).
+    """
     factors = []
     _product_factors(tree, factors)
     numbers = 0
@@ -707,6 +818,8 @@ def fully_factored(tree):
                 return False
         elif not _factor_ok(node):
             return False
+    if reference is not None and factor_count(tree) < factor_count(reference):
+        return False
     return bool(factors)
 
 
@@ -734,9 +847,7 @@ def check_simplified(student, reference):
         return UNKNOWN
     if not same:
         return WRONG
-    if reducible(tree):
-        return WRONG
-    if _size(expr) > 2 * _size(reference) + 4:
+    if reducible(tree) or unsimplified(expr, reference):
         return WRONG
     return OK
 
