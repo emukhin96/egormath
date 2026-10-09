@@ -2429,9 +2429,12 @@ def merge_solutions(
                     # Компактный ответ Зива: «а) 1; б) -1» при условии без
                     # подпунктов. Нельзя звать _explicit_answers — там нет
                     # строки «Ответ:», и поле обнулялось.
-                    task.author_answer_latex = (
-                        task.author_answer_latex
-                        or _compact_labeled_answers(solution_subitems))
+                    # Вводная фраза перед «1) …; 2) …» не заменяет сами
+                    # ответы: «Два положения окружности: 1) …; 2) …».
+                    compact = _compact_labeled_answers(solution_subitems)
+                    task.author_answer_latex = " ".join(
+                        part for part in (task.author_answer_latex, compact)
+                        if part)
             else:
                 # При несовпадении границ не обнуляем ответ: у Зива часто
                 # «1) а) … 2) а)» против нумерованных частей условия.
