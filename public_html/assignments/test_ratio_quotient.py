@@ -54,7 +54,9 @@ class RatioQuotientTests(SimpleTestCase):
         for mask in ('{{ratio: 1:2}}', '{{proportion: 1:2}}'):
             slot = parse_mask(mask).slots[0]
             for value in ('1/2', '0,5'):
-                self.assertEqual(check_slot(slot, value), 'wrong')
+                # Без опции дробь — запись не по формату (статус format),
+                # а не допустимое значение; в итоге по задаче — неверно.
+                self.assertEqual(check_slot(slot, value), 'format')
         self.assertEqual(check_slot(self.slot('1:2'), '0,5'), 'ok')
         for mask in ('{{ratio: 6/7 | quotient}}',
                      '{{ratio: 6:7 | unknown}}',
