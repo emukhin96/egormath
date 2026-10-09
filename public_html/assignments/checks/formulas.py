@@ -1158,9 +1158,10 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
     if mode == 'simplify':
         item = student[0]
         if (expressions.reducible(item.tree)
-                or expressions._size(item.expression) > 2 * expressions._size(reference.items[0].expression) + 4):
+                or expressions.unsimplified(item.expression, reference.items[0].expression)):
             return WRONG
     elif mode == 'factor':
-        if not expressions.fully_factored(expressions.resolve(student[0].tree)):
+        if not expressions.fully_factored(expressions.resolve(student[0].tree),
+                                          expressions.resolve(reference.items[0].tree)):
             return WRONG
     return OK
