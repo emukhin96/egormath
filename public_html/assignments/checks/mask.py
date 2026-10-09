@@ -756,8 +756,7 @@ def _numeric_math_set(answer, condition=''):
         if '=' in value or sets.numeric_value(value) is None:
             return ''
         values.append(value)
-    if len(set(values)) != len(values):
-        return ''
+    repeated = len(set(values)) != len(values)
     outside = _ANSWER_MATH_RE.sub(' ', source)
     has_or = bool(re.search(r'\bили\b', outside, re.I))
     outside = re.sub(r'\b(?:и|или)\b', ' ', outside, flags=re.I)
@@ -773,10 +772,24 @@ def _numeric_math_set(answer, condition=''):
         return ''
     degree = all(degrees)
     suffix = '°' if degree else (f' {units[0]}' if units else '')
-    homogeneous = bool(re.search(
-        r'\b(?:корн\w*|решени\w*|сторон\w*|угл\w*)\b',
-        condition or '', re.I))
-    if has_or or homogeneous:
+    named = _named_objects(condition)
+    if named and not has_or:
+        # «Найдите углы ACB и ACD» → ответ «50°, 60°» отвечает каждому углу
+        # по порядку; множество потеряло бы соответствие и приняло бы
+        # перепутанные значения. При ином числе имён не угадываем.
+        if len(named) != len(values):
+            return ''
+        candidate = '; '.join(
+            f'${label} =$ {{{{{NUMBER}: {value}}}}}{suffix}'
+            for label, value in zip(named, values))
+    elif re.search(_QUANTITY_WORDS, condition or '', re.I) and not has_or:
+        # Однородные величины без имён («углы параллелограмма», «стороны»):
+        # порядок любой, но кратность важна — 56; 56; 68 не равно 56; 68.
+        candidate = f'{{{{{EXPRESSIONS}: {"; ".join(values)}}}}}{suffix}'
+    elif repeated:
+        return ''
+    elif has_or or re.search(r'\b(?:корн\w*|решени\w*|все\s+значени\w*)\b',
+                             condition or '', re.I):
         candidate = f'{{{{{SET}: {"; ".join(values)}}}}}{suffix}'
     else:
         candidate = ', '.join(
@@ -784,6 +797,51 @@ def _numeric_math_set(answer, condition=''):
     if not parse_mask(candidate).is_valid:
         return ''
     return candidate
+
+
+_QUANTITY_WORDS = (r'\b(?:сторон|угл|отрезк|основани|диагонал|катет|высот|радиус'
+                   r'|медиан|биссектрис|хорд|дуг|длин|периметр|площад)[а-яё]*\b')
+_OBJECT_NAME = r'(?:\\angle\s*)?[A-Z](?:[A-Z]{1,2}|_\{?\d\}?)?'
+_NAMED_LIST_RE = re.compile(
+    r'(?:угл|сторон|отрезк|основани|диагонал|катет|высот|радиус|медиан|биссектрис|хорд|дуг)'
+    r'[а-яё]*\s+(' + _OBJECT_NAME + r'(?:\s*(?:,|и)\s*' + _OBJECT_NAME + r')*)', re.I)
+_PLAIN_LIST_RE = re.compile(
+    r'(?:найдите|вычислите|определите)\s+(' + _OBJECT_NAME
+    + r'(?:\s*(?:,|и)\s*' + _OBJECT_NAME + r')+)', re.I)
+_SIMPLIFY_CONTEXT_RE = re.compile(
+    r'вынесите|внесите|упростите|сократите|освободитесь|избавьтесь|представьте', re.I)
+_INTERVAL_CONTEXT_RE = re.compile(
+    r'неравенств|при каких значениях|множество значений|область\s+(?:определения|значений)'
+    r'|промежут', re.I)
+_UNORDERED_RATIO_RE = re.compile(r'как относятся|в каком отношении', re.I)
+
+
+def _named_objects(condition):
+    """Имена объектов из вопроса: «углы ACB и ACD» → ['\\angle ACB', '\\angle ACD'],
+    «стороны AB и BC» → ['AB', 'BC']. Пусто — объекты не названы."""
+    plain = re.sub(r'\\[()\[\]]|\$', ' ', condition or '')
+    plain = re.sub(r'(?<=[A-Z])\s+(?=[A-Z])', '', plain)  # A C B → ACB (Mathpix)
+    sentences = [s for s in re.split(r'[.?!]\s+', plain)
+                 if re.search(r'найдите|вычислите|определите|чему равн', s, re.I)]
+    for sentence in sentences:
+        match = _NAMED_LIST_RE.search(sentence) or _PLAIN_LIST_RE.search(sentence)
+        if not match:
+            continue
+        angle = match.group(0).lower().startswith('угл')
+        names = []
+        for name in re.split(r'\s*(?:,|и)\s*', match.group(1)):
+            name = re.sub(r'\\angle\s*', '', name.strip())
+            name = re.sub(r'_\{?(\d)\}?', r'_\1', name)
+            names.append((r'\angle ' + name) if angle else name)
+        if len(names) == len(set(names)):
+            return names
+    return []
+
+
+def _free_letters(text):
+    """Одиночные латинские буквы-переменные вне команд LaTeX."""
+    without_commands = re.sub(r'\\[A-Za-z]+', ' ', text or '')
+    return set(re.findall(r'(?<![A-Za-z])[A-Za-z](?![A-Za-z])', without_commands))
 
 
 def _single_numeric_math(answer):
@@ -889,6 +947,8 @@ def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subi
     if coordinates:
         return coordinates
     ratio_text = answer.replace('$', '').strip()
+    unordered_ratio = bool(_UNORDERED_RATIO_RE.search(condition or '')
+                           and not re.search(r'считая от', condition or '', re.I))
     if ':' in ratio_text:
         from . import numeric
         try:
@@ -897,7 +957,18 @@ def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subi
             # Черновик не должен падать или предлагать непроверенный эталон.
             return ''
         if ratio is not None:
-            return f'{{{{{RATIO}: {ratio_text}}}}}'
+            # «Как относятся площади», «в каком отношении делит» без
+            # «считая от» — порядок частей условием не задан.
+            kind = PROPORTION if unordered_ratio else RATIO
+            return f'{{{{{kind}: {ratio_text}}}}}'
+    fraction = re.fullmatch(r'\\[dt]?frac\{(\d+)\}\{(\d+)\}|(\d+)/(\d+)', ratio_text)
+    if fraction and re.search(r'отношени|относ[яи]тся', condition or '', re.I):
+        # Авторский ответ дробью на «найдите отношение»: принимаем и
+        # отношение через двоеточие, и его значение.
+        numerator, denominator = [g for g in fraction.groups() if g is not None]
+        if int(denominator):
+            kind = PROPORTION if unordered_ratio else RATIO
+            return f'{{{{{kind}: {numerator}:{denominator} | quotient}}}}'
     from .drafting import contextual_draft
     contextual = contextual_draft(answer, condition)
     if contextual:
@@ -906,6 +977,15 @@ def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subi
             r'реши\w*\s+(?:следующ\w*\s+)?(?:уравнен|систем)|'
             r'найди\w*\s+(?:все\s+)?корни', condition or '', re.I):
         return ''
+    stripped = re.sub(r'\s+', ' ', answer.replace('$', ' ')).strip().rstrip('.')
+    if re.fullmatch(r'\\?\{.*\\?\}', stripped) and sets.parse_range(stripped) is not None:
+        # Ответ-множество {3} или {-1; 8}: поле множества, а не число.
+        return f'{{{{{RANGE}: {stripped}}}}}'
+    if (_SIMPLIFY_CONTEXT_RE.search(condition or '') and re.search(r'\\sqrt|\^', stripped)
+            and '=' not in stripped and sets.numeric_value(stripped) is not None):
+        # «Вынесите множитель из-под знака корня»: число совпадает и у
+        # \sqrt{8}, требование к виду записи держит только simplify.
+        return f'{{{{{SIMPLIFY}: {stripped}}}}}'
     single_numeric = _single_numeric_math(answer)
     if single_numeric:
         return single_numeric
@@ -929,10 +1009,15 @@ def _draft_mask(answer, condition="", exam_codes=None, *, source_number="", subi
             return f'{{{{{preset}: {low}}}}}'
     if sets.numeric_value(text) is not None and '=' not in text:
         return f'{{{{{NUMBER}: {text}}}}}'
-    if '(' in text and sets.parse_pairs(text, coordinate_comma=False):
+    interval = bool(_INTERVAL_CONTEXT_RE.search(condition or '')
+                    and re.fullmatch(r'[(\[][^;()]+;[^;()]+[)\]]', text))
+    if interval and sets.parse_range(text) is not None:
+        # Промежуток-ответ неравенства, а не координаты точки.
+        return f'{{{{{RANGE}: {text}}}}}'
+    if '(' in text and not interval and sets.parse_pairs(text, coordinate_comma=False):
         return f'{{{{{PAIR}: {text}}}}}'
     if re.search(r'[<>≤≥\[\]∪]|\\infty|\\le|\\ge|\\cup', text) \
-            and sets.parse_range(text) is not None:
+            and len(_free_letters(text)) <= 1 and sets.parse_range(text) is not None:
         return f'{{{{{RANGE}: {text}}}}}'
     if (';' in text or '\\pm' in text or low in sets.EMPTY_WORDS) \
             and sets.parse_set(text) is not None:

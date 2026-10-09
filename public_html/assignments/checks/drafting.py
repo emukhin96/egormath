@@ -7,7 +7,7 @@ import re
 
 from . import sets
 
-_SOLVE = re.compile(r'реши\w*\s+(?:следующ\w*\s+)?(?:уравнен|систем)|найди\w*\s+(?:все\s+)?корни', re.I)
+_SOLVE = re.compile(r'реши\w*\s+(?:следующ\w*\s+)?(?:уравнен|неравенств|систем)|найди\w*\s+(?:все\s+)?корни', re.I)
 _EQUATION_REQUEST = re.compile(
     r'(?:состав|запиш|напиш)\w*.{0,40}уравнен', re.I)
 _ASSIGNMENT = re.compile(r'(?<![A-Za-z\\])([a-z](?:_\{?\d+\}?)?)\s*=\s*', re.I)
@@ -28,6 +28,8 @@ def _slot(kind, value):
 def _equation(answer, condition):
     # Обычные школьные неизвестные; параметры a, b не становятся полями.
     variables = sorted(set(re.findall(r'(?<![A-Za-z\\])[xyz](?![A-Za-z])', condition)))
+    # Решение неравенства — множество: подпись «x ∈», а не «x =».
+    relation = r' \in' if re.search(r'неравенств', condition, re.I) else ' ='
     assignments = []
     for match in _ASSIGNMENT.finditer(answer):
         prefix = answer[:match.start()]
@@ -53,7 +55,7 @@ def _equation(answer, condition):
             value = '; '.join(values)
             if sets.parse_range(value) is None:
                 return ''
-            fields.append(f'${variable} =$' + _slot('range', value))
+            fields.append(f'${variable}{relation}$' + _slot('range', value))
         return ', '.join(fields)
     if len(variables) > 1:
         pairs = sets.parse_pairs(answer)
@@ -68,7 +70,7 @@ def _equation(answer, condition):
     value = re.sub(r'\s+(?:и|или)\s+', '; ', answer)
     if sets.parse_range(value) is None:
         return ''
-    return f'${variables[0]} =$' + _slot('range', value)
+    return f'${variables[0]}{relation}$' + _slot('range', value)
 
 
 def _geometry(answer, condition):
