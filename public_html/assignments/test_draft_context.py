@@ -145,8 +145,9 @@ class InequalityAndRangeDraftTests(SimpleTestCase):
                          '{{pair: (-2; 1)}}')
         self.assertEqual(draft_mask('$-3; -1; 2$', 'Решите уравнение $x(x^2+2x+1)=6(x+1)$.'),
                          '$x =${{range: -3; -1; 2}}')
-        # Ответ-неравенство остаётся без подписи «x ∈».
+        # Ответ-неравенство остаётся без подписи «x ∈»; ответ-равенство — с «x =».
         self.assertEqual(draft_mask('$x<2$', 'Решите неравенство $3x-1<5$.'), '{{range: x<2}}')
+        self.assertEqual(draft_mask('$x=2$', r'Решите неравенство $(x-2)^2\le 0$.'), '$x =${{range: 2}}')
         self.assertEqual(draft_mask(r'$x\le -1$ или $x\ge 3$', 'Решите неравенство $x^2-2x-3\ge0$.'),
                          r'{{range: x\le -1; x\ge 3}}')
         # \left( — не \le: скобочная запись Mathpix сохраняет подпись.

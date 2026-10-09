@@ -55,7 +55,9 @@ def _equation(answer, condition):
             value = '; '.join(values)
             if sets.parse_range(value) is None:
                 return ''
-            fields.append(f'${variable}{relation}$' + _slot('range', value))
+            # Автор записал ответ равенством (x=2) — подпись «x =» и для
+            # неравенства; «x ∈» только для промежутка без явного «x =».
+            fields.append(f'${variable} =$' + _slot('range', value))
         return ', '.join(fields)
     if len(variables) > 1:
         pairs = sets.parse_pairs(answer)
