@@ -237,6 +237,10 @@ def _renumber_enumerate(text: str) -> str:
 _LEFT_DOT_LABEL_RE = re.compile(
     r"\$\s*\\left\.(?P<body>[^$\n]*?)[;,]\s*(?:\\quad\s*)?(?P<label>\d{1,2})"
     r"\\right\)\s*(?:\\quad\s*)?")
+# То же посреди формулы: «$a+2\pi k, \left.\pm b ; \quad 3\right) c$».
+_INNER_LEFT_DOT_LABEL_RE = re.compile(
+    r"(?<=[,;])\s*\\left\.(?P<body>[^$\n]*?)[;,]\s*(?:\\quad\s*)?"
+    r"(?P<label>\d{1,2})\\right\)\s*(?:\\quad\s*)?")
 # «радиусом $5 ; 2$ ) окружность» — метка «2)» разорвана долларом.
 _DOLLAR_LABEL_RE = re.compile(r";\s*(?P<label>\d{1,2})\$\s*\)")
 
@@ -249,6 +253,9 @@ def _heal_item_labels(text: str) -> str:
     text = re.sub(r"(?m)^([ \t]*)\$(\d{1,2})\)\s*", r"\1\2) $", text)
     text = _LEFT_DOT_LABEL_RE.sub(
         lambda m: "$" + m.group("body").rstrip() + "$; " + m.group("label") + ") $",
+        text)
+    text = _INNER_LEFT_DOT_LABEL_RE.sub(
+        lambda m: " " + m.group("body").strip() + "$; " + m.group("label") + ") $",
         text)
     return _DOLLAR_LABEL_RE.sub(lambda m: "$; " + m.group("label") + ")", text)
 
@@ -276,7 +283,15 @@ def prepare_shabunin_text(text: str) -> str:
     text = _flatten_lists(text)
     text = _heal_item_labels(text)
     text = re.sub(r"\\\\\[0pt\]", r"\\\\", text)
+    # Ячейки таблиц в OCR обёрнуты в «$…$»: внутри выносной array доллары
+    # недопустимы, а ``_tabular_to_array`` снимает только ``\\(…\\)``.
+    text = re.sub(
+        r"\\begin\{tabular\}.*?\\end\{tabular\}",
+        lambda m: re.sub(r"(?<!\$)\$([^$]+)\$", r"\\(\1\\)", m.group(0)),
+        text, flags=re.S)
     text = _tabular_to_array(text)
+    # Диакритика OCR на латинице и знаках («a ̈-1»).
+    text = re.sub(r"(?<![А-Яа-яЁё])[\u0300-\u036f]", "", text)
     text = _join_hyphenation(text)
     text = _heal_ocr_words(text)
     text = _join_page_breaks(text)
@@ -359,7 +374,9 @@ def extract_range_stems(text: str, roman: str) -> tuple[str, dict[int, str], lis
         first, last = int(match.group("a")), int(match.group("b"))
         stem = re.sub(r"[.:;\s]+$", "", stem) + ":"
         for number in range(first, last + 1):
-            stems.setdefault(number, stem)
+            # Пересекающиеся серии («XV.41–XV.45», «XV.45–XV.47») — у номера
+            # действует ближайшая предшествующая формулировка.
+            stems[number] = stem
         found.append({"first": f"{roman}.{first}", "last": f"{roman}.{last}",
                       "stem": stem})
         out.append(text[pos:line_start])
@@ -397,8 +414,22 @@ def _clean_task_body(body: str, titles: set[str] = frozenset()) -> str:
     return body.strip()
 
 
+_OWN_INSTRUCTION_RE = re.compile(
+    r"(?:Найти|Найдите|Решить|Решите|Вычислить|Вычислите|Доказать|Докажите|"
+    r"Построить|Постройте|Определить|Указать|Выяснить|Исследовать|Упростить|"
+    r"Сравнить|Показать|При\s+как)")
+
+
 def _with_stem(body: str, stem: str) -> str:
+    """Формулировка серии + условие задачи.
+
+    Если задача начинается собственным заданием («Найти все решения…»,
+    «При каком $a$…»), общая формулировка не нужна (канон QA § 4.5);
+    утверждение («Число … делится на 16») её, наоборот, требует.
+    """
     if not stem:
+        return body
+    if _OWN_INSTRUCTION_RE.match(body.lstrip()):
         return body
     return stem + "\n" + body if body else stem
 

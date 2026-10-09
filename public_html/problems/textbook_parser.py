@@ -298,7 +298,7 @@ def strip_imported_answer_punct(value: str) -> str:
         return value
     if value.endswith(('?', '!')):
         return value
-    if not value.endswith('.'):
+    if not value.endswith('.') or value.endswith('\\right.'):
         return value
     # «0. 2.» / «n=7. 7.» — точка держит номер следующей задачи.
     if re.search(r'\d{1,2}\s*\.\s*\d{1,2}\.$', value):
@@ -712,6 +712,9 @@ def strip_subitem_punct(value: str) -> str:
     if value.endswith('?'):
         return value
     if value[0].isupper() and value.endswith('.'):
+        return value
+    if value.endswith('\\right.'):
+        # Точка — часть ``\right.`` формулы без закрывающего «$».
         return value
     if value.endswith((';', '.', ',')):
         return value[:-1].rstrip()

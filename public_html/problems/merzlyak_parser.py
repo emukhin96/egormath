@@ -1027,7 +1027,7 @@ def _finish_fields(task: TaskDraft) -> None:
 
     def answer_field(value: str) -> str:
         value = wrap_answer_numbers(text_field(value))
-        value = re.sub(r"\.\s*\$$", "$", value)
+        value = re.sub(r"(?<!\\right)\.\s*\$$", "$", value)
         value = re.sub(r"(?<=\S)[ \t]+\$(?=[\s;,.)]|$)", "$", value)
         return value
 
