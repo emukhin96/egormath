@@ -36,6 +36,9 @@ class NamedQuantityDraftTests(SimpleTestCase):
                          '$AB =$ {{number: 100}}°; $BC =$ {{number: 260}}°')
         self.assertEqual(_named_objects('Найдите дуги $AB$ и $BC$.', with_measure=True),
                          (['AB', 'BC'], 'angular'))
+        # Имена с \angle без слова «углы» — тоже углы, префикс сохраняется.
+        self.assertEqual(draft_mask(r'$50^{\circ}$, $60^{\circ}$', r'Найдите $\angle A$ и $\angle B$.'),
+                         r'$\angle A =$ {{number: 50}}°; $\angle B =$ {{number: 60}}°')
         self.assertEqual(_named_objects('Катеты $AC$ и $BC$ равны 3 и 4. Найдите углы треугольника.'), [])
         self.assertEqual(_named_objects('Найдите углы $A$ и $B$, если $AB=5$ и $BC=3$.'),
                          [r'\angle A', r'\angle B'])
@@ -76,10 +79,19 @@ class NamedQuantityDraftTests(SimpleTestCase):
                          '{{expressions: 4; 9}} см')
         for condition in ('Найдите периметр и площадь прямоугольника.',
                           'Найдите площадь треугольника ABC и его периметр.',
-                          'Найдите объём и площадь поверхности куба.'):
+                          'Найдите объём и площадь поверхности куба.',
+                          'Найдите скорость лодки в стоячей воде и скорость течения.',
+                          'Найдите радиус окружности, вписанной в треугольник, и радиус описанной.',
+                          'Найдите меньший и больший катеты.',
+                          'Найдите острый и тупой углы ромба.',
+                          'Найдите площади треугольников ABC и ABD.'):
             with self.subTest(condition=condition):
                 self.assertEqual(draft_mask('$24$, $20$', condition),
                                  '{{number: 24}}, {{number: 20}}')
+        # Одно имя на два значения — черновик отказывается, а не угадывает.
+        self.assertEqual(draft_mask('$24$, $20$', 'Найдите длину стороны AB и высоту.'), '')
+        # Единственное число величины — не однородный набор.
+        self.assertEqual(draft_mask('$24$, $20$', 'Найдите площадь.'), '{{number: 24}}, {{number: 20}}')
         # Повтор без геометрического контекста по-прежнему не угадывается.
         self.assertEqual(draft_mask('$3$, $3$', 'Найдите значения.'), '')
 
@@ -100,6 +112,9 @@ class InequalityAndRangeDraftTests(SimpleTestCase):
         self.assertEqual(draft_mask('$x<2$', 'Решите неравенство $3x-1<5$.'), '{{range: x<2}}')
         self.assertEqual(draft_mask(r'$x\le -1$ или $x\ge 3$', 'Решите неравенство $x^2-2x-3\ge0$.'),
                          r'{{range: x\le -1; x\ge 3}}')
+        # \left( — не \le: скобочная запись Mathpix сохраняет подпись.
+        self.assertEqual(draft_mask(r'$\left(-2; 1\right)$', 'Решите неравенство $|x^2-x-3|<9$.'),
+                         r'$x \in${{range: \left(-2; 1\right)}}')
 
     def test_set_braces_and_multi_variable_ranges(self):
         self.assertEqual(draft_mask(r'$\{3\}$', ''), '{{set: 3}}')
