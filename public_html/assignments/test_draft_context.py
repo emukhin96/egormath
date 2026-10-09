@@ -29,9 +29,12 @@ class NamedQuantityDraftTests(SimpleTestCase):
             r'$30^{\circ}$, $60^{\circ}$',
             r'Найдите острые углы треугольника, если катеты $AC$ и $BC$ равны $3$ и $3\sqrt3$.'),
             '{{expressions: 30; 60}}°')
-        # Градусы не подписываются именами отрезков и наоборот; дуги — в градусах.
-        self.assertEqual(draft_mask(r'$30^{\circ}$, $60^{\circ}$', 'Найдите стороны $AB$ и $BC$.'), '')
-        self.assertEqual(draft_mask('$3$ см, $4$ см', 'Найдите углы $A$ и $B$.'), '')
+        # Градусы не подписываются именами отрезков и наоборот (остаются
+        # обычные поля по порядку); дуги — в градусах.
+        self.assertEqual(draft_mask(r'$30^{\circ}$, $60^{\circ}$', 'Найдите стороны $AB$ и $BC$.'),
+                         '{{number: 30}}°, {{number: 60}}°')
+        self.assertEqual(draft_mask('$3$ см, $4$ см', 'Найдите углы $A$ и $B$.'),
+                         '{{number: 3}} см, {{number: 4}} см')
         self.assertEqual(draft_mask(r'$100^{\circ}$, $260^{\circ}$', 'Найдите дуги $AB$ и $BC$.'),
                          '$AB =$ {{number: 100}}°; $BC =$ {{number: 260}}°')
         self.assertEqual(_named_objects('Найдите дуги $AB$ и $BC$.', with_measure=True),
@@ -54,10 +57,23 @@ class NamedQuantityDraftTests(SimpleTestCase):
                                     'Площади относятся как 2:3. В каком отношении точка делит отрезок, считая от A?'),
                          '{{ratio: 2 : 3}}')
 
-    def test_name_count_mismatch_abstains(self):
+    def test_name_mismatch_falls_back_to_other_branches(self):
+        # Имена не подходят по числу — обычные ветки, а не отказ:
+        # «углы A и B» — перечисление, значит поля по порядку.
         self.assertEqual(draft_mask(
             r'$60^{\circ}$, $120^{\circ}$, $60^{\circ}$, $120^{\circ}$',
             'Найдите углы $A$ и $B$ параллелограмма.'), '')
+        self.assertEqual(draft_mask(
+            r'$60^{\circ}$, $120^{\circ}$, $70^{\circ}$, $110^{\circ}$',
+            'Найдите углы $A$ и $B$ параллелограмма.'),
+            '{{number: 60}}°, {{number: 120}}°, {{number: 70}}°, {{number: 110}}°')
+        # Имя из чужой именной группы не считается именем искомых углов.
+        self.assertEqual(draft_mask(r'$30^{\circ}$, $50^{\circ}$',
+                                    'Найдите углы, на которые высота $BH$ делит угол $B$.'),
+                         '{{expressions: 30; 50}}°')
+        self.assertEqual(_named_objects('Найдите углы, на которые высота $BH$ делит угол $B$.'), [])
+        self.assertEqual(draft_mask('$10$ см, $6$ см', 'Найдите диагональ $AC$ и сторону $AB$.'),
+                         '{{number: 10}} см, {{number: 6}} см')
 
     def test_unnamed_homogeneous_quantities_keep_multiplicity_without_order(self):
         self.assertEqual(draft_mask(r'$60^{\circ}$, $120^{\circ}$',
@@ -88,8 +104,9 @@ class NamedQuantityDraftTests(SimpleTestCase):
             with self.subTest(condition=condition):
                 self.assertEqual(draft_mask('$24$, $20$', condition),
                                  '{{number: 24}}, {{number: 20}}')
-        # Одно имя на два значения — черновик отказывается, а не угадывает.
-        self.assertEqual(draft_mask('$24$, $20$', 'Найдите длину стороны AB и высоту.'), '')
+        # Одно имя на два значения — имена не подходят, поля по порядку.
+        self.assertEqual(draft_mask('$24$, $20$', 'Найдите длину стороны AB и высоту.'),
+                         '{{number: 24}}, {{number: 20}}')
         # Единственное число величины — не однородный набор.
         self.assertEqual(draft_mask('$24$, $20$', 'Найдите площадь.'), '{{number: 24}}, {{number: 20}}')
         # Родительный множественный и вопрос без слова-величины — тоже набор.
