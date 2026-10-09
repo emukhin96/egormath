@@ -34,7 +34,8 @@ from pathlib import Path
 from typing import Sequence
 
 from .merzlyak_parser import (
-    _finish_fields, _flatten_lists, _heal_ocr_words, _tabular_to_array)
+    LEFTOVER_LABEL_RE, _flatten_lists, _heal_ocr_math, _heal_ocr_words,
+    _tabular_to_array, normalize_degrees, wrap_answer_numbers)
 from .textbook_parser import (
     Marker, TaskDraft, _open_paren_depth, blocks, clean, finalize_draft_images,
     inline_numeric_markers, merge_solutions, numeric_subitem_labels,
@@ -280,6 +281,8 @@ def _heal_item_labels(text: str) -> str:
     """Типовые OCR-поломки цифровых меток пунктов."""
     # «з)» — тройка, распознанная как буква.
     text = re.sub(r"(?m)(^[ \t]*|;\s*)з\)", r"\g<1>3)", text)
+    # «2 )» — пробел внутри метки.
+    text = re.sub(r"(?m)(^[ \t]*|;\s*)([1-9])[ \t]+\)(?=\s)", r"\1\2)", text)
     # «$2) \forall x…$» — метка ушла внутрь формулы в начале строки.
     text = re.sub(r"(?m)^([ \t]*)\$(\d{1,2})\)\s*", r"\1\2) $", text)
     text = _LEFT_DOT_LABEL_RE.sub(
@@ -334,6 +337,7 @@ def prepare_shabunin_text(text: str) -> str:
     # Диакритика OCR на латинице и знаках («a ̈-1»).
     text = re.sub(r"(?<![А-Яа-яЁё])[\u0300-\u036f]", "", text)
     text = _join_hyphenation(text)
+    text = re.sub(r"(?<![а-яё])с\s+м(?![а-яё])", "см", text)
     text = _heal_ocr_words(text)
     text = _join_page_breaks(text)
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -679,7 +683,7 @@ _UNIT_WORDS = {
 }
 _PER_WORDS = {"ч": "ч", "u": "ч", "c": "с", "с": "с", "мин": "мин"}
 _UNIT_RE = re.compile(
-    r"(?<=[\d}])\s*(?P<unit>(?:\\kappa|к)\s*м|[сc]\s*м|м\s*м|м\s*и\s*н|м\s*л|к\s*г"
+    r"(?:(?<=[\d}])|(?<=\\pi))\s*(?P<unit>(?:\\kappa|к)\s*м|[сc]\s*м|м\s*м|м\s*и\s*н|м\s*л|к\s*г"
     r"|м|г|ч|с|л|т)(?![а-яё])"
     r"(?P<per>\s*/\s*(?:м\s*и\s*н|ч|u|c|с)(?![а-яё\w]))?"
     r"(?P<power>\s*\^\s*\{?\s*[23]\s*\}?)?"
@@ -770,6 +774,33 @@ def _normalize_task_units(task: TaskDraft) -> None:
             item.text_latex = "$" + item.text_latex.strip() + "$"
         for attr in ("text_latex", "author_answer_latex", "author_solution_latex"):
             setattr(item, attr, _finish_value(getattr(item, attr)))
+
+
+def _finish_fields(task: TaskDraft) -> None:
+    """Градусы и голые числа ответов, как у Мерзляка, но без его единиц:
+    правило «$H$» → «Н» (ньютоны) портит высоту конуса в главе XIV."""
+    def text_field(value: str) -> str:
+        return normalize_degrees(_heal_ocr_math(value))
+
+    def answer_field(value: str) -> str:
+        value = wrap_answer_numbers(text_field(value))
+        value = re.sub(r"(?<!\\right)\.\s*\$$", "$", value)
+        return re.sub(r"(?<=\S)[ \t]+\$(?=[\s;,.)]|$)", "$", value)
+
+    task.text_latex = text_field(task.text_latex)
+    task.author_solution_latex = text_field(task.author_solution_latex)
+    task.author_answer_latex = answer_field(task.author_answer_latex)
+    for item in task.subitems:
+        item.text_latex = text_field(item.text_latex)
+        item.author_solution_latex = text_field(item.author_solution_latex)
+        item.author_answer_latex = answer_field(item.author_answer_latex)
+    answers = [task.author_answer_latex] + [
+        item.author_answer_latex for item in task.subitems]
+    if any(LEFTOVER_LABEL_RE.search(value or "") for value in answers):
+        task.warnings.append(
+            "В ответе остались метки других пунктов: OCR перемешал "
+            "колонки ответов, сверить с книгой")
+        task.confidence = max(0.0, task.confidence - 0.3)
 
 
 # --------------------------------------------------------------------------
