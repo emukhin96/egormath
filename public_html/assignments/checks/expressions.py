@@ -133,6 +133,11 @@ def prepare(text):
 
     for rx in _IMPLICIT_MUL_RES:
         text = rx.sub(product, text)
+    # Lark принимает ab, но после явного умножения требует один множитель:
+    # \sqrt{2}ab превращается в \sqrt{2}\cdot a\cdot b. Степень остаётся
+    # у последней буквы; команды и аргументы функций здесь не разделяем.
+    text = re.sub(r'(\\cdot\b|\\times\b|\*)\s*([A-Za-z]{2,})',
+                  lambda m: m[1] + ' ' + r'\cdot '.join(m[2]), text)
     return text.strip()
 
 

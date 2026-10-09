@@ -133,6 +133,7 @@ class Slot:
     allow_quotient: bool = False
     reference_unavailable: bool = False
     tolerance_reference: str = ''
+    degree_unit: bool = False
 
     @property
     def name(self):
@@ -388,6 +389,54 @@ _PARSERS = {
 }
 
 
+# Единица относится только к непосредственно предшествующему полю.
+_DEGREE_UNIT = r'(?:°|\^\s*(?:\{\s*\\circ\s*\}|\\circ\b)|\\degree\b)'
+_DEGREE_SUFFIX_RE = re.compile(r'^\s*(?:\$|\\\(|\\\[)?\s*' + _DEGREE_UNIT)
+_DEGREE_END_RE = re.compile(_DEGREE_UNIT + r'\s*$')
+# Единица длины, площади или объёма не является единицей угла.
+_NONANGULAR_UNIT_END_RE = re.compile(
+    r'(?:\\(?:text|mathrm)\s*\{\s*(?:мм|см|дм|км|м)\s*\}|(?:мм|см|дм|км|м))'
+    r'(?:\^\s*(?:\{\s*[23]\s*\}|[23])|[²³])?\s*$', re.I)
+
+
+def _wrong_angle_unit(slot, value):
+    """Явная единица не того вида после числовой величины угла."""
+    from ..check_answer import MAX_EXPR_LEN
+    from . import numeric
+    if (not slot.degree_unit or slot.kind not in (NUMBER, EXPRESSIONS)
+            or len(value) > MAX_EXPR_LEN):
+        return False
+    parts = normalize(value).split(';') if slot.kind == EXPRESSIONS else [normalize(value)]
+    for part in parts:
+        match = _NONANGULAR_UNIT_END_RE.search(part)
+        # Не делаем вывод о размерности выражений с переменными или
+        # сокращающимися единицами: здесь распознаётся только числовая часть.
+        if match and numeric.prepare(part[:match.start()].strip()) is not None:
+            return True
+    return False
+
+
+
+def _degree_input(slot, value):
+    """Повторённые градусы в числовом поле угла, без смены смысла формул."""
+    from ..check_answer import MAX_EXPR_LEN
+    from . import numeric
+    if not slot.degree_unit or slot.kind not in (NUMBER, EXPRESSIONS):
+        return value
+    if len(value) > MAX_EXPR_LEN:
+        return value
+    # Пробельные команды LaTeX не должны стать разделителями списка.
+    parts = normalize(value).split(';') if slot.kind == EXPRESSIONS else [normalize(value)]
+    out = []
+    for part in parts:
+        match = _DEGREE_END_RE.search(part)
+        bare = part[:match.start()].strip() if match else part
+        # sin 30° — градусы аргумента функции, а не единица всего ответа.
+        # Чистую арифметику проверим дальше вместе с исходными делениями.
+        out.append(bare if match and numeric.prepare(bare) is not None else part)
+    return ';'.join(out)
+
+
 def parse_mask(text, *, validate_references=False):
     """Текст маски → ``MaskSpec`` (фрагменты текста и слоты, ошибки).
 
@@ -418,7 +467,8 @@ def parse_mask(text, *, validate_references=False):
         index += 1
         kind = CHOICE if name in PRESETS else name
         slot = Slot(index=index, kind=kind, raw=payload,
-                    preset=name if name in PRESETS else None)
+                    preset=name if name in PRESETS else None,
+                    degree_unit=bool(_DEGREE_SUFFIX_RE.match(text[end + 2:])))
         if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
             _parse_formula(slot, payload, validate=validate_references)
         elif kind in (SET, PAIR) and validate_references:
@@ -484,7 +534,7 @@ def _number_needs_worker(slot, value):
     from ..check_answer import MAX_EXPR_LEN, parse_number
     if not (value or '').strip() or len(value) > MAX_EXPR_LEN:
         return False
-    literals = _number_literals(value, slot.reference)
+    literals = _number_literals(_degree_input(slot, value), slot.reference)
     if slot.tolerance not in (None, 0):
         literals += (parse_number(normalize(slot.tolerance_reference)),)
     return any(number is None for number in literals)
@@ -495,6 +545,9 @@ def check_slot(slot, value):
     value = (value or '').strip()
     if not value or not slot.is_valid:
         return ''
+    if _wrong_angle_unit(slot, value):
+        return WRONG
+    value = _degree_input(slot, value)
     kind = slot.kind
     if kind == DIGITS:
         return OK if formats.digits(value) and value == slot.data else WRONG
@@ -534,7 +587,9 @@ def check_slot(slot, value):
     if kind == CHOICE:
         if _compact(value).replace('ё', 'е') == _compact(slot.correct).replace('ё', 'е'):
             return OK
-        return WRONG if value in slot.options else UNKNOWN
+        # Непустое значение вне конечного списка вариантов недопустимо.
+        # Его нельзя считать неопределённым математическим вычислением.
+        return WRONG
     if kind == NUMBER:
         if slot.tolerance is None or slot.tolerance == 0:
             from ..check_answer import MAX_EXPR_LEN
@@ -586,7 +641,8 @@ def check_mask(spec, values, known=None):
         if known and slot.name in known:
             results[slot.name] = known[slot.name]
             continue
-        if unavailable is not None and (
+        if unavailable is not None and not _wrong_angle_unit(
+                slot, (values.get(slot.name, '') or '').strip()) and (
                 slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION, RATIO)
                 or slot.kind == NUMBER and _number_needs_worker(slot, values.get(slot.name, ''))
                 or slot.kind in (SET, PAIR) and formats.collection_needs_worker(

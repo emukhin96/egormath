@@ -498,8 +498,8 @@ def _assignment_rows(assignment, with_review=False, item_ids=None):
             parts = {p.subitem_id: p for p in submission.parts.all()}
         subitems = item.selected_subitems()
         task = item.task
-        # Краткий ответ — только по рабочей маске; иначе ученику доступно
-        # лишь фото решения. Маска подпункта — своя у каждого подпункта
+        # Краткий ответ — по рабочей маске; полное решение сдаётся фото,
+        # на доске или текстом, когда оба этих способа выключены.
         short_answer = task.short_answer_available(subitems)
         subrows = []
         for s in subitems:
@@ -548,13 +548,14 @@ def _assignment_rows(assignment, with_review=False, item_ids=None):
         # (верно только один из нескольких подпунктов) флажок не ставит.
         if subrows:
             auto_ok = all(
-                sr['part'] is not None
+                sr['spec'] is not None
+                and sr['part'] is not None
                 and sr['part'].display_answer
                 and sr['part'].auto_check == Submission.CHECK_OK
                 for sr in subrows)
         else:
             auto_ok = bool(
-                submission and submission.display_answer
+                spec is not None and submission and submission.display_answer
                 and submission.auto_check == Submission.CHECK_OK)
         rows.append({
             'item': item,
@@ -664,15 +665,21 @@ def _get_or_create_submission(assignment, task_id):
     return submission
 
 
-def _answer_payload(owner, post, prefix):
+def _answer_payload(owner, post, prefix, full_answer_only=False):
     """Что сохранить для задачи/подпункта ``owner``: слоты маски
-    (``answer_json``) при рабочей маске. Без маски новые ответы не принимаются.
+    (``answer_json``) при рабочей маске или текст полного решения учителю.
     Пустой словарь означает, что сохранять нечего."""
-    spec = owner.mask_spec
+    spec = None if full_answer_only else owner.mask_spec
     if spec is not None and spec.is_valid:
         from .checks import collect_values
         values = collect_values(post, prefix, spec)
         return ({'answer_json': values}, spec) if values else ({}, spec)
+    field = f'{prefix}_solution'
+    if field in post:
+        # Отдельное имя не возвращает старый свободный ввод коротких ответов.
+        # При переходе к полному решению прежние поля остаются в истории.
+        return ({'answer_text': post[field].strip(), 'answer_json': {},
+                 'answer_number': '', 'interval_low': '', 'interval_high': ''}, None)
     return {}, None
 
 
@@ -700,14 +707,33 @@ def _persist_answers(assignment, post):
         snapshot_before = answer_snapshot(obj)
         before = obj.display_answer
         previous = dict(obj.answer_json or {})
+        if spec is None and fields['answer_text'] == obj.legacy_answer:
+            # Общая форма присылает также неизменённый старый ответ.
+            # Сохраняем его структуру, вердикт и историю до реальной правки.
+            return
+        if (spec is None and not fields['answer_text']
+                and obj.has_mask_values and not obj.legacy_answer):
+            # Пустое новое поле полного решения в общей форме не должно
+            # стирать исторический короткий ответ до ввода доказательства.
+            return
         for name, value in fields.items():
-            if name == 'answer_json':
+            if name == 'answer_json' and spec is not None:
                 merged = dict(obj.answer_json or {})
                 merged.update(value)
                 value = merged
             setattr(obj, name, value)
         current = obj.answer_json or {}
         changed = obj.display_answer != before
+        if spec is None:
+            # Текст доказательства не сравнивается с эталоном и не получает
+            # машинный вердикт. Флаг отличает новый ввод от старых ответов.
+            obj.auto_check, obj.checked_at = '', None
+            obj.check_json = {'_teacher_solution': True}
+            obj.check_revealed = False
+            obj.save(update_fields=[*fields, 'auto_check', 'check_json', 'checked_at',
+                                    'check_revealed', 'updated_at'])
+            record_revision(obj, snapshot_before)
+            return
         # Автосохранение шлёт всю форму: слоты с прежним значением и свежей
         # сверкой не пересчитываем — формульный слот стоит дочернего процесса,
         # а всё это идёт под блокировкой задания.
@@ -749,13 +775,11 @@ def _persist_answers(assignment, post):
         if item.task_id is None or item.pk in hidden:
             continue
         task = item.task
-        if task.full_answer_only:
-            continue
         prefix = f'task{task.pk}'
         subitems = item.selected_subitems()
         if subitems:
             part_fields = {
-                s: _answer_payload(s, post, f'{prefix}_sub{s.pk}')
+                s: _answer_payload(s, post, f'{prefix}_sub{s.pk}', task.full_answer_only)
                 for s in subitems
             }
             part_fields = {s: fs for s, fs in part_fields.items() if fs[0]}
@@ -774,7 +798,7 @@ def _persist_answers(assignment, post):
                     submission=submission, subitem=subitem)
                 _apply(part, task, fields, subitem.effective_answer_latex, spec)
             continue
-        fields, spec = _answer_payload(task, post, prefix)
+        fields, spec = _answer_payload(task, post, prefix, task.full_answer_only)
         if not fields:
             continue
         if _has_value(fields) or task.pk in existing:
@@ -986,9 +1010,13 @@ def check_task(request, pk, task_id):
                       .prefetch_related('parts').get(pk=submission.pk))
 
         unavailable = []
+        teacher_solutions = []
 
         def _reveal(obj, prefix):
             """Раскрыть результат: итог по полю и по слотам маски."""
+            if (obj.check_json or {}).get('_teacher_solution'):
+                teacher_solutions.append(prefix)
+                return
             if not obj.auto_check and '_unavailable' in (obj.check_json or {}):
                 # Сверка не состоялась (вычислитель временно недоступен):
                 # нечего раскрывать и не за что списывать попытку.
@@ -1025,6 +1053,8 @@ def check_task(request, pk, task_id):
             message = 'Проверено'
         elif unavailable:
             message = 'Проверка временно недоступна — попробуйте ещё раз через минуту'
+        elif teacher_solutions:
+            message = 'Развёрнутое решение проверит учитель'
         else:
             message = 'Сначала введите ответ'
 

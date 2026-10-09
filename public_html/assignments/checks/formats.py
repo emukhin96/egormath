@@ -16,6 +16,32 @@ def decimal(text):
     return Fraction(text.replace(',', '.'))
 
 
+_RATIO_OPERATOR_NAMES = r'(?:sin|cos|tan|tg|cot|ctg|sec|csc|asin|acos|atan)'
+_RATIO_TRIG = re.compile(
+    r'(?:\\operatorname\s*\{\s*'
+    rf'(?:{_RATIO_OPERATOR_NAMES}\s*|'
+    rf'\\mathrm\s*\{{\s*{_RATIO_OPERATOR_NAMES}\s*\}}\s*)\}}'
+    r'|\\(?:sin|cos|tan|tg|cot|ctg|sec|csc|arcsin|arccos|arctan)(?![A-Za-z])'
+    r'|(?<![A-Za-z\\])(?:sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan)\b)'
+    r'(?:\s*\^\s*(?:\{\s*\d+\s*\}|\d))?')
+
+
+def _ratio_part(text):
+    """Ограниченная арифметика быстро; числовая тригонометрия — в процессе."""
+    from . import numeric
+    prepared = numeric.prepare(text)
+    if prepared is not None:
+        return prepared
+    # Проверяем только лексику: сами функции, исходные знаменатели и
+    # вещественную область проверит ограниченный числовой вычислитель.
+    # Удаление имён здесь не подменяет выражение при вычислении.
+    skeleton, count = _RATIO_TRIG.subn('', text)
+    skeleton = skeleton.replace(r'\circ', '').replace(r'\degree', '').replace('°', '')
+    if not count or numeric.prepare(skeleton) is None:
+        return None
+    return text
+
+
 def ratio(text, *, allow_quotient=False):
     """Числовые выражения в обеих частях; порядок проверяет слот."""
     if allow_quotient and ':' not in text:
@@ -33,10 +59,12 @@ def proportion(text):
     if len(parts) != 2:
         return None
     # Проверяем синтаксис обеих частей до возможного точного fallback.
-    parts = [numeric.prepare(part) for part in parts]
-    if any(part is None for part in parts):
+    prepared = [numeric.prepare(part) for part in parts]
+    if any(part is None for part in prepared):
+        if all(_ratio_part(part) is not None for part in parts):
+            raise numeric.Uncertain
         return None
-    a, b = (numeric.parse(part) for part in parts)
+    a, b = (numeric.parse(part) for part in prepared)
     if a is None or b is None:
         return None
     if b == 0:
@@ -59,15 +87,17 @@ def check_ratio_exact(value, reference, *, allow_reverse=False, allow_quotient=F
     parts, expected = value.split(':'), reference.split(':')
     if len(parts) != 2 or len(expected) != 2:
         return WRONG
-    parts = [numeric.prepare(part) for part in parts]
-    expected = [numeric.prepare(part) for part in expected]
+    parts = [_ratio_part(part) for part in parts]
+    expected = [_ratio_part(part) for part in expected]
     if any(part is None for part in (*parts, *expected)):
         return WRONG
     def quotient(pair):
         return '(' + pair[0] + ')/(' + pair[1] + ')'
     try:
-        parts = [numeric.worker_text(part) for part in parts]
-        expected = [numeric.worker_text(part) for part in expected]
+        parts = [numeric.worker_text(part) if numeric.prepare(part) is not None else part
+                 for part in parts]
+        expected = [numeric.worker_text(part) if numeric.prepare(part) is not None else part
+                    for part in expected]
         spec = formulas.FormulaSpec(quotient(expected), False, numeric=True)
         direct = formulas.check(quotient(parts), spec)
         if direct == OK or not allow_reverse:

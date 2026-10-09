@@ -58,7 +58,7 @@
     </div>
     {% endif %}
 
-    {# Краткий ответ — по маске; без маски ученик шлёт фото, а если фото выключены — старое текстовое поле. #}
+    {# Краткий ответ — по маске; полное решение — фото, доска или текст учителю. #}
     {% if row.subrows %}
     <ol class="subitems">
       {% for sr in row.subrows %}
@@ -82,6 +82,10 @@
           {% endif %}
         </div>
         {% endif %}
+        {% elif not canvas_enabled and not assignment.allow_photos %}
+        <div class="subitem-answer">
+          {% include 'assignments/_full_solution_fields.html' with prefix=sr.prefix obj=sr.part %}
+        </div>
         {% elif sr.part.legacy_answer or not editable %}
         <div class="subitem-answer">
           {% include 'assignments/_answer_fields.html' with prefix=sr.prefix obj=sr.part editable=False %}
@@ -103,6 +107,8 @@
       <label>Ответ</label>
       {% include 'assignments/_mask.html' with fragments=row.fragments editable=editable show_checks=show_checks %}
       {% endif %}
+      {% elif not canvas_enabled and not assignment.allow_photos %}
+      {% include 'assignments/_full_solution_fields.html' with prefix=row.prefix obj=sub %}
       {% elif sub.legacy_answer or not editable %}
       <label>Ответ</label>
       {% include 'assignments/_answer_fields.html' with prefix=row.prefix obj=sub editable=False %}
