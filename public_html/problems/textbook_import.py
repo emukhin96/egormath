@@ -279,6 +279,7 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
 
     seen = set()
     drafts = []
+    topic_codes = []
     valid_statuses = dict(TextbookTaskDraft.STATUS_CHOICES)
     for position, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
@@ -351,6 +352,7 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
             tags=_string_list(row.get('tags'), 'tags'),
             status=status,
         ))
+        topic_codes.append(str(row.get('topic_code') or '').strip())
     # Символьный подбор по всей книге может превысить таймаут WSGI.
     # Проверяем бюджет перед каждой маской, остальные достроим при публикации.
     mask_deadline = monotonic() + MASK_DRAFT_BUDGET_SECONDS
@@ -363,6 +365,7 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
                 draft.warnings = _append_warning(draft.warnings, DEFERRED_MASK_WARNING)
         except ValueError as exc:
             raise TextbookImportError(str(exc)) from exc
+    _apply_bundle_topic_codes(drafts, topic_codes)
     apply_topic_suggestions(drafts)
     if batch.profile == 'ostromogilsky_ege':
         from .ege_metadata import apply_ege_topics
@@ -376,6 +379,26 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
         batch.refresh_from_db()
     sync_batch_draft_images(batch)
     return batch
+
+
+def _apply_bundle_topic_codes(drafts, codes):
+    """Основная тема из ``topic_code`` пакета: профиль знает её по книге.
+
+    Неизвестный код не прерывает заливку, а остаётся предупреждением —
+    тему тогда выбирает редактор.
+    """
+    wanted = {code for code in codes if code}
+    if not wanted:
+        return
+    topics = dict(Topic.objects.filter(code__in=wanted).values_list('code', 'pk'))
+    for draft, code in zip(drafts, codes):
+        if not code:
+            continue
+        if code in topics:
+            draft.topic_id = topics[code]
+        else:
+            draft.warnings = _append_warning(
+                draft.warnings, f'Тема с кодом {code} не найдена в рубрикаторе')
 
 
 def read_bundle(upload, max_bytes=50 * 1024 * 1024):

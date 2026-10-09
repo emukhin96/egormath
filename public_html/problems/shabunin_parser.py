@@ -135,6 +135,20 @@ def chapter_title(chapter: dict) -> str:
     return f"Глава {chapter['number']}. {chapter['title']}"
 
 
+def topic_code(chapter: dict, number: int, text: str) -> str:
+    """Тема рубрикатора по параграфу; смешанный раздел — по виду задачи."""
+    code = chapter.get("topic", "")
+    hard = chapter.get("hard_first")
+    if not (hard and number >= hard):
+        for item in chapter["paragraphs"]:
+            if item["first"] <= number:
+                code = item.get("topic") or code
+    if isinstance(code, dict):
+        kind = "inequality" if re.search(r"(?i)неравенств", text) else "equation"
+        code = code[kind]
+    return code
+
+
 def source_path(chapter: dict, number: int) -> list[str]:
     """Глава → параграф → уровень по номеру задачи в главе."""
     path = [chapter_title(chapter)]
@@ -197,6 +211,12 @@ def _renumber_enumerate(text: str) -> str:
     marker_re = re.compile(
         r"(?:(?m:^)[ \t]*|(?<![\w.]))" + ROMAN + r"\s?\.\s?\d{1,3}\.(?=\s|\d)")
     label_re = re.compile(r"(?:^|[\s;$])(\d{1,2})\)(?=[\s$])")
+    math_re = re.compile(r"\$\$.*?\$\$|\$[^$]*\$", re.S)
+
+    def labels_in(segment: str) -> list[int]:
+        """Метки «k)» вне формул: «(-2 ; 2)» внутри $…$ — не метка."""
+        return [int(found) for found in label_re.findall(
+            math_re.sub(" $ ", segment))]
     for match in token_re.finditer(text):
         segment = text[pos:match.start()]
         out.append(segment)
@@ -206,7 +226,7 @@ def _renumber_enumerate(text: str) -> str:
             if markers:
                 segment = segment[markers[-1].end():]
                 counters[-1] = 0
-            labels = [int(found) for found in label_re.findall(segment)]
+            labels = labels_in(segment)
             if labels:
                 counters[-1] = max(labels)
         if match.group("counter"):
@@ -216,7 +236,12 @@ def _renumber_enumerate(text: str) -> str:
                 counters[-1] = int(match.group("counter"))
             token = ""
         elif token == r"\begin{enumerate}":
-            counters.append(0)
+            # «IV.5. 1) … \\begin{enumerate} \\item …» — список продолжает
+            # пункты, начатые в строке номера задачи.
+            before = text[max(0, match.start() - 600):match.start()]
+            markers = list(marker_re.finditer(before))
+            labels = labels_in(before[markers[-1].end():]) if markers else []
+            counters.append(max(labels, default=0))
         elif token == r"\end{enumerate}":
             if counters:
                 counters.pop()
@@ -274,6 +299,13 @@ def prepare_shabunin_text(text: str) -> str:
     text = _join_split_brackets(text)
     text = _unwrap_range_sections(text)
     text = RANGE_BREAK_RE.sub(r"\1", text)
+    # «xiii.45.» / «XXIII.14» отдельной строкой — номер задачи строчными
+    # буквами или без точки.
+    text = re.sub(r"(?m)^[ \t]*([ivx]{1,6}|" + ROMAN + r")\s?\.\s?(\d{1,3})\.?[ \t]*$",
+                  lambda m: m.group(1).upper().translate(_ROMAN_FIX) + "."
+                  + m.group(2) + ".", text)
+    # «XIII.44. I) …» — первая метка пункта распознана как римская I.
+    text = re.sub(r"(?<=\d\. )I\)(?=\s)", "1)", text)
     text = ITEM_MARKER_RE.sub(
         lambda m: "\n" + m.group("roman").translate(_ROMAN_FIX) + "."
         + m.group("number") + ". ", text)
@@ -686,6 +718,8 @@ def _finish_value(value: str) -> str:
     # «$\\taskpic{2}$» — рисунок не формула (иначе после финальной обработки
     # рисунков остаётся висячий «$»).
     value = re.sub(r"\$\s*(\\taskpic\{[^{}]+\})\s*\$", r"\1", value or "")
+    # «1)\\ -8» — перенос строки сразу после метки пункта.
+    value = re.sub(r"^\s*(?:\\\\\s*)+", "", value)
     return normalize_cyrillic_units(value)
 
 
@@ -743,7 +777,14 @@ def parse_shabunin(text: str) -> tuple[list[TaskDraft], dict]:
                 body = _with_stem(_clean_task_body(raw_body, titles),
                                   stems.get(number, ""))
                 task = task_from_block(marker, body, source_path(chapter, number))
-                task.collection_key = "shabunin/" + "/".join(task.source_path)
+                # Подборка — глава целиком, параграфы и уровни — рубрики
+                # внутри неё (как у Мерзляка). Тема источника — параграф.
+                task.collection_title = task.source_path[0]
+                task.topic_code = topic_code(chapter, number, " ".join(
+                    [task.text_latex] + [item.text_latex for item in task.subitems]))
+                task.topic_original = (task.source_path[1]
+                                       if len(task.source_path) > 1
+                                       else task.source_path[0])
                 if number in stems:
                     diagnostics["tasks_with_range_stem"] += 1
                 chapter_tasks.append(task)

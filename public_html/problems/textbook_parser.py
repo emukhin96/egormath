@@ -197,6 +197,8 @@ class TaskDraft:
     exam_item_codes: list[str] = field(default_factory=list)
     grade_band_codes: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    # Код темы рубрикатора, если профиль знает её по структуре книги.
+    topic_code: str = ""
     confidence: float = 1.0
     review_status: str = "needs_review"
     warnings: list[str] = field(default_factory=list)
