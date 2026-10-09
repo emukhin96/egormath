@@ -46,6 +46,12 @@ class NamedQuantityDraftTests(SimpleTestCase):
                          r'{{number: \frac{3}{2}}} см, {{number: \frac{25}{8}}} см')
         self.assertEqual(draft_mask('$4$ см, $9$ см', 'Найдите катеты, если гипотенуза равна 5 и один катет больше.'),
                          '{{expressions: 4; 9}} см')
+        for condition in ('Найдите периметр и площадь прямоугольника.',
+                          'Найдите площадь треугольника ABC и его периметр.',
+                          'Найдите объём и площадь поверхности куба.'):
+            with self.subTest(condition=condition):
+                self.assertEqual(draft_mask('$24$, $20$', condition),
+                                 '{{number: 24}}, {{number: 20}}')
         # Повтор без геометрического контекста по-прежнему не угадывается.
         self.assertEqual(draft_mask('$3$, $3$', 'Найдите значения.'), '')
 
