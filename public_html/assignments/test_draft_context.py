@@ -92,6 +92,15 @@ class NamedQuantityDraftTests(SimpleTestCase):
         self.assertEqual(draft_mask('$24$, $20$', 'Найдите длину стороны AB и высоту.'), '')
         # Единственное число величины — не однородный набор.
         self.assertEqual(draft_mask('$24$, $20$', 'Найдите площадь.'), '{{number: 24}}, {{number: 20}}')
+        # Родительный множественный и вопрос без слова-величины — тоже набор.
+        for condition in ('Найдите величины углов треугольника.',
+                          'Найдите градусные меры углов параллелограмма.',
+                          'Углы треугольника относятся как 2:3:4. Найдите их.'):
+            with self.subTest(condition=condition):
+                self.assertEqual(draft_mask(r'$30^{\circ}$, $60^{\circ}$, $90^{\circ}$', condition),
+                                 '{{expressions: 30; 60; 90}}°')
+                self.assertEqual(draft_mask(r'$56^{\circ}$, $56^{\circ}$, $68^{\circ}$', condition),
+                                 '{{expressions: 56; 56; 68}}°')
         # Повтор без геометрического контекста по-прежнему не угадывается.
         self.assertEqual(draft_mask('$3$, $3$', 'Найдите значения.'), '')
 
