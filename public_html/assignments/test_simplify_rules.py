@@ -90,6 +90,19 @@ class SimplifyExpansionTests(SimpleTestCase):
         self.assertEqual(check('x^2-1', '(x-1)(x+1)'), WRONG)
         self.assertEqual(check('\\sqrt{a-3}+1', '\\sqrt{a-3}+2-1'), WRONG)
 
+    def test_irrational_factors_inside_fractions_count(self):
+        for reference, value in (
+                ('\\sqrt{3}', '\\sqrt{6}\\cdot\\frac{1}{\\sqrt{2}}'),
+                ('\\sqrt{3}', '\\frac{\\sqrt{6}}{1}\\cdot\\frac{1}{\\sqrt{2}}'),
+                ('\\frac{2\\sqrt3}{3}', '2\\cdot\\frac{\\sqrt3}{3}'),
+                ('\\frac{2\\sqrt3}{3}', '\\frac{\\sqrt{3}}{3}\\cdot 2'),
+                ('\\frac{\\sqrt2}{2}', '\\frac{1}{2}\\sqrt{2}')):
+            with self.subTest(reference=reference, value=value):
+                self.assertEqual(check(reference, value), WRONG)
+        self.assertEqual(check('\\frac{2\\sqrt3}{3}', '\\frac{2\\sqrt3}{3}'), OK)
+        self.assertEqual(check('\\frac{2\\sqrt3}{3}', '\\frac{2}{\\sqrt3}'), OK)
+        self.assertEqual(check('\\sqrt{3}', '\\frac{\\sqrt{6}}{\\sqrt{2}}'), OK)
+
     def test_factored_denominator_is_accepted(self):
         self.assertEqual(check('\\frac{2}{x^2-1}', '\\frac{2}{(x-1)(x+1)}'), OK)
         self.assertEqual(check('\\frac{2}{(x-1)(x+1)}', '\\frac{2}{x^2-1}'), OK)

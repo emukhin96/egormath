@@ -707,9 +707,16 @@ def _numeric_node_reducible(node):
         # с суммой среди числовых множителей проверяем по сырому дереву.
         if any(_is_bracketed_sum(f) for f in factors):
             return True
-        radicals = [f for f in factors if _is_tree(f)
-                    and _unwrap(f).data in ('square_root', 'superscript')]
-        return len(radicals) > 1
+        # Множитель не внесён в дробь: 2\cdot\frac{\sqrt3}{3} вместо \frac{2\sqrt3}{3}.
+        if len(factors) > 1 and any(
+                _is_tree(f) and _unwrap(f).data in _QUOTIENT_NODES for f in factors):
+            return True
+        # Два иррациональных множителя не перемножены: \sqrt2\sqrt3,
+        # \sqrt6\cdot\frac{1}{\sqrt2} — считаем по значениям, а не по виду узла.
+        values = [_operand_value(_unwrap(f)) for f in factors]
+        irrational = [v for v in values if v is not None
+                      and hasattr(v, 'is_Rational') and not v.is_Rational]
+        return len(irrational) > 1
     if node.data == 'superscript':
         operands = _operands(node)
         if len(operands) != 2:
