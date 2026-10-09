@@ -100,8 +100,10 @@ def _for_task_opt(text):
 
     Аргумент не \\long: пустая строка (\\par) его обрывает. \\mbox{}\\\\
     даёт перенос и после display-формулы (иначе «no line here to end»).
+    Явный \\par в тексте обрывает аргумент так же, как пустая строка.
     """
-    return re.sub(r'\n\s*\n+', r' \\mbox{}\\\\ ', text.strip())
+    text = re.sub(r'\s*\\par(?![A-Za-z@])\s*', '\n\n', text).strip()
+    return re.sub(r'\n\s*\n+', r' \\mbox{}\\\\ ', text)
 
 
 def _join_labeled(parts, wrapper='stack'):
