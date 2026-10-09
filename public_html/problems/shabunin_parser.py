@@ -735,6 +735,9 @@ def _finish_value(value: str) -> str:
     value = re.sub(r"\$\s*(\\taskpic\{[^{}]+\})\s*\$", r"\1", value or "")
     # «$… . \\quad$» — хвост разделителя OCR в конце формулы.
     value = re.sub(r"\s*\.?\s*(?:\\quad\s*)+\$(?=\s*[.;,]?\s*$)", "$", value)
+    # «$-1$- наим.», «$1+2\\sqrt{3}-$ наиб.» — тире OCR перед пояснением.
+    value = re.sub(r"\s*-\s*\$\s*(?=наи[мб])", "$ — ", value)
+    value = re.sub(r"\$\s*-\s*(?=наи[мб])", "$ — ", value)
     # «1)\\ -8» — перенос строки сразу после метки пункта.
     value = re.sub(r"^\s*(?:\\\\\s*)+", "", value)
     return normalize_cyrillic_units(value)
