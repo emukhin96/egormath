@@ -192,7 +192,8 @@ def _renumber_enumerate(text: str) -> str:
     counters: list[int] = []
     pos = 0
     token_re = re.compile(
-        r"\\begin\{enumerate\}|\\end\{enumerate\}|\\item(?!\[)(?![a-zA-Z])")
+        r"\\begin\{enumerate\}|\\end\{enumerate\}|\\item(?!\[)(?![a-zA-Z])"
+        r"|\\setcounter\{enumi+\}\{(?P<counter>\d+)\}")
     marker_re = re.compile(
         r"(?:(?m:^)[ \t]*|(?<![\w.]))" + ROMAN + r"\s?\.\s?\d{1,3}\.(?=\s|\d)")
     label_re = re.compile(r"(?:^|[\s;$])(\d{1,2})\)(?=[\s$])")
@@ -208,11 +209,20 @@ def _renumber_enumerate(text: str) -> str:
             labels = [int(found) for found in label_re.findall(segment)]
             if labels:
                 counters[-1] = max(labels)
-        if token == r"\begin{enumerate}":
+        if match.group("counter"):
+            # «\\setcounter{enumi}{1}» — OCR продолжает нумерацию после
+            # разрыва списка рисунками или страницей.
+            if counters:
+                counters[-1] = int(match.group("counter"))
+            token = ""
+        elif token == r"\begin{enumerate}":
             counters.append(0)
         elif token == r"\end{enumerate}":
             if counters:
                 counters.pop()
+        elif re.match(r"\s*" + ROMAN + r"\s?\.\s?\d{1,3}\.", text[match.end():]):
+            # «\\item XXIII.19.» — OCR сделал пунктом сам номер задачи.
+            token = "\n"
         elif counters:
             counters[-1] += 1
             token = rf"\item[{counters[-1]})]"
@@ -240,12 +250,21 @@ def _heal_item_labels(text: str) -> str:
     text = _LEFT_DOT_LABEL_RE.sub(
         lambda m: "$" + m.group("body").rstrip() + "$; " + m.group("label") + ") $",
         text)
-    text = _DOLLAR_LABEL_RE.sub(lambda m: "$; " + m.group("label") + ")", text)
-    return re.sub(r"\$\s*\$", "", text)
+    return _DOLLAR_LABEL_RE.sub(lambda m: "$; " + m.group("label") + ")", text)
+
+
+def _join_split_brackets(text: str) -> str:
+    """«$\\left[a\\right.$, $\\left.b\\right]$» — Mathpix режет промежуток по запятой."""
+    text = re.sub(
+        r"\\right\.\s*\$\s*,\s*\$\s*(?:\\displaystyle\s*)?\\left\.\s*", ", ", text)
+    # Без «\\right.» слева «\\left.» нужен для пары с правой скобкой.
+    return re.sub(
+        r"\s*\$\s*,\s*\$\s*(?:\\displaystyle\s*)?(?=\\left\.)", ", ", text)
 
 
 def prepare_shabunin_text(text: str) -> str:
     text = text.replace("\r\n", "\n")
+    text = _join_split_brackets(text)
     text = _unwrap_range_sections(text)
     text = RANGE_BREAK_RE.sub(r"\1", text)
     text = ITEM_MARKER_RE.sub(
@@ -350,7 +369,27 @@ def extract_range_stems(text: str, roman: str) -> tuple[str, dict[int, str], lis
     return "".join(out), stems, found
 
 
-def _clean_task_body(body: str) -> str:
+def _heading_key(line: str) -> str:
+    line = re.sub(r"\\section\*?\{|\}|\\\\", " ", line)
+    line = re.sub(r"^\s*(?:\d{1,2}\s*[.)]\s*)?", "", line)
+    line = line.replace("ё", "е").replace("Ё", "Е")
+    return re.sub(r"[\s.]+", " ", line).strip().lower()
+
+
+def _strip_subsection_headings(body: str, titles: set[str]) -> str:
+    """Строки-подзаголовки параграфа («3. Пересечение и объединение …»).
+
+    OCR оформляет их то заголовком, то пунктом списка — тогда они
+    прилипают к последнему подпункту предыдущей задачи.
+    """
+    if not titles:
+        return body
+    return "\n".join(
+        line for line in body.split("\n") if _heading_key(line) not in titles)
+
+
+def _clean_task_body(body: str, titles: set[str] = frozenset()) -> str:
+    body = _strip_subsection_headings(body, titles)
     body = HEADING_LINE_RE.sub("", body)
     body = re.sub(r"\\section\*?\{[^{}]*\}", "", body)
     body = re.sub(r"(?m)^\s*\}\s*$", "", body)
@@ -481,9 +520,56 @@ def _wrap_answer_specials(text: str) -> str:
     return "".join(out)
 
 
+def _unbold_task_numbers(text: str, roman: str) -> str:
+    """«\\mathbf{X . 5 2 . ~ 1 ) ~}» внутри формулы → «X.52. 1)»."""
+    def fix(match: re.Match) -> str:
+        squeezed = re.sub(r"[\s~]+", "", match.group(1))
+        found = re.fullmatch(
+            r"(?P<roman>" + ROMAN + r")\.(?P<number>\d{1,3})\.?(?P<label>\d\))?",
+            squeezed)
+        if not found or found.group("roman").translate(_ROMAN_FIX) != roman:
+            return match.group(0)
+        label = found.group("label")
+        return f" {roman}.{found.group('number')}. " + (label + " " if label else "")
+
+    return re.sub(r"\\mathbf\{([^{}]*)\}", fix, text)
+
+
+_INTERVAL = (r"[\[(]\s*[-+]?\s*(?:\d+(?:,\d+)?|\\infty|∞)\s*;\s*[-+]?\s*"
+             r"(?:\d+(?:,\d+)?|\\infty|∞)\s*[\])]")
+_INTERVAL_CHAIN_RE = re.compile(
+    _INTERVAL + r"(?:\s*(?:U|∪|\\cup)\s*" + _INTERVAL + r")*")
+
+
+def _wrap_bare_intervals(text: str) -> str:
+    """«[-5; -3] U [3; 5]» вне формулы → ``$[-5; -3] \\cup [3; 5]$``."""
+    def wrap(chunk: str) -> str:
+        return _INTERVAL_CHAIN_RE.sub(
+            lambda m: "$" + re.sub(r"\s*(?:U|∪)\s*", r" \\cup ", m.group(0)) + "$",
+            chunk)
+
+    out = []
+    pos = 0
+    for match in _DOLLAR_SPAN_RE.finditer(text):
+        out.append(wrap(text[pos:match.start()]))
+        out.append(match.group(0))
+        pos = match.end()
+    out.append(wrap(text[pos:]))
+    return "".join(out)
+
+
 def prepare_answers(text: str, roman: str = "") -> str:
+    # «$E(f)=\\{0\\} ;$ 2) …» — разделитель пунктов ушёл внутрь формулы.
+    text = re.sub(r"\s*([;,])\s*\$(?=\s+[1-9]\d?\)\s)", r"$\1", text)
+    text = _wrap_bare_intervals(text)
     text = re.sub(r"(?<![A-Za-zА-Яа-яЁё])" + ROMAN + r"(?=\s*\.\s*\d)",
                   _normalize_roman, text)
+    if roman:
+        text = _unbold_task_numbers(text, roman)
+        # «XII.24, 1)», «XXIII.14 1)» — у номера пропала или исказилась точка.
+        text = re.sub(
+            r"(?<![\w.])(" + re.escape(roman) + r")\.(\d{1,3}),?\s+(?=1\)\s)",
+            r"\1.\2. ", text)
     text = re.sub(r"\\\\\[0pt\]", r"\\\\", text)
     text = _split_labels_in_math(text, roman)
     return _wrap_answer_specials(text)
@@ -500,6 +586,87 @@ def answer_markers(text: str, allowed: set[str]) -> list[Marker]:
         result.append(marker)
         previous = number
     return result
+
+
+# --------------------------------------------------------------------------
+# Единицы измерения
+# --------------------------------------------------------------------------
+
+# Единица внутри формулы после числа: «$20 к м$», «$50 м / м и н$»,
+# «$5 \\kappa м / u$» (OCR: u — «ч», латинская c — «с»), «$12 c м^{3}$».
+_UNIT_WORDS = {
+    "км": "км", "κм": "км", "см": "см", "cм": "см", "мм": "мм", "м": "м",
+    "кг": "кг", "г": "г", "мин": "мин", "ч": "ч", "с": "с", "мл": "мл",
+    "л": "л", "т": "т",
+}
+_PER_WORDS = {"ч": "ч", "u": "ч", "c": "с", "с": "с", "мин": "мин"}
+_UNIT_RE = re.compile(
+    r"(?<=[\d}])\s*(?P<unit>(?:\\kappa|к)\s*м|[сc]\s*м|м\s*м|м\s*и\s*н|м\s*л|к\s*г"
+    r"|м|г|ч|с|л|т)(?![а-яё])"
+    r"(?P<per>\s*/\s*(?:м\s*и\s*н|ч|u|c|с)(?![а-яё\w]))?"
+    r"(?P<power>\s*\^\s*\{?\s*[23]\s*\}?)?"
+    r"(?=\s*(?:[,.;:)]|\\quad|\\text|$))")
+
+
+def _unit_word(match: re.Match) -> str:
+    unit = re.sub(r"\s+|\\kappa", lambda m: "к" if "kappa" in m.group(0) else "",
+                  match.group("unit"))
+    unit = _UNIT_WORDS.get(unit, unit)
+    per = match.group("per")
+    if per:
+        unit += "/" + _PER_WORDS[re.sub(r"[\s/]+", "", per)]
+    power = match.group("power")
+    if power:
+        unit += "$^{" + re.search(r"[23]", power).group(0) + "}$"
+    return unit
+
+
+def normalize_cyrillic_units(value: str) -> str:
+    """Число — в формуле, единица — текстом (канон QA § 4.6)."""
+    if not value or "$" not in value:
+        return value
+
+    def math_piece(piece: str) -> str:
+        """«, y=4» → «, $y=4$»: пунктуация между формулами — текст."""
+        lead = re.match(r"\s*(?:(?:[,.;:]|\\quad)\s*)*", piece).group(0)
+        rest = piece[len(lead):].strip()
+        lead = re.sub(r"\\quad", " ", lead).strip()
+        return (lead + " " if lead else "") + ("$" + rest + "$" if rest else "")
+
+    def fix_span(match: re.Match) -> str:
+        inner = match.group(0)[1:-1]
+        out = []
+        pos = 0
+        for found in _UNIT_RE.finditer(inner):
+            out.append(math_piece(inner[pos:found.start()]))
+            out.append(" " + _unit_word(found))
+            pos = found.end()
+        if not out:
+            return match.group(0)
+        tail = math_piece(inner[pos:])
+        if tail:
+            out.append(("" if tail[0] in ",.;:" else " ") + tail)
+        return re.sub(r"\s+([,.;:])", r"\1", "".join(out)).strip()
+
+    return _DOLLAR_SPAN_RE.sub(fix_span, value)
+
+
+def _finish_value(value: str) -> str:
+    # «$\\taskpic{2}$» — рисунок не формула (иначе после финальной обработки
+    # рисунков остаётся висячий «$»).
+    value = re.sub(r"\$\s*(\\taskpic\{[^{}]+\})\s*\$", r"\1", value or "")
+    return normalize_cyrillic_units(value)
+
+
+def _normalize_task_units(task: TaskDraft) -> None:
+    for attr in ("text_latex", "author_answer_latex", "author_solution_latex"):
+        setattr(task, attr, _finish_value(getattr(task, attr)))
+    for item in task.subitems:
+        # Подпункт-число («1) -1; 2) $\\frac{1}{2}$») — тоже формула.
+        if re.fullmatch(r"-?\d+(?:,\d+)?", item.text_latex.strip()):
+            item.text_latex = "$" + item.text_latex.strip() + "$"
+        for attr in ("text_latex", "author_answer_latex", "author_solution_latex"):
+            setattr(item, attr, _finish_value(getattr(item, attr)))
 
 
 # --------------------------------------------------------------------------
@@ -538,10 +705,12 @@ def parse_shabunin(text: str) -> tuple[list[TaskDraft], dict]:
             task_text, stems, found = extract_range_stems(task_text, roman)
             diagnostics["range_stems"].extend(found)
             markers = task_markers(task_text, roman)
+            titles = {_heading_key(title) for title in chapter.get("subsections", [])}
             chapter_tasks = []
             for marker, raw_body in blocks(task_text, markers):
                 number = int(marker.external_id.split(".")[1])
-                body = _with_stem(_clean_task_body(raw_body), stems.get(number, ""))
+                body = _with_stem(_clean_task_body(raw_body, titles),
+                                  stems.get(number, ""))
                 task = task_from_block(marker, body, source_path(chapter, number))
                 task.collection_key = "shabunin/" + "/".join(task.source_path)
                 if number in stems:
@@ -572,6 +741,7 @@ def parse_shabunin(text: str) -> tuple[list[TaskDraft], dict]:
                 sorted(solution["tasks_without_solution_ids"],
                        key=lambda value: int(value.split(".")[1])))
             for task in chapter_tasks:
+                _normalize_task_units(task)
                 _finish_fields(task)
                 finalize_draft_images(task)
             tasks.extend(chapter_tasks)
