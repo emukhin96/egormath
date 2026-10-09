@@ -784,12 +784,12 @@ def _numeric_math_set(answer, condition=''):
         candidate = '; '.join(
             f'${label} =$ {{{{{NUMBER}: {value}}}}}{suffix}'
             for label, value in zip(named, values))
-    elif (re.search(_QUANTITY_WORDS, question, re.I) and not has_or
-          and not _QUANTITY_ENUM_RE.search(question)):
+    elif not has_or and _homogeneous_question(question):
         # Однородные величины без имён («углы параллелограмма», «катеты»):
         # порядок любой, но кратность важна — 56; 56; 68 не равно 56; 68.
         # Перечисление разных объектов («радиусы вписанной и описанной»,
-        # «скорости лодки и течения») задаёт порядок — поля по порядку ниже.
+        # «скорость лодки … и скорость течения», «меньший и больший катеты»)
+        # задаёт порядок — поля по порядку ниже.
         candidate = f'{{{{{EXPRESSIONS}: {"; ".join(values)}}}}}{suffix}'
     elif repeated:
         return ''
@@ -812,6 +812,30 @@ _QUANTITY_WORDS = r'\b' + _QUANTITY_STEMS + r'[а-яё]*\b'
 # после слова-величины перечисляет разные объекты по порядку.
 _QUANTITY_ENUM_RE = re.compile(
     r'\b' + _QUANTITY_STEMS + r'[а-яё]*(?:\s+[A-Za-zа-яё-]+){0,3}\s+и\s+[A-Za-zа-яё]', re.I)
+# Явное множественное число величины: только оно означает однородный набор.
+_QUANTITY_PLURAL_RE = re.compile(
+    r'\b(?:стороны|углы|отрезки|основания|диагонали|катеты|высоты|радиусы|медианы'
+    r'|биссектрисы|хорды|дуги|длины|скорости|периметры|площади|объ[её]мы)\b', re.I)
+# «Меньший и больший катеты», «острый и тупой углы»: порядок задан прилагательными.
+_ORDERING_ADJECTIVES_RE = re.compile(
+    r'\b(?:меньш|больш|остр|туп|перв|втор|одн|друг|наибольш|наименьш|внутренн|внешн'
+    r'|ближн|дальн|верхн|нижн|лев|прав)[а-яё]*\s+и\s+[а-яё]+\s+$', re.I)
+
+
+def _homogeneous_question(question):
+    """Вопрос про однородный набор величин без заданного порядка:
+    первое слово-величина после глагола вопроса стоит во множественном числе
+    («найдите углы параллелограмма»), и ни перед ним, ни после него нет
+    перечисления разных объектов. «Найдите скорость лодки … и скорость
+    течения», «радиус … и радиус …», «меньший и больший катеты» — порядок."""
+    verb = _QUESTION_RE.search(question)
+    start = verb.end() if verb else 0
+    first = re.compile(_QUANTITY_WORDS, re.I).search(question, start)
+    if not first or not _QUANTITY_PLURAL_RE.fullmatch(first.group(0)):
+        return False
+    if _ORDERING_ADJECTIVES_RE.search(question[start:first.start()]):
+        return False
+    return not _QUANTITY_ENUM_RE.search(question, first.start())
 _OBJECT_NAME = r'(?:\\angle\s*)?[A-Z](?:[A-Z]{1,2}|_\{?\d\}?)?'
 _NAMED_LIST_RE = re.compile(
     r'(?:угл|сторон|отрезк|основани|диагонал|катет|высот|радиус|медиан|биссектрис|хорд|дуг)'
@@ -864,7 +888,8 @@ def _named_objects(condition, *, with_measure=False):
         if not match:
             continue
         keyword = match.group(0).lower()
-        angle = keyword.startswith('угл')
+        # «Найдите \angle A и \angle B»: вид виден по самим именам.
+        angle = keyword.startswith('угл') or '\\angle' in match.group(1)
         measure = 'angular' if angle or keyword.startswith('дуг') else 'length'
         names = []
         for name in re.split(r'\s*(?:,|и)\s*', match.group(1)):
