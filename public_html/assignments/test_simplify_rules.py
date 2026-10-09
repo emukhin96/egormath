@@ -37,6 +37,16 @@ class SimplifyRadicalTests(SimpleTestCase):
             with self.subTest(reference=reference, value=value):
                 self.assertEqual(check(reference, value), WRONG)
 
+    def test_numeric_brackets_and_powers_must_be_expanded(self):
+        for reference, value in (
+                ('3+2\\sqrt{2}', '(1+\\sqrt{2})^2'), ('7+4\\sqrt3', '(2+\\sqrt3)^2'),
+                ('2+2\\sqrt2', '2(1+\\sqrt2)'), ('2+\\sqrt2', '\\sqrt2(\\sqrt2+1)'),
+                ('1', '(\\sqrt2-1)(\\sqrt2+1)')):
+            with self.subTest(reference=reference, value=value):
+                self.assertEqual(check(reference, value), WRONG)
+        self.assertEqual(check('3+2\\sqrt{2}', '3+2\\sqrt{2}'), OK)
+        self.assertEqual(check('3+2\\sqrt{2}', '2\\sqrt{2}+3'), OK)
+
     def test_prepared_textbook_masks_no_longer_need_radicand_workaround(self):
         # Мерзляк-9 алгебра: вынесите множитель из-под знака корня.
         self.assertEqual(check('2\\sqrt[3]{2}', '\\sqrt[3]{16}'), WRONG)

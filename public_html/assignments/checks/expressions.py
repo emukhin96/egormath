@@ -664,19 +664,40 @@ def _radical_reducible(node):
                 and any(f.is_Rational and f != 1 for f in value.args))
 
 
+def _is_bracketed_sum(node):
+    """Множитель-скобка с суммой: ``(1+\\sqrt2)`` в ``2(1+\\sqrt2)``."""
+    node = _unwrap(node)
+    if not _is_tree(node) or node.data != 'group_round_parentheses':
+        return False
+    inner = [_unwrap(c) for c in _subtrees(node)]
+    return (len(inner) == 1 and _is_tree(inner[0]) and inner[0].data in ('add', 'sub')
+            and not _is_unary_minus(inner[0]))
+
+
 def _numeric_node_reducible(node):
     """Числовое действие, которое ученик мог выполнить: ``2\\cdot3``, ``2+3``,
     ``2^3``, ``\\sqrt2\\sqrt8``, ``\\sqrt2\\sqrt3``, ``8^{1/3}``, ``2^{4/3}``.
     Произведение числа и одного несократимого корня (``2\\sqrt{2}``) и сумма
     вроде ``1+\\sqrt{2}`` — простейший вид, а не невыполненное действие."""
+    from sympy import expand
     value = evaluate(resolve(node))
     if value is None or not hasattr(value, 'is_Rational'):
         return False
     if value.is_Rational:
         return True
+    try:
+        # Нераскрытые скобки с числами: (1+\sqrt2)^2, 2(1+\sqrt2), \sqrt2(\sqrt2+1).
+        if expand(value) != value:
+            return True
+    except Exception:  # noqa: BLE001
+        pass
     if node.data in _PRODUCT_NODES:
         factors = []
         _product_factors(node, factors)
+        # SymPy раскрывает 2(1+\sqrt2) ещё при построении, поэтому скобки
+        # с суммой среди числовых множителей проверяем по сырому дереву.
+        if any(_is_bracketed_sum(f) for f in factors):
+            return True
         radicals = [f for f in factors if _is_tree(f)
                     and _unwrap(f).data in ('square_root', 'superscript')]
         return len(radicals) > 1
