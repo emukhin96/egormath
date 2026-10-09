@@ -90,6 +90,18 @@ class SimplifyExpansionTests(SimpleTestCase):
         self.assertEqual(check('x^2-1', '(x-1)(x+1)'), WRONG)
         self.assertEqual(check('\\sqrt{a-3}+1', '\\sqrt{a-3}+2-1'), WRONG)
 
+    def test_factored_denominator_is_accepted(self):
+        self.assertEqual(check('\\frac{2}{x^2-1}', '\\frac{2}{(x-1)(x+1)}'), OK)
+        self.assertEqual(check('\\frac{2}{(x-1)(x+1)}', '\\frac{2}{x^2-1}'), OK)
+        self.assertEqual(check('\\frac{2}{x^2-1}', '\\frac{2x-2}{(x-1)(x^2-1)}'), WRONG)
+
+    def test_single_digit_exponent_without_braces(self):
+        self.assertEqual(check('2\\sqrt{2}', '\\sqrt{2}^3'), WRONG)
+        self.assertEqual(check('2\\sqrt{2}', '(\\sqrt{2})^3'), WRONG)
+        self.assertEqual(check('2\\sqrt{2}', '\\sqrt{2}^{3}'), WRONG)
+        self.assertEqual(expressions._number_value(
+            expressions.resolve(expressions.raw_tree('x^3')).children[0].children[-1]), 3)
+
     def test_equivalent_compact_forms_are_accepted(self):
         self.assertEqual(check('b^{4/5}+9', '9+b^{0,8}'), OK)
         self.assertEqual(check('b^{4/5}+9 | positive: b', '\\sqrt[5]{b^4}+9'), OK)

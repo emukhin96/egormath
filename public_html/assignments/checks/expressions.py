@@ -479,11 +479,18 @@ def _unwrap(node):
     return node
 
 
+def _is_digit_token(child):
+    """Однозначный показатель или индекс без скобок (``x^2``, ``\\sqrt2^3``)."""
+    return getattr(child, 'type', '') == 'DIGIT'
+
+
 def _operands(node):
-    """Операнды узла: поддеревья и буквы-токены; знаки операций не считаются.
-    Буква ``x`` в ``13-x`` — токен, а не поддерево, поэтому считать только
-    поддеревья нельзя: бинарное вычитание приняли бы за унарный минус."""
-    return [c for c in node.children if _is_tree(c) or _is_symbol_token(c)]
+    """Операнды узла: поддеревья, буквы- и цифры-токены; знаки операций не
+    считаются. Буква ``x`` в ``13-x`` — токен, а не поддерево, поэтому
+    считать только поддеревья нельзя: бинарное вычитание приняли бы за
+    унарный минус."""
+    return [c for c in node.children
+            if _is_tree(c) or _is_symbol_token(c) or _is_digit_token(c)]
 
 
 def _is_unary_minus(node):
@@ -493,6 +500,8 @@ def _is_unary_minus(node):
 def _number_value(node):
     """Литерал числа (или ``-число``, ``(число)``) → Fraction, иначе None."""
     node = _unwrap(node)
+    if _is_digit_token(node):
+        return Fraction(str(node))
     if not _is_tree(node):
         return None
     if node.data == 'number':
@@ -726,14 +735,19 @@ def _plain(expr):
 
 def unsimplified(expr, reference):
     """Запись длиннее эталона и сворачивается раскрытием скобок (``x(x+1)-x^2``,
-    ``(b^{0,4}+3)^2-6b^{0,4}``) либо существенно длиннее эталона."""
-    from sympy import expand
+    ``(b^{0,4}+3)^2-6b^{0,4}``) либо существенно длиннее эталона.
+
+    Раскрывается только числитель: разложенный знаменатель
+    ``\\frac{2}{(x-1)(x+1)}`` — допустимый итог упрощения, а не невыполненное
+    действие."""
+    from sympy import expand, fraction
     student, expected = _plain(expr), _plain(reference)
     size, limit = _size(student), _size(expected)
     if size > max(2 * limit, limit + 2):
         return True
     try:
-        return size > limit and _size(expand(student)) < size
+        numerator, _ = fraction(student)
+        return size > limit and _size(expand(numerator)) < _size(numerator)
     except Exception:  # noqa: BLE001
         return False
 
