@@ -43,6 +43,19 @@ class StrictFormatStatusTests(SimpleTestCase):
         self.assertEqual(overall, WRONG)
         self.assertEqual(checks, {'s1': FORMAT, 's2': OK})
 
+    def test_badge_carries_the_slot_hint(self):
+        from django.template.loader import render_to_string
+        from .checks.mask import render_fragments
+        spec = parse_mask('{{ratio: 2:3}} и {{decimal: 0,8}}')
+        html = render_to_string('assignments/_mask.html', {
+            'fragments': render_fragments(spec, 'p', {'s1': '2/3', 's2': '0.8'},
+                                          {'s1': FORMAT, 's2': FORMAT}),
+            'editable': True, 'show_checks': True})
+        self.assertIn('data-hint="Отношение через двоеточие — например 2:3"', html)
+        self.assertIn('title="Отношение через двоеточие — например 2:3">✗ не тот формат', html)
+        self.assertIn('title="Целое число или десятичная дробь через запятую', html)
+        self.assertNotIn('цифры и запятая, без дробей, точки и единиц', html)
+
     def test_format_hint_text_and_helper(self):
         self.assertIn('запятую', slot('{{decimal: 0,8}}').format_hint)
         self.assertIn('дробью', slot('{{ratio: 2:3 | quotient}}').format_hint)

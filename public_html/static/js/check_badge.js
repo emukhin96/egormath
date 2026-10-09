@@ -6,7 +6,7 @@
   var BADGES = {
     ok: ['badge-reviewed', '✓ верно', 'Ответ совпал с эталоном'],
     wrong: ['badge-returned', '✗ неверно', 'Ответ не совпал с эталоном — проверьте запись'],
-    format: ['badge-returned', '✗ не тот формат', 'Запись не как на бланке: нужны только цифры и запятая, без дробей, точки и единиц'],
+    format: ['badge-returned', '✗ не тот формат', 'Запись не в формате бланка — см. подсказку под полем'],
     unknown: ['badge-assigned', '? не разобрано', 'Автосверка не смогла разобрать ответ; учитель проверит вручную'],
   };
 
@@ -18,7 +18,9 @@
     var badge = document.createElement('span');
     badge.className = 'badge ' + spec[0];
     badge.textContent = spec[1];
-    badge.title = spec[2];
+    /* Подсказка о формате своя у каждого строгого поля (data-hint из _check_badge.html):
+       для отношения — «через двоеточие», для десятичной дроби — «через запятую» */
+    badge.title = (status === 'format' && holder.dataset.hint) ? holder.dataset.hint : spec[2];
     holder.appendChild(badge);
   }
 
