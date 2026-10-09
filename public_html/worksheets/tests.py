@@ -257,6 +257,18 @@ class LatexGenerationTests(TestCase):
             'а)~Складываем', tex)
         self.assertNotIn('\\end{minipage}', tex)
 
+    def test_explicit_par_in_solution_does_not_break_task(self):
+        # Явный \par в необязательном аргументе \task (не \long) даёт
+        # «Paragraph ended before \task was complete» — как пустая строка
+        task = Task.objects.create(text_latex='Решите:')
+        TaskSubitem.objects.create(
+            task=task, order=10, text_latex='$x=1$', answer_latex='1',
+            solution_latex='Ответ: $25$.\\par б) Переход\\par\\parbox{1cm}{x}')
+        tex = task_to_tex(make_item(self.worksheet, task))
+        self.assertNotRegex(tex, r'\\par(?![A-Za-z@])')
+        self.assertIn('Ответ: $25$. \\mbox{}\\\\ б) Переход \\mbox{}\\\\ '
+                      '\\parbox{1cm}{x}', tex)
+
     def test_preamble_uses_egorweb(self):
         # Правки egor (заглушка array/bidi, ответы, рисунки) — пакетом
         # egorweb после \usepackage{egor}, а не вставками в каждый .tex
