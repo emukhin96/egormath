@@ -46,7 +46,8 @@
     {% for row in section_nav %}
     <tr>
       <td>{% if row.work_href %}<a href="{{ row.work_href }}"{% if row.work_current %} class="is-current"{% endif %}>{{ row.work|heading_dot }}</a>{% else %}{{ row.work|heading_dot }}{% endif %}</td>
-      <td>{% if row.title_href %}<a href="{{ row.title_href }}"{% if row.title_current %} class="is-current"{% endif %}>{{ row.title|heading_dot }}</a>{% else %}{{ row.title|heading_dot }}{% endif %}</td>
+      <td>{% if row.title_href %}<a href="{{ row.title_href }}"{% if row.title_current %} class="is-current"{% endif %}>{{ row.title|heading_dot }}</a>{% else %}{{ row.title|heading_dot }}{% endif %}
+        {% if row.levels %}<div class="import-section-levels">{% for level in row.levels %}<a href="{{ level.href }}"{% if level.current %} class="is-current"{% endif %}>{{ level.title }}</a>&nbsp;{{ level.count }}{% if not forloop.last %} · {% endif %}{% endfor %}</div>{% endif %}</td>
       <td>{{ row.count }}</td>
     </tr>
     {% endfor %}
@@ -70,6 +71,13 @@
   </form>
   {% elif batch.status != 'imported' and selected_group.open_count %}
   <p class="helptext">Одобрите хотя бы одну задачу этого раздела — появится кнопка загрузки только её одобренных строк.</p>
+  {% endif %}
+  {% if batch.status != 'imported' and section_masks_pending_count %}
+  <form method="post" action="{% url 'textbook_import_prepare_masks' batch.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="section" value="{{ selected_group.token }}">
+    <div class="form-buttons"><button class="btn btn-secondary" type="submit">Подобрать маски раздела ({{ section_masks_pending_count }})</button></div>
+  </form>
   {% endif %}
   {% if batch.status != 'imported' %}
   <form method="post" action="{% url 'textbook_import_assign_section_topic' batch.pk %}" onsubmit="return confirm('Назначить выбранные темы всем задачам раздела «{{ selected_group.title }}»?');">
@@ -111,6 +119,7 @@
     <a class="btn btn-secondary{% if answers_filter %} is-current{% endif %}" href="{{ missing_answers_href }}">Без ответов ({{ missing_answer_count }})</a>
     {% if batch.status != 'imported' %}
     <form method="post" action="{% url 'textbook_import_approve_clean' batch.pk %}">{% csrf_token %}<button class="btn btn-secondary" type="submit">Одобрить безошибочные</button></form>
+    {% if masks_pending_count %}<form method="post" action="{% url 'textbook_import_prepare_masks' batch.pk %}" title="Подобрать маски ответов сейчас, чтобы проверить их до одобрения">{% csrf_token %}<button class="btn btn-secondary" type="submit">Подобрать маски ({{ masks_pending_count }})</button></form>{% endif %}
     {% endif %}
     {% if approved_count or missing_collection_count %}<form method="post" action="{% url 'textbook_import_commit' batch.pk %}" onsubmit="return confirm('Загрузить {{ approved_count }} одобренных задач и добавить в подборки {{ missing_collection_count }} задач из базы? Непроверенные и конфликтные строки останутся в партии.');">{% csrf_token %}<button class="btn" type="submit">{% if approved_count %}Загрузить в каталог{% else %}Восстановить подборки{% endif %}</button></form>{% endif %}
   </div>
@@ -140,12 +149,13 @@
   {% endif %}
   <div class="import-drafts-wrap">
   <table class="list import-drafts">
-      <tr>{% if batch.status != 'imported' %}<th class="col-select"><input type="checkbox" data-bulk-all="import-bulk-form" title="Выбрать все задачи на странице"></th>{% endif %}<th class="col-key">Ключ</th><th class="col-text">Задание и подпункты</th><th class="col-answer">Отв.</th><th class="col-solution">Реш.</th><th class="col-meta">Раздел + темы</th><th class="col-confidence" title="Уверенность">Увер.</th></tr>
+      <tr>{% if batch.status != 'imported' %}<th class="col-select"><input type="checkbox" data-bulk-all="import-bulk-form" title="Выбрать все задачи на странице"></th>{% endif %}<th class="col-key">Ключ</th><th class="col-text">Задание и подпункты</th><th class="col-answer">Отв.</th><th class="col-mask" title="Маски ответа ученика: с маской / мест для ответа">Маска</th><th class="col-solution">Реш.</th><th class="col-meta">Раздел + темы</th><th class="col-confidence" title="Уверенность">Увер.</th></tr>
     {% for draft in page %}<tr>
       {% if batch.status != 'imported' %}<td class="col-select">{% if draft.status != 'imported' %}<input type="checkbox" class="row-select" name="ids" value="{{ draft.pk }}" form="import-bulk-form" title="Выбрать задачу">{% endif %}</td>{% endif %}
       <td class="col-key"><a href="{% url 'textbook_import_review' batch.pk draft.pk %}">{{ draft.external_id }}</a><div class="import-key-status">{% include 'problems/_textbook_draft_status.html' with draft=draft %}</div></td>
       <td class="col-text">{% include 'problems/_textbook_draft_preview.html' with draft=draft %}</td>
       <td class="col-answer">{% if draft.has_answer_material %}<span class="badge" title="{% if draft.subitems %}{{ draft.answer_material_subitem_count }}/{{ draft.subitems|length }}{% else %}есть{% endif %}">да</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="col-mask">{% with masks=draft.mask_summary %}{% if masks.total %}{% if masks.masked == masks.total %}<span class="badge" title="Маска у каждого ответа">да</span>{% elif masks.masked %}<span class="badge" title="Маски есть не у всех ответов">{{ masks.masked }}/{{ masks.total }}</span>{% elif masks.pending %}<span class="muted" title="Маски подберутся при загрузке в каталог или кнопкой «Подобрать маски»">позже</span>{% else %}<span class="muted" title="Маски нет: доказательство, построение или развёрнутый ответ">—</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}{% endwith %}</td>
       <td class="col-solution">{% if draft.has_solution_material %}<span class="badge" title="{% if draft.subitems %}{{ draft.solution_material_subitem_count }}/{{ draft.subitems|length }}{% else %}есть{% endif %}">да</span>{% else %}<span class="muted">—</span>{% endif %}</td>
       <td class="col-meta">
         <div class="import-section-path">{% for part in draft.source_path %}<div class="import-section-part">{{ part|heading_dot }}</div>{% endfor %}</div>

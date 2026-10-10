@@ -125,4 +125,11 @@
 \clubpenalty=10000
 \widowpenalty=10000
 
+%% --- Знак делимости --------------------------------------------------------
+% «a ⋮ b» как в задачниках: три точки высотой с цифру и отступы отношения.
+% Стандартный \vdots поднимается выше строки и не даёт отступов. Тот же
+% макрос \divby задан для KaTeX в static/js/math.js и formula.js.
+\providecommand{\divby}{\mathrel{\vbox{\baselineskip.5ex\lineskiplimit\z@
+  \kern-.15ex\hbox{.}\hbox{.}\hbox{.}}}}
+
 \endinput

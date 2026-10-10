@@ -26,7 +26,7 @@ function renderMathContent(el) {
       {left: '\\(', right: '\\)', display: false},
     ],
     // Команды egor.sty, которых KaTeX не знает
-    macros: {'\\degr': '^{\\circ}'},
+    macros: {'\\degr': '^{\\circ}', '\\divby': '\\mathrel{\\footnotesize\\varvdots}'},
     throwOnError: false,
   });
   // Запоминаем результат, а не флаг: после редактирования рендер нужен снова.

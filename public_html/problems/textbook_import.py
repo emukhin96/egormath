@@ -212,17 +212,45 @@ def complete_deferred_answer_masks(draft):
     draft.save(update_fields=['answer_mask', 'subitems', 'warnings'])
 
 
+def complete_draft_answer_masks(draft):
+    """Подбирает недостающие маски одной строки сразу, по кнопке в сверке.
+
+    Готовые маски (в том числе ручные) не трогает. Возвращает число мест
+    ответа, получивших маску.
+    """
+    def masked(item):
+        return bool(str(item.get('answer_mask') or '').strip())
+
+    before = (sum(masked(item) for item in draft.subitems) if draft.subitems
+              else int(bool(draft.answer_mask.strip())))
+    fill_draft_answer_masks(draft)
+    draft.warnings = [w for w in draft.warnings if w != DEFERRED_MASK_WARNING]
+    draft.save(update_fields=['answer_mask', 'subitems', 'warnings'])
+    after = (sum(masked(item) for item in draft.subitems) if draft.subitems
+             else int(bool(draft.answer_mask.strip())))
+    return after - before
+
+
 def content_warnings(draft):
     """Техническая очередь подбора масок не является дефектом условия."""
     return [w for w in draft.warnings if w != DEFERRED_MASK_WARNING]
 
 
 @transaction.atomic
-def prepare_batch_answer_masks(batch, *, draft_ids=None):
-    """Один короткий шаг подготовки публикации; возвращает остаток очереди."""
+def prepare_batch_answer_masks(batch, *, draft_ids=None, approved_only=True):
+    """Один короткий шаг подбора масок; возвращает остаток очереди.
+
+    Для публикации обрабатываются одобренные строки. Кнопка «Подобрать
+    маски» в партии (approved_only=False) берёт все ещё не загруженные
+    строки, чтобы маски можно было проверить до одобрения.
+    """
     # Та же блокировка, что у публикации; два запроса не обрабатывают очередь вместе.
     batch = TextbookImportBatch.objects.select_for_update().get(pk=batch.pk)
-    drafts = batch.drafts.filter(status=TextbookTaskDraft.STATUS_APPROVED)
+    if approved_only:
+        drafts = batch.drafts.filter(status=TextbookTaskDraft.STATUS_APPROVED)
+    else:
+        drafts = batch.drafts.exclude(status__in=[
+            TextbookTaskDraft.STATUS_IMPORTED, TextbookTaskDraft.STATUS_SKIPPED])
     if draft_ids is not None:
         drafts = drafts.filter(pk__in=draft_ids)
     pending = [d for d in drafts.order_by('pk') if DEFERRED_MASK_WARNING in d.warnings]

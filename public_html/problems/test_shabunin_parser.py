@@ -10,7 +10,8 @@ from .shabunin_parser import (
 from .test_textbook_import import bundle, make_teacher
 from .textbook_import import create_batch_from_bundle
 from .textbook_parser import (
-    _open_paren_depth, apply_imported_math, strip_subitem_punct)
+    _open_paren_depth, apply_imported_answer, apply_imported_math,
+    strip_subitem_punct)
 
 
 FIGURE = r"""
@@ -187,6 +188,17 @@ class SharedNormalizationTests(SimpleTestCase):
         # Целые пары вне формулы разрывом не считаются.
         for value in (r"$\left(x\right)$ и \left(y\right)", r"$a$ \{b\} $c$"):
             self.assertEqual(heal_split_math_dollars(value), value)
+
+    def test_prose_between_formulas_is_not_a_split_pair(self):
+        # Скобки множества вокруг фразы OCR: доллары на месте, фраза — текст.
+        for value in (
+                r"Истинно, $\bar{A} \equiv\left\{\right.$ Число $1917^{1941}$ "
+                r"делится на $1941^{2}$ и не делится на 1941\}.",
+                r"$A \equiv \{$Число 54 делится на 2 или на 3 \}"):
+            self.assertEqual(heal_split_math_dollars(value), value)
+        self.assertEqual(
+            apply_imported_answer(r"Истинно, $\bar{A} \equiv\left\{\right.$ Число"),
+            r"Истинно, $\bar{A} \equiv\left\{\right.$ Число")
 
     def test_interval_brackets_close_paren_depth(self):
         self.assertEqual(_open_paren_depth(r"(-\infty ; 2] \cup\{11\} "), 0)

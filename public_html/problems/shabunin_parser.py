@@ -323,6 +323,10 @@ def prepare_shabunin_text(text: str) -> str:
     text = re.sub(r"\\hspace\{0pt\}\s*", "", text)
     # «в точке ( $1 ;-8$ )» — скобки координат вынесены из формулы.
     text = re.sub(r"(?<![\w\\])\(\s*\$([^$\n]+)\$\s*\)", r"$(\1)$", text)
+    # Делимость «a ⋮ b»: в книге это отношение высотой с цифру. Сайт и
+    # пакеты LaTeX знают макрос \divby; высокий \vdots выпирает из строки.
+    text = re.sub(r"\$\s*⋮\s*\$", r" \\divby ", text)
+    text = re.sub(r"(?:\\vdots(?![a-zA-Z])|⋮)\s*", r"\\divby ", text)
     text = _renumber_enumerate(text)
     text = _flatten_lists(text)
     text = _heal_item_labels(text)

@@ -790,7 +790,9 @@ class TextbookTaskDraft(models.Model):
     class Meta:
         verbose_name = 'Черновик задачи из задачника'
         verbose_name_plural = 'Черновики задач из задачника'
-        ordering = ['external_id', 'pk']
+        # Порядок создания совпадает с порядком книги: строковый external_id
+        # ставил I.10 перед I.2, а IV.30 — сразу за IV.3.
+        ordering = ['pk']
         constraints = [
             models.UniqueConstraint(
                 fields=['batch', 'external_id'],
@@ -849,6 +851,30 @@ class TextbookTaskDraft(models.Model):
         return bool(self.effective_solution_latex or any(
             item.get('author_solution_latex') or item.get('solution_latex')
             for item in self.subitems))
+
+    @property
+    def mask_summary(self):
+        """Маски для списка партии: (с маской, с ответом) и отложенность.
+
+        Считаются места ответа ученика: подпункты с ответом или сама задача
+        без подпунктов. Подбор, отложенный при заливке, — отдельное состояние.
+        """
+        from .textbook_import import DEFERRED_MASK_WARNING
+        if self.subitems:
+            owners = [item for item in self.subitems
+                      if item.get('author_answer_latex') or item.get('answer_latex')
+                      or item.get('answer_mask')]
+            masked = sum(bool(str(item.get('answer_mask') or '').strip())
+                         for item in owners)
+        else:
+            owners = [self] if (self.effective_answer_latex
+                                or self.answer_mask.strip()) else []
+            masked = int(bool(self.answer_mask.strip()))
+        return {
+            'masked': masked,
+            'total': len(owners),
+            'pending': DEFERRED_MASK_WARNING in (self.warnings or []),
+        }
 
     def unmatched_images(self):
         from .textbook_import import normalize_image_stem

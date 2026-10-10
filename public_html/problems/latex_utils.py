@@ -355,6 +355,9 @@ _OPEN_SET_RE = re.compile(r'(?<!\\left)\\\{')
 _CLOSE_SET_RE = re.compile(r'(?<!\\right)\\\}')
 
 
+_PROSE_RE = re.compile(r'[А-Яа-яЁё]{2,}')
+
+
 def _unbalanced_pairs(segment):
     return (len(_LEFT_RE.findall(segment)) != len(_RIGHT_RE.findall(segment))
             or len(_OPEN_SET_RE.findall(segment)) != len(_CLOSE_SET_RE.findall(segment)))
@@ -388,6 +391,11 @@ def heal_split_math_dollars(text):
     if '$' not in text:
         return text
     if not _has_split_math_pair(text):
+        return text
+    if _PROSE_RE.search(_INLINE_DOLLAR_SPAN_RE.sub(' ', text)):
+        # Между формулами русский текст: «$A \equiv \{$Число 54 … \}» —
+        # это не разорванная формула, а скобки множества вокруг фразы.
+        # Сняв доллары, повторная обёртка втянула бы фразу в формулу.
         return text
     return text.replace('$', '')
 

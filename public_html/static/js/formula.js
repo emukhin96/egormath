@@ -54,7 +54,7 @@
         {left: '$', right: '$', display: false},
         {left: '\\(', right: '\\)', display: false},
       ],
-      macros: {'\\degr': '^{\\circ}'},
+      macros: {'\\degr': '^{\\circ}', '\\divby': '\\mathrel{\\footnotesize\\varvdots}'},
       throwOnError: false,
     });
     preview.hidden = false;

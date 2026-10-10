@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, Min, Q
 from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -1003,7 +1003,8 @@ def _textbook_collection_groups(batch):
     rows = (batch.drafts.exclude(status=TextbookTaskDraft.STATUS_SKIPPED)
             .order_by()
             .values('collection_key', 'source_path')
-            .annotate(count=Count('pk'), title=Max('collection_title')))
+            .annotate(count=Count('pk'), title=Max('collection_title'),
+                      first_pk=Min('pk')))
     grouped = {}
     for row in rows:
         path = tuple(
@@ -1020,10 +1021,12 @@ def _textbook_collection_groups(batch):
             'count': 0,
             'is_leaf': True,
             'level_label': 'Подраздел',
+            'first_pk': row['first_pk'],
         })
         group['selectors'].append((
             row['collection_key'], row['source_path']))
         group['count'] += row['count']
+        group['first_pk'] = min(group['first_pk'], row['first_pk'])
     leaf_groups = list(grouped.values())
     for leaf in leaf_groups:
         for depth in range(1, len(leaf['path'])):
@@ -1038,9 +1041,11 @@ def _textbook_collection_groups(batch):
                 'is_leaf': False,
                 'level_label': ('Глава целиком'
                                 if depth == 1 else 'Раздел целиком'),
+                'first_pk': leaf['first_pk'],
             })
             group['selectors'].extend(leaf['selectors'])
             group['count'] += leaf['count']
+            group['first_pk'] = min(group['first_pk'], leaf['first_pk'])
     for identity, group in grouped.items():
         raw = json.dumps(identity, ensure_ascii=False, separators=(',', ':'))
         group['token'] = hashlib.sha256(
@@ -1053,8 +1058,11 @@ def _textbook_collection_groups(batch):
             group['optgroup'] = (
                 group['path'][0] if len(group['path']) > 1
                 else 'Подразделы')
+    # Порядок книги: по первой задаче раздела. Строковый путь ставил
+    # «Глава 10» сразу за «Главой 1».
     return sorted(grouped.values(), key=lambda group: (
-        tuple(group['path']), group['is_leaf'], group['collection_key']))
+        group['first_pk'], len(group['path']), group['is_leaf'],
+        tuple(group['path']), group['collection_key']))
 
 
 def _group_for_path(groups, path):
@@ -1116,11 +1124,43 @@ def _link_ziv_variant_summary(summary, collection_groups, request,
     return summary
 
 
+# Уровни сложности внутри параграфа («Первый уровень» у Шабунина) — не
+# темы: в сводке они идут ссылками внутри строки своего параграфа.
+_LEVEL_TITLE_RE = re.compile(
+    r'(?i)^(?:перв|втор|трет|четв[её]рт|пят)\w*\s+уровень(?:\s+сложности)?$')
+
+
 def _section_nav_rows(collection_groups, request, selected_token):
     """Ссылки на главы и листовые подборки, если нет сводки Зива."""
     rows = []
+    by_topic = {}
     for leaf in collection_groups:
         if not leaf['is_leaf']:
+            continue
+        path = leaf['path']
+        if len(path) >= 3 and _LEVEL_TITLE_RE.match(path[-1]):
+            parent = path[:-1]
+            row = by_topic.get(tuple(parent))
+            if row is None:
+                row = {
+                    'work': parent[0],
+                    'title': ' › '.join(parent[1:]),
+                    'count': 0,
+                    'levels': [],
+                }
+                _annotate_section_nav_row(
+                    row, request, selected_token,
+                    _group_for_path(collection_groups, [parent[0]]),
+                    _group_for_path(collection_groups, parent))
+                by_topic[tuple(parent)] = row
+                rows.append(row)
+            row['count'] += leaf['count']
+            row['levels'].append({
+                'title': path[-1],
+                'count': leaf['count'],
+                'href': _section_filter_href(request, leaf['token']),
+                'current': leaf['token'] == selected_token,
+            })
             continue
         work = leaf['path'][0]
         title = leaf['path'][-1] if len(leaf['path']) > 1 else leaf['title']
@@ -1543,8 +1583,22 @@ def textbook_import_detail(request, pk):
         'all_sections_href': _all_sections_href(request),
         'approved_count': counts.get(TextbookTaskDraft.STATUS_APPROVED, 0),
         'missing_collection_count': len(missing_collection_ids),
+        'masks_pending_count': _masks_pending_count(batch.drafts.all()),
+        'section_masks_pending_count': (
+            _masks_pending_count(_textbook_group_drafts(batch, selected_group))
+            if selected_group else 0),
     })
     return render(request, 'problems/textbook_import_detail.html', context)
+
+
+def _masks_pending_count(drafts):
+    """Строки с отложенным подбором масок (ещё не загруженные)."""
+    from .textbook_import import DEFERRED_MASK_WARNING
+    return sum(
+        DEFERRED_MASK_WARNING in (warnings or [])
+        for warnings in drafts.exclude(status__in=[
+            TextbookTaskDraft.STATUS_IMPORTED,
+            TextbookTaskDraft.STATUS_SKIPPED]).values_list('warnings', flat=True))
 
 
 @teacher_required
@@ -1777,9 +1831,8 @@ def textbook_import_review(request, batch_pk, pk):
                 updated.save()
                 refresh_image_warnings(batch)
                 messages.success(request, f'{updated.external_id}: сохранено.')
-                next_draft = (batch.drafts
-                              .filter(external_id__gt=updated.external_id)
-                              .order_by('external_id', 'pk').first())
+                next_draft = (batch.drafts.filter(pk__gt=updated.pk)
+                              .order_by('pk').first())
                 if request.POST.get('save_next') and next_draft:
                     return redirect(
                         'textbook_import_review', batch_pk=batch.pk,
@@ -1788,10 +1841,9 @@ def textbook_import_review(request, batch_pk, pk):
                     'textbook_import_review', batch_pk=batch.pk, pk=updated.pk)
     else:
         form = TextbookDraftReviewForm(instance=draft)
-    previous = (batch.drafts.filter(external_id__lt=draft.external_id)
-                .order_by('-external_id', '-pk').first())
-    following = (batch.drafts.filter(external_id__gt=draft.external_id)
-                 .order_by('external_id', 'pk').first())
+    # Соседи в порядке книги (порядке создания черновиков), а не строк.
+    previous = batch.drafts.filter(pk__lt=draft.pk).order_by('-pk').first()
+    following = batch.drafts.filter(pk__gt=draft.pk).order_by('pk').first()
     from .textbook_parser import order_letter_subitems
     review_subitems = [dict(item) for item in draft.subitems]
     if request.method == 'POST':
@@ -1916,15 +1968,60 @@ def textbook_import_approve_clean(request, pk):
     return redirect('textbook_import_detail', pk=batch.pk)
 
 
-def _prepare_import_publication(request, batch, draft_ids=None):
+def _prepare_import_publication(request, batch, draft_ids=None,
+                                approved_only=True):
     """Повторные POST завершают подбор без длинного запроса на всю книгу."""
     from .textbook_import import prepare_batch_answer_masks
-    remaining = prepare_batch_answer_masks(batch, draft_ids=draft_ids)
+    remaining = prepare_batch_answer_masks(
+        batch, draft_ids=draft_ids, approved_only=approved_only)
     if remaining:
         return render(request, 'problems/textbook_import_preparing.html', {
             'batch': batch, 'remaining': remaining,
             'action_url': request.path, 'section': request.POST.get('section', ''),
+            'masks_only': not approved_only,
         })
+
+
+@teacher_required
+@require_POST
+def textbook_import_prepare_masks(request, pk):
+    """Подбирает отложенные маски всей партии или раздела до одобрения."""
+    batch = _own_import_batch(request, pk)
+    section_token = request.POST.get('section', '')
+    draft_ids = None
+    if section_token:
+        group = next((item for item in _textbook_collection_groups(batch)
+                      if item['token'] == section_token), None)
+        if group is None:
+            messages.error(request, 'Выбранный раздел задачника не найден.')
+            return redirect(_textbook_detail_url(batch))
+        draft_ids = list(_textbook_group_drafts(batch, group)
+                         .values_list('pk', flat=True))
+    preparing = _prepare_import_publication(
+        request, batch, draft_ids, approved_only=False)
+    if preparing is not None:
+        return preparing
+    messages.success(request, 'Маски ответов подобраны. Проверьте их в сверке '
+                              'задач или в списке с включёнными ответами.')
+    return redirect(_textbook_detail_url(batch, section=section_token or None))
+
+
+@teacher_required
+@require_POST
+def textbook_import_review_masks(request, batch_pk, pk):
+    """Подбирает маски одной задачи сразу, не дожидаясь загрузки в каталог."""
+    from .textbook_import import complete_draft_answer_masks
+    batch = _own_import_batch(request, batch_pk)
+    draft = get_object_or_404(TextbookTaskDraft, batch=batch, pk=pk)
+    if draft.status == TextbookTaskDraft.STATUS_IMPORTED:
+        messages.error(request, 'Задача уже в каталоге: маски правятся в её карточке.')
+    else:
+        added = complete_draft_answer_masks(draft)
+        messages.success(
+            request, f'{draft.external_id}: подобрано масок — {added}.'
+            if added else f'{draft.external_id}: новых масок нет — '
+                          'добавьте вручную, если ответ можно проверить.')
+    return redirect('textbook_import_review', batch_pk=batch.pk, pk=draft.pk)
 
 
 @teacher_required

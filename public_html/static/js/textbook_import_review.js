@@ -47,5 +47,88 @@
         if (field) wrapMathField(field);
       });
     });
+
+    initMaskTools();
   });
+
+  /* Маска в сверке: «Из ответа» — заготовка тем же кодом, что при загрузке;
+     «Как увидит ученик» — поля ввода и ошибки разбора маски. */
+  function csrfToken() {
+    var el = document.querySelector('[name=csrfmiddlewaretoken]');
+    return el ? el.value : '';
+  }
+
+  function post(url, data) {
+    var body = new URLSearchParams();
+    Object.keys(data).forEach(function (key) { body.append(key, data[key]); });
+    return fetch(url, {
+      method: 'POST', body: body, credentials: 'same-origin',
+      headers: {'X-CSRFToken': csrfToken(), 'X-Requested-With': 'XMLHttpRequest'},
+    }).then(function (response) { return response.json(); });
+  }
+
+  function fieldValue(id) {
+    var el = id && document.getElementById(id);
+    return el ? el.value : '';
+  }
+
+  function showBox(box, html, errors) {
+    box.hidden = false;
+    box.innerHTML = '';
+    if (errors && errors.length) {
+      var list = document.createElement('ul');
+      list.className = 'errorlist';
+      errors.forEach(function (text) {
+        var li = document.createElement('li');
+        li.textContent = text;
+        list.appendChild(li);
+      });
+      box.appendChild(list);
+    }
+    var holder = document.createElement('div');
+    holder.innerHTML = html;
+    box.appendChild(holder);
+    if (typeof renderMathContent === 'function') {
+      holder.querySelectorAll('.mask-text, .mask-order-items li, .math-content')
+        .forEach(renderMathContent);
+    }
+    if (window.EgorMask && html) window.EgorMask.enhance(holder);
+  }
+
+  function initMaskTools() {
+    var config = document.getElementById('import-mask-config');
+    if (!config) return;
+    document.querySelectorAll('.import-mask-tools').forEach(function (tools) {
+      var mask = document.getElementById(tools.dataset.mask);
+      var box = tools.parentNode.querySelector('[data-mask-preview-box]');
+      if (!mask || !box) return;
+      tools.querySelector('[data-import-mask-draft]').addEventListener('click', function () {
+        var answer = fieldValue(tools.dataset.answer).trim()
+          || fieldValue(tools.dataset.editorAnswer).trim();
+        if (!answer) {
+          showBox(box, '', ['Ответ пуст — заготовку делать не из чего.']);
+          return;
+        }
+        var condition = (tools.dataset.condition || '').split(' ')
+          .map(fieldValue).filter(Boolean).join('\n');
+        post(config.dataset.draftUrl, {answer: answer, condition: condition}).then(function (res) {
+          if (!res.ok) { showBox(box, '', [res.message || 'Тип ответа не определён — задайте маску вручную.']); return; }
+          if (mask.value.trim() && mask.value.trim() !== res.mask
+              && !window.confirm('Заменить текущую маску заготовкой?')) return;
+          mask.value = res.mask;
+          mask.dispatchEvent(new Event('input', {bubbles: true}));
+          box.hidden = true;
+        }).catch(function () { showBox(box, '', ['Не удалось сделать заготовку — попробуйте ещё раз.']); });
+      });
+      tools.querySelector('[data-import-mask-preview]').addEventListener('click', function () {
+        if (!mask.value.trim()) {
+          showBox(box, '', ['Маска пуста — ученик сможет прислать только фото решения.']);
+          return;
+        }
+        post(config.dataset.previewUrl, {mask: mask.value, prefix: 'preview'}).then(function (res) {
+          showBox(box, res.html || '', res.errors);
+        }).catch(function () { showBox(box, '', ['Не удалось получить превью — попробуйте ещё раз.']); });
+      });
+    });
+  }
 })();
