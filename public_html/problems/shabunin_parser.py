@@ -748,7 +748,29 @@ def _finish_value(value: str) -> str:
     value = re.sub(r"\$\s*-\s*(?=наи[мб])", "$ — ", value)
     # «1)\\ -8» — перенос строки сразу после метки пункта.
     value = re.sub(r"^\s*(?:\\\\\s*)+", "", value)
-    return normalize_cyrillic_units(value)
+    return _wrap_lone_braces(normalize_cyrillic_units(value))
+
+
+def _wrap_lone_braces(value: str) -> str:
+    """«$A \\equiv \\{$Число 54 … на 3 \\}» — скобка множества вне формулы.
+
+    OCR закрывает формулу сразу после «\\{», и закрывающая «\\}» остаётся
+    в тексте сырой командой. Скобки вне формул оборачиваем в ``$…$``.
+    """
+    if not value or ("\\}" not in value and "\\{" not in value):
+        return value
+    def fix(chunk: str) -> str:
+        return re.sub(r"\s*\\([{}])",
+                      lambda m: ("" if m.group(1) == "}" else " ") + "$\\" + m.group(1) + "$",
+                      chunk)
+    out = []
+    pos = 0
+    for match in _ANY_MATH_RE.finditer(value):
+        out.append(fix(value[pos:match.start()]))
+        out.append(match.group(0))
+        pos = match.end()
+    out.append(fix(value[pos:]))
+    return "".join(out)
 
 
 _ANY_MATH_RE = re.compile(r"\$\$.*?\$\$|\$[^$]*\$|\\\[.*?\\\]", re.S)

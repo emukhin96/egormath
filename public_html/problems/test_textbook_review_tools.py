@@ -104,6 +104,13 @@ class ReviewToolsTests(TestCase):
         self.assertNotContains(response, 'Подобрать маски (')
         self.assertContains(response, 'Маска ответа:')
 
+    def test_lone_set_brace_outside_math_is_wrapped(self):
+        from .shabunin_parser import _wrap_lone_braces
+        self.assertEqual(
+            _wrap_lone_braces(r"$A \equiv \{$Число 54 делится на 2 \}"),
+            r"$A \equiv \{$Число 54 делится на 2$\}$")
+        self.assertEqual(_wrap_lone_braces(r"$\{1; 2\}$"), r"$\{1; 2\}$")
+
     def test_divisibility_becomes_compact_relation_macro(self):
         self.assertEqual(
             prepare_shabunin_text(r'1) $\left(2^{2 n+1}+1\right) \vdots 3$; ( $n^{p}-n$ ) ⋮ $p$'),
