@@ -13,6 +13,9 @@ from fractions import Fraction
 OK = 'ok'
 WRONG = 'wrong'
 UNKNOWN = 'unknown'
+# Строгий формат бланка (digits/decimal/ratio) нарушен: для итога по задаче это
+# «неверно», но ученику показывается подсказка о записи, а не о значении.
+FORMAT = 'format'
 
 # Слишком длинный ввод в sympy не отдаём: equals может работать долго
 MAX_EXPR_LEN = 300

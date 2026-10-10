@@ -936,11 +936,13 @@ def _terms(side):
         return set()
 
 
-def check_equation(student, reference):
-    """Уравнение в приведённом виде: ``y=x+5`` и ``y-x=5`` равносильны
-    эталону буквально (не пропорционально: ``2y=2x+10`` — нет), и ни одно
-    слагаемое не повторяется в обеих частях (``y-2=x+3`` — нет)."""
-    from sympy import Eq, expand
+def check_equation(student, reference, *, strict=False):
+    """Уравнение, равносильное эталону: разности сторон пропорциональны с
+    ненулевым числовым множителем (``y=x+5``, ``y-x=5``, ``2y=2x+10``,
+    ``x=y-5``, ``y-2=x+3``). В строгом режиме (``| strict``) — приведённый
+    вид: буквально ``±`` эталон (``2y=2x+10`` — нет) и ни одно слагаемое не
+    повторяется в обеих частях (``y-2=x+3`` — нет)."""
+    from sympy import Eq, cancel, expand
     _, expr = parse(student)
     if not isinstance(expr, Eq) or not isinstance(reference, Eq):
         return UNKNOWN
@@ -951,9 +953,10 @@ def check_equation(student, reference):
         if ds == 0 or dr == 0:
             return UNKNOWN
         if ds != dr and ds != -dr:
-            ratio = (ds / dr)
+            ratio = cancel(ds / dr)
             if ratio.is_number:
-                return WRONG
+                # Пропорциональная запись той же линии/кривой: 2x-6y=4 для x-3y=2.
+                return WRONG if strict or ratio == 0 else OK
             same = equal(ds, dr)
             if same is False:
                 same = equal(ds, -dr)
@@ -961,7 +964,7 @@ def check_equation(student, reference):
                 return UNKNOWN
             if not same:
                 return WRONG
-        if _terms(expand(lhs)) & _terms(expand(rhs)):
+        if strict and _terms(expand(lhs)) & _terms(expand(rhs)):
             return WRONG
     except Exception:  # noqa: BLE001
         return UNKNOWN

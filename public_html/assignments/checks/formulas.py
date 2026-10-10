@@ -236,7 +236,7 @@ def check(value, reference, multiple=False):
     засчитывать его нельзя — проверку нужно повторить позже.
     """
     limit = MAX_EXPR_LEN
-    if reference.numeric and reference.mode in ('set', 'pair', 'pair-unordered'):
+    if reference.numeric and reference.mode in ('set', 'pair', 'pair-unordered', 'range'):
         from .sets import MAX_COLLECTION_LEN
         limit = MAX_COLLECTION_LEN
     if len(value) > limit:
@@ -1082,6 +1082,19 @@ def _counterexample(difference, reference):
     return False
 
 
+def _split_list(value, count):
+    """Элементы списка ``expressions``: основной разделитель — «;». Без него
+    принимаются «, », «,» и «и», если число частей совпадает с эталоном:
+    ``8, 40`` и ``22,5, 67,5, 90`` — списки, а не одно число."""
+    if ';' in value or count < 2:
+        return value.split(';')
+    for separator in (r',\s+', r'\s+(?:и|or|and)\s+', ','):
+        parts = re.split(separator, value)
+        if len(parts) == count:
+            return parts
+    return [value]
+
+
 def _check(value, reference, multiple=False, mode='expression', *, numeric=False):
     from sympy import factor, simplify
     if len(value) > MAX_EXPR_LEN:
@@ -1093,7 +1106,7 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
     # элементом. В режиме expressions разделитель остаётся допустимым.
     if not multiple and ';' in value:
         return WRONG
-    texts = value.split(';') if multiple else [value]
+    texts = _split_list(value, len(reference.items)) if multiple else [value]
     if len(texts) != len(reference.items) or any(not t.strip() for t in texts):
         return WRONG
     student = tuple(_parse(t.strip(), reference.positive, numeric=numeric) for t in texts)

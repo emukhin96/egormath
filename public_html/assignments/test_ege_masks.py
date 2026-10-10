@@ -15,7 +15,9 @@ class EgeMaskTests(SimpleTestCase):
         self.assertEqual(self.mask('3', 9, '9.2'), '{{decimal: 3}}')
         self.assertEqual(self.mask('1/3', 1), '')
         slot = parse_mask(self.mask('3', 9, '9.8')).slots[0]
-        self.assertEqual(check_slot(slot, '3.0'), 'wrong')
+        # Точка вместо запятой — ошибка записи, а не значения: отдельный
+        # статус для подсказки ученику; итог по задаче всё равно «неверно».
+        self.assertEqual(check_slot(slot, '3.0'), 'format')
 
     def test_late_formats(self):
         self.assertIn('range:', self.mask(r'$-\pi, 0, \pi$', 14))

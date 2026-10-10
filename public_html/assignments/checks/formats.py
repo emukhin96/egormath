@@ -5,6 +5,18 @@ from fractions import Fraction
 DIGITS_RE = re.compile(r'[0-9]+')
 DECIMAL_RE = re.compile(r'-?[0-9]+(?:,[0-9]+)?')
 
+# Подсказки о формате записи: показываются под полем при вводе (mask.js) и в
+# бейдже «формат», когда сервер отверг запись, а не значение.
+FORMAT_HINTS = {
+    'digits': 'Только цифры подряд, без пробелов, запятых и дробей — например 215',
+    'decimal': 'Целое число или десятичная дробь через запятую, без точки, '
+               'обыкновенных дробей и единиц — например 0,8 или -2,5',
+    'ratio': 'Отношение через двоеточие — например 2:3',
+    'ratio_quotient': 'Отношение через двоеточие или его значение дробью — например 2:3 или 2/3',
+    'proportion': 'Отношение через двоеточие в любом порядке — например 2:3 или 3:2',
+    'proportion_quotient': 'Отношение через двоеточие или дробью в любом порядке — например 2:3 или 3/2',
+}
+
 
 def digits(text):
     return bool(len(text) <= 256 and DIGITS_RE.fullmatch(text))
@@ -14,6 +26,24 @@ def decimal(text):
     if len(text) > 256 or not DECIMAL_RE.fullmatch(text):
         return None
     return Fraction(text.replace(',', '.'))
+
+
+def format_hint(kind, *, allow_quotient=False):
+    key = kind + ('_quotient' if allow_quotient and kind in ('ratio', 'proportion') else '')
+    return FORMAT_HINTS.get(key, '')
+
+
+def wrong_format(kind, text, *, allow_quotient=False):
+    """Запись заведомо не в формате бланка: ``4/5`` или ``0.8`` для decimal,
+    ``0215,0`` для digits, дробь без двоеточия для ratio без ``quotient``.
+    Неверное значение в правильном формате сюда не относится."""
+    if kind == 'digits':
+        return not digits(text)
+    if kind == 'decimal':
+        return decimal(text) is None
+    if kind in ('ratio', 'proportion'):
+        return ':' not in text and not allow_quotient
+    return False
 
 
 _RATIO_OPERATOR_NAMES = r'(?:sin|cos|tan|tg|cot|ctg|sec|csc|asin|acos|atan)'
@@ -143,7 +173,7 @@ def check_number_with_tolerance(value, reference, tolerance):
 
 def _collection_literals(value, reference, kind):
     from . import sets, numeric_collections
-    parser = sets.parse_set if kind == 'set' else sets.parse_pairs
+    parser = {'set': sets.parse_set, 'range': sets.parse_range}.get(kind, sets.parse_pairs)
     return (parser(reference, value_parser=numeric_collections.literal),
             parser(value, value_parser=numeric_collections.literal))
 
@@ -179,8 +209,12 @@ def check_collection_exact(value, reference, *, kind, unordered=False):
         return UNKNOWN
     expected, student = _collection_literals(value, reference, kind)
     if expected is not None and student is not None:
-        same = (sets.sets_equal(expected, student) if kind == 'set'
-                else sets.pairs_equal(expected, student, unordered=unordered))
+        if kind == 'set':
+            same = sets.sets_equal(expected, student)
+        elif kind == 'range':
+            same = sets.ranges_equal(expected, student)
+        else:
+            same = sets.pairs_equal(expected, student, unordered=unordered)
         return OK if same else WRONG
     mode = kind if not unordered else 'pair-unordered'
     return formulas.check(value, formulas.FormulaSpec(reference, False, mode=mode,

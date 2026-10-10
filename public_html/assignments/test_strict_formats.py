@@ -4,7 +4,9 @@ from .checks import parse_mask, check_slot, draft_mask
 
 
 class StrictFormatsTests(SimpleTestCase):
-    def check_values(self, mask, correct, wrong):
+    def check_values(self, mask, correct, wrong, bad_format=()):
+        """``wrong`` — верный формат, неверное значение; ``bad_format`` —
+        запись не по бланку: статус ``format`` (в итоге по задаче — неверно)."""
         spec = parse_mask(mask)
         self.assertTrue(spec.is_valid, spec.errors)
         for value in correct:
@@ -13,25 +15,28 @@ class StrictFormatsTests(SimpleTestCase):
         for value in wrong:
             with self.subTest(mask=mask, value=value):
                 self.assertEqual(check_slot(spec.slots[0], value), 'wrong')
+        for value in bad_format:
+            with self.subTest(mask=mask, value=value):
+                self.assertEqual(check_slot(spec.slots[0], value), 'format')
         self.assertEqual(check_slot(spec.slots[0], ''), '')
 
     def test_digits_are_not_numbers(self):
-        self.check_values('{{digits: 234}}', ['234', ' 234 '],
-                          ['234,00', '468/2', '2 3 4', '0234', '+234',
+        self.check_values('{{digits: 234}}', ['234', ' 234 '], ['0234'],
+                          ['234,00', '468/2', '2 3 4', '+234',
                            '234.0', '٢٣٤', '$234$', '234\n0', '2*117'])
         self.check_values('{{digits: 001}}', ['001'], ['1', '01'])
 
     def test_decimal_requires_decimal_not_expression(self):
-        self.check_values('{{decimal: -0,5}}', ['-0,5', '-0,50', '-00,500'],
+        self.check_values('{{decimal: -0,5}}', ['-0,5', '-0,50', '-00,500'], ['0,5', '-0,6'],
                           ['-1/2', '-0.5', '-,5', '-0,5+0', '−0,5', '+0,5'])
-        self.check_values('{{decimal: 234}}', ['234', '234,00'], ['468/2'])
+        self.check_values('{{decimal: 234}}', ['234', '234,00'], [], ['468/2'])
 
     def test_ratio_order_and_scaling(self):
         self.check_values('{{ratio: 1:2}}', ['1:2', '2:4', '8:16', '1,5 : 3', '-1:-2', '1:2+0'],
-                          ['2:1', '0,5', '1/2', '1:0', '0:0', '1:2:3', '1:3+0'])
+                          ['2:1', '1:0', '0:0', '1:2:3', '1:3+0'], ['0,5', '1/2'])
         self.check_values('{{proportion: 1:2}}', ['1:2', '2:1', '8:16', '16:8'],
-                          ['0,5', '2', '1:3', '1:0', '0:0'])
-        self.check_values('{{ratio: 0:2}}', ['0:3'], ['1:0', '0'])
+                          ['1:3', '1:0', '0:0'], ['0,5', '2'])
+        self.check_values('{{ratio: 0:2}}', ['0:3'], ['1:0'], ['0'])
 
     def test_invalid_references_and_large_values(self):
         for text in ['{{digits: 2 3}}', '{{digits: 2,0}}', '{{decimal: 1/2}}',
@@ -109,10 +114,13 @@ class StrictFormatsTests(SimpleTestCase):
             '{{number: 8}} км/ч, {{number: 3}} км/ч')
 
     def test_generated_mask_must_accept_its_reference(self):
+        # Уравнение окружности с константами по обе стороны раньше отвергало
+        # собственный эталон (приведённый вид); теперь equation принимает
+        # равносильные записи, и черновик допустим.
         self.assertEqual(
             draft_mask(r'$(x+3)^2+(y-2)^2=25$',
                        'Составьте уравнение окружности.'),
-            '')
+            '{{equation: (x+3)^2+(y-2)^2=25}}')
         self.assertEqual(draft_mask('$x+x$'), '')
 
     def test_textbook_yes_no_drafting(self):
