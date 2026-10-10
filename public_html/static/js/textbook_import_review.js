@@ -60,7 +60,9 @@
 
   function post(url, data) {
     var body = new URLSearchParams();
-    Object.keys(data).forEach(function (key) { body.append(key, data[key]); });
+    Object.keys(data).forEach(function (key) {
+      [].concat(data[key]).forEach(function (value) { body.append(key, value); });
+    });
     return fetch(url, {
       method: 'POST', body: body, credentials: 'same-origin',
       headers: {'X-CSRFToken': csrfToken(), 'X-Requested-With': 'XMLHttpRequest'},
@@ -98,10 +100,15 @@
   function initMaskTools() {
     var config = document.getElementById('import-mask-config');
     if (!config) return;
-    document.querySelectorAll('.import-mask-tools').forEach(function (tools) {
+    var examCodes = (config.dataset.examCodes || '').split(',').filter(Boolean);
+    document.querySelectorAll('.import-mask-tools').forEach(function (tools, index) {
       var mask = document.getElementById(tools.dataset.mask);
       var box = tools.parentNode.querySelector('[data-mask-preview-box]');
       if (!mask || !box) return;
+      // Enter в поле превью не отправляет форму сверки.
+      box.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && event.target.tagName === 'INPUT') event.preventDefault();
+      });
       tools.querySelector('[data-import-mask-draft]').addEventListener('click', function () {
         var answer = fieldValue(tools.dataset.answer).trim()
           || fieldValue(tools.dataset.editorAnswer).trim();
@@ -111,7 +118,11 @@
         }
         var condition = (tools.dataset.condition || '').split(' ')
           .map(fieldValue).filter(Boolean).join('\n');
-        post(config.dataset.draftUrl, {answer: answer, condition: condition}).then(function (res) {
+        post(config.dataset.draftUrl, {
+          answer: answer, condition: condition, exam_codes: examCodes,
+          source_number: config.dataset.sourceNumber || '',
+          subitem_label: tools.dataset.subitemLabel || '',
+        }).then(function (res) {
           if (!res.ok) { showBox(box, '', [res.message || 'Тип ответа не определён — задайте маску вручную.']); return; }
           if (mask.value.trim() && mask.value.trim() !== res.mask
               && !window.confirm('Заменить текущую маску заготовкой?')) return;
@@ -125,7 +136,8 @@
           showBox(box, '', ['Маска пуста — ученик сможет прислать только фото решения.']);
           return;
         }
-        post(config.dataset.previewUrl, {mask: mask.value, prefix: 'preview'}).then(function (res) {
+        // Свой префикс у каждого превью: id полей ввода не повторяются.
+        post(config.dataset.previewUrl, {mask: mask.value, prefix: 'preview_' + index}).then(function (res) {
           showBox(box, res.html || '', res.errors);
         }).catch(function () { showBox(box, '', ['Не удалось получить превью — попробуйте ещё раз.']); });
       });

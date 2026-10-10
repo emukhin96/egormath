@@ -11,7 +11,7 @@ from .shabunin_parser import prepare_shabunin_text
 from .test_textbook_import import bundle, make_teacher
 from .textbook_import import DEFERRED_MASK_WARNING, create_batch_from_bundle
 from .textbook_patches import (TextbookPatchError, apply_draft_patch,
-                               build_draft_patch, current_rows)
+                               batch_rows, build_draft_patch)
 
 CHAPTER = 'Глава 1. Элементы математической логики'
 PARAGRAPH = '§ 1. Высказывания и операции над ними'
@@ -77,20 +77,69 @@ class ReviewToolsTests(TestCase):
                          [('Первый уровень', 2), ('Второй уровень', 1)])
         self.assertContains(response, 'import-section-levels')
 
-    def test_review_button_fills_pending_masks(self):
+    def test_review_button_saves_and_fills_pending_masks(self):
         draft = self.batch.drafts.get(external_id='I.2')
         draft.answer_mask = ''
         draft.warnings = [DEFERRED_MASK_WARNING]
         draft.save()
         review = reverse('textbook_import_review', args=[self.batch.pk, draft.pk])
-        self.assertContains(self.client.get(review), 'Подобрать маски сейчас')
-        response = self.client.post(
-            reverse('textbook_import_review_masks', args=[self.batch.pk, draft.pk]))
+        response = self.client.get(review)
+        self.assertContains(response, 'Сохранить и подобрать маски')
+        data = {name: field.value() or '' for name, field in
+                ((name, response.context['form'][name])
+                 for name in response.context['form'].fields)}
+        data.update({'author_answer_latex': '$5$', 'prepare_masks': '1',
+                     'topic_ids': [], 'topic': ''})
+        response = self.client.post(review, {k: v for k, v in data.items() if v is not None})
         self.assertRedirects(response, review)
         draft.refresh_from_db()
-        self.assertEqual(draft.answer_mask, '{{number: 4}}')
+        # Подбор идёт по ответу, сохранённому в том же запросе.
+        self.assertEqual(draft.author_answer_latex, '$5$')
+        self.assertEqual(draft.answer_mask, '{{number: 5}}')
         self.assertNotIn(DEFERRED_MASK_WARNING, draft.warnings)
-        self.assertContains(self.client.get(review), 'Как увидит ученик')
+        response = self.client.get(review)
+        self.assertContains(response, 'Как увидит ученик')
+        self.assertNotContains(response, 'Сохранить и подобрать маски')
+
+    def test_exam_draft_mask_is_left_to_exam_format(self):
+        TextbookTaskDraft.objects.filter(batch=self.batch).update(
+            answer_mask='', exam_item_codes=['EGE_1'])
+        draft = self.batch.drafts.get(external_id='I.2')
+        self.assertTrue(draft.masks_by_exam)
+        self.assertTrue(draft.mask_summary['exam'])
+        review = self.client.get(
+            reverse('textbook_import_review', args=[self.batch.pk, draft.pk]))
+        self.assertContains(review, 'ставится при загрузке по формату задания экзамена')
+        self.assertContains(review, 'data-exam-codes="EGE_1"')
+        detail = self.client.get(reverse('textbook_import_detail', args=[self.batch.pk]))
+        self.assertContains(detail, 'по формату')
+
+    def test_mask_draft_gets_exam_codes_and_numbers(self):
+        with patch('assignments.checks.draft_mask', return_value='{{number: 4}}') as draft_mask:
+            response = self.client.post(reverse('task_mask_draft'), {
+                'answer': '$4$', 'condition': 'Найдите $x$.',
+                'exam_codes': ['EGE_1', 'EGE_2'], 'source_number': 'I.2',
+                'subitem_label': '3'})
+        self.assertEqual(response.json()['mask'], '{{number: 4}}')
+        draft_mask.assert_called_once_with(
+            '$4$', 'Найдите $x$.', exam_codes=['EGE_1', 'EGE_2'],
+            source_number='I.2', subitem_label='3')
+
+    def test_migration_backfills_book_order_and_places_split_drafts(self):
+        import importlib
+        from django.apps import apps
+        migration = importlib.import_module(
+            'problems.migrations.0028_textbook_draft_position')
+        split = TextbookTaskDraft.objects.create(
+            batch=self.batch, external_id='I.3', source_number='I.3',
+            text_latex='Выделенная задача.',
+            warnings=[migration.SPLIT_WARNING])
+        TextbookTaskDraft.objects.filter(batch=self.batch).update(position=0)
+        migration.fill_positions(apps, None)
+        self.assertEqual(
+            list(self.batch.drafts.values_list('external_id', 'position')),
+            [('I.2', 10), ('I.3', 11), ('I.10', 20), ('I.11', 30)])
+        self.assertEqual(split.warnings, [migration.SPLIT_WARNING])
 
     def test_batch_button_prepares_unapproved_drafts(self):
         TextbookTaskDraft.objects.filter(batch=self.batch).update(
@@ -132,7 +181,8 @@ class DraftPatchTests(TestCase):
         payload['tasks'].append({**payload['tasks'][0], 'external_id': '1.2.38'})
         self.batch = create_batch_from_bundle(
             payload, user=self.teacher, title='Партия', source_title='Книга')
-        self.baseline = current_rows(self.batch)
+        self.baseline = batch_rows(self.batch)
+        self.original = self.baseline['drafts'][0]
 
     def edit_and_build(self):
         draft = self.batch.drafts.get(external_id='1.2.37')
@@ -140,21 +190,27 @@ class DraftPatchTests(TestCase):
         draft.answer_mask = '{{set: -2; 2}}'
         draft.topic = self.topic_b
         draft.topic_ids = [self.topic_b.pk]
+        draft.source_number = '37а'
         draft.save()
-        patch_data = build_draft_patch(self.baseline, current_rows(self.batch))
+        patch_data, untransferred = build_draft_patch(self.baseline, batch_rows(self.batch))
+        self.assertEqual(untransferred, [('1.2.37', 'source_number')])
         # Возвращаем партию к исходному состоянию — как сервер до переноса.
-        draft.author_answer_latex = self.baseline[0]['author_answer_latex']
-        draft.answer_mask = self.baseline[0]['answer_mask']
+        draft.author_answer_latex = self.original['author_answer_latex']
+        draft.answer_mask = self.original['answer_mask']
         draft.topic = self.topic_a
         draft.topic_ids = [self.topic_a.pk]
+        draft.source_number = self.original['source_number']
         draft.save()
         return json.loads(json.dumps(patch_data))
+
+    def draft(self):
+        return self.batch.drafts.get(external_id='1.2.37')
 
     def test_patch_has_only_changed_fields(self):
         patch_data = self.edit_and_build()
         self.assertEqual([row['external_id'] for row in patch_data['drafts']],
                          ['1.2.37'])
-        self.assertEqual(set(patch_data['drafts'][0]['fields']),
+        self.assertEqual(set(patch_data['drafts'][0]['after']),
                          {'author_answer_latex', 'answer_mask',
                           'topic_code', 'topic_codes'})
 
@@ -162,37 +218,79 @@ class DraftPatchTests(TestCase):
         patch_data = self.edit_and_build()
         report = apply_draft_patch(self.batch, patch_data)
         self.assertEqual(report['applied'], ['1.2.37'])
-        draft = self.batch.drafts.get(external_id='1.2.37')
-        self.assertEqual(draft.answer_mask, self.baseline[0]['answer_mask'])
+        self.assertEqual(self.draft().answer_mask, self.original['answer_mask'])
         apply_draft_patch(self.batch, patch_data, apply=True)
-        draft.refresh_from_db()
+        draft = self.draft()
         self.assertEqual(draft.author_answer_latex, r'$x=\pm 2$')
         self.assertEqual(draft.answer_mask, '{{set: -2; 2}}')
         self.assertEqual(draft.topic_id, self.topic_b.pk)
         self.assertEqual(draft.topic_ids, [self.topic_b.pk])
+        # Повторный запуск не считает свои же правки конфликтом.
+        report = apply_draft_patch(self.batch, patch_data, apply=True)
+        self.assertEqual(report['already'], ['1.2.37'])
+        self.assertEqual(report['skipped'], [])
 
-    def test_later_teacher_edit_is_not_overwritten(self):
+    def test_later_teacher_edit_of_any_field_is_not_overwritten(self):
         patch_data = self.edit_and_build()
-        draft = self.batch.drafts.get(external_id='1.2.37')
-        draft.author_answer_latex = 'Правка учителя'
+        draft = self.draft()
+        # Учитель поправил поле, которого пакет не меняет.
+        draft.text_latex = 'Решите $x^2=9$.'
         draft.save()
         report = apply_draft_patch(self.batch, patch_data, apply=True)
         self.assertEqual(report['applied'], [])
-        self.assertIn('author_answer_latex', report['skipped'][0][1])
-        draft.refresh_from_db()
-        self.assertEqual(draft.author_answer_latex, 'Правка учителя')
+        self.assertIn('text_latex', report['skipped'][0][1])
+        self.assertEqual(self.draft().author_answer_latex,
+                         self.original['author_answer_latex'])
+
+    def test_approved_after_export_is_skipped(self):
+        patch_data = self.edit_and_build()
+        TextbookTaskDraft.objects.filter(batch=self.batch).update(
+            status=TextbookTaskDraft.STATUS_APPROVED)
+        report = apply_draft_patch(self.batch, patch_data, apply=True)
+        self.assertIn('статус', report['skipped'][0][1])
+
+    def test_approved_at_export_returns_to_review(self):
+        TextbookTaskDraft.objects.filter(batch=self.batch).update(
+            status=TextbookTaskDraft.STATUS_APPROVED, reviewed_by=self.teacher)
+        self.baseline = batch_rows(self.batch)
+        self.original = self.baseline['drafts'][0]
+        patch_data = self.edit_and_build()
+        report = apply_draft_patch(self.batch, patch_data, apply=True)
+        self.assertEqual(report['reset'], ['1.2.37'])
+        draft = self.draft()
+        self.assertEqual(draft.status, TextbookTaskDraft.STATUS_REVIEW)
+        self.assertIsNone(draft.reviewed_by)
+
+    def test_other_batch_with_same_keys_is_refused(self):
+        patch_data = self.edit_and_build()
+        other = create_batch_from_bundle(
+            bundle(), user=self.teacher, title='Другая партия', source_title='Книга')
+        with self.assertRaises(TextbookPatchError):
+            apply_draft_patch(other, patch_data, apply=True)
+
+    def test_image_warning_is_recomputed_on_server(self):
+        draft = self.draft()
+        draft.text_latex += r' \taskpic{fig5}'
+        draft.images = ['fig5']
+        draft.save()
+        patch_data, _ = build_draft_patch(self.baseline, batch_rows(self.batch))
+        draft.text_latex = self.original['text_latex']
+        draft.images = []
+        draft.save()
+        report = apply_draft_patch(self.batch, json.loads(json.dumps(patch_data)), apply=True)
+        self.assertEqual(report['images'], [('1.2.37', ['fig5'])])
+        self.assertTrue(any('изображений' in w for w in self.draft().warnings))
 
     def test_invalid_mask_rejects_whole_patch(self):
         patch_data = self.edit_and_build()
-        patch_data['drafts'][0]['fields']['answer_mask']['after'] = '{{set: '
+        patch_data['drafts'][0]['after']['answer_mask'] = '{{set: '
         with self.assertRaises(Exception):
             apply_draft_patch(self.batch, patch_data, apply=True)
-        draft = self.batch.drafts.get(external_id='1.2.37')
-        self.assertEqual(draft.author_answer_latex, self.baseline[0]['author_answer_latex'])
+        self.assertEqual(self.draft().author_answer_latex,
+                         self.original['author_answer_latex'])
 
     def test_unknown_field_is_refused(self):
         patch_data = self.edit_and_build()
-        patch_data['drafts'][0]['fields']['status'] = {'before': 'needs_review',
-                                                       'after': 'approved'}
+        patch_data['drafts'][0]['after']['status'] = 'approved'
         with self.assertRaises(TextbookPatchError):
             apply_draft_patch(self.batch, patch_data, apply=True)

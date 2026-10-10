@@ -379,6 +379,7 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
                 row.get('grade_band_codes'), 'grade_band_codes'),
             tags=_string_list(row.get('tags'), 'tags'),
             status=status,
+            position=position * 10,
         ))
         topic_codes.append(str(row.get('topic_code') or '').strip())
     # Символьный подбор по всей книге может превысить таймаут WSGI.
@@ -720,6 +721,7 @@ def repair_ziv_batch_leaks(batch):
     skipped_heading_ids = []
     to_update = []
     to_create = []
+    split_count = {}
 
     for draft in drafts:
         if not draft_has_ziv_leak(draft.text_latex, draft.subitems):
@@ -807,8 +809,11 @@ def repair_ziv_batch_leaks(batch):
             warnings = list(task.warnings)
             if ZIV_SPLIT_FROM_WARNING not in warnings:
                 warnings.append(ZIV_SPLIT_FROM_WARNING)
+            split_count[draft.pk] = split_count.get(draft.pk, 0) + 1
             created = TextbookTaskDraft(
                 batch=batch,
+                # Сразу за исходной строкой: заливка нумерует строки через 10.
+                position=draft.position + min(split_count[draft.pk], 9),
                 external_id=task.external_id,
                 source_number=task.source_number or task.external_id,
                 source_path=task.source_path,
@@ -1343,7 +1348,7 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
     initial_collection_count = Collection.objects.filter(
         source=batch.source).count()
 
-    for draft in approved.select_related('topic').order_by('pk'):
+    for draft in approved.select_related('topic').order_by('position', 'pk'):
         # Гарантия для всех путей: массовое одобрение, раздел, CLI и
         # прямой вызов. HTTP заранее обрабатывает очередь короткими шагами.
         complete_deferred_answer_masks(draft)
@@ -1476,7 +1481,7 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
 
     for draft in batch.drafts.filter(
             pk__in=missing_imported_ids).select_related(
-                'imported_task').order_by('pk'):
+                'imported_task').order_by('position', 'pk'):
         task = draft.imported_task
         if task is None:
             raise TextbookImportError(

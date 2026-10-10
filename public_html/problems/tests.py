@@ -116,7 +116,7 @@ class LatexUtilsTests(TestCase):
         self.assertEqual(
             heal_split_math_dollars(
                 r'$\displaystyle \left(-\frac{7}{6}$ ;$-2\right)$'),
-            r'\displaystyle \left(-\frac{7}{6} ;-2\right)')
+            r'$\displaystyle \left(-\frac{7}{6} ;-2\right)$')
         self.assertEqual(heal_split_math_dollars(r'$\{-2;1\}$'), r'$\{-2;1\}$')
         self.assertEqual(heal_split_math_dollars(r'$(2;3)$'), r'$(2;3)$')
         solution = (

@@ -128,8 +128,12 @@
 %% --- Знак делимости --------------------------------------------------------
 % «a ⋮ b» как в задачниках: три точки высотой с цифру и отступы отношения.
 % Стандартный \vdots поднимается выше строки и не даёт отступов. Тот же
-% макрос \divby задан для KaTeX в static/js/math.js и formula.js.
-\providecommand{\divby}{\mathrel{\vbox{\baselineskip.5ex\lineskiplimit\z@
-  \kern-.15ex\hbox{.}\hbox{.}\hbox{.}}}}
+% макрос \divby задан для KaTeX в static/js/math.js и formula.js. В индексах
+% точки и шаг между ними уменьшаются вместе со шрифтом.
+\providecommand{\egor@divby}[2]{\vbox{\baselineskip#2\lineskiplimit\z@
+  \kern-.3\dimexpr#2\relax\hbox{$\m@th#1.$}\hbox{$\m@th#1.$}\hbox{$\m@th#1.$}}}
+\providecommand{\divby}{\mathrel{\mathchoice
+  {\egor@divby\displaystyle{.5ex}}{\egor@divby\textstyle{.5ex}}
+  {\egor@divby\scriptstyle{.35ex}}{\egor@divby\scriptscriptstyle{.25ex}}}}
 
 \endinput

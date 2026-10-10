@@ -8,8 +8,8 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 
 from problems.models import TextbookImportBatch
-from problems.textbook_patches import (TextbookPatchError, build_draft_patch,
-                                       current_rows, read_batch_rows)
+from problems.textbook_patches import (TextbookPatchError, batch_rows,
+                                       build_draft_patch, read_batch_export)
 
 
 class Command(BaseCommand):
@@ -26,12 +26,15 @@ class Command(BaseCommand):
             raise CommandError(f'Файл уже существует: {output}')
         try:
             batch = TextbookImportBatch.objects.get(pk=options['batch_id'])
-            patch = build_draft_patch(
-                read_batch_rows(options['baseline']), current_rows(batch),
-                source=f'{batch.title} (партия {batch.pk})')
-        except (TextbookImportBatch.DoesNotExist, TextbookPatchError) as exc:
-            raise CommandError(str(exc))
+            patch, untransferred = build_draft_patch(
+                read_batch_export(options['baseline']), batch_rows(batch))
+        except TextbookImportBatch.DoesNotExist:
+            raise CommandError(f'Партия {options["batch_id"]} не найдена.')
+        except (OSError, KeyError, TypeError, ValueError) as exc:
+            raise CommandError(f'Не удалось собрать пакет: {exc}')
         output.write_text(json.dumps(patch, ensure_ascii=False, indent=1) + '\n',
                           encoding='utf-8')
-        fields = sum(len(row['fields']) for row in patch['drafts'])
+        fields = sum(len(row['after']) for row in patch['drafts'])
         self.stdout.write(f'Пакет: задач {len(patch["drafts"])}, полей {fields} → {output}')
+        for external_id, name in untransferred:
+            self.stderr.write(f'  не переносится пакетом: {external_id} {name}')

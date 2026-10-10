@@ -173,14 +173,14 @@ class SharedNormalizationTests(SimpleTestCase):
         self.assertEqual(heal_split_math_dollars(value), value)
         self.assertEqual(
             heal_split_math_dollars(r"$\left(-\frac{7}{6}$ ;$-2\right)$"),
-            r"\left(-\frac{7}{6} ;-2\right)")
+            r"$\left(-\frac{7}{6} ;-2\right)$")
 
     def test_lost_opening_dollar_still_heals_split_pair(self):
         # Открывающий доллар потерян: половина пары осталась вне ``$…$``.
         self.assertEqual(
             heal_split_math_dollars(r"\left(-\frac{7}{6}$ ;$-2\right)"),
-            r"\left(-\frac{7}{6} ;-2\right)")
-        self.assertEqual(heal_split_math_dollars(r"\{-2$; $1\}"), r"\{-2; 1\}")
+            r"$\left(-\frac{7}{6} ;-2\right)$")
+        self.assertEqual(heal_split_math_dollars(r"\{-2$; $1\}"), r"$\{-2; 1\}$")
         self.assertEqual(
             apply_imported_math(r"\left(-\frac{7}{6}$ ;$-2\right)"),
             r"$\displaystyle \left(-\frac{7}{6} ;-2\right)$")
@@ -188,6 +188,19 @@ class SharedNormalizationTests(SimpleTestCase):
         # Целые пары вне формулы разрывом не считаются.
         for value in (r"$\left(x\right)$ и \left(y\right)", r"$a$ \{b\} $c$"):
             self.assertEqual(heal_split_math_dollars(value), value)
+
+    def test_split_pair_inside_sentence_is_healed_locally(self):
+        # Русский текст вокруг разрыва склейке не мешает: склеивается
+        # только отрезок разорванной пары.
+        self.assertEqual(
+            apply_imported_math(
+                r"Найдите $x \in \left(-\frac{7}{6}$ ;$-2\right)$, при которых"),
+            r"Найдите $\displaystyle x \in \left(-\frac{7}{6} ;-2\right)$, при которых")
+        # Многоточие внутри множества не обрывает склеенную формулу.
+        value = r"$\{3, 7, 11, 15, 19,$ ...$\}$"
+        self.assertEqual(apply_imported_math(value), r"$\{3, 7, 11, 15, 19, ...\}$")
+        self.assertEqual(apply_imported_math(apply_imported_math(value)),
+                         apply_imported_math(value))
 
     def test_prose_between_formulas_is_not_a_split_pair(self):
         # Скобки множества вокруг фразы OCR: доллары на месте, фраза — текст.

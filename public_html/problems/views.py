@@ -569,7 +569,9 @@ def task_mask_draft(request):
     """Заготовка маски из текстового «Ответа» (только очевидные случаи)."""
     from assignments.checks import draft_mask
     mask = draft_mask(request.POST.get('answer', ''), request.POST.get('condition', ''),
-                      exam_codes=request.POST.getlist('exam_codes'))
+                      exam_codes=request.POST.getlist('exam_codes'),
+                      source_number=request.POST.get('source_number', ''),
+                      subitem_label=request.POST.get('subitem_label', ''))
     return JsonResponse({
         'ok': bool(mask), 'mask': mask,
         'message': '' if mask else
@@ -1004,7 +1006,7 @@ def _textbook_collection_groups(batch):
             .order_by()
             .values('collection_key', 'source_path')
             .annotate(count=Count('pk'), title=Max('collection_title'),
-                      first_pk=Min('pk')))
+                      first_position=Min('position'), first_pk=Min('pk')))
     grouped = {}
     for row in rows:
         path = tuple(
@@ -1021,12 +1023,13 @@ def _textbook_collection_groups(batch):
             'count': 0,
             'is_leaf': True,
             'level_label': 'Подраздел',
-            'first_pk': row['first_pk'],
+            'book_order': (row['first_position'], row['first_pk']),
         })
         group['selectors'].append((
             row['collection_key'], row['source_path']))
         group['count'] += row['count']
-        group['first_pk'] = min(group['first_pk'], row['first_pk'])
+        group['book_order'] = min(group['book_order'],
+                                (row['first_position'], row['first_pk']))
     leaf_groups = list(grouped.values())
     for leaf in leaf_groups:
         for depth in range(1, len(leaf['path'])):
@@ -1041,11 +1044,11 @@ def _textbook_collection_groups(batch):
                 'is_leaf': False,
                 'level_label': ('Глава целиком'
                                 if depth == 1 else 'Раздел целиком'),
-                'first_pk': leaf['first_pk'],
+                'book_order': leaf['book_order'],
             })
             group['selectors'].extend(leaf['selectors'])
             group['count'] += leaf['count']
-            group['first_pk'] = min(group['first_pk'], leaf['first_pk'])
+            group['book_order'] = min(group['book_order'], leaf['book_order'])
     for identity, group in grouped.items():
         raw = json.dumps(identity, ensure_ascii=False, separators=(',', ':'))
         group['token'] = hashlib.sha256(
@@ -1061,7 +1064,7 @@ def _textbook_collection_groups(batch):
     # Порядок книги: по первой задаче раздела. Строковый путь ставил
     # «Глава 10» сразу за «Главой 1».
     return sorted(grouped.values(), key=lambda group: (
-        group['first_pk'], len(group['path']), group['is_leaf'],
+        group['book_order'], len(group['path']), group['is_leaf'],
         tuple(group['path']), group['collection_key']))
 
 
@@ -1780,6 +1783,19 @@ def textbook_import_block(request, batch_pk, block_pk):
         'rows': rows, 'combined': split is not None})
 
 
+def _neighbour_draft(batch, draft, *, following):
+    """Соседняя строка в порядке книги (position, затем pk)."""
+    if following:
+        return (batch.drafts.filter(
+            Q(position__gt=draft.position)
+            | Q(position=draft.position, pk__gt=draft.pk))
+            .order_by('position', 'pk').first())
+    return (batch.drafts.filter(
+        Q(position__lt=draft.position)
+        | Q(position=draft.position, pk__lt=draft.pk))
+        .order_by('-position', '-pk').first())
+
+
 @teacher_required
 def textbook_import_review(request, batch_pk, pk):
     from .models import ExamItem
@@ -1830,9 +1846,19 @@ def textbook_import_review(request, batch_pk, pk):
                 updated.reviewed_at = timezone.now()
                 updated.save()
                 refresh_image_warnings(batch)
+                if request.POST.get('prepare_masks'):
+                    # Подбор после сохранения: маски строятся по ответам,
+                    # которые учитель только что поправил в этой форме.
+                    from .textbook_import import complete_draft_answer_masks
+                    added = complete_draft_answer_masks(updated)
+                    messages.success(
+                        request, f'{updated.external_id}: сохранено, подобрано масок — {added}.'
+                        if added else f'{updated.external_id}: сохранено; новых масок нет — '
+                                      'добавьте вручную, если ответ можно проверить.')
+                    return redirect('textbook_import_review',
+                                    batch_pk=batch.pk, pk=updated.pk)
                 messages.success(request, f'{updated.external_id}: сохранено.')
-                next_draft = (batch.drafts.filter(pk__gt=updated.pk)
-                              .order_by('pk').first())
+                next_draft = _neighbour_draft(batch, updated, following=True)
                 if request.POST.get('save_next') and next_draft:
                     return redirect(
                         'textbook_import_review', batch_pk=batch.pk,
@@ -1841,9 +1867,8 @@ def textbook_import_review(request, batch_pk, pk):
                     'textbook_import_review', batch_pk=batch.pk, pk=updated.pk)
     else:
         form = TextbookDraftReviewForm(instance=draft)
-    # Соседи в порядке книги (порядке создания черновиков), а не строк.
-    previous = batch.drafts.filter(pk__lt=draft.pk).order_by('-pk').first()
-    following = batch.drafts.filter(pk__gt=draft.pk).order_by('pk').first()
+    previous = _neighbour_draft(batch, draft, following=False)
+    following = _neighbour_draft(batch, draft, following=True)
     from .textbook_parser import order_letter_subitems
     review_subitems = [dict(item) for item in draft.subitems]
     if request.method == 'POST':
@@ -1903,6 +1928,7 @@ def textbook_import_review(request, batch_pk, pk):
         'draft': draft,
         'content_warnings': content_warnings(draft),
         'masks_pending': DEFERRED_MASK_WARNING in draft.warnings,
+        'masks_by_exam': draft.masks_by_exam,
         'form': form,
         'review_subitems': review_subitems,
         'import_exam_items': ExamItem.objects.filter(code__in=draft.exam_item_codes),
@@ -2004,24 +2030,6 @@ def textbook_import_prepare_masks(request, pk):
     messages.success(request, 'Маски ответов подобраны. Проверьте их в сверке '
                               'задач или в списке с включёнными ответами.')
     return redirect(_textbook_detail_url(batch, section=section_token or None))
-
-
-@teacher_required
-@require_POST
-def textbook_import_review_masks(request, batch_pk, pk):
-    """Подбирает маски одной задачи сразу, не дожидаясь загрузки в каталог."""
-    from .textbook_import import complete_draft_answer_masks
-    batch = _own_import_batch(request, batch_pk)
-    draft = get_object_or_404(TextbookTaskDraft, batch=batch, pk=pk)
-    if draft.status == TextbookTaskDraft.STATUS_IMPORTED:
-        messages.error(request, 'Задача уже в каталоге: маски правятся в её карточке.')
-    else:
-        added = complete_draft_answer_masks(draft)
-        messages.success(
-            request, f'{draft.external_id}: подобрано масок — {added}.'
-            if added else f'{draft.external_id}: новых масок нет — '
-                          'добавьте вручную, если ответ можно проверить.')
-    return redirect('textbook_import_review', batch_pk=batch.pk, pk=draft.pk)
 
 
 @teacher_required
