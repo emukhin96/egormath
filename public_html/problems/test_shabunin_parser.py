@@ -266,6 +266,43 @@ class SharedNormalizationTests(SimpleTestCase):
                     r"1, & x \geqslant 2 .\end{array}\right.$")
         self.assertEqual(_strip_system_tail_punct(sentence), sentence)
 
+    def test_prose_inside_formula_moves_out(self):
+        from .shabunin_parser import _unwrap_math_prose
+        self.assertEqual(
+            _unwrap_math_prose(
+                "Доказать справедливость неравенства\n$$\n\\ln ^{2} x>\\ln (x-1) "
+                "\\ln (x+1) \\text { при } x>2 \\text {. }\n$$"),
+            "Доказать справедливость неравенства\n$\\ln ^{2} x>\\ln (x-1) "
+            "\\ln (x+1)$ при $x>2$.")
+        self.assertEqual(
+            _unwrap_math_prose(
+                r"$A \equiv\left\{\text { Число } 2^{222}-1 \text { делится на } 15\right\}$"),
+            r"$A \equiv\{$Число $2^{222}-1$ делится на $15\}$")
+        self.assertEqual(
+            _unwrap_math_prose(
+                r"$x^{2}+\frac{2}{y-3}, \text { если }-2 \leqslant x \text { и } y \leqslant 2,9 .$"),
+            r"$x^{2}+\frac{2}{y-3}$, если $-2 \leqslant x$ и $y \leqslant 2,9$.")
+        # Текст как часть формулы остаётся: кусочная функция, индекс, имя.
+        for value in (
+                r"$y=\left\{\begin{aligned}4 x, & \text { если } x>-1\end{aligned}\right.$",
+                r"$f_{\text {наим }}=-3$", r"$\operatorname{НОД}(a, b)$",
+                r"$x \text {, } y$"):
+            self.assertEqual(_unwrap_math_prose(value), value)
+
+    def test_parameter_tasks_get_site_tag(self):
+        from .shabunin_parser import PARAMETER_TAG, _PARAMETER_RE
+        from .oge_metadata import PARAMETER_TAG as SITE_TAG
+        self.assertEqual(PARAMETER_TAG, SITE_TAG)
+        for text in ("Найти все значения $a$, при которых уравнение имеет корень.",
+                     "При каких значениях параметра $b$ система совместна?",
+                     "Решить уравнение при всех значениях $a$:",
+                     "Сколько корней имеет уравнение в зависимости от $a$?"):
+            self.assertTrue(_PARAMETER_RE.search(text), text)
+        for text in ("При каких значениях $x$ верно неравенство?",
+                     "Найти все значения $x$, удовлетворяющие условию.",
+                     "Доказать, что при любом натуральном $n$ число делится на 3."):
+            self.assertFalse(_PARAMETER_RE.search(text), text)
+
     def test_subitem_punct_keeps_right_delimiter_dot(self):
         value = r"F=\left\{\begin{array}{l}0 \\ 1\end{array}\right."
         self.assertEqual(strip_subitem_punct(value), value)

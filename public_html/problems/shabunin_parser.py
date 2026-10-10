@@ -749,7 +749,136 @@ def _finish_value(value: str) -> str:
     # «1)\\ -8» — перенос строки сразу после метки пункта.
     value = re.sub(r"^\s*(?:\\\\\s*)+", "", value)
     value = _join_split_halves(value)
+    value = _unwrap_math_prose(value)
     return _wrap_lone_braces(normalize_cyrillic_units(value))
+
+
+# Проза внутри строчной формулы («$\ln ^{2} x>… \text { при } x>2$»): на
+# сайте русский текст в формуле идёт чужим шрифтом и не переносится.
+# Выносим \text{…} с кириллицей наружу, только вне скобок и окружений:
+# «если» в кусочной функции, русские индексы и \operatorname остаются.
+_TEXT_CMD_RE = re.compile(r"\\(?:text|mbox|textrm)\s*\{")
+_PROSE_DEPTH_RE = re.compile(
+    r"\\(?:left|begin)(?![a-zA-Z])|(?<!\\)\{|\\(?:right|end)(?![a-zA-Z])|(?<!\\)\}")
+
+
+def _brace_end(text: str, opening: int) -> int:
+    depth = 0
+    for pos in range(opening, len(text)):
+        char = text[pos]
+        if char == "\\":
+            continue
+        if char == "{" and text[pos - 1] != "\\":
+            depth += 1
+        elif char == "}" and text[pos - 1] != "\\":
+            depth -= 1
+            if depth == 0:
+                return pos
+    return -1
+
+
+def _split_math_prose(body: str) -> list[tuple[bool, str]] | None:
+    """[(формула?, кусок)] или None, если прозы на верхнем уровне нет."""
+    pieces = []
+    depth = 0
+    start = pos = 0
+    found = False
+    while pos < len(body):
+        command = _TEXT_CMD_RE.match(body, pos)
+        if command and depth == 0:
+            end = _brace_end(body, command.end() - 1)
+            content = body[command.end():end] if end > 0 else ""
+            # Русские слова и знаки предложения («\text {. }») — проза.
+            if end > 0 and (re.search(r"[А-Яа-яЁё]", content)
+                            or re.fullmatch(r"[\s.,;:]+", content)):
+                pieces.append((True, body[start:pos]))
+                pieces.append((False, content))
+                found = True
+                start = pos = end + 1
+                continue
+        token = _PROSE_DEPTH_RE.match(body, pos)
+        if token:
+            opening = token.group(0) in ("{",) or token.group(0).startswith(("\\left", "\\begin"))
+            depth += 1 if opening else -1
+            pos = token.end()
+            continue
+        pos += 2 if body.startswith("\\", pos) else 1
+    pieces.append((True, body[start:]))
+    if not found or depth != 0 or not any(
+            re.search(r"[А-Яа-яЁё]", piece) for is_math, piece in pieces if not is_math):
+        return None
+    return pieces
+
+
+_FLAT_SET_PAIR_RE = re.compile(r"\\left\\\{((?:(?!\\left|\\right).)*?)\\right\\\}", re.S)
+
+
+_DISPLAY_MATH_RE = re.compile(r"\$\$(.+?)\$\$|\\\[(.+?)\\\]", re.S)
+
+
+def _unwrap_math_prose(value: str) -> str:
+    """Строчная формула с прозой — формулы и текст вперемешку; выключная
+    («$$\ln … \text { при } x>2 .$$») — строка текста со строчными."""
+    def fix_display(match: re.Match) -> str:
+        body = match.group(1) or match.group(2)
+        fixed = fix_body(body, display=True)
+        return match.group(0) if fixed is None else fixed
+
+    def fix(match: re.Match) -> str:
+        fixed = fix_body(match.group(0)[1:-1])
+        return match.group(0) if fixed is None else fixed
+
+    def fix_body(body: str, display: bool = False) -> str | None:
+        if not _TEXT_CMD_RE.search(body):
+            return None
+        # Скобки множества вокруг фразы («\left\{\text{Число} …\right\}»)
+        # — обычные: после выноса фразы половины окажутся в разных формулах.
+        plain = _FLAT_SET_PAIR_RE.sub(r"\\{\1\\}", body)
+        pieces = _split_math_prose(plain)
+        if pieces is None:
+            return None
+        display = display or body.lstrip().startswith("\\displaystyle")
+        out = ""
+        for is_math, piece in pieces:
+            piece = " ".join(piece.split())
+            if is_math:
+                piece = re.sub(r"^\\displaystyle\s*", "", piece)
+                # Знак предложения в конце формулы («…\frac{2}{y-3},», «2,9 .»)
+                # — за формулу; точку «\right.» не трогаем.
+                tail = re.search(r"(?<!\\right)\s*([,.;:])$", piece)
+                if tail:
+                    piece = piece[:tail.start()].rstrip()
+                if not piece:
+                    continue
+                if display and "\\frac" in piece:
+                    piece = "\\displaystyle " + piece
+                glue = "" if not out or out.endswith((" ", "(")) or piece.startswith("\\}") else " "
+                out += glue + "$" + piece + "$" + (tail.group(1) if tail else "")
+            elif piece:
+                glue = "" if not out or piece[0] in ".,;:)" or out.endswith("\\{$") else " "
+                out += glue + piece
+        return out.strip()
+
+    value = _DISPLAY_MATH_RE.sub(fix_display, value or "")
+    return _DOLLAR_SPAN_RE.sub(fix, value)
+
+
+# Метка сайта для задач с параметром (как у ОГЭ-22, oge_metadata).
+PARAMETER_TAG = "задача с параметром"
+_PARAM_LETTER = r"\$\s*(?:\\displaystyle\s*)?[a-dk-mpqr]\s*\$"
+_PARAMETER_RE = re.compile(
+    r"параметр"
+    r"|(?:при|для)\s+(?:каких|всех|любых|каждого|каждом|каком)\s+"
+    r"(?:(?:действительных|целых|натуральных)\s+)?(?:значени\w*\s+)?" + _PARAM_LETTER
+    + r"|(?:найти|найдите|определить|указать)\s+(?:все\s+)?(?:\w+\s+)?значени\w*\s+" + _PARAM_LETTER
+    + r"|в\s+зависимости\s+от\s+(?:значени\w*\s+)?" + _PARAM_LETTER,
+    re.I)
+
+
+def _tag_parameter_task(task: TaskDraft) -> None:
+    text = " ".join([task.text_latex] + [item.text_latex for item in task.subitems])
+    if _PARAMETER_RE.search(text) and PARAMETER_TAG not in task.tags:
+        task.tags.append(PARAMETER_TAG)
 
 
 # «$\left(a\right.$; $\displaystyle \left.b\right)$» — OCR разорвал пару
@@ -996,6 +1125,7 @@ def parse_shabunin(text: str) -> tuple[list[TaskDraft], dict]:
                 _normalize_task_units(task)
                 _finish_fields(task)
                 finalize_draft_images(task)
+                _tag_parameter_task(task)
             tasks.extend(chapter_tasks)
     diagnostics["task_marker_occurrences"] = len(tasks)
     diagnostics["unique_tasks"] = len(tasks)

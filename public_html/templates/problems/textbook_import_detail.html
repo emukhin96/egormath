@@ -160,6 +160,7 @@
       <td class="col-meta">
         <div class="import-section-path">{% for part in draft.source_path %}<div class="import-section-part">{{ part|heading_dot }}</div>{% endfor %}</div>
         <div class="import-section-topics">{% include 'problems/_textbook_draft_topic.html' with draft=draft %}</div>
+        {% if draft.tags %}<div class="import-draft-tags">{% for tag in draft.tags %}<span class="badge">{{ tag }}</span>{% endfor %}</div>{% endif %}
       </td>
       <td class="col-confidence">{{ draft.confidence }}</td>
     </tr>{% endfor %}
