@@ -671,6 +671,18 @@ def _radical_reducible(node):
                 and value.args[1].is_Pow and value.args[1].exp == exponent
                 and value.args[1].base == -inner):
             return False
+        # SymPy сам переписывает ∛4 = 2^(2/3) и ∜12 = √2·∜3. Множитель не
+        # вынесен (коэффициент ±1), а показатель корня не понижается (НОК
+        # знаменателей степеней равен показателю) — корень уже простейший.
+        if inner.is_Integer:
+            from sympy import Mul, ilcm
+            coefficient, radical = value.as_coeff_Mul()
+            powers = Mul.make_args(radical)
+            if (coefficient in (1, -1) and all(
+                    p.is_Pow and p.base.is_Integer and p.exp.is_Rational
+                    and 0 < p.exp < 1 for p in powers)
+                    and ilcm(*(p.exp.q for p in powers), 1) == degree):
+                return False
         return True
     # Символьный радикал: \sqrt{4Rr} = 2\sqrt{Rr} — числовой множитель
     # выносится без знания знаков; нечётные корни оставляем вычислителю.
