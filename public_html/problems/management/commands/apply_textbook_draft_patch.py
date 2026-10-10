@@ -43,7 +43,8 @@ class Command(BaseCommand):
             f'{mode}: задач {len(report["applied"])}, полей {report["fields"]}, '
             f'уже применено {len(report["already"])}, '
             f'возвращено на проверку {len(report["reset"])}, '
-            f'пропущено {len(report["skipped"])}.')
+            f'пропущено {len(report["skipped"])}, '
+            f'переставлено по порядку книги {report["reordered"]}.')
         for external_id, reason in report['skipped']:
             self.stdout.write(f'  пропущено {external_id}: {reason}')
         for external_id in report['reset']:
