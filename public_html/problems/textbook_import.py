@@ -221,6 +221,9 @@ def complete_draft_answer_masks(draft):
     def masked(item):
         return bool(str(item.get('answer_mask') or '').strip())
 
+    # Предупреждения о рисунках могли только что пересчитаться в базе
+    # (refresh_image_warnings) — не затираем их старым списком из памяти.
+    draft.refresh_from_db(fields=['warnings'])
     before = (sum(masked(item) for item in draft.subitems) if draft.subitems
               else int(bool(draft.answer_mask.strip())))
     fill_draft_answer_masks(draft)

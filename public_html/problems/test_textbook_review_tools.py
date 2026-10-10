@@ -101,6 +101,22 @@ class ReviewToolsTests(TestCase):
         self.assertContains(response, 'Как увидит ученик')
         self.assertNotContains(response, 'Сохранить и подобрать маски')
 
+    def test_prepare_masks_keeps_fresh_image_warning(self):
+        draft = self.batch.drafts.get(external_id='I.2')
+        draft.answer_mask = ''
+        draft.warnings = [DEFERRED_MASK_WARNING]
+        draft.save()
+        review = reverse('textbook_import_review', args=[self.batch.pk, draft.pk])
+        form = self.client.get(review).context['form']
+        data = {name: form[name].value() or '' for name in form.fields}
+        # Учитель сослался на рисунок, файла которого в партии нет.
+        data.update({'text_latex': r'Задача I.2. \taskpic{fig9}',
+                     'prepare_masks': '1', 'topic_ids': [], 'topic': ''})
+        self.client.post(review, data)
+        draft.refresh_from_db()
+        self.assertEqual(draft.answer_mask, '{{number: 4}}')
+        self.assertTrue(any('изображений' in w for w in draft.warnings), draft.warnings)
+
     def test_exam_draft_mask_is_left_to_exam_format(self):
         TextbookTaskDraft.objects.filter(batch=self.batch).update(
             answer_mask='', exam_item_codes=['EGE_1'])

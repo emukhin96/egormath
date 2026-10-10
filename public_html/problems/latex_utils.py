@@ -378,6 +378,29 @@ def _dollar_segments(text):
     return segments
 
 
+_OPENER_RE = re.compile(r'\\left(?![a-zA-Z])|(?<!\\left)\\\{')
+_CLOSER_RE = re.compile(
+    r'\\right(?![a-zA-Z])\s*(?:\\[a-zA-Z]+|\\.|.)?|(?<!\\right)\\\}')
+
+
+def _edge_cut(body, balance, *, first):
+    """Где крайний текстовый кусок отрезка переходит в половину пары.
+
+    У первого куска формула начинается с открывающей ``\\left``/``\\{``,
+    у последнего кончается закрывающей: соседняя фраза («Найдите …»,
+    «… при $x>0$») остаётся текстом.
+    """
+    if first:
+        for match in _OPENER_RE.finditer(body):
+            if _pair_balance(body[match.start():]) == balance:
+                return match.start()
+        return 0
+    for match in _CLOSER_RE.finditer(body):
+        if _pair_balance(body[:match.end()]) == balance:
+            return match.end()
+    return len(body)
+
+
 def _has_split_math_pair(text):
     """Есть ли разорванная долларами пара ``\\left…\\right``/``\\{…\\}``."""
     return any(_pair_balance(body) != (0, 0)
@@ -391,7 +414,8 @@ def heal_split_math_dollars(text):
     посередине: ``$\\left(-\\frac{7}{6}$ ;$-2\\right)$``, а при потерянном
     открывающем долларе — ``\\{-2$; $1\\}``. Склеивается только отрезок от
     куска с непарной открывающей до куска с её парой: он становится одной
-    формулой, остальной текст не трогается. Если на этом отрезке есть
+    формулой, остальной текст не трогается; у крайних текстовых кусков
+    в формулу уходит только половина пары. Если на этом отрезке есть
     русский текст («$A \\equiv \\{$Число 54 делится на 2 \\}»), это не
     разорванная формула, а скобки вокруг фразы — её оставляем как есть.
     """
@@ -420,14 +444,27 @@ def heal_split_math_dollars(text):
             step = _pair_balance(segments[end][1])
             left += step[0]
             braces += step[1]
-        region = segments[index:end + 1]
-        if ((left, braces) != (0, 0) or end == index
-                or any(not is_math and _PROSE_RE.search(body)
-                       for is_math, body in region)):
+        if (left, braces) != (0, 0) or end == index:
             out.append(raw(segments[index]))
             index += 1
             continue
-        out.append('$' + ''.join(body for _is_math, body in region) + '$')
+        bodies = [body for _is_math, body in segments[index:end + 1]]
+        lead = tail = ''
+        first_math, first_body = segments[index]
+        if not first_math:
+            cut = _edge_cut(first_body, _pair_balance(first_body), first=True)
+            lead, bodies[0] = first_body[:cut], first_body[cut:]
+        last_math, last_body = segments[end]
+        if not last_math:
+            cut = _edge_cut(last_body, _pair_balance(last_body), first=False)
+            bodies[-1], tail = last_body[:cut], last_body[cut:]
+        texts = [body for (is_math, _old), body
+                 in zip(segments[index:end + 1], bodies) if not is_math]
+        if any(_PROSE_RE.search(body) for body in texts):
+            out.append(raw(segments[index]))
+            index += 1
+            continue
+        out.append(lead + '$' + ''.join(bodies) + '$' + tail)
         healed = True
         index = end + 1
     return ''.join(out) if healed else text
