@@ -9,7 +9,8 @@ from .shabunin_parser import (
     topic_code)
 from .test_textbook_import import bundle, make_teacher
 from .textbook_import import create_batch_from_bundle
-from .textbook_parser import _open_paren_depth, strip_subitem_punct
+from .textbook_parser import (
+    _open_paren_depth, apply_imported_math, strip_subitem_punct)
 
 
 FIGURE = r"""
@@ -172,6 +173,20 @@ class SharedNormalizationTests(SimpleTestCase):
         self.assertEqual(
             heal_split_math_dollars(r"$\left(-\frac{7}{6}$ ;$-2\right)$"),
             r"\left(-\frac{7}{6} ;-2\right)")
+
+    def test_lost_opening_dollar_still_heals_split_pair(self):
+        # Открывающий доллар потерян: половина пары осталась вне ``$…$``.
+        self.assertEqual(
+            heal_split_math_dollars(r"\left(-\frac{7}{6}$ ;$-2\right)"),
+            r"\left(-\frac{7}{6} ;-2\right)")
+        self.assertEqual(heal_split_math_dollars(r"\{-2$; $1\}"), r"\{-2; 1\}")
+        self.assertEqual(
+            apply_imported_math(r"\left(-\frac{7}{6}$ ;$-2\right)"),
+            r"$\displaystyle \left(-\frac{7}{6} ;-2\right)$")
+        self.assertEqual(apply_imported_math(r"\{-2$; $1\}"), r"$\{-2; 1\}$")
+        # Целые пары вне формулы разрывом не считаются.
+        for value in (r"$\left(x\right)$ и \left(y\right)", r"$a$ \{b\} $c$"):
+            self.assertEqual(heal_split_math_dollars(value), value)
 
     def test_interval_brackets_close_paren_depth(self):
         self.assertEqual(_open_paren_depth(r"(-\infty ; 2] \cup\{11\} "), 0)

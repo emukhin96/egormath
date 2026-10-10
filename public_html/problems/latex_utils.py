@@ -355,19 +355,27 @@ _OPEN_SET_RE = re.compile(r'(?<!\\left)\\\{')
 _CLOSE_SET_RE = re.compile(r'(?<!\\right)\\\}')
 
 
-def _has_split_math_pair(text):
-    """Есть ли формула ``$…$`` с разорванной парой ``\\left…\\right``/``\\{…\\}``.
+def _unbalanced_pairs(segment):
+    return (len(_LEFT_RE.findall(segment)) != len(_RIGHT_RE.findall(segment))
+            or len(_OPEN_SET_RE.findall(segment)) != len(_CLOSE_SET_RE.findall(segment)))
 
-    Целая формула ``$\\left(x\\right)$`` разрывом не считается: снимать
-    в ней доллары нельзя, иначе повторная обёртка порежет её на куски.
+
+def _has_split_math_pair(text):
+    """Есть ли разорванная долларами пара ``\\left…\\right``/``\\{…\\}``.
+
+    Текст делится на формулы ``$…$`` и куски между ними; разрыв — это
+    непарные ``\\left``/``\\{`` внутри любого куска: ``$\\left(a$ и $b\\right)$``,
+    а также с потерянным открывающим долларом ``\\left(a$ ;$b\\right)`` и
+    ``\\{-2$; $1\\}``. Целая формула ``$\\left(x\\right)$`` разрывом не
+    считается: снимать в ней доллары нельзя, иначе повторная обёртка
+    порежет её на куски.
     """
+    position = 0
     for match in _INLINE_DOLLAR_SPAN_RE.finditer(text):
-        span = match.group(0)
-        if len(_LEFT_RE.findall(span)) != len(_RIGHT_RE.findall(span)):
+        if _unbalanced_pairs(text[position:match.start()]) or _unbalanced_pairs(match.group(0)):
             return True
-        if len(_OPEN_SET_RE.findall(span)) != len(_CLOSE_SET_RE.findall(span)):
-            return True
-    return False
+        position = match.end()
+    return _unbalanced_pairs(text[position:])
 
 
 def heal_split_math_dollars(text):
