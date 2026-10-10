@@ -348,8 +348,34 @@ def ensure_displaystyle_fractions(text):
     return _MATH_SPAN_RE.sub(repl, text)
 
 
-_BROKEN_LEFT_DOLLAR_RE = re.compile(r'\\left[^$]*\$')
-_BROKEN_SET_DOLLAR_RE = re.compile(r'\\\{[^$}]*\$')
+_INLINE_DOLLAR_SPAN_RE = re.compile(r'(?<!\$)\$(?!\$)[^$]*\$')
+_LEFT_RE = re.compile(r'\\left(?![a-zA-Z])')
+_RIGHT_RE = re.compile(r'\\right(?![a-zA-Z])')
+_OPEN_SET_RE = re.compile(r'(?<!\\left)\\\{')
+_CLOSE_SET_RE = re.compile(r'(?<!\\right)\\\}')
+
+
+def _unbalanced_pairs(segment):
+    return (len(_LEFT_RE.findall(segment)) != len(_RIGHT_RE.findall(segment))
+            or len(_OPEN_SET_RE.findall(segment)) != len(_CLOSE_SET_RE.findall(segment)))
+
+
+def _has_split_math_pair(text):
+    """Есть ли разорванная долларами пара ``\\left…\\right``/``\\{…\\}``.
+
+    Текст делится на формулы ``$…$`` и куски между ними; разрыв — это
+    непарные ``\\left``/``\\{`` внутри любого куска: ``$\\left(a$ и $b\\right)$``,
+    а также с потерянным открывающим долларом ``\\left(a$ ;$b\\right)`` и
+    ``\\{-2$; $1\\}``. Целая формула ``$\\left(x\\right)$`` разрывом не
+    считается: снимать в ней доллары нельзя, иначе повторная обёртка
+    порежет её на куски.
+    """
+    position = 0
+    for match in _INLINE_DOLLAR_SPAN_RE.finditer(text):
+        if _unbalanced_pairs(text[position:match.start()]) or _unbalanced_pairs(match.group(0)):
+            return True
+        position = match.end()
+    return _unbalanced_pairs(text[position:])
 
 
 def heal_split_math_dollars(text):
@@ -361,8 +387,7 @@ def heal_split_math_dollars(text):
     text = str(text or '')
     if '$' not in text:
         return text
-    if not (_BROKEN_LEFT_DOLLAR_RE.search(text)
-            or _BROKEN_SET_DOLLAR_RE.search(text)):
+    if not _has_split_math_pair(text):
         return text
     return text.replace('$', '')
 

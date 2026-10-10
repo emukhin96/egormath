@@ -197,6 +197,8 @@ class TaskDraft:
     exam_item_codes: list[str] = field(default_factory=list)
     grade_band_codes: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    # Код темы рубрикатора, если профиль знает её по структуре книги.
+    topic_code: str = ""
     confidence: float = 1.0
     review_status: str = "needs_review"
     warnings: list[str] = field(default_factory=list)
@@ -298,7 +300,7 @@ def strip_imported_answer_punct(value: str) -> str:
         return value
     if value.endswith(('?', '!')):
         return value
-    if not value.endswith('.'):
+    if not value.endswith('.') or value.endswith('\\right.'):
         return value
     # «0. 2.» / «n=7. 7.» — точка держит номер следующей задачи.
     if re.search(r'\d{1,2}\s*\.\s*\d{1,2}\.$', value):
@@ -713,6 +715,9 @@ def strip_subitem_punct(value: str) -> str:
         return value
     if value[0].isupper() and value.endswith('.'):
         return value
+    if value.endswith('\\right.'):
+        # Точка — часть ``\right.`` формулы без закрывающего «$».
+        return value
     if value.endswith((';', '.', ',')):
         return value[:-1].rstrip()
     return value
@@ -742,11 +747,12 @@ def path_at(all_sections: Sequence[Section], pos: int) -> list[str]:
 
 
 def _open_paren_depth(prefix: str) -> int:
+    """Глубина незакрытых скобок; промежутки «(a; b]» и «[a; b)» закрыты."""
     depth = 0
     for char in prefix:
-        if char == "(":
+        if char in "([":
             depth += 1
-        elif char == ")" and depth:
+        elif char in ")]" and depth:
             depth -= 1
     return depth
 
@@ -2423,9 +2429,12 @@ def merge_solutions(
                     # Компактный ответ Зива: «а) 1; б) -1» при условии без
                     # подпунктов. Нельзя звать _explicit_answers — там нет
                     # строки «Ответ:», и поле обнулялось.
-                    task.author_answer_latex = (
-                        task.author_answer_latex
-                        or _compact_labeled_answers(solution_subitems))
+                    # Вводная фраза перед «1) …; 2) …» не заменяет сами
+                    # ответы: «Два положения окружности: 1) …; 2) …».
+                    compact = _compact_labeled_answers(solution_subitems)
+                    task.author_answer_latex = " ".join(
+                        part for part in (task.author_answer_latex, compact)
+                        if part)
             else:
                 # При несовпадении границ не обнуляем ответ: у Зива часто
                 # «1) а) … 2) а)» против нумерованных частей условия.
@@ -3353,6 +3362,9 @@ def bundle_from_text(
     elif profile == "merzlyak":
         from .merzlyak_parser import parse_merzlyak
         tasks, diagnostics = parse_merzlyak(tasks_text)
+    elif profile == "shabunin":
+        from .shabunin_parser import parse_shabunin
+        tasks, diagnostics = parse_shabunin(tasks_text)
     elif profile == "feoktistov":
         from .feoktistov_parser import parse_feoktistov
         tasks, diagnostics = parse_feoktistov(tasks_text)
@@ -3562,7 +3574,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--profile", required=True,
-        choices=("galitsky", "merzlyak", "feoktistov", "ziv", "shestakov", "ostromogilsky",
+        choices=("galitsky", "merzlyak", "shabunin", "feoktistov", "ziv", "shestakov", "ostromogilsky",
                  "ostromogilsky_ege"))
     parser.add_argument("--tasks", required=True, type=Path)
     parser.add_argument("--solutions", type=Path)
