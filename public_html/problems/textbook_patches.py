@@ -29,17 +29,17 @@ from .textbook_transfer import serialize_batch
 
 PATCH_KIND = 'textbook-draft-patch'
 PATCH_VERSION = 2
-# Содержание черновика, маски и темы. Статус и отметки сверки не переносятся:
-# одобряет человек на сервере.
+# Содержание черновика, маски, темы и метки. Статус и отметки сверки не
+# переносятся: одобряет человек на сервере.
 TEXT_FIELDS = ('text_latex', 'author_answer_latex', 'author_solution_latex',
                'answer_latex', 'solution_latex', 'answer_mask')
-LIST_FIELDS = ('subitems', 'warnings', 'images')
+LIST_FIELDS = ('subitems', 'warnings', 'images', 'tags')
 TOPIC_FIELDS = ('topic_code', 'topic_codes')
 PATCH_FIELDS = TEXT_FIELDS + LIST_FIELDS + TOPIC_FIELDS
 # Поля, правка которых пакетом не переносится: о них предупреждаем.
 UNTRANSFERRED_FIELDS = ('source_number', 'source_path', 'collection_key',
                         'collection_title', 'topic_original',
-                        'exam_item_codes', 'grade_band_codes', 'tags')
+                        'exam_item_codes', 'grade_band_codes')
 
 
 class TextbookPatchError(ValueError):

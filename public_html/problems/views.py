@@ -1932,6 +1932,7 @@ def textbook_import_review(request, batch_pk, pk):
         'form': form,
         'review_subitems': review_subitems,
         'import_exam_items': ExamItem.objects.filter(code__in=draft.exam_item_codes),
+        'known_tags': list(Tag.objects.values_list('name', flat=True)),
         'previous': previous,
         'following': following,
         'review_locked': draft.status == TextbookTaskDraft.STATUS_IMPORTED,
