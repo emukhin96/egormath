@@ -202,6 +202,15 @@ class SharedNormalizationTests(SimpleTestCase):
         self.assertEqual(apply_imported_math(apply_imported_math(value)),
                          apply_imported_math(value))
 
+    def test_lost_dollar_next_to_prose_heals_only_pair_half(self):
+        # Потерян внешний доллар: в формулу уходит половина пары, соседняя
+        # фраза остаётся текстом.
+        self.assertEqual(heal_split_math_dollars(r"Найдите \left(a$ ;$b\right)"),
+                         r"Найдите $\left(a ;b\right)$")
+        self.assertEqual(
+            heal_split_math_dollars(r"$\left(a$ ; b\right) при $x>0$"),
+            r"$\left(a ; b\right)$ при $x>0$")
+
     def test_prose_between_formulas_is_not_a_split_pair(self):
         # Скобки множества вокруг фразы OCR: доллары на месте, фраза — текст.
         for value in (
@@ -216,6 +225,46 @@ class SharedNormalizationTests(SimpleTestCase):
     def test_interval_brackets_close_paren_depth(self):
         self.assertEqual(_open_paren_depth(r"(-\infty ; 2] \cup\{11\} "), 0)
         self.assertEqual(_open_paren_depth("(1; "), 1)
+
+    def test_split_pair_halves_join_into_one_formula(self):
+        from .shabunin_parser import _join_split_halves
+        self.assertEqual(
+            _join_split_halves(
+                r"$\displaystyle \left( \pm \frac{7 \pi}{24}+\pi(k+n)\right.$; "
+                r"$\displaystyle \left.\pm \frac{\pi}{24}+\pi(n-k)\right)$"),
+            r"$\displaystyle \left( \pm \frac{7 \pi}{24}+\pi(k+n) ; "
+            r"\pm \frac{\pi}{24}+\pi(n-k)\right)$")
+        system = r"$\left\{\begin{array}{l}x=1\end{array}\right.$; $y=2$"
+        self.assertEqual(_join_split_halves(system), system)
+
+    def test_quad_separated_answers_become_separate_formulas(self):
+        from .shabunin_parser import _split_quad_list
+        self.assertEqual(
+            _split_quad_list(
+                r"$\displaystyle \left(\frac{2}{9} ; \frac{10}{9}\right), "
+                r"\quad\left(-\frac{5}{49} ; 1\right), \quad k, n \in \mathbb{Z}$"),
+            r"$\displaystyle \left(\frac{2}{9} ; \frac{10}{9}\right)$, "
+            r"$\displaystyle \left(-\frac{5}{49} ; 1\right)$, $k, n \in \mathbb{Z}$")
+        # Внутри скобок множества и систем «\quad» — часть формулы.
+        for value in (r"$\{1, \quad 2\}$",
+                      r"$\left\{\begin{array}{l}x=1, \quad y=2\end{array}\right.$",
+                      r"$$A(x), \quad B(x)$$"):
+            self.assertEqual(_split_quad_list(value), value)
+
+    def test_list_punct_inside_subitem_system_is_removed(self):
+        from .shabunin_parser import _strip_system_tail_punct
+        self.assertEqual(
+            _strip_system_tail_punct(
+                r"$\left\{\begin{array}{l}y \geqslant|x|-1, \\ y \leqslant 3 ;\end{array}\right.$"),
+            r"$\left\{\begin{array}{l}y \geqslant|x|-1, \\ y \leqslant 3\end{array}\right.$")
+        self.assertEqual(
+            _strip_system_tail_punct(
+                r"$\left\{\begin{array}{l}2^{x}=32, \\ x+y=5 \text {. }\end{array}\right.$"),
+            r"$\left\{\begin{array}{l}2^{x}=32, \\ x+y=5\end{array}\right.$")
+        # Законченное предложение сохраняет точку, как strip_subitem_punct.
+        sentence = (r"Найти $f(1)$, если $f(x)=\left\{\begin{array}{l}x, & x<2, \\ "
+                    r"1, & x \geqslant 2 .\end{array}\right.$")
+        self.assertEqual(_strip_system_tail_punct(sentence), sentence)
 
     def test_subitem_punct_keeps_right_delimiter_dot(self):
         value = r"F=\left\{\begin{array}{l}0 \\ 1\end{array}\right."

@@ -748,7 +748,91 @@ def _finish_value(value: str) -> str:
     value = re.sub(r"\$\s*-\s*(?=наи[мб])", "$ — ", value)
     # «1)\\ -8» — перенос строки сразу после метки пункта.
     value = re.sub(r"^\s*(?:\\\\\s*)+", "", value)
+    value = _join_split_halves(value)
     return _wrap_lone_braces(normalize_cyrillic_units(value))
+
+
+# «$\left(a\right.$; $\displaystyle \left.b\right)$» — OCR разорвал пару
+# на две формулы по «;». Формула с «\left.» в начале — всегда вторая
+# половина такой пары, поэтому половины склеиваются в одну формулу.
+_SPLIT_HALVES_RE = re.compile(
+    r"\s*\\right\.\s*\$\s*([;,]?)\s*\$\s*(?:\\displaystyle\s*)?\\left\.\s*")
+
+
+def _join_split_halves(value: str) -> str:
+    return _SPLIT_HALVES_RE.sub(
+        lambda m: f" {m.group(1)} " if m.group(1) else " ", value or "")
+
+
+# «…x>0 ;\end{array}\right.$» — знак перечисления подпунктов остался
+# внутри системы, куда strip_subitem_punct не заглядывает.
+_SYSTEM_TAIL_PUNCT_RE = re.compile(
+    r"\s*(?:[;,.]|\\text\s*\{\s*[;,.]\s*\})\s*"
+    r"(?=\\end\{(?:array|aligned|cases)\}\s*\\right\.\s*\$\s*$)")
+
+
+def _strip_system_tail_punct(value: str) -> str:
+    """Как strip_subitem_punct: точка законченного предложения остаётся."""
+    match = _SYSTEM_TAIL_PUNCT_RE.search(value or "")
+    if not match:
+        return value
+    if "." in match.group(0) and value.lstrip()[:1].isupper():
+        return value
+    return value[:match.start()] + value[match.end():]
+
+
+_QUAD_SEP_RE = re.compile(r"\s*([,;])\s*\\quad(?![a-zA-Z])\s*")
+_DEPTH_TOKEN_RE = re.compile(
+    r"\\(?:left|begin)(?![a-zA-Z])|\\\{|(?<!\\)\{"
+    r"|\\(?:right|end)(?![a-zA-Z])|\\\}|(?<!\\)\}")
+
+
+def _top_level_quad_split(body: str) -> list[tuple[str, str]]:
+    """Части формулы между «, \\quad» вне скобок и окружений: [(знак, часть)]."""
+    depth = 0
+    parts = []
+    start = 0
+    sign = ""
+    pos = 0
+    while pos < len(body):
+        token = _DEPTH_TOKEN_RE.match(body, pos)
+        if token:
+            text = token.group(0)
+            opening = text in ("{", "\\{") or text.startswith(("\\left", "\\begin"))
+            depth += 1 if opening else -1
+            pos = token.end()
+            continue
+        if body.startswith("\\", pos):
+            pos += 2
+            continue
+        sep = _QUAD_SEP_RE.match(body, pos) if depth == 0 else None
+        if sep:
+            parts.append((sign, body[start:pos]))
+            sign = sep.group(1)
+            start = pos = sep.end()
+            continue
+        pos += 1
+    parts.append((sign, body[start:]))
+    return parts
+
+
+def _split_quad_list(value: str) -> str:
+    """«$A, \\quad B$» в ответе — перечисление: «$A$, $B$» (канон § 5)."""
+    def fix(match: re.Match) -> str:
+        body = match.group(0)[1:-1]
+        parts = _top_level_quad_split(body)
+        if len(parts) < 2 or not all(part.strip() for _sign, part in parts):
+            return match.group(0)
+        display = body.lstrip().startswith("\\displaystyle")
+        out = []
+        for sign, part in parts:
+            part = part.strip()
+            if display and "\\frac" in part and not part.startswith("\\displaystyle"):
+                part = "\\displaystyle " + part
+            out.append((sign + " " if sign else "") + "$" + part + "$")
+        return "".join(out)
+
+    return _DOLLAR_SPAN_RE.sub(fix, value or "")
 
 
 def _wrap_lone_braces(value: str) -> str:
@@ -800,6 +884,7 @@ def _normalize_task_units(task: TaskDraft) -> None:
             item.text_latex = "$" + item.text_latex.strip() + "$"
         for attr in ("text_latex", "author_answer_latex", "author_solution_latex"):
             setattr(item, attr, _finish_value(getattr(item, attr)))
+        item.text_latex = _strip_system_tail_punct(item.text_latex)
 
 
 def _finish_fields(task: TaskDraft) -> None:
@@ -809,7 +894,7 @@ def _finish_fields(task: TaskDraft) -> None:
         return normalize_degrees(_heal_ocr_math(value))
 
     def answer_field(value: str) -> str:
-        value = wrap_answer_numbers(text_field(value))
+        value = wrap_answer_numbers(_split_quad_list(text_field(value)))
         value = re.sub(r"(?<!\\right)\.\s*\$$", "$", value)
         return re.sub(r"(?<=\S)[ \t]+\$(?=[\s;,.)]|$)", "$", value)
 
