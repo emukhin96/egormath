@@ -2982,6 +2982,12 @@ class TextbookImportTests(TestCase):
         self.assertIn('ziv_uneven_variant_topics', batch.diagnostics)
         again = repair_ziv_batch_leaks(batch)
         self.assertEqual(again['created'], [])
+        # Выделенные задачи стоят сразу за источником, а не в конце партии.
+        order = list(batch.drafts.values_list('external_id', flat=True))
+        self.assertLess(order.index('kr/03/v3/1'), order.index('kr/03/v3/2'))
+        self.assertLess(order.index('kr/03/v3/2'), order.index('kr/03/v2/1'))
+        self.assertLess(order.index('kr/03/v4/1'), order.index('kr/03/v2/1'))
+        self.assertLess(order.index('sr/02/v2/1'), order.index('kr/03/v1/4'))
 
     def test_repair_ziv_batch_splits_solve_stem_stuck_to_graph(self):
         payload = {

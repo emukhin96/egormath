@@ -3,3 +3,4 @@
 {% if owner.answer_latex %}<div class="answer-box math-content"><strong>Редакторский / AI-ответ:</strong> {{ owner.answer_latex|web_answer }}</div>{% endif %}
 {% if owner.author_solution_latex %}<div class="solution-box math-content"><strong>Авторское решение:</strong> {{ owner.author_solution_latex|web_text|linebreaksbr }}</div>{% endif %}
 {% if owner.solution_latex %}<div class="solution-box math-content"><strong>Редакторское / AI-решение:</strong> {{ owner.solution_latex|web_text|linebreaksbr }}</div>{% endif %}
+{% if owner.answer_mask %}<div class="answer-box"><strong>Маска ответа:</strong> <span class="problem-mask-code math-content">{{ owner.answer_mask|web_text }}</span></div>{% endif %}

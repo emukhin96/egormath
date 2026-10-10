@@ -4055,6 +4055,17 @@
     font-weight: 650;
   }
 
+  /* Уровни сложности внутри строки параграфа: мельче, без отдельной строки. */
+  .import-section-levels {
+    margin-top: var(--space-1);
+    color: var(--muted);
+    font-size: 0.875em;
+  }
+
+  .import-section-nav .import-section-levels a {
+    padding: 0 6px;
+  }
+
   .pagination .btn.is-current,
   .form-buttons a.btn.is-current {
     color: var(--accent);
@@ -4095,6 +4106,8 @@
 
   table.list th.col-answer,
   table.list td.col-answer,
+  table.list th.col-mask,
+  table.list td.col-mask,
   table.list th.col-solution,
   table.list td.col-solution {
     width: 1%;
@@ -4104,6 +4117,8 @@
 
   table.import-drafts th.col-answer,
   table.import-drafts td.col-answer,
+  table.import-drafts th.col-mask,
+  table.import-drafts td.col-mask,
   table.import-drafts th.col-solution,
   table.import-drafts td.col-solution {
     width: 2.75rem;

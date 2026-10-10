@@ -1,6 +1,9 @@
 {% extends 'base.html' %}
 {% load static task_extras %}
-{% block extra_head %}<script defer src="{% static 'js/textbook_import_review.js' %}?v=5"></script>{% endblock %}
+{% block extra_head %}<script defer src="{% static 'js/textbook_import_review.js' %}?v=7"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script>
+<script defer src="{% static 'js/mask.js' %}?v=5"></script>
+<script defer src="{% static 'js/numberline.js' %}?v=5"></script>{% endblock %}
 {% block title %}Сверка {{ draft.external_id }} — Математика{% endblock %}
 {% block content %}
 <div class="page-head"><div><span class="page-eyebrow">Ручная сверка</span><h1>{{ draft.external_id }}</h1>
@@ -17,10 +20,14 @@
 {% if draft.imported_task %}<p class="msg">Эта задача уже в базе: <a href="{% url 'task_detail' draft.imported_task_id %}" target="_blank" rel="noopener">открыть сохранённую версию</a>.</p>{% endif %}
 {% if review_locked %}<p class="helptext">Черновик только для просмотра: после загрузки в каталог сверка его не меняет. Исправления — в карточке задачи.</p>{% endif %}
 {% if content_warnings %}<div class="msg msg-warning"><strong>Требует внимания:</strong> {{ content_warnings|join:'; ' }}</div>{% endif %}
-{% if masks_pending %}<p class="helptext">Маски ответов будут подготовлены при загрузке задач в каталог. Это не мешает одобрению задачи.</p>{% endif %}
+<div hidden id="import-mask-config" data-preview-url="{% url 'task_mask_preview' %}" data-draft-url="{% url 'task_mask_draft' %}" data-exam-codes="{{ draft.exam_item_codes|join:',' }}" data-source-number="{{ draft.external_id }}"></div>
 <form method="post" class="import-review-grid">{% csrf_token %}
   <section class="card">
     <h2>Задача и привязка</h2>
+    {% if masks_pending and not masks_by_exam and not review_locked %}<div class="import-masks-pending">
+      <p class="helptext">Маски ответов этой задачи ещё не подобраны: при загрузке в каталог это сделается само. Чтобы проверить или поправить маски сейчас, сохраните задачу с подбором масок — правки на странице сохранятся.</p>
+      <div class="form-buttons"><button class="btn btn-secondary" type="submit" name="prepare_masks" value="1">Сохранить и подобрать маски</button></div>
+    </div>{% endif %}
     <div class="import-review-meta">
       <p><label for="{{ form.external_id.id_for_label }}">Ключ источника</label>{{ form.external_id.errors }}{{ form.external_id }}</p>
       <p><label for="{{ form.source_number.id_for_label }}">Номер</label>{{ form.source_number.errors }}{{ form.source_number }}</p>
@@ -57,12 +64,13 @@
             <textarea id="subitem_author_answer_{{ forloop.counter0 }}" name="subitem_author_answer_{{ forloop.counter0 }}" rows="2">{{ subitem.author_answer_latex }}</textarea>
           </p>
         </details>
-        {% if subitem.answer_mask %}<div class="import-preview-block"><strong>Маска ответа</strong><code>{{ subitem.answer_mask }}</code></div>{% endif %}
+        <div class="import-preview-block"><strong>Маска ответа</strong>{% if subitem.answer_mask %}<div class="problem-mask-code math-content">{{ subitem.answer_mask|web_text }}</div>{% elif masks_by_exam %}<span class="muted">ставится при загрузке по формату задания экзамена</span>{% elif masks_pending and subitem.author_answer_latex or masks_pending and subitem.answer_latex %}<span class="muted">подберётся при загрузке или кнопкой «Сохранить и подобрать маски»</span>{% else %}<span class="muted">нет — ученик пришлёт фото решения</span>{% endif %}</div>
         <details class="import-source-edit">
           <summary>{% if subitem.answer_mask %}Править маску ответа{% else %}Добавить маску ответа{% endif %}</summary>
           <p>
             <label for="subitem_answer_mask_{{ forloop.counter0 }}">Маска ответа подпункта</label>
             <textarea id="subitem_answer_mask_{{ forloop.counter0 }}" name="subitem_answer_mask_{{ forloop.counter0 }}" rows="2" placeholder="&#123;&#123;number: 10&#125;&#125;">{{ subitem.answer_mask }}</textarea>
+            {% include 'problems/_import_mask_tools.html' with index=forloop.counter0 label=subitem.label task_text_id=form.text_latex.id_for_label %}
             <span class="helptext">Оставьте пустой для доказательства, построения или развёрнутого ответа. Тип equation сравнивает уравнения в заданном виде: перенос слагаемых допустим, а пропорциональное умножение или деление всего уравнения — нет.</span>
           </p>
         </details>
@@ -94,15 +102,17 @@
         {{ form.author_answer_latex.errors }}{{ form.author_answer_latex }}
       </p>
     </details>
-    {% if draft.answer_mask %}<div class="import-preview-block"><strong>Маска ответа</strong><code>{{ draft.answer_mask }}</code></div>{% endif %}
-    <details class="import-source-edit"{% if form.answer_mask.errors %} open{% endif %}>
+    {% if not review_subitems %}<div class="import-preview-block"><strong>Маска ответа</strong>{% if draft.answer_mask %}<div class="problem-mask-code math-content">{{ draft.answer_mask|web_text }}</div>{% elif masks_by_exam %}<span class="muted">ставится при загрузке по формату задания экзамена</span>{% elif masks_pending and draft.effective_answer_latex %}<span class="muted">подберётся при загрузке или кнопкой «Сохранить и подобрать маски»</span>{% else %}<span class="muted">нет — ученик пришлёт фото решения</span>{% endif %}</div>{% endif %}
+    {# У задачи с подпунктами маски — у подпунктов; общую показываем, только если она уже есть. #}
+    {% if not review_subitems or draft.answer_mask or form.answer_mask.errors %}<details class="import-source-edit"{% if form.answer_mask.errors %} open{% endif %}>
       <summary>{% if draft.answer_mask %}Править маску ответа{% else %}Добавить маску ответа{% endif %}</summary>
       <p>
         <label for="{{ form.answer_mask.id_for_label }}">Маска ответа</label>
         {{ form.answer_mask.errors }}{{ form.answer_mask }}
+        {% include 'problems/_import_mask_tools.html' with mask_id=form.answer_mask.id_for_label answer_id=form.author_answer_latex.id_for_label editor_id=form.answer_latex.id_for_label task_text_id=form.text_latex.id_for_label %}
         <span class="helptext">Оставьте пустой для доказательства, построения или развёрнутого ответа. Тип equation сравнивает уравнения в заданном виде: перенос слагаемых допустим, а пропорциональное умножение или деление всего уравнения — нет.</span>
       </p>
-    </details>
+    </details>{% endif %}
     {% if draft.author_solution_latex %}<div class="import-preview-block"><strong>Предпросмотр авторского решения</strong><div class="math-content">{{ draft.author_solution_latex|web_text|linebreaksbr }}</div></div>{% endif %}
     <details class="import-source-edit"{% if form.author_solution_latex.errors %} open{% endif %}>
       <summary>{% if draft.author_solution_latex %}Править исходник решения{% else %}Добавить решение{% endif %}</summary>

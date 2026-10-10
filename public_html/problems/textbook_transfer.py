@@ -30,7 +30,8 @@ FIELDS = ('external_id', 'source_number', 'source_path', 'collection_key',
           'images', 'author_answer_latex', 'author_solution_latex',
           'answer_latex', 'solution_latex', 'answer_mask',
           'solution_source_external_id', 'warnings', 'status',
-          'exam_item_codes', 'grade_band_codes', 'tags', 'block_position')
+          'exam_item_codes', 'grade_band_codes', 'tags', 'block_position',
+          'position')
 MAX_BYTES = 2 * 1024 ** 3
 
 
@@ -76,7 +77,9 @@ def serialize_batch(batch):
             raise TextbookTransferError(f'У темы {pk} нет переносимого кода.')
         return topics[pk]
     drafts, blocks = [], {}
-    for draft in batch.drafts.select_related('block', 'reviewed_by').order_by('external_id'):
+    # Порядок книги (порядок создания): загрузка создаёт черновики в порядке
+    # пакета, а строковый external_id ставил IX перед V и I.10 перед I.2.
+    for draft in batch.drafts.select_related('block', 'reviewed_by').order_by('position', 'pk'):
         if draft.imported_task_id or draft.status == TextbookTaskDraft.STATUS_IMPORTED:
             raise TextbookTransferError('Перенос поддерживает черновики, а не задачи, уже загруженные в каталог.')
         row = {name: getattr(draft, name) for name in FIELDS}
@@ -308,8 +311,10 @@ def import_batches(src, *, username=None, check_only=False):
                             raise TextbookTransferError('Общий блок конфликтует с существующими данными.')
                         blocks[info['key']] = block
                     drafts = []
-                    for d in row['drafts']:
+                    for index, d in enumerate(row['drafts'], start=1):
                         fields = {k: d[k] for k in FIELDS if k in d}
+                        # Старые пакеты без позиции: порядок строк пакета.
+                        fields.setdefault('position', index * 10)
                         candidates = [dict(c, id=by_code[c['code']].pk) if c.get('code') else dict(c)
                                       for c in d.get('topic_candidates', [])]
                         reviewer = (owner if payload['schema_version'] == 1 and d.get('status') != 'needs_review' else None)

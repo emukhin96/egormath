@@ -741,6 +741,10 @@ class TextbookTaskDraft(models.Model):
         TaskBlock, null=True, blank=True, on_delete=models.PROTECT,
         related_name='drafts', verbose_name='Общий блок', editable=False)
     block_position = models.PositiveSmallIntegerField('Номер в блоке', default=0, editable=False)
+    # Порядок книги: заливка нумерует строки по порядку разбора, выделенные
+    # из слипаний задачи встают сразу за исходной. Перенос и загрузка в
+    # каталог идут по этому полю, а не по строке external_id.
+    position = models.PositiveIntegerField('Порядок в книге', default=0, editable=False)
     external_id = models.CharField('Ключ задачи', max_length=190)
     source_number = models.CharField('Номер в источнике', max_length=190)
     source_path = models.JSONField('Путь в источнике', default=list, blank=True)
@@ -790,7 +794,9 @@ class TextbookTaskDraft(models.Model):
     class Meta:
         verbose_name = 'Черновик задачи из задачника'
         verbose_name_plural = 'Черновики задач из задачника'
-        ordering = ['external_id', 'pk']
+        # Порядок книги: строковый external_id ставил I.10 перед I.2,
+        # а IV.30 — сразу за IV.3.
+        ordering = ['position', 'pk']
         constraints = [
             models.UniqueConstraint(
                 fields=['batch', 'external_id'],
@@ -849,6 +855,40 @@ class TextbookTaskDraft(models.Model):
         return bool(self.effective_solution_latex or any(
             item.get('author_solution_latex') or item.get('solution_latex')
             for item in self.subitems))
+
+    @property
+    def masks_by_exam(self):
+        """Маску ставит загрузка по формату задания ОГЭ/ЕГЭ, а не подбор."""
+        from assignments.checks.formats import oge_kind
+        codes = self.exam_item_codes or []
+        return bool(oge_kind(codes) or any(
+            str(code).startswith('EGE_') for code in codes))
+
+    @property
+    def mask_summary(self):
+        """Маски для списка партии: (с маской, с ответом), отложенность, экзамен.
+
+        Считаются места ответа ученика: подпункты с ответом или сама задача
+        без подпунктов. Подбор, отложенный при заливке, — отдельное состояние.
+        """
+        from .textbook_import import DEFERRED_MASK_WARNING
+        if self.subitems:
+            owners = [item for item in self.subitems
+                      if item.get('author_answer_latex') or item.get('answer_latex')
+                      or item.get('answer_mask')]
+            masked = sum(bool(str(item.get('answer_mask') or '').strip())
+                         for item in owners)
+        else:
+            owners = [self] if (self.effective_answer_latex
+                                or self.answer_mask.strip()) else []
+            masked = int(bool(self.answer_mask.strip()))
+        return {
+            'masked': masked,
+            'total': len(owners),
+            'pending': (DEFERRED_MASK_WARNING in (self.warnings or [])
+                        or self.masks_by_exam),
+            'exam': self.masks_by_exam,
+        }
 
     def unmatched_images(self):
         from .textbook_import import normalize_image_stem

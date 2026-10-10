@@ -4,14 +4,14 @@
 {% block extra_head %}<script defer src="{% static 'js/textbook_import_preparing.js' %}"></script>{% endblock %}
 {% block content %}
 <section class="card">
-  <h1>Подготовка задач к загрузке</h1>
+  <h1>{% if masks_only %}Подбор масок ответов{% else %}Подготовка задач к загрузке{% endif %}</h1>
   <p>{{ batch.title }}</p>
   <p>Подбираем маски ответов. Осталось задач: {{ remaining }}.</p>
-  <p class="helptext">Загрузка продолжится автоматически. Не закрывайте страницу. Если процесс прервался, снова нажмите загрузку в партии — подготовленные маски сохранятся.</p>
+  <p class="helptext">{% if masks_only %}Подбор продолжится автоматически. Не закрывайте страницу. Если процесс прервался, снова нажмите «Подобрать маски» в партии — готовые маски сохранятся.{% else %}Загрузка продолжится автоматически. Не закрывайте страницу. Если процесс прервался, снова нажмите загрузку в партии — подготовленные маски сохранятся.{% endif %}</p>
   <form method="post" action="{{ action_url }}" id="import-prepare-form">
     {% csrf_token %}
     {% if section %}<input type="hidden" name="section" value="{{ section }}">{% endif %}
-    <div class="form-buttons"><button class="btn" type="submit">Продолжить загрузку</button></div>
+    <div class="form-buttons"><button class="btn" type="submit">{% if masks_only %}Продолжить подбор{% else %}Продолжить загрузку{% endif %}</button></div>
   </form>
   <p><a class="btn btn-secondary" href="{% url 'textbook_import_detail' batch.pk %}">К партии</a></p>
 </section>

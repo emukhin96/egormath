@@ -355,41 +355,119 @@ _OPEN_SET_RE = re.compile(r'(?<!\\left)\\\{')
 _CLOSE_SET_RE = re.compile(r'(?<!\\right)\\\}')
 
 
-def _unbalanced_pairs(segment):
-    return (len(_LEFT_RE.findall(segment)) != len(_RIGHT_RE.findall(segment))
-            or len(_OPEN_SET_RE.findall(segment)) != len(_CLOSE_SET_RE.findall(segment)))
+_PROSE_RE = re.compile(r'[А-Яа-яЁё]{2,}')
+
+
+def _pair_balance(segment):
+    """Сколько ``\\left`` и ``\\{`` осталось незакрытыми (минус — лишние закрытия)."""
+    return (len(_LEFT_RE.findall(segment)) - len(_RIGHT_RE.findall(segment)),
+            len(_OPEN_SET_RE.findall(segment)) - len(_CLOSE_SET_RE.findall(segment)))
+
+
+def _dollar_segments(text):
+    """Текст по кускам: (True, тело формулы ``$…$``) и (False, текст между ними)."""
+    segments = []
+    position = 0
+    for match in _INLINE_DOLLAR_SPAN_RE.finditer(text):
+        if match.start() > position:
+            segments.append((False, text[position:match.start()]))
+        segments.append((True, match.group(0)[1:-1]))
+        position = match.end()
+    if position < len(text):
+        segments.append((False, text[position:]))
+    return segments
+
+
+_OPENER_RE = re.compile(r'\\left(?![a-zA-Z])|(?<!\\left)\\\{')
+_CLOSER_RE = re.compile(
+    r'\\right(?![a-zA-Z])\s*(?:\\[a-zA-Z]+|\\.|.)?|(?<!\\right)\\\}')
+
+
+def _edge_cut(body, balance, *, first):
+    """Где крайний текстовый кусок отрезка переходит в половину пары.
+
+    У первого куска формула начинается с открывающей ``\\left``/``\\{``,
+    у последнего кончается закрывающей: соседняя фраза («Найдите …»,
+    «… при $x>0$») остаётся текстом.
+    """
+    if first:
+        for match in _OPENER_RE.finditer(body):
+            if _pair_balance(body[match.start():]) == balance:
+                return match.start()
+        return 0
+    for match in _CLOSER_RE.finditer(body):
+        if _pair_balance(body[:match.end()]) == balance:
+            return match.end()
+    return len(body)
 
 
 def _has_split_math_pair(text):
-    """Есть ли разорванная долларами пара ``\\left…\\right``/``\\{…\\}``.
-
-    Текст делится на формулы ``$…$`` и куски между ними; разрыв — это
-    непарные ``\\left``/``\\{`` внутри любого куска: ``$\\left(a$ и $b\\right)$``,
-    а также с потерянным открывающим долларом ``\\left(a$ ;$b\\right)`` и
-    ``\\{-2$; $1\\}``. Целая формула ``$\\left(x\\right)$`` разрывом не
-    считается: снимать в ней доллары нельзя, иначе повторная обёртка
-    порежет её на куски.
-    """
-    position = 0
-    for match in _INLINE_DOLLAR_SPAN_RE.finditer(text):
-        if _unbalanced_pairs(text[position:match.start()]) or _unbalanced_pairs(match.group(0)):
-            return True
-        position = match.end()
-    return _unbalanced_pairs(text[position:])
+    """Есть ли разорванная долларами пара ``\\left…\\right``/``\\{…\\}``."""
+    return any(_pair_balance(body) != (0, 0)
+               for _is_math, body in _dollar_segments(text))
 
 
 def heal_split_math_dollars(text):
-    """Убирает ``$``, которые разорвали ``\\left…\\right`` или ``\\{…\\}``.
+    """Склеивает формулу, которую доллары разорвали внутри ``\\left…\\right``/``\\{…\\}``.
 
     Старый wrap останавливался на ``;`` внутри формулы и вставлял доллары
-    посередине. После вырезания хвоста такие осколки снова склеиваем.
+    посередине: ``$\\left(-\\frac{7}{6}$ ;$-2\\right)$``, а при потерянном
+    открывающем долларе — ``\\{-2$; $1\\}``. Склеивается только отрезок от
+    куска с непарной открывающей до куска с её парой: он становится одной
+    формулой, остальной текст не трогается; у крайних текстовых кусков
+    в формулу уходит только половина пары. Если на этом отрезке есть
+    русский текст («$A \\equiv \\{$Число 54 делится на 2 \\}»), это не
+    разорванная формула, а скобки вокруг фразы — её оставляем как есть.
     """
     text = str(text or '')
     if '$' not in text:
         return text
-    if not _has_split_math_pair(text):
-        return text
-    return text.replace('$', '')
+    segments = _dollar_segments(text)
+
+    def raw(segment):
+        is_math, body = segment
+        return f'${body}$' if is_math else body
+
+    out = []
+    healed = False
+    index = 0
+    while index < len(segments):
+        left, braces = _pair_balance(segments[index][1])
+        if left <= 0 and braces <= 0:
+            out.append(raw(segments[index]))
+            index += 1
+            continue
+        end = index
+        while (left, braces) != (0, 0) and end + 1 < len(segments) \
+                and left >= 0 and braces >= 0:
+            end += 1
+            step = _pair_balance(segments[end][1])
+            left += step[0]
+            braces += step[1]
+        if (left, braces) != (0, 0) or end == index:
+            out.append(raw(segments[index]))
+            index += 1
+            continue
+        bodies = [body for _is_math, body in segments[index:end + 1]]
+        lead = tail = ''
+        first_math, first_body = segments[index]
+        if not first_math:
+            cut = _edge_cut(first_body, _pair_balance(first_body), first=True)
+            lead, bodies[0] = first_body[:cut], first_body[cut:]
+        last_math, last_body = segments[end]
+        if not last_math:
+            cut = _edge_cut(last_body, _pair_balance(last_body), first=False)
+            bodies[-1], tail = last_body[:cut], last_body[cut:]
+        texts = [body for (is_math, _old), body
+                 in zip(segments[index:end + 1], bodies) if not is_math]
+        if any(_PROSE_RE.search(body) for body in texts):
+            out.append(raw(segments[index]))
+            index += 1
+            continue
+        out.append(lead + '$' + ''.join(bodies) + '$' + tail)
+        healed = True
+        index = end + 1
+    return ''.join(out) if healed else text
 
 
 def wrap_bare_math(text):

@@ -212,17 +212,48 @@ def complete_deferred_answer_masks(draft):
     draft.save(update_fields=['answer_mask', 'subitems', 'warnings'])
 
 
+def complete_draft_answer_masks(draft):
+    """Подбирает недостающие маски одной строки сразу, по кнопке в сверке.
+
+    Готовые маски (в том числе ручные) не трогает. Возвращает число мест
+    ответа, получивших маску.
+    """
+    def masked(item):
+        return bool(str(item.get('answer_mask') or '').strip())
+
+    # Предупреждения о рисунках могли только что пересчитаться в базе
+    # (refresh_image_warnings) — не затираем их старым списком из памяти.
+    draft.refresh_from_db(fields=['warnings'])
+    before = (sum(masked(item) for item in draft.subitems) if draft.subitems
+              else int(bool(draft.answer_mask.strip())))
+    fill_draft_answer_masks(draft)
+    draft.warnings = [w for w in draft.warnings if w != DEFERRED_MASK_WARNING]
+    draft.save(update_fields=['answer_mask', 'subitems', 'warnings'])
+    after = (sum(masked(item) for item in draft.subitems) if draft.subitems
+             else int(bool(draft.answer_mask.strip())))
+    return after - before
+
+
 def content_warnings(draft):
     """Техническая очередь подбора масок не является дефектом условия."""
     return [w for w in draft.warnings if w != DEFERRED_MASK_WARNING]
 
 
 @transaction.atomic
-def prepare_batch_answer_masks(batch, *, draft_ids=None):
-    """Один короткий шаг подготовки публикации; возвращает остаток очереди."""
+def prepare_batch_answer_masks(batch, *, draft_ids=None, approved_only=True):
+    """Один короткий шаг подбора масок; возвращает остаток очереди.
+
+    Для публикации обрабатываются одобренные строки. Кнопка «Подобрать
+    маски» в партии (approved_only=False) берёт все ещё не загруженные
+    строки, чтобы маски можно было проверить до одобрения.
+    """
     # Та же блокировка, что у публикации; два запроса не обрабатывают очередь вместе.
     batch = TextbookImportBatch.objects.select_for_update().get(pk=batch.pk)
-    drafts = batch.drafts.filter(status=TextbookTaskDraft.STATUS_APPROVED)
+    if approved_only:
+        drafts = batch.drafts.filter(status=TextbookTaskDraft.STATUS_APPROVED)
+    else:
+        drafts = batch.drafts.exclude(status__in=[
+            TextbookTaskDraft.STATUS_IMPORTED, TextbookTaskDraft.STATUS_SKIPPED])
     if draft_ids is not None:
         drafts = drafts.filter(pk__in=draft_ids)
     pending = [d for d in drafts.order_by('pk') if DEFERRED_MASK_WARNING in d.warnings]
@@ -351,6 +382,7 @@ def create_batch_from_bundle(payload, *, user, title, source_title,
                 row.get('grade_band_codes'), 'grade_band_codes'),
             tags=_string_list(row.get('tags'), 'tags'),
             status=status,
+            position=position * 10,
         ))
         topic_codes.append(str(row.get('topic_code') or '').strip())
     # Символьный подбор по всей книге может превысить таймаут WSGI.
@@ -692,6 +724,7 @@ def repair_ziv_batch_leaks(batch):
     skipped_heading_ids = []
     to_update = []
     to_create = []
+    split_count = {}
 
     for draft in drafts:
         if not draft_has_ziv_leak(draft.text_latex, draft.subitems):
@@ -779,8 +812,11 @@ def repair_ziv_batch_leaks(batch):
             warnings = list(task.warnings)
             if ZIV_SPLIT_FROM_WARNING not in warnings:
                 warnings.append(ZIV_SPLIT_FROM_WARNING)
+            split_count[draft.pk] = split_count.get(draft.pk, 0) + 1
             created = TextbookTaskDraft(
                 batch=batch,
+                # Сразу за исходной строкой: заливка нумерует строки через 10.
+                position=draft.position + min(split_count[draft.pk], 9),
                 external_id=task.external_id,
                 source_number=task.source_number or task.external_id,
                 source_path=task.source_path,
@@ -1315,7 +1351,7 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
     initial_collection_count = Collection.objects.filter(
         source=batch.source).count()
 
-    for draft in approved.select_related('topic').order_by('pk'):
+    for draft in approved.select_related('topic').order_by('position', 'pk'):
         # Гарантия для всех путей: массовое одобрение, раздел, CLI и
         # прямой вызов. HTTP заранее обрабатывает очередь короткими шагами.
         complete_deferred_answer_masks(draft)
@@ -1448,7 +1484,7 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
 
     for draft in batch.drafts.filter(
             pk__in=missing_imported_ids).select_related(
-                'imported_task').order_by('pk'):
+                'imported_task').order_by('position', 'pk'):
         task = draft.imported_task
         if task is None:
             raise TextbookImportError(

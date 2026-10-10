@@ -1,0 +1,8 @@
+{# Кнопки маски в сверке: заготовка из ответа и вид для ученика. #}
+{# Подпункт — index (id полей по номеру), задача — явные id полей. #}
+<span class="form-buttons import-mask-tools"
+  {% if index is not None %}data-mask="subitem_answer_mask_{{ index }}" data-answer="subitem_author_answer_{{ index }}" data-editor-answer="subitem_answer_{{ index }}" data-condition="{{ task_text_id }} subitem_text_{{ index }}" data-subitem-label="{{ label }}"{% else %}data-mask="{{ mask_id }}" data-answer="{{ answer_id }}" data-editor-answer="{{ editor_id }}" data-condition="{{ task_text_id }}"{% endif %}>
+  <button type="button" class="btn btn-small btn-secondary" data-import-mask-draft>Из ответа</button>
+  <button type="button" class="btn btn-small btn-secondary" data-import-mask-preview>Как увидит ученик</button>
+</span>
+<span class="import-mask-preview" data-mask-preview-box hidden></span>
