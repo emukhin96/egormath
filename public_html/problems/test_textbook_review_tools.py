@@ -305,6 +305,36 @@ class DraftPatchTests(TestCase):
         self.assertEqual(self.draft().author_answer_latex,
                          self.original['author_answer_latex'])
 
+    def test_patch_restores_book_order(self):
+        patch_data = self.edit_and_build()
+        self.assertEqual(patch_data['order'], ['1.2.37', '1.2.38'])
+        # Сервер получил партию в другом порядке (старая выгрузка).
+        TextbookTaskDraft.objects.filter(batch=self.batch, external_id='1.2.37').update(position=50)
+        report = apply_draft_patch(self.batch, patch_data, apply=True)
+        self.assertEqual(report['reordered'], 1)
+        self.assertEqual(list(self.batch.drafts.values_list('external_id', 'position')),
+                         [('1.2.37', 10), ('1.2.38', 20)])
+        patch_data['order'] = ['1.2.37']
+        with self.assertRaises(TextbookPatchError):
+            apply_draft_patch(self.batch, patch_data, apply=True)
+
+    def test_busy_formula_worker_is_retried(self):
+        from .textbook_import import TextbookImportUnavailable, normalize_answer_mask
+        patch_data = self.edit_and_build()
+        calls = []
+
+        def flaky(value, *, key='answer_mask'):
+            calls.append(key)
+            if len(calls) == 1:
+                raise TextbookImportUnavailable('занят')
+            return normalize_answer_mask(value, key=key)
+
+        with patch('problems.textbook_patches.normalize_answer_mask', flaky), \
+                patch('problems.textbook_patches.time.sleep'):
+            report = apply_draft_patch(self.batch, patch_data, apply=True)
+        self.assertEqual(report['applied'], ['1.2.37'])
+        self.assertEqual(len(calls), 2)
+
     def test_unknown_field_is_refused(self):
         patch_data = self.edit_and_build()
         patch_data['drafts'][0]['after']['status'] = 'approved'

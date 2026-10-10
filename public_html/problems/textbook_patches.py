@@ -16,14 +16,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 import zipfile
 from pathlib import Path
 
 from django.db import transaction
 
 from .models import TextbookImportBatch, TextbookTaskDraft, Topic
-from .textbook_import import (normalize_answer_mask, refresh_image_warnings,
-                              unmatched_image_names)
+from .textbook_import import (TextbookImportUnavailable, normalize_answer_mask,
+                              refresh_image_warnings, unmatched_image_names)
 from .textbook_transfer import serialize_batch
 
 PATCH_KIND = 'textbook-draft-patch'
@@ -103,6 +104,9 @@ def build_draft_patch(baseline, current):
             'ids_sha256': _ids_digest(before_rows),
         },
         'drafts': drafts,
+        # Порядок книги целиком: партия, перенесённая старой выгрузкой,
+        # на сервере стоит в порядке строк ключей (I.1, I.10, I.2).
+        'order': [row['external_id'] for row in current['drafts']],
     }
     return patch, untransferred
 
@@ -128,6 +132,21 @@ def _current_value(draft, name, codes_by_pk):
     return getattr(draft, name)
 
 
+MASK_CHECK_ATTEMPTS = 5
+
+
+def _check_mask(value, key='answer_mask'):
+    """Разбор маски с повтором: в большом пакете тысячи масок, и один
+    занятый вычислитель формул не должен отменять весь пакет."""
+    for attempt in range(1, MASK_CHECK_ATTEMPTS + 1):
+        try:
+            return normalize_answer_mask(value, key=key)
+        except TextbookImportUnavailable:
+            if attempt == MASK_CHECK_ATTEMPTS:
+                raise
+            time.sleep(2 ** (attempt - 1))
+
+
 def _check_value(name, value):
     """Проверяет тип и маски, значение записывается как есть.
 
@@ -138,7 +157,7 @@ def _check_value(name, value):
         if not isinstance(value, str):
             raise TextbookPatchError(f'Поле {name} должно быть строкой.')
         if name == 'answer_mask':
-            normalize_answer_mask(value)
+            _check_mask(value)
         return value
     if not isinstance(value, list):
         raise TextbookPatchError(f'Поле {name} должно быть списком.')
@@ -147,31 +166,23 @@ def _check_value(name, value):
             if not isinstance(item, dict) or not all(
                     isinstance(v, str) for v in item.values()):
                 raise TextbookPatchError(f'Подпункт {index}: ожидались строки.')
-            normalize_answer_mask(item.get('answer_mask'),
-                                  key=f'subitems[{index}].answer_mask')
+            _check_mask(item.get('answer_mask'), key=f'subitems[{index}].answer_mask')
     elif not all(isinstance(v, str) for v in value):
         raise TextbookPatchError(f'Поле {name}: ожидался список строк.')
     return value
 
 
-def _validate_patch(batch, patch, allow_other_title):
+def _check_patch_values(patch):
+    """Форма пакета и разбор масок — без базы, до блокировки партии.
+
+    Разбор масок с формулами медленный (вычислитель), поэтому он идёт вне
+    транзакции: строки партии блокируются только на время записи.
+    """
     if not isinstance(patch, dict) or patch.get('kind') != PATCH_KIND:
         raise TextbookPatchError('Это не пакет правок черновиков.')
     if patch.get('version') != PATCH_VERSION:
         raise TextbookPatchError(
             f'Пакет версии {patch.get("version")}, ожидалась {PATCH_VERSION}.')
-    info = patch.get('batch') or {}
-    if info.get('profile') != batch.profile:
-        raise TextbookPatchError(
-            f'Пакет для профиля {info.get("profile")!r}, партия — {batch.profile!r}.')
-    if info.get('title') != batch.title and not allow_other_title:
-        raise TextbookPatchError(
-            f'Пакет для партии «{info.get("title")}», выбрана «{batch.title}». '
-            'Если это та же книга под другим названием, повторите с --allow-other-title.')
-    ids = list(batch.drafts.values_list('external_id', flat=True))
-    if _ids_digest(ids) != info.get('ids_sha256') or len(ids) != info.get('drafts'):
-        raise TextbookPatchError(
-            'Набор задач партии не совпадает с исходной выгрузкой пакета.')
     for row in patch.get('drafts') or []:
         if not isinstance(row, dict) or not isinstance(row.get('external_id'), str):
             raise TextbookPatchError('Строка пакета без external_id.')
@@ -187,7 +198,24 @@ def _validate_patch(batch, patch, allow_other_title):
             _check_value(name, value)
 
 
-@transaction.atomic
+def _validate_batch(batch, patch, allow_other_title):
+    info = patch.get('batch') or {}
+    if info.get('profile') != batch.profile:
+        raise TextbookPatchError(
+            f'Пакет для профиля {info.get("profile")!r}, партия — {batch.profile!r}.')
+    if info.get('title') != batch.title and not allow_other_title:
+        raise TextbookPatchError(
+            f'Пакет для партии «{info.get("title")}», выбрана «{batch.title}». '
+            'Если это та же книга под другим названием, повторите с --allow-other-title.')
+    ids = list(batch.drafts.values_list('external_id', flat=True))
+    if _ids_digest(ids) != info.get('ids_sha256') or len(ids) != info.get('drafts'):
+        raise TextbookPatchError(
+            'Набор задач партии не совпадает с исходной выгрузкой пакета.')
+    order = patch.get('order')
+    if order is not None and (not isinstance(order, list) or sorted(order) != sorted(ids)):
+        raise TextbookPatchError('Порядок задач в пакете не совпадает с набором партии.')
+
+
 def apply_draft_patch(batch, patch, *, apply=False, allow_other_title=False):
     """Применяет пакет; без ``apply`` только проверяет (откат транзакции).
 
@@ -196,8 +224,15 @@ def apply_draft_patch(batch, patch, *, apply=False, allow_other_title=False):
     проверку, ``skipped`` — строки с причиной (изменены после выгрузки,
     загружены в каталог), ``images`` — строки с несопоставленными рисунками.
     """
+    _check_patch_values(patch)
+    return _apply_checked_patch(batch, patch, apply=apply,
+                                allow_other_title=allow_other_title)
+
+
+@transaction.atomic
+def _apply_checked_patch(batch, patch, *, apply, allow_other_title):
     batch = TextbookImportBatch.objects.select_for_update().get(pk=batch.pk)
-    _validate_patch(batch, patch, allow_other_title)
+    _validate_batch(batch, patch, allow_other_title)
     codes = set()
     for row in patch['drafts']:
         codes.add(row['after'].get('topic_code') or '')
@@ -208,7 +243,18 @@ def apply_draft_patch(batch, patch, *, apply=False, allow_other_title=False):
     drafts = {draft.external_id: draft
               for draft in batch.drafts.select_for_update()}
     report = {'applied': [], 'already': [], 'reset': [], 'skipped': [],
-              'images': [], 'fields': 0}
+              'images': [], 'fields': 0, 'reordered': 0}
+    if patch.get('order'):
+        # Порядок — не содержание: ставится всем строкам, правки учителя
+        # он не затрагивает.
+        position = {external_id: index * 10
+                    for index, external_id in enumerate(patch['order'], start=1)}
+        moved = [draft for draft in drafts.values()
+                 if draft.position != position[draft.external_id]]
+        for draft in moved:
+            draft.position = position[draft.external_id]
+        TextbookTaskDraft.objects.bulk_update(moved, ['position'], batch_size=500)
+        report['reordered'] = len(moved)
     for row in patch['drafts']:
         external_id = row['external_id']
         draft = drafts[external_id]
