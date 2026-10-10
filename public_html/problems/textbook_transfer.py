@@ -76,7 +76,9 @@ def serialize_batch(batch):
             raise TextbookTransferError(f'У темы {pk} нет переносимого кода.')
         return topics[pk]
     drafts, blocks = [], {}
-    for draft in batch.drafts.select_related('block', 'reviewed_by').order_by('external_id'):
+    # Порядок книги (порядок создания): загрузка создаёт черновики в порядке
+    # пакета, а строковый external_id ставил IX перед V и I.10 перед I.2.
+    for draft in batch.drafts.select_related('block', 'reviewed_by').order_by('pk'):
         if draft.imported_task_id or draft.status == TextbookTaskDraft.STATUS_IMPORTED:
             raise TextbookTransferError('Перенос поддерживает черновики, а не задачи, уже загруженные в каталог.')
         row = {name: getattr(draft, name) for name in FIELDS}

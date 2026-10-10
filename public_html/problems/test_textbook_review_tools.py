@@ -60,6 +60,12 @@ class ReviewToolsTests(TestCase):
         self.assertEqual(response.context['following'].external_id, 'I.10')
         self.assertIsNone(response.context['previous'])
 
+    def test_transfer_package_keeps_book_order(self):
+        from .textbook_transfer import serialize_batch
+        self.assertEqual(
+            [row['external_id'] for row in serialize_batch(self.batch)['drafts']],
+            ['I.2', 'I.10', 'I.11'])
+
     def test_levels_are_links_inside_paragraph_row(self):
         response = self.client.get(
             reverse('textbook_import_detail', args=[self.batch.pk]))
