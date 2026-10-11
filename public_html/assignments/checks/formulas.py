@@ -252,7 +252,8 @@ def check(value, reference, multiple=False):
 
 
 def _prepare(text):
-    text = expressions.normalize_roots(text)
+    # \ln^{2} x переписывается до вставки умножения после степени.
+    text = expressions.function_powers(expressions.normalize_roots(text))
     # Степень переменной и следующая функция — отдельные множители.
     # В sin² x степень относится к функции, умножение туда не вставляем.
     functions = r'(?:sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|arccot|arcsec|arccsc|sinh|cosh|tanh|asinh|acosh|atanh)'
@@ -298,6 +299,19 @@ def _components(tree, *, numeric=False, pi_marker=None):
     tree = expressions.resolve(tree)
     value = expressions.evaluate(tree, numeric=numeric, pi_marker=pi_marker)
     result = [value] if value is not None and hasattr(value, 'free_symbols') else []
+    name = str(tree.data).removesuffix('_power')
+    import sympy
+    if (name != tree.data and name in expressions._TRIG_NODES
+            and value is not None and value.has(getattr(sympy, name))):
+        # \tan^2 x требует определённого \tan x, как и (\tan x)^2, но
+        # сама функция не отдельное поддерево: без неё область эталона
+        # не содержит tan x, и равная запись уходит в долгий перебор.
+        # \tan^{-1} x — арктангенс: tan x в нём нет, области он не сужает.
+        argument = tree.children[-1]
+        inner = (expressions.evaluate(argument, numeric=numeric, pi_marker=pi_marker)
+                 if expressions._is_tree(argument) else expressions.parse_expr(str(argument)))
+        if inner is not None and hasattr(inner, 'free_symbols'):
+            result.append(getattr(sympy, name)(inner))
     for child in tree.children:
         result.extend(_components(child, numeric=numeric, pi_marker=pi_marker))
     return result
@@ -1131,6 +1145,13 @@ def _defined(item, reference):
     allowed = set()
     for denominator in original_denominators:
         allowed |= _zero_bases(denominator) or set()
+    # Определённый на области эталона tan u (sec u) требует cos u ≠ 0,
+    # cot u (csc u) — sin u ≠ 0: \frac{\sin^2 x}{\cos^2 x} при \tan^2 x.
+    from sympy import cos, cot, csc, sec, sin, tan
+    for original in originals:
+        for atom in original.atoms(tan, sec, cot, csc):
+            function = cos if isinstance(atom, (tan, sec)) else sin
+            allowed.add(_real_base(function(atom.args[0]))[1])
 
     def covered(bases):
         return bases is not None and all(

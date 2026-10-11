@@ -8,7 +8,7 @@ XIV.92, XV.2, XV.15).
 """
 from django.test import SimpleTestCase
 
-from .checks import formulas
+from .checks import expressions, formulas
 from .checks.mask import check_slot, parse_mask
 
 
@@ -139,3 +139,71 @@ class FractionalPowerTests(SimpleTestCase):
                                  (r'\sqrt{2}', r'\sqrt[6]{8}')):
             with self.subTest(value=value):
                 self.assertEqual(check_slot(self.slot(reference, 'simplify'), value), 'wrong')
+
+
+class FunctionPowerTests(SimpleTestCase):
+    """Степень функции: \\sin^{2/3}x, \\tan^2 x, \\ln^2 x — та же величина,
+    что (\\sin x)^{2/3}, (\\tan x)^2, (\\ln x)^2."""
+
+    def setUp(self):
+        with formulas._failed_lock:
+            formulas._failed_inputs.clear()
+
+    def tearDown(self):
+        with formulas._failed_lock:
+            formulas._failed_inputs.clear()
+
+    def check(self, reference, value, kind='expression'):
+        spec = parse_mask('{{' + kind + ': ' + reference + '}}', validate_references=True)
+        self.assertTrue(spec.is_valid, spec.errors)
+        return check_slot(spec.slots[0], value)
+
+    def test_odd_power_of_trigonometric_function_is_real_root(self):
+        for value, expected in ((r'\sqrt[3]{\sin^2 x}', 'ok'), (r'(\sin x)^{\frac{2}{3}}', 'ok'),
+                                (r'\sqrt[3]{\sin x}^{2}', 'ok'),
+                                (r'-\sqrt[3]{\sin^2 x}', 'wrong'),
+                                (r'\sin^{\frac{1}{3}} x', 'wrong')):
+            with self.subTest(value=value):
+                self.assertEqual(self.check(r'\sin^{\frac{2}{3}} x', value), expected)
+        self.assertEqual(self.check(r'\sqrt[3]{\sin^2 x}', r'\sin^{\frac{2}{3}} x'), 'ok')
+        self.assertEqual(self.check(r'\frac{1}{\sqrt[3]{\cos x}}', r'\cos^{-\frac{1}{3}} x'), 'ok')
+        self.assertEqual(self.check(r'\sqrt[3]{\tan x}', r'\tan^{\frac{1}{3}} x'), 'ok')
+        self.assertEqual(self.check(r'\arcsin x', r'\sin^{-1} x'), 'ok')
+
+    def test_even_power_of_trigonometric_function_keeps_domain(self):
+        self.assertEqual(self.check(r'\cos^{\frac{3}{2}} x', r'\sqrt{\cos^3 x}'), 'ok')
+        self.assertEqual(self.check(r'\cos^{\frac{3}{2}} x', r'\cos x\sqrt{\cos x}'), 'ok')
+        self.assertEqual(self.check(r'\cos^{\frac{3}{2}} x', r'-\sqrt{\cos^3 x}'), 'wrong')
+        self.assertEqual(self.check(r'\sqrt{\sin x}', r'\sin^{\frac{1}{2}} x'), 'ok')
+
+    def test_power_of_function_requires_the_function_itself(self):
+        # Раньше \tan x не входил в область \tan^2 x: перебор до таймаута.
+        self.assertEqual(self.check(r'\tan^{2} x', r'(\tan x)^{2}'), 'ok')
+        self.assertEqual(self.check(r'\tan^{2} x', r'\frac{\sin^2 x}{\cos^2 x}'), 'ok')
+        self.assertEqual(self.check(r'\cot^{2} x', r'\frac{\cos^2 x}{\sin^2 x}'), 'ok')
+        self.assertEqual(self.check(r'\tan^{2} x',
+                                    r'\frac{\sin^2 x}{\cos^2 x}+0\cdot\frac{1}{\sin x}'), 'wrong')
+        # \tan^{-1} x — арктангенс: область tan x к нему не относится.
+        self.assertEqual(self.check(r'\arctan x', r'\tan^{-1} x'), 'ok')
+        self.assertEqual(self.check(r'\tan^{-1} x', r'\arctan x'), 'ok')
+
+    def test_power_of_logarithm(self):
+        for reference, value, expected in (
+                (r'(\ln x)^{2}', r'\ln^{2} x', 'ok'), (r'(\ln x)^{2}', r'\ln^2 x', 'ok'),
+                (r'\ln^{4} x', r'(\ln x)^4', 'ok'),
+                (r'(\ln x)^{2}+1', r'\ln^{2}x+1', 'ok'),
+                (r'(\ln(x+1))^{2}', r'\ln^{2}(x+1)', 'ok'),
+                (r'\frac{1}{3}(\ln x)^{3}+C', r'\frac{1}{3}\ln^{3}x+C', 'ok'),
+                (r'(\ln x)^{\frac{1}{3}}', r'\sqrt[3]{\ln x}', 'ok'),
+                (r'(\ln x)^{2}', r'\ln x^{2}', 'wrong')):
+            with self.subTest(value=value):
+                self.assertEqual(self.check(reference, value), expected)
+        number = parse_mask(r'{{number: (\ln 3)^{2}}}', validate_references=True).slots[0]
+        self.assertEqual(check_slot(number, r'\ln^{2} 3'), 'ok')
+        self.assertEqual(check_slot(number, r'\ln^{2} 9'), 'wrong')
+
+    def test_ambiguous_logarithm_argument_is_not_guessed(self):
+        # ln²(2x) или (ln² 2)·x — граница аргумента неоднозначна.
+        self.assertEqual(expressions.function_powers(r'\ln^2 2x'), r'\ln^2 2x')
+        self.assertEqual(expressions.function_powers(r'\ln^{2} x+1'), r'(\ln x)^{2}+1')
+        self.assertEqual(expressions.function_powers(r'\ln^{-1} x'), r'\ln^{-1} x')

@@ -117,9 +117,27 @@ def normalize_roots(text):
     return re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text)
 
 
+# В грамматике нет степени логарифма: \ln^{2} x не разбирается. Пишем
+# (\ln x)^{2}, только если граница аргумента однозначна: число, буква с
+# индексом, греческая буква или скобка, а за ней — конец, знак операции или
+# закрывающая скобка. \ln^2 2x так не переписывается: ln²(2x) или (ln²2)·x.
+_LN_POWER_RE = re.compile(
+    r'\\ln\s*\^\s*(\{(?!\s*-\s*1\s*\})[^{}]+\}|[0-9])\s*'
+    r'(\\left\((?:[^()]|\([^()]*\))*\\right\)|\((?:[^()]|\([^()]*\))*\)'
+    r'|[0-9]+(?:\.[0-9]+)?|(?:[A-Za-z]|\\[A-Za-z]+)(?:_(?:\{[0-9A-Za-z]+\}|[0-9A-Za-z]))?)'
+    r'(?=\s*(?:$|[-+*/=)\]},;|]|\\(?:cdot|times|right|div)\b))')
+
+
+def function_powers(text):
+    """\\ln^{2} x → (\\ln x)^{2} при однозначном аргументе."""
+    return _LN_POWER_RE.sub(
+        lambda m: '(\\ln ' + m[2] + ')^' + (m[1] if m[1].startswith('{') else '{' + m[1] + '}'),
+        text)
+
+
 def prepare(text):
     """Нормализация школьной записи + явное умножение перед скобкой."""
-    text = normalize_roots(normalize(text))
+    text = function_powers(normalize_roots(normalize(text)))
     text = _insert_cdot_after_group(text)
     def product(match):
         # Цифра завершает индекс/степень функции, а корень или скобка —
@@ -216,6 +234,36 @@ def _lark():
                             and exponent.q > 1 and exponent.q % 2):
                         return _bounded_odd_root(base, exponent.q, exponent.p)
                 return super().superscript(tokens)
+
+            def _function_power(self, tokens, name):
+                # \sin^{2/3}x — отдельное правило грамматики; без него
+                # степень строилась главной комплексной ветвью, а
+                # (\sin x)^{2/3} и \sqrt[3]{\sin^2 x} — вещественным корнем.
+                exponent = tokens[2]
+                if (getattr(exponent, 'is_Rational', False)
+                        and exponent.q > 1 and exponent.q % 2):
+                    import sympy
+                    return _bounded_odd_root(getattr(sympy, name)(tokens[-1]),
+                                             exponent.q, exponent.p)
+                return getattr(super(), name + '_power')(tokens)
+
+            def sin_power(self, tokens):
+                return self._function_power(tokens, 'sin')
+
+            def cos_power(self, tokens):
+                return self._function_power(tokens, 'cos')
+
+            def tan_power(self, tokens):
+                return self._function_power(tokens, 'tan')
+
+            def cot_power(self, tokens):
+                return self._function_power(tokens, 'cot')
+
+            def sec_power(self, tokens):
+                return self._function_power(tokens, 'sec')
+
+            def csc_power(self, tokens):
+                return self._function_power(tokens, 'csc')
         _transformer = ExactTransformer()
     return _parser, _transformer
 
