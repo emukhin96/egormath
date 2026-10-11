@@ -865,7 +865,8 @@ def _unwrap_math_prose(value: str) -> str:
 
 # Метка сайта для задач с параметром (как у ОГЭ-22, oge_metadata).
 PARAMETER_TAG = "задача с параметром"
-_PARAM_LETTER = r"\$\s*(?:\\displaystyle\s*)?(?:[a-dk-mpqr]|\\lambda)\s*\$"
+# Буква параметра — строчная латинская (регистр учитывается и под re.I).
+_PARAM_LETTER = r"\$\s*(?:\\displaystyle\s*)?(?-i:[a-dk-mpqr]|\\lambda)\s*\$"
 _PARAMETER_RE = re.compile(
     r"параметр"
     r"|(?:при|для)\s+(?:каких|всех|любых|каждого|каждом|каком)\s+"

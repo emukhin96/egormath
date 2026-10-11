@@ -345,6 +345,16 @@ class DraftPatchTests(TestCase):
         apply_draft_patch(self.batch, json.loads(json.dumps(patch_data)), apply=True)
         self.assertEqual(self.draft().tags, ['задача с параметром'])
 
+    def test_patch_built_before_tags_still_applies(self):
+        patch_data = self.edit_and_build()
+        # Пакет старого кода: в снимке «до» нет меток.
+        for row in patch_data['drafts']:
+            row['before'].pop('tags', None)
+        self.draft().__class__.objects.filter(pk=self.draft().pk).update(tags=['ОГЭ'])
+        report = apply_draft_patch(self.batch, patch_data, apply=True)
+        self.assertEqual(report['applied'], ['1.2.37'])
+        self.assertEqual(report['skipped'], [])
+
     def test_busy_formula_worker_is_retried(self):
         from .textbook_import import TextbookImportUnavailable, normalize_answer_mask
         patch_data = self.edit_and_build()

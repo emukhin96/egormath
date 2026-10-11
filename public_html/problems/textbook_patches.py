@@ -269,6 +269,10 @@ def _apply_checked_patch(batch, patch, *, apply, allow_other_title):
         conflicts = []
         pending = {}
         for name in PATCH_FIELDS:
+            # Поля, которого не было в пакете (собран до появления поля,
+            # например меток), не участвуют в сверке строки.
+            if name not in before and name not in after:
+                continue
             current = _current_value(draft, name, codes_by_pk)
             if name in after and current == after[name]:
                 continue
