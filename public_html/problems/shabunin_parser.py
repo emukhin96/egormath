@@ -845,9 +845,15 @@ def _unwrap_math_prose(value: str) -> str:
                 piece = re.sub(r"^\\displaystyle\s*", "", piece)
                 # «\right .» — тот же разделитель «\right.», не точка предложения.
                 piece = re.sub(r"\\right\s+\.", r"\\right.", piece)
+                # Отступы на краю формулы перед прозой («x>0 \; \text{при}») не нужны.
+                piece = re.sub(r"(?:\s*\\(?:[,;:!]|q?quad(?![a-zA-Z])))+\s*$", "", piece)
+                piece = re.sub(r"^(?:\\(?:[,;:!]|q?quad(?![a-zA-Z]))\s*)+", "", piece)
                 # Знак предложения в конце формулы («…\frac{2}{y-3},», «2,9 .»)
-                # — за формулу; точку «\right.» не трогаем.
-                tail = re.search(r"(?<!\\right)\s*([,.;:])$", piece)
+                # — за формулу; точку «\right.» и команды «\;», «\,» не трогаем.
+                tail = re.search(r"\s*([,.;:])$", piece)
+                if tail and (piece[:tail.start(1)].endswith("\\")
+                             or piece[:tail.start(1)].endswith("\\right")):
+                    tail = None
                 if tail:
                     piece = piece[:tail.start()].rstrip()
                 if not piece:

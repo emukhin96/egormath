@@ -287,6 +287,11 @@ class SharedNormalizationTests(SimpleTestCase):
             _unwrap_math_prose(
                 r"$\left\{\begin{array}{l}x=1 \\ y=2\end{array}\right . \text { при } a>0$"),
             r"$\left\{\begin{array}{l}x=1 \\ y=2\end{array}\right.$ при $a>0$")
+        # Отступы «\;», «\,» на краю формулы снимаются, а не режутся пополам.
+        self.assertEqual(_unwrap_math_prose(r"$x>0 \; \text { при } a>1$"),
+                         r"$x>0$ при $a>1$")
+        self.assertEqual(_unwrap_math_prose(r"$x>0 \, \text {, если } \, a>1$"),
+                         r"$x>0$, если $a>1$")
         # Текст как часть формулы остаётся: кусочная функция, индекс, имя.
         for value in (
                 r"$y=\left\{\begin{aligned}4 x, & \text { если } x>-1\end{aligned}\right.$",
