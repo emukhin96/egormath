@@ -843,6 +843,8 @@ def _unwrap_math_prose(value: str) -> str:
             piece = " ".join(piece.split())
             if is_math:
                 piece = re.sub(r"^\\displaystyle\s*", "", piece)
+                # «\right .» — тот же разделитель «\right.», не точка предложения.
+                piece = re.sub(r"\\right\s+\.", r"\\right.", piece)
                 # Знак предложения в конце формулы («…\frac{2}{y-3},», «2,9 .»)
                 # — за формулу; точку «\right.» не трогаем.
                 tail = re.search(r"(?<!\\right)\s*([,.;:])$", piece)

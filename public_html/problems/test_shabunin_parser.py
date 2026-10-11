@@ -282,6 +282,11 @@ class SharedNormalizationTests(SimpleTestCase):
             _unwrap_math_prose(
                 r"$x^{2}+\frac{2}{y-3}, \text { если }-2 \leqslant x \text { и } y \leqslant 2,9 .$"),
             r"$x^{2}+\frac{2}{y-3}$, если $-2 \leqslant x$ и $y \leqslant 2,9$.")
+        # «\right .» с пробелом — разделитель, а не точка предложения.
+        self.assertEqual(
+            _unwrap_math_prose(
+                r"$\left\{\begin{array}{l}x=1 \\ y=2\end{array}\right . \text { при } a>0$"),
+            r"$\left\{\begin{array}{l}x=1 \\ y=2\end{array}\right.$ при $a>0$")
         # Текст как часть формулы остаётся: кусочная функция, индекс, имя.
         for value in (
                 r"$y=\left\{\begin{aligned}4 x, & \text { если } x>-1\end{aligned}\right.$",
