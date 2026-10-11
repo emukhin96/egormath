@@ -865,7 +865,7 @@ def _unwrap_math_prose(value: str) -> str:
 
 # Метка сайта для задач с параметром (как у ОГЭ-22, oge_metadata).
 PARAMETER_TAG = "задача с параметром"
-_PARAM_LETTER = r"\$\s*(?:\\displaystyle\s*)?[a-dk-mpqr]\s*\$"
+_PARAM_LETTER = r"\$\s*(?:\\displaystyle\s*)?(?:[a-dk-mpqr]|\\lambda)\s*\$"
 _PARAMETER_RE = re.compile(
     r"параметр"
     r"|(?:при|для)\s+(?:каких|всех|любых|каждого|каждом|каком)\s+"
@@ -875,9 +875,16 @@ _PARAMETER_RE = re.compile(
     re.I)
 
 
+# Не задача с параметром: доказательство («при любых $a$…», константа $C$
+# в решении ДУ) и уравнения при заданных значениях («при указанных
+# значениях параметра $a$: $a=-2$, $a=3$»).
+_NOT_PARAMETER_RE = re.compile(r"^\s*(?:Доказать|Докажите|Показать)|при\s+указанных\s+значени", re.I)
+
+
 def _tag_parameter_task(task: TaskDraft) -> None:
     text = " ".join([task.text_latex] + [item.text_latex for item in task.subitems])
-    if _PARAMETER_RE.search(text) and PARAMETER_TAG not in task.tags:
+    if (_PARAMETER_RE.search(text) and not _NOT_PARAMETER_RE.search(text)
+            and PARAMETER_TAG not in task.tags):
         task.tags.append(PARAMETER_TAG)
 
 

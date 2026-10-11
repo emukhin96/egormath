@@ -290,18 +290,39 @@ class SharedNormalizationTests(SimpleTestCase):
             self.assertEqual(_unwrap_math_prose(value), value)
 
     def test_parameter_tasks_get_site_tag(self):
-        from .shabunin_parser import PARAMETER_TAG, _PARAMETER_RE
+        from types import SimpleNamespace
+        from .shabunin_parser import PARAMETER_TAG, _tag_parameter_task
         from .oge_metadata import PARAMETER_TAG as SITE_TAG
         self.assertEqual(PARAMETER_TAG, SITE_TAG)
+
+        def tags(text):
+            task = SimpleNamespace(text_latex=text, subitems=[], tags=[])
+            _tag_parameter_task(task)
+            return task.tags
+
         for text in ("Найти все значения $a$, при которых уравнение имеет корень.",
                      "При каких значениях параметра $b$ система совместна?",
                      "Решить уравнение при всех значениях $a$:",
-                     "Сколько корней имеет уравнение в зависимости от $a$?"):
-            self.assertTrue(_PARAMETER_RE.search(text), text)
+                     "Сколько корней имеет уравнение в зависимости от $a$?",
+                     "Найти все значения $\\lambda$, при которых уравнения имеют общий корень."):
+            self.assertEqual(tags(text), [SITE_TAG], text)
         for text in ("При каких значениях $x$ верно неравенство?",
                      "Найти все значения $x$, удовлетворяющие условию.",
-                     "Доказать, что при любом натуральном $n$ число делится на 3."):
-            self.assertFalse(_PARAMETER_RE.search(text), text)
+                     "Доказать, что при любом натуральном $n$ число делится на 3.",
+                     "Доказать, что функция при любых $a$ и $b$ имеет один экстремум.",
+                     "Показать, что при каждом значении параметра $C$ функция — решение.",
+                     "Определить число корней при указанных значениях параметра $a$:"):
+            self.assertEqual(tags(text), [], text)
+
+    def test_sentence_dot_between_formulas_is_not_task_number(self):
+        from .templatetags.task_extras import web_answer
+        from .textbook_parser import heal_ocr_task_number_labels
+        self.assertEqual(apply_imported_answer(r"$y=1$. $z=2$"), r"$y=1$. $z=2$")
+        self.assertNotIn("$$", str(web_answer(
+            r"$\displaystyle y=x+1$. $D(y)=\mathbb{R}$. Функция возрастает на $(0;1)$")))
+        # Номер следующей задачи OCR вне формулы по-прежнему отделяется.
+        self.assertEqual(heal_ocr_task_number_labels(r"$(1;2)$ 5$. (-3;1)"),
+                         r"$(1;2)$ 5. (-3;1)")
 
     def test_subitem_punct_keeps_right_delimiter_dot(self):
         value = r"F=\left\{\begin{array}{l}0 \\ 1\end{array}\right."

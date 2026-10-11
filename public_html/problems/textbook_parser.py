@@ -388,12 +388,20 @@ _OCR_MATH_CMD_TASK_RE = re.compile(
 )
 
 
+def _bare_dollar_task_number(match: re.Match) -> str:
+    # Цифра внутри формулы («$y=1$. $z=2$») — доллар её закрывает, это не
+    # номер задачи OCR. Номер стоит вне формул: долларов перед ним чётно.
+    if match.string.count('$', 0, match.start()) % 2:
+        return match.group(0)
+    return f" {match.group('num')}. "
+
+
 def heal_ocr_task_number_labels(value: str) -> str:
     """Отделяет номер следующей задачи от ответа и жирного OCR."""
     value = _OCR_BOLD_TASK_NUM_RE.sub(r' \g<num>. ', str(value or ''))
     value = _OCR_CDOT_TASK_NUM_RE.sub(r' \g<num>. ', value)
     value = _OCR_DOLLAR_TASK_NUM_RE.sub(r'. \g<num>. ', value)
-    value = _OCR_BARE_DOLLAR_TASK_RE.sub(r' \g<num>. ', value)
+    value = _OCR_BARE_DOLLAR_TASK_RE.sub(_bare_dollar_task_number, value)
     value = _OCR_MATH_CMD_TASK_RE.sub(r' \g<num>. ', value)
     value = _OCR_SPACED_DOT_TASK_RE.sub(r' \g<num>. ', value)
     value = _OCR_TASK_THEN_ANSWER_DIGIT_RE.sub(r' \g<num>. \g<lead>. ', value)
