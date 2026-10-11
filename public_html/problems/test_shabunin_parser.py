@@ -333,9 +333,13 @@ class SharedNormalizationTests(SimpleTestCase):
         self.assertEqual(apply_imported_answer(r"$y=1$. $z=2$"), r"$y=1$. $z=2$")
         self.assertNotIn("$$", str(web_answer(
             r"$\displaystyle y=x+1$. $D(y)=\mathbb{R}$. Функция возрастает на $(0;1)$")))
-        # Номер следующей задачи OCR вне формулы по-прежнему отделяется.
+        self.assertEqual(apply_imported_answer(r"$y = 1$. $z=2$"), r"$y = 1$. $z=2$")
+        # Номер следующей задачи OCR по-прежнему отделяется — и вне формулы,
+        # и проглоченный формулой после законченного выражения.
         self.assertEqual(heal_ocr_task_number_labels(r"$(1;2)$ 5$. (-3;1)"),
                          r"$(1;2)$ 5. (-3;1)")
+        self.assertEqual(heal_ocr_task_number_labels(r"$(1;2) 5$. $(-3;1)$"),
+                         r"$(1;2) 5. $(-3;1)$")
 
     def test_subitem_punct_keeps_right_delimiter_dot(self):
         value = r"F=\left\{\begin{array}{l}0 \\ 1\end{array}\right."

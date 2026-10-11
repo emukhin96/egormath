@@ -189,6 +189,16 @@ class ReviewToolsTests(TestCase):
                             'value="задача с параметром, построение графика"')
         detail = self.client.get(reverse('textbook_import_detail', args=[self.batch.pk]))
         self.assertContains(detail, '<span class="badge">задача с параметром</span>', html=True)
+        # Метка с запятой в имени (от импортёра) не распадается при сохранении.
+        draft.tags = ['задача с параметром', 'ОГЭ, часть 2']
+        draft.save()
+        form = self.client.get(review).context['form']
+        self.assertEqual(form['tags'].value(), 'задача с параметром')
+        data = {name: form[name].value() or '' for name in form.fields}
+        data.update({'topic_ids': [], 'topic': ''})
+        self.client.post(review, data)
+        draft.refresh_from_db()
+        self.assertEqual(draft.tags, ['задача с параметром', 'ОГЭ, часть 2'])
 
     def test_lone_set_brace_outside_math_is_wrapped(self):
         from .shabunin_parser import _wrap_lone_braces

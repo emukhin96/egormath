@@ -206,7 +206,10 @@ class TextbookDraftReviewForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.initial['tags'] = ', '.join(self.instance.tags or [])
+        # Метку с запятой в имени через это поле не выразить — её не
+        # показываем и сохраняем как есть (как теги в редакторе задачи).
+        self.initial['tags'] = ', '.join(
+            name for name in self.instance.tags or [] if ',' not in name)
         if self.instance.pk and (
                 self.instance.status == TextbookTaskDraft.STATUS_IMPORTED):
             for field in self.fields.values():
@@ -242,7 +245,8 @@ class TextbookDraftReviewForm(forms.ModelForm):
             name = ' '.join(name.split())[:64]
             if name and name not in names:
                 names.append(name)
-        return names
+        return names + [name for name in self.instance.tags or []
+                        if ',' in name and name not in names]
 
     def clean_text_latex(self):
         from .textbook_parser import apply_imported_math, collapse_repeated_lead

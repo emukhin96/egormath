@@ -389,10 +389,16 @@ _OCR_MATH_CMD_TASK_RE = re.compile(
 
 
 def _bare_dollar_task_number(match: re.Match) -> str:
-    # Цифра внутри формулы («$y=1$. $z=2$») — доллар её закрывает, это не
-    # номер задачи OCR. Номер стоит вне формул: долларов перед ним чётно.
+    # Внутри формулы («$y=1$. $z=2$») цифра — конец выражения, доллар её
+    # закрывает. Номером задачи OCR («$(1;2) 5$. $(-3;1)$») считаем только
+    # отдельно стоящую цифру после законченного выражения.
     if match.string.count('$', 0, match.start()) % 2:
-        return match.group(0)
+        before = match.string[:match.start()]
+        tail = before.rstrip()
+        if (before == tail or not tail
+                or tail[-1] in '=+-<>;:,({[|^_/' or tail.endswith('\\')
+                or re.search(r'\\[a-zA-Z]+$', tail)):
+            return match.group(0)
     return f" {match.group('num')}. "
 
 
