@@ -313,7 +313,8 @@ class SharedNormalizationTests(SimpleTestCase):
                      "Показать, что при каждом значении параметра $C$ функция — решение.",
                      "Определить число корней при указанных значениях параметра $a$:",
                      "Доказать, что при всех $a$ верно $a^{2}+1 \\geqslant 2 a$.",
-                     "Вычислить сумму для любых $A$ и $B$."):
+                     "Вычислить сумму для любых $A$ и $B$.",
+                     "Кривая задана параметрически: $x=\\cos t$, $y=\\sin t$."):
             self.assertEqual(tags(text), [], text)
 
     def test_sentence_dot_between_formulas_is_not_task_number(self):
