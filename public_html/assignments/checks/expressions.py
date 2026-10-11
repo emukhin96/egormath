@@ -344,6 +344,87 @@ def _absolute_products(text):
     return None if depth or groups else ''.join(out)
 
 
+_PRODUCT_OPERATOR_RE = re.compile(r'\*|\\cdot(?![A-Za-z])|\\times(?![A-Za-z])')
+_CHAIN_STOP_COMMANDS = frozenset((
+    'cdot', 'times', 'div', 'right', 'pm', 'mp', 'le', 'leq', 'leqslant',
+    'ge', 'geq', 'geqslant', 'ne', 'neq', 'lt', 'gt'))
+# Команда функции с аргументом без скобок: \sin, \arccos, \ln, \log.
+_FUNCTION_COMMAND_RE = re.compile(
+    r'\\(?:arc)?(?:sin|cos|tan|cot|sec|csc)h?(?![A-Za-z])|\\(?:ln|lg|log)(?![A-Za-z])')
+
+
+def _product_chain_end(text, start):
+    """Конец операнда явного умножения: до знака того же уровня скобок.
+
+    None — если в операнде модуль: его черты разбирает _absolute_products."""
+    depth, i, first = 0, start, True
+    while i < len(text):
+        char = text[i]
+        if char.isspace():
+            i += 1
+            continue
+        if char == '\\':
+            command = re.match(r'\\([A-Za-z]+)', text[i:])
+            if command:
+                if depth == 0 and command[1] in _CHAIN_STOP_COMMANDS:
+                    break
+                i += command.end()
+                first = False
+                continue
+        if char == '|':
+            return None
+        if char in '({[':
+            depth += 1
+        elif char in ')}]':
+            if depth == 0:
+                break
+            depth -= 1
+        elif depth == 0 and char in '+-' and not first and text[i-1:i] not in ('^', '_'):
+            break
+        elif depth == 0 and char in '*/=,;<>':
+            break
+        first = False
+        i += 1
+    return i
+
+
+def _group_products(text):
+    """a\\cdot\\sin x\\cos x → a\\cdot{\\sin x\\cos x}.
+
+    Справа от явного умножения грамматика допускает одно применение
+    функции, и у \\sin x\\cos x остаётся единственное прочтение
+    \\sin(x\\cos x), которое _valid_function_scopes отвергает. В скобках
+    действует то же соседство, что и без знака умножения; умножение
+    ассоциативно, поэтому значение не меняется."""
+    inserts = []
+    for match in _PRODUCT_OPERATOR_RE.finditer(text):
+        start = match.end()
+        end = _product_chain_end(text, start)
+        if end is None or not text[start:end].strip():
+            continue
+        inserts += [(start, '{'), (end, '}')]
+    for position, brace in sorted(inserts, key=lambda item: item[0], reverse=True):
+        text = text[:position] + brace + text[position:]
+    return text
+
+
+def _grouped_products_tree(parser, text):
+    """Запасной разбор с операндами умножения в скобках: только если в
+    записи есть явное умножение и функция, и только допустимое дерево."""
+    if not (_PRODUCT_OPERATOR_RE.search(text) and _FUNCTION_COMMAND_RE.search(text)):
+        return None
+    grouped = _group_products(text)
+    if grouped == text:
+        return None
+    try:
+        tree = parser.parser.parse(grouped)
+    except MemoryError:
+        raise
+    except Exception:  # noqa: BLE001
+        return None
+    return tree if resolve(tree) is not None else None
+
+
 def raw_tree(text):
     """Сырое дерево разбора подготовленной строки; None — не разобралось."""
     text = prepare(text)
@@ -354,7 +435,7 @@ def raw_tree(text):
         # Сырое дерево нужно независимо от transform_expr общего парсера.
         # Его настройки не меняем: им пользуется и parse_latex SymPy.
         try:
-            return parser.parser.parse(text)
+            tree = parser.parser.parse(text)
         except MemoryError:
             raise
         except Exception:
@@ -362,8 +443,16 @@ def raw_tree(text):
             # Нормализация добавляет только скобки и знаки умножения.
             grouped = _absolute_products(text) if '|' in text else None
             if grouped is None or grouped == text:
-                raise
+                alternative = _grouped_products_tree(parser, text)
+                if alternative is None:
+                    raise
+                return alternative
             return parser.parser.parse(grouped)
+        if (_PRODUCT_OPERATOR_RE.search(text) and _FUNCTION_COMMAND_RE.search(text)
+                and resolve(tree) is None):
+            # Разбор есть, но ни одна граница функции не допустима.
+            return _grouped_products_tree(parser, text) or tree
+        return tree
     except MemoryError:
         raise
     except Exception as error:  # noqa: BLE001 — синтаксический сбой = «не разобрано»
