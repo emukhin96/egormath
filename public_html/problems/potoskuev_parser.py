@@ -827,6 +827,23 @@ def _wrap_bare_tuples(value: str) -> str:
     return "".join(out)
 
 
+_NUM = r"[-−]?\s*\d+(?:[.,]\d+)?"
+_BARE_POINT_RE = re.compile(
+    r"(?<![\w\\$])(?:[A-Z](?:_\{?\d\}?)?\s?)?\(\s*" + _NUM + r"(?:\s*;\s*" + _NUM + r"){1,2}\s*\)")
+
+
+def _wrap_bare_points(value: str) -> str:
+    """«с центром в точке (2; -3; 4)», «M(1; 3; 8)» в тексте — формула."""
+    out = []
+    pos = 0
+    for match in MATH_SPAN_RE.finditer(value or ""):
+        out.append(_BARE_POINT_RE.sub(lambda m: "\\(" + m.group(0).strip() + "\\)", value[pos:match.start()]))
+        out.append(match.group(0))
+        pos = match.end()
+    out.append(_BARE_POINT_RE.sub(lambda m: "\\(" + m.group(0).strip() + "\\)", (value or "")[pos:]))
+    return "".join(out)
+
+
 def _finish_fields(task: TaskDraft) -> None:
     def text_field(value: str) -> str:
         value = (value or "").replace(_LABEL_GUARD, "")
@@ -840,12 +857,13 @@ def _finish_fields(task: TaskDraft) -> None:
         value = re.sub(r"(?<!\\right)\.\s*\$$", "$", value)
         return re.sub(r"(?<=\S)[ \t]+\$(?=[\s;,.)]|$)", "$", value)
 
-    task.text_latex = text_field(task.text_latex)
+    task.text_latex = _wrap_bare_points(text_field(task.text_latex))
     task.author_solution_latex = text_field(task.author_solution_latex)
     task.author_answer_latex = answer_field(task.author_answer_latex)
     for item in task.subitems:
         # «\\(…, \\vec{k} ;\\)» — служебный знак перечисления внутри формулы.
-        item.text_latex = re.sub(r"\s*[;,]\s*\\\)\s*$", r"\\)", text_field(item.text_latex))
+        item.text_latex = re.sub(r"\s*[;,]\s*\\\)\s*$", r"\\)",
+                                 _wrap_bare_points(text_field(item.text_latex)))
         item.author_solution_latex = text_field(item.author_solution_latex)
         item.author_answer_latex = answer_field(item.author_answer_latex)
     answers = [task.author_answer_latex] + [

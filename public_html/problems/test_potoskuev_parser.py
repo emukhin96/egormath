@@ -169,3 +169,11 @@ class PotoskuevPdfSafetyTests(SimpleTestCase):
         value = prepare_text(
             "\\[\n\\begin{aligned}\nx & =1 \\\\\n& =2 \\tag{*}\n\\end{aligned}\n\\]")
         self.assertIn("\\end{aligned} \\tag{*}", value)
+
+
+class PotoskuevBarePointsTests(SimpleTestCase):
+    def test_coordinates_in_condition_become_math(self):
+        from .potoskuev_parser import _wrap_bare_points
+        self.assertEqual(
+            _wrap_bare_points("с центром в точке (2; -3; 4) и M(1; 3; 8), \\(x\\) (рис. 5)"),
+            "с центром в точке \\((2; -3; 4)\\) и \\(M(1; 3; 8)\\), \\(x\\) (рис. 5)")
