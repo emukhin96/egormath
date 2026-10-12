@@ -51,15 +51,67 @@ _MIXED_FRAC_RE = re.compile(r'^([+-])?(\d+)\s*\\frac\{(\d+)\}\{(\d+)\}$')
 _INTERVAL_RE = re.compile(r'^([(\[])\s*([^;]+?)\s*;\s*([^;]+?)\s*([)\]])$')
 _PM_RE = re.compile(r'^\\pm\s*(.+)$')
 
+# Школьные имена тригонометрических функций → команды, которые понимает
+# Lark-грамматика SymPy. Ученик набирает их буквами (arccos(1/6)), MathLive
+# присылает \mathrm{arctg} или \operatorname{ctg}, в книгах встречается \tg.
+_FUNCTION_COMMANDS = {
+    'sin': 'sin', 'cos': 'cos', 'tg': 'tan', 'tan': 'tan', 'ctg': 'cot', 'cot': 'cot',
+    'arcsin': 'arcsin', 'arccos': 'arccos', 'arctg': 'arctan', 'arctan': 'arctan',
+    'arcctg': 'arccot', 'arccot': 'arccot',
+}
+_FUNCTION_NAMES = '|'.join(sorted(_FUNCTION_COMMANDS, key=len, reverse=True))
+# Имена SymPy (asin) понимаем только в оболочке: буквами «acos» — это и a·cos.
+_SYMPY_COMMANDS = {'asin': 'arcsin', 'acos': 'arccos', 'atan': 'arctan'}
+_WRAPPED_NAMES = '|'.join(sorted({**_FUNCTION_COMMANDS, **_SYMPY_COMMANDS},
+                                 key=len, reverse=True))
+_WRAPPED_FUNCTION_RE = re.compile(
+    r'\\(?:operatorname|mathrm|text|textrm)\s*\{\s*'
+    rf'(?:\\(?:mathrm|text|textrm)\s*\{{\s*({_WRAPPED_NAMES})\s*\}}|({_WRAPPED_NAMES}))\s*\}}')
+# Команда целиком (\tg, но не \tgx) и имя буквами вне более длинного слова
+# (arccos, но не xarccos и не arccosx: такие записи не угадываем).
+# Буквенное имя считается функцией, только если за ним (и за степенью)
+# идёт аргумент: «tg + 1» с параметрами t и g остаётся произведением.
+_FUNCTION_COMMAND_RE = re.compile(rf'\\({_FUNCTION_NAMES})(?![A-Za-z])')
+_BARE_FUNCTION_RE = re.compile(
+    rf'(?<![A-Za-z\\])({_FUNCTION_NAMES})(?![A-Za-z])'
+    r'(?=\s*(?:\^\s*(?:\{[^{}]*\}|[+-]?\d+)\s*)?[0-9A-Za-zα-ωπ(\[{\\.])')
+# Остаток имени функции в слове из букв после нормализации: Arccos, sinx.
+_LEFTOVER_FUNCTION_RE = re.compile(
+    r'(?<![A-Za-z\\])[A-Za-z]*(?:arc|sin|cos|tg|tan|cot)[A-Za-z]*', re.I)
+
+
+def _function_commands(text):
+    def command(match):
+        name = match[match.lastindex]
+        result = '\\' + (_FUNCTION_COMMANDS.get(name) or _SYMPY_COMMANDS[name])
+        # Пробел нужен только перед буквой: \tan x, а не \tanx.
+        following = match.string[match.end():match.end() + 1]
+        return result + ' ' if following.isalpha() else result
+
+    for rx in (_WRAPPED_FUNCTION_RE, _FUNCTION_COMMAND_RE, _BARE_FUNCTION_RE):
+        text = rx.sub(command, text)
+    return text
+
+
+def unrecognized_function(text):
+    """В вводе осталось имя функции, которое нормализация не распознала.
+
+    Такой ввод разбирается как произведение букв (Arccos → A·r·c·c·o·s),
+    и «неверно» по нему было бы ложным: решение остаётся за учителем.
+    """
+    return bool(_LEFTOVER_FUNCTION_RE.search(normalize(text)))
+
 
 def normalize(text):
     """Общая нормализация школьной записи; ``$`` снимаются, запятая в
-    десятичной дроби становится точкой, пробелы схлопываются."""
+    десятичной дроби становится точкой, пробелы схлопываются, школьные
+    имена функций (arctg, \\mathrm{ctg}, \\tg) становятся командами LaTeX."""
     text = (text or '').replace('$', ' ')
     text = _RELATION_RE.sub(lambda m: f' {_RELATIONS[m.group(1)]} ', text)
     for old, new in _REPLACEMENTS:
         text = text.replace(old, new)
     text = _DECIMAL_COMMA_RE.sub('.', text)
+    text = _function_commands(text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
@@ -210,6 +262,13 @@ def _compare_items(student, reference):
 def check_answer(student, reference, strict_brackets=True):
     """Сверка строки ученика с эталоном: 'ok' / 'wrong' / 'unknown' /
     '' (сверять нечего: пустой эталон или пустой ответ)."""
+    result = _check_answer(student, reference, strict_brackets)
+    if result == WRONG and unrecognized_function(student):
+        return UNKNOWN
+    return result
+
+
+def _check_answer(student, reference, strict_brackets):
     s, r = normalize(student), normalize(reference)
     if not s or not r:
         return ''

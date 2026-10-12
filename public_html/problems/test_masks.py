@@ -140,6 +140,18 @@ class MaskEndpointTests(TestCase):
                          {'preview_s1': 'ok', 'preview_s2': 'wrong'})
         self.assertIn('value="10,0"', data['html'])
 
+    def test_preview_accepts_inverse_functions_typed_as_letters(self):
+        # Потоскуев, 4.048 а): ученик набирает arctg буквами, без \operatorname.
+        response = self.client.post(reverse('task_mask_preview'), {
+            'mask': '{{number: \\operatorname{arctg} \\frac{1}{3}}} и '
+                    '{{number: \\arccos \\left(-\\frac{7}{25}\\right)}} и '
+                    '{{number: \\arccos \\frac{1}{6}}}',
+            'preview_s1': 'arctg(1/3)', 'preview_s2': '\\mathrm{arccos}(-7/25)',
+            'preview_s3': 'Arccos(1/6)'})
+        data = response.json()
+        self.assertEqual(data['checks'], {'preview_s1': 'ok', 'preview_s2': 'ok',
+                                          'preview_s3': 'unknown'})
+
     def test_preview_reports_temporarily_unavailable_checker(self):
         from unittest.mock import patch
         from assignments.checks import formulas

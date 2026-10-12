@@ -15,7 +15,8 @@ import random
 import re
 from dataclasses import dataclass, field
 
-from ..check_answer import FORMAT, OK, UNKNOWN, WRONG, _compact, normalize
+from ..check_answer import (FORMAT, OK, UNKNOWN, WRONG, _compact, normalize,
+                            unrecognized_function)
 from . import expressions, sets, formats, series, formulas
 
 NUMBER = 'number'
@@ -558,6 +559,16 @@ def _number_needs_worker(slot, value):
 
 def check_slot(slot, value):
     """Значение ученика для одного слота → '' / ok / wrong / unknown."""
+    result = _check_slot(slot, value)
+    # Нераспознанное имя функции (Arccos, sinx) разбирается как произведение
+    # букв: «неверно» по такому вводу было бы ложным, решает учитель.
+    if (result == WRONG and slot.kind not in (DIGITS, DECIMAL, CHOICE, ORDER)
+            and unrecognized_function(value or '')):
+        return UNKNOWN
+    return result
+
+
+def _check_slot(slot, value):
     value = (value or '').strip()
     if not value or not slot.is_valid:
         return ''
