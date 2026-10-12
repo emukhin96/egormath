@@ -6,6 +6,7 @@ x^{2/3} = ∛(x²) = (∛x)² при любом действительном x. 
 Случаи взяты из задачника Шабунина (II.44, II.61, II.62, XIII.14, XIII.33,
 XIV.92, XV.2, XV.15).
 """
+import sympy as sp
 from django.test import SimpleTestCase
 
 from .checks import expressions, formulas
@@ -202,8 +203,19 @@ class FunctionPowerTests(SimpleTestCase):
         self.assertEqual(check_slot(number, r'\ln^{2} 3'), 'ok')
         self.assertEqual(check_slot(number, r'\ln^{2} 9'), 'wrong')
 
+    def test_power_of_logarithm_inside_another_function(self):
+        # Без внешней группы \sin(\ln x)^2 читался бы как sin²(ln x).
+        x = sp.Symbol('x', real=True)
+        for latex, expected in ((r'\sin\ln^2 x', sp.sin(sp.log(x)**2)),
+                                (r'\cos\ln^{2} x+1', sp.cos(sp.log(x)**2) + 1),
+                                (r'\sqrt{\ln^2 x}', sp.sqrt(sp.log(x)**2))):
+            with self.subTest(latex=latex):
+                parsed = formulas._parse(latex)
+                self.assertIsNotNone(parsed, latex)
+                self.assertEqual(sp.simplify(parsed.expression - expected), 0, latex)
+
     def test_ambiguous_logarithm_argument_is_not_guessed(self):
         # ln²(2x) или (ln² 2)·x — граница аргумента неоднозначна.
         self.assertEqual(expressions.function_powers(r'\ln^2 2x'), r'\ln^2 2x')
-        self.assertEqual(expressions.function_powers(r'\ln^{2} x+1'), r'(\ln x)^{2}+1')
+        self.assertEqual(expressions.function_powers(r'\ln^{2} x+1'), r'{(\ln x)^{2}}+1')
         self.assertEqual(expressions.function_powers(r'\ln^{-1} x'), r'\ln^{-1} x')
