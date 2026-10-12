@@ -177,3 +177,13 @@ class PotoskuevBarePointsTests(SimpleTestCase):
         self.assertEqual(
             _wrap_bare_points("с центром в точке (2; -3; 4) и M(1; 3; 8), \\(x\\) (рис. 5)"),
             "с центром в точке \\((2; -3; 4)\\) и \\(M(1; 3; 8)\\), \\(x\\) (рис. 5)")
+
+
+class PotoskuevSignTests(SimpleTestCase):
+    def test_letter_o_is_sign_only_before_capital(self):
+        from .potoskuev_parser import _clean_task_body
+        self.assertEqual(_clean_task_body(" О Величина угла равна 60°."), "Величина угла равна 60°.")
+        self.assertEqual(_clean_task_body(" О прямых \\(a\\) и \\(b\\) известно, что они параллельны."),
+                         "О прямых \\(a\\) и \\(b\\) известно, что они параллельны.")
+        self.assertEqual(_clean_task_body(" (Устно.) О прямых \\(a\\) известно."),
+                         "(Устно.) О прямых \\(a\\) известно.")
