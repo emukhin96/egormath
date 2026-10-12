@@ -175,6 +175,31 @@ class ReviewToolsTests(TestCase):
         self.assertNotContains(response, 'Подобрать маски (')
         self.assertContains(response, 'Маска ответа:')
 
+    def test_review_edits_tags_and_list_shows_them(self):
+        draft = self.batch.drafts.get(external_id='I.2')
+        review = reverse('textbook_import_review', args=[self.batch.pk, draft.pk])
+        form = self.client.get(review).context['form']
+        data = {name: form[name].value() or '' for name in form.fields}
+        data.update({'tags': 'задача с параметром,  построение графика, задача с параметром',
+                     'topic_ids': [], 'topic': ''})
+        self.client.post(review, data)
+        draft.refresh_from_db()
+        self.assertEqual(draft.tags, ['задача с параметром', 'построение графика'])
+        self.assertContains(self.client.get(review),
+                            'value="задача с параметром, построение графика"')
+        detail = self.client.get(reverse('textbook_import_detail', args=[self.batch.pk]))
+        self.assertContains(detail, '<span class="badge">задача с параметром</span>', html=True)
+        # Метка с запятой в имени (от импортёра) не распадается при сохранении.
+        draft.tags = ['задача с параметром', 'ОГЭ, часть 2']
+        draft.save()
+        form = self.client.get(review).context['form']
+        self.assertEqual(form['tags'].value(), 'задача с параметром')
+        data = {name: form[name].value() or '' for name in form.fields}
+        data.update({'topic_ids': [], 'topic': ''})
+        self.client.post(review, data)
+        draft.refresh_from_db()
+        self.assertEqual(draft.tags, ['задача с параметром', 'ОГЭ, часть 2'])
+
     def test_lone_set_brace_outside_math_is_wrapped(self):
         from .shabunin_parser import _wrap_lone_braces
         self.assertEqual(
@@ -317,6 +342,28 @@ class DraftPatchTests(TestCase):
         patch_data['order'] = ['1.2.37']
         with self.assertRaises(TextbookPatchError):
             apply_draft_patch(self.batch, patch_data, apply=True)
+
+    def test_tags_travel_with_patch(self):
+        draft = self.draft()
+        draft.tags = ['задача с параметром']
+        draft.save()
+        patch_data, untransferred = build_draft_patch(self.baseline, batch_rows(self.batch))
+        self.assertEqual(untransferred, [])
+        self.assertEqual(patch_data['drafts'][0]['after'], {'tags': ['задача с параметром']})
+        draft.tags = []
+        draft.save()
+        apply_draft_patch(self.batch, json.loads(json.dumps(patch_data)), apply=True)
+        self.assertEqual(self.draft().tags, ['задача с параметром'])
+
+    def test_patch_built_before_tags_still_applies(self):
+        patch_data = self.edit_and_build()
+        # Пакет старого кода: в снимке «до» нет меток.
+        for row in patch_data['drafts']:
+            row['before'].pop('tags', None)
+        self.draft().__class__.objects.filter(pk=self.draft().pk).update(tags=['ОГЭ'])
+        report = apply_draft_patch(self.batch, patch_data, apply=True)
+        self.assertEqual(report['applied'], ['1.2.37'])
+        self.assertEqual(report['skipped'], [])
 
     def test_busy_formula_worker_is_retried(self):
         from .textbook_import import TextbookImportUnavailable, normalize_answer_mask

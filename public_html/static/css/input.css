@@ -4218,6 +4218,14 @@
     margin-top: 2px;
   }
 
+  /* Метки сайта у черновика («задача с параметром») под темами. */
+  .import-draft-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin-top: var(--space-1);
+  }
+
   table.import-drafts th.col-text,
   table.import-drafts td.col-text {
     min-width: 0;
@@ -5694,4 +5702,13 @@
   }
   .canvas-stage canvas { position: absolute; left: 0; top: 0; display: block; }
   .canvas-top { pointer-events: none; }
+}
+
+/* Русский текст внутри формулы («если», f_наим, \operatorname{НОД}): KaTeX
+   рисует его запасным шрифтом браузера. Шрифт сайта и размер текста
+   (KaTeX увеличивает формулы в 1,21 раза). Вне @layer: правила KaTeX
+   (.katex .mathrm) идут без слоя и перебили бы правило из слоя. */
+.katex .cyrillic_fallback {
+  font-family: var(--font-sans);
+  font-size: 0.8264em;
 }

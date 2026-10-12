@@ -252,7 +252,8 @@ def check(value, reference, multiple=False):
 
 
 def _prepare(text):
-    text = expressions.normalize_roots(text)
+    # \ln^{2} x переписывается до вставки умножения после степени.
+    text = expressions.function_powers(expressions.normalize_roots(text))
     # Степень переменной и следующая функция — отдельные множители.
     # В sin² x степень относится к функции, умножение туда не вставляем.
     functions = r'(?:sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|arccot|arcsec|arccsc|sinh|cosh|tanh|asinh|acosh|atanh)'
@@ -263,14 +264,16 @@ def _prepare(text):
                   r'd\\cdot ', text)
 
     def after_power(match):
-        if re.search(r'\\' + functions + r'$', text[:match.start()].rstrip()):
+        if re.search(r'\\(?:' + functions + r'|ln|log|lg)$', text[:match.start()].rstrip()):
             return match.group(1)
         return match.group(1) + r'\cdot '
 
+    # Показатель может содержать один уровень скобок: x^{\frac{2}{3}}y.
+    exponent = r'\^\{(?:[^{}]|\{[^{}]*\})+\}'
     text = re.sub(
-        r'(\^(?:\{[^{}]+\}|[+-]?\d+))\s*(?=[A-Za-z]|\\(?:sqrt|frac|pi|' + functions + r')\b)',
+        r'(' + exponent + r'|\^[+-]?\d+)\s*(?=[A-Za-z]|\\(?:sqrt|frac|pi|ln|log|lg|' + functions + r')\b)',
         after_power, text)
-    text = re.sub(r'(\^\{[^{}]+\})\s*(?=\()', after_power, text)
+    text = re.sub(r'(' + exponent + r')\s*(?=\()', after_power, text)
     def after_group(match):
         if match.group(1) == '}' and expressions._closes_script(text, match.start()):
             return match.group(1)
@@ -296,6 +299,19 @@ def _components(tree, *, numeric=False, pi_marker=None):
     tree = expressions.resolve(tree)
     value = expressions.evaluate(tree, numeric=numeric, pi_marker=pi_marker)
     result = [value] if value is not None and hasattr(value, 'free_symbols') else []
+    name = str(tree.data).removesuffix('_power')
+    import sympy
+    if (name != tree.data and name in expressions._TRIG_NODES
+            and value is not None and value.has(getattr(sympy, name))):
+        # \tan^2 x требует определённого \tan x, как и (\tan x)^2, но
+        # сама функция не отдельное поддерево: без неё область эталона
+        # не содержит tan x, и равная запись уходит в долгий перебор.
+        # \tan^{-1} x — арктангенс: tan x в нём нет, области он не сужает.
+        argument = tree.children[-1]
+        inner = (expressions.evaluate(argument, numeric=numeric, pi_marker=pi_marker)
+                 if expressions._is_tree(argument) else expressions.parse_expr(str(argument)))
+        if inner is not None and hasattr(inner, 'free_symbols'):
+            result.append(getattr(sympy, name)(inner))
     for child in tree.children:
         result.extend(_components(child, numeric=numeric, pi_marker=pi_marker))
     return result
@@ -425,6 +441,124 @@ def _numeric_degree_arguments(text):
     return text
 
 
+# Школьный нечётный корень вычисляется вещественной ветвью:
+# real_root(v, n) = |v|^(1/n)·sign(v). Одно значение приходит в разных
+# записях: ∛(x²) даёт |x|^(2/3)·sign(x²), (∛x)² — |x|^(2/3)·sign(x)², а
+# x^(-2/3) — |x|^(-2/3)·sign(x)^(-2). SymPy не доказывает их равенство и
+# местами ошибочно отвечает «не равно». Ниже знаки сводятся к одной форме:
+# каждое действительное основание b входит в произведение один раз, как
+# |b|^R·sign(b)^K с K ∈ {±1, ±2} или как b^R. Все шаги — тождества при
+# b ≠ 0; при b = 0 значение сохраняется, а неопределённость (0 в
+# отрицательной степени) не исчезает. Чётные корни (√x, x^(1/2)) сюда не
+# попадают: у них нет sign, и их область определения не меняется.
+
+def _real_base(value):
+    """Основание без числового множителя и внешнего минуса: 6x+9 → (3, 2x+3)."""
+    from sympy import S
+    content, base = value.as_content_primitive() if value.is_Add else (S.One, value)
+    if base.could_extract_minus_sign():
+        content, base = -content, -base
+    return content, base
+
+
+def _split_sign(value):
+    """sign(v) → произведение знаков действительных оснований.
+
+    sign(ab)=sign(a)·sign(b), sign(b^n)=sign(b)^n при целом n,
+    sign(|b|^r)=sign(|b|)=sign(b)² при r>0."""
+    from sympy import Abs, Mul, sign
+    if value.is_Mul:
+        return Mul(*(_split_sign(factor) for factor in value.args))
+    if value.is_Pow:
+        base, exponent = value.args
+        if base.is_real is True and exponent.is_Integer:
+            return _split_sign(base) ** exponent
+        if base.is_nonnegative is True and exponent.is_positive is True:
+            return _split_sign(base)
+    if isinstance(value, Abs) and value.args[0].is_real is True:
+        return _split_sign(value.args[0]) ** 2
+    if value.is_real is True and not value.is_Number:
+        content, base = _real_base(value)
+        if content != 1:
+            return sign(content) * _split_sign(base)
+    return sign(value)
+
+
+def _merge_signs(value):
+    """Множители |b|^r, sign(b)^k и b^m одного основания — в один.
+
+    Сводятся только основания, у которых в произведении есть sign:
+    записи без нечётных корней остаются как были."""
+    from sympy import Abs, Mul, S, sign
+    entries, rest = [], []
+    factors = []
+    for factor in Mul.make_args(value):
+        inner, exponent = factor.as_base_exp()
+        if isinstance(inner, Abs) and inner.args[0].is_Mul and exponent.is_Rational:
+            # SymPy оставляет |ab| целым, если знаки a и b неизвестны.
+            factors.extend(Abs(part) ** exponent for part in inner.args[0].args)
+        else:
+            factors.append(factor)
+    for factor in factors:
+        inner, exponent = factor.as_base_exp()
+        entry = None
+        if isinstance(inner, sign) and exponent.is_Integer:
+            content, base = _real_base(inner.args[0])
+            entry = (base, sign(content) ** exponent, S.Zero, exponent, True)
+        elif isinstance(inner, Abs) and exponent.is_Rational:
+            content, base = _real_base(inner.args[0])
+            entry = (base, Abs(content) ** exponent, exponent, 0, False)
+        elif exponent.is_Integer and inner.is_real is True and not inner.is_Number:
+            content, base = _real_base(inner)
+            entry = (base, content ** exponent, exponent, exponent, False)
+        if entry is None or entry[0].is_real is not True:
+            rest.append(factor)
+        else:
+            entries.append((factor, entry))
+    signed = {entry[0] for _, entry in entries if entry[4]}
+    powers = {}
+    for factor, (base, coefficient, r, k, _) in entries:
+        if base not in signed:
+            rest.append(factor)
+            continue
+        rest.append(coefficient)
+        total = powers.setdefault(base, [S.Zero, 0])
+        total[0] += r
+        total[1] += k
+    for base, (r, k) in powers.items():
+        if k:
+            # sign(b)^k зависит только от чётности k; знак k хранит
+            # неопределённость при b = 0.
+            k = (1 if k % 2 else 2) * (1 if k > 0 else -1)
+        if r < 0 and k < 0:
+            # |b|^r уже не определён при b = 0.
+            k = -k
+        if r != 0 and k == 2:
+            # sign(b)² = 1 при b ≠ 0, а при b = 0 обе части равны 0
+            # или обе не определены.
+            k = 0
+        if r.is_integer and r != 0 and (k - r) % 2 == 0 and (k > 0 or r < 0):
+            rest.append(base ** r)
+        else:
+            rest.append(Abs(base) ** r * sign(base) ** k)
+    return Mul(*rest)
+
+
+def _real_signs(value):
+    """Единая запись вещественных нечётных корней (см. комментарий выше)."""
+    from sympy import sign
+    if value.is_Atom or not value.free_symbols or not value.has(sign):
+        return value
+    args = tuple(_real_signs(arg) for arg in value.args)
+    if args != value.args:
+        value = value.func(*args)
+    if isinstance(value, sign):
+        value = _split_sign(value.args[0])
+    if value.is_Mul or value.is_Pow or isinstance(value, sign):
+        value = _merge_signs(value)
+    return value
+
+
 def _parse(text, positive=(), *, numeric=False):
     from sympy import Expr, Symbol, pi
     if not text.strip() or len(text) > MAX_EXPR_LEN:
@@ -470,20 +604,9 @@ def _parse(text, positive=(), *, numeric=False):
                        Symbol(str(s), positive=True) if str(s) in positive else
                        Symbol(str(s), real=True)) for s in symbols}
     def move(component):
-        from sympy import sign, simplify
-        component = component.xreplace(replacements)
-        if component.has(sign):
-            # sign(x^(2n+1))=sign(x) и при x=0. Отрицательные
-            # показатели сюда не входят: их разрыв сохраняется отдельно.
-            normalized = component.replace(
-                lambda node: node.func == sign and node.args[0].is_Pow
-                and node.args[0].base.is_real is True
-                and node.args[0].exp.is_Integer
-                and node.args[0].exp.is_positive and node.args[0].exp.is_odd,
-                lambda node: sign(node.args[0].base))
-            if normalized != component:
-                component = simplify(normalized)
-        return component
+        # Знаки нечётных корней сводятся только после выбора вещественных
+        # символов: для комплексного основания тождества не верны.
+        return _real_signs(component.xreplace(replacements))
     return Formula(move(value), tuple(move(d) for d in denominators),
                    tuple(move(c) for c in components), tree)
 
@@ -845,6 +968,119 @@ def _parse_reference(payload, multiple=False, *, numeric=False):
     return reference, ';'.join(texts).strip()
 
 
+def _sign_root(base):
+    """Основание того же знака: 2x³ → x, -(2-x)⁵ → x-2."""
+    coefficient, rest = base.as_coeff_Mul()
+    if rest.is_Pow and rest.exp.is_Integer and rest.exp.is_odd and rest.exp > 0:
+        rest = rest.base
+    if coefficient.is_nonzero is not True:
+        return base
+    return rest if coefficient > 0 else -rest
+
+
+def _nonneg_bases(values):
+    """Основания чётных корней: там, где values вещественны, они ≥ 0.
+
+    Главная ветвь b^(p/q) с чётным q вещественна только при b ≥ 0. Знак
+    переходит и к основанию нечётной степени: 2x³ ≥ 0 ⇔ x ≥ 0,
+    -(2-x)⁵ ≥ 0 ⇔ x-2 ≥ 0."""
+    from sympy import Pow
+    found = set()
+    for value in values:
+        for node in value.atoms(Pow):
+            base, exponent = node.args
+            if (exponent.is_Rational and exponent.q % 2 == 0
+                    and base.is_real is True and not base.is_number):
+                found |= {base, _sign_root(base)}
+    return found
+
+
+def _on_domain(nonneg):
+    """Сравнение на области эталона с чётными корнями.
+
+    Там основания из nonneg неотрицательны: b^(p/q) = |b|^(p/q), а символ
+    x ≥ 0 (x ≤ 0) можно заменить положительным p (−p). Без этого SymPy
+    сравнивает главные комплексные ветви x^(5/4) и (x⁵)^(1/4) при x < 0,
+    где ни одна из записей не определена."""
+    from sympy import Abs, Dummy
+    if not nonneg:
+        return None
+    polarity = {}
+    for base in nonneg:
+        coefficient, rest = base.as_coeff_Mul()
+        if rest.is_Symbol and coefficient in (1, -1):
+            # x ≥ 0 и x ≤ 0 вместе оставляют только x = 0: не заменяем.
+            polarity[rest] = coefficient if polarity.get(rest, coefficient) == coefficient else 0
+    substitution = {symbol: side * Dummy(symbol.name, positive=True)
+                    for symbol, side in polarity.items() if side}
+
+    def restrict(value):
+        value = value.replace(
+            lambda node: (node.is_Pow and node.exp.is_Rational
+                          and node.exp.q % 2 == 0 and _sign_root(node.base) in nonneg),
+            lambda node: Abs(node.base) ** node.exp)
+        return value.xreplace(substitution)
+    return restrict
+
+
+def _zero_bases(value):
+    """Основания, обнуляющие произведение c·∏|b|^r·sign(b)^k·b^m с
+    положительными показателями: оно равно нулю, только когда одно из
+    оснований равно нулю. None — если value так не раскладывается."""
+    from sympy import Abs, Mul, sign
+    bases = set()
+    for factor in Mul.make_args(value):
+        if factor.is_number:
+            if factor.is_zero is not False or factor.is_finite is not True:
+                return None
+            continue
+        inner, exponent = factor.as_base_exp()
+        if exponent.is_positive is not True:
+            return None
+        if isinstance(inner, (Abs, sign)):
+            inner = inner.args[0]
+        if inner.is_Mul or inner.is_Pow:
+            nested = _zero_bases(inner)
+            if nested is None:
+                return None
+            bases |= nested
+        else:
+            bases.add(_real_base(inner)[1])
+    return bases
+
+
+def _real_poles(value, nonneg):
+    """Основания, в нуле которых value не определено, если value — сумма
+    произведений вещественных степеней: |b|^r, sign(b)^k, b^m с целым m и
+    b^r для основания из nonneg. None — если вещественность так не доказать."""
+    from sympy import Abs, sign
+    if value.is_number:
+        return set() if value.is_real is True and value.is_finite is True else None
+    if value.is_Add or value.is_Mul:
+        poles = set()
+        for arg in value.args:
+            nested = _real_poles(arg, nonneg)
+            if nested is None:
+                return None
+            poles |= nested
+        return poles
+    if isinstance(value, (Abs, sign)):
+        return _real_poles(value.args[0], nonneg)
+    if value.is_Pow:
+        base, exponent = value.args
+        if not exponent.is_Rational:
+            return None
+        if not (exponent.is_Integer or _sign_root(base) in nonneg
+                or isinstance(base, Abs) or base.is_nonnegative is True):
+            return None
+        poles = _real_poles(base, nonneg)
+        if poles is None or exponent > 0:
+            return poles
+        zeros = _zero_bases(base)
+        return None if zeros is None else poles | zeros
+    return set() if value.is_real is True and value.is_finite is True else None
+
+
 def _defined(item, reference):
     """Отсекает лишние разрывы и невещественные значения на области эталона."""
     from sympy import S, Interval, solveset, oo
@@ -898,6 +1134,32 @@ def _defined(item, reference):
 
     if (all(real_from_original(c) for c in (value, *item.components))
             and all(d in original_denominators or nonzero(d)
+                    for d in item.denominators)):
+        return True
+    # Степени и корни: x^(-2/3) вместо 1/∛(x²), 1/∛e вместо e^(-1/3).
+    # Знаменатель эталона ≠ 0 на его области, значит, ненулевые и все
+    # основания, из которых он составлен. Если ввод делит только на эти
+    # основания, а чётные корни берёт только из неотрицательных на области
+    # эталона оснований, новых разрывов и невещественных значений нет.
+    nonneg = _nonneg_bases(originals)
+    allowed = set()
+    for denominator in original_denominators:
+        allowed |= _zero_bases(denominator) or set()
+    # Определённый на области эталона tan u (sec u) требует cos u ≠ 0,
+    # cot u (csc u) — sin u ≠ 0: \frac{\sin^2 x}{\cos^2 x} при \tan^2 x.
+    from sympy import cos, cot, csc, sec, sin, tan
+    for original in originals:
+        for atom in original.atoms(tan, sec, cot, csc):
+            function = cos if isinstance(atom, (tan, sec)) else sin
+            allowed.add(_real_base(function(atom.args[0]))[1])
+
+    def covered(bases):
+        return bases is not None and all(
+            base in allowed or nonzero(base) for base in bases)
+
+    if (all(real_from_original(c) or covered(_real_poles(c, nonneg))
+            for c in (value, *item.components))
+            and all(d in original_denominators or nonzero(d) or covered(_zero_bases(d))
                     for d in item.denominators)):
         return True
     # Допустимая точная точка с новым разрывом уже опровергает ввод;
@@ -1096,7 +1358,7 @@ def _split_list(value, count):
 
 
 def _check(value, reference, multiple=False, mode='expression', *, numeric=False):
-    from sympy import factor, simplify
+    from sympy import Pow, expand, factor, sign, simplify
     if len(value) > MAX_EXPR_LEN:
         return UNKNOWN
     # Команды \;, \,, \: и \! — пробелы, а не элементы списка.
@@ -1148,6 +1410,27 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
             # извлечения корня; исходные области уже проверены отдельно.
             difference = simplify(factor(item.expression) - factor(expected.expression))
             same = difference == 0 or difference.equals(0)
+            raw = item.expression - expected.expression
+            if same is not True and raw.has(sign) and all(
+                    not node.base.is_Add or abs(node.exp) <= 12
+                    for node in raw.atoms(Pow) if node.exp.is_Integer):
+                # Раскрытие скобок снова порождает sign(b)² у нечётных
+                # корней: (∛m)·(∛m)² — сводим знаки ещё раз после expand.
+                # simplify здесь не помогает: он заменяет sign на Piecewise.
+                # Большие степени сумм не раскрываем: это не школьная запись,
+                # а лишняя нагрузка на вычислитель.
+                if _real_signs(expand(raw)) == 0:
+                    same = True
+            if same is not True:
+                # Чётные корни эталона ограничивают область; вне её SymPy
+                # видит разные комплексные ветви и не находит равенства.
+                restrict = _on_domain(_nonneg_bases(
+                    (expected.expression, *expected.components)))
+                if restrict is not None:
+                    restricted = simplify(factor(restrict(item.expression))
+                                          - factor(restrict(expected.expression)))
+                    if restricted == 0 or restricted.equals(0) is True:
+                        same = True
             if same is None and _counterexample(difference, reference):
                 same = False
             if same is True:

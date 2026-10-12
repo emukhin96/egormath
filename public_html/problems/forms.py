@@ -198,9 +198,18 @@ class TextbookDraftReviewForm(forms.ModelForm):
     text_latex = forms.CharField(
         label='Условие (LaTeX)', required=False,
         widget=forms.Textarea(attrs={'rows': 8}))
+    # Метки сайта (как «Теги» в редакторе задачи): через запятую; при
+    # загрузке в каталог создаются и привязываются к задаче.
+    tags = forms.CharField(
+        label='Метки', required=False,
+        widget=forms.TextInput(attrs={'placeholder': 'Через запятую'}))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Метку с запятой в имени через это поле не выразить — её не
+        # показываем и сохраняем как есть (как теги в редакторе задачи).
+        self.initial['tags'] = ', '.join(
+            name for name in self.instance.tags or [] if ',' not in name)
         if self.instance.pk and (
                 self.instance.status == TextbookTaskDraft.STATUS_IMPORTED):
             for field in self.fields.values():
@@ -216,7 +225,7 @@ class TextbookDraftReviewForm(forms.ModelForm):
             'external_id', 'source_number', 'text_latex',
             'subitems', 'author_answer_latex', 'answer_mask',
             'author_solution_latex', 'answer_latex', 'solution_latex',
-            'status',
+            'tags', 'status',
         ]
         widgets = {
             'subitems': forms.Textarea(attrs={'rows': 8}),
@@ -229,6 +238,15 @@ class TextbookDraftReviewForm(forms.ModelForm):
             }),
             'author_solution_latex': forms.Textarea(attrs={'rows': 12}),
         }
+
+    def clean_tags(self):
+        names = []
+        for name in (self.cleaned_data.get('tags') or '').split(','):
+            name = ' '.join(name.split())[:64]
+            if name and name not in names:
+                names.append(name)
+        return names + [name for name in self.instance.tags or []
+                        if ',' in name and name not in names]
 
     def clean_text_latex(self):
         from .textbook_parser import apply_imported_math, collapse_repeated_lead

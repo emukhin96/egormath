@@ -266,6 +266,81 @@ class SharedNormalizationTests(SimpleTestCase):
                     r"1, & x \geqslant 2 .\end{array}\right.$")
         self.assertEqual(_strip_system_tail_punct(sentence), sentence)
 
+    def test_prose_inside_formula_moves_out(self):
+        from .shabunin_parser import _unwrap_math_prose
+        self.assertEqual(
+            _unwrap_math_prose(
+                "Доказать справедливость неравенства\n$$\n\\ln ^{2} x>\\ln (x-1) "
+                "\\ln (x+1) \\text { при } x>2 \\text {. }\n$$"),
+            "Доказать справедливость неравенства\n$\\ln ^{2} x>\\ln (x-1) "
+            "\\ln (x+1)$ при $x>2$.")
+        self.assertEqual(
+            _unwrap_math_prose(
+                r"$A \equiv\left\{\text { Число } 2^{222}-1 \text { делится на } 15\right\}$"),
+            r"$A \equiv\{$Число $2^{222}-1$ делится на $15\}$")
+        self.assertEqual(
+            _unwrap_math_prose(
+                r"$x^{2}+\frac{2}{y-3}, \text { если }-2 \leqslant x \text { и } y \leqslant 2,9 .$"),
+            r"$x^{2}+\frac{2}{y-3}$, если $-2 \leqslant x$ и $y \leqslant 2,9$.")
+        # «\right .» с пробелом — разделитель, а не точка предложения.
+        self.assertEqual(
+            _unwrap_math_prose(
+                r"$\left\{\begin{array}{l}x=1 \\ y=2\end{array}\right . \text { при } a>0$"),
+            r"$\left\{\begin{array}{l}x=1 \\ y=2\end{array}\right.$ при $a>0$")
+        # Отступы «\;», «\,» на краю формулы снимаются, а не режутся пополам.
+        self.assertEqual(_unwrap_math_prose(r"$x>0 \; \text { при } a>1$"),
+                         r"$x>0$ при $a>1$")
+        self.assertEqual(_unwrap_math_prose(r"$x>0 \, \text {, если } \, a>1$"),
+                         r"$x>0$, если $a>1$")
+        # Текст как часть формулы остаётся: кусочная функция, индекс, имя.
+        for value in (
+                r"$y=\left\{\begin{aligned}4 x, & \text { если } x>-1\end{aligned}\right.$",
+                r"$f_{\text {наим }}=-3$", r"$\operatorname{НОД}(a, b)$",
+                r"$x \text {, } y$"):
+            self.assertEqual(_unwrap_math_prose(value), value)
+
+    def test_parameter_tasks_get_site_tag(self):
+        from types import SimpleNamespace
+        from .shabunin_parser import PARAMETER_TAG, _tag_parameter_task
+        from .oge_metadata import PARAMETER_TAG as SITE_TAG
+        self.assertEqual(PARAMETER_TAG, SITE_TAG)
+
+        def tags(text):
+            task = SimpleNamespace(text_latex=text, subitems=[], tags=[])
+            _tag_parameter_task(task)
+            return task.tags
+
+        for text in ("Найти все значения $a$, при которых уравнение имеет корень.",
+                     "При каких значениях параметра $b$ система совместна?",
+                     "Решить уравнение при всех значениях $a$:",
+                     "Сколько корней имеет уравнение в зависимости от $a$?",
+                     "Найти все значения $\\lambda$, при которых уравнения имеют общий корень."):
+            self.assertEqual(tags(text), [SITE_TAG], text)
+        for text in ("При каких значениях $x$ верно неравенство?",
+                     "Найти все значения $x$, удовлетворяющие условию.",
+                     "Доказать, что при любом натуральном $n$ число делится на 3.",
+                     "Доказать, что функция при любых $a$ и $b$ имеет один экстремум.",
+                     "Показать, что при каждом значении параметра $C$ функция — решение.",
+                     "Определить число корней при указанных значениях параметра $a$:",
+                     "Доказать, что при всех $a$ верно $a^{2}+1 \\geqslant 2 a$.",
+                     "Вычислить сумму для любых $A$ и $B$.",
+                     "Кривая задана параметрически: $x=\\cos t$, $y=\\sin t$."):
+            self.assertEqual(tags(text), [], text)
+
+    def test_sentence_dot_between_formulas_is_not_task_number(self):
+        from .templatetags.task_extras import web_answer
+        from .textbook_parser import heal_ocr_task_number_labels
+        self.assertEqual(apply_imported_answer(r"$y=1$. $z=2$"), r"$y=1$. $z=2$")
+        self.assertNotIn("$$", str(web_answer(
+            r"$\displaystyle y=x+1$. $D(y)=\mathbb{R}$. Функция возрастает на $(0;1)$")))
+        self.assertEqual(apply_imported_answer(r"$y = 1$. $z=2$"), r"$y = 1$. $z=2$")
+        # Номер следующей задачи OCR по-прежнему отделяется — и вне формулы,
+        # и проглоченный формулой после законченного выражения.
+        self.assertEqual(heal_ocr_task_number_labels(r"$(1;2)$ 5$. (-3;1)"),
+                         r"$(1;2)$ 5. (-3;1)")
+        self.assertEqual(heal_ocr_task_number_labels(r"$(1;2) 5$. $(-3;1)$"),
+                         r"$(1;2) 5. $(-3;1)$")
+
     def test_subitem_punct_keeps_right_delimiter_dot(self):
         value = r"F=\left\{\begin{array}{l}0 \\ 1\end{array}\right."
         self.assertEqual(strip_subitem_punct(value), value)
