@@ -540,6 +540,22 @@ def set_example_solution(task: TaskDraft, solution: str) -> None:
         task.author_answer_latex = re.sub(r"\.$", "", answer).strip()
 
 
+def build_task(marker: Marker, body: str, path: list[str], diagnostics: dict) -> TaskDraft:
+    """Черновик из блока: части «1) … 2) …» со вступлением — отдельно."""
+    body, images = normalize_task_images(body)
+    stem, parts = split_numbered_parts(body)
+    if parts:
+        task = task_from_block(marker, stem, path)
+        task.subitems = [
+            SubitemDraft(label, apply_imported_math(_format_part(part)))
+            for label, part in parts]
+        diagnostics["numbered_parts"].append(task.external_id)
+    else:
+        task = task_from_block(marker, body, path)
+    task.images = images
+    return task
+
+
 def _heal_late_labels(body: str) -> str:
     """«…; з) …; и) …» — метки после «з)» общий разбор не знает."""
     if not re.search(r"(?:^|[;\s])з\)", body):
@@ -969,9 +985,7 @@ def parse_appendix(spec: dict, zone: str, answers: str, figures: dict[int, list[
     for marker, raw_body in blocks(zone, markers):
         path, topic = appendix_section_path(spec, zone, marker.start)
         body, example_solution = split_example_solution(_clean_task_body(raw_body))
-        body, images = normalize_task_images(body)
-        task = task_from_block(marker, body, path)
-        task.images = images
+        task = build_task(marker, body, path, diagnostics)
         task.source_number = marker.external_id.split(".")[1]
         task.collection_title = path[0]
         task.topic_original = path[-1]
@@ -1087,17 +1101,7 @@ def parse_potoskuev(text: str) -> tuple[list[TaskDraft], dict]:
             section = section_for(chapter, local)
             path = [chapter_title(chapter), section["title"]]
             body, example_solution = split_example_solution(_clean_task_body(raw_body))
-            body, part_images = normalize_task_images(body)
-            stem, parts = split_numbered_parts(body)
-            if parts:
-                task = task_from_block(marker, stem, path)
-                task.subitems = [
-                    SubitemDraft(label, apply_imported_math(_format_part(part)))
-                    for label, part in parts]
-                diagnostics["numbered_parts"].append(task.external_id)
-            else:
-                task = task_from_block(marker, body, path)
-            task.images = part_images
+            task = build_task(marker, body, path, diagnostics)
             if example_solution:
                 set_example_solution(task, example_solution)
                 diagnostics["worked_examples"].append(task.external_id)
