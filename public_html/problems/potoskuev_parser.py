@@ -603,13 +603,26 @@ def _clean_task_body(body: str) -> str:
     return body.strip()
 
 
-def chapter_zones(task_text: str) -> list[tuple[int, str]]:
-    """Текст задач по главам: граница — первый номер «N.001.»."""
+def chapter_zones(task_text: str, chapters: Sequence[int] = range(1, 8)) -> list[tuple[int, str]]:
+    """Текст задач по главам: граница — первый номер «N.001.».
+
+    Если OCR исказил «N.001.», границей служит первый номер главы, который
+    распознан (« N.002.», « N.003.» …): иначе вся глава ушла бы в хвост
+    предыдущей и молча пропала.
+    """
     starts = []
-    for chapter in range(1, 8):
-        match = re.search(rf"(?<![\d.]){chapter}\s?\.\s?001\s?\.", task_text)
-        if match:
-            starts.append((chapter, match.start()))
+    floor = 0
+    for chapter in chapters:
+        match = re.search(rf"(?<![\d.]){chapter}\s?\.\s?001\s?\.", task_text[floor:])
+        if not match:
+            match = next((m for m in TASK_MARKER_RE.finditer(task_text, floor)
+                          if int(m.group("chapter")) == chapter), None)
+            if match:
+                starts.append((chapter, match.start()))
+                floor = match.start()
+            continue
+        starts.append((chapter, floor + match.start()))
+        floor += match.start()
     zones = []
     for index, (chapter, start) in enumerate(starts):
         end = starts[index + 1][1] if index + 1 < len(starts) else len(task_text)
@@ -1107,6 +1120,7 @@ def parse_potoskuev(text: str) -> tuple[list[TaskDraft], dict]:
     diagnostics: dict = {
         "source_repairs_applied": source_repairs,
         "tasks_by_chapter": {},
+        "chapters_without_zone": [],
         "missing_task_ids": [],
         "figures_numbered": len(figures),
         "figures_missing_by_task": {},
@@ -1134,7 +1148,13 @@ def parse_potoskuev(text: str) -> tuple[list[TaskDraft], dict]:
                 section["after"], work)
             diagnostics["graphic_works"].append(
                 f"ГР{work_number}: {len(work.subitems)} пунктов")
-    for number, zone in chapter_zones(task_text):
+    zones = chapter_zones(task_text, sorted(structure))
+    for number in sorted(set(structure) - {n for n, _zone in zones}):
+        # Глава не найдена совсем — все её номера в отчёт пропусков.
+        diagnostics["chapters_without_zone"].append(number)
+        diagnostics["missing_task_ids"].extend(
+            f"{number}.{n:03d}" for n in range(1, structure[number].get("last", 0) + 1))
+    for number, zone in zones:
         chapter = structure[number]
         work_tasks = works_by_chapter.get(number, {})
         markers = task_markers(zone, number)

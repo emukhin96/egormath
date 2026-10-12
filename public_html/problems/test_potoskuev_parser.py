@@ -219,3 +219,18 @@ class PotoskuevNewtonTests(SimpleTestCase):
             task = parse_potoskuev(book)[0][0]
             self.assertIn("\\(2\\) Н.", task.text_latex)
             self.assertEqual(task.author_answer_latex, "$3$ Н")
+
+
+class PotoskuevChapterZoneTests(SimpleTestCase):
+    def test_damaged_first_number_still_opens_chapter(self):
+        from .potoskuev_parser import chapter_zones
+        text = "1.001. Первая.\n1.002. Вторая.\n2,001. Искажённый номер.\n2.002. Вторая главы 2.\n"
+        zones = dict(chapter_zones(text, [1, 2]))
+        self.assertNotIn("2.002", zones[1])
+        self.assertTrue(zones[2].startswith("2.002."))
+
+    def test_chapter_without_any_number_is_reported(self):
+        tasks, diagnostics = parse_potoskuev(BOOK)
+        self.assertIn(2, diagnostics["chapters_without_zone"])
+        self.assertIn("2.001", diagnostics["missing_task_ids"])
+        self.assertIn("2.055", diagnostics["missing_task_ids"])
