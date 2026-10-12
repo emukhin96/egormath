@@ -187,3 +187,23 @@ class PotoskuevSignTests(SimpleTestCase):
                          "О прямых \\(a\\) и \\(b\\) известно, что они параллельны.")
         self.assertEqual(_clean_task_body(" (Устно.) О прямых \\(a\\) известно."),
                          "(Устно.) О прямых \\(a\\) известно.")
+
+
+class PotoskuevMarkerGapTests(SimpleTestCase):
+    def test_long_ocr_gap_is_bridged_by_following_numbers(self):
+        from .potoskuev_parser import task_markers
+        text = ("2.001. Первая.\n2.002. Вторая.\n2.010. Десятая.\n"
+                "2.011. Одиннадцатая.\n2.012. Двенадцатая.\n")
+        ids = [m.external_id for m in task_markers(text, 2)]
+        self.assertEqual(ids, ["2.001", "2.002", "2.010", "2.011", "2.012"])
+
+    def test_far_reference_without_followers_is_not_a_task(self):
+        from .potoskuev_parser import task_markers
+        text = "2.001. См. ответ 2.040. и рисунок.\n2.002. Вторая.\n2.003. Третья.\n"
+        ids = [m.external_id for m in task_markers(text, 2)]
+        self.assertEqual(ids, ["2.001", "2.002", "2.003"])
+
+    def test_missing_tail_of_chapter_is_reported(self):
+        tasks, diagnostics = parse_potoskuev(BOOK)
+        missing = [n for n in diagnostics["missing_task_ids"] if n.startswith("1.")]
+        self.assertIn("1.071", missing)

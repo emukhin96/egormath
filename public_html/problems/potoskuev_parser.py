@@ -21,8 +21,14 @@
   подписи, а не по положению float-окружения в OCR;
 - «ОТВЕТЫ И УКАЗАНИЯ» в конце книги — плотный поток ``1.004. …`` по главам.
 
-Дополнения Д1 (методы построения сечений) и Д2 (планиметрия) в профиль пока
-не входят.
+Дополнения со сквозной нумерацией книги разбирает ``parse_appendix``
+(таблица ``appendices`` в структуре): Д1 «Методы построения сечений
+многогранников» — задачи 1–70, ключ ``Д1.N``, ответов в книге нет; Д2
+«Материалы для повторения и углубления планиметрии» — задачи 71–256, ключ
+``Д2.N``, подразделы 2.2 и 2.3 с рубриками, ответы — в конце раздела ответов
+(«Д2. …»). Номера задач дополнений OCR держит в счётчиках ``enumerate``
+(``\\setcounter{enumi}{N}``) — их разворачивает ``renumber_appendix_lists``.
+Раздел 2.1 «Рабочие теоремы» — теория, в импорт не входит.
 """
 
 from __future__ import annotations
@@ -455,19 +461,37 @@ def attach_figure_refs(task: TaskDraft, index: dict[int, list[str]],
 # Задачи
 # --------------------------------------------------------------------------
 
-def task_markers(text: str, chapter: int) -> list[Marker]:
-    """Номера задач главы, монотонно возрастающие."""
+def monotonic_numbers(candidates: list[tuple[int, int, int]], start: int,
+                      step: int, last: int | None = None) -> list[tuple[int, int, int]]:
+    """Возрастающая цепочка номеров (начало, конец, номер) без чужих ссылок.
+
+    Шаг больше ``step`` — обычно ссылка на другую задачу; но если OCR потерял
+    несколько номеров подряд, дальний номер подтверждают два следующих
+    (N+1, N+2): иначе весь хвост главы молча приклеился бы к последней
+    задаче перед разрывом.
+    """
     result = []
-    previous = 0
-    for match in TASK_MARKER_RE.finditer(text):
-        if int(match.group("chapter")) != chapter:
+    previous = start
+    for index, (begin, end, number) in enumerate(candidates):
+        if number <= previous or (last is not None and number > last):
             continue
-        number = int(match.group("number"))
-        if number <= previous or number > previous + 5:
-            continue
-        result.append(Marker(match.start(), match.end(), f"{chapter}.{number:03d}"))
+        if number > previous + step:
+            following = [n for _b, _e, n in candidates[index + 1:index + 6] if n > number]
+            if following[:2] != [number + 1, number + 2]:
+                continue
+        result.append((begin, end, number))
         previous = number
     return result
+
+
+def task_markers(text: str, chapter: int) -> list[Marker]:
+    """Номера задач главы, монотонно возрастающие."""
+    candidates = [
+        (match.start(), match.end(), int(match.group("number")))
+        for match in TASK_MARKER_RE.finditer(text)
+        if int(match.group("chapter")) == chapter]
+    return [Marker(begin, end, f"{chapter}.{number:03d}")
+            for begin, end, number in monotonic_numbers(candidates, 0, 5)]
 
 
 def split_example_solution(body: str) -> tuple[str, str]:
@@ -928,15 +952,10 @@ APPENDIX_TASK_RE = re.compile(
 
 
 def appendix_markers(text: str, key: str, first: int, last: int) -> list[Marker]:
-    result = []
-    previous = first - 1
-    for match in APPENDIX_TASK_RE.finditer(text):
-        number = int(match.group("number"))
-        if not previous < number <= min(last, previous + 6):
-            continue
-        result.append(Marker(match.start(), match.end(), f"{key}.{number}"))
-        previous = number
-    return result
+    candidates = [(match.start(), match.end(), int(match.group("number")))
+                  for match in APPENDIX_TASK_RE.finditer(text)]
+    return [Marker(begin, end, f"{key}.{number}")
+            for begin, end, number in monotonic_numbers(candidates, first - 1, 6, last)]
 
 
 _APPENDIX_ANSWER_RE = re.compile(r"(?<![\d.,\w])(?P<number>\d{2,3})\s?\.(?=\s|$)")
@@ -1151,9 +1170,11 @@ def parse_potoskuev(text: str) -> tuple[list[TaskDraft], dict]:
                     "Графическая работа поставлена в конец главы: "
                     "проверить место по книге")
                 chapter_tasks.append(work)
+        # Верхняя граница — сверенное число задач главы, а не последний
+        # найденный номер: иначе потерянный хвост главы не попадёт в отчёт.
+        last = max(chapter.get("last", 0), max(numbers, default=0))
         diagnostics["missing_task_ids"].extend(
-            f"{number}.{n:03d}" for n in range(1, max(numbers, default=0) + 1)
-            if n not in present)
+            f"{number}.{n:03d}" for n in range(1, last + 1) if n not in present)
         diagnostics["tasks_by_chapter"][number] = len(markers)
         tasks.extend(chapter_tasks)
 
