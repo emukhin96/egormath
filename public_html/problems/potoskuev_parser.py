@@ -50,6 +50,8 @@ STRUCTURE_PATH = DATA_DIR / "potoskuev_structure.json"
 REPAIRS_PATH = DATA_DIR / "potoskuev_repairs.json"
 
 CREATIVE_TAG = "Творческая задача"
+KEY_TAG = "Основная задача"
+HARD_TAG = "Трудная задача"
 
 TASKS_START_RE = re.compile(r"\\section\*?\{\s*Задачи к § 3-4")
 APPENDIX_RE = re.compile(r"\\section\*?\{\s*МЕТОДЫ ПОСТРОЕНИЯ СЕЧЕНИЙ")
@@ -67,7 +69,11 @@ TASK_MARKER_RE = re.compile(
 FOOTNOTE_MARK_RE = re.compile(r"\s*\\\(\{\s*\}\^\{1\}\\\)|\{\s*\}\^\{1\}\s*")
 FOOTNOTE_TEXT_RE = re.compile(r"\\footnotetext\{\s*\\\(\{\s*\}\^\{1\}\\\).*?\n\}", re.S)
 # Разобранный в книге пример: «Решение.» в начале строки или после условия.
-EXAMPLE_SOLUTION_RE = re.compile(r"(?:(?<=\n)|(?<=[.?!]\s)|(?<=\\\\\s))[ \t]*Решение\.")
+EXAMPLE_SOLUTION_RE = re.compile(
+    r"(?:(?<=\n)|(?<=[.?!]\s)|(?<=\\\\\s))[ \t]*Решение(?:[.:]|\s+пунктов)")
+# «Ответ:» разобранного примера — до конца строки: дальше может идти
+# второй способ решения со своим «Ответ:».
+EXAMPLE_ANSWER_RE = re.compile(r"(?m)\bОтвет\s*:\s*(?P<answer>[^\n]+)")
 # Значки ☺ и ⌛ после номера в OCR: «:-)», «:)», «⊙», «©», «-», «()».
 TASK_SIGN_RE = re.compile(
     r"^(?P<lead>[ \t]*(?:\(Устно\.\)\s*)?)"
@@ -100,11 +106,25 @@ def apply_source_repairs(text: str, path: Path = REPAIRS_PATH) -> tuple[str, lis
         if edition.get("source_sha256") != digest:
             continue
         for patch in edition.get("patches", []):
-            count = text.count(patch["before"])
-            if count != 1:
-                raise ValueError(
-                    f"Сверенный фрагмент {patch['id']} встречается {count} раз")
-            text = text.replace(patch["before"], patch["after"], 1)
+            if "start" in patch:
+                # Длинный испорченный фрагмент (раздел ответов Д2) заменяется
+                # целиком: от уникального начала до уникального конца.
+                for key in ("start", "end"):
+                    count = text.count(patch[key])
+                    if count != 1:
+                        raise ValueError(
+                            f"Граница {key} правки {patch['id']} встречается {count} раз")
+                start = text.index(patch["start"])
+                end = text.index(patch["end"])
+                if end <= start:
+                    raise ValueError(f"Границы правки {patch['id']} перепутаны")
+                text = text[:start] + patch["after"] + text[end:]
+            else:
+                count = text.count(patch["before"])
+                if count != 1:
+                    raise ValueError(
+                        f"Сверенный фрагмент {patch['id']} встречается {count} раз")
+                text = text.replace(patch["before"], patch["after"], 1)
             applied.append(patch["id"])
     return text, applied
 
@@ -184,6 +204,74 @@ def _heal_word_lookalikes(text: str) -> str:
     return "".join(out)
 
 
+# Невидимый разделитель: «6⁠)» внутри координат не считается меткой «б)».
+_LABEL_GUARD = "\u2060"
+_MATH_LABEL_RE = re.compile(r"(?P<label>[a-dа-и6])\)")
+
+
+def _heal_math_labels(text: str) -> str:
+    """Метки пунктов внутри формул OCR.
+
+    «\\(\\vec{b}(1 ;-4 ; 6)\\)» — координата, а не «б)»: общий разбор
+    видит «; 6)» и режет пункт. Внутри открытой скобки метка защищается.
+    «\\(H(0 ; 0 ; 2) ; 6) P(2 ;-1 ; 2)\\)» — настоящая метка б) на верхнем
+    уровне формулы закрывает её. «\\vec{k} ;\\) г \\() \\vec{a}…» — скобка
+    метки ушла в следующую формулу.
+    """
+    text = re.sub(r"(?<=\s)(?P<label>[а-и])\s*\\\(\)\s*", r"\g<label>) \\(", text)
+
+    def fix(match: re.Match) -> str:
+        raw = match.group(0)
+        if not raw.startswith("\\("):
+            return raw
+        inner = raw[2:-2]
+        out = []
+        pos = 0
+        for found in _MATH_LABEL_RE.finditer(inner):
+            before = inner[:found.start()]
+            plain = re.sub(r"\\[a-zA-Z]+|\\.", " ", before)
+            depth = plain.count("(") - plain.count(")")
+            if depth > 0:
+                out.append(inner[pos:found.end() - 1] + _LABEL_GUARD + ")")
+                pos = found.end()
+                continue
+            label = found.group("label")
+            if label == "6" and re.search(r";\s*$", before) and depth == 0:
+                out.append(re.sub(r"\s*;\s*$", "", inner[pos:found.start()]))
+                out.append("\\); б) \\(")
+                pos = found.end()
+        if not out:
+            return raw
+        out.append(inner[pos:])
+        return re.sub(r"\\\(\s*\\\)", "", "\\(" + "".join(out) + "\\)")
+
+    text = MATH_SPAN_RE.sub(fix, text)
+    return _guard_plain_coordinates(text)
+
+
+def _guard_plain_coordinates(text: str) -> str:
+    """«(8; 1; 6).» вне формулы — тоже координата, а не метка «б)»."""
+    out = []
+    pos = 0
+    depth = 0
+    for match in re.finditer(r"\\\(.*?\\\)|\\\[.*?\\\]|\$\$.*?\$\$|\$[^$]*\$|\n|[()]|(?<=;)\s*[a-d6]\)", text, re.S):
+        token = match.group(0)
+        out.append(text[pos:match.start()])
+        pos = match.end()
+        if token == "\n":
+            depth = 0
+        elif token == "(":
+            depth += 1
+        elif token == ")":
+            depth = max(0, depth - 1)
+        elif token.rstrip().endswith(")") and len(token.strip()) == 2 and depth > 0:
+            token = token[:-1] + _LABEL_GUARD + ")"
+            depth -= 1
+        out.append(token)
+    out.append(text[pos:])
+    return "".join(out)
+
+
 def prepare_text(text: str) -> str:
     text = text.replace("\r\n", "\n")
     # Сноски внизу страницы («Творческая задача», общее условие серии,
@@ -205,6 +293,7 @@ def prepare_text(text: str) -> str:
                   r"\g<body>\); \g<label>) \(", text)
     text = _heal_label_letters(text)
     text = _heal_cyrillic_math(text)
+    text = _heal_math_labels(text)
     text = tabular_to_array(text)
     text = re.sub(r"(?<![А-Яа-яЁё])[\u0300-\u036f]", "", text)
     text = _join_hyphenation(text)
@@ -310,7 +399,7 @@ def extract_figures(text: str) -> tuple[str, dict[int, list[str]]]:
 
 
 def attach_figure_refs(task: TaskDraft, index: dict[int, list[str]],
-                       used: set[int]) -> list[int]:
+                       used: set[int], skip: Sequence[int] = ()) -> list[int]:
     """«(рис. 5)» → «(рис. 5 \\taskpic{файл})»; вернуть ненайденные номера."""
     missing: list[int] = []
     placed: set[str] = set()
@@ -323,6 +412,9 @@ def attach_figure_refs(task: TaskDraft, index: dict[int, list[str]],
                 return match.group(0)
             tokens = []
             for number in range(first, last + 1):
+                if number in skip:
+                    # Опечатка книги в номере рисунка (сверено со сканом).
+                    continue
                 paths = index.get(number)
                 if not paths:
                     missing.append(number)
@@ -427,16 +519,26 @@ def split_numbered_parts(text: str, allowed: Sequence[str] = ()) -> tuple[str, l
 def _format_part(text: str) -> str:
     """Буквенные пункты части — с новой строки, без служебных «;»."""
     text = re.sub(r"\s*\\\\\s*$", "", text.strip())
+    text = re.sub(r"\s*\\\\\s*\n\s*", "\n", text)
     text = re.sub(r"(?:(?<=[:;.?])|(?<=\\\)))\s*(?=[а-и]\)\s)", "\n", text)
     text = re.sub(r";\n", "\n", text)
     return strip_subitem_punct(text)
+
+
+def set_example_solution(task: TaskDraft, solution: str) -> None:
+    """Решение примера — в авторское решение, первый «Ответ:» — в ответ."""
+    task.author_solution_latex = clean(solution)
+    match = EXAMPLE_ANSWER_RE.search(solution)
+    if match:
+        answer = re.sub(r"\s*\\\\\s*$", "", match.group("answer")).strip()
+        task.author_answer_latex = re.sub(r"\.$", "", answer).strip()
 
 
 def _heal_late_labels(body: str) -> str:
     """«…; з) …; и) …» — метки после «з)» общий разбор не знает."""
     if not re.search(r"(?:^|[;\s])з\)", body):
         return body
-    return re.sub(r";\s*(?=[ик]\)\s)", ";\n", body)
+    return re.sub(r";\s*(?=[иклмн]\)\s)", ";\n", body)
 
 
 def _clean_task_body(body: str) -> str:
@@ -547,7 +649,16 @@ def keep_hint_whole(task: TaskDraft, raw: str) -> None:
 
     Пункты внутри указания — часть указания, а не ответы подпунктов.
     """
-    if task.subitems or not re.match(r"\s*Указание\.", raw or ""):
+    if not re.match(r"\s*Указание\.", raw or ""):
+        return
+    if task.subitems:
+        # «Указание. а) …; б) …» — указания к пунктам, а не их ответы.
+        for item in task.subitems:
+            if item.author_answer_latex and not item.author_solution_latex:
+                item.author_solution_latex = item.author_answer_latex
+                item.author_answer_latex = ""
+        if re.fullmatch(r"\s*Указание\.?\s*", task.author_solution_latex or ""):
+            task.author_solution_latex = ""
         return
     task.author_answer_latex = ""
     task.author_solution_latex = clean(raw)
@@ -582,6 +693,51 @@ def distribute_part_answers(task: TaskDraft, raw: str) -> bool:
     return True
 
 
+_TAIL_SENTENCE_RE = re.compile(r"(?<=[.?!])\s+(?=(?:[А-ЯЁ]|\(Каждый)[^\n]{8,}$)", re.S)
+
+
+def lift_common_tail(task: TaskDraft) -> bool:
+    """Общая фраза после последнего пункта «…в) AC. Найдите длину каждого…».
+
+    Пункты-фрагменты (со строчной буквы) не содержат законченных
+    предложений, поэтому предложение с прописной в конце последнего пункта —
+    общее требование ко всей задаче: оно переносится в условие, иначе при
+    выборе части пунктов данные задачи пропадут.
+    """
+    if len(task.subitems) < 2:
+        return False
+    last = task.subitems[-1]
+    def fragment(value: str) -> bool:
+        plain = MATH_SPAN_RE.sub("x", value or "").lstrip()
+        return plain[:1].islower()
+    if not all(fragment(item.text_latex) for item in task.subitems[:-1]):
+        return False
+    plain = MATH_SPAN_RE.sub(lambda m: "x" * len(m.group(0)), last.text_latex)
+    match = _TAIL_SENTENCE_RE.search(plain)
+    if not match:
+        return False
+    tail = last.text_latex[match.end():].strip()
+    head = last.text_latex[:match.start()].strip()
+    if not head:
+        return False
+    last.text_latex = strip_subitem_punct(head)
+    if not re.search(r"[.?!]\)?$", tail):
+        tail += "."
+    task.text_latex = task.text_latex.rstrip() + "\n" + tail
+    return True
+
+
+def apply_marks(tasks: list[TaskDraft], spec: dict) -> None:
+    marks = spec.get("marks", {})
+    smiley = set(marks.get("smiley", []))
+    hourglass = set(marks.get("hourglass", []))
+    for task in tasks:
+        if task.external_id in smiley:
+            task.tags.append(KEY_TAG)
+        if task.external_id in hourglass:
+            task.tags.append(HARD_TAG)
+
+
 def answer_markers(text: str, allowed: set[str]) -> list[Marker]:
     result = []
     previous = (0, 0)
@@ -608,6 +764,7 @@ def prepare_answers(text: str, allowed: set[str]) -> str:
 
 def _finish_fields(task: TaskDraft) -> None:
     def text_field(value: str) -> str:
+        value = (value or "").replace(_LABEL_GUARD, "")
         return normalize_degrees(normalize_units(_heal_ocr_math(value)))
 
     def answer_field(value: str) -> str:
@@ -619,7 +776,8 @@ def _finish_fields(task: TaskDraft) -> None:
     task.author_solution_latex = text_field(task.author_solution_latex)
     task.author_answer_latex = answer_field(task.author_answer_latex)
     for item in task.subitems:
-        item.text_latex = text_field(item.text_latex)
+        # «\\(…, \\vec{k} ;\\)» — служебный знак перечисления внутри формулы.
+        item.text_latex = re.sub(r"\s*[;,]\s*\\\)\s*$", r"\\)", text_field(item.text_latex))
         item.author_solution_latex = text_field(item.author_solution_latex)
         item.author_answer_latex = answer_field(item.author_answer_latex)
     answers = [task.author_answer_latex] + [
@@ -628,6 +786,182 @@ def _finish_fields(task: TaskDraft) -> None:
         task.warnings.append(
             "В ответе остались метки других пунктов: сверить с книгой")
         task.confidence = max(0.0, task.confidence - 0.3)
+
+
+# --------------------------------------------------------------------------
+# Дополнения: сквозная нумерация 1–256
+# --------------------------------------------------------------------------
+
+_LIST_TOKEN_RE = re.compile(
+    r"\\begin\{(?P<begin>enumerate|itemize)\}|\\end\{(?:enumerate|itemize)\}"
+    r"|\\setcounter\{enum(?P<depth>i+)\}\{(?P<value>\d+)\}"
+    r"|\\item(?:\[(?P<label>[^\[\]]*)\])?[ \t]*")
+
+
+def renumber_appendix_lists(text: str) -> str:
+    """Списки Д1/Д2 → строки «N. …»: номера задач живут в счётчиках OCR.
+
+    Mathpix разрывает нумерацию книги на десятки ``enumerate`` с
+    ``\\setcounter{enumi}{N}``: следующий ``\\item`` — задача N+1.
+    """
+    stack: list[list] = []
+    out = []
+    pos = 0
+    for match in _LIST_TOKEN_RE.finditer(text):
+        out.append(text[pos:match.start()])
+        pos = match.end()
+        token = match.group(0)
+        enums = [level for level in stack if level[0] == "enumerate"]
+        if match.group("begin"):
+            stack.append([match.group("begin"), 0])
+            out.append("\n")
+        elif token.startswith("\\end"):
+            if stack:
+                stack.pop()
+            out.append("\n")
+        elif match.group("depth"):
+            depth = len(match.group("depth"))
+            if len(enums) >= depth:
+                enums[depth - 1][1] = int(match.group("value"))
+        elif match.group("label") is not None:
+            out.append("\n" + match.group("label").strip() + " ")
+        elif stack and stack[-1][0] == "enumerate":
+            stack[-1][1] += 1
+            number = stack[-1][1]
+            out.append(f"\n{number}. " if len(enums) == 1 else f"\n{number}) ")
+        else:
+            out.append("\n")
+    out.append(text[pos:])
+    return "".join(out)
+
+
+APPENDIX_TASK_RE = re.compile(
+    r"(?m)^[ \t]*(?:ЗАДАЧА\s+)?(?P<number>\d{1,3})\s?\.(?=\s)")
+
+
+def appendix_markers(text: str, key: str, first: int, last: int) -> list[Marker]:
+    result = []
+    previous = first - 1
+    for match in APPENDIX_TASK_RE.finditer(text):
+        number = int(match.group("number"))
+        if not previous < number <= min(last, previous + 6):
+            continue
+        result.append(Marker(match.start(), match.end(), f"{key}.{number}"))
+        previous = number
+    return result
+
+
+_APPENDIX_ANSWER_RE = re.compile(r"(?<![\d.,\w])(?P<number>\d{2,3})\s?\.(?=\s|$)")
+
+
+def appendix_answer_markers(text: str, key: str, allowed: set[int]) -> list[Marker]:
+    result = []
+    previous = 0
+    for match in _APPENDIX_ANSWER_RE.finditer(text):
+        number = int(match.group("number"))
+        if number not in allowed or number <= previous or number > previous + 12 and previous:
+            continue
+        result.append(Marker(match.start(), match.end(), f"{key}.{number}"))
+        previous = number
+    return result
+
+
+def split_appendix_markers_in_math(text: str, allowed: set[int]) -> str:
+    """«\\(\\sqrt{…} .186 .15 \\mathrm{~cm} .187 .7,2\\)» — номера внутри формулы."""
+    inner_re = re.compile(r"\s*\.\s?(?P<number>\d{2,3})\s?\.\s?")
+
+    def fix(match: re.Match) -> str:
+        raw = match.group(0)
+        if not raw.startswith("\\("):
+            return raw
+        inner = raw[2:-2]
+        out = []
+        pos = 0
+        for found in inner_re.finditer(inner):
+            if int(found.group("number")) not in allowed:
+                continue
+            out.append(inner[pos:found.start()])
+            out.append(f"\\). {found.group('number')}. \\(")
+            pos = found.end()
+        if not out:
+            return raw
+        out.append(inner[pos:])
+        return re.sub(r"\\\(\s*\\\)", "", "\\(" + "".join(out) + "\\)")
+
+    return MATH_SPAN_RE.sub(fix, text)
+
+
+def appendix_section_path(spec: dict, text: str, position: int) -> tuple[list[str], str]:
+    """Путь «Д2 → 2.3 → Треугольник» и тема по заголовкам перед задачей."""
+    path = [spec["title"]]
+    topic = ""
+    section = None
+    subsection = None
+    for match in re.finditer(r"\\section\*?\{(?P<title>[^{}]*)\}", text[:position]):
+        title = clean(match.group("title")).strip()
+        for item in spec["sections"]:
+            if title.startswith(item["heading"]):
+                section = item
+                subsection = None
+        if section and title in section.get("subsections", {}):
+            subsection = title
+    if section:
+        path.append(section["title"])
+        topic = section.get("topic", "")
+        if subsection:
+            path.append(subsection)
+            topic = section["subsections"][subsection]
+    return path, topic
+
+
+def parse_appendix(spec: dict, zone: str, answers: str, figures: dict[int, list[str]],
+                   diagnostics: dict) -> list[TaskDraft]:
+    zone = prepare_text(renumber_appendix_lists(zone))
+    markers = appendix_markers(zone, spec["key"], spec["first"], spec["last"])
+    tasks = []
+    for marker, raw_body in blocks(zone, markers):
+        path, topic = appendix_section_path(spec, zone, marker.start)
+        body, example_solution = split_example_solution(_clean_task_body(raw_body))
+        body, images = normalize_task_images(body)
+        task = task_from_block(marker, body, path)
+        task.images = images
+        task.source_number = marker.external_id.split(".")[1]
+        task.collection_title = path[0]
+        task.topic_original = path[-1]
+        task.topic_code = topic
+        if example_solution:
+            set_example_solution(task, example_solution)
+            diagnostics["worked_examples"].append(task.external_id)
+        if task.images:
+            diagnostics["figures_positional"].append(task.external_id)
+            task.warnings.append("Рисунок без подписи привязан по положению: проверить")
+        tasks.append(task)
+    numbers = [int(m.external_id.split(".")[1]) for m in markers]
+    present = set(numbers)
+    diagnostics["missing_task_ids"].extend(
+        f"{spec['key']}.{n}" for n in range(spec["first"], spec["last"] + 1)
+        if n not in present)
+    diagnostics["tasks_by_chapter"][spec["key"]] = len(tasks)
+
+    if not spec.get("answers"):
+        return tasks
+    allowed = set(numbers)
+    answers = split_appendix_markers_in_math(
+        prepare_text(renumber_appendix_lists(answers)), allowed)
+    examples = {task.external_id: (task.author_answer_latex, task.author_solution_latex)
+                for task in tasks if task.author_solution_latex}
+    factory = lambda value: appendix_answer_markers(value, spec["key"], allowed)
+    solution = merge_solutions(tasks, answers, factory, missing_ok=True)
+    diagnostics["appendix_matched_solutions"] = solution["matched_solutions"]
+    raw_blocks = {m.external_id: body for m, body in blocks(answers, factory(answers))}
+    for task in tasks:
+        keep_hint_whole(task, raw_blocks.get(task.external_id, ""))
+        if task.external_id in examples:
+            answer, inline = examples[task.external_id]
+            extra = task.author_solution_latex
+            task.author_solution_latex = inline + ("\n\n" + extra if extra and extra != inline else "")
+            task.author_answer_latex = task.author_answer_latex or answer
+    return tasks
 
 
 # --------------------------------------------------------------------------
@@ -646,8 +980,18 @@ def parse_potoskuev(text: str) -> tuple[list[TaskDraft], dict]:
     task_text = text[start:appendix.start() if appendix else answers.start()]
     answer_text = text[answers.end():toc.start() if toc else len(text)]
     appendix_answers = ANSWERS_APPENDIX_RE.search(answer_text)
+    appendix_answer_text = ""
     if appendix_answers:
+        appendix_answer_text = answer_text[appendix_answers.end():]
         answer_text = answer_text[:appendix_answers.start()]
+    spec_all = json.loads(STRUCTURE_PATH.read_text(encoding="utf-8"))
+    appendix_zones = []
+    for spec in spec_all.get("appendices", []):
+        a = text.find(spec["start"])
+        b = text.find(spec["end"], a)
+        if a >= 0 and b > a:
+            zone, zone_figures = extract_figures(text[a:b])
+            appendix_zones.append((spec, zone, zone_figures))
 
     task_text, figures = extract_figures(task_text)
     task_text = prepare_text(task_text)
@@ -665,6 +1009,7 @@ def parse_potoskuev(text: str) -> tuple[list[TaskDraft], dict]:
         "worked_examples": [],
         "numbered_parts": [],
         "numbered_part_answers": [],
+        "lifted_tails": [],
     }
     tasks: list[TaskDraft] = []
     used: set[int] = set()
@@ -706,10 +1051,7 @@ def parse_potoskuev(text: str) -> tuple[list[TaskDraft], dict]:
                 task = task_from_block(marker, body, path)
             task.images = part_images
             if example_solution:
-                answer, solution = split_answer_solution(example_solution)
-                task.author_solution_latex = solution or clean(example_solution)
-                if re.search(r"(?i)\bОтвет\s*:", example_solution):
-                    task.author_answer_latex = answer
+                set_example_solution(task, example_solution)
                 diagnostics["worked_examples"].append(task.external_id)
             task.collection_title = path[0]
             task.topic_original = section["title"]
@@ -725,14 +1067,20 @@ def parse_potoskuev(text: str) -> tuple[list[TaskDraft], dict]:
                     chapter_tasks.append(work)
         numbers = [int(m.external_id.split(".")[1]) for m in markers]
         present = set(numbers)
+        for work_number, (after, work) in sorted(work_tasks.items()):
+            if after and after not in present:
+                # Якорь работы потерян OCR: работа остаётся в своей главе.
+                work.warnings.append(
+                    "Графическая работа поставлена в конец главы: "
+                    "проверить место по книге")
+                chapter_tasks.append(work)
         diagnostics["missing_task_ids"].extend(
             f"{number}.{n:03d}" for n in range(1, max(numbers, default=0) + 1)
             if n not in present)
         diagnostics["tasks_by_chapter"][number] = len(markers)
         tasks.extend(chapter_tasks)
 
-    diagnostics["footnotes_applied"] = apply_footnotes(
-        tasks, json.loads(STRUCTURE_PATH.read_text(encoding="utf-8")))
+    diagnostics["footnotes_applied"] = apply_footnotes(tasks, spec_all)
     allowed = {task.external_id for task in tasks if "." in task.external_id}
     answer_text = prepare_answers(answer_text, allowed)
     numbered = [task for task in tasks if task.external_id in allowed]
@@ -752,15 +1100,39 @@ def parse_potoskuev(text: str) -> tuple[list[TaskDraft], dict]:
             extra = task.author_solution_latex
             task.author_solution_latex = inline + ("\n\n" + extra if extra and extra != inline else "")
             task.author_answer_latex = task.author_answer_latex or answer
+    for spec, zone, zone_figures in appendix_zones:
+        appendix_tasks = parse_appendix(
+            spec, zone, appendix_answer_text, zone_figures, diagnostics)
+        for task in appendix_tasks:
+            missing = attach_figure_refs(
+                task, zone_figures, used,
+                spec_all.get("figure_ref_skip", {}).get(task.external_id, ()))
+            if missing:
+                diagnostics["figures_missing_by_task"][task.external_id] = sorted(set(missing))
+                task.warnings.append(
+                    "Не найден рисунок по подписи: "
+                    + ", ".join(str(n) for n in sorted(set(missing))))
+        figures_extra = set(zone_figures)
+        diagnostics.setdefault("appendix_figures", {})[spec["key"]] = len(figures_extra)
+        appendix_task_list = appendix_tasks
+        tasks.extend(appendix_task_list)
     for task in tasks:
+        if task.external_id.startswith("Д"):
+            continue
         missing = attach_figure_refs(task, figures, used)
         if missing:
             diagnostics["figures_missing_by_task"][task.external_id] = sorted(set(missing))
             task.warnings.append(
                 "Не найден рисунок по подписи: "
                 + ", ".join(str(n) for n in sorted(set(missing))))
-    diagnostics["figures_unreferenced"] = sorted(set(figures) - used)
+    all_figures = set(figures)
+    for _spec, _zone, zone_figures in appendix_zones:
+        all_figures |= set(zone_figures)
+    diagnostics["figures_unreferenced"] = sorted(all_figures - used)
+    apply_marks(tasks, spec_all)
     for task in tasks:
+        if lift_common_tail(task):
+            diagnostics["lifted_tails"].append(task.external_id)
         _finish_fields(task)
         finalize_draft_images(task)
     diagnostics["task_marker_occurrences"] = len(tasks)
