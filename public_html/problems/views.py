@@ -1388,7 +1388,10 @@ def textbook_import_list(request):
     batches = TextbookImportBatch.objects.all()
     if not request.user.is_superuser:
         batches = batches.filter(created_by=request.user)
+    # Без diagnostics: MySQL сортирует (-created_at) и группирует строки
+    # целиком, большой JSON переполняет буфер сортировки.
     batches = (batches.select_related('source', 'created_by')
+               .defer('diagnostics')
                .annotate(total=Count('drafts')))
     return render(request, 'problems/textbook_import_list.html', {
         'batches': batches,

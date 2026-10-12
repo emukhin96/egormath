@@ -7,9 +7,37 @@ from django.db import migrations, models
 SPLIT_WARNING = 'Выделено из слипшегося условия соседней задачи'
 
 
+def _position_field():
+    field = models.PositiveIntegerField(
+        default=0, editable=False, verbose_name='Порядок в книге')
+    field.set_attributes_from_name('position')
+    return field
+
+
 def _natural_key(external_id):
     return [int(part) if part.isdigit() else part
             for part in re.split(r'(\d+)', str(external_id or ''))]
+
+
+def add_position_column(apps, schema_editor):
+    """Колонка position, если её ещё нет.
+
+    В MySQL DDL не откатывается: если заполнение ниже упало, колонка
+    остаётся, а миграция не отмечена — повторный AddField падал на
+    «Duplicate column name». Так повторный запуск проходит.
+    """
+    Draft = apps.get_model('problems', 'TextbookTaskDraft')
+    table = Draft._meta.db_table
+    with schema_editor.connection.cursor() as cursor:
+        columns = {col.name for col in schema_editor.connection.introspection
+                   .get_table_description(cursor, table)}
+    if 'position' not in columns:
+        schema_editor.add_field(Draft, _position_field())
+
+
+def remove_position_column(apps, schema_editor):
+    Draft = apps.get_model('problems', 'TextbookTaskDraft')
+    schema_editor.remove_field(Draft, _position_field())
 
 
 def fill_positions(apps, schema_editor):
@@ -20,8 +48,11 @@ def fill_positions(apps, schema_editor):
     """
     Draft = apps.get_model('problems', 'TextbookTaskDraft')
     Batch = apps.get_model('problems', 'TextbookImportBatch')
-    for batch in Batch.objects.all().iterator():
-        drafts = list(Draft.objects.filter(batch_id=batch.pk)
+    # Только pk и без сортировки модели (-created_at): MySQL сортирует
+    # строки целиком вместе с большим diagnostics и падает с
+    # «Out of sort memory».
+    for batch_id in Batch.objects.order_by('pk').values_list('pk', flat=True):
+        drafts = list(Draft.objects.filter(batch_id=batch_id)
                       .order_by('pk').only('pk', 'external_id', 'warnings'))
         split = [d for d in drafts if SPLIT_WARNING in (d.warnings or [])]
         main = [d for d in drafts if SPLIT_WARNING not in (d.warnings or [])]
@@ -52,10 +83,17 @@ class Migration(migrations.Migration):
             name='textbooktaskdraft',
             options={'ordering': ['position', 'pk'], 'verbose_name': 'Черновик задачи из задачника', 'verbose_name_plural': 'Черновики задач из задачника'},
         ),
-        migrations.AddField(
-            model_name='textbooktaskdraft',
-            name='position',
-            field=models.PositiveIntegerField(default=0, editable=False, verbose_name='Порядок в книге'),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AddField(
+                    model_name='textbooktaskdraft',
+                    name='position',
+                    field=models.PositiveIntegerField(default=0, editable=False, verbose_name='Порядок в книге'),
+                ),
+            ],
+            database_operations=[
+                migrations.RunPython(add_position_column, remove_position_column),
+            ],
         ),
         migrations.RunPython(fill_positions, migrations.RunPython.noop),
     ]
