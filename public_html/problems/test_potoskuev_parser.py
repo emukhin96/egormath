@@ -161,3 +161,11 @@ class PotoskuevOcrRulesTests(SimpleTestCase):
             "Второй способ. Иначе.\nОтвет: \\(2 \\sqrt{5}\\).\\\\\n")["1.001"]
         self.assertEqual(task.author_answer_latex, "\\(2 \\sqrt{5}\\)")
         self.assertIn("Второй способ", task.author_solution_latex)
+
+
+class PotoskuevPdfSafetyTests(SimpleTestCase):
+    def test_tag_moves_out_of_aligned(self):
+        from .potoskuev_parser import prepare_text
+        value = prepare_text(
+            "\\[\n\\begin{aligned}\nx & =1 \\\\\n& =2 \\tag{*}\n\\end{aligned}\n\\]")
+        self.assertIn("\\end{aligned} \\tag{*}", value)

@@ -596,8 +596,8 @@
      "id": "E-6.095-8",
      "source": "PDF 107",
      "note": "Потеряна метка (*) у разложения \\overrightarrow{PQ}, а в тексте есть ссылка «в разложении (*)».",
-     "before": "+\\frac{1}{2}(1-y) \\vec{c}",
-     "after": "+\\frac{1}{2}(1-y) \\vec{c} \\tag{*}"
+     "before": "+\\frac{1}{2}(1-y) \\vec{c}\n\\end{aligned}",
+     "after": "+\\frac{1}{2}(1-y) \\vec{c}\n\\end{aligned} \\tag{*}"
     },
     {
      "id": "E-6.096-9",

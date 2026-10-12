@@ -305,6 +305,11 @@ def prepare_text(text: str) -> str:
     text = _join_hyphenation(text)
     text = _heal_ocr_words(text)
     text = _heal_word_lookalikes(text)
+    # «。» — OCR-мусор: в шрифтах PDF такого знака нет.
+    text = text.replace("\u3002", "")
+    # amsmath не разрешает \tag внутри aligned/gathered: метка — после окружения.
+    text = re.sub(r"\s*(\\tag\{[^{}]*\})(\s*\\end\{(?:aligned|gathered)\})",
+                  r"\2 \1", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text
 
