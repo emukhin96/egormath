@@ -1344,6 +1344,64 @@ def _counterexample(difference, reference):
     return False
 
 
+_INVERSE_RANGES = {'asin': (-1, 1), 'acos': (0, 2), 'atan': (-1, 1)}  # в долях π/2
+
+
+def _inverse_trig_zero(difference):
+    """Равенство нулю разности с обратными тригонометрическими функциями.
+
+    SymPy.equals не доказывает даже arccos(-1/3) = π - arccos(1/3), а для
+    формул проверяет случайные комплексные точки без учёта области: там у
+    arctg a + arctg(1/a) = π/2 нет условия a > 0, и верный ответ получал
+    «неверно». Для разности углов d точное cos d = 1 означает d = 2πk.
+    Число: оценка |d| < 1 оставляет k = 0, а cos d ≠ 1 доказывает d ≠ 0.
+    Формула: cos d ≡ 1 с учётом области и d в (-2π; 2π) по диапазонам
+    arcsin/arccos/arctg дают d ≡ 0. Иначе None — решает учитель.
+    """
+    from sympy import (Add, Dummy, acos, asin, atan, cos, expand_trig,
+                       minimal_polynomial, pi, simplify, sin, tan)
+
+    # Вызывать только внутри ограниченного вычислителя: simplify и
+    # minimal_polynomial не имеют своего лимита времени.
+    if not difference.has(asin, acos, atan) or len(difference.atoms(asin, acos, atan)) > 4:
+        return None
+    try:
+        if not difference.free_symbols:
+            value = difference.evalf(30)
+            if not value.is_real or not value.is_Number:
+                return None
+            cosine = expand_trig(cos(difference))
+            # Нераскрытый cos(arctg(x)/2) или cos 1 — не алгебраическое число.
+            if cosine.has(sin, cos, tan, asin, acos, atan):
+                return None
+            root = Dummy('cos_minus_one')
+            if minimal_polynomial(cosine - 1, root) != root:
+                return False
+            return True if abs(value) < 1 else None
+        low = high = 0
+        for term in Add.make_args(difference):
+            if not term.free_symbols:
+                value = term.evalf(30)
+                if not value.is_real:
+                    return None
+                low, high = low + value, high + value
+                continue
+            coefficient, function = term.as_independent(*term.free_symbols, as_Add=False)
+            bounds = _INVERSE_RANGES.get(type(function).__name__)
+            coefficient = coefficient.evalf(30)
+            if bounds is None or not coefficient.is_real:
+                return None
+            ends = sorted(coefficient*b*pi.evalf(30)/2 for b in bounds)
+            low, high = low + ends[0], high + ends[1]
+        if not (-2*pi.evalf(30) < low and high < 2*pi.evalf(30)):
+            return None
+        return True if simplify(expand_trig(cos(difference))) == 1 else None
+    except MemoryError:
+        raise
+    except Exception:  # noqa: BLE001 — не доказано, решает учитель
+        return None
+
+
 def _split_list(value, count):
     """Элементы списка ``expressions``: основной разделитель — «;». Без него
     принимаются «, », «,» и «и», если число частей совпадает с эталоном:
@@ -1358,7 +1416,7 @@ def _split_list(value, count):
 
 
 def _check(value, reference, multiple=False, mode='expression', *, numeric=False):
-    from sympy import Pow, expand, factor, sign, simplify
+    from sympy import Pow, acos, asin, atan, expand, factor, sign, simplify
     if len(value) > MAX_EXPR_LEN:
         return UNKNOWN
     # Команды \;, \,, \: и \! — пробелы, а не элементы списка.
@@ -1390,7 +1448,8 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
     # Доказуемо неверную формулу можно отклонить до трудного анализа
     # области. Для принятия ответа проверка всех исходных ограничений
     # остаётся обязательной, даже после сокращения к эталону.
-    uncertain_comparison = False
+    uncertain_comparison = uncertain_inverse = False
+    substituted = set().union(*(v.atoms(atan) for _, v in reference.substitutions))
     # Сохраняем кратность: лишняя или повторная длина не заменяет другую.
     remaining = list(reference.items)
     for item in student:
@@ -1431,17 +1490,35 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
                                           - factor(restrict(expected.expression)))
                     if restricted == 0 or restricted.equals(0) is True:
                         same = True
+            # atan(u) из подстановки angle — не обратная функция ответа.
+            inverse = same is not True and bool(difference.atoms(asin, acos, atan) - substituted)
+            if inverse:
+                proven = _inverse_trig_zero(difference)
+                if proven is not None:
+                    same = proven
+                elif same is False and difference.free_symbols:
+                    # «Не равно» из случайных комплексных точек без области
+                    # для ветвей обратных функций не доказательство: нужен
+                    # контрпример точной допустимой подстановкой.
+                    same = None
             if same is None and _counterexample(difference, reference):
                 same = False
             if same is True:
                 remaining.pop(index)
                 break
             uncertain |= same is None
+            uncertain_inverse |= same is None and inverse
         else:
             if not uncertain:
                 return WRONG
             uncertain_comparison = True
             break
+    if uncertain_comparison and uncertain_inverse:
+        # Равенство с обратными функциями не доказано — итог всё равно не
+        # «верно», а анализ области для формул вроде arcsin(1/√(1+4sin²(x/2)))
+        # не укладывается в лимит вычислителя. Остальным формулам он нужен:
+        # нигде не определённый ответ остаётся «неверно».
+        return UNKNOWN
     for item in student:
         defined = _defined(item, reference)
         if defined is not True:

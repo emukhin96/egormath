@@ -261,6 +261,10 @@ def _lark():
                 return self._function_power(tokens, 'tan')
 
             def cot_power(self, tokens):
+                if tokens[2] == -1:
+                    # \cot^{-1} x — тот же школьный arcctg, см. arccot.
+                    from sympy import atan, pi
+                    return pi/2 - atan(tokens[-1])
                 return self._function_power(tokens, 'cot')
 
             def sec_power(self, tokens):
@@ -268,6 +272,13 @@ def _lark():
 
             def csc_power(self, tokens):
                 return self._function_power(tokens, 'csc')
+
+            # Школьный arcctg принимает значения в (0; π), а sympy.acot —
+            # в (-π/2; π/2]: arcctg(-2) = π - arcctg 2, но acot(-2) < 0.
+            # Определение π/2 - arctg x верно при любом вещественном x.
+            def arccot(self, tokens):
+                from sympy import atan, pi
+                return pi/2 - atan(tokens[1])
         _transformer = ExactTransformer()
     return _parser, _transformer
 

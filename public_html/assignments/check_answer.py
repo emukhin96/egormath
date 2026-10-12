@@ -51,15 +51,101 @@ _MIXED_FRAC_RE = re.compile(r'^([+-])?(\d+)\s*\\frac\{(\d+)\}\{(\d+)\}$')
 _INTERVAL_RE = re.compile(r'^([(\[])\s*([^;]+?)\s*;\s*([^;]+?)\s*([)\]])$')
 _PM_RE = re.compile(r'^\\pm\s*(.+)$')
 
+# Школьные имена тригонометрических функций → команды, которые понимает
+# Lark-грамматика SymPy. Ученик набирает их буквами (arccos(1/6)), MathLive
+# присылает \mathrm{arctg} или \operatorname{ctg}, в книгах встречается \tg.
+_FUNCTION_COMMANDS = {
+    'sin': 'sin', 'cos': 'cos', 'tg': 'tan', 'tan': 'tan', 'ctg': 'cot', 'cot': 'cot',
+    'arcsin': 'arcsin', 'arccos': 'arccos', 'arctg': 'arctan', 'arctan': 'arctan',
+    'arcctg': 'arccot', 'arccot': 'arccot',
+}
+_FUNCTION_NAMES = '|'.join(sorted(_FUNCTION_COMMANDS, key=len, reverse=True))
+# Имена SymPy (asin) понимаем только в оболочке: буквами «acos» — это и a·cos.
+_SYMPY_COMMANDS = {'asin': 'arcsin', 'acos': 'arccos', 'atan': 'arctan'}
+_WRAPPED_NAMES = '|'.join(sorted({**_FUNCTION_COMMANDS, **_SYMPY_COMMANDS},
+                                 key=len, reverse=True))
+_WRAPPED_FUNCTION_RE = re.compile(
+    r'\\(?:operatorname|mathrm|text|textrm)\s*\{\s*'
+    rf'(?:\\(?:mathrm|text|textrm)\s*\{{\s*({_WRAPPED_NAMES})\s*\}}|({_WRAPPED_NAMES}))\s*\}}')
+# Команда целиком (\tg, но не \tgx) и имя буквами вне более длинного слова
+# (arccos, но не xarccos и не arccosx: такие записи не угадываем).
+# Буквенное имя считается функцией, только если за ним (и за степенью)
+# идёт аргумент: «tg + 1» с параметрами t и g остаётся произведением.
+_FUNCTION_COMMAND_RE = re.compile(rf'\\({_FUNCTION_NAMES})(?![A-Za-z])')
+_BARE_FUNCTION_RE = re.compile(
+    rf'(?<![A-Za-z\\])({_FUNCTION_NAMES})(?![A-Za-z])'
+    r'(?=\s*(?:\^\s*(?:\{[^{}]*\}|[+-]?\d+)\s*)?[0-9A-Za-zα-ωπ(\[{\\.])')
+# Остаток имени функции после нормализации — слово, где имя склеено с
+# другими буквами или набрано иначе: Arccos, sinx, acos. Голое имя (tg, cot,
+# arc) осталось без аргумента и сознательно читается произведением t·g.
+_LETTER_RUN_RE = re.compile(r'(?<![A-Za-z\\])[A-Za-z]+')
+_FUNCTION_PART_RE = re.compile(r'arc|sin|cos|tg|tan|cot', re.I)
+_PRODUCT_NAMES = frozenset(_FUNCTION_COMMANDS) | {'arc'}
+
+
+def _function_commands(text):
+    def command(match):
+        name = match[match.lastindex]
+        result = '\\' + (_FUNCTION_COMMANDS.get(name) or _SYMPY_COMMANDS[name])
+        # Пробел нужен только перед буквой: \tan x, а не \tanx.
+        following = match.string[match.end():match.end() + 1]
+        return result + ' ' if following.isalpha() else result
+
+    for rx in (_WRAPPED_FUNCTION_RE, _FUNCTION_COMMAND_RE, _BARE_FUNCTION_RE):
+        text = rx.sub(command, text)
+    return text
+
+
+def unrecognized_function(text):
+    """В вводе осталось имя функции, которое нормализация не распознала.
+
+    Такой ввод разбирается как произведение букв (Arccos → A·r·c·c·o·s),
+    и «неверно» по нему было бы ложным: решение остаётся за учителем.
+    """
+    return any(run not in _PRODUCT_NAMES and _FUNCTION_PART_RE.search(run)
+               for run in _LETTER_RUN_RE.findall(normalize(text)))
+
+
+# «arccos 1/6» без скобок по правилам LaTeX — arccos(1)/6, но так ученик
+# набирает \frac{1}{6} в аргументе. Простая дробь после функции без скобок
+# допускает и второе чтение: f(a/b). Атомы — число, корень, π, буква.
+_FRACTION_ATOM = (r'(?:\d+(?:\.\d+)?|\\sqrt(?:\[[^\]]*\])?\s*(?:\{[^{}]*\}|\d)'
+                  r'|sqrt\s*\([^()]*\)|\\pi(?![A-Za-z])|pi(?![A-Za-z])|π|[A-Za-z](?![A-Za-z]))')
+_FRACTION_TERM = rf'(?:{_FRACTION_ATOM}\s*){{1,3}}'
+_FUNCTION_FRACTION_RE = re.compile(
+    r'(\\(?:arcsin|arccos|arctan|arccot|sin|cos|tan|cot)(?![A-Za-z])'
+    r'(?:\s*\^\s*(?:\{[^{}]*\}|[+-]?\d))?)\s*'
+    rf'(?![(\[{{]|\\left)({_FRACTION_TERM})\s*/\s*({_FRACTION_TERM})'
+    r'(?=\s*(?:$|[-+;,)\]=<>]))')
+
+
+def function_fraction_reading(text):
+    """Второе чтение «f a/b» как f(a/b): (текст, только числа) или None."""
+    text = normalize(text)
+    found = False
+    numeric = True
+
+    def wrap(match):
+        nonlocal found, numeric
+        found = True
+        letters = re.sub(r'\\[A-Za-z]+|sqrt|pi', '', match[2] + match[3])
+        numeric &= not re.search('[A-Za-z]', letters)
+        return f'{match[1]}({match[2].strip()}/{match[3].strip()})'
+
+    text = _FUNCTION_FRACTION_RE.sub(wrap, text)
+    return (text, numeric) if found else None
+
 
 def normalize(text):
     """Общая нормализация школьной записи; ``$`` снимаются, запятая в
-    десятичной дроби становится точкой, пробелы схлопываются."""
+    десятичной дроби становится точкой, пробелы схлопываются, школьные
+    имена функций (arctg, \\mathrm{ctg}, \\tg) становятся командами LaTeX."""
     text = (text or '').replace('$', ' ')
     text = _RELATION_RE.sub(lambda m: f' {_RELATIONS[m.group(1)]} ', text)
     for old, new in _REPLACEMENTS:
         text = text.replace(old, new)
     text = _DECIMAL_COMMA_RE.sub('.', text)
+    text = _function_commands(text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
@@ -182,6 +268,9 @@ def _sympy_equal(a, b):
         if isinstance(a, Expr) and isinstance(b, Expr):
             if a.free_symbols != b.free_symbols:
                 return False
+            # Без точного доказательства обратных функций (formulas.
+            # _inverse_trig_zero): здесь нет ограниченного вычислителя,
+            # проверка идёт прямо в веб-процессе — None уходит учителю.
             return a.equals(b)
         return bool(a == b) or None
     except Exception:  # noqa: BLE001
@@ -210,6 +299,17 @@ def _compare_items(student, reference):
 def check_answer(student, reference, strict_brackets=True):
     """Сверка строки ученика с эталоном: 'ok' / 'wrong' / 'unknown' /
     '' (сверять нечего: пустой эталон или пустой ответ)."""
+    result = _check_answer(student, reference, strict_brackets)
+    if result == WRONG:
+        reading = function_fraction_reading(student)
+        if reading and _check_answer(reading[0], reference, strict_brackets) == OK:
+            return OK if reading[1] else UNKNOWN
+        if unrecognized_function(student):
+            return UNKNOWN
+    return result
+
+
+def _check_answer(student, reference, strict_brackets):
     s, r = normalize(student), normalize(reference)
     if not s or not r:
         return ''
