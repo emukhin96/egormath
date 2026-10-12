@@ -874,7 +874,9 @@ def _finish_fields(task: TaskDraft) -> None:
     def text_field(value: str) -> str:
         value = (value or "").replace(_LABEL_GUARD, "")
         value = normalize_degrees(normalize_units(_heal_ocr_math(value)))
-        # «\\(2 Н\\)» — ньютоны: единица текстом после числа.
+        # «\\(2 Н\\)» — ньютоны: единица текстом после числа. Кириллическую
+        # «Н» внутри формулы _heal_cyrillic_math уже сделал латинской, а
+        # normalize_units вернул «H» после числа в «Н» — поэтому здесь «Н».
         value = re.sub(r"(\d)\s*Н\\\)", r"\1\\) Н", value)
         return re.sub(r"\$(\d+(?:,\d+)?)\s*Н\$", r"$\1$ Н", value)
 

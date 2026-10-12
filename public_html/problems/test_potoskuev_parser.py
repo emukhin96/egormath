@@ -207,3 +207,15 @@ class PotoskuevMarkerGapTests(SimpleTestCase):
         tasks, diagnostics = parse_potoskuev(BOOK)
         missing = [n for n in diagnostics["missing_task_ids"] if n.startswith("1.")]
         self.assertIn("1.071", missing)
+
+
+class PotoskuevNewtonTests(SimpleTestCase):
+    def test_newtons_leave_formula_for_cyrillic_and_latin_ocr(self):
+        for unit in ("Н", "H"):
+            book = ("\\section*{Задачи к § 3-4. Аксиомы и следствия из них}\n"
+                    "1.001. Каждая из сил равна \\(2 " + unit + "\\). Найдите равнодействующую.\\\\\n"
+                    "\\section*{ОТВЕТЫ И УКАЗАНИЯ}\n1.001. \\(3 " + unit + "\\).\n"
+                    "\\section*{ОГЛАВЛЕНИЕ}\n")
+            task = parse_potoskuev(book)[0][0]
+            self.assertIn("\\(2\\) Н.", task.text_latex)
+            self.assertEqual(task.author_answer_latex, "$3$ Н")
