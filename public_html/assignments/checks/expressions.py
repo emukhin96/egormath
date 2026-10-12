@@ -117,9 +117,31 @@ def normalize_roots(text):
     return re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text)
 
 
+# В грамматике нет степени логарифма: \ln^{2} x не разбирается. Пишем
+# (\ln x)^{2}, только если граница аргумента однозначна: число, буква с
+# индексом, греческая буква или скобка, а за ней — конец, знак операции или
+# закрывающая скобка. \ln^2 2x так не переписывается: ln²(2x) или (ln²2)·x.
+_LN_POWER_RE = re.compile(
+    r'\\ln\s*\^\s*(\{(?!\s*-\s*1\s*\})[^{}]+\}|[0-9])\s*'
+    r'(\\left\((?:[^()]|\([^()]*\))*\\right\)|\((?:[^()]|\([^()]*\))*\)'
+    r'|[0-9]+(?:\.[0-9]+)?|(?:[A-Za-z]|\\[A-Za-z]+)(?:_(?:\{[0-9A-Za-z]+\}|[0-9A-Za-z]))?)'
+    r'(?=\s*(?:$|[-+*/=)\]},;|]|\\(?:cdot|times|right|div)\b))')
+
+
+def function_powers(text):
+    """\\ln^{2} x → {(\\ln x)^{2}} при однозначном аргументе.
+
+    Внешняя группа держит степень целиком: \\sin\\ln^2 x — это
+    sin(ln² x), а без неё (\\ln x)^{2} стал бы степенью синуса."""
+    return _LN_POWER_RE.sub(
+        lambda m: '{(\\ln ' + m[2] + ')^'
+                  + (m[1] if m[1].startswith('{') else '{' + m[1] + '}') + '}',
+        text)
+
+
 def prepare(text):
     """Нормализация школьной записи + явное умножение перед скобкой."""
-    text = normalize_roots(normalize(text))
+    text = function_powers(normalize_roots(normalize(text)))
     text = _insert_cdot_after_group(text)
     def product(match):
         # Цифра завершает индекс/степень функции, а корень или скобка —
@@ -216,6 +238,36 @@ def _lark():
                             and exponent.q > 1 and exponent.q % 2):
                         return _bounded_odd_root(base, exponent.q, exponent.p)
                 return super().superscript(tokens)
+
+            def _function_power(self, tokens, name):
+                # \sin^{2/3}x — отдельное правило грамматики; без него
+                # степень строилась главной комплексной ветвью, а
+                # (\sin x)^{2/3} и \sqrt[3]{\sin^2 x} — вещественным корнем.
+                exponent = tokens[2]
+                if (getattr(exponent, 'is_Rational', False)
+                        and exponent.q > 1 and exponent.q % 2):
+                    import sympy
+                    return _bounded_odd_root(getattr(sympy, name)(tokens[-1]),
+                                             exponent.q, exponent.p)
+                return getattr(super(), name + '_power')(tokens)
+
+            def sin_power(self, tokens):
+                return self._function_power(tokens, 'sin')
+
+            def cos_power(self, tokens):
+                return self._function_power(tokens, 'cos')
+
+            def tan_power(self, tokens):
+                return self._function_power(tokens, 'tan')
+
+            def cot_power(self, tokens):
+                return self._function_power(tokens, 'cot')
+
+            def sec_power(self, tokens):
+                return self._function_power(tokens, 'sec')
+
+            def csc_power(self, tokens):
+                return self._function_power(tokens, 'csc')
         _transformer = ExactTransformer()
     return _parser, _transformer
 
@@ -351,10 +403,17 @@ def _starts_with_group(node):
     return False
 
 
-def _contains_trig(node):
+# Логарифм в грамматике — узел log (\ln, \log, \log_2). Без скобок его
+# аргумент ограничен так же, как у тригонометрических функций: иначе
+# \ln x-1 читался как ln(x-1), а 2\ln 2-1 — как 2ln(2-1) = 0.
+_SCOPED_FUNCTIONS = _TRIG_NODES | {'log'}
+
+
+def _contains_function(node):
     return (_is_tree(node) and
-            (node.data in _TRIG_NODES or str(node.data).removesuffix('_power') in _TRIG_NODES
-             or any(_contains_trig(c) for c in node.children)))
+            (node.data in _SCOPED_FUNCTIONS
+             or str(node.data).removesuffix('_power') in _TRIG_NODES
+             or any(_contains_function(c) for c in node.children)))
 
 
 def _valid_function_scopes(node):
@@ -362,16 +421,21 @@ def _valid_function_scopes(node):
     if not _is_tree(node):
         return True
     kind = str(node.data)
-    if kind in _TRIG_NODES or kind.removesuffix('_power') in _TRIG_NODES:
+    if kind in _SCOPED_FUNCTIONS or kind.removesuffix('_power') in _TRIG_NODES:
         argument = node.children[-1]
         if _is_tree(argument) and argument.data not in _FUNCTION_GROUPS:
-            if _starts_with_group(argument):
+            # \ln(1+e^x)^2 = ln((1+e^x)^2): степень скобки — часть аргумента
+            # логарифма, как и читалось раньше; у sin(x)^2 это степень синуса.
+            log_of_power = (kind == 'log' and argument.data == 'superscript'
+                            and _is_tree(argument.children[0])
+                            and argument.children[0].data in _FUNCTION_GROUPS)
+            if _starts_with_group(argument) and not log_of_power:
                 return False
             if argument.data in ('mul', 'div', 'add'):
                 return False
             if argument.data == 'sub' and len(argument.children) > 2:
                 return False
-            if argument.data == 'adjacent_expressions' and _contains_trig(argument):
+            if argument.data == 'adjacent_expressions' and _contains_function(argument):
                 return False
     if node.data == 'superscript':
         base = node.children[0]
@@ -379,6 +443,9 @@ def _valid_function_scopes(node):
         if (_is_tree(base) and base.data in _TRIG_NODES
                 and not (_is_tree(base.children[-1])
                          and base.children[-1].data in _FUNCTION_GROUPS)):
+            return False
+        # Степень логарифма пишут (\ln x)^2 или \ln^2 x; ln x² = ln(x²).
+        if _is_tree(base) and base.data == 'log':
             return False
     return all(_valid_function_scopes(c) for c in node.children)
 
@@ -671,6 +738,18 @@ def _radical_reducible(node):
                 and value.args[1].is_Pow and value.args[1].exp == exponent
                 and value.args[1].base == -inner):
             return False
+        # SymPy сам переписывает ∛4 = 2^(2/3) и ∜12 = √2·∜3. Множитель не
+        # вынесен (коэффициент ±1), а показатель корня не понижается (НОК
+        # знаменателей степеней равен показателю) — корень уже простейший.
+        if inner.is_Integer:
+            from sympy import Mul, ilcm
+            coefficient, radical = value.as_coeff_Mul()
+            powers = Mul.make_args(radical)
+            if (coefficient in (1, -1) and all(
+                    p.is_Pow and p.base.is_Integer and p.exp.is_Rational
+                    and 0 < p.exp < 1 for p in powers)
+                    and ilcm(*(p.exp.q for p in powers), 1) == degree):
+                return False
         return True
     # Символьный радикал: \sqrt{4Rr} = 2\sqrt{Rr} — числовой множитель
     # выносится без знания знаков; нечётные корни оставляем вычислителю.
