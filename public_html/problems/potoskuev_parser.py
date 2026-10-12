@@ -38,6 +38,7 @@ from .merzlyak_parser import (
     LEFTOVER_LABEL_RE, MATH_SPAN_RE, _flatten_lists, _heal_ocr_math,
     _heal_ocr_words, _renumber_enumerate, _split_markers_in_math,
     normalize_degrees, normalize_units, wrap_answer_numbers)
+from .shabunin_parser import _TUPLE_RE
 from .textbook_parser import (
     Marker, SubitemDraft, TaskDraft, apply_imported_math, blocks, clean,
     finalize_draft_images, inline_numeric_markers, merge_solutions,
@@ -294,6 +295,11 @@ def prepare_text(text: str) -> str:
     text = _heal_label_letters(text)
     text = _heal_cyrillic_math(text)
     text = _heal_math_labels(text)
+    # «Окончание таблицы» на следующей странице — та же таблица.
+    text = re.sub(
+        r"\\end\{tabular\}\s*\\end\{center\}\s*Окончание таблицы\s*\\begin\{center\}\s*"
+        r"\\begin\{tabular\}(?:\[[^\]]*\])?\{[^{}]*\}\s*\\hline\s*№[^\n]*\\\\\s*\\hline\s*",
+        "", text)
     text = tabular_to_array(text)
     text = re.sub(r"(?<![А-Яа-яЁё])[\u0300-\u036f]", "", text)
     text = _join_hyphenation(text)
@@ -303,7 +309,7 @@ def prepare_text(text: str) -> str:
     return text
 
 
-_CYRILLIC_RUN_RE = re.compile(r"[А-Яа-яЁё][А-Яа-яЁё.,:;!?«»\- ]*")
+_CYRILLIC_RUN_RE = re.compile(r"[№А-Яа-яЁё][А-Яа-яЁё.,:;!?«»\- ]*")
 
 
 def _table_cell(cell: str) -> str:
@@ -693,7 +699,8 @@ def distribute_part_answers(task: TaskDraft, raw: str) -> bool:
     return True
 
 
-_TAIL_SENTENCE_RE = re.compile(r"(?<=[.?!])\s+(?=(?:[А-ЯЁ]|\(Каждый)[^\n]{8,}$)", re.S)
+_TAIL_SENTENCE_RE = re.compile(
+    r"(?<=[.?!])(?:\s*\\\\)?\s+(?=\(?[А-ЯЁ][^\n]{8,}$)", re.S)
 
 
 def lift_common_tail(task: TaskDraft) -> bool:
@@ -713,7 +720,10 @@ def lift_common_tail(task: TaskDraft) -> bool:
     if not all(fragment(item.text_latex) for item in task.subitems[:-1]):
         return False
     plain = MATH_SPAN_RE.sub(lambda m: "x" * len(m.group(0)), last.text_latex)
-    match = _TAIL_SENTENCE_RE.search(plain)
+    # «2) отрезок AB пересекает α. В каждом случае найдите: а) …; б) …» —
+    # общий вопрос к случаям 1) и 2) со своими пунктами.
+    match = (re.search(r"(?<=[.?!])\s+(?=В каждом (?:из )?случа)", plain)
+             or _TAIL_SENTENCE_RE.search(plain))
     if not match:
         return False
     tail = last.text_latex[match.end():].strip()
@@ -724,6 +734,28 @@ def lift_common_tail(task: TaskDraft) -> bool:
     if not re.search(r"[.?!]\)?$", tail):
         tail += "."
     task.text_latex = task.text_latex.rstrip() + "\n" + tail
+    return True
+
+
+def distribute_labeled_answer(task: TaskDraft) -> bool:
+    """«Ответ: а) …; в) …» примера — в пустые ответы этих пунктов."""
+    value = task.author_answer_latex or ""
+    labels = {item.label: item for item in task.subitems if not item.label.isdigit()}
+    if not labels or not re.match(r"\s*[а-и]\)\s", value):
+        return False
+    plain = MATH_SPAN_RE.sub(lambda m: "x" * len(m.group(0)), value)
+    cuts = [m for m in re.finditer(r"(?:^|(?<=[;\s]))(?P<label>[а-и])\)\s", plain)]
+    if not cuts or any(m.group("label") not in labels for m in cuts):
+        return False
+    parts = []
+    for index, cut in enumerate(cuts):
+        stop = cuts[index + 1].start() if index + 1 < len(cuts) else len(value)
+        parts.append((cut.group("label"), value[cut.end():stop]))
+    if any(labels[label].author_answer_latex for label, _ in parts):
+        return False
+    for label, part in parts:
+        labels[label].author_answer_latex = strip_subitem_punct(part.strip())
+    task.author_answer_latex = ""
     return True
 
 
@@ -762,13 +794,28 @@ def prepare_answers(text: str, allowed: set[str]) -> str:
 # Поля
 # --------------------------------------------------------------------------
 
+def _wrap_bare_tuples(value: str) -> str:
+    """«(8; 1; 6)» вне формулы — одна формула, а не три числа."""
+    out = []
+    pos = 0
+    for match in MATH_SPAN_RE.finditer(value or ""):
+        out.append(_TUPLE_RE.sub(lambda m: "$" + m.group(0) + "$", value[pos:match.start()]))
+        out.append(match.group(0))
+        pos = match.end()
+    out.append(_TUPLE_RE.sub(lambda m: "$" + m.group(0) + "$", (value or "")[pos:]))
+    return "".join(out)
+
+
 def _finish_fields(task: TaskDraft) -> None:
     def text_field(value: str) -> str:
         value = (value or "").replace(_LABEL_GUARD, "")
-        return normalize_degrees(normalize_units(_heal_ocr_math(value)))
+        value = normalize_degrees(normalize_units(_heal_ocr_math(value)))
+        # «\\(2 Н\\)» — ньютоны: единица текстом после числа.
+        value = re.sub(r"(\d)\s*Н\\\)", r"\1\\) Н", value)
+        return re.sub(r"\$(\d+(?:,\d+)?)\s*Н\$", r"$\1$ Н", value)
 
     def answer_field(value: str) -> str:
-        value = wrap_answer_numbers(text_field(value))
+        value = wrap_answer_numbers(_wrap_bare_tuples(text_field(value)))
         value = re.sub(r"(?<!\\right)\.\s*\$$", "$", value)
         return re.sub(r"(?<=\S)[ \t]+\$(?=[\s;,.)]|$)", "$", value)
 
@@ -1010,6 +1057,7 @@ def parse_potoskuev(text: str) -> tuple[list[TaskDraft], dict]:
         "numbered_parts": [],
         "numbered_part_answers": [],
         "lifted_tails": [],
+        "labeled_answers_distributed": [],
     }
     tasks: list[TaskDraft] = []
     used: set[int] = set()
@@ -1133,6 +1181,8 @@ def parse_potoskuev(text: str) -> tuple[list[TaskDraft], dict]:
     for task in tasks:
         if lift_common_tail(task):
             diagnostics["lifted_tails"].append(task.external_id)
+        if distribute_labeled_answer(task):
+            diagnostics["labeled_answers_distributed"].append(task.external_id)
         _finish_fields(task)
         finalize_draft_images(task)
     diagnostics["task_marker_occurrences"] = len(tasks)
