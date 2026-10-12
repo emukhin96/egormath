@@ -2783,6 +2783,36 @@
     margin: 0 0.3em;
   }
 
+  /* Табличная маска «Заполните таблицу»: в ячейках текст и слоты.
+     Широкая таблица прокручивается сама, а не вся страница */
+  .mask-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    margin-block: var(--space-2);
+  }
+
+  .mask-table {
+    border-collapse: collapse;
+    line-height: 1.5;
+  }
+
+  .mask-table th,
+  .mask-table td {
+    border: 1px solid var(--border);
+    padding: var(--space-1) 10px;
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  .mask-table th {
+    font-weight: 600;
+    background: var(--accent-soft);
+  }
+
+  .mask-table .mask-slot {
+    margin: 0;
+  }
+
   .mask-input {
     display: inline-block;
     width: auto;

@@ -902,9 +902,23 @@ def _attempt_target(obj, *, kind, object_id, label):
         'result': obj.auto_check,
         'complete': complete,
         'slots': slots,
-        'fragments': [{k: v for k, v in fragment.items() if k in ('text', 'display', 'kind')}
-                      for fragment in (obj.mask_fragments('history', for_teacher=True) or [])],
+        'fragments': _snapshot_fragments(obj.mask_fragments('history', for_teacher=True) or []),
     }
+
+
+def _snapshot_fragments(fragments):
+    """Фрагменты маски для снимка попытки: только показываемое, таблицы —
+    со строками и ячейками."""
+    out = []
+    for fragment in fragments:
+        if fragment.get('table'):
+            out.append({'table': True, 'rows': [
+                {'header': row['header'],
+                 'cells': [_snapshot_fragments(cell) for cell in row['cells']]}
+                for row in fragment['rows']]})
+        else:
+            out.append({k: v for k, v in fragment.items() if k in ('text', 'display', 'kind')})
+    return out
 
 
 def _attempt_snapshot(submission, task, subitems, only_subitem=None):
