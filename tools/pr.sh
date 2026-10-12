@@ -10,6 +10,8 @@
 #                                             база — ветка другого PR, если это стек
 #   tools/pr.sh status                        PR текущей ветки: состояние, CI, замечания ревью (с id)
 #   tools/pr.sh reply <id> "Текст"            ответить в треде замечания (id — из status)
+#   tools/pr.sh comment <id> "Текст"          ответить на общий комментарий PR (id — из status):
+#                                             у них нет тредов, ответ — новый комментарий со ссылкой
 #
 # Токен: fine-grained PAT на один репозиторий, права Contents: read/write,
 # Pull requests: read/write. Файл в .gitignore; скрипт его никогда не печатает.
@@ -152,7 +154,9 @@ if unanswered:
   api GET "/issues/$num/comments?per_page=100" | python3 -c '
 import json, sys
 cs = json.load(sys.stdin)
-if cs: print("комментариев к PR: %d (последний от %s)" % (len(cs), cs[-1]["user"]["login"]))'
+if cs: print("комментариев к PR: %d (последний от %s)" % (len(cs), cs[-1]["user"]["login"]))
+for c in cs:
+    print("  id %s от %s: %s" % (c["id"], c["user"]["login"], " ".join(c["body"].split())[:100]))'
   api GET "/commits/$(git rev-parse HEAD)/check-runs" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
@@ -180,10 +184,35 @@ else: print("GitHub: %s" % d.get("message")); sys.exit(1)'
   rm -f "$payload"
 }
 
+cmd_comment() {
+  local id=${1:-} text=${2:-}
+  [[ "$id" =~ ^[0-9]+$ ]] || die "нужен числовой id комментария (tools/pr.sh status)"
+  [ -n "$text" ] || die "нужен текст ответа"
+  local num
+  num=$(pr_json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["number"] if isinstance(d, list) and d else "")')
+  [ -n "$num" ] || die "открытого PR для ветки $BRANCH нет"
+  local url
+  url=$(api GET "/issues/comments/$id" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print(d.get("html_url", "") if str(d.get("issue_url", "")).endswith("/issues/'"$num"'") else "")')
+  [ -n "$url" ] || die "комментарий $id не относится к PR #$num"
+  local payload
+  payload=$(mktemp)
+  python3 -c 'import json,sys; print(json.dumps({"body": "Ответ на %s\n\n%s" % (sys.argv[1], sys.argv[2])}))' "$url" "$text" > "$payload"
+  api POST "/issues/$num/comments" --data "@$payload" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+if "html_url" in d: print("ответ опубликован: %s" % d["html_url"])
+else: print("GitHub: %s" % d.get("message")); sys.exit(1)'
+  rm -f "$payload"
+}
+
 case "${1:-}" in
   push)   shift; cmd_push "$@" ;;
   open)   shift; cmd_open "$@" ;;
   status) shift; cmd_status ;;
   reply)  shift; cmd_reply "$@" ;;
-  *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  comment) shift; cmd_comment "$@" ;;
+  *) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
