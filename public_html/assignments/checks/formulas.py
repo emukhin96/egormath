@@ -264,14 +264,14 @@ def _prepare(text):
                   r'd\\cdot ', text)
 
     def after_power(match):
-        if re.search(r'\\' + functions + r'$', text[:match.start()].rstrip()):
+        if re.search(r'\\(?:' + functions + r'|ln|log|lg)$', text[:match.start()].rstrip()):
             return match.group(1)
         return match.group(1) + r'\cdot '
 
     # Показатель может содержать один уровень скобок: x^{\frac{2}{3}}y.
     exponent = r'\^\{(?:[^{}]|\{[^{}]*\})+\}'
     text = re.sub(
-        r'(' + exponent + r'|\^[+-]?\d+)\s*(?=[A-Za-z]|\\(?:sqrt|frac|pi|' + functions + r')\b)',
+        r'(' + exponent + r'|\^[+-]?\d+)\s*(?=[A-Za-z]|\\(?:sqrt|frac|pi|ln|log|lg|' + functions + r')\b)',
         after_power, text)
     text = re.sub(r'(' + exponent + r')\s*(?=\()', after_power, text)
     def after_group(match):

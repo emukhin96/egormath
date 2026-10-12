@@ -399,10 +399,17 @@ def _starts_with_group(node):
     return False
 
 
-def _contains_trig(node):
+# Логарифм в грамматике — узел log (\ln, \log, \log_2). Без скобок его
+# аргумент ограничен так же, как у тригонометрических функций: иначе
+# \ln x-1 читался как ln(x-1), а 2\ln 2-1 — как 2ln(2-1) = 0.
+_SCOPED_FUNCTIONS = _TRIG_NODES | {'log'}
+
+
+def _contains_function(node):
     return (_is_tree(node) and
-            (node.data in _TRIG_NODES or str(node.data).removesuffix('_power') in _TRIG_NODES
-             or any(_contains_trig(c) for c in node.children)))
+            (node.data in _SCOPED_FUNCTIONS
+             or str(node.data).removesuffix('_power') in _TRIG_NODES
+             or any(_contains_function(c) for c in node.children)))
 
 
 def _valid_function_scopes(node):
@@ -410,16 +417,21 @@ def _valid_function_scopes(node):
     if not _is_tree(node):
         return True
     kind = str(node.data)
-    if kind in _TRIG_NODES or kind.removesuffix('_power') in _TRIG_NODES:
+    if kind in _SCOPED_FUNCTIONS or kind.removesuffix('_power') in _TRIG_NODES:
         argument = node.children[-1]
         if _is_tree(argument) and argument.data not in _FUNCTION_GROUPS:
-            if _starts_with_group(argument):
+            # \ln(1+e^x)^2 = ln((1+e^x)^2): степень скобки — часть аргумента
+            # логарифма, как и читалось раньше; у sin(x)^2 это степень синуса.
+            log_of_power = (kind == 'log' and argument.data == 'superscript'
+                            and _is_tree(argument.children[0])
+                            and argument.children[0].data in _FUNCTION_GROUPS)
+            if _starts_with_group(argument) and not log_of_power:
                 return False
             if argument.data in ('mul', 'div', 'add'):
                 return False
             if argument.data == 'sub' and len(argument.children) > 2:
                 return False
-            if argument.data == 'adjacent_expressions' and _contains_trig(argument):
+            if argument.data == 'adjacent_expressions' and _contains_function(argument):
                 return False
     if node.data == 'superscript':
         base = node.children[0]
@@ -427,6 +439,9 @@ def _valid_function_scopes(node):
         if (_is_tree(base) and base.data in _TRIG_NODES
                 and not (_is_tree(base.children[-1])
                          and base.children[-1].data in _FUNCTION_GROUPS)):
+            return False
+        # Степень логарифма пишут (\ln x)^2 или \ln^2 x; ln x² = ln(x²).
+        if _is_tree(base) and base.data == 'log':
             return False
     return all(_valid_function_scopes(c) for c in node.children)
 
