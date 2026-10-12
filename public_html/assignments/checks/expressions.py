@@ -216,6 +216,19 @@ def _lark():
                             and exponent.q > 1 and exponent.q % 2):
                         return _bounded_odd_root(base, exponent.q, exponent.p)
                 return super().superscript(tokens)
+
+            # Школьный arcctg принимает значения в (0; π), а sympy.acot —
+            # в (-π/2; π/2]: arcctg(-2) = π - arcctg 2, но acot(-2) < 0.
+            # Определение π/2 - arctg x верно при любом вещественном x.
+            def arccot(self, tokens):
+                from sympy import atan, pi
+                return pi/2 - atan(tokens[1])
+
+            def cot_power(self, tokens):
+                if tokens[2] == -1:
+                    from sympy import atan, pi
+                    return pi/2 - atan(tokens[-1])
+                return super().cot_power(tokens)
         _transformer = ExactTransformer()
     return _parser, _transformer
 

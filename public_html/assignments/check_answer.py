@@ -102,6 +102,36 @@ def unrecognized_function(text):
     return bool(_LEFTOVER_FUNCTION_RE.search(normalize(text)))
 
 
+# «arccos 1/6» без скобок по правилам LaTeX — arccos(1)/6, но так ученик
+# набирает \frac{1}{6} в аргументе. Простая дробь после функции без скобок
+# допускает и второе чтение: f(a/b). Атомы — число, корень, π, буква.
+_FRACTION_ATOM = (r'(?:\d+(?:\.\d+)?|\\sqrt(?:\[[^\]]*\])?\s*(?:\{[^{}]*\}|\d)'
+                  r'|sqrt\s*\([^()]*\)|\\pi(?![A-Za-z])|pi(?![A-Za-z])|π|[A-Za-z](?![A-Za-z]))')
+_FRACTION_TERM = rf'(?:{_FRACTION_ATOM}\s*){{1,3}}'
+_FUNCTION_FRACTION_RE = re.compile(
+    r'(\\(?:arcsin|arccos|arctan|arccot|sin|cos|tan|cot)(?![A-Za-z])'
+    r'(?:\s*\^\s*(?:\{[^{}]*\}|[+-]?\d))?)\s*'
+    rf'(?![(\[{{]|\\left)({_FRACTION_TERM})\s*/\s*({_FRACTION_TERM})'
+    r'(?=\s*(?:$|[-+;,)\]=<>]))')
+
+
+def function_fraction_reading(text):
+    """Второе чтение «f a/b» как f(a/b): (текст, только числа) или None."""
+    text = normalize(text)
+    found = False
+    numeric = True
+
+    def wrap(match):
+        nonlocal found, numeric
+        found = True
+        letters = re.sub(r'\\[A-Za-z]+|sqrt|pi', '', match[2] + match[3])
+        numeric &= not re.search('[A-Za-z]', letters)
+        return f'{match[1]}({match[2].strip()}/{match[3].strip()})'
+
+    text = _FUNCTION_FRACTION_RE.sub(wrap, text)
+    return (text, numeric) if found else None
+
+
 def normalize(text):
     """Общая нормализация школьной записи; ``$`` снимаются, запятая в
     десятичной дроби становится точкой, пробелы схлопываются, школьные
@@ -234,7 +264,11 @@ def _sympy_equal(a, b):
         if isinstance(a, Expr) and isinstance(b, Expr):
             if a.free_symbols != b.free_symbols:
                 return False
-            return a.equals(b)
+            result = a.equals(b)
+            if result is None:
+                from .checks.formulas import _inverse_trig_zero
+                result = _inverse_trig_zero(a - b)
+            return result
         return bool(a == b) or None
     except Exception:  # noqa: BLE001
         return None
@@ -263,8 +297,12 @@ def check_answer(student, reference, strict_brackets=True):
     """Сверка строки ученика с эталоном: 'ok' / 'wrong' / 'unknown' /
     '' (сверять нечего: пустой эталон или пустой ответ)."""
     result = _check_answer(student, reference, strict_brackets)
-    if result == WRONG and unrecognized_function(student):
-        return UNKNOWN
+    if result == WRONG:
+        reading = function_fraction_reading(student)
+        if reading and _check_answer(reading[0], reference, strict_brackets) == OK:
+            return OK if reading[1] else UNKNOWN
+        if unrecognized_function(student):
+            return UNKNOWN
     return result
 
 

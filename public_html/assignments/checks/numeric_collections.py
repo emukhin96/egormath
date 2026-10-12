@@ -36,6 +36,9 @@ def _equal(a, b, tolerance=None):
     difference = simplify(difference)
     same = difference == 0 or difference.equals(0)
     if same is None:
+        from . import formulas
+        same = formulas._inverse_trig_zero(difference)
+    if same is None:
         raise ValueError('равенство не установлено')
     return bool(same)
 
