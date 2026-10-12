@@ -228,3 +228,15 @@ class InverseTrigEqualityTests(SimpleTestCase):
             with self.subTest(value=value):
                 self.assertEqual(self.check(mask, value), 'unknown')
         self.assertEqual(self.check(mask, 'arctg(2sin(x/2))'), 'wrong')
+
+    def test_undecided_comparison_still_checks_domain(self):
+        # Ранний «не знаю» без анализа области — только для обратных функций.
+        # Нигде не определённый на области эталона ответ остаётся «неверно»,
+        # даже если SymPy не решил равенство и контрпример не найден.
+        from unittest import mock
+        import sympy as sp
+        reference = formulas._parse_reference(r'\ln x | positive: x | range: x<3')[0]
+        with mock.patch.object(formulas, '_counterexample', return_value=False), \
+                mock.patch.object(sp.Expr, 'equals', lambda self, other, *a, **k: None):
+            self.assertEqual(formulas._check(r'\ln(x-5)', reference), 'wrong')
+            self.assertEqual(formulas._check(r'\ln x + 0\cdot x', reference), 'ok')

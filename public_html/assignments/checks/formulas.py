@@ -1448,7 +1448,7 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
     # Доказуемо неверную формулу можно отклонить до трудного анализа
     # области. Для принятия ответа проверка всех исходных ограничений
     # остаётся обязательной, даже после сокращения к эталону.
-    uncertain_comparison = False
+    uncertain_comparison = uncertain_inverse = False
     substituted = set().union(*(v.atoms(atan) for _, v in reference.substitutions))
     # Сохраняем кратность: лишняя или повторная длина не заменяет другую.
     remaining = list(reference.items)
@@ -1491,7 +1491,8 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
                     if restricted == 0 or restricted.equals(0) is True:
                         same = True
             # atan(u) из подстановки angle — не обратная функция ответа.
-            if same is not True and difference.atoms(asin, acos, atan) - substituted:
+            inverse = same is not True and bool(difference.atoms(asin, acos, atan) - substituted)
+            if inverse:
                 proven = _inverse_trig_zero(difference)
                 if proven is not None:
                     same = proven
@@ -1506,20 +1507,24 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
                 remaining.pop(index)
                 break
             uncertain |= same is None
+            uncertain_inverse |= same is None and inverse
         else:
             if not uncertain:
                 return WRONG
             uncertain_comparison = True
             break
-    if uncertain_comparison:
-        # Равенство не доказано — итог в любом случае не «верно». Анализ
-        # области мог бы лишь заменить его на «неверно», а для формул вроде
-        # arcsin(1/√(1+4sin²(x/2))) он не укладывается в лимит вычислителя.
+    if uncertain_comparison and uncertain_inverse:
+        # Равенство с обратными функциями не доказано — итог всё равно не
+        # «верно», а анализ области для формул вроде arcsin(1/√(1+4sin²(x/2)))
+        # не укладывается в лимит вычислителя. Остальным формулам он нужен:
+        # нигде не определённый ответ остаётся «неверно».
         return UNKNOWN
     for item in student:
         defined = _defined(item, reference)
         if defined is not True:
             return WRONG if defined is False else UNKNOWN
+    if uncertain_comparison:
+        return UNKNOWN
     # Равносильность уже доказана с исходными областями и предположениями.
     # Повторное сравнение без positive/π потеряло бы этот контекст. По сырому
     # дереву отдельно проверяем только требуемый вид записи.
