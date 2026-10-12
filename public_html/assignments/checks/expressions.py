@@ -129,9 +129,13 @@ _LN_POWER_RE = re.compile(
 
 
 def function_powers(text):
-    """\\ln^{2} x → (\\ln x)^{2} при однозначном аргументе."""
+    """\\ln^{2} x → {(\\ln x)^{2}} при однозначном аргументе.
+
+    Внешняя группа держит степень целиком: \\sin\\ln^2 x — это
+    sin(ln² x), а без неё (\\ln x)^{2} стал бы степенью синуса."""
     return _LN_POWER_RE.sub(
-        lambda m: '(\\ln ' + m[2] + ')^' + (m[1] if m[1].startswith('{') else '{' + m[1] + '}'),
+        lambda m: '{(\\ln ' + m[2] + ')^'
+                  + (m[1] if m[1].startswith('{') else '{' + m[1] + '}') + '}',
         text)
 
 
