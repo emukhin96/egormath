@@ -184,6 +184,36 @@ def _table_html(body):
     return '<table class="tex-table">' + ''.join(rows) + '</table>'
 
 
+def map_outside_tables(text, func):
+    """``func`` к тексту вне таблиц ``tabular`` и к каждой их ячейке.
+
+    Нормализация ответа (``apply_imported_answer``) не знает разметки
+    таблицы: ``\\hline`` и ``&`` она обернула бы в формулы. Такие таблицы
+    дают табличные маски (``filled_text``/``reference_text``).
+    """
+    tables = []
+
+    def stash(match):
+        rows = []
+        for row in _split_outside_math(match.group(2).replace('\\hline', ''), r'\\\\'):
+            cells = _split_outside_math(row, r'(?<!\\)&')
+            if not any(c.strip() for c in cells) and len(cells) == 1:
+                continue
+            rows.append(' & '.join(func(c.strip()) if c.strip() else ''
+                                   for c in cells))
+        tables.append('\\begin{tabular}%s%s\\end{tabular}' % (
+            match.group(1) or '{}', ' \\\\ '.join(rows)))
+        return f'\x05{len(tables) - 1}\x06'
+
+    text = _sub_outside_math(_TABULAR_RE, stash, text or '')
+    if not tables:
+        return func(text)
+    return ''.join(
+        tables[int(part[1:-1])] if part.startswith('\x05')
+        else func(part) if part.strip() else part
+        for part in re.split(r'(\x05\d+\x06)', text))
+
+
 def tex_to_web_html(source):
     """HTML-версия текста задачи для веб-страниц (формулы рендерит KaTeX).
 

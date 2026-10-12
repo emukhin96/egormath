@@ -6,7 +6,7 @@ from problems.task_images import TASKPIC_NUM_RE, images_for_group
 from problems.textbook_parser import (
     apply_imported_answer, cyrillic_item_label as _cyrillic_item_label,
     normalize_imported_text, order_letter_subitems, strip_heading_dot)
-from problems.web_tex import tex_preview_html, tex_to_web_html
+from problems.web_tex import map_outside_tables, tex_preview_html, tex_to_web_html
 from worksheets.latex import subitem_label as _subitem_label
 
 register = template.Library()
@@ -61,7 +61,7 @@ def web_answer(text):
     # Рисунки выводит шаблон. Убираем ссылки до OCR-нормализации, иначе
     # ссылка после неравенства может ошибочно попасть внутрь формулы.
     text, pictures = TASKPIC_NUM_RE.subn('', text or '')
-    result = apply_imported_answer(text)
+    result = map_outside_tables(text, apply_imported_answer)
     # «См. рис.» перед рисунком — сокращение, его точка остаётся на месте.
     if pictures and text.rstrip().endswith('.') and not result.rstrip().endswith('.'):
         result += '.'

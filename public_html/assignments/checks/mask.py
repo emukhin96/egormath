@@ -9,6 +9,10 @@
 Разделители: варианты ``choice`` — ``|``, правильный помечен ``*``;
 несколько значений (пары, элементы множества) — ``;`` (запятая занята
 десятичной дробью).
+
+Таблица — подряд идущие строки вида ``| $AA_1$ | $DC$ | {{number: 1}} |``;
+строка ``|---|---|`` отделяет шапку. Ячейка — тот же текст со слотами;
+``|`` внутри слота и формулы ячейку не делит, ``\\|`` — буквальная черта.
 """
 import hashlib
 import random
@@ -99,6 +103,10 @@ HELP = (
                                                'нет решений / ℝ, границы вроде \\sqrt{2} и 7/3'),
     ('{{order: \\sqrt[6]{5}|\\sqrt[5]{4}|2}}', 'элементы в правильном порядке; '
                                               'ученику показываются перемешанными'),
+    ('| $AA_1$ | $DC$ | {{number: 1}} |', 'строка таблицы «Заполните таблицу»: ячейки через |, '
+                                        'в ячейке текст, формулы и поля любого типа; подряд '
+                                        'идущие строки — одна таблица, строка |---|---| '
+                                        'под первой выделяет шапку'),
 )
 
 _OPEN_RE = re.compile(r'\{\{\s*([a-z]+)\s*:')
@@ -192,6 +200,19 @@ class Slot:
 
 
 @dataclass
+class MaskTable:
+    """Таблица в маске: строки → ячейки → фрагменты (текст и слоты).
+    Первые ``header`` строк — шапка (над разделителем ``|---|``)."""
+    rows: list = field(default_factory=list)
+    header: int = 0
+
+    @property
+    def slots(self):
+        return [f for row in self.rows for cell in row for f in cell
+                if isinstance(f, Slot)]
+
+
+@dataclass
 class MaskSpec:
     source: str
     fragments: list = field(default_factory=list)
@@ -199,7 +220,13 @@ class MaskSpec:
 
     @property
     def slots(self):
-        return [f for f in self.fragments if isinstance(f, Slot)]
+        out = []
+        for f in self.fragments:
+            if isinstance(f, Slot):
+                out.append(f)
+            elif isinstance(f, MaskTable):
+                out.extend(f.slots)
+        return out
 
     @property
     def is_valid(self):
@@ -450,17 +477,39 @@ def _degree_input(slot, value):
     return ';'.join(out)
 
 
-def parse_mask(text, *, validate_references=False):
-    """Текст маски → ``MaskSpec`` (фрагменты текста и слоты, ошибки).
+def _parse_slot(name, payload, index, after, validate_references):
+    kind = CHOICE if name in PRESETS else name
+    slot = Slot(index=index, kind=kind, raw=payload,
+                preset=name if name in PRESETS else None,
+                degree_unit=bool(_DEGREE_SUFFIX_RE.match(after)))
+    if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
+        _parse_formula(slot, payload, validate=validate_references)
+    elif kind in (SET, PAIR, RANGE) and validate_references:
+        option = re.search(r'\|\s*unordered\s*$', payload) if kind == PAIR else None
+        reference = payload[:option.start()].strip() if option else payload.strip()
+        reference = reference or ('∅' if kind == SET else reference)
+        # Сначала синтаксис (понятное сообщение об ошибке), затем
+        # нелитеральный эталон проходит тот же вычислитель, что и ответ.
+        _PARSERS[kind](slot, payload)
+        if not slot.error:
+            try:
+                formats.validate_collection_reference(reference, kind=kind,
+                                                      unordered=bool(option))
+            except formulas.FormulaUnavailable as error:
+                slot.reference_unavailable = True
+                slot.error = str(error)
+            except ValueError as error:
+                slot.error = str(error)
+    else:
+        _PARSERS[kind](slot, payload)
+    return slot
 
-    При показе сохранённых expression-полей не запускаем вычислитель.
-    Формы сохранения и импорта передают validate_references=True, чтобы
-    проверить математический эталон до записи.
-    """
-    text = text or ''
-    spec = MaskSpec(source=text)
+
+def _parse_inline(text, spec, counter, validate_references):
+    """Текст со слотами → фрагменты; ``counter[0]`` — сквозной номер слота,
+    чтобы слоты таблицы и текста вокруг неё нумеровались по порядку чтения."""
+    fragments = []
     pos = 0
-    index = 0
     while True:
         m = _OPEN_RE.search(text, pos)
         if not m:
@@ -475,39 +524,131 @@ def parse_mask(text, *, validate_references=False):
             spec.errors.append(f'слот {{{{{name}: …}}}} не закрыт двойной скобкой')
             break
         if m.start() > pos:
-            spec.fragments.append(text[pos:m.start()])
-        payload = text[m.end():end].strip()
-        index += 1
-        kind = CHOICE if name in PRESETS else name
-        slot = Slot(index=index, kind=kind, raw=payload,
-                    preset=name if name in PRESETS else None,
-                    degree_unit=bool(_DEGREE_SUFFIX_RE.match(text[end + 2:])))
-        if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
-            _parse_formula(slot, payload, validate=validate_references)
-        elif kind in (SET, PAIR, RANGE) and validate_references:
-            option = re.search(r'\|\s*unordered\s*$', payload) if kind == PAIR else None
-            reference = payload[:option.start()].strip() if option else payload.strip()
-            reference = reference or ('∅' if kind == SET else reference)
-            # Сначала синтаксис (понятное сообщение об ошибке), затем
-            # нелитеральный эталон проходит тот же вычислитель, что и ответ.
-            _PARSERS[kind](slot, payload)
-            if not slot.error:
-                try:
-                    formats.validate_collection_reference(reference, kind=kind,
-                                                          unordered=bool(option))
-                except formulas.FormulaUnavailable as error:
-                    slot.reference_unavailable = True
-                    slot.error = str(error)
-                except ValueError as error:
-                    slot.error = str(error)
-        else:
-            _PARSERS[kind](slot, payload)
+            fragments.append(text[pos:m.start()])
+        counter[0] += 1
+        index = counter[0]
+        slot = _parse_slot(name, text[m.end():end].strip(), index,
+                           text[end + 2:], validate_references)
         if slot.error:
             spec.errors.append(f'слот {index} ({{{{{name}: …}}}}): {slot.error}')
-        spec.fragments.append(slot)
+        fragments.append(slot)
         pos = end + 2
     if pos < len(text):
-        spec.fragments.append(text[pos:])
+        fragments.append(text[pos:])
+    return fragments
+
+
+# Строка таблицы — целая строка маски между крайними «|».
+_TABLE_ROW_RE = re.compile(r'^[ \t]*\|[^\n]*\|[ \t]*\r?$', re.M)
+_TABLE_RULE_RE = re.compile(r'^\s*:?-{3,}:?\s*$')
+_CELL_MATH_RE = re.compile(r'\$\$.*?\$\$|\\\[.*?\\\]|\$.*?\$|\\\(.*?\\\)')
+
+
+def _split_tables(text):
+    """Текст маски → части: строки текста и списки строк таблиц.
+    Пустые строки вокруг таблицы не нужны — она и так отдельный блок."""
+    runs = []
+    for m in _TABLE_ROW_RE.finditer(text):
+        # Соседние строки — одна таблица; пустая строка начинает новую.
+        if runs and text[runs[-1][1]:m.start()].strip(' \t\r') == '\n':
+            runs[-1][1] = m.end()
+            runs[-1][2].append(m.group().strip())
+        else:
+            runs.append([m.start(), m.end(), [m.group().strip()]])
+    if not runs:
+        return [text]
+    parts = []
+    pos = 0
+    for start, end, rows in runs:
+        before = text[pos:start]
+        before = before.rstrip() if pos == 0 else before.strip()
+        if before:
+            parts.append(before)
+        parts.append(rows)
+        pos = end
+    if text[pos:].strip():
+        parts.append(text[pos:].strip())
+    return parts
+
+
+def _split_cells(line):
+    """``| a | b |`` → ['a', 'b']. Черта внутри слота ``{{…}}`` или формулы
+    ячейку не делит; ``\\|`` вне формулы — буквальная черта."""
+    cells, current = [], []
+    i = 0
+    while i < len(line):
+        if line.startswith('{{', i):
+            m = _OPEN_RE.match(line, i)
+            end = _find_close(line, m.end()) if m else -1
+            if end >= 0:
+                current.append(line[i:end + 2])
+                i = end + 2
+                continue
+        math = _CELL_MATH_RE.match(line, i)
+        if math:
+            current.append(math.group())
+            i = math.end()
+            continue
+        if line.startswith('\\|', i):
+            current.append('|')
+            i += 2
+            continue
+        if line[i] == '\\':
+            current.append(line[i:i + 2])
+            i += 2
+            continue
+        if line[i] == '|':
+            cells.append(''.join(current).strip())
+            current = []
+        else:
+            current.append(line[i])
+        i += 1
+    cells.append(''.join(current).strip())
+    # Крайние «|» строки дают пустые края списка.
+    return cells[1:-1]
+
+
+def _parse_table(lines, spec, counter, validate_references):
+    table = MaskTable()
+    width = None
+    for line in lines:
+        cells = _split_cells(line)
+        if cells and all(_TABLE_RULE_RE.match(c) for c in cells):
+            if table.header or not table.rows:
+                spec.errors.append('таблица: строка-разделитель |---| ставится '
+                                   'один раз, сразу под шапкой')
+            else:
+                table.header = len(table.rows)
+            continue
+        if width is None:
+            width = len(cells)
+        elif len(cells) != width:
+            spec.errors.append(
+                f'таблица: в строке {len(table.rows) + 1} ячеек {len(cells)}, '
+                f'а в первой — {width}')
+        table.rows.append([
+            _parse_inline(cell, spec, counter, validate_references)
+            for cell in cells])
+    return table
+
+
+def parse_mask(text, *, validate_references=False):
+    """Текст маски → ``MaskSpec`` (фрагменты текста, слоты и таблицы, ошибки).
+
+    При показе сохранённых expression-полей не запускаем вычислитель.
+    Формы сохранения и импорта передают validate_references=True, чтобы
+    проверить математический эталон до записи.
+    """
+    text = text or ''
+    spec = MaskSpec(source=text)
+    counter = [0]
+    for part in _split_tables(text):
+        if isinstance(part, list):
+            spec.fragments.append(
+                _parse_table(part, spec, counter, validate_references))
+        else:
+            spec.fragments.extend(
+                _parse_inline(part, spec, counter, validate_references))
     if not spec.slots and not spec.errors and text.strip():
         spec.errors.append('в маске нет ни одного слота {{тип: …}}')
     return spec
@@ -714,66 +855,119 @@ def slot_display(slot, value):
     return value
 
 
+def _tabular_cell(text):
+    """Ячейка для ``tabular``: ``&`` и переносы вне формул не должны
+    ломать строки таблицы."""
+    out = []
+    pos = 0
+    for m in _CELL_MATH_RE.finditer(text):
+        out.append(text[pos:m.start()])
+        out.append(m.group())
+        pos = m.end()
+    out.append(text[pos:])
+    for i in range(0, len(out), 2):
+        out[i] = re.sub(r'(?<!\\)&', r'\\&', re.sub(r'\s*\n\s*', ' ', out[i]))
+    return ''.join(out).strip()
+
+
+def _tabular(table, cell_text):
+    """Таблица маски → ``tabular``: её понимают и LaTeX, и ``web_answer``
+    (tex-table), так что текстовые формы маски остаются таблицей."""
+    width = max((len(row) for row in table.rows), default=1) or 1
+    lines = ['\\begin{tabular}{|' + 'l|' * width + '}', '\\hline']
+    for row in table.rows:
+        cells = [_tabular_cell(cell_text(cell)) for cell in row]
+        cells += [''] * (width - len(cells))
+        lines.append(' & '.join(cells) + ' \\\\ \\hline')
+    lines.append('\\end{tabular}')
+    return '\n'.join(lines)
+
+
+def _mask_text(fragments, slot_text):
+    """Текст маски, где каждый слот заменён на ``slot_text(slot)``,
+    а таблица — на ``tabular`` с отдельной строки."""
+    parts = []
+    after_table = False
+    for frag in fragments:
+        if isinstance(frag, MaskTable):
+            if parts:
+                parts.append('\n')
+            parts.append(_tabular(frag, lambda cell: _mask_text(cell, slot_text)))
+            after_table = True
+            continue
+        if after_table:
+            parts.append('\n')
+            after_table = False
+        parts.append(slot_text(frag) if isinstance(frag, Slot) else frag)
+    return ''.join(parts)
+
+
 def filled_text(spec, values, placeholder='___'):
     """Текст маски с подставленными значениями ученика: так учитель видит
     «Меньшая сторона равна [10] см»."""
-    parts = []
-    for frag in spec.fragments:
-        if isinstance(frag, Slot):
-            shown = slot_display(frag, values.get(frag.name, ''))
-            parts.append(f'[{shown}]' if shown else placeholder)
-        else:
-            parts.append(frag)
-    return ''.join(parts)
+    def shown(slot):
+        value = slot_display(slot, values.get(slot.name, ''))
+        return f'[{value}]' if value else placeholder
+    return _mask_text(spec.fragments, shown)
 
 
 def reference_text(spec):
     """Текст маски с эталонами вместо слотов (для учителя)."""
-    parts = []
-    for frag in spec.fragments:
-        if isinstance(frag, Slot):
-            ref = frag.reference
-            if frag.uses_math_field and ref and not ref.startswith('$'):
-                ref = f'${ref}$'
-            parts.append(f'[{ref}]')
-        else:
-            parts.append(frag)
-    return ''.join(parts)
+    def shown(slot):
+        ref = slot.reference
+        if slot.uses_math_field and ref and not ref.startswith('$'):
+            ref = f'${ref}$'
+        return f'[{ref}]'
+    return _mask_text(spec.fragments, shown)
+
+
+def _render_slot(frag, prefix, values, checks, seed):
+    value = values.get(frag.name, '')
+    item = {
+        'slot': frag,
+        'kind': frag.kind,
+        'name': f'{prefix}_{frag.name}',
+        'value': value,
+        'display': slot_display(frag, value),
+        'check': checks.get(frag.name, ''),
+    }
+    if frag.kind == ORDER:
+        chosen = _parse_order_positions(value, len(frag.items))
+        if chosen is None:
+            chosen = [None] * len(frag.items)
+        seed_key = seed or prefix
+        tokens = frag.order_tokens(seed_key)
+        item['order_items'] = [
+            (tokens[i], text) for i, text in frag.shuffled(seed_key)]
+        item['order_positions'] = [
+            {'k': k,
+             'selected': tokens[chosen[k]] if chosen[k] is not None else None}
+            for k in range(len(frag.items))]
+    return item
 
 
 def render_fragments(spec, prefix, values=None, checks=None, seed=''):
     """Данные для шаблона ``assignments/_mask.html``: текст и слоты с именами
-    полей формы ``{prefix}_s1``…, текущими значениями и результатами."""
+    полей формы ``{prefix}_s1``…, текущими значениями и результатами.
+    Таблица — ``{'table': True, 'rows': [{'header', 'cells'}]}``, ячейка —
+    такой же список фрагментов."""
     values = values or {}
     checks = checks or {}
-    out = []
-    for frag in spec.fragments:
-        if not isinstance(frag, Slot):
-            out.append({'text': frag})
-            continue
-        value = values.get(frag.name, '')
-        item = {
-            'slot': frag,
-            'kind': frag.kind,
-            'name': f'{prefix}_{frag.name}',
-            'value': value,
-            'display': slot_display(frag, value),
-            'check': checks.get(frag.name, ''),
-        }
-        if frag.kind == ORDER:
-            chosen = _parse_order_positions(value, len(frag.items))
-            if chosen is None:
-                chosen = [None] * len(frag.items)
-            seed_key = seed or prefix
-            tokens = frag.order_tokens(seed_key)
-            item['order_items'] = [
-                (tokens[i], text) for i, text in frag.shuffled(seed_key)]
-            item['order_positions'] = [
-                {'k': k,
-                 'selected': tokens[chosen[k]] if chosen[k] is not None else None}
-                for k in range(len(frag.items))]
-        out.append(item)
-    return out
+
+    def render(fragments):
+        out = []
+        for frag in fragments:
+            if isinstance(frag, Slot):
+                out.append(_render_slot(frag, prefix, values, checks, seed))
+            elif isinstance(frag, MaskTable):
+                out.append({'table': True, 'rows': [
+                    {'header': i < frag.header,
+                     'cells': [render(cell) for cell in row]}
+                    for i, row in enumerate(frag.rows)]})
+            else:
+                out.append({'text': frag})
+        return out
+    return render(spec.fragments)
 
 
 def collect_values(data, prefix, spec):
