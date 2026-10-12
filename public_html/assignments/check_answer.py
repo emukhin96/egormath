@@ -75,9 +75,12 @@ _FUNCTION_COMMAND_RE = re.compile(rf'\\({_FUNCTION_NAMES})(?![A-Za-z])')
 _BARE_FUNCTION_RE = re.compile(
     rf'(?<![A-Za-z\\])({_FUNCTION_NAMES})(?![A-Za-z])'
     r'(?=\s*(?:\^\s*(?:\{[^{}]*\}|[+-]?\d+)\s*)?[0-9A-Za-zα-ωπ(\[{\\.])')
-# Остаток имени функции в слове из букв после нормализации: Arccos, sinx.
-_LEFTOVER_FUNCTION_RE = re.compile(
-    r'(?<![A-Za-z\\])[A-Za-z]*(?:arc|sin|cos|tg|tan|cot)[A-Za-z]*', re.I)
+# Остаток имени функции после нормализации — слово, где имя склеено с
+# другими буквами или набрано иначе: Arccos, sinx, acos. Голое имя (tg, cot,
+# arc) осталось без аргумента и сознательно читается произведением t·g.
+_LETTER_RUN_RE = re.compile(r'(?<![A-Za-z\\])[A-Za-z]+')
+_FUNCTION_PART_RE = re.compile(r'arc|sin|cos|tg|tan|cot', re.I)
+_PRODUCT_NAMES = frozenset(_FUNCTION_COMMANDS) | {'arc'}
 
 
 def _function_commands(text):
@@ -99,7 +102,8 @@ def unrecognized_function(text):
     Такой ввод разбирается как произведение букв (Arccos → A·r·c·c·o·s),
     и «неверно» по нему было бы ложным: решение остаётся за учителем.
     """
-    return bool(_LEFTOVER_FUNCTION_RE.search(normalize(text)))
+    return any(run not in _PRODUCT_NAMES and _FUNCTION_PART_RE.search(run)
+               for run in _LETTER_RUN_RE.findall(normalize(text)))
 
 
 # «arccos 1/6» без скобок по правилам LaTeX — arccos(1)/6, но так ученик

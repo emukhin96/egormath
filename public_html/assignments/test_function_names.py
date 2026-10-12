@@ -38,7 +38,9 @@ class FunctionNameNormalizeTests(SimpleTestCase):
         for value in ('Arccos(1/6)', 'acos(1/6)', 'sinx', 'arcctgx'):
             with self.subTest(value=value):
                 self.assertTrue(unrecognized_function(value))
-        for value in ('arccos(1/6)', r'\mathrm{arctg}(1)', r'\sqrt{3}', 'ab+c', r'\pi-1'):
+        # Голое имя без аргумента осталось произведением t·g — это не остаток.
+        for value in ('arccos(1/6)', r'\mathrm{arctg}(1)', r'\sqrt{3}', 'ab+c', r'\pi-1',
+                      'tg', 'v_0 + tg', '2cot', 'arc'):
             with self.subTest(value=value):
                 self.assertFalse(unrecognized_function(value))
 
@@ -115,6 +117,13 @@ class FunctionNameMaskTests(SimpleTestCase):
         for value in ('tg', 'tg+0', 't g'):
             with self.subTest(value=value):
                 self.assertEqual(self.check(mask, value), 'ok')
+        # Ошибка в знаке при параметрах t, g — «неверно», а не «не знаю».
+        mask = r'{{expression: v_0 - g t}}'
+        self.assertEqual(self.check(mask, 'v_0 - tg'), 'ok')
+        for value in ('v_0 + tg', 'v_0 + gt'):
+            with self.subTest(value=value):
+                self.assertEqual(self.check(mask, value), 'wrong')
+        self.assertEqual(self.check(r'{{expression: a r c}}', 'arc+1'), 'wrong')
 
     def test_collections_with_letters(self):
         self.assertEqual(self.check(r'{{set: \arccos\frac13; \pi-\arccos\frac13}}',
