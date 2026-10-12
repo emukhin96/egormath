@@ -1361,7 +1361,9 @@ def _inverse_trig_zero(difference):
     from sympy import (Add, Dummy, acos, asin, atan, cos, expand_trig,
                        minimal_polynomial, pi, simplify, sin, tan)
 
-    if not difference.has(asin, acos, atan):
+    # Вызывать только внутри ограниченного вычислителя: simplify и
+    # minimal_polynomial не имеют своего лимита времени.
+    if not difference.has(asin, acos, atan) or len(difference.atoms(asin, acos, atan)) > 4:
         return None
     try:
         if not difference.free_symbols:
@@ -1376,8 +1378,6 @@ def _inverse_trig_zero(difference):
             if minimal_polynomial(cosine - 1, root) != root:
                 return False
             return True if abs(value) < 1 else None
-        if len(difference.atoms(asin, acos, atan)) > 4:
-            return None
         low = high = 0
         for term in Add.make_args(difference):
             if not term.free_symbols:

@@ -135,7 +135,9 @@ class FunctionNameMaskTests(SimpleTestCase):
         self.assertEqual(check_answer(r'\mathrm{arctg} 2', r'\operatorname{arctg} 2'), 'ok')
         self.assertEqual(check_answer('Arccos(1/6)', r'\arccos\frac{1}{6}'), 'unknown')
         self.assertEqual(check_answer('arccos 1/6', r'\arccos\frac{1}{6}'), 'ok')
-        self.assertEqual(check_answer('arctg(1/2)', r'\operatorname{arcctg} 2'), 'ok')
+        # Обычная сверка идёт в веб-процессе без вычислителя: точное
+        # доказательство равенства углов там не запускается — «не знаю».
+        self.assertEqual(check_answer('arctg(1/2)', r'\operatorname{arcctg} 2'), 'unknown')
 
 
 class FunctionFractionReadingTests(SimpleTestCase):

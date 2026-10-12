@@ -268,11 +268,10 @@ def _sympy_equal(a, b):
         if isinstance(a, Expr) and isinstance(b, Expr):
             if a.free_symbols != b.free_symbols:
                 return False
-            result = a.equals(b)
-            if result is None:
-                from .checks.formulas import _inverse_trig_zero
-                result = _inverse_trig_zero(a - b)
-            return result
+            # Без точного доказательства обратных функций (formulas.
+            # _inverse_trig_zero): здесь нет ограниченного вычислителя,
+            # проверка идёт прямо в веб-процессе — None уходит учителю.
+            return a.equals(b)
         return bool(a == b) or None
     except Exception:  # noqa: BLE001
         return None
