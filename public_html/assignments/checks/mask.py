@@ -11,7 +11,8 @@
 десятичной дробью).
 
 Таблица — подряд идущие строки вида ``| $AA_1$ | $DC$ | {{number: 1}} |``;
-строка ``|---|---|`` отделяет шапку. Ячейка — тот же текст со слотами;
+строка ``|---|---|`` обязательна: под шапкой или первой строкой, если
+шапки нет. Ячейка — тот же текст со слотами;
 ``|`` внутри слота и формулы ячейку не делит, ``\\|`` — буквальная черта.
 """
 import hashlib
@@ -105,8 +106,8 @@ HELP = (
                                               'ученику показываются перемешанными'),
     ('| $AA_1$ | $DC$ | {{number: 1}} |', 'строка таблицы «Заполните таблицу»: ячейки через |, '
                                         'в ячейке текст, формулы и поля любого типа; подряд '
-                                        'идущие строки — одна таблица, строка |---|---| '
-                                        'под первой выделяет шапку'),
+                                        'идущие строки — одна таблица; строка |---|---| '
+                                        'обязательна: под шапкой или первой строкой'),
 )
 
 _OPEN_RE = re.compile(r'\{\{\s*([a-z]+)\s*:')
@@ -546,6 +547,8 @@ _CELL_MATH_RE = re.compile(r'\$\$.*?\$\$|\\\[.*?\\\]|\$.*?\$|\\\(.*?\\\)')
 
 def _split_tables(text):
     """Текст маски → части: строки текста и списки строк таблиц.
+    Таблица — только блок со строкой-разделителем ``|---|``: строка вроде
+    ``|x| = {{number: 2}} или |y|`` (модули по краям) остаётся текстом.
     Пустые строки вокруг таблицы не нужны — она и так отдельный блок."""
     runs = []
     for m in _TABLE_ROW_RE.finditer(text):
@@ -555,6 +558,7 @@ def _split_tables(text):
             runs[-1][2].append(m.group().strip())
         else:
             runs.append([m.start(), m.end(), [m.group().strip()]])
+    runs = [run for run in runs if any(_is_rule(line) for line in run[2])]
     if not runs:
         return [text]
     parts = []
@@ -608,18 +612,25 @@ def _split_cells(line):
     return cells[1:-1]
 
 
+def _is_rule(line):
+    cells = _split_cells(line)
+    return bool(cells) and all(_TABLE_RULE_RE.match(c) for c in cells)
+
+
 def _parse_table(lines, spec, counter, validate_references):
     table = MaskTable()
     width = None
+    ruled = False
     for line in lines:
-        cells = _split_cells(line)
-        if cells and all(_TABLE_RULE_RE.match(c) for c in cells):
-            if table.header or not table.rows:
+        if _is_rule(line):
+            # Разделитель первой строкой — таблица без шапки.
+            if ruled:
                 spec.errors.append('таблица: строка-разделитель |---| ставится '
-                                   'один раз, сразу под шапкой')
-            else:
-                table.header = len(table.rows)
+                                   'один раз — под шапкой или первой строкой')
+            ruled = True
+            table.header = len(table.rows)
             continue
+        cells = _split_cells(line)
         if width is None:
             width = len(cells)
         elif len(cells) != width:

@@ -45,7 +45,7 @@ class TableParseTests(SimpleTestCase):
         self.assertEqual(spec.slots[0].reference, 'a')
 
     def test_slots_around_table_numbered_in_reading_order(self):
-        spec = parse_mask('Ответ: {{number: 1}}\n| {{number: 2}} | {{number: 3}} |\nИ ещё {{number: 4}}')
+        spec = parse_mask('Ответ: {{number: 1}}\n|---|---|\n| {{number: 2}} | {{number: 3}} |\nИ ещё {{number: 4}}')
         self.assertEqual([s.reference for s in spec.slots], ['1', '2', '3', '4'])
         self.assertEqual([s.name for s in spec.slots], ['s1', 's2', 's3', 's4'])
         self.assertEqual(spec.fragments[0], 'Ответ: ')
@@ -53,7 +53,7 @@ class TableParseTests(SimpleTestCase):
         self.assertEqual(spec.fragments[3], 'И ещё ')
 
     def test_pipes_in_choice_math_and_escape(self):
-        spec = parse_mask(r'| $|x|$ \| $y$ | {{choice: *А|Б|В|Г}} | {{compare: >}}° |')
+        spec = parse_mask('|---|---|---|\n' r'| $|x|$ \| $y$ | {{choice: *А|Б|В|Г}} | {{compare: >}}° |')
         self.assertEqual(spec.errors, [])
         (row,) = spec.fragments[0].rows
         self.assertEqual(row[0], ['$|x|$ | $y$'])
@@ -64,7 +64,7 @@ class TableParseTests(SimpleTestCase):
 
     def test_all_slot_kinds_work_inside_cells(self):
         spec = parse_mask(
-            '| {{digits: 234}} | {{decimal: -0,5}} | {{ratio: 1:2}} | {{set: 1; 2}} '
+            '|---|\n| {{digits: 234}} | {{decimal: -0,5}} | {{ratio: 1:2}} | {{set: 1; 2}} '
             '| {{pair: (1; 2)}} | {{range: (1;4)}} | {{order: 1|2|3}} | {{yesno: да}} '
             '| {{series: \\pi n}} | {{equation: y=x+5}} |')
         self.assertEqual(spec.errors, [])
@@ -77,25 +77,42 @@ class TableParseTests(SimpleTestCase):
         self.assertEqual(result, 'ok')
 
     def test_column_count_and_rule_errors(self):
-        self.assertEqual(parse_mask('| {{number: 1}} | a |\n| {{number: 2}} |').errors,
+        self.assertEqual(parse_mask('|---|---|\n| {{number: 1}} | a |\n| {{number: 2}} |').errors,
                          ['таблица: в строке 2 ячеек 1, а в первой — 2'])
-        self.assertIn('строка-разделитель', parse_mask('|---|\n| {{number: 1}} |').errors[0])
         self.assertIn('строка-разделитель',
                       parse_mask('| a |\n|---|\n| {{number: 1}} |\n|---|').errors[0])
 
     def test_slot_error_inside_cell_reported_with_number(self):
-        spec = parse_mask('| a | {{number: 1}} |\n| b | {{number: abc}} |')
+        spec = parse_mask('|---|---|\n| a | {{number: 1}} |\n| b | {{number: abc}} |')
         self.assertFalse(spec.is_valid)
         self.assertEqual(spec.errors, ['слот 2 ({{number: …}}): эталон не разобран как число'])
 
     def test_table_without_slots_is_not_a_mask(self):
-        self.assertEqual(parse_mask('| a | b |').errors,
+        self.assertEqual(parse_mask('| a | b |\n|---|---|').errors,
                          ['в маске нет ни одного слота {{тип: …}}'])
 
     def test_blank_line_splits_tables(self):
-        spec = parse_mask('| {{number: 1}} |\n\n| {{number: 2}} | {{number: 3}} |')
+        spec = parse_mask('|---|\n| {{number: 1}} |\n\n|---|---|\n| {{number: 2}} | {{number: 3}} |')
         self.assertEqual(spec.errors, [])
         self.assertEqual([type(f) for f in spec.fragments], [MaskTable, MaskTable])
+
+    def test_rule_first_line_means_no_header(self):
+        spec = parse_mask('|---|---|\n| $AB$ | {{number: 1}} |')
+        self.assertEqual(spec.errors, [])
+        self.assertEqual(spec.fragments[0].header, 0)
+        self.assertEqual(len(spec.fragments[0].rows), 1)
+
+    def test_pipe_lines_without_rule_stay_text(self):
+        # Модули по краям строки — не таблица: без |---| разбор как раньше
+        for text in ('|x| = {{number: 2}} или |y|',
+                     '| {{number: 1}} | {{number: 2}} |',
+                     'Ответ:\n|AB| = {{number: 5}} |\n|CD| = {{number: 6}} |'):
+            spec = parse_mask(text)
+            self.assertEqual(spec.errors, [])
+            self.assertFalse(any(isinstance(f, MaskTable) for f in spec.fragments))
+            self.assertEqual(reference_text(spec).count('tabular'), 0)
+        spec = parse_mask('|x| = {{number: 2}} или |y|')
+        self.assertEqual(spec.fragments, ['|x| = ', spec.slots[0], ' или |y|'])
 
     def test_plain_masks_unchanged(self):
         spec = parse_mask('Ответ: {{number: 10}} см\n|x| = {{number: 3}}')
@@ -113,7 +130,7 @@ class TableCheckAndTextTests(SimpleTestCase):
         self.assertEqual(check_mask(spec, {'s1': 'А'})[0], 'unknown')
 
     def test_collect_values_and_order_inside_table(self):
-        spec = parse_mask('| Порядок | {{order: 1|2|3}} |\n| Число | {{number: 5}} |')
+        spec = parse_mask('|---|---|\n| Порядок | {{order: 1|2|3}} |\n| Число | {{number: 5}} |')
         tokens = spec.slots[0].order_tokens('p7')
         data = {'p7_s1_0': tokens[0], 'p7_s1_1': tokens[1], 'p7_s1_2': tokens[2],
                 'p7_s2': ' 5 '}
@@ -129,13 +146,13 @@ class TableCheckAndTextTests(SimpleTestCase):
         filled = filled_text(spec, {'s2': 'Б'})
         self.assertIn('1 & $DB$ и $AMN$ & ___ \\\\ \\hline', filled)
         self.assertIn('2 & $MN$ и $ABC$ & [Б] \\\\ \\hline', filled)
-        spec = parse_mask('Таблица:\n| {{number: 1}} |\nКонец')
+        spec = parse_mask('Таблица:\n|---|\n| {{number: 1}} |\nКонец')
         self.assertEqual(reference_text(spec),
                          'Таблица:\n\\begin{tabular}{|l|}\n\\hline\n[1] \\\\ \\hline\n'
                          '\\end{tabular}\nКонец')
 
     def test_tabular_cell_escapes_ampersand_outside_math(self):
-        spec = parse_mask('| A & B | $\\begin{matrix}1 & 2\\end{matrix}$ | {{number: 1}} |')
+        spec = parse_mask('|---|---|---|\n| A & B | $\\begin{matrix}1 & 2\\end{matrix}$ | {{number: 1}} |')
         self.assertIn('A \\& B & $\\begin{matrix}1 & 2\\end{matrix}$ & [1]',
                       reference_text(spec))
 
