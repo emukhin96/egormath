@@ -290,6 +290,14 @@ def assignment_list(request):
             .order_by('last_name', 'first_name', 'username')
             if request.user.is_superuser else []),
         'status_choices': Assignment.STATUS_CHOICES,
+        # Короткие подписи для сегментов строки фильтров (как в .stat-strip)
+        'status_short_choices': [
+            (Assignment.STATUS_ASSIGNED, 'Выдано'),
+            (Assignment.STATUS_SUBMITTED, 'На проверке'),
+            (Assignment.STATUS_RETURNED, 'На доработке'),
+            (Assignment.STATUS_REVIEWED, 'Проверено'),
+        ],
+        'kind_choices': [('ordinary', 'Обычные'), ('independent', 'Самостоятельные')],
         'due_choices': [
             ('overdue', 'Просроченные'),
             ('today', 'Срок сегодня'),

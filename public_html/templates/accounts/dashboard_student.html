@@ -1,14 +1,19 @@
 {% extends 'base.html' %}
+{% load task_extras %}
 {% block title %}Мои задания — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/dashboard_student.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>Мои задания</h1>
+    {% if assignments %}
+    <p class="page-meta">
+      <span>{{ assignments|length }} {{ assignments|length|plural_ru:'задание,задания,заданий' }}</span>
+      {% if todo %}<span>сдать: {{ todo|length }}</span>{% endif %}
+      {% if submitted %}<span>на проверке: {{ submitted|length }}</span>{% endif %}
+    </p>
+    {% endif %}
   </div>
-  {% if assignments %}
-  <p class="muted">Всего заданий: {{ assignments|length }}</p>
-  {% endif %}
 </div>
 
 {% if independentworks_enabled %}{% include 'includes/work_kind_filter.html' %}{% endif %}

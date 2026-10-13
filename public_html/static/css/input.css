@@ -2065,7 +2065,13 @@
     margin: 0 0 0 auto;
     color: var(--muted);
     font-size: 0.85rem;
+    font-weight: 400;
     white-space: nowrap;
+  }
+
+  /* Тот же вид для фильтра-select в начале строки (значений много: группы, листки) */
+  .sort-inline.filter-inline {
+    margin-left: 0;
   }
 
   .sort-inline label {
