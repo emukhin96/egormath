@@ -655,10 +655,10 @@
     position: absolute;
     right: 0;
     top: calc(100% + 6px);
-    width: min(440px, calc(100vw - 2 * var(--space-4)));
+    width: min(520px, calc(100vw - 2 * var(--space-4)));
     padding: var(--space-3);
     display: grid;
-    gap: var(--space-2);
+    gap: var(--space-3);
     background: #fff;
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -666,9 +666,21 @@
     z-index: 70;
   }
 
+  .cart-panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
   .cart-panel-title {
     margin: 0;
     font-weight: 600;
+    color: var(--accent-dark);
+  }
+
+  .cart-panel .linklike {
+    min-height: 0;
   }
 
   .cart-panel .helptext {
@@ -676,15 +688,105 @@
     overflow-wrap: anywhere;
   }
 
-  .cart-form {
-    display: flex;
+  /* Список задач корзины: точка семьи аналогов · источник и условие · × */
+  .cart-items {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  .cart-item {
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    gap: var(--space-2);
     align-items: center;
+    padding: 2px var(--space-1) 2px var(--space-2);
+    border-radius: 6px;
+    background: #f7f9fb;
+    font-size: 0.82rem;
+  }
+
+  .cart-item-text {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .cart-item-source {
+    color: var(--accent-dark);
+    font-weight: 500;
+  }
+
+  .cart-fam {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+  }
+
+  /* Палитра семей аналогов — от токенов сайта */
+  .cart-fam-1 { background: var(--accent); }
+  .cart-fam-2 { background: var(--ok); }
+  .cart-fam-3 { background: var(--warn); }
+  .cart-fam-4 { background: #7b4fb5; }
+  .cart-fam-5 { background: #00838f; }
+  .cart-fam-6 { background: var(--accent-dark); }
+
+  /* Куда отправить корзину: «Листок» и «Самостоятельная» рядом */
+  .cart-dest {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: var(--space-2);
   }
 
-  .cart-form .quick-select {
-    flex: 1;
+  .cart-dest-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .cart-dest-iw {
+    border-color: var(--accent);
+    background: #f6faff;
+  }
+
+  .cart-dest-title {
+    margin: 0;
+    font-weight: 700;
+    color: var(--accent-dark);
+    font-size: 0.85rem;
+  }
+
+  .cart-dest-pick {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    align-self: stretch;
+  }
+
+  .cart-dest-pick .quick-select {
+    width: 100%;
     min-width: 0;
+  }
+
+  .cart-similar {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    font-size: 0.82rem;
+    color: var(--text);
+  }
+
+  .cart-similar input {
+    margin-top: 2px;
+    flex: none;
   }
 
   /* «+» у задачи: квадрат в размер .btn-small, крупный знак */
@@ -5548,6 +5650,9 @@
   .iw-workspace-overview, .iw-workspace-detail { margin-bottom: var(--space-4); }
   .iw-workspace-selected { background: #edf4fd; }
   .iw-workspace-candidate { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); min-width: 0; }
+  /* Номера, только что добавленные из корзины (?new=…): подсветка гаснет сама */
+  .ws-item.iw-new { animation: iw-new-fade 5s ease-out 1; }
+  @keyframes iw-new-fade { from, 50% { background-color: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); } }
   .iw-workspace-settings { margin-top: var(--space-4); }
   .iw-workspace-tabs { display: flex; gap: var(--space-2); margin-block: var(--space-4); }
   .iw-workspace-tabs [aria-pressed=true] { background: var(--accent); color: white; border-color: var(--accent); }

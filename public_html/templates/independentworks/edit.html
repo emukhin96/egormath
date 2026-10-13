@@ -7,7 +7,7 @@
 <div id="ws-items" data-reorder-url="{% url 'independentworks:reorder' work.pk %}" data-reorder-reload="1" data-answers-key="iw-show-answers">
 {% if positions %}
 {% for position in positions %}
-<section class="ws-item" id="position-{{ position.pk }}" data-id="{{ position.pk }}"><div class="ws-body">{% include 'includes/builder_drag_handle.html' %}<div class="ws-content">
+<section class="ws-item{% if position.is_new %} iw-new{% endif %}" id="position-{{ position.pk }}" data-id="{{ position.pk }}"><div class="ws-body">{% include 'includes/builder_drag_handle.html' %}<div class="ws-content">
 <div class="form-buttons iw-position-heading"><h2>{% if position.rows or not position.text %}<a href="{% url 'independentworks:pick' position.pk %}{% if preparation_query %}?{{ preparation_query }}{% endif %}">№{{ position.number }} · кандидатов: {{ position.rows|length }}</a>{% else %}Пояснение{% endif %}</h2>
 <form method="post">{% csrf_token %}<input type="hidden" name="position" value="{{ position.pk }}"><input type="hidden" name="action" value="move"><button class="icon-btn" name="direction" value="up" aria-label="Выше">↑</button><button class="icon-btn" name="direction" value="down" aria-label="Ниже">↓</button></form>
 <form method="post">{% csrf_token %}<input type="hidden" name="position" value="{{ position.pk }}"><button class="icon-btn" name="action" value="remove" aria-label="Удалить номер">×</button></form>

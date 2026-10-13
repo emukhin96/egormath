@@ -191,8 +191,11 @@ def edit(request, pk):
             return redirect(reverse('independentworks:edit', args=[work.pk]) + '?' + params.urlencode())
         return redirect(request.get_full_path())
     positions = list(work.positions.prefetch_related('candidates__task__subitems', 'candidates__task__images'))
+    # ?new=<id,…> — номера, только что добавленные из корзины (подсветка .iw-new)
+    new_ids = {int(v) for v in request.GET.get('new', '').split(',') if v.isdigit()}
     number = 0
     for p in positions:
+        p.is_new = p.pk in new_ids
         p.rows = list(p.candidates.all())
         if p.rows or not p.text:
             number += 1
