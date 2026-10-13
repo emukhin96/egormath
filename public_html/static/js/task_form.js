@@ -83,45 +83,57 @@
       if (input.type !== 'file' || !imagesTable
           || !imagesTable.contains(input)) return;
       var img = input.closest('tr').querySelector('.pic-preview');
+      if (!img) return;
       var file = input.files && input.files[0];
+      // Исходное превью (сохранённая картинка) — чтобы вернуть его,
+      // когда новый файл убрали крестиком в зоне вставки
+      if (!('origSrc' in img.dataset)) {
+        img.dataset.origSrc = img.hidden ? '' : (img.getAttribute('src') || '');
+      }
       // Превью только для растровых файлов (PDF браузер в <img> не покажет)
-      if (img && file && file.type.indexOf('image/') === 0) {
+      if (file && file.type.indexOf('image/') === 0) {
         img.src = URL.createObjectURL(file);
         img.hidden = false;
+      } else if (img.dataset.origSrc) {
+        img.src = img.dataset.origSrc;
+        img.hidden = false;
+      } else {
+        img.removeAttribute('src');
+        img.hidden = true;
       }
     });
 
     // --- Вставка картинки из буфера обмена ---
+    // Саму вставку делает общий static/js/image_paste.js; форма лишь
+    // подсказывает, куда класть картинку, если поле не выбрано явно:
+    // в первое пустое поле формсета, а если пустых нет — в новую строку.
     function firstEmptyFileInput() {
       if (!imagesTable) return null;
-      var inputs = imagesTable.querySelectorAll(
-        'tr.formset-row:not([hidden]) input[type=file]');
-      for (var i = 0; i < inputs.length; i += 1) {
-        if (!inputs[i].files.length) return inputs[i];
+      var rows = imagesTable.querySelectorAll('tr.formset-row:not([hidden])');
+      for (var i = 0; i < rows.length; i += 1) {
+        // Строка с сохранённой картинкой (заполнен скрытый id) — не пустая:
+        // вставка туда молча заменила бы уже загруженный рисунок.
+        var id = rows[i].querySelector('input[name$="-id"]');
+        if (id && id.value) continue;
+        var input = rows[i].querySelector('input[type=file]');
+        if (input && !input.files.length) return input;
       }
       return null;
     }
 
-    document.addEventListener('paste', function (e) {
-      if (!form.isConnected) return;
-      var files = e.clipboardData ? e.clipboardData.files : null;
-      if (!files || !files.length
-          || files[0].type.indexOf('image/') !== 0) return;
-      var input = firstEmptyFileInput();
-      if (!input) {
-        var addBtn = imagesTable && form.querySelector(
+    if (imagesTable && window.EgorImagePaste) {
+      window.EgorImagePaste.addResolver(function () {
+        // Форма встроенного редактора может быть закрыта — тогда не она
+        if (!form.isConnected || !form.getClientRects().length) return null;
+        var input = firstEmptyFileInput();
+        if (input) return input;
+        var addBtn = form.querySelector(
           '.formset-add[data-formset="' + imagesTable.dataset.formset + '"]');
-        if (!addBtn) return;
+        if (!addBtn) return null;
         addBtn.click();
-        input = firstEmptyFileInput();
-      }
-      if (!input) return;
-      var dt = new DataTransfer();
-      dt.items.add(files[0]);
-      input.files = dt.files;
-      input.dispatchEvent(new Event('change', {bubbles: true}));
-      e.preventDefault();
-    });
+        return firstEmptyFileInput();
+      });
+    }
 
     renumberPics();
 

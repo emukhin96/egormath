@@ -665,6 +665,20 @@ class StudentAnswerTests(TestCase):
         self.assertEqual(submission.answer_json['s1'], 'после удаления фото')
         self.assertFalse(SubmissionPhoto.objects.exists())
 
+    def test_pasted_photo_from_clipboard(self):
+        """Фото, вставленное из буфера (image_paste.js), — обычный PNG с
+        именем paste-….png или вовсе без расширения: оба принимаются и
+        сжимаются в JPEG."""
+        task = self.tasks[0]
+        url = reverse('upload_photo', args=[self.assignment.pk, task.pk])
+        self.client.post(url, {'photos': fake_photo(
+            'paste-20261014-153000.png', size=(40, 30))})
+        self.client.post(url, {'photos': fake_photo('paste', size=(40, 30))})
+        names = sorted(p.image.name for p in SubmissionPhoto.objects.all())
+        self.assertEqual(len(names), 2)
+        self.assertTrue(all(n.endswith('.jpg') for n in names))
+        self.assertTrue(any('paste-20261014-153000' in n for n in names))
+
     def test_post_without_answer_fields_does_not_clear(self):
         """POST без полей ответа (форма фото) не затирает сохранённое."""
         task = self.tasks[0]

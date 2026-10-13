@@ -5709,6 +5709,62 @@
   .canvas-top { pointer-events: none; }
 }
 
+/* Зона «Вставить из буфера» рядом с полем загрузки картинки
+   (static/js/image_paste.js): кнопка, подсказка Ctrl+V / ⌘V, приём
+   перетаскиваемого файла, миниатюра и имя выбранного файла с × «убрать». */
+@layer components {
+  .paste-zone {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    width: max-content;
+    max-width: 100%;
+    margin-top: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+  }
+  .paste-zone.is-dragover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  /* В ряду кнопок отступ задаёт gap ряда */
+  .task-tools > .paste-zone,
+  .form-buttons > .paste-zone { margin-top: 0; }
+  .paste-zone .btn { margin: 0; }
+  .paste-zone-hint,
+  .paste-zone-msg {
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .paste-zone-msg { color: var(--warn); flex-basis: 100%; }
+  .paste-zone-msg[hidden],
+  .paste-zone-file[hidden] { display: none; }
+  .paste-zone-file {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+    max-width: 100%;
+    font-size: 0.85rem;
+  }
+  .paste-zone-thumb {
+    max-height: 40px;
+    max-width: 80px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fff;
+  }
+  .paste-zone-thumb[hidden] { display: none; }
+  .paste-zone-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 240px;
+  }
+}
+
 /* Русский текст внутри формулы («если», f_наим, \operatorname{НОД}): KaTeX
    рисует его запасным шрифтом браузера. Шрифт сайта и размер текста
    (KaTeX увеличивает формулы в 1,21 раза). Вне @layer: правила KaTeX

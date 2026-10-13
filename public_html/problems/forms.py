@@ -1,3 +1,5 @@
+import os
+
 from django import forms
 from django.core.validators import FileExtensionValidator
 from django.forms import inlineformset_factory
@@ -77,13 +79,67 @@ TaskSubitemFormSet = inlineformset_factory(
 )
 
 
+class TaskImageForm(forms.ModelForm):
+    """Строка формсета картинок задачи.
+
+    Картинка может прийти из буфера обмена (static/js/image_paste.js):
+    имя тогда вида paste-20261014-153000.png, а при ручной сборке запроса —
+    вовсе без расширения. Поэтому тип определяем по содержимому, а
+    расширение имени приводим к нему: валидатор модели и сжатие в
+    TaskImage.save() смотрят именно на имя. Нечитаемый или слишком большой
+    файл — ошибка строки формы, а не 500 при сохранении.
+    """
+
+    class Meta:
+        model = TaskImage
+        fields = ['order', 'image']
+        widgets = {
+            # Миниатюру показывает сама строка (.pic-preview), поэтому
+            # зона вставки из буфера — без своей картинки.
+            'image': forms.ClearableFileInput(attrs={
+                'accept': '.png,.jpg,.jpeg,.pdf,image/*',
+                'data-image-paste-thumb': 'off'}),
+        }
+
+    def clean_image(self):
+        from django.conf import settings
+        from django.core.files.uploadedfile import UploadedFile
+        from PIL import Image
+
+        upload = self.cleaned_data.get('image')
+        if not isinstance(upload, UploadedFile):
+            return upload  # файл не меняли или отметили «очистить»
+        limit = settings.TASK_IMAGE_MAX_SIZE_MB
+        if upload.size > limit * 1024 * 1024:
+            raise forms.ValidationError(
+                f'Файл больше {limit} МБ — уменьшите картинку.')
+        base = os.path.splitext(os.path.basename(upload.name or ''))[0]
+        base = base or 'image'
+        upload.seek(0)
+        head = upload.read(5)
+        upload.seek(0)
+        if head.startswith(b'%PDF'):
+            ext = '.pdf'
+        else:
+            try:
+                with Image.open(upload) as img:
+                    fmt = img.format
+                    img.load()
+            except Exception:
+                raise forms.ValidationError(
+                    'Файл не похож на картинку PNG/JPEG или PDF.')
+            finally:
+                upload.seek(0)
+            # Не-PNG растр TaskImage._compress всё равно сохранит JPEG-ом
+            ext = '.png' if fmt == 'PNG' else '.jpg'
+        current = os.path.splitext(upload.name or '')[1].lower()
+        if not (current == ext or (ext == '.jpg' and current == '.jpeg')):
+            upload.name = base + ext
+        return upload
+
+
 TaskImageFormSet = inlineformset_factory(
-    Task, TaskImage,
-    fields=['order', 'image'],
-    widgets={
-        'image': forms.ClearableFileInput(
-            attrs={'accept': '.png,.jpg,.jpeg,.pdf,image/*'}),
-    },
+    Task, TaskImage, form=TaskImageForm,
     extra=1, can_delete=True,
 )
 
