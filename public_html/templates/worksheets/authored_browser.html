@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% load static task_extras %}
+{% block title %}{% if section %}{{ page_title }} · {% endif %}{{ source.title }} — Математика{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/authored.html' %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <nav class="page-crumbs" aria-label="Путь">
+      <a href="{% url 'collection_list' %}">Подборки</a>
+      {% if section %}<a href="{% url 'authored_collections' %}">{{ source.title }}</a><span>{{ page_title }}</span>{% else %}<span>{{ source.title }}</span>{% endif %}
+    </nav>
+    <h1>{{ page_title }}</h1>
+    <p class="page-meta">{% if source.author %}<span>{{ source.author }}</span>{% endif %}<span>{{ sheets_total }} {{ sheets_total|plural_ru:'листок,листка,листков' }}</span><span>{{ tasks_total }} {{ tasks_total|plural_ru:'задача,задачи,задач' }}</span></p>
+  </div>
+  <div class="page-actions">
+    <nav class="seg" aria-label="Вид">
+      <a class="seg-item{% if view == 'list' %} is-active{% endif %}"{% if view == 'list' %} aria-current="true"{% endif %} href="{{ list_url }}">Список</a>
+      <a class="seg-item{% if view == 'table' %} is-active{% endif %}"{% if view == 'table' %} aria-current="true"{% endif %} href="{{ table_url }}">Таблица</a>
+    </nav>
+  </div>
+</div>
+
+<div class="page-toolbar">
+  <nav class="seg" aria-label="Раздел">
+    {% for segment in segments %}<a class="seg-item{% if segment.active %} is-active{% endif %}"{% if segment.active %} aria-current="true"{% endif %} href="{{ segment.url }}{% if view != 'list' or sort != 'topic' %}{{ sheet_query }}{% endif %}">{{ segment.label }}</a>{% endfor %}
+  </nav>
+  {# Поиск по названию — на клиенте; без JS поле не показываем #}
+  <label class="filter-search" hidden data-authored-filter-wrap>
+    <input type="search" placeholder="Найти листок…" aria-label="Найти листок по названию" autocomplete="off" data-authored-filter>
+  </label>
+  <form method="get" data-autosubmit>
+    {% if view != 'list' %}<input type="hidden" name="view" value="{{ view }}">{% endif %}
+    {% if explicit_sheet %}<input type="hidden" name="sheet" value="{{ selected.pk }}">{% endif %}
+    <label class="sort-inline">Сортировка:
+      <select name="sort" aria-label="Сортировка листков">
+        {% for value, label in sorts %}<option value="{{ value }}"{% if value == sort %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <noscript><button class="btn btn-small" type="submit">Показать</button></noscript>
+  </form>
+</div>
+
+{% if not sheets_total %}
+<div class="card"><p class="muted">{% if section %}В этом разделе пока нет листков, которые вам видны.{% else %}Авторских листков пока нет.{% endif %}</p></div>
+{% elif view == 'table' %}
+<div class="authored-table" data-authored-browser>
+  {% for group in groups %}
+  <details class="card authored-topic" id="{{ group.anchor }}" open data-authored-group>
+    <summary class="authored-topic-head">
+      <span class="authored-topic-title">{{ group.label|default:'Все листки' }}</span>
+      <span class="muted">{{ group.sheets|length }} {{ group.sheets|length|plural_ru:'листок,листка,листков' }} · {{ group.tasks_total }} {{ group.tasks_total|plural_ru:'задача,задачи,задач' }}</span>
+      {% with ids=group.cart_task_ids %}{% if ids and ids|length <= cart_limit %}
+      <form method="post" action="{% url 'cart_add_many' %}" class="authored-topic-cart" title="Все задачи листков темы — в корзину">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        {% for task_id in ids %}<input type="hidden" name="task_ids" value="{{ task_id }}">{% endfor %}
+        <button class="btn btn-small btn-secondary" type="submit">Всё в корзину · {{ ids|length }}</button>
+      </form>
+      {% endif %}{% endwith %}
+    </summary>
+    {% for sheet in group.sheets %}
+    <div class="authored-sr" data-authored-row>
+      <div class="authored-sr-main">
+        <a class="authored-sr-title" href="{{ list_url }}{% if '?' in list_url %}&amp;{% else %}?{% endif %}sheet={{ sheet.pk }}" data-authored-title>{{ sheet.title }}</a>{% if not sheet.collection.is_published %} <span class="muted authored-private" title="Подборку видите только вы">· видна только вам</span>{% endif %}
+        {% if sheet.other_topics %}<div class="authored-also">также: {% for info in sheet.other_topics|slice:':3' %}{{ info.topic.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+        {% if sort != 'topic' and sheet.main_topic %}<div class="authored-also">{{ sheet.main_topic.label }}</div>{% endif %}
+      </div>
+      <span class="muted authored-sr-count">{{ sheet.tasks_total }} {{ sheet.tasks_total|plural_ru:'задача,задачи,задач' }}</span>
+      <span class="muted authored-sr-date">{{ sheet.month_year_short }}</span>
+      <form method="post" action="{% url 'collection_use' sheet.pk %}" class="authored-sr-use">
+        {% csrf_token %}
+        <button class="btn btn-small btn-secondary" type="submit" title="Скопировать в мои листки">Взять</button>
+      </form>
+    </div>
+    {% endfor %}
+  </details>
+  {% endfor %}
+  <p class="muted" hidden data-authored-empty>Листков с таким названием нет.</p>
+</div>
+{% else %}
+<div class="authored-md{% if explicit_sheet %} has-sheet{% endif %}" data-authored-browser>
+  <nav class="card authored-list" aria-label="Листки">
+    {% for group in groups %}
+    <section class="authored-group" id="{{ group.anchor }}" data-authored-group>
+      {% if group.label %}<h2 class="authored-grp"><span>{{ group.label }}</span><span>{{ group.sheets|length }}</span></h2>{% endif %}
+      {% for sheet in group.sheets %}
+      <a class="authored-li{% if selected.pk == sheet.pk %} is-active{% endif %}"{% if selected.pk == sheet.pk %} aria-current="true"{% endif %}
+         href="{{ sheet_query }}{% if sheet_query != '?' %}&amp;{% endif %}sheet={{ sheet.pk }}"
+         data-authored-row
+         data-preview-url="{% url 'collection_preview' sheet.pk %}"
+         data-detail-url="{% url 'collection_detail' sheet.pk %}">
+        <span class="authored-li-name" data-authored-title>{{ sheet.title }}</span>
+        <span class="authored-li-count" title="Задач в листке">{{ sheet.tasks_total }}</span>
+        <span class="authored-li-sub">{{ sheet.month_year }}{% if not sheet.collection.is_published %} · видна только вам{% endif %}</span>
+      </a>
+      {% endfor %}
+    </section>
+    {% endfor %}
+    <p class="muted" hidden data-authored-empty>Листков с таким названием нет.</p>
+  </nav>
+  <section class="card authored-pane" data-authored-pane>
+    <a class="authored-back" href="{{ list_url }}">← Все листки</a>
+    <div class="collection-view-options">
+      <label class="ws-toggle" title="Показывать ответы и решения задач">
+        <input type="checkbox" id="toggle-answers">
+        <span class="ws-toggle-slider"></span>
+        <span class="ws-toggle-text">ответы и решения</span>
+      </label>
+      <label class="ws-toggle" title="Скрыть редакторские / AI-ответы и решения: только то, что есть в листке">
+        <input type="checkbox" id="toggle-author-only" data-storage-key="collection-author-only">
+        <span class="ws-toggle-slider"></span>
+        <span class="ws-toggle-text">только авторские</span>
+      </label>
+    </div>
+    {% include 'worksheets/_authored_preview.html' %}
+  </section>
+</div>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+<script defer src="{% static 'js/answers-toggle.js' %}?v=2"></script>
+<script defer src="{% static 'js/cart.js' %}"></script>
+<script defer src="{% static 'js/authored_browser.js' %}"></script>
+{% endblock %}

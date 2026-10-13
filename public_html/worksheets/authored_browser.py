@@ -127,7 +127,9 @@ class Group:
 
     @property
     def anchor(self):
-        return f'topic-{self.topic.topic.pk}' if self.topic else 'topic-none'
+        if self.topic:
+            return f'topic-{self.topic.topic.pk}'
+        return 'topic-none' if self.label else 'sheets'
 
     @property
     def tasks_total(self):

@@ -1,0 +1,14 @@
+{# Панель действий предпросмотра авторского листка. Контекст: sheet, preview_cart_ids, next_url. Отдельный инклюд, чтобы добавлять действия (например, «Самостоятельная по образцу») в одном месте. #}
+<form method="post" action="{% url 'collection_use' sheet.pk %}">
+  {% csrf_token %}
+  <button class="btn" type="submit">Взять как листок</button>
+</form>
+{% if preview_cart_ids %}
+<form method="post" action="{% url 'cart_add_many' %}" title="Все задачи листка — в корзину">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ next_url }}">
+  {% for task_id in preview_cart_ids %}<input type="hidden" name="task_ids" value="{{ task_id }}">{% endfor %}
+  <button class="btn btn-secondary" type="submit">Всё в корзину · {{ preview_cart_ids|length }}</button>
+</form>
+{% endif %}
+<a class="authored-open-link" href="{% url 'collection_detail' sheet.pk %}">Открыть на отдельной странице ↗</a>

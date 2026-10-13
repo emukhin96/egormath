@@ -834,6 +834,9 @@ def _authored_preview_context(request, sheet, next_url):
         'number_width': max(labels or [2]),
         'wide_numbers': any(width > 3 for width in labels),
         'next_url': next_url,
+        # Фрагмент грузится отдельным запросом: без JS кнопки корзины
+        # возвращают на страницу обзора, а не на адрес фрагмента.
+        'cart_next': next_url,
         'is_owner': (collection.worksheet.owner_id == request.user.pk
                      or request.user.is_superuser),
         'corpus_key': corpus_key_from_comment(collection.worksheet.comment),
@@ -912,7 +915,10 @@ def _authored_browser(request, source, section=None):
         'sheet_query': _authored_query(view, sort) or '?',
         'list_url': base_url + _authored_query('list', sort),
         'table_url': base_url + _authored_query('table', sort),
-        'topic_query': _authored_query(view, 'topic'),
+        # Ссылки на темы в панели: при сортировке по теме — якорь на этой же
+        # странице, иначе — тот же вид с группировкой по темам.
+        'topic_query': ('' if sort == 'topic'
+                        else base_url + _authored_query(view, 'topic')),
         'cart_limit': CART_ADD_MANY_LIMIT,
     })
 
