@@ -241,8 +241,22 @@ def number_value(literal):
 
 # --- маска, которая следует за ответом ---------------------------------------
 
+def is_negative(text, start):
+    """Перед числом стоит минус (``-`` или ``−``, пробелы пропускаются)."""
+    i = start - 1
+    while i >= 0 and text[i] in ' \t\r\n':
+        i -= 1
+    return i >= 0 and text[i] in '-\u2212'
+
+
+def signed_numbers(text):
+    """Числа ответа со знаком: ``(start, end, value, negative)``."""
+    return [(start, end, value, is_negative(text, start))
+            for start, end, value in find_numbers(text)]
+
+
 def mask_numbers(mask):
-    """Числа в эталонах слотов маски: ``(start, end, value)`` в тексте маски.
+    """Числа в эталонах слотов маски: ``(start, end, value, negative)``.
 
     Берётся тело слота до опций ``| …`` и допуска ``~ …``. Слоты выбора
     (choice, order, пресеты) с цифрами делают маску «сложной» — ``None``.
@@ -269,37 +283,42 @@ def mask_numbers(mask):
                 if at >= 0:
                     cut = min(cut, at)
             for start, end, value in find_numbers(body[:cut]):
-                result.append((body_start + start, body_start + end, value))
+                result.append((body_start + start, body_start + end, value,
+                               is_negative(body, start)))
         pos = close + 2
     return result
 
 
 def _same_values(left, right):
+    """Числа со знаком совпадают по порядку: ``(…, value, negative)``."""
     return len(left) == len(right) and all(
-        number_value(a) == number_value(b) for a, b in zip(left, right))
+        number_value(a[2]) == number_value(b[2]) and a[3] == b[3]
+        for a, b in zip(left, right))
 
 
 def mask_follows_answer(mask, answer):
-    """Маска «простая»: числа её эталонов — ровно числа ответа по порядку."""
+    """Маска «простая»: числа её эталонов (со знаком) — ровно числа ответа
+    по порядку."""
     slots = mask_numbers(mask)
     if not slots:
         return False
-    return _same_values([v for _, _, v in slots],
-                        [v for _, _, v in find_numbers(answer)])
+    return _same_values(slots, signed_numbers(answer))
 
 
 def follow_mask(mask, old_answer, new_answer):
-    """Новая маска для нового ответа или ``None``, если маска не простая
-    или в новом ответе другое количество чисел."""
+    """Новая маска для нового ответа или ``None``: маска не простая, в новом
+    ответе другое количество чисел или у какого-то числа сменился знак
+    (минус бывает и бинарным — переносить его в маску вслепую нельзя)."""
     if not mask_follows_answer(mask, old_answer):
         return None
-    new_values = [v for _, _, v in find_numbers(new_answer)]
+    old = signed_numbers(old_answer)
+    new = signed_numbers(new_answer)
     slots = mask_numbers(mask)
-    if len(new_values) != len(slots):
+    if len(new) != len(slots) or any(a[3] != b[3] for a, b in zip(old, new)):
         return None
     parts = []
     pos = 0
-    for (start, end, _), value in zip(slots, new_values):
+    for (start, end, _, _), (_, _, value, _) in zip(slots, new):
         parts.append(mask[pos:start])
         # В маске десятичная запятая без фигурных скобок
         parts.append(value.replace('{,}', ','))

@@ -12,7 +12,6 @@ import json
 
 from django import forms
 from django.conf import settings
-from django.contrib import messages
 from django.core.validators import FileExtensionValidator
 from django.db import transaction
 from django.db.models import Q
@@ -90,7 +89,7 @@ def _owner_data(owner, key, title):
         'answer_source': 'author' if (owner.author_answer_latex or '').strip() else 'editor',
         'mask': mask,
         'mask_follows': follows,
-        'mask_slots': json.dumps([[start, end] for start, end, _ in mask_numbers(mask)]
+        'mask_slots': json.dumps([[start, end] for start, end, _, _ in mask_numbers(mask)]
                                  if follows else []),
         'has_solution': bool(owner.effective_solution_latex),
     }
@@ -326,11 +325,9 @@ def task_clone(request, pk):
     except CloneError as error:
         return JsonResponse({'ok': False, 'errors': [str(error)]}, status=400)
     url = reverse('task_detail', args=[copy.pk])
+    # Об успехе сообщает тост диалога (и после перезагрузки страницы тоже):
+    # flash-сообщения копились бы при «Сохранить и ещё клон».
     reload = item is not None or position is not None
-    if item is not None:
-        messages.success(request, f'Клон #{copy.pk} добавлен после задачи #{task.pk}.')
-    elif position is not None:
-        messages.success(request, f'Клон #{copy.pk} добавлен в номер.')
     return JsonResponse({'ok': True, 'task_id': copy.pk, 'url': url, 'reload': reload,
                          'item_id': row.pk if row else None,
                          'message': f'Клон #{copy.pk} сохранён'})

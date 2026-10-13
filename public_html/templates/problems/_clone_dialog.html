@@ -50,7 +50,7 @@
           <div class="qclone-pic-opts">
             <label><input type="radio" name="image-{{ entry.image.pk }}" value="keep" checked> Оставить рисунок</label>
             <label><input type="radio" name="image-{{ entry.image.pk }}" value="replace"> Заменить: загрузить файл</label>
-            <input type="file" name="image-{{ entry.image.pk }}-file" accept="image/*" data-pic-file hidden>
+            <input type="file" name="image-{{ entry.image.pk }}-file" accept="image/png,image/jpeg,application/pdf,.pdf" data-pic-file hidden>
             <label><input type="radio" name="image-{{ entry.image.pk }}" value="remove"> Убрать рисунок</label>
             {% if entry.referenced %}<span class="qclone-check" data-pic-warn hidden>В условии есть ссылка \taskpic{{ '{' }}{{ entry.number }}}: она будет удалена, ссылки на следующие рисунки перенумеруются.</span>{% endif %}
           </div>

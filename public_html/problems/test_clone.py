@@ -118,6 +118,18 @@ class MaskFollowTests(SimpleTestCase):
         self.assertEqual(follow_mask('{{number: 3,14 ~ 0,01}}', '$3{,}14$', '$2{,}72$'),
                          '{{number: 2,72 ~ 0,01}}')
 
+    def test_sign_change_breaks_follow(self):
+        # Ответ −3 → 5: в маске не должно остаться «−5»
+        self.assertTrue(mask_follows_answer('{{number: -3}}', '$-3$'))
+        self.assertIsNone(follow_mask('{{number: -3}}', '$-3$', '$5$'))
+        self.assertIsNone(follow_mask('{{number: 2}}', '$2$', '$-2$'))
+        self.assertIsNone(follow_mask('{{set: -1; 1}}', '$-1; 1$', '$1; -1$'))
+        self.assertEqual(follow_mask('{{number: -3}}', '$-3$', '$-7$'), '{{number: -7}}')
+        self.assertEqual(follow_mask('{{number: -3}}', '$−3$', '$ − 4$'), '{{number: -4}}')
+        # Знак маски и ответа расходятся — маска не «простая»
+        self.assertFalse(mask_follows_answer('{{number: 3}}', '$-3$'))
+        self.assertFalse(mask_follows_answer('{{number: -3}}', '$3$'))
+
     def test_complex_masks_do_not_follow(self):
         self.assertFalse(mask_follows_answer('{{choice: 1|*2}}', '2'))
         self.assertFalse(mask_follows_answer('{{number: 8}}', '$9$'))
@@ -207,6 +219,10 @@ class CloneViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('Маска', response.json()['errors'][0])
         self.assertEqual(Task.objects.count(), before)
+        # Знак сменился — сервер не пересчитывает маску, берёт присланную
+        response = self.client.post(self.url, self.data(**{
+            'task-answer': '$2; 3$', 'task-mask': '{{set: 2; 3}}'}))
+        self.assertEqual(Task.objects.get(pk=response.json()['task_id']).answer_mask, '{{set: 2; 3}}')
         # Число чисел в ответе изменилось — простая маска не пересчитывается
         response = self.client.post(self.url, self.data(**{
             'task-answer': '$1$', 'task-mask': '{{number: 1}}'}))
@@ -237,7 +253,8 @@ class CloneViewTests(TestCase):
         self.assertEqual(list(rows[1].subitems.values_list('text_latex', flat=True)),
                          ['Найдите сумму корней, увеличенную на 6'])
         detail = self.client.get(reverse('worksheet_detail', args=[ws.pk]))
-        self.assertContains(detail, f'Клон #{payload["task_id"]} добавлен')
+        # Успех показывает тост диалога, flash-плашки не копятся
+        self.assertNotContains(detail, 'ws-toast-src')
         self.assertContains(detail, 'клон рядом')
 
     def test_next_clones_follow_previous_clone(self):
@@ -338,7 +355,7 @@ class CloneImageTests(TestCase):
         response = self.client.get(self.url)
         self.assertContains(response, 'Проверьте, что числа на рисунке согласованы с условием')
         self.assertContains(response, 'data-pic-warn', count=3)
-        self.assertContains(response, 'accept="image/*"', count=3)
+        self.assertContains(response, 'accept="image/png,image/jpeg,application/pdf,.pdf"', count=3)
 
     def test_keep_replace_remove(self):
         first, second, third = self.images

@@ -141,6 +141,21 @@
     return found;
   }
 
+  // Минус перед числом (как clone_numbers.is_negative): знак у маски «за
+  // ответом» должен совпадать, иначе маску правят вручную.
+  function isNegative(text, start) {
+    var i = start - 1;
+    while (i >= 0 && ' \t\r\n'.indexOf(text[i]) >= 0) i--;
+    return i >= 0 && (text[i] === '-' || text[i] === '\u2212');
+  }
+
+  function signedNumbers(text) {
+    return findNumbers(text).map(function (n) {
+      n.negative = isNegative(text || '', n.start);
+      return n;
+    });
+  }
+
   // --- вид исходного LaTeX в поле условия (только показ) -------------------
   var PRETTY = [
     [/\\(?:displaystyle|textstyle|left|right|bigl|bigr|Bigl|Bigr)(?![A-Za-z])\s*/g, ''],
@@ -170,7 +185,8 @@
   // --- диалог ----------------------------------------------------------------
   var dialog = null;
   // after — строка листка, после которой встанет следующий клон
-  var state = {url: '', dirty: false, reload: false, saved: '', after: null};
+  var state = {url: '', dirty: false, reload: false, saved: '', after: null, count: 0};
+  var TOAST_KEY = 'egorCloneToast';
   var previewTimer = null;
   var toastTimer = null;
 
@@ -182,12 +198,19 @@
     document.body.appendChild(dialog);
     dialog.addEventListener('close', function () {
       dialog.innerHTML = '';
-      if (state.dirty && state.reload) window.location.reload();
+      if (state.dirty && state.reload) reloadWithToast();
     });
     dialog.addEventListener('click', function (e) {
       if (e.target.closest('[data-qclone-close]')) dialog.close();
     });
     return dialog;
+  }
+
+  // Тост переживает перезагрузку страницы (листок, самостоятельная)
+  function reloadWithToast() {
+    var message = state.count > 1 ? 'Сохранено клонов: ' + state.count : state.lastMessage;
+    try { window.sessionStorage.setItem(TOAST_KEY, message || ''); } catch (e) { /* без тоста */ }
+    window.location.reload();
   }
 
   function toast(ok, message, url) {
@@ -225,7 +248,7 @@
 
   function open(url) {
     ensureDialog();
-    state = {url: url, dirty: false, reload: false, saved: '', after: null};
+    state = {url: url, dirty: false, reload: false, saved: '', after: null, count: 0};
     load().catch(function () { toast(false, 'Не удалось открыть клон задачи'); });
   }
 
@@ -269,8 +292,10 @@
     if (was) was.hidden = !changed;
     if (field.dataset.follows === '1' && field.dataset.manual !== '1') {
       var slots = JSON.parse(field.dataset.maskSlots || '[]');
-      var numbers = findNumbers(answer.value);
-      if (numbers.length === slots.length) {
+      var numbers = signedNumbers(answer.value);
+      var old = signedNumbers(answer.defaultValue);
+      var signChanged = numbers.some(function (n, i) { return old[i] && old[i].negative !== n.negative; });
+      if (numbers.length === slots.length && !signChanged) {
         var mask = substituteSlots(textarea.defaultValue, slots, numbers);
         textarea.value = mask;
         view.querySelector('[data-mask-text]').textContent = mask;
@@ -284,7 +309,9 @@
       view.hidden = true;
       textarea.hidden = false;
       textarea.value = textarea.defaultValue;
-      check.textContent = 'Проверьте маску: в новом ответе другое количество чисел.';
+      check.textContent = signChanged && numbers.length === slots.length
+        ? 'Проверьте маску: у числа в ответе сменился знак.'
+        : 'Проверьте маску: в новом ответе другое количество чисел.';
       check.hidden = false;
       return;
     }
@@ -387,6 +414,8 @@
         }
         state.dirty = true;
         state.reload = !!data.reload;
+        state.count += 1;
+        state.lastMessage = data.message;
         if (again) {
           if (data.item_id) state.after = data.item_id;
           state.saved = data.message + ' ✓ Можно делать следующий.';
@@ -394,7 +423,7 @@
         }
         if (data.reload) {
           state.dirty = false;
-          window.location.reload();
+          reloadWithToast();
           return;
         }
         dialog.close();
@@ -496,6 +525,15 @@
     renderMath(form.querySelector('[data-student]'));
   }
 
+  document.addEventListener('DOMContentLoaded', function () {
+    var message = null;
+    try {
+      message = window.sessionStorage.getItem(TOAST_KEY);
+      window.sessionStorage.removeItem(TOAST_KEY);
+    } catch (e) { /* хранилище недоступно */ }
+    if (message) toast(true, message);
+  });
+
   document.addEventListener('click', function (e) {
     var button = e.target.closest('[data-quick-clone]');
     if (!button) return;
@@ -503,5 +541,5 @@
     open(button.dataset.quickClone);
   });
 
-  window.EgorClone = {open: open, findNumbers: findNumbers};
+  window.EgorClone = {open: open, findNumbers: findNumbers, signedNumbers: signedNumbers};
 })();
