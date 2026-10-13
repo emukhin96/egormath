@@ -1,7 +1,7 @@
 {% extends 'independentworks/base.html' %}
 {% load task_extras %}
 {% block content %}
-<div class="page-head"><div><span class="page-eyebrow">Состав из источника</span><h1>{{ form.title.value }}</h1><p>{{ collection.worksheet.title }} · варианты {{ pair }}–{{ pair|add:1 }}</p></div></div>
+<div class="page-head"><div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'independentworks:catalog' %}">Самостоятельные</a><a href="{% url 'independentworks:create' %}">Новая самостоятельная</a></nav><h1>{{ form.title.value }}</h1><p class="page-meta"><span>{{ collection.worksheet.title }}</span><span>варианты {{ pair }}–{{ pair|add:1 }}</span><span>{{ source_rows|length }} {{ source_rows|length|plural_ru:'номер,номера,номеров' }}</span></p></div></div>
 {% for row in source_rows %}
 <section class="card form-section"><h2>Исходный №{{ row.number }}</h2>
 {% if row.incomplete %}<p class="msg msg-warning">Импортирован один кандидат. Парная задача пока отсутствует.</p>{% endif %}

@@ -58,11 +58,9 @@
 {% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><span class="page-eyebrow">PDF · {{ variant_label }}</span>
+  <div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a><span>PDF</span></nav>
     <h1>{{ worksheet.title }}</h1>
-    <p class="page-subtitle">Первая версия собирается автоматически. После
-      правки tex-кода или настроек запустите повторную сборку вручную.
-      Изменения кода не сохраняются в листок.</p>
+    <p class="page-meta"><span>PDF · {{ variant_label }}</span><span>первая версия собирается автоматически, после правки кода или настроек — «Собрать PDF»; код в листок не сохраняется</span></p>
   </div>
 </div>
 

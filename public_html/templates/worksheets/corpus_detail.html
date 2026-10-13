@@ -18,9 +18,9 @@
 {% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><span class="page-eyebrow">Сверка</span>
+  <div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_corpus_list' %}">Сверка корпуса</a></nav>
     <h1>{{ draft.title|default:draft.id }}{% if draft.title_origin == 'proposed' %} <span class="badge badge-submitted corpus-title-flag">заголовок предложен</span>{% elif draft.title_origin == 'filename' %} <span class="badge badge-submitted corpus-title-flag">заголовок из имени файла</span>{% endif %}</h1>
-    <p class="page-subtitle">Статус: <span data-corpus-draft-status>{{ status_label }}</span>{% if draft.warnings %} · {{ draft.warnings|join:'; ' }}{% endif %}</p>
+    <p class="page-meta"><span>статус: <span data-corpus-draft-status>{{ status_label }}</span></span>{% if draft.warnings %}<span>{{ draft.warnings|join:'; ' }}</span>{% endif %}</p>
   </div>
 </div>
 {% if draft.warnings %}<div class="msg msg-warning"><strong>Требует внимания:</strong> {{ draft.warnings|join:'; ' }}</div>{% endif %}

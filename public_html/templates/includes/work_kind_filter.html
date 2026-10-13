@@ -1,12 +1,9 @@
-<form method="get" class="card filter-card">
-  <div class="filters">
-    <div>
-      <select name="kind" id="work-kind" aria-label="Вид работы">
-        <option value="">Все работы</option>
-        <option value="ordinary"{% if kind == 'ordinary' %} selected{% endif %}>Обычные задания</option>
-        <option value="independent"{% if kind == 'independent' %} selected{% endif %}>Самостоятельные</option>
-      </select>
-    </div>
-    <div class="filter-actions"><button class="btn btn-secondary">Применить</button></div>
-  </div>
-</form>
+{% load page_tools %}
+{# Вид работы в кабинете ученика: сегменты-ссылки ?kind=, без кнопки «Применить» #}
+<div class="page-toolbar">
+  <nav class="seg" aria-label="Вид работы">
+    <a class="seg-item{% if not kind %} is-active{% endif %}" href="{% query_set kind=None %}"{% if not kind %} aria-current="true"{% endif %}>Все работы</a>
+    <a class="seg-item{% if kind == 'ordinary' %} is-active{% endif %}" href="{% query_set kind='ordinary' %}"{% if kind == 'ordinary' %} aria-current="true"{% endif %}>Задания</a>
+    <a class="seg-item{% if kind == 'independent' %} is-active{% endif %}" href="{% query_set kind='independent' %}"{% if kind == 'independent' %} aria-current="true"{% endif %}>Самостоятельные</a>
+  </nav>
+</div>

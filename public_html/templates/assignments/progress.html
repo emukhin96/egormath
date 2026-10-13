@@ -1,11 +1,17 @@
-{% extends 'base.html' %}{% load static livefile %}
+{% extends 'base.html' %}{% load static livefile task_extras %}
 {% block title %}Прогресс · {{ worksheet.title }}{% endblock %}
 {% block content %}
-<h1>{{ worksheet.title }} · прогресс</h1>
-<div class="progress-head">
-  <form method="get" class="progress-filters"><label for="progress-group">Группа</label><select id="progress-group" name="group"><option value="">Все назначенные ученики</option>{% for group in groups %}<option value="{{ group.pk }}" {% if group.pk|stringformat:'s' == group_id %}selected{% endif %}>{{ group.name }}</option>{% endfor %}</select><button class="btn btn-secondary">Показать</button></form>
-  {% if canvas_enabled %}<a class="btn" href="{% url 'worksheet_boards' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">Доски всех учеников</a>{% include 'canvas/_toggle.html' %}{% endif %}
-  <a class="progress-back" href="{% url 'worksheet_detail' worksheet.pk %}">Вернуться в листок</a>
+<div class="page-head">
+  <div>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a></nav>
+    <h1>Прогресс учеников</h1>
+    <p class="page-meta"><span>{{ people|length }} {{ people|length|plural_ru:'ученик,ученика,учеников' }}</span><span>{{ items|length }} {{ items|length|plural_ru:'задача,задачи,задач' }}</span></p>
+  </div>
+  {% if canvas_enabled %}<div class="page-actions"><a class="btn" href="{% url 'worksheet_boards' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">Доски всех учеников</a></div>{% endif %}
+</div>
+<div class="page-toolbar progress-head">
+  {% include 'assignments/_group_filter.html' with current=group_id all_label='Все назначенные' %}
+  {% if canvas_enabled %}{% include 'canvas/_toggle.html' %}{% endif %}
 </div>
 <p class="progress-legend"><span data-live-status role="status">Обновляется каждые 5 секунд, до отправки работы; нажмите ячейку для подробностей.</span><span>✓ — верно с первой</span><span>✓₂ — верно со второй</span><span>×₂ — неверно после двух</span><span>… — введено, не проверено</span><span>— не начато / не назначено</span></p><div data-progress-table data-live-file="{% live_file 'worksheet' worksheet.pk %}">{% include 'assignments/_progress_table.html' %}</div>
 {% include 'assignments/_progress_dialog.html' %}

@@ -1,11 +1,12 @@
 {% load task_extras %}
 <div id="task-form" data-problem-editor data-task-id="{{ task.pk }}" data-manage-url="{% url 'task_manage' task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}">
   <div class="page-head">
-    <div><h1>Задача #{{ task.pk }}</h1>
-      {% if task.variant_of_id %}<span class="badge badge-returned">Локальная копия #{{ task.variant_of_id }}</span>{% endif %}
-      {% if worksheet %}<a href="{% url 'worksheet_detail' worksheet.pk %}">Вернуться в листок «{{ worksheet.title }}»</a>{% endif %}
+    <div>
+      <nav class="page-crumbs" aria-label="Путь">{% if worksheet %}<a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}" title="Вернуться в листок «{{ worksheet.title }}»">{{ worksheet.title }}</a>{% else %}<a href="{% url 'task_list' %}">База задач</a>{% endif %}</nav>
+      <h1>Задача #{{ task.pk }}</h1>
+      <p class="page-meta">{% if task.grade_display %}<span>{{ task.grade_display }} класс</span>{% endif %}{% for ref in task.source_refs.all %}<span>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}</span>{% endfor %}<span>изменена {{ task.updated_at|date:'d.m.Y' }}</span>{% if task.variant_of_id %}<span class="badge badge-returned">Локальная копия #{{ task.variant_of_id }}</span>{% endif %}</p>
     </div>
-    <div class="form-buttons">
+    <div class="form-buttons page-actions">
       {% if not task.variant_of_id %}{% include 'includes/cart_button.html' with task=task %}{% endif %}
       <button type="button" class="btn btn-secondary" data-editor-ai="answer">Дописать AI-ответ</button>
       <button type="button" class="btn btn-secondary" data-editor-ai="solution">Добавить AI-решение</button>

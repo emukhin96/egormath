@@ -3,9 +3,10 @@
 {% block title %}Подготовка задач — Математика{% endblock %}
 {% block extra_head %}<script defer src="{% static 'js/textbook_import_preparing.js' %}"></script>{% endblock %}
 {% block content %}
-<section class="card">
+<div class="page-head"><div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'textbook_import_list' %}">Импорт задачников</a><a href="{% url 'textbook_import_detail' batch.pk %}">{{ batch.title }}</a></nav>
   <h1>{% if masks_only %}Подбор масок ответов{% else %}Подготовка задач к загрузке{% endif %}</h1>
-  <p>{{ batch.title }}</p>
+  <p class="page-meta"><span>осталось задач: {{ remaining }}</span></p></div></div>
+<section class="card">
   <p>Подбираем маски ответов. Осталось задач: {{ remaining }}.</p>
   <p class="helptext">{% if masks_only %}Подбор продолжится автоматически. Не закрывайте страницу. Если процесс прервался, снова нажмите «Подобрать маски» в партии — готовые маски сохранятся.{% else %}Загрузка продолжится автоматически. Не закрывайте страницу. Если процесс прервался, снова нажмите загрузку в партии — подготовленные маски сохранятся.{% endif %}</p>
   <form method="post" action="{{ action_url }}" id="import-prepare-form">

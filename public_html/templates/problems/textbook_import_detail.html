@@ -4,11 +4,10 @@
 {% block title %}{{ batch.title }} — Математика{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><span class="page-eyebrow">Партия импорта</span><h1>{{ batch.title }}</h1>
-    <p class="page-subtitle">{{ batch.source }} · {{ batch.get_status_display }} · {{ batch.drafts.count }} задач</p></div>
-  <div class="form-buttons">
+  <div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">База задач</a><a href="{% url 'textbook_import_list' %}">Импорт задачников</a></nav><h1>{{ batch.title }}</h1>
+    <p class="page-meta"><span>{{ batch.source }}</span><span>{{ batch.get_status_display }}</span>{% with total=batch.drafts.count %}<span>{{ total }} {{ total|plural_ru:'задача,задачи,задач' }}</span>{% endwith %}<span>{{ batch.created_at|date:'d.m.Y' }}</span></p></div>
+  <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'textbook_import_help' %}">Инструкция</a>
-    <a class="btn btn-secondary" href="{% url 'textbook_import_list' %}">Все партии</a>
   </div>
 </div>
 {% if batch.diagnostics.missing_task_ids or batch.diagnostics.paragraphs_without_structure %}

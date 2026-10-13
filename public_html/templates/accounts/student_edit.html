@@ -3,10 +3,11 @@
 {% block sidebar %}{% include 'includes/sidebar/student_edit.html' %}{% endblock %}
 {% block content %}
 <div class="page-head"><div>
-  <h1>{{ profile.user.get_full_name }}</h1>
+  <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'students' %}">Ученики</a><span>Карточка ученика</span></nav>
+  <h1>{{ profile.user.get_full_name|default:profile.user.username }}</h1>
+  <p class="page-meta"><span>логин <span class="mono">{{ profile.user.username }}</span></span>{% if profile.grade %}<span>{{ profile.grade }} класс</span>{% endif %}</p>
 </div></div>
 <div class="card">
-  <p class="task-meta">Логин: <span class="mono">{{ profile.user.username }}</span></p>
   <form method="post">
     {% csrf_token %}
     {{ form.as_p }}

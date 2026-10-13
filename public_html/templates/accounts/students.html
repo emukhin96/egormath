@@ -1,11 +1,19 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static page_tools task_extras %}
 {% block title %}Ученики — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/students.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>{% if request.user.is_superuser %}Все ученики{% else %}Мои ученики{% endif %}</h1>
+    <p class="page-meta">
+      <span>{{ student_profiles|length }} {{ student_profiles|length|plural_ru:'ученик,ученика,учеников' }}</span>
+      {% if groups %}<span>{{ groups|length }} {{ groups|length|plural_ru:'группа,группы,групп' }}</span>{% endif %}
+      {% if current_group %}<span>группа «{{ current_group.name }}»</span>{% elif group_filter == 'ungrouped' %}<span>без группы</span>{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-secondary" href="{% url 'progress_overview' %}{% if current_group %}?group={{ current_group.pk }}{% endif %}">Прогресс{% if current_group %} группы{% else %} учеников{% endif %}</a>
   </div>
 </div>
 
@@ -31,42 +39,48 @@
   {% if form.errors %}<div class="errorlist">{{ form.errors }}</div>{% endif %}
 </div>
 
-<form method="get" class="card filter-card">
-  <div class="filters">
-    <div class="filter-search">
-      <label for="student-q">Поиск</label>
-      <input type="search" name="q" id="student-q" value="{{ q }}"
-             placeholder="Имя, фамилия или логин">
-    </div>
-    {% if request.user.is_superuser %}
-    <div>
-      <label for="student-teacher">Учитель</label>
-      <select name="teacher" id="student-teacher">
-        <option value="">Все учителя</option>
-        {% for teacher in teacher_choices %}
-        <option value="{{ teacher.pk }}"{% if teacher_filter == teacher.pk|stringformat:'s' %} selected{% endif %}>{{ teacher.get_full_name|default:teacher.username }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    {% endif %}
-    <div>
-      <label for="student-group">Группа</label>
-      <select name="group" id="student-group">
-        <option value="">Все группы</option>
-        <option value="ungrouped"{% if group_filter == 'ungrouped' %} selected{% endif %}>Без группы</option>
-        {% for group in groups %}
-        <option value="{{ group.pk }}"{% if current_group == group %} selected{% endif %}>{{ group.name }}{% if request.user.is_superuser %} — {{ group.teacher.get_full_name|default:group.teacher.username }}{% endif %}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="filter-actions"><button type="submit" class="btn">Применить</button>{% if q or group_filter or teacher_filter %}<a class="filter-reset" href="{% url 'students' %}">Сбросить</a>{% endif %}</div>
+{# Группа — сегменты-ссылки (если групп немного), поиск и учитель — автоотправка формы #}
+<form method="get" class="page-toolbar" data-autosubmit>
+  {% if groups|length <= 6 %}
+  <nav class="seg" aria-label="Группа">
+    <a class="seg-item{% if not group_filter %} is-active{% endif %}" href="{% query_set group=None %}"{% if not group_filter %} aria-current="true"{% endif %}>Все</a>
+    {% for group in groups %}<a class="seg-item{% if current_group == group %} is-active{% endif %}" href="{% query_set group=group.pk %}"{% if current_group == group %} aria-current="true"{% endif %}>{{ group.name }}</a>{% endfor %}
+    <a class="seg-item{% if group_filter == 'ungrouped' %} is-active{% endif %}" href="{% query_set group='ungrouped' %}"{% if group_filter == 'ungrouped' %} aria-current="true"{% endif %}>Без группы</a>
+  </nav>
+  {% if group_filter %}<input type="hidden" name="group" value="{{ group_filter }}">{% endif %}
+  {% else %}
+  <label class="sort-inline filter-inline" for="student-group">Группа:
+    <select name="group" id="student-group">
+      <option value="">все</option>
+      <option value="ungrouped"{% if group_filter == 'ungrouped' %} selected{% endif %}>без группы</option>
+      {% for group in groups %}
+      <option value="{{ group.pk }}"{% if current_group == group %} selected{% endif %}>{{ group.name }}{% if request.user.is_superuser %} — {{ group.teacher.get_full_name|default:group.teacher.username }}{% endif %}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <div class="filter-search">
+    <input type="search" name="q" id="student-q" value="{{ q }}"
+           placeholder="Имя, фамилия или логин" aria-label="Поиск учеников">
   </div>
+  {% if q or group_filter or teacher_filter %}<a class="filter-reset" href="{% url 'students' %}">Сбросить</a>{% endif %}
+  {% if request.user.is_superuser %}
+  <label class="sort-inline" for="student-teacher">Учитель:
+    <select name="teacher" id="student-teacher">
+      <option value="">все</option>
+      {% for teacher in teacher_choices %}
+      <option value="{{ teacher.pk }}"{% if teacher_filter == teacher.pk|stringformat:'s' %} selected{% endif %}>{{ teacher.get_full_name|default:teacher.username }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <noscript><button type="submit" class="btn btn-small">Показать</button></noscript>
 </form>
 
 <div class="card">
   <div class="card-head">
     <div><h2>Список{% if current_group %}: {{ current_group.name }}{% elif group_filter == 'ungrouped' %}: без группы{% endif %}</h2></div>
-    <a href="{% url 'progress_overview' %}{% if current_group %}?group={{ current_group.pk }}{% endif %}">Прогресс{% if current_group %} группы{% else %} учеников{% endif %} →</a><span class="counter">{{ student_profiles|length }}</span>
+    <span class="counter">{{ student_profiles|length }}</span>
   </div>
   {% if student_profiles %}
   <form id="students-bulk-form" method="post" action="{% url 'students_bulk_groups' %}"
