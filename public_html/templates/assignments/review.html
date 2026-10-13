@@ -3,14 +3,14 @@
 {% block title %}Проверка: {{ assignment.worksheet.title }} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/review.html' %}{% endblock %}
 {% block content %}
-<div class="page-head"><div><span class="page-eyebrow">Работа ученика</span>
+<div class="page-head"><div>
+<nav class="page-crumbs" aria-label="Путь"><a href="{% url 'assignment_list' %}?kind=ordinary">Задания</a><a href="{% url 'worksheet_progress' assignment.worksheet.pk %}">{{ assignment.worksheet.title }}</a></nav>
 <h1>Проверка работы</h1>
-<p class="page-subtitle">
-  {{ assignment.worksheet.title }} ·
-  {{ assignment.student.get_full_name|default:assignment.student.username }}
-  {% if request.user.is_superuser %}· владелец {{ assignment.worksheet.owner.get_full_name|default:assignment.worksheet.owner.username }}{% endif %}
-  · отправлено {{ assignment.submitted_at|date:'d.m.Y H:i' }}
-  · <span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span>
+<p class="page-meta">
+  <span>{{ assignment.student.get_full_name|default:assignment.student.username }}</span>
+  {% if request.user.is_superuser %}<span>владелец {{ assignment.worksheet.owner.get_full_name|default:assignment.worksheet.owner.username }}</span>{% endif %}
+  {% if assignment.submitted_at %}<span>отправлено {{ assignment.submitted_at|date:'d.m.Y H:i' }}</span>{% endif %}
+  <span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span>
 </p>
 </div></div>
 

@@ -47,7 +47,7 @@ class BuilderTests(TestCase):
         self.assertContains(response, 'data-save-draft-before-leave')
         self.assertContains(response, 'name="action" value="preview"', count=2)
         self.assertContains(response, 'name="action" value="draft"')
-        self.assertContains(response, 'class="page-back-link"')
+        self.assertContains(response, 'class="page-crumbs"')
         self.assertContains(response, 'class="summary-work"')
         self.assertContains(response, 'class="form-buttons summary-actions"')
         self.assertNotContains(response, 'Независимый шаблон самостоятельной.')

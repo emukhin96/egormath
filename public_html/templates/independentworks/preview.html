@@ -1,7 +1,7 @@
 {% extends 'independentworks/base.html' %}
 {% load task_extras %}
 {% block content %}
-<div class="page-head"><div><h1>{{ run.title }} · перед выдачей</h1><p>{{ recipients|length }} учеников · {{ variants|length }} вариантов · {{ run.duration }} мин.</p><p class="page-subtitle"><a href="{% url 'independentworks:edit' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">← К кандидатам по номерам</a></p></div></div>
+<div class="page-head"><div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'independentworks:catalog' %}">Самостоятельные</a><a href="{% url 'independentworks:edit' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Кандидаты по номерам</a></nav><h1>{{ run.title }} · перед выдачей</h1><p class="page-meta"><span>{{ recipients|length }} {{ recipients|length|plural_ru:'ученик,ученика,учеников' }}</span><span>{{ variants|length }} {{ variants|length|plural_ru:'вариант,варианта,вариантов' }}</span><span>{{ run.duration }} мин.</span></p></div></div>
 {% if run.superseded_at %}<p class="msg msg-warning">Этот предпросмотр заменён новым. Выдача из него недоступна; откройте актуальный предпросмотр.</p>{% endif %}
 {% if run.plan.shortage or run.plan.repeats %}<p class="msg msg-warning">Есть повторные варианты или ранее выданные пункты. Проверьте распределение и состав ниже.</p>{% endif %}
 <div class="iw-preview-layout"><div class="iw-preview-document">

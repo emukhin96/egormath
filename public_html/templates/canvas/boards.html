@@ -1,10 +1,14 @@
 {% extends 'base.html' %}{% load static livefile %}
 {% block title %}Доски · {{ worksheet.title }}{% endblock %}
 {% block content %}
-<h1>{{ worksheet.title }} · доски</h1>
-<div class="progress-head">
-  <form method="get" class="progress-filters"><label for="boards-group">Группа</label><select id="boards-group" name="group"><option value="">Все назначенные ученики</option>{% for g in groups %}<option value="{{ g.pk }}" {% if g.pk|stringformat:'s' == group_id %}selected{% endif %}>{{ g.name }}</option>{% endfor %}</select>{% if task_id %}<input type="hidden" name="task" value="{{ task_id }}">{% endif %}<button class="btn btn-secondary">Показать</button></form>
-  <a class="progress-back" href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">Вернуться к прогрессу</a>
+<div class="page-head">
+  <div>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a><a href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">Прогресс учеников</a></nav>
+    <h1>Доски учеников</h1>
+  </div>
+</div>
+<div class="page-toolbar progress-head">
+  {% include 'assignments/_group_filter.html' with current=group_id all_label='Все назначенные' %}
 </div>
 <p class="boards-tasks" data-boards-tasks><span class="boards-tasks-label" id="boards-tasks-label">Задача</span>
   <a class="btn btn-small btn-secondary" href="?{% if group_id %}group={{ group_id }}{% endif %}"{% if not task_id %} aria-current="page"{% endif %} title="У каждого ученика — последняя изменённая доска">Последняя</a>
