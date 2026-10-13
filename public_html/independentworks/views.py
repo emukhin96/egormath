@@ -81,10 +81,14 @@ def catalog(request):
 def create(request):
     form = WorkForm(request.POST or None, initial={'title': request.GET.get('title', '')})
     sheets = Worksheet.visible_to(request.user).order_by('-updated_at')
-    collections = Collection.objects.select_related('worksheet').filter(is_published=True).order_by('source_id', 'order')
+    # Опубликованные подборки — всем учителям, неопубликованные — автору
+    # (как на странице подборки: «Самостоятельная по образцу» ведёт сюда)
+    collections = Collection.objects.select_related('worksheet').order_by('source_id', 'order')
+    if not request.user.is_superuser:
+        collections = collections.filter(Q(is_published=True) | Q(worksheet__owner=request.user))
     selected_sheet = request.GET.get('worksheet', '')
     if request.method == 'POST' and form.is_valid():
-        from .preparation import ziv_rows, selection_fingerprint, from_worksheet
+        from .preparation import is_ziv_collection, ziv_rows, selection_fingerprint, from_worksheet
         sheet_id = request.POST.get('worksheet')
         collection_id = request.POST.get('collection')
         source_mode = request.POST.get('source_mode')
@@ -105,11 +109,7 @@ def create(request):
         if collection_id:
             collection = get_object_or_404(collections, pk=collection_id)
             sheet = collection.worksheet
-            from .analogs import ZIV
-            from problems.models import TaskSource
-            is_ziv = any(ZIV.fullmatch(r or '') for r in TaskSource.objects.filter(
-                source=collection.source, task_id__in=sheet.ordered_items().values('task_id')).values_list('locator', flat=True))
-            if is_ziv:
+            if is_ziv_collection(collection):
                 try:
                     pair = int(request.POST.get('pair', '1'))
                 except ValueError:

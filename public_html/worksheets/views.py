@@ -830,8 +830,11 @@ def collection_to_independent(request, pk):
 
     Доступ — по видимости подборки (опубликована, своя, суперпользователь),
     а не ``Worksheet.visible_to``: чужую опубликованную подборку тоже можно
-    взять образцом. Состав собирает тот же ``preparation.from_worksheet``,
-    что и «Создать самостоятельную» из листка.
+    взять образцом. Обычную подборку копирует тот же
+    ``preparation.from_worksheet``, что и «Создать самостоятельную» из
+    листка. Подборку Зива (варианты 1–8) — в мастер создания: там
+    выбирают пару вариантов, номера собираются пулами из пары
+    (``ziv_rows``) и состав подтверждается по предпросмотру.
     """
     if not settings.INDEPENDENT_WORKS_ENABLED:
         raise Http404
@@ -840,7 +843,12 @@ def collection_to_independent(request, pk):
             deleted_at__isnull=True, task__isnull=False).exists():
         messages.error(request, 'В подборке нет задач для самостоятельной.')
         return redirect('collection_detail', pk=collection.pk)
-    from independentworks.preparation import from_worksheet
+    from independentworks.preparation import from_worksheet, is_ziv_collection
+    if is_ziv_collection(collection):
+        from urllib.parse import urlencode
+        return redirect(reverse('independentworks:create') + '?' + urlencode({
+            'source_mode': 'collection', 'collection': collection.pk,
+            'pair': 1, 'title': collection.worksheet.title}))
     with transaction.atomic():
         work = from_worksheet(collection.worksheet, request.user,
                               collection.worksheet.title)

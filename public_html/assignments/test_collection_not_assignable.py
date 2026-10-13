@@ -8,7 +8,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from independentworks.models import Candidate, Work
-from problems.models import Source, Task
+from problems.models import Source, Task, TaskSource
 from problems.tests import make_student, make_teacher
 from worksheets.models import Collection, Worksheet, WorksheetItem
 
@@ -143,6 +143,48 @@ class CollectionToIndependentTests(TestCase):
         edit = self.client.get(response.url)
         self.assertContains(edit, reverse('collection_detail', args=[self.collection.pk]))
         self.assertNotContains(edit, reverse('worksheet_detail', args=[self.sheet.pk]))
+
+    def test_ziv_collection_goes_through_pair_preview(self):
+        """Подборка Зива: не номер на каждую задачу, а пары вариантов
+        в пулы — через мастер создания с предпросмотром."""
+        self.sheet.items.all().delete()
+        for variant in range(1, 5):
+            WorksheetItem.objects.create(worksheet=self.sheet, rubric=f'Вариант {variant}',
+                                         order=variant * 10)
+            for number in (1, 2):
+                task = Task.objects.create(text_latex=f'Задача {variant}/{number}')
+                TaskSource.objects.create(source=self.collection.source, task=task, number=str(number),
+                                          locator=f'sr/1/v{variant}/{number}')
+                WorksheetItem.objects.create(worksheet=self.sheet, task=task, order=variant * 10 + number)
+        response = self.client.post(self.url)
+        create = reverse('independentworks:create')
+        self.assertTrue(response.url.startswith(create + '?'))
+        self.assertIn(f'collection={self.collection.pk}', response.url)
+        self.assertFalse(Work.objects.exists())
+        # Не-владелец опубликованной подборки проходит мастер до шаблона
+        form = self.client.get(response.url)
+        self.assertContains(form, f'<option value="{self.collection.pk}" selected>')
+        data = {'title': '§ 5. Виета', 'source_mode': 'collection',
+                'collection': self.collection.pk, 'pair': '3'}
+        preview = self.client.post(create, data)
+        self.assertTemplateUsed(preview, 'independentworks/source_preview.html')
+        self.client.post(create, {**data, 'selection': preview.context['selection']})
+        work = Work.objects.get(owner=self.other)
+        self.assertEqual(
+            [sorted(p.candidates.values_list('task__text_latex', flat=True)) for p in work.positions.all()],
+            [['Задача 3/1', 'Задача 4/1'], ['Задача 3/2', 'Задача 4/2']])
+
+    def test_unpublished_own_ziv_collection_reaches_create_flow(self):
+        self.collection.is_published = False
+        self.collection.save()
+        TaskSource.objects.create(source=self.collection.source, task=self.task, number='1',
+                                  locator='sr/1/v1/1')
+        self.client.login(username='teacher1', password='pass12345')
+        form = self.client.get(self.client.post(self.url).url)
+        self.assertContains(form, f'<option value="{self.collection.pk}" selected>')
+        self.client.login(username='teacher2', password='pass12345')
+        foreign = self.client.get(reverse('independentworks:create'))
+        self.assertNotIn(self.collection, foreign.context['collections'])
 
     def test_unpublished_foreign_collection_is_closed(self):
         self.collection.is_published = False
