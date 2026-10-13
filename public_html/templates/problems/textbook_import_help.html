@@ -2,9 +2,8 @@
 {% block title %}Инструкция по импорту задачников — Математика{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><span class="page-eyebrow">Импорт задачников</span><h1>Проверка и загрузка задач</h1>
+  <div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">База задач</a><a href="{% url 'textbook_import_list' %}">Импорт задачников</a></nav><h1>Проверка и загрузка задач</h1>
 </div>
-  <a class="btn btn-secondary" href="{% url 'textbook_import_list' %}">К партиям импорта</a>
 </div>
 
 <section class="card prose">
