@@ -1,0 +1,83 @@
+{% comment %}Фрагмент диалога «Клон задачи» (static/js/quick_clone.js вставляет его в <dialog>).
+Числа условия — поля .num-in; textarea «…-text» — итоговый LaTeX, его синхронизирует скрипт.{% endcomment %}
+{% if blocked %}
+<div class="qclone">
+  <div class="qclone-head"><h2 id="qclone-title">Клон задачи #{{ task.pk }}</h2><button type="button" class="icon-btn" data-qclone-close aria-label="Закрыть">×</button></div>
+  <div class="qclone-edit"><p>Задача входит в общий блок с общим условием. Быстрый клон для неё недоступен: используйте «дублировать».</p></div>
+  <div class="qclone-foot"><span></span><span class="form-buttons"><button type="button" class="btn btn-secondary" data-qclone-close>Закрыть</button></span></div>
+</div>
+{% else %}
+<form class="qclone" method="post" action="{% url 'task_clone' task.pk %}" enctype="multipart/form-data" data-preview-url="{% url 'task_clone_preview' task.pk %}" novalidate>
+  {% csrf_token %}
+  {% if item %}<input type="hidden" name="worksheet" value="{{ item.worksheet_id }}"><input type="hidden" name="item" value="{{ item.pk }}">{% endif %}
+  {% if position %}<input type="hidden" name="position" value="{{ position.pk }}">{% endif %}
+  <div class="qclone-head">
+    <div class="qclone-title"><h2 id="qclone-title">Клон задачи · {% if source_label %}{{ source_label }}{% else %}#{{ task.pk }}{% endif %}</h2><span class="qclone-target">{{ target }}</span></div>
+    <button type="button" class="icon-btn" data-qclone-close aria-label="Закрыть">×</button>
+  </div>
+  <div class="qclone-body">
+    <div class="qclone-edit">
+      <div class="msg msg-error" data-qclone-errors role="alert" hidden></div>
+      {% for owner in owners %}
+      <section class="qclone-owner" data-owner="{{ owner.key }}" data-title="{{ owner.title }}">
+        <div class="qclone-field">
+          <span class="qclone-label">{{ owner.title }} · числа выделены, Tab — к следующему</span>
+          <div class="qclone-stmt" data-stmt>{% for seg in owner.segments %}{% if seg.num %}<input type="text" class="num-in" value="{{ seg.num }}" data-orig="{{ seg.num }}" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Число {{ seg.index|add:1 }}">{% else %}<span class="qclone-tex" data-raw="{{ seg.text }}">{{ seg.text }}</span>{% endif %}{% endfor %}</div>
+          <textarea name="{{ owner.key }}-text" class="qclone-raw" rows="4" hidden>{{ owner.text }}</textarea>
+          <button type="button" class="link-btn qclone-link" data-raw-toggle>Править текст целиком (LaTeX) ›</button>
+        </div>
+        {% if owner.answer_block %}
+        <div class="qclone-field">
+          <label class="qclone-label" for="qclone-{{ owner.key }}-answer">Ответ{% if owner.answer_source == 'author' %} (из задачника){% endif %}</label>
+          <div class="qclone-answer"><input type="text" id="qclone-{{ owner.key }}-answer" name="{{ owner.key }}-answer" value="{{ owner.answer }}" data-answer autocomplete="off" spellcheck="false"><span class="qclone-was" data-answer-was hidden>было {{ owner.answer|default:'—' }}</span></div>
+        </div>
+        <div class="qclone-field" data-mask-field data-mask-slots="{{ owner.mask_slots }}" data-follows="{% if owner.mask_follows %}1{% else %}0{% endif %}">
+          <span class="qclone-label">Маска автосверки</span>
+          {% if owner.mask_follows %}<div class="qclone-mask-view" data-mask-view><code data-mask-text>{{ owner.mask }}</code><span class="qclone-sync">✓ следует за ответом</span><button type="button" class="link-btn" data-mask-edit>править</button></div>{% endif %}
+          <textarea name="{{ owner.key }}-mask" class="qclone-mono" rows="2" placeholder="Маски нет. Например: {% templatetag openvariable %}number: 10{% templatetag closevariable %}"{% if owner.mask_follows %} hidden{% endif %}>{{ owner.mask }}</textarea>
+          <input type="hidden" name="{{ owner.key }}-mask_follow" value="{% if owner.mask_follows %}1{% else %}0{% endif %}" data-mask-follow>
+          <span class="qclone-check" data-mask-check hidden></span>
+        </div>
+        {% endif %}
+      </section>
+      {% endfor %}
+      {% if images %}
+      <div class="qclone-field">
+        <span class="qclone-label">{% if images|length == 1 %}Рисунок{% else %}Рисунки{% endif %}</span>
+        {% for entry in images %}
+        <div class="qclone-pic" data-pic>
+          {% if entry.image.is_pdf %}<a class="qclone-thumb" href="{% url 'task_image_file' entry.image.pk %}" target="_blank" rel="noopener">PDF</a>{% else %}<img class="qclone-thumb" src="{% url 'task_image_file' entry.image.pk %}" alt="Рисунок {{ entry.number }}">{% endif %}
+          <div class="qclone-pic-opts">
+            <label><input type="radio" name="image-{{ entry.image.pk }}" value="keep" checked> Оставить рисунок</label>
+            <label><input type="radio" name="image-{{ entry.image.pk }}" value="replace"> Заменить: загрузить файл</label>
+            <input type="file" name="image-{{ entry.image.pk }}-file" accept="image/*" data-pic-file hidden>
+            <label><input type="radio" name="image-{{ entry.image.pk }}" value="remove"> Убрать рисунок</label>
+            {% if entry.referenced %}<span class="qclone-check" data-pic-warn hidden>В условии есть ссылка \taskpic{{ '{' }}{{ entry.number }}}: она будет удалена, ссылки на следующие рисунки перенумеруются.</span>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+        <span class="qclone-hint">Проверьте, что числа на рисунке согласованы с условием.</span>
+      </div>
+      {% endif %}
+      {% if has_solution %}
+      <label class="qclone-keep"><input type="checkbox" name="keep_solution" value="1"> Оставить решение (проверьте числа)</label>
+      {% endif %}
+    </div>
+    <div class="qclone-preview">
+      <span class="qclone-label">Что изменится</span>
+      <div class="qclone-box" data-diff></div>
+      <span class="qclone-label">Ученик увидит</span>
+      <div class="qclone-box" data-student>{{ preview_html }}</div>
+      <div class="qclone-chips"><span class="qclone-chip">Темы и класс — как у исходной</span><span class="qclone-chip">Источник: аналог к {% if source_label %}{{ source_label }}{% else %}задаче #{{ task.pk }}{% endif %}</span></div>
+    </div>
+  </div>
+  <div class="qclone-foot">
+    <span class="qclone-note" data-qclone-note>{{ note }}</span>
+    <span class="form-buttons">
+      <button type="button" class="btn btn-secondary" data-qclone-close>Отмена</button>
+      <button type="button" class="btn btn-secondary" data-qclone-again>Сохранить и ещё клон</button>
+      <button type="submit" class="btn">Сохранить клон</button>
+    </span>
+  </div>
+</form>
+{% endif %}

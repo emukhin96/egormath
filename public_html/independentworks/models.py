@@ -12,6 +12,20 @@ class Family(models.Model):
     origin = models.CharField(max_length=30, default='manual')
     tasks = models.ManyToManyField('problems.Task', related_name='analog_families', through='FamilyMember')
 
+    @classmethod
+    def link_analog(cls, source, copy, key=None):
+        """Ручной аналог: копия входит в семейство исходной задачи (или её
+        каталожного оригинала); если семейства нет — создаётся новое."""
+        family = source.analog_families.first()
+        if not family and source.variant_of_id:
+            family = source.variant_of.analog_families.first()
+        if family is None:
+            family = cls.objects.create(key='manual:analog:' + (key or uuid.uuid4().hex),
+                                        title=f'Аналоги задачи {source.pk}')
+            family.tasks.add(source)
+        family.tasks.add(copy)
+        return family
+
 
 class FamilyMember(models.Model):
     family = models.ForeignKey(Family, on_delete=models.CASCADE)

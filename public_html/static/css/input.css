@@ -5717,3 +5717,118 @@
   font-family: var(--font-sans);
   font-size: 0.8264em;
 }
+
+/* Диалог «Клон задачи» (static/js/quick_clone.js, problems/_clone_dialog.html):
+   слева правка чисел/ответа/маски/рисунков, справа «Что изменится» и
+   «Ученик увидит». До 760px — одна колонка. */
+@layer components {
+  .qclone-dialog {
+    width: min(960px, calc(100vw - 2 * var(--space-2)));
+    max-width: none;
+    max-height: calc(100dvh - 2 * var(--space-2));
+    margin: auto;
+    padding: 0;
+    border: none;
+    border-radius: 10px;
+    background: var(--card);
+    color: var(--text);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+  }
+  .qclone-dialog[open] { display: flex; flex-direction: column; }
+  .qclone-dialog::backdrop { background: rgba(16, 43, 85, 0.32); }
+  .qclone { display: flex; flex-direction: column; min-height: 0; max-height: inherit; }
+  .qclone-head, .qclone-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4); flex: none;
+  }
+  .qclone-head { border-bottom: 1px solid var(--border); }
+  .qclone-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); min-width: 0; }
+  .qclone-title h2 { margin: 0; font-size: 1rem; color: var(--accent-dark); }
+  .qclone-target { color: var(--muted); font-size: 0.85rem; }
+  .qclone-body {
+    display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    min-height: 0; overflow-y: auto;
+  }
+  .qclone-edit {
+    display: flex; flex-direction: column; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4); border-right: 1px solid var(--border);
+  }
+  .qclone-edit .msg { margin: 0; }
+  .qclone-preview {
+    display: flex; flex-direction: column; gap: var(--space-2);
+    padding: var(--space-3) var(--space-4); background: #fafbfd;
+  }
+  .qclone-owner { display: flex; flex-direction: column; gap: var(--space-3); }
+  .qclone-owner + .qclone-owner { padding-top: var(--space-3); border-top: 1px dashed var(--border); }
+  .qclone-field { display: flex; flex-direction: column; gap: var(--space-1); }
+  .qclone-label { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+  .qclone-stmt {
+    border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-2) var(--space-3);
+    font-size: 0.9rem; line-height: 2; white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .qclone .num-in {
+    display: inline-block; width: 3ch; min-width: 28px; max-width: 12ch; height: auto;
+    margin: 0 1px; padding: 0 5px; line-height: 1.5; text-align: center; vertical-align: baseline;
+    border: 1.5px solid #c3cfdd; border-radius: 5px; background: #fff; color: var(--muted);
+    font-family: "Times New Roman", "STIX Two Text", Georgia, serif; font-size: 0.95rem;
+  }
+  .qclone .num-in.is-changed {
+    border-color: var(--accent); background: var(--accent-soft); color: var(--accent-dark); font-weight: 600;
+  }
+  .qclone .num-in:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(23, 101, 181, 0.25); }
+  .qclone-raw, .qclone-mono { max-width: none; font-family: var(--font-mono); font-size: 0.8rem; }
+  .qclone-link { align-self: flex-start; font-size: 0.8rem; color: var(--muted); text-decoration: none; }
+  .qclone-link:hover { color: var(--accent); }
+  .qclone-answer { display: flex; align-items: center; gap: var(--space-2); }
+  .qclone-answer input { max-width: none; }
+  .qclone-was, .qclone-hint { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+  .qclone-hint { white-space: normal; }
+  .qclone-mask-view {
+    display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+    min-height: 36px; padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--border); border-radius: 8px; background: #fff;
+  }
+  .qclone-mask-view code { flex: 1; min-width: 0; font-size: 0.8rem; overflow-wrap: anywhere; }
+  .qclone-mask-view .link-btn { font-size: 0.8rem; }
+  .qclone-sync { color: var(--ok); font-size: 0.8rem; }
+  .qclone-check { color: var(--warn); font-size: 0.8rem; }
+  .qclone-pic { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+  .qclone-pic + .qclone-pic { margin-top: var(--space-2); }
+  .qclone-thumb {
+    display: flex; align-items: center; justify-content: center; width: 92px; height: 72px;
+    object-fit: contain; border: 1px solid var(--border); border-radius: 6px; background: #fff;
+  }
+  .qclone-pic.is-removed .qclone-thumb { opacity: 0.35; }
+  .qclone-pic-opts { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
+  .qclone-pic-opts label { display: flex; align-items: center; gap: var(--space-1); }
+  .qclone-keep { display: flex; align-items: center; gap: var(--space-2); font-size: 0.9rem; }
+  .qclone-box {
+    border: 1px solid var(--border); border-radius: var(--radius); background: #fff;
+    padding: var(--space-2) var(--space-3); font-size: 0.9rem; line-height: 1.75; overflow-wrap: anywhere;
+  }
+  .qclone-box .subitems { margin: var(--space-1) 0 0; }
+  .qclone-box del { color: #b23a3a; text-decoration-thickness: 1.5px; }
+  .qclone-box ins { color: var(--ok); text-decoration: none; font-weight: 600; }
+  .qclone-diff-row + .qclone-diff-row { margin-top: var(--space-2); }
+  .qclone-diff-answer { color: var(--muted); }
+  .qclone-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-1); }
+  .qclone-chip {
+    display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 99px;
+    background: #f1f4f8; border: 1px solid var(--border); color: var(--muted); font-size: 0.78rem;
+  }
+  .qclone-foot { border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .qclone-foot .form-buttons { margin: 0; }
+  .qclone-note { color: var(--muted); font-size: 0.85rem; }
+  .qclone-note.is-saved { color: var(--ok); font-weight: 600; }
+  .ws-saved a { color: inherit; font-weight: 600; text-decoration: underline; }
+  /* «клон» в заголовке кандидата самостоятельной — справа, рядом с × */
+  .iw-workspace-heading > [data-quick-clone] { margin-left: auto; font-size: 0.85rem; }
+
+  @media (max-width: 760px) {
+    .qclone-body { grid-template-columns: minmax(0, 1fr); }
+    .qclone-edit { border-right: none; border-bottom: 1px solid var(--border); }
+    .qclone-head, .qclone-foot, .qclone-edit, .qclone-preview { padding-inline: var(--space-3); }
+    .qclone-foot .form-buttons { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+  }
+}

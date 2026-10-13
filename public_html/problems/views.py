@@ -442,7 +442,7 @@ def task_detail(request, pk):
 @transaction.atomic
 def task_duplicate(request, pk):
     """Самостоятельная копия в базе или локальная — следующей строкой листка."""
-    from .editor import worksheet_context
+    from .editor import insert_after, worksheet_context
     from worksheets.models import Worksheet
     task = get_object_or_404(Task, pk=pk)
     item = worksheet_context(request, task)
@@ -483,17 +483,7 @@ def task_duplicate(request, pk):
         messages.success(request, 'Локальная копия общего блока добавлена после исходного блока.')
         return redirect('worksheet_detail', pk=item.worksheet_id)
     if item:
-        rows = list(item.worksheet.items.order_by('order', 'pk'))
-        for position, row in enumerate(rows, 1):
-            row.order = position * 10
-            row.save(update_fields=['order'])
-            if row.pk == item.pk:
-                insertion = row.order + 5
-        clone = item.worksheet.items.create(task=copy, order=insertion,
-            stars_override=item.stars_override, columns_override=item.columns_override,
-            all_subitems=item.all_subitems)
-        clone.subitems.set([mapping['subitems'][pk]
-                           for pk in item.subitems.values_list('pk', flat=True)])
+        clone = insert_after(item, copy, mapping)
         if standalone:
             messages.success(
                 request, f'Копия #{copy.pk} создана в базе и добавлена в листок.')

@@ -17,7 +17,7 @@
 <div class="iw-candidate-grid">
 {% for candidate in position.rows %}
 <article class="iw-workspace-candidate">
-<div class="iw-workspace-heading"><a href="{% url 'task_detail' candidate.task_id %}" target="_blank" rel="noopener">Задача #{{ candidate.task_id }}</a><form method="post">{% csrf_token %}<input type="hidden" name="candidate" value="{{ candidate.pk }}"><button class="icon-btn" name="action" value="candidate_remove" aria-label="Убрать кандидата">×</button></form></div><div class="ws-content">
+<div class="iw-workspace-heading"><a href="{% url 'task_detail' candidate.task_id %}" target="_blank" rel="noopener">Задача #{{ candidate.task_id }}</a>{% if not candidate.task.block_id %}<button type="button" class="link-btn" data-quick-clone="{% url 'task_clone' candidate.task_id %}?position={{ position.pk }}" title="Аналог с другими числами в этот номер">клон</button>{% endif %}<form method="post">{% csrf_token %}<input type="hidden" name="candidate" value="{{ candidate.pk }}"><button class="icon-btn" name="action" value="candidate_remove" aria-label="Убрать кандидата">×</button></form></div><div class="ws-content">
 {% include 'includes/task_row.html' with number=forloop.counter text=candidate.task.text_latex builder=True %}
 {% if candidate.selected %}{% include 'problems/_subitems.html' with subitems=candidate.selected %}{% endif %}
 {% task_images candidate.task %}

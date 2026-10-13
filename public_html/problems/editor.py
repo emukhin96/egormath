@@ -132,6 +132,25 @@ def local_copy(task, item, user):
     return copy, mappings
 
 
+def insert_after(item, copy, mapping):
+    """Новая строка листка с ``copy`` сразу после ``item``: те же настройки
+    и выбранные подпункты (через ``mapping`` из ``make_variant``)."""
+    rows = list(item.worksheet.items.order_by('order', 'pk'))
+    insertion = None
+    for position, row in enumerate(rows, 1):
+        row.order = position * 10
+        row.save(update_fields=['order'])
+        if row.pk == item.pk:
+            insertion = row.order + 5
+    clone = item.worksheet.items.create(
+        task=copy, order=insertion,
+        stars_override=item.stars_override, columns_override=item.columns_override,
+        all_subitems=item.all_subitems)
+    clone.subitems.set([mapping['subitems'][pk]
+                        for pk in item.subitems.values_list('pk', flat=True)])
+    return clone
+
+
 @teacher_required
 def manage(request, pk, *, mask_selection=None):
     task = get_object_or_404(Task, pk=pk)

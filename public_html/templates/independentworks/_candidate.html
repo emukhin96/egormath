@@ -15,7 +15,7 @@
 {% if candidate %}{% include 'problems/_subitem_choices.html' with selected_ids=candidate.subitem_ids %}{% else %}{% include 'problems/_subitem_choices.html' with disabled_ids=task.pool_used_parts %}{% endif %}
 {% endif %}
 </fieldset>
-<div class="form-buttons"><button class="btn" {% if not candidate and task.pool_blocked %}disabled{% endif %}>{% if candidate %}Сохранить подпункты{% elif task.pool_blocked %}Уже в самостоятельной{% else %}Добавить в пул{% endif %}</button><button class="btn btn-secondary" formaction="{% url 'independentworks:create_analog' position.pk task.pk %}" formnovalidate>Создать аналог вручную</button></div>
+<div class="form-buttons"><button class="btn" {% if not candidate and task.pool_blocked %}disabled{% endif %}>{% if candidate %}Сохранить подпункты{% elif task.pool_blocked %}Уже в самостоятельной{% else %}Добавить в пул{% endif %}</button>{% if not task.block_id %}<button type="button" class="btn btn-secondary" data-quick-clone="{% url 'task_clone' task.pk %}?position={{ position.pk }}" title="Аналог с другими числами сразу в этот номер">Клон в этот номер</button>{% endif %}<button class="link-btn" formaction="{% url 'independentworks:create_analog' position.pk task.pk %}" formnovalidate title="Создать аналог вручную в полной форме задачи">Полная форма</button></div>
 </form>
 <div data-worksheet-mask data-manage-url="{% url 'independentworks:picker_masks' position.pk task.pk %}?area={{ mask_area|default:'pool' }}{% if candidate %}&amp;candidate={{ candidate.pk }}{% endif %}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
 </article>
