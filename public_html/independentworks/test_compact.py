@@ -178,3 +178,30 @@ class CompactBuilderTests(TestCase):
         # №1 с двумя кандидатами подсказку не получает.
         family.tasks.add(self.tasks[0])
         self.assertEqual(len(self.client.get(self.url('edit')).context['similar_hints']), 1)
+
+    def test_stale_undo_token_keeps_current_undo(self):
+        self.client.post(self.url('move_candidate'), {'candidate': self.c2.pk, 'target': self.p3.pk}, **AJAX)
+        response = self.client.post(self.url('undo_compact'), {'token': 'stale'}, **AJAX)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(self.undo().status_code, 200)
+        self.assertEqual(self.layout(), [self.ids(0, 1), self.ids(2), self.ids(3)])
+
+    def test_gap_inside_block_is_closed(self):
+        from .services import add_candidate
+        source = Source.objects.create(title='Блоки')
+        block = TaskBlock.objects.create(source=source, key='b', title='Блок', size=2)
+        first = Task.objects.create(text_latex='Вопрос 1', block=block, block_position=1)
+        Task.objects.create(text_latex='Вопрос 2', block=block, block_position=2)
+        start = Position.objects.create(work=self.work, order=4)
+        add_candidate(start, first)
+        inner = self.work.positions.last()
+        self.assertNotEqual(inner.pk, start.pk)
+        response = self.client.post(self.url('move_candidate'), {'candidate': self.c3.pk, 'before': inner.pk}, **AJAX)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('общего блока', response.json()['message'])
+        # Перед первым номером блока вставлять можно.
+        response = self.client.post(self.url('move_candidate'), {'candidate': self.c0.pk, 'before': start.pk}, **AJAX)
+        self.assertEqual(response.status_code, 200)
+        page = self.client.get(self.url('edit'))
+        self.assertNotContains(page, f'data-before="{inner.pk}"')
+        self.assertContains(page, f'data-before="{start.pk}"')

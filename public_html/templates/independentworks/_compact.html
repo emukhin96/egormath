@@ -7,7 +7,7 @@
 {% endfor %}
 <div class="iw-compact-list" data-compact-list>
 {% for position in positions %}
-<div class="iw-compact-gap" data-before="{{ position.pk }}"><span>отпустить между номерами — отдельный номер</span></div>
+{% if not position.inside_block %}<div class="iw-compact-gap" data-before="{{ position.pk }}"><span>отпустить между номерами — отдельный номер</span></div>{% endif %}
 {% if position.rows or not position.text %}
 <div class="iw-compact-pos" data-position="{{ position.pk }}" data-number="{{ position.number }}">
 <input type="checkbox" class="iw-compact-check" value="{{ position.pk }}" data-number="{{ position.number }}" aria-label="Выбрать №{{ position.number }}">

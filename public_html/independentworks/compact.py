@@ -56,6 +56,10 @@ def _number(work, position_id):
     return number
 
 
+def _blocks(position):
+    return {c.task.block_id for c in position.candidates.select_related('task') if c.task.block_id}
+
+
 def _reject_block_target(rows):
     if any(c.task.block_id for c in rows):
         raise WorkError('Номер общего блока не принимает другие задачи.')
@@ -92,6 +96,9 @@ def move_candidate(work, candidate_id, target_id=None, before_id=None):
             index = next((i for i, p in enumerate(positions) if p.pk == before_id), None)
             if index is None:
                 raise WorkError('Состав изменился. Обновите страницу и повторите перетаскивание.', 409)
+            # Номера общего блока идут подряд: вставка между ними разорвала бы блок.
+            if index > 0 and _blocks(positions[index - 1]) & _blocks(positions[index]):
+                raise WorkError('Между номерами общего блока нельзя вставить номер.')
         source_index = positions.index(source)
         alone = not source.text and source.candidates.count() == 1
         if alone and index in (source_index, source_index + 1):
@@ -172,9 +179,11 @@ def pending_undo(request, work):
 
 @transaction.atomic
 def undo(request, work, token):
-    saved = request.session.pop(UNDO_KEY, None)
+    saved = request.session.get(UNDO_KEY)
     if not saved or saved.get('work') != work.pk or saved.get('token') != token:
+        # Устаревший тост в другой вкладке не стирает действующую отмену.
         raise WorkError('Отменять нечего: действие уже отменено или было не последним.', 409)
+    del request.session[UNDO_KEY]
     work = _lock(work)
     if digest(state(work)) != saved['after']:
         raise WorkError('Состав изменился после этого действия — отменить его уже нельзя.', 409)
@@ -256,8 +265,13 @@ def _short_answers(candidate):
 
 def decorate(positions):
     """Подписи плашек компактного вида: источник, ответ, признак блока."""
+    previous = set()
     for position in positions:
-        position.closed = any(c.task.block_id for c in position.rows)
+        position.block_ids = {c.task.block_id for c in position.rows if c.task.block_id}
+        position.closed = bool(position.block_ids)
+        # Промежуток перед номером не выводится внутри общего блока.
+        position.inside_block = bool(previous & position.block_ids)
+        previous = position.block_ids
     candidates = [c for p in positions for c in p.rows]
     prefetch_related_objects([c.task for c in candidates], 'source_refs__source')
     for candidate in candidates:
