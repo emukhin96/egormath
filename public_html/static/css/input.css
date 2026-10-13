@@ -5709,6 +5709,107 @@
   .canvas-top { pointer-events: none; }
 }
 
+/* Компактный вид состава самостоятельной (independentworks/_compact.html,
+   static/js/iw_compact.js): номер — строка, кандидаты — плашки. */
+@layer components {
+  .worksheet-items-card.is-compact #ws-items { display: none; }
+  .iw-compact-view { margin-left: auto; }
+  .iw-compact-list { display: flex; flex-direction: column; gap: var(--space-2); margin-block: var(--space-3); }
+  .iw-compact-pos {
+    display: grid; grid-template-columns: 16px 14px 56px minmax(0, 1fr) auto; gap: var(--space-2);
+    align-items: start; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 9px 10px; font-size: 0.85rem;
+  }
+  .iw-compact-pos > form { margin: 0; }
+  .iw-compact-pos.is-selected { background: #f8fbff; border-color: #b8d3f3; }
+  .iw-compact-check { width: 14px; height: 14px; margin: 4px 0 0; accent-color: var(--accent); }
+  .iw-compact-handle, .iw-compact-grip { color: #a2adbb; cursor: grab; user-select: none; line-height: 1.4; }
+  .iw-compact-handle { padding-top: 2px; }
+  .iw-compact-no { font-weight: 700; color: var(--accent-dark); text-decoration: none; padding-top: 2px; }
+  .iw-compact-no small { display: block; font-weight: 400; color: var(--muted); font-size: 0.72rem; }
+  .iw-compact-cands { display: flex; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+  .iw-compact-cand {
+    width: 238px; display: flex; flex-direction: column; gap: 3px; min-width: 0;
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; background: #fbfcfd;
+  }
+  .iw-compact-cand-head { display: flex; align-items: center; gap: var(--space-1); font-size: 0.75rem; color: var(--muted); }
+  .iw-compact-cand-head a { color: var(--muted); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .iw-compact-cand-head a:hover { color: var(--accent); }
+  .iw-compact-cand-head form { margin: 0 0 0 auto; }
+  .iw-compact-cand-head .icon-btn { font-size: 0.95rem; padding: 0 4px; }
+  .iw-compact-cand.is-block { background: var(--bg); }
+  .iw-compact-postext, .iw-compact-warn { flex: 1 1 100%; margin: 0; font-size: 0.8rem; color: var(--muted); }
+  .iw-compact-warn { color: var(--warn); }
+  .iw-compact-warn .link-btn { color: var(--accent); }
+  .iw-compact-text {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+    line-height: 1.45; overflow-wrap: anywhere;
+  }
+  .iw-compact-ans { display: none; font-size: 0.75rem; color: var(--ok); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .iw-compact.show-answers .iw-compact-ans { display: block; }
+  .iw-compact-add {
+    width: 238px; min-height: 64px; display: flex; align-items: center; justify-content: center;
+    border: 1px dashed var(--border); border-radius: 6px; background: var(--card);
+    color: var(--accent); font-weight: 600; text-decoration: none;
+  }
+  .iw-compact-add:hover { border-color: var(--accent); }
+  .iw-compact-dropzone {
+    display: none; width: 238px; min-height: 64px; align-items: center; justify-content: center; text-align: center;
+    border: 2px dashed var(--accent); border-radius: 6px; background: var(--card);
+    color: var(--accent); font-weight: 600; font-size: 0.78rem; padding: 6px;
+  }
+  .iw-compact-pos.is-drop { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: #f8fbff; }
+  .iw-compact-pos.is-drop .iw-compact-dropzone { display: flex; }
+  .iw-compact-pos.is-drop .iw-compact-add { display: none; }
+  .iw-compact-ghost { opacity: 0.35; border-style: dashed; }
+  .iw-compact-note { grid-template-columns: 16px 14px 56px minmax(0, 1fr) auto; padding-block: 5px; background: transparent; border-style: dashed; }
+  .iw-compact-note-label { color: var(--muted); font-size: 0.75rem; padding-top: 2px; }
+  .iw-compact-note .iw-compact-text { -webkit-line-clamp: 1; color: var(--muted); }
+  /* Промежутки между номерами видны только во время перетаскивания плашки */
+  .iw-compact-gap { height: 0; overflow: hidden; position: relative; margin-block: calc(-1 * var(--space-1)); }
+  .iw-compact.is-dragging .iw-compact-gap {
+    height: auto; min-height: 30px; overflow: visible; margin: 0 40px;
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+    border-top: 2px dashed #c3cfdd;
+  }
+  .iw-compact-gap > span {
+    position: absolute; top: 0; left: 50%; transform: translate(-50%, -50%); white-space: nowrap;
+    background: var(--card); padding: 0 var(--space-2); font-size: 0.75rem; color: var(--muted);
+  }
+  .iw-compact-gap.is-drop { border-top-color: var(--accent); }
+  .iw-compact-gap.is-drop > span { color: var(--accent); font-weight: 600; }
+  .iw-compact-gap .iw-compact-cand { height: 8px; padding: 0; overflow: hidden; border: 2px dashed var(--accent); background: var(--accent-soft); }
+  .iw-compact-gap .iw-compact-cand > * { display: none; }
+  .iw-compact-hint {
+    display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-top: var(--space-3);
+    background: #fff4e0; border: 1px solid #f1d9ad; border-radius: var(--radius); padding: var(--space-2) 10px; font-size: 0.85rem;
+  }
+  .iw-compact-hint[hidden] { display: none; }
+  .iw-compact-hint > span { flex: 1 1 320px; }
+  .iw-compact-hint b { color: var(--warn); }
+  .iw-compact-hint .link-btn { color: var(--muted); }
+  .iw-compact-selbar {
+    position: sticky; top: calc(var(--topbar-height) + var(--space-2)); z-index: 5;
+    display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-top: var(--space-3);
+    background: var(--accent-dark); color: #fff; border-radius: 8px; padding: var(--space-2) var(--space-3); font-size: 0.85rem;
+  }
+  .iw-compact-selbar[hidden] { display: none; }
+  .iw-compact-selbar .btn { background: #fff; color: var(--accent-dark); border-color: #fff; }
+  .iw-compact-selbar .iw-compact-ghost-btn { background: transparent; color: #fff; border-color: rgb(255 255 255 / 40%); }
+  .iw-compact-selbar-note { margin-left: auto; opacity: 0.75; }
+  .ws-saved-action {
+    background: none; border: none; padding: 0; color: inherit; font: inherit; font-weight: 600;
+    text-decoration: underline; cursor: pointer;
+  }
+  @media (max-width: 760px) {
+    .iw-compact-pos { grid-template-columns: 16px 14px minmax(0, 1fr) auto; }
+    .iw-compact-cands, .iw-compact-note .iw-compact-text { grid-column: 1 / -1; }
+    .iw-compact-pos > form { grid-row: 1; grid-column: -2; }
+    .iw-compact-cand, .iw-compact-add, .iw-compact-dropzone { width: 100%; }
+    .iw-compact-view { margin-left: 0; }
+  }
+}
+
 /* Русский текст внутри формулы («если», f_наим, \operatorname{НОД}): KaTeX
    рисует его запасным шрифтом браузера. Шрифт сайта и размер текста
    (KaTeX увеличивает формулы в 1,21 раза). Вне @layer: правила KaTeX

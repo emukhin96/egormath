@@ -207,7 +207,61 @@ def edit(request, pk):
         p.point_summary = ' / '.join(str(n) for n in counts) or '—'
         p.needs_manual = any(c.mask_count < c.point_count for c in p.rows)
     selected = next((p for p in positions if str(p.pk) == request.GET.get('position')), positions[0] if positions else None)
-    return render(request, 'independentworks/edit.html', {'work': work, 'positions': positions, 'selected_position': selected, 'preparation_query': preparation_query(request)})
+    from . import compact
+    compact.decorate(positions)
+    return render(request, 'independentworks/edit.html', {'work': work, 'positions': positions, 'selected_position': selected, 'preparation_query': preparation_query(request),
+                                                          'similar_hints': compact.similar_hints(positions), 'undo': compact.pending_undo(request, work)})
+
+
+def _ids(value, message='Некорректный номер.'):
+    try:
+        return [int(v) for v in str(value or '').split(',') if v.strip()]
+    except ValueError:
+        raise svc.WorkError(message)
+
+
+@enabled
+@teacher_required
+@require_POST
+def move_candidate(request, pk):
+    """Компактный вид: плашку отпустили на другой номер или между номерами."""
+    from . import compact
+    work = get_object_or_404(Work.visible_to(request.user), pk=pk)
+    candidate = (_ids(request.POST.get('candidate')) or [None])[0]
+    target = (_ids(request.POST.get('target')) or [None])[0]
+    before = (_ids(request.POST.get('before')) or [None])[0]
+    if candidate is None or (target is None and 'before' not in request.POST):
+        raise svc.WorkError('Укажите задачу и место переноса.')
+    result = compact.move_candidate(work, candidate, target_id=target, before_id=before)
+    if result is None:
+        return JsonResponse({'ok': True, 'changed': False})
+    state, message = result
+    compact.remember(request, work, state, message)
+    return JsonResponse({'ok': True, 'changed': True, 'message': message})
+
+
+@enabled
+@teacher_required
+@require_POST
+def merge_positions(request, pk):
+    """Выбранные номера — в один (номер первого по порядку сохраняется)."""
+    from . import compact
+    work = get_object_or_404(Work.visible_to(request.user), pk=pk)
+    state, message = compact.merge_positions(work, _ids(request.POST.get('ids')))
+    compact.remember(request, work, state, message)
+    return JsonResponse({'ok': True, 'changed': True, 'message': message})
+
+
+@enabled
+@teacher_required
+@require_POST
+def undo_compact(request, pk):
+    """Отмена последнего переноса или объединения из тоста."""
+    from . import compact
+    work = get_object_or_404(Work.visible_to(request.user), pk=pk)
+    compact.undo(request, work, request.POST.get('token', ''))
+    messages.success(request, 'Отменено')
+    return JsonResponse({'ok': True, 'message': 'Отменено'})
 
 
 @enabled

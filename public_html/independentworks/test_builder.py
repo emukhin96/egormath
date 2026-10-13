@@ -143,8 +143,9 @@ class BuilderTests(TestCase):
         self.assertContains(response, 'data-mask-readonly', count=4)
         self.assertContains(response, 'id="toggle-masks"')
         self.assertContains(response, 'math-content')
-        self.assertContains(response, 'Удалить номер', count=2)
-        self.assertContains(response, 'Убрать кандидата', count=4)
+        # Страница содержит оба вида состава: подробный и компактный.
+        self.assertContains(response, 'Удалить номер', count=4)
+        self.assertContains(response, 'Убрать кандидата', count=8)
         candidate = work.positions.first().candidates.first()
         response = self.client.post(reverse('independentworks:edit', args=[work.pk]),
             {'action': 'candidate_remove', 'candidate': candidate.pk})

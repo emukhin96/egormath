@@ -1,0 +1,55 @@
+{% load task_extras %}{# Компактный вид состава: номер — строка, кандидаты — плашки. Перетаскивание и объединение — static/js/iw_compact.js #}
+<div id="iw-compact" class="iw-compact" hidden data-move-url="{% url 'independentworks:move_candidate' work.pk %}" data-merge-url="{% url 'independentworks:merge_positions' work.pk %}" data-undo-url="{% url 'independentworks:undo_compact' work.pk %}" data-reorder-url="{% url 'independentworks:reorder' work.pk %}">
+{% csrf_token %}
+{% if undo %}<div id="iw-undo" hidden data-token="{{ undo.token }}" data-message="{{ undo.message }}"></div>{% endif %}
+<div class="iw-compact-selbar" data-selbar hidden><span data-selbar-text></span><button type="button" class="btn btn-small" data-merge-selected>Объединить в один номер</button><button type="button" class="btn btn-small iw-compact-ghost-btn" data-clear-selection>Снять выбор</button><span class="iw-compact-selbar-note">Номер первого выбранного сохраняется</span></div>
+{% for hint in similar_hints %}<div class="iw-compact-hint" data-hint="{{ hint.first.pk }}-{{ hint.second.pk }}" hidden><span><b>Похожи:</b> №{{ hint.first.number }} и №{{ hint.second.number }} — обе из семьи «{{ hint.family }}».</span><button type="button" class="btn btn-small" data-merge="{{ hint.first.pk }},{{ hint.second.pk }}">Объединить в №{{ hint.first.number }}</button><button type="button" class="link-btn" data-hide-hint>Скрыть</button></div>
+{% endfor %}
+<div class="iw-compact-list" data-compact-list>
+{% for position in positions %}
+<div class="iw-compact-gap" data-before="{{ position.pk }}"><span>отпустить между номерами — отдельный номер</span></div>
+{% if position.rows or not position.text %}
+<div class="iw-compact-pos" data-position="{{ position.pk }}" data-number="{{ position.number }}">
+<input type="checkbox" class="iw-compact-check" value="{{ position.pk }}" data-number="{{ position.number }}" aria-label="Выбрать №{{ position.number }}">
+<span class="iw-compact-handle" title="Перетащите, чтобы изменить порядок номеров">⠿</span>
+<a class="iw-compact-no" href="{% url 'independentworks:pick' position.pk %}{% if preparation_query %}?{{ preparation_query }}{% endif %}">№{{ position.number }}<small>{% if position.rows %}{{ position.rows|length }} {{ position.rows|length|plural_ru:'вариант,варианта,вариантов' }}{% else %}пусто{% endif %}</small></a>
+<div class="iw-compact-cands" data-target="{{ position.pk }}" data-number="{{ position.number }}"{% if position.closed %} data-closed="1"{% endif %}>
+{% if position.text %}<div class="math-content iw-compact-text iw-compact-postext">{{ position.text|web_text_preview:160 }}</div>{% endif %}
+{% if position.mismatch and not position.mismatch_confirmed %}<form method="post" class="iw-compact-warn">{% csrf_token %}<input type="hidden" name="position" value="{{ position.pk }}">Разное число подпунктов. <button class="link-btn" name="action" value="confirm">Подтверждаю различие объёма</button></form>{% endif %}
+{% for candidate in position.rows %}<article class="iw-compact-cand{% if candidate.is_block %} is-block{% endif %}" data-candidate="{{ candidate.pk }}"{% if candidate.is_block %} title="Задачи блока переносятся только вместе"{% endif %}>
+<div class="iw-compact-cand-head">{% if not candidate.is_block %}<span class="iw-compact-grip" title="Перетащите на другой номер или между номерами">⠿</span>{% endif %}<a href="{% url 'task_detail' candidate.task_id %}" target="_blank" rel="noopener">{{ candidate.label }}</a><form method="post">{% csrf_token %}<input type="hidden" name="candidate" value="{{ candidate.pk }}"><button class="icon-btn" name="action" value="candidate_remove" aria-label="Убрать кандидата">×</button></form></div>
+<div class="math-content iw-compact-text">{{ candidate.preview|web_text_preview:110 }}</div>
+{% if candidate.short_answers %}<div class="math-content iw-compact-ans">Ответ: {% for label, text in candidate.short_answers %}{% if label %}{{ label }}) {% endif %}{{ text|web_answer }}{% if not forloop.last %}; {% endif %}{% endfor %}{% if candidate.answers_more %}; …{% endif %}</div>{% endif %}
+</article>{% endfor %}
+<a class="iw-compact-add" href="{% url 'independentworks:pick' position.pk %}{% if preparation_query %}?{{ preparation_query }}{% endif %}">+ из базы</a>
+<div class="iw-compact-dropzone">Отпустите —<br>станет вариантом №{{ position.number }}</div>
+</div>
+<form method="post">{% csrf_token %}<input type="hidden" name="position" value="{{ position.pk }}"><button class="icon-btn" name="action" value="remove" aria-label="Удалить номер">×</button></form>
+</div>
+{% else %}
+<div class="iw-compact-pos iw-compact-note" data-position="{{ position.pk }}">
+<span></span>
+<span class="iw-compact-handle" title="Перетащите, чтобы изменить порядок">⠿</span>
+<span class="iw-compact-note-label">Пояснение</span>
+<div class="math-content iw-compact-text">{{ position.text|web_text_preview:160 }}</div>
+<form method="post">{% csrf_token %}<input type="hidden" name="position" value="{{ position.pk }}"><button class="icon-btn" name="action" value="remove" aria-label="Удалить пояснение">×</button></form>
+</div>
+{% endif %}
+{% endfor %}
+<div class="iw-compact-gap" data-before=""><span>отпустить между номерами — отдельный номер</span></div>
+</div>
+<div class="form-buttons"><form method="post">{% csrf_token %}<button class="btn" name="action" value="add">Добавить номер</button></form></div>
+</div>
+<script>
+/* Вид выбирается до первой отрисовки, чтобы не мигал подробный состав. */
+(function () {
+  try {
+    if (localStorage.getItem('iw-view') !== 'compact') return;
+    var box = document.getElementById('iw-compact');
+    box.hidden = false;
+    box.closest('.worksheet-items-card').classList.add('is-compact');
+    var radio = document.querySelector('input[name="iw-view"][value="compact"]');
+    if (radio) radio.checked = true;
+  } catch (e) {}
+})();
+</script>
