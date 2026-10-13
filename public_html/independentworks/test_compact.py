@@ -205,3 +205,19 @@ class CompactBuilderTests(TestCase):
         page = self.client.get(self.url('edit'))
         self.assertNotContains(page, f'data-before="{inner.pk}"')
         self.assertContains(page, f'data-before="{start.pk}"')
+
+    def test_change_between_action_and_remember_blocks_undo(self):
+        """Правка из другой вкладки сразу после коммита действия не
+        попадает в «после» — отмена её не откатывает молча."""
+        from unittest.mock import patch
+        from . import compact
+        original = compact.remember
+
+        def racing(request, work, before, after, message):
+            Candidate.objects.filter(pk=self.c3.pk).delete()
+            return original(request, work, before, after, message)
+
+        with patch.object(compact, 'remember', racing):
+            self.client.post(self.url('merge_positions'), {'ids': f'{self.p1.pk},{self.p2.pk}'}, **AJAX)
+        self.assertEqual(self.undo().status_code, 409)
+        self.assertFalse(Position.objects.filter(pk=self.p2.pk).exists())

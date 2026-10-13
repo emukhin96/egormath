@@ -235,8 +235,8 @@ def move_candidate(request, pk):
     result = compact.move_candidate(work, candidate, target_id=target, before_id=before)
     if result is None:
         return JsonResponse({'ok': True, 'changed': False})
-    state, message = result
-    compact.remember(request, work, state, message)
+    state, after, message = result
+    compact.remember(request, work, state, after, message)
     return JsonResponse({'ok': True, 'changed': True, 'message': message})
 
 
@@ -247,8 +247,8 @@ def merge_positions(request, pk):
     """Выбранные номера — в один (номер первого по порядку сохраняется)."""
     from . import compact
     work = get_object_or_404(Work.visible_to(request.user), pk=pk)
-    state, message = compact.merge_positions(work, _ids(request.POST.get('ids')))
-    compact.remember(request, work, state, message)
+    state, after, message = compact.merge_positions(work, _ids(request.POST.get('ids')))
+    compact.remember(request, work, state, after, message)
     return JsonResponse({'ok': True, 'changed': True, 'message': message})
 
 

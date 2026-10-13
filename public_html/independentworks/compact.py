@@ -71,7 +71,7 @@ def move_candidate(work, candidate_id, target_id=None, before_id=None):
 
     ``target_id`` — номер-цель; иначе создаётся новый номер перед
     ``before_id`` (пусто — в конец). Опустевший номер без пояснения
-    удаляется. Возвращает (состояние до, сообщение) или None, если
+    удаляется. Возвращает (состояние до, дайджест после, сообщение) или None, если
     перенос ничего не меняет.
     """
     work = _lock(work)
@@ -118,7 +118,8 @@ def move_candidate(work, candidate_id, target_id=None, before_id=None):
     work.save(update_fields=['updated_at'])
     number = _number(work, target.pk)
     message = f'Объединено в №{number}' if target_id is not None else f'Вынесено в отдельный №{number}'
-    return before, message
+    # «После» снимается в той же транзакции: чужая правка не попадёт в отмену.
+    return before, digest(state(work)), message
 
 
 @transaction.atomic
@@ -157,14 +158,17 @@ def merge_positions(work, ids):
     Position.objects.filter(pk__in=[p.pk for p in rest]).delete()
     _renumber(list(work.positions.all()))
     work.save(update_fields=['updated_at'])
-    return before, f'Объединено в №{_number(work, first.pk)}'
+    return before, digest(state(work)), f'Объединено в №{_number(work, first.pk)}'
 
 
-def remember(request, work, before, message):
-    """Одна отмена на сессию: только последнее действие."""
+def remember(request, work, before, after, message):
+    """Одна отмена на сессию: только последнее действие.
+
+    ``after`` — дайджест состава, снятый внутри транзакции действия.
+    """
     request.session[UNDO_KEY] = {
         'token': uuid.uuid4().hex, 'work': work.pk, 'before': before,
-        'after': digest(state(work)), 'message': message, 'fresh': True}
+        'after': after, 'message': message, 'fresh': True}
 
 
 def pending_undo(request, work):
