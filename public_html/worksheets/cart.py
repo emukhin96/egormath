@@ -133,13 +133,16 @@ def _back(request, fallback):
     return redirect(fallback)
 
 
-def _respond(request, ok, message, in_cart, fallback='task_list'):
+def _respond(request, ok, message, in_cart, fallback='task_list', task_ids=()):
+    """``task_ids`` — все задачи, чьё состояние изменилось (весь блок для
+    задачи блока): cart.js переключает «+»/«✓» у каждой."""
     if _is_xhr(request):
         return JsonResponse({
             'ok': ok,
             'message': message,
             'in_cart': in_cart,
             'count': len(cart_ids(request)),
+            'task_ids': list(task_ids),
         }, status=200 if ok else 400)
     (messages.success if ok else messages.error)(request, message)
     return _back(request, fallback)
@@ -160,14 +163,15 @@ def cart_add(request):
         if not all(pk in ids for pk in members):
             ids = [pk for pk in ids if pk not in members] + members
             _store(request, ids)
-        return _respond(request, True, f'В корзине весь блок: {len(members)} задач.', True)
+        return _respond(request, True, f'В корзине весь блок: {len(members)} задач.', True,
+                        task_ids=members)
     if task.pk in ids:
         message = f'Задача #{task.pk} уже в корзине.'
     else:
         ids.append(task.pk)
         _store(request, ids)
         message = f'Задача #{task.pk} — в корзине.'
-    return _respond(request, True, message, True)
+    return _respond(request, True, message, True, task_ids=[task.pk])
 
 
 # Столько же, сколько задач помещается в развёрнутый раздел подборок
@@ -226,7 +230,7 @@ def cart_remove(request):
     removed = set(task.block.tasks.values_list('pk', flat=True)) if task and task.block_id else {task_id}
     _store(request, [pk for pk in cart_ids(request) if pk not in removed])
     return _respond(request, True, f'Задача #{task_id} убрана из корзины.',
-                    False)
+                    False, task_ids=sorted(removed))
 
 
 def _pour(request, worksheet):

@@ -143,3 +143,21 @@ class CartToIndependentTests(TestCase):
         page = self.client.get(reverse('task_list'))
         self.assertContains(page, 'data-cart-remove', count=8)
         self.assertContains(page, 'и ещё 2')
+
+
+class CartBlockIdsTests(TestCase):
+    """«+»/«×» у задачи блока сообщают все id блока — cart.js переключает
+    «✓» у каждой кнопки, а не только у нажатой."""
+
+    def test_add_and_remove_report_whole_block(self):
+        make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        block = TaskBlock.objects.create(source=Source.objects.create(title='ОГЭ'), key='b', title='Участок', size=2)
+        first, second = [Task.objects.create(text_latex=f'Вопрос {n}', block=block, block_position=n)
+                         for n in (1, 2)]
+        xhr = {'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'}
+        added = self.client.post(reverse('cart_add'), {'task_id': second.pk}, **xhr).json()
+        self.assertEqual(added['task_ids'], [first.pk, second.pk])
+        removed = self.client.post(reverse('cart_remove'), {'task_id': first.pk}, **xhr).json()
+        self.assertEqual(removed['task_ids'], sorted([first.pk, second.pk]))
+        self.assertEqual(removed['count'], 0)

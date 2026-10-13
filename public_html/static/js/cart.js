@@ -33,9 +33,22 @@
     return result;
   }
 
+  // Отметка «+»/«✓» у всех кнопок задач из ответа сервера: у задачи блока
+  // меняется весь блок (task_ids), а не только нажатая кнопка.
+  function renderButtons(taskIds, inCart) {
+    var ids = (taskIds || []).map(String);
+    document.querySelectorAll('[data-cart-form]').forEach(function (f) {
+      var input = f.querySelector('[name=task_id]');
+      if (input && ids.indexOf(input.value) !== -1) renderButton(f, inCart);
+    });
+  }
+
   // Меню корзины (список задач, точки семей) собирает сервер: после «+»/«×»
   // просим свежую разметку cart_panel. Закрытое меню — при следующем открытии.
+  // Запрос панели идёт в той же очереди, что и изменения корзины, а ответ,
+  // обогнанный более новым запросом, отбрасывается (panelSeq).
   var panelStale = false;
+  var panelSeq = 0;
 
   function refreshPanel() {
     var menu = document.querySelector('[data-cart-menu]');
@@ -45,11 +58,15 @@
       return;
     }
     panelStale = false;
+    var seq = ++panelSeq;
     var url = menu.dataset.panelUrl + '?next=' +
       encodeURIComponent(window.location.pathname + window.location.search);
-    fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
-      .then(function (r) { return r.ok ? r.text() : Promise.reject(r); })
+    enqueue(function () {
+      return fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+        .then(function (r) { return r.ok ? r.text() : Promise.reject(r); });
+    })
       .then(function (html) {
+        if (seq !== panelSeq) return;
         var old = menu.querySelector('[data-cart-panel]');
         var box = document.createElement('div');
         box.innerHTML = html.trim();
@@ -60,7 +77,7 @@
           fresh.querySelectorAll('.math-content').forEach(renderMathContent);
         }
       })
-      .catch(function () { panelStale = true; });
+      .catch(function () { if (seq === panelSeq) panelStale = true; });
   }
 
   function renderMenu(count) {
@@ -80,6 +97,7 @@
   }
 
   // «×» в меню: убрать задачу без перезагрузки и снять отметку «✓» у её «+»
+  // (у задачи блока — у всего блока)
   document.addEventListener('submit', function (e) {
     var form = e.target.closest ? e.target.closest('[data-cart-remove]') : null;
     if (!form) return;
@@ -99,10 +117,7 @@
         toast(false, result.data.message || 'Не удалось изменить корзину');
         return;
       }
-      document.querySelectorAll('[data-cart-form]').forEach(function (f) {
-        var input = f.querySelector('[name=task_id]');
-        if (input && input.value === taskId) renderButton(f, false);
-      });
+      renderButtons(result.data.task_ids || [taskId], false);
       renderMenu(result.data.count);
     }).catch(function () {
       toast(false, 'Нет связи — корзина не изменена');
@@ -130,6 +145,7 @@
         return;
       }
       renderButton(form, result.data.in_cart);
+      renderButtons(result.data.task_ids, result.data.in_cart);
       renderMenu(result.data.count);
       toast(true, result.data.message);
     }).catch(function () {
