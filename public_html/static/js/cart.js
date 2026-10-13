@@ -23,6 +23,16 @@
     button.setAttribute('aria-label', inCart ? 'Убрать из корзины' : 'В корзину');
   }
 
+  // Корзина лежит в сессии: два одновременных запроса читают одну и ту же
+  // корзину, и последний ответ затирает задачу из первого (быстрые клики
+  // «+» по нескольким задачам). Поэтому запросы корзины — строго по очереди.
+  var queue = Promise.resolve();
+  function enqueue(send) {
+    var result = queue.then(send, send);
+    queue = result.catch(function () {});
+    return result;
+  }
+
   // Меню корзины (список задач, точки семей) собирает сервер: после «+»/«×»
   // просим свежую разметку cart_panel. Закрытое меню — при следующем открытии.
   var panelStale = false;
@@ -75,10 +85,13 @@
     if (!form) return;
     e.preventDefault();
     var taskId = form.querySelector('[name=task_id]').value;
-    fetch(form.action, {
-      method: 'POST',
-      headers: {'X-Requested-With': 'XMLHttpRequest'},
-      body: new FormData(form),
+    var body = new FormData(form);
+    enqueue(function () {
+      return fetch(form.action, {
+        method: 'POST',
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+        body: body,
+      });
     }).then(function (r) {
       return r.json().then(function (data) { return {ok: r.ok && data.ok, data: data}; });
     }).then(function (result) {
@@ -102,10 +115,13 @@
     e.preventDefault();
     var button = form.querySelector('.cart-btn');
     button.disabled = true;
-    fetch(form.action, {
-      method: 'POST',
-      headers: {'X-Requested-With': 'XMLHttpRequest'},
-      body: new FormData(form),
+    var body = new FormData(form);
+    enqueue(function () {
+      return fetch(form.action, {
+        method: 'POST',
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+        body: body,
+      });
     }).then(function (r) {
       return r.json().then(function (data) { return {ok: r.ok && data.ok, data: data}; });
     }).then(function (result) {
