@@ -81,8 +81,10 @@ class CollectionNotAssignableTests(TestCase):
         response = self.client.post(
             reverse('assignment_group_update', args=[self.sheet.pk]),
             {'students': [self.student.pk, self.student2.pk],
-             f'status_{self.student.pk}': Assignment.STATUS_RETURNED})
-        self.assertEqual(response.status_code, 302)
+             f'status_{self.student.pk}': Assignment.STATUS_RETURNED}, follow=True)
+        shown = [str(m) for m in response.context['messages']]
+        self.assertTrue(any('Новые ученики не добавлены: 1' in m for m in shown))
+        self.assertFalse(any('сохранены' in m for m in shown))
         self.assertEqual(list(Assignment.objects.filter(worksheet=self.sheet)), [old])
         old.refresh_from_db()
         self.assertEqual(old.status, Assignment.STATUS_RETURNED)

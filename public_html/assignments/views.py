@@ -389,7 +389,8 @@ def assignment_group_update(request, worksheet_id):
             request,
             'Ученики сохранены. Проверенной можно отметить только '
             'отправленную работу.')
-    else:
+    elif not refused_new:
+        # При отказе добавить новых учеников запрос выполнен лишь частично
         messages.success(request, 'Ученики и статусы задания сохранены.')
     target = reverse('assignment_list')
     if request.GET:
