@@ -119,3 +119,31 @@ class ImagePasteTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('не похож на картинку', response.json()['errors']['__all__'][0])
         self.assertFalse(task.images.exists())
+
+    def test_replacing_file_in_saved_row_converts_webp(self):
+        """Замена файла в уже сохранённой строке тоже проходит сжатие:
+        WEBP с именем .jpg не должен лечь в хранилище как есть."""
+        task = Task.objects.create(text_latex='Условие', created_by=self.teacher)
+        response = self.client.post(reverse('task_manage', args=[task.pk]), {
+            'block': 'images', 'scope': 'global',
+            **formset_management('images', total=1),
+            'images-0-order': 10,
+            'images-0-image': SimpleUploadedFile(
+                'first.png', image_bytes(), 'image/png'),
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200, response.content)
+        image = task.images.get()
+        response = self.client.post(reverse('task_manage', args=[task.pk]), {
+            'block': 'images', 'scope': 'global',
+            **formset_management('images', total=1, initial=1),
+            'images-0-id': image.pk, 'images-0-order': 10,
+            'images-0-image': SimpleUploadedFile(
+                'paste-20261014-153000.webp', image_bytes('WEBP', (3000, 200)),
+                'image/webp'),
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200, response.content)
+        image.refresh_from_db()
+        self.assertTrue(image.filename.endswith('.jpg'))
+        with image.image.open('rb') as f, Image.open(f) as stored:
+            self.assertEqual(stored.format, 'JPEG')
+            self.assertLessEqual(max(stored.size), 1600)

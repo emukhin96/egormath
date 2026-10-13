@@ -175,18 +175,24 @@
   }
 
   // --- Запись файла в цель ---
-  function deliver(t, file, quiet) {
+  // files — один файл или массив: несколько перетащенных картинок
+  // записываются разом и дают ОДНО событие change (иначе автоотправка
+  // фото решения ушла бы по разу на каждый файл).
+  function deliver(t, files, quiet) {
     lastActive = t;
+    files = [].concat(files);
     if (t.onFile) {
-      t.onFile(file);
+      files.forEach(function (f) { t.onFile(f); });
       return true;
     }
     var input = t.input;
-    if (!fileAllowed(input, file)) {
+    var ok = files.filter(function (f) { return fileAllowed(input, f); });
+    if (!ok.length) {
       say(t, 'Этот формат сюда не подходит.');
       toast(false, 'Формат картинки не подходит для этого поля');
       return false;
     }
+    if (!input.multiple) ok = ok.slice(0, 1);
     var dt;
     try { dt = new DataTransfer(); } catch (e) { dt = null; }
     if (!dt) {
@@ -196,15 +202,16 @@
     if (input.multiple && input.files) {
       Array.prototype.forEach.call(input.files, function (f) { dt.items.add(f); });
     }
-    dt.items.add(file);
+    ok.forEach(function (f) { dt.items.add(f); });
     input.files = dt.files;
-    say(t, '');
+    say(t, ok.length < files.length ? 'Часть файлов пропущена: формат не подходит.' : '');
     reveal(t.zone);
     input.dispatchEvent(new Event('input', {bubbles: true}));
     input.dispatchEvent(new Event('change', {bubbles: true}));
     if (!quiet) toast(true, 'Картинка вставлена');
     return true;
   }
+
 
   function clear(t) {
     if (!t.input) return;
@@ -284,8 +291,7 @@
         return f.type.indexOf('image/') === 0;
       });
       if (!list.length) { say(t, 'Перетащите файл картинки.'); return; }
-      if (t.input && !t.input.multiple) list = list.slice(0, 1);
-      list.forEach(function (f) { deliver(t, f, true); });
+      deliver(t, list, true);
     });
     var btn = zone.querySelector('.paste-zone-btn');
     if (btn) btn.addEventListener('click', function () { readClipboard(t); });

@@ -555,9 +555,11 @@ class TaskImage(models.Model):
         return self.image.name.lower().endswith('.pdf')
 
     def save(self, *args, **kwargs):
-        # Сжимаем только свежезагруженный растровый файл
-        # (не PDF и не ссылку на существующий файл)
-        if (self.image and not self.pk and not self.image._committed
+        # Сжимаем только свежезагруженный растровый файл (не PDF и не
+        # ссылку на существующий файл) — и у новой строки, и при замене
+        # файла в сохранённой: иначе WEBP/GIF, которому форма дала имя .jpg,
+        # лёг бы в хранилище как есть и сломал \includegraphics.
+        if (self.image and not self.image._committed
                 and not self.image.name.lower().endswith('.pdf')):
             self.image = self._compress(self.image)
         super().save(*args, **kwargs)
