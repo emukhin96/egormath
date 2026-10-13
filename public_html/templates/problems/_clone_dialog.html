@@ -29,12 +29,12 @@
         {% if owner.answer_block %}
         <div class="qclone-field">
           <label class="qclone-label" for="qclone-{{ owner.key }}-answer">Ответ{% if owner.answer_source == 'author' %} (из задачника){% endif %}</label>
-          <div class="qclone-answer"><input type="text" id="qclone-{{ owner.key }}-answer" name="{{ owner.key }}-answer" value="{{ owner.answer }}" data-answer autocomplete="off" spellcheck="false"><span class="qclone-was" data-answer-was hidden>было {{ owner.answer|default:'—' }}</span></div>
+          <div class="qclone-answer"><textarea id="qclone-{{ owner.key }}-answer" name="{{ owner.key }}-answer" rows="1" data-answer data-autosize autocomplete="off" spellcheck="false">{{ owner.answer }}</textarea><span class="qclone-was" data-answer-was hidden>было {{ owner.answer|default:'—' }}</span></div>
         </div>
         <div class="qclone-field" data-mask-field data-mask-slots="{{ owner.mask_slots }}" data-follows="{% if owner.mask_follows %}1{% else %}0{% endif %}">
           <span class="qclone-label">Маска автосверки</span>
           {% if owner.mask_follows %}<div class="qclone-mask-view" data-mask-view><code data-mask-text>{{ owner.mask }}</code><span class="qclone-sync">✓ следует за ответом</span><button type="button" class="link-btn" data-mask-edit>править</button></div>{% endif %}
-          <textarea name="{{ owner.key }}-mask" class="qclone-mono" rows="2" placeholder="Маски нет. Например: {% templatetag openvariable %}number: 10{% templatetag closevariable %}"{% if owner.mask_follows %} hidden{% endif %}>{{ owner.mask }}</textarea>
+          <textarea name="{{ owner.key }}-mask" class="qclone-mono" rows="2" data-autosize placeholder="Маски нет. Например: {% templatetag openvariable %}number: 10{% templatetag closevariable %}"{% if owner.mask_follows %} hidden{% endif %}>{{ owner.mask }}</textarea>
           <input type="hidden" name="{{ owner.key }}-mask_follow" value="{% if owner.mask_follows %}1{% else %}0{% endif %}" data-mask-follow>
           <span class="qclone-check" data-mask-check hidden></span>
         </div>

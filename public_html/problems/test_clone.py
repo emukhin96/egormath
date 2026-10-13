@@ -228,6 +228,37 @@ class CloneViewTests(TestCase):
             'task-answer': '$1$', 'task-mask': '{{number: 1}}'}))
         self.assertEqual(Task.objects.get(pk=response.json()['task_id']).answer_mask, '{{number: 1}}')
 
+    def test_multiline_answer_survives_textarea(self):
+        Task.objects.filter(pk=self.task.pk).update(
+            author_answer_latex='$D<a \\Rightarrow$\nкорней нет % см. рис. 3\n$x=2$',
+            answer_mask='{{number: 2}}')
+        self.task.refresh_from_db()
+        page = self.client.get(self.url)
+        self.assertContains(page, 'name="task-answer" rows="1" data-answer')
+        original = self.task.author_answer_latex
+        # Браузер присылает textarea с CRLF; ответ не трогали — он остаётся как был
+        response = self.client.post(self.url, self.data(**{
+            'task-answer': original.replace('\n', '\r\n'), 'task-mask': '{{number: 2}}'}))
+        copy = Task.objects.get(pk=response.json()['task_id'])
+        self.assertEqual(copy.author_answer_latex, original)
+        self.assertEqual(copy.answer_mask, '{{number: 2}}')
+        # Изменённый многострочный ответ сохраняет переводы строк, маска следует
+        response = self.client.post(self.url, self.data(**{
+            'task-answer': original.replace('x=2', 'x=5').replace('\n', '\r\n'),
+            'task-mask': '{{number: 2}}'}))
+        copy = Task.objects.get(pk=response.json()['task_id'])
+        self.assertEqual(copy.author_answer_latex, original.replace('x=2', 'x=5'))
+        self.assertEqual(copy.answer_mask, '{{number: 5}}')
+        # Подпункт: многострочный ответ без изменений
+        self.sub.answer_latex = 'а) $1$\n% хвост\nб) $5$'
+        self.sub.answer_mask = ''
+        self.sub.save()
+        response = self.client.post(self.url, self.data(**{
+            f'sub-{self.sub.pk}-answer': self.sub.answer_latex.replace('\n', '\r\n'),
+            f'sub-{self.sub.pk}-mask': '', f'sub-{self.sub.pk}-mask_follow': '0'}))
+        sub = Task.objects.get(pk=response.json()['task_id']).subitems.get()
+        self.assertEqual(sub.answer_latex, 'а) $1$\n% хвост\nб) $5$')
+
     def test_editor_answer_is_edited_when_no_author_answer(self):
         self.client.post(self.url, self.data(**{f'sub-{self.sub.pk}-answer': '$11$'}))
         sub = Task.objects.exclude(pk=self.task.pk).get().subitems.get()

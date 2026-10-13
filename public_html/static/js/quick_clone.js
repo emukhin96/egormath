@@ -241,7 +241,7 @@
         var form = dialog.querySelector('form.qclone');
         if (form) init(form);
         if (!dialog.open) dialog.showModal();
-        var first = dialog.querySelector('.num-in, input[data-answer], .btn');
+        var first = dialog.querySelector('.num-in, [data-answer], .btn');
         if (first) first.focus();
       });
   }
@@ -253,6 +253,13 @@
   }
 
   function owners(form) { return Array.prototype.slice.call(form.querySelectorAll('[data-owner]')); }
+
+  // Высота textarea по содержимому: многострочный ответ виден целиком
+  function autosize(area) {
+    if (area.hidden) return;
+    area.style.height = 'auto';
+    area.style.height = area.scrollHeight + 2 + 'px';
+  }
 
   function fitInput(input) {
     input.style.width = Math.max(2, input.value.length + 1) + 'ch';
@@ -309,6 +316,7 @@
       view.hidden = true;
       textarea.hidden = false;
       textarea.value = textarea.defaultValue;
+      autosize(textarea);
       check.textContent = signChanged && numbers.length === slots.length
         ? 'Проверьте маску: у числа в ответе сменился знак.'
         : 'Проверьте маску: в новом ответе другое количество чисел.';
@@ -447,6 +455,8 @@
       span.textContent = pretty(span.dataset.raw);
     });
     form.querySelectorAll('.num-in').forEach(fitInput);
+    // После showModal: у скрытого диалога scrollHeight ещё нулевой
+    setTimeout(function () { form.querySelectorAll('[data-autosize]').forEach(autosize); }, 0);
     if (state.after && form.querySelector('[name=item]')) {
       var after = document.createElement('input');
       after.type = 'hidden';
@@ -461,6 +471,7 @@
     }
     form.addEventListener('input', function (e) {
       var target = e.target;
+      if (target.matches('[data-autosize]')) autosize(target);
       if (target.classList.contains('num-in')) {
         fitInput(target);
         target.classList.toggle('is-changed', target.value !== target.dataset.orig);
@@ -475,9 +486,9 @@
       if (target.classList.contains('num-in') || target.classList.contains('qclone-raw')) schedulePreview(form);
     });
     form.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && e.target.matches('.num-in, input[data-answer]')) {
+      if (e.key === 'Enter' && e.target.matches('.num-in')) {
         e.preventDefault();
-        if (e.target.classList.contains('num-in')) focusNext(e.target);
+        focusNext(e.target);
       }
     });
     form.addEventListener('change', function (e) {
@@ -512,6 +523,7 @@
         field.querySelector('[data-mask-view]').hidden = true;
         var textarea = field.querySelector('textarea');
         textarea.hidden = false;
+        autosize(textarea);
         textarea.focus();
         return;
       }

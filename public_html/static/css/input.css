@@ -5781,7 +5781,7 @@
   .qclone-link { align-self: flex-start; font-size: 0.8rem; color: var(--muted); text-decoration: none; }
   .qclone-link:hover { color: var(--accent); }
   .qclone-answer { display: flex; align-items: center; gap: var(--space-2); }
-  .qclone-answer input { max-width: none; }
+  .qclone-answer textarea { max-width: none; min-height: 36px; resize: vertical; overflow-y: hidden; }
   .qclone-was, .qclone-hint { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
   .qclone-hint { white-space: normal; }
   .qclone-mask-view {

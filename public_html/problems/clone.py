@@ -9,6 +9,7 @@
 * без контекста — просто новая задача в базе.
 """
 import json
+import re
 
 from django import forms
 from django.conf import settings
@@ -174,6 +175,19 @@ def _validated_image(upload):
     return upload
 
 
+def _posted(data, name, original):
+    """Значение поля textarea: переводы строк браузер шлёт как CRLF.
+    Если по сути (без учёта CR/LF) учитель поле не менял — берём исходное
+    как есть, чтобы многострочный ответ или условие не изменились."""
+    original = original or ''
+    value = data.get(name)
+    if value is None:
+        return original
+    if re.sub(r'[\r\n]', '', value).strip() == re.sub(r'[\r\n]', '', original).strip():
+        return original
+    return value.replace('\r\n', '\n').replace('\r', '\n')
+
+
 def read_post(request, task):
     """Разбор формы диалога до создания копии: тексты, ответы, маски, рисунки."""
     data = request.POST
@@ -181,17 +195,17 @@ def read_post(request, task):
     for row in owners(task):
         key = row['key']
         values = {}
-        text = data.get(f'{key}-text', row['text'])
+        text = _posted(data, f'{key}-text', row['text'])
         if not text.strip():
             raise CloneError(f'{row["title"]}: текст не может быть пустым.')
         values['text'] = text
         if row['answer_block']:
-            answer = data.get(f'{key}-answer', row['answer']).strip()
+            answer = _posted(data, f'{key}-answer', row['answer']).strip()
             mask = None
             if data.get(f'{key}-mask_follow') == '1':
                 mask = follow_mask(row['mask'], row['answer'], answer)
             if mask is None:
-                mask = data.get(f'{key}-mask', row['mask'])
+                mask = _posted(data, f'{key}-mask', row['mask'])
             try:
                 mask = clean_mask_text(mask)
             except forms.ValidationError as exc:
