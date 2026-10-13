@@ -679,6 +679,16 @@ class StudentAnswerTests(TestCase):
         self.assertTrue(all(n.endswith('.jpg') for n in names))
         self.assertTrue(any('paste-20261014-153000' in n for n in names))
 
+    def test_photo_input_opts_out_of_paste_fallback(self):
+        """Поле фото отправляет форму сразу по change, поэтому вставка из
+        буфера кладёт туда файл только по явному выбору (image_paste.js)."""
+        self.assignment.allow_photos = True
+        self.assignment.save(update_fields=['allow_photos'])
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(
+            response, 'data-photo-input data-image-paste-fallback="off"')
+
     def test_post_without_answer_fields_does_not_clear(self):
         """POST без полей ответа (форма фото) не затирает сохранённое."""
         task = self.tasks[0]
