@@ -1,4 +1,4 @@
-{# Параметры: mode, primary, facets, grades, compact, single, chip_full, field_name, selected_json. #}
+{# Параметры: mode, primary, facets, grades, compact, single, chip_full, field_name, selected_json, placeholder. #}
 <div class="tax-picker{% if compact %} tax-picker-compact{% endif %}"
      data-tax-picker
      data-mode="{{ mode|default:'assign' }}"
@@ -16,7 +16,7 @@
   {% endif %}
   <div class="tax-search-row">
     <input type="search" class="tax-search" data-tax-search
-           placeholder="{% if compact %}Тема: код или название{% else %}Код или название темы{% endif %}"
+           placeholder="{% if placeholder %}{{ placeholder }}{% elif compact %}Тема: код или название{% else %}Код или название темы{% endif %}"{% if placeholder %} aria-label="Добавить тему в фильтр"{% endif %}
            autocomplete="off">
   </div>
   <div class="tax-panel" data-tax-panel {% if compact %}hidden{% endif %}>

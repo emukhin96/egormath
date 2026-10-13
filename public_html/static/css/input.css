@@ -1910,6 +1910,7 @@
   /* Сегментный переключатель: ссылки с GET-параметрами или кнопки.
      На узком экране прокручивается внутри себя, страница не уезжает. */
   .seg {
+    position: relative;
     display: inline-flex;
     flex: 0 1 auto;
     min-width: 0;
@@ -1964,9 +1965,27 @@
     font-weight: 600;
   }
 
-  .seg-item:focus-visible {
+  .seg-item:focus-visible,
+  .seg-item:has(> input:focus-visible) {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
+  }
+
+  /* Сегменты-радиокнопки внутри формы (живой поиск берёт значение из формы) */
+  .seg-item > input[type="radio"],
+  .seg-item > input[type="checkbox"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .seg-item:has(> input:checked) {
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font-weight: 600;
   }
 
   /* Выбранное значение фильтра (тема, тег) — чип с ×; «+ тема» — пустой чип */
@@ -2135,6 +2154,94 @@
     min-height: 32px;
     padding: 4px 8px;
     font-size: 0.88rem;
+  }
+
+  /* Выбор темы в строке фильтров (taxonomy_picker, compact, placeholder='+ тема'):
+     выбранные темы — те же чипы с ×, поле поиска — чип «+ тема», дерево тем
+     открывается под ним. JS виджета прежний (taxonomy.js). */
+  .page-toolbar .tax-picker-compact {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-chips {
+    display: contents;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-empty {
+    display: none;
+  }
+
+  .page-toolbar .tax-chip {
+    min-height: 28px;
+    gap: var(--space-1);
+    padding: 0 4px 0 10px;
+    border-color: #c9dbf2;
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font-weight: 500;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-chip-label {
+    max-width: 14rem;
+  }
+
+  .page-toolbar .tax-chip-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 1rem;
+  }
+
+  .page-toolbar .tax-chip-x:hover,
+  .page-toolbar .tax-chip-x:focus-visible {
+    color: var(--err);
+    background: #fdeaea;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-search {
+    width: 7.5rem;
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid #e3e8ef;
+    border-radius: 999px;
+    background: #f1f4f8;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-search::placeholder {
+    color: #44505f;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-search:focus {
+    width: 14rem;
+    max-width: 100%;
+    background: #fff;
+    cursor: text;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-search:focus::placeholder {
+    color: var(--muted);
+  }
+
+  .page-toolbar .tax-picker-compact .tax-panel {
+    left: 0;
+    right: auto;
+    top: calc(100% + 4px);
+  }
+
+  .page-toolbar .filter-reset {
+    min-height: 28px;
+    font-size: 0.85rem;
   }
 
   /* Числовой бейдж-счётчик (корзина, «новые»): акцентный круг, белые цифры */
