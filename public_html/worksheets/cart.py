@@ -13,8 +13,6 @@
 задача становится номером, похожие (одна семья аналогов) — по желанию
 вариантами одного номера; см. ``independentworks.from_cart``.
 """
-from urllib.parse import urlencode
-
 from django.conf import settings
 from django.contrib import messages
 from django.http import Http404, JsonResponse
@@ -344,7 +342,7 @@ def cart_to_independent(request):
         messages.success(request, '; '.join(parts) + '.')
     else:
         messages.info(request, 'Новых номеров нет — ' + '; '.join(parts or ['корзина пуста']) + '.')
-    url = reverse('independentworks:edit', args=[work.pk])
     if created:
-        url += '?' + urlencode({'new': ','.join(map(str, created))})
-    return redirect(url)
+        # Подсветку новых номеров edit покажет один раз (см. views.edit)
+        request.session[f'iw_new_positions_{work.pk}'] = created
+    return redirect('independentworks:edit', pk=work.pk)

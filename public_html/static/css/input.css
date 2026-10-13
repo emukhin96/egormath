@@ -5650,7 +5650,7 @@
   .iw-workspace-overview, .iw-workspace-detail { margin-bottom: var(--space-4); }
   .iw-workspace-selected { background: #edf4fd; }
   .iw-workspace-candidate { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); min-width: 0; }
-  /* Номера, только что добавленные из корзины (?new=…): подсветка гаснет сама */
+  /* Номера, только что добавленные из корзины (один показ): подсветка гаснет сама */
   .ws-item.iw-new { animation: iw-new-fade 5s ease-out 1; }
   @keyframes iw-new-fade { from, 50% { background-color: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); } }
   .iw-workspace-settings { margin-top: var(--space-4); }

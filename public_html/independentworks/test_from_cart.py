@@ -57,13 +57,17 @@ class CartToIndependentTests(TestCase):
         self.assertEqual(work.title, 'С-3')
         self.assertEqual(self._numbers(work), [
             [self.viet_a.pk, self.viet_b.pk], [self.manual_a.pk, self.manual_b.pk], [self.plain.pk]])
-        new_ids = ','.join(str(pk) for pk in work.positions.values_list('pk', flat=True))
-        self.assertRedirects(response, reverse('independentworks:edit', args=[work.pk]) + f'?new={new_ids.replace(",", "%2C")}',
+        self.assertRedirects(response, reverse('independentworks:edit', args=[work.pk]),
                              fetch_redirect_response=False)
         self.assertNotIn(SESSION_KEY, self.client.session)
         page = self.client.get(response.url)
         self.assertContains(page, 'Добавлено 3 номера из корзины')
         self.assertContains(page, 'iw-new', count=3)
+        # Подсветка — один раз: ни перезагрузка, ни POST-действие её не повторяют
+        self.assertNotContains(self.client.get(response.url), 'iw-new')
+        position = work.positions.first()
+        after = self.client.post(response.url, {'action': 'text', 'position': position.pk, 'text': ''}, follow=True)
+        self.assertNotContains(after, 'iw-new')
 
     def test_without_grouping_each_task_is_a_number(self):
         self._fill(self.viet_a, self.viet_b, self.plain)
