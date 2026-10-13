@@ -40,6 +40,19 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Фильтры без кнопки «Применить»: select/checkbox с data-autosubmit (или
+  // внутри формы с data-autosubmit) отправляет свою форму при изменении.
+  // requestSubmit, чтобы сработали submit-обработчики (живой поиск finder).
+  document.addEventListener("change", (event) => {
+    const field = event.target;
+    if (!(field instanceof Element) || !field.form) return;
+    if (!field.matches("[data-autosubmit], [data-autosubmit] *")) return;
+    if (field.matches('input[type="text"], input[type="search"], textarea')) return;
+    const form = field.form;
+    if (typeof form.requestSubmit === "function") form.requestSubmit();
+    else form.submit();
+  });
+
   const sidebar = document.getElementById("context-sidebar");
   const toggle = document.getElementById("context-toggle");
   const close = document.getElementById("sidebar-close");
