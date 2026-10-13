@@ -240,6 +240,22 @@ class CloneViewTests(TestCase):
         self.assertContains(detail, f'Клон #{payload["task_id"]} добавлен')
         self.assertContains(detail, 'клон рядом')
 
+    def test_next_clones_follow_previous_clone(self):
+        ws = Worksheet.objects.create(owner=self.teacher, title='Листок')
+        item = WorksheetItem.objects.create(worksheet=ws, task=self.task, order=10)
+        last = WorksheetItem.objects.create(worksheet=ws, text_latex='После', order=20)
+        first = self.client.post(self.url, self.data(worksheet=ws.pk, item=item.pk)).json()
+        second = self.client.post(self.url, self.data(
+            worksheet=ws.pk, item=item.pk, after=first['item_id'])).json()
+        self.assertEqual(list(ws.ordered_items().values_list('pk', flat=True)),
+                         [item.pk, first['item_id'], second['item_id'], last.pk])
+        self.assertEqual(WorksheetItem.objects.get(pk=second['item_id']).task_id, second['task_id'])
+        # Строка другого листка как «после чего» не принимается
+        other = WorksheetItem.objects.create(
+            worksheet=Worksheet.objects.create(owner=self.teacher, title='Другой'), text_latex='x')
+        response = self.client.post(self.url, self.data(worksheet=ws.pk, item=item.pk, after=other.pk))
+        self.assertEqual(response.status_code, 404)
+
     @override_settings(INDEPENDENT_WORKS_ENABLED=True)
     def test_clone_into_independent_position(self):
         work = Work.objects.create(owner=self.teacher, title='С-3')

@@ -169,7 +169,8 @@
 
   // --- диалог ----------------------------------------------------------------
   var dialog = null;
-  var state = {url: '', dirty: false, reload: false, saved: ''};
+  // after — строка листка, после которой встанет следующий клон
+  var state = {url: '', dirty: false, reload: false, saved: '', after: null};
   var previewTimer = null;
   var toastTimer = null;
 
@@ -224,7 +225,7 @@
 
   function open(url) {
     ensureDialog();
-    state = {url: url, dirty: false, reload: false, saved: ''};
+    state = {url: url, dirty: false, reload: false, saved: '', after: null};
     load().catch(function () { toast(false, 'Не удалось открыть клон задачи'); });
   }
 
@@ -387,6 +388,7 @@
         state.dirty = true;
         state.reload = !!data.reload;
         if (again) {
+          if (data.item_id) state.after = data.item_id;
           state.saved = data.message + ' ✓ Можно делать следующий.';
           return load();
         }
@@ -416,6 +418,13 @@
       span.textContent = pretty(span.dataset.raw);
     });
     form.querySelectorAll('.num-in').forEach(fitInput);
+    if (state.after && form.querySelector('[name=item]')) {
+      var after = document.createElement('input');
+      after.type = 'hidden';
+      after.name = 'after';
+      after.value = state.after;
+      form.appendChild(after);
+    }
     if (state.saved) {
       var note = form.querySelector('[data-qclone-note]');
       note.textContent = state.saved;

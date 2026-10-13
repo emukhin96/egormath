@@ -267,12 +267,23 @@ def _apply_images(copy, mapping, plan):
             _renumber_taskpics(copy, numbering)
 
 
-def create_clone(request, task, item, position, plan):
-    """Создаёт клон по разобранной форме; вызывается внутри транзакции."""
+def resolve_after(request, item):
+    """«Сохранить и ещё клон»: следующий клон встаёт после предыдущего.
+    ``after`` — строка того же листка; чужая или удалённая — 404."""
+    after_id = request.POST.get('after')
+    if item is None or not after_id:
+        return None
+    return get_object_or_404(item.worksheet.items, pk=after_id, deleted_at__isnull=True)
+
+
+def create_clone(request, task, item, position, plan, after=None):
+    """Создаёт клон по разобранной форме; вызывается внутри транзакции.
+    Возвращает ``(copy, строка листка или None)``."""
     from independentworks.models import Family
     copy, mapping = task.make_variant(request.user, with_mapping=True, standalone=True)
     # Клон — не номер задачника: связь с исходной хранит семейство аналогов
     copy.source_refs.all().delete()
+    row = None
     keep = plan['keep_solution']
     _apply_owner(task, copy, plan['owners']['task'], keep)
     clones = {sub.pk: sub for sub in copy.subitems.all()}
@@ -284,14 +295,14 @@ def create_clone(request, task, item, position, plan):
     Family.link_analog(task, copy)
     if item is not None:
         from .editor import insert_after
-        insert_after(item, copy, mapping)
+        row = insert_after(item, copy, mapping, after)
     if position is not None:
         from independentworks import services as svc
         try:
             svc.add_candidate(position, copy)
         except svc.WorkError as error:
             raise CloneError(str(error))
-    return copy
+    return copy, row
 
 
 @teacher_required
@@ -304,13 +315,14 @@ def task_clone(request, pk):
     if task.block_id:
         return JsonResponse({'ok': False, 'errors': [
             'Задача из общего блока: используйте «дублировать».']}, status=400)
+    after = resolve_after(request, item)
     try:
         plan = read_post(request, task)
         with transaction.atomic():
             if item is not None:
                 from worksheets.models import Worksheet
                 Worksheet.objects.select_for_update().get(pk=item.worksheet_id)
-            copy = create_clone(request, task, item, position, plan)
+            copy, row = create_clone(request, task, item, position, plan, after)
     except CloneError as error:
         return JsonResponse({'ok': False, 'errors': [str(error)]}, status=400)
     url = reverse('task_detail', args=[copy.pk])
@@ -320,6 +332,7 @@ def task_clone(request, pk):
     elif position is not None:
         messages.success(request, f'Клон #{copy.pk} добавлен в номер.')
     return JsonResponse({'ok': True, 'task_id': copy.pk, 'url': url, 'reload': reload,
+                         'item_id': row.pk if row else None,
                          'message': f'Клон #{copy.pk} сохранён'})
 
 
