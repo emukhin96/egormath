@@ -105,8 +105,11 @@
         if (!swap(html)) throw new Error('bad fragment');
         browser.classList.add('has-sheet');
         history.replaceState(null, '', link.href);
+        // Начало листка уехало выше топбара — возвращаем его в поле зрения
+        var topbar = document.querySelector('.topbar');
+        var offset = (topbar ? topbar.offsetHeight : 0) + 16;
         var top = pane.getBoundingClientRect().top;
-        if (top < 0) pane.scrollIntoView({block: 'start'});
+        if (top < offset) window.scrollBy(0, top - offset);
       }).catch(function (error) {
         if (error && error.name === 'AbortError') return;
         window.location.href = link.href;
