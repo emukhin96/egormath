@@ -2344,6 +2344,11 @@
     overflow-y: hidden;
     vertical-align: middle;
     padding-block: 0.15em;
+    /* Индексы KaTeX (.vlist-t2) вылезают за край на 2px — без запаса
+       под каждой M_4 появлялась пустая полоса прокрутки. Отрицательный
+       margin возвращает исходную ширину в строке. */
+    padding-inline-end: 2px;
+    margin-inline-end: -2px;
   }
 
   .ws-answers .katex-display {
