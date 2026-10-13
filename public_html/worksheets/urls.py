@@ -30,6 +30,8 @@ urlpatterns = [
          name='collection_detail'),
     path('collections/<int:pk>/use/', views.collection_use,
          name='collection_use'),
+    path('collections/<int:pk>/independent/', views.collection_to_independent,
+         name='collection_to_independent'),
     path('collections/<int:pk>/edit/', views.collection_edit,
          name='collection_edit'),
     path('collections/<int:pk>/to-worksheets/', views.collection_to_worksheets,

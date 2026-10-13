@@ -207,7 +207,22 @@ def edit(request, pk):
         p.point_summary = ' / '.join(str(n) for n in counts) or '—'
         p.needs_manual = any(c.mask_count < c.point_count for c in p.rows)
     selected = next((p for p in positions if str(p.pk) == request.GET.get('position')), positions[0] if positions else None)
-    return render(request, 'independentworks/edit.html', {'work': work, 'positions': positions, 'selected_position': selected, 'preparation_query': preparation_query(request)})
+    return render(request, 'independentworks/edit.html', {'work': work, 'positions': positions, 'selected_position': selected, 'preparation_query': preparation_query(request),
+                                                          'source_url': _source_url(request, work)})
+
+
+def _source_url(request, work):
+    """Ссылка «На основе …»: подборка — на её страницу, свой листок — в
+    конструктор; чужой листок без подборки — без ссылки (конструктор 404)."""
+    if not work.source_worksheet_id:
+        return ''
+    from worksheets.models import Collection
+    collection = Collection.objects.filter(worksheet_id=work.source_worksheet_id).first()
+    if collection:
+        return reverse('collection_detail', args=[collection.pk])
+    if Worksheet.visible_to(request.user).filter(pk=work.source_worksheet_id).exists():
+        return reverse('worksheet_detail', args=[work.source_worksheet_id])
+    return ''
 
 
 @enabled

@@ -825,6 +825,32 @@ def collection_use(request, pk):
 
 @teacher_required
 @require_POST
+def collection_to_independent(request, pk):
+    """«Самостоятельная по образцу»: копия подборки в новую самостоятельную.
+
+    Доступ — по видимости подборки (опубликована, своя, суперпользователь),
+    а не ``Worksheet.visible_to``: чужую опубликованную подборку тоже можно
+    взять образцом. Состав собирает тот же ``preparation.from_worksheet``,
+    что и «Создать самостоятельную» из листка.
+    """
+    if not settings.INDEPENDENT_WORKS_ENABLED:
+        raise Http404
+    collection = _visible_collection(request, pk)
+    if not collection.worksheet.items.filter(
+            deleted_at__isnull=True, task__isnull=False).exists():
+        messages.error(request, 'В подборке нет задач для самостоятельной.')
+        return redirect('collection_detail', pk=collection.pk)
+    from independentworks.preparation import from_worksheet
+    with transaction.atomic():
+        work = from_worksheet(collection.worksheet, request.user,
+                              collection.worksheet.title)
+    messages.success(
+        request, f'Самостоятельная «{work.title}» создана по образцу подборки.')
+    return redirect('independentworks:edit', pk=work.pk)
+
+
+@teacher_required
+@require_POST
 def worksheet_to_collections(request, pk):
     """Свой листок → подборка в «Авторских листках»."""
     from .authored import AuthoredError, move_to_collections
