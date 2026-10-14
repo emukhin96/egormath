@@ -14,7 +14,7 @@
   </div>
   <div class="page-actions">
     <nav class="seg" aria-label="Вид">
-      <a class="seg-item{% if view == 'list' %} is-active{% endif %}"{% if view == 'list' %} aria-current="true"{% endif %} href="{{ list_url }}">Список</a>
+      <a class="seg-item{% if view == 'list' %} is-active{% endif %}"{% if view == 'list' %} aria-current="true"{% endif %} href="{{ list_segment_url }}" data-sheet-scope="all">Список</a>
       <a class="seg-item{% if view == 'table' %} is-active{% endif %}"{% if view == 'table' %} aria-current="true"{% endif %} href="{{ table_url }}">Таблица</a>
     </nav>
   </div>
@@ -22,7 +22,7 @@
 
 <div class="page-toolbar">
   <nav class="seg" aria-label="Раздел">
-    {% for segment in segments %}<a class="seg-item{% if segment.active %} is-active{% endif %}"{% if segment.active %} aria-current="true"{% endif %} href="{{ segment.url }}{% if view != 'list' or sort != 'topic' %}{{ sheet_query }}{% endif %}">{{ segment.label }}</a>{% endfor %}
+    {% for segment in segments %}<a class="seg-item{% if segment.active %} is-active{% endif %}"{% if segment.active %} aria-current="true"{% endif %} href="{{ segment.url }}" data-sheet-scope="{{ segment.scope }}">{{ segment.label }}</a>{% endfor %}
   </nav>
   {# Поиск по названию — на клиенте; без JS поле не показываем #}
   <label class="filter-search" hidden data-authored-filter-wrap>
@@ -30,6 +30,7 @@
   </label>
   <form method="get" data-autosubmit>
     {% if view != 'list' %}<input type="hidden" name="view" value="{{ view }}">{% endif %}
+    {# Выбранный листок сохраняется при смене сортировки; JS обновляет поле после выбора без перезагрузки #}
     {% if explicit_sheet %}<input type="hidden" name="sheet" value="{{ selected.pk }}">{% endif %}
     <label class="sort-inline">Сортировка:
       <select name="sort" aria-label="Сортировка листков">
@@ -120,5 +121,5 @@
 {% block extra_js %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=3"></script>
 <script defer src="{% static 'js/cart.js' %}"></script>
-<script defer src="{% static 'js/authored_browser.js' %}?v=2"></script>
+<script defer src="{% static 'js/authored_browser.js' %}?v=3"></script>
 {% endblock %}

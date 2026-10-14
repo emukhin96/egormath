@@ -58,6 +58,31 @@
       link.setAttribute('aria-current', 'true');
     }
 
+    // Листок выбран без перезагрузки: форма сортировки и ссылки сегментов
+    // должны его сохранять, как при выборе ссылкой ?sheet=.
+    function syncSheet(head) {
+      var pk = head.dataset.sheetPk;
+      var sectionPk = head.dataset.sectionPk || '';
+      var form = document.querySelector('form[data-autosubmit]');
+      if (form) {
+        var input = form.querySelector('input[name="sheet"]');
+        if (!input) {
+          input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'sheet';
+          form.appendChild(input);
+        }
+        input.value = pk;
+      }
+      document.querySelectorAll('a[data-sheet-scope]').forEach(function (a) {
+        var scope = a.dataset.sheetScope;
+        var url = new URL(a.href, window.location.href);
+        if (scope === 'all' || scope === sectionPk) url.searchParams.set('sheet', pk);
+        else url.searchParams.delete('sheet');
+        a.href = url.pathname + url.search;
+      });
+    }
+
     function swap(html) {
       var tmp = document.createElement('div');
       tmp.innerHTML = html;
@@ -69,6 +94,7 @@
       var oldItems = pane.querySelector('#ws-items');
       if (!head || !items || !actions || !oldHead || !oldItems || !oldActions) return false;
       oldHead.replaceWith(head);
+      syncSheet(head);
       oldActions.replaceWith(actions);
       // #ws-items остаётся тем же узлом со своими классами: на него подписаны
       // тумблеры ответов (show-answers, author-only). Из фрагмента берём

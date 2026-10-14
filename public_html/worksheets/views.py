@@ -892,11 +892,24 @@ def _authored_browser(request, source, section=None):
     preview = (_authored_preview_context(
         request, selected, request.get_full_path()) if selected else {})
 
-    segments = [{'label': 'Все', 'url': reverse('authored_collections'),
+    # Ссылки сегментов несут выбранный листок туда, где он есть: в корень
+    # («Все») и в его собственный раздел. data-sheet-scope — для JS, который
+    # переписывает их после выбора листка без перезагрузки.
+    selected_scope = (str(selected.section.pk) if explicit and selected.section
+                      else None)
+
+    def segment_url(path, scope, segment_view=view):
+        keep = explicit and (scope == 'all' or scope == selected_scope)
+        return path + _authored_query(
+            segment_view, sort, sheet=selected.pk if keep else None)
+
+    segments = [{'label': 'Все', 'scope': 'all',
+                 'url': segment_url(reverse('authored_collections'), 'all'),
                  'active': section is None}]
     segments += [
-        {'label': row.short_title,
-         'url': reverse('collection_detail', args=[row.pk]),
+        {'label': row.short_title, 'scope': str(row.pk),
+         'url': segment_url(
+             reverse('collection_detail', args=[row.pk]), str(row.pk)),
          'active': section is not None and row.pk == section.pk}
         for row in sections
         if row.sheets_total or (section is not None and row.pk == section.pk)]
@@ -920,6 +933,7 @@ def _authored_browser(request, source, section=None):
         'base_url': base_url,
         'sheet_query': _authored_query(view, sort) or '?',
         'list_url': base_url + _authored_query('list', sort),
+        'list_segment_url': segment_url(base_url, 'all', 'list'),
         'table_url': base_url + _authored_query('table', sort),
         # Ссылки на темы в панели: при сортировке по теме — якорь на этой же
         # странице, иначе — тот же вид с группировкой по темам.

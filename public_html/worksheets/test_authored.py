@@ -316,6 +316,28 @@ class AuthoredBrowserTests(TestCase):
             response = self.section_page(sheet=pk)
             self.assertEqual(response.context['selected'].pk, self.sheet10.pk)
 
+    def test_selected_sheet_survives_sort_and_segments(self):
+        response = self.section_page(sort='date', sheet=self.plain.pk)
+        self.assertContains(
+            response, f'<input type="hidden" name="sheet" value="{self.plain.pk}">',
+            html=True)
+        urls = {s['scope']: s['url'] for s in response.context['segments']}
+        root = reverse('authored_collections')
+        own = reverse('collection_detail', args=[self.section.pk])
+        other = reverse('collection_detail', args=[self.sheet9.parent.pk])
+        # Листок есть в корне и в своём разделе, в чужом разделе — нет.
+        self.assertEqual(urls['all'], f'{root}?sort=date&sheet={self.plain.pk}')
+        self.assertEqual(urls[str(self.section.pk)],
+                         f'{own}?sort=date&sheet={self.plain.pk}')
+        self.assertEqual(urls[str(self.sheet9.parent.pk)], f'{other}?sort=date')
+        self.assertEqual(response.context['list_segment_url'],
+                         f'{own}?sort=date&sheet={self.plain.pk}')
+        self.assertContains(response, f'data-section-pk="{self.section.pk}"')
+        # Без явного выбора поле не выводится, сегменты без sheet.
+        response = self.section_page()
+        self.assertNotContains(response, 'name="sheet"')
+        self.assertEqual(response.context['segments'][0]['url'], root)
+
     def test_table_view_and_sorted_list(self):
         response = self.section_page(view='table')
         self.assertContains(response, 'также: Уравнения')

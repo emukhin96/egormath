@@ -1,6 +1,6 @@
 {% load task_extras %}
 {# Предпросмотр авторского листка в обзоре. Отдаётся и целиком в странице, и фрагментом (collection_preview): JS подменяет [data-authored-head], [data-authored-actions] и содержимое #ws-items. Контекст: sheet, collection, rows, preview_cart_ids, next_url #}
-<div class="authored-preview-head" data-authored-head data-sheet-pk="{{ sheet.pk }}" data-sheet-title="{{ sheet.title }}">
+<div class="authored-preview-head" data-authored-head data-sheet-pk="{{ sheet.pk }}" data-section-pk="{{ sheet.section.pk|default:'' }}" data-sheet-title="{{ sheet.title }}">
   <nav class="page-crumbs" aria-label="Путь к листку">
     <a href="{% url 'authored_collections' %}">{{ collection.source.title }}</a>
     {% if sheet.section %}<a href="{% url 'collection_detail' sheet.section.pk %}">{{ sheet.section.worksheet.title }}</a>{% endif %}
