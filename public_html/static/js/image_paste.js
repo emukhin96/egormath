@@ -10,18 +10,21 @@
    DataTransfer, после чего поле получает обычное событие change — так
    срабатывают существующие обработчики (превью, автоотправка фото).
 
-   Ctrl+V без нажатия кнопки: картинка уходит в поле, которое в фокусе,
-   под курсором или с которым работали последним; иначе — в поле, которое
-   подскажет страница (EgorImagePaste.addResolver, например первое пустое
-   поле формсета картинок), или в единственное пустое поле на странице
-   (если фокус не в текстовом поле). Вставку текста не перехватываем.
+   Ctrl+V: картинка уходит в поле (зону) в фокусе или где нажали
+   «Вставить из буфера»; если фокус не в текстовом поле — ещё под курсором
+   (кроме строки с сохранённым файлом) или с которым работали последним;
+   затем в поле, которое подскажет страница (EgorImagePaste.addResolver,
+   например первое пустое поле формсета картинок), и, если фокус не в
+   текстовом поле, в единственное пустое поле. Иначе — тост «Куда
+   вставить?». Вставку текста не перехватываем.
 
    Атрибуты поля:
      data-image-paste-thumb="off" — не показывать миниатюру в зоне
        (у строки уже есть своё превью).
      data-image-paste-fallback="off" — класть файл только по явному выбору
-       (фокус, курсор, кнопка зоны), не «в единственное пустое поле»:
-       для полей, которые отправляют форму сразу по change.
+       (фокус в поле/зоне или кнопка зоны), не по курсору, «последнему
+       активному» или «единственному пустому»: для полей, которые
+       отправляют форму сразу по change.
 
    API для загрузчиков без <input type=file>:
      EgorImagePaste.attach(element, onFile) — element становится зоной
@@ -46,6 +49,7 @@
   var targets = [];      // {input?, zone, onFile?}
   var hovered = null;    // цель под курсором
   var lastActive = null; // цель, с которой работали последней
+  var armed = null;      // зона, где нажали «Вставить из буфера»
   var resolvers = [];
 
   // --- Какие поля улучшаем ---
@@ -183,6 +187,7 @@
   // фото решения ушла бы по разу на каждый файл).
   function deliver(t, files, quiet) {
     lastActive = t;
+    armed = null;
     files = [].concat(files);
     if (t.onFile) {
       files.forEach(function (f) { t.onFile(f); });
@@ -227,6 +232,7 @@
   // --- Кнопка «Вставить из буфера»: Async Clipboard API ---
   function readClipboard(t) {
     lastActive = t;
+    armed = t;  // кнопка могла не получить фокус (Safari, Firefox на macOS)
     var hint = 'Нажмите ' + KEYS + ', чтобы вставить картинку сюда.';
     if (!navigator.clipboard || !navigator.clipboard.read) {
       say(t, hint);
@@ -335,6 +341,7 @@
     targets = targets.filter(function (t) { return t.zone.isConnected; });
     if (hovered && !hovered.zone.isConnected) hovered = null;
     if (lastActive && !lastActive.zone.isConnected) lastActive = null;
+    if (armed && !armed.zone.isConnected) armed = null;
   }
 
   // --- Куда вставлять по Ctrl+V ---
@@ -349,12 +356,39 @@
     return false;
   }
 
+  // Поле с автоотправкой (data-image-paste-fallback="off") принимает
+  // файл только по явному выбору: фокус в поле/зоне или нажатая кнопка
+  // «Вставить из буфера» этой зоны.
+  function explicitOnly(t) {
+    return t.input && t.input.getAttribute('data-image-paste-fallback') === 'off';
+  }
+
+  // Строка формсета с уже сохранённым файлом (заполнен скрытый
+  // «<префикс>-N-id»): наведение курсора не должно молча заменить его.
+  function hasSavedFile(t) {
+    var input = t.input;
+    var m = input && input.name && input.name.match(/^(.*-\d+)-[^-]+$/);
+    if (!m || !input.form) return false;
+    var id = input.form.elements[m[1] + '-id'];
+    return !!(id && id.value);
+  }
+
   function resolveTarget(file) {
     prune();
-    var active = findTarget(document.activeElement);
+    var focus = document.activeElement;
+    var active = findTarget(focus);
     if (active && isUsable(active)) return active;
-    if (hovered && isUsable(hovered)) return hovered;
-    if (lastActive && isUsable(lastActive)) return lastActive;
+    if (armed && isUsable(armed)) return armed;
+    // Человек печатает в текстовом поле вне зон: курсор мог случайно
+    // остаться над чужой зоной, а «последнее активное» — устареть.
+    // Тогда решают только подсказки страницы (формсет картинок задачи).
+    var typing = isTextField(focus);
+    if (!typing) {
+      if (hovered && isUsable(hovered) && !explicitOnly(hovered)
+          && !hasSavedFile(hovered)) return hovered;
+      if (lastActive && isUsable(lastActive)
+          && !explicitOnly(lastActive)) return lastActive;
+    }
     for (var i = 0; i < resolvers.length; i += 1) {
       var got = resolvers[i](file);
       var t = got && (findTarget(got) || null);
@@ -365,16 +399,16 @@
       if (t && isUsable(t)) return t;
     }
     // Запасная ветка «единственное пустое поле» — только когда человек не
-    // печатает в текстовом поле (скриншот, вставленный в ответ, не должен
-    // молча стать файлом) и только для полей без автоотправки: у них
-    // data-image-paste-fallback="off", туда кладём лишь по явному выбору.
-    if (isTextField(document.activeElement)) return null;
+    // печатает (скриншот, вставленный в ответ, не должен молча стать
+    // файлом) и только для полей без автоотправки.
+    if (typing) return null;
     var empty = targets.filter(function (t) {
       return t.input && isUsable(t) && isVisible(t) && isEmpty(t)
-        && t.input.getAttribute('data-image-paste-fallback') !== 'off';
+        && !explicitOnly(t);
     });
     return empty.length === 1 ? empty[0] : null;
   }
+
 
   function clipboardImage(data) {
     var items = data.items || [];
@@ -407,13 +441,13 @@
     var t = resolveTarget(file);
     if (!t) {
       var visible = targets.some(function (x) { return isUsable(x) && isVisible(x); });
-      if (visible && !isTextField(focus)) {
+      if (visible) {
         toast(false, 'Куда вставить? Нажмите «Вставить из буфера» у нужного поля');
       }
       return;
     }
     e.preventDefault();
-    var explicit = t === hovered || t === findTarget(focus);
+    var explicit = t === hovered || t === armed || t === findTarget(focus);
     var name = file.name && !/^image\.(png|jpe?g|gif|webp)$/i.test(file.name) ? file : named(file);
     deliver(t, name, explicit);
   });
@@ -422,7 +456,10 @@
   // загрузки больше не считается выбранным: иначе скриншот, вставленный
   // в ответ к задаче 5, уехал бы фотографией к задаче 3.
   document.addEventListener('focusin', function (e) {
-    if (isTextField(e.target) && !findTarget(e.target)) lastActive = null;
+    if (isTextField(e.target) && !findTarget(e.target)) {
+      lastActive = null;
+      armed = null;
+    }
   });
 
   // --- API ---
