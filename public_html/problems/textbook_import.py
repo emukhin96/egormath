@@ -1273,6 +1273,11 @@ def _attach_task_images(task, draft, batch):
         existing[stem] = image
 
 
+# Профили, у которых варианты работ связываются в семьи аналогов
+# при загрузке в каталог (ключи «С1.2/3», «КI.3/4»).
+ANALOG_PROFILES = {'vysotsky'}
+
+
 @transaction.atomic
 def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
     """Загружает одобренные черновики; повторный вызов безопасен.
@@ -1525,8 +1530,15 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         batch.save(update_fields=['status', 'updated_at'])
     collection_count = (Collection.objects.filter(source=batch.source).count()
                         - initial_collection_count)
-    return {
+    result = {
         'created': created,
         'reused': reused,
         'collections': max(0, collection_count),
     }
+    if batch.profile in ANALOG_PROFILES:
+        # Один номер в парных вариантах самостоятельных и контрольных —
+        # семья аналогов сразу после загрузки, без ручного
+        # sync_independent_analogs.
+        from independentworks.analogs import sync_families
+        result['analog_families'] = sync_families(source_id=batch.source_id)
+    return result
