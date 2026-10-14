@@ -70,8 +70,10 @@
       if (!head || !items || !actions || !oldHead || !oldItems || !oldActions) return false;
       oldHead.replaceWith(head);
       oldActions.replaceWith(actions);
-      // #ws-items остаётся тем же узлом: на него подписан тумблер ответов
-      oldItems.className = items.className;
+      // #ws-items остаётся тем же узлом со своими классами: на него подписаны
+      // тумблеры ответов (show-answers, author-only). Из фрагмента берём
+      // только ширину колонки номеров.
+      oldItems.classList.toggle('ws-num-wide', items.classList.contains('ws-num-wide'));
       oldItems.setAttribute('style', items.getAttribute('style') || '');
       oldItems.innerHTML = items.innerHTML;
       document.dispatchEvent(new CustomEvent('worksheet:updated'));
