@@ -4076,9 +4076,10 @@
     grid-column: 1 / -1;
   }
 
+  /* Выбранный листок — только фоном и цветом названия, без левой полосы
+     (запрет — docs/PIPELINE.md, «Шапка страницы и фильтры») */
   .authored-li.is-active {
     background: var(--accent-soft);
-    box-shadow: inset 3px 0 0 var(--accent);
   }
 
   .authored-li.is-active .authored-li-name {
