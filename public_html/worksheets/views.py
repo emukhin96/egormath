@@ -15,6 +15,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST, require_http_methods
 
 from django.utils.dateparse import parse_date
@@ -451,6 +452,10 @@ def collection_list(request):
     source_pk = request.GET.get('source', '')
     selected_source = next(
         (row for row in sources if str(row['source'].pk) == source_pk), None)
+    from .corpus import SOURCE_TITLE as AUTHORED_SOURCE
+    if (selected_source
+            and selected_source['source'].title == AUTHORED_SOURCE):
+        return redirect('authored_collections')
     return render(request, 'worksheets/collection_list.html', {
         'collection_sources': sources,
         'selected_source': selected_source,
@@ -727,6 +732,9 @@ def collection_detail(request, pk):
     с задачами на одной странице (?view=tree — прежняя таблица детей).
     """
     collection = _visible_collection(request, pk)
+    from .authored_browser import is_authored_section
+    if is_authored_section(collection):
+        return _authored_browser(request, collection.source, section=collection)
     collection.catalog_title = _collection_title(collection)
     all_items = list(collection.worksheet.ordered_items())
     prefetch_related_objects(all_items, 'task__source_refs')
@@ -811,6 +819,162 @@ def collection_detail(request, pk):
         'current_collection_topics': (
             current_collection_row['topics'] if current_collection_row else []),
     })
+
+
+def _authored_preview_context(request, sheet, next_url):
+    """Предпросмотр одного авторского листка: его задачи и рубрики."""
+    collection = sheet.collection
+    items = list(collection.worksheet.ordered_items())
+    prefetch_related_objects(items, 'task__source_refs')
+    rows = _collection_rows(items, source_id=collection.source_id)
+    from assignments.task_usage import attach_usage, audience_context
+    usage_ctx = audience_context(request, attach_usage(
+        request, [row['item'].task for row in rows if row['item'].task_id]))
+    labels = [len(row['label']) for row in rows]
+    return {
+        **usage_ctx,
+        'sheet': sheet,
+        'collection': collection,
+        'rows': rows,
+        'preview_cart_ids': sheet.cart_task_ids,
+        'number_width': max(labels or [2]),
+        'wide_numbers': any(width > 3 for width in labels),
+        'next_url': next_url,
+        # Фрагмент грузится отдельным запросом: без JS кнопки корзины
+        # возвращают на страницу обзора, а не на адрес фрагмента.
+        'cart_next': next_url,
+        'is_owner': (collection.worksheet.owner_id == request.user.pk
+                     or request.user.is_superuser),
+        'corpus_key': corpus_key_from_comment(collection.worksheet.comment),
+    }
+
+
+def _authored_query(view, sort, **extra):
+    """Строка запроса страницы обзора без значений по умолчанию."""
+    from urllib.parse import urlencode
+    params = {}
+    if view != 'list':
+        params['view'] = view
+    if sort != 'topic':
+        params['sort'] = sort
+    params.update({key: value for key, value in extra.items() if value})
+    return '?' + urlencode(params) if params else ''
+
+
+def _authored_browser(request, source, section=None):
+    """Страница раздела (или всего источника) «Авторские листки».
+
+    Вид «Список»: листки по главной теме и предпросмотр выбранного
+    (``?sheet=<pk>``, без JS всё работает ссылками); «Таблица» — темы-главы.
+    """
+    from .authored_browser import (SORTS, VIEWS, group_sheets, load_sheets,
+                                   sections_of)
+    from .cart import CART_ADD_MANY_LIMIT
+    view = request.GET.get('view')
+    view = view if view in VIEWS else 'list'
+    sort = request.GET.get('sort')
+    sort = sort if sort in dict(SORTS) else 'topic'
+    sheets = load_sheets(source, request.user, section)
+    groups = group_sheets(sheets, sort)
+    topic_groups = groups if sort == 'topic' else group_sheets(sheets)
+    sections = sections_of(source, request.user)
+    base_url = (reverse('collection_detail', args=[section.pk]) if section
+                else reverse('authored_collections'))
+
+    selected, explicit = None, False
+    if view == 'list':
+        ordered = [sheet for group in groups for sheet in group.sheets]
+        wanted = request.GET.get('sheet', '')
+        selected = next((s for s in ordered if str(s.pk) == wanted), None)
+        explicit = selected is not None
+        if selected is None and ordered:
+            selected = ordered[0]
+    preview = (_authored_preview_context(
+        request, selected, request.get_full_path()) if selected else {})
+
+    # Ссылки сегментов несут выбранный листок туда, где он есть: в корень
+    # («Все») и в его собственный раздел. data-sheet-scope — для JS, который
+    # переписывает их после выбора листка без перезагрузки.
+    selected_scope = (str(selected.section.pk) if explicit and selected.section
+                      else None)
+
+    def segment_url(path, scope, segment_view=view):
+        keep = explicit and (scope == 'all' or scope == selected_scope)
+        return path + _authored_query(
+            segment_view, sort, sheet=selected.pk if keep else None)
+
+    segments = [{'label': 'Все', 'scope': 'all',
+                 'url': segment_url(reverse('authored_collections'), 'all'),
+                 'active': section is None}]
+    segments += [
+        {'label': row.short_title, 'scope': str(row.pk),
+         'url': segment_url(
+             reverse('collection_detail', args=[row.pk]), str(row.pk)),
+         'active': section is not None and row.pk == section.pk}
+        for row in sections
+        if row.sheets_total or (section is not None and row.pk == section.pk)]
+    return render(request, 'worksheets/authored_browser.html', {
+        **preview,
+        'source': source,
+        'section': section,
+        'page_title': section.worksheet.title if section else source.title,
+        'sheets_total': len(sheets),
+        'tasks_total': sum(sheet.tasks_total for sheet in sheets),
+        'groups': groups,
+        'topic_groups': topic_groups,
+        'sections': sections,
+        'all_sheets_total': sum(row.sheets_total for row in sections),
+        'segments': segments,
+        'view': view,
+        'sort': sort,
+        'sorts': SORTS,
+        'selected': selected,
+        'explicit_sheet': explicit,
+        'base_url': base_url,
+        'sheet_query': _authored_query(view, sort) or '?',
+        'list_url': base_url + _authored_query('list', sort),
+        'list_segment_url': segment_url(base_url, 'all', 'list'),
+        'table_url': base_url + _authored_query('table', sort),
+        # Ссылки на темы в панели: при сортировке по теме — якорь на этой же
+        # странице, иначе — тот же вид с группировкой по темам.
+        'topic_query': ('' if sort == 'topic'
+                        else base_url + _authored_query(view, 'topic')),
+        'cart_limit': CART_ADD_MANY_LIMIT,
+    })
+
+
+@teacher_required
+def authored_collections(request):
+    """Корень «Авторских листков»: листки всех разделов сразу."""
+    from problems.models import Source
+    from .corpus import SOURCE_TITLE
+    source = Source.objects.filter(title=SOURCE_TITLE).order_by('pk').first()
+    if source is None:
+        raise Http404
+    return _authored_browser(request, source)
+
+
+@teacher_required
+def collection_preview(request, pk):
+    """HTML-фрагмент предпросмотра авторского листка для панели обзора."""
+    from .authored_browser import is_authored_sheet, load_sheets
+    collection = _visible_collection(request, pk)
+    if not is_authored_sheet(collection):
+        raise Http404
+    page_url = (reverse('collection_detail', args=[collection.parent_id])
+                if collection.parent_id else reverse('authored_collections'))
+    page_url += f'?sheet={collection.pk}'
+    if request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return redirect(page_url)
+    sheets = load_sheets(collection.source, request.user, pks=[collection.pk])
+    if not sheets:
+        raise Http404
+    next_url = request.GET.get('next', '')
+    if not url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}):
+        next_url = page_url
+    return render(request, 'worksheets/_authored_preview.html',
+                  _authored_preview_context(request, sheets[0], next_url))
 
 
 @teacher_required
