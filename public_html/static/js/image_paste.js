@@ -10,9 +10,10 @@
    DataTransfer, после чего поле получает обычное событие change — так
    срабатывают существующие обработчики (превью, автоотправка фото).
 
-   Ctrl+V: картинка уходит в поле (зону) в фокусе или где нажали
-   «Вставить из буфера»; если фокус не в текстовом поле — ещё под курсором
-   (кроме строки с сохранённым файлом) или с которым работали последним;
+   Ctrl+V: картинка уходит в зону, где нажали «Вставить из буфера», или
+   в пустое поле (зону) в фокусе; если фокус не в текстовом поле — ещё под курсором
+   или с которым работали последним, но только пустое (не перезаписываем
+   выбранный файл и сохранённую картинку строки без явного выбора);
    затем в поле, которое подскажет страница (EgorImagePaste.addResolver,
    например первое пустое поле формсета картинок), и, если фокус не в
    текстовом поле, в единственное пустое поле. Иначе — тост «Куда
@@ -185,8 +186,9 @@
   // files — один файл или массив: несколько перетащенных картинок
   // записываются разом и дают ОДНО событие change (иначе автоотправка
   // фото решения ушла бы по разу на каждый файл).
+  // deliver не делает поле «последним активным»: иначе следующий Ctrl+V
+  // затёр бы только что вставленную картинку вместо новой строки формсета.
   function deliver(t, files, quiet) {
-    lastActive = t;
     armed = null;
     files = [].concat(files);
     if (t.onFile) {
@@ -373,21 +375,34 @@
     return !!(id && id.value);
   }
 
+  function implicitOk(t) {
+    return isUsable(t) && !explicitOnly(t) && !hasSavedFile(t)
+      && (isEmpty(t) || (t.input && t.input.multiple));
+  }
+
   function resolveTarget(file) {
     prune();
     var focus = document.activeElement;
-    var active = findTarget(focus);
-    if (active && isUsable(active)) return active;
+    // «Вставить из буфера» не смогла прочитать буфер и попросила Ctrl+V —
+    // это явный выбор, даже если в поле уже есть файл.
     if (armed && isUsable(armed)) return armed;
+    // Фокус в зоне/поле — тоже выбор, но фокус остаётся на кнопке и после
+    // вставки: следующий Ctrl+V не должен затереть только что вставленное,
+    // поэтому заполненное поле (без multiple) пропускаем — в форме задачи
+    // картинка уйдёт в новую строку. Заменить файл — кнопкой или ×.
+    var active = findTarget(focus);
+    if (active && isUsable(active)
+        && (isEmpty(active) || (active.input && active.input.multiple))) return active;
     // Человек печатает в текстовом поле вне зон: курсор мог случайно
     // остаться над чужой зоной, а «последнее активное» — устареть.
     // Тогда решают только подсказки страницы (формсет картинок задачи).
     var typing = isTextField(focus);
+    // Без явного выбора заполненное поле не перезаписываем: ни уже
+    // выбранный/вставленный файл, ни сохранённую картинку строки формсета
+    // (поле с multiple не перезаписывается, а дополняется — его можно).
     if (!typing) {
-      if (hovered && isUsable(hovered) && !explicitOnly(hovered)
-          && !hasSavedFile(hovered)) return hovered;
-      if (lastActive && isUsable(lastActive)
-          && !explicitOnly(lastActive)) return lastActive;
+      if (hovered && implicitOk(hovered)) return hovered;
+      if (lastActive && implicitOk(lastActive)) return lastActive;
     }
     for (var i = 0; i < resolvers.length; i += 1) {
       var got = resolvers[i](file);
