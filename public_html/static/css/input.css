@@ -3067,7 +3067,12 @@
     min-width: 0;
   }
 
-  #ws-items .ws-content > .task-images {
+  /* Конструктор: рисунки, ответы и решения, маски ответов — на линии
+     основного текста задачи (колонка номера 2rem + зазор 6px), как
+     подпункты и как в подборках. */
+  #ws-items .ws-content > .task-images,
+  #ws-items .ws-content > .ws-answers,
+  #ws-items .ws-content > [data-worksheet-mask] {
     margin-left: calc(2rem + 6px);
   }
 
@@ -4535,8 +4540,10 @@
     line-height: 1.5;
   }
 
+  /* Строка действий задачи (#id, звёзды, маски…) — тоже на линии текста:
+     ручка перетаскивания 28px + колонка номера 2rem + зазор 6px. */
   .ws-item:has(> .ws-body > .drag-handle) > .worksheet-task-meta {
-    margin-left: 28px;
+    margin-left: calc(28px + 2rem + 6px);
   }
 
   .worksheet-task-meta .task-meta-item {
