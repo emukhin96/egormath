@@ -6645,9 +6645,10 @@
   .canvas-head, .canvas-toolbar, .canvas-pages, .canvas-controls, .canvas-group {
     display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
   }
-  .canvas-head { justify-content: space-between; margin-bottom: var(--space-2); }
+  /* Крестик — в правом верхнем углу, не переносится отдельной строкой под вкладки */
+  .canvas-head { position: relative; justify-content: space-between; margin-bottom: var(--space-2); padding-right: 36px; }
   .canvas-controls { flex-basis: 100%; }
-  .canvas-close { margin-left: auto; align-self: flex-start; }
+  .canvas-close { position: absolute; top: 0; right: 0; margin: 0; }
   .canvas-busy { pointer-events: none; opacity: 0.65; }
   .canvas-label { font-weight: 600; color: var(--accent-dark); }
   .canvas-page[aria-pressed="true"], .canvas-tool[aria-pressed="true"] {
@@ -6660,12 +6661,14 @@
     content: ''; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px;
     border-radius: 50%; background: #dc2626; box-shadow: 0 0 0 2px #fff;
   }
-  .canvas-bg { margin: 0; width: auto; max-width: 12rem; min-height: 28px; padding: 2px 6px; font-size: 0.82rem; }
+  .canvas-bg { margin: 0; width: auto; max-width: 15rem; min-height: 28px; padding: 2px 6px; font-size: 0.82rem; }
   /* Подпись + селект: селект не тянется на всю колонку даже без правила выше */
   .canvas-bg-field { display: inline-flex; align-items: center; gap: var(--space-1); margin: 0; font-size: 0.82rem; color: var(--muted); }
-  .canvas-bg-field select { width: auto; max-width: 12rem; }
-  .canvas-bg-note { font-size: 0.82rem; color: var(--muted); }
-  /* Панель: две фиксированные строки, состав кнопок не меняется — поле не прыгает */
+  .canvas-bg-field select { width: auto; max-width: 15rem; }
+  /* Подпись чужого фона ужимается многоточием, чтобы привязка к сетке встала с ней в строку */
+  .canvas-bg-note { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; color: var(--muted); }
+  .canvas-controls .ws-toggle { flex: none; }
+  /* Панель: два фиксированных ряда, состав кнопок не меняется — поле не прыгает */
   .canvas-toolbar { flex-direction: column; align-items: stretch; gap: var(--space-2); margin-bottom: var(--space-2); }
   .canvas-toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); min-height: 30px; }
   .canvas-swatch:disabled { opacity: 0.3; cursor: default; box-shadow: 0 0 0 1px var(--border); }
@@ -6677,19 +6680,36 @@
     width: 30px; height: 30px; min-height: 30px; padding: 4px;
   }
   .canvas-icon svg { width: 20px; height: 20px; flex: none; }
-  .canvas-graphs .canvas-tool { min-width: 30px; padding: 3px 6px; font-family: KaTeX_Main, serif; }
-  .canvas-graphs .katex { font-size: 1.05em; }
-  /* Меню выбора рисунка задачи: всплывает над панелью, не сдвигая поле */
-  .canvas-pictures { position: relative; }
+  /* Кнопка со значком и подписью («Дублировать», «Вставить ▾») */
+  .canvas-head .canvas-labelled, .canvas-toolbar .canvas-labelled {
+    display: inline-flex; align-items: center; gap: var(--space-1); width: auto; min-height: 30px; padding: 3px 8px;
+  }
+  .canvas-labelled.canvas-icon svg { width: 18px; height: 18px; }
+  /* Подпись группы кнопок («Выделенное:») */
+  .canvas-caption { font-size: 0.82rem; color: var(--muted); margin-right: 2px; cursor: default; }
+  /* Меню «Вставить»: всплывает над панелью, не сдвигая поле */
+  .canvas-insert { position: relative; }
   .canvas-menu {
     position: absolute; top: 100%; left: 0; z-index: 20; margin-top: 4px;
     display: flex; gap: var(--space-1); padding: var(--space-1); background: #fff;
     border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(5, 20, 43, 0.18);
   }
+  .canvas-menu-list { flex-direction: column; align-items: stretch; width: 17rem; padding: var(--space-2); }
+  .canvas-menu-title { font-size: 0.78rem; color: var(--muted); padding: 0 var(--space-1); }
+  .canvas-menu-title + .canvas-menu-row, .canvas-menu-title + .canvas-menu-thumbs, .canvas-menu-title + .canvas-menu-note { margin-top: 2px; }
+  .canvas-menu-row + .canvas-menu-title { margin-top: var(--space-2); }
+  .canvas-menu-row {
+    display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 32px; margin: 0; padding: 2px var(--space-1);
+    border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; font-size: 0.9rem; text-align: left; cursor: pointer;
+  }
+  .canvas-menu-row:hover, .canvas-menu-row:focus-visible { background: var(--accent-soft); outline: none; }
+  .canvas-menu-formula { flex: none; min-width: 4.5rem; font-family: KaTeX_Main, serif; }
+  .canvas-menu-note { font-size: 0.82rem; color: var(--muted); padding: 0 var(--space-1); }
+  .canvas-menu-thumbs { display: flex; flex-wrap: wrap; gap: var(--space-1); }
   .canvas-menu-item { width: 72px; height: 56px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
   .canvas-menu-item:hover { border-color: var(--accent); }
   .canvas-menu-item img { width: 100%; height: 100%; object-fit: contain; display: block; }
-  .canvas-toolbar .ws-toggle { margin-left: 0; }
+  .canvas-controls .ws-toggle { margin-left: 0; }
   .canvas-group { gap: var(--space-1); }
   .canvas-swatch {
     width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff;
