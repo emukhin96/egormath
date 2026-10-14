@@ -171,3 +171,21 @@ class AnalogDiscoveryTests(TestCase):
         family = tasks[0].analog_families.get()
         self.assertEqual(set(family.tasks.all()), set(tasks[:3]))
         self.assertEqual(sync_families(source_id=self.source.pk, report=True)['members_added'], 0)
+
+    def test_work_variants_by_number(self):
+        # Высоцкий: «С1.1/2» и «С1.2/2» — один номер в паре вариантов;
+        # КI: варианты 1–2 базовые, 3–4 — другая пара.
+        s1, s2 = self.ref('С1.1/2'), self.ref('С1.2/2')
+        k1, k2 = self.ref('КI.1/4'), self.ref('КI.2/4')
+        k3, k4 = self.ref('КI.3/4'), self.ref('КI.4/4')
+        self.ref('С1.1/3')
+        lonely = self.ref('КII.1/6')
+        report = sync_families(report=True)
+        families = {frozenset(f.tasks.all()) for f in Family.objects.all()}
+        self.assertEqual(families, {frozenset({s1, s2}), frozenset({k1, k2}), frozenset({k3, k4})})
+        self.assertEqual(len(report['incomplete']), 2)
+        self.assertFalse(lonely.analog_families.exists())
+        from .analogs import similar_groups
+        groups = similar_groups([s1.pk, k1.pk, s2.pk, k3.pk])
+        self.assertEqual(groups[s1.pk], groups[s2.pk])
+        self.assertNotIn(k1.pk, groups)

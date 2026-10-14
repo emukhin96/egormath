@@ -36,10 +36,11 @@ from pathlib import Path
 from .merzlyak_parser import (
     LEFTOVER_LABEL_RE, _heal_ocr_math, _heal_ocr_words, normalize_degrees,
     normalize_units, wrap_answer_numbers)
-from .potoskuev_parser import monotonic_numbers, renumber_appendix_lists
+from .potoskuev_parser import (
+    monotonic_numbers, renumber_appendix_lists, tabular_to_array)
 from .textbook_parser import (
-    Marker, TaskDraft, blocks, clean, finalize_draft_images, merge_solutions,
-    task_from_block)
+    Marker, TaskDraft, blocks, clean, cyrillic_item_label, finalize_draft_images,
+    merge_solutions, task_from_block)
 
 
 DATA_DIR = Path(__file__).with_name("data")
@@ -184,15 +185,37 @@ _POINT_REF_RE = re.compile(r"(?<=\bп\.)\s*(?=[а-е]\))")
 _LATIN_LABEL_RE = re.compile(r"(?m)^(?P<lead>[ \t]*(?:\\item\[)?)B\)")
 
 
+_PICTURE = r"\\includegraphics(?:\[[^\]]*\])?\{[^{}]+\}"
+_INLINE_PICTURE_RE = re.compile(
+    r"(?P<pre>[А-Яа-яЁё,])(?P<hy>-?)[ \t]*\\\\\n(?P<img>" + _PICTURE + r")\\\\\n"
+    r"(?P<post>[а-яё][^\n]*?)(?P<end>\\\\\n|\n|$)")
+
+
+def lift_inline_pictures(text: str) -> str:
+    """«дере-⏎рисунок⏎во некоторого…»: рисунок стоял в обтекание посреди
+    фразы — фраза склеивается (и разорванное слово), рисунок встаёт
+    после неё."""
+    def fix(match: re.Match) -> str:
+        glue = "" if match.group("hy") else " "
+        return (match.group("pre") + glue + match.group("post") + "\\\\\n"
+                + match.group("img") + match.group("end"))
+    return _INLINE_PICTURE_RE.sub(fix, text)
+
+
 def prepare_text(text: str, *, through: bool = True) -> str:
     """``through`` — сквозная нумерация книги; иначе (карточки, работы)
     каждый список нумеруется с 1."""
     text = text.replace("\r\n", "\n")
+    text = lift_inline_pictures(text)
     text = renumber_lists(text) if through else renumber_appendix_lists(text)
     text = re.sub(r"\\\\\[0pt\]", r"\\\\", text)
     text = _POINT_REF_RE.sub(" " + _LABEL_GUARD, text)
     text = _LATIN_LABEL_RE.sub(r"\g<lead>в)", text)
     text = _heal_ocr_words(text)
+    # Латинские двойники кириллицы в словах книги.
+    text = re.sub(r"\bCMC\b", "СМС", text).replace("Bceго", "Всего")
+    text = tabular_to_array(text)
+    text = re.sub(r"\\(?:begin|end)\{(?:table|center)\}(?:\[[^\]]*\])?", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text
 
@@ -236,13 +259,45 @@ def _clean_body(body: str) -> str:
     return body.strip()
 
 
+_FOOTNOTE_RE = re.compile(r"\\footnotetext\{\s*\\\(\{\s*\}\^\{1\}\\\)\s*(?P<text>.*?)\n\}", re.S)
+_FOOTNOTE_MARK_RE = re.compile(r"\s*\\\(\{\s*\}\^\{1\}\\\)")
+
+
+def attach_footnotes(pairs: list[tuple[Marker, str]]) -> list[tuple[Marker, str]]:
+    """Текст сноски внизу страницы OCR ставит в тело следующей задачи:
+    сноска уходит к задаче со знаком «¹»."""
+    result = [list(pair) for pair in pairs]
+    for index in range(1, len(result)):
+        body = result[index][1]
+        if (not _FOOTNOTE_RE.search(body)
+                or _FOOTNOTE_MARK_RE.search(_FOOTNOTE_RE.sub("", body))):
+            continue
+        # Ближайшая задача выше (до трёх назад) со знаком без своей сноски.
+        for back in range(index - 1, max(-1, index - 4), -1):
+            previous = result[back][1]
+            if (_FOOTNOTE_MARK_RE.search(_FOOTNOTE_RE.sub("", previous))
+                    and not _FOOTNOTE_RE.search(previous)):
+                notes = "".join(m.group(0) for m in _FOOTNOTE_RE.finditer(body))
+                result[index][1] = _FOOTNOTE_RE.sub("\n", body)
+                result[back][1] = previous + "\n" + notes
+                break
+    return [tuple(pair) for pair in result]
+
+
 def build_task(marker: Marker, body: str, path: list[str]) -> TaskDraft:
+    # Сноска книги к задаче — методическое примечание: в разбор.
+    notes = [clean(m.group("text")) for m in _FOOTNOTE_RE.finditer(body)]
+    body = _FOOTNOTE_MARK_RE.sub("", _FOOTNOTE_RE.sub("\n", body))
     body, solution = split_author_material(_clean_body(body))
     task = task_from_block(marker, body, path)
     if marker.kind == "star":
         task.stars = max(task.stars, 1)
     if solution:
         task.author_solution_latex = clean(solution)
+    if notes:
+        task.author_solution_latex = "\n\n".join(
+            ([task.author_solution_latex] if task.author_solution_latex else [])
+            + ["Примечание. " + note for note in notes])
     return task
 
 
@@ -262,9 +317,14 @@ def parse_paragraphs(text: str, structure: dict, diagnostics: dict) -> list[Task
         diagnostics["missing_task_ids"].extend(
             str(n) for n in range(spec["first"], spec["last"] + 1) if n not in found)
         diagnostics["tasks_by_paragraph"][number] = len(markers)
-        for marker, body in blocks(zone, markers):
-            local = int(marker.external_id)
-            sub = structure["class_title"] if local < spec["home"] else structure["home_title"]
+        home = HOME_RE.search(zone)
+        home_at = home.start() if home else len(zone)
+        first_home = next((int(m.external_id) for m in markers if m.start > home_at), None)
+        if first_home != spec["home"]:
+            diagnostics["home_boundary_mismatch"].append(
+                f"§{number}: в тексте {first_home}, в таблице {spec['home']}")
+        for marker, body in attach_footnotes(list(blocks(zone, markers))):
+            sub = structure["class_title"] if marker.start < home_at else structure["home_title"]
             path = [parts[spec["part"]], spec["title"], sub]
             task = build_task(marker, body, path)
             task.collection_title = sub
@@ -380,10 +440,15 @@ def parse_tests(zone: str, structure: dict, diagnostics: dict) -> list[TaskDraft
         if len(markers) != item["tasks"]:
             diagnostics["tests_task_count_mismatch"].append(
                 f"{key}: {len(markers)} из {item['tasks']}")
+        topics = {p["number"]: p for p in structure["paragraphs"]}
         for marker, raw in blocks(body, markers):
             task = build_task(marker, raw, path)
             task.collection_title = item["title"]
             task.topic_original = item["title"]
+            number = int(marker.external_id.split("/")[1])
+            paragraph = item.get("paragraphs", [])[number - 1:number]
+            if paragraph:
+                task.topic_code = topics[paragraph[0]]["topic"]
             tasks.append(task)
     return tasks
 
@@ -424,7 +489,7 @@ def labeled_answer_blocks(text: str) -> dict[str, str]:
         found.append((key, match.start(), match.end()))
     for index, (key, start, end) in enumerate(found):
         stop = found[index + 1][1] if index + 1 < len(found) else len(text)
-        result.setdefault(key, text[end:stop])
+        result.setdefault(key, SECTION_RE.sub("", text[end:stop]))
     return result
 
 
@@ -435,8 +500,12 @@ def keep_examples(tasks: list[TaskDraft], examples: dict[str, str]) -> None:
         if not inline:
             continue
         extra = task.author_solution_latex
-        task.author_solution_latex = inline + (
-            "\n\n" + extra if extra and extra != inline else "")
+        def letters(value: str) -> str:
+            return re.sub(r"[^А-Яа-яЁё]", "", value or "")
+        if extra and letters(extra) in letters(inline):
+            # Указание книги повторено и в разделе ответов (166).
+            extra = ""
+        task.author_solution_latex = inline + ("\n\n" + extra if extra else "")
 
 
 def attach_labeled_answers(tasks: list[TaskDraft], text: str, diagnostics: dict) -> None:
@@ -510,6 +579,41 @@ def lift_common_tail(task: TaskDraft) -> bool:
     return True
 
 
+def move_answer_notes(task: TaskDraft) -> bool:
+    """«… Примечание. Важно, решая эту…» — сноска книги к ответу:
+    в разбор, а не в ответ (по ответу строится маска)."""
+    moved = False
+    for item in [task, *task.subitems]:
+        answer = item.author_answer_latex or ""
+        match = re.search(r"\s*Примечание\.\s*", answer)
+        if not match:
+            continue
+        note = answer[match.end():].strip()
+        item.author_answer_latex = answer[:match.start()].rstrip()
+        item.author_solution_latex = "\n\n".join(
+            part for part in (item.author_solution_latex, "Примечание. " + note) if part)
+        moved = True
+    return moved
+
+
+_PICTURE_TOKEN_RE = re.compile(r"\s*(?:\\\\\s*)?(?P<pic>\\taskpic\{\d+\}|" + _PICTURE + r")\s*(?:\\\\)?\s*$")
+
+
+def lift_stem_pictures(task: TaskDraft) -> bool:
+    """Рисунок условия, который OCR поставил в конец последнего пункта
+    (книга даёт его справа от всех пунктов), — в общее условие."""
+    if len(task.subitems) < 2:
+        return False
+    last = task.subitems[-1]
+    match = _PICTURE_TOKEN_RE.search(last.text_latex or "")
+    if not match or any(re.search(_PICTURE + r"|\\taskpic", item.text_latex or "")
+                        for item in task.subitems[:-1]):
+        return False
+    last.text_latex = last.text_latex[:match.start()].rstrip()
+    task.text_latex = task.text_latex.rstrip() + "\\\\\n" + match.group("pic")
+    return True
+
+
 _WHOLE_WARNING = "Авторский материал не удалось распределить по подпунктам"
 
 
@@ -527,6 +631,7 @@ def _finish_fields(task: TaskDraft) -> None:
     task.author_solution_latex = text_field(task.author_solution_latex)
     task.author_answer_latex = answer_field(task.author_answer_latex)
     for item in task.subitems:
+        item.label = cyrillic_item_label(item.label)
         item.text_latex = text_field(item.text_latex)
         item.author_solution_latex = text_field(item.author_solution_latex)
         item.author_answer_latex = answer_field(item.author_answer_latex)
@@ -560,6 +665,7 @@ def parse_vysotsky(text: str) -> tuple[list[TaskDraft], dict]:
         "missing_task_ids": [],
         "worked_examples": [],
         "tests_task_count_mismatch": [],
+        "home_boundary_mismatch": [],
     }
     main = prepare_text(text[first_part.start():cards.start()])
     tasks = parse_paragraphs(main, structure, diagnostics)
@@ -591,6 +697,9 @@ def parse_vysotsky(text: str) -> tuple[list[TaskDraft], dict]:
     for task in tasks:
         if lift_common_tail(task):
             diagnostics["lifted_tails"].append(task.external_id)
+        move_answer_notes(task)
+        if lift_stem_pictures(task):
+            diagnostics.setdefault("stem_pictures", []).append(task.external_id)
         if share_joint_answers(task):
             diagnostics["joint_answers"].append(task.external_id)
         if task.external_id in whole:
