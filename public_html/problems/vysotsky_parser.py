@@ -620,6 +620,8 @@ _WHOLE_WARNING = "Авторский материал не удалось рас
 def _finish_fields(task: TaskDraft) -> None:
     def text_field(value: str) -> str:
         value = (value or "").replace(_LABEL_GUARD, "")
+        # Голый «%» в LaTeX — комментарий: съедает конец строки и ломает PDF.
+        value = re.sub(r"(?<!\\)%", r"\\%", value)
         return normalize_degrees(normalize_units(_heal_ocr_math(value)))
 
     def answer_field(value: str) -> str:

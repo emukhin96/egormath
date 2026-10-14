@@ -524,8 +524,11 @@ def sync_batch_draft_images(batch):
     if str(batch.profile or '') == 'ziv':
         for draft in reattach_leaked_following_answers(drafts):
             dirty[draft.pk] = draft
+    fields = (('author_answer_latex',)
+              if str(batch.profile or '') in WHOLE_SOLUTION_PROFILES
+              else ('author_answer_latex', 'author_solution_latex'))
     for draft in drafts:
-        if redistribute_glued_subitem_answers(draft):
+        if redistribute_glued_subitem_answers(draft, fields):
             dirty[draft.pk] = draft
         if finalize_draft_images(draft):
             dirty[draft.pk] = draft
@@ -1276,6 +1279,10 @@ def _attach_task_images(task, draft, batch):
 # Профили, у которых варианты работ связываются в семьи аналогов
 # при загрузке в каталог (ключи «С1.2/3», «КI.3/4»).
 ANALOG_PROFILES = {'vysotsky'}
+# Профили, где авторский разбор общего условия — единый текст ко всей
+# задаче («Пример решения. … а) … б) …»): по пунктам делятся только ответы,
+# иначе вступление и хвосты разбора теряются.
+WHOLE_SOLUTION_PROFILES = {'vysotsky'}
 
 
 @transaction.atomic
