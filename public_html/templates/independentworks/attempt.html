@@ -5,11 +5,10 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <span class="page-eyebrow">{{ attempt.run.kind_label }}</span>
+    <nav class="page-crumbs" aria-label="Путь">{% if teacher_view %}<a href="{% url 'independentworks:catalog' %}">Самостоятельные</a><a href="{% url 'independentworks:progress' attempt.run_id %}">Общий прогресс</a>{% else %}<a href="{% url 'dashboard' %}?kind=independent">Мои задания</a><span>{{ attempt.run.kind_label }}</span>{% endif %}</nav>
     <h1>{{ attempt.run.title }}</h1>
-    <p class="page-subtitle">Вариант {{ attempt.variant.number }} · {{ attempt.run.duration }} мин. · <span class="badge {% if attempt.finished %}badge-submitted{% else %}badge-assigned{% endif %}">{{ attempt.state }}</span></p>
+    <p class="page-meta">{% if teacher_view %}<span>{{ attempt.student.get_full_name|default:attempt.student.username }}</span>{% endif %}<span>{{ attempt.run.kind_label }}</span><span>вариант {{ attempt.variant.number }}</span><span>{{ attempt.run.duration }} мин.</span><span class="badge {% if attempt.finished %}badge-submitted{% else %}badge-assigned{% endif %}">{{ attempt.state }}</span></p>
   </div>
-  {% if teacher_view %}<a class="btn btn-secondary" href="{% url 'independentworks:progress' attempt.run_id %}">Общий прогресс</a>{% endif %}
 </div>
 {% if teacher_view %}{% include 'workaudit/panel.html' with kind='attempt' object=attempt %}{% elif editable or can_start %}{% include 'workaudit/notice.html' with kind='attempt' object=attempt restricted=attempt.restrict_clipboard active=editable %}{% endif %}
 {% if editable %}

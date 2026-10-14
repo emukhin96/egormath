@@ -262,6 +262,13 @@ class AssignmentWorkspaceTests(TestCase):
         self.assertEqual(
             list(response.context['assignments']),
             [older_submitted, submitted])
+        # Статус — сегменты-ссылки: выбранный активен, форма помнит его для поиска
+        self.assertContains(
+            response, 'class="seg-item is-active" href="?status=submitted" '
+            'aria-current="true">На проверке</a>', html=False)
+        self.assertContains(response, 'class="seg-item" href="?">Все</a>')
+        self.assertContains(
+            response, '<input type="hidden" name="status" value="submitted">')
 
     def test_catalog_groups_are_ordered_by_last_assignment_date(self):
         """Свежая выдача выше старой, даже если старая ждёт проверки."""

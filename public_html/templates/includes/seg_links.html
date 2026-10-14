@@ -1,0 +1,2 @@
+{# Сегменты-ссылки фильтра: {% seg_links 'grade' grade_choices label='Класс' %} (problems/templatetags/page_tools.py) #}
+<nav class="seg"{% if label %} aria-label="{{ label }}"{% endif %}>{% for item in items %}<a class="seg-item{% if item.active %} is-active{% endif %}" href="{{ item.url }}"{% if item.active %} aria-current="true"{% endif %}>{{ item.label }}</a>{% endfor %}</nav>

@@ -400,10 +400,13 @@
   }
 
   /* Меню не сжимается под содержимое: место отдаёт поиск (flex-shrink у .topbar-search) */
+  /* Пункты тянутся на всю высоту топбара: активный подчёркнут акцентной
+     линией 2px по нижнему краю топбара (макет «Подборки», вариант A) */
   .topbar-nav {
     flex: none;
+    align-self: stretch;
     display: flex;
-    align-items: center;
+    align-items: stretch;
     gap: var(--space-1);
   }
 
@@ -415,14 +418,12 @@
     flex: none;
     display: flex;
     align-items: stretch;
-    border-radius: 6px;
   }
 
   /* Специфичность выше, чем у .topbar-nav a: иначе ссылка сохраняет полный
      радиус и между ней и шевроном остаётся шов */
   .topbar-nav .nav-group > a {
     padding-right: var(--space-1);
-    border-radius: 6px 0 0 6px;
   }
 
   .nav-more {
@@ -432,21 +433,24 @@
     justify-content: center;
     padding: 0 var(--space-1) 0 0;
     border: 0;
-    border-radius: 0 6px 6px 0;
+    border-radius: 0;
     background: transparent;
     color: #53647b;
     cursor: pointer;
   }
 
   .topbar-nav .nav-group:hover > a,
-  .nav-group:hover > .nav-more,
-  .nav-group.is-active > .nav-more {
-    background: #e4eef9;
+  .nav-group:hover > .nav-more {
+    color: var(--accent);
   }
 
-  .nav-group:hover > .nav-more,
   .nav-group.is-active > .nav-more {
-    color: var(--accent);
+    color: var(--accent-dark);
+  }
+
+  /* Линия активного раздела — под всей группой: ссылкой и шевроном */
+  .nav-group.is-active {
+    box-shadow: inset 0 -2px 0 var(--accent);
   }
 
   .nav-more svg {
@@ -454,9 +458,16 @@
     height: 14px;
   }
 
+  /* Открытое меню подсвечивает весь пункт — ссылку и шеврон вместе,
+     а не один шеврон: пункт меню — одна плашка */
+  .nav-group:has(> .nav-more[aria-expanded="true"]) {
+    background: var(--accent-soft);
+    border-radius: 8px;
+  }
+
+  .topbar-nav .nav-group:has(> .nav-more[aria-expanded="true"]) > a,
   .nav-more[aria-expanded="true"] {
     color: var(--accent);
-    background: #d6e4f7;
   }
 
   /* Открытие — классом is-open, не атрибутом hidden: preflight делает
@@ -465,7 +476,7 @@
     display: none;
     position: absolute;
     left: 0;
-    top: calc(100% + 6px);
+    top: calc(100% + 2px);
     min-width: 200px;
     padding: var(--space-1);
     background: #fff;
@@ -479,35 +490,43 @@
     display: grid;
   }
 
-  .topbar-nav .nav-menu a {
-    display: block;
-    white-space: nowrap;
-  }
-
   .topbar-nav .nav-group.is-active > a {
-    color: var(--accent);
-    background: #e4eef9;
+    color: var(--accent-dark);
     font-weight: 650;
   }
 
   .topbar-nav a {
     flex: none;
+    display: flex;
+    align-items: center;
     color: #53647b;
     text-decoration: none;
     padding: var(--space-2) var(--space-3);
-    border-radius: 6px;
     font-size: 0.9rem;
     font-weight: 500;
   }
 
-  .topbar-nav a:hover,
-  .topbar-nav a.is-active {
+  .topbar-nav a:hover {
     color: var(--accent);
-    background: #e4eef9;
   }
 
-  .topbar-nav a.is-active {
+  .topbar-nav > a.is-active {
+    color: var(--accent-dark);
     font-weight: 650;
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+
+  /* Подразделы в выпадающем меню — строки списка: фон, без линии */
+  .topbar-nav .nav-menu a {
+    display: block;
+    white-space: nowrap;
+    border-radius: 6px;
+  }
+
+  .topbar-nav .nav-menu a:hover,
+  .topbar-nav .nav-menu a.is-active {
+    color: var(--accent);
+    background: var(--accent-soft);
   }
 
   /* Поиск задач в шапке: ведёт на базу задач с введённым запросом */
@@ -612,8 +631,8 @@
     margin: 0;
   }
 
-  /* Корзина задач в шапке (native details). Кнопка-summary — обычная
-     .btn.btn-secondary из гайдлайна, поэтому геометрию не переопределяем. */
+  /* Корзина задач в шапке (native details). Кнопка-summary — .btn.btn-secondary,
+     в топбаре — компактная пилюля с круглым счётчиком (макет «Подборки», A). */
   .cart-menu {
     position: relative;
     flex: none;
@@ -627,28 +646,36 @@
     user-select: none;
   }
 
+  .topbar .cart-summary {
+    min-height: 32px;
+    padding: 0 6px 0 12px;
+    gap: 6px;
+    border-radius: 999px;
+    color: var(--accent-dark);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .topbar .cart-summary:not(:has(.cart-count:not([hidden]))) {
+    padding-right: 12px;
+  }
+
+  .topbar .cart-icon {
+    width: 16px;
+    height: 16px;
+  }
+
   .cart-summary::-webkit-details-marker {
     display: none;
   }
 
   .cart-menu[open] .cart-summary {
-    background: #edf3f9;
+    border-color: var(--accent);
+    background: var(--accent-soft);
   }
 
   .cart-icon {
     flex: none;
-  }
-
-  .cart-count {
-    min-width: 20px;
-    padding: 0 6px;
-    border-radius: 999px;
-    background: var(--accent);
-    color: #fff;
-    font-size: 0.75rem;
-    font-weight: 600;
-    line-height: 20px;
-    text-align: center;
   }
 
   .cart-panel {
@@ -1751,13 +1778,15 @@
     font-weight: 600;
   }
 
-  /* Шапка страницы: заголовок и основное действие в одну строку */
+  /* Шапка страницы (макет «Подборки», вариант A): слева крошки, h1 и
+     мета-строка, справа действия или переключатель вида. Правила — в
+     docs/PIPELINE.md, «Шапка страницы и фильтры». */
   .page-head {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
-    gap: var(--space-3);
+    gap: var(--space-2) var(--space-3);
     margin-bottom: var(--space-4);
   }
 
@@ -1766,26 +1795,482 @@
   }
 
   .page-head h1 {
-    margin: var(--space-1) 0;
-    letter-spacing: -0.03em;
+    margin: 0;
+    font-size: 1.375rem;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
   }
 
   .page-head .muted {
     margin: 0;
   }
 
-  /* Строка над заголовком — только путь (источник, раздел, вариант), не ярлык раздела */
+  /* Крошки — путь к родителю: «Подборки › Авторские листки». Последний
+     элемент — текущая страница или раздел, ссылками только предки.
+     .page-eyebrow — прежнее имя той же строки, оставлено для совместимости. */
+  .page-crumbs,
   .page-eyebrow {
     display: block;
+    margin: 0 0 2px;
     color: var(--muted);
-    font-size: 0.82rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  .page-crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+
+  .page-crumbs > * + *::before {
+    content: "›";
+    margin: 0 6px;
+    color: #9aa5b4;
+  }
+
+  .page-crumbs a,
+  .page-eyebrow a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .page-crumbs a:hover,
+  .page-eyebrow a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+
+  /* Мета-строка под заголовком: «Е. А. Мухин · 46 листков · 812 задач».
+     Части — соседние элементы, точку-разделитель ставит CSS, поэтому
+     необязательные части можно выводить под {% if %}.
+     .page-subtitle — прежнее имя, тот же вид. */
+  .page-meta,
+  .page-subtitle {
+    margin: 2px 0 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  .page-meta > * + *::before {
+    content: "·";
+    margin: 0 6px;
+  }
+
+  .page-meta > .filter-chip::before,
+  .page-meta > .badge::before {
+    content: none;
+  }
+
+  /* Действия и переключатели вида справа от заголовка */
+  .page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .page-actions > form {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+  }
+
+  .page-actions .btn,
+  .page-actions .ws-toggle {
+    margin: 0;
+  }
+
+  /* Строка фильтров под шапкой: сегменты и чипы слева, сортировка справа */
+  .page-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin: calc(-1 * var(--space-1)) 0 var(--space-4);
+    min-width: 0;
+  }
+
+  .page-toolbar > form {
+    display: contents;
+  }
+
+  .page-toolbar .filter-search {
+    flex: 0 1 16rem;
+    min-width: 10rem;
+    margin: 0;
+  }
+
+  .page-toolbar .filter-search input {
+    width: 100%;
+    max-width: none;
+    min-height: 32px;
+    padding: 4px 10px;
+    font-size: 0.88rem;
+  }
+
+  /* Сегментный переключатель: ссылки с GET-параметрами или кнопки.
+     На узком экране прокручивается внутри себя, страница не уезжает. */
+  .seg {
+    position: relative;
+    display: inline-flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    vertical-align: middle;
+  }
+
+  .seg::-webkit-scrollbar {
+    display: none;
+  }
+
+  .seg-item {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    margin: 0;
+    padding: 0 12px;
+    border: 0;
+    border-right: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .seg-item:last-child {
+    border-right: 0;
+  }
+
+  .seg-item:hover {
+    color: var(--accent);
+    background: #f5f8fc;
+  }
+
+  .seg-item.is-active,
+  .seg-item[aria-current="page"],
+  .seg-item[aria-current="true"],
+  .seg-item[aria-pressed="true"] {
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font-weight: 600;
+  }
+
+  .seg-item:focus-visible,
+  .seg-item:has(> input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  /* Сегменты-радиокнопки внутри формы (живой поиск берёт значение из формы) */
+  .seg-item > input[type="radio"],
+  .seg-item > input[type="checkbox"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .seg-item:has(> input:checked) {
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font-weight: 600;
+  }
+
+  /* Выбранное значение фильтра (тема, тег) — чип с ×; «+ тема» — пустой чип */
+  .filter-chip,
+  .filter-chip-add {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: 28px;
+    max-width: 100%;
+    margin: 0;
+    padding: 0 10px;
+    border: 1px solid #c9dbf2;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    line-height: 1.3;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .filter-chip:has(.filter-chip-remove) {
+    padding-right: 4px;
+  }
+
+  .filter-chip > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .filter-chip-remove {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .filter-chip-remove:hover,
+  .filter-chip-remove:focus-visible {
+    color: var(--err);
+    background: #fdeaea;
+  }
+
+  .filter-chip-add {
+    border-color: #e3e8ef;
+    background: #f1f4f8;
+    color: #44505f;
+    cursor: pointer;
+  }
+
+  .filter-chip-add:hover,
+  .filter-chip-add:focus-visible {
+    border-color: #c9dbf2;
+    color: var(--accent);
+  }
+
+  /* «Сортировка: по теме ▾» — select без рамки в одну строку, справа в .page-toolbar */
+  .sort-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0 0 0 auto;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 400;
+    white-space: nowrap;
+  }
+
+  /* Тот же вид для фильтра-select в начале строки (значений много: группы, листки) */
+  .sort-inline.filter-inline {
+    margin-left: 0;
+  }
+
+  .sort-inline label {
+    display: inline;
+    margin: 0;
+    font-weight: 400;
+    color: inherit;
+  }
+
+  .sort-inline select {
+    width: auto;
+    max-width: 14rem;
+    min-height: 0;
+    margin: 0;
+    padding: 2px 2px 2px 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--accent-dark);
+    font-size: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .sort-inline select:focus-visible {
+    box-shadow: none;
+    outline: 2px solid var(--accent);
+  }
+
+  /* Громоздкие фильтры (даты, владелец) — свёрнуты в «Ещё фильтры» */
+  .filter-more {
+    flex-basis: 100%;
+    order: 10;
+  }
+
+  .filter-more > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .filter-more > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .filter-more > summary::after {
+    content: "▾";
+    font-size: 0.75rem;
+  }
+
+  .filter-more[open] > summary::after {
+    content: "▴";
+  }
+
+  .filter-more > summary:hover {
+    color: var(--accent);
+  }
+
+  .filter-more-body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-2) var(--space-3);
+    margin-top: var(--space-2);
+  }
+
+  .filter-more-body > div {
+    min-width: 0;
+  }
+
+  .filter-more-body label {
+    margin-bottom: var(--space-1);
+    color: var(--muted);
+    font-size: 0.8rem;
     font-weight: 500;
   }
 
-  .page-subtitle {
-    margin: 0;
+  .filter-more-body input,
+  .filter-more-body select {
+    width: auto;
+    max-width: 14rem;
+    min-height: 32px;
+    padding: 4px 8px;
+    font-size: 0.88rem;
+  }
+
+  /* Выбор темы в строке фильтров (taxonomy_picker, compact, placeholder='+ тема'):
+     выбранные темы — те же чипы с ×, поле поиска — чип «+ тема», дерево тем
+     открывается под ним. JS виджета прежний (taxonomy.js). */
+  .page-toolbar .tax-picker-compact {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-chips {
+    display: contents;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-empty {
+    display: none;
+  }
+
+  .page-toolbar .tax-chip {
+    min-height: 28px;
+    gap: var(--space-1);
+    padding: 0 4px 0 10px;
+    border-color: #c9dbf2;
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font-weight: 500;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-chip-label {
+    max-width: 14rem;
+  }
+
+  .page-toolbar .tax-chip-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border-radius: 999px;
     color: var(--muted);
+    font-size: 1rem;
+  }
+
+  .page-toolbar .tax-chip-x:hover,
+  .page-toolbar .tax-chip-x:focus-visible {
+    color: var(--err);
+    background: #fdeaea;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-search {
+    width: 7.5rem;
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid #e3e8ef;
+    border-radius: 999px;
+    background: #f1f4f8;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-search::placeholder {
+    color: #44505f;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-search:focus {
+    width: 14rem;
+    max-width: 100%;
+    background: #fff;
+    cursor: text;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-search:focus::placeholder {
+    color: var(--muted);
+  }
+
+  .page-toolbar .tax-picker-compact .tax-panel {
+    left: 0;
+    right: auto;
+    top: calc(100% + 4px);
+  }
+
+  .page-toolbar .filter-reset {
+    min-height: 28px;
     font-size: 0.85rem;
+  }
+
+  /* Числовой бейдж-счётчик (корзина, «новые»): акцентный круг, белые цифры */
+  .badge-count,
+  .cart-count {
+    display: inline-block;
+    min-width: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 20px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
   }
 
   .page-back-link {
@@ -4560,13 +5045,45 @@
       min-width: max-content;
     }
 
+    /* Ряд меню — нижняя полоса топбара: линия активного пункта у её края */
     .topbar-nav {
       order: 3;
       width: 100%;
       margin-inline: calc(var(--space-3) * -1);
-      padding: 0 var(--space-3) var(--space-2);
+      padding: 0 var(--space-3);
       overflow-x: auto;
       scrollbar-width: none;
+    }
+
+    /* Подразделы стоят в общем ряду: подчёркиваем сам активный пункт, не группу */
+    .nav-group.is-active {
+      box-shadow: none;
+    }
+
+    .topbar-nav .nav-group.is-active > a {
+      box-shadow: inset 0 -2px 0 var(--accent);
+    }
+
+    .topbar-nav .nav-group.is-active:has(.nav-menu a.is-active) > a {
+      box-shadow: none;
+      color: #53647b;
+      font-weight: 500;
+    }
+
+    .topbar-nav .nav-menu a {
+      display: flex;
+      border-radius: 0;
+    }
+
+    .topbar-nav .nav-menu a:hover {
+      background: transparent;
+    }
+
+    .topbar-nav .nav-menu a.is-active {
+      background: transparent;
+      color: var(--accent-dark);
+      font-weight: 650;
+      box-shadow: inset 0 -2px 0 var(--accent);
     }
 
     /* Узкий экран: подразделы в общем ряду, без выпадающего меню */
@@ -4685,7 +5202,10 @@
     .page-head {
       align-items: flex-start;
     }
-  }
+
+    .page-head h1 {
+      font-size: 1.25rem;
+    }  }
 
   @media (max-width: 640px) {
     .filters {

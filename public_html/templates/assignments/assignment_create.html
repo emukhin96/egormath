@@ -4,14 +4,27 @@
 {% block content %}
 <div class="page-head">
   <div>
+    <nav class="page-crumbs" aria-label="Путь">
+      {% if independent %}<a href="{% url 'assignment_list' %}?kind=ordinary" data-save-draft-before-leave>Задания</a><a href="{% url 'independentworks:catalog' %}" data-save-draft-before-leave>Самостоятельные</a>{% else %}<a href="{% url 'assignment_list' %}?kind=ordinary">Задания</a>{% endif %}
+    </nav>
     <h1>Выдать задание</h1>
-    <p class="page-subtitle">{% if independent %}{% if kind == 'correction' %}Работа над ошибками.{% elif kind == 'retake' %}Пересдача.{% endif %} Самостоятельная с зафиксированными вариантами и серверным сроком.{% else %}Один листок — группе, нескольким группам или отдельным ученикам.{% endif %}</p>
-    {% if independent %}<a class="page-back-link" href="{% url 'independentworks:catalog' %}" data-save-draft-before-leave>← К самостоятельным</a>{% endif %}
+    {% if independent %}
+    <p class="page-meta">
+      <span>{% if kind == 'correction' %}работа над ошибками{% elif kind == 'retake' %}пересдача{% else %}самостоятельная{% endif %}</span>
+      {% if work %}<span>{{ work.title }}</span>{% endif %}
+      <span>варианты зафиксированы, срок — по серверу</span>
+    </p>
+    {% endif %}
   </div>
-  {% if independent %}{% if work %}<button class="btn" type="submit" form="assignment-create-form" name="action" value="preview">Сформировать и просмотреть</button>{% endif %}{% else %}<a class="btn btn-secondary" href="{% url 'assignment_list' %}">К заданиям</a>{% endif %}
+  {% if independent and work %}<div class="page-actions"><button class="btn" type="submit" form="assignment-create-form" name="action" value="preview">Сформировать и просмотреть</button></div>{% endif %}
 </div>
 
-{% if not work and independentworks_enabled %}<div class="form-buttons"><a class="btn{% if independent %} btn-secondary{% endif %}" href="{% url 'assignment_create' %}" {% if not independent %}aria-current="page"{% endif %}>Обычное задание</a><a class="btn{% if not independent %} btn-secondary{% endif %}" href="{% url 'assignment_create' %}?mode=independent" {% if independent %}aria-current="page"{% endif %}>Самостоятельная</a></div>{% endif %}
+{% if not work and independentworks_enabled %}
+<div class="page-toolbar">
+  <nav class="seg" aria-label="Вид задания"><a class="seg-item{% if not independent %} is-active{% endif %}" href="{% url 'assignment_create' %}" {% if not independent %}aria-current="page"{% endif %}>Обычное задание</a><a class="seg-item{% if independent %} is-active{% endif %}" href="{% url 'assignment_create' %}?mode=independent" {% if independent %}aria-current="page"{% endif %}>Самостоятельная</a></nav>
+  {% if not independent %}<span class="muted">Один листок — группе, нескольким группам или отдельным ученикам.</span>{% endif %}
+</div>
+{% endif %}
 {% if choose_work %}
 <section class="card form-section"><div class="iw-workspace-heading"><h2>Шаблоны самостоятельных</h2><a class="btn" href="{% url 'independentworks:create' %}">Создать самостоятельную</a></div>
 <form method="get"><input type="hidden" name="mode" value="independent"><label>Поиск по названию<input name="q" value="{{ request.GET.q|default:'' }}" placeholder="Название самостоятельной"></label><div class="form-buttons"><button class="btn btn-secondary">Найти</button></div></form>
@@ -81,15 +94,14 @@
   var form = document.getElementById('assignment-create-form');
   if (!form) return;
   var initialState = new URLSearchParams(new FormData(form)).toString();
-  var backLink = document.querySelector('[data-save-draft-before-leave]');
-  if (backLink) backLink.addEventListener('click', function (event) {
+  document.querySelectorAll('[data-save-draft-before-leave]').forEach(function (backLink) { backLink.addEventListener('click', function (event) {
     var currentState = new URLSearchParams(new FormData(form)).toString();
     if (form.dataset.draftSaved === '1' && currentState === initialState) return;
     event.preventDefault();
     if (window.confirm('Настройки ещё не сохранены как черновик. Сохранить перед выходом?')) {
       form.requestSubmit(form.querySelector('[name="action"][value="draft"]'));
     }
-  });
+  }); });
   var worksheet = form.querySelector('[name="worksheet"]');
   var groupBoxes = form.querySelectorAll('[name="groups"]');
   var studentBoxes = form.querySelectorAll('[name="students"]');

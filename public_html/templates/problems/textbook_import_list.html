@@ -1,10 +1,14 @@
 {% extends 'base.html' %}
 {% block title %}Импорт задачников — Математика{% endblock %}
 {% block content %}
+{% load task_extras %}
 <div class="page-head">
-  <div><h1>Импорт задачников</h1>
-</div>
-  <div class="form-buttons">
+  <div>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a></nav>
+    <h1>Импорт задачников</h1>
+    <p class="page-meta"><span>{{ batches|length }} {{ batches|length|plural_ru:'партия,партии,партий' }}</span></p>
+  </div>
+  <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'textbook_import_help' %}">Инструкция</a>
     <a class="btn" href="{% url 'textbook_import_upload' %}">Новая партия</a>
   </div>

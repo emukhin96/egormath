@@ -23,10 +23,11 @@
 {% block content %}
 <div class="page-head">
   <div>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a></nav>
     <h1>Сверка корпуса</h1>
-    <p class="page-subtitle">Промежуточные JSON после <code>run_worksheet_corpus.py</code>.</p>
+    <p class="page-meta"><span>промежуточные JSON после <code>run_worksheet_corpus.py</code></span></p>
   </div>
-  <div class="form-buttons">
+  <div class="form-buttons page-actions">
     <form method="post" action="{% url 'worksheet_corpus_approve_clean' %}">
       {% csrf_token %}
       <button type="submit" class="btn btn-secondary">Одобрить все без замечаний</button>

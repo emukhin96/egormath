@@ -1,19 +1,21 @@
 {% extends 'base.html' %}
 {% load static task_extras %}
-{% block title %}База задач — Математика{% endblock %}
+{% block title %}Задачи — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/task_list.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>База задач</h1>
+    <h1>Задачи</h1>
+    {# Счётчик обновляет живой поиск (data-finder-target, task_finder.js) #}
+    <p class="page-meta"><span data-finder-target="head-count">{{ page.paginator.count }} {{ page.paginator.count|plural_ru:'задача,задачи,задач' }}{% if params.q %} по запросу «{{ params.q }}»{% endif %}</span></p>
   </div>
-  <div class="form-buttons">
-    <a class="btn" href="{% url 'task_create' %}">Новая задача</a>
+  <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'bulk_answers' %}">Массовые ответы</a>
+    <a class="btn" href="{% url 'task_create' %}">Новая задача</a>
   </div>
 </div>
 
-{% include 'problems/_catalog_filters.html' %}
+{% include 'problems/_catalog_filters.html' with toolbar=True %}
 
 <form id="task-bulk-form" method="post" action="{% url 'task_bulk_update' %}"
       class="bulk-bar" data-bulk hidden>

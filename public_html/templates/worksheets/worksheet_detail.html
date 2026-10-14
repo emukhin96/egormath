@@ -6,7 +6,7 @@
 {# Шапка в стандартном .page-head — как на остальных страницах #}
 <div class="page-head worksheet-page-head">
 <div>
-<span class="page-eyebrow">{% if collection %}Конструктор подборки{% else %}Конструктор листка{% endif %}</span>
+<nav class="page-crumbs" aria-label="Путь">{% if collection %}<a href="{% url 'collection_list' %}">Подборки</a><a href="{% url 'collection_detail' collection.pk %}">{{ collection.source }}</a><span>Конструктор подборки</span>{% else %}<a href="{% url 'worksheet_list' %}">Листки</a><span>Конструктор листка</span>{% endif %}</nav>
 {# Заголовок и подзаголовок редактируются кликом по тексту (builder.js) #}
 <div class="worksheet-title-row">
 <h1 class="ws-title">
@@ -22,7 +22,7 @@
          type="hidden" name="grade_label" value="{{ worksheet.grade_label }}"
          maxlength="100" hidden>
 </h1>
-{% if request.user.is_superuser %}<p class="page-subtitle">Владелец: {{ worksheet.owner.get_full_name|default:worksheet.owner.username }}</p>{% endif %}
+<p class="page-meta">{% if request.user.is_superuser %}<span>владелец {{ worksheet.owner.get_full_name|default:worksheet.owner.username }}</span>{% endif %}<span>создан {{ worksheet.created_at|date:'d.m.Y' }}</span><span>изменён {{ worksheet.updated_at|date:'d.m.Y H:i' }}</span></p>
 </div>
 {% if worksheet.comment %}
 <p class="ws-comment muted">{{ worksheet.comment|linebreaksbr }}</p>
@@ -202,7 +202,7 @@
           </label>
         </form>
         <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button class="link-btn" title="Добавить локальную копию следующей строкой">дублировать локально</button></form>
-        <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><input type="hidden" name="standalone" value="1"><button class="link-btn" title="Создать копию в базе задач и добавить в листок">дублировать</button></form>
+        <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><input type="hidden" name="standalone" value="1"><button class="link-btn" title="Создать копию в разделе «Задачи» и добавить в листок">дублировать</button></form>
         {% if item.task.subitems.all %}
         <label class="inline-label task-meta-item ws-column-control">колонки
           <input type="number" name="columns" form="settings-{{ item.pk }}"

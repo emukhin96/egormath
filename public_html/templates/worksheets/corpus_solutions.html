@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+{% extends 'base.html' %}{% load task_extras %}
 {% block title %}Решения корпуса — Математика{% endblock %}
 {% block sidebar %}
 <section class="sidebar-section">
@@ -11,8 +11,9 @@
 {% block content %}
 <div class="page-head">
   <div>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_corpus_list' %}">Сверка корпуса</a></nav>
     <h1>Задачи без решений</h1>
-    <p class="page-subtitle">Нейросеть заполняет пустые поля; авторские поля не трогает.</p>
+    <p class="page-meta"><span>{{ rows|length }} {{ rows|length|plural_ru:'листок,листка,листков' }}</span><span>нейросеть заполняет пустые поля, авторские не трогает</span></p>
   </div>
 </div>
 <div class="card">

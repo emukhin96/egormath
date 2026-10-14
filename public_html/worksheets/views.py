@@ -454,6 +454,12 @@ def collection_list(request):
     return render(request, 'worksheets/collection_list.html', {
         'collection_sources': sources,
         'selected_source': selected_source,
+        # Мета-строка шапки: «3 источника · 120 подборок · 2400 задач»
+        'collection_totals': {
+            'sources': len(sources),
+            'leaves': sum(row['leaf_total'] for row in sources),
+            'items': sum(row['item_total'] for row in sources),
+        },
     })
 
 

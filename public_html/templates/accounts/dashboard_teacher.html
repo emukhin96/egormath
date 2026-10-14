@@ -5,6 +5,7 @@
 <div class="page-head">
   <div>
     <h1>Кабинет учителя</h1>
+    <p class="page-meta"><span>{{ user.get_full_name|default:user.username }}</span><span>{% now 'j E Y' %}</span>{% if pending %}<span>на проверке {{ pending|length }}</span>{% endif %}</p>
   </div>
   <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'assignment_list' %}">Все задания</a>
