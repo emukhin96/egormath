@@ -9,6 +9,7 @@ from django.core.files.base import ContentFile
 from django.db import transaction
 from django.db.models import Q
 
+from problems.math_prose import unwrap_math_prose
 from problems.models import ExamItem, Source, Task, TaskImage, TaskSource, Topic
 from problems.rubricator import (GRADE_LEVEL_TO_CODE, set_grade_bands,
                                  set_task_exams, set_task_topics)
@@ -294,8 +295,12 @@ def commit_draft(draft, owner, *, force=False):
             continue
         if el.get('status') == 'skipped':
             continue
-        text = el.get('text') or ''
-        subitems = el.get('subitems') or []
+        # OCR-текст целиком в формуле («$\\text { Даны точки } M(1;1) …$») —
+        # прозу наружу, иначе на сайте отступ первой строки и чужой шрифт.
+        raw_text = el.get('text') or ''
+        raw_subitems = el.get('subitems') or []
+        text = unwrap_math_prose(raw_text, display=False)
+        subitems = [unwrap_math_prose(chunk or '', display=False) for chunk in raw_subitems]
         ensure_subitem_fields(el)
         sub_answers = el.get('subitem_answers') or []
         sub_solutions = el.get('subitem_solutions') or []
@@ -306,7 +311,9 @@ def commit_draft(draft, owner, *, force=False):
         paths, missing = resolve_element_image_paths(key, el)
         missing_images.extend(missing)
         incoming_names = {path.name for path in paths}
-        task_pk = find_existing_task(text, subitems)
+        # Задача могла быть загружена до выноса прозы — ищем и по исходному тексту
+        task_pk = (find_existing_task(text, subitems)
+                   or find_existing_task(raw_text, raw_subitems))
         # Одна и та же формулировка в классной и домашней — две задачи,
         # иначе догрузка рисунков смешает картинки на общем Task.
         if task_pk in used_in_sheet:

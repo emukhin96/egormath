@@ -115,14 +115,31 @@ def _protect_decimal_commas(value):
     return _DECIMAL_COMMA_RE.sub(r'\1{,}\2', value)
 
 
-def _math_for_web(value):
+# Формула в начале строки, начинающаяся с «\text { Даны …}» (OCR-текст
+# целиком в формуле): KaTeX рисует пробел в начале \text, и первая строка
+# сдвигается относительно подпунктов. В начале строки он не нужен.
+_LEADING_TEXT_SPACE_RE = re.compile(r'^(\$\$|\$|\\\(|\\\[)\s*\\(text|mbox|textrm)\s*\{\s+')
+
+
+def _math_for_web(value, line_start=False):
     """KaTeX не переносит формулу по \\n; linebreaksbr тоже не должен.
 
     Десятичную запятую делаем ординарной ({,}): иначе KaTeX считает её
-    разделителем списка и добавляет тонкий пробел. Исходник в базе
+    разделителем списка и добавляет тонкий пробел. У формулы в начале
+    строки убираем пробел в начале ``\\text{ …}``. Исходник в базе
     не меняем — только показ.
     """
-    return _protect_decimal_commas(re.sub(r'\s+', ' ', value).strip())
+    value = re.sub(r'\s+', ' ', value).strip()
+    if line_start:
+        value = _LEADING_TEXT_SPACE_RE.sub(r'\1\\\2{', value)
+    return _protect_decimal_commas(value)
+
+
+def _at_line_start(before):
+    """Формула стоит в начале строки: до неё только пробелы после начала
+    текста или после переноса строки (\\n, \\\\, \\par)."""
+    tail = before.rstrip(' \t')
+    return not tail or tail.endswith(('\n', '\\\\', '\\par'))
 
 
 def _plain(text):
@@ -130,6 +147,9 @@ def _plain(text):
     text = text.replace(r'\hspace{0pt}', '')
     text = re.sub(r'\\par\b', _BR + _BR, text)
     text = text.replace('\\\\', _BR)
+    # \- — мягкий перенос (в PDF его понимает LaTeX); на сайте — &shy;,
+    # иначе «рас\-сто\-яние» видно как есть.
+    text = text.replace('\\-', '\u00ad')
     text = text.replace('\n', _BR)
     text = re.sub(r'(?<!\\)~', _NBSP, text)
     for src, dst in _UNESCAPE:
@@ -242,7 +262,7 @@ def tex_to_web_html(source):
     pos = 0
     for m in _MATH_RE.finditer(text):
         parts.append(_plain(text[pos:m.start()]))
-        parts.append(_math_for_web(m.group(0)))
+        parts.append(_math_for_web(m.group(0), _at_line_start(text[:m.start()])))
         pos = m.end()
     parts.append(_plain(text[pos:]))
 
