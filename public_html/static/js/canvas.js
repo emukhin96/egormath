@@ -1166,8 +1166,10 @@
     this.closeMenu();
     this.menu = menu;
     anchor.appendChild(menu);
+    /* Клик внутри якоря (включая саму кнопку) не закрывает меню здесь: иначе
+       pointerdown по кнопке закрыл бы его до click, и тот открыл бы меню заново */
     this.menuCloser = function (ev) {
-      if (ev.type === 'keydown' ? ev.key === 'Escape' : !menu.contains(ev.target)) self.closeMenu();
+      if (ev.type === 'keydown' ? ev.key === 'Escape' : !anchor.contains(ev.target)) self.closeMenu();
     };
     setTimeout(function () {
       if (self.menu !== menu) return;
