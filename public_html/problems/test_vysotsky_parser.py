@@ -18,6 +18,12 @@ BOOK = r"""
   \item Симметричную монету бросили два раза.\\
 a) Сколько элементарных исходов в этом эксперименте?\\
 б) Выпишите исходы, благоприятствующие событию «выпал хотя бы один орёл».
+\end{enumerate}
+
+Пример решения. Обозначим орла буквой О. а) Исходов четыре: ОО, ОР, РО и РР; б) благоприятствуют три исхода.
+
+\begin{enumerate}
+  \setcounter{enumi}{1}
   \item Симметричную монету бросили три раза. Найдите вероятность события \(A=\{\) первые два броска окончились одинаково \(\}\).
 \end{enumerate}
 
@@ -184,6 +190,12 @@ class VysotskyCommitTests(TestCase):
         batch = create_batch_from_bundle(payload, user=user, title='Проба', source_title='Высоцкий')
         batch.drafts.update(status=TextbookTaskDraft.STATUS_APPROVED,
                             topic=Topic.objects.create(name='Тема проверки'))
+        # Разбор примера — единый текст к задаче: при создании партии его
+        # не режут по пунктам.
+        first = batch.drafts.get(external_id='1')
+        self.assertIn('Обозначим орла', first.author_solution_latex)
+        self.assertIn('благоприятствуют три исхода', first.author_solution_latex)
+        self.assertIn('четыре', first.subitems[0]['author_answer_latex'])
         result = commit_batch(batch, user=user)
         self.assertEqual(result['analog_families'], 1)
         family = Family.objects.get()
@@ -223,3 +235,16 @@ class VysotskyLayoutTests(SimpleTestCase):
         task = build_task(m93, b93, ["§"])
         self.assertEqual(task.author_solution_latex, "Примечание. Обратите внимание.")
         self.assertNotIn("{ }^{1}", task.text_latex)
+
+
+class VysotskyPercentTests(SimpleTestCase):
+    def test_bare_percent_is_escaped(self):
+        from .textbook_parser import SubitemDraft, TaskDraft
+        from .vysotsky_parser import _finish_fields
+        task = TaskDraft("1", "1", [], "", "", "", "Стрелок (60 % попаданий), уже 10\\%.",
+                         subitems=[SubitemDraft("а", "x", author_answer_latex="10,9 %")])
+        _finish_fields(task)
+        self.assertIn("60 \\% попаданий", task.text_latex)
+        self.assertIn("10\\%", task.text_latex)
+        self.assertNotIn("\\\\%", task.text_latex)
+        self.assertIn("\\%", task.subitems[0].author_answer_latex)
