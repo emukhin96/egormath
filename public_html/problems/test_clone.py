@@ -259,6 +259,35 @@ class CloneViewTests(TestCase):
         sub = Task.objects.get(pk=response.json()['task_id']).subitems.get()
         self.assertEqual(sub.answer_latex, 'а) $1$\n% хвост\nб) $5$')
 
+    def test_crlf_mask_offsets_match_textarea(self):
+        mask = '| $a$ | $b$ |\r\n|---|---|\r\n| {{number: 3}} | {{number: 4}} |'
+        self.sub.answer_latex, self.sub.answer_mask = '$3$; $4$', mask
+        self.sub.save()
+        page = self.client.get(self.url)
+        lf = mask.replace('\r\n', '\n')
+        start = lf.index('3}}')
+        # Смещения — по тексту с LF, как его отдаёт textarea браузера
+        self.assertContains(page, f'data-mask-slots="[[{start}, {start + 1}], '
+                                  f'[{lf.index("4}}")}, {lf.index("4}}") + 1}]]"')
+        self.assertContains(page, 'data-follows="1"', count=2)
+        key = f'sub-{self.sub.pk}'
+        # Ответ не меняли — маска сохраняется байт-в-байт
+        response = self.client.post(self.url, self.data(**{
+            f'{key}-answer': '$3$; $4$', f'{key}-mask': lf}))
+        sub = Task.objects.get(pk=response.json()['task_id']).subitems.get()
+        self.assertEqual(sub.answer_mask, mask)
+        # Ручная маска без изменений по сути — тоже исходник
+        response = self.client.post(self.url, self.data(**{
+            f'{key}-answer': '$3$; $4$', f'{key}-mask': lf.replace('\n', '\r\n'),
+            f'{key}-mask_follow': '0'}))
+        self.assertEqual(Task.objects.get(pk=response.json()['task_id']).subitems.get().answer_mask, mask)
+        # Новый ответ — маска пересчитана по LF-тексту
+        response = self.client.post(self.url, self.data(**{
+            f'{key}-answer': '$5$; $6$', f'{key}-mask': lf}))
+        sub = Task.objects.get(pk=response.json()['task_id']).subitems.get()
+        self.assertEqual(sub.answer_mask, lf.replace('{{number: 3}}', '{{number: 5}}')
+                         .replace('{{number: 4}}', '{{number: 6}}'))
+
     def test_editor_answer_is_edited_when_no_author_answer(self):
         self.client.post(self.url, self.data(**{f'sub-{self.sub.pk}-answer': '$11$'}))
         sub = Task.objects.exclude(pk=self.task.pk).get().subitems.get()

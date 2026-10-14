@@ -77,9 +77,16 @@ def source_label(task):
     return f'{ref.source}, №{ref.number}' if ref.number else str(ref.source)
 
 
+def _lf(text):
+    """Переводы строк как в textarea браузера (LF): смещения слотов маски
+    считаются по тому же тексту, что увидит клиент."""
+    return (text or '').replace('\r\n', '\n').replace('\r', '\n')
+
+
 def _owner_data(owner, key, title):
     answer = owner.effective_answer_latex
-    mask = owner.answer_mask or ''
+    mask_raw = owner.answer_mask or ''
+    mask = _lf(mask_raw)
     follows = mask_follows_answer(mask, answer)
     return {
         'key': key,
@@ -89,6 +96,7 @@ def _owner_data(owner, key, title):
         'answer': answer,
         'answer_source': 'author' if (owner.author_answer_latex or '').strip() else 'editor',
         'mask': mask,
+        'mask_raw': mask_raw,
         'mask_follows': follows,
         'mask_slots': json.dumps([[start, end] for start, end, _, _ in mask_numbers(mask)]
                                  if follows else []),
@@ -185,7 +193,7 @@ def _posted(data, name, original):
         return original
     if re.sub(r'[\r\n]', '', value).strip() == re.sub(r'[\r\n]', '', original).strip():
         return original
-    return value.replace('\r\n', '\n').replace('\r', '\n')
+    return _lf(value)
 
 
 def read_post(request, task):
@@ -204,8 +212,11 @@ def read_post(request, task):
             mask = None
             if data.get(f'{key}-mask_follow') == '1':
                 mask = follow_mask(row['mask'], row['answer'], answer)
+                if mask == row['mask']:
+                    # Маска не изменилась — исходник байт-в-байт (с его CRLF)
+                    mask = row['mask_raw']
             if mask is None:
-                mask = _posted(data, f'{key}-mask', row['mask'])
+                mask = _posted(data, f'{key}-mask', row['mask_raw'])
             try:
                 mask = clean_mask_text(mask)
             except forms.ValidationError as exc:
