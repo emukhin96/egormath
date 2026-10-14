@@ -9,7 +9,6 @@
 * без контекста — просто новая задача в базе.
 """
 import json
-import re
 
 from django import forms
 from django.conf import settings
@@ -68,6 +67,17 @@ def resolve_context(request, task):
         if task.variant_of_id and not position.candidates.filter(task=task).exists():
             raise Http404
     return item, position
+
+
+def resolve_candidate(request, task, position):
+    """Кандидат номера, от которого делают клон: его выбор подпунктов
+    переносится на клон. Чужой номер или другая задача — 404."""
+    candidate_id = request.GET.get('candidate') or request.POST.get('candidate')
+    if not candidate_id:
+        return None
+    if position is None:
+        raise Http404
+    return get_object_or_404(position.candidates, pk=candidate_id, task=task)
 
 
 def source_label(task):
@@ -185,13 +195,14 @@ def _validated_image(upload):
 
 def _posted(data, name, original):
     """Значение поля textarea: переводы строк браузер шлёт как CRLF.
-    Если по сути (без учёта CR/LF) учитель поле не менял — берём исходное
-    как есть, чтобы многострочный ответ или условие не изменились."""
+    Если учитель поле не менял (с точностью до CRLF/LF и краевых пробелов) —
+    берём исходное как есть, чтобы многострочный текст не изменился.
+    Разбитые или склеенные строки — это правка, она сохраняется."""
     original = original or ''
     value = data.get(name)
     if value is None:
         return original
-    if re.sub(r'[\r\n]', '', value).strip() == re.sub(r'[\r\n]', '', original).strip():
+    if _lf(value).strip() == _lf(original).strip():
         return original
     return _lf(value)
 
@@ -300,7 +311,7 @@ def resolve_after(request, item):
     return get_object_or_404(item.worksheet.items, pk=after_id, deleted_at__isnull=True)
 
 
-def create_clone(request, task, item, position, plan, after=None):
+def create_clone(request, task, item, position, plan, after=None, candidate=None):
     """Создаёт клон по разобранной форме; вызывается внутри транзакции.
     Возвращает ``(copy, строка листка или None)``."""
     from independentworks.models import Family
@@ -323,7 +334,10 @@ def create_clone(request, task, item, position, plan, after=None):
     if position is not None:
         from independentworks import services as svc
         try:
-            svc.add_candidate(position, copy)
+            # Выбранные у кандидата подпункты → те же подпункты клона
+            ids = [mapping['subitems'][pk] for pk in (candidate.subitem_ids if candidate else [])
+                   if pk in mapping['subitems']]
+            svc.add_candidate(position, copy, ids)
         except svc.WorkError as error:
             raise CloneError(str(error))
     return copy, row
@@ -333,9 +347,11 @@ def create_clone(request, task, item, position, plan, after=None):
 def task_clone(request, pk):
     task = get_object_or_404(Task.objects.prefetch_related('subitems', 'images'), pk=pk)
     item, position = resolve_context(request, task)
+    candidate = resolve_candidate(request, task, position)
     if request.method != 'POST':
-        return render(request, 'problems/_clone_dialog.html',
-                      dialog_context(request, task, item, position))
+        context = dialog_context(request, task, item, position)
+        context['candidate'] = candidate
+        return render(request, 'problems/_clone_dialog.html', context)
     if task.block_id:
         return JsonResponse({'ok': False, 'errors': [
             'Задача из общего блока: используйте «дублировать».']}, status=400)
@@ -346,7 +362,7 @@ def task_clone(request, pk):
             if item is not None:
                 from worksheets.models import Worksheet
                 Worksheet.objects.select_for_update().get(pk=item.worksheet_id)
-            copy, row = create_clone(request, task, item, position, plan, after)
+            copy, row = create_clone(request, task, item, position, plan, after, candidate)
     except CloneError as error:
         return JsonResponse({'ok': False, 'errors': [str(error)]}, status=400)
     url = reverse('task_detail', args=[copy.pk])

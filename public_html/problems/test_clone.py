@@ -249,6 +249,13 @@ class CloneViewTests(TestCase):
         copy = Task.objects.get(pk=response.json()['task_id'])
         self.assertEqual(copy.author_answer_latex, original.replace('x=2', 'x=5'))
         self.assertEqual(copy.answer_mask, '{{number: 5}}')
+        # Учитель только разбил строку — это правка, она сохраняется
+        split = original.replace('корней нет ', 'корней\r\nнет ')
+        response = self.client.post(self.url, self.data(**{
+            'task-answer': split.replace('\n', '\r\n').replace('\r\r\n', '\r\n'),
+            'task-mask': '{{number: 2}}'}))
+        copy = Task.objects.get(pk=response.json()['task_id'])
+        self.assertEqual(copy.author_answer_latex, original.replace('корней нет ', 'корней\nнет '))
         # Подпункт: многострочный ответ без изменений
         self.sub.answer_latex = 'а) $1$\n% хвост\nб) $5$'
         self.sub.answer_mask = ''
@@ -352,6 +359,27 @@ class CloneViewTests(TestCase):
         self.assertContains(pick, 'Полная форма')
         edit = self.client.get(reverse('independentworks:edit', args=[work.pk]))
         self.assertContains(edit, f'?position={position.pk}')
+
+    @override_settings(INDEPENDENT_WORKS_ENABLED=True)
+    def test_clone_keeps_candidate_subitem_selection(self):
+        second = self.task.subitems.create(order=2, text_latex='Второй подпункт', answer_latex='$1$')
+        work = Work.objects.create(owner=self.teacher, title='С-3')
+        position = Position.objects.create(work=work)
+        candidate = Candidate.objects.create(position=position, task=self.task, subitem_ids=[second.pk])
+        edit = self.client.get(reverse('independentworks:edit', args=[work.pk]))
+        self.assertContains(edit, f'?position={position.pk}&amp;candidate={candidate.pk}')
+        page = self.client.get(self.url + f'?position={position.pk}&candidate={candidate.pk}')
+        self.assertContains(page, f'name="candidate" value="{candidate.pk}"')
+        response = self.client.post(self.url, self.data(position=position.pk, candidate=candidate.pk))
+        copy = Task.objects.get(pk=response.json()['task_id'])
+        clone = position.candidates.get(task=copy)
+        self.assertEqual(clone.subitem_ids, [copy.subitems.get(text_latex='Второй подпункт').pk])
+        # Кандидат другого номера или другой задачи — 404
+        other = Position.objects.create(work=work)
+        foreign = Candidate.objects.create(position=other, task=self.task)
+        self.assertEqual(self.client.post(self.url, self.data(
+            position=position.pk, candidate=foreign.pk)).status_code, 404)
+        self.assertEqual(self.client.get(self.url + f'?candidate={candidate.pk}').status_code, 404)
 
     @override_settings(INDEPENDENT_WORKS_ENABLED=True)
     def test_permissions(self):

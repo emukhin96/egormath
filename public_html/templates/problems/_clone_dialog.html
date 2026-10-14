@@ -11,6 +11,7 @@
   {% csrf_token %}
   {% if item %}<input type="hidden" name="worksheet" value="{{ item.worksheet_id }}"><input type="hidden" name="item" value="{{ item.pk }}">{% endif %}
   {% if position %}<input type="hidden" name="position" value="{{ position.pk }}">{% endif %}
+  {% if candidate %}<input type="hidden" name="candidate" value="{{ candidate.pk }}">{% endif %}
   <div class="qclone-head">
     <div class="qclone-title"><h2 id="qclone-title">Клон задачи · {% if source_label %}{{ source_label }}{% else %}#{{ task.pk }}{% endif %}</h2><span class="qclone-target">{{ target }}</span></div>
     <button type="button" class="icon-btn" data-qclone-close aria-label="Закрыть">×</button>
