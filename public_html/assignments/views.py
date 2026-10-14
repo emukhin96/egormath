@@ -16,7 +16,7 @@ from django.views.decorators.http import require_POST
 from accounts.decorators import student_required, teacher_required
 from accounts.models import Profile, StudentGroup
 from problems.models import Task
-from worksheets.models import Worksheet
+from worksheets.models import Collection, Worksheet
 
 from .checks import reference_text, slot_display
 from .forms import AssignmentCreateForm
@@ -72,11 +72,32 @@ def _create_assignments(*, worksheet, teacher, students, check_visibility,
     return created
 
 
+COLLECTION_NOT_ASSIGNABLE = (
+    'Это подборка-образец, её нельзя задать ученикам. '
+    'Возьмите её как листок и выдайте копию.')
+
+
+def _refuse_collection(request, worksheet_id):
+    """Редирект на страницу подборки, если листок — подборка, иначе None.
+
+    Общая проверка всех путей новой выдачи: подборку не задают даже
+    автору, только её копию («Взять как листок»).
+    """
+    collection = Collection.objects.filter(worksheet_id=worksheet_id).first()
+    if collection is None:
+        return None
+    messages.error(request, COLLECTION_NOT_ASSIGNABLE)
+    return redirect('collection_detail', pk=collection.pk)
+
+
 @teacher_required
 @require_POST
 def assign_worksheet(request, worksheet_id):
     worksheet = get_object_or_404(
         Worksheet.visible_to(request.user), pk=worksheet_id)
+    refused = _refuse_collection(request, worksheet.pk)
+    if refused:
+        return refused
     student_ids = set(request.POST.getlist('students'))
     # Выбранные группы: назначение всем участникам
     group_ids = request.POST.getlist('groups')
@@ -236,8 +257,12 @@ def assignment_list(request):
     for assignment in page_assignments:
         by_worksheet.setdefault(assignment.worksheet_id, {})[
             assignment.student_id] = assignment
+    collection_ids = set(Collection.objects.filter(
+        worksheet_id__in=worksheet_ids).values_list('worksheet_id', flat=True))
     for group in groups_on_page:
         existing = by_worksheet.get(group['worksheet_id'], {})
+        # Старую выдачу подборки можно вести дальше, но не расширять
+        group['is_collection'] = group['worksheet_id'] in collection_ids
         group['recipient_rows'] = [
             {
                 'profile': profile,
@@ -248,7 +273,8 @@ def assignment_list(request):
                         Assignment.STATUS_SUBMITTED,
                         Assignment.STATUS_REVIEWED)),
             }
-            for profile in all_profiles]
+            for profile in all_profiles
+            if not group['is_collection'] or profile.user_id in existing]
     runs_by_key = {f'independent-{r.pk}': r for r in independent_runs}
     for group in groups_on_page:
         if group['kind'] != 'independent':
@@ -329,6 +355,12 @@ def assignment_group_update(request, worksheet_id):
         int(value) for value in request.POST.getlist('students')
         if value.isdigit() and int(value) in allowed_ids
     }
+    # Подборку новым ученикам не выдаём; статусы и снятие уже выданных —
+    # как у обычного листка.
+    refused_new = 0
+    if worksheet.is_collection:
+        refused_new = len(selected_ids - set(existing))
+        selected_ids &= set(existing)
     status_values = dict(Assignment.STATUS_CHOICES)
     first = next(iter(existing.values()), None)
     check_visibility = (first.check_visibility if first
@@ -356,12 +388,17 @@ def assignment_group_update(request, worksheet_id):
                 blocked_review += 1
         worksheet.assignments.filter(
             student_id__in=set(existing) - selected_ids).delete()
+    if refused_new:
+        messages.error(
+            request, f'{COLLECTION_NOT_ASSIGNABLE} Новые ученики не добавлены: '
+                     f'{refused_new}.')
     if blocked_review:
         messages.warning(
             request,
             'Ученики сохранены. Проверенной можно отметить только '
             'отправленную работу.')
-    else:
+    elif not refused_new:
+        # При отказе добавить новых учеников запрос выполнен лишь частично
         messages.success(request, 'Ученики и статусы задания сохранены.')
     target = reverse('assignment_list')
     if request.GET:
@@ -433,8 +470,16 @@ def assignment_create(request):
             'work_options': Paginator(works, 30).get_page(request.GET.get('page'))})
     initial = {'allow_photos': True}
     worksheet_id = request.GET.get('worksheet', '')
+    # Подборку из списка формы уже убрал queryset; прямой id объясняем
+    # и ведём на страницу подборки, где есть «Взять как листок».
+    for requested in (worksheet_id, request.POST.get('worksheet', '')):
+        if (requested.isdigit() and Worksheet.visible_to(request.user)
+                .filter(pk=requested).exists()):
+            refused = _refuse_collection(request, int(requested))
+            if refused:
+                return refused
     if worksheet_id.isdigit():
-        initial['worksheet'] = Worksheet.visible_to(request.user).filter(
+        initial['worksheet'] = Worksheet.assignable_to(request.user).filter(
             pk=worksheet_id).first()
     form = AssignmentCreateForm(
         request.POST or None, teacher=request.user, initial=initial)

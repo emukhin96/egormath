@@ -164,7 +164,7 @@
     <form method="post" action="{% if group.kind == "independent" %}{% url 'independentworks:recipients' group.run.pk %}{% else %}{% url 'assignment_group_update' group.worksheet_id %}{% endif %}{% if return_query %}?{{ return_query }}{% endif %}" {% if group.kind == "ordinary" %}data-assignment-group-form{% endif %}>
       {% csrf_token %}
       <div class="dialog-heading"><h3>{{ group.worksheet__title }}</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
-      {% if group.kind == "independent" %}<p class="helptext">Отметьте получателей и выберите из уже выданных вариантов. Начавших учеников и их варианты менять нельзя. Для работы над ошибками и пересдачи получатель закреплён.</p>{% else %}<p class="helptext">Отметьте учеников и выберите текущий статус для каждого.</p>{% endif %}
+      {% if group.kind == "independent" %}<p class="helptext">Отметьте получателей и выберите из уже выданных вариантов. Начавших учеников и их варианты менять нельзя. Для работы над ошибками и пересдачи получатель закреплён.</p>{% elif group.is_collection %}<p class="helptext">Это подборка-образец: новых учеников добавить нельзя, только вести уже выданные работы.</p>{% else %}<p class="helptext">Отметьте учеников и выберите текущий статус для каждого.</p>{% endif %}
       <div class="assignment-recipient-list">
         {% for row in group.recipient_rows %}
         {% if group.kind == "independent" %}

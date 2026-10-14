@@ -63,8 +63,9 @@ class AssignmentCreateForm(forms.Form):
     def __init__(self, *args, teacher, **kwargs):
         super().__init__(*args, **kwargs)
         self.teacher = teacher
+        # Подборки-образцы не выдаются (их сначала берут как листок)
         self.fields['worksheet'].queryset = (
-            Worksheet.visible_to(teacher).select_related('owner')
+            Worksheet.assignable_to(teacher).select_related('owner')
             .order_by('-updated_at'))
         self.fields['groups'].queryset = (
             StudentGroup.visible_to(teacher).select_related('teacher'))

@@ -60,7 +60,7 @@ class CollectionTests(TestCase):
         self.assertContains(source, 'Готовая тема')
         detail = self.client.get(reverse(
             'collection_detail', args=[self.collection.pk]))
-        self.assertContains(detail, 'Использовать подборку')
+        self.assertContains(detail, 'Взять как листок')
         self.assertContains(detail, 'Поясните вычисление')
         self.assertContains(detail, 'toggle-answers')
         self.assertContains(detail, 'ответы и решения')
