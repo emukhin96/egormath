@@ -25,6 +25,7 @@
   <script defer src="{% static 'js/livefile.js' %}"></script>
   <script defer src="{% static 'js/shell.js' %}?v=3"></script>
   <script defer src="{% static 'js/dialogs.js' %}"></script>
+  <script defer src="{% static 'js/image_zoom.js' %}"></script>
   <script defer src="{% static 'js/taxonomy.js' %}?v=3"></script>
   {# Как верхнее меню: суперпользователь без профиля тоже учитель (get_role). #}
   {% if user.profile.is_teacher or user.is_superuser %}
