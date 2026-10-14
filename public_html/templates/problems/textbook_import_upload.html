@@ -3,8 +3,8 @@
 {% block extra_head %}<script defer src="{% static 'js/textbook_import_upload.js' %}"></script>{% endblock %}
 {% block title %}Новая партия импорта — Математика{% endblock %}
 {% block content %}
-<div class="page-head"><div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">База задач</a><a href="{% url 'textbook_import_list' %}">Импорт задачников</a></nav><h1>Новая партия</h1>
-  <p class="page-meta"><span>создаёт только черновики: база задач не меняется до подтверждения</span></p></div></div>
+<div class="page-head"><div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a><a href="{% url 'textbook_import_list' %}">Импорт задачников</a></nav><h1>Новая партия</h1>
+  <p class="page-meta"><span>создаёт только черновики: раздел «Задачи» не меняется до подтверждения</span></p></div></div>
 <div class="card">
   <h2>Исходные данные</h2>
   <p class="muted">Выберите компоновку книги и, если нужно, явный профиль парсера. Один TEX с ответами в конце подходит Галицкому, Зиву, Мерзляку, Шабунину (ответы после каждой главы), Потоскуеву и Феоктистову; два TEX — задачник и решебник — профилю Шестакова. ZIP с рисунками сопоставляется по имени файла. Сначала создаются только проверяемые черновики.</p>

@@ -850,9 +850,15 @@ class WorksheetViewTests(TestCase):
         self.assertIn('Б-листок', titles)
         self.assertNotIn(self.worksheet.title, titles)
 
-        response = self.client.get(url, {'grade': '8'})
+        response = self.client.get(url, {'grade': '8', 'topic': topic.pk})
         titles = [w.title for w in response.context['worksheets']]
         self.assertEqual(titles, ['А-листок'])
+        # Класс — сегменты-ссылки: выбранный активен, ссылки хранят тему
+        self.assertContains(
+            response, f'class="seg-item is-active" href="?topic={topic.pk}&amp;grade=8"')
+        self.assertContains(
+            response, f'class="seg-item" href="?topic={topic.pk}"')
+        self.assertContains(response, 'data-autosubmit')
 
         response = self.client.get(url, {'order': 'title'})
         titles = [w.title for w in response.context['worksheets']]

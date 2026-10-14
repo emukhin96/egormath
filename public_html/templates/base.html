@@ -39,14 +39,14 @@
   <div class="topbar-inner">
     <a class="brand" href="{% url 'index' %}" title="Кабинет">Математика</a>
     {% if user.is_authenticated %}
-      {# Пять пунктов: подразделы базы задач и заданий — в выпадающем меню у шеврона (shell.js); на узком экране все ссылки в одном ряду #}
+      {# Пять пунктов: подразделы «Задач» и заданий — в выпадающем меню у шеврона (shell.js); на узком экране все ссылки в одном ряду #}
       <nav class="topbar-nav" aria-label="Основные разделы">
         {# Учителю пункт «Главная» не нужен: в кабинет ведёт логотип #}
         {% if not is_teacher %}<a href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} class="is-active"{% endif %}>Задания</a>{% endif %}
         {% if is_teacher %}
           <div class="nav-group{% if 'task' in request.resolver_match.url_name or request.resolver_match.url_name == 'bulk_answers' or 'textbook_import' in request.resolver_match.url_name %} is-active{% endif %}">
-            <a href="{% url 'task_list' %}">База задач</a>
-            <button type="button" class="nav-more" aria-expanded="false" aria-haspopup="true" aria-label="Разделы базы задач" data-nav-more>
+            <a href="{% url 'task_list' %}">Задачи</a>
+            <button type="button" class="nav-more" aria-expanded="false" aria-haspopup="true" aria-label="Разделы задач" data-nav-more>
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
             </button>
             <div class="nav-menu">

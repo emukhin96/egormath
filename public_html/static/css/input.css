@@ -458,9 +458,16 @@
     height: 14px;
   }
 
+  /* Открытое меню подсвечивает весь пункт — ссылку и шеврон вместе,
+     а не один шеврон: пункт меню — одна плашка */
+  .nav-group:has(> .nav-more[aria-expanded="true"]) {
+    background: var(--accent-soft);
+    border-radius: 8px;
+  }
+
+  .topbar-nav .nav-group:has(> .nav-more[aria-expanded="true"]) > a,
   .nav-more[aria-expanded="true"] {
     color: var(--accent);
-    background: var(--accent-soft);
   }
 
   /* Открытие — классом is-open, не атрибутом hidden: preflight делает

@@ -131,7 +131,7 @@
     </div>{% endif %}
     {% if topic_candidates %}<p class="helptext">Кандидаты рубрикатора: {% for item in topic_candidates %}{{ item.name }} ({{ item.reason_label }}){% if not forloop.last %}; {% endif %}{% endfor %}. Точное совпадение ставится при импорте, похожее название остаётся подсказкой.</p>{% endif %}
     <p><label for="{{ form.tags.id_for_label }}">Метки</label>{{ form.tags.errors }}{{ form.tags }}<span class="helptext">Через запятую, как теги в редакторе задачи{% if known_tags %}; на сайте уже есть: {{ known_tags|join:', ' }}{% endif %}.</span></p>
-    <div><label>Темы рубрикатора</label>{% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True selected_json=selected_json %}<span class="helptext">Можно выбрать несколько тем, как в базе задач. Звезда отмечает основную. Поиск по коду или названию; ветви раскрываются до конкретной темы.</span></div>
+    <div><label>Темы рубрикатора</label>{% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True selected_json=selected_json %}<span class="helptext">Можно выбрать несколько тем, как в разделе «Задачи». Звезда отмечает основную. Поиск по коду или названию; ветви раскрываются до конкретной темы.</span></div>
   </section>
   <div class="import-review-actions">
     <div class="import-status-field">

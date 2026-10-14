@@ -202,7 +202,7 @@
           </label>
         </form>
         <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button class="link-btn" title="Добавить локальную копию следующей строкой">дублировать локально</button></form>
-        <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><input type="hidden" name="standalone" value="1"><button class="link-btn" title="Создать копию в базе задач и добавить в листок">дублировать</button></form>
+        <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><input type="hidden" name="standalone" value="1"><button class="link-btn" title="Создать копию в разделе «Задачи» и добавить в листок">дублировать</button></form>
         {% if item.task.subitems.all %}
         <label class="inline-label task-meta-item ws-column-control">колонки
           <input type="number" name="columns" form="settings-{{ item.pk }}"
