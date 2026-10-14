@@ -259,6 +259,8 @@ PDF_EDITOR_FONTS = [
 SUBMISSION_PHOTO_MAX_SIZE_MB = 15       # до сжатия
 SUBMISSION_PHOTO_MAX_SIDE = 1600        # px, большая сторона после сжатия
 SUBMISSION_PHOTO_MAX_COUNT = 6          # фото на одну задачу
+# Картинка к условию задачи (TaskImage) до сжатия
+TASK_IMAGE_MAX_SIZE_MB = 15
 
 # Холст (мини-доска к задаче). Выключатель на случай перегрузки:
 # CANVAS_ENABLED=0 в .secrets/ прячет панель и закрывает эндпоинты (503).

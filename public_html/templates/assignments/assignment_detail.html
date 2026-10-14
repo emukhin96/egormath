@@ -128,7 +128,7 @@
       {% if can_upload %}
       {# Файл привязан к отдельной multipart-форме (атрибут form): формы не вкладываются #}
       <label class="btn btn-small btn-secondary photo-pick">Фото решения
-        <input type="file" name="photos" form="photo-form-{{ row.task.pk }}" data-photo-input
+        <input type="file" name="photos" form="photo-form-{{ row.task.pk }}" data-photo-input data-image-paste-fallback="off"
                accept="image/jpeg,image/png,image/webp" multiple></label>
       <button type="submit" class="btn btn-small btn-secondary" form="photo-form-{{ row.task.pk }}" data-photo-submit>Загрузить</button>
       {% endif %}
