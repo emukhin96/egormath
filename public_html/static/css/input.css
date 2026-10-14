@@ -3719,6 +3719,50 @@
     border: 1px solid var(--border);
     border-radius: 6px;
     background: #fff;
+    cursor: zoom-in;
+  }
+
+  .task-images img:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Увеличенный просмотр картинки задачи (image_zoom.js): белая подложка
+     по размеру картинки, крестик в углу, клик в любом месте закрывает. */
+  dialog.image-zoom {
+    margin: auto;
+    padding: var(--space-2);
+    max-width: none;
+    max-height: none;
+    border: 0;
+    border-radius: var(--radius);
+    background: #fff;
+    overflow: visible;
+    cursor: zoom-out;
+  }
+
+  dialog.image-zoom::backdrop {
+    background: rgba(7, 20, 38, 0.7);
+  }
+
+  dialog.image-zoom img {
+    display: block;
+    max-width: 92vw;
+    max-height: 88vh;
+  }
+
+  dialog.image-zoom .image-zoom-close {
+    position: absolute;
+    top: calc(-1 * var(--space-2));
+    right: calc(-1 * var(--space-2));
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    background: #fff;
+    font-size: 24px;
+    line-height: 1;
+    box-shadow: 0 1px 4px rgba(7, 20, 38, 0.3);
   }
 
   .task-image-pdf {
