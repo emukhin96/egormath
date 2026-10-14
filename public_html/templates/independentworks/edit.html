@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head"><div><span class="page-eyebrow">Состав самостоятельной</span><h1>{{ work.title }}</h1>{% if work.source_worksheet_id %}<p class="page-subtitle">На основе {% if source_url %}<a href="{{ source_url }}">{{ work.source_worksheet.title }}</a>{% else %}«{{ work.source_worksheet.title }}»{% endif %}. Шаблон редактируется независимо.</p>{% else %}<p class="page-subtitle">Все номера и утверждённые кандидаты. Для подбора аналогов откройте нужный номер.</p>{% endif %}</div><a class="btn" href="{% url 'independentworks:prepare' work.pk %}{% if preparation_query %}?{{ preparation_query }}{% endif %}">Подготовить выдачу</a></div>
 <div class="ws-toolbar iw-template-toolbar"><form method="post" class="iw-title-form">{% csrf_token %}<input type="hidden" name="action" value="title"><label for="iw-title">Название</label><input type="text" id="iw-title" name="title" maxlength="190" value="{{ work.title }}" required><button class="btn">Сохранить название</button></form><form method="post" action="{% url 'independentworks:copy' work.pk %}">{% csrf_token %}<button class="btn btn-secondary">Копировать шаблон</button></form></div>
-<div class="card worksheet-items-card"><h2 class="worksheet-items-heading"><span>Номера самостоятельной</span>{% include 'includes/builder_answers_toggle.html' %}{% include 'includes/builder_masks_toggle.html' with masks_key='iw-masks' %}</h2>
+<div class="card worksheet-items-card"><h2 class="worksheet-items-heading"><span>Номера самостоятельной</span>{% include 'includes/builder_answers_toggle.html' %}{% include 'includes/builder_masks_toggle.html' with masks_key='iw-masks' %}{% include 'independentworks/_view_toggle.html' %}</h2>
 <div id="ws-items" data-reorder-url="{% url 'independentworks:reorder' work.pk %}" data-reorder-reload="1" data-answers-key="iw-show-answers">
 {% if positions %}
 {% for position in positions %}
@@ -35,6 +35,7 @@
 {% else %}<section class="card empty-state"><h2>Добавьте первый номер</h2><p class="muted">Затем выберите задачу и её аналоги из базы.</p><form method="post">{% csrf_token %}<button class="btn" name="action" value="add">Добавить номер</button></form></section>{% endif %}
 {% if positions %}<div class="form-buttons"><form method="post">{% csrf_token %}<button class="btn" name="action" value="add">Добавить номер</button></form></div>{% endif %}
 </div>
+{% include 'independentworks/_compact.html' %}
 {% include 'includes/builder_add_text.html' with independent=True %}
 </div>
 {% endblock %}
@@ -45,4 +46,5 @@
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <script defer src="{% static 'js/answers-toggle.js' %}?v=2"></script>
 <script defer src="{% static 'js/builder.js' %}?v=6"></script>
+<script defer src="{% static 'js/iw_compact.js' %}?v=1"></script>
 {% endblock %}
