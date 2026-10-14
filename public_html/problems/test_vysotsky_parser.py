@@ -248,3 +248,10 @@ class VysotskyPercentTests(SimpleTestCase):
         self.assertIn("10\\%", task.text_latex)
         self.assertNotIn("\\\\%", task.text_latex)
         self.assertIn("\\%", task.subitems[0].author_answer_latex)
+
+
+class VysotskyIncompleteBookTests(SimpleTestCase):
+    def test_missing_section_is_import_error(self):
+        broken = BOOK.replace("\\section*{Справочник}", "\\section*{Термины}")
+        with self.assertRaisesRegex(ValueError, "«Справочник»"):
+            parse_vysotsky(broken)

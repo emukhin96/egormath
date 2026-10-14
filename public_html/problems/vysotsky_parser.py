@@ -651,13 +651,21 @@ def parse_vysotsky(text: str) -> tuple[list[TaskDraft], dict]:
     text, source_repairs = apply_source_repairs(text)
     text = strip_watermarks(text)
     structure = load_structure()
-    first_part = PART_RE.search(text)
-    cards = CARDS_RE.search(text)
-    works = WORKS_RE.search(text, cards.end())
-    tests = TESTS_RE.search(text, works.end())
-    handbook = HANDBOOK_RE.search(text, tests.end())
-    answers = ANSWERS_RE.search(text, handbook.end())
-    answers_cards = ANSWERS_CARDS_RE.search(text, answers.end())
+    def find(pattern: re.Pattern, title: str, pos: int = 0) -> re.Match:
+        # Неполный или иначе распознанный TEX — понятная ошибка импорта,
+        # а не AttributeError (форма «Новая партия» ловит только ValueError).
+        match = pattern.search(text, pos)
+        if match is None:
+            raise ValueError(f"Не найден раздел «{title}» книги Высоцкого")
+        return match
+
+    first_part = find(PART_RE, "Раздел I")
+    cards = find(CARDS_RE, "Карточки для индивидуальной работы")
+    works = find(WORKS_RE, "Самостоятельные работы", cards.end())
+    tests = find(TESTS_RE, "Контрольные работы", works.end())
+    handbook = find(HANDBOOK_RE, "Справочник", tests.end())
+    answers = find(ANSWERS_RE, "Ответы", handbook.end())
+    answers_cards = find(ANSWERS_CARDS_RE, "Индивидуальные карточки (ответы)", answers.end())
     toc = TOC_RE.search(text, answers_cards.end())
 
     diagnostics: dict = {
