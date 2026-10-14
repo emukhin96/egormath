@@ -56,13 +56,7 @@ def draft(request, pk, token):
                     ref.save(update_fields=['source_path', 'page'])
             sub_fs.save()
             image_fs.save()
-            family = source.analog_families.first()
-            if not family and source.variant_of_id:
-                family = source.variant_of.analog_families.first()
-            if family is None:
-                family = Family.objects.create(key='manual:analog:' + token, title=f'Аналоги задачи {source.pk}')
-                family.tasks.add(source)
-            family.tasks.add(copy)
+            Family.link_analog(source, copy, token)
             svc.add_candidate(position, copy)
         state['saved'] = copy.pk
         request.session[key] = state

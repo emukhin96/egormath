@@ -52,7 +52,7 @@
 <td>{% include 'problems/_catalog_content.html' %}
 <div data-worksheet-mask data-task-id="{{ task.pk }}" data-manage-url="{% url 'task_manage' task.pk %}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
 {# Нижняя строка задачи: откуда задача (источник, №, раздел) и действия — в одну строку под условием, а не столбиком в узкой колонке #}
-<div class="task-meta catalog-row-meta"><span class="catalog-source">{% for ref in task.source_refs.all %}<span>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}{% for part in ref.source_path %} › {{ part|heading_dot }}{% endfor %}</span>{% endfor %}</span><span class="catalog-row-actions"><span data-mask-links></span><form class="inline-form" method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn">дублировать</button></form></span></div>
+<div class="task-meta catalog-row-meta"><span class="catalog-source">{% for ref in task.source_refs.all %}<span>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}{% for part in ref.source_path %} › {{ part|heading_dot }}{% endfor %}</span>{% endfor %}</span><span class="catalog-row-actions"><span data-mask-links></span>{% if not task.block_id %}<button type="button" class="link-btn" data-quick-clone="{% url 'task_clone' task.pk %}" title="Новая задача с другими числами — не уходя со страницы">клон</button>{% endif %}<form class="inline-form" method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn">дублировать</button></form></span></div>
 </td>
 <td>{# Класс и темы показаны текстом; контролы раскрываются по клику (task_catalog.js обновляет текст после правки) #}
 <details class="row-edit" data-row-edit>
