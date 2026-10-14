@@ -2044,11 +2044,21 @@ def textbook_import_commit(request, pk):
         request,
         'Импорт завершён: создано задач — %(created)s, '
         'переиспользовано — %(reused)s, новых подборок — %(collections)s.'
-        % result)
+        % result + _analog_note(result))
     batch.refresh_from_db()
     if batch.status == TextbookImportBatch.STATUS_IMPORTED:
         return redirect('collection_list')
     return redirect('textbook_import_detail', pk=batch.pk)
+
+
+def _analog_note(result):
+    """«Новых семей аналогов — 3»: варианты СР/КР, связанные при загрузке."""
+    families = result.get('analog_families') or 0
+    members = result.get('analog_members') or 0
+    if not families and not members:
+        return ''
+    return (f' Новых семей аналогов — {families}, '
+            f'задач добавлено в семьи — {members}.')
 
 
 @teacher_required
@@ -2083,7 +2093,7 @@ def textbook_import_commit_section(request, pk):
             request,
             'Раздел «%(title)s» загружен: создано задач — %(created)s, '
             'переиспользовано — %(reused)s, новых подборок — %(collections)s.'
-            % {'title': group['title'], **result})
+            % {'title': group['title'], **result} + _analog_note(result))
     else:
         messages.success(request, f'Раздел «{group["title"]}» уже загружен. '
                                   'Изменений нет.')

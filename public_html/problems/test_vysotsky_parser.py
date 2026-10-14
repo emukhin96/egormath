@@ -198,6 +198,11 @@ class VysotskyCommitTests(TestCase):
         self.assertIn('четыре', first.subitems[0]['author_answer_latex'])
         result = commit_batch(batch, user=user)
         self.assertEqual(result['analog_families'], 1)
+        self.assertEqual(result['analog_members'], 2)
+        # Повторная загрузка ничего не меняет — и результат пустой, чтобы
+        # раздел показал «Изменений нет».
+        again = commit_batch(batch, user=user)
+        self.assertFalse(any(again.values()), again)
         family = Family.objects.get()
         texts = sorted(task.text_latex for task in family.tasks.all())
         self.assertEqual(len(texts), 2)

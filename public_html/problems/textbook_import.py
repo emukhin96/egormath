@@ -1547,5 +1547,9 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         # семья аналогов сразу после загрузки, без ручного
         # sync_independent_analogs.
         from independentworks.analogs import sync_families
-        result['analog_families'] = sync_families(source_id=batch.source_id)
+        # Только новое: по пустому результату представление сообщает
+        # «Изменений нет» при повторной загрузке раздела.
+        report = sync_families(report=True, source_id=batch.source_id)
+        result['analog_families'] = report['created']
+        result['analog_members'] = report['members_added']
     return result
