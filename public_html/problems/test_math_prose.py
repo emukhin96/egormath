@@ -61,6 +61,17 @@ class UnwrapCommandTests(TestCase):
         self.clean.refresh_from_db()
         self.assertEqual(self.clean.text_latex, 'Найдите $x$.')
 
+    def test_several_sources_are_or(self):
+        from .models import Source
+        first = Source.objects.create(title='Авторские листки')
+        second = Source.objects.create(title='Шабунин 10-11')
+        self.task.sources.add(first)
+        other = Task.objects.create(text_latex=r'$\text { Решите } x=1 .$')
+        other.sources.add(second)
+        out = StringIO()
+        call_command('unwrap_math_prose', '--source', 'Авторские', '--source', 'Шабунин', stdout=out)
+        self.assertIn('Задач с изменениями: 2,', out.getvalue())
+
     def test_task_filter(self):
         out = StringIO()
         call_command('unwrap_math_prose', '--task', str(self.clean.pk), stdout=out)

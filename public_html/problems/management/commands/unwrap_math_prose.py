@@ -14,6 +14,7 @@
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.db.models import Q
 
 from problems.math_prose import unwrap_math_prose
 from problems.models import Task, TaskSubitem
@@ -34,8 +35,12 @@ class Command(BaseCommand):
         tasks = Task.objects.all()
         if options['task']:
             tasks = tasks.filter(pk__in=options['task'])
-        for title in options['source']:
-            tasks = tasks.filter(sources__title__icontains=title)
+        if options['source']:
+            # Несколько --source — любой из источников («ИЛИ»), как у --task
+            match = Q()
+            for title in options['source']:
+                match |= Q(sources__title__icontains=title)
+            tasks = tasks.filter(match)
         tasks = tasks.distinct().order_by('pk')
 
         task_changes, subitem_changes = [], []
