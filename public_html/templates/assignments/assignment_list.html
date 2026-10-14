@@ -1,12 +1,24 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static page_tools task_extras %}
 {% block title %}{% if filters.kind == 'independent' %}Самостоятельные{% else %}Выданные задания{% endif %} — Математика{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>{% if filters.kind == 'independent' %}Самостоятельные{% else %}Выданные задания{% endif %}</h1>
+    <p class="page-meta">
+      <span>{{ page.paginator.count }} {{ page.paginator.count|plural_ru:'работа,работы,работ' }}</span>
+      <span>{{ stats.total }} {{ stats.total|plural_ru:'выдача,выдачи,выдач' }}</span>
+      {% if stats.submitted %}<span>на проверке {{ stats.submitted }}</span>{% endif %}
+    </p>
   </div>
-  {% if filters.kind == 'independent' %}<div class="form-buttons"><a class="btn" href="{% url 'independentworks:create' %}">Создать самостоятельную</a><a class="btn btn-secondary" href="{% url 'assignment_create' %}?mode=independent">Шаблоны · выдать</a></div>{% else %}<a class="btn" href="{% url 'assignment_create' %}">Выдать задание</a>{% endif %}
+  <div class="page-actions">
+    {% if filters.kind == 'independent' %}
+    <a class="btn btn-secondary" href="{% url 'assignment_create' %}?mode=independent">Шаблоны · выдать</a>
+    <a class="btn" href="{% url 'independentworks:create' %}">Создать самостоятельную</a>
+    {% else %}
+    <a class="btn" href="{% url 'assignment_create' %}">Выдать задание</a>
+    {% endif %}
+  </div>
 </div>
 
 {% if filters.kind == 'independent' and draft_runs %}
@@ -41,68 +53,67 @@
   </a>
 </div>
 
-<form method="get" class="card filter-card">
-  <div class="filters assignment-filters">
-    {% if request.resolver_match.namespace == "independentworks" %}<input type="hidden" name="kind" value="independent">{% elif independentworks_enabled %}<div><label for="assignment-kind">Вид работы</label><select name="kind" id="assignment-kind"><option value="">Все работы</option><option value="ordinary"{% if filters.kind == 'ordinary' %} selected{% endif %}>Обычные задания</option><option value="independent"{% if filters.kind == 'independent' %} selected{% endif %}>Самостоятельные</option></select></div>{% endif %}
-    <div class="filter-search">
-      <label for="assignment-q">Поиск</label>
-      <input type="text" name="q" id="assignment-q" value="{{ filters.q }}"
-             placeholder="Листок или ученик">
-    </div>
-    {% if request.user.is_superuser %}
-    <div>
-      <label for="assignment-owner">Владелец</label>
-      <select name="owner" id="assignment-owner">
-        <option value="">Все владельцы</option>
-        {% for owner in owners %}
-        <option value="{{ owner.pk }}"{% if filters.owner == owner.pk|stringformat:'s' %} selected{% endif %}>{{ owner.get_full_name|default:owner.username }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    {% endif %}
-    <div>
-      <label for="assignment-status">Статус</label>
-      <select name="status" id="assignment-status">
-        <option value="">Все статусы</option>
-        {% for value, label in status_choices %}
-        <option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div>
-      <label for="assignment-student">Ученик</label>
-      <select name="student" id="assignment-student">
-        <option value="">Все ученики</option>
-        {% for profile in students %}
-        <option value="{{ profile.user_id }}"{% if filters.student == profile.user_id|stringformat:'s' %} selected{% endif %}>{{ profile.user.get_full_name|default:profile.user.username }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div>
-      <label for="assignment-worksheet">Листок</label>
-      <select name="worksheet" id="assignment-worksheet">
-        <option value="">Все листки</option>
-        {% for worksheet in worksheets %}
-        <option value="{{ worksheet.pk }}"{% if filters.worksheet == worksheet.pk|stringformat:'s' %} selected{% endif %}>{{ worksheet.title }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div>
-      <label for="assignment-due">Срок</label>
-      <select name="due" id="assignment-due">
-        <option value="">Любой срок</option>
-        {% for value, label in due_choices %}
-        <option value="{{ value }}"{% if filters.due == value %} selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="filter-actions">
-      <button class="btn" type="submit">Применить</button>
-      {% if filters.q or filters.status or filters.student or filters.worksheet or filters.due or filters.owner or filters.kind %}
-      <a class="filter-reset" href="{% if filters.kind == 'independent' %}{% url 'independentworks:catalog' %}{% else %}{% url 'assignment_list' %}{% endif %}">Сбросить</a>
+{# Фильтры применяются сразу: вид и статус — сегменты-ссылки, остальное — автоотправка формы #}
+<form method="get" class="page-toolbar assignment-filters" data-autosubmit>
+  {% if request.resolver_match.namespace == "independentworks" %}
+  <input type="hidden" name="kind" value="independent">
+  {% elif independentworks_enabled %}
+  {% seg_links 'kind' kind_choices label='Вид работы' %}
+  {% if filters.kind %}<input type="hidden" name="kind" value="{{ filters.kind }}">{% endif %}
+  {% endif %}
+  {% seg_links 'status' status_short_choices label='Статус' current=filters.status %}
+  {% if filters.status %}<input type="hidden" name="status" value="{{ filters.status }}">{% endif %}
+  <div class="filter-search">
+    <input type="search" name="q" id="assignment-q" value="{{ filters.q }}"
+           placeholder="Листок или ученик" aria-label="Поиск: листок или ученик">
+  </div>
+  {% if filters.q or filters.status or filters.student or filters.worksheet or filters.due or filters.owner or filters.kind %}
+  <a class="filter-reset" href="{% if filters.kind == 'independent' %}{% url 'independentworks:catalog' %}{% else %}{% url 'assignment_list' %}{% endif %}">Сбросить</a>
+  {% endif %}
+  <details class="filter-more"{% if filters.student or filters.worksheet or filters.due or filters.owner %} open{% endif %}>
+    <summary>Ещё фильтры</summary>
+    <div class="filter-more-body">
+      <div>
+        <label for="assignment-student">Ученик</label>
+        <select name="student" id="assignment-student">
+          <option value="">Все ученики</option>
+          {% for profile in students %}
+          <option value="{{ profile.user_id }}"{% if filters.student == profile.user_id|stringformat:'s' %} selected{% endif %}>{{ profile.user.get_full_name|default:profile.user.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="assignment-worksheet">Листок</label>
+        <select name="worksheet" id="assignment-worksheet">
+          <option value="">Все листки</option>
+          {% for worksheet in worksheets %}
+          <option value="{{ worksheet.pk }}"{% if filters.worksheet == worksheet.pk|stringformat:'s' %} selected{% endif %}>{{ worksheet.title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="assignment-due">Срок</label>
+        <select name="due" id="assignment-due">
+          <option value="">Любой срок</option>
+          {% for value, label in due_choices %}
+          <option value="{{ value }}"{% if filters.due == value %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if request.user.is_superuser %}
+      <div>
+        <label for="assignment-owner">Владелец</label>
+        <select name="owner" id="assignment-owner">
+          <option value="">Все владельцы</option>
+          {% for owner in owners %}
+          <option value="{{ owner.pk }}"{% if filters.owner == owner.pk|stringformat:'s' %} selected{% endif %}>{{ owner.get_full_name|default:owner.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
       {% endif %}
     </div>
-  </div>
+  </details>
+  <noscript><button class="btn btn-small" type="submit">Показать</button></noscript>
 </form>
 
 <form id="assignment-bulk-form" method="post" action="{% url 'assignment_bulk' %}" class="bulk-bar assignment-bulk" data-bulk hidden>
@@ -153,7 +164,7 @@
     <form method="post" action="{% if group.kind == "independent" %}{% url 'independentworks:recipients' group.run.pk %}{% else %}{% url 'assignment_group_update' group.worksheet_id %}{% endif %}{% if return_query %}?{{ return_query }}{% endif %}" {% if group.kind == "ordinary" %}data-assignment-group-form{% endif %}>
       {% csrf_token %}
       <div class="dialog-heading"><h3>{{ group.worksheet__title }}</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
-      {% if group.kind == "independent" %}<p class="helptext">Отметьте получателей и выберите из уже выданных вариантов. Начавших учеников и их варианты менять нельзя. Для работы над ошибками и пересдачи получатель закреплён.</p>{% else %}<p class="helptext">Отметьте учеников и выберите текущий статус для каждого.</p>{% endif %}
+      {% if group.kind == "independent" %}<p class="helptext">Отметьте получателей и выберите из уже выданных вариантов. Начавших учеников и их варианты менять нельзя. Для работы над ошибками и пересдачи получатель закреплён.</p>{% elif group.is_collection %}<p class="helptext">Это подборка-образец: новых учеников добавить нельзя, только вести уже выданные работы.</p>{% else %}<p class="helptext">Отметьте учеников и выберите текущий статус для каждого.</p>{% endif %}
       <div class="assignment-recipient-list">
         {% for row in group.recipient_rows %}
         {% if group.kind == "independent" %}

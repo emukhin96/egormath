@@ -47,7 +47,7 @@ class BuilderTests(TestCase):
         self.assertContains(response, 'data-save-draft-before-leave')
         self.assertContains(response, 'name="action" value="preview"', count=2)
         self.assertContains(response, 'name="action" value="draft"')
-        self.assertContains(response, 'class="page-back-link"')
+        self.assertContains(response, 'class="page-crumbs"')
         self.assertContains(response, 'class="summary-work"')
         self.assertContains(response, 'class="form-buttons summary-actions"')
         self.assertNotContains(response, 'Независимый шаблон самостоятельной.')
@@ -143,8 +143,9 @@ class BuilderTests(TestCase):
         self.assertContains(response, 'data-mask-readonly', count=4)
         self.assertContains(response, 'id="toggle-masks"')
         self.assertContains(response, 'math-content')
-        self.assertContains(response, 'Удалить номер', count=2)
-        self.assertContains(response, 'Убрать кандидата', count=4)
+        # Страница содержит оба вида состава: подробный и компактный.
+        self.assertContains(response, 'Удалить номер', count=4)
+        self.assertContains(response, 'Убрать кандидата', count=8)
         candidate = work.positions.first().candidates.first()
         response = self.client.post(reverse('independentworks:edit', args=[work.pk]),
             {'action': 'candidate_remove', 'candidate': candidate.pk})

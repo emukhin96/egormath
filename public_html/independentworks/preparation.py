@@ -7,6 +7,14 @@ from .models import Work, Position, Candidate
 from .services import WorkError, digest
 
 
+def is_ziv_collection(collection):
+    """Подборка Зива: задачи с ключами ``(sr|kr|pr)/N/vK/num`` — номера
+    собираются парами вариантов (``ziv_rows``), а не по одному."""
+    task_ids = collection.worksheet.ordered_items().values('task_id')
+    return any(ZIV.fullmatch(locator or '') for locator in TaskSource.objects.filter(
+        source=collection.source, task_id__in=task_ids).values_list('locator', flat=True))
+
+
 def ziv_rows(collection, pair):
     if pair not in (1, 3, 5, 7):
         raise WorkError('Выберите пару вариантов Зива.')

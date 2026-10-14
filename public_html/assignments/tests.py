@@ -262,6 +262,13 @@ class AssignmentWorkspaceTests(TestCase):
         self.assertEqual(
             list(response.context['assignments']),
             [older_submitted, submitted])
+        # Статус — сегменты-ссылки: выбранный активен, форма помнит его для поиска
+        self.assertContains(
+            response, 'class="seg-item is-active" href="?status=submitted" '
+            'aria-current="true">На проверке</a>', html=False)
+        self.assertContains(response, 'class="seg-item" href="?">Все</a>')
+        self.assertContains(
+            response, '<input type="hidden" name="status" value="submitted">')
 
     def test_catalog_groups_are_ordered_by_last_assignment_date(self):
         """Свежая выдача выше старой, даже если старая ждёт проверки."""
@@ -664,6 +671,30 @@ class StudentAnswerTests(TestCase):
         submission.refresh_from_db()
         self.assertEqual(submission.answer_json['s1'], 'после удаления фото')
         self.assertFalse(SubmissionPhoto.objects.exists())
+
+    def test_pasted_photo_from_clipboard(self):
+        """Фото, вставленное из буфера (image_paste.js), — обычный PNG с
+        именем paste-….png или вовсе без расширения: оба принимаются и
+        сжимаются в JPEG."""
+        task = self.tasks[0]
+        url = reverse('upload_photo', args=[self.assignment.pk, task.pk])
+        self.client.post(url, {'photos': fake_photo(
+            'paste-20261014-153000.png', size=(40, 30))})
+        self.client.post(url, {'photos': fake_photo('paste', size=(40, 30))})
+        names = sorted(p.image.name for p in SubmissionPhoto.objects.all())
+        self.assertEqual(len(names), 2)
+        self.assertTrue(all(n.endswith('.jpg') for n in names))
+        self.assertTrue(any('paste-20261014-153000' in n for n in names))
+
+    def test_photo_input_opts_out_of_paste_fallback(self):
+        """Поле фото отправляет форму сразу по change, поэтому вставка из
+        буфера кладёт туда файл только по явному выбору (image_paste.js)."""
+        self.assignment.allow_photos = True
+        self.assignment.save(update_fields=['allow_photos'])
+        response = self.client.get(
+            reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(
+            response, 'data-photo-input data-image-paste-fallback="off"')
 
     def test_post_without_answer_fields_does_not_clear(self):
         """POST без полей ответа (форма фото) не затирает сохранённое."""

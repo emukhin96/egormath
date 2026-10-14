@@ -60,7 +60,7 @@ class CollectionTests(TestCase):
         self.assertContains(source, 'Готовая тема')
         detail = self.client.get(reverse(
             'collection_detail', args=[self.collection.pk]))
-        self.assertContains(detail, 'Использовать подборку')
+        self.assertContains(detail, 'Взять как листок')
         self.assertContains(detail, 'Поясните вычисление')
         self.assertContains(detail, 'toggle-answers')
         self.assertContains(detail, 'ответы и решения')
@@ -251,6 +251,19 @@ class CollectionFlatViewTests(TestCase):
         self.assertContains(response, 'открыть раздел')
         self.assertContains(response, 'Всё в корзину · 3')
         self.assertContains(response, 'href="?view=tree"')
+
+    def test_book_section_keeps_its_page(self):
+        """Обзор «Авторских листков» не касается книжных подборок."""
+        response = self.client.get(reverse('collection_detail', args=[self.root.pk]))
+        self.assertTemplateUsed(response, 'worksheets/collection_detail.html')
+        self.assertTemplateNotUsed(response, 'worksheets/authored_browser.html')
+        response = self.client.get(
+            reverse('collection_list'), {'source': self.source.pk})
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get(
+            reverse('collection_preview', args=[self.sub_a.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 404)
 
     def test_tree_view_and_hidden_private_children(self):
         other = make_teacher('teacher2')

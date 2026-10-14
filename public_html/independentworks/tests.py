@@ -741,6 +741,23 @@ class IndependentWorkTests(TestCase):
         self.assertEqual(Photo.objects.count(), 1)
 
 
+    def test_pasted_photo_from_clipboard(self):
+        """Фото из буфера обмена: имя paste-….png и PNG без расширения."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .models import Photo
+        a = self.begin()
+        p = a.variant.points.get()
+        data = io.BytesIO()
+        Image.new('RGB', (8, 8)).save(data, format='PNG')
+        self.client.force_login(self.student)
+        for name in ('paste-20261014-153000.png', 'paste'):
+            response = self.client.post(self.url('upload_photo', a.pk, p.pk), {'photo': SimpleUploadedFile(name, data.getvalue(), content_type='image/png')})
+            self.assertEqual(response.status_code, 302)
+        self.assertEqual(Photo.objects.count(), 2)
+        broken = self.client.post(self.url('upload_photo', a.pk, p.pk), {'photo': SimpleUploadedFile('paste.png', b'garbage', content_type='image/png')})
+        self.assertContains(broken, 'Не удалось прочитать фотографию.', status_code=broken.status_code)
+        self.assertNotEqual(broken.status_code, 500)
+
     def test_save_rechecks_time_after_validation(self):
         from assignments.checks import check_mask
         a = self.begin()

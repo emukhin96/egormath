@@ -1,0 +1,23 @@
+{% load task_extras %}
+{# Предпросмотр авторского листка в обзоре. Отдаётся и целиком в странице, и фрагментом (collection_preview): JS подменяет [data-authored-head], [data-authored-actions] и содержимое #ws-items. Контекст: sheet, collection, rows, preview_cart_ids, next_url #}
+<div class="authored-preview-head" data-authored-head data-sheet-pk="{{ sheet.pk }}" data-section-pk="{{ sheet.section.pk|default:'' }}" data-sheet-title="{{ sheet.title }}">
+  <nav class="page-crumbs" aria-label="Путь к листку">
+    <a href="{% url 'authored_collections' %}">{{ collection.source.title }}</a>
+    {% if sheet.section %}<a href="{% url 'collection_detail' sheet.section.pk %}">{{ sheet.section.worksheet.title }}</a>{% endif %}
+    {% if sheet.main_topic %}<span>{{ sheet.main_topic.topic.name }}</span>{% endif %}
+  </nav>
+  <h2 class="authored-preview-title">{{ sheet.title }}</h2>
+  <p class="page-meta">
+    <span>{{ sheet.tasks_total }} {{ sheet.tasks_total|plural_ru:'задача,задачи,задач' }}</span>
+    <span>{{ sheet.month_year }}</span>
+    {% if sheet.topics %}<span class="collection-topics authored-preview-topics">{% for info in sheet.topics|slice:':5' %}<span class="collection-topic" title="{{ info.label }}">{{ info.topic.name }}</span>{% endfor %}</span>{% endif %}
+  </p>
+  {% if is_owner %}
+  <div class="authored-controls authored-preview-owner">{% include 'worksheets/_authored_controls.html' with next_url=next_url %}</div>
+  {% endif %}
+</div>
+{# Панель действий — прямой потомок панели предпросмотра, иначе sticky не держится при прокрутке задач #}
+<div class="authored-stick" data-authored-actions>{% include 'worksheets/_authored_preview_actions.html' %}</div>
+<div id="ws-items" class="ws-collection authored-items{% if wide_numbers %} ws-num-wide{% endif %}" style="--task-num-col: calc({{ number_width }}ch + 1.1rem)" data-answers-key="collection-show-answers">
+  {% if rows %}{% include 'worksheets/_collection_rows.html' with rows=rows %}{% else %}<p class="muted">Листок пуст.</p>{% endif %}
+</div>

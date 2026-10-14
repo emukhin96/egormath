@@ -7,14 +7,34 @@
 
   var badgeTimer = null;
 
-  function showSaved(ok, message) {
+  /* action — необязательная кнопка в тосте: {label: 'Отменить', onClick}.
+     С кнопкой тост держится дольше и не исчезает, пока над ним курсор. */
+  function showSaved(ok, message, action) {
     var badge = document.getElementById('ws-saved');
     if (!badge) return;
     badge.textContent = message || (ok ? 'Сохранено ✓' : 'Ошибка сохранения');
     badge.classList.toggle('ws-saved-error', !ok);
+    var delay = ok ? 1500 : 4000;
+    if (action && action.label) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'ws-saved-action';
+      button.textContent = action.label;
+      button.addEventListener('click', function () {
+        clearTimeout(badgeTimer);
+        badge.hidden = true;
+        action.onClick();
+      });
+      badge.appendChild(document.createTextNode(' · '));
+      badge.appendChild(button);
+      delay = 8000;
+    }
     badge.hidden = false;
     clearTimeout(badgeTimer);
-    badgeTimer = setTimeout(function () { badge.hidden = true; }, ok ? 1500 : 4000);
+    function hide() { badge.hidden = true; }
+    badgeTimer = setTimeout(hide, delay);
+    badge.onmouseenter = action ? function () { clearTimeout(badgeTimer); } : null;
+    badge.onmouseleave = action ? function () { badgeTimer = setTimeout(hide, 3000); } : null;
   }
 
   /* keepalive: запрос доживает до ответа, даже если страница уже уходит

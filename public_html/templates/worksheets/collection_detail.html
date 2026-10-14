@@ -12,10 +12,16 @@
   {# Действия над подборкой — одна заливная кнопка; настройки просмотра ниже, отдельным рядом #}
   <div class="form-buttons collection-head-actions">
     {% if can_use %}
-    <form method="post" action="{% url 'collection_use' collection.pk %}">
+    <form method="post" action="{% url 'collection_use' collection.pk %}" title="Копия подборки в «Мои листки»: её можно менять и задавать ученикам">
       {% csrf_token %}
-      <button class="btn" type="submit">Использовать подборку</button>
+      <button class="btn" type="submit">Взять как листок</button>
     </form>
+    {% if independentworks_enabled and tasks_total %}
+    <form method="post" action="{% url 'collection_to_independent' collection.pk %}" title="Новая самостоятельная: номера подборки, к ним можно добавить аналоги">
+      {% csrf_token %}
+      <button class="btn btn-secondary" type="submit">Самостоятельная по образцу</button>
+    </form>
+    {% endif %}
     {% endif %}
     {% if cart_task_ids %}
     <form method="post" action="{% url 'cart_add_many' %}" title="{% if page.has_other_pages %}Задачи этой страницы — в корзину{% else %}Все задачи — в корзину{% endif %}">
@@ -120,5 +126,5 @@
 <script defer src="{% static 'js/problem_editor.js' %}?v=2"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=2"></script>
-<script defer src="{% static 'js/cart.js' %}"></script>
+<script defer src="{% static 'js/cart.js' %}?v=2"></script>
 {% endblock %}

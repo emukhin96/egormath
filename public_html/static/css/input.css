@@ -400,10 +400,13 @@
   }
 
   /* Меню не сжимается под содержимое: место отдаёт поиск (flex-shrink у .topbar-search) */
+  /* Пункты тянутся на всю высоту топбара: активный подчёркнут акцентной
+     линией 2px по нижнему краю топбара (макет «Подборки», вариант A) */
   .topbar-nav {
     flex: none;
+    align-self: stretch;
     display: flex;
-    align-items: center;
+    align-items: stretch;
     gap: var(--space-1);
   }
 
@@ -415,14 +418,12 @@
     flex: none;
     display: flex;
     align-items: stretch;
-    border-radius: 6px;
   }
 
   /* Специфичность выше, чем у .topbar-nav a: иначе ссылка сохраняет полный
      радиус и между ней и шевроном остаётся шов */
   .topbar-nav .nav-group > a {
     padding-right: var(--space-1);
-    border-radius: 6px 0 0 6px;
   }
 
   .nav-more {
@@ -432,21 +433,24 @@
     justify-content: center;
     padding: 0 var(--space-1) 0 0;
     border: 0;
-    border-radius: 0 6px 6px 0;
+    border-radius: 0;
     background: transparent;
     color: #53647b;
     cursor: pointer;
   }
 
   .topbar-nav .nav-group:hover > a,
-  .nav-group:hover > .nav-more,
-  .nav-group.is-active > .nav-more {
-    background: #e4eef9;
+  .nav-group:hover > .nav-more {
+    color: var(--accent);
   }
 
-  .nav-group:hover > .nav-more,
   .nav-group.is-active > .nav-more {
-    color: var(--accent);
+    color: var(--accent-dark);
+  }
+
+  /* Линия активного раздела — под всей группой: ссылкой и шевроном */
+  .nav-group.is-active {
+    box-shadow: inset 0 -2px 0 var(--accent);
   }
 
   .nav-more svg {
@@ -454,9 +458,16 @@
     height: 14px;
   }
 
+  /* Открытое меню подсвечивает весь пункт — ссылку и шеврон вместе,
+     а не один шеврон: пункт меню — одна плашка */
+  .nav-group:has(> .nav-more[aria-expanded="true"]) {
+    background: var(--accent-soft);
+    border-radius: 8px;
+  }
+
+  .topbar-nav .nav-group:has(> .nav-more[aria-expanded="true"]) > a,
   .nav-more[aria-expanded="true"] {
     color: var(--accent);
-    background: #d6e4f7;
   }
 
   /* Открытие — классом is-open, не атрибутом hidden: preflight делает
@@ -465,7 +476,7 @@
     display: none;
     position: absolute;
     left: 0;
-    top: calc(100% + 6px);
+    top: calc(100% + 2px);
     min-width: 200px;
     padding: var(--space-1);
     background: #fff;
@@ -479,35 +490,43 @@
     display: grid;
   }
 
-  .topbar-nav .nav-menu a {
-    display: block;
-    white-space: nowrap;
-  }
-
   .topbar-nav .nav-group.is-active > a {
-    color: var(--accent);
-    background: #e4eef9;
+    color: var(--accent-dark);
     font-weight: 650;
   }
 
   .topbar-nav a {
     flex: none;
+    display: flex;
+    align-items: center;
     color: #53647b;
     text-decoration: none;
     padding: var(--space-2) var(--space-3);
-    border-radius: 6px;
     font-size: 0.9rem;
     font-weight: 500;
   }
 
-  .topbar-nav a:hover,
-  .topbar-nav a.is-active {
+  .topbar-nav a:hover {
     color: var(--accent);
-    background: #e4eef9;
   }
 
-  .topbar-nav a.is-active {
+  .topbar-nav > a.is-active {
+    color: var(--accent-dark);
     font-weight: 650;
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+
+  /* Подразделы в выпадающем меню — строки списка: фон, без линии */
+  .topbar-nav .nav-menu a {
+    display: block;
+    white-space: nowrap;
+    border-radius: 6px;
+  }
+
+  .topbar-nav .nav-menu a:hover,
+  .topbar-nav .nav-menu a.is-active {
+    color: var(--accent);
+    background: var(--accent-soft);
   }
 
   /* Поиск задач в шапке: ведёт на базу задач с введённым запросом */
@@ -612,8 +631,8 @@
     margin: 0;
   }
 
-  /* Корзина задач в шапке (native details). Кнопка-summary — обычная
-     .btn.btn-secondary из гайдлайна, поэтому геометрию не переопределяем. */
+  /* Корзина задач в шапке (native details). Кнопка-summary — .btn.btn-secondary,
+     в топбаре — компактная пилюля с круглым счётчиком (макет «Подборки», A). */
   .cart-menu {
     position: relative;
     flex: none;
@@ -627,38 +646,46 @@
     user-select: none;
   }
 
+  .topbar .cart-summary {
+    min-height: 32px;
+    padding: 0 6px 0 12px;
+    gap: 6px;
+    border-radius: 999px;
+    color: var(--accent-dark);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .topbar .cart-summary:not(:has(.cart-count:not([hidden]))) {
+    padding-right: 12px;
+  }
+
+  .topbar .cart-icon {
+    width: 16px;
+    height: 16px;
+  }
+
   .cart-summary::-webkit-details-marker {
     display: none;
   }
 
   .cart-menu[open] .cart-summary {
-    background: #edf3f9;
+    border-color: var(--accent);
+    background: var(--accent-soft);
   }
 
   .cart-icon {
     flex: none;
   }
 
-  .cart-count {
-    min-width: 20px;
-    padding: 0 6px;
-    border-radius: 999px;
-    background: var(--accent);
-    color: #fff;
-    font-size: 0.75rem;
-    font-weight: 600;
-    line-height: 20px;
-    text-align: center;
-  }
-
   .cart-panel {
     position: absolute;
     right: 0;
     top: calc(100% + 6px);
-    width: min(440px, calc(100vw - 2 * var(--space-4)));
+    width: min(520px, calc(100vw - 2 * var(--space-4)));
     padding: var(--space-3);
     display: grid;
-    gap: var(--space-2);
+    gap: var(--space-3);
     background: #fff;
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -666,9 +693,21 @@
     z-index: 70;
   }
 
+  .cart-panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
   .cart-panel-title {
     margin: 0;
     font-weight: 600;
+    color: var(--accent-dark);
+  }
+
+  .cart-panel .linklike {
+    min-height: 0;
   }
 
   .cart-panel .helptext {
@@ -676,15 +715,105 @@
     overflow-wrap: anywhere;
   }
 
-  .cart-form {
-    display: flex;
+  /* Список задач корзины: точка семьи аналогов · источник и условие · × */
+  .cart-items {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  .cart-item {
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    gap: var(--space-2);
     align-items: center;
+    padding: 2px var(--space-1) 2px var(--space-2);
+    border-radius: 6px;
+    background: #f7f9fb;
+    font-size: 0.82rem;
+  }
+
+  .cart-item-text {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .cart-item-source {
+    color: var(--accent-dark);
+    font-weight: 500;
+  }
+
+  .cart-fam {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+  }
+
+  /* Палитра семей аналогов — от токенов сайта */
+  .cart-fam-1 { background: var(--accent); }
+  .cart-fam-2 { background: var(--ok); }
+  .cart-fam-3 { background: var(--warn); }
+  .cart-fam-4 { background: #7b4fb5; }
+  .cart-fam-5 { background: #00838f; }
+  .cart-fam-6 { background: var(--accent-dark); }
+
+  /* Куда отправить корзину: «Листок» и «Самостоятельная» рядом */
+  .cart-dest {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: var(--space-2);
   }
 
-  .cart-form .quick-select {
-    flex: 1;
+  .cart-dest-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .cart-dest-iw {
+    border-color: var(--accent);
+    background: #f6faff;
+  }
+
+  .cart-dest-title {
+    margin: 0;
+    font-weight: 700;
+    color: var(--accent-dark);
+    font-size: 0.85rem;
+  }
+
+  .cart-dest-pick {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    align-self: stretch;
+  }
+
+  .cart-dest-pick .quick-select {
+    width: 100%;
     min-width: 0;
+  }
+
+  .cart-similar {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    font-size: 0.82rem;
+    color: var(--text);
+  }
+
+  .cart-similar input {
+    margin-top: 2px;
+    flex: none;
   }
 
   /* «+» у задачи: квадрат в размер .btn-small, крупный знак */
@@ -1751,13 +1880,15 @@
     font-weight: 600;
   }
 
-  /* Шапка страницы: заголовок и основное действие в одну строку */
+  /* Шапка страницы (макет «Подборки», вариант A): слева крошки, h1 и
+     мета-строка, справа действия или переключатель вида. Правила — в
+     docs/PIPELINE.md, «Шапка страницы и фильтры». */
   .page-head {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
-    gap: var(--space-3);
+    gap: var(--space-2) var(--space-3);
     margin-bottom: var(--space-4);
   }
 
@@ -1766,26 +1897,482 @@
   }
 
   .page-head h1 {
-    margin: var(--space-1) 0;
-    letter-spacing: -0.03em;
+    margin: 0;
+    font-size: 1.375rem;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
   }
 
   .page-head .muted {
     margin: 0;
   }
 
-  /* Строка над заголовком — только путь (источник, раздел, вариант), не ярлык раздела */
+  /* Крошки — путь к родителю: «Подборки › Авторские листки». Последний
+     элемент — текущая страница или раздел, ссылками только предки.
+     .page-eyebrow — прежнее имя той же строки, оставлено для совместимости. */
+  .page-crumbs,
   .page-eyebrow {
     display: block;
+    margin: 0 0 2px;
     color: var(--muted);
-    font-size: 0.82rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  .page-crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+
+  .page-crumbs > * + *::before {
+    content: "›";
+    margin: 0 6px;
+    color: #9aa5b4;
+  }
+
+  .page-crumbs a,
+  .page-eyebrow a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .page-crumbs a:hover,
+  .page-eyebrow a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+
+  /* Мета-строка под заголовком: «Е. А. Мухин · 46 листков · 812 задач».
+     Части — соседние элементы, точку-разделитель ставит CSS, поэтому
+     необязательные части можно выводить под {% if %}.
+     .page-subtitle — прежнее имя, тот же вид. */
+  .page-meta,
+  .page-subtitle {
+    margin: 2px 0 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  .page-meta > * + *::before {
+    content: "·";
+    margin: 0 6px;
+  }
+
+  .page-meta > .filter-chip::before,
+  .page-meta > .badge::before {
+    content: none;
+  }
+
+  /* Действия и переключатели вида справа от заголовка */
+  .page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .page-actions > form {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+  }
+
+  .page-actions .btn,
+  .page-actions .ws-toggle {
+    margin: 0;
+  }
+
+  /* Строка фильтров под шапкой: сегменты и чипы слева, сортировка справа */
+  .page-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin: calc(-1 * var(--space-1)) 0 var(--space-4);
+    min-width: 0;
+  }
+
+  .page-toolbar > form {
+    display: contents;
+  }
+
+  .page-toolbar .filter-search {
+    flex: 0 1 16rem;
+    min-width: 10rem;
+    margin: 0;
+  }
+
+  .page-toolbar .filter-search input {
+    width: 100%;
+    max-width: none;
+    min-height: 32px;
+    padding: 4px 10px;
+    font-size: 0.88rem;
+  }
+
+  /* Сегментный переключатель: ссылки с GET-параметрами или кнопки.
+     На узком экране прокручивается внутри себя, страница не уезжает. */
+  .seg {
+    position: relative;
+    display: inline-flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    vertical-align: middle;
+  }
+
+  .seg::-webkit-scrollbar {
+    display: none;
+  }
+
+  .seg-item {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    margin: 0;
+    padding: 0 12px;
+    border: 0;
+    border-right: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .seg-item:last-child {
+    border-right: 0;
+  }
+
+  .seg-item:hover {
+    color: var(--accent);
+    background: #f5f8fc;
+  }
+
+  .seg-item.is-active,
+  .seg-item[aria-current="page"],
+  .seg-item[aria-current="true"],
+  .seg-item[aria-pressed="true"] {
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font-weight: 600;
+  }
+
+  .seg-item:focus-visible,
+  .seg-item:has(> input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  /* Сегменты-радиокнопки внутри формы (живой поиск берёт значение из формы) */
+  .seg-item > input[type="radio"],
+  .seg-item > input[type="checkbox"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .seg-item:has(> input:checked) {
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font-weight: 600;
+  }
+
+  /* Выбранное значение фильтра (тема, тег) — чип с ×; «+ тема» — пустой чип */
+  .filter-chip,
+  .filter-chip-add {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: 28px;
+    max-width: 100%;
+    margin: 0;
+    padding: 0 10px;
+    border: 1px solid #c9dbf2;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    line-height: 1.3;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .filter-chip:has(.filter-chip-remove) {
+    padding-right: 4px;
+  }
+
+  .filter-chip > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .filter-chip-remove {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .filter-chip-remove:hover,
+  .filter-chip-remove:focus-visible {
+    color: var(--err);
+    background: #fdeaea;
+  }
+
+  .filter-chip-add {
+    border-color: #e3e8ef;
+    background: #f1f4f8;
+    color: #44505f;
+    cursor: pointer;
+  }
+
+  .filter-chip-add:hover,
+  .filter-chip-add:focus-visible {
+    border-color: #c9dbf2;
+    color: var(--accent);
+  }
+
+  /* «Сортировка: по теме ▾» — select без рамки в одну строку, справа в .page-toolbar */
+  .sort-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0 0 0 auto;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 400;
+    white-space: nowrap;
+  }
+
+  /* Тот же вид для фильтра-select в начале строки (значений много: группы, листки) */
+  .sort-inline.filter-inline {
+    margin-left: 0;
+  }
+
+  .sort-inline label {
+    display: inline;
+    margin: 0;
+    font-weight: 400;
+    color: inherit;
+  }
+
+  .sort-inline select {
+    width: auto;
+    max-width: 14rem;
+    min-height: 0;
+    margin: 0;
+    padding: 2px 2px 2px 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--accent-dark);
+    font-size: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .sort-inline select:focus-visible {
+    box-shadow: none;
+    outline: 2px solid var(--accent);
+  }
+
+  /* Громоздкие фильтры (даты, владелец) — свёрнуты в «Ещё фильтры» */
+  .filter-more {
+    flex-basis: 100%;
+    order: 10;
+  }
+
+  .filter-more > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .filter-more > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .filter-more > summary::after {
+    content: "▾";
+    font-size: 0.75rem;
+  }
+
+  .filter-more[open] > summary::after {
+    content: "▴";
+  }
+
+  .filter-more > summary:hover {
+    color: var(--accent);
+  }
+
+  .filter-more-body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-2) var(--space-3);
+    margin-top: var(--space-2);
+  }
+
+  .filter-more-body > div {
+    min-width: 0;
+  }
+
+  .filter-more-body label {
+    margin-bottom: var(--space-1);
+    color: var(--muted);
+    font-size: 0.8rem;
     font-weight: 500;
   }
 
-  .page-subtitle {
-    margin: 0;
+  .filter-more-body input,
+  .filter-more-body select {
+    width: auto;
+    max-width: 14rem;
+    min-height: 32px;
+    padding: 4px 8px;
+    font-size: 0.88rem;
+  }
+
+  /* Выбор темы в строке фильтров (taxonomy_picker, compact, placeholder='+ тема'):
+     выбранные темы — те же чипы с ×, поле поиска — чип «+ тема», дерево тем
+     открывается под ним. JS виджета прежний (taxonomy.js). */
+  .page-toolbar .tax-picker-compact {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-chips {
+    display: contents;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-empty {
+    display: none;
+  }
+
+  .page-toolbar .tax-chip {
+    min-height: 28px;
+    gap: var(--space-1);
+    padding: 0 4px 0 10px;
+    border-color: #c9dbf2;
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font-weight: 500;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-chip-label {
+    max-width: 14rem;
+  }
+
+  .page-toolbar .tax-chip-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border-radius: 999px;
     color: var(--muted);
+    font-size: 1rem;
+  }
+
+  .page-toolbar .tax-chip-x:hover,
+  .page-toolbar .tax-chip-x:focus-visible {
+    color: var(--err);
+    background: #fdeaea;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-search {
+    width: 7.5rem;
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid #e3e8ef;
+    border-radius: 999px;
+    background: #f1f4f8;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-search::placeholder {
+    color: #44505f;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-search:focus {
+    width: 14rem;
+    max-width: 100%;
+    background: #fff;
+    cursor: text;
+  }
+
+  .page-toolbar .tax-picker-compact .tax-search:focus::placeholder {
+    color: var(--muted);
+  }
+
+  .page-toolbar .tax-picker-compact .tax-panel {
+    left: 0;
+    right: auto;
+    top: calc(100% + 4px);
+  }
+
+  .page-toolbar .filter-reset {
+    min-height: 28px;
     font-size: 0.85rem;
+  }
+
+  /* Числовой бейдж-счётчик (корзина, «новые»): акцентный круг, белые цифры */
+  .badge-count,
+  .cart-count {
+    display: inline-block;
+    min-width: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 20px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
   }
 
   .page-back-link {
@@ -3563,6 +4150,291 @@
     margin: 0;
   }
 
+  /* Обзор «Авторских листков» (макет «Подборки», вариант B+C): слева
+     листки по главной теме, справа предпросмотр выбранного; вид «Таблица» —
+     темы-главы со строками листков. На узком экране список и листок — два
+     экрана (.has-sheet — листок выбран ссылкой ?sheet=). */
+  .authored-md {
+    display: grid;
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    gap: var(--space-4);
+    align-items: start;
+  }
+
+  .authored-list {
+    position: sticky;
+    top: calc(var(--topbar-height) + var(--space-4));
+    max-height: calc(100vh - var(--topbar-height) - var(--space-6));
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: var(--space-3) var(--space-2);
+  }
+
+  .authored-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .authored-grp {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin: 0 var(--space-2) 2px;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  .authored-li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0 var(--space-2);
+    padding: 6px var(--space-2);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.85rem;
+    line-height: 1.35;
+    text-decoration: none;
+  }
+
+  .authored-li:hover {
+    background: #f2f6fc;
+    color: var(--text);
+  }
+
+  .authored-li-name {
+    font-weight: 500;
+  }
+
+  .authored-li-count,
+  .authored-li-sub {
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .authored-li-sub {
+    grid-column: 1 / -1;
+  }
+
+  /* Выбранный листок — только фоном и цветом названия, без левой полосы
+     (запрет — docs/PIPELINE.md, «Шапка страницы и фильтры») */
+  .authored-li.is-active {
+    background: var(--accent-soft);
+  }
+
+  .authored-li.is-active .authored-li-name {
+    color: var(--accent-dark);
+    font-weight: 600;
+  }
+
+  .authored-pane {
+    min-width: 0;
+    margin: 0;
+    padding: var(--space-4) var(--space-3) var(--space-2);
+  }
+
+  .authored-pane > [data-authored-head],
+  .authored-pane > #ws-items {
+    transition: opacity 0.15s;
+  }
+
+  .authored-pane.is-loading > [data-authored-head],
+  .authored-pane.is-loading > #ws-items {
+    opacity: 0.5;
+  }
+
+  .authored-pane > .collection-view-options {
+    justify-content: flex-end;
+    margin: 0 var(--space-1) var(--space-2);
+  }
+
+  .authored-preview-head {
+    padding: 0 var(--space-1);
+  }
+
+  .authored-preview-title {
+    margin: 0;
+    color: var(--text);
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .authored-preview-topics {
+    display: inline-flex;
+    vertical-align: 1px;
+  }
+
+  .authored-preview-owner {
+    margin-top: var(--space-2);
+  }
+
+  /* Действия над листком держатся под топбаром, пока листают задачи */
+  .authored-stick {
+    position: sticky;
+    top: calc(var(--topbar-height) + var(--space-2));
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-3) 0 var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+  }
+
+  .authored-stick > form {
+    display: inline-flex;
+    margin: 0;
+  }
+
+  .authored-open-link {
+    margin-left: auto;
+    font-size: 0.85rem;
+  }
+
+  .authored-items .ws-item:last-child {
+    border-bottom: 0;
+  }
+
+  .authored-back {
+    display: none;
+  }
+
+  .authored-topic {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .authored-topic-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .authored-topic-head::-webkit-details-marker {
+    display: none;
+  }
+
+  .authored-topic-head::before {
+    content: "▸";
+    color: var(--muted);
+    transition: transform 0.15s;
+  }
+
+  .authored-topic[open] > .authored-topic-head::before {
+    transform: rotate(90deg);
+  }
+
+  .authored-topic[open] > .authored-topic-head {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .authored-topic-title {
+    color: var(--accent-dark);
+    font-weight: 650;
+  }
+
+  .authored-topic-head > .muted {
+    font-size: 0.8rem;
+  }
+
+  .authored-topic-cart {
+    display: inline-flex;
+    margin: 0 0 0 auto;
+  }
+
+  .authored-sr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 6.5rem 5.5rem auto;
+    gap: var(--space-3);
+    align-items: center;
+    padding: var(--space-2) var(--space-4);
+    border-bottom: 1px solid #edf0f4;
+    font-size: 0.88rem;
+  }
+
+  .authored-sr:last-child {
+    border-bottom: 0;
+  }
+
+  .authored-sr-title {
+    color: var(--text);
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .authored-sr-title:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+
+  .authored-also,
+  .authored-private,
+  .authored-sr-count,
+  .authored-sr-date {
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .authored-sr-use {
+    display: inline-flex;
+    margin: 0;
+  }
+
+  @media (max-width: 759px) {
+    .authored-md {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .authored-list {
+      position: static;
+      max-height: none;
+    }
+
+    .authored-md:not(.has-sheet) > .authored-pane,
+    .authored-md.has-sheet > .authored-list {
+      display: none;
+    }
+
+    .authored-back {
+      display: inline-block;
+      margin: 0 var(--space-1) var(--space-2);
+      font-size: 0.85rem;
+    }
+
+    .authored-open-link {
+      margin-left: 0;
+    }
+
+    .authored-sr {
+      grid-template-columns: auto auto minmax(0, 1fr);
+      gap: var(--space-1) var(--space-3);
+      padding-inline: var(--space-3);
+    }
+
+    .authored-sr-main {
+      grid-column: 1 / -1;
+    }
+
+    .authored-sr-use {
+      justify-self: end;
+    }
+  }
+
   .collection-head-actions > form {
     display: inline-flex;
     align-items: center;
@@ -4560,13 +5432,45 @@
       min-width: max-content;
     }
 
+    /* Ряд меню — нижняя полоса топбара: линия активного пункта у её края */
     .topbar-nav {
       order: 3;
       width: 100%;
       margin-inline: calc(var(--space-3) * -1);
-      padding: 0 var(--space-3) var(--space-2);
+      padding: 0 var(--space-3);
       overflow-x: auto;
       scrollbar-width: none;
+    }
+
+    /* Подразделы стоят в общем ряду: подчёркиваем сам активный пункт, не группу */
+    .nav-group.is-active {
+      box-shadow: none;
+    }
+
+    .topbar-nav .nav-group.is-active > a {
+      box-shadow: inset 0 -2px 0 var(--accent);
+    }
+
+    .topbar-nav .nav-group.is-active:has(.nav-menu a.is-active) > a {
+      box-shadow: none;
+      color: #53647b;
+      font-weight: 500;
+    }
+
+    .topbar-nav .nav-menu a {
+      display: flex;
+      border-radius: 0;
+    }
+
+    .topbar-nav .nav-menu a:hover {
+      background: transparent;
+    }
+
+    .topbar-nav .nav-menu a.is-active {
+      background: transparent;
+      color: var(--accent-dark);
+      font-weight: 650;
+      box-shadow: inset 0 -2px 0 var(--accent);
     }
 
     /* Узкий экран: подразделы в общем ряду, без выпадающего меню */
@@ -4685,7 +5589,10 @@
     .page-head {
       align-items: flex-start;
     }
-  }
+
+    .page-head h1 {
+      font-size: 1.25rem;
+    }  }
 
   @media (max-width: 640px) {
     .filters {
@@ -5592,6 +6499,9 @@
   .iw-workspace-overview, .iw-workspace-detail { margin-bottom: var(--space-4); }
   .iw-workspace-selected { background: #edf4fd; }
   .iw-workspace-candidate { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); min-width: 0; }
+  /* Номера, только что добавленные из корзины (один показ): подсветка гаснет сама */
+  .ws-item.iw-new { animation: iw-new-fade 5s ease-out 1; }
+  @keyframes iw-new-fade { from, 50% { background-color: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); } }
   .iw-workspace-settings { margin-top: var(--space-4); }
   .iw-workspace-tabs { display: flex; gap: var(--space-2); margin-block: var(--space-4); }
   .iw-workspace-tabs [aria-pressed=true] { background: var(--accent); color: white; border-color: var(--accent); }
@@ -5789,6 +6699,163 @@
   .canvas-top { pointer-events: none; }
 }
 
+/* Компактный вид состава самостоятельной (independentworks/_compact.html,
+   static/js/iw_compact.js): номер — строка, кандидаты — плашки. */
+@layer components {
+  .worksheet-items-card.is-compact #ws-items { display: none; }
+  .iw-compact-view { margin-left: auto; }
+  .iw-compact-list { display: flex; flex-direction: column; gap: var(--space-2); margin-block: var(--space-3); }
+  .iw-compact-pos {
+    display: grid; grid-template-columns: 16px 14px 56px minmax(0, 1fr) auto; gap: var(--space-2);
+    align-items: start; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 9px 10px; font-size: 0.85rem;
+  }
+  .iw-compact-pos > form { margin: 0; }
+  .iw-compact-pos.is-selected { background: #f8fbff; border-color: #b8d3f3; }
+  .iw-compact-check { width: 14px; height: 14px; margin: 4px 0 0; accent-color: var(--accent); }
+  .iw-compact-handle, .iw-compact-grip { color: #a2adbb; cursor: grab; user-select: none; line-height: 1.4; }
+  .iw-compact-handle { padding-top: 2px; }
+  .iw-compact-no { font-weight: 700; color: var(--accent-dark); text-decoration: none; padding-top: 2px; }
+  .iw-compact-no small { display: block; font-weight: 400; color: var(--muted); font-size: 0.72rem; }
+  .iw-compact-cands { display: flex; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+  .iw-compact-cand {
+    width: 238px; display: flex; flex-direction: column; gap: 3px; min-width: 0;
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; background: #fbfcfd;
+  }
+  .iw-compact-cand-head { display: flex; align-items: center; gap: var(--space-1); font-size: 0.75rem; color: var(--muted); }
+  .iw-compact-cand-head a { color: var(--muted); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .iw-compact-cand-head a:hover { color: var(--accent); }
+  .iw-compact-cand-head form { margin: 0 0 0 auto; }
+  .iw-compact-cand-head .icon-btn { font-size: 0.95rem; padding: 0 4px; }
+  .iw-compact-cand.is-block { background: var(--bg); }
+  .iw-compact-postext, .iw-compact-warn { flex: 1 1 100%; margin: 0; font-size: 0.8rem; color: var(--muted); }
+  .iw-compact-warn { color: var(--warn); }
+  .iw-compact-warn .link-btn { color: var(--accent); }
+  .iw-compact-text {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+    line-height: 1.45; overflow-wrap: anywhere;
+  }
+  .iw-compact-ans { display: none; font-size: 0.75rem; color: var(--ok); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .iw-compact.show-answers .iw-compact-ans { display: block; }
+  .iw-compact-add {
+    width: 238px; min-height: 64px; display: flex; align-items: center; justify-content: center;
+    border: 1px dashed var(--border); border-radius: 6px; background: var(--card);
+    color: var(--accent); font-weight: 600; text-decoration: none;
+  }
+  .iw-compact-add:hover { border-color: var(--accent); }
+  .iw-compact-dropzone {
+    display: none; width: 238px; min-height: 64px; align-items: center; justify-content: center; text-align: center;
+    border: 2px dashed var(--accent); border-radius: 6px; background: var(--card);
+    color: var(--accent); font-weight: 600; font-size: 0.78rem; padding: 6px;
+  }
+  .iw-compact-pos.is-drop { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: #f8fbff; }
+  .iw-compact-pos.is-drop .iw-compact-dropzone { display: flex; }
+  .iw-compact-pos.is-drop .iw-compact-add { display: none; }
+  .iw-compact-ghost { opacity: 0.35; border-style: dashed; }
+  .iw-compact-note { grid-template-columns: 16px 14px 56px minmax(0, 1fr) auto; padding-block: 5px; background: transparent; border-style: dashed; }
+  .iw-compact-note-label { color: var(--muted); font-size: 0.75rem; padding-top: 2px; }
+  .iw-compact-note .iw-compact-text { -webkit-line-clamp: 1; color: var(--muted); }
+  /* Промежутки между номерами видны только во время перетаскивания плашки */
+  .iw-compact-gap { height: 0; overflow: hidden; position: relative; margin-block: calc(-1 * var(--space-1)); }
+  .iw-compact.is-dragging .iw-compact-gap {
+    height: auto; min-height: 30px; overflow: visible; margin: 0 40px;
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+    border-top: 2px dashed #c3cfdd;
+  }
+  .iw-compact-gap > span {
+    position: absolute; top: 0; left: 50%; transform: translate(-50%, -50%); white-space: nowrap;
+    background: var(--card); padding: 0 var(--space-2); font-size: 0.75rem; color: var(--muted);
+  }
+  .iw-compact-gap.is-drop { border-top-color: var(--accent); }
+  .iw-compact-gap.is-drop > span { color: var(--accent); font-weight: 600; }
+  .iw-compact-gap .iw-compact-cand { height: 8px; padding: 0; overflow: hidden; border: 2px dashed var(--accent); background: var(--accent-soft); }
+  .iw-compact-gap .iw-compact-cand > * { display: none; }
+  .iw-compact-hint {
+    display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-top: var(--space-3);
+    background: #fff4e0; border: 1px solid #f1d9ad; border-radius: var(--radius); padding: var(--space-2) 10px; font-size: 0.85rem;
+  }
+  .iw-compact-hint[hidden] { display: none; }
+  .iw-compact-hint > span { flex: 1 1 320px; }
+  .iw-compact-hint b { color: var(--warn); }
+  .iw-compact-hint .link-btn { color: var(--muted); }
+  .iw-compact-selbar {
+    position: sticky; top: calc(var(--topbar-height) + var(--space-2)); z-index: 5;
+    display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-top: var(--space-3);
+    background: var(--accent-dark); color: #fff; border-radius: 8px; padding: var(--space-2) var(--space-3); font-size: 0.85rem;
+  }
+  .iw-compact-selbar[hidden] { display: none; }
+  .iw-compact-selbar .btn { background: #fff; color: var(--accent-dark); border-color: #fff; }
+  .iw-compact-selbar .iw-compact-ghost-btn { background: transparent; color: #fff; border-color: rgb(255 255 255 / 40%); }
+  .iw-compact-selbar-note { margin-left: auto; opacity: 0.75; }
+  .ws-saved-action {
+    background: none; border: none; padding: 0; color: inherit; font: inherit; font-weight: 600;
+    text-decoration: underline; cursor: pointer;
+  }
+  @media (max-width: 760px) {
+    .iw-compact-pos { grid-template-columns: 16px 14px minmax(0, 1fr) auto; }
+    .iw-compact-cands, .iw-compact-note .iw-compact-text { grid-column: 1 / -1; }
+    .iw-compact-pos > form { grid-row: 1; grid-column: -2; }
+    .iw-compact-cand, .iw-compact-add, .iw-compact-dropzone { width: 100%; }
+    .iw-compact-view { margin-left: 0; }
+  }
+}
+
+/* Зона «Вставить из буфера» рядом с полем загрузки картинки
+   (static/js/image_paste.js): кнопка, подсказка Ctrl+V / ⌘V, приём
+   перетаскиваемого файла, миниатюра и имя выбранного файла с × «убрать». */
+@layer components {
+  .paste-zone {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    width: max-content;
+    max-width: 100%;
+    margin-top: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+  }
+  .paste-zone.is-dragover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  /* В ряду кнопок отступ задаёт gap ряда */
+  .task-tools > .paste-zone,
+  .form-buttons > .paste-zone { margin-top: 0; }
+  .paste-zone .btn { margin: 0; }
+  .paste-zone-hint,
+  .paste-zone-msg {
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .paste-zone-msg { color: var(--warn); flex-basis: 100%; }
+  .paste-zone-msg[hidden],
+  .paste-zone-file[hidden] { display: none; }
+  .paste-zone-file {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+    max-width: 100%;
+    font-size: 0.85rem;
+  }
+  .paste-zone-thumb {
+    max-height: 40px;
+    max-width: 80px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fff;
+  }
+  .paste-zone-thumb[hidden] { display: none; }
+  .paste-zone-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 240px;
+  }
+}
+
 /* Русский текст внутри формулы («если», f_наим, \operatorname{НОД}): KaTeX
    рисует его запасным шрифтом браузера. Шрифт сайта и размер текста
    (KaTeX увеличивает формулы в 1,21 раза). Вне @layer: правила KaTeX
@@ -5796,4 +6863,119 @@
 .katex .cyrillic_fallback {
   font-family: var(--font-sans);
   font-size: 0.8264em;
+}
+
+/* Диалог «Клон задачи» (static/js/quick_clone.js, problems/_clone_dialog.html):
+   слева правка чисел/ответа/маски/рисунков, справа «Что изменится» и
+   «Ученик увидит». До 760px — одна колонка. */
+@layer components {
+  .qclone-dialog {
+    width: min(960px, calc(100vw - 2 * var(--space-2)));
+    max-width: none;
+    max-height: calc(100dvh - 2 * var(--space-2));
+    margin: auto;
+    padding: 0;
+    border: none;
+    border-radius: 10px;
+    background: var(--card);
+    color: var(--text);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+  }
+  .qclone-dialog[open] { display: flex; flex-direction: column; }
+  .qclone-dialog::backdrop { background: rgba(16, 43, 85, 0.32); }
+  .qclone { display: flex; flex-direction: column; min-height: 0; max-height: inherit; }
+  .qclone-head, .qclone-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4); flex: none;
+  }
+  .qclone-head { border-bottom: 1px solid var(--border); }
+  .qclone-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); min-width: 0; }
+  .qclone-title h2 { margin: 0; font-size: 1rem; color: var(--accent-dark); }
+  .qclone-target { color: var(--muted); font-size: 0.85rem; }
+  .qclone-body {
+    display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    min-height: 0; overflow-y: auto;
+  }
+  .qclone-edit {
+    display: flex; flex-direction: column; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4); border-right: 1px solid var(--border);
+  }
+  .qclone-edit .msg { margin: 0; }
+  .qclone-preview {
+    display: flex; flex-direction: column; gap: var(--space-2);
+    padding: var(--space-3) var(--space-4); background: #fafbfd;
+  }
+  .qclone-owner { display: flex; flex-direction: column; gap: var(--space-3); }
+  .qclone-owner + .qclone-owner { padding-top: var(--space-3); border-top: 1px dashed var(--border); }
+  .qclone-field { display: flex; flex-direction: column; gap: var(--space-1); }
+  .qclone-label { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+  .qclone-stmt {
+    border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-2) var(--space-3);
+    font-size: 0.9rem; line-height: 2; white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .qclone .num-in {
+    display: inline-block; width: 3ch; min-width: 28px; max-width: 12ch; height: auto;
+    margin: 0 1px; padding: 0 5px; line-height: 1.5; text-align: center; vertical-align: baseline;
+    border: 1.5px solid #c3cfdd; border-radius: 5px; background: #fff; color: var(--muted);
+    font-family: "Times New Roman", "STIX Two Text", Georgia, serif; font-size: 0.95rem;
+  }
+  .qclone .num-in.is-changed {
+    border-color: var(--accent); background: var(--accent-soft); color: var(--accent-dark); font-weight: 600;
+  }
+  .qclone .num-in:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(23, 101, 181, 0.25); }
+  .qclone-raw, .qclone-mono { max-width: none; font-family: var(--font-mono); font-size: 0.8rem; }
+  .qclone-link { align-self: flex-start; font-size: 0.8rem; color: var(--muted); text-decoration: none; }
+  .qclone-link:hover { color: var(--accent); }
+  .qclone-answer { display: flex; align-items: center; gap: var(--space-2); }
+  .qclone-answer textarea { max-width: none; min-height: 36px; resize: vertical; overflow-y: hidden; }
+  .qclone-was, .qclone-hint { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+  .qclone-hint { white-space: normal; }
+  .qclone-mask-view {
+    display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+    min-height: 36px; padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--border); border-radius: 8px; background: #fff;
+  }
+  .qclone-mask-view code { flex: 1; min-width: 0; font-size: 0.8rem; overflow-wrap: anywhere; }
+  .qclone-mask-view .link-btn { font-size: 0.8rem; }
+  .qclone-sync { color: var(--ok); font-size: 0.8rem; }
+  .qclone-check { color: var(--warn); font-size: 0.8rem; }
+  .qclone-pic { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+  .qclone-pic + .qclone-pic { margin-top: var(--space-2); }
+  .qclone-thumb {
+    display: flex; align-items: center; justify-content: center; width: 92px; height: 72px;
+    object-fit: contain; border: 1px solid var(--border); border-radius: 6px; background: #fff;
+  }
+  .qclone-pic.is-removed .qclone-thumb { opacity: 0.35; }
+  .qclone-pic-opts { display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.85rem; }
+  .qclone-pic-opts label { display: flex; align-items: center; gap: var(--space-1); }
+  .qclone-keep { display: flex; align-items: center; gap: var(--space-2); font-size: 0.9rem; }
+  .qclone-box {
+    border: 1px solid var(--border); border-radius: var(--radius); background: #fff;
+    padding: var(--space-2) var(--space-3); font-size: 0.9rem; line-height: 1.75; overflow-wrap: anywhere;
+  }
+  .qclone-box .subitems { margin: var(--space-1) 0 0; }
+  .qclone-box del { color: #b23a3a; text-decoration-thickness: 1.5px; }
+  .qclone-box ins { color: var(--ok); text-decoration: none; font-weight: 600; }
+  .qclone-diff-row + .qclone-diff-row { margin-top: var(--space-2); }
+  .qclone-diff-answer { color: var(--muted); }
+  .qclone-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-1); }
+  .qclone-chip {
+    display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 99px;
+    background: #f1f4f8; border: 1px solid var(--border); color: var(--muted); font-size: 0.78rem;
+  }
+  .qclone-foot { border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .qclone-foot .form-buttons { margin: 0; }
+  .qclone-note { color: var(--muted); font-size: 0.85rem; }
+  .qclone-note.is-saved { color: var(--ok); font-weight: 600; }
+  .ws-saved a { color: inherit; font-weight: 600; text-decoration: underline; }
+  /* «клон» в заголовке кандидата самостоятельной — справа, рядом с × */
+  .iw-workspace-heading > [data-quick-clone] { margin-left: auto; font-size: 0.85rem; }
+
+  @media (max-width: 760px) {
+    .qclone-body { grid-template-columns: minmax(0, 1fr); }
+    .qclone-edit { border-right: none; border-bottom: 1px solid var(--border); }
+    .qclone-head, .qclone-foot, .qclone-edit, .qclone-preview { padding-inline: var(--space-3); }
+    .qclone-foot .form-buttons { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+  }
 }

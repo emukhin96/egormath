@@ -2,14 +2,14 @@
 {% block title %}.tex — {{ worksheet.title }} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/diagnostic.html' %}{% endblock %}
 {% block content %}
-<div class="page-head"><div><span class="page-eyebrow">Диагностика PDF</span>
-  <h1>.tex-исходник</h1><p class="page-subtitle">{{ worksheet.title }} · {{ variant }}</p>
-</div></div>
-<p>
-  <a class="btn btn-small btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}?variant=student">ученик</a>
-  <a class="btn btn-small btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}?variant=answers">с ответами</a>
-  <a class="btn btn-small btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}?variant=teacher">учитель</a>
-  <a class="btn btn-small" href="{% url 'worksheet_detail' worksheet.pk %}">К листку</a>
-</p>
+<div class="page-head"><div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a><span>Диагностика PDF</span></nav>
+  <h1>.tex-исходник</h1><p class="page-meta"><span>{{ worksheet.title }}</span></p>
+</div>
+  <nav class="seg" aria-label="Вариант">
+    <a class="seg-item{% if variant == 'student' %} is-active{% endif %}" href="{% url 'worksheet_tex' worksheet.pk %}?variant=student">ученик</a>
+    <a class="seg-item{% if variant == 'answers' %} is-active{% endif %}" href="{% url 'worksheet_tex' worksheet.pk %}?variant=answers">с ответами</a>
+    <a class="seg-item{% if variant == 'teacher' %} is-active{% endif %}" href="{% url 'worksheet_tex' worksheet.pk %}?variant=teacher">учитель</a>
+  </nav>
+</div>
 <pre class="log">{{ tex }}</pre>
 {% endblock %}

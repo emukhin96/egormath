@@ -1,72 +1,73 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static page_tools task_extras %}
 {% block title %}{% if request.user.is_superuser %}Все листки{% else %}Мои листки{% endif %} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/worksheet_list.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><h1>{% if request.user.is_superuser %}Все листки{% else %}Мои листки{% endif %}</h1>
-</div>
-  <div class="form-buttons">
-    <a class="btn" href="{% url 'worksheet_create' %}">Создать листок</a>
+  <div>
+    <h1>{% if request.user.is_superuser %}Все листки{% else %}Мои листки{% endif %}</h1>
+    <p class="page-meta">
+      <span>{{ worksheets|length }} {{ worksheets|length|plural_ru:'листок,листка,листков' }}</span>
+      {% if current_topic %}<span>{{ current_topic.name }}</span>{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'worksheet_import' %}">Импорт из .tex</a>
     <a class="btn btn-secondary" href="{% url 'worksheet_corpus_list' %}">Сверка корпуса</a>
+    <a class="btn" href="{% url 'worksheet_create' %}">Создать листок</a>
   </div>
 </div>
 
-<div class="card filter-card">
-  <form method="get" class="filters">
-    {% if request.user.is_superuser %}
-    <div>
-      <label for="f_owner">Владелец</label>
-      <select name="owner" id="f_owner">
-        <option value="">Все владельцы</option>
-        {% for owner in owners %}
-        <option value="{{ owner.pk }}"{% if owner_filter == owner.pk|stringformat:'s' %} selected{% endif %}>{{ owner.get_full_name|default:owner.username }}</option>
-        {% endfor %}
-      </select>
+{# Фильтры применяются сразу: класс — ссылки-сегменты, тема — чипы, остальное — автоотправка формы #}
+<form method="get" class="page-toolbar" id="worksheet-filters" data-autosubmit>
+  {% seg_links 'grade' grade_choices label='Класс' %}
+  {% if params.grade %}<input type="hidden" name="grade" value="{{ params.grade }}">{% endif %}
+  {% include 'includes/taxonomy_picker.html' with mode='filter' primary=False facets=False grades=False compact=True chip_full=True selected_json=selected_json placeholder='+ тема' %}
+  {% if request.GET %}<a class="filter-reset" href="{% url 'worksheet_list' %}">Сбросить</a>{% endif %}
+  <label class="sort-inline">Сортировка:
+    <select name="order" id="f_order">
+      <option value="-updated_at" {% if order == '-updated_at' %}selected{% endif %}>сначала изменённые</option>
+      <option value="updated_at" {% if order == 'updated_at' %}selected{% endif %}>давно изменённые</option>
+      <option value="-created_at" {% if order == '-created_at' %}selected{% endif %}>сначала новые</option>
+      <option value="created_at" {% if order == 'created_at' %}selected{% endif %}>сначала старые</option>
+      <option value="title" {% if order == 'title' %}selected{% endif %}>по названию А–Я</option>
+      <option value="-title" {% if order == '-title' %}selected{% endif %}>по названию Я–А</option>
+    </select>
+  </label>
+  <details class="filter-more"{% if params.created_from or params.created_to or params.updated_from or params.updated_to or owner_filter %} open{% endif %}>
+    <summary>Ещё фильтры</summary>
+    <div class="filter-more-body">
+      {% if request.user.is_superuser %}
+      <div>
+        <label for="f_owner">Владелец</label>
+        <select name="owner" id="f_owner">
+          <option value="">Все владельцы</option>
+          {% for owner in owners %}
+          <option value="{{ owner.pk }}"{% if owner_filter == owner.pk|stringformat:'s' %} selected{% endif %}>{{ owner.get_full_name|default:owner.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div>
+        <label for="f_cf">Создан с</label>
+        <input type="date" name="created_from" id="f_cf" value="{{ params.created_from|default:'' }}">
+      </div>
+      <div>
+        <label for="f_ct">по</label>
+        <input type="date" name="created_to" id="f_ct" value="{{ params.created_to|default:'' }}">
+      </div>
+      <div>
+        <label for="f_uf">Изменён с</label>
+        <input type="date" name="updated_from" id="f_uf" value="{{ params.updated_from|default:'' }}">
+      </div>
+      <div>
+        <label for="f_ut">по</label>
+        <input type="date" name="updated_to" id="f_ut" value="{{ params.updated_to|default:'' }}">
+      </div>
+      <noscript><button type="submit" class="btn btn-small">Показать</button></noscript>
     </div>
-    {% endif %}
-    <div>
-      <label for="f_grade">Класс</label>
-      <select name="grade" id="f_grade" class="quick-select" onchange="this.form.submit()">
-        {% include 'includes/grade_options.html' with selected=params.grade empty_label='Любой' %}
-      </select>
-    </div>
-    <div class="tax-filter">
-      <label>Тема</label>
-      {% include 'includes/taxonomy_picker.html' with mode='filter' primary=False facets=False grades=False compact=True selected_json=selected_json %}
-    </div>
-    <div>
-      <label for="f_cf">Создан с</label>
-      <input type="date" name="created_from" id="f_cf" value="{{ params.created_from|default:'' }}">
-    </div>
-    <div>
-      <label for="f_ct">по</label>
-      <input type="date" name="created_to" id="f_ct" value="{{ params.created_to|default:'' }}">
-    </div>
-    <div>
-      <label for="f_uf">Изменён с</label>
-      <input type="date" name="updated_from" id="f_uf" value="{{ params.updated_from|default:'' }}">
-    </div>
-    <div>
-      <label for="f_ut">по</label>
-      <input type="date" name="updated_to" id="f_ut" value="{{ params.updated_to|default:'' }}">
-    </div>
-    <div>
-      <label for="f_order">Сортировка</label>
-      <select name="order" id="f_order">
-        <option value="-updated_at" {% if order == '-updated_at' %}selected{% endif %}>Изменён ↓</option>
-        <option value="updated_at" {% if order == 'updated_at' %}selected{% endif %}>Изменён ↑</option>
-        <option value="-created_at" {% if order == '-created_at' %}selected{% endif %}>Создан ↓</option>
-        <option value="created_at" {% if order == 'created_at' %}selected{% endif %}>Создан ↑</option>
-        <option value="title" {% if order == 'title' %}selected{% endif %}>Название А–Я</option>
-        <option value="-title" {% if order == '-title' %}selected{% endif %}>Название Я–А</option>
-      </select>
-    </div>
-    <div class="filter-actions"><button type="submit" class="btn">Применить</button><a class="filter-reset" href="{% url 'worksheet_list' %}">Сбросить</a></div>
-  </form>
-
-</div>
+  </details>
+</form>
 
 {% if worksheets %}
 <form id="ws-bulk-form" method="post" action="{% url 'worksheet_bulk_update' %}"

@@ -4,15 +4,16 @@
 {% block sidebar %}{% include 'includes/sidebar/assignment_detail.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><span class="page-eyebrow">Задание</span><h1>{{ assignment.worksheet.title }}</h1>
-  <p class="page-subtitle">
-  Учитель: {{ assignment.worksheet.owner.get_full_name|default:assignment.worksheet.owner.username }}
-  · выдано {{ assignment.assigned_at|date:'d.m.Y' }}
-  {% if assignment.due_at %} · срок: {{ assignment.due_at|date:'d.m.Y H:i' }}
-    {% if assignment.is_overdue %}<span class="badge badge-returned">просрочено</span>{% endif %}{% endif %}
-  · <span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span>
+  <div>
+  <nav class="page-crumbs" aria-label="Путь">{% if is_teacher %}<a href="{% url 'assignment_list' %}?kind=ordinary">Задания</a>{% else %}<a href="{% url 'dashboard' %}">Мои задания</a>{% endif %}<span>Задание</span></nav>
+  <h1>{{ assignment.worksheet.title }}</h1>
+  <p class="page-meta">
+    <span>учитель {{ assignment.worksheet.owner.get_full_name|default:assignment.worksheet.owner.username }}</span>
+    <span>выдано {{ assignment.assigned_at|date:'d.m.Y' }}</span>
+    {% if assignment.due_at %}<span>срок {{ assignment.due_at|date:'d.m.Y H:i' }}</span>{% endif %}
+    <span><span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span>{% if assignment.due_at and assignment.is_overdue %} <span class="badge badge-returned">просрочено</span>{% endif %}</span>
   </p></div>
-  <a class="btn btn-secondary" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' assignment.worksheet.pk %}?variant=student">Скачать PDF</a>
+  <div class="page-actions"><a class="btn btn-secondary" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' assignment.worksheet.pk %}?variant=student">Скачать PDF</a></div>
 </div>
 
 {% if editable %}{% include 'workaudit/notice.html' with kind='assignment' object=assignment restricted=assignment.restrict_clipboard active=True %}{% endif %}
@@ -127,7 +128,7 @@
       {% if can_upload %}
       {# Файл привязан к отдельной multipart-форме (атрибут form): формы не вкладываются #}
       <label class="btn btn-small btn-secondary photo-pick">Фото решения
-        <input type="file" name="photos" form="photo-form-{{ row.task.pk }}" data-photo-input
+        <input type="file" name="photos" form="photo-form-{{ row.task.pk }}" data-photo-input data-image-paste-fallback="off"
                accept="image/jpeg,image/png,image/webp" multiple></label>
       <button type="submit" class="btn btn-small btn-secondary" form="photo-form-{{ row.task.pk }}" data-photo-submit>Загрузить</button>
       {% endif %}

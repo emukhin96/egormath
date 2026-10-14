@@ -1,9 +1,13 @@
 {% extends 'independentworks/base.html' %}
-{% load static livefile %}
+{% load static livefile task_extras %}
 {% block content %}
 <div class="page-head">
-  <h1>{{ run.title }} · прогресс</h1>
-  <a class="btn btn-secondary" href="{% url 'independentworks:export' run.pk %}">Скачать XLSX</a>
+  <div>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'independentworks:catalog' %}">Самостоятельные</a><span>{{ run.kind_label }}</span></nav>
+    <h1>{{ run.title }} · прогресс</h1>
+    <p class="page-meta"><span>{{ run.duration }} мин.</span>{% if run.deadline %}<span>до {{ run.deadline|date:'d.m.Y H:i' }}</span>{% endif %}{% if run.issued_at %}<span>выдана {{ run.issued_at|date:'d.m.Y' }}</span>{% endif %}</p>
+  </div>
+  <div class="page-actions"><a class="btn btn-secondary" href="{% url 'independentworks:export' run.pk %}">Скачать XLSX</a></div>
 </div>
 <p class="helptext iw-live-status" data-live-status role="status">Обновляется каждые 5 секунд</p>
 <div data-progress-table data-progress-url="{% url 'independentworks:progress' run.pk %}" data-live-file="{% live_file 'run' run.pk %}">{% include 'independentworks/_progress.html' %}</div>

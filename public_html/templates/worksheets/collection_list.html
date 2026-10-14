@@ -5,14 +5,24 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>{% if selected_source %}{{ selected_source.source.title }}{% else %}Подборки{% endif %}</h1>
-    <p class="page-subtitle">
-      {% if selected_source %}
-      {% if selected_source.source.author %}{{ selected_source.source.author }}{% if selected_source.source.year %}, {{ selected_source.source.year }}{% endif %}{% else %}Разделы и подборки источника{% endif %}
-      {% else %}Выберите источник, затем нужный раздел или подборку.{% endif %}
+    {% if selected_source %}
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'collection_list' %}">Подборки</a><span>Источник</span></nav>
+    <h1>{{ selected_source.source.title }}</h1>
+    <p class="page-meta">
+      {% if selected_source.source.author %}<span>{{ selected_source.source.author }}</span>{% endif %}
+      {% if selected_source.source.year %}<span>{{ selected_source.source.year }}</span>{% endif %}
+      <span>{{ selected_source.leaf_total }} {{ selected_source.leaf_total|plural_ru:'подборка,подборки,подборок' }}</span>
+      <span>{{ selected_source.item_total }} {{ selected_source.item_total|plural_ru:'задача,задачи,задач' }}</span>
     </p>
+    {% else %}
+    <h1>Подборки</h1>
+    <p class="page-meta">
+      <span>{{ collection_totals.sources }} {{ collection_totals.sources|plural_ru:'источник,источника,источников' }}</span>
+      <span>{{ collection_totals.leaves }} {{ collection_totals.leaves|plural_ru:'подборка,подборки,подборок' }}</span>
+      <span>{{ collection_totals.items }} {{ collection_totals.items|plural_ru:'задача,задачи,задач' }}</span>
+    </p>
+    {% endif %}
   </div>
-  {% if selected_source %}<a class="btn btn-secondary" href="{% url 'collection_list' %}">Все источники</a>{% endif %}
 </div>
 
 {% if selected_source %}

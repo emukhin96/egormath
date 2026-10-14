@@ -1,19 +1,21 @@
 {% extends 'base.html' %}
 {% load static task_extras %}
-{% block title %}База задач — Математика{% endblock %}
+{% block title %}Задачи — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/task_list.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>База задач</h1>
+    <h1>Задачи</h1>
+    {# Счётчик обновляет живой поиск (data-finder-target, task_finder.js) #}
+    <p class="page-meta"><span data-finder-target="head-count">{{ page.paginator.count }} {{ page.paginator.count|plural_ru:'задача,задачи,задач' }}{% if params.q %} по запросу «{{ params.q }}»{% endif %}</span></p>
   </div>
-  <div class="form-buttons">
-    <a class="btn" href="{% url 'task_create' %}">Новая задача</a>
+  <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'bulk_answers' %}">Массовые ответы</a>
+    <a class="btn" href="{% url 'task_create' %}">Новая задача</a>
   </div>
 </div>
 
-{% include 'problems/_catalog_filters.html' %}
+{% include 'problems/_catalog_filters.html' with toolbar=True %}
 
 <form id="task-bulk-form" method="post" action="{% url 'task_bulk_update' %}"
       class="bulk-bar" data-bulk hidden>
@@ -50,7 +52,7 @@
 <td>{% include 'problems/_catalog_content.html' %}
 <div data-worksheet-mask data-task-id="{{ task.pk }}" data-manage-url="{% url 'task_manage' task.pk %}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
 {# Нижняя строка задачи: откуда задача (источник, №, раздел) и действия — в одну строку под условием, а не столбиком в узкой колонке #}
-<div class="task-meta catalog-row-meta"><span class="catalog-source">{% for ref in task.source_refs.all %}<span>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}{% for part in ref.source_path %} › {{ part|heading_dot }}{% endfor %}</span>{% endfor %}</span><span class="catalog-row-actions"><span data-mask-links></span><form class="inline-form" method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn">дублировать</button></form></span></div>
+<div class="task-meta catalog-row-meta"><span class="catalog-source">{% for ref in task.source_refs.all %}<span>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}{% for part in ref.source_path %} › {{ part|heading_dot }}{% endfor %}</span>{% endfor %}</span><span class="catalog-row-actions"><span data-mask-links></span>{% if not task.block_id %}<button type="button" class="link-btn" data-quick-clone="{% url 'task_clone' task.pk %}" title="Новая задача с другими числами — не уходя со страницы">клон</button>{% endif %}<form class="inline-form" method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn">дублировать</button></form></span></div>
 </td>
 <td>{# Класс и темы показаны текстом; контролы раскрываются по клику (task_catalog.js обновляет текст после правки) #}
 <details class="row-edit" data-row-edit>
@@ -69,7 +71,7 @@
 </div>
 <script defer src="{% static 'js/bulk.js' %}?v=3"></script>
 <script defer src="{% static 'js/task_finder.js' %}"></script>
-<script defer src="{% static 'js/cart.js' %}"></script>
+<script defer src="{% static 'js/cart.js' %}?v=2"></script>
 {% include 'problems/_mask_dialogs.html' %}
 <script defer src="{% static 'js/problem_editor.js' %}?v=2"></script>
 {% include 'problems/_mask_scripts.html' %}

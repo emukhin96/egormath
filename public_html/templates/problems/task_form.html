@@ -5,14 +5,11 @@
 {% block content %}
 <div class="page-head">
   <div>
+    <nav class="page-crumbs" aria-label="Путь">{% if worksheet %}<a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a>{% else %}<a href="{% url 'task_list' %}">Задачи</a>{% endif %}</nav>
     <h1>{% if analog_source %}Новый аналог задачи #{{ analog_source.pk }}{% elif task %}Задача #{{ task.pk }}{% else %}Новая задача{% endif %}</h1>
-    {% if task.variant_of_id %}<span class="badge badge-returned">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}
+    {% if task.variant_of_id or worksheet %}<p class="page-meta">{% if worksheet %}<span>из конструктора листка</span>{% endif %}{% if task.variant_of_id %}<span class="badge badge-returned">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}</p>{% endif %}
   </div>
 </div>
-
-{% if worksheet %}
-<p class="muted">Из конструктора листка «{{ worksheet.title }}».</p>
-{% endif %}
 
 {% if analog_source %}<p class="helptext">Копия появится в базе и в пуле только после нажатия «Сохранить аналог». <a href="{{ analog_back }}">Назад к подбору</a></p>{% endif %}
 <form method="post" enctype="multipart/form-data" id="task-form" {% if not task %}data-new-task="1"{% endif %}>
@@ -158,7 +155,7 @@
 </div></div>
 {% include 'problems/_task_form_buttons.html' %}
 </form>
-<script defer src="{% static 'js/task_form.js' %}?v=2"></script>
+<script defer src="{% static 'js/task_form.js' %}?v=3"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script>
 <script defer src="{% static 'js/check_badge.js' %}"></script>
 <script defer src="{% static 'js/mask.js' %}?v=5"></script>

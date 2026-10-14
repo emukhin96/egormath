@@ -3,8 +3,8 @@
 {% block sidebar %}{% if not for_student %}{% include 'includes/sidebar/diagnostic.html' %}{% endif %}{% endblock %}
 {% block content %}
 {% if for_student %}
-<div class="page-head"><div><span class="page-eyebrow">Задание</span>
-  <h1>PDF пока недоступен</h1><p class="page-subtitle">{{ worksheet.title }}</p>
+<div class="page-head"><div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'dashboard' %}">Мои задания</a><span>Задание</span></nav>
+  <h1>PDF пока недоступен</h1><p class="page-meta"><span>{{ worksheet.title }}</span></p>
 </div></div>
 <div class="card">
   <p>Листок «{{ worksheet.title }}» не удалось собрать в PDF. Задание можно
@@ -14,8 +14,8 @@
   <p><a class="btn btn-secondary" href="{% url 'dashboard' %}">К моим заданиям</a></p>
 </div>
 {% else %}
-<div class="page-head"><div><span class="page-eyebrow">Диагностика PDF</span>
-  <h1>Ошибка компиляции</h1><p class="page-subtitle">{{ worksheet.title }}</p>
+<div class="page-head"><div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a><span>Диагностика PDF</span></nav>
+  <h1>Ошибка компиляции</h1><p class="page-meta"><span>{{ worksheet.title }}</span></p>
 </div></div>
 <div class="card">
   <p>Листок «{{ worksheet.title }}» не удалось собрать в PDF.</p>

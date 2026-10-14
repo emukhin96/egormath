@@ -1,0 +1,26 @@
+{% load task_extras %}
+{# Контекст обзора «Авторских листков»: разделы со счётчиками и темы текущего списка. Основные разделы сайта — только в верхнем меню. #}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Подборки</p>
+  <h2>{{ source.title }}</h2>
+  <div class="sidebar-actions"><a class="sidebar-action" href="{% url 'collection_list' %}">Все источники</a></div>
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Разделы</p>
+  <ul class="sidebar-list">
+    <li{% if not section %} class="is-current"{% endif %}><a class="sidebar-row sidebar-row-count" href="{% url 'authored_collections' %}">Все листки<span class="sidebar-count">{{ all_sheets_total }}</span></a></li>
+    {% for row in sections %}{% if row.sheets_total or section.pk == row.pk %}
+    <li{% if section.pk == row.pk %} class="is-current"{% endif %}><a class="sidebar-row sidebar-row-count" href="{% url 'collection_detail' row.pk %}">{{ row.worksheet.title }}<span class="sidebar-count">{{ row.sheets_total }}</span></a></li>
+    {% endif %}{% endfor %}
+  </ul>
+</section>
+{% if topic_groups %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">{% if section %}Темы раздела{% else %}Темы{% endif %}</p>
+  <ul class="sidebar-list">
+    {% for group in topic_groups %}
+    <li><a class="sidebar-row sidebar-row-count" href="{{ topic_query }}#{{ group.anchor }}">{{ group.label }}<span class="sidebar-count">{{ group.sheets|length }}</span></a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}

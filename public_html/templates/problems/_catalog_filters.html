@@ -1,4 +1,26 @@
-{# Общий поиск задач («finder»): база задач, подбор кандидатов самостоятельной, конструктор листка. Живой поиск — static/js/task_finder.js; результаты — элементы с data-finder-target #}
+{# Общий поиск задач («finder»): раздел «Задачи», подбор кандидатов самостоятельной, конструктор листка. Живой поиск — static/js/task_finder.js; результаты — элементы с data-finder-target. toolbar=True — строка фильтров под шапкой страницы (раздел «Задачи»): класс сегментами, тема чипами #}
+{% if toolbar %}
+<form method="get" class="page-toolbar task-finder" id="task-filters" data-finder{% if finder_anchor %} data-finder-anchor="{{ finder_anchor }}"{% endif %}>
+  {% if params.source %}<input type="hidden" name="source" value="{{ params.source }}">{% endif %}
+  <div class="finder-search filter-search">
+    <input type="search" name="q" id="f_q" value="{{ params.q|default:'' }}" placeholder="Поиск: слова или #id" aria-label="Поиск задач" autocomplete="off">
+  </div>
+  {# Класс — радиокнопки-сегменты: живой поиск берёт значение из формы, как раньше у select #}
+  <div class="seg" role="radiogroup" aria-label="Класс" data-autosubmit>
+    <label class="seg-item"><input type="radio" name="grade" value=""{% if not params.grade %} checked{% endif %}>Все</label>
+    {% for g, label in grade_choices %}
+    <label class="seg-item"><input type="radio" name="grade" value="{{ g }}"{% if params.grade == g|stringformat:'s' or params.grade == '11' and g == 10 %} checked{% endif %}>{{ label }}</label>
+    {% endfor %}
+  </div>
+  {% include 'includes/taxonomy_picker.html' with mode='filter' primary=False facets=False grades=False compact=True chip_full=True selected_json=selected_json placeholder='+ тема' %}
+  <span class="finder-status muted" data-finder-status aria-live="polite" hidden>Ищу…</span>
+  <a class="filter-reset" href="{{ request.path }}{% if finder_anchor %}#{{ finder_anchor }}{% endif %}" data-finder-reset>Сбросить</a>
+  {% if audience_students or audience_groups %}
+  <span class="sort-inline">{% include 'includes/audience_select.html' with label='Задавалась:' %}</span>
+  {% endif %}
+  <noscript><button type="submit" class="btn btn-small">Найти</button></noscript>
+</form>
+{% else %}
 <div class="card filter-card">
   <form method="get" class="filters task-finder" id="task-filters" data-finder{% if finder_anchor %} data-finder-anchor="{{ finder_anchor }}"{% endif %}>
     {% if position %}<input type="hidden" name="tab" value="catalog">{% endif %}
@@ -26,3 +48,4 @@
     <div class="filter-actions"><button type="submit" class="btn">Найти</button><a class="filter-reset" href="{{ request.path }}{% if finder_anchor %}#{{ finder_anchor }}{% endif %}" data-finder-reset>Сбросить</a><span class="finder-status muted" data-finder-status aria-live="polite" hidden>Ищу…</span></div>
   </form>
 </div>
+{% endif %}

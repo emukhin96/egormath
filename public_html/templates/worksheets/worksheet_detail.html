@@ -6,7 +6,7 @@
 {# Шапка в стандартном .page-head — как на остальных страницах #}
 <div class="page-head worksheet-page-head">
 <div>
-<span class="page-eyebrow">{% if collection %}Конструктор подборки{% else %}Конструктор листка{% endif %}</span>
+<nav class="page-crumbs" aria-label="Путь">{% if collection %}<a href="{% url 'collection_list' %}">Подборки</a><a href="{% url 'collection_detail' collection.pk %}">{{ collection.source }}</a><span>Конструктор подборки</span>{% else %}<a href="{% url 'worksheet_list' %}">Листки</a><span>Конструктор листка</span>{% endif %}</nav>
 {# Заголовок и подзаголовок редактируются кликом по тексту (builder.js) #}
 <div class="worksheet-title-row">
 <h1 class="ws-title">
@@ -22,7 +22,7 @@
          type="hidden" name="grade_label" value="{{ worksheet.grade_label }}"
          maxlength="100" hidden>
 </h1>
-{% if request.user.is_superuser %}<p class="page-subtitle">Владелец: {{ worksheet.owner.get_full_name|default:worksheet.owner.username }}</p>{% endif %}
+<p class="page-meta">{% if request.user.is_superuser %}<span>владелец {{ worksheet.owner.get_full_name|default:worksheet.owner.username }}</span>{% endif %}<span>создан {{ worksheet.created_at|date:'d.m.Y' }}</span><span>изменён {{ worksheet.updated_at|date:'d.m.Y H:i' }}</span></p>
 </div>
 {% if worksheet.comment %}
 <p class="ws-comment muted">{{ worksheet.comment|linebreaksbr }}</p>
@@ -34,7 +34,7 @@
 <div class="msg msg-warning">
   Это каталожная подборка из источника «{{ collection.source }}».
   Все изменения сразу меняют её backing-листок; личную копию создаёт кнопка
-  «Использовать подборку» на странице каталога.
+  «Взять как листок» на странице каталога.
   <a class="btn btn-small btn-secondary" href="{% url 'collection_detail' collection.pk %}">← К странице подборки</a>
 </div>
 {% endif %}
@@ -202,7 +202,8 @@
           </label>
         </form>
         <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button class="link-btn" title="Добавить локальную копию следующей строкой">дублировать локально</button></form>
-        <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><input type="hidden" name="standalone" value="1"><button class="link-btn" title="Создать копию в базе задач и добавить в листок">дублировать</button></form>
+        <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><input type="hidden" name="standalone" value="1"><button class="link-btn" title="Создать копию в разделе «Задачи» и добавить в листок">дублировать</button></form>
+        {% if not item.task.block_id %}<button type="button" class="link-btn task-meta-item" data-quick-clone="{% url 'task_clone' item.task.pk %}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}" title="Клон с другими числами — следующей строкой листка">клон рядом</button>{% endif %}
         {% if item.task.subitems.all %}
         <label class="inline-label task-meta-item ws-column-control">колонки
           <input type="number" name="columns" form="settings-{{ item.pk }}"
@@ -347,11 +348,24 @@
 </div>
 
 <div class="card" id="assign-students">
+  {% if collection %}
+  {# Подборка — образец: новые выдачи закрыты, старые ведутся как обычно #}
+  <h2>Ученикам</h2>
+  <p>Это подборка-образец, её нельзя задать. Возьмите её как листок.</p>
+  <div class="form-buttons">
+    <form method="post" action="{% url 'collection_use' collection.pk %}">
+      {% csrf_token %}
+      <button class="btn" type="submit">Взять как листок</button>
+    </form>
+    {% if assignments %}<button type="button" class="btn btn-secondary" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'all' 0 %}">Редактировать назначения</button>{% endif %}
+  </div>
+  {% else %}
   <h2>Назначить ученикам</h2>
   <div class="form-buttons">
     <a class="btn" href="{% url 'assignment_create' %}?worksheet={{ worksheet.pk }}">Выдать задание</a>
     {% if assignments %}<button type="button" class="btn btn-secondary" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'all' 0 %}">Редактировать назначения</button>{% endif %}
   </div>
+  {% endif %}
 
   {% if assignments %}
   <h2><a href="{% url 'worksheet_progress' worksheet.pk %}">Прогресс</a></h2>
@@ -451,6 +465,6 @@
 <script defer src="{% static 'js/builder.js' %}?v=9"></script>
 <script defer src="{% static 'js/worksheet_controls.js' %}?v=7"></script>
 <script defer src="{% static 'js/task_finder.js' %}"></script>
-<script defer src="{% static 'js/cart.js' %}"></script>
+<script defer src="{% static 'js/cart.js' %}?v=2"></script>
 {% if assignments %}<script defer src="{% static 'js/teacher_progress.js' %}?v=6"></script>{% endif %}
 {% endblock %}

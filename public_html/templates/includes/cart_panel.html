@@ -1,0 +1,79 @@
+{% load task_extras %}
+{# Меню корзины. Рендерится в шапке и отдельно (cart_panel) — cart.js подменяет его после «+»/«×» без перезагрузки #}
+{% with next=cart_next|default:request.get_full_path %}
+<div class="cart-panel" data-cart-panel>
+  <div class="cart-panel-head">
+    <p class="cart-panel-title">{% if cart.count %}Корзина · {{ cart.count }} {{ cart.count|plural_ru:'задача,задачи,задач' }}{% else %}Корзина пуста{% endif %}</p>
+    {% if cart.count %}
+    <form method="post" action="{% url 'cart_clear' %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <button type="submit" class="linklike">Очистить</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if cart.items %}
+  <ul class="cart-items">
+    {% for item in cart.items %}
+    <li class="cart-item">
+      <span class="cart-fam{% if item.family %} cart-fam-{{ item.family }}{% endif %}"{% if item.family %} title="Похожие: одна семья аналогов"{% endif %} aria-hidden="true"></span>
+      <span class="cart-item-text"><span class="cart-item-source">{{ item.label }}</span> · <span class="math-content">{{ item.preview }}</span></span>
+      <form method="post" action="{% url 'cart_remove' %}" data-cart-remove>
+        {% csrf_token %}
+        <input type="hidden" name="task_id" value="{{ item.pk }}">
+        <input type="hidden" name="next" value="{{ next }}">
+        <button type="submit" class="icon-btn" aria-label="Убрать из корзины" title="Убрать из корзины">×</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if cart.more %}<p class="helptext">и ещё {{ cart.more }}</p>{% endif %}
+  {% else %}
+  <p class="helptext">Нажимайте «+» у задач в базе, подборках и листках. Затем сложите отобранное в листок или самостоятельную.</p>
+  {% endif %}
+  {% if cart.count %}
+  <div class="cart-dest">
+    <div class="cart-dest-box">
+      <p class="cart-dest-title">Листок</p>
+      <form method="post" action="{% url 'cart_create' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <button type="submit" class="btn btn-secondary btn-small">Новый листок</button>
+      </form>
+      {% if cart.choices %}
+      <form method="post" action="{% url 'cart_append' %}" class="cart-dest-pick">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <select name="worksheet" class="quick-select" aria-label="Существующий листок">
+          {% for pk, title in cart.choices %}<option value="{{ pk }}">{{ title|truncatechars:48 }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="btn btn-secondary btn-small">Добавить в листок</button>
+      </form>
+      {% endif %}
+    </div>
+    {% if independentworks_enabled %}
+    <form method="post" action="{% url 'cart_to_independent' %}" class="cart-dest-box cart-dest-iw" id="cart-iw-form">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <p class="cart-dest-title">Самостоятельная</p>
+      <button type="submit" class="btn btn-small" name="target" value="new">Новая самостоятельная</button>
+      {% if cart.works %}
+      <div class="cart-dest-pick">
+        <select name="work" class="quick-select" aria-label="Существующая самостоятельная">
+          {% for pk, title in cart.works %}<option value="{{ pk }}">{{ title|truncatechars:48 }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="btn btn-small" name="target" value="existing">Добавить в самостоятельную</button>
+      </div>
+      {% endif %}
+    </form>
+    {% endif %}
+  </div>
+  {% if independentworks_enabled %}
+  <label class="cart-similar">
+    <input type="checkbox" name="group_similar" value="1" form="cart-iw-form" checked>
+    <span><b>Похожие — сразу в один номер.</b> Задачи одной семьи аналогов (цветная точка: ЗИВ, банк ФИПИ, вручную созданные аналоги) станут вариантами одного номера самостоятельной. Остальные — отдельными номерами.</span>
+  </label>
+  {% endif %}
+  {% endif %}
+</div>
+{% endwith %}

@@ -37,5 +37,8 @@
     try { authorOnly.checked = localStorage.getItem(AUTHOR_KEY) === '1'; } catch (e) {}
     applyAuthorOnly();
     authorOnly.addEventListener('change', applyAuthorOnly);
+    // Список подменили скриптом (предпросмотр листка и т.п.) — состояние
+    // тумблера применяется заново, как и у «ответов и решений».
+    document.addEventListener('worksheet:updated', applyAuthorOnly);
   });
 })();

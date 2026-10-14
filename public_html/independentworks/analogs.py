@@ -38,6 +38,68 @@ def bank_identity(source_id, path, locator=''):
     return key, number
 
 
+def task_family_keys(task_ids):
+    """Признаки семей аналогов для небольшого набора задач (корзина).
+
+    Сохранённые семьи — как вкладка «Связанные аналоги» в подборе
+    (``Task.analog_families``, в т.ч. вручную созданные аналоги) — плюс
+    автоопределение по ``TaskSource`` теми же правилами, что и
+    ``discover_families``: ЗИВ ``(sr|kr|pr)/N/vK/num`` (пара вариантов) и
+    «прототип N.N» банка. Подборочные рубрики без синхронизации не
+    просматриваем: это полный проход по каталогу.
+    """
+    keys = defaultdict(set)
+    ids = list(task_ids)
+    for task_id, family_id in FamilyMember.objects.filter(task_id__in=ids).values_list('task_id', 'family_id'):
+        keys[task_id].add(f'family:{family_id}')
+    for ref in TaskSource.objects.filter(task_id__in=ids):
+        path, locator = ref.source_path or [], ref.locator or ''
+        match = ZIV.fullmatch(locator)
+        if match:
+            kind, topic, variant, number = match.groups()
+            keys[ref.task_id].add(f'ziv:{ref.source_id}:{kind}:{topic}:{(int(variant) - 1) // 2}:{number}')
+        elif any(SECTION.search(str(p)) for p in path):
+            identity = bank_identity(ref.source_id, path, locator)
+            if identity:
+                keys[ref.task_id].add(identity[0])
+    return keys
+
+
+def similar_groups(task_ids):
+    """Задачи набора, у которых в нём же есть аналог: ``{id: номер группы}``.
+
+    Группа — связная компонента по общим признакам семьи; номера групп
+    идут в порядке первого появления задачи в ``task_ids``. Одиночки в
+    результат не попадают.
+    """
+    ids = list(dict.fromkeys(task_ids))
+    keys = task_family_keys(ids)
+    parent = {pk: pk for pk in ids}
+
+    def find(pk):
+        while parent[pk] != pk:
+            parent[pk] = parent[parent[pk]]
+            pk = parent[pk]
+        return pk
+
+    first_with_key = {}
+    for pk in ids:
+        for key in sorted(keys.get(pk, ())):
+            if key in first_with_key:
+                parent[find(pk)] = find(first_with_key[key])
+            else:
+                first_with_key[key] = pk
+    sizes = defaultdict(int)
+    for pk in ids:
+        sizes[find(pk)] += 1
+    numbers, result = {}, {}
+    for pk in ids:
+        root = find(pk)
+        if sizes[root] > 1:
+            result[pk] = numbers.setdefault(root, len(numbers))
+    return result
+
+
 def discover_families(*, source_id=None):
     groups = {}
     ambiguous = []

@@ -6,12 +6,11 @@
 <script defer src="{% static 'js/numberline.js' %}?v=5"></script>{% endblock %}
 {% block title %}Сверка {{ draft.external_id }} — Математика{% endblock %}
 {% block content %}
-<div class="page-head"><div><span class="page-eyebrow">Ручная сверка</span><h1>{{ draft.external_id }}</h1>
-  <p class="page-subtitle">{{ batch.source }} · {{ draft.source_path|join:' › ' }}</p></div>
-  <div class="form-buttons">
+<div class="page-head"><div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'textbook_import_list' %}">Импорт задачников</a><a href="{% url 'textbook_import_detail' batch.pk %}">{{ batch.title }}</a><span>Ручная сверка</span></nav><h1>{{ draft.external_id }}</h1>
+  <p class="page-meta"><span>{{ batch.source }}</span>{% if draft.source_path %}<span>{{ draft.source_path|join:' › ' }}</span>{% endif %}</p></div>
+  <div class="page-actions">
     {% if draft.block_id %}<a class="btn btn-secondary" href="{% url 'textbook_import_block' batch.pk draft.block_id %}">Блок №1–5 целиком</a>{% endif %}
     <a class="btn btn-secondary" href="{% url 'textbook_import_help' %}#review-result">Инструкция</a>
-    <a class="btn btn-secondary" href="{% url 'textbook_import_detail' batch.pk %}">К партии</a>
   </div>
 </div>
 {% if import_exam_items %}<p class="helptext">Метки экзамена: {% for item in import_exam_items %}{{ item.name }}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
@@ -132,7 +131,7 @@
     </div>{% endif %}
     {% if topic_candidates %}<p class="helptext">Кандидаты рубрикатора: {% for item in topic_candidates %}{{ item.name }} ({{ item.reason_label }}){% if not forloop.last %}; {% endif %}{% endfor %}. Точное совпадение ставится при импорте, похожее название остаётся подсказкой.</p>{% endif %}
     <p><label for="{{ form.tags.id_for_label }}">Метки</label>{{ form.tags.errors }}{{ form.tags }}<span class="helptext">Через запятую, как теги в редакторе задачи{% if known_tags %}; на сайте уже есть: {{ known_tags|join:', ' }}{% endif %}.</span></p>
-    <div><label>Темы рубрикатора</label>{% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True selected_json=selected_json %}<span class="helptext">Можно выбрать несколько тем, как в базе задач. Звезда отмечает основную. Поиск по коду или названию; ветви раскрываются до конкретной темы.</span></div>
+    <div><label>Темы рубрикатора</label>{% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True selected_json=selected_json %}<span class="helptext">Можно выбрать несколько тем, как в разделе «Задачи». Звезда отмечает основную. Поиск по коду или названию; ветви раскрываются до конкретной темы.</span></div>
   </section>
   <div class="import-review-actions">
     <div class="import-status-field">

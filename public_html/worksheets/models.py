@@ -94,6 +94,21 @@ class Worksheet(models.Model):
             queryset = queryset.filter(owner=user)
         return queryset
 
+    @classmethod
+    def assignable_to(cls, user):
+        """Листки, которые учитель может задать ученикам.
+
+        Подборка (листок под ``Collection``) — образец: её не выдают даже
+        автору, сначала «Взять как листок». Уже созданные выдачи подборок
+        продолжают работать — фильтр только для новых.
+        """
+        return cls.visible_to(user).filter(collection__isnull=True)
+
+    @property
+    def is_collection(self):
+        """Листок — содержимое каталожной подборки (не выдаётся ученикам)."""
+        return Collection.objects.filter(worksheet_id=self.pk).exists()
+
     @property
     def grade_option(self):
         """Значение селекта класса: 11 из старых данных = 10–11."""
