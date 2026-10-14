@@ -224,6 +224,26 @@ class CorpusLoadTests(TestCase):
         self.assertTrue(info2['skipped'])
         self.assertEqual(again.pk, worksheet.pk)
 
+    def test_commit_unwraps_prose_from_formula(self):
+        """OCR-текст целиком в формуле — проза наружу; уже загруженная
+        в старом виде задача находится и переиспользуется, без дубля."""
+        from worksheet_corpus.store import save_draft
+        raw = r'$\text { Даны точки } M(1 ; 1) \text { и } N(4 ;-1) .$'
+        old = Task.objects.create(text_latex=raw, stars=0)
+        draft = _sample_draft(key='b/prose')
+        draft['elements'][1]['text'] = raw
+        save_draft(draft)
+        worksheet, info = commit_draft(draft, self.teacher)
+        self.assertEqual(info['reused'], 1)
+        self.assertTrue(worksheet.items.filter(task=old).exists())
+        fresh = _sample_draft(key='b/prose2', title='Другой')
+        fresh['header']['title'] = 'Другой'
+        fresh['elements'][1]['text'] = r'$\text { Даны точки } A(0 ; 2) \text { и } B(3 ; 5) .$'
+        save_draft(fresh)
+        ws2, _info = commit_draft(fresh, self.teacher)
+        texts = {item.task.text_latex for item in ws2.items.filter(task__isnull=False)}
+        self.assertIn('Даны точки $A(0 ; 2)$ и $B(3 ; 5)$.', texts)
+
     def test_dedup_reuses_task(self):
         from worksheet_corpus.store import save_draft
         first = _sample_draft(key='a/one')
