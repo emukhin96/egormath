@@ -191,8 +191,13 @@ def edit(request, pk):
             return redirect(reverse('independentworks:edit', args=[work.pk]) + '?' + params.urlencode())
         return redirect(request.get_full_path())
     positions = list(work.positions.prefetch_related('candidates__task__subitems', 'candidates__task__images'))
+    # Номера, только что добавленные из корзины (подсветка .iw-new): id
+    # лежат в сессии до первого показа, URL без параметра — после POST и
+    # перезагрузки подсветка не повторяется.
+    new_ids = set(request.session.pop(f'iw_new_positions_{work.pk}', None) or [])
     number = 0
     for p in positions:
+        p.is_new = p.pk in new_ids
         p.rows = list(p.candidates.all())
         if p.rows or not p.text:
             number += 1
