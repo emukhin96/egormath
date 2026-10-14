@@ -1,4 +1,4 @@
-{# Общий поиск задач («finder»): база задач, подбор кандидатов самостоятельной, конструктор листка. Живой поиск — static/js/task_finder.js; результаты — элементы с data-finder-target. toolbar=True — строка фильтров под шапкой страницы (база задач): класс сегментами, тема чипами #}
+{# Общий поиск задач («finder»): раздел «Задачи», подбор кандидатов самостоятельной, конструктор листка. Живой поиск — static/js/task_finder.js; результаты — элементы с data-finder-target. toolbar=True — строка фильтров под шапкой страницы (раздел «Задачи»): класс сегментами, тема чипами #}
 {% if toolbar %}
 <form method="get" class="page-toolbar task-finder" id="task-filters" data-finder{% if finder_anchor %} data-finder-anchor="{{ finder_anchor }}"{% endif %}>
   {% if params.source %}<input type="hidden" name="source" value="{{ params.source }}">{% endif %}
