@@ -37,13 +37,13 @@
   };
   var FN_TEX = {parabola: 'x^2', abs: '|x|', sqrt: '\\sqrt{x}', hyperbola: '\\frac{1}{x}'};
   var SHAPE_TOOLS = {
-    line: {label: '—', title: 'Отрезок: протяните от точки до точки, с Shift — горизонтально, вертикально или под 45° (L)'},
-    dot: {label: '•', title: 'Точка: один клик; на координатной плоскости с привязкой к сетке подписываются координаты'},
-    circle: {label: '○', title: 'Окружность: протяните от центра до точки на окружности (S)'},
-    rect: {label: '▭', title: 'Прямоугольник: протяните по диагонали, с Shift — квадрат (O)'},
-    square: {label: '□', title: 'Квадрат: протяните по диагонали'},
-    tri: {label: '△', title: 'Треугольник: три клика по вершинам, Esc — отменить'},
-    para: {label: '▱', title: 'Параллелограмм: три клика по вершинам, четвёртая достроится, Esc — отменить'},
+    line: {label: '—', name: 'Отрезок', title: 'Отрезок: протяните от точки до точки, с Shift — горизонтально, вертикально или под 45° (L)'},
+    dot: {label: '•', name: 'Точка', title: 'Точка: один клик; на координатной плоскости с привязкой к сетке подписываются координаты'},
+    circle: {label: '○', name: 'Окружность', title: 'Окружность: протяните от центра до точки на окружности (S)'},
+    rect: {label: '▭', name: 'Прямоугольник', title: 'Прямоугольник: протяните по диагонали, с Shift — квадрат (O)'},
+    square: {label: '□', name: 'Квадрат', title: 'Квадрат: протяните по диагонали'},
+    tri: {label: '△', name: 'Треугольник', title: 'Треугольник: три клика по вершинам, Esc — отменить'},
+    para: {label: '▱', name: 'Параллелограмм', title: 'Параллелограмм: три клика по вершинам, четвёртая достроится, Esc — отменить'},
   };
   var BG_LABELS = {blank: 'Белый', grid: 'Клетка', grid_large: 'Крупная клетка', plane: 'Координатная плоскость'};
 
@@ -90,13 +90,69 @@
     /* Передний/задний план — какой из двух квадратов сверху (закрашенный — выделенное) */
     front: '<rect x="3" y="3" width="12" height="12" rx="1"/><rect x="9" y="9" width="12" height="12" rx="1" fill="currentColor"/>',
     back: '<rect x="3" y="3" width="12" height="12" rx="1" fill="currentColor"/><rect x="9" y="9" width="12" height="12" rx="1" fill="#fff"/>',
+    /* Фигуры — тем же штрихом, что и остальные значки (раньше были символы шрифта) */
+    line: '<path d="M4 20 20 4"/>',
+    dot: '<circle cx="12" cy="12" r="3.5" fill="currentColor"/>',
+    circle: '<circle cx="12" cy="12" r="8.5"/>',
+    rect: '<rect x="2" y="6.5" width="20" height="11" rx="1"/>',
+    square: '<rect x="4.5" y="4.5" width="15" height="15" rx="1"/>',
+    tri: '<path d="M12 3.5 21.5 20h-19Z"/>',
+    para: '<path d="M7.5 5.5H22l-5.5 13H2Z"/>',
+    shapes: '<circle cx="7" cy="7" r="4.5"/><rect x="13" y="13" width="8" height="8" rx="1"/><path d="M17 2.5 21.5 10h-9Z"/><path d="M3 21 10 14"/>',
+    graph: '<path d="M2 18h20 M12 2v20" stroke-width="1.5"/><path d="M5 3c1.8 8 4.2 11.5 7 11.5S17.2 11 19 3"/>',
+    bgBlank: '<rect x="3" y="3" width="18" height="18" rx="2"/>',
+    bgGrid: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18 M15 3v18 M3 9h18 M3 15h18" stroke-width="1.4"/>',
+    bgGridLarge: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18 M3 12h18" stroke-width="1.4"/>',
+    bgPlane: '<path d="M12 21V3 M9.5 5.5 12 3l2.5 2.5 M3 12h18 M18.5 9.5 21 12l-2.5 2.5"/>',
+    originCenter: '<path d="M12 21V3 M9.5 5.5 12 3l2.5 2.5 M3 12h18 M18.5 9.5 21 12l-2.5 2.5"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
+    originCorner: '<path d="M5 21V3 M2.5 5.5 5 3l2.5 2.5 M3 19h18 M18.5 16.5 21 19l-2.5 2.5"/><circle cx="5" cy="19" r="2" fill="currentColor"/>',
+    magnet: '<path d="M5 3h4v8a3 3 0 0 0 6 0V3h4v8a7 7 0 0 1-14 0Z M5 7h4 M15 7h4"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    eyeOff: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/>',
     picture: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/><path d="M12 1v5 M9.5 3.5 12 6l2.5-2.5" stroke-width="2"/>',
   };
+  function svgIcon(name) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
+  }
   function addIcon(node, name) {
     node.classList.add('canvas-icon');
-    node.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
+    node.innerHTML = svgIcon(name);
     return node;
   }
+  /* Кнопка в рамке (как остальные в панели), а не голый .icon-btn */
+  function boxedIconButton(name, title, action) {
+    var b = iconButton(name, title, action);
+    b.classList.remove('icon-btn');
+    b.classList.add('btn', 'btn-small', 'btn-secondary');
+    return b;
+  }
+  /* Кнопка-меню: значок, подпись (на узкой доске прячется) и стрелка */
+  function menuButton(icon, text, title, action) {
+    var b = button('btn btn-small btn-secondary canvas-labelled canvas-menu-btn', '', title, action);
+    b.setAttribute('aria-haspopup', 'true');
+    var ic = el('span', 'canvas-btn-icon'); ic.innerHTML = svgIcon(icon);
+    b.appendChild(ic);
+    b.appendChild(el('span', 'canvas-btn-text', text));
+    b.appendChild(el('span', 'canvas-caret', '▾'));
+    return b;
+  }
+  /* Ряд связанных переключателей (фон, клетка, начало координат) */
+  function segment(items, current, disabled, onpick) {
+    var g = el('div', 'canvas-segment');
+    g.setAttribute('role', 'group');
+    items.forEach(function (item) {
+      var b = addIcon(button('canvas-seg', '', item[2], function () { if (item[0] !== current) onpick(item[0]); }), item[1]);
+      b.setAttribute('aria-pressed', String(item[0] === current));
+      b.disabled = disabled;
+      g.appendChild(b);
+    });
+    return g;
+  }
+  var BG_ITEMS = [['blank', 'bgBlank', 'Белый фон'], ['grid', 'bgGrid', 'Клетка'],
+    ['grid_large', 'bgGridLarge', 'Крупная клетка'], ['plane', 'bgPlane', 'Координатная плоскость']];
+  var CELL_ITEMS = [[25, 'bgGrid', 'Мелкая клетка плоскости'], [50, 'bgGridLarge', 'Крупная клетка плоскости']];
+  var ORIGIN_ITEMS = [['center', 'originCenter', 'Начало координат в центре'],
+    ['bottom_left', 'originCorner', 'Начало координат слева внизу — для парабол и корней']];
   function iconButton(name, title, action) {
     return addIcon(button(name === 'trash' ? 'icon-btn' : 'btn btn-small btn-secondary', '', title, action), name);
   }
@@ -906,6 +962,9 @@
     head.innerHTML = '';
     var tabs = el('div', 'canvas-pages');
     tabs.appendChild(el('span', 'canvas-label', 'Доска для записей'));
+    /* Номера страниц — отдельной полосой: на узкой доске она прокручивается
+       вбок, а не переносится строками */
+    var strip = el('div', 'canvas-tabs');
     this.pages.forEach(function (p, i) {
       var b = button('btn btn-small btn-secondary canvas-page', String(p.number),
         p.locked ? 'Страница отправлена — только просмотр' : 'Страница ' + p.number, function () {
@@ -914,31 +973,51 @@
       b.setAttribute('aria-pressed', String(i === self.index));
       if (p.locked) b.classList.add('canvas-page-locked');
       if (p.fresh && i !== self.index) { b.classList.add('canvas-page-fresh'); b.title += ' — есть новые пометки'; }
-      tabs.appendChild(b);
+      strip.appendChild(b);
     });
     var limitHint = this.layer === 'teacher' ? 'до ' + this.limits.teacher + ' страниц учителя' : 'до ' + this.limits.student + ' страниц';
+    tabs.appendChild(strip);
+    /* Действия со страницей целиком — рядом с вкладками, а не в панели рисования;
+       «+» — первым из них, чтобы не уезжал за край прокручиваемой полосы */
+    var actions = el('div', 'canvas-page-actions');
     if (this.canAddPage()) {
-      tabs.appendChild(button('btn btn-small btn-secondary', '+', 'Новая пустая страница (' + limitHint + ')', function () { self.addPage(); }));
+      actions.appendChild(button('btn btn-small btn-secondary canvas-page', '+', 'Новая пустая страница (' + limitHint + ')', function () { self.addPage(); }));
     }
-    /* Действия со страницей — рядом с вкладками, а не в панели рисования */
     if (this.layer && page) {
       var copyable = this.copyableElements(page).length > 0;
-      var dup = button('btn btn-small btn-secondary canvas-labelled', 'Дублировать',
+      var dup = button('btn btn-small btn-secondary canvas-labelled', '',
         !this.canAddPage() ? 'Страниц уже максимум (' + limitHint + ')'
           : !copyable ? 'На странице пока нечего копировать'
-          : 'Новая страница с копией этого рисунка: на ней можно стереть лишнее, а эта останется как есть',
+          : 'Дублировать: новая страница с копией этого рисунка — на ней можно стереть лишнее, а эта останется как есть',
         function () { self.duplicatePage(); });
-      addIcon(dup, 'duplicate');
-      dup.appendChild(document.createTextNode('Дублировать'));
+      var dupIcon = el('span', 'canvas-btn-icon'); dupIcon.innerHTML = svgIcon('duplicate');
+      dup.appendChild(dupIcon);
+      dup.appendChild(el('span', 'canvas-btn-text', 'Дублировать'));
       dup.disabled = !this.canAddPage() || !copyable;
-      tabs.appendChild(dup);
+      actions.appendChild(dup);
     }
-    if (page) tabs.appendChild(iconButton('picture', 'Скопировать страницу как картинку — вставится в чат, документ или презентацию', function () { self.copyPage(); }));
-    this.deletePageButton = iconButton('trash', 'Удалить пустую последнюю страницу', function () { self.removeLastPage(); });
-    if (this.layer) tabs.appendChild(this.deletePageButton);
+    if (page) actions.appendChild(boxedIconButton('picture', 'Скопировать страницу как картинку — вставится в чат, документ или презентацию', function () { self.copyPage(); }));
+    this.deletePageButton = boxedIconButton('trash', 'Удалить пустую последнюю страницу', function () { self.removeLastPage(); });
+    if (this.layer) actions.appendChild(this.deletePageButton);
+    if (page && this.role === 'student' && this.showTeacherLayer) {
+      var eye = boxedIconButton(this.showTeacher ? 'eye' : 'eyeOff',
+        this.showTeacher ? 'Пометки учителя видны — нажмите, чтобы скрыть' : 'Пометки учителя скрыты — нажмите, чтобы показать',
+        function () {
+          self.showTeacher = !self.showTeacher;
+          try { localStorage.setItem(HIDE_TEACHER_KEY, self.showTeacher ? '0' : '1'); } catch (e) {}
+          self.refresh();
+        });
+      eye.setAttribute('aria-pressed', String(!this.showTeacher));
+      actions.appendChild(eye);
+    }
+    tabs.appendChild(actions);
     this.syncDeleteButton();
     head.appendChild(tabs);
     head.appendChild(button('icon-btn canvas-close', '×', 'Свернуть доску для записей — всё уже сохранено, откроется той же кнопкой', function () { self.close(); }));
+    requestAnimationFrame(function () {
+      var current = strip.querySelector('[aria-pressed="true"]');
+      if (current && strip.scrollWidth > strip.clientWidth) strip.scrollLeft = current.offsetLeft - strip.offsetLeft - 40;
+    });
     if (!page) {
       head.appendChild(el('span', 'helptext', this.layer ? 'Нажмите «+», чтобы добавить страницу.' : 'Страниц нет.'));
       this.toolbar.innerHTML = '';
@@ -948,98 +1027,117 @@
     this.stage.hidden = false;
     var editable = this.editableLayer(page);
 
-    var controls = el('div', 'canvas-controls');
     /* Фон — свойство страницы того, кто её создал: ученик правит свои страницы,
-       учитель — свои; чужие страницы и просмотр получают одну подпись вместо
-       трёх выпадающих списков. */
-    var ownsBackground = !!this.layer && page.createdBy === this.layer;
-    if (!ownsBackground) {
-      var plane0 = page.background === 'plane';
-      var desc = BG_LABELS[page.background] || page.background;
-      if (plane0) {
-        desc += ', ' + ((page.bgOptions.cell || 25) === 50 ? 'крупная клетка' : 'мелкая клетка')
-          + ', ' + (page.bgOptions.origin === 'bottom_left' ? 'начало слева внизу' : 'начало в центре');
-      }
-      var note = el('span', 'canvas-bg-note', 'Фон: ' + desc.toLowerCase());
-      note.title = note.textContent;
-      controls.appendChild(note);
-    }
-    function labelled(text, select) {
-      var label = el('label', 'canvas-bg-field');
-      label.appendChild(el('span', null, text));
-      label.appendChild(select);
-      return label;
-    }
-    var bg = el('select', 'canvas-bg');
-    Object.keys(BG_LABELS).forEach(function (key) {
-      var opt = el('option', null, BG_LABELS[key]);
-      opt.value = key;
-      bg.appendChild(opt);
-    });
-    bg.value = page.background;
-    bg.disabled = !editable;
-    bg.title = 'Фон страницы: белый, клетка, крупная клетка или координатная плоскость';
-    bg.addEventListener('change', function () {
-      page.background = bg.value;
-      if (bg.value === 'plane' && !page.bgOptions.cell) page.bgOptions = Object.assign({}, page.bgOptions, {cell: 50, origin: 'center'});
-      self.touch(page);
-      self.refresh();
-    });
-    if (ownsBackground) controls.appendChild(labelled('Фон', bg));
-    var plane = page.background === 'plane';
-    var cellSel = el('select', 'canvas-bg');
-    [[25, 'мелкая клетка'], [50, 'крупная клетка']].forEach(function (pair) {
-      var opt = el('option', null, pair[1]); opt.value = String(pair[0]); cellSel.appendChild(opt);
-    });
-    cellSel.value = String(page.bgOptions.cell || 25);
-    /* На старых страницах 1000×750 клетка задаёт смещение рисунка (offsetOf) — там её не меняем */
-    var legacy = !page.bgOptions.square;
-    cellSel.disabled = !editable || !plane || legacy;
-    cellSel.title = !plane ? 'Размер клетки — только для координатной плоскости'
-      : legacy ? 'На странице старого формата размер клетки фиксирован' : 'Размер клетки координатной плоскости';
-    cellSel.addEventListener('change', function () {
-      page.bgOptions = Object.assign({}, page.bgOptions, {cell: parseInt(cellSel.value, 10)});
-      self.touch(page); self.redraw();
-    });
-    /* Клетка и начало координат есть только у координатной плоскости; их
-       варианты («крупная клетка», «начало в центре») читаются без подписи */
-    if (ownsBackground && plane) controls.appendChild(cellSel);
-    var originSel = el('select', 'canvas-bg');
-    [['center', 'начало в центре'], ['bottom_left', 'начало слева внизу']].forEach(function (pair) {
-      var opt = el('option', null, pair[1]); opt.value = pair[0]; originSel.appendChild(opt);
-    });
-    originSel.value = page.bgOptions.origin || 'center';
-    originSel.disabled = !editable || !plane;
-    originSel.title = plane ? 'Положение начала координат: в центре или слева внизу (для парабол и корней)' : 'Начало координат — только для координатной плоскости';
-    originSel.addEventListener('change', function () {
-      page.bgOptions = Object.assign({}, page.bgOptions, {origin: originSel.value});
-      self.touch(page); self.redraw();
-    });
-    if (ownsBackground && plane) controls.appendChild(originSel);
-    this.snapToggle = null;
-    if (editable) {
-      this.snapToggle = this.toggle('Привязка к сетке', this.snap, function (on) { self.snap = on; });
-      this.snapToggle.title = 'Концы фигур, точки и ручки заготовок притягиваются к узлам сетки; карандаша не касается';
-      controls.appendChild(this.snapToggle);
-    }
-    if (this.role === 'student' && this.showTeacherLayer) {
-      var teacherToggle = this.toggle('Скрыть пометки учителя', !this.showTeacher, function (hide) {
-        self.showTeacher = !hide;
-        try { localStorage.setItem(HIDE_TEACHER_KEY, hide ? '1' : '0'); } catch (e) {}
-        self.redraw();
-      });
-      teacherToggle.title = 'Пометки учителя появляются поверх вашего решения по мере того, как он их оставляет; тумблер их прячет';
-      controls.appendChild(teacherToggle);
-    }
+       учитель — свои; у чужих страниц переключатели только показывают фон. */
+    var controls = el('div', 'canvas-controls');
+    this.snapButton = null;
+    if (this.bgUi() === 'inline') this.buildBackgroundInline(controls, page, editable);
+    else if (!editable) controls.appendChild(el('span', 'canvas-bg-note', 'Фон: ' + this.backgroundText(page)));
     if (page.locked && this.role === 'student') {
       controls.appendChild(el('span', 'helptext', 'Страница отправлена — только просмотр'));
     }
-    head.appendChild(controls);
+    if (controls.childNodes.length) head.appendChild(controls);
 
     this.selection = [];
     this.pending = [];
     this.buildToolbar(editable);
     this.resize();
+  };
+
+  /* Как показывать выбор фона: 'inline' — ряд значков над панелью,
+     'panel' — кнопка «Фон ▾» в панели со всплывающей карточкой.
+     Ключ canvas-bg-ui в localStorage — только для сравнения вариантов. */
+  Widget.prototype.bgUi = function () {
+    var mode = null;
+    try { mode = localStorage.getItem('canvas-bg-ui'); } catch (e) {}
+    return mode === 'panel' ? 'panel' : 'inline';
+  };
+
+  Widget.prototype.ownsBackground = function (page) {
+    return !!this.editableLayer(page) && page.createdBy === this.layer;
+  };
+
+  Widget.prototype.backgroundText = function (page) {
+    var desc = (BG_LABELS[page.background] || page.background).toLowerCase();
+    if (page.background === 'plane') {
+      desc += ', ' + ((page.bgOptions.cell || 25) === 50 ? 'крупная клетка' : 'мелкая клетка')
+        + ', ' + (page.bgOptions.origin === 'bottom_left' ? 'начало слева внизу' : 'начало в центре');
+    }
+    return desc;
+  };
+
+  Widget.prototype.setBackground = function (page, background, options) {
+    if (background) {
+      page.background = background;
+      if (background === 'plane' && !page.bgOptions.cell) page.bgOptions = Object.assign({}, page.bgOptions, {cell: 50, origin: 'center'});
+    }
+    if (options) page.bgOptions = Object.assign({}, page.bgOptions, options);
+    this.touch(page);
+    this.refresh();
+  };
+
+  /* Блоки выбора фона, общие для обоих вариантов: [подпись, переключатели] */
+  Widget.prototype.backgroundParts = function (page) {
+    var self = this, owns = this.ownsBackground(page), plane = page.background === 'plane';
+    /* На старых страницах 1000×750 клетка задаёт смещение рисунка (offsetOf) — там её не меняем */
+    var legacy = !page.bgOptions.square;
+    var parts = [['Фон', segment(BG_ITEMS, page.background, !owns, function (v) { self.setBackground(page, v); })]];
+    if (plane) {
+      parts.push(['Клетка', segment(CELL_ITEMS, page.bgOptions.cell || 25, !owns || legacy,
+        function (v) { self.setBackground(page, null, {cell: v}); })]);
+      parts.push(['Начало', segment(ORIGIN_ITEMS, page.bgOptions.origin || 'center', !owns,
+        function (v) { self.setBackground(page, null, {origin: v}); })]);
+    }
+    return parts;
+  };
+
+  Widget.prototype.makeSnapButton = function () {
+    var self = this;
+    this.snapButton = addIcon(button('canvas-seg canvas-seg-solo', '', '', function () {
+      self.snap = !self.snap; self.syncToolbar();
+    }), 'magnet');
+    return this.snapButton;
+  };
+
+  Widget.prototype.buildBackgroundInline = function (controls, page, editable) {
+    this.backgroundParts(page).forEach(function (part) {
+      var box = el('div', 'canvas-seg-box');
+      box.appendChild(el('span', 'canvas-seg-caption', part[0]));
+      box.appendChild(part[1]);
+      controls.appendChild(box);
+    });
+    if (editable) controls.appendChild(this.makeSnapButton());
+  };
+
+  Widget.prototype.openBackgroundMenu = function (anchor) {
+    var self = this, page = this.page();
+    if (this.menu && anchor.contains(this.menu)) { this.closeMenu(); return; }
+    var menu = el('div', 'canvas-menu canvas-menu-list canvas-menu-bg');
+    menu.appendChild(el('div', 'canvas-menu-title', 'Фон страницы'));
+    var tiles = el('div', 'canvas-bg-tiles'), owns = this.ownsBackground(page);
+    BG_ITEMS.forEach(function (item) {
+      var b = button('canvas-bg-tile', '', item[2], function () { self.closeMenu(); if (page.background !== item[0]) self.setBackground(page, item[0]); });
+      var ic = el('span', 'canvas-btn-icon'); ic.innerHTML = svgIcon(item[1]);
+      b.appendChild(ic);
+      b.appendChild(el('span', null, BG_LABELS[item[0]].replace('Координатная плоскость', 'Плоскость')));
+      b.setAttribute('aria-pressed', String(page.background === item[0]));
+      b.disabled = !owns;
+      tiles.appendChild(b);
+    });
+    menu.appendChild(tiles);
+    this.backgroundParts(page).slice(1).forEach(function (part) {
+      var row = el('div', 'canvas-menu-field');
+      row.appendChild(el('span', 'canvas-menu-title', part[0]));
+      row.appendChild(part[1]);
+      menu.appendChild(row);
+    });
+    if (!owns) menu.appendChild(el('div', 'canvas-menu-note', 'Фон этой страницы выбирает её автор'));
+    var snapRow = el('div', 'canvas-menu-field');
+    snapRow.appendChild(el('span', 'canvas-menu-title', 'Привязка к сетке'));
+    snapRow.appendChild(this.makeSnapButton());
+    menu.appendChild(snapRow);
+    this.openMenu(anchor, menu);
+    this.syncToolbar();
   };
 
   Widget.prototype.toggle = function (text, checked, onchange) {
@@ -1056,9 +1154,9 @@
      кнопок, их число и порядок не зависят от инструмента и выделения, меняются
      только aria-pressed/disabled и цвета слотов. Иначе появление ряда с
      действиями над выделением сдвигало бы рабочее поле.
-     Два ряда: «чем рисовать» (инструменты, фигуры, вставка, история) и «как
-     выглядит» (цвет, толщина, действия с выделенным). Действия со страницей
-     целиком — в шапке рядом с вкладками, привязка к сетке — рядом с фоном. */
+     Два ряда: «чем рисовать» (инструменты, меню «Фигуры» и «График», рисунок
+     задачи, очистка) и «как выглядит» (отмена/возврат, цвет, толщина, действия
+     с выделенным). Действия со страницей целиком — в шапке рядом с вкладками. */
   Widget.prototype.buildToolbar = function (editable) {
     var self = this, bar = this.toolbar;
     this.closeMenu();
@@ -1067,6 +1165,7 @@
     this.swatches = [];
     this.widthButtons = [];
     this.selectionButtons = [];
+    this.shapesButton = null;
     /* Только просмотр: копия картинкой уже в шапке, рисовать нечем */
     if (!editable) return;
     var row1 = el('div', 'canvas-toolbar-row'), row2 = el('div', 'canvas-toolbar-row');
@@ -1087,23 +1186,35 @@
     tool(main, 'eraser', 'Ластик', 'Ластик: стирает участки карандаша и маркера; фигуры удаляются через «Выбор» (E)');
     tool(main, 'select', 'Выбор', 'Выбор: клик или рамка выделяет, перетаскивание двигает, стрелки сдвигают на 1 (с Shift — на 10), Esc снимает выделение (V)');
 
-    var shapes = group(row1);
-    Object.keys(SHAPE_TOOLS).forEach(function (name) { tool(shapes, name, SHAPE_TOOLS[name].label, SHAPE_TOOLS[name].title); });
+    /* Семь фигур — в меню: на кнопке значок последней выбранной */
+    var shapes = group(row1, 'canvas-menu-anchor');
+    this.shapesButton = menuButton('shapes', 'Фигуры', 'Фигуры: отрезок, точка, окружность, прямоугольник, квадрат, треугольник, параллелограмм',
+      function () { self.openShapesMenu(shapes); });
+    this.shapesButton.classList.add('canvas-tool');
+    shapes.appendChild(this.shapesButton);
 
-    /* Графики-заготовки и рисунок задачи — в одном меню с подписями:
-       значки x², |x|, 1/x без пояснения не читались как «вставить график» */
-    var insert = group(row1, 'canvas-insert');
-    this.insertButton = button('btn btn-small btn-secondary canvas-labelled', 'Вставить ▾',
-      'Вставить график-заготовку или рисунок из условия задачи', function () { self.openInsertMenu(insert); });
-    this.insertButton.setAttribute('aria-haspopup', 'true');
-    insert.appendChild(this.insertButton);
+    var graphs = group(row1, 'canvas-menu-anchor');
+    graphs.appendChild(menuButton('graph', 'График', 'График-заготовка: парабола, модуль, корень, гипербола',
+      function () { self.openGraphMenu(graphs); }));
 
-    var history = group(row1);
-    this.undoButton = iconButton('undo', 'Отменить (Ctrl+Z, на Mac ⌘Z)', function () { self.undo(); });
-    this.redoButton = iconButton('redo', 'Вернуть (Ctrl+Shift+Z или Ctrl+Y)', function () { self.redo(); });
+    var images = this.images || [];
+    if (images.length) {
+      var pictures = group(row1, 'canvas-menu-anchor');
+      pictures.appendChild(boxedIconButton('image', 'Вставить рисунок из условия задачи' + (images.length > 1 ? ' (' + images.length + ')' : ''),
+        function () { self.pickImage(pictures); }));
+    }
+    if (this.bgUi() === 'panel') {
+      var bgGroup = group(row1, 'canvas-menu-anchor');
+      var bgIcon = (BG_ITEMS.filter(function (i) { return i[0] === self.page().background; })[0] || BG_ITEMS[1])[1];
+      bgGroup.appendChild(menuButton(bgIcon, 'Фон', 'Фон страницы и привязка к сетке', function () { self.openBackgroundMenu(bgGroup); }));
+    }
+    group(row1).appendChild(boxedIconButton('clear', 'Очистить страницу — свой слой целиком; отменяется через Ctrl+Z', function () { self.clearPage(); }));
+
+    var history = group(row2);
+    this.undoButton = boxedIconButton('undo', 'Отменить (Ctrl+Z, на Mac ⌘Z)', function () { self.undo(); });
+    this.redoButton = boxedIconButton('redo', 'Вернуть (Ctrl+Shift+Z или Ctrl+Y)', function () { self.redo(); });
     history.appendChild(this.undoButton);
     history.appendChild(this.redoButton);
-    history.appendChild(iconButton('clear', 'Очистить страницу — свой слой целиком; отменяется через Ctrl+Z', function () { self.clearPage(); }));
 
     var colors = group(row2, 'canvas-colors');
     COLORS.forEach(function (_, i) {
@@ -1142,9 +1253,7 @@
      ['ungroup', 'Разгруппировать (Ctrl+Shift+G)', function () { self.groupSelection(false); }],
      ['front', 'На передний план (клавиша ])', function () { self.reorderSelection(true); }],
      ['back', 'На задний план (клавиша [)', function () { self.reorderSelection(false); }]].forEach(function (item) {
-      var b = iconButton(item[0], item[1], item[2]);
-      b.classList.remove('icon-btn');
-      b.classList.add('btn', 'btn-small', 'btn-secondary');
+      var b = boxedIconButton(item[0], item[1], item[2]);
       sel.appendChild(b);
       self.selectionButtons.push(b);
     });
@@ -1166,6 +1275,9 @@
     this.closeMenu();
     this.menu = menu;
     anchor.appendChild(menu);
+    /* Меню не выходит за правый край доски: иначе прижимаем его к нему */
+    var box = this.root.getBoundingClientRect(), at = anchor.getBoundingClientRect(), r = menu.getBoundingClientRect();
+    if (r.right > box.right) menu.style.left = Math.max(box.left - at.left, box.right - at.left - r.width) + 'px';
     /* Клик внутри якоря (включая саму кнопку) не закрывает меню здесь: иначе
        pointerdown по кнопке закрыл бы его до click, и тот открыл бы меню заново */
     this.menuCloser = function (ev) {
@@ -1178,36 +1290,56 @@
     }, 0);
   };
 
-  Widget.prototype.openInsertMenu = function (anchor) {
+  Widget.prototype.menuRow = function (icon, label, title, action) {
+    var b = button('canvas-menu-row', '', title, action);
+    b.setAttribute('role', 'menuitem');
+    var ic = el('span', 'canvas-menu-icon');
+    if (typeof icon === 'string') ic.innerHTML = svgIcon(icon); else ic.appendChild(icon);
+    b.appendChild(ic);
+    b.appendChild(el('span', null, label));
+    return b;
+  };
+
+  Widget.prototype.openShapesMenu = function (anchor) {
+    var self = this;
+    if (this.menu && anchor.contains(this.menu)) { this.closeMenu(); return; }
+    var menu = el('div', 'canvas-menu canvas-menu-list canvas-menu-shapes');
+    menu.setAttribute('role', 'menu');
+    Object.keys(SHAPE_TOOLS).forEach(function (name) {
+      var b = self.menuRow(name, SHAPE_TOOLS[name].name, SHAPE_TOOLS[name].title, function () { self.closeMenu(); self.setTool(name); });
+      b.setAttribute('aria-pressed', String(self.tool === name));
+      menu.appendChild(b);
+    });
+    this.openMenu(anchor, menu);
+  };
+
+  Widget.prototype.openGraphMenu = function (anchor) {
     var self = this;
     if (this.menu && anchor.contains(this.menu)) { this.closeMenu(); return; }
     var menu = el('div', 'canvas-menu canvas-menu-list');
     menu.setAttribute('role', 'menu');
-    menu.appendChild(el('div', 'canvas-menu-title', 'График-заготовка — тянется за ручки в режиме «Выбор»'));
+    menu.appendChild(el('div', 'canvas-menu-title', 'Заготовка текущим цветом; ручки тянутся в режиме «Выбор»'));
     Object.keys(FN).forEach(function (kind) {
-      var b = button('canvas-menu-row', '', FN[kind].title, function () { self.closeMenu(); self.insertFn(kind); });
-      b.setAttribute('role', 'menuitem');
       var formula = el('span', 'canvas-menu-formula', 'y = ' + FN[kind].label);
       if (window.katex) window.katex.render('y = ' + FN_TEX[kind], formula, {throwOnError: false});
-      b.appendChild(formula);
-      b.appendChild(el('span', null, FN[kind].name));
+      var b = self.menuRow(formula, FN[kind].name, FN[kind].title, function () { self.closeMenu(); self.insertFn(kind); });
       menu.appendChild(b);
     });
-    var images = this.images || [];
-    menu.appendChild(el('div', 'canvas-menu-title', 'Рисунок из условия'));
-    if (!images.length) {
-      menu.appendChild(el('div', 'canvas-menu-note', 'У этой задачи нет рисунков, которые можно положить на доску'));
-    } else {
-      var thumbs = el('div', 'canvas-menu-thumbs');
-      images.forEach(function (image, i) {
-        var b = button('canvas-menu-item', '', 'Вставить рисунок ' + (i + 1), function () { self.closeMenu(); self.insertImage(image); });
-        b.setAttribute('role', 'menuitem');
-        var thumb = el('img'); thumb.src = image.url; thumb.alt = 'рисунок ' + (i + 1); thumb.loading = 'lazy';
-        b.appendChild(thumb);
-        thumbs.appendChild(b);
-      });
-      menu.appendChild(thumbs);
-    }
+    this.openMenu(anchor, menu);
+  };
+
+  Widget.prototype.pickImage = function (anchor) {
+    var self = this, images = this.images || [];
+    if (!images.length) return;
+    if (images.length === 1) { this.insertImage(images[0]); return; }
+    if (this.menu && anchor.contains(this.menu)) { this.closeMenu(); return; }
+    var menu = el('div', 'canvas-menu');
+    images.forEach(function (image, i) {
+      var b = button('canvas-menu-item', '', 'Вставить рисунок ' + (i + 1), function () { self.closeMenu(); self.insertImage(image); });
+      var thumb = el('img'); thumb.src = image.url; thumb.alt = 'рисунок ' + (i + 1); thumb.loading = 'lazy';
+      b.appendChild(thumb);
+      menu.appendChild(b);
+    });
     this.openMenu(anchor, menu);
   };
 
@@ -1251,10 +1383,20 @@
     }
     if (this.undoButton) this.undoButton.disabled = !page.undo.length;
     if (this.redoButton) this.redoButton.disabled = !page.redo.length;
-    if (this.snapToggle) {
-      var input = this.snapToggle.querySelector('input');
-      input.disabled = !cellOf(page);
-      this.snapToggle.classList.toggle('canvas-disabled', !cellOf(page));
+    if (this.shapesButton) {
+      var shape = SHAPE_TOOLS[this.tool] ? this.tool : null;
+      if (shape) this.lastShape = shape;
+      this.shapesButton.setAttribute('aria-pressed', String(!!shape));
+      this.shapesButton.querySelector('.canvas-btn-icon').innerHTML = svgIcon(this.lastShape || 'shapes');
+      this.shapesButton.title = shape ? 'Фигуры — сейчас: ' + SHAPE_TOOLS[shape].name.toLowerCase() : 'Фигуры: отрезок, точка, окружность, прямоугольник, квадрат, треугольник, параллелограмм';
+    }
+    if (this.snapButton && document.body.contains(this.snapButton)) {
+      var cell = !!cellOf(page);
+      this.snapButton.disabled = !cell;
+      this.snapButton.setAttribute('aria-pressed', String(this.snap && cell));
+      this.snapButton.title = !cell ? 'Привязка к сетке — только на фоне с клеткой'
+        : 'Привязка к сетке ' + (this.snap ? 'включена' : 'выключена') + ': концы фигур, точки и ручки заготовок притягиваются к узлам; карандаша не касается';
+      this.snapButton.setAttribute('aria-label', this.snapButton.title);
     }
   };
 
