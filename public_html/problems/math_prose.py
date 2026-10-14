@@ -50,8 +50,11 @@ def _split_math_prose(body: str) -> list[tuple[bool, str]] | None:
             end = _brace_end(body, command.end() - 1)
             content = body[command.end():end] if end > 0 else ""
             # Русские слова и знаки предложения («\text {. }») — проза.
+            # Но не единица со степенью или индексом («5 \text{ см}^{2}»,
+            # «\text{м}_{1}», «\text{мин}'»): вынос оторвал бы ² от единицы.
             if end > 0 and (re.search(r"[А-Яа-яЁё]", content)
-                            or re.fullmatch(r"[\s.,;:]+", content)):
+                            or re.fullmatch(r"[\s.,;:]+", content)) \
+                    and not re.match(r"\s*['^_]", body[end + 1:]):
                 pieces.append((True, body[start:pos]))
                 pieces.append((False, content))
                 found = True

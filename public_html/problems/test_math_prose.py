@@ -19,6 +19,11 @@ class UnwrapMathProseTests(SimpleTestCase):
         for value in ('Найдите $x^2$.', r'$f(x)=\begin{cases}1,&\text{если } x>0\\0\end{cases}$'):
             self.assertEqual(unwrap_math_prose(value), value)
 
+    def test_unit_with_power_or_index_stays_in_formula(self):
+        for value in (r'Площадь $5 \text{ см}^{2}$.', r'$a=3\text{ м}_{1}$',
+                      r"$t=5\text{ мин}'$"):
+            self.assertEqual(unwrap_math_prose(value), value)
+
     def test_display_kept_when_asked(self):
         value = r'Найдите \[ \frac{1}{x}, \text { при } x=2 \]'
         self.assertEqual(unwrap_math_prose(value, display=False), value)
@@ -46,13 +51,13 @@ class UnwrapCommandTests(TestCase):
 
     def test_dry_run_changes_nothing(self):
         out = StringIO()
-        call_command('unwrap_math_prose', stdout=out)
+        call_command('unwrap_math_prose', '--all', stdout=out)
         self.assertIn('Задач с изменениями: 1, подпунктов: 1', out.getvalue())
         self.task.refresh_from_db()
         self.assertEqual(self.task.text_latex, OCR)
 
     def test_apply_saves_text_and_search_field(self):
-        call_command('unwrap_math_prose', '--apply', stdout=StringIO())
+        call_command('unwrap_math_prose', '--all', '--apply', stdout=StringIO())
         self.task.refresh_from_db()
         self.sub.refresh_from_db()
         self.assertEqual(self.task.text_latex, 'Даны точки $M(1 ; 1)$ и $N(4 ;-1)$.')
@@ -71,6 +76,13 @@ class UnwrapCommandTests(TestCase):
         out = StringIO()
         call_command('unwrap_math_prose', '--source', 'Авторские', '--source', 'Шабунин', stdout=out)
         self.assertIn('Задач с изменениями: 2,', out.getvalue())
+
+    def test_needs_explicit_scope(self):
+        from django.core.management.base import CommandError
+        with self.assertRaises(CommandError):
+            call_command('unwrap_math_prose', '--apply', stdout=StringIO())
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.text_latex, OCR)
 
     def test_task_filter(self):
         out = StringIO()

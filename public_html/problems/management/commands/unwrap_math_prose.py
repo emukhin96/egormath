@@ -11,8 +11,9 @@
     manage.py unwrap_math_prose --source "Авторские листки"
     manage.py unwrap_math_prose --source "Авторские листки" --apply
     manage.py unwrap_math_prose --task 12466 --task 12465 --apply
+    manage.py unwrap_math_prose --all          # вся база — только явно
 """
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Q
 
@@ -28,10 +29,16 @@ class Command(BaseCommand):
                             help='Только задачи источника (часть названия); можно несколько раз')
         parser.add_argument('--task', action='append', type=int, default=[],
                             help='Только эти задачи (id); можно несколько раз')
+        parser.add_argument('--all', action='store_true',
+                            help='Все задачи базы, включая созданные учителями вручную')
         parser.add_argument('--apply', action='store_true', help='Сохранить изменения')
         parser.add_argument('--show', type=int, default=10, help='Сколько примеров показать')
 
     def handle(self, *args, **options):
+        # Вся база — только явно: эвристика рассчитана на распознанный текст,
+        # задачи, набранные учителями, без нужды не трогаем.
+        if not (options['source'] or options['task'] or options['all']):
+            raise CommandError('Укажите --source, --task или --all (вся база).')
         tasks = Task.objects.all()
         if options['task']:
             tasks = tasks.filter(pk__in=options['task'])
