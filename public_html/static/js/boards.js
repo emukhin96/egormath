@@ -19,6 +19,12 @@
   var COPY_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   var pagesOf = {};         /* assignment → {task: {task_no, canvas_url, count}} */
   var open = null;          /* {assignment, task} открытого диалога */
+  /* Блок «Задание · ответ ученика» над доской: фрагмент с сервера. Развёрнут
+     ли он (и «Эталон» в нём) — помним, пока открыта страница: учитель развернул
+     у одного ученика — у следующего тоже развёрнут. answerVersions — версии
+     ответов из живого опроса: блок перезагружается, только если ответ сменился. */
+  var peekUrl = root.dataset.peekUrl || '';
+  var peekState = {open: false, reference: false}, peekShown = null, peekSeq = 0, answerVersions = {};
 
   function card(id) { return root.querySelector('[data-board="' + id + '"]'); }
   function ago(iso) {
@@ -81,6 +87,10 @@
   }
   function apply(data) {
     syncTaskLinks(data.tasks);
+    answerVersions = {};
+    (data.answers || []).forEach(function (a) { answerVersions[a.assignment + ':' + a.task] = a.version; });
+    if (open && peekShown && peekShown.key === open.assignment + ':' + open.task
+        && (answerVersions[peekShown.key] || '') !== peekShown.version) loadPeek(open.assignment, open.task);
     var seen = {};
     data.states.forEach(function (state, i) {
       seen[state.assignment] = true;
@@ -160,6 +170,47 @@
   });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
 
+  /* ---- блок «Задание · ответ ученика» ---- */
+  function peekHolder() { return dialog.querySelector('[data-dialog-peek]'); }
+  function loadPeek(assignment, task) {
+    var holder = peekHolder();
+    if (!holder || !peekUrl) return;
+    var seq = ++peekSeq, key = assignment + ':' + task;
+    var url = peekUrl.replace('/0/task/0/', '/' + assignment + '/task/' + task + '/');
+    fetch(url, {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(function (html) {
+        if (seq !== peekSeq || !open || open.assignment + ':' + open.task !== key) return;
+        /* Обновление того же ответа из живого опроса не сбрасывает прокрутку блока */
+        var prev = peekShown && peekShown.key === key ? holder.querySelector('.boards-peek-body') : null;
+        var top = prev ? prev.scrollTop : 0;
+        holder.innerHTML = html;
+        var details = holder.querySelector('[data-peek]'), reference = holder.querySelector('[data-peek-reference]');
+        peekShown = {key: key, version: details ? details.dataset.version || '' : ''};
+        if (details) {
+          details.open = peekState.open;
+          details.addEventListener('toggle', function () { peekState.open = details.open; });
+        }
+        if (reference) {
+          reference.open = peekState.reference;
+          reference.addEventListener('toggle', function () { peekState.reference = reference.open; });
+        }
+        if (window.renderMathContent) holder.querySelectorAll('.math-content').forEach(window.renderMathContent);
+        var body = holder.querySelector('.boards-peek-body');
+        if (body && top) body.scrollTop = top;
+      })
+      .catch(function () {
+        if (seq !== peekSeq) return;
+        peekShown = null;
+        holder.innerHTML = '<p class="helptext">Не удалось загрузить условие и ответ — откройте задачу ещё раз.</p>';
+      });
+  }
+  function clearPeek() {
+    peekSeq++; peekShown = null;
+    var holder = peekHolder();
+    if (holder) holder.innerHTML = '';
+  }
+
   /* ---- диалог с виджетом учителя ---- */
   function mount(assignment, task) {
     var holder = dialog.querySelector('[data-dialog-canvas]');
@@ -170,10 +221,12 @@
     node.dataset.always = '1';   /* тумблер «Показать доски» со страницы прогресса здесь не действует */
     node.id = 'boards-canvas-' + assignment + '-' + task;
     holder.appendChild(node);        /* canvas.js поднимет виджет через MutationObserver */
+    var same = open && open.assignment === assignment && open.task === task;
     open = {assignment: assignment, task: task};
     Array.prototype.forEach.call(dialog.querySelectorAll('[data-dialog-task]'), function (b) {
       b.setAttribute('aria-pressed', String(b.dataset.dialogTask === String(task)));
     });
+    if (!same || !peekShown) { clearPeek(); loadPeek(assignment, task); }
   }
   function openBoard(id) {
     var byTask = pagesOf[id], el = card(id);
@@ -201,6 +254,7 @@
     var node = dialog.querySelector('[data-canvas]');
     if (node && node.canvasWidget) node.canvasWidget.close();
     dialog.querySelector('[data-dialog-canvas]').innerHTML = '';
+    clearPeek();
     open = null;
     if (dialog.open) dialog.close();
     schedule();

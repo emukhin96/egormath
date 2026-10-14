@@ -10,7 +10,7 @@ import hashlib
 from urllib.parse import urlencode
 
 from django.db.models import Count, Max, Q, Sum
-from django.http import HttpResponseNotModified, JsonResponse
+from django.http import Http404, HttpResponseNotModified, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -20,9 +20,9 @@ from django.views.decorators.http import require_GET
 
 from accounts.decorators import teacher_required
 from accounts.models import StudentGroup
-from assignments.models import Assignment
+from assignments.models import Assignment, Submission
 from livefile import etags
-from worksheets.models import Worksheet
+from worksheets.models import Worksheet, WorksheetItem
 
 from . import services
 from .models import CanvasPage
@@ -92,6 +92,8 @@ def worksheet_boards(request, worksheet_id):
         'tasks': [{'id': tid, 'no': no} for tid, no in numbers.items() if tid in with_boards], 'task_id': task_id,
         'task_no': numbers.get(task_id),
         'live_url': reverse('worksheet_boards_live', args=[worksheet.pk]) + ('?' + urlencode(query) if query else ''),
+        'peek_url': reverse('worksheet_boards_peek', args=[worksheet.pk, 0, 0]),
+        'conditions_url': reverse('worksheet_boards_tasks', args=[worksheet.pk]) + ('?' + urlencode(query) if query else ''),
     })
 
 
@@ -137,11 +139,12 @@ def worksheet_boards_live(request, worksheet_id):
     tasks = [{'assignment': a, 'task': t, 'task_no': numbers.get(t), 'count': n,
               'canvas_url': reverse('canvas:pages', args=[a, t])}
              for (a, t), n in sorted(per_task.items())]
+    answers = _answer_stamps(ids)
     summary = pages.aggregate(n=Count('pk'), s=Max('student_updated_at'), t=Max('teacher_updated_at'),
                               c=Max('created_at'), sv=Sum('student_version'), tv=Sum('teacher_version'))
     signature = hashlib.sha256(repr([
         [(s['assignment'], s['status']) for s in states], overflow, task_id, sorted(summary.items()),
-        sorted(per_task.items()),
+        sorted(per_task.items()), sorted(answers.items()),
     ]).encode()).hexdigest()
     etag = f'"{signature}"'
     if etags.matches(request, etag):
@@ -155,6 +158,9 @@ def worksheet_boards_live(request, worksheet_id):
     response = JsonResponse({
         'ok': True, 'since': now.isoformat(), 'overflow': overflow, 'states': states, 'tasks': tasks,
         'task': task_id,
+        # Версии ответов ученика (без доски): диалог перезагружает блок
+        # «Задание · ответ ученика», только когда версия открытой задачи сменилась
+        'answers': [{'assignment': a, 'task': t, 'version': v} for (a, t), v in sorted(answers.items())],
         'pages': [{
             'assignment': p.submission.assignment_id,
             'task': p.submission.task_id, 'task_no': numbers.get(p.submission.task_id),
@@ -168,3 +174,89 @@ def worksheet_boards_live(request, worksheet_id):
     })
     response['ETag'] = etag
     return response
+
+
+def _answer_stamps(assignment_ids, task_id=None):
+    """Версия ответа ученика по (назначение, задача) — одним запросом.
+
+    Учитывает поля ответа, подпункты, сверку и фото, но не доску: доска
+    обновляется своим путём, и её штрихи не должны перезагружать блок ответа.
+    """
+    rows = Submission.objects.filter(assignment_id__in=assignment_ids)
+    if task_id is not None:
+        rows = rows.filter(task_id=task_id)
+    rows = rows.annotate(last_part=Max('parts__updated_at'), photos_n=Count('photos', distinct=True),
+                         last_photo=Max('photos__uploaded_at')).values_list(
+        'assignment_id', 'task_id', 'updated_at', 'auto_check', 'last_part', 'photos_n', 'last_photo')
+    return {(a, t): hashlib.sha256(repr(rest).encode()).hexdigest()[:16] for a, t, *rest in rows}
+
+
+def _answer_status(row):
+    """Короткий итог ответа для заголовка блока: (код, подпись)."""
+    targets = [sr['part'] for sr in row['subrows']] if row['subrows'] else [row['submission']]
+    answered = [obj for obj in targets if obj is not None and obj.display_answer]
+    if not answered:
+        if row['submission'] is not None and row['submission'].photos.all():
+            return 'photo', 'только фото'
+        return 'empty', 'нет ответа'
+    if any(getattr(obj, 'check_stale', False) for obj in answered):
+        return 'unchecked', 'сверка устарела'
+    checks = [obj.auto_check for obj in answered]
+    if Submission.CHECK_WRONG in checks:
+        return 'wrong', 'неверно'
+    if all(check == Submission.CHECK_OK for check in checks):
+        return ('ok', 'верно') if len(answered) == len(targets) else ('partial', 'верно частично')
+    return 'unchecked', 'не сверено'
+
+
+@teacher_required
+@never_cache
+@require_GET
+def worksheet_boards_peek(request, worksheet_id, assignment_id, task_id):
+    """Фрагмент диалога доски: условие задачи, ответ ученика и эталон.
+
+    Те же строки, что на странице проверки (`_assignment_rows`): выбранные
+    в пункте листка подпункты, отметки сверки по слотам, фото решения.
+    """
+    from assignments.views import _assignment_rows
+
+    worksheet = get_object_or_404(Worksheet.visible_to(request.user), pk=worksheet_id)
+    assignment = get_object_or_404(Assignment.visible_to(request.user).select_related('student', 'worksheet'),
+                                   pk=assignment_id, worksheet=worksheet)
+    numbers = _task_numbers(worksheet)
+    if task_id not in numbers:
+        raise Http404
+    item = (WorksheetItem.objects.filter(worksheet=worksheet, task_id=task_id, deleted_at__isnull=True)
+            .order_by('order', 'pk').first())
+    row = next((r for r in _assignment_rows(assignment, with_review=True, item_ids={item.pk}) if r['task']), None)
+    context = {'assignment': assignment, 'row': row, 'task_no': numbers[task_id],
+               'version': _answer_stamps([assignment.pk], task_id).get((assignment.pk, task_id), '')}
+    if row is not None:
+        context['status'], context['status_label'] = _answer_status(row)
+        context['subitems'] = [sr['subitem'] for sr in row['subrows']]
+    return render(request, 'canvas/_boards_peek.html', context)
+
+
+@teacher_required
+@never_cache
+@require_GET
+def worksheet_boards_tasks(request, worksheet_id):
+    """Фрагмент боковой панели «Условия задач»: все задачи листка по порядку.
+
+    Грузится по первому открытию панели, а не со страницей досок: в листке
+    бывает 40+ задач, и страница с живым опросом не должна их ждать.
+    """
+    from worksheets.block_presentation import decorate_block_rows
+
+    worksheet = get_object_or_404(Worksheet.visible_to(request.user), pk=worksheet_id)
+    items = [item for item in worksheet.ordered_items() if item.task_id]
+    numbers = _task_numbers(worksheet)
+    task_id = _task_filter(request, numbers)
+    group_id = request.GET.get('group', '')
+    rows = decorate_block_rows([{
+        'item': item, 'number': numbers[item.task_id], 'subitems': item.selected_subitems(),
+        'current': item.task_id == task_id,
+        'boards_url': reverse('worksheet_boards', args=[worksheet.pk]) + '?' + urlencode(
+            {k: v for k, v in (('group', group_id if group_id.isdigit() else ''), ('task', item.task_id)) if v}),
+    } for item in items])
+    return render(request, 'canvas/_boards_tasks.html', {'worksheet': worksheet, 'rows': rows})

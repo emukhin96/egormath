@@ -10,11 +10,12 @@
   <a class="btn btn-small btn-secondary" href="?{% if group_id %}group={{ group_id }}{% endif %}"{% if not task_id %} aria-current="page"{% endif %} title="У каждого ученика — последняя изменённая доска">Последняя</a>
   {% for t in tasks %}<a class="btn btn-small btn-secondary" data-task-link="{{ t.id }}" href="?{% if group_id %}group={{ group_id }}&{% endif %}task={{ t.id }}"{% if t.id == task_id %} aria-current="page"{% endif %} aria-label="Задача {{ t.no }}" title="Доски задачи {{ t.no }} у всех учеников">{{ t.no }}</a>{% endfor %}
   <span class="helptext" data-tasks-empty{% if tasks %} hidden{% endif %}>досок пока нет</span>
+  <button type="button" class="btn btn-small btn-secondary boards-peek-toggle" data-peek-panel-toggle aria-controls="boards-peek-panel" aria-expanded="false">Условия задач</button>
 </p>
 {% if not canvas_enabled %}<p class="helptext">Доски для записей временно отключены.</p>{% else %}
 <p class="helptext boards-status" data-boards-status role="status">Доски обновляются каждые 5 секунд. Нажмите на доску, чтобы открыть её с инструментами и оставить пометки.</p>
 {% if overflow %}<p class="helptext boards-overflow">На экране {{ boards_max }} учеников с самой свежей активностью; ещё {{ overflow }} не поместились — выберите группу поменьше.</p>{% endif %}
-<div class="boards-grid" data-boards data-live-url="{{ live_url }}" data-live-file="{% live_file 'worksheet' worksheet.pk %}"{% if task_id %} data-task="{{ task_id }}"{% endif %}>
+<div class="boards-grid" data-boards data-live-url="{{ live_url }}" data-peek-url="{{ peek_url }}" data-live-file="{% live_file 'worksheet' worksheet.pk %}"{% if task_id %} data-task="{{ task_id }}"{% endif %}>
   {% for a in assignments %}<article class="board-card" data-board="{{ a.pk }}" tabindex="0" role="button" aria-label="Доска: {{ a.student.get_full_name|default:a.student.username }}">
     <div class="board-meta"><strong class="board-name">{{ a.student.get_full_name|default:a.student.username }}</strong><span class="board-state" data-board-state>{{ a.get_status_display }}</span></div>
     <canvas class="board-thumb" width="300" height="300" aria-hidden="true"></canvas>
@@ -24,9 +25,15 @@
 <dialog class="dialog boards-dialog" id="boards-dialog">
   <div class="dialog-heading"><h3 data-dialog-title>Доска</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
   <p class="boards-dialog-tasks" data-dialog-tasks></p>
+  <div class="boards-dialog-peek" data-dialog-peek></div>
   <div data-dialog-canvas></div>
   <p><a data-dialog-review href="#">Открыть проверку работы</a></p>
 </dialog>
 {% endif %}
+{# Условия всех задач листка: немодальная панель справа, доски остаются видны и обновляются. Содержимое — фрагментом по первому открытию (boards_tasks.js) #}
+<aside class="boards-peek-panel" id="boards-peek-panel" data-peek-panel data-url="{{ conditions_url }}" data-storage-key="boards-peek-panel:{{ worksheet.pk }}" aria-labelledby="boards-peek-panel-title" hidden>
+  <div class="boards-peek-panel-head"><h2 id="boards-peek-panel-title">Условия задач</h2><button type="button" class="icon-btn" data-peek-panel-close aria-label="Закрыть условия задач">×</button></div>
+  <div class="boards-peek-panel-body" data-peek-panel-body><p class="helptext">Загружаем условия…</p></div>
+</aside>
 {% endblock %}
-{% block extra_js %}{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=3"></script><script defer src="{% static 'js/boards.js' %}?v=1"></script>{% endif %}{% endblock %}
+{% block extra_js %}{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=3"></script><script defer src="{% static 'js/boards.js' %}?v=2"></script>{% endif %}<script defer src="{% static 'js/boards_tasks.js' %}"></script>{% endblock %}

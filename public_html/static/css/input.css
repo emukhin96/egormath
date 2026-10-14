@@ -5671,6 +5671,42 @@
   .boards-dialog-tasks { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--space-2); }
   .boards-dialog-tasks .btn { margin: 0; }
   .boards-dialog .canvas-launch, .boards-dialog .canvas-close { display: none; }
+  /* Доски: блок «Задание · ответ ученика» над доской в диалоге и немодальная
+     панель «Условия задач» справа. Выбранное выделяется только фоном --accent-soft */
+  .boards-dialog-peek:empty { display: none; }
+  .boards-peek { margin: 0 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius); background: #fff; }
+  .boards-peek-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); padding: var(--space-2) var(--space-3); cursor: pointer; font-weight: 600; color: var(--accent-dark); }
+  .boards-peek[open] > .boards-peek-summary { background: var(--accent-soft); border-radius: var(--radius) var(--radius) 0 0; }
+  .boards-peek-status { font-weight: 500; font-size: 0.85rem; color: var(--muted); }
+  .boards-peek-status[data-status="ok"] { color: var(--ok); }
+  .boards-peek-status[data-status="wrong"] { color: var(--err); }
+  .boards-peek-status[data-status="partial"], .boards-peek-status[data-status="unchecked"] { color: var(--warn); }
+  .boards-peek-body { display: grid; gap: var(--space-3); max-height: 45vh; overflow-y: auto; padding: var(--space-3); }
+  .boards-peek-label { margin: 0 0 var(--space-2); font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+  .boards-peek-answer { display: grid; gap: var(--space-2); }
+  .boards-peek-answer-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+  .boards-peek-answer-row .review-answer-row, .boards-peek-answer .photo-grid { margin: 0; }
+  .boards-peek-reference > summary { cursor: pointer; font-weight: 500; color: var(--accent-dark); }
+  .boards-peek-reference[open] > summary { margin-bottom: var(--space-3); }
+  .boards-peek-links { margin: 0; font-size: 0.9rem; }
+  .boards-tasks .boards-peek-toggle { margin-left: auto; }
+  .boards-tasks .boards-peek-toggle[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+  .boards-peek-panel {
+    position: fixed; top: var(--topbar-height); right: 0; bottom: 0; z-index: 55;
+    display: flex; flex-direction: column; width: 440px;
+    background: #fff; border-left: 1px solid var(--border); box-shadow: -8px 0 24px rgb(16 43 85 / 0.08);
+  }
+  .boards-peek-panel[hidden] { display: none; }
+  .boards-peek-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); }
+  .boards-peek-panel-head h2 { margin: 0; font-size: 1rem; }
+  .boards-peek-panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-2) var(--space-3) var(--space-5); }
+  .boards-peek-task { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius); }
+  .boards-peek-task + .boards-peek-task { margin-top: var(--space-1); }
+  .boards-peek-task.is-current { background: var(--accent-soft); }
+  .boards-peek-task .subitems, .boards-peek-task .task-images, .boards-peek-condition .subitems, .boards-peek-condition .task-images { margin: 0; }
+  /* Широкий экран: доски сдвигаются и остаются видны рядом с панелью; узкий — панель во всю ширину поверх */
+  @media (min-width: 900px) { body.boards-peek-open .app-shell { margin-right: 440px; } }
+  @media (max-width: 899px) { .boards-peek-panel { width: 100%; } }
 
   /* «Активность ученика»: сводка, чипы, лента интервалов */
   .audit-summary { margin: 0 0 var(--space-2); font-size: 0.9rem; }

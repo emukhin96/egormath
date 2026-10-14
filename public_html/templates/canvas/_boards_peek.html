@@ -1,0 +1,31 @@
+{% load task_extras %}
+{# Блок над доской в диалоге «Доски»: условие задачи, ответ ученика (как на странице проверки) и эталон. Свёрнут по умолчанию; boards.js помнит, развернул ли его учитель #}
+<details class="boards-peek" data-peek data-version="{{ version }}">
+  <summary class="boards-peek-summary">
+    <span class="boards-peek-title">Задание №{{ task_no }} · ответ ученика</span>
+    {% if row %}<span class="boards-peek-status" data-status="{{ status }}">{% if status == 'ok' %}✓ {% elif status == 'wrong' %}✗ {% endif %}{{ status_label }}</span>
+    {% else %}<span class="boards-peek-status" data-status="hidden">задача скрыта у ученика</span>{% endif %}
+  </summary>
+  {% if row %}
+  <div class="boards-peek-body">
+    <div class="boards-peek-condition">
+      {% include 'worksheets/_common_condition.html' %}
+      {% include 'includes/task_row.html' with number=task_no stars=row.item.effective_stars text=row.statement %}
+      {% include 'problems/_subitems.html' %}
+      {% include 'problems/_task_images.html' with images=row.statement_images %}
+    </div>
+    <div class="boards-peek-answer">
+      <h4 class="boards-peek-label">Ответ ученика</h4>
+      {% if row.subrows %}{% for sr in row.subrows %}
+      <div class="boards-peek-answer-row">{% include 'assignments/_review_answer.html' with obj=sr.part fragments=sr.fragments reference='' mask_reference='' label=forloop.counter %}{% if sr.part.display_answer %}{% include 'assignments/_check_badge.html' with status=sr.part.auto_check prefix='' hint='' %}{% endif %}</div>
+      {% endfor %}{% else %}
+      <div class="boards-peek-answer-row">{% include 'assignments/_review_answer.html' with obj=row.submission fragments=row.fragments reference='' mask_reference='' label='' %}{% if row.submission.display_answer %}{% include 'assignments/_check_badge.html' with status=row.submission.auto_check prefix='' hint='' %}{% endif %}</div>
+      {% endif %}
+      {% include 'assignments/_photo_gallery.html' with photos=row.submission.photos.all photo_route='photo_file' editable=False %}
+    </div>
+    {% answer_material row.task subitems as material %}
+    {% if material %}<details class="boards-peek-reference" data-peek-reference><summary>Эталон</summary>{% include 'problems/_task_answers.html' with task=row.task %}</details>{% endif %}
+    <p class="boards-peek-links"><a href="{% url 'review_assignment' assignment.pk %}#task-{{ row.number }}">Открыть в проверке</a></p>
+  </div>
+  {% endif %}
+</details>
