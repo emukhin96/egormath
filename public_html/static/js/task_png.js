@@ -55,6 +55,8 @@
       var box = li.querySelector('input[type=checkbox]');
       if (box && !box.checked) li.remove();
     });
+    // Блоки только для картинки (скрыты на странице) — показываем в копии
+    clone.querySelectorAll('[data-task-png-only]').forEach(function (el) { el.removeAttribute('hidden'); });
     clone.querySelectorAll(SKIP).forEach(function (el) { el.remove(); });
     // «а)», «б)» у подпунктов — CSS-счётчик в ::before, рендер его не вычисляет:
     // ставим метки текстом (после отбора, как в листке у ученика)
