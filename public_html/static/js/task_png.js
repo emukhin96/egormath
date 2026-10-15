@@ -34,9 +34,24 @@
     if (!root) return null;
     var source = root.querySelector('[data-task-png-content]') || root;
     var clone = source.cloneNode(true);
+    // В карточке кандидата самостоятельной подпункты — внутри формы выбора,
+    // которая ниже удаляется целиком: поднимаем их под текст условия.
+    // При «Вся задача» на картинку идут все пункты, независимо от галочек.
+    clone.querySelectorAll('form').forEach(function (form) {
+      var lists = form.querySelectorAll('ol.subitems');
+      if (!lists.length) return;
+      var whole = form.querySelector('input[name=parts_mode][value=all]:checked');
+      var text = clone.querySelector('.task-text');
+      var parent = text ? text.parentNode : form.parentNode;
+      var anchor = text ? text.nextSibling : form;
+      lists.forEach(function (list) {
+        if (whole) list.setAttribute('data-task-png-whole', '');
+        parent.insertBefore(list, anchor);
+      });
+    });
     // В листке подпункты отмечаются галочками: на картинку — только выбранные
     // (cloneNode переносит и текущее состояние галочки)
-    clone.querySelectorAll('li').forEach(function (li) {
+    clone.querySelectorAll('ol.subitems:not([data-task-png-whole]) > li').forEach(function (li) {
       var box = li.querySelector('input[type=checkbox]');
       if (box && !box.checked) li.remove();
     });
