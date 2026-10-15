@@ -34,8 +34,8 @@ from collections import Counter
 from pathlib import Path
 
 from .merzlyak_parser import (
-    LEFTOVER_LABEL_RE, _heal_ocr_math, _heal_ocr_words, normalize_degrees,
-    normalize_units, wrap_answer_numbers)
+    LEFTOVER_LABEL_RE, MATH_SPAN_RE, _heal_ocr_math, _heal_ocr_words,
+    normalize_degrees, normalize_units, wrap_answer_numbers)
 from .potoskuev_parser import (
     monotonic_numbers, renumber_appendix_lists, tabular_to_array)
 from .textbook_parser import (
@@ -614,6 +614,22 @@ def lift_stem_pictures(task: TaskDraft) -> bool:
     return True
 
 
+_TEXT_BRACE_RE = re.compile(r"(?<!\\)\\([{}])")
+
+
+def math_text_braces(value: str) -> str:
+    """«\\(A=\\{\\) событие\\}»: скобка события у OCR то в формуле, то голой
+    «\\}» в тексте. LaTeX в PDF понимает обе, а KaTeX на сайте рендерит
+    только формулы — голая «\\}» видна как есть. Выносим её в формулу."""
+    parts, pos = [], 0
+    for match in MATH_SPAN_RE.finditer(value):
+        parts.append(_TEXT_BRACE_RE.sub(r"\\(\\\1\\)", value[pos:match.start()]))
+        parts.append(match.group(0))
+        pos = match.end()
+    parts.append(_TEXT_BRACE_RE.sub(r"\\(\\\1\\)", value[pos:]))
+    return "".join(parts)
+
+
 _WHOLE_WARNING = "Авторский материал не удалось распределить по подпунктам"
 
 
@@ -622,6 +638,7 @@ def _finish_fields(task: TaskDraft) -> None:
         value = (value or "").replace(_LABEL_GUARD, "")
         # Голый «%» в LaTeX — комментарий: съедает конец строки и ломает PDF.
         value = re.sub(r"(?<!\\)%", r"\\%", value)
+        value = math_text_braces(value)
         return normalize_degrees(normalize_units(_heal_ocr_math(value)))
 
     def answer_field(value: str) -> str:

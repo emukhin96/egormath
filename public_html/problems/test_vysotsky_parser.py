@@ -255,6 +255,17 @@ class VysotskyPercentTests(SimpleTestCase):
         self.assertIn("\\%", task.subitems[0].author_answer_latex)
 
 
+class VysotskyEventBracesTests(SimpleTestCase):
+    def test_bare_closing_brace_goes_into_formula(self):
+        from .vysotsky_parser import math_text_braces
+        self.assertEqual(
+            math_text_braces(r"событие \(B=\{\) бросков одинаковы\} и найдите"),
+            r"событие \(B=\{\) бросков одинаковы\(\}\) и найдите")
+        # Скобки в формулах и перенос строки «\\» перед «}» не трогаем.
+        for text in (r"часов \(\}, B=\{\) не более \(\}\)", r"$\{1; 2\}$", "строка\\\\}"):
+            self.assertEqual(math_text_braces(text), text)
+
+
 class VysotskyIncompleteBookTests(SimpleTestCase):
     def test_missing_section_is_import_error(self):
         broken = BOOK.replace("\\section*{Справочник}", "\\section*{Термины}")
