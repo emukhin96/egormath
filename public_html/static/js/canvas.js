@@ -1054,8 +1054,7 @@
        учитель — свои; у чужих страниц переключатели только показывают фон. */
     var controls = el('div', 'canvas-controls');
     this.snapButton = null;
-    if (this.bgUi() === 'inline') this.buildBackgroundInline(controls, page, editable);
-    else if (!editable) controls.appendChild(el('span', 'canvas-bg-note', 'Фон: ' + this.backgroundText(page)));
+    this.buildBackground(controls, page, editable);
     if (page.locked && this.role === 'student') {
       controls.appendChild(el('span', 'helptext', 'Страница отправлена — только просмотр'));
     }
@@ -1067,23 +1066,8 @@
     this.resize();
   };
 
-  /* Как показывать выбор фона: 'inline' — ряд значков над панелью,
-     'panel' — кнопка «Фон ▾» в панели со всплывающей карточкой.
-     Ключ canvas-bg-ui в localStorage — только для сравнения вариантов. */
-  Widget.prototype.bgUi = function () {
-    var mode = null;
-    try { mode = localStorage.getItem('canvas-bg-ui'); } catch (e) {}
-    return mode === 'panel' ? 'panel' : 'inline';
-  };
-
   Widget.prototype.ownsBackground = function (page) {
     return !!this.editableLayer(page) && page.createdBy === this.layer;
-  };
-
-  Widget.prototype.backgroundText = function (page) {
-    var base = {blank: 'белый', grid: 'мелкая клетка', grid_large: 'крупная клетка'}[baseOf(page)] || page.background;
-    var axes = axesOf(page);
-    return base + (axes === 'none' ? '' : axes === 'bottom_left' ? ', оси с началом слева внизу' : ', оси с началом в центре');
   };
 
   /* Подложка и оси меняются независимо: оси ложатся на ту подложку, что уже
@@ -1106,7 +1090,7 @@
     this.refresh();
   };
 
-  /* Блоки выбора фона, общие для обоих вариантов: [подпись, переключатели] */
+  /* Блоки выбора фона: [подпись, переключатели] */
   Widget.prototype.backgroundParts = function (page) {
     var self = this, owns = this.ownsBackground(page);
     /* На старых страницах 1000×750 смещение рисунка зависит от фона и клетки
@@ -1126,7 +1110,9 @@
     return this.snapButton;
   };
 
-  Widget.prototype.buildBackgroundInline = function (controls, page, editable) {
+  /* Строка над панелью: подложка, оси и привязка к сетке. У чужих страниц
+     и в просмотре переключатели неактивны и только показывают фон. */
+  Widget.prototype.buildBackground = function (controls, page, editable) {
     this.backgroundParts(page).forEach(function (part) {
       var box = el('div', 'canvas-seg-box');
       box.appendChild(el('span', 'canvas-seg-caption', part[0]));
@@ -1134,47 +1120,6 @@
       controls.appendChild(box);
     });
     if (editable) controls.appendChild(this.makeSnapButton());
-  };
-
-  Widget.prototype.openBackgroundMenu = function (anchor) {
-    var self = this, page = this.page();
-    if (this.menu && anchor.contains(this.menu)) { this.closeMenu(); return; }
-    var menu = el('div', 'canvas-menu canvas-menu-list canvas-menu-bg');
-    menu.appendChild(el('div', 'canvas-menu-title', 'Фон страницы'));
-    var tiles = el('div', 'canvas-bg-tiles'), owns = this.ownsBackground(page);
-    BG_ITEMS.forEach(function (item) {
-      var b = button('canvas-bg-tile', '', item[2], function () { self.closeMenu(); if (baseOf(page) !== item[0]) self.setBackground(page, item[0], null); });
-      var ic = el('span', 'canvas-btn-icon'); ic.innerHTML = svgIcon(item[1]);
-      b.appendChild(ic);
-      b.appendChild(el('span', null, item[2].replace('Белый фон', 'Белый')));
-      b.setAttribute('aria-pressed', String(baseOf(page) === item[0]));
-      b.disabled = !owns;
-      tiles.appendChild(b);
-    });
-    menu.appendChild(tiles);
-    this.backgroundParts(page).slice(1).forEach(function (part) {
-      var row = el('div', 'canvas-menu-field');
-      row.appendChild(el('span', 'canvas-menu-title', part[0]));
-      row.appendChild(part[1]);
-      menu.appendChild(row);
-    });
-    if (!owns) menu.appendChild(el('div', 'canvas-menu-note', 'Фон этой страницы выбирает её автор'));
-    var snapRow = el('div', 'canvas-menu-field');
-    snapRow.appendChild(el('span', 'canvas-menu-title', 'Привязка к сетке'));
-    snapRow.appendChild(this.makeSnapButton());
-    menu.appendChild(snapRow);
-    this.openMenu(anchor, menu);
-    this.syncToolbar();
-  };
-
-  Widget.prototype.toggle = function (text, checked, onchange) {
-    var label = el('label', 'ws-toggle');
-    var input = el('input'); input.type = 'checkbox'; input.checked = checked;
-    input.addEventListener('change', function () { onchange(input.checked); });
-    label.appendChild(input);
-    label.appendChild(el('span', 'ws-toggle-slider'));
-    label.appendChild(el('span', 'ws-toggle-text', text));
-    return label;
   };
 
   /* Панель строится один раз на страницу и больше не перестраивается: набор
@@ -1229,12 +1174,6 @@
       var pictures = group(row1, 'canvas-menu-anchor');
       pictures.appendChild(boxedIconButton('image', 'Вставить рисунок из условия задачи' + (images.length > 1 ? ' (' + images.length + ')' : ''),
         function () { self.pickImage(pictures); }));
-    }
-    if (this.bgUi() === 'panel') {
-      var bgGroup = group(row1, 'canvas-menu-anchor');
-      var bgIcon = axesOf(this.page()) !== 'none' ? 'bgPlane'
-        : (BG_ITEMS.filter(function (i) { return i[0] === baseOf(self.page()); })[0] || BG_ITEMS[1])[1];
-      bgGroup.appendChild(menuButton(bgIcon, 'Фон', 'Фон страницы и привязка к сетке', function () { self.openBackgroundMenu(bgGroup); }));
     }
     group(row1).appendChild(boxedIconButton('clear', 'Очистить страницу — свой слой целиком; отменяется через Ctrl+Z', function () { self.clearPage(); }));
 

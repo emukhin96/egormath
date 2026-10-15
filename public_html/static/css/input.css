@@ -6668,7 +6668,6 @@
     content: ''; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px;
     border-radius: 50%; background: #dc2626; box-shadow: 0 0 0 2px #fff;
   }
-  .canvas-bg-note { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; color: var(--muted); }
   /* Панель: два фиксированных ряда, состав кнопок не меняется — поле не прыгает */
   .canvas-toolbar { flex-direction: column; align-items: stretch; gap: var(--space-2); margin-bottom: var(--space-2); }
   .canvas-toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 30px; }
@@ -6724,17 +6723,6 @@
   .canvas-menu-icon { display: inline-flex; flex: none; min-width: 1.5rem; color: var(--accent-dark); }
   .canvas-menu-formula { min-width: 4.5rem; font-family: KaTeX_Main, serif; color: var(--text); }
   .canvas-menu-note { font-size: 0.82rem; color: var(--muted); padding: 0 var(--space-1); }
-  .canvas-menu-field { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-2); }
-  .canvas-menu-field .canvas-menu-title { padding: 0; font-size: 0.85rem; color: var(--text); }
-  .canvas-bg-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-1); margin-top: var(--space-1); }
-  .canvas-bg-tile {
-    display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 0; padding: 6px 2px;
-    border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--accent-dark);
-    font: inherit; font-size: 0.72rem; cursor: pointer;
-  }
-  .canvas-bg-tile .canvas-btn-icon svg { width: 22px; height: 22px; }
-  .canvas-bg-tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--accent-soft); }
-  .canvas-bg-tile:disabled { cursor: default; opacity: 0.6; }
   .canvas-menu-item { width: 72px; height: 56px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
   .canvas-menu-item:hover { border-color: var(--accent); }
   .canvas-menu-item img { width: 100%; height: 100%; object-fit: contain; display: block; }
