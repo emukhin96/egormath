@@ -2,9 +2,9 @@
 {# Строки подборки (задачи, рубрики, тексты). Контекст: rows, worksheet #}
 {% for row in rows %}
 {% with item=row.item %}
-<div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}">
+<div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}"{% if item.task_id %} data-task-png-root{% endif %}>
   <div class="ws-body">
-    <div class="ws-content">
+    <div class="ws-content" data-task-png-content>
       {% if item.task_id %}
       {% include 'worksheets/_common_condition.html' %}
       <div class="task-line">
@@ -32,8 +32,8 @@
       <div class="math-content">{{ item.text_latex|web_text|linebreaksbr }}</div>
       {% endif %}
     </div>
-    {% if item.task_id and not item.task.variant_of_id %}
-    <div class="ws-actions">{% include 'includes/cart_button.html' with task=item.task %}</div>
+    {% if item.task_id %}
+    <div class="ws-actions">{% include 'includes/task_png_button.html' %}{% if not item.task.variant_of_id %}{% include 'includes/cart_button.html' with task=item.task %}{% endif %}</div>
     {% endif %}
   </div>
 </div>

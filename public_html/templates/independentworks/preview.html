@@ -12,8 +12,9 @@
 {% for row in variant.rows %}
 {% for note in row.notes %}<div class="card ws-view math-content">{{ note|web_text }}</div>{% endfor %}
 <!-- Общее условие и подпункты одного номера остаются в одной карточке. -->
-{% if row.group_start %}<div class="card ws-view">{% endif %}<section class="iw-point">
-{% include 'assignments/_point_content.html' %}
+{% if row.group_start %}<div class="card ws-view">{% endif %}<section class="iw-point" data-task-png-root>
+<div class="task-png-corner">{% include 'includes/task_png_button.html' %}</div>
+<div data-task-png-content>{% include 'assignments/_point_content.html' %}</div>
 {% if row.repeated %}<p class="msg msg-warning">№{{ row.point.label }} · этот пункт уже выдавался в предыдущих попытках.</p>{% endif %}
 {% if row.fragments %}<div>{% include 'assignments/_mask.html' with fragments=row.fragments editable=True show_checks=False %}</div><p class="helptext">Пробный ввод не сохраняется.</p>{% else %}<p class="helptext">{% if run.allow_photos %}Фото решения · ручная проверка.{% else %}Задание без электронного ввода ответа.{% endif %}</p>{% endif %}
 <details class="problem-section"><summary>Ответ и решение — только учителю</summary><div class="math-content">{{ row.reference|web_answer }} {{ row.solution|web_text }}</div>{% include 'problems/_task_images.html' with images=row.reference_images %}</details>
