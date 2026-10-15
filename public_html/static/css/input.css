@@ -1103,6 +1103,63 @@
     color: var(--accent);
   }
 
+  /* Кнопка «условие картинкой» (task_png.js): как глаз видимости, не красная */
+  .task-png-btn {
+    padding: 3px 5px;
+  }
+
+  .task-png-btn:hover {
+    color: var(--accent);
+    background: #e8f1fb;
+  }
+
+  .task-png-btn svg {
+    display: block;
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Лист, с которого снимается PNG: за экраном, белый, не шире 600px —
+     строка условия как на карточке самостоятельной */
+  .task-png-holder {
+    position: fixed;
+    top: 0;
+    left: -10000px;
+  }
+
+  .task-png-sheet {
+    width: max-content;
+    max-width: 600px;
+    padding: var(--space-3) var(--space-4);
+    background: #fff;
+    color: var(--text);
+  }
+
+  /* Заголовок «Условие» с кнопкой справа; кнопка в углу номера самостоятельной */
+  .task-png-heading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .task-png-corner {
+    float: right;
+    margin-left: var(--space-2);
+  }
+
+  .task-png-sheet ol.subitems > li::before {
+    content: none;
+  }
+
+  .task-png-marker {
+    display: inline-block;
+    min-width: var(--subitem-marker);
+  }
+
+  .task-png-sheet .task-images img {
+    max-width: 100%;
+  }
+
   .linklike:hover {
     color: var(--accent);
   }

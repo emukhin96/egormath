@@ -81,14 +81,14 @@
   <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}">
     {% for row in rows %}
     {% with item=row.item %}
-    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" data-id="{{ item.pk }}"{% if item.task_id %} data-task-id="{{ item.task.pk }}" data-has-answer="{% if item.task.effective_answer_latex or item.task.effective_solution_latex or item.task.has_subitem_answers %}1{% endif %}" data-no-answer="{% if item.task.has_blank_answer %}1{% endif %}"{% endif %}>
+    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" data-id="{{ item.pk }}"{% if item.task_id %} data-task-id="{{ item.task.pk }}" data-has-answer="{% if item.task.effective_answer_latex or item.task.effective_solution_latex or item.task.has_subitem_answers %}1{% endif %}" data-no-answer="{% if item.task.has_blank_answer %}1{% endif %}" data-task-png-root{% endif %}>
       <div class="ws-body">
         {% if not item.task.block_id %}{% include 'includes/builder_drag_handle.html' %}{% endif %}
 
         {% if item.task_id %}
         {# --- Задача --- #}
-        <div class="ws-content">
-          {% if item.task.block_id %}<p class="page-subtitle">{{ item.task.block.title }} · вопрос {{ item.task.block_position }} из {{ item.task.block.size }}. Кнопки ↑/↓ перемещают весь блок.</p>{% endif %}
+        <div class="ws-content" data-task-png-content>
+          {% if item.task.block_id %}<p class="page-subtitle" data-task-png-skip>{{ item.task.block.title }} · вопрос {{ item.task.block_position }} из {{ item.task.block.size }}. Кнопки ↑/↓ перемещают весь блок.</p>{% endif %}
           <form id="settings-{{ item.pk }}" method="post" class="ws-settings"
                 data-autosave="change"
                 action="{% url 'worksheet_item_settings' worksheet.pk item.pk %}">
@@ -160,6 +160,7 @@
         <div class="ws-actions">
           {% if item.task_id and not item.task.variant_of_id %}{% include 'includes/cart_button.html' with task=item.task %}{% endif %}
           {% if item.task_id %}
+          {% include 'includes/task_png_button.html' %}
           {% if row.hidden_links or row.hidden_assignments %}
           <button type="button"
                   class="icon-btn vis-btn vis-on"

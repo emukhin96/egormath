@@ -14,7 +14,7 @@
   </div>
   <div class="problem-columns">
     <div class="card">
-      <section class="problem-section"><h2>Условие</h2>
+      <section class="problem-section" data-task-png-root><h2 class="task-png-heading" data-task-png-skip>Условие{% include 'includes/task_png_button.html' %}</h2>
         <div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
         <details class="ws-add-text"><summary>Править условие</summary>
           {% include 'problems/_editor_form.html' with form=condition_form block='condition' %}
