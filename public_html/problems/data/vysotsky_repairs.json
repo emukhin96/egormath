@@ -39,7 +39,7 @@
           "id": "23-пункты",
           "source": "PDF с. 9",
           "before": "\\begin{figure}[h]\n\\begin{center}\n\\captionsetup{labelformat=empty}\n\\caption{a)}\n  \\includegraphics[alt={},max width=\\textwidth]{6fe76aca-4d0d-43d3-87db-ef41166ff6a3-009_287_395_1524_261}\n\\end{center}\n\\end{figure}\n\n\\begin{figure}[h]\n\\begin{center}\n\\captionsetup{labelformat=empty}\n\\caption{б)}\n  \\includegraphics[alt={},max width=\\textwidth]{6fe76aca-4d0d-43d3-87db-ef41166ff6a3-009_287_291_1524_666}\n\\end{center}\n\\end{figure}",
-          "after": "а) \\includegraphics[max width=\\textwidth, alt={}]{6fe76aca-4d0d-43d3-87db-ef41166ff6a3-009_287_395_1524_261}\\\\\nб) \\includegraphics[max width=\\textwidth, alt={}]{6fe76aca-4d0d-43d3-87db-ef41166ff6a3-009_287_291_1524_666}"
+          "after": "а) первая таблица \\includegraphics[max width=\\textwidth, alt={}]{6fe76aca-4d0d-43d3-87db-ef41166ff6a3-009_287_395_1524_261}\\\\\nб) вторая таблица \\includegraphics[max width=\\textwidth, alt={}]{6fe76aca-4d0d-43d3-87db-ef41166ff6a3-009_287_291_1524_666}"
         },
         {
           "id": "222-г",
