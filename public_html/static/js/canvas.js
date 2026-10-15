@@ -45,7 +45,6 @@
     tri: {label: '△', name: 'Треугольник', title: 'Треугольник: три клика по вершинам, Esc — отменить'},
     para: {label: '▱', name: 'Параллелограмм', title: 'Параллелограмм: три клика по вершинам, четвёртая достроится, Esc — отменить'},
   };
-  var BG_LABELS = {blank: 'Белый', grid: 'Клетка', grid_large: 'Крупная клетка', plane: 'Координатная плоскость'};
 
   /* ---------- утилиты ---------- */
 
@@ -65,17 +64,25 @@
     if (text != null) node.textContent = text;
     return node;
   }
+  /* Всплывающее пояснение: CSS-подсказка по data-tip (быстрее и заметнее
+     системного title), aria-label — для экранных читалок */
+  function setTip(node, text) {
+    node.removeAttribute('title');
+    if (text) { node.dataset.tip = text; node.setAttribute('aria-label', text); }
+    else { delete node.dataset.tip; node.removeAttribute('aria-label'); }
+  }
   function button(cls, text, title, onclick) {
     var b = el('button', cls, text);
     b.type = 'button';
-    if (title) { b.title = title; b.setAttribute('aria-label', title); }
+    if (title) setTip(b, title);
     if (onclick) b.addEventListener('click', onclick);
     return b;
   }
   var ICONS = {
     pen: '<path d="m4 16-1 5 5-1L20 8l-4-4Z M14 6l4 4"/>',
     hl: '<path d="m5 14 5 5 10-10-5-5Z M5 14l-2 5 2 2 5-2 M3 22h11"/>',
-    eraser: '<path d="m3 14 10-10a2 2 0 0 1 3 0l5 5a2 2 0 0 1 0 3l-9 9H8Z M8 9l8 8 M12 21h10"/>',
+    /* Ластик — резинка с закрашенным кончиком, не похожий на маркер */
+    eraser: '<path d="M15.5 3.5 20.5 8.5 10 19H5.5L3.5 17a2 2 0 0 1 0-2.8Z"/><path d="M8.6 10.4 13.6 15.4 10 19H5.5L3.5 17a2 2 0 0 1 0-2.8Z" fill="currentColor"/><path d="M13 21h8"/>',
     select: '<path d="m5 3 14 10-7 1-3 7Z"/>',
     image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
     undo: '<path d="M9 4 3 10l6 6 M3 10h11a7 7 0 0 1 0 14" transform="translate(0 -2)"/>',
@@ -103,6 +110,7 @@
     bgBlank: '<rect x="3" y="3" width="18" height="18" rx="2"/>',
     bgGrid: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18 M15 3v18 M3 9h18 M3 15h18" stroke-width="1.4"/>',
     bgGridLarge: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18 M3 12h18" stroke-width="1.4"/>',
+    axesNone: '<path d="M12 21V3 M3 12h18" stroke-opacity="0.35"/><path d="M5 5l14 14"/>',
     bgPlane: '<path d="M12 21V3 M9.5 5.5 12 3l2.5 2.5 M3 12h18 M18.5 9.5 21 12l-2.5 2.5"/>',
     originCenter: '<path d="M12 21V3 M9.5 5.5 12 3l2.5 2.5 M3 12h18 M18.5 9.5 21 12l-2.5 2.5"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
     originCorner: '<path d="M5 21V3 M2.5 5.5 5 3l2.5 2.5 M3 19h18 M18.5 16.5 21 19l-2.5 2.5"/><circle cx="5" cy="19" r="2" fill="currentColor"/>',
@@ -148,11 +156,10 @@
     });
     return g;
   }
-  var BG_ITEMS = [['blank', 'bgBlank', 'Белый фон'], ['grid', 'bgGrid', 'Клетка'],
-    ['grid_large', 'bgGridLarge', 'Крупная клетка'], ['plane', 'bgPlane', 'Координатная плоскость']];
-  var CELL_ITEMS = [[25, 'bgGrid', 'Мелкая клетка плоскости'], [50, 'bgGridLarge', 'Крупная клетка плоскости']];
-  var ORIGIN_ITEMS = [['center', 'originCenter', 'Начало координат в центре'],
-    ['bottom_left', 'originCorner', 'Начало координат слева внизу — для парабол и корней']];
+  var BG_ITEMS = [['blank', 'bgBlank', 'Белый фон'], ['grid', 'bgGrid', 'Мелкая клетка'],
+    ['grid_large', 'bgGridLarge', 'Крупная клетка']];
+  var AXES_ITEMS = [['none', 'axesNone', 'Без осей координат'], ['center', 'originCenter', 'Оси с началом в центре'],
+    ['bottom_left', 'originCorner', 'Оси с началом слева внизу — для парабол и корней']];
   function iconButton(name, title, action) {
     return addIcon(button(name === 'trash' ? 'icon-btn' : 'btn btn-small btn-secondary', '', title, action), name);
   }
@@ -456,23 +463,39 @@
     if (page.bgOptions.origin === 'bottom_left') return [cell * 2, height - cell * 2];
     return [W / 2, Math.round(height / 2 / cell) * cell];
   }
-  function cellOf(page) {
+  /* Единичный отрезок: шаг клетки, у осей — их масштаб */
+  function unitOf(page) {
     if (page.background === 'plane') return page.bgOptions.cell || 25;
     return CELLS[page.background] || 0;
+  }
+  /* Шаг видимой сетки (0 — без сетки): оси бывают и на белом фоне (grid: false) */
+  function cellOf(page) {
+    if (page.background === 'plane' && page.bgOptions.grid === false) return 0;
+    return unitOf(page);
+  }
+  /* Фон в терминах панели: подложка (белый / клетка / крупная клетка) + оси */
+  function baseOf(page) {
+    if (page.background !== 'plane') return page.background;
+    if (page.bgOptions.grid === false) return 'blank';
+    return (page.bgOptions.cell || 25) === 50 ? 'grid_large' : 'grid';
+  }
+  function axesOf(page) {
+    return page.background === 'plane' ? (page.bgOptions.origin || 'center') : 'none';
   }
 
   function drawBackground(ctx, page) {
     ctx.fillStyle = '#fff';
     var top = -offsetOf(page), bottom = top + H;
     ctx.fillRect(0, top, W, H);
-    var cell = cellOf(page);
-    if (!cell) return;
-    ctx.strokeStyle = GRID_COLOR;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (var x = 0; x <= W; x += cell) { ctx.moveTo(x, top); ctx.lineTo(x, bottom); }
-    for (var y = Math.floor(top / cell) * cell; y <= bottom; y += cell) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
-    ctx.stroke();
+    var grid = cellOf(page), cell = unitOf(page);
+    if (grid) {
+      ctx.strokeStyle = GRID_COLOR;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (var x = 0; x <= W; x += grid) { ctx.moveTo(x, top); ctx.lineTo(x, bottom); }
+      for (var y = Math.floor(top / grid) * grid; y <= bottom; y += grid) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+      ctx.stroke();
+    }
     if (page.background !== 'plane') return;
     var o = planeOrigin(page);
     ctx.strokeStyle = '#111';
@@ -540,7 +563,7 @@
         var r = Math.max(3, element.w);
         ctx.beginPath(); ctx.arc(p[0][0], p[0][1], r, 0, Math.PI * 2); ctx.fill();
         if (element.l && page.background === 'plane') {
-          var o = planeOrigin(page), cell = cellOf(page);
+          var o = planeOrigin(page), cell = unitOf(page);
           var x = (p[0][0] - o[0]) / cell, y = (o[1] - p[0][1]) / cell;
           var fmt = function (v) { return (Math.round(v * 10) / 10).toString().replace('.', ','); };
           ctx.font = '15px "Times New Roman", serif';
@@ -915,9 +938,9 @@
     var last = this.pages[this.pages.length - 1];
     var empty = last && !last.layers.student.elements.length && !last.layers.teacher.elements.length;
     this.deletePageButton.disabled = !last || !this.editableLayer(last) || !empty;
-    this.deletePageButton.title = !last ? 'Страниц нет' : !this.editableLayer(last)
+    setTip(this.deletePageButton, !last ? 'Страниц нет' : !this.editableLayer(last)
       ? 'Отправленную страницу нельзя удалить' : !empty
-      ? 'Сначала очистите последнюю страницу' : 'Удалить пустую последнюю страницу';
+      ? 'Удалить последнюю страницу — сначала очистите её' : 'Удалить пустую последнюю страницу');
   };
 
   /* ---------- DOM ---------- */
@@ -972,7 +995,7 @@
         });
       b.setAttribute('aria-pressed', String(i === self.index));
       if (p.locked) b.classList.add('canvas-page-locked');
-      if (p.fresh && i !== self.index) { b.classList.add('canvas-page-fresh'); b.title += ' — есть новые пометки'; }
+      if (p.fresh && i !== self.index) { b.classList.add('canvas-page-fresh'); setTip(b, b.dataset.tip + ' — есть новые пометки'); }
       strip.appendChild(b);
     });
     var limitHint = this.layer === 'teacher' ? 'до ' + this.limits.teacher + ' страниц учителя' : 'до ' + this.limits.student + ' страниц';
@@ -1058,37 +1081,41 @@
   };
 
   Widget.prototype.backgroundText = function (page) {
-    var desc = (BG_LABELS[page.background] || page.background).toLowerCase();
-    if (page.background === 'plane') {
-      desc += ', ' + ((page.bgOptions.cell || 25) === 50 ? 'крупная клетка' : 'мелкая клетка')
-        + ', ' + (page.bgOptions.origin === 'bottom_left' ? 'начало слева внизу' : 'начало в центре');
-    }
-    return desc;
+    var base = {blank: 'белый', grid: 'мелкая клетка', grid_large: 'крупная клетка'}[baseOf(page)] || page.background;
+    var axes = axesOf(page);
+    return base + (axes === 'none' ? '' : axes === 'bottom_left' ? ', оси с началом слева внизу' : ', оси с началом в центре');
   };
 
-  Widget.prototype.setBackground = function (page, background, options) {
-    if (background) {
-      page.background = background;
-      if (background === 'plane' && !page.bgOptions.cell) page.bgOptions = Object.assign({}, page.bgOptions, {cell: 50, origin: 'center'});
+  /* Подложка и оси меняются независимо: оси ложатся на ту подложку, что уже
+     выбрана. В базе это прежние значения — plane с клеткой 25/50 и началом,
+     а оси на белом фоне — plane с grid: false (клетка задаёт единичный отрезок). */
+  Widget.prototype.setBackground = function (page, base, axes) {
+    base = base || baseOf(page);
+    axes = axes || axesOf(page);
+    if (axes === 'none') {
+      page.background = base;
+      page.bgOptions = page.bgOptions.square ? {square: true} : {};
+    } else {
+      var options = {cell: base === 'grid' ? 25 : 50, origin: axes};
+      if (base === 'blank') options.grid = false;
+      if (page.bgOptions.square) options.square = true;
+      page.background = 'plane';
+      page.bgOptions = options;
     }
-    if (options) page.bgOptions = Object.assign({}, page.bgOptions, options);
     this.touch(page);
     this.refresh();
   };
 
   /* Блоки выбора фона, общие для обоих вариантов: [подпись, переключатели] */
   Widget.prototype.backgroundParts = function (page) {
-    var self = this, owns = this.ownsBackground(page), plane = page.background === 'plane';
-    /* На старых страницах 1000×750 клетка задаёт смещение рисунка (offsetOf) — там её не меняем */
-    var legacy = !page.bgOptions.square;
-    var parts = [['Фон', segment(BG_ITEMS, page.background, !owns, function (v) { self.setBackground(page, v); })]];
-    if (plane) {
-      parts.push(['Клетка', segment(CELL_ITEMS, page.bgOptions.cell || 25, !owns || legacy,
-        function (v) { self.setBackground(page, null, {cell: v}); })]);
-      parts.push(['Начало', segment(ORIGIN_ITEMS, page.bgOptions.origin || 'center', !owns,
-        function (v) { self.setBackground(page, null, {origin: v}); })]);
-    }
-    return parts;
+    var self = this, owns = this.ownsBackground(page);
+    /* На старых страницах 1000×750 смещение рисунка зависит от фона и клетки
+       (offsetOf) — там фон не меняем, чтобы рисунок не съехал */
+    var locked = !owns || !page.bgOptions.square;
+    return [
+      ['Фон', segment(BG_ITEMS, baseOf(page), locked, function (v) { self.setBackground(page, v, null); })],
+      ['Оси', segment(AXES_ITEMS, axesOf(page), locked, function (v) { self.setBackground(page, null, v); })],
+    ];
   };
 
   Widget.prototype.makeSnapButton = function () {
@@ -1116,11 +1143,11 @@
     menu.appendChild(el('div', 'canvas-menu-title', 'Фон страницы'));
     var tiles = el('div', 'canvas-bg-tiles'), owns = this.ownsBackground(page);
     BG_ITEMS.forEach(function (item) {
-      var b = button('canvas-bg-tile', '', item[2], function () { self.closeMenu(); if (page.background !== item[0]) self.setBackground(page, item[0]); });
+      var b = button('canvas-bg-tile', '', item[2], function () { self.closeMenu(); if (baseOf(page) !== item[0]) self.setBackground(page, item[0], null); });
       var ic = el('span', 'canvas-btn-icon'); ic.innerHTML = svgIcon(item[1]);
       b.appendChild(ic);
-      b.appendChild(el('span', null, BG_LABELS[item[0]].replace('Координатная плоскость', 'Плоскость')));
-      b.setAttribute('aria-pressed', String(page.background === item[0]));
+      b.appendChild(el('span', null, item[2].replace('Белый фон', 'Белый')));
+      b.setAttribute('aria-pressed', String(baseOf(page) === item[0]));
       b.disabled = !owns;
       tiles.appendChild(b);
     });
@@ -1181,10 +1208,10 @@
       return b;
     }
     var main = group(row1);
-    tool(main, 'pen', 'Карандаш', 'Карандаш (P)');
+    tool(main, 'pen', 'Карандаш', 'Карандаш — рисовать от руки (P)');
     tool(main, 'hl', 'Маркер', 'Маркер — полупрозрачный выделитель (Shift+P)');
-    tool(main, 'eraser', 'Ластик', 'Ластик: стирает участки карандаша и маркера; фигуры удаляются через «Выбор» (E)');
-    tool(main, 'select', 'Выбор', 'Выбор: клик или рамка выделяет, перетаскивание двигает, стрелки сдвигают на 1 (с Shift — на 10), Esc снимает выделение (V)');
+    tool(main, 'eraser', 'Ластик', 'Ластик — стирает штрихи карандаша и маркера; фигуры удаляйте через «Выбор» (E)');
+    tool(main, 'select', 'Выбор', 'Выбор — выделить кликом или рамкой и перетащить; Esc снимает выделение (V)');
 
     /* Семь фигур — в меню: на кнопке значок последней выбранной */
     var shapes = group(row1, 'canvas-menu-anchor');
@@ -1205,7 +1232,8 @@
     }
     if (this.bgUi() === 'panel') {
       var bgGroup = group(row1, 'canvas-menu-anchor');
-      var bgIcon = (BG_ITEMS.filter(function (i) { return i[0] === self.page().background; })[0] || BG_ITEMS[1])[1];
+      var bgIcon = axesOf(this.page()) !== 'none' ? 'bgPlane'
+        : (BG_ITEMS.filter(function (i) { return i[0] === baseOf(self.page()); })[0] || BG_ITEMS[1])[1];
       bgGroup.appendChild(menuButton(bgIcon, 'Фон', 'Фон страницы и привязка к сетке', function () { self.openBackgroundMenu(bgGroup); }));
     }
     group(row1).appendChild(boxedIconButton('clear', 'Очистить страницу — свой слой целиком; отменяется через Ctrl+Z', function () { self.clearPage(); }));
@@ -1318,7 +1346,6 @@
     if (this.menu && anchor.contains(this.menu)) { this.closeMenu(); return; }
     var menu = el('div', 'canvas-menu canvas-menu-list');
     menu.setAttribute('role', 'menu');
-    menu.appendChild(el('div', 'canvas-menu-title', 'Заготовка текущим цветом; ручки тянутся в режиме «Выбор»'));
     Object.keys(FN).forEach(function (kind) {
       var formula = el('span', 'canvas-menu-formula', 'y = ' + FN[kind].label);
       if (window.katex) window.katex.render('y = ' + FN_TEX[kind], formula, {throwOnError: false});
@@ -1360,17 +1387,15 @@
     this.swatches.forEach(function (b, i) {
       var c = palette.colors[i];
       b.style.setProperty('--c', c);
-      b.title = self.tool === 'eraser' ? 'У ластика нет цвета'
-        : 'Цвет: ' + (COLOR_NAMES[c] || c) + (self.selection.length ? ' — перекрасить выделенное' : '');
-      b.setAttribute('aria-label', b.title);
+      setTip(b, self.tool === 'eraser' ? 'У ластика нет цвета'
+        : 'Цвет: ' + (COLOR_NAMES[c] || c) + (self.selection.length ? ' — перекрасить выделенное' : ''));
       b.disabled = self.tool === 'eraser';
       b.setAttribute('aria-pressed', String(c === palette.current));
     });
     this.widthButtons.forEach(function (b, i) {
       var w = palette.widths[i];
-      b.title = self.tool === 'eraser' ? 'Размер ластика: ' + ERASER_NAMES[i] + ' (' + w + ')'
-        : 'Толщина: ' + SIZE_NAMES[i] + ' (' + w + ')' + (self.selection.length ? ' — применить к выделенному' : '');
-      b.setAttribute('aria-label', b.title);
+      setTip(b, self.tool === 'eraser' ? 'Размер ластика: ' + ERASER_NAMES[i]
+        : 'Толщина: ' + SIZE_NAMES[i] + (self.selection.length ? ' — применить к выделенному' : ''));
       b.setAttribute('aria-pressed', String(w === palette.width));
     });
     var hasSelection = this.tool === 'select' && this.selection.length > 0;
@@ -1379,7 +1404,7 @@
     });
     if (this.selectionCaption) {
       this.selectionCaption.classList.toggle('canvas-disabled', !hasSelection);
-      this.selectionCaption.title = hasSelection ? '' : 'Выделите фигуры инструментом «Выбор» — тогда станут доступны эти действия';
+      setTip(this.selectionCaption, hasSelection ? '' : 'Выделите фигуры инструментом «Выбор» — тогда станут доступны эти действия');
     }
     if (this.undoButton) this.undoButton.disabled = !page.undo.length;
     if (this.redoButton) this.redoButton.disabled = !page.redo.length;
@@ -1388,15 +1413,14 @@
       if (shape) this.lastShape = shape;
       this.shapesButton.setAttribute('aria-pressed', String(!!shape));
       this.shapesButton.querySelector('.canvas-btn-icon').innerHTML = svgIcon(this.lastShape || 'shapes');
-      this.shapesButton.title = shape ? 'Фигуры — сейчас: ' + SHAPE_TOOLS[shape].name.toLowerCase() : 'Фигуры: отрезок, точка, окружность, прямоугольник, квадрат, треугольник, параллелограмм';
+      setTip(this.shapesButton, shape ? 'Фигуры — сейчас: ' + SHAPE_TOOLS[shape].name.toLowerCase() : 'Фигуры: отрезок, окружность, многоугольники');
     }
     if (this.snapButton && document.body.contains(this.snapButton)) {
       var cell = !!cellOf(page);
       this.snapButton.disabled = !cell;
       this.snapButton.setAttribute('aria-pressed', String(this.snap && cell));
-      this.snapButton.title = !cell ? 'Привязка к сетке — только на фоне с клеткой'
-        : 'Привязка к сетке ' + (this.snap ? 'включена' : 'выключена') + ': концы фигур, точки и ручки заготовок притягиваются к узлам; карандаша не касается';
-      this.snapButton.setAttribute('aria-label', this.snapButton.title);
+      setTip(this.snapButton, !cell ? 'Привязка к сетке — только на фоне с клеткой'
+        : 'Привязка к сетке ' + (this.snap ? 'включена' : 'выключена') + ': концы фигур и точки притягиваются к узлам клетки');
     }
   };
 
@@ -1711,7 +1735,7 @@
   Widget.prototype.insertFn = function (kind) {
     var page = this.page();
     if (!page || !this.editableLayer(page)) return;
-    var cell = cellOf(page) || 25;
+    var cell = unitOf(page) || 25;
     var o = page.background === 'plane' ? planeOrigin(page) : [W / 2, H / 2 - offsetOf(page)];
     var element = {id: uid(), t: 'fn', k: kind, c: this.color, w: this.penWidth, p: [[o[0], o[1]], [o[0] + cell, o[1] - cell]]};
     this.addElement(element);

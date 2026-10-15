@@ -116,6 +116,19 @@ class StudentCanvasTests(CanvasBase):
             self.assertTrue(page.background_options['square'])
         self.assertEqual(self.save(version=3, background_options={'square': 'yes'}).status_code, 400)
 
+    def test_axes_on_blank_background(self):
+        # Оси на белом фоне: plane с grid: False; grid: True не хранится, у других фонов — отбрасывается
+        options = {'square': True, 'cell': 50, 'origin': 'center', 'grid': False}
+        self.assertEqual(self.save(background='plane', background_options=options).status_code, 200)
+        self.assertEqual(CanvasPage.objects.get().background_options, options)
+        self.assertEqual(self.save(version=1, background='plane',
+                                   background_options={**options, 'grid': True}).status_code, 200)
+        self.assertNotIn('grid', CanvasPage.objects.get().background_options)
+        self.assertEqual(self.save(version=2, background='blank', background_options=options).status_code, 200)
+        self.assertEqual(CanvasPage.objects.get().background_options, {'square': True})
+        self.assertEqual(self.save(version=3, background='plane',
+                                   background_options={**options, 'grid': 'no'}).status_code, 400)
+
     def test_legacy_page_can_draw_at_top_of_square_view(self):
         element = stroke()
         element['p'] = [[0, -250], [10, -240]]

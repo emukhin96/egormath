@@ -6757,6 +6757,27 @@
   .canvas-stage canvas { position: absolute; left: 0; top: 0; display: block; }
   .canvas-top { pointer-events: none; }
 
+  /* Всплывающее пояснение к кнопкам доски (data-tip, ставит canvas.js):
+     появляется под кнопкой через 0,3 с, в том числе у неактивных — чтобы
+     было видно, почему кнопка недоступна. ::before — ::after занят точкой
+     «новые пометки» на вкладке страницы. */
+  .canvas-widget [data-tip]:not(.canvas-close) { position: relative; }
+  .canvas-widget [data-tip]::before {
+    content: attr(data-tip); position: absolute; top: calc(100% + 6px); left: 50%; z-index: 40;
+    width: max-content; max-width: 15rem; padding: 4px 8px; border-radius: 6px;
+    background: #1f2937; color: #fff; font: 400 0.75rem/1.35 var(--font-sans); text-align: left; white-space: normal;
+    transform: translateX(-50%); opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity 0.12s ease 0s, visibility 0s linear 0.12s;
+  }
+  .canvas-widget [data-tip]:hover::before, .canvas-widget [data-tip]:focus-visible::before {
+    opacity: 1; visibility: visible; transition-delay: 0.3s, 0.3s;
+  }
+  /* У правого края доски подсказка выравнивается по правому краю кнопки */
+  .canvas-close[data-tip]::before, .canvas-page-actions > :last-child[data-tip]::before { left: auto; right: 0; transform: none; }
+  /* Пока открыто меню, подсказка его кнопки не нужна */
+  .canvas-menu-anchor:has(.canvas-menu) [data-tip]::before { display: none; }
+  @media (hover: none) { .canvas-widget [data-tip]::before { display: none; } }
+
   /* Узкая доска (телефон): подписи у кнопок-меню прячем, номера страниц
      прокручиваются одной полосой, ряды плотнее — поле поднимается выше */
   @container (max-width: 480px) {
