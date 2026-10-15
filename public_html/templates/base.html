@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" crossorigin="anonymous">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=32">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=33">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
@@ -33,7 +33,7 @@
   {% if user.profile.is_teacher or user.is_superuser %}
   <script>window.NEURO_SOLVE_URL = '{% url "task_neuro_solve" %}';</script>
   <script defer src="{% static 'js/neuro.js' %}"></script>
-  <script defer src="{% static 'js/task_png.js' %}?v=3"></script>
+  <script defer src="{% static 'js/task_png.js' %}?v=4"></script>
   {% endif %}
   {% block extra_head %}{% endblock %}
 </head>

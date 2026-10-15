@@ -1147,6 +1147,13 @@
     margin-left: var(--space-2);
   }
 
+  /* Номер на картинку не идёт (длинный «KI.1/1» наезжал на текст):
+     строка задачи без колонки номера */
+  .task-png-sheet .task-row,
+  .task-png-sheet .task-line {
+    display: block;
+  }
+
   .task-png-sheet ol.subitems > li::before {
     content: none;
   }

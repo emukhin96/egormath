@@ -2,7 +2,7 @@
 // чтобы вставить её на доску (Miro и т.п.). Условие — ближайший
 // [data-task-png-root], а внутри него [data-task-png-content], если он есть.
 // Копия условия рисуется на белом листе шириной не больше 600px (как строка
-// на карточке самостоятельной), без ответов, масок и кнопок.
+// на карточке самостоятельной), без номера, ответов, масок и кнопок.
 // Рендер DOM → PNG — modern-screenshot, грузится только при первом нажатии.
 (function () {
   var LIB_URL = 'https://cdn.jsdelivr.net/npm/modern-screenshot@4.6.8/dist/index.js';
@@ -10,7 +10,7 @@
   var SKIP = [
     'button', 'form', 'details', 'input', 'select', 'textarea', 'script', 'template',
     'object', '[hidden]', '.ws-answers', '.usage-badge', '[data-worksheet-mask]',
-    '.ws-stars', '[data-task-png-skip]',
+    '.ws-stars', '.ws-num', '[data-task-png-skip]',
   ].join(',');
   var LETTERS = 'абвгдежзиклмнопрстуф';
   var libPromise = null;
@@ -78,8 +78,6 @@
     holder.className = 'task-png-holder';
     var sheet = document.createElement('div');
     sheet.className = 'task-png-sheet';
-    // Есть номер — подпункты и рисунки на линии текста, как в просмотре листка
-    if (clone.querySelector('.ws-num')) sheet.classList.add('ws-view');
     sheet.appendChild(clone);
     holder.appendChild(sheet);
     document.body.appendChild(holder);
