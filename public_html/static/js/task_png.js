@@ -13,6 +13,10 @@
     '.ws-stars', '.ws-num', '[data-task-png-skip]',
   ].join(',');
   var LETTERS = 'абвгдежзиклмнопрстуф';
+  // Доска вставляет картинку в её пиксельном размере: при 2× условие
+  // выходило вдвое крупнее страницы (до 1200px). 1.25× — до 750px,
+  // текст и формулы ещё чёткие при увеличении, файл почти вдвое меньше.
+  var SCALE = 1.25;
   var libPromise = null;
 
   function loadLib() {
@@ -91,7 +95,7 @@
       return img.decode ? img.decode().catch(function () { img.remove(); }) : null;
     });
     return Promise.all([loadLib()].concat(ready)).then(function (result) {
-      return result[0].domToBlob(parts.sheet, {scale: 2, type: 'image/png', backgroundColor: '#ffffff'});
+      return result[0].domToBlob(parts.sheet, {scale: SCALE, type: 'image/png', backgroundColor: '#ffffff'});
     }).finally(function () {
       parts.holder.remove();
     });
