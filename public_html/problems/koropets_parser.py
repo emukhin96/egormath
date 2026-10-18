@@ -321,9 +321,9 @@ def parse_koropets(text: str, *, structure: dict | None = None,
     }
     tasks: list[TaskDraft] = []
     chapters = structure["chapters"]
-    literature = text.find("ЛИТЕРАТУРА")
     # Оглавление повторяет заголовки разделов: ищем после него.
     body_at = text.find("\\section*{1. МЕТОД ЗАМЕНЫ")
+    literature = text.find("ЛИТЕРАТУРА", max(body_at, 0))
     for index, chapter in enumerate(chapters):
         number = chapter["number"]
         exercises_at = _heading(number, "Примеры для самостоятельного").search(text, body_at)
