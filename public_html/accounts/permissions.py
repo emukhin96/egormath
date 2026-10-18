@@ -48,11 +48,15 @@ def can_edit_task(user, task):
 
 def visible_tasks(user):
     """Задачи, которые пользователь вправе открыть: редактор — все,
-    остальные — общие и свои (включая локальные копии)."""
+    остальные — общие, свои (включая локальные копии) и те, что стоят в
+    их листках: «Взять как листок» копирует подборку вместе с чужими
+    локальными копиями и личными задачами автора подборки."""
     from problems.models import Task
     if is_base_editor(user):
         return Task.objects.all()
-    return Task.objects.filter(Q(is_shared=True) | Q(created_by=user))
+    return Task.objects.filter(
+        Q(is_shared=True) | Q(created_by=user)
+        | Q(worksheet_items__worksheet__owner=user)).distinct()
 
 
 def catalog_tasks(user):
