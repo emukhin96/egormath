@@ -108,6 +108,13 @@ make test         # только Django-тесты
   задачи — только редакторам (`base_editor_required`, `is_base_editor` в
   шаблонах). Новые проверки `is_superuser` не добавлять — расширять
   `permissions.py`. Подробности и план: [docs/USERS_PLAN.md](docs/USERS_PLAN.md).
+- Учителя регистрируются только по приглашению (`accounts.TeacherInvite`,
+  `/accounts/join/<token>/`); выписывает и отзывает их, сбрасывает пароли и
+  отключает учителей суперпользователь на странице «Учителя»
+  (`superuser_required`, не `is_staff`). Ученик по ссылке
+  `/accounts/register/?t=<Profile.student_code>` записывается к владельцу
+  кода, без кода — к `default_teacher()`. Общие поля и валидаторы форм
+  регистрации — в `accounts.forms.RegistrationForm`.
 
 ## Git-pipeline: обновления → PR → ревью → правки
 

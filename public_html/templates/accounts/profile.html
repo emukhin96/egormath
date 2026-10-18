@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Профиль — Математика{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/profile.html' %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Профиль</h1>
+    <p class="page-meta">
+      <span>логин <span class="mono">{{ user.username }}</span></span>
+      {% if teacher_profile.invited_by %}<span>пригласил {{ teacher_profile.invited_by.get_full_name|default:teacher_profile.invited_by.username }}</span>{% endif %}
+    </p>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Имя и почта</h2>
+    <form method="post">
+      {% csrf_token %}
+      {{ profile_form.as_p }}
+      <div class="form-buttons">
+        <button type="submit" class="btn">Сохранить</button>
+      </div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Смена пароля</h2>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="change_password" value="1">
+      {% if password_form.non_field_errors %}<div class="msg msg-error">{{ password_form.non_field_errors }}</div>{% endif %}
+      {{ password_form.as_p }}
+      <div class="form-buttons">
+        <button type="submit" class="btn">Изменить пароль</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

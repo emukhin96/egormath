@@ -889,6 +889,15 @@
     white-space: nowrap;
   }
 
+  a.user-name {
+    text-decoration: none;
+  }
+
+  a.user-name:hover,
+  a.user-name:focus-visible {
+    color: var(--accent);
+  }
+
   .context-toggle {
     display: none;
     padding: 6px 10px;
@@ -1217,6 +1226,10 @@
   .sidebar-stat + .sidebar-list,
   .sidebar-copy + .sidebar-actions {
     margin-top: var(--space-3);
+  }
+
+  .sidebar-copy + .sidebar-copy {
+    margin-top: var(--space-2);
   }
 
   .sidebar-kicker {
@@ -1937,6 +1950,40 @@
     padding: 2px 8px;
     border-radius: 6px;
     border: 1px solid var(--border);
+  }
+
+  /* Ссылка или код рядом с кнопкой «Скопировать» (приглашение учителя,
+     ссылка регистрации учеников): поле ↔ кнопка — --space-2 */
+  .copy-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+
+  .copy-row code {
+    background: #fff;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+  }
+
+  .copy-row + .helptext {
+    margin-top: var(--space-2);
+  }
+
+  /* Переключатели в таблице учителей и форме приглашения — без отступа слева,
+     как в колонках редактора задачи */
+  .teacher-editor-toggle,
+  .invite-editor-toggle {
+    margin-left: 0;
+  }
+
+  .filters .invite-editor-toggle {
+    min-height: 36px;
   }
 
   .rubric-row td {

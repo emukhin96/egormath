@@ -40,6 +40,36 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Кнопки «Скопировать»: data-copy — текст для буфера обмена, результат —
+  // тост (ссылка-приглашение, ссылка регистрации учеников).
+  document.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-copy]");
+    if (!button) return;
+    const toast = window.EgorAutosave && window.EgorAutosave.showSaved;
+    const text = button.dataset.copy;
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    } catch (error) {
+      // Без Clipboard API (встроенный просмотр, http без localhost) —
+      // скрытое поле и execCommand
+      const field = document.createElement("textarea");
+      field.value = text;
+      field.setAttribute("readonly", "");
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.select();
+      try { copied = document.execCommand("copy"); } catch (e) { copied = false; }
+      field.remove();
+    }
+    if (toast) {
+      if (copied) toast(true, "Скопировано");
+      else toast(false, "Не удалось скопировать — выделите текст вручную");
+    }
+  });
+
   // Фильтры без кнопки «Применить»: select, радио и галочки с data-autosubmit
   // (или внутри формы с data-autosubmit) отправляют форму при изменении.
   // Текстовые поля отправляются по Enter (штатно). Поля даты/числа дают
