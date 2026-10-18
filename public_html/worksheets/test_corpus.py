@@ -229,7 +229,7 @@ class CorpusLoadTests(TestCase):
         в старом виде задача находится и переиспользуется, без дубля."""
         from worksheet_corpus.store import save_draft
         raw = r'$\text { Даны точки } M(1 ; 1) \text { и } N(4 ;-1) .$'
-        old = Task.objects.create(text_latex=raw, stars=0)
+        old = Task.objects.create(text_latex=raw, stars=0, is_shared=True)
         draft = _sample_draft(key='b/prose')
         draft['elements'][1]['text'] = raw
         save_draft(draft)

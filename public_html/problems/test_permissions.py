@@ -334,11 +334,15 @@ class VisibilityTests(Roles, TestCase):
         self.assertNotContains(self.client.get(reverse('task_detail', args=[self.shared.pk])), '>личная<')
 
     def test_import_deduplication_ignores_foreign_personal_tasks(self):
+        """Дубль ищется среди общих и своих задач — и у редактора тоже,
+        иначе импорт в базу допишет ответы в чужую личную задачу."""
         from worksheets.import_tex import find_existing_task
         self.assertIsNone(find_existing_task('Личная про уравнения', user=self.other_guest))
         self.assertIsNone(find_existing_task('Личная про уравнения'))
         self.assertEqual(find_existing_task('Личная про уравнения', user=self.guest), self.personal.pk)
-        self.assertEqual(find_existing_task('Личная про уравнения', user=self.editor), self.personal.pk)
+        self.assertIsNone(find_existing_task('Личная про уравнения', user=self.editor))
+        self.assertIsNone(find_existing_task('Личная про уравнения', user=self.superuser))
+        self.assertEqual(find_existing_task('Общая про уравнения', ['а)'], user=self.editor), self.shared.pk)
         self.assertEqual(find_existing_task('Общая про уравнения', ['а)'], user=self.other_guest), self.shared.pk)
 
     def test_independent_work_picker_excludes_foreign_personal(self):
@@ -483,8 +487,15 @@ class GuestLocalEditTests(Roles, TestCase):
         self.assertEqual(plain.answer_latex, '')
         new = Task.objects.get(text_latex='Новая из импорта')
         self.assertEqual((new.created_by, new.is_shared, new.answer_latex), (self.guest, False, '7'))
-        self.assertEqual([i.task_id for i in worksheet.items.all()], [plain.pk, new.pk])
+        # Правка ответа у совпавшей общей задачи не теряется: листок получает
+        # локальную копию с этим ответом
+        first = worksheet.items.order_by('order').first().task
+        self.assertEqual((first.variant_of, first.created_by, first.is_shared, first.answer_latex),
+                         (plain, self.guest, False, '42'))
+        # Без правок совпавшая общая задача ставится в листок как есть
+        again, _ = create_worksheet(parsed, self.guest, overrides={1: {'skip': True}})
+        self.assertEqual(again.items.get().task, plain)
         # Редактор при импорте дописывает ответ и в существующую общую задачу
-        create_worksheet(parsed, self.editor, overrides={0: {'answer': '42'}})
+        create_worksheet(parsed, self.editor, overrides={0: {'answer': '42'}, 1: {'skip': True}})
         plain.refresh_from_db()
         self.assertEqual(plain.answer_latex, '42')

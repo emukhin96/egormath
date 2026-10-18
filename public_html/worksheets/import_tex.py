@@ -285,13 +285,14 @@ def _task_signature(text, subitems=()):
 
 
 def _known_signatures(user=None):
-    """Сигнатуры задач каталога, видимых пользователю: {(условие, подпункты): pk}.
+    """Сигнатуры задач для дедупликации: {(условие, подпункты): pk}.
 
-    Без пользователя — только общие задачи: чужая личная задача не должна
-    всплывать как «уже есть #id».
+    Общие задачи плюс собственные пользователя (accounts.permissions.dedup_tasks);
+    чужая личная задача не должна всплывать как «уже есть #id» даже у
+    редактора базы — иначе импорт допишет в неё ответы.
     """
-    from accounts.permissions import catalog_tasks, shared_catalog
-    catalog = catalog_tasks(user) if user is not None else shared_catalog()
+    from accounts.permissions import dedup_tasks
+    catalog = dedup_tasks(user)
     subs = {}
     for task_id, sub_text in (TaskSubitem.objects
                               .filter(task__in=catalog)
@@ -380,12 +381,21 @@ def create_worksheet(parsed, owner, title='', overrides=None):
             if task_pk is not None:
                 task = Task.objects.get(pk=task_pk)
                 # Ответы/решения можно горячо править и у существующих
-                # задач (класс/тему/звёзды существующих не трогаем) — но
-                # общую задачу приглашённый учитель не меняет.
-                if not can_edit_task(owner, task):
-                    extra = {k: v for k, v in extra.items()
-                             if k not in ('answer', 'solution')}
-                    sub_answers, sub_solutions = {}, {}
+                # задач (класс/тему/звёзды существующих не трогаем).
+                subs = list(task.subitems.all())
+                changed = (
+                    ('answer' in extra and extra['answer'] != task.answer_latex)
+                    or ('solution' in extra
+                        and extra['solution'] != task.solution_latex)
+                    or any((j in sub_answers and sub_answers[j] != sub.answer_latex)
+                           or (j in sub_solutions
+                               and sub_solutions[j] != sub.solution_latex)
+                           for j, sub in enumerate(subs)))
+                if changed and not can_edit_task(owner, task):
+                    # Общую задачу приглашённый учитель не меняет: его правки
+                    # ответов уходят в локальную копию для этого листка.
+                    task = task.make_variant(owner)
+                    subs = list(task.subitems.all())
                 updates = []
                 if 'answer' in extra and extra['answer'] != task.answer_latex:
                     task.answer_latex = extra['answer']
@@ -397,7 +407,7 @@ def create_worksheet(parsed, owner, title='', overrides=None):
                 if updates:
                     task.save(update_fields=updates)
                 if sub_answers or sub_solutions:
-                    for j, sub in enumerate(task.subitems.all()):
+                    for j, sub in enumerate(subs):
                         sub_updates = []
                         if (j in sub_answers
                                 and sub_answers[j] != sub.answer_latex):
