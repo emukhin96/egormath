@@ -1,0 +1,2 @@
+{# Статус предложения бейджем: proposal — TaskProposal #}
+<span class="badge {% if proposal.status == 'new' %}badge-submitted{% elif proposal.status == 'accepted' %}badge-reviewed{% else %}badge-returned{% endif %}">{{ proposal.get_status_display }}</span>

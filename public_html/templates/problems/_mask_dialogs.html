@@ -50,13 +50,15 @@
   <p>{% if is_base_editor %}В общей базе изменения будут доступны во всех листках.{% else %}В самой задаче изменения будут видны во всех ваших листках.{% endif %} Локальная копия изменит только текущий листок.</p>
   <div class="form-buttons"><button type="button" class="btn" data-save-scope="local">Только в этом листке</button><button type="button" class="btn btn-secondary" data-save-scope="global">{% if is_base_editor %}В общей базе{% else %}В самой задаче{% endif %}</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
 </dialog>
-{# Общая задача у приглашённого учителя без контекста листка (problem_editor.js chooseScope): править можно только локальную копию в своём листке; «Предложить исправление» появится вместе с очередью предложений #}
+{# Общая задача у приглашённого учителя без контекста листка (problem_editor.js chooseScope): править можно только локальную копию в своём листке; «Предложить исправление» — страница предложения этой задачи (problems/proposals.py), id подставляет baseLocked() #}
+{% if not is_base_editor %}
 <dialog class="dialog" id="base-locked-dialog" aria-labelledby="base-locked-title">
   <h3 id="base-locked-title">Это задача общей базы</h3>
   <p>Общие задачи правятся только для своего листка: добавьте задачу в листок через корзину и измените её там — в базе появится ваша локальная копия, оригинал не изменится.</p>
   <form method="post" action="{% url 'cart_add' %}" class="form-buttons" data-locked-cart>
     {% csrf_token %}<input type="hidden" name="task_id" value=""><input type="hidden" name="next" value="{{ request.get_full_path }}">
-    <button class="btn">Добавить в листок и править там</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button>
+    <button class="btn">Добавить в листок и править там</button><a class="btn btn-secondary" data-propose-link data-url-template="{% url 'task_propose' 0 %}" href="{% url 'task_propose' 0 %}">Предложить исправление</a><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button>
   </form>
 </dialog>
+{% endif %}
 <div hidden id="answer-mask-config" data-preview-url="{% url 'task_mask_preview' %}" data-draft-url="{% url 'task_mask_draft' %}"></div>

@@ -68,7 +68,12 @@ def context(request, task):
                     ctx['iw_finish_url'] = reverse('independentworks:finish_analog', args=[position_id, task.pk])
                     break
     editable = can_edit_task(request.user, task)
+    # Кнопка предложения (proposals.proposal_options): редактору базы не
+    # нужна — он правит напрямую; остальным — по виду задачи.
+    from .proposals import proposal_options
+    propose = None if is_base_editor(request.user) else proposal_options(request.user, task)
     ctx.update(task=task, item=item, worksheet=item.worksheet if item else None,
+               propose=propose,
                # Общая задача у приглашённого: в листке правки уходят в
                # локальную копию (data-base-locked), без листка карточка
                # только для чтения (accounts/permissions.py).

@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% load page_tools task_extras %}
+{% block title %}Предложения исправлений — Математика{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/proposals.html' %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a></nav>
+    <h1>Предложения исправлений</h1>
+    <p class="page-meta"><span>{{ new_total }} {{ new_total|plural_ru:'новое,новых,новых' }}</span></p>
+  </div>
+</div>
+<div class="filters">
+  {% seg_links 'status' status_choices label='Статус' all_label=None current=status %}
+</div>
+<div class="card">
+  {% if page.object_list %}
+  <div class="catalog-table-wrap"><table class="list table-stack">
+    <thead><tr><th>Задача</th><th>Вид</th><th>Автор</th><th>Отправлено</th><th>Статус</th><th></th></tr></thead>
+    <tbody>
+    {% for proposal in page %}
+    <tr>
+      <td class="stack-primary">
+        <a href="{% url 'proposal_detail' proposal.pk %}">Задача #{{ proposal.task.pk }}</a>
+        {% if proposal.message %}<div class="muted task-meta">{{ proposal.message|truncatechars:120 }}</div>{% endif %}
+      </td>
+      <td data-label="Вид">{{ proposal.get_kind_display }}{% if proposal.variant_id %}<div class="muted task-meta">с копией #{{ proposal.variant_id }}</div>{% endif %}</td>
+      <td data-label="Автор">{{ proposal.author.get_full_name|default:proposal.author.username }}</td>
+      <td data-label="Отправлено">{{ proposal.created_at|date:'d.m.Y H:i' }}</td>
+      <td data-label="Статус">{% include 'problems/_proposal_status.html' %}</td>
+      <td class="row-actions"><a class="btn btn-small btn-secondary" href="{% url 'proposal_detail' proposal.pk %}">Открыть</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% include 'includes/pagination.html' with query=params %}
+  {% else %}
+  <p class="muted">{% if status == 'new' %}Новых предложений нет.{% else %}Предложений пока не было.{% endif %}</p>
+  {% endif %}
+</div>
+{% endblock %}

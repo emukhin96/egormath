@@ -17,7 +17,7 @@ from problems.models import Task
 from worksheets.models import Worksheet
 
 from .decorators import get_role, superuser_required, teacher_required
-from .permissions import catalog_tasks
+from .permissions import catalog_tasks, is_base_editor
 from .forms import (InviteUnavailable, StudentCreateForm, StudentEditForm,
                     StudentGroupForm, StudentRegistrationForm,
                     TeacherInviteForm, TeacherJoinForm, TeacherProfileForm,
@@ -285,14 +285,23 @@ def teacher_dashboard(request):
                 .filter(status=Assignment.STATUS_REVIEWED)
                 .select_related('worksheet', 'worksheet__owner', 'student')
                 .order_by('-reviewed_at')[:10])
-    return render(request, 'accounts/dashboard_teacher.html', {
+    context = {
         'worksheets': worksheets,
         'pending': pending,
         'reviewed': reviewed,
         'worksheets_total': Worksheet.visible_to(request.user).count(),
         'students_total': Profile.students_for(request.user).count(),
         'tasks_total': catalog_tasks(request.user).count(),
-    })
+        'proposals': None,
+    }
+    if is_base_editor(request.user):
+        # Очередь предложений исправлений — последние новые, как «Ожидают
+        # проверки»; счётчик — из контекст-процессора shell.
+        from problems.models import TaskProposal
+        context['proposals'] = (
+            TaskProposal.objects.filter(status=TaskProposal.STATUS_NEW)
+            .select_related('task', 'author')[:5])
+    return render(request, 'accounts/dashboard_teacher.html', context)
 
 
 def student_dashboard(request):

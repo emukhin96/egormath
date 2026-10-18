@@ -262,6 +262,24 @@ SUBMISSION_PHOTO_MAX_COUNT = 6          # фото на одну задачу
 # Картинка к условию задачи (TaskImage) до сжатия
 TASK_IMAGE_MAX_SIZE_MB = 15
 
+# Почта — только для уведомлений об очереди предложений исправлений
+# (problems/notifications.py). Без EMAIL_HOST письма не отправляются, сайт
+# работает как прежде; локально при DEBUG письма печатаются в консоль
+# runserver. Адреса редакторов — PROPOSAL_NOTIFY_EMAILS через запятую.
+EMAIL_HOST = read_secret('EMAIL_HOST', '')
+EMAIL_PORT = int(read_secret('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = read_secret('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = read_secret('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = read_secret('EMAIL_USE_TLS', '1').strip().lower() not in ('0', 'false', 'no', 'off')
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = read_secret('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'webmaster@localhost')
+if DEBUG and not EMAIL_HOST:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+PROPOSAL_NOTIFY_EMAILS = [
+    a.strip()
+    for a in read_secret('PROPOSAL_NOTIFY_EMAILS', '').split(',')
+    if a.strip()]
+
 # Холст (мини-доска к задаче). Выключатель на случай перегрузки:
 # CANVAS_ENABLED=0 в .secrets/ прячет панель и закрывает эндпоинты (503).
 CANVAS_ENABLED = read_secret('CANVAS_ENABLED', '1').strip().lower() not in ('0', 'false', 'no', 'off')

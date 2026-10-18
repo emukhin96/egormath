@@ -6,10 +6,11 @@
 {% include 'problems/_editor.html' %}
 {% if iw_finish_url %}<form method="post" action="{{ iw_finish_url }}" data-iw-finish class="form-buttons">{% csrf_token %}<button class="btn">Добавить сохранённый аналог в самостоятельную</button></form>{% endif %}
 {% include 'problems/_mask_dialogs.html' %}
+{% include 'problems/_propose_dialog.html' %}
 {% endblock %}
 {% block extra_js %}
 <script defer src="{% static 'js/task_form.js' %}?v=3"></script>
-<script defer src="{% static 'js/problem_editor.js' %}?v=4"></script>
+<script defer src="{% static 'js/problem_editor.js' %}?v=5"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/cart.js' %}?v=2"></script>
 {% if iw_finish_url %}<script>document.querySelector('[data-iw-finish]').addEventListener('submit', function(event) { if(document.querySelector('[data-editor-form][data-dirty], [data-editor-form][data-busy="1"]')) { event.preventDefault(); EgorAutosave.showSaved(false, 'Сначала сохраните изменения в редакторе задачи.'); } });</script>{% endif %}

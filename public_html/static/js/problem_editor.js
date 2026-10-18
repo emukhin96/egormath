@@ -37,14 +37,19 @@
     });
   }
   // Общая задача у приглашённого учителя (data-base-locked): в листке правки
-  // сразу уходят в локальную копию, без листка — только подсказка, как её
-  // получить (accounts/permissions.py). «Предложить исправление» появится
-  // вместе с очередью предложений.
+  // сразу уходят в локальную копию, без листка — подсказка, как её получить
+  // (accounts/permissions.py), и ссылка «Предложить исправление» на страницу
+  // предложения этой задачи (problems/proposals.py).
   function baseLocked(root) {
     var dialog = document.getElementById('base-locked-dialog');
     if (!dialog) return Promise.reject(new Error('Задача из общей базы: измените её для своего листка.'));
     var input = dialog.querySelector('[name=task_id]');
     if (input) input.value = root.dataset.taskId || '';
+    var propose = dialog.querySelector('[data-propose-link]');
+    if (propose && propose.dataset.urlTemplate) {
+      propose.href = propose.dataset.urlTemplate.replace('/0/', '/' + (root.dataset.taskId || '0') + '/')
+        + '?next=' + encodeURIComponent(location.pathname + location.search);
+    }
     return new Promise(function (resolve) {
       dialog.addEventListener('close', function () { resolve(null); }, {once: true});
       dialog.showModal();

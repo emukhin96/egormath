@@ -48,17 +48,20 @@
         {# Учителю пункт «Главная» не нужен: в кабинет ведёт логотип #}
         {% if not is_teacher %}<a href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} class="is-active"{% endif %}>Задания</a>{% endif %}
         {% if is_teacher %}
-          <div class="nav-group{% if 'task' in request.resolver_match.url_name or request.resolver_match.url_name == 'bulk_answers' or 'textbook_import' in request.resolver_match.url_name %} is-active{% endif %}">
-            <a href="{% url 'task_list' %}">Задачи</a>
-            {# Импорт задачников пишет в общую базу — пункт только редакторам базы (accounts/permissions.py) #}
-            {% if is_base_editor %}
+          <div class="nav-group{% if 'task' in request.resolver_match.url_name or 'proposal' in request.resolver_match.url_name or request.resolver_match.url_name == 'bulk_answers' or 'textbook_import' in request.resolver_match.url_name %} is-active{% endif %}">
+            {# Счётчик новых предложений исправлений — редактору базы (accounts.context_processors.shell) #}
+            <a href="{% url 'task_list' %}">Задачи{% if proposals_new %}<span class="badge-count nav-count" title="Новые предложения исправлений">{{ proposals_new }}</span>{% endif %}</a>
             <button type="button" class="nav-more" aria-expanded="false" aria-haspopup="true" aria-label="Разделы задач" data-nav-more>
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
             </button>
             <div class="nav-menu">
+              {# Импорт задачников и очередь предложений пишут в общую базу — пункты только редакторам базы (accounts/permissions.py) #}
+              {% if is_base_editor %}
               <a href="{% url 'textbook_import_list' %}"{% if 'textbook_import' in request.resolver_match.url_name %} class="is-active"{% endif %}>Импорт задачников</a>
+              <a href="{% url 'proposal_list' %}"{% if request.resolver_match.url_name in 'proposal_list proposal_detail' %} class="is-active"{% endif %}>Предложения{% if proposals_new %} · {{ proposals_new }}{% endif %}</a>
+              {% endif %}
+              <a href="{% url 'proposals_mine' %}"{% if request.resolver_match.url_name == 'proposals_mine' %} class="is-active"{% endif %}>Мои предложения{% if proposals_replies %} · {{ proposals_replies }}{% endif %}</a>
             </div>
-            {% endif %}
           </div>
           <a href="{% url 'collection_list' %}"{% if 'collection' in request.resolver_match.url_name %} class="is-active"{% endif %}>Подборки</a>
           <a href="{% url 'worksheet_list' %}"{% if 'worksheet' in request.resolver_match.url_name %} class="is-active"{% endif %}>Листки</a>
