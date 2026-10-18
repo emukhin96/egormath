@@ -264,36 +264,35 @@ class CounterTests(ProposalBase):
 
 
 class MinePageTests(ProposalBase):
-    def test_unread_replies_come_first_and_only_shown_are_marked_seen(self):
-        """Старый непросмотренный ответ — на первой странице раньше новых
-        записей; ответ на другой странице остаётся непросмотренным и в
-        счётчике, пока автор его не увидит."""
+    def test_unread_block_is_complete_and_pages_are_stable(self):
+        """Все непросмотренные ответы — отдельным блоком независимо от
+        страницы и даты; общий список постраничный по дате отправки, его
+        порядок от отметки просмотра не меняется."""
         older = create_proposal(self.guest, self.shared, kind='fix', message='Старое')
         TaskProposal.objects.filter(pk=older.pk).update(status=TaskProposal.STATUS_REJECTED)
         newer = create_proposal(self.guest, self.own, kind='new', message='Новое')
-        self.client.force_login(self.guest)
-        response = self.client.get(reverse('proposals_mine'))
-        self.assertEqual([p.pk for p in response.context['proposals']], [older.pk, newer.pk])
-        older.refresh_from_db()
-        self.assertIsNotNone(older.seen_by_author_at)
         TaskProposal.objects.filter(pk=newer.pk).update(status=TaskProposal.STATUS_ACCEPTED)
-        TaskProposal.objects.filter(pk=older.pk).update(seen_by_author_at=None)
+        self.client.force_login(self.guest)
         with mock.patch('problems.proposals.MINE_PAGE', 1):
             response = self.client.get(reverse('proposals_mine'))
+        # Старый ответ не влез на страницу списка, но виден в блоке новых ответов
+        self.assertEqual({p.pk for p in response.context['unread']}, {older.pk, newer.pk})
         self.assertEqual([p.pk for p in response.context['proposals']], [newer.pk])
         self.assertTrue(response.context['page'].has_next())
+        self.assertContains(response, 'Новые ответы')
+        self.assertEqual(response.content.decode().count('proposal-unread'), 3)
         older.refresh_from_db()
         newer.refresh_from_db()
-        self.assertIsNone(older.seen_by_author_at)
-        self.assertIsNotNone(newer.seen_by_author_at)
-        self.assertEqual(self.client.get(reverse('dashboard')).context['proposals_replies'], 1)
-        # Следующий визит: непросмотренный ответ поднялся на первую страницу
-        with mock.patch('problems.proposals.MINE_PAGE', 1):
-            response = self.client.get(reverse('proposals_mine'))
-        self.assertEqual([p.pk for p in response.context['proposals']], [older.pk])
-        older.refresh_from_db()
         self.assertIsNotNone(older.seen_by_author_at)
+        self.assertIsNotNone(newer.seen_by_author_at)
         self.assertEqual(self.client.get(reverse('dashboard')).context['proposals_replies'], 0)
+        # Страница 2 — тот же порядок по дате, блока новых ответов больше нет
+        with mock.patch('problems.proposals.MINE_PAGE', 1):
+            response = self.client.get(reverse('proposals_mine') + '?page=2')
+        self.assertEqual([p.pk for p in response.context['proposals']], [older.pk])
+        self.assertEqual(response.context['unread'], [])
+        self.assertNotContains(response, 'Новые ответы')
+        self.assertNotContains(response, 'proposal-unread')
         # Решивший редактор удалён (SET_NULL) — страницы не падают
         response = self.client.get(reverse('proposals_mine'))
         self.assertContains(response, 'редактор базы')
