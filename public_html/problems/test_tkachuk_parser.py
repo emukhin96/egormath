@@ -183,7 +183,7 @@ class TkachukBookTests(SimpleTestCase):
         by_id = {task.external_id: task for task in tasks}
         self.assertNotIn("1970.ХФ.2", by_id)
         self.assertEqual(by_id["1970.ХФ.3"].author_answer_latex, r"\(7\)")
-        self.assertIn("1970.ХФ: нет задач [2]", diagnostics["numbering"])
+        self.assertIn("1970.ХФ: нет задач [2]", diagnostics["structure_problems"])
 
     def test_repairs_bound_to_sha_and_composition(self):
         import hashlib
