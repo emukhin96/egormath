@@ -26,7 +26,7 @@
       <td data-label="Вид">{{ proposal.get_kind_display }}</td>
       <td data-label="Отправлено">{{ proposal.created_at|date:'d.m.Y H:i' }}</td>
       <td data-label="Статус">{% include 'problems/_proposal_status.html' %}{% if proposal.unread %} <span class="badge-count" title="Новый ответ">1</span>{% endif %}</td>
-      <td data-label="Ответ редактора">{% if proposal.is_open %}<span class="muted">ждёт ответа</span>{% else %}{{ proposal.resolution_note|default:'—'|linebreaksbr }}<div class="muted task-meta">{{ proposal.resolved_by.get_full_name|default:proposal.resolved_by.username }} · {{ proposal.resolved_at|date:'d.m.Y' }}</div>{% endif %}</td>
+      <td data-label="Ответ редактора">{% if proposal.is_open %}<span class="muted">ждёт ответа</span>{% else %}{{ proposal.resolution_note|default:'—'|linebreaksbr }}<div class="muted task-meta">{{ proposal.resolved_by_name }} · {{ proposal.resolved_at|date:'d.m.Y' }}</div>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>

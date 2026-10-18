@@ -75,7 +75,7 @@
     <tr>
       <td class="stack-primary">Задача #{{ p.task.pk }}{% if p.message %}<div class="muted task-meta">{{ p.message|truncatechars:80 }}</div>{% endif %}</td>
       <td data-label="Вид">{{ p.get_kind_display }}</td>
-      <td data-label="Автор">{{ p.author.get_full_name|default:p.author.username }}</td>
+      <td data-label="Автор">{{ p.author_name }}</td>
       <td data-label="Отправлено">{{ p.created_at|date:'d.m.Y H:i' }}</td>
       <td class="row-actions"><a class="btn btn-small" href="{% url 'proposal_detail' p.pk %}">Открыть</a></td>
     </tr>

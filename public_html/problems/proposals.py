@@ -54,6 +54,9 @@ SECTION_FIELDS = {
 }
 SECTION_LABELS = dict(SECTIONS)
 MASK_PREFILL = 'Предлагаю маску ответа:\n'
+# «Мои предложения»: сколько последних показывать; просмотренными
+# отмечаются только показанные.
+MINE_LIMIT = 200
 
 
 class ProposalError(Exception):
@@ -338,12 +341,15 @@ def proposals_mine(request):
     ответы подсвечены и после показа считаются просмотренными."""
     proposals = list(
         TaskProposal.objects.filter(author=request.user)
-        .select_related('task', 'variant', 'resolved_by')[:200])
+        .select_related('task', 'variant', 'resolved_by')[:MINE_LIMIT])
     unread = [p.pk for p in proposals if not p.is_open and p.seen_by_author_at is None]
     for proposal in proposals:
         proposal.unread = proposal.pk in unread
-    TaskProposal.objects.filter(author=request.user, seen_by_author_at__isnull=True).exclude(
-        status=TaskProposal.STATUS_NEW).update(seen_by_author_at=timezone.now())
+    # Только то, что автор сейчас увидел: ответ за пределами списка остаётся
+    # непросмотренным и в счётчике.
+    if unread:
+        TaskProposal.objects.filter(pk__in=unread, author=request.user).update(
+            seen_by_author_at=timezone.now())
     return render(request, 'problems/proposals_mine.html', {
         'proposals': proposals, 'unread_total': len(unread),
     })
