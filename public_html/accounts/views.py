@@ -200,6 +200,11 @@ def _managed_teacher(request, user_id):
 @require_POST
 def teacher_reset_password(request, user_id):
     teacher = _managed_teacher(request, user_id)
+    if teacher.pk == request.user.pk:
+        # set_password без update_session_auth_hash разлогинил бы
+        # администратора, а новый пароль он бы уже не увидел
+        messages.error(request, 'Свой пароль меняйте на странице «Профиль».')
+        return redirect('teachers')
     password = generate_password()
     teacher.set_password(password)
     teacher.save(update_fields=['password'])

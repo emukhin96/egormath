@@ -71,8 +71,11 @@
       </td>
       <td data-label="Доступ">{% if teacher.is_active %}активен{% else %}<span class="badge badge-returned">отключён</span>{% endif %}</td>
       <td class="row-actions">
+        {# Себе пароль не сбрасывают (разлогинит, пароль потеряется) и себя не отключают — свой пароль меняется в профиле #}
+        {% if teacher.pk == request.user.pk %}
+        <a class="btn btn-small btn-secondary" href="{% url 'profile' %}">Профиль</a>
+        {% else %}
         <button type="button" class="btn btn-small btn-secondary" data-dialog-open="reset-password-{{ teacher.pk }}">Сбросить пароль</button>
-        {% if teacher.pk != request.user.pk %}
         <form method="post" action="{% url 'teacher_toggle_active' teacher.pk %}" class="inline-form"{% if teacher.is_active %} onsubmit="return confirm('Отключить учителя {{ teacher.get_full_name|default:teacher.username|escapejs }}? Он не сможет войти, его ученики и листки останутся.');"{% endif %}>
           {% csrf_token %}
           <button type="submit" class="btn btn-small btn-secondary">{% if teacher.is_active %}Отключить{% else %}Включить{% endif %}</button>
@@ -83,7 +86,7 @@
     {% endfor %}
     </tbody>
   </table></div>
-  {% for teacher in teacher_list %}
+  {% for teacher in teacher_list %}{% if teacher.pk != request.user.pk %}
   <dialog class="dialog problem-dialog" id="reset-password-{{ teacher.pk }}" aria-labelledby="reset-password-title-{{ teacher.pk }}">
     <div class="dialog-heading">
       <h3 id="reset-password-title-{{ teacher.pk }}">Сбросить пароль учителя?</h3>
@@ -99,7 +102,7 @@
       </div>
     </form>
   </dialog>
-  {% endfor %}
+  {% endif %}{% endfor %}
 </div>
 
 <div class="card">
