@@ -136,7 +136,7 @@
 <input type="hidden" name="answer_policy_submitted" value="1">
 {% include 'problems/_answer_policy.html' with field=form.full_answer_only %}
 {% include 'problems/_task_answer_fields.html' with fields=form %}
-<div class="form-buttons"><button type="button" class="btn btn-secondary" data-neuro="task-form-answer">Дописать AI-ответ</button><button type="button" class="btn btn-secondary" data-neuro="task-form">Добавить AI-решение</button></div>
+<div class="form-buttons">{% include 'includes/ai_button.html' with neuro='task-form-answer' label='Дописать AI-ответ' %}{% include 'includes/ai_button.html' with neuro='task-form' label='Добавить AI-решение' %}</div>
     <div class="card mask-preview" id="mask-preview" hidden
          data-preview-url="{% url 'task_mask_preview' %}"
          data-draft-url="{% url 'task_mask_draft' %}">

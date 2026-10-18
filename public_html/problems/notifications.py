@@ -48,7 +48,7 @@ def notify_new_proposal(proposal, url=None):
     страницу предложения (view знает хост запроса, модуль — нет)."""
     task_id = proposal.task_id
     if proposal.kind == proposal.KIND_NEW:
-        subject = f'Задача #{task_id}: предложена в общую базу'
+        subject = f'Задача #{task_id}: предложена в общие задачи'
     else:
         subject = f'Задача #{task_id}: предложено исправление'
     lines = [

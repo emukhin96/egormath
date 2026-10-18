@@ -1,4 +1,6 @@
 {# Кнопки авторской подборки для владельца: видимость, возврат в «Мои листки», возврат черновика в корпус. Контекст: collection, next_url, corpus_key #}
+{# Публикация «всем учителям» — только редактору базы (решение 3 плана пользователей, collection_publish под base_editor_required) #}
+{% if is_base_editor %}
 <form method="post" action="{% url 'collection_publish' collection.pk %}" class="inline-form authored-publish">
   {% csrf_token %}
   <input type="hidden" name="next" value="{{ next_url }}">
@@ -6,6 +8,9 @@
   <span class="muted">{% if collection.is_published %}Видна всем учителям{% else %}Видна только вам{% endif %}</span>
   <button type="submit" class="link-btn">{% if collection.is_published %}скрыть от других{% else %}открыть всем учителям{% endif %}</button>
 </form>
+{% else %}
+<span class="muted">{% if collection.is_published %}Видна всем учителям{% else %}Подборка видна только вам; сделать её общей может редактор{% endif %}</span>
+{% endif %}
 <form method="post" action="{% url 'collection_to_worksheets' collection.pk %}" class="inline-form"
       onsubmit="return confirm('Вернуть «{{ collection.worksheet.title|escapejs }}» в мои листки? Из подборок он исчезнет.');">
   {% csrf_token %}

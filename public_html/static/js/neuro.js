@@ -332,6 +332,8 @@
   function onClick(ev) {
     var el = ev.target.closest('[data-neuro]');
     if (!el) return;
+    // Приглушённая кнопка у не-редактора (решение 5): не трогаем
+    if (el.disabled) return;
     ev.preventDefault();
     var kind = el.dataset.neuro;
     if (kind === 'task-detail' || kind === 'task-detail-answer') {

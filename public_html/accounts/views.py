@@ -10,6 +10,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods, require_POST
 
 from assignments.models import Assignment
@@ -17,7 +18,7 @@ from problems.models import Task
 from worksheets.models import Worksheet
 
 from .decorators import get_role, superuser_required, teacher_required
-from .permissions import catalog_tasks, is_base_editor
+from .permissions import base_editor_required, catalog_tasks, is_base_editor
 from .forms import (InviteUnavailable, StudentCreateForm, StudentEditForm,
                     StudentGroupForm, StudentRegistrationForm,
                     TeacherInviteForm, TeacherJoinForm, TeacherProfileForm,
@@ -247,8 +248,8 @@ def teacher_toggle_base_editor(request, user_id):
     profile.save(update_fields=['base_editor'])
     name = teacher.get_full_name() or teacher.username
     messages.success(request, (
-        f'{name} теперь правит общую базу.' if profile.base_editor
-        else f'{name} больше не правит общую базу.'))
+        f'{name} теперь правит общие задачи.' if profile.base_editor
+        else f'{name} больше не правит общие задачи.'))
     return redirect('teachers')
 
 
@@ -259,6 +260,22 @@ def invite_revoke(request, invite_id):
     invite.delete()
     messages.success(request, 'Приглашение отозвано.')
     return redirect('teachers')
+
+
+@base_editor_required
+@require_POST
+def task_list_prefs(request):
+    """Тумблер каталога «Показывать задачи других учителей» (решение 1 плана
+    пользователей): хранится в профиле редактора, после сохранения — назад
+    на тот же URL каталога с его фильтрами. Явное значение, не инверсия:
+    повторная отправка формы ничего не переключит обратно."""
+    profile = Profile.for_teacher(request.user)
+    profile.show_foreign_tasks = request.POST.get('show_foreign_tasks') == '1'
+    profile.save(update_fields=['show_foreign_tasks'])
+    next_url = request.POST.get('next', '')
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = reverse('task_list')
+    return redirect(next_url)
 
 
 @login_required

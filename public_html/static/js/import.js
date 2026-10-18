@@ -103,7 +103,8 @@
       });
     }
 
-    document.querySelectorAll('.neuro-btn').forEach(function (btn) {
+    // Приглушённые кнопки не-редактора (disabled в шаблоне) не слушаем
+    document.querySelectorAll('.neuro-btn:not([disabled])').forEach(function (btn) {
       btn.addEventListener('click', function () {
         btn.disabled = true;
         btn.textContent = 'Генерация…';
@@ -119,7 +120,7 @@
     });
 
     var bulkSolve = document.getElementById('bulk-solve');
-    if (bulkSolve) {
+    if (bulkSolve && !bulkSolve.disabled) {
       bulkSolve.addEventListener('click', function () {
         var queue = selected().map(function (box) {
           return box.dataset.index;

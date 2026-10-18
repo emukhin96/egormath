@@ -12,7 +12,7 @@
   {# Общая задача у приглашённого учителя: в базу не пишем, только локальная копия для листка #}
   {% if can_save_local %}<button type="submit" name="save_local" class="btn"
           title="Задача в базе не изменится; в листке появится её локальная копия">
-    Сохранить только для этого листка</button>{% else %}<span class="helptext">Задача из общей базы: изменить её можно только для своего листка.</span>{% endif %}
+    Сохранить только для этого листка</button>{% else %}<span class="helptext">Общая задача: изменить её можно только для своего листка.</span>{% endif %}
   {% elif can_save_local %}
   <button type="submit" name="save" class="btn">Сохранить в базе</button>
   <button type="submit" name="save_local" class="btn btn-secondary"

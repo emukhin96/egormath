@@ -1001,7 +1001,7 @@ class TaskProposal(models.Model):
     KIND_NEW = 'new'
     KIND_CHOICES = [
         (KIND_FIX, 'Исправить общую задачу'),
-        (KIND_NEW, 'Принять задачу в общую базу'),
+        (KIND_NEW, 'Принять в общие задачи'),
     ]
     STATUS_NEW = 'new'
     STATUS_ACCEPTED = 'accepted'
