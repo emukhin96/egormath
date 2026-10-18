@@ -160,6 +160,26 @@ class CreateTests(ProposalBase):
         self.assertContains(page, 'Предложение отправлено')
         self.assertNotContains(page, 'id="propose-dialog"')
 
+    def test_dialog_rerenders_with_card_after_local_copy(self):
+        """Карточка общей задачи из листка: после сохранения в локальную копию
+        новая разметка несёт и кнопку «Предложить эту версию», и диалог с
+        подставленной копией — старый диалог без поля variant не остаётся."""
+        self.client.force_login(self.guest)
+        context = f'?worksheet={self.sheet.pk}&item={self.item.pk}'
+        page = self.client.get(reverse('task_detail', args=[self.shared.pk]) + context)
+        self.assertContains(page, 'id="propose-dialog"')
+        self.assertNotContains(page, 'name="variant"')
+        response = self.client.post(reverse('task_manage', args=[self.shared.pk]) + context,
+                                    {'block': 'condition', 'text_latex': 'Моя версия', 'scope': 'local'})
+        self.assertEqual(response.status_code, 200, response.content)
+        copy = Task.objects.get(variant_of=self.shared)
+        html = response.json()['html']
+        self.assertIn('Предложить эту версию в базу', html)
+        self.assertIn('id="propose-dialog"', html)
+        self.assertIn(f'name="variant" value="{copy.pk}"', html)
+        self.assertIn(f'action="{reverse("task_propose", args=[self.shared.pk])}"', html)
+        self.assertEqual(html.count('id="propose-dialog"'), 1)
+
     def test_propose_page_prefills_mask_text(self):
         self.client.force_login(self.guest)
         response = self.client.get(reverse('task_propose', args=[self.shared.pk]) + '?mask=1&next=/problems/')

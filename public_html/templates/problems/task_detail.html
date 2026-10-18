@@ -6,7 +6,6 @@
 {% include 'problems/_editor.html' %}
 {% if iw_finish_url %}<form method="post" action="{{ iw_finish_url }}" data-iw-finish class="form-buttons">{% csrf_token %}<button class="btn">Добавить сохранённый аналог в самостоятельную</button></form>{% endif %}
 {% include 'problems/_mask_dialogs.html' %}
-{% include 'problems/_propose_dialog.html' %}
 {% endblock %}
 {% block extra_js %}
 <script defer src="{% static 'js/task_form.js' %}?v=3"></script>
