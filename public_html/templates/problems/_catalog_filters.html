@@ -2,7 +2,6 @@
 {% if toolbar %}
 <form method="get" class="page-toolbar task-finder" id="task-filters" data-finder{% if finder_anchor %} data-finder-anchor="{{ finder_anchor }}"{% endif %}>
   {% if params.source %}<input type="hidden" name="source" value="{{ params.source }}">{% endif %}
-  {% if params.mine %}<input type="hidden" name="mine" value="1">{% endif %}
   <div class="finder-search filter-search">
     <input type="search" name="q" id="f_q" value="{{ params.q|default:'' }}" placeholder="Поиск: слова или #id" aria-label="Поиск задач" autocomplete="off">
   </div>
@@ -14,8 +13,8 @@
     {% endfor %}
   </div>
   {% include 'includes/taxonomy_picker.html' with mode='filter' primary=False facets=False grades=False compact=True chip_full=True selected_json=selected_json placeholder='+ тема' %}
-  {# «Мои задачи» — свои задачи, не принятые в общие (?mine=1); чип есть, только если такие задачи есть или фильтр уже включён #}
-  {% if has_own_tasks %}{% if params.mine %}<a class="filter-chip" href="{% querystring mine=None page=None %}" title="Снять фильтр «Мои задачи»"><span>Мои задачи</span><span class="filter-chip-remove" aria-hidden="true">×</span></a>{% else %}<a class="filter-chip-add" href="{% querystring mine=1 page=None %}" title="Только мои задачи, не принятые в общие">Мои задачи</a>{% endif %}{% endif %}
+  {# «Мои задачи» — свои задачи, не принятые в общие (?mine=1): галочка той же GET-формы, живой поиск и data-autosubmit учитывают её вместе с q, классом и темой; отмеченная выглядит как выбранный чип с × (CSS :has). Чип есть, только если такие задачи есть или фильтр уже включён #}
+  {% if has_own_tasks %}<label class="filter-chip-toggle" title="Только мои задачи, не принятые в общие"><input type="checkbox" name="mine" value="1" data-autosubmit{% if params.mine %} checked{% endif %}><span>Мои задачи</span><span class="filter-chip-remove" aria-hidden="true">×</span></label>{% endif %}
   <span class="finder-status muted" data-finder-status aria-live="polite" hidden>Ищу…</span>
   <a class="filter-reset" href="{{ request.path }}{% if finder_anchor %}#{{ finder_anchor }}{% endif %}" data-finder-reset>Сбросить</a>
   {% if audience_students or audience_groups %}

@@ -161,13 +161,12 @@ class MineFilterAndBadgeTests(Roles, TestCase):
         self.client.force_login(self.guest)
         response = self.client.get(reverse('task_list'))
         self.assertEqual(set(response.context['page']), {self.shared, self.mine})
-        self.assertContains(response, 'class="filter-chip-add" href="?mine=1"')
+        # Чип — галочка формы фильтров: живой поиск берёт её из FormData вместе с q и классом
+        self.assertContains(response, '<input type="checkbox" name="mine" value="1" data-autosubmit>')
         self.assertContains(response, 'Мои задачи')
         response = self.client.get(reverse('task_list'), {'mine': '1', 'q': 'гостевая'})
         self.assertEqual(list(response.context['page']), [self.mine])
-        # Активный чип снимается ссылкой без mine; живой поиск сохраняет фильтр скрытым полем
-        self.assertContains(response, '<input type="hidden" name="mine" value="1">')
-        self.assertContains(response, 'class="filter-chip" href="?q=%D0%B3%D0%BE%D1%81%D1%82%D0%B5%D0%B2%D0%B0%D1%8F"')
+        self.assertContains(response, 'name="mine" value="1" data-autosubmit checked>')
         # Задача, принятая в общие, из «Моих» уходит
         self.mine.is_shared = True
         self.mine.save(update_fields=['is_shared'])
