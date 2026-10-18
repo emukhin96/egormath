@@ -167,6 +167,17 @@ def display_stem(text: str) -> str:
     return f"{match.group('lead').rstrip()} \\[{body}\\]"
 
 
+_LABEL_COLUMN_RE = re.compile(
+    r"\s*\\q?quad\s*\\begin\{array\}\{l\}\s*\(\d\)(?:\s*\\\\\s*\(\d\))*\s*\\end\{array\}")
+_LABEL_RE = re.compile(r"\s*\\q?quad\s*\(\d\)|(?<=\\\))\s*\(\d\)\s*$")
+
+
+def strip_labels(text: str) -> str:
+    """Номера неравенств книги «(1)», «(2)» в условии не нужны: разбор
+    ссылается на них словами «неравенство (1)», условие — без меток."""
+    return _LABEL_RE.sub("", _LABEL_COLUMN_RE.sub("", text)).rstrip()
+
+
 _DISPLAY_RE = re.compile(r"\\\[(?P<body>.*?)\\\]", re.S)
 _TOKEN_RE = re.compile(
     r"\\(?:left|right)(?![a-zA-Z])|\\(?:begin|end)\{[^{}]*\}|\\Leftrightarrow(?![a-zA-Z])|(?<!\\)[{}]")
@@ -360,7 +371,7 @@ def parse_koropets(text: str, *, structure: dict | None = None,
         if task.external_id in overrides:
             _apply_override(task, overrides[task.external_id])
             diagnostics["overrides_applied"].append(task.external_id)
-        task.text_latex = display_stem(task.text_latex)
+        task.text_latex = display_stem(strip_labels(task.text_latex))
         task.author_solution_latex = break_chains(task.author_solution_latex)
         task.topic_code = structure.get("topics", {}).get(task.external_id, chapter["topic"])
         task.topic_original = chapter["title"]

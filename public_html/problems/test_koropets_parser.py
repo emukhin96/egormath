@@ -7,7 +7,8 @@ from pathlib import Path
 
 from django.test import SimpleTestCase
 
-from .koropets_parser import break_chains, display_stem, parse_koropets, split_example
+from .koropets_parser import (
+    break_chains, display_stem, parse_koropets, split_example, strip_labels)
 
 
 STRUCTURE = {
@@ -159,6 +160,16 @@ class KoropetsParserTests(SimpleTestCase):
         self.assertEqual(diagnostics["overrides_applied"], ["П2.1"])
         # Другой скан: правки не применяются.
         self.assertIn(r"\mid", {t.external_id: t for t in other}["2.2"].text_latex)
+
+    def test_condition_labels_removed(self):
+        self.assertEqual(
+            strip_labels(r"Решите систему неравенств \[\left\{\begin{array}{l} a<0, \\ b \geq 0 \end{array}\right. "
+                         r"\quad \begin{array}{l} (1) \\ (2) \end{array}\]"),
+            r"Решите систему неравенств \[\left\{\begin{array}{l} a<0, \\ b \geq 0 \end{array}\right.\]")
+        self.assertEqual(
+            strip_labels(r"Решите \[\left\{\begin{array}{l} a \geq 0, \quad (1) \\ b. \quad (2)\end{array}\right.\]"),
+            r"Решите \[\left\{\begin{array}{l} a \geq 0, \\ b.\end{array}\right.\]")
+        self.assertEqual(strip_labels(r"Решите неравенство \(x>1\) (1)"), r"Решите неравенство \(x>1\)")
 
     def test_display_stem_keeps_label(self):
         self.assertEqual(
