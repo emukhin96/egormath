@@ -2,7 +2,9 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import login as auth_login
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Prefetch, Q
@@ -14,11 +16,13 @@ from assignments.models import Assignment
 from problems.models import Task
 from worksheets.models import Worksheet
 
-from .decorators import get_role, teacher_required
+from .decorators import get_role, superuser_required, teacher_required
 from .permissions import catalog_tasks
-from .forms import (StudentCreateForm, StudentEditForm, StudentGroupForm,
-                    StudentRegistrationForm, generate_password)
-from .models import Profile, StudentGroup
+from .forms import (InviteUnavailable, StudentCreateForm, StudentEditForm,
+                    StudentGroupForm, StudentRegistrationForm,
+                    TeacherInviteForm, TeacherJoinForm, TeacherProfileForm,
+                    generate_password)
+from .models import Profile, StudentGroup, TeacherInvite
 
 
 def index(request):
@@ -29,22 +33,227 @@ def index(request):
 
 @require_http_methods(['GET', 'POST'])
 def register(request):
-    """Самостоятельная регистрация ученика с немедленным входом."""
+    """Самостоятельная регистрация ученика с немедленным входом.
+
+    ``?t=<код>`` из персональной ссылки учителя записывает ученика к нему;
+    код едет дальше скрытым полем формы. Без кода — к ``default_teacher()``.
+    """
     if request.user.is_authenticated:
         return redirect('dashboard')
-    form = StudentRegistrationForm(
-        request.POST if request.method == 'POST' else None)
+    link_invalid = False
+    if request.method == 'POST':
+        form = StudentRegistrationForm(request.POST)
+        if form.is_valid():
+            try:
+                user = form.save()
+            except IntegrityError:
+                # Защита от одновременной регистрации одинакового логина.
+                form.add_error('username', 'Этот логин уже занят.')
+            else:
+                auth_login(request, user)
+                messages.success(request, 'Аккаунт создан. Добро пожаловать!')
+                return redirect('dashboard')
+        # Неверный код — ошибка формы (non_field_errors), шаблон её покажет
+        link_teacher = form.teacher
+    else:
+        # Код остаётся в скрытом поле и при неверной ссылке: отправка формы
+        # повторит ту же ошибку, а не запишет ученика к другому учителю
+        code = request.GET.get('t', '').strip()
+        form = StudentRegistrationForm(initial={'teacher_code': code})
+        link_teacher = Profile.teacher_by_student_code(code)
+        link_invalid = bool(code) and link_teacher is None
+    return render(request, 'accounts/register.html', {
+        'form': form,
+        'link_teacher': link_teacher,
+        'link_invalid': link_invalid,
+    })
+
+
+@require_http_methods(['GET', 'POST'])
+def teacher_join(request, token):
+    """Регистрация учителя по приглашению.
+
+    Неизвестный (отозванный), просроченный или погашенный токен — страница
+    с объяснением без формы, не 404: ссылку открывает человек, которому
+    её прислали, и ему нужно понять, что делать дальше.
+    """
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+    invite = (TeacherInvite.objects.filter(token=token)
+              .select_related('created_by').first())
+    reason = invite_unavailable_reason(invite)
+    if reason:
+        return render(request, 'accounts/join_unavailable.html',
+                      {'reason': reason}, status=200)
+    form = TeacherJoinForm(
+        request.POST if request.method == 'POST' else None, invite=invite)
     if request.method == 'POST' and form.is_valid():
         try:
             user = form.save()
+        except InviteUnavailable:
+            # Двойная отправка одной ссылки: приглашение уже погашено
+            invite.refresh_from_db()
+            return render(request, 'accounts/join_unavailable.html',
+                          {'reason': invite_unavailable_reason(invite)})
         except IntegrityError:
-            # Защита от одновременной регистрации одинакового логина.
             form.add_error('username', 'Этот логин уже занят.')
         else:
             auth_login(request, user)
             messages.success(request, 'Аккаунт создан. Добро пожаловать!')
             return redirect('dashboard')
-    return render(request, 'accounts/register.html', {'form': form})
+    return render(request, 'accounts/join.html', {
+        'form': form,
+        'invite': invite,
+    })
+
+
+def invite_unavailable_reason(invite):
+    """Почему по ссылке нельзя зарегистрироваться: ключ для шаблона
+    ``join_unavailable.html`` или ``None``, если приглашение действует."""
+    if invite is None:
+        return 'unknown'
+    if invite.is_used:
+        return 'used'
+    if invite.is_expired:
+        return 'expired'
+    return None
+
+
+@teacher_required
+@require_http_methods(['GET', 'POST'])
+def profile(request):
+    """Мини-профиль учителя: имя, фамилия, почта и смена пароля."""
+    user = request.user
+    profile_form = TeacherProfileForm(user=user)
+    password_form = PasswordChangeForm(user)
+    if request.method == 'POST' and 'change_password' in request.POST:
+        password_form = PasswordChangeForm(user, request.POST)
+        if password_form.is_valid():
+            password_form.save()
+            # Иначе смена пароля разлогинит текущую сессию
+            update_session_auth_hash(request, password_form.user)
+            messages.success(request, 'Пароль изменён.')
+            return redirect('profile')
+    elif request.method == 'POST':
+        profile_form = TeacherProfileForm(request.POST, user=user)
+        if profile_form.is_valid():
+            profile_form.save()
+            messages.success(request, 'Профиль сохранён.')
+            return redirect('profile')
+    return render(request, 'accounts/profile.html', {
+        'profile_form': profile_form,
+        'password_form': password_form,
+        'teacher_profile': Profile.for_teacher(user),
+    })
+
+
+def teacher_users():
+    """Все учителя сайта вместе с суперпользователями без профиля."""
+    return (User.objects.filter(
+        Q(profile__role=Profile.ROLE_TEACHER) | Q(is_superuser=True))
+        .distinct())
+
+
+@superuser_required
+@require_http_methods(['GET', 'POST'])
+def teachers(request):
+    """Учителя сайта и приглашения — только суперпользователю."""
+    new_credentials = request.session.pop('new_teacher_credentials', None)
+    new_invite = request.session.pop('new_invite', None)
+    invite_form = TeacherInviteForm()
+    if request.method == 'POST':
+        invite_form = TeacherInviteForm(request.POST)
+        if invite_form.is_valid():
+            invite = invite_form.save(created_by=request.user)
+            # Ссылка показывается один раз — после редиректа, как пароль
+            request.session['new_invite'] = {
+                'note': invite.note,
+                'url': request.build_absolute_uri(
+                    reverse('teacher_join', args=[invite.token])),
+            }
+            messages.success(request, 'Приглашение создано.')
+            return redirect('teachers')
+    teacher_list = (teacher_users().select_related('profile')
+                    .annotate(
+                        students_count=Count(
+                            'students', distinct=True,
+                            filter=Q(students__role=Profile.ROLE_STUDENT)),
+                        worksheets_count=Count('worksheets', distinct=True))
+                    .order_by('-is_superuser', 'last_name', 'first_name',
+                              'username'))
+    return render(request, 'accounts/teachers.html', {
+        'teacher_list': teacher_list,
+        'invites': TeacherInvite.pending().select_related('created_by'),
+        'invite_form': invite_form,
+        'new_credentials': new_credentials,
+        'new_invite': new_invite,
+    })
+
+
+def _managed_teacher(request, user_id):
+    """Учитель (или суперпользователь), которым распоряжается администратор."""
+    return get_object_or_404(teacher_users().select_related('profile'),
+                             pk=user_id)
+
+
+@superuser_required
+@require_POST
+def teacher_reset_password(request, user_id):
+    teacher = _managed_teacher(request, user_id)
+    password = generate_password()
+    teacher.set_password(password)
+    teacher.save(update_fields=['password'])
+    request.session['new_teacher_credentials'] = {
+        'name': teacher.get_full_name() or teacher.username,
+        'username': teacher.username,
+        'password': password,
+    }
+    messages.success(
+        request, f'Пароль учителя {teacher.get_full_name() or teacher.username} сброшен.')
+    return redirect('teachers')
+
+
+@superuser_required
+@require_POST
+def teacher_toggle_active(request, user_id):
+    teacher = _managed_teacher(request, user_id)
+    if teacher.pk == request.user.pk:
+        messages.error(request, 'Нельзя отключить самого себя.')
+        return redirect('teachers')
+    teacher.is_active = not teacher.is_active
+    teacher.save(update_fields=['is_active'])
+    name = teacher.get_full_name() or teacher.username
+    messages.success(
+        request, f'Учитель {name} {"включён" if teacher.is_active else "отключён"}.')
+    return redirect('teachers')
+
+
+@superuser_required
+@require_POST
+def teacher_toggle_base_editor(request, user_id):
+    teacher = _managed_teacher(request, user_id)
+    if teacher.is_superuser:
+        messages.error(request, 'У администратора право править базу есть всегда.')
+        return redirect('teachers')
+    # Явное значение, а не переключение: повторная отправка той же формы
+    # (двойной клик, обновление страницы) не вернёт право обратно
+    profile = teacher.profile
+    profile.base_editor = request.POST.get('base_editor') == '1'
+    profile.save(update_fields=['base_editor'])
+    name = teacher.get_full_name() or teacher.username
+    messages.success(request, (
+        f'{name} теперь правит общую базу.' if profile.base_editor
+        else f'{name} больше не правит общую базу.'))
+    return redirect('teachers')
+
+
+@superuser_required
+@require_POST
+def invite_revoke(request, invite_id):
+    invite = get_object_or_404(TeacherInvite, pk=invite_id, used_at__isnull=True)
+    invite.delete()
+    messages.success(request, 'Приглашение отозвано.')
+    return redirect('teachers')
 
 
 @login_required
@@ -195,9 +404,12 @@ def students(request):
         teacher_choices = (User.objects.filter(
             Q(profile__role=Profile.ROLE_TEACHER) | Q(is_superuser=True))
             .distinct().order_by('last_name', 'first_name', 'username'))
+    student_code = Profile.for_teacher(request.user).student_code
     return render(request, 'accounts/students.html', {
         'form': form,
         'group_form': group_form,
+        'registration_url': request.build_absolute_uri(
+            f"{reverse('register')}?t={student_code}"),
         'student_profiles': student_profiles,
         'student_sections': student_sections,
         'groups': groups,

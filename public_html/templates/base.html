@@ -24,7 +24,7 @@
   <script defer src="{% static 'js/autosave.js' %}?v=7"></script>
   <script defer src="{% static 'js/image_paste.js' %}?v=4"></script>
   <script defer src="{% static 'js/livefile.js' %}"></script>
-  <script defer src="{% static 'js/shell.js' %}?v=5"></script>
+  <script defer src="{% static 'js/shell.js' %}?v=6"></script>
   <script defer src="{% static 'js/dialogs.js' %}"></script>
   <script defer src="{% static 'js/quick_clone.js' %}"></script>
   <script defer src="{% static 'js/image_zoom.js' %}"></script>
@@ -75,7 +75,18 @@
           {% else %}
           <a href="{% url 'assignment_list' %}?kind=ordinary"{% if 'assignment' in request.resolver_match.url_name or 'review' in request.resolver_match.url_name %} class="is-active"{% endif %}>Задания</a>
           {% endif %}
-          <a href="{% url 'students' %}"{% if 'student' in request.resolver_match.url_name or 'group' in request.resolver_match.url_name %} class="is-active"{% endif %}>Ученики</a>
+          <div class="nav-group{% if 'student' in request.resolver_match.url_name or 'group' in request.resolver_match.url_name or request.resolver_match.url_name == 'teachers' %} is-active{% endif %}">
+            <a href="{% url 'students' %}">Ученики</a>
+            {# Учителями и приглашениями распоряжается только суперпользователь (accounts.decorators.superuser_required) #}
+            {% if user.is_superuser %}
+            <button type="button" class="nav-more" aria-expanded="false" aria-haspopup="true" aria-label="Разделы учеников" data-nav-more>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </button>
+            <div class="nav-menu">
+              <a href="{% url 'teachers' %}"{% if request.resolver_match.url_name == 'teachers' %} class="is-active"{% endif %}>Учителя</a>
+            </div>
+            {% endif %}
+          </div>
         {% endif %}
       </nav>
       {% if is_teacher and not minimal_page %}
@@ -93,7 +104,8 @@
         </button>
         {% endif %}
         <span class="user-avatar" aria-hidden="true">{{ user.get_full_name|default:user.username|first|upper }}</span>
-        <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
+        {# Учителю имя — ссылка на профиль (имя, почта, пароль); ученику профиля нет #}
+        {% if is_teacher %}<a class="user-name" href="{% url 'profile' %}" title="Профиль">{{ user.get_full_name|default:user.username }}</a>{% else %}<span class="user-name">{{ user.get_full_name|default:user.username }}</span>{% endif %}
         <form method="post" action="{% url 'logout' %}" class="inline-form" data-logout>
           {% csrf_token %}
           <button type="submit" class="linklike">Выйти</button>

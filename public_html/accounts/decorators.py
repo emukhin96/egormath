@@ -34,3 +34,15 @@ def student_required(view_func):
             raise PermissionDenied('Доступно только ученикам')
         return view_func(request, *args, **kwargs)
     return wrapper
+
+
+def superuser_required(view_func):
+    """Управление учителями и приглашениями — только суперпользователю
+    (не ``is_staff``: редактор базы учителями не распоряжается)."""
+    @wraps(view_func)
+    @login_required
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_superuser:
+            raise PermissionDenied('Доступно только администратору сайта')
+        return view_func(request, *args, **kwargs)
+    return wrapper
