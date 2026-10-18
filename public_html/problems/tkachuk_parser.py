@@ -1638,7 +1638,13 @@ def parse_part3(text: str, structure: dict, diagnostics: dict) -> list[TaskDraft
                 diagnostics["sections_without_answers"].append(f"{year}.{code} {section.title}")
                 pieces, missing = {}, []
             else:
-                pieces, missing = split_stream(block.stream, len(section.items))
+                # Номер задачи может пропускаться (OCR слил задачу с соседней):
+                # ответы — по наибольшему номеру, иначе последний остаётся без ответа.
+                pieces, missing = split_stream(block.stream, max(n for n, _ in section.items))
+            numbers = [n for n, _ in section.items]
+            gaps = sorted(set(range(1, max(numbers) + 1)) - set(numbers))
+            if gaps:
+                diagnostics["numbering"].append(f"{year}.{code}: нет задач {gaps}")
             if missing and block is not None:
                 diagnostics["missing_answers"].append(f"{year}.{code}: {missing}")
             title = section.title + (f". {section.subtitle}" if section.subtitle else "")

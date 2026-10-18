@@ -171,6 +171,20 @@ class TkachukBookTests(SimpleTestCase):
         self.assertIn("8", by_id["1970.ХФ.1"].author_answer_latex)
         self.assertTrue(any("геофизики" in note for note in diagnostics["sections_without_tasks"]))
 
+    def test_variant_answers_cover_skipped_number(self):
+        # OCR потерял задачу 2 химфака: ответы режутся по наибольшему номеру,
+        # ответ 3 достаётся задаче 3, пропуск — в диагностике.
+        book = BOOK.replace(
+            r"  \item[-] 1. Решить уравнение \(x=1\).",
+            "  \\item[-] 1. Решить уравнение \\(x=1\\).\n  \\item[-] 3. Найти \\(y\\).").replace(
+            "геологического ф-та. 1. 8 час 45 мин.",
+            "геологического ф-та. 1. 8 час 45 мин. 2. \\(5\\). 3. \\(7\\).")
+        tasks, diagnostics = parse(book)
+        by_id = {task.external_id: task for task in tasks}
+        self.assertNotIn("1970.ХФ.2", by_id)
+        self.assertEqual(by_id["1970.ХФ.3"].author_answer_latex, r"\(7\)")
+        self.assertIn("1970.ХФ: нет задач [2]", diagnostics["numbering"])
+
     def test_repairs_bound_to_sha_and_composition(self):
         import hashlib
         digest = hashlib.sha256(BOOK.encode("utf-8")).hexdigest()
