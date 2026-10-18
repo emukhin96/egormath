@@ -361,6 +361,42 @@ class VisibilityTests(Roles, TestCase):
             self.assertEqual(self.client.post(reverse('independentworks:pick', args=[position.pk]),
                                               {'task': self.personal.pk, 'parts_mode': 'all'}).status_code, 404)
 
+    def test_collection_with_editor_local_copy_taken_by_guest(self):
+        """«Взять как листок» копирует подборку вместе с локальной копией
+        редактора: приглашённый видит её в своём листке и правит через
+        собственную копию, копия редактора не меняется."""
+        from worksheets.models import Collection
+        from .models import Source
+        editor_copy = self.shared.make_variant(self.editor)
+        editor_copy.text_latex = 'Версия редактора для подборки'
+        editor_copy.save()
+        sheet = Worksheet.objects.create(owner=self.editor, title='Подборка редактора')
+        WorksheetItem.objects.create(worksheet=sheet, task=editor_copy, order=10)
+        collection = Collection.objects.create(
+            worksheet=sheet, source=Source.objects.create(title='Книга'),
+            locator='kniga/1', is_published=True)
+        self.client.force_login(self.other_guest)
+        # Чужая локальная копия не из своего листка — невидима
+        self.assertEqual(self.client.get(reverse('task_detail', args=[editor_copy.pk])).status_code, 404)
+        response = self.client.post(reverse('collection_use', args=[collection.pk]))
+        mine = Worksheet.objects.get(owner=self.other_guest)
+        self.assertRedirects(response, reverse('worksheet_detail', args=[mine.pk]))
+        item = mine.items.get()
+        self.assertEqual(item.task, editor_copy)
+        context = f'?worksheet={mine.pk}&item={item.pk}'
+        self.assertEqual(self.client.get(reverse('task_detail', args=[editor_copy.pk]) + context).status_code, 200)
+        self.assertEqual(self.client.get(reverse('task_detail', args=[editor_copy.pk])).status_code, 200)
+        response = self.client.post(reverse('task_manage', args=[editor_copy.pk]) + context,
+                                    {'block': 'condition', 'text_latex': 'Моя версия', 'scope': 'local'})
+        self.assertEqual(response.status_code, 200, response.content)
+        item.refresh_from_db()
+        self.assertNotEqual(item.task, editor_copy)
+        self.assertEqual((item.task.created_by, item.task.is_shared, item.task.variant_of, item.task.text_latex),
+                         (self.other_guest, False, self.shared, 'Моя версия'))
+        editor_copy.refresh_from_db()
+        self.assertEqual(editor_copy.text_latex, 'Версия редактора для подборки')
+        self.assertEqual(sheet.items.get().task, editor_copy)
+
     def test_taxonomy_counts_ignore_personal_tasks(self):
         from .models import TaskTopic, Topic
         from .rubricator import taxonomy_catalog
