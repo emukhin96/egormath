@@ -182,6 +182,16 @@ class MineFilterAndBadgeTests(Roles, TestCase):
         Task.objects.create(text_latex='Своя', created_by=self.editor, is_shared=False)
         self.assertContains(self.client.get(reverse('task_list')), 'Мои задачи')
 
+    def test_authorless_task_renders_without_badge_error(self):
+        """Задача без автора (created_by=NULL, как в фикстурах) в каталоге
+        редактора: бейдж не падает на task.created_by.username."""
+        orphan = Task.objects.create(text_latex='Без автора')
+        self.client.force_login(self.editor)
+        response = self.client.get(reverse('task_list'), {'q': f'#{orphan.pk}'})
+        self.assertEqual(list(response.context['page']), [orphan])
+        self.assertContains(response, '>не общая</span>')
+        self.assertContains(self.client.get(reverse('task_detail', args=[orphan.pk])), '>не общая</span>')
+
     def test_badges_in_catalog_and_card(self):
         self.client.force_login(self.guest)
         html = self.client.get(reverse('task_list')).content.decode()
