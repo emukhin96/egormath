@@ -37,10 +37,13 @@ def is_base_editor(user):
 
 def can_edit_task(user, task):
     """Редактор базы правит всё; остальные — только свои личные задачи
-    (в том числе локальные копии, созданные ими)."""
+    и свои локальные копии (копия живёт в одном листке автора, флаг общей
+    базы для неё ничего не значит)."""
     if is_base_editor(user):
         return True
-    return task.created_by_id == user.pk and not task.is_shared
+    if task.created_by_id != user.pk:
+        return False
+    return not task.is_shared or task.variant_of_id is not None
 
 
 def visible_tasks(user):

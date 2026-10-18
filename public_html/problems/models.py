@@ -365,11 +365,13 @@ class Task(models.Model):
         return is_base_editor(user)
 
     @classmethod
-    def new_for(cls, user, **fields):
-        """Единая точка создания задачи: автор и флаг общей базы по автору.
+    def new_for(cls, user, *, author=None, **fields):
+        """Единая точка создания задачи: флаг общей базы — по ``user``, который
+        её создаёт; ``author`` — кто подписан автором, если это другой человек
+        (суперпользователь загружает партию задачника приглашённого учителя).
         Все пути создания (форма, конструктор, импорт, корпус) идут сюда."""
         return cls.objects.create(
-            created_by=user, is_shared=cls.shared_for(user), **fields)
+            created_by=author or user, is_shared=cls.shared_for(user), **fields)
 
     @property
     def has_subitem_answers(self):
@@ -468,6 +470,9 @@ class Task(models.Model):
             # она личная и правится им свободно (accounts/permissions.py).
             copy.created_by = user
             copy.is_shared = Task.shared_for(user)
+        if not standalone:
+            # Локальная копия живёт в одном листке — в общей базе её нет.
+            copy.is_shared = False
         copy.save()
         copy_task_taxonomy(original, copy)
         copy.tags.set(original.tags.all())

@@ -3,9 +3,12 @@ from django.db import migrations, models
 
 
 def mark_existing_shared(apps, schema_editor):
-    """Все задачи, созданные до разделения на общие и личные, — общие."""
+    """Все задачи каталога, созданные до разделения на общие и личные, —
+    общие. Локальные копии (variant_of) живут в одном листке своего автора
+    и в общую базу не входят — иначе автор без права редактора потерял бы
+    возможность править свои старые копии."""
     Task = apps.get_model('problems', 'Task')
-    Task.objects.update(is_shared=True)
+    Task.objects.filter(variant_of__isnull=True).update(is_shared=True)
 
 
 def noop(apps, schema_editor):

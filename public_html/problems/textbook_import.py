@@ -1384,8 +1384,11 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         else:
             # Совпадение текста между изданиями — только подсказка для
             # рецензента, но не безопасное основание автоматически слить задачи.
+            # Флаг общей базы — по тому, кто загружает (редактор базы), автор
+            # остаётся авторам партии: суперпользователь мог загрузить
+            # партию, созданную приглашённым учителем до разделения прав.
             task = Task.new_for(
-                batch.created_by,
+                user, author=batch.created_by,
                 text_latex=draft.text_latex,
                 answer_mask=('' if draft.subitems else draft.answer_mask),
                 author_answer_latex=draft.author_answer_latex,
