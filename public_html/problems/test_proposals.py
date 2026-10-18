@@ -171,6 +171,19 @@ class CreateTests(ProposalBase):
         self.client.force_login(self.guest)
         self.assertEqual(self.client.get(reverse('task_propose', args=[personal_copy.pk])).status_code, 403)
 
+    def test_propose_page_drops_unsafe_next(self):
+        """Адрес возврата из GET попадает в ссылку «Отмена» и скрытое поле
+        только с нашего хоста: javascript: и чужой домен отбрасываются."""
+        self.client.force_login(self.guest)
+        url = reverse('task_propose', args=[self.shared.pk])
+        for bad in ('javascript:alert(1)', 'https://evil.example/x', '//evil.example/x'):
+            response = self.client.get(url + '?next=' + bad)
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, bad)
+            self.assertContains(response, f'href="{reverse("task_detail", args=[self.shared.pk])}">Отмена')
+        response = self.client.get(url + '?next=/problems/')
+        self.assertContains(response, 'href="/problems/">Отмена')
+
     def test_independent_work_picker_offers_mask_proposal(self):
         from independentworks.models import Work, Position, Candidate
         with override_settings(INDEPENDENT_WORKS_ENABLED=True):

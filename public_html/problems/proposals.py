@@ -284,12 +284,18 @@ def reject_proposal(proposal, user, note):
 
 # ---- views ----------------------------------------------------------------
 
+def _safe_next(request, target):
+    """Адрес возврата только на наш хост: чужой адрес или схема вроде
+    ``javascript:`` отбрасываются и для редиректа, и для ссылки в шаблоне."""
+    if target and url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}):
+        return target
+    return ''
+
+
 def _back(request, task):
     """После отправки — туда, откуда пришли (поле next), иначе на карточку."""
-    target = request.POST.get('next') or request.GET.get('next')
-    if target and url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}):
-        return redirect(target)
-    return redirect('task_detail', pk=task.pk)
+    target = _safe_next(request, request.POST.get('next') or request.GET.get('next'))
+    return redirect(target) if target else redirect('task_detail', pk=task.pk)
 
 
 @teacher_required
@@ -322,7 +328,7 @@ def task_propose(request, pk):
     return render(request, 'problems/propose.html', {
         'task': task, 'propose': options,
         'prefill': MASK_PREFILL if request.GET.get('mask') else '',
-        'next': request.GET.get('next', ''),
+        'next': _safe_next(request, request.GET.get('next', '')),
     })
 
 
