@@ -263,23 +263,37 @@ class CounterTests(ProposalBase):
         self.assertEqual(response.context['proposals_replies'], 0)
 
 
-class MineLimitTests(ProposalBase):
-    def test_only_shown_replies_are_marked_seen(self):
-        """Ответ за пределами списка не отмечается просмотренным и остаётся
-        в счётчике, пока автор его не увидит."""
+class MinePageTests(ProposalBase):
+    def test_unread_replies_come_first_and_only_shown_are_marked_seen(self):
+        """Старый непросмотренный ответ — на первой странице раньше новых
+        записей; ответ на другой странице остаётся непросмотренным и в
+        счётчике, пока автор его не увидит."""
         older = create_proposal(self.guest, self.shared, kind='fix', message='Старое')
         TaskProposal.objects.filter(pk=older.pk).update(status=TaskProposal.STATUS_REJECTED)
         newer = create_proposal(self.guest, self.own, kind='new', message='Новое')
-        TaskProposal.objects.filter(pk=newer.pk).update(status=TaskProposal.STATUS_ACCEPTED)
         self.client.force_login(self.guest)
-        with mock.patch('problems.proposals.MINE_LIMIT', 1):
+        response = self.client.get(reverse('proposals_mine'))
+        self.assertEqual([p.pk for p in response.context['proposals']], [older.pk, newer.pk])
+        older.refresh_from_db()
+        self.assertIsNotNone(older.seen_by_author_at)
+        TaskProposal.objects.filter(pk=newer.pk).update(status=TaskProposal.STATUS_ACCEPTED)
+        TaskProposal.objects.filter(pk=older.pk).update(seen_by_author_at=None)
+        with mock.patch('problems.proposals.MINE_PAGE', 1):
             response = self.client.get(reverse('proposals_mine'))
         self.assertEqual([p.pk for p in response.context['proposals']], [newer.pk])
+        self.assertTrue(response.context['page'].has_next())
         older.refresh_from_db()
         newer.refresh_from_db()
         self.assertIsNone(older.seen_by_author_at)
         self.assertIsNotNone(newer.seen_by_author_at)
         self.assertEqual(self.client.get(reverse('dashboard')).context['proposals_replies'], 1)
+        # Следующий визит: непросмотренный ответ поднялся на первую страницу
+        with mock.patch('problems.proposals.MINE_PAGE', 1):
+            response = self.client.get(reverse('proposals_mine'))
+        self.assertEqual([p.pk for p in response.context['proposals']], [older.pk])
+        older.refresh_from_db()
+        self.assertIsNotNone(older.seen_by_author_at)
+        self.assertEqual(self.client.get(reverse('dashboard')).context['proposals_replies'], 0)
         # Решивший редактор удалён (SET_NULL) — страницы не падают
         response = self.client.get(reverse('proposals_mine'))
         self.assertContains(response, 'редактор базы')

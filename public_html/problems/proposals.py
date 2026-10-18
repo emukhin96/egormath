@@ -12,6 +12,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.db.models import Case, IntegerField, Q, Value, When
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -54,9 +55,9 @@ SECTION_FIELDS = {
 }
 SECTION_LABELS = dict(SECTIONS)
 MASK_PREFILL = 'Предлагаю маску ответа:\n'
-# «Мои предложения»: сколько последних показывать; просмотренными
-# отмечаются только показанные.
-MINE_LIMIT = 200
+# «Мои предложения»: строк на странице; непросмотренные ответы идут первыми,
+# просмотренными отмечаются только показанные на текущей странице.
+MINE_PAGE = 50
 
 
 class ProposalError(Exception):
@@ -337,21 +338,29 @@ def task_propose(request, pk):
 
 @teacher_required
 def proposals_mine(request):
-    """Свои предложения со статусом и ответом редактора; непросмотренные
-    ответы подсвечены и после показа считаются просмотренными."""
-    proposals = list(
+    """Свои предложения со статусом и ответом редактора. Непросмотренные
+    ответы — первыми независимо от даты (счётчик в шапке обнуляется с первой
+    страницы), подсвечены и после показа считаются просмотренными."""
+    unseen = Q(seen_by_author_at__isnull=True) & ~Q(status=TaskProposal.STATUS_NEW)
+    queryset = (
         TaskProposal.objects.filter(author=request.user)
-        .select_related('task', 'variant', 'resolved_by')[:MINE_LIMIT])
+        .select_related('task', 'variant', 'resolved_by')
+        .annotate(unread_first=Case(When(unseen, then=Value(0)), default=Value(1),
+                                    output_field=IntegerField()))
+        .order_by('unread_first', '-created_at', '-pk'))
+    page = Paginator(queryset, MINE_PAGE).get_page(request.GET.get('page'))
+    proposals = list(page)
     unread = [p.pk for p in proposals if not p.is_open and p.seen_by_author_at is None]
     for proposal in proposals:
         proposal.unread = proposal.pk in unread
-    # Только то, что автор сейчас увидел: ответ за пределами списка остаётся
+    # Только то, что автор сейчас увидел: ответ на другой странице остаётся
     # непросмотренным и в счётчике.
     if unread:
         TaskProposal.objects.filter(pk__in=unread, author=request.user).update(
             seen_by_author_at=timezone.now())
     return render(request, 'problems/proposals_mine.html', {
-        'proposals': proposals, 'unread_total': len(unread),
+        'proposals': proposals, 'page': page, 'unread_total': len(unread),
+        'params': request.GET.urlencode(),
     })
 
 
