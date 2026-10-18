@@ -17,6 +17,9 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_GET, require_POST
 
 from accounts.decorators import teacher_required
+from accounts.permissions import (BASE_LOCKED_MESSAGE, base_editor_required,
+                                  can_edit_task, catalog_tasks, editable_tasks,
+                                  forbidden_json, is_base_editor, visible_tasks)
 from assignments.checks import HELP as MASK_HELP
 
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
@@ -33,13 +36,14 @@ from .rubricator import (GRADE_LEVEL_TO_CODE, apply_task_taxonomy,
                          task_taxonomy_state)
 
 
-def filter_tasks(params):
+def filter_tasks(params, user):
     """Каталог задач по GET-параметрам: q, topic, grade, tag.
 
-    «Локальные» копии задач (варианты для конкретного листка)
+    База — задачи, видимые пользователю (accounts.permissions.catalog_tasks):
+    общие и его личные; «локальные» копии (варианты для конкретного листка)
     в каталоге не показываются.
     """
-    tasks = (Task.objects.filter(variant_of__isnull=True)
+    tasks = (catalog_tasks(user)
              .prefetch_related('topics', 'topic_links', 'grade_bands',
                                'facet_values', 'exam_items', 'tags',
                                'source_refs__source', 'subitems', 'images')
@@ -62,7 +66,7 @@ def filter_tasks(params):
     return tasks
 
 
-def _rubricator_blocks(topics_flat, active_topic=None):
+def _rubricator_blocks(topics_flat, user, active_topic=None):
     """Разделы рубрикатора (корневые темы) с числом задач в поддереве.
 
     Поддеревья берутся из плоского списка topic_tree() (один запрос),
@@ -88,8 +92,8 @@ def _rubricator_blocks(topics_flat, active_topic=None):
                 children.append(topic)
             elif children:
                 children[-1].subtree_ids.append(topic.pk)
-    # Та же база, что у каталога (filter_tasks): локальные копии задач не считаем.
-    catalog = Task.objects.filter(variant_of__isnull=True)
+    # Та же база, что у каталога (filter_tasks): видимые задачи без локальных копий.
+    catalog = catalog_tasks(user)
     for block in blocks:
         block.task_total = catalog.filter(topics__in=block.subtree_ids).distinct().count()
         block.is_current = active_topic == block.pk
@@ -101,9 +105,9 @@ def _rubricator_blocks(topics_flat, active_topic=None):
     return blocks
 
 
-def _catalog_facets(params):
+def _catalog_facets(params, user):
     """Классы и источники для панели каталога — с числом задач и текущим выбором."""
-    catalog = Task.objects.filter(variant_of__isnull=True)
+    catalog = catalog_tasks(user)
     # Условие то же, что у фильтра ?grade=N (filter_by_taxonomy): полоса
     # классов ИЛИ старое поле grade_level — иначе счётчик расходится с выдачей.
     levels_of = {level: [10, 11] if level == 10 else [level]
@@ -124,7 +128,7 @@ def _catalog_facets(params):
     sources = [
         {'pk': row['source_id'], 'title': row['source__title'], 'count': row['n'],
          'is_current': current_source == str(row['source_id'])}
-        for row in (TaskSource.objects.filter(task__variant_of__isnull=True)
+        for row in (TaskSource.objects.filter(task__in=catalog)
                     .values('source_id', 'source__title')
                     .annotate(n=Count('task_id', distinct=True))
                     .order_by('-n', 'source__title')[:12])]
@@ -133,17 +137,17 @@ def _catalog_facets(params):
 
 @teacher_required
 def task_list(request):
-    tasks = filter_tasks(request.GET)
+    tasks = filter_tasks(request.GET, request.user)
     paginator = Paginator(tasks, 25)
     page = paginator.get_page(request.GET.get('page'))
     topics_flat = topic_tree()
     active_topic = request.GET.get('topic', '')
     active_topic = int(active_topic) if active_topic.isdigit() else None
-    grade_facets, source_facets = _catalog_facets(request.GET)
+    grade_facets, source_facets = _catalog_facets(request.GET, request.user)
     ctx = taxonomy_page_context(filter_state_from_params(request.GET))
     ctx.update({
         'page': page,
-        'topics': _rubricator_blocks(topics_flat, active_topic),
+        'topics': _rubricator_blocks(topics_flat, request.user, active_topic),
         'grade_facets': grade_facets,
         'source_facets': source_facets,
         'topics_flat': topics_flat,
@@ -155,8 +159,11 @@ def task_list(request):
     from assignments.checks import KINDS, PRESETS
     from assignments.task_usage import attach_usage, audience_context
     ctx['mask_kinds'] = {**KINDS, **{k: k for k in PRESETS}}
+    ctx['is_base_editor'] = is_base_editor(request.user)
     for task in page:
         task.taxonomy_json = dumps_state(task_taxonomy_state(task))
+        # Общая задача у приглашённого учителя — без inline-форм и чекбоксов.
+        task.can_edit = can_edit_task(request.user, task)
     ctx.update(audience_context(request, attach_usage(request, page.object_list)))
     return render(request, 'problems/task_list.html', ctx)
 
@@ -179,7 +186,9 @@ def _delete_unused_task(task):
 @teacher_required
 @require_POST
 def task_delete(request, pk):
-    task = get_object_or_404(Task, pk=pk)
+    task = get_object_or_404(visible_tasks(request.user), pk=pk)
+    if not can_edit_task(request.user, task):
+        raise PermissionDenied(BASE_LOCKED_MESSAGE)
     if _delete_unused_task(task):
         messages.success(request, f'Задача #{pk} удалена.')
         return redirect('task_list')
@@ -192,7 +201,8 @@ def task_delete(request, pk):
 def task_bulk_update(request):
     """Массовые действия над выбранными задачами: назначение или удаление."""
     ids = request.POST.getlist('ids')
-    tasks = Task.objects.filter(variant_of__isnull=True, pk__in=ids)
+    # Только то, что пользователь вправе менять: у приглашённого — личные задачи.
+    tasks = editable_tasks(request.user).filter(variant_of__isnull=True, pk__in=ids)
     if request.POST.get('delete'):
         deleted = 0
         blocked = 0
@@ -266,7 +276,9 @@ def task_quick_update(request, pk):
     """
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'message': 'Только POST'}, status=405)
-    task = get_object_or_404(Task, pk=pk)
+    task = get_object_or_404(visible_tasks(request.user), pk=pk)
+    if not can_edit_task(request.user, task):
+        return forbidden_json()
     # Сохраняем только присланные поля (update_fields): формы на карточке
     # автосохраняются параллельно, и полный task.save() затирал бы поля,
     # изменённые соседним запросом, устаревшими значениями
@@ -369,7 +381,11 @@ def task_quick_update(request, pk):
 @require_POST
 def task_subitem_update(request, pk, spk):
     """Горячее редактирование подпункта на карточке задачи (или удаление)."""
-    subitem = get_object_or_404(TaskSubitem, pk=spk, task_id=pk)
+    subitem = get_object_or_404(
+        TaskSubitem.objects.select_related('task'), pk=spk,
+        task__in=visible_tasks(request.user), task_id=pk)
+    if not can_edit_task(request.user, subitem.task):
+        return forbidden_json()
     if request.POST.get('delete'):
         subitem.delete()
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
@@ -398,7 +414,9 @@ def task_subitem_update(request, pk, spk):
 @require_POST
 def task_subitem_add(request, pk):
     """Добавление подпункта прямо с карточки задачи."""
-    task = get_object_or_404(Task, pk=pk)
+    task = get_object_or_404(visible_tasks(request.user), pk=pk)
+    if not can_edit_task(request.user, task):
+        raise PermissionDenied(BASE_LOCKED_MESSAGE)
     text = request.POST.get('text_latex', '').strip()
     if text:
         last = task.subitems.order_by('-order').first()
@@ -428,11 +446,12 @@ def task_image_file(request, pk):
 
 @teacher_required
 def task_detail(request, pk):
+    # Чужая личная задача — 404, как несуществующая (accounts.permissions).
     if request.method == 'POST':
-        task = get_object_or_404(Task, pk=pk)
+        task = get_object_or_404(visible_tasks(request.user), pk=pk)
         return _task_form(request, task=task)
     from .editor import context
-    task = get_object_or_404(Task.objects.prefetch_related(
+    task = get_object_or_404(visible_tasks(request.user).prefetch_related(
         'subitems', 'images', 'topics', 'tags', 'source_refs__source'), pk=pk)
     return render(request, 'problems/task_detail.html', context(request, task))
 
@@ -444,7 +463,7 @@ def task_duplicate(request, pk):
     """Самостоятельная копия в базе или локальная — следующей строкой листка."""
     from .editor import insert_after, worksheet_context
     from worksheets.models import Worksheet
-    task = get_object_or_404(Task, pk=pk)
+    task = get_object_or_404(visible_tasks(request.user), pk=pk)
     item = worksheet_context(request, task)
     if item and item.deleted_at:
         raise Http404
@@ -503,7 +522,7 @@ def task_create(request):
 
 @teacher_required
 def task_edit(request, pk):
-    task = get_object_or_404(Task, pk=pk)
+    task = get_object_or_404(visible_tasks(request.user), pk=pk)
     if request.method == 'POST':
         return _task_form(request, task=task)
     url = reverse('task_detail', args=[pk])
@@ -598,6 +617,7 @@ def _save_local_variant(user, original, form, source_fs, subitem_fs, post, image
     variant.pk = None
     variant.variant_of = original.variant_of or original
     variant.created_by = user
+    variant.is_shared = Task.shared_for(user)
     for name, value in form.cleaned_data.items():
         setattr(variant, name, value)
     variant.save()
@@ -653,9 +673,12 @@ def _parse_answer_lines(text):
     return rows
 
 
-@teacher_required
+@base_editor_required
 def bulk_answers(request):
-    """Массовое добавление ответов к задачам по номерам в источнике."""
+    """Массовое добавление ответов к задачам по номерам в источнике.
+
+    Пишет сразу в общие задачи — только редакторам базы.
+    """
     context = {
         'sources': Source.objects.all(),
         'text': '',
@@ -772,6 +795,9 @@ def _task_form(request, task):
         save_local = ('save_local' in request.POST and task is not None
                       and item is not None and item.task_id == task.pk
                       and task.variant_of_id is None)
+        # Общую задачу приглашённый учитель меняет только локальной копией.
+        if task is not None and not save_local and not can_edit_task(request.user, task):
+            raise PermissionDenied(BASE_LOCKED_MESSAGE)
         if (form.is_valid() and source_fs.is_valid()
                 and subitem_fs.is_valid() and image_fs.is_valid()):
             # Дедупликация: не создавать вторую задачу с теми же условием
@@ -783,7 +809,8 @@ def _task_form(request, task):
                     for row in subitem_fs.cleaned_data
                     if row and not row.get('DELETE')]
                 duplicate_pk = find_existing_task(
-                    form.cleaned_data['text_latex'], new_subitems)
+                    form.cleaned_data['text_latex'], new_subitems,
+                    user=request.user)
                 if duplicate_pk is not None:
                     warning = (
                         f'Задача с таким условием уже есть в базе — '
@@ -829,6 +856,7 @@ def _task_form(request, task):
             obj = form.save(commit=False)
             if task is None:
                 obj.created_by = request.user
+                obj.is_shared = Task.shared_for(request.user)
             obj.save()
             form.save_m2m()
             apply_task_taxonomy(obj, request.POST)
@@ -884,6 +912,8 @@ def _task_form(request, task):
         'can_save_local': (task is not None and item is not None
                            and item.task_id == task.pk
                            and task.variant_of_id is None),
+        # Приглашённому на общей задаче остаётся только локальная копия.
+        'base_locked': task is not None and not can_edit_task(request.user, task),
     })
     return render(request, 'problems/task_form.html', ctx)
 
@@ -928,7 +958,7 @@ def task_neuro_solve(request):
         pk = int(task_id)
         if pk < 1:
             return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
-        task = get_object_or_404(Task, pk=pk)
+        task = get_object_or_404(visible_tasks(request.user), pk=pk)
 
     # Поля формы, если ключ передан; база — только запасной вариант.
     # Пустой массив subitems тоже считается переданным (не подменяем).
@@ -961,6 +991,18 @@ def task_neuro_solve(request):
         answers_only = _neuro_flag(payload, 'answers_only')
     except ValueError:
         return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
+    # Запись AI-ответа в задачу — только редакторам базы (решение 5 плана
+    # пользователей); остальным — черновик в поля карточки без apply.
+    if apply and task is not None and not can_edit_task(request.user, task):
+        return JsonResponse(
+            {'error': 'Задача из общей базы: AI-черновик можно получить на '
+                      'карточке задачи и сохранить в локальную копию.'},
+            status=403)
+    if apply and not is_base_editor(request.user):
+        return JsonResponse(
+            {'error': 'Запись AI-ответов в задачи доступна только редакторам '
+                      'общей базы.'},
+            status=403)
     acquired_at = None
     try:
         acquired_at = acquire_quota(request.user)
@@ -984,6 +1026,8 @@ def task_neuro_solve(request):
 
 
 def _own_import_batch(request, pk):
+    # Все textbook_import_* — только редакторам базы (base_editor_required):
+    # партии пишут задачи в общую базу пачками.
     batch = get_object_or_404(TextbookImportBatch, pk=pk)
     if batch.created_by_id != request.user.pk and not request.user.is_superuser:
         raise PermissionDenied
@@ -1373,7 +1417,7 @@ def _overlay_review_author_fields(subitems, original, post):
     return subitems
 
 
-@teacher_required
+@base_editor_required
 def textbook_import_list(request):
     batches = TextbookImportBatch.objects.all()
     if not request.user.is_superuser:
@@ -1388,13 +1432,13 @@ def textbook_import_list(request):
     })
 
 
-@teacher_required
+@base_editor_required
 def textbook_import_help(request):
     """Инструкция редактора по сверке и загрузке задачника."""
     return render(request, 'problems/textbook_import_help.html')
 
 
-@teacher_required
+@base_editor_required
 def textbook_import_upload(request):
     from .textbook_import import (TextbookImportError,
                                   attach_image_archive,
@@ -1443,7 +1487,7 @@ def textbook_import_upload(request):
     })
 
 
-@teacher_required
+@base_editor_required
 def textbook_import_detail(request, pk):
     batch = _own_import_batch(request, pk)
     from .textbook_import import missing_imported_collection_draft_ids
@@ -1597,7 +1641,7 @@ def _masks_pending_count(drafts):
             TextbookTaskDraft.STATUS_SKIPPED]).values_list('warnings', flat=True))
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 @transaction.atomic
 def textbook_import_assign_section_topic(request, pk):
@@ -1639,7 +1683,7 @@ def textbook_import_assign_section_topic(request, pk):
     return redirect(_textbook_detail_url(batch, section=section_token))
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def textbook_import_quick_topic(request, batch_pk, pk):
     """Горячее назначение темы одной строке партии — как в базе задач."""
@@ -1658,7 +1702,7 @@ def textbook_import_quick_topic(request, batch_pk, pk):
     return JsonResponse({'ok': True})
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 @transaction.atomic
 def textbook_import_bulk(request, pk):
@@ -1740,7 +1784,7 @@ def textbook_import_bulk(request, pk):
     return redirect(next_url)
 
 
-@teacher_required
+@base_editor_required
 def textbook_import_block(request, batch_pk, block_pk):
     """Показывает все пять черновиков с общим условием один раз."""
     from .block_text import split_common_condition
@@ -1789,7 +1833,7 @@ def _neighbour_draft(batch, draft, *, following):
         .order_by('-position', '-pk').first())
 
 
-@teacher_required
+@base_editor_required
 def textbook_import_review(request, batch_pk, pk):
     from .models import ExamItem
     batch = _own_import_batch(request, batch_pk)
@@ -1938,7 +1982,7 @@ def textbook_import_review(request, batch_pk, pk):
     return render(request, 'problems/textbook_import_review.html', context)
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def textbook_import_attach_images(request, pk):
     from .textbook_import import TextbookImportError, attach_image_archive
@@ -1959,7 +2003,7 @@ def textbook_import_attach_images(request, pk):
     return redirect(_textbook_detail_url(batch))
 
 
-@teacher_required
+@base_editor_required
 @xframe_options_sameorigin
 def textbook_import_asset_file(request, batch_pk, pk):
     batch = _own_import_batch(request, batch_pk)
@@ -1967,7 +2011,7 @@ def textbook_import_asset_file(request, batch_pk, pk):
     return FileResponse(asset.file.open('rb'), filename=asset.original_name)
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def textbook_import_approve_clean(request, pk):
     from .textbook_import import content_warnings
@@ -2002,7 +2046,7 @@ def _prepare_import_publication(request, batch, draft_ids=None,
         })
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def textbook_import_prepare_masks(request, pk):
     """Подбирает отложенные маски всей партии или раздела до одобрения."""
@@ -2026,7 +2070,7 @@ def textbook_import_prepare_masks(request, pk):
     return redirect(_textbook_detail_url(batch, section=section_token or None))
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def textbook_import_commit(request, pk):
     from .textbook_import import TextbookImportError, commit_batch
@@ -2061,7 +2105,7 @@ def _analog_note(result):
             f'задач добавлено в семьи — {members}.')
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def textbook_import_commit_section(request, pk):
     """Загружает в каталог только одобренные задачи выбранного раздела."""

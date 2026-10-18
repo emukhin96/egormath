@@ -312,8 +312,8 @@ def commit_draft(draft, owner, *, force=False):
         missing_images.extend(missing)
         incoming_names = {path.name for path in paths}
         # Задача могла быть загружена до выноса прозы — ищем и по исходному тексту
-        task_pk = (find_existing_task(text, subitems)
-                   or find_existing_task(raw_text, raw_subitems))
+        task_pk = (find_existing_task(text, subitems, user=owner)
+                   or find_existing_task(raw_text, raw_subitems, user=owner))
         # Одна и та же формулировка в классной и домашней — две задачи,
         # иначе догрузка рисунков смешает картинки на общем Task.
         if task_pk in used_in_sheet:
@@ -330,14 +330,14 @@ def commit_draft(draft, owner, *, force=False):
             _fill_task_answers(
                 task, task_answer, task_solution, sub_answers, sub_solutions)
         else:
-            task = Task.objects.create(
+            task = Task.new_for(
+                owner,
                 text_latex=text,
                 stars=0,
                 columns=int(el.get('columns') or 0),
                 answer_latex=task_answer,
                 solution_latex=task_solution,
-                grade_level=grade_opt,
-                created_by=owner)
+                grade_level=grade_opt)
             for j, chunk in enumerate(subitems):
                 task.subitems.create(
                     order=(j + 1) * 10, text_latex=chunk,

@@ -28,6 +28,14 @@ def answer_material(task, subitems=None):
 
 
 @register.filter
+def editable_by(task, user):
+    """Вправе ли пользователь менять задачу напрямую (accounts/permissions.py):
+    для строк листков и подборок, где задач много и контекст общий."""
+    from accounts.permissions import can_edit_task
+    return can_edit_task(user, task)
+
+
+@register.filter
 def complete_solutions(owner):
     """Авторское указание и полное решение для редактора и проверки работ."""
     texts = solution_texts(owner)

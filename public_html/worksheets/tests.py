@@ -1611,10 +1611,12 @@ class ImportTexTests(TestCase):
         self.assertNotEqual(new_task.pk, base.pk)
         # Полное совпадение (условие + подпункты) — задача находится
         self.assertEqual(
-            find_existing_task('Решите уравнение:', ['$x^2=4$', '$x^2=9$']),
+            find_existing_task('Решите уравнение:', ['$x^2=4$', '$x^2=9$'],
+                               user=self.teacher),
             base.pk)
         self.assertIsNone(
-            find_existing_task('Решите уравнение:', ['$x^2=4$']))
+            find_existing_task('Решите уравнение:', ['$x^2=4$'],
+                               user=self.teacher))
 
     def test_dedup_ignores_subitem_trailing_punct(self):
         from .import_tex import create_worksheet, find_existing_task, \
@@ -1631,7 +1633,8 @@ class ImportTexTests(TestCase):
         self.assertEqual(worksheet.items.get().task_id, existing.pk)
         self.assertEqual(Task.objects.count(), 1)
         self.assertEqual(
-            find_existing_task('Докажите:', ['Докажите неравенство.']),
+            find_existing_task('Докажите:', ['Докажите неравенство.'],
+                               user=self.teacher),
             existing.pk)
 
     def test_import_updates_existing_answer(self):

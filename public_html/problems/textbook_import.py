@@ -1384,14 +1384,15 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         else:
             # Совпадение текста между изданиями — только подсказка для
             # рецензента, но не безопасное основание автоматически слить задачи.
-            task = Task.objects.create(
+            task = Task.new_for(
+                batch.created_by,
                 text_latex=draft.text_latex,
                 answer_mask=('' if draft.subitems else draft.answer_mask),
                 author_answer_latex=draft.author_answer_latex,
                 author_solution_latex=draft.author_solution_latex,
                 answer_latex=draft.answer_latex,
                 solution_latex=draft.solution_latex,
-                stars=0, columns=0, created_by=batch.created_by)
+                stars=0, columns=0)
             for index, item in enumerate(draft.subitems, start=1):
                 TaskSubitem.objects.create(
                     task=task, order=index * 10,

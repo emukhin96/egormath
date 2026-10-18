@@ -52,10 +52,13 @@
   <a class="btn btn-secondary" href="{% url 'worksheet_beamer_editor' worksheet.pk %}"
      target="_blank" rel="noopener">Презентация</a>
   <a class="btn btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}">.tex</a>
+  {# Запись AI-ответов прямо в задачи листка — только редакторам базы (task_neuro_solve apply) #}
+  {% if is_base_editor %}
   <button type="button" class="btn btn-secondary" data-neuro="apply-answers"
           title="Ответы в пустые поля — существующие ответы и решения не трогаем">Дописать AI-ответ к решениям</button>
   <button type="button" class="btn btn-secondary" data-neuro="apply-all"
           title="Ответ и решение для всех задач листка — проверьте после записи">Добавить AI-решения и ответ</button>
+  {% endif %}
 </div>
 
 <div class="card worksheet-items-card">
@@ -118,7 +121,7 @@
           {% endif %}
           {% include 'problems/_task_images.html' with images=row.statement_images %}
           {% include 'problems/_task_answers.html' with task=item.task subitems=item.task.subitems.all hide_answers=True %}
-          <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
+          <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}"{% if not item.task|editable_by:request.user %} data-base-locked="1"{% endif %} hidden><div data-mask-tools class="problem-mask-tools"></div></div>
         </div>
 
         {% elif item.is_rubric %}
@@ -460,7 +463,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 {% include 'problems/_mask_dialogs.html' %}
-<script defer src="{% static 'js/problem_editor.js' %}?v=3"></script>
+<script defer src="{% static 'js/problem_editor.js' %}?v=4"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=3"></script>
 <script defer src="{% static 'js/builder.js' %}?v=9"></script>

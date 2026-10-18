@@ -8,6 +8,7 @@ from django.conf import settings
 
 from .decorators import get_role
 from .models import Profile
+from .permissions import is_base_editor
 
 
 def shell(request):
@@ -17,6 +18,7 @@ def shell(request):
     if user is None or not user.is_authenticated:
         return {
             'is_teacher': False,
+            'is_base_editor': False,
             'cart': None,
             'favicon_local': favicon_local,
         }
@@ -24,6 +26,9 @@ def shell(request):
     context = {
         'independentworks_enabled': settings.INDEPENDENT_WORKS_ENABLED,
         'is_teacher': is_teacher,
+        # Пункты меню только для редакторов базы: импорт задачников,
+        # массовые ответы, сверка корпуса (accounts/permissions.py).
+        'is_base_editor': is_teacher and is_base_editor(user),
         'cart': None,
         'favicon_local': favicon_local,
     }

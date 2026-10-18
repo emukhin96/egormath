@@ -616,8 +616,13 @@ def _taxonomy_catalog_cache_key(using='default'):
 
 
 def _topic_counts_for_catalog(topics, lookup='tasks'):
-    """Считает свежие итоги, используя дерево из кэша."""
-    raw = dict(Topic.objects.annotate(n=Count(lookup, distinct=True))
+    """Считает свежие итоги, используя дерево из кэша.
+
+    Каталог один на всех пользователей, поэтому задачи считаются только
+    общие (``Task.is_shared``): личные задачи учителей в счётчики не попадают.
+    """
+    shared = Q(**{f'{lookup}__is_shared': True}) if lookup == 'tasks' else None
+    raw = dict(Topic.objects.annotate(n=Count(lookup, distinct=True, filter=shared))
                .values_list('pk', 'n'))
     by_parent = {}
     for topic in topics:

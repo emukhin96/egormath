@@ -284,28 +284,34 @@ def _task_signature(text, subitems=()):
                   if s))
 
 
-def _known_signatures():
-    """Сигнатуры всех задач каталога: {(условие, подпункты): pk}."""
+def _known_signatures(user=None):
+    """Сигнатуры задач каталога, видимых пользователю: {(условие, подпункты): pk}.
+
+    Без пользователя — только общие задачи: чужая личная задача не должна
+    всплывать как «уже есть #id».
+    """
+    from accounts.permissions import catalog_tasks, shared_catalog
+    catalog = catalog_tasks(user) if user is not None else shared_catalog()
     subs = {}
     for task_id, sub_text in (TaskSubitem.objects
-                              .filter(task__variant_of__isnull=True)
+                              .filter(task__in=catalog)
                               .order_by('task_id', 'order', 'id')
                               .values_list('task_id', 'text_latex')):
         subs.setdefault(task_id, []).append(sub_text)
     known = {}
-    for pk, text in (Task.objects.filter(variant_of__isnull=True)
-                     .values_list('pk', 'text_latex')):
+    for pk, text in catalog.values_list('pk', 'text_latex'):
         known.setdefault(_task_signature(text, subs.get(pk, ())), pk)
     return known
 
 
-def match_existing_tasks(parsed):
+def match_existing_tasks(parsed, user=None):
     """Для каждой задачи ищет совпадение в базе по условию и подпунктам.
 
     Возвращает список той же длины, что elements: pk задачи или None
-    (None и для нетасковых элементов).
+    (None и для нетасковых элементов). ``user`` сужает поиск до видимых
+    ему задач.
     """
-    known = _known_signatures()
+    known = _known_signatures(user)
     matches = []
     for kind, data in parsed['elements']:
         if kind != 'task':
@@ -316,13 +322,14 @@ def match_existing_tasks(parsed):
     return matches
 
 
-def find_existing_task(text, subitems=()):
+def find_existing_task(text, subitems=(), user=None):
     """pk задачи каталога с тем же условием и подпунктами или None.
 
     Та же проверка, что при импорте, — используется и при ручном создании
-    задачи, чтобы не плодить дубли под разными ID.
+    задачи, чтобы не плодить дубли под разными ID. ``user`` — чьи задачи
+    считать видимыми (без него — только общие).
     """
-    return _known_signatures().get(_task_signature(text, subitems))
+    return _known_signatures(user).get(_task_signature(text, subitems))
 
 
 def create_worksheet(parsed, owner, title='', overrides=None):
@@ -339,8 +346,9 @@ def create_worksheet(parsed, owner, title='', overrides=None):
     не переносятся, missing_images — список {'task': Task, 'files': […]}
     для догрузки на страницах задач (двухшаговый импорт графики).
     """
+    from accounts.permissions import can_edit_task
     header = parsed['header']
-    matches = match_existing_tasks(parsed)
+    matches = match_existing_tasks(parsed, owner)
     overrides = overrides or {}
     worksheet = Worksheet.objects.create(
         title=title or header['title'] or 'Импортированный листок',
@@ -372,7 +380,12 @@ def create_worksheet(parsed, owner, title='', overrides=None):
             if task_pk is not None:
                 task = Task.objects.get(pk=task_pk)
                 # Ответы/решения можно горячо править и у существующих
-                # задач (класс/тему/звёзды существующих не трогаем)
+                # задач (класс/тему/звёзды существующих не трогаем) — но
+                # общую задачу приглашённый учитель не меняет.
+                if not can_edit_task(owner, task):
+                    extra = {k: v for k, v in extra.items()
+                             if k not in ('answer', 'solution')}
+                    sub_answers, sub_solutions = {}, {}
                 updates = []
                 if 'answer' in extra and extra['answer'] != task.answer_latex:
                     task.answer_latex = extra['answer']
@@ -397,14 +410,14 @@ def create_worksheet(parsed, owner, title='', overrides=None):
                         if sub_updates:
                             sub.save(update_fields=sub_updates)
             else:
-                task = Task.objects.create(
+                task = Task.new_for(
+                    owner,
                     text_latex=data['text'],
                     stars=extra.get('stars', data['stars']),
                     columns=data['columns'],
                     answer_latex=extra.get('answer', data['answer']),
                     solution_latex=extra.get('solution', data['solution']),
-                    grade_level=extra.get('grade_level'),
-                    created_by=owner)
+                    grade_level=extra.get('grade_level'))
                 grade_code = GRADE_LEVEL_TO_CODE.get(extra.get('grade_level'))
                 if grade_code:
                     set_grade_bands(task, [grade_code], sync_legacy=False)

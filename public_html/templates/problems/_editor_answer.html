@@ -4,15 +4,15 @@
     <span class="helptext">{% if owner.author_answer_latex %}Авторский{% elif owner.answer_latex %}Редакторский / AI{% endif %}</span>
   </div>
   <div class="math-content">{{ owner.effective_answer_latex|default:'—'|web_text|linebreaksbr }}</div>
-  <details class="ws-add-text"><summary>Править ответ и источники</summary>
+  {% if not editor_readonly %}<details class="ws-add-text"><summary>Править ответ и источники</summary>
     {% include 'problems/_editor_form.html' with form=answer_form block='answer' %}
     <p class="helptext">Основной — авторский ответ. Редакторский / AI используется при его отсутствии.</p>
     {% if owner.answer_mask %}<p class="helptext">После изменения ответа проверьте маску: правильный ответ в ней не заменяется автоматически.</p>{% endif %}
-  </details>
+  </details>{% endif %}
   <div class="problem-mask-summary">
     <strong>Ответ ученика</strong>
     <span class="helptext">{% if task.full_answer_only %}Только развёрнутый ответ{% elif owner.has_mask %}Маска готова{% else %}Маски нет{% endif %}</span>
-    <button type="button" class="btn btn-secondary" data-mask-edit="{{ sub.pk|default:'' }}">{% if owner.answer_mask %}Настроить{% else %}Добавить маску{% endif %}</button>
+    {% if not editor_readonly %}<button type="button" class="btn btn-secondary" data-mask-edit="{{ sub.pk|default:'' }}">{% if owner.answer_mask %}Настроить{% else %}Добавить маску{% endif %}</button>{% endif %}
     <button type="button" class="btn btn-secondary" data-mask-preview="{{ sub.pk|default:'' }}">Предпросмотр</button>
   </div>
   {% if owner.answer_mask %}<div class="problem-mask-code math-content">{{ owner.answer_mask|web_text }}</div>{% endif %}
@@ -21,8 +21,8 @@
     <summary>Решение</summary>
     <p class="helptext">Авторские ответ и решение имеют приоритет. Если авторское поле пустое, используется редакторская / AI-версия.</p>
     {% for text in owner|complete_solutions %}{% if not forloop.first %}<p class="helptext">Полное решение от AI</p>{% endif %}<div class="math-content">{{ text|web_text|linebreaksbr }}</div>{% empty %}<div class="math-content">Решение пока не добавлено.</div>{% endfor %}
-    <details class="ws-add-text"><summary>Править решение</summary>
+    {% if not editor_readonly %}<details class="ws-add-text"><summary>Править решение</summary>
       {% include 'problems/_editor_form.html' with form=solution_form block='solution' %}
-    </details>
+    </details>{% endif %}
   </details>
 </section>

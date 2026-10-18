@@ -26,7 +26,7 @@ class IndependentWorkTests(TestCase):
         self.addCleanup(settings.disable)
         User = get_user_model()
         self.teacher = User.objects.create_user('teacher')
-        Profile.objects.create(user=self.teacher, role='teacher')
+        Profile.objects.create(user=self.teacher, role='teacher', base_editor=True)
         self.student = User.objects.create_user('student')
         Profile.objects.create(user=self.student, teacher=self.teacher, role='student')
         self.other = User.objects.create_user('other')

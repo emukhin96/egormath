@@ -31,8 +31,8 @@ admin.site.register(User, UserWithProfileAdmin)
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'role', 'grade', 'teacher')
-    list_filter = ('role', 'grade')
+    list_display = ('user', 'role', 'grade', 'teacher', 'base_editor')
+    list_filter = ('role', 'grade', 'base_editor')
     search_fields = ('user__username', 'user__first_name', 'user__last_name')
     autocomplete_fields = ('user', 'teacher')
 

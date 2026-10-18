@@ -44,9 +44,19 @@
   <div data-preview-body></div>
   <p class="helptext">Проверка пробного ответа работает тем же кодом, что у ученика.</p>
 </dialog>
+{# Диалог открывается только для задач, которые пользователь вправе менять напрямую: у редактора базы это общие задачи, у приглашённого учителя — его личные #}
 <dialog class="dialog" id="answer-scope-dialog" aria-labelledby="answer-scope-title">
   <h3 id="answer-scope-title">Где сохранить изменения?</h3>
-  <p>В общей базе изменения будут доступны во всех листках. Локальная копия изменит только текущий листок.</p>
-  <div class="form-buttons"><button type="button" class="btn" data-save-scope="local">Только в этом листке</button><button type="button" class="btn btn-secondary" data-save-scope="global">В общей базе</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
+  <p>{% if is_base_editor %}В общей базе изменения будут доступны во всех листках.{% else %}В самой задаче изменения будут видны во всех ваших листках.{% endif %} Локальная копия изменит только текущий листок.</p>
+  <div class="form-buttons"><button type="button" class="btn" data-save-scope="local">Только в этом листке</button><button type="button" class="btn btn-secondary" data-save-scope="global">{% if is_base_editor %}В общей базе{% else %}В самой задаче{% endif %}</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
+</dialog>
+{# Общая задача у приглашённого учителя без контекста листка (problem_editor.js chooseScope): править можно только локальную копию в своём листке; «Предложить исправление» появится вместе с очередью предложений #}
+<dialog class="dialog" id="base-locked-dialog" aria-labelledby="base-locked-title">
+  <h3 id="base-locked-title">Это задача общей базы</h3>
+  <p>Общие задачи правятся только для своего листка: добавьте задачу в листок через корзину и измените её там — в базе появится ваша локальная копия, оригинал не изменится.</p>
+  <form method="post" action="{% url 'cart_add' %}" class="form-buttons" data-locked-cart>
+    {% csrf_token %}<input type="hidden" name="task_id" value=""><input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <button class="btn">Добавить в листок и править там</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button>
+  </form>
 </dialog>
 <div hidden id="answer-mask-config" data-preview-url="{% url 'task_mask_preview' %}" data-draft-url="{% url 'task_mask_draft' %}"></div>

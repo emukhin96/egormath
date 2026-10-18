@@ -18,6 +18,7 @@ from assignments.checks import parse_mask, collect_values, render_fragments
 from assignments.models import Review, SubmissionPhoto
 from accounts.decorators import get_role, teacher_required
 from accounts.models import Profile
+from accounts.permissions import catalog_tasks, visible_tasks
 from livefile import etags
 from problems.models import Task, TaskSubitem
 from worksheets.models import Worksheet, Collection
@@ -338,7 +339,8 @@ def picker_masks(request, pk, task_id):
     from types import SimpleNamespace
     from problems.editor import manage
     position = get_object_or_404(Position, pk=pk, work__in=Work.visible_to(request.user))
-    task = get_object_or_404(Task, pk=task_id)
+    # Маски общей задачи приглашённый не меняет: manage ответит 403.
+    task = get_object_or_404(visible_tasks(request.user), pk=task_id)
     if task.variant_of_id and not position.candidates.filter(task=task).exists():
         raise Http404
     candidate_id = request.GET.get('candidate')
@@ -369,7 +371,7 @@ def pick(request, pk):
     from problems.views import filter_tasks
     from problems.rubricator import taxonomy_page_context, filter_state_from_params
     query = request.GET.get('q', '')
-    tasks = filter_tasks(request.GET).prefetch_related('analog_families', 'familymember_set__family')
+    tasks = filter_tasks(request.GET, request.user).prefetch_related('analog_families', 'familymember_set__family')
     recommended = tasks.none()
     same_topic = tasks.none()
     topic_names = []
@@ -378,13 +380,14 @@ def pick(request, pk):
         family_ids = set(base.task.analog_families.values_list('pk', flat=True))
         if base.task.variant_of_id:
             family_ids.update(base.task.variant_of.analog_families.values_list('pk', flat=True))
-        recommended = Task.objects.filter(variant_of__isnull=True, analog_families__in=family_ids).exclude(pk=base.task_id).distinct().prefetch_related('subitems', 'images', 'familymember_set__family')
+        # Чужая личная задача не попадает в рекомендации, даже из общей семьи аналогов.
+        recommended = catalog_tasks(request.user).filter(analog_families__in=family_ids).exclude(pk=base.task_id).distinct().prefetch_related('subitems', 'images', 'familymember_set__family')
         topics = list(base.task.topics.all())
         topic_names = [topic.name for topic in topics]
-        same_topic = Task.objects.filter(variant_of__isnull=True, topics__in=topics).exclude(
+        same_topic = catalog_tasks(request.user).filter(topics__in=topics).exclude(
             pk__in=position.candidates.values('task_id')).exclude(pk__in=recommended.values('pk')).distinct().order_by('-pk').prefetch_related('subitems', 'images', 'familymember_set__family')
     if request.method == 'POST':
-        task = get_object_or_404(Task, pk=request.POST.get('task'), variant_of__isnull=True)
+        task = get_object_or_404(catalog_tasks(request.user), pk=request.POST.get('task'))
         try:
             ids = sorted(set(int(i) for i in request.POST.getlist('parts')))
         except ValueError:
@@ -447,7 +450,7 @@ def pick(request, pk):
 @require_POST
 def create_analog(request, pk, task_id):
     position = get_object_or_404(Position, pk=pk, work__in=Work.visible_to(request.user))
-    task = get_object_or_404(Task.objects.select_related('variant_of'), pk=task_id)
+    task = get_object_or_404(visible_tasks(request.user).select_related('variant_of'), pk=task_id)
     if task.variant_of_id and not position.candidates.filter(task=task).exists():
         raise Http404
     token = uuid.uuid4().hex

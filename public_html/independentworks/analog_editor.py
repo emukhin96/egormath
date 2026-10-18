@@ -5,6 +5,7 @@ from django.forms.models import model_to_dict
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from accounts.permissions import visible_tasks
 from problems.forms import TaskForm, TaskSourceFormSet, TaskSubitemFormSet, TaskImageFormSet
 from problems.models import Task
 from problems.rubricator import apply_task_taxonomy, task_taxonomy_state, taxonomy_state_from_post, taxonomy_page_context
@@ -22,7 +23,7 @@ def draft(request, pk, token):
     back = reverse('independentworks:pick', args=[pk])
     if state.get('saved'):
         return redirect(back)
-    source = get_object_or_404(Task, pk=state['source'])
+    source = get_object_or_404(visible_tasks(request.user), pk=state['source'])
     posted = request.method == 'POST'
     form = TaskForm(request.POST if posted else None,
         initial=model_to_dict(source, fields=TaskForm.Meta.fields))

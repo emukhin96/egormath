@@ -12,6 +12,8 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from accounts.decorators import teacher_required
+from accounts.permissions import (BASE_LOCKED_MESSAGE, can_edit_task,
+                                  forbidden_json, is_base_editor, visible_tasks)
 from assignments.checks import HELP, KINDS, PRESETS
 from .forms import TaskForm, TaskImageFormSet, TaskSourceFormSet, clean_mask_text
 from .models import Task, TaskSubitem, Tag
@@ -65,7 +67,14 @@ def context(request, task):
                 if Position.objects.filter(pk=position_id, work__in=Work.visible_to(request.user)).exists():
                     ctx['iw_finish_url'] = reverse('independentworks:finish_analog', args=[position_id, task.pk])
                     break
+    editable = can_edit_task(request.user, task)
     ctx.update(task=task, item=item, worksheet=item.worksheet if item else None,
+               # Общая задача у приглашённого: в листке правки уходят в
+               # локальную копию (data-base-locked), без листка карточка
+               # только для чтения (accounts/permissions.py).
+               can_edit_task=editable,
+               is_base_editor=is_base_editor(request.user),
+               editor_readonly=not editable and item is None,
                tags_value=', '.join(task.tags.values_list('name', flat=True)),
                mask_help=HELP, mask_kinds={**KINDS, **{k: k for k in PRESETS}},
                condition_form=block_form('condition', task),
@@ -155,7 +164,7 @@ def insert_after(item, copy, mapping, after=None):
 
 @teacher_required
 def manage(request, pk, *, mask_selection=None):
-    task = get_object_or_404(Task, pk=pk)
+    task = get_object_or_404(visible_tasks(request.user), pk=pk)
     item = None if mask_selection is not None else worksheet_context(request, task)
     selected_only = request.GET.get('view') != 'task'
     selection = mask_selection if mask_selection is not None else (item if selected_only else None)
@@ -171,6 +180,12 @@ def manage(request, pk, *, mask_selection=None):
         if block not in {*BLOCKS, 'subitems', 'images', 'sources', 'masks'}:
             return JsonResponse({'ok': False, 'errors': {'__all__': ['Неизвестный блок']}}, status=400)
         scope = request.POST.get('scope', 'global' if item is None else '')
+        if not can_edit_task(request.user, task):
+            # Общая задача у приглашённого учителя: только локальная копия в
+            # своём листке; без листка (и для масок самостоятельных) — 403.
+            if item is None or scope == 'global':
+                return forbidden_json(BASE_LOCKED_MESSAGE)
+            scope = 'local'
         if scope not in ('global', 'local') or (scope == 'local' and item is None):
             return JsonResponse({'ok': False, 'errors': {'__all__': ['Выберите область сохранения']}}, status=400)
         data = request.POST.copy()
@@ -274,4 +289,7 @@ def manage(request, pk, *, mask_selection=None):
         html = render_to_string('problems/_editor.html', context(request, task), request=request)
         return JsonResponse({'ok': True, 'html': html, 'url': url,
                              'task_id': task.pk, 'answers': mask_data(task, selection),
-                             'sidebar': render_to_string('includes/sidebar/task_detail.html', {'task': task}, request=request)})
+                             'sidebar': render_to_string(
+                                 'includes/sidebar/task_detail.html',
+                                 {'task': task, 'can_edit_task': can_edit_task(request.user, task)},
+                                 request=request)})

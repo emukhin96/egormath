@@ -13,7 +13,7 @@
   </div>
   <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'worksheet_import' %}">Импорт из .tex</a>
-    <a class="btn btn-secondary" href="{% url 'worksheet_corpus_list' %}">Сверка корпуса</a>
+    {% if is_base_editor %}<a class="btn btn-secondary" href="{% url 'worksheet_corpus_list' %}">Сверка корпуса</a>{% endif %}
     <a class="btn" href="{% url 'worksheet_create' %}">Создать листок</a>
   </div>
 </div>
