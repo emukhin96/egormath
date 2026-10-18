@@ -862,6 +862,27 @@ class TeachersPageTests(TestCase):
         self.assertContains(page, credentials['password'])
         self.assertIsNone(self.client.get(self.url).context['new_credentials'])
 
+    def test_cannot_reset_own_password(self):
+        # set_password без update_session_auth_hash разлогинил бы
+        # администратора, а новый пароль показать было бы уже некому
+        self.client.login(username='admin', password='pass12345')
+        page = self.client.get(self.url)
+        self.assertNotContains(
+            page, 'data-dialog-open="reset-password-%d"' % self.admin.pk)
+        self.assertNotContains(page, 'id="reset-password-%d"' % self.admin.pk)
+        self.assertContains(page, f'href="{reverse("profile")}"')
+        old_hash = self.admin.password
+        response = self.client.post(
+            reverse('teacher_reset_password', args=[self.admin.pk]))
+        self.assertRedirects(response, self.url, fetch_redirect_response=False)
+        self.admin.refresh_from_db()
+        self.assertEqual(self.admin.password, old_hash)
+        page = self.client.get(self.url)
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(
+            int(self.client.session['_auth_user_id']), self.admin.pk)
+        self.assertIsNone(page.context['new_credentials'])
+
     def test_toggle_active_but_not_self(self):
         self.client.login(username='admin', password='pass12345')
         self.client.post(reverse('teacher_toggle_active', args=[self.teacher.pk]))
