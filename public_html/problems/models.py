@@ -314,6 +314,13 @@ class Task(models.Model):
         related_name='variants', verbose_name='Вариант задачи',
         help_text='«Локальная» копия для конкретного листка: '
                   'в каталоге не показывается')
+    # Общая база против личных задач: политика — accounts/permissions.py.
+    # Новые задачи создавать через Task.new_for / make_variant(user), чтобы
+    # флаг выставлялся по автору, а не по умолчанию.
+    is_shared = models.BooleanField(
+        'В общей базе', default=False,
+        help_text='Общую задачу видят все учителя, правят только редакторы '
+                  'базы. Личная видна автору и редакторам.')
     created_at = models.DateTimeField('Создана', auto_now_add=True)
     updated_at = models.DateTimeField('Изменена', auto_now=True)
 
@@ -321,6 +328,10 @@ class Task(models.Model):
         verbose_name = 'Задача'
         verbose_name_plural = 'Задачи'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['is_shared', 'created_by'],
+                         name='problems_task_shared_author'),
+        ]
 
     def __str__(self):
         short = self.text_plain or strip_latex(self.text_latex)
@@ -345,6 +356,20 @@ class Task(models.Model):
         if update_fields is not None and 'text_latex' in update_fields:
             kwargs['update_fields'] = list(update_fields) + ['text_plain']
         super().save(*args, **kwargs)
+
+    @staticmethod
+    def shared_for(user):
+        """Попадает ли новая задача этого автора сразу в общую базу:
+        у редактора базы — да, у приглашённого учителя — личная задача."""
+        from accounts.permissions import is_base_editor
+        return is_base_editor(user)
+
+    @classmethod
+    def new_for(cls, user, **fields):
+        """Единая точка создания задачи: автор и флаг общей базы по автору.
+        Все пути создания (форма, конструктор, импорт, корпус) идут сюда."""
+        return cls.objects.create(
+            created_by=user, is_shared=cls.shared_for(user), **fields)
 
     @property
     def has_subitem_answers(self):
@@ -439,7 +464,10 @@ class Task(models.Model):
         copy.block_position = 0
         copy.variant_of = None if standalone else original.variant_of or original
         if user is not None:
+            # Копия принадлежит тому, кто её сделал: у приглашённого учителя
+            # она личная и правится им свободно (accounts/permissions.py).
             copy.created_by = user
+            copy.is_shared = Task.shared_for(user)
         copy.save()
         copy_task_taxonomy(original, copy)
         copy.tags.set(original.tags.all())

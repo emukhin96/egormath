@@ -36,7 +36,22 @@
       container.appendChild(p);
     });
   }
+  // Общая задача у приглашённого учителя (data-base-locked): в листке правки
+  // сразу уходят в локальную копию, без листка — только подсказка, как её
+  // получить (accounts/permissions.py). «Предложить исправление» появится
+  // вместе с очередью предложений.
+  function baseLocked(root) {
+    var dialog = document.getElementById('base-locked-dialog');
+    if (!dialog) return Promise.reject(new Error('Задача из общей базы: измените её для своего листка.'));
+    var input = dialog.querySelector('[name=task_id]');
+    if (input) input.value = root.dataset.taskId || '';
+    return new Promise(function (resolve) {
+      dialog.addEventListener('close', function () { resolve(null); }, {once: true});
+      dialog.showModal();
+    });
+  }
   function chooseScope(root) {
+    if (root.dataset.baseLocked) return root.dataset.item ? Promise.resolve('local') : baseLocked(root);
     if (!root.dataset.item) return Promise.resolve('global');
     return new Promise(function (resolve) {
       var dialog = document.getElementById('answer-scope-dialog'), choice = null;

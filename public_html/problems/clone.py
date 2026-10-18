@@ -22,6 +22,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from accounts.decorators import teacher_required
+from accounts.permissions import visible_tasks
 
 from .clone_numbers import (follow_mask, mask_follows_answer, mask_numbers,
                             split_numbers)
@@ -345,7 +346,8 @@ def create_clone(request, task, item, position, plan, after=None, candidate=None
 
 @teacher_required
 def task_clone(request, pk):
-    task = get_object_or_404(Task.objects.prefetch_related('subitems', 'images'), pk=pk)
+    # Клон — самостоятельная копия автора (make_variant): общую задачу не меняет.
+    task = get_object_or_404(visible_tasks(request.user).prefetch_related('subitems', 'images'), pk=pk)
     item, position = resolve_context(request, task)
     candidate = resolve_candidate(request, task, position)
     if request.method != 'POST':
@@ -378,7 +380,7 @@ def task_clone(request, pk):
 @require_POST
 def task_clone_preview(request, pk):
     """«Ученик увидит»: условие и подпункты клона в веб-разметке."""
-    get_object_or_404(Task, pk=pk)
+    get_object_or_404(visible_tasks(request.user), pk=pk)
     return JsonResponse({'html': preview_html(
         request.POST.get('text', ''), request.POST.getlist('sub'))})
 

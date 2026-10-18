@@ -10,7 +10,8 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from accounts.decorators import teacher_required
+# Сверка корпуса пишет листки и задачи в общую базу — только редакторам.
+from accounts.permissions import base_editor_required
 from problems.models import ExamItem, Topic
 from problems.rubricator import (
     ensure_exam_parent_codes, taxonomy_page_context, taxonomy_state_from_post)
@@ -185,7 +186,7 @@ def _apply_taxonomy_post(draft, post):
             .values_list('code', flat=True)))
 
 
-@teacher_required
+@base_editor_required
 def corpus_list(request):
     drafts = list_drafts()
     status = request.GET.get('status')
@@ -218,7 +219,7 @@ def corpus_list(request):
     return render(request, 'worksheets/corpus_list.html', ctx)
 
 
-@teacher_required
+@base_editor_required
 def corpus_detail(request, draft_id):
     from worksheet_corpus.store import save_draft
     draft = _get_draft_or_404(draft_id)
@@ -323,7 +324,7 @@ def corpus_detail(request, draft_id):
     return render(request, 'worksheets/corpus_detail.html', ctx)
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def corpus_toggle_skip(request, draft_id):
     from worksheet_corpus.store import save_draft
@@ -385,7 +386,7 @@ def corpus_toggle_skip(request, draft_id):
     return redirect('worksheet_corpus_list')
 
 
-@teacher_required
+@base_editor_required
 def corpus_tex(request, draft_id):
     from worksheet_corpus.emit import emit_egor_tex
     draft = _get_draft_or_404(draft_id)
@@ -400,7 +401,7 @@ def corpus_tex(request, draft_id):
     return response
 
 
-@teacher_required
+@base_editor_required
 def corpus_asset(request, draft_id, filename):
     from worksheet_corpus.paths import assets_dir
     root = (assets_dir() / draft_id.replace('/', '__')).resolve()
@@ -410,7 +411,7 @@ def corpus_asset(request, draft_id, filename):
     return FileResponse(path.open('rb'), filename=path.name)
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def corpus_push(request, draft_id):
     from worksheet_corpus.store import save_draft
@@ -460,7 +461,7 @@ def corpus_push(request, draft_id):
     return redirect('worksheet_corpus_list')
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def corpus_unpush(request, pk):
     worksheet = imported_worksheets(
@@ -481,7 +482,7 @@ def corpus_unpush(request, pk):
     return redirect('worksheet_list')
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def corpus_commit_approved(request):
     results = commit_approved(request.user)
@@ -493,7 +494,7 @@ def corpus_commit_approved(request):
     return redirect('worksheet_corpus_list')
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def corpus_approve_clean(request):
     approved = approve_clean_drafts()
@@ -505,7 +506,7 @@ def corpus_approve_clean(request):
     return redirect('worksheet_corpus_list')
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def corpus_assign_topic(request):
     state = taxonomy_state_from_post(request.POST)
@@ -528,7 +529,7 @@ def corpus_assign_topic(request):
     return redirect('worksheet_corpus_list')
 
 
-@teacher_required
+@base_editor_required
 def corpus_solutions(request):
     sheets = imported_worksheets(
         None if request.user.is_superuser else request.user)
@@ -540,7 +541,7 @@ def corpus_solutions(request):
     return render(request, 'worksheets/corpus_solutions.html', {'rows': rows})
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def corpus_solve_worksheet(request, pk):
     worksheet = imported_worksheets(

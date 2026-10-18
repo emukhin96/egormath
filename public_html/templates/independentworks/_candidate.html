@@ -17,5 +17,6 @@
 </fieldset>
 <div class="form-buttons"><button class="btn" {% if not candidate and task.pool_blocked %}disabled{% endif %}>{% if candidate %}Сохранить подпункты{% elif task.pool_blocked %}Уже в самостоятельной{% else %}Добавить в пул{% endif %}</button>{% if not task.block_id %}<button type="button" class="btn btn-secondary" data-quick-clone="{% url 'task_clone' task.pk %}?position={{ position.pk }}{% if candidate %}&amp;candidate={{ candidate.pk }}{% endif %}" title="Аналог с другими числами сразу в этот номер">Клон в этот номер</button>{% endif %}<button class="link-btn" formaction="{% url 'independentworks:create_analog' position.pk task.pk %}" formnovalidate title="Создать аналог вручную в полной форме задачи">Полная форма</button></div>
 </form>
-<div data-worksheet-mask data-manage-url="{% url 'independentworks:picker_masks' position.pk task.pk %}?area={{ mask_area|default:'pool' }}{% if candidate %}&amp;candidate={{ candidate.pk }}{% endif %}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
+{# Маски общей задачи приглашённый учитель не меняет (picker_masks → 403): только просмотр #}
+<div data-worksheet-mask data-manage-url="{% url 'independentworks:picker_masks' position.pk task.pk %}?area={{ mask_area|default:'pool' }}{% if candidate %}&amp;candidate={{ candidate.pk }}{% endif %}"{% if not task|editable_by:request.user %} data-mask-readonly="1"{% endif %} hidden><div data-mask-tools class="problem-mask-tools"></div></div>
 </article>

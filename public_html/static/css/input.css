@@ -4922,6 +4922,13 @@
     color: var(--accent);
   }
 
+  /* Общая задача у приглашённого учителя: класс и темы только текстом */
+  .row-edit-static,
+  .row-edit-static:hover {
+    cursor: default;
+    color: var(--muted);
+  }
+
   .row-edit-sep {
     color: #b8c2cf;
   }

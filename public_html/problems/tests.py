@@ -47,11 +47,20 @@ class ReadSecretTests(SimpleTestCase):
                 self.assertEqual(read_secret('TEST_SECRET'), expected, raw)
 
 
-def make_teacher(username='teacher1'):
+def make_teacher(username='teacher1', *, base_editor=True):
+    """Учитель-редактор базы: как единственный учитель сайта до появления
+    приглашённых. ``base_editor=False`` — приглашённый учитель, который общие
+    задачи правит только локальной копией (accounts/permissions.py)."""
     user = User.objects.create_user(username=username, password='pass12345',
                                     first_name='Иван', last_name='Учителев')
-    Profile.objects.create(user=user, role=Profile.ROLE_TEACHER)
+    Profile.objects.create(user=user, role=Profile.ROLE_TEACHER,
+                           base_editor=base_editor)
     return user
+
+
+def make_invited_teacher(username='guest1'):
+    """Приглашённый учитель без права писать в общую базу."""
+    return make_teacher(username, base_editor=False)
 
 
 def make_student(teacher, username='student1'):

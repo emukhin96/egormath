@@ -1,0 +1,90 @@
+"""Политика доступа к общей базе задач.
+
+Единственное место, где решается, кто вправе писать в общую базу: все
+проверки «редактор базы / приглашённый учитель» в коде и шаблонах идут
+через эти функции, а не через ``is_superuser`` напрямую. Подробности и
+таблица точек записи — docs/USERS_PLAN.md, разделы 3–4.
+
+Правило одно: приглашённый учитель видит общие задачи и пользуется ими, но
+менять общую задачу может только локально — копией для своего листка
+(``Task.make_variant``); в саму общую задачу пишут только редакторы базы.
+"""
+from functools import wraps
+
+from django.core.exceptions import PermissionDenied
+from django.db.models import Q
+from django.http import JsonResponse
+
+from .decorators import teacher_required
+from .models import Profile
+
+BASE_LOCKED_MESSAGE = ('Задача из общей базы: измените её для своего листка '
+                       'или предложите исправление.')
+EDITORS_ONLY_MESSAGE = 'Доступно только редакторам общей базы задач.'
+
+
+def is_base_editor(user):
+    """Суперпользователь или учитель с ``Profile.base_editor``."""
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    if user.is_superuser:
+        return True
+    try:
+        return bool(user.profile.base_editor)
+    except Profile.DoesNotExist:
+        return False
+
+
+def can_edit_task(user, task):
+    """Редактор базы правит всё; остальные — только свои личные задачи
+    (в том числе локальные копии, созданные ими)."""
+    if is_base_editor(user):
+        return True
+    return task.created_by_id == user.pk and not task.is_shared
+
+
+def visible_tasks(user):
+    """Задачи, которые пользователь вправе открыть: редактор — все,
+    остальные — общие и свои (включая локальные копии)."""
+    from problems.models import Task
+    if is_base_editor(user):
+        return Task.objects.all()
+    return Task.objects.filter(Q(is_shared=True) | Q(created_by=user))
+
+
+def catalog_tasks(user):
+    """То же без локальных копий: база каталога, поиска, корзины,
+    дедупликации импорта и подбора кандидатов."""
+    return visible_tasks(user).filter(variant_of__isnull=True)
+
+
+def shared_catalog():
+    """Общие задачи без локальных копий — для общих счётчиков (кэш один
+    на всех пользователей, личные задачи в него не попадают)."""
+    from problems.models import Task
+    return Task.objects.filter(is_shared=True, variant_of__isnull=True)
+
+
+def editable_tasks(user):
+    """Задачи, которые пользователь вправе менять напрямую."""
+    from problems.models import Task
+    if is_base_editor(user):
+        return Task.objects.all()
+    return Task.objects.filter(created_by=user, is_shared=False)
+
+
+def base_editor_required(view_func):
+    """Только редакторам базы: импорт задачников, сверка корпуса,
+    массовые ответы."""
+    @wraps(view_func)
+    @teacher_required
+    def wrapper(request, *args, **kwargs):
+        if not is_base_editor(request.user):
+            raise PermissionDenied(EDITORS_ONLY_MESSAGE)
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+def forbidden_json(message=BASE_LOCKED_MESSAGE):
+    """403 для fetch-запросов редактора: ``{ok: false, message}``."""
+    return JsonResponse({'ok': False, 'message': message}, status=403)

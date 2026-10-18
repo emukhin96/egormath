@@ -34,6 +34,12 @@ class Profile(models.Model):
         null=True, blank=True, related_name='students',
         verbose_name='Учитель',
         help_text='Для учеников: учитель, который ведёт этого ученика')
+    base_editor = models.BooleanField(
+        'Правит общую базу задач', default=False,
+        help_text='Для учителей: право менять общие задачи напрямую. '
+                  'У суперпользователя подразумевается всегда; остальные '
+                  'правят общие задачи только копией для своего листка '
+                  '(accounts/permissions.py).')
 
     class Meta:
         verbose_name = 'Профиль'

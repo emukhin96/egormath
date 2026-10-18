@@ -15,6 +15,7 @@ from problems.models import Task
 from worksheets.models import Worksheet
 
 from .decorators import get_role, teacher_required
+from .permissions import catalog_tasks
 from .forms import (StudentCreateForm, StudentEditForm, StudentGroupForm,
                     StudentRegistrationForm, generate_password)
 from .models import Profile, StudentGroup
@@ -76,8 +77,7 @@ def teacher_dashboard(request):
         'reviewed': reviewed,
         'worksheets_total': Worksheet.visible_to(request.user).count(),
         'students_total': Profile.students_for(request.user).count(),
-        'tasks_total': Task.objects.filter(
-            variant_of__isnull=True).count(),
+        'tasks_total': catalog_tasks(request.user).count(),
     })
 
 
