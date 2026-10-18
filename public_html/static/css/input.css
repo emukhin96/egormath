@@ -7109,3 +7109,85 @@
     .qclone-foot .form-buttons { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
   }
 }
+
+/* Очередь предложений исправлений (problems/proposals.py): счётчик у пункта
+   меню, сравнение «в базе ↔ предложено», непросмотренный ответ автору */
+@layer components {
+  .nav-count {
+    margin-left: var(--space-1);
+  }
+
+  .proposal-compare-head,
+  .proposal-row {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-3);
+    align-items: start;
+  }
+
+  .proposal-compare-head {
+    margin-bottom: var(--space-2);
+  }
+
+  .proposal-compare-head h2 {
+    margin: 0;
+  }
+
+  .proposal-row {
+    padding: var(--space-2) 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .proposal-label {
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .proposal-cell {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Отличающееся поле — подсветка предложенного значения фоном, без цветной полосы */
+  .proposal-row.is-changed .proposal-cell-proposed {
+    background: #fff6e5;
+    border-radius: var(--radius);
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .proposal-subhead {
+    margin: var(--space-4) 0 var(--space-2);
+    font-size: 0.95rem;
+  }
+
+  .proposal-message {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+
+  .list tr.proposal-unread > td {
+    background: var(--accent-soft);
+  }
+
+  @media (max-width: 720px) {
+    .proposal-compare-head {
+      display: none;
+    }
+
+    .proposal-row {
+      grid-template-columns: 1fr;
+    }
+
+    .proposal-row .proposal-cell::before {
+      display: block;
+      color: var(--muted);
+      font-size: 0.8rem;
+      content: "В базе";
+    }
+
+    .proposal-row .proposal-cell-proposed::before {
+      content: "Предложено";
+    }
+  }
+}

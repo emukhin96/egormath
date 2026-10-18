@@ -1,0 +1,21 @@
+{# Поля предложения — общие для диалога карточки и отдельной страницы: propose — proposals.proposal_options, prefill — текст по умолчанию (например, «Предложить маску») #}
+{% if propose.kind == 'fix' %}
+<p><label>Что исправить<textarea name="message" rows="4"{% if not propose.variants and not propose.variant %} required{% endif %} placeholder="Опечатка в условии, неверный ответ, нужна маска…">{{ prefill }}</textarea></label></p>
+{% if propose.variant %}
+<input type="hidden" name="variant" value="{{ propose.variant.pk }}">
+<p class="helptext">Предложенная версия — ваша локальная копия #{{ propose.variant.pk }}: условие, ответы, решения, маски и подпункты на момент отправки. Копию можно править дальше, предложение не изменится.</p>
+{% elif propose.variants|length == 1 %}
+{% with copy=propose.variants.0 %}
+<div class="choice-items"><label class="choice-item"><input type="checkbox" name="variant" value="{{ copy.pk }}"><span>Приложить мою локальную копию #{{ copy.pk }} как предложенную версию</span></label></div>
+{% endwith %}
+{% elif propose.variants %}
+<p class="helptext">Приложить как предложенную версию:</p>
+<div class="choice-items">
+<label class="choice-item"><input type="radio" name="variant" value="" checked><span>Без копии — только текст</span></label>
+{% for copy in propose.variants %}<label class="choice-item"><input type="radio" name="variant" value="{{ copy.pk }}"><span>Локальная копия #{{ copy.pk }} · изменена {{ copy.updated_at|date:'d.m.Y' }}</span></label>{% endfor %}
+</div>
+{% endif %}
+{% else %}
+<p class="helptext">В общую базу уйдёт текущая версия задачи: условие, ответы, решения, маски и подпункты. Редактор базы проверит её и примет или отклонит с ответом.</p>
+<p><label>Комментарий редактору<textarea name="message" rows="3" placeholder="Откуда задача, на что обратить внимание">{{ prefill }}</textarea></label></p>
+{% endif %}

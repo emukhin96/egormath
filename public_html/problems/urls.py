@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import clone, editor, views
+from . import clone, editor, proposals, views
 
 urlpatterns = [
     path('', views.task_list, name='task_list'),
@@ -49,7 +49,17 @@ urlpatterns = [
          views.textbook_import_block, name='textbook_import_block'),
     path('imports/<int:batch_pk>/tasks/<int:pk>/',
          views.textbook_import_review, name='textbook_import_review'),
+    # Очередь предложений исправлений (problems/proposals.py)
+    path('proposals/', proposals.proposal_list, name='proposal_list'),
+    path('proposals/mine/', proposals.proposals_mine, name='proposals_mine'),
+    path('proposals/<int:pk>/', proposals.proposal_detail,
+         name='proposal_detail'),
+    path('proposals/<int:pk>/apply/', proposals.proposal_apply,
+         name='proposal_apply'),
+    path('proposals/<int:pk>/reject/', proposals.proposal_reject,
+         name='proposal_reject'),
     path('<int:pk>/', views.task_detail, name='task_detail'),
+    path('<int:pk>/propose/', proposals.task_propose, name='task_propose'),
     path('<int:pk>/delete/', views.task_delete, name='task_delete'),
     path('<int:pk>/duplicate/', views.task_duplicate, name='task_duplicate'),
     path('<int:pk>/clone/', clone.task_clone, name='task_clone'),

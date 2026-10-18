@@ -9,6 +9,8 @@
     </div>
     <div class="form-buttons page-actions">
       {% if not task.variant_of_id %}{% include 'includes/cart_button.html' with task=task %}{% endif %}
+      {# Очередь предложений (problems/proposals.py): исправление общей задачи, своя копия как версия, личная задача в базу #}
+      {% if propose %}{% if propose.open %}<a class="btn btn-secondary" href="{% url 'proposals_mine' %}" title="Ваше предложение по этой задаче ждёт ответа редактора базы">Предложение отправлено</a>{% else %}<button type="button" class="btn btn-secondary" data-dialog-open="propose-dialog">{{ propose.label }}</button>{% endif %}{% endif %}
       {% if not editor_readonly %}
       <button type="button" class="btn btn-secondary" data-editor-ai="answer">Дописать AI-ответ</button>
       <button type="button" class="btn btn-secondary" data-editor-ai="solution">Добавить AI-решение</button>
@@ -17,7 +19,7 @@
   </div>
   {% if editor_readonly %}
   <div class="card problem-base-locked">
-    <p>Это задача общей базы. Чтобы изменить её для себя, добавьте задачу в листок (через корзину) и откройте из листка: правки сохранятся в вашу локальную копию, оригинал в базе не изменится.</p>
+    <p>Это задача общей базы. Чтобы изменить её для себя, добавьте задачу в листок (через корзину) и откройте из листка: правки сохранятся в вашу локальную копию, оригинал в базе не изменится. Ошибку в самой базе исправят редакторы — нажмите «Предложить исправление».</p>
   </div>
   {% endif %}
   <div class="problem-columns">

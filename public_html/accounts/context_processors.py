@@ -5,6 +5,8 @@
 к БД нет.
 """
 from django.conf import settings
+from django.db.models import Count, Q
+from django.utils.functional import SimpleLazyObject
 
 from .decorators import get_role
 from .models import Profile
@@ -35,4 +37,26 @@ def shell(request):
     if is_teacher:
         from worksheets.cart import cart_context
         context['cart'] = cart_context(request)
+        # Очередь предложений исправлений (problems/proposals.py): редактору
+        # базы — новые, автору — ответы, которых он ещё не видел. Один запрос
+        # на страницу, и только когда шаблон дошёл до счётчиков: частичные
+        # рендеры (JSON-ответы редактора карточки) их не трогают.
+        counts = SimpleLazyObject(
+            lambda: proposal_counts(user, context['is_base_editor']))
+        if context['is_base_editor']:
+            context['proposals_new'] = SimpleLazyObject(lambda: counts['new'])
+        context['proposals_replies'] = SimpleLazyObject(lambda: counts['replies'])
     return context
+
+
+def proposal_counts(user, editor):
+    """``new`` — новые предложения (редактору), ``replies`` — непросмотренные
+    ответы автору; WHERE по индексам (status, created_at) и (author, status)."""
+    from problems.models import TaskProposal
+    mine = (Q(author=user, seen_by_author_at__isnull=True)
+            & ~Q(status=TaskProposal.STATUS_NEW))
+    if not editor:
+        return {'new': 0, 'replies': TaskProposal.objects.filter(mine).count()}
+    fresh = Q(status=TaskProposal.STATUS_NEW)
+    return TaskProposal.objects.filter(fresh | mine).aggregate(
+        new=Count('pk', filter=fresh), replies=Count('pk', filter=mine))

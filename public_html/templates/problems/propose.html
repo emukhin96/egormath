@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% load task_extras %}
+{% block title %}{{ propose.label }} — Математика{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/task_detail.html' with task=task %}{% endblock %}
+{% block content %}
+{# Та же форма, что в диалоге карточки: сюда ведут «Предложить маску» из самостоятельных и диалог «Это задача общей базы» со страниц без карточки #}
+<div class="page-head">
+  <div>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a><a href="{% url 'task_detail' task.pk %}">Задача #{{ task.pk }}</a></nav>
+    <h1>{{ propose.label }}</h1>
+    <p class="page-meta"><span>задача #{{ propose.task.pk }}</span>{% if propose.variant %}<span>локальная копия #{{ propose.variant.pk }}</span>{% endif %}</p>
+  </div>
+</div>
+<div class="problem-columns">
+  <div class="card">
+    <h2>Условие</h2>
+    <div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
+    {% if task.subitems.all %}<ol class="subitems">{% for sub in task.subitems.all %}<li class="math-content">{{ sub.text_latex|web_text }}</li>{% endfor %}</ol>{% endif %}
+    {% task_images task %}
+  </div>
+  <div class="card">
+    {% if propose.open %}
+    <p>Ваше предложение по этой задаче уже ждёт ответа редактора базы.</p>
+    <div class="form-buttons"><a class="btn btn-secondary" href="{% url 'proposals_mine' %}">Мои предложения</a></div>
+    {% else %}
+    <form method="post" action="{% url 'task_propose' propose.task.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      {% include 'problems/_propose_fields.html' %}
+      <div class="form-buttons"><button class="btn">Отправить</button><a class="btn btn-secondary" href="{% if next %}{{ next }}{% else %}{% url 'task_detail' task.pk %}{% endif %}">Отмена</a></div>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

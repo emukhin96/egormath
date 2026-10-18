@@ -58,6 +58,35 @@
   {% endif %}
 </div>
 
+{# Очередь предложений исправлений — только редакторам базы (accounts/permissions.py) #}
+{% if proposals is not None %}
+<div class="card">
+  <div class="card-head">
+    <h2>Предложения исправлений</h2>
+    <div class="card-head-actions">
+      <a href="{% url 'proposal_list' %}">Вся очередь</a>
+      {% if proposals_new %}<span class="counter">{{ proposals_new }}</span>{% endif %}
+    </div>
+  </div>
+  {% if proposals %}
+  <div class="catalog-table-wrap"><table class="list table-stack">
+    <tr><th>Задача</th><th>Вид</th><th>Автор</th><th>Отправлено</th><th></th></tr>
+    {% for p in proposals %}
+    <tr>
+      <td class="stack-primary">Задача #{{ p.task.pk }}{% if p.message %}<div class="muted task-meta">{{ p.message|truncatechars:80 }}</div>{% endif %}</td>
+      <td data-label="Вид">{{ p.get_kind_display }}</td>
+      <td data-label="Автор">{{ p.author.get_full_name|default:p.author.username }}</td>
+      <td data-label="Отправлено">{{ p.created_at|date:'d.m.Y H:i' }}</td>
+      <td class="row-actions"><a class="btn btn-small" href="{% url 'proposal_detail' p.pk %}">Открыть</a></td>
+    </tr>
+    {% endfor %}
+  </table></div>
+  {% else %}
+  <p class="muted">Новых предложений нет.</p>
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="grid-2">
   <div class="card">
     <h2>{% if request.user.is_superuser %}Все листки{% else %}Мои листки{% endif %}</h2>

@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% load task_extras %}
+{% block title %}Предложение #{{ proposal.pk }} — Математика{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/proposal_detail.html' %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a><a href="{% url 'proposal_list' %}">Предложения</a></nav>
+    <h1>{{ proposal.get_kind_display }} · задача #{{ task.pk }}</h1>
+    <p class="page-meta"><span>{{ proposal.author.get_full_name|default:proposal.author.username }}</span><span>{{ proposal.created_at|date:'d.m.Y H:i' }}</span>{% include 'problems/_proposal_status.html' %}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-secondary" href="{% url 'task_detail' task.pk %}">Открыть задачу</a>
+    {% if proposal.variant %}<a class="btn btn-secondary" href="{% url 'task_detail' proposal.variant.pk %}">Открыть копию автора</a>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Сообщение автора</h2>
+  <p class="proposal-message">{{ proposal.message|default:'—' }}</p>
+</div>
+
+{% if not proposal.is_open %}
+<div class="card">
+  <h2>Решение</h2>
+  <p>{{ proposal.get_status_display }} · {{ proposal.resolved_by.get_full_name|default:proposal.resolved_by.username }} · {{ proposal.resolved_at|date:'d.m.Y H:i' }}</p>
+  {% if proposal.resolution_note %}<p class="proposal-message">{{ proposal.resolution_note }}</p>{% endif %}
+</div>
+{% endif %}
+
+{% if diff %}
+{# Слева задача в базе сейчас, справа снимок на момент отправки; отличающиеся строки подсвечены #}
+<div class="card proposal-compare">
+  <div class="proposal-compare-head"><span></span><h2>{% if proposal.kind == 'new' %}Сейчас в задаче{% else %}В базе{% endif %}</h2><h2>{% if proposal.kind == 'new' %}На момент отправки{% else %}Предложено{% endif %}</h2></div>
+  {% for section in diff.sections %}{% for f in section.fields %}
+  <div class="proposal-row{% if f.changed %} is-changed{% endif %}">
+    <div class="proposal-label">{{ f.label }}</div>
+    <div class="proposal-cell">{% include 'problems/_proposal_value.html' with value=f.current is_mask=f.is_mask is_bool=f.is_bool %}</div>
+    <div class="proposal-cell proposal-cell-proposed">{% include 'problems/_proposal_value.html' with value=f.proposed is_mask=f.is_mask is_bool=f.is_bool %}</div>
+  </div>
+  {% endfor %}{% endfor %}
+  {% for row in diff.subitems %}
+  <h3 class="proposal-subhead">Подпункт {{ row.index|subitem_label }}){% if not row.current %} <span class="badge badge-reviewed">новый</span>{% elif not row.proposed %} <span class="badge badge-returned">удалён</span>{% endif %}</h3>
+  {% for f in row.fields %}{% if f.current or f.proposed or f.name == 'text_latex' %}
+  <div class="proposal-row{% if f.changed %} is-changed{% endif %}">
+    <div class="proposal-label">{{ f.label }}</div>
+    <div class="proposal-cell">{% include 'problems/_proposal_value.html' with value=f.current is_mask=f.is_mask is_bool=f.is_bool %}</div>
+    <div class="proposal-cell proposal-cell-proposed">{% include 'problems/_proposal_value.html' with value=f.proposed is_mask=f.is_mask is_bool=f.is_bool %}</div>
+  </div>
+  {% endif %}{% endfor %}
+  {% endfor %}
+  {% if not diff.any_changed %}<p class="helptext">Предложенная версия совпадает с задачей в базе.</p>{% endif %}
+</div>
+{% else %}
+<div class="card">
+  <h2>Предложенная версия</h2>
+  <p class="muted">Автор не приложил копию задачи — исправление описано текстом выше. Внесите его на карточке задачи и отметьте предложение принятым, либо отклоните с ответом.</p>
+</div>
+{% endif %}
+
+{% if proposal.is_open %}
+<div class="card">
+  <h2>{% if proposal.kind == 'new' %}Принять в общую базу{% else %}Применить{% endif %}</h2>
+  <form method="post" action="{% url 'proposal_apply' proposal.pk %}">
+    {% csrf_token %}
+    {% if diff %}
+    <p class="helptext">Отмеченные разделы копируются в задачу теми же формами, что и редактор карточки; подпункты — по порядку. По умолчанию отмечено то, что отличается.</p>
+    <div class="choice-items">
+      {% for section in diff.sections %}<label class="choice-item"><input type="checkbox" name="sections" value="{{ section.key }}"{% if section.changed %} checked{% endif %}><span>{{ section.label }}{% if section.changed %} · отличается{% endif %}</span></label>{% endfor %}
+    </div>
+    {% endif %}
+    {% if proposal.kind == 'new' %}<p class="helptext">Задача станет общей: её увидят все учителя, править дальше смогут только редакторы базы.</p>{% endif %}
+    <p><label>Ответ автору (необязательно)<textarea name="note" rows="2"></textarea></label></p>
+    <div class="form-buttons"><button class="btn">{% if proposal.kind == 'new' %}Принять в общую базу{% elif diff %}Применить{% else %}Отметить принятым{% endif %}</button><button type="button" class="btn btn-secondary" data-dialog-open="reject-dialog">Отклонить</button></div>
+  </form>
+</div>
+<dialog class="dialog" id="reject-dialog" aria-labelledby="reject-title">
+  <h3 id="reject-title">Отклонить предложение</h3>
+  <form method="post" action="{% url 'proposal_reject' proposal.pk %}">
+    {% csrf_token %}
+    <p><label>Причина — автор увидит её в ответе<textarea name="note" rows="3" required></textarea></label></p>
+    <div class="form-buttons"><button class="btn">Отклонить</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

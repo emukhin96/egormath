@@ -67,6 +67,8 @@
       var actions=document.createElement('div');actions.className='problem-mask-actions';target.appendChild(actions);
       if(owners.some(o=>o.full_answer_only)){var policy=document.createElement('span');policy.className='helptext';policy.textContent='Только развёрнутый ответ. Сохранённые маски не используются.';actions.appendChild(policy);}
       if(!root.dataset.maskReadonly&&!owners.some(o=>o.full_answer_only)&&owners.filter(o=>!o.mask.trim()).length>1)actions.appendChild(button('Создать недостающие маски','maskMissing','1'));
+      // Маски общей задачи приглашённый не меняет (403): вместо редактора — ссылка на предложение исправления (problems/proposals.py)
+      if(root.dataset.maskReadonly&&root.dataset.proposeUrl){var propose=document.createElement('a');propose.className='btn btn-small btn-secondary';propose.href=root.dataset.proposeUrl;propose.textContent='Предложить маску';propose.title='Маски общей задачи меняют редакторы базы — предложите свою';actions.appendChild(propose);}
 
       for(var i=0;i<owners.length;i++){
         var o=owners[i],row=document.createElement('div');row.className='problem-mask-summary';

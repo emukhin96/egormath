@@ -4,8 +4,8 @@ from django import forms
 from .forms import clean_mask_text
 
 from .models import (ExamItem, ExamModel, FacetType, FacetValue, GradeBand,
-                     Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
-                     TextbookImportAsset, TextbookImportBatch,
+                     Source, Tag, Task, TaskImage, TaskProposal, TaskSource,
+                     TaskSubitem, TextbookImportAsset, TextbookImportBatch,
                      TextbookTaskDraft, Topic)
 
 
@@ -142,3 +142,17 @@ class TextbookTaskDraftAdmin(admin.ModelAdmin):
 class TextbookImportAssetAdmin(admin.ModelAdmin):
     list_display = ('original_name', 'stem', 'batch')
     search_fields = ('original_name', 'stem')
+
+
+@admin.register(TaskProposal)
+class TaskProposalAdmin(admin.ModelAdmin):
+    """Очередь предложений: решения принимаются на сайте
+    (/problems/proposals/), здесь — просмотр и разбор снимков."""
+    list_display = ('__str__', 'kind', 'status', 'author', 'created_at',
+                    'resolved_by', 'resolved_at')
+    list_filter = ('status', 'kind')
+    search_fields = ('message', 'resolution_note', 'author__username',
+                     'task__text_plain')
+    raw_id_fields = ('task', 'variant', 'author', 'resolved_by')
+    readonly_fields = ('snapshot', 'created_at')
+    date_hierarchy = 'created_at'

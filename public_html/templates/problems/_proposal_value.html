@@ -1,0 +1,2 @@
+{# Значение поля снимка на странице предложения: value, is_mask, is_bool — из proposals.compare #}
+{% load task_extras %}{% if is_bool %}{% if value %}да{% else %}нет{% endif %}{% elif not value %}<span class="muted">—</span>{% elif is_mask %}<div class="problem-mask-code math-content">{{ value|web_text }}</div>{% else %}<div class="math-content">{{ value|web_text|linebreaksbr }}</div>{% endif %}
