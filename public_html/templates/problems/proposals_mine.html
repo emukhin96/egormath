@@ -7,7 +7,7 @@
   <div>
     <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a></nav>
     <h1>Мои предложения</h1>
-    <p class="page-meta"><span>{{ proposals|length }} {{ proposals|length|plural_ru:'предложение,предложения,предложений' }}</span>{% if unread_total %}<span>{{ unread_total }} {{ unread_total|plural_ru:'новый ответ,новых ответа,новых ответов' }}</span>{% endif %}</p>
+    <p class="page-meta"><span>{{ page.paginator.count }} {{ page.paginator.count|plural_ru:'предложение,предложения,предложений' }}</span>{% if unread_total %}<span>{{ unread_total }} {{ unread_total|plural_ru:'новый ответ,новых ответа,новых ответов' }}</span>{% endif %}</p>
   </div>
 </div>
 <div class="card">
@@ -31,6 +31,7 @@
     {% endfor %}
     </tbody>
   </table></div>
+  {% include 'includes/pagination.html' with query=params %}
   {% else %}
   <p class="muted">Вы пока ничего не предлагали. Кнопка «Предложить исправление» есть на карточке любой задачи общей базы, «Предложить задачу в общую базу» — на карточке своей задачи.</p>
   {% endif %}
