@@ -485,7 +485,7 @@ def mark_already_imported_drafts(drafts, source):
     refs = {
         ref.locator: ref
         for ref in TaskSource.objects.select_related('task').filter(
-            source=source, locator__in=locators)
+            source=source, locator__in=locators, task__is_shared=True)
     }
     for draft in drafts:
         ref = refs.get(draft.external_id)
@@ -1372,8 +1372,11 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
                 draft.save(update_fields=['exam_item_codes', 'tags'])
         except ValueError as exc:
             raise TextbookImportError(str(exc)) from exc
+        # Ключ задачника ищем только среди общих задач: личная задача
+        # учителя не должна перехватывать импорт в базу.
         ref = (TaskSource.objects.select_related('task')
-               .filter(source=batch.source, locator=draft.external_id).first())
+               .filter(source=batch.source, locator=draft.external_id,
+                       task__is_shared=True).first())
         if ref:
             task = ref.task
             if task.text_latex.strip() != draft.text_latex.strip():

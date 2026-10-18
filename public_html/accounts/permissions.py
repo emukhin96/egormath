@@ -68,6 +68,18 @@ def shared_catalog():
     return Task.objects.filter(is_shared=True, variant_of__isnull=True)
 
 
+def dedup_tasks(user=None):
+    """База дедупликации при импорте и создании: общие задачи плюс свои —
+    и для редактора тоже. Чужая личная задача не должна ни находиться как
+    «уже есть #id», ни получать ответы из импорта, ни попадать в общий
+    корпусный листок."""
+    from problems.models import Task
+    catalog = Task.objects.filter(variant_of__isnull=True)
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return catalog.filter(is_shared=True)
+    return catalog.filter(Q(is_shared=True) | Q(created_by=user))
+
+
 def editable_tasks(user):
     """Задачи, которые пользователь вправе менять напрямую."""
     from problems.models import Task
