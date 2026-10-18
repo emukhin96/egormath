@@ -16,6 +16,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -239,13 +240,19 @@ def _resolve(proposal, status, user, note):
 
 
 @transaction.atomic
-def apply_proposal(proposal, sections, user, note=''):
+def apply_proposal(proposal, sections, user, note='', version=None):
     """Выбранные разделы снимка — в общую задачу; для ``new`` задача
-    становится общей. Любая ошибка валидации откатывает всё."""
+    становится общей. ``version`` — ``updated_at`` задачи на момент показа
+    страницы: если задача с тех пор изменилась (автор правит личную задачу,
+    пока предложение открыто), редактор увидел не то, что уйдёт в базу, —
+    отказ. Любая ошибка валидации откатывает всё."""
     proposal = TaskProposal.objects.select_for_update().get(pk=proposal.pk)
     if not proposal.is_open:
         raise ProposalError('Предложение уже обработано.')
     task = Task.objects.select_for_update().get(pk=proposal.task_id)
+    if version is not None and parse_datetime(version or '') != task.updated_at:
+        raise ProposalError('Задача изменилась, пока вы смотрели предложение: '
+                            'обновите страницу и проверьте ещё раз.')
     chosen = [key for key, _ in SECTIONS if key in set(sections)]
     snapshot = proposal.snapshot
     if chosen and not snapshot:
@@ -392,6 +399,8 @@ def proposal_detail(request, pk):
     return render(request, 'problems/proposal_detail.html', {
         'proposal': proposal, 'task': proposal.task, 'diff': diff,
         'sections': [s for s in (diff['sections'] if diff else [])],
+        # Отметка версии для формы «Применить» (apply_proposal)
+        'task_version': proposal.task.updated_at.isoformat(),
     })
 
 
@@ -401,7 +410,8 @@ def proposal_apply(request, pk):
     proposal = _proposal(pk)
     try:
         proposal = apply_proposal(proposal, request.POST.getlist('sections'),
-                                  request.user, request.POST.get('note', ''))
+                                  request.user, request.POST.get('note', ''),
+                                  version=request.POST.get('version', ''))
     except ProposalError as exc:
         messages.error(request, str(exc))
         return redirect('proposal_detail', pk=pk)

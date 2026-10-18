@@ -345,17 +345,48 @@ class MailTests(ProposalBase):
         self.propose(self.shared, {'message': 'Опечатка'})
         proposal = TaskProposal.objects.get()
         self.client.force_login(self.editor)
-        self.client.post(reverse('proposal_apply', args=[proposal.pk]), {'note': 'Исправил вручную'})
+        self.client.post(reverse('proposal_apply', args=[proposal.pk]),
+                         {'note': 'Исправил вручную', 'version': self.shared.updated_at.isoformat()})
         self.assertEqual(mail.outbox, [])
         proposal.refresh_from_db()
         self.assertEqual(proposal.status, TaskProposal.STATUS_ACCEPTED)
 
 
 class ApplyTests(ProposalBase):
-    def apply(self, proposal, sections=(), note='', user=None):
+    def apply(self, proposal, sections=(), note='', user=None, version=None):
+        """Как форма страницы: с отметкой версии задачи на момент показа."""
+        if version is None:
+            version = Task.objects.get(pk=proposal.task_id).updated_at.isoformat()
         self.client.force_login(user or self.editor)
         return self.client.post(reverse('proposal_apply', args=[proposal.pk]),
-                                {'sections': list(sections), 'note': note})
+                                {'sections': list(sections), 'note': note, 'version': version})
+
+    def test_apply_refuses_task_changed_since_page_was_shown(self):
+        """Автор правит личную задачу, пока предложение открыто: редактор
+        смотрел одну версию, в базу ушла бы другая — отказ до обновления."""
+        proposal = create_proposal(self.guest, self.own, kind='new', message='В базу')
+        self.client.force_login(self.editor)
+        page = self.client.get(reverse('proposal_detail', args=[proposal.pk]))
+        stale = page.context['task_version']
+        self.assertContains(page, f'name="version" value="{stale}"')
+        self.own.text_latex = 'Правка после показа'
+        self.own.save()
+        for version in (stale, '', 'мусор'):
+            self.apply(proposal, [], note='Принято', version=version)
+            self.own.refresh_from_db()
+            self.assertFalse(self.own.is_shared, version)
+            proposal.refresh_from_db()
+            self.assertTrue(proposal.is_open, version)
+        page = self.client.get(reverse('proposal_detail', args=[proposal.pk]))
+        self.assertContains(page, 'Задача изменилась')
+        self.apply(proposal, [], note='Принято')
+        self.own.refresh_from_db()
+        self.assertTrue(self.own.is_shared)
+        # Без отметки версии функция применяет как раньше (прямой вызов)
+        other = create_proposal(self.other_guest, self.shared, kind='fix', message='Текст')
+        apply_proposal(other, [], self.editor)
+        other.refresh_from_db()
+        self.assertEqual(other.status, TaskProposal.STATUS_ACCEPTED)
 
     def test_apply_selected_fields_only(self):
         proposal, copy = self.fix_with_copy()
