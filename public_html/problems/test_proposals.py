@@ -1,6 +1,8 @@
 """Очередь предложений исправлений (problems/proposals.py): создание трёх
 видов со снимком, запреты, счётчики в шапке и кабинете, почта, применение
 выбранных полей, отклонение с причиной, доступ к страницам."""
+from unittest import mock
+
 from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -239,6 +241,30 @@ class CounterTests(ProposalBase):
         response = self.client.get(reverse('proposals_mine'))
         self.assertNotContains(response, 'proposal-unread')
         self.assertEqual(response.context['proposals_replies'], 0)
+
+
+class MineLimitTests(ProposalBase):
+    def test_only_shown_replies_are_marked_seen(self):
+        """Ответ за пределами списка не отмечается просмотренным и остаётся
+        в счётчике, пока автор его не увидит."""
+        older = create_proposal(self.guest, self.shared, kind='fix', message='Старое')
+        TaskProposal.objects.filter(pk=older.pk).update(status=TaskProposal.STATUS_REJECTED)
+        newer = create_proposal(self.guest, self.own, kind='new', message='Новое')
+        TaskProposal.objects.filter(pk=newer.pk).update(status=TaskProposal.STATUS_ACCEPTED)
+        self.client.force_login(self.guest)
+        with mock.patch('problems.proposals.MINE_LIMIT', 1):
+            response = self.client.get(reverse('proposals_mine'))
+        self.assertEqual([p.pk for p in response.context['proposals']], [newer.pk])
+        older.refresh_from_db()
+        newer.refresh_from_db()
+        self.assertIsNone(older.seen_by_author_at)
+        self.assertIsNotNone(newer.seen_by_author_at)
+        self.assertEqual(self.client.get(reverse('dashboard')).context['proposals_replies'], 1)
+        # Решивший редактор удалён (SET_NULL) — страницы не падают
+        response = self.client.get(reverse('proposals_mine'))
+        self.assertContains(response, 'редактор базы')
+        self.client.force_login(self.editor)
+        self.assertContains(self.client.get(reverse('proposal_detail', args=[older.pk])), 'редактор базы')
 
 
 # Адреса редакторов по умолчанию пустые: локальный local_settings.py (стенд)

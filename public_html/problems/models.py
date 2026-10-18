@@ -1062,3 +1062,19 @@ class TaskProposal(models.Model):
     def has_snapshot(self):
         """Есть ли предложенная версия полей (не только текст автора)."""
         return bool(self.snapshot)
+
+    @staticmethod
+    def _name(user, fallback):
+        if user is None:
+            return fallback
+        return user.get_full_name() or user.username
+
+    @property
+    def author_name(self):
+        return self._name(self.author, 'учитель')
+
+    @property
+    def resolved_by_name(self):
+        """Кто решил; пользователь мог быть удалён (SET_NULL) — тогда
+        просто «редактор базы», страница не падает."""
+        return self._name(self.resolved_by, 'редактор базы')

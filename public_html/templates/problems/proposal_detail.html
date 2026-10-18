@@ -7,7 +7,7 @@
   <div>
     <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a><a href="{% url 'proposal_list' %}">Предложения</a></nav>
     <h1>{{ proposal.get_kind_display }} · задача #{{ task.pk }}</h1>
-    <p class="page-meta"><span>{{ proposal.author.get_full_name|default:proposal.author.username }}</span><span>{{ proposal.created_at|date:'d.m.Y H:i' }}</span>{% include 'problems/_proposal_status.html' %}</p>
+    <p class="page-meta"><span>{{ proposal.author_name }}</span><span>{{ proposal.created_at|date:'d.m.Y H:i' }}</span>{% include 'problems/_proposal_status.html' %}</p>
   </div>
   <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'task_detail' task.pk %}">Открыть задачу</a>
@@ -23,7 +23,7 @@
 {% if not proposal.is_open %}
 <div class="card">
   <h2>Решение</h2>
-  <p>{{ proposal.get_status_display }} · {{ proposal.resolved_by.get_full_name|default:proposal.resolved_by.username }} · {{ proposal.resolved_at|date:'d.m.Y H:i' }}</p>
+  <p>{{ proposal.get_status_display }} · {{ proposal.resolved_by_name }} · {{ proposal.resolved_at|date:'d.m.Y H:i' }}</p>
   {% if proposal.resolution_note %}<p class="proposal-message">{{ proposal.resolution_note }}</p>{% endif %}
 </div>
 {% endif %}
