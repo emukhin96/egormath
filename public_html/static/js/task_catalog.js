@@ -13,6 +13,19 @@
   toggle.addEventListener('change', display); display();
 })();
 
+/* Тумблер редактора «Показывать задачи других учителей»: форма #task-list-prefs
+   возвращает на адрес из скрытого поля next, а живой поиск (task_finder.js)
+   меняет фильтры через replaceState без перезагрузки — поэтому next
+   подставляется из текущего адреса в момент отправки, а не при отрисовке. */
+(function () {
+  var form = document.getElementById('task-list-prefs');
+  if (!form) return;
+  form.addEventListener('submit', function () {
+    var next = form.querySelector('input[name="next"]');
+    if (next) next.value = location.pathname + location.search;
+  });
+})();
+
 /* Класс и темы в строке каталога: текст сводки обновляется после правки в
    раскрытом блоке — класс по селекту, темы по чипам выбора темы. */
 (function () {

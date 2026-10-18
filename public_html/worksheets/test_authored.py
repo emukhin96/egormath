@@ -447,7 +447,7 @@ class PublishPermissionTests(TestCase):
         own.refresh_from_db()
         self.assertTrue(own.is_published)
 
-    def test_superuser_publishes_guest_collection(self):
+    def test_superuser_publishes_and_guest_owner_can_hide(self):
         root = get_user_model().objects.create_superuser('root', password='x')
         self.client.force_login(root)
         response = self.client.post(
@@ -455,7 +455,17 @@ class PublishPermissionTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.collection.refresh_from_db()
         self.assertTrue(self.collection.is_published)
+        # Опубликованную подборку владелец-гость видит с кнопкой «скрыть» и может снять с публикации
         self.client.force_login(self.guest)
         response = self.client.get(reverse('collection_detail', args=[self.collection.pk]))
         self.assertContains(response, 'Видна всем учителям')
-        self.assertNotContains(response, 'authored-publish')
+        self.assertContains(response, 'authored-publish')
+        self.assertContains(response, 'скрыть от других')
+        self.assertNotContains(response, 'открыть всем учителям')
+        response = self.client.post(
+            reverse('collection_publish', args=[self.collection.pk]), {'published': '0'})
+        self.assertEqual(response.status_code, 302)
+        self.collection.refresh_from_db()
+        self.assertFalse(self.collection.is_published)
+        self.assertContains(self.client.get(reverse('collection_detail', args=[self.collection.pk])),
+                            'сделать её общей может редактор')
