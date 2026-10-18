@@ -2208,9 +2208,11 @@
     font-weight: 600;
   }
 
-  /* Выбранное значение фильтра (тема, тег) — чип с ×; «+ тема» — пустой чип */
+  /* Выбранное значение фильтра (тема, тег) — чип с ×; «+ тема» — пустой чип;
+     .filter-chip-toggle — чип-галочка формы фильтров («Мои задачи») */
   .filter-chip,
-  .filter-chip-add {
+  .filter-chip-add,
+  .filter-chip-toggle {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
@@ -2264,7 +2266,8 @@
     background: #fdeaea;
   }
 
-  .filter-chip-add {
+  .filter-chip-add,
+  .filter-chip-toggle {
     border-color: #e3e8ef;
     background: #f1f4f8;
     color: #44505f;
@@ -2272,9 +2275,38 @@
   }
 
   .filter-chip-add:hover,
-  .filter-chip-add:focus-visible {
+  .filter-chip-add:focus-visible,
+  .filter-chip-toggle:hover {
     border-color: #c9dbf2;
     color: var(--accent);
+  }
+
+  /* Чип-галочка: сама галочка скрыта, отмеченный чип выглядит как выбранный (с ×) */
+  .filter-chip-toggle input {
+    position: absolute;
+    width: 0;
+    height: 0;
+    margin: 0;
+    opacity: 0;
+  }
+
+  .filter-chip-toggle .filter-chip-remove {
+    display: none;
+  }
+
+  .filter-chip-toggle:has(input:checked) {
+    padding-right: 4px;
+    border-color: #c9dbf2;
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+  }
+
+  .filter-chip-toggle:has(input:checked) .filter-chip-remove {
+    display: inline-flex;
+  }
+
+  .filter-chip-toggle:has(input:focus-visible) {
+    box-shadow: 0 0 0 3px rgb(36 86 166 / 35%);
   }
 
   /* Тумблер редактора «Показывать задачи других учителей» — справа в строке фильтров каталога */
