@@ -134,6 +134,11 @@ class KoropetsParserTests(SimpleTestCase):
         self.assertEqual(tasks[2].text_latex, r"Решите неравенство \[|x-2|<1\]")
         self.assertEqual(tasks[3].author_answer_latex, r"\([-2; 5]\).")
 
+    def test_decimal_comma_in_answer(self):
+        from .koropets_parser import _answer_text
+        self.assertEqual(_answer_text(r"\{0,5\}."), r"\(\{0{,}5\}\).")
+        self.assertEqual(_answer_text(r"(0,7; 0,8) \cup \{1; 2\}"), r"\((0{,}7; 0{,}8) \cup \{1; 2\}\).")
+
     def test_toc_is_not_a_section(self):
         _, diagnostics = parse()
         self.assertEqual(diagnostics["tasks_by_section"][

@@ -103,6 +103,9 @@ def _answer_text(value: str) -> str:
     value = re.sub(r"\s+", " ", value).rstrip(".").strip()
     if not value:
         return ""
+    # Элементы ответа книга разделяет «;»: запятая между цифрами —
+    # десятичная. «{0,5}» без {,} маска читает как множество {0; 5}.
+    value = re.sub(r"(\d),(?=\d)", r"\1{,}", value)
     return clean("\\(" + value + "\\).")
 
 
