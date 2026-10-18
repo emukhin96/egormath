@@ -21,7 +21,7 @@ from django.views.decorators.http import require_POST, require_http_methods
 from django.utils.dateparse import parse_date
 
 from accounts.decorators import get_role, teacher_required
-from accounts.permissions import is_base_editor, visible_tasks
+from accounts.permissions import base_editor_required, is_base_editor, visible_tasks
 from livefile import files as livefiles
 from accounts.models import Profile, StudentGroup
 from assignments.models import Assignment, locked_check_visibility
@@ -1071,10 +1071,12 @@ def collection_to_worksheets(request, pk):
     return redirect('worksheet_detail', pk=worksheet.pk)
 
 
-@teacher_required
+@base_editor_required
 @require_POST
 def collection_publish(request, pk):
-    """Переключает видимость подборки для других учителей."""
+    """Переключает видимость подборки для других учителей — только редактор
+    базы (решение 3 плана пользователей); владелец-гость видит подпись
+    «сделать её общей может редактор»."""
     from .authored import set_published
     collection = _own_authored_collection(request, pk)
     set_published(collection, request.POST.get('published') == '1')

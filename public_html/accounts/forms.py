@@ -251,7 +251,7 @@ class TeacherInviteForm(forms.Form):
         label='Срок, дней', min_value=1, max_value=365,
         initial=INVITE_DEFAULT_DAYS)
     base_editor = forms.BooleanField(
-        label='Может править общую базу задач', required=False)
+        label='Может править общие задачи', required=False)
 
     def save(self, created_by):
         return TeacherInvite.objects.create(

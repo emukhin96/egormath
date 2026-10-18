@@ -42,7 +42,7 @@
   // предложения этой задачи (problems/proposals.py).
   function baseLocked(root) {
     var dialog = document.getElementById('base-locked-dialog');
-    if (!dialog) return Promise.reject(new Error('Задача из общей базы: измените её для своего листка.'));
+    if (!dialog) return Promise.reject(new Error('Общая задача: измените её для своего листка.'));
     var input = dialog.querySelector('[name=task_id]');
     if (input) input.value = root.dataset.taskId || '';
     var propose = dialog.querySelector('[data-propose-link]');
@@ -163,7 +163,7 @@
         if(fresh){form.replaceWith(fresh);window.EgorTaxonomy.init();window.EgorTaskForm.init();}
       }catch(error){toast(false,'Не удалось восстановить блок');}
     }
-    var ai=e.target.closest('[data-editor-ai]');if(!ai)return;
+    var ai=e.target.closest('[data-editor-ai]');if(!ai||ai.disabled)return; // disabled — приглушённая кнопка не-редактора (решение 5)
     var root=ai.closest('[data-problem-editor]');ai.disabled=true;
     try {
       if(root.querySelector('[name=block][value=subitems]').form.dataset.dirty) {

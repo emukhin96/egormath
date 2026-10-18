@@ -18,9 +18,12 @@ from django.http import JsonResponse
 from .decorators import teacher_required
 from .models import Profile
 
-BASE_LOCKED_MESSAGE = ('Задача из общей базы: измените её для своего листка '
+# Тексты для пользователя: «общая задача» / «моя задача», а не «общая база»
+# и «личная» (решение 6 плана пользователей; тест гигиены шаблонов).
+BASE_LOCKED_MESSAGE = ('Общая задача: измените её для своего листка '
                        'или предложите исправление.')
-EDITORS_ONLY_MESSAGE = 'Доступно только редакторам общей базы задач.'
+EDITORS_ONLY_MESSAGE = 'Доступно только редакторам базы задач.'
+NEURO_EDITORS_ONLY_MESSAGE = 'Нейрогенерация доступна только редакторам базы.'
 
 
 def is_base_editor(user):
@@ -59,10 +62,39 @@ def visible_tasks(user):
         | Q(worksheet_items__worksheet__owner=user)).distinct()
 
 
+def shows_foreign_tasks(user):
+    """Тумблер редактора «Показывать задачи других учителей»
+    (``Profile.show_foreign_tasks``): по умолчанию выключен, у
+    суперпользователя без профиля — тоже."""
+    try:
+        return bool(user.profile.show_foreign_tasks)
+    except Profile.DoesNotExist:
+        return False
+
+
 def catalog_tasks(user):
-    """То же без локальных копий: база каталога, поиска, корзины,
-    дедупликации импорта и подбора кандидатов."""
+    """База каталога, поиска, фасетов и подбора кандидатов: видимые задачи
+    без локальных копий. Редактор базы при выключенном тумблере не видит
+    здесь чужие личные задачи — только общие, свои и задачи без автора
+    (такие не «другого учителя»); по прямой ссылке (``visible_tasks``)
+    карточка открывается всегда."""
+    tasks = cart_tasks(user)
+    if is_base_editor(user) and not shows_foreign_tasks(user):
+        tasks = tasks.filter(Q(is_shared=True) | Q(created_by=user)
+                             | Q(created_by__isnull=True))
+    return tasks
+
+
+def cart_tasks(user):
+    """Задачи, которые можно положить в листок по id (корзина): как прямая
+    ссылка на карточку, без локальных копий и независимо от тумблера —
+    редактор добавляет и чужую задачу, открытую по ссылке."""
     return visible_tasks(user).filter(variant_of__isnull=True)
+
+
+def own_personal_tasks(user):
+    """«Мои задачи» — свои задачи не из общей базы (без локальных копий)."""
+    return cart_tasks(user).filter(created_by=user, is_shared=False)
 
 
 def shared_catalog():

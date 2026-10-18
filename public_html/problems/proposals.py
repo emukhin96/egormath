@@ -109,7 +109,7 @@ def proposal_options(user, task):
                 'open': open_proposal(user, task)}
     if task.created_by_id == user.pk:
         return {'kind': TaskProposal.KIND_NEW, 'task': task, 'variant': None,
-                'label': 'Предложить задачу в общую базу', 'variants': [],
+                'label': 'Предложить в общие задачи', 'variants': [],
                 'open': open_proposal(user, task)}
     return None
 
@@ -123,7 +123,7 @@ def create_proposal(user, task, *, kind, message='', variant=None):
     task = Task.objects.select_for_update().get(pk=task.pk)
     if kind == TaskProposal.KIND_FIX:
         if not task.is_shared or task.variant_of_id:
-            raise ProposalError('Предложить исправление можно только для задачи общей базы.')
+            raise ProposalError('Предложить исправление можно только для общей задачи.')
         if variant is not None and (variant.variant_of_id != task.pk
                                     or variant.created_by_id != user.pk):
             raise ProposalError('Приложить можно только свою локальную копию этой задачи.')
@@ -131,7 +131,7 @@ def create_proposal(user, task, *, kind, message='', variant=None):
             raise ProposalError('Напишите, что исправить, или приложите свою копию задачи.')
     elif kind == TaskProposal.KIND_NEW:
         if task.created_by_id != user.pk or task.is_shared or task.variant_of_id:
-            raise ProposalError('В общую базу можно предложить только свою личную задачу.')
+            raise ProposalError('В общие задачи можно предложить только свою задачу, ещё не принятую в общие.')
         variant = None
     else:
         raise ProposalError('Неизвестный вид предложения.')
@@ -416,7 +416,7 @@ def proposal_apply(request, pk):
         messages.error(request, str(exc))
         return redirect('proposal_detail', pk=pk)
     notify_resolved(proposal, url=request.build_absolute_uri(reverse('proposals_mine')))
-    messages.success(request, 'Задача принята в общую базу.'
+    messages.success(request, 'Задача принята в общие задачи.'
                      if proposal.kind == TaskProposal.KIND_NEW else 'Предложение применено.')
     return redirect('proposal_detail', pk=pk)
 

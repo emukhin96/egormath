@@ -2277,6 +2277,15 @@
     color: var(--accent);
   }
 
+  /* Тумблер редактора «Показывать задачи других учителей» — справа в строке фильтров каталога */
+  .page-toolbar .catalog-foreign-toggle {
+    margin-left: auto;
+  }
+
+  .page-toolbar .sort-inline ~ .catalog-foreign-toggle {
+    margin-left: 0;
+  }
+
   /* «Сортировка: по теме ▾» — select без рамки в одну строку, справа в .page-toolbar */
   .sort-inline {
     display: inline-flex;
@@ -4781,6 +4790,20 @@
     opacity: 0.5;
     cursor: not-allowed;
     pointer-events: none;
+  }
+
+  /* Приглушённая кнопка с подсказкой (нейрогенерация у не-редакторов):
+     наведение нужно, чтобы показался title; клик по disabled-кнопке браузер не отдаёт */
+  .btn[disabled][title] {
+    pointer-events: auto;
+  }
+
+  .btn[disabled][title]:hover {
+    background: var(--accent);
+  }
+
+  .btn-secondary[disabled][title]:hover {
+    background: #fff;
   }
 
   .import-toolbar {

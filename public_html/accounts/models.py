@@ -67,6 +67,12 @@ class Profile(models.Model):
                   'У суперпользователя подразумевается всегда; остальные '
                   'правят общие задачи только копией для своего листка '
                   '(accounts/permissions.py).')
+    show_foreign_tasks = models.BooleanField(
+        'Показывать задачи других учителей', default=False,
+        help_text='Для редакторов базы: показывать в каталоге и поиске '
+                  'задачи других учителей, не принятые в общие '
+                  '(accounts/permissions.py, catalog_tasks). По прямой '
+                  'ссылке такая задача открывается всегда.')
     invited_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='invited_teachers',

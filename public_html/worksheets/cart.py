@@ -25,7 +25,7 @@ from problems.templatetags.task_extras import plural_ru
 from problems.web_tex import tex_preview_html
 
 from accounts.decorators import teacher_required
-from accounts.permissions import catalog_tasks
+from accounts.permissions import cart_tasks
 from problems.models import Task
 from problems.task_blocks import block_members
 
@@ -153,7 +153,8 @@ def _respond(request, ok, message, in_cart, fallback='task_list', task_ids=()):
 @require_POST
 def cart_add(request):
     """Положить задачу в корзину (повтор — без дубля)."""
-    task = get_object_or_404(catalog_tasks(request.user), pk=request.POST.get('task_id'))
+    # По id, как прямая ссылка на карточку: тумблер редактора здесь не действует
+    task = get_object_or_404(cart_tasks(request.user), pk=request.POST.get('task_id'))
     ids = cart_ids(request)
     if task.block_id:
         try:
@@ -195,7 +196,7 @@ def cart_add_many(request):
         return _respond(request, False,
                         f'За раз можно положить не больше {CART_ADD_MANY_LIMIT} задач.', False)
     wanted = [int(value) for value in raw]
-    tasks = catalog_tasks(request.user).filter(pk__in=wanted).in_bulk()
+    tasks = cart_tasks(request.user).filter(pk__in=wanted).in_bulk()
     ids = cart_ids(request)
     added = 0
     for pk in wanted:

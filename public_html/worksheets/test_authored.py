@@ -4,12 +4,13 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
 from problems.models import ExamItem, ExamModel, Task
-from problems.tests import make_teacher
+from problems.tests import make_invited_teacher, make_teacher
 from worksheets.models import Collection, Worksheet, WorksheetItem
 from worksheets.tests import make_worksheet
 
@@ -404,3 +405,57 @@ class AuthoredBrowserTests(TestCase):
             response = self.client.get(url, {'view': 'table'})
         self.assertEqual(response.context['sheets_total'], 7)
         self.assertEqual(len(after), len(before))
+
+
+class PublishPermissionTests(TestCase):
+    """Решение 3 плана пользователей: публикацию подборки «всем учителям»
+    делает только редактор базы; приглашённый владелец видит подпись."""
+
+    def setUp(self):
+        self.editor = make_teacher()
+        self.guest = make_invited_teacher('guest')
+        sheet = make_worksheet(self.guest, title='Подборка гостя')
+        sheet.grade = 6
+        sheet.save()
+        self.collection = move_to_collections(sheet, self.guest)
+
+    def test_guest_cannot_publish_and_sees_hint(self):
+        self.client.force_login(self.guest)
+        response = self.client.post(
+            reverse('collection_publish', args=[self.collection.pk]), {'published': '1'})
+        self.assertEqual(response.status_code, 403)
+        self.collection.refresh_from_db()
+        self.assertFalse(self.collection.is_published)
+        response = self.client.get(reverse('collection_detail', args=[self.collection.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'authored-publish')
+        self.assertNotContains(response, 'открыть всем учителям')
+        self.assertContains(response, 'Подборка видна только вам; сделать её общей может редактор')
+        # Остальные кнопки владельца на месте
+        self.assertContains(response, 'Вернуть в мои листки')
+
+    def test_editor_owner_keeps_toggle(self):
+        sheet = make_worksheet(self.editor, title='Подборка редактора')
+        sheet.grade = 6
+        sheet.save()
+        own = move_to_collections(sheet, self.editor)
+        self.client.force_login(self.editor)
+        response = self.client.get(reverse('collection_detail', args=[own.pk]))
+        self.assertContains(response, 'authored-publish')
+        self.assertContains(response, 'открыть всем учителям')
+        self.client.post(reverse('collection_publish', args=[own.pk]), {'published': '1'})
+        own.refresh_from_db()
+        self.assertTrue(own.is_published)
+
+    def test_superuser_publishes_guest_collection(self):
+        root = get_user_model().objects.create_superuser('root', password='x')
+        self.client.force_login(root)
+        response = self.client.post(
+            reverse('collection_publish', args=[self.collection.pk]), {'published': '1'})
+        self.assertEqual(response.status_code, 302)
+        self.collection.refresh_from_db()
+        self.assertTrue(self.collection.is_published)
+        self.client.force_login(self.guest)
+        response = self.client.get(reverse('collection_detail', args=[self.collection.pk]))
+        self.assertContains(response, 'Видна всем учителям')
+        self.assertNotContains(response, 'authored-publish')

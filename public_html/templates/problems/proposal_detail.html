@@ -60,7 +60,7 @@
 
 {% if proposal.is_open %}
 <div class="card">
-  <h2>{% if proposal.kind == 'new' %}Принять в общую базу{% else %}Применить{% endif %}</h2>
+  <h2>{% if proposal.kind == 'new' %}Принять в общие задачи{% else %}Применить{% endif %}</h2>
   <form method="post" action="{% url 'proposal_apply' proposal.pk %}">
     {% csrf_token %}
     {# Версия задачи на момент показа: если автор изменит её, пока страница открыта, применение будет отклонено #}
@@ -73,7 +73,7 @@
     {% endif %}
     {% if proposal.kind == 'new' %}<p class="helptext">Задача станет общей в том виде, что слева («Сейчас в задаче»), плюс отмеченные разделы снимка: её увидят все учителя, править дальше смогут только редакторы базы. Если автор изменит задачу, пока страница открыта, применение будет отклонено — обновите страницу.</p>{% endif %}
     <p><label>Ответ автору (необязательно)<textarea name="note" rows="2"></textarea></label></p>
-    <div class="form-buttons"><button class="btn">{% if proposal.kind == 'new' %}Принять в общую базу{% elif diff %}Применить{% else %}Отметить принятым{% endif %}</button><button type="button" class="btn btn-secondary" data-dialog-open="reject-dialog">Отклонить</button></div>
+    <div class="form-buttons"><button class="btn">{% if proposal.kind == 'new' %}Принять в общие задачи{% elif diff %}Применить{% else %}Отметить принятым{% endif %}</button><button type="button" class="btn btn-secondary" data-dialog-open="reject-dialog">Отклонить</button></div>
   </form>
 </div>
 <dialog class="dialog" id="reject-dialog" aria-labelledby="reject-title">

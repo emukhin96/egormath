@@ -149,7 +149,7 @@ class WriteEndpointMatrixTests(Roles, TestCase):
         response = self.manage(self.guest, self.shared, 'Чужая')
         self.assertEqual(response.status_code, 403)
         self.assertFalse(response.json()['ok'])
-        self.assertIn('общей базы', response.json()['message'])
+        self.assertIn('Общая задача', response.json()['message'])
         self.shared.refresh_from_db()
         self.assertEqual(self.shared.text_latex, 'Правка')
         self.assertEqual(self.manage(self.student, self.shared, 'Ученик').status_code, 403)
@@ -257,7 +257,9 @@ class WriteEndpointMatrixTests(Roles, TestCase):
         self.assertEqual(item.task.variant_of, self.shared)
         self.assertEqual((item.task.created_by, item.task.is_shared), (self.guest, False))
 
-    def test_neuro_apply_only_for_editors(self):
+    def test_neuro_only_for_editors(self):
+        """Решение 5 плана пользователей: не-редактору нейрогенерация
+        закрыта целиком — и запись, и черновик (подробнее test_decisions)."""
         result = {'answer': '4', 'solution': 'Решение', 'subitem_answers': ['1'], 'subitem_solutions': ['']}
         with mock.patch('problems.neuro.solve_task', return_value=result):
             self.login(self.guest)
@@ -267,11 +269,9 @@ class WriteEndpointMatrixTests(Roles, TestCase):
             response = self.client.post(reverse('task_neuro_solve'), json.dumps(
                 {'task_id': self.own.pk, 'apply': True}), content_type='application/json')
             self.assertEqual(response.status_code, 403)
-            # Черновик без записи доступен и на общей задаче
             response = self.client.post(reverse('task_neuro_solve'), json.dumps(
                 {'task_id': self.shared.pk}), content_type='application/json')
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json()['answer'], '4')
+            self.assertEqual(response.status_code, 403)
             self.assertEqual(self.shared.subitems.get().answer_latex, '')
             self.login(self.editor)
             response = self.client.post(reverse('task_neuro_solve'), json.dumps(
@@ -321,17 +321,22 @@ class VisibilityTests(Roles, TestCase):
         self.assertEqual(self.client.post(reverse('cart_add'), {'task_id': self.personal.pk}).status_code, 404)
         self.assertEqual(self.client.post(reverse('worksheet_add_task', args=[
             Worksheet.objects.create(owner=self.other_guest, title='Л').pk]), {'task_id': self.personal.pk}).status_code, 404)
+        self.client.force_login(self.guest)
+        self.assertIn(self.personal, self.client.get(reverse('task_list')).context['page'])
+        # Редактору чужая задача не из общих по ссылке открывается всегда, а в
+        # каталоге — только при включённом тумблере (решение 1, test_decisions)
         for user in (self.guest, self.editor, self.superuser):
             self.client.force_login(user)
-            self.assertIn(self.personal, self.client.get(reverse('task_list')).context['page'])
             self.assertEqual(self.client.get(reverse('task_detail', args=[self.personal.pk])).status_code, 200)
+        self.assertNotIn(self.personal, self.client.get(reverse('task_list')).context['page'])
 
     def test_personal_badge(self):
+        # Решение 6: автору — «моя», редактору — чья задача; слова «личная» нет
         self.client.force_login(self.guest)
-        self.assertContains(self.client.get(reverse('task_detail', args=[self.personal.pk])), '>личная<')
+        self.assertContains(self.client.get(reverse('task_detail', args=[self.personal.pk])), '>моя<')
         self.client.force_login(self.editor)
-        self.assertContains(self.client.get(reverse('task_detail', args=[self.personal.pk])), 'личная задача')
-        self.assertNotContains(self.client.get(reverse('task_detail', args=[self.shared.pk])), '>личная<')
+        self.assertContains(self.client.get(reverse('task_detail', args=[self.personal.pk])), 'задача Иван Учителев')
+        self.assertNotContains(self.client.get(reverse('task_detail', args=[self.shared.pk])), '>моя<')
 
     def test_import_deduplication_ignores_foreign_personal_tasks(self):
         """Дубль ищется среди общих и своих задач — и у редактора тоже,
@@ -412,7 +417,11 @@ class VisibilityTests(Roles, TestCase):
     def test_dashboard_counts_visible_tasks(self):
         self.client.force_login(self.other_guest)
         self.assertEqual(self.client.get(reverse('dashboard')).context['tasks_total'], 1)
+        # Редактору чужая задача не из общих считается только при включённом тумблере
         self.client.force_login(self.editor)
+        self.assertEqual(self.client.get(reverse('dashboard')).context['tasks_total'], 1)
+        self.editor.profile.show_foreign_tasks = True
+        self.editor.profile.save(update_fields=['show_foreign_tasks'])
         self.assertEqual(self.client.get(reverse('dashboard')).context['tasks_total'], 2)
 
 
@@ -431,11 +440,11 @@ class GuestLocalEditTests(Roles, TestCase):
     def test_card_without_worksheet_is_read_only(self):
         response = self.client.get(reverse('task_detail', args=[self.shared.pk]))
         self.assertContains(response, 'data-base-locked="1"')
-        self.assertContains(response, 'Общая база · правки только для листка')
+        self.assertContains(response, 'Общая задача · правки только для листка')
         self.assertNotContains(response, 'data-editor-form')
         self.assertNotContains(response, 'data-mask-edit')
         self.assertNotContains(response, 'Удалить задачу')
-        self.assertNotContains(response, 'В общей базе')
+        self.assertNotContains(response, 'увидят все учителя')
         self.assertContains(response, 'id="base-locked-dialog"')
 
     def test_card_in_worksheet_keeps_forms_but_locks_scope(self):
@@ -443,7 +452,7 @@ class GuestLocalEditTests(Roles, TestCase):
         self.assertContains(response, 'data-base-locked="1"')
         self.assertContains(response, 'data-editor-form')
         self.assertNotContains(response, 'Удалить задачу')
-        self.assertNotContains(response, 'В общей базе')
+        self.assertNotContains(response, 'увидят все учителя')
 
     def test_editor_card_is_unchanged(self):
         self.client.force_login(self.editor)
@@ -451,7 +460,7 @@ class GuestLocalEditTests(Roles, TestCase):
         self.assertNotContains(response, 'data-base-locked="1"')
         self.assertContains(response, 'data-editor-form')
         self.assertContains(response, 'Удалить задачу')
-        self.assertContains(response, 'В общей базе')
+        self.assertContains(response, 'увидят все учителя')
 
     def test_catalog_row_has_no_inline_form_for_shared(self):
         own = Task.new_for(self.guest, text_latex='Своя')
@@ -461,6 +470,9 @@ class GuestLocalEditTests(Roles, TestCase):
         self.assertIn(f'value="{own.pk}" form="task-bulk-form"', html)
         self.assertNotIn(f'value="{self.shared.pk}" form="task-bulk-form"', html)
         self.assertIn('row-edit-static', html)
+        # Редактор видит задачу гостя в каталоге только при включённом тумблере (решение 1)
+        self.editor.profile.show_foreign_tasks = True
+        self.editor.profile.save(update_fields=['show_foreign_tasks'])
         self.client.force_login(self.editor)
         html = self.client.get(reverse('task_list')).content.decode()
         self.assertEqual(html.count('<details class="row-edit" data-row-edit>'), 2)

@@ -3,7 +3,7 @@
 {% block title %}{{ propose.label }} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/task_detail.html' with task=task %}{% endblock %}
 {% block content %}
-{# Та же форма, что в диалоге карточки: сюда ведут «Предложить маску» из самостоятельных и диалог «Это задача общей базы» со страниц без карточки #}
+{# Та же форма, что в диалоге карточки: сюда ведут «Предложить маску» из самостоятельных и диалог «Это общая задача» со страниц без карточки #}
 <div class="page-head">
   <div>
     <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a><a href="{% url 'task_detail' task.pk %}">Задача #{{ task.pk }}</a></nav>

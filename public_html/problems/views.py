@@ -17,9 +17,11 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_GET, require_POST
 
 from accounts.decorators import teacher_required
-from accounts.permissions import (BASE_LOCKED_MESSAGE, base_editor_required,
-                                  can_edit_task, catalog_tasks, editable_tasks,
-                                  forbidden_json, is_base_editor, visible_tasks)
+from accounts.permissions import (BASE_LOCKED_MESSAGE, NEURO_EDITORS_ONLY_MESSAGE,
+                                  base_editor_required, can_edit_task,
+                                  catalog_tasks, editable_tasks, forbidden_json,
+                                  is_base_editor, own_personal_tasks,
+                                  shows_foreign_tasks, visible_tasks)
 from assignments.checks import HELP as MASK_HELP
 
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
@@ -37,17 +39,21 @@ from .rubricator import (GRADE_LEVEL_TO_CODE, apply_task_taxonomy,
 
 
 def filter_tasks(params, user):
-    """Каталог задач по GET-параметрам: q, topic, grade, tag.
+    """Каталог задач по GET-параметрам: q, topic, grade, tag, mine.
 
     База — задачи, видимые пользователю (accounts.permissions.catalog_tasks):
     общие и его личные; «локальные» копии (варианты для конкретного листка)
-    в каталоге не показываются.
+    в каталоге не показываются. У редактора базы чужие личные задачи — только
+    при включённом тумблере «Показывать задачи других учителей».
     """
     tasks = (catalog_tasks(user)
              .prefetch_related('topics', 'topic_links', 'grade_bands',
                                'facet_values', 'exam_items', 'tags',
                                'source_refs__source', 'subitems', 'images')
              .select_related('created_by').order_by('-created_at', '-pk'))
+    if params.get('mine'):
+        # Чип «Мои задачи»: свои задачи, не принятые в общие (решение 6)
+        tasks = tasks.filter(created_by=user, is_shared=False)
     q = params.get('q', '').strip()
     if re.fullmatch(r'#?\d+', q):
         # «#123» или «123» — задача по id
@@ -160,6 +166,11 @@ def task_list(request):
     from assignments.task_usage import attach_usage, audience_context
     ctx['mask_kinds'] = {**KINDS, **{k: k for k in PRESETS}}
     ctx['is_base_editor'] = is_base_editor(request.user)
+    # Тумблер редактора (accounts.task_list_prefs) и чип «Мои задачи»: чип
+    # показывается, только если такие задачи есть (у редактора обычно нет),
+    # или пока фильтр включён — чтобы его можно было снять.
+    ctx['show_foreign_tasks'] = ctx['is_base_editor'] and shows_foreign_tasks(request.user)
+    ctx['has_own_tasks'] = bool(request.GET.get('mine')) or own_personal_tasks(request.user).exists()
     for task in page:
         task.taxonomy_json = dumps_state(task_taxonomy_state(task))
         # Общая задача у приглашённого учителя — без inline-форм и чекбоксов.
@@ -931,7 +942,7 @@ def _neuro_flag(payload, key):
 @teacher_required
 @require_POST
 def task_neuro_solve(request):
-    """Нейрогенерация черновика ответа/решения.
+    """Нейрогенерация черновика ответа/решения — только редакторам базы.
 
     JSON {text, subitems} и/или {task_id, apply, overwrite, answers_only}.
     Без apply ничего не пишет в базу — черновик уходит в поля формы.
@@ -940,6 +951,10 @@ def task_neuro_solve(request):
     from .neuro import (MAX_TASK_CHARS, NeuroError, NeuroQuotaError,
                         acquire_quota, apply_result, release_quota,
                         solve_task)
+    # Нейрогенерация выключена для не-редакторов целиком — и черновик, и
+    # запись (решение 5 плана пользователей); кнопки у них приглушены.
+    if not is_base_editor(request.user):
+        return JsonResponse({'error': NEURO_EDITORS_ONLY_MESSAGE}, status=403)
     try:
         payload = json.loads(request.body)
     except (ValueError, TypeError):
@@ -991,18 +1006,6 @@ def task_neuro_solve(request):
         answers_only = _neuro_flag(payload, 'answers_only')
     except ValueError:
         return JsonResponse({'error': 'Некорректный запрос.'}, status=400)
-    # Запись AI-ответа в задачу — только редакторам базы (решение 5 плана
-    # пользователей); остальным — черновик в поля карточки без apply.
-    if apply and task is not None and not can_edit_task(request.user, task):
-        return JsonResponse(
-            {'error': 'Задача из общей базы: AI-черновик можно получить на '
-                      'карточке задачи и сохранить в локальную копию.'},
-            status=403)
-    if apply and not is_base_editor(request.user):
-        return JsonResponse(
-            {'error': 'Запись AI-ответов в задачи доступна только редакторам '
-                      'общей базы.'},
-            status=403)
     acquired_at = None
     try:
         acquired_at = acquire_quota(request.user)

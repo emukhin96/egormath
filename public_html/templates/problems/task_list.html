@@ -16,6 +16,13 @@
 </div>
 
 {% include 'problems/_catalog_filters.html' with toolbar=True %}
+{% if is_base_editor %}
+{# Тумблер редактора (решение 1 плана пользователей): чужие задачи не из общих в каталоге, поиске и подборе — по настройке профиля (accounts.task_list_prefs). Чекбокс стоит в строке фильтров, но принадлежит этой POST-форме (атрибут form) #}
+<form id="task-list-prefs" method="post" action="{% url 'task_list_prefs' %}" hidden>
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+</form>
+{% endif %}
 
 <form id="task-bulk-form" method="post" action="{% url 'task_bulk_update' %}"
       class="bulk-bar" data-bulk hidden>
@@ -53,7 +60,7 @@
 <td data-task-png-root>{% include 'problems/_catalog_content.html' %}
 <div data-worksheet-mask data-task-id="{{ task.pk }}" data-manage-url="{% url 'task_manage' task.pk %}"{% if not task.can_edit %} data-base-locked="1"{% endif %} hidden><div data-mask-tools class="problem-mask-tools"></div></div>
 {# Нижняя строка задачи: откуда задача (источник, №, раздел) и действия — в одну строку под условием, а не столбиком в узкой колонке #}
-<div class="task-meta catalog-row-meta" data-task-png-skip><span class="catalog-source">{% if not task.is_shared %}<span class="badge badge-assigned" title="Задача не в общей базе: её видят автор и редакторы базы">личная{% if is_base_editor and task.created_by %} · {{ task.created_by.get_full_name|default:task.created_by.username }}{% endif %}</span>{% endif %}{% for ref in task.source_refs.all %}<span>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}{% for part in ref.source_path %} › {{ part|heading_dot }}{% endfor %}</span>{% endfor %}</span><span class="catalog-row-actions"><span data-mask-links></span>{% include 'includes/task_png_button.html' %}{% if not task.block_id %}<button type="button" class="link-btn" data-quick-clone="{% url 'task_clone' task.pk %}" title="Новая задача с другими числами — не уходя со страницы">клон</button>{% endif %}<form class="inline-form" method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn">дублировать</button></form></span></div>
+<div class="task-meta catalog-row-meta" data-task-png-skip><span class="catalog-source">{% include 'problems/_task_owner_badge.html' %}{% for ref in task.source_refs.all %}<span>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}{% for part in ref.source_path %} › {{ part|heading_dot }}{% endfor %}</span>{% endfor %}</span><span class="catalog-row-actions"><span data-mask-links></span>{% include 'includes/task_png_button.html' %}{% if not task.block_id %}<button type="button" class="link-btn" data-quick-clone="{% url 'task_clone' task.pk %}" title="Новая задача с другими числами — не уходя со страницы">клон</button>{% endif %}<form class="inline-form" method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn">дублировать</button></form></span></div>
 </td>
 <td>{# Класс и темы показаны текстом; контролы раскрываются по клику (task_catalog.js обновляет текст после правки); общая задача у приглашённого — только текст #}
 {% if task.can_edit %}<details class="row-edit" data-row-edit>
@@ -74,7 +81,7 @@
 <script defer src="{% static 'js/task_finder.js' %}"></script>
 <script defer src="{% static 'js/cart.js' %}?v=2"></script>
 {% include 'problems/_mask_dialogs.html' %}
-<script defer src="{% static 'js/problem_editor.js' %}?v=5"></script>
+<script defer src="{% static 'js/problem_editor.js' %}?v=6"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/task_catalog.js' %}?v=5"></script>
 {% endblock %}
