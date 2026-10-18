@@ -209,6 +209,11 @@ class KoropetsParserTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             parse_koropets("Другая книга", structure=STRUCTURE)
 
+    def test_missing_first_examples_section_is_import_error(self):
+        text = BOOK.replace("2.2. Примеры с решениями\n\nПример 1.", "Пример 1.")
+        with self.assertRaisesMessage(ValueError, "«Примеры с решениями» главы 2"):
+            parse(text)
+
 
 class KoropetsRepairsDataTests(SimpleTestCase):
     """Сверенные правки скана: целостность файла, без самого TEX."""

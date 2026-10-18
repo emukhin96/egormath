@@ -333,7 +333,10 @@ def parse_koropets(text: str, *, structure: dict | None = None,
             chapter_end = literature if literature > 0 else len(text)
         # Примеры: от конца предыдущей главы (её ответов) до самостоятельных.
         if index == 0:
-            start = _heading(number, "Примеры с решениями").search(text, body_at).start()
+            first = _heading(number, "Примеры с решениями").search(text, body_at)
+            if first is None:
+                raise ValueError(f"Не найден раздел «Примеры с решениями» главы {number}")
+            start = first.start()
         else:
             start = previous_end
         previous_end = chapter_end
