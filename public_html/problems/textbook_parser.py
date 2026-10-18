@@ -3387,6 +3387,9 @@ def bundle_from_text(
     elif profile == "vysotsky":
         from .vysotsky_parser import parse_vysotsky
         tasks, diagnostics = parse_vysotsky(tasks_text)
+    elif profile == "tkachuk":
+        from .tkachuk_parser import parse_tkachuk
+        tasks, diagnostics = parse_tkachuk(tasks_text)
     elif profile == "feoktistov":
         from .feoktistov_parser import parse_feoktistov
         tasks, diagnostics = parse_feoktistov(tasks_text)
@@ -3596,7 +3599,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--profile", required=True,
-        choices=("galitsky", "merzlyak", "shabunin", "potoskuev", "vysotsky", "feoktistov", "ziv", "shestakov", "ostromogilsky",
+        choices=("galitsky", "merzlyak", "shabunin", "potoskuev", "vysotsky", "tkachuk", "feoktistov", "ziv", "shestakov", "ostromogilsky",
                  "ostromogilsky_ege"))
     parser.add_argument("--tasks", required=True, type=Path)
     parser.add_argument("--solutions", type=Path)

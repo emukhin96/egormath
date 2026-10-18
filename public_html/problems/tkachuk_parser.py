@@ -36,6 +36,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .merzlyak_parser import normalize_degrees, normalize_units, wrap_answer_numbers
 from .textbook_parser import (
     Marker, SubitemDraft, TaskDraft, clean, finalize_draft_images,
     task_from_block)
@@ -56,19 +57,29 @@ def load_structure(path: Path = STRUCTURE_PATH) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def load_repairs(text: str, path: Path = REPAIRS_PATH) -> tuple[str, dict, list[str]]:
+@dataclass
+class Repairs:
+    """Сверенные с книгой правки одного скана."""
+    tasks: dict = field(default_factory=dict)       # id → поля целиком
+    drop: list = field(default_factory=list)        # не задачи книги
+    renumber: dict = field(default_factory=dict)    # id OCR → верный id
+    insert: list = field(default_factory=list)      # задачи, потерянные OCR
+    patches: list = field(default_factory=list)     # применённые замены
+
+
+def load_repairs(text: str, path: Path = REPAIRS_PATH) -> tuple[str, Repairs]:
     """Сверенные с книгой правки, привязанные к sha256 исходного TEX.
 
     ``patches`` — точечные замены текста OCR (фрагмент встречается ровно
     один раз); ``tasks`` — переписанные по скану поля задачи целиком
-    (``text``, ``answer``, ``solution``, ``subitems``).
+    (``text``, ``answer``, ``solution``, ``subitems``); ``drop``,
+    ``renumber``, ``insert`` — состав задач, исправленный по скану.
     """
+    repairs = Repairs()
     if not path.exists():
-        return text, {}, []
+        return text, repairs
     spec = json.loads(path.read_text(encoding="utf-8"))
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    applied: list[str] = []
-    overrides: dict = {}
     for edition in spec.get("editions", []):
         if edition.get("source_sha256") != digest:
             continue
@@ -78,9 +89,64 @@ def load_repairs(text: str, path: Path = REPAIRS_PATH) -> tuple[str, dict, list[
                 raise ValueError(
                     f"Сверенный фрагмент {patch['id']} встречается {count} раз")
             text = text.replace(patch["before"], patch["after"], 1)
-            applied.append(patch["id"])
-        overrides.update(edition.get("tasks", {}))
-    return text, overrides, applied
+            repairs.patches.append(patch["id"])
+        repairs.tasks.update(edition.get("tasks", {}))
+        repairs.drop.extend(edition.get("drop", []))
+        repairs.renumber.update(edition.get("renumber", {}))
+        repairs.insert.extend(edition.get("insert", []))
+    return text, repairs
+
+
+def apply_composition(tasks: list[TaskDraft], repairs: Repairs, diagnostics: dict) -> list[TaskDraft]:
+    """Состав задач по скану: лишние убрать, номера исправить, потерянные
+    OCR вставить после указанной задачи (с тем же разделом)."""
+    if repairs.drop:
+        dropped = set(repairs.drop)
+        diagnostics["dropped"] = [t.external_id for t in tasks if t.external_id in dropped]
+        tasks = [t for t in tasks if t.external_id not in dropped]
+    for task in tasks:
+        new_id = repairs.renumber.get(task.external_id)
+        if new_id:
+            level = task.source_number[len(task.external_id):]
+            task.external_id = new_id
+            task.source_number = new_id + level
+            diagnostics["renumbered"].append(new_id)
+    for spec in repairs.insert:
+        index = next((i for i, t in enumerate(tasks) if t.external_id == spec["after"]), None)
+        if index is None:
+            diagnostics["structure_problems"].append(
+                f"вставка {spec['id']}: нет задачи {spec['after']}")
+            continue
+        anchor = tasks[index]
+        task = task_from_block(Marker(0, 0, spec["id"]), spec.get("text", ""), list(anchor.source_path))
+        for name in ("topic_original", "collection_title"):
+            setattr(task, name, getattr(anchor, name))
+        task.grade_band_codes = list(anchor.grade_band_codes)
+        task.tags = list(anchor.tags)
+        task.topic_code = anchor.topic_code
+        task.author_answer_latex = spec.get("answer", "")
+        task.author_solution_latex = spec.get("solution", "")
+        if spec.get("section"):
+            move_to_section(task, spec["section"])
+        elif task.external_id[:1].isdigit():
+            task.topic_code = content_topic(task.text_latex)
+        tasks.insert(index + 1, task)
+        diagnostics["inserted"].append(spec["id"])
+    return tasks
+
+
+def move_to_section(task: TaskDraft, section: str) -> None:
+    """Задача варианта в другой секции года: «2008 год / Химический …»
+    (OCR слил секции, заголовок восстановлен по скану)."""
+    parts = [part.strip() for part in section.split(" / ") if part.strip()]
+    task.source_path = [task.source_path[0], *parts]
+    task.collection_key = "/".join(task.source_path)
+    task.collection_title = parts[-1]
+    task.topic_original = ". ".join(parts)
+    task.topic_code = content_topic(task.text_latex)
+    task.tags = [tag for tag in task.tags if tag != "Олимпиада"]
+    if re.search(r"(?i)олимпиад", section):
+        task.tags.append("Олимпиада")
 
 
 def lessons_of(structure: dict) -> list[dict]:
@@ -299,7 +365,8 @@ def lesson_spans(text: str, structure: dict) -> tuple[list[LessonSpan], list[str
             if match.start() < start < end:
                 end = start
                 break
-        level = int(match.group("level")) if match.group("level") else None
+        # Уровень урока — из сверенной таблицы: в части заголовков OCR потерял «[2]».
+        level = int(match.group("level")) if match.group("level") else lesson.get("level")
         spans.append(LessonSpan(lesson, match.end(), end, level))
     return spans, problems
 
@@ -703,7 +770,7 @@ def split_stream(text: str, count: int, first: int = 1) -> tuple[dict[int, str],
         if cand.reopen:
             chunk = "\\(" + chunk
         if i + 1 < len(chain) and chain[i + 1][0].in_math:
-            chunk = chunk + "\\)"
+            chunk = re.sub(r"[\s.;,]*$", "", chunk) + "\\)"
         chunk = chunk.replace(WILDCARD, " ")
         chunk = re.sub(r"\\\(\s*\.?\s*\\\)", " ", chunk)
         pieces[value] = _balance_math(chunk.strip())
@@ -713,7 +780,7 @@ def split_stream(text: str, count: int, first: int = 1) -> tuple[dict[int, str],
 
 # Начало книжного указания после ответа: «… n ∈ Z. Привести уравнение к виду …».
 HINT_START_RE = re.compile(
-    r"(?:(?<=[.;])|(?<=\\\)\.)|(?<=\\\))\s*\.?)\s*(?=(?:Привести|Приводится|Приведите|Переписать|"
+    r"(?:(?<=[.;])|(?<=\\\))(?=\s+[А-ЯЁ]))\s*(?=(?:Привести|Приводится|Приведите|Переписать|"
     r"Перепишите|Воспольз|Выразить|Выразите|Указание|Сделайте|Сделать|Заметим|Заметьте|"
     r"Рассмотр|Обозначим|Обозначив|Обратите|Решение|Пусть|Положим|Используй|Использ|"
     r"Так как|Поскольку|Применить|Примените|Разделите|Разделив|Введ|Ввести|Свед|Свести|"
@@ -935,9 +1002,47 @@ def _drop_unbalanced_lists(value: str) -> str:
     return value
 
 
+_MATH_SPAN_ANY_RE = re.compile(r"\$\$.*?\$\$|\\\[.*?\\\]|\$.*?\$|\\\(.*?\\\)", re.S)
+
+
+_LIST_RE = re.compile(r"\d,\s?-?\d+,\s?-?\d")
+_PAIR_RE = re.compile(r"[\[(]\s*-?\d+,-?\d+\s*[\])]")
+
+
+def decimal_commas(value: str) -> str:
+    """Десятичная запятая в формулах — ``{,}``: «\\(2,5\\)» → «\\(2{,}5\\)».
+
+    Книга пишет и списки через запятую без пробела: перечень «0,1,2» и
+    пара или промежуток «[-1,1]», «(1,3)» не трогаются; список с пробелом
+    после запятой («1, 2») — тоже.
+    """
+    def fix(match: re.Match) -> str:
+        span = match.group(0)
+        if _LIST_RE.search(span):
+            return span
+        pairs = [(m.start(), m.end()) for m in _PAIR_RE.finditer(span)]
+
+        def comma(m: re.Match) -> str:
+            if any(start < m.start() < end for start, end in pairs):
+                return m.group(0)
+            return "{,}"
+        return re.sub(r"(?<=\d),(?=\d)", comma, span)
+    return _MATH_SPAN_ANY_RE.sub(fix, value or "")
+
+
+def paren_math(value: str) -> str:
+    """Строчные ``$…$`` нормализаторов — в ``\\(…\\)``, как во всей книге."""
+    return re.sub(r"(?<![\\$])\$(?!\$)([^$]+?)\$(?!\$)", r"\\(\1\\)", value or "")
+
+
+def finish_text(value: str) -> str:
+    """Единицы текстом, градусы, десятичная запятая (канон QA § 4.6, § 5.2)."""
+    return paren_math(decimal_commas(normalize_degrees(normalize_units(value))))
+
+
 def _prepare(value: str) -> str:
     value = _strip_tail_markup(_strip_lead_markup(heal_ocr(value)))
-    return clean(_drop_unbalanced_lists(value))
+    return finish_text(clean(_drop_unbalanced_lists(value)))
 
 
 def _answer_field(value: str) -> str:
@@ -948,7 +1053,8 @@ def _answer_field(value: str) -> str:
     value = re.sub(r"(?<=\.)\s+4\s*$", "", value)
     value = value.strip().rstrip(".").rstrip()
     value = re.sub(r"\s*\.\s*\\\)$", r"\\)", value)
-    return clean(heal_ocr(value))
+    value = clean(heal_ocr(value))
+    return paren_math(decimal_commas(wrap_answer_numbers(normalize_degrees(normalize_units(value)))))
 
 
 def parse_part2(text: str, structure: dict, diagnostics: dict) -> list[TaskDraft]:
@@ -1036,11 +1142,14 @@ def parse_tkachuk(text: str, *, structure: dict | None = None,
     text = text.replace("\r\n", "\n")
     if BOOK_MARKER not in text or "Ткачук" not in text:
         raise ValueError("Не найдена книга Ткачука «Математика — абитуриенту»")
-    text, overrides, patches = load_repairs(text, repairs_path)
+    text, repairs = load_repairs(text, repairs_path)
     text = heal_ocr(text)
     diagnostics: dict = {
-        "source_repairs_applied": patches,
+        "source_repairs_applied": repairs.patches,
         "overrides_applied": [],
+        "dropped": [],
+        "renumbered": [],
+        "inserted": [],
         "structure_problems": [],
         "numbering": [],
         "missing_answers": [],
@@ -1051,9 +1160,10 @@ def parse_tkachuk(text: str, *, structure: dict | None = None,
     }
     tasks = parse_part2(text, structure, diagnostics)
     tasks += parse_part3(text, structure, diagnostics)
+    tasks = apply_composition(tasks, repairs, diagnostics)
     for task in tasks:
-        if task.external_id in overrides:
-            apply_override(task, overrides[task.external_id])
+        if task.external_id in repairs.tasks:
+            apply_override(task, repairs.tasks[task.external_id])
             diagnostics["overrides_applied"].append(task.external_id)
         finalize_draft_images(task)
     diagnostics["unique_tasks"] = len({t.external_id for t in tasks})
@@ -1067,16 +1177,33 @@ def parse_tkachuk(text: str, *, structure: dict | None = None,
 def apply_override(task: TaskDraft, override: dict) -> None:
     if "text" in override:
         task.text_latex = override["text"]
+        # Условие переписано по скану целиком, с пунктами «а) б)» в тексте:
+        # подпункты, нарезанные из OCR, устарели.
+        if "subitems" not in override:
+            task.subitems = []
     if "answer" in override:
         task.author_answer_latex = override["answer"]
     if "solution" in override:
         task.author_solution_latex = override["solution"]
     if "subitems" in override:
         task.subitems = [SubitemDraft(**item) for item in override["subitems"]]
+    if "section" in override:
+        move_to_section(task, override["section"])
     if "topic" in override:
         task.topic_code = override["topic"]
     if "tags" in override:
         task.tags = list(override["tags"])
+    # Рисунки правки записаны путями (\includegraphics), а у полей OCR — уже
+    # номерами \taskpic{N}. Если номеров не осталось, список рисунков
+    # собирается заново по правке: рисунок из старого условия (чужой или
+    # перенесённый в решение) не остаётся висеть у задачи.
+    fields = [task.text_latex, task.author_answer_latex, task.author_solution_latex]
+    fields += [value for item in task.subitems for value in vars(item).values() if isinstance(value, str)]
+    if not any(NUMBERED_TASKPIC_RE.search(value or "") for value in fields):
+        task.images = []
+
+
+NUMBERED_TASKPIC_RE = re.compile(r"\\taskpic\{\d+\}")
 
 
 # --------------------------------------------------------------------------
@@ -1145,6 +1272,10 @@ def faculty_codes(title: str) -> list[str]:
             if code == "ФФ" and re.search(r"(?i)физическ\w*\s+культур", low):
                 continue
             codes.append(code)
+    # Институт стран Азии и Африки «социально-экономический», Московская
+    # школа экономики — не экономический факультет.
+    if "ИСАА" in codes or "МШЭ" in codes:
+        codes = [c for c in codes if c != "ЭФ"]
     return codes
 
 
@@ -1257,8 +1388,15 @@ def year_sections(year: int, zone: str) -> list[VariantSection]:
         if variant and parent:
             section = VariantSection(year, parent, title)
         else:
-            section = VariantSection(year, title)
-            parent = title
+            # «Дополнительное вступительное испытание … Вариант 1» — шапка
+            # испытания и первый вариант в одной строке.
+            inline = re.match(r"(?i)^(?P<head>.+?)\s+(?P<variant>вариант\s+\d+)$", title)
+            if inline and not re.match(r"(?i)^вариант", title):
+                section = VariantSection(year, inline.group("head"), inline.group("variant").capitalize())
+                parent = inline.group("head")
+            else:
+                section = VariantSection(year, title)
+                parent = title
         for token in list_tokens(body):
             if isinstance(token, Para):
                 if section.items and re.match(r"^[а-яё(\\]", token.text):
@@ -1304,6 +1442,12 @@ def _section_code(section: VariantSection, used: Counter) -> str:
             code += ".В" + (sub.group(0) if sub else "")
     elif variant:
         code += ".В" + variant.group(1)
+    if re.search(r"(?i)вечерн", section.title):
+        code += "-В"
+    if re.search(r"(?i)прикладной информатики", section.title):
+        code += "-ПИ"
+    if re.search(r"(?i)иностранных граждан", section.title):
+        code += "-ИН"
     if re.search(r"(?i)бакалавр", section.title):
         code += "-Б"
     if re.search(r"(?i)специалист", section.title):
@@ -1410,7 +1554,9 @@ _SOLID_RE = re.compile(r"(?i)пирамид|призм|куб[аеу ]|шар|с
                        r"многогранник|двугранн|плоскост")
 _WORD_RE = re.compile(r"(?i)км/ч|скорост|рабоч|бригад|производител|раствор|сплав|процент|"
                       r"рубл|коп\.|стоимост|цена|поезд|автомобил|пешеход|велосипедист|лодк|"
-                      r"бассейн|труб[аы]|насос|завод|изготов|магазин|ящик")
+                      r"бассейн|труб[аы]|насос|завод|изготов|магазин|ящик|станк|детал|"
+                      r"изделий|комбайн|трактор|экскаватор|бак[аеу ]|автобус|катер|пароход|"
+                      r"турист|самол[её]т|мотоцикл|грузовик|машин[аыу]|цех|предприяти|кг\b|литр")
 
 
 def content_topic(text: str) -> str:
@@ -1433,7 +1579,8 @@ def content_topic(text: str) -> str:
             return "ALG.09.04"
         if _has(text, "км/ч", "скорост", "поезд", "автомобил", "пешеход", "велосипедист", "лодк"):
             return "ALG.09.02"
-        if _has(text, "бригад", "производител", "рабоч", "бассейн", "насос", "труб"):
+        if _has(text, "бригад", "производител", "рабоч", "бассейн", "насос", "труб",
+                "станк", "детал", "изделий", "комбайн", "трактор", "экскаватор", "бак", "цех"):
             return "ALG.09.03"
         return "ALG.09.01"
     if _has(text, "прогресси"):
