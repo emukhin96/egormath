@@ -10,26 +10,24 @@
     <p class="page-meta"><span>{{ page.paginator.count }} {{ page.paginator.count|plural_ru:'предложение,предложения,предложений' }}</span>{% if unread_total %}<span>{{ unread_total }} {{ unread_total|plural_ru:'новый ответ,новых ответа,новых ответов' }}</span>{% endif %}</p>
   </div>
 </div>
+{# Непросмотренные ответы — все сразу, над общим списком: порядок списка от отметки просмотра не зависит #}
+{% if unread %}
+<div class="card">
+  <div class="card-head">
+    <h2>Новые ответы</h2>
+    <span class="counter">{{ unread|length }}</span>
+  </div>
+  <div class="catalog-table-wrap"><table class="list table-stack">
+    <thead><tr><th>Задача</th><th>Вид</th><th>Отправлено</th><th>Статус</th><th>Ответ редактора</th></tr></thead>
+    <tbody>{% for proposal in unread %}{% include 'problems/_proposal_mine_row.html' %}{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endif %}
 <div class="card">
   {% if proposals %}
   <div class="catalog-table-wrap"><table class="list table-stack">
     <thead><tr><th>Задача</th><th>Вид</th><th>Отправлено</th><th>Статус</th><th>Ответ редактора</th></tr></thead>
-    <tbody>
-    {% for proposal in proposals %}
-    {# Непросмотренный ответ подсвечен один раз: после этого показа он считается прочитанным #}
-    <tr{% if proposal.unread %} class="proposal-unread"{% endif %}>
-      <td class="stack-primary">
-        <a href="{% url 'task_detail' proposal.task.pk %}">Задача #{{ proposal.task.pk }}</a>
-        {% if proposal.variant %}<div class="muted task-meta"><a href="{% url 'task_detail' proposal.variant.pk %}">Моя копия #{{ proposal.variant.pk }}</a></div>{% endif %}
-        {% if proposal.message %}<div class="muted task-meta">{{ proposal.message|truncatechars:120 }}</div>{% endif %}
-      </td>
-      <td data-label="Вид">{{ proposal.get_kind_display }}</td>
-      <td data-label="Отправлено">{{ proposal.created_at|date:'d.m.Y H:i' }}</td>
-      <td data-label="Статус">{% include 'problems/_proposal_status.html' %}{% if proposal.unread %} <span class="badge-count" title="Новый ответ">1</span>{% endif %}</td>
-      <td data-label="Ответ редактора">{% if proposal.is_open %}<span class="muted">ждёт ответа</span>{% else %}{{ proposal.resolution_note|default:'—'|linebreaksbr }}<div class="muted task-meta">{{ proposal.resolved_by_name }} · {{ proposal.resolved_at|date:'d.m.Y' }}</div>{% endif %}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
+    <tbody>{% for proposal in proposals %}{% include 'problems/_proposal_mine_row.html' %}{% endfor %}</tbody>
   </table></div>
   {% include 'includes/pagination.html' with query=params %}
   {% else %}

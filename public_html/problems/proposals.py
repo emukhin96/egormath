@@ -12,7 +12,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Case, IntegerField, Q, Value, When
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -55,8 +55,9 @@ SECTION_FIELDS = {
 }
 SECTION_LABELS = dict(SECTIONS)
 MASK_PREFILL = 'Предлагаю маску ответа:\n'
-# «Мои предложения»: строк на странице; непросмотренные ответы идут первыми,
-# просмотренными отмечаются только показанные на текущей странице.
+# «Мои предложения»: строк на странице общего списка (по дате отправки).
+# Непросмотренные ответы — отдельным блоком над списком целиком, чтобы
+# отметка просмотра не меняла порядок и разбиение на страницы.
 MINE_PAGE = 50
 
 
@@ -339,28 +340,26 @@ def task_propose(request, pk):
 @teacher_required
 def proposals_mine(request):
     """Свои предложения со статусом и ответом редактора. Непросмотренные
-    ответы — первыми независимо от даты (счётчик в шапке обнуляется с первой
-    страницы), подсвечены и после показа считаются просмотренными."""
-    unseen = Q(seen_by_author_at__isnull=True) & ~Q(status=TaskProposal.STATUS_NEW)
-    queryset = (
-        TaskProposal.objects.filter(author=request.user)
-        .select_related('task', 'variant', 'resolved_by')
-        .annotate(unread_first=Case(When(unseen, then=Value(0)), default=Value(1),
-                                    output_field=IntegerField()))
-        .order_by('unread_first', '-created_at', '-pk'))
-    page = Paginator(queryset, MINE_PAGE).get_page(request.GET.get('page'))
+    ответы показываются все сразу отдельным блоком над списком (он у автора
+    всегда короткий) и после показа считаются просмотренными; общий список —
+    по дате отправки постранично, его порядок от отметки не зависит."""
+    own = (TaskProposal.objects.filter(author=request.user)
+           .select_related('task', 'variant', 'resolved_by'))
+    unread = list(own.filter(seen_by_author_at__isnull=True)
+                  .exclude(status=TaskProposal.STATUS_NEW)
+                  .order_by('-resolved_at', '-pk'))
+    page = Paginator(own.order_by('-created_at', '-pk'), MINE_PAGE).get_page(
+        request.GET.get('page'))
     proposals = list(page)
-    unread = [p.pk for p in proposals if not p.is_open and p.seen_by_author_at is None]
-    for proposal in proposals:
-        proposal.unread = proposal.pk in unread
-    # Только то, что автор сейчас увидел: ответ на другой странице остаётся
-    # непросмотренным и в счётчике.
-    if unread:
-        TaskProposal.objects.filter(pk__in=unread, author=request.user).update(
+    unread_ids = {p.pk for p in unread}
+    for proposal in unread + proposals:
+        proposal.unread = proposal.pk in unread_ids
+    if unread_ids:
+        TaskProposal.objects.filter(pk__in=unread_ids, author=request.user).update(
             seen_by_author_at=timezone.now())
     return render(request, 'problems/proposals_mine.html', {
-        'proposals': proposals, 'page': page, 'unread_total': len(unread),
-        'params': request.GET.urlencode(),
+        'unread': unread, 'proposals': proposals, 'page': page,
+        'unread_total': len(unread), 'params': request.GET.urlencode(),
     })
 
 
