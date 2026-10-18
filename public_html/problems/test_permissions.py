@@ -89,8 +89,36 @@ class PermissionHelpersTests(Roles, TestCase):
         self.assertTrue(can_edit_task(self.guest, copy))
         standalone = self.shared.make_variant(self.editor, standalone=True)
         self.assertTrue(standalone.is_shared)
-        # Копия без автора наследует флаг оригинала
-        self.assertTrue(self.shared.make_variant().is_shared)
+        # Локальная копия — не в общей базе, чья бы она ни была
+        self.assertFalse(self.shared.make_variant(self.editor).is_shared)
+        self.assertFalse(self.shared.make_variant().is_shared)
+        # Самостоятельная копия без автора наследует флаг оригинала
+        self.assertTrue(self.shared.make_variant(standalone=True).is_shared)
+        # Автор подписан отдельно от того, кто решает про общую базу
+        signed = Task.new_for(self.superuser, author=self.guest, text_latex='Из партии гостя')
+        self.assertEqual((signed.created_by, signed.is_shared), (self.guest, True))
+
+    def test_author_edits_own_local_copy_even_if_flagged_shared(self):
+        """Копия, помеченная общей по ошибке (данные до разделения прав),
+        всё равно правится автором: она живёт только в его листке."""
+        copy = self.shared.make_variant(self.guest)
+        Task.objects.filter(pk=copy.pk).update(is_shared=True)
+        copy.refresh_from_db()
+        self.assertTrue(can_edit_task(self.guest, copy))
+        self.assertFalse(can_edit_task(self.other_guest, copy))
+
+    def test_textbook_batch_of_guest_committed_by_superuser_is_shared(self):
+        from .models import TextbookTaskDraft, Topic
+        from .test_textbook_import import bundle
+        from .textbook_import import commit_batch, create_batch_from_bundle
+        batch = create_batch_from_bundle(
+            bundle(), user=self.guest, title='Партия гостя',
+            source_title='Тестовый задачник', source_author='Автор')
+        batch.drafts.update(status=TextbookTaskDraft.STATUS_APPROVED,
+                            topic=Topic.objects.create(name='Тема партии'))
+        commit_batch(batch, user=self.superuser)
+        task = Task.objects.get(text_latex=bundle()['tasks'][0]['text_latex'])
+        self.assertEqual((task.created_by, task.is_shared), (self.guest, True))
 
 
 class WriteEndpointMatrixTests(Roles, TestCase):

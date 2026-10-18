@@ -617,7 +617,7 @@ def _save_local_variant(user, original, form, source_fs, subitem_fs, post, image
     variant.pk = None
     variant.variant_of = original.variant_of or original
     variant.created_by = user
-    variant.is_shared = Task.shared_for(user)
+    variant.is_shared = False  # локальная копия — не в общей базе
     for name, value in form.cleaned_data.items():
         setattr(variant, name, value)
     variant.save()
