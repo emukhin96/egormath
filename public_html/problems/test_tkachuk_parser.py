@@ -238,6 +238,21 @@ class TkachukPiecesTests(SimpleTestCase):
             split_answer_hint(r"Выразить \(\cos 2 x\) через \(\sin x\). Ответ: \(n \pi\)."),
             (r"\(n \pi\).", r"Выразить \(\cos 2 x\) через \(\sin x\)."))
 
+    def test_hint_split_word_stems(self):
+        # Основы слов («Воспольз», «Введ») и «Указ.» — без границы слова.
+        self.assertEqual(
+            split_answer_hint(r"\(x=1\). Воспользуйтесь формулой \(\sin 2x\)."),
+            (r"\(x=1\).", r"Воспользуйтесь формулой \(\sin 2x\)."))
+        self.assertEqual(
+            split_answer_hint(r"\(2\). Введем \(t=\sin x\)."),
+            (r"\(2\).", r"Введем \(t=\sin x\)."))
+        self.assertEqual(
+            split_answer_hint(r"\(3\). Указ. Рассмотрите \(x=0\)."),
+            (r"\(3\).", r"Указ. Рассмотрите \(x=0\)."))
+        # Слово из списка в начале — не указание: так начинаются ответы книги.
+        answer = r"Пусть \(T=2\). Тогда первая машина выполняет работу за \(T+1\) ч."
+        self.assertEqual(split_answer_hint(answer), (answer, ""))
+
     def test_stems(self):
         self.assertEqual(with_stem(r"\(|x-7|=4\)", None), r"Решите уравнение \(|x-7|=4\).")
         self.assertEqual(with_stem(r"\(x^{2}-x-1>0\).", None), r"Решите неравенство \(x^{2}-x-1>0\).")
