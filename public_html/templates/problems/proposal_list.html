@@ -24,10 +24,10 @@
         <a href="{% url 'proposal_detail' proposal.pk %}">Задача #{{ proposal.task.pk }}</a>
         {% if proposal.message %}<div class="muted task-meta">{{ proposal.message|truncatechars:120 }}</div>{% endif %}
       </td>
-      <td data-label="Вид">{{ proposal.get_kind_display }}{% if proposal.variant_id %}<div class="muted task-meta">с копией #{{ proposal.variant_id }}</div>{% endif %}</td>
-      <td data-label="Автор">{{ proposal.author_name }}</td>
-      <td data-label="Отправлено">{{ proposal.created_at|date:'d.m.Y H:i' }}</td>
-      <td data-label="Статус">{% include 'problems/_proposal_status.html' %}</td>
+      <td>{{ proposal.get_kind_display }}{% if proposal.variant_id %}<div class="muted task-meta">с копией #{{ proposal.variant_id }}</div>{% endif %}</td>
+      <td>{{ proposal.author_name }}</td>
+      <td>{{ proposal.created_at|date:'d.m.Y H:i' }}</td>
+      <td>{% include 'problems/_proposal_status.html' %}</td>
       <td class="row-actions"><a class="btn btn-small btn-secondary" href="{% url 'proposal_detail' proposal.pk %}">Открыть</a></td>
     </tr>
     {% endfor %}
