@@ -112,6 +112,9 @@ def load_repairs(text: str, path: Path = REPAIRS_PATH) -> tuple[str, dict, list[
         for key, fields in edition.get("tasks", {}).items():
             overrides[key] = fields
             applied.append("task:" + key)
+        # Предупреждения разбора у этих задач сверены со сканом.
+        for key in edition.get("reviewed", []):
+            overrides.setdefault(key, {})["clear_warnings"] = True
     return text, overrides, applied
 
 
@@ -257,6 +260,9 @@ def split_example(body: str) -> tuple[str, str, str, list[str]]:
 
 _FIGURE_SLOT = "\u27e6Рис.{}\u27e7"
 _FIGURE_SLOT_RE = re.compile("\u27e6Рис\\.(\\d+)\u27e7")
+_GLUED_SLOT_RE = re.compile(
+    "(?P<pre>[А-Яа-яЁё,])(?P<hy>-?)[ \\t]*(?:\\\\\\\\)?\\s*"
+    "(?P<slot>\u27e6Рис\\.\\d+\u27e7(?:\\s*\u27e6Рис\\.\\d+\u27e7)*)\\s*(?P<post>[а-яё\\\\])")
 
 
 def parse_examples(zone: str, chapter: dict, diagnostics: dict) -> list[TaskDraft]:
@@ -311,13 +317,46 @@ def parse_examples(zone: str, chapter: dict, diagnostics: dict) -> list[TaskDraf
         task.author_solution_latex = insert_solution_figures(
             task.author_solution_latex, figures, used)
 
+    theory_refs = {int(n) for n in re.findall(r"рис\.\s*(\d+)", zone)}
+
     def slot(match: re.Match) -> str:
         number = int(match.group(1))
         if number in used or number not in figures:
             return ""
+        if number in theory_refs:
+            # Ссылка есть только в теории параграфа — рисунок не к примеру.
+            used.add(number)
+            diagnostics["theory_figures"].append(f"{chapter['roman']}: рис. {number}")
+            return ""
         used.add(number)
         diagnostics["figures_without_reference"].append(f"{chapter['roman']}: рис. {number}")
         return "\n" + "\\\\\n".join(figures[number] + [f"Рис. {number}"]) + "\n"
+    def glue(value: str) -> str:
+        """Рисунок стоял посреди фразы («пара-⏎рисунок⏎метра»): фраза
+        склеивается, рисунок (если остаётся здесь) — после её строки."""
+        def fix(match: re.Match) -> str:
+            joiner = "" if match.group("hy") else " "
+            return match.group("pre") + joiner + match.group("slot") + match.group("post")
+        return _GLUED_SLOT_RE.sub(fix, value)
+
+    def place(value: str) -> str:
+        # Слот посреди строки — в конец строки, затем подстановка.
+        value = glue(value)
+        lines = []
+        for line in value.split("\n"):
+            slots = _FIGURE_SLOT_RE.findall(line)
+            if slots and _FIGURE_SLOT_RE.sub("", line).strip():
+                line = _FIGURE_SLOT_RE.sub("", line).rstrip() + "\n" + "".join(
+                    _FIGURE_SLOT.format(n) for n in slots)
+            lines.append(line)
+        return _FIGURE_SLOT_RE.sub(slot, "\n".join(lines))
+    for task in tasks:
+        task.text_latex = place(task.text_latex)
+        task.author_solution_latex = place(task.author_solution_latex)
+        for item in task.subitems:
+            item.text_latex = place(item.text_latex)
+        task.text_latex = re.sub(r"\n{3,}", "\n\n", task.text_latex).strip()
+        task.author_solution_latex = re.sub(r"\n{3,}", "\n\n", task.author_solution_latex).strip()
     for task in tasks:
         task.text_latex = _FIGURE_SLOT_RE.sub(slot, task.text_latex)
         task.author_solution_latex = _FIGURE_SLOT_RE.sub(slot, task.author_solution_latex)
@@ -755,9 +794,23 @@ def apply_task_repair(task: TaskDraft, fields: dict) -> None:
     ``{field, before, after}``: фрагмент обязан встречаться ровно один раз;
     ``field`` — ``text``/``answer``/``solution`` или ``subitem:б``.
     """
+    # Правки пишут рисунки именами файлов: \taskpic{N} задачи — обратно
+    # в \includegraphics, после правки нумерация собирается заново.
+    def expand(value: str) -> str:
+        return re.sub(r"\\taskpic\{(\d+)\}", lambda m: (
+            "\\includegraphics{" + task.images[int(m.group(1)) - 1] + "}"
+            if 0 < int(m.group(1)) <= len(task.images) else m.group(0)), value or "")
+    for attr in _FIELDS.values():
+        setattr(task, attr, expand(getattr(task, attr)))
+    for item in task.subitems:
+        for attr in _FIELDS.values():
+            setattr(item, attr, expand(getattr(item, attr)))
     if "text" in fields:
+        # Текст без меток пунктов — только общее условие, пункты остаются.
         text, subitems = split_subitems(fields["text"])
-        task.text_latex, task.subitems = text, subitems
+        task.text_latex = text
+        if subitems:
+            task.subitems = subitems
     for key in ("answer", "solution"):
         if key in fields:
             setattr(task, _FIELDS[key], fields[key])
@@ -782,6 +835,8 @@ def apply_task_repair(task: TaskDraft, fields: dict) -> None:
     if fields.get("clear_warnings"):
         task.warnings = []
         task.confidence = 1.0
+    task.images = []
+    finalize_draft_images(task)
 
 
 def parse_shabunin_method(text: str, *, structure: dict | None = None) -> tuple[list[TaskDraft], dict]:
@@ -796,6 +851,7 @@ def parse_shabunin_method(text: str, *, structure: dict | None = None) -> tuple[
         "variants_without_tasks": [],
         "unused_answer_figures": {},
         "figures_without_reference": [],
+        "theory_figures": [],
     }
     tasks: list[TaskDraft] = []
     for chapter, start, stop in _find_chapters(text, structure):
