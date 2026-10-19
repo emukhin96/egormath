@@ -8,7 +8,7 @@ from .shabunin_method_parser import (
 
 
 STRUCTURE = {
-    "grade_bands": ["10"],
+    "grade_bands": ["GRADE_10_11"],
     "chapters": [
         {"roman": "II", "title": "Множества и операции над ними",
          "start": "\\section*{Глава II}", "topic": "ALG.02",
@@ -209,7 +209,7 @@ class ShabuninMethodParserTests(SimpleTestCase):
             "Глава II. Множества и операции над ними", "Дидактические материалы",
             "Контрольная работа II.1", "Вариант 2"])
         self.assertEqual(task.topic_original, "Множества")
-        self.assertEqual(task.grade_band_codes, ["10"])
+        self.assertEqual(task.grade_band_codes, ["GRADE_10_11"])
 
 
 class HelpersTests(SimpleTestCase):
