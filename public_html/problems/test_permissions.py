@@ -462,6 +462,55 @@ class GuestLocalEditTests(Roles, TestCase):
         self.assertContains(response, 'Удалить задачу')
         self.assertContains(response, 'увидят все учителя')
 
+    def answer_block(self, response):
+        """Разметка блока «Ответ ученика» единственного подпункта."""
+        html = response.content.decode()
+        start = html.index('<section class="problem-answer"')
+        return html[start:html.index('</section>', start)]
+
+    def test_read_only_card_shows_student_form_instead_of_mask(self):
+        """Решение R12-1 обхода экранов: приглашённому вместо сырой маски —
+        форма ученика с «Проверить как ученик», код маски — под «показать маску»."""
+        import re
+        sub = self.shared.subitems.get()
+        sub.answer_mask = '$x=${{number:3}}'
+        sub.save(update_fields=['answer_mask'])
+        response = self.client.get(reverse('task_detail', args=[self.shared.pk]))
+        block = self.answer_block(response)
+        self.assertIn('data-mask-check', block)
+        self.assertIn('Проверить как ученик', block)
+        self.assertIn('data-mask-reset', block)
+        self.assertIn(f'name="preview_{sub.pk}_s1"', block)
+        self.assertIn(f'data-check="preview_{sub.pk}"', block)
+        self.assertIn('<summary>показать маску</summary>', block)
+        # Сырой маски в видимой разметке нет: только в скрытом поле формы и под «показать маску»
+        visible = re.sub(r'<input type="hidden"[^>]*>|<details [^>]*problem-mask-source.*?</details>',
+                         '', block, flags=re.S)
+        self.assertNotIn('{{', visible)
+        self.assertIn('{{number:3}}', block)
+        self.assertNotContains(response, 'data-mask-preview')
+        self.assertNotContains(response, 'data-mask-edit')
+        self.assertContains(response, 'data-check-url="/problems/mask/check/"')
+        # Без маски формы нет, остаётся подсказка про фото
+        sub.answer_mask = ''
+        sub.save(update_fields=['answer_mask'])
+        block = self.answer_block(self.client.get(reverse('task_detail', args=[self.shared.pk])))
+        self.assertNotIn('data-mask-check', block)
+        self.assertNotIn('показать маску', block)
+        self.assertIn('Пока ученик может прислать только фото решения.', block)
+
+    def test_editor_card_keeps_mask_code_and_preview_button(self):
+        sub = self.shared.subitems.get()
+        sub.answer_mask = '$x=${{number:3}}'
+        sub.save(update_fields=['answer_mask'])
+        self.client.force_login(self.editor)
+        block = self.answer_block(self.client.get(reverse('task_detail', args=[self.shared.pk])))
+        self.assertIn('<div class="problem-mask-code math-content">', block)
+        self.assertIn('data-mask-preview', block)
+        self.assertIn('data-mask-edit', block)
+        self.assertNotIn('data-mask-check', block)
+        self.assertNotIn('показать маску', block)
+
     def test_catalog_row_has_no_inline_form_for_shared(self):
         own = Task.new_for(self.guest, text_latex='Своя')
         response = self.client.get(reverse('task_list'))

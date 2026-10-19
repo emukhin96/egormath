@@ -12,10 +12,14 @@
   <div class="problem-mask-summary">
     <strong>Ответ ученика</strong>
     <span class="helptext">{% if task.full_answer_only %}Только развёрнутый ответ{% elif owner.has_mask %}Маска готова{% else %}Маски нет{% endif %}</span>
-    {% if not editor_readonly %}<button type="button" class="btn btn-secondary" data-mask-edit="{{ sub.pk|default:'' }}">{% if owner.answer_mask %}Настроить{% else %}Добавить маску{% endif %}</button>{% endif %}
-    <button type="button" class="btn btn-secondary" data-mask-preview="{{ sub.pk|default:'' }}">Предпросмотр</button>
+    {% if not editor_readonly %}<button type="button" class="btn btn-secondary" data-mask-edit="{{ sub.pk|default:'' }}">{% if owner.answer_mask %}Настроить{% else %}Добавить маску{% endif %}</button>
+    <button type="button" class="btn btn-secondary" data-mask-preview="{{ sub.pk|default:'' }}">Предпросмотр</button>{% endif %}
   </div>
-  {% if owner.answer_mask %}<div class="problem-mask-code math-content">{{ owner.answer_mask|web_text }}</div>{% endif %}
+  {% if editor_readonly %}
+  {# Только чтение (общая задача у приглашённого без листка): вместо кода маски сразу форма ученика с «Проверить как ученик» (тег mask_check_form), код — под «показать маску» #}
+  {% if owner.has_mask and not task.full_answer_only %}{% mask_check_form owner %}{% endif %}
+  {% if owner.answer_mask %}<details class="ws-add-text problem-mask-source"><summary>показать маску</summary><div class="problem-mask-code math-content">{{ owner.answer_mask|web_text }}</div></details>{% endif %}
+  {% elif owner.answer_mask %}<div class="problem-mask-code math-content">{{ owner.answer_mask|web_text }}</div>{% endif %}
   {% if not owner.has_mask %}<p class="helptext">Пока ученик может прислать только фото решения.</p>{% endif %}
   <details class="problem-solution" {% if owner.effective_solution_latex %}open{% endif %}>
     <summary>Решение</summary>

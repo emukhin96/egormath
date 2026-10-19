@@ -5,7 +5,8 @@
       разбирает маску и возвращает разметку с контролами ученика + ошибки.
    2. Самопроверка: учитель заполняет превью пробным ответом и нажимает
       «Проверить пробный ответ» — результат по слотам считает тот же код,
-      что и у ученика.
+      что и у ученика (эндпоинт task_mask_check, он же у «Проверить как
+      ученик» на карточке задачи).
    3. «Заготовка из ответа»: из текстового «Ответа» сервер делает черновик
       маски для очевидных случаев (число, промежуток, пары, уравнение…). */
 (function () {
@@ -39,6 +40,7 @@
     var panel = document.getElementById('mask-preview');
     if (!form || !panel) return;
     var previewUrl = panel.dataset.previewUrl;
+    var checkUrl = panel.dataset.checkUrl;
     var draftUrl = panel.dataset.draftUrl;
     var container = panel.querySelector('[data-mask-html]');
     var errors = panel.querySelector('[data-mask-errors]');
@@ -89,7 +91,7 @@
       panel.hidden = false;
       result.textContent = '';
       var seq = ++previewSeq;
-      post(previewUrl, data).then(function (res) {
+      post(withValues ? checkUrl : previewUrl, data).then(function (res) {
         if (seq !== previewSeq || active !== textarea) return;
         showErrors(res.errors);
         if (!withValues) {
@@ -107,12 +109,12 @@
           return;
         }
         if (window.EgorCheckBadge) EgorCheckBadge.apply(container, res.checks || {});
-        var overall = res.overall || '';
-        result.textContent = res.unavailable ? res.message
-          : overall === 'ok' ? 'Итог: верно'
+        /* Итог по задаче — в checks под префиксом полей (как у ученика) */
+        var overall = (res.checks || {}).preview || '';
+        result.textContent = overall === 'ok' ? 'Итог: верно'
           : overall === 'wrong' ? 'Итог: неверно'
           : overall === 'unknown' ? 'Итог: не разобрано (или не все слоты заполнены)'
-          : 'Введите пробный ответ в поля превью';
+          : (res.message || 'Введите пробный ответ в поля превью');
       }).catch(function () {
         showErrors(['Не удалось получить превью — попробуйте ещё раз']);
       });

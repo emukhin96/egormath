@@ -4,7 +4,7 @@ from django.urls import reverse
 
 from .forms import TaskForm, TaskSubitemFormSet
 from .models import Task, TaskSubitem
-from .tests import formset_management, make_teacher
+from .tests import formset_management, make_student, make_teacher
 
 
 def task_form_data(**extra):
@@ -109,9 +109,16 @@ class MaskFormTests(TestCase):
 
 
 class MaskEndpointTests(TestCase):
+    """Превью маски (одни поля и форма с «Проверить как ученик») и проверка
+    пробного ответа — views.task_mask_preview / task_mask_check."""
+
     def setUp(self):
-        make_teacher()
+        self.teacher = make_teacher()
         self.client.login(username='teacher1', password='pass12345')
+
+    def check(self, mask, prefix='preview', **values):
+        return self.client.post(reverse('task_mask_check'),
+                                {'mask': mask, 'prefix': prefix, **values})
 
     def test_preview_renders_controls_and_errors(self):
         response = self.client.post(reverse('task_mask_preview'), {
@@ -123,54 +130,93 @@ class MaskEndpointTests(TestCase):
         self.assertIn('<option value="девочек"', data['html'])
         self.assertIn('name="preview_s2"', data['html'])
         self.assertIn('data-check="preview_s2"', data['html'])
+        # Та же разметка в форме с кнопкой — для диалога предпросмотра
+        self.assertNotIn('data-mask-check', data['html'])
+        self.assertIn('data-mask-check', data['form'])
+        self.assertIn('name="preview_s2"', data['form'])
+        self.assertIn('Проверить как ученик', data['form'])
+        self.assertIn('data-mask-reset', data['form'])
+        self.assertIn('data-check="preview"', data['form'])
+        self.assertIn('name="mask" value="Больше {{choice: мальчиков|*девочек}}, всего {{number: 20}}"',
+                      data['form'])
 
         response = self.client.post(reverse('task_mask_preview'),
                                     {'mask': '{{number: abc}} и {{foo: 1}}'})
         data = response.json()
         self.assertFalse(data['ok'])
         self.assertEqual(len(data['errors']), 2)
+        self.assertIn('Маска не разобрана', data['message'])
 
-    def test_preview_selftest(self):
-        response = self.client.post(reverse('task_mask_preview'), {
-            'mask': '{{number: 10}} и {{simplify: \\frac{2}{a+3}}}',
-            'preview_s1': '10,0', 'preview_s2': '4/(2a+6)'})
-        data = response.json()
-        self.assertEqual(data['overall'], 'wrong')
-        self.assertEqual(data['checks'],
-                         {'preview_s1': 'ok', 'preview_s2': 'wrong'})
-        self.assertIn('value="10,0"', data['html'])
+    def test_check_number_and_choice_like_student(self):
+        # Ответ — как у ученика по кнопке «Проверить» (assignments.views.check_task):
+        # итог под префиксом формы, результат по каждому слоту, подпись
+        mask = '$x=${{number:3}} и {{choice: а|*б}}'
+        data = self.check(mask, preview_s1='3,0', preview_s2='б').json()
+        self.assertEqual(data, {'ok': True, 'message': 'Проверено', 'checks': {
+            'preview': 'ok', 'preview_s1': 'ok', 'preview_s2': 'ok'}})
+        data = self.check(mask, preview_s1='4', preview_s2='б').json()
+        self.assertEqual(data['checks'], {'preview': 'wrong', 'preview_s1': 'wrong',
+                                          'preview_s2': 'ok'})
+        data = self.check(mask, preview_s1='3', preview_s2='а').json()
+        self.assertEqual(data['checks'], {'preview': 'wrong', 'preview_s1': 'ok',
+                                          'preview_s2': 'wrong'})
+        # Не все поля заполнены — итог «не разобрано», как и у ученика
+        data = self.check(mask, preview_s1='3', preview_s2='').json()
+        self.assertEqual(data['checks'], {'preview': 'unknown', 'preview_s1': 'ok',
+                                          'preview_s2': ''})
 
-    def test_preview_accepts_inverse_functions_typed_as_letters(self):
+    def test_check_subitem_prefix(self):
+        # Подпункт в предпросмотре и на карточке — свой префикс имён полей
+        data = self.check('{{number: 3}}', prefix='preview_558', preview_558_s1='3').json()
+        self.assertEqual(data['checks'], {'preview_558': 'ok', 'preview_558_s1': 'ok'})
+        response = self.check('{{number: 3}}', prefix='task12', task12_s1='3')
+        self.assertEqual(response.status_code, 400)
+
+    def test_check_without_values_asks_for_answer(self):
+        data = self.check('{{number: 3}}', preview_s1='  ').json()
+        self.assertEqual(data, {'ok': True, 'message': 'Сначала введите ответ', 'checks': {}})
+
+    def test_check_rejects_unparsable_or_oversized_mask(self):
+        for mask in ('{{number: abc}}', '{{foo: 1}}', 'без полей', '', 'x' * 10_001):
+            response = self.check(mask, preview_s1='1')
+            self.assertEqual(response.status_code, 400, mask[:20])
+            self.assertFalse(response.json()['ok'])
+        self.assertEqual(self.check('{{foo: 1}}').json()['errors'],
+                         self.client.post(reverse('task_mask_preview'),
+                                          {'mask': '{{foo: 1}}'}).json()['errors'])
+
+    def test_check_accepts_inverse_functions_typed_as_letters(self):
         # Потоскуев, 4.048 а): ученик набирает arctg буквами, без \operatorname.
-        response = self.client.post(reverse('task_mask_preview'), {
-            'mask': '{{number: \\operatorname{arctg} \\frac{1}{3}}} и '
-                    '{{number: \\arccos \\left(-\\frac{7}{25}\\right)}} и '
-                    '{{number: \\arccos \\frac{1}{6}}}',
-            'preview_s1': 'arctg(1/3)', 'preview_s2': '\\mathrm{arccos}(-7/25)',
-            'preview_s3': 'Arccos(1/6)'})
-        data = response.json()
-        self.assertEqual(data['checks'], {'preview_s1': 'ok', 'preview_s2': 'ok',
-                                          'preview_s3': 'unknown'})
+        data = self.check(
+            '{{number: \\operatorname{arctg} \\frac{1}{3}}} и '
+            '{{number: \\arccos \\left(-\\frac{7}{25}\\right)}} и '
+            '{{number: \\arccos \\frac{1}{6}}}',
+            preview_s1='arctg(1/3)', preview_s2='\\mathrm{arccos}(-7/25)',
+            preview_s3='Arccos(1/6)').json()
+        self.assertEqual(data['checks'], {'preview': 'unknown', 'preview_s1': 'ok',
+                                          'preview_s2': 'ok', 'preview_s3': 'unknown'})
 
-    def test_preview_reports_temporarily_unavailable_checker(self):
+    def test_check_reports_temporarily_unavailable_checker(self):
         from unittest.mock import patch
         from assignments.checks import formulas
         with patch.object(formulas, 'check',
                           side_effect=formulas.FormulaUnavailable('занято')):
-            response = self.client.post(reverse('task_mask_preview'), {
-                'mask': '{{number: 10}} и {{simplify: \\frac{2}{a+3}}}',
-                'preview_s1': '10', 'preview_s2': '4/(2a+6)'})
+            response = self.check('{{number: 10}} и {{simplify: \\frac{2}{a+3}}}',
+                                  preview_s1='10', preview_s2='4/(2a+6)')
         self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertTrue(data['unavailable'])
-        self.assertIn('временно недоступна', data['message'])
-        self.assertNotIn('overall', data)
-        self.assertIn('name="preview_s2"', data['html'])
+        self.assertEqual(response.json(), {
+            'ok': False, 'checks': {},
+            'message': 'Проверка временно недоступна — попробуйте ещё раз через минуту'})
 
-    def test_preview_requires_teacher(self):
-        self.client.logout()
-        response = self.client.post(reverse('task_mask_preview'), {'mask': 'x'})
-        self.assertNotEqual(response.status_code, 200)
+    def test_endpoints_require_teacher(self):
+        for url in (reverse('task_mask_preview'), reverse('task_mask_check')):
+            self.client.login(username='teacher1', password='pass12345')
+            self.assertEqual(self.client.post(url, {'mask': '{{number: 1}}'}).status_code, 200)
+            self.client.logout()
+            self.assertNotEqual(self.client.post(url, {'mask': '{{number: 1}}'}).status_code, 200)
+            self.client.force_login(make_student(self.teacher, username=f'student{len(url)}'))
+            self.assertEqual(self.client.post(url, {'mask': '{{number: 1}}'}).status_code, 403)
+            self.assertEqual(self.client.get(url).status_code, 403)
 
     def test_draft_skips_temporarily_unavailable_formula(self):
         from unittest.mock import patch

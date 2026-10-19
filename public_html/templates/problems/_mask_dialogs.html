@@ -42,7 +42,7 @@
 <dialog class="dialog problem-dialog" id="answer-preview-dialog" aria-labelledby="answer-preview-title">
   <div class="dialog-heading"><h3 id="answer-preview-title">Как увидит ученик</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
   <div data-preview-body></div>
-  <p class="helptext">Проверка пробного ответа работает тем же кодом, что у ученика.</p>
+  <p class="helptext">«Проверить как ученик» сверяет пробный ответ тем же кодом, что и ответ ученика в задании; попытки не считаются.</p>
 </dialog>
 {# Диалог открывается только для задач, которые пользователь вправе менять напрямую: у редактора базы это общие задачи, у приглашённого учителя — его собственные #}
 <dialog class="dialog" id="answer-scope-dialog" aria-labelledby="answer-scope-title">
@@ -61,4 +61,4 @@
   </form>
 </dialog>
 {% endif %}
-<div hidden id="answer-mask-config" data-preview-url="{% url 'task_mask_preview' %}" data-draft-url="{% url 'task_mask_draft' %}"></div>
+<div hidden id="answer-mask-config" data-preview-url="{% url 'task_mask_preview' %}" data-check-url="{% url 'task_mask_check' %}" data-draft-url="{% url 'task_mask_draft' %}"></div>

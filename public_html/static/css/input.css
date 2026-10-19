@@ -323,6 +323,10 @@
   .review-comment textarea { width: 100%; margin-top: var(--space-1); }
   table.list.progress-table td, table.list.progress-table th { white-space: nowrap; }
   .problem-mask-code { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* Форма «Проверить как ученик» (_mask_check_form.html): поля под заголовком
+     «Ответ ученика» и под подпунктом в предпросмотре, кнопки под полями */
+  .mask-check { margin-top: var(--space-3); }
+  .mask-check [data-trial-result]:empty { display: none; }
   .problem-columns textarea, .problem-dialog textarea { max-width: 100%; }
   .problem-columns .formset { table-layout: fixed; width: 100%; }
   .problem-columns .formset th:first-child { width: 80px; }
