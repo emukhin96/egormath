@@ -250,7 +250,9 @@ class SubmitAndTeacherTests(CanvasBase):
         # Ученик больше не пишет, учитель — пишет и может добавить свою страницу
         self.assertEqual(self.save(elements=[stroke('b2')], version=2).status_code, 403)
         self.client.force_login(self.teacher)
-        self.assertTrue(self.client.get(self.url('pages')).json()['can_add_pages'])
+        data = self.client.get(self.url('pages')).json()
+        self.assertTrue(data['can_add_pages'])
+        self.assertEqual(data['limits']['bytes'], CanvasPage.MAX_BYTES)
         response = self.save(layer='teacher', elements=[stroke('t1', '#dc2626'), stroke('t2')], version=1)
         self.assertEqual(response.status_code, 200)
         page.refresh_from_db()

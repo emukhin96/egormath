@@ -348,3 +348,18 @@ test('точка на осях без сетки — без подписи ко�
   assert.equal(dot.l, true);
   assert.deepEqual([...dot.p[0]], [500, 500]);
 });
+
+test('дублирование: копия больше лимита байт слоя не создаётся, обычная — создаётся', () => {
+  const {widget: w} = setup(); w.addPage();
+  const source = w.page();
+  source.layers.student.elements = [stroke('a'), stroke('b')];
+  w.limits = Object.assign({}, w.limits, {bytes: 50});
+  w.duplicatePage();
+  assert.equal(w.pages.length, 1);
+  w.limits.bytes = 512 * 1024;
+  w.duplicatePage();
+  assert.equal(w.pages.length, 2);
+  assert.equal(w.page().layers.student.elements.length, 2);
+  assert.notEqual(w.page().layers.student.elements[0].id, 'a');
+  assert.equal(source.layers.student.elements[0].id, 'a');
+});

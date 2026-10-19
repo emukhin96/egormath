@@ -810,7 +810,7 @@
   Widget.prototype.applyData = function (data) {
     var self = this;
     this.layer = this.role === 'viewer' ? null : data.layer;
-    this.limits = data.limits || {student: 10, teacher: 2, total: 15, elements: 2000};
+    this.limits = data.limits || {student: 10, teacher: 2, total: 15, elements: 2000, bytes: 512 * 1024};
     this.showTeacherLayer = !!data.show_teacher_layer;
     this.canAddPages = data.can_add_pages !== false;
     this.images = data.images || [];
@@ -894,6 +894,12 @@
       if (element.g) copy.g = groups[element.g] || (groups[element.g] = uid());
       return copy;
     });
+    /* У учителя копия собирает оба слоя в один — сервер ограничивает размер
+       JSON слоя (MAX_BYTES), и такая копия не сохранилась бы никогда */
+    if (this.limits.bytes && JSON.stringify(copied).length > this.limits.bytes) {
+      toast(false, 'Рисунок слишком большой для копии — упростите его');
+      return;
+    }
     var page = this.makePage({number: this.pages.length + 1, created_by_role: this.layer,
       background: source.background, background_options: Object.assign({}, source.bgOptions)});
     page.layers[this.layer].elements = copied;
