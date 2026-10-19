@@ -1734,7 +1734,10 @@
       this.startSelect(e, pt);
     } else if (tool === 'dot') {
       var snappedPt = roundPoint(this.snapped(pt));
-      this.addElement({id: uid(), t: 'dot', c: this.color, w: Math.max(3, this.penWidth), p: [snappedPt], l: page.background === 'plane' && this.snap});
+      /* Подпись координат — только если точка правда встала в узел: на осях
+         без сетки (grid: false) привязки нет, и подпись вышла бы дробной */
+      this.addElement({id: uid(), t: 'dot', c: this.color, w: Math.max(3, this.penWidth), p: [snappedPt],
+        l: page.background === 'plane' && this.snap && !!cellOf(page)});
     } else if (tool === 'tri' || tool === 'para') {
       this.pending.push(roundPoint(this.snapped(pt)));
       if (this.pending.length === 3) {

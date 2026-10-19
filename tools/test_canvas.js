@@ -329,3 +329,22 @@ test('картинки: ожидание привязано к URL, ошибка
   assert.equal(c.waiters.length, 0);
   assert.equal(geo.pending(w.page().layers.student.elements).length, 0);
 });
+
+test('точка на осях без сетки — без подписи координат, на клетке — в узле с подписью', () => {
+  const {widget: w} = setup(); w.addPage();
+  Object.assign(w, {tool: 'dot', snap: true, scale: 1, color: '#000000', penWidth: 2, drawTop() {}, syncToolbar() {},
+    stage: {getBoundingClientRect: () => ({left: 0, top: 0}), setPointerCapture() {}}});
+  const down = () => w.onDown({button: 0, pointerType: 'mouse', pointerId: 1, clientX: 523, clientY: 481, preventDefault() {}});
+  const page = w.page();
+  page.background = 'plane';
+  page.bgOptions = {square: true, cell: 50, origin: 'center', grid: false};
+  down();
+  let dot = page.layers.student.elements.at(-1);
+  assert.equal(dot.l, false);
+  assert.deepEqual([...dot.p[0]], [523, 481]);
+  page.bgOptions = {square: true, cell: 50, origin: 'center'};
+  down();
+  dot = page.layers.student.elements.at(-1);
+  assert.equal(dot.l, true);
+  assert.deepEqual([...dot.p[0]], [500, 500]);
+});
