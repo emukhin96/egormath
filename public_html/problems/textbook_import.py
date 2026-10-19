@@ -524,8 +524,11 @@ def sync_batch_draft_images(batch):
     if str(batch.profile or '') == 'ziv':
         for draft in reattach_leaked_following_answers(drafts):
             dirty[draft.pk] = draft
+    fields = (('author_answer_latex',)
+              if str(batch.profile or '') in WHOLE_SOLUTION_PROFILES
+              else ('author_answer_latex', 'author_solution_latex'))
     for draft in drafts:
-        if redistribute_glued_subitem_answers(draft):
+        if redistribute_glued_subitem_answers(draft, fields):
             dirty[draft.pk] = draft
         if finalize_draft_images(draft):
             dirty[draft.pk] = draft
@@ -1273,6 +1276,15 @@ def _attach_task_images(task, draft, batch):
         existing[stem] = image
 
 
+# Профили, у которых варианты работ связываются в семьи аналогов
+# при загрузке в каталог (ключи «С1.2/3», «КI.3/4»).
+ANALOG_PROFILES = {'vysotsky'}
+# Профили, где авторский разбор общего условия — единый текст ко всей
+# задаче («Пример решения. … а) … б) …»): по пунктам делятся только ответы,
+# иначе вступление и хвосты разбора теряются.
+WHOLE_SOLUTION_PROFILES = {'vysotsky'}
+
+
 @transaction.atomic
 def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
     """Загружает одобренные черновики; повторный вызов безопасен.
@@ -1525,8 +1537,19 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         batch.save(update_fields=['status', 'updated_at'])
     collection_count = (Collection.objects.filter(source=batch.source).count()
                         - initial_collection_count)
-    return {
+    result = {
         'created': created,
         'reused': reused,
         'collections': max(0, collection_count),
     }
+    if batch.profile in ANALOG_PROFILES:
+        # Один номер в парных вариантах самостоятельных и контрольных —
+        # семья аналогов сразу после загрузки, без ручного
+        # sync_independent_analogs.
+        from independentworks.analogs import sync_families
+        # Только новое: по пустому результату представление сообщает
+        # «Изменений нет» при повторной загрузке раздела.
+        report = sync_families(report=True, source_id=batch.source_id)
+        result['analog_families'] = report['created']
+        result['analog_members'] = report['members_added']
+    return result

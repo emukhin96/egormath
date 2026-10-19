@@ -1,7 +1,7 @@
 {% load task_extras %}
-<article class="card form-section{% if not candidate and task.pool_blocked %} iw-candidate-used{% endif %}" data-task-row>
-<div class="iw-workspace-heading"><h3><a href="{% url 'task_detail' task.pk %}" target="_blank" rel="noopener">Задача #{{ task.pk }}</a></h3>{% if candidate %}<form method="post">{% csrf_token %}<input type="hidden" name="candidate" value="{{ candidate.pk }}"><button class="icon-btn" name="action" value="candidate_remove" aria-label="Убрать кандидата">×</button></form>{% endif %}</div>
-{% if not candidate and task.pool_label %}<p class="badge">Уже выбрана: {{ task.pool_label }}</p>{% endif %}
+<article class="card form-section{% if not candidate and task.pool_blocked %} iw-candidate-used{% endif %}" data-task-row data-task-png-root>
+<div class="iw-workspace-heading" data-task-png-skip><h3><a href="{% url 'task_detail' task.pk %}" target="_blank" rel="noopener">Задача #{{ task.pk }}</a></h3>{% include 'includes/task_png_button.html' %}{% if candidate %}<form method="post">{% csrf_token %}<input type="hidden" name="candidate" value="{{ candidate.pk }}"><button class="icon-btn" name="action" value="candidate_remove" aria-label="Убрать кандидата">×</button></form>{% endif %}</div>
+{% if not candidate and task.pool_label %}<p class="badge" data-task-png-skip>Уже выбрана: {{ task.pool_label }}</p>{% endif %}
 {% include 'problems/_catalog_content.html' with selecting=True %}
 <form method="post" {% if candidate %}data-iw-parts{% endif %}>{% csrf_token %}
 {% if not candidate and task.pool_partial %}<p class="helptext">Можно выбрать только ещё не использованные подпункты.</p>{% endif %}<fieldset {% if not candidate and task.pool_blocked %}disabled{% endif %}>

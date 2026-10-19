@@ -10,6 +10,23 @@ from worksheets.models import Collection, WorksheetItem
 from .models import Family, FamilyMember
 
 ZIV = re.compile(r'(sr|kr|pr)/(\d+)/v([1-8])/(.+)')
+# Варианты работ с кодом в ключе (Высоцкий): самостоятельная «С1.2/3»,
+# контрольная «КI.3/4» — работа, вариант, номер. Аналоги — один номер в паре
+# вариантов 1–2, 3–4 (КI: 1–2 базовые, 3–4 — более сложные).
+WORK_VARIANT = re.compile(r'(?P<work>С\d{1,2}|КI{1,3})\.(?P<variant>[1-4])/(?P<number>\d{1,2})')
+
+
+def work_variant_key(source_id, locator):
+    """Ключ и подпись семьи для «С1.2/3», «КI.3/4»; иначе ``None``."""
+    match = WORK_VARIANT.fullmatch(locator or '')
+    if not match:
+        return None
+    work, number = match.group('work'), match.group('number')
+    variant = int(match.group('variant'))
+    pair = (variant - 1) // 2
+    key = f'variants:{source_id}:{work}:{pair}:{number}'
+    title = f'{work} · варианты {pair * 2 + 1}–{pair * 2 + 2} · №{number}'
+    return key, title, variant
 PROTOTYPE = re.compile(r'прототип(?:а|у)?\s*[№:]?\s*(\d+(?:\.\d+)+)', re.I)
 SECTION = re.compile(r'прототип|аналог', re.I)
 
@@ -44,7 +61,8 @@ def task_family_keys(task_ids):
     Сохранённые семьи — как вкладка «Связанные аналоги» в подборе
     (``Task.analog_families``, в т.ч. вручную созданные аналоги) — плюс
     автоопределение по ``TaskSource`` теми же правилами, что и
-    ``discover_families``: ЗИВ ``(sr|kr|pr)/N/vK/num`` (пара вариантов) и
+    ``discover_families``: ЗИВ ``(sr|kr|pr)/N/vK/num`` (пара вариантов),
+    варианты работ ``С1.2/3``, ``КI.3/4`` (``WORK_VARIANT``) и
     «прототип N.N» банка. Подборочные рубрики без синхронизации не
     просматриваем: это полный проход по каталогу.
     """
@@ -58,6 +76,8 @@ def task_family_keys(task_ids):
         if match:
             kind, topic, variant, number = match.groups()
             keys[ref.task_id].add(f'ziv:{ref.source_id}:{kind}:{topic}:{(int(variant) - 1) // 2}:{number}')
+        elif work_variant_key(ref.source_id, locator):
+            keys[ref.task_id].add(work_variant_key(ref.source_id, locator)[0])
         elif any(SECTION.search(str(p)) for p in path):
             identity = bank_identity(ref.source_id, path, locator)
             if identity:
@@ -125,6 +145,10 @@ def discover_families(*, source_id=None):
             title = f'{ref.source.title} · {kind}/{topic} · варианты {pair * 2 + 1}–{pair * 2 + 2} · №{number}'
             add(key, title, ref.task_id, evidence)
             ziv_variants[key][int(variant)].add(ref.task_id)
+        elif work_variant_key(ref.source_id, locator):
+            key, title, variant = work_variant_key(ref.source_id, locator)
+            add(key, f'{ref.source.title} · {title}', ref.task_id, evidence)
+            ziv_variants[key][variant].add(ref.task_id)
         elif any(SECTION.search(str(p)) for p in path):
             identity = bank_identity(ref.source_id, path, locator)
             if identity:

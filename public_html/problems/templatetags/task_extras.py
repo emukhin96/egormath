@@ -1,3 +1,5 @@
+import re
+
 from django import template
 
 from problems.answer_material import (answer_material as _answer_material,
@@ -55,12 +57,22 @@ def web_text(text):
     return tex_to_web_html(text)
 
 
+def _strip_picture_separators(text):
+    """«[рисунок]; 1/36», «[рисунок], вероятность…», ««…», [рисунок]»:
+    рисунок выводится отдельно, разделитель вокруг него — уже мусор."""
+    text = re.sub(r'^\s*(?:\\\\\s*)*[;,]\s*', '', text)
+    text = re.sub(r'\s*[;,]\s*(?:\\\\\s*)*$', '', text)
+    return re.sub(r'([;,])\s*(?:\\\\\s*)*[;,]', r'\1', text)
+
+
 @register.filter
 def web_answer(text):
     """Авторский ответ: голый TeX вроде ``\\{-2;1\\}`` оборачивается для KaTeX."""
     # Рисунки выводит шаблон. Убираем ссылки до OCR-нормализации, иначе
     # ссылка после неравенства может ошибочно попасть внутрь формулы.
     text, pictures = TASKPIC_NUM_RE.subn('', text or '')
+    if pictures:
+        text = _strip_picture_separators(text)
     result = map_outside_tables(text, apply_imported_answer)
     # «См. рис.» перед рисунком — сокращение, его точка остаётся на месте.
     if pictures and text.rstrip().endswith('.') and not result.rstrip().endswith('.'):

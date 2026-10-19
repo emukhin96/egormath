@@ -2241,11 +2241,13 @@ def _give_leftover_parent_to_unmatched_subitems(task, assigned_labels) -> None:
             return
 
 
-def redistribute_glued_subitem_answers(task) -> bool:
+def redistribute_glued_subitem_answers(
+        task, fields=("author_answer_latex", "author_solution_latex")) -> bool:
     """Если в ответе пункта торчит ``б)``, отрезает его и отдаёт соседу.
 
     Нужно и при разборе, и для уже сохранённых черновиков, где метка
-    следующего пункта приклеилась после закрытой формулы.
+    следующего пункта приклеилась после закрытой формулы. ``fields`` —
+    какие авторские поля общего условия делить по пунктам.
     """
     items = list(getattr(task, "subitems", None) or [])
     if len(items) < 2:
@@ -2256,7 +2258,7 @@ def redistribute_glued_subitem_answers(task) -> bool:
             str(_subitem_get(item, "label")).strip().isdigit()
             for item in items):
         with numeric_subitem_labels():
-            return redistribute_glued_subitem_answers(task)
+            return redistribute_glued_subitem_answers(task, fields)
     rows = [dict(item) if isinstance(item, dict) else item for item in items]
     changed = False
 
@@ -2294,7 +2296,7 @@ def redistribute_glued_subitem_answers(task) -> bool:
                 break
         return moved
 
-    for field in ("author_answer_latex", "author_solution_latex"):
+    for field in fields:
         blob = getattr(task, field, "") or ""
         parent, found = split_blob(blob)
         if not found:
@@ -3382,6 +3384,12 @@ def bundle_from_text(
     elif profile == "potoskuev":
         from .potoskuev_parser import parse_potoskuev
         tasks, diagnostics = parse_potoskuev(tasks_text)
+    elif profile == "vysotsky":
+        from .vysotsky_parser import parse_vysotsky
+        tasks, diagnostics = parse_vysotsky(tasks_text)
+    elif profile == "koropets":
+        from .koropets_parser import parse_koropets
+        tasks, diagnostics = parse_koropets(tasks_text)
     elif profile == "feoktistov":
         from .feoktistov_parser import parse_feoktistov
         tasks, diagnostics = parse_feoktistov(tasks_text)
@@ -3591,7 +3599,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--profile", required=True,
-        choices=("galitsky", "merzlyak", "shabunin", "potoskuev", "feoktistov", "ziv", "shestakov", "ostromogilsky",
+        choices=("galitsky", "merzlyak", "shabunin", "potoskuev", "vysotsky", "koropets", "feoktistov", "ziv", "shestakov", "ostromogilsky",
                  "ostromogilsky_ege"))
     parser.add_argument("--tasks", required=True, type=Path)
     parser.add_argument("--solutions", type=Path)
