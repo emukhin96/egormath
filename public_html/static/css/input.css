@@ -6819,15 +6819,23 @@
   .audit-copy .audit-text::before, .audit-paste .audit-text::before, .audit-drop .audit-text::before { content: '⎘ '; color: var(--muted); }
   .audit-blocked .audit-text { color: #b45309; }
   .audit-note { margin-top: var(--space-2); }
-  .canvas-head, .canvas-toolbar, .canvas-pages, .canvas-controls, .canvas-group {
+  /* Все кнопки доски — одной высоты 30px; «выбрано» у режимов — заливка
+     акцентом, у параметров (цвет, толщина) — кольцо акцентом в 2px */
+  .canvas-widget { container-type: inline-size; }
+  .canvas-head, .canvas-toolbar, .canvas-pages, .canvas-controls, .canvas-group,
+  .canvas-tabs, .canvas-page-actions {
     display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
   }
-  .canvas-head { justify-content: space-between; margin-bottom: var(--space-2); }
-  .canvas-controls { flex-basis: 100%; }
-  .canvas-close { margin-left: auto; align-self: flex-start; }
+  .canvas-head { position: relative; margin-bottom: var(--space-2); padding-right: 36px; }
+  .canvas-pages { flex: 1 1 auto; min-width: 0; }
+  .canvas-tabs, .canvas-page-actions, .canvas-group { gap: var(--space-1); }
+  .canvas-controls { flex-basis: 100%; gap: var(--space-3); }
+  .canvas-close { position: absolute; top: 0; right: 0; margin: 0; }
   .canvas-busy { pointer-events: none; opacity: 0.65; }
-  .canvas-label { font-weight: 600; color: var(--accent-dark); }
-  .canvas-page[aria-pressed="true"], .canvas-tool[aria-pressed="true"] {
+  .canvas-label { font-weight: 600; color: var(--accent-dark); margin-right: var(--space-1); }
+  .canvas-head .btn, .canvas-toolbar .btn, .canvas-menu .btn { margin: 0; }
+  .canvas-page { min-width: 30px; height: 30px; min-height: 30px; padding: 0 8px; }
+  .canvas-page[aria-pressed="true"], .canvas-tool[aria-pressed="true"], .canvas-seg[aria-pressed="true"] {
     background: var(--accent); color: #fff; border-color: var(--accent);
   }
   .canvas-page-locked { color: var(--muted); }
@@ -6837,44 +6845,71 @@
     content: ''; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px;
     border-radius: 50%; background: #dc2626; box-shadow: 0 0 0 2px #fff;
   }
-  .canvas-bg { margin: 0; width: auto; max-width: 12rem; min-height: 28px; padding: 2px 6px; font-size: 0.82rem; }
-  /* Подпись + селект: селект не тянется на всю колонку даже без правила выше */
-  .canvas-bg-field { display: inline-flex; align-items: center; gap: var(--space-1); margin: 0; font-size: 0.82rem; color: var(--muted); }
-  .canvas-bg-field select { width: auto; max-width: 12rem; }
-  .canvas-bg-note { font-size: 0.82rem; color: var(--muted); }
-  /* Панель: две фиксированные строки, состав кнопок не меняется — поле не прыгает */
+  /* Панель: два фиксированных ряда, состав кнопок не меняется — поле не прыгает */
   .canvas-toolbar { flex-direction: column; align-items: stretch; gap: var(--space-2); margin-bottom: var(--space-2); }
-  .canvas-toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); min-height: 30px; }
+  .canvas-toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 30px; }
+  .canvas-colors { gap: 3px; }
   .canvas-swatch:disabled { opacity: 0.3; cursor: default; box-shadow: 0 0 0 1px var(--border); }
   .canvas-disabled { opacity: 0.45; }
-  .canvas-controls .canvas-bg:disabled { opacity: 0.6; }
-  .canvas-toolbar .btn { margin: 0; }
-  .canvas-toolbar .canvas-icon, .canvas-pages .canvas-icon {
+  .canvas-head .canvas-icon, .canvas-toolbar .canvas-icon {
     display: inline-flex; align-items: center; justify-content: center;
     width: 30px; height: 30px; min-height: 30px; padding: 4px;
   }
-  .canvas-icon svg { width: 20px; height: 20px; flex: none; }
-  .canvas-graphs .canvas-tool { min-width: 30px; padding: 3px 6px; font-family: KaTeX_Main, serif; }
-  .canvas-graphs .katex { font-size: 1.05em; }
-  /* Меню выбора рисунка задачи: всплывает над панелью, не сдвигая поле */
-  .canvas-pictures { position: relative; }
+  .canvas-icon svg, .canvas-btn-icon svg, .canvas-menu-icon svg { width: 20px; height: 20px; flex: none; display: block; }
+  /* Кнопка со значком и подписью («Дублировать», «Фигуры ▾», «График ▾») */
+  .canvas-head .canvas-labelled, .canvas-toolbar .canvas-labelled {
+    display: inline-flex; align-items: center; gap: 5px; width: auto; height: 30px; min-height: 30px; padding: 0 8px;
+  }
+  .canvas-btn-icon svg { width: 18px; height: 18px; }
+  .canvas-caret { font-size: 0.7em; opacity: 0.7; }
+  /* Подпись группы кнопок («Выделенное:», «Фон», «Клетка») */
+  .canvas-caption, .canvas-seg-caption { font-size: 0.82rem; color: var(--muted); cursor: default; }
+  .canvas-caption { margin-right: 2px; }
+  /* Переключатели фона: значки, слитые в одну полосу */
+  .canvas-seg-box { display: inline-flex; align-items: center; gap: var(--space-1); }
+  .canvas-segment { display: inline-flex; }
+  .canvas-seg {
+    display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 4px; margin: 0;
+    border: 1px solid var(--border); background: #fff; color: var(--accent-dark); cursor: pointer;
+  }
+  .canvas-seg svg { width: 18px; height: 18px; }
+  .canvas-segment .canvas-seg + .canvas-seg { margin-left: -1px; }
+  .canvas-segment .canvas-seg:first-child { border-radius: 6px 0 0 6px; }
+  .canvas-segment .canvas-seg:last-child { border-radius: 0 6px 6px 0; }
+  .canvas-seg-solo { border-radius: 6px; }
+  .canvas-seg:hover:not(:disabled) { border-color: var(--accent); position: relative; }
+  .canvas-seg:disabled { cursor: default; color: var(--muted); }
+  .canvas-seg:disabled[aria-pressed="true"] { opacity: 0.7; }
+  /* Меню фигур, графиков, рисунков и фона: всплывают над полем, не сдвигая его */
+  .canvas-menu-anchor { position: relative; }
   .canvas-menu {
     position: absolute; top: 100%; left: 0; z-index: 20; margin-top: 4px;
     display: flex; gap: var(--space-1); padding: var(--space-1); background: #fff;
     border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(5, 20, 43, 0.18);
   }
+  .canvas-menu-list { flex-direction: column; align-items: stretch; width: 16rem; padding: var(--space-2); }
+  .canvas-menu-shapes { width: 13rem; }
+  .canvas-menu-title { font-size: 0.78rem; color: var(--muted); padding: 0 var(--space-1); }
+  .canvas-menu-title + .canvas-menu-row { margin-top: 2px; }
+  .canvas-menu-row {
+    display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 32px; margin: 0; padding: 2px var(--space-1);
+    border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; font-size: 0.9rem; text-align: left; cursor: pointer;
+  }
+  .canvas-menu-row:hover, .canvas-menu-row:focus-visible { background: var(--accent-soft); outline: none; }
+  .canvas-menu-row[aria-pressed="true"] { background: var(--accent-soft); font-weight: 600; }
+  .canvas-menu-icon { display: inline-flex; flex: none; min-width: 1.5rem; color: var(--accent-dark); }
+  .canvas-menu-formula { min-width: 4.5rem; font-family: KaTeX_Main, serif; color: var(--text); }
+  .canvas-menu-note { font-size: 0.82rem; color: var(--muted); padding: 0 var(--space-1); }
   .canvas-menu-item { width: 72px; height: 56px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
   .canvas-menu-item:hover { border-color: var(--accent); }
   .canvas-menu-item img { width: 100%; height: 100%; object-fit: contain; display: block; }
-  .canvas-toolbar .ws-toggle { margin-left: 0; }
-  .canvas-group { gap: var(--space-1); }
   .canvas-swatch {
     width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff;
     background: var(--c); box-shadow: 0 0 0 1px var(--border); padding: 0; cursor: pointer;
   }
   .canvas-swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--accent); }
   .canvas-width {
-    width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
     border: 1px solid var(--border); border-radius: 6px; background: #fff; padding: 0; cursor: pointer;
   }
   .canvas-width span { display: block; border-radius: 50%; background: var(--accent-dark); }
@@ -6886,6 +6921,42 @@
   }
   .canvas-stage canvas { position: absolute; left: 0; top: 0; display: block; }
   .canvas-top { pointer-events: none; }
+
+  /* Всплывающее пояснение к кнопкам доски (data-tip, ставит canvas.js):
+     появляется под кнопкой через 0,3 с, в том числе у неактивных — чтобы
+     было видно, почему кнопка недоступна. ::before — ::after занят точкой
+     «новые пометки» на вкладке страницы. */
+  .canvas-widget [data-tip]:not(.canvas-close) { position: relative; }
+  .canvas-widget [data-tip]::before {
+    content: attr(data-tip); position: absolute; top: calc(100% + 6px); left: 50%; z-index: 40;
+    width: max-content; max-width: 15rem; padding: 4px 8px; border-radius: 6px;
+    background: #1f2937; color: #fff; font: 400 0.75rem/1.35 var(--font-sans); text-align: left; white-space: normal;
+    transform: translateX(-50%); opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity 0.12s ease 0s, visibility 0s linear 0.12s;
+  }
+  .canvas-widget [data-tip]:hover::before, .canvas-widget [data-tip]:focus-visible::before {
+    opacity: 1; visibility: visible; transition-delay: 0.3s, 0.3s;
+  }
+  /* У правого края доски подсказка выравнивается по правому краю кнопки */
+  .canvas-close[data-tip]::before, .canvas-page-actions > :last-child[data-tip]::before { left: auto; right: 0; transform: none; }
+  /* Пока открыто меню, подсказка его кнопки не нужна */
+  .canvas-menu-anchor:has(.canvas-menu) [data-tip]::before { display: none; }
+  @media (hover: none) { .canvas-widget [data-tip]::before { display: none; } }
+
+  /* Узкая доска (телефон): подписи у кнопок-меню прячем, номера страниц
+     прокручиваются одной полосой, ряды плотнее — поле поднимается выше */
+  @container (max-width: 480px) {
+    .canvas-label { flex: 1 1 100%; }
+    /* Вторая строка шапки может заходить под крестик — он только в первой */
+    .canvas-pages { flex-basis: 100%; margin-right: -36px; }
+    .canvas-tabs { flex: 1 1 0; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 3px 1px; margin: -3px 0; }
+    .canvas-tabs::-webkit-scrollbar { display: none; }
+    .canvas-tabs .btn { flex: none; }
+    .canvas-btn-text, .canvas-caption, .canvas-seg-caption { display: none; }
+    .canvas-toolbar-row, .canvas-controls { gap: var(--space-2); }
+    .canvas-group { gap: 3px; }
+    .canvas-swatch { width: 20px; height: 20px; }
+  }
 }
 
 /* Компактный вид состава самостоятельной (independentworks/_compact.html,

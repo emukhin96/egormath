@@ -39,8 +39,9 @@
     <div class="proposal-cell proposal-cell-proposed">{% include 'problems/_proposal_value.html' with value=f.proposed is_mask=f.is_mask is_bool=f.is_bool %}</div>
   </div>
   {% endfor %}{% endfor %}
+  {# Подпункты сопоставлены по тексту (proposals.align_subitems): удалённые и новые — отдельными строками, подпункт с ответами учеников удалить нельзя #}
   {% for row in diff.subitems %}
-  <h3 class="proposal-subhead">Подпункт {{ row.index|subitem_label }}){% if not row.current %} <span class="badge badge-reviewed">новый</span>{% elif not row.proposed %} <span class="badge badge-returned">удалён</span>{% endif %}</h3>
+  <h3 class="proposal-subhead">{% if not row.current %}Новый подпункт <span class="badge badge-reviewed">будет {{ row.index|subitem_label }})</span>{% else %}Подпункт {{ row.index|subitem_label }}){% if not row.proposed %} <span class="badge badge-returned">в предложении удалён</span>{% if row.has_answers %} <span class="badge badge-returned">есть ответы учеников — удалять нельзя</span>{% endif %}{% endif %}{% endif %}</h3>
   {% for f in row.fields %}{% if f.current or f.proposed or f.name == 'text_latex' %}
   <div class="proposal-row{% if f.changed %} is-changed{% endif %}">
     <div class="proposal-label">{{ f.label }}</div>
@@ -68,8 +69,9 @@
     {% if diff %}
     <p class="helptext">Отмеченные разделы копируются в задачу теми же формами, что и редактор карточки; подпункты — по порядку. По умолчанию отмечено то, что отличается.</p>
     <div class="choice-items">
-      {% for section in diff.sections %}<label class="choice-item"><input type="checkbox" name="sections" value="{{ section.key }}"{% if section.changed %} checked{% endif %}><span>{{ section.label }}{% if section.changed %} · отличается{% endif %}</span></label>{% endfor %}
+      {% for section in diff.sections %}<label class="choice-item"><input type="checkbox" name="sections" value="{{ section.key }}"{% if section.changed %} checked{% endif %}{% if section.key == 'subitems' and diff.subitems_blocked %} disabled{% endif %}><span>{{ section.label }}{% if section.changed %} · отличается{% endif %}</span></label>{% endfor %}
     </div>
+    {% if diff.subitems_blocked %}<p class="helptext">В предложении нет подпункта, на который уже есть ответы учеников: применить «Подпункты» нельзя (ответы были бы стёрты). Остальные разделы применяются только при совпадающем составе подпунктов — либо уберите подпункт вручную на карточке задачи, либо отклоните предложение.</p>{% endif %}
     {% endif %}
     {% if proposal.kind == 'new' %}<p class="helptext">Задача станет общей в том виде, что слева («Сейчас в задаче»), плюс отмеченные разделы снимка: её увидят все учителя, править дальше смогут только редакторы базы. Если автор изменит задачу, пока страница открыта, применение будет отклонено — обновите страницу.</p>{% endif %}
     <p><label>Ответ автору (необязательно)<textarea name="note" rows="2"></textarea></label></p>

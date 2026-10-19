@@ -430,7 +430,7 @@ class ApplyTests(ProposalBase):
         proposal.refresh_from_db()
         self.assertTrue(proposal.is_open)
         page = self.client.get(reverse('proposal_detail', args=[proposal.pk]))
-        self.assertContains(page, 'Число подпунктов')
+        self.assertContains(page, 'Состав подпунктов')
         # Со структурой: подпункты по порядку, ответы к ним
         self.apply(proposal, ['subitems', 'answer'])
         subs = list(self.shared.subitems.all())
@@ -439,6 +439,84 @@ class ApplyTests(ProposalBase):
         self.assertEqual([s.order for s in subs], [10, 20])
         proposal.refresh_from_db()
         self.assertEqual(proposal.status, TaskProposal.STATUS_ACCEPTED)
+
+    def test_subitems_matched_by_text_not_position(self):
+        """Удаление подпункта в середине копии: подпункты базы сопоставляются
+        по тексту, а не по позиции — а) и в) сохраняют свои pk (и ответы
+        учеников при них), удаляется именно б)."""
+        first = self.shared.subitems.get()
+        middle = TaskSubitem.objects.create(task=self.shared, order=20, text_latex='б)', author_answer_latex='6')
+        last = TaskSubitem.objects.create(task=self.shared, order=30, text_latex='в)', author_answer_latex='7')
+        copy = self.shared.make_variant(self.guest)
+        copy.subitems.get(text_latex='б)').delete()
+        copy_last = copy.subitems.get(text_latex='в)')
+        copy_last.author_answer_latex = '77'
+        copy_last.save()
+        proposal = create_proposal(self.guest, self.shared, kind='fix', message='Лишний б)', variant=copy)
+        self.client.force_login(self.editor)
+        page = self.client.get(reverse('proposal_detail', args=[proposal.pk]))
+        self.assertContains(page, 'в предложении удалён')
+        self.assertContains(page, 'value="subitems" checked')
+        self.apply(proposal, ['subitems', 'answer'])
+        subs = list(self.shared.subitems.all())
+        self.assertEqual([s.pk for s in subs], [first.pk, last.pk])
+        self.assertFalse(TaskSubitem.objects.filter(pk=middle.pk).exists())
+        self.assertEqual([(s.text_latex, s.author_answer_latex, s.order) for s in subs],
+                         [('а)', '5', 10), ('в)', '77', 20)])
+
+    def test_inserted_and_edited_subitems_keep_existing_ids(self):
+        """Вставка нового подпункта перед существующими и правка текста на
+        месте: существующие строки остаются теми же записями."""
+        first = self.shared.subitems.get()
+        last = TaskSubitem.objects.create(task=self.shared, order=20, text_latex='б)', author_answer_latex='6')
+        copy = self.shared.make_variant(self.guest)
+        TaskSubitem.objects.create(task=copy, order=5, text_latex='а0)', author_answer_latex='0')
+        edited = copy.subitems.get(text_latex='б)')
+        edited.text_latex = 'б) исправлено'
+        edited.save()
+        proposal = create_proposal(self.guest, self.shared, kind='fix', message='Новый пункт', variant=copy)
+        self.client.force_login(self.editor)
+        page = self.client.get(reverse('proposal_detail', args=[proposal.pk]))
+        self.assertContains(page, 'Новый подпункт')
+        self.apply(proposal, ['subitems', 'answer'])
+        subs = list(self.shared.subitems.all())
+        self.assertEqual([s.text_latex for s in subs], ['а0)', 'а)', 'б) исправлено'])
+        self.assertEqual([s.pk for s in subs[1:]], [first.pk, last.pk])
+        self.assertEqual([s.author_answer_latex for s in subs], ['0', '5', '6'])
+        self.assertEqual([s.order for s in subs], [10, 20, 30])
+
+    def test_subitem_with_student_answers_is_not_deleted(self):
+        """Подпункт, на который уже есть ответы учеников, предложением не
+        удаляется (CASCADE стёр бы ответы): «Подпункты» заблокированы, другие
+        разделы при разном составе — отказ, условие применяется."""
+        from assignments.models import Assignment, Submission, SubmissionPart
+        answered = TaskSubitem.objects.create(task=self.shared, order=20, text_latex='б)')
+        assignment = Assignment.objects.create(worksheet=self.sheet, student=self.student, assigned_by=self.guest)
+        submission = Submission.objects.create(assignment=assignment, task=self.shared)
+        SubmissionPart.objects.create(submission=submission, subitem=answered, answer_json={'s1': '1'})
+        copy = self.shared.make_variant(self.guest)
+        copy.text_latex = 'Исправленное условие'
+        copy.save()
+        copy.subitems.get(text_latex='б)').delete()
+        proposal = create_proposal(self.guest, self.shared, kind='fix', message='Без б)', variant=copy)
+        self.client.force_login(self.editor)
+        page = self.client.get(reverse('proposal_detail', args=[proposal.pk]))
+        self.assertContains(page, 'есть ответы учеников')
+        self.assertContains(page, 'value="subitems" disabled')
+        for sections in (['subitems'], ['subitems', 'condition'], ['answer']):
+            self.apply(proposal, sections)
+            self.assertTrue(TaskSubitem.objects.filter(pk=answered.pk).exists(), sections)
+            self.assertTrue(SubmissionPart.objects.filter(subitem=answered).exists(), sections)
+            self.shared.refresh_from_db()
+            self.assertEqual(self.shared.text_latex, 'Общая задача', sections)
+            proposal.refresh_from_db()
+            self.assertTrue(proposal.is_open, sections)
+        page = self.client.get(reverse('proposal_detail', args=[proposal.pk]))
+        self.assertContains(page, 'удалить его можно только вручную')
+        self.apply(proposal, ['condition'])
+        self.shared.refresh_from_db()
+        self.assertEqual(self.shared.text_latex, 'Исправленное условие')
+        self.assertEqual(self.shared.subitems.count(), 2)
 
     def test_apply_removes_extra_subitems(self):
         TaskSubitem.objects.create(task=self.shared, order=20, text_latex='б)')

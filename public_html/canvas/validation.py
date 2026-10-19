@@ -135,6 +135,12 @@ def validate_background(background, options):
         if origin not in PLANE_ORIGINS:
             raise CanvasValidationError('Недопустимое положение начала координат')
         clean = {'cell': cell, 'origin': origin}
+        # Оси на белом фоне: клетка задаёт только единичный отрезок, линий сетки нет
+        if 'grid' in options:
+            if not isinstance(options['grid'], bool):
+                raise CanvasValidationError('Некорректный параметр сетки')
+            if not options['grid']:
+                clean['grid'] = False
     if options.get('square'):
         clean['square'] = True
     return background, clean
