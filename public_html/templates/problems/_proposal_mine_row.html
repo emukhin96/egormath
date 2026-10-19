@@ -4,6 +4,6 @@
     <a href="{% url 'task_detail' proposal.task.pk %}">Задача #{{ proposal.task.pk }}</a>
     <div class="muted task-meta">{{ proposal.message|truncatechars:120 }}</div>
   </td>
-  <td data-label="Отправлено">{{ proposal.created_at|date:'d.m.Y H:i' }}</td>
-  <td data-label="Статус">{% include 'problems/_proposal_status.html' %}{% if proposal.unread %} <span class="badge-count" title="Новый статус">1</span>{% endif %}{% if not proposal.is_open %}<div class="muted task-meta">{{ proposal.resolved_at|date:'d.m.Y' }}</div>{% endif %}</td>
+  <td>{{ proposal.created_at|date:'d.m.Y H:i' }}</td>
+  <td>{% include 'problems/_proposal_status.html' %}{% if proposal.unread %} <span class="badge-count" title="Новый статус">1</span>{% endif %}{% if not proposal.is_open %}<div class="muted task-meta">{{ proposal.resolved_at|date:'d.m.Y' }}</div>{% endif %}</td>
 </tr>

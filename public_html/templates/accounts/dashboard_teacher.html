@@ -47,8 +47,8 @@
     <tr>
       <td class="stack-primary">{{ a.worksheet.title }}</td>
       {% if request.user.is_superuser %}<td data-label="Владелец">{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>{% endif %}
-      <td data-label="Ученик">{{ a.student.get_full_name|default:a.student.username }}</td>
-      <td data-label="Отправлено">{{ a.submitted_at|date:'d.m.Y H:i' }}</td>
+      <td>{{ a.student.get_full_name|default:a.student.username }}</td>
+      <td>{{ a.submitted_at|date:'d.m.Y H:i' }}</td>
       <td class="row-actions"><a class="btn btn-small" href="{% url 'review_assignment' a.pk %}">Проверить</a></td>
     </tr>
     {% endfor %}
@@ -74,8 +74,8 @@
     {% for p in proposals %}
     <tr>
       <td class="stack-primary">Задача #{{ p.task.pk }}<div class="muted task-meta">{{ p.message|truncatechars:80 }}</div></td>
-      <td data-label="Автор">{{ p.author_name }}</td>
-      <td data-label="Отправлено">{{ p.created_at|date:'d.m.Y H:i' }}</td>
+      <td>{{ p.author_name }}</td>
+      <td>{{ p.created_at|date:'d.m.Y H:i' }}</td>
       <td class="row-actions"><a class="btn btn-small" href="{% url 'proposal_detail' p.pk %}">Открыть</a></td>
     </tr>
     {% endfor %}
@@ -121,9 +121,9 @@
       <tr>
         <td class="stack-primary">{{ a.worksheet.title }}</td>
         {% if request.user.is_superuser %}<td data-label="Владелец">{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>{% endif %}
-        <td data-label="Ученик">{{ a.student.get_full_name|default:a.student.username }}</td>
+        <td>{{ a.student.get_full_name|default:a.student.username }}</td>
         <td data-label="Проверено">{{ a.reviewed_at|date:'d.m.Y' }}</td>
-        <td data-label="Результат">{% with r=a.result %}{{ r.done }}/{{ r.total }} ({{ r.percent }}%){% endwith %}</td>
+        <td>{% with r=a.result %}{{ r.done }}/{{ r.total }} ({{ r.percent }}%){% endwith %}</td>
         <td class="row-actions"><a class="btn btn-small btn-secondary" href="{% url 'review_assignment' a.pk %}">Открыть</a></td>
       </tr>
       {% endfor %}
