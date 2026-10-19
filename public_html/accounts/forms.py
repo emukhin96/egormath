@@ -189,7 +189,8 @@ class TeacherJoinForm(RegistrationForm):
     """Регистрация учителя по приглашению.
 
     Логин можно не заполнять: составится из фамилии и имени транслитом
-    (``generate_username``); то же подставляет на лету ``registration.js``.
+    (``generate_username``, занятый вариант получает номер); тот же
+    вариант ``registration.js`` показывает в поле как placeholder.
     """
 
     email = forms.EmailField(

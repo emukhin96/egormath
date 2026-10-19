@@ -99,7 +99,11 @@ def teacher_join(request, token):
             form.add_error('username', 'Этот логин уже занят.')
         else:
             auth_login(request, user)
-            messages.success(request, 'Аккаунт создан. Добро пожаловать!')
+            # Логин мог быть составлен сервером (пустое поле, занятый
+            # вариант с номером) — назвать его, чтобы учитель знал, как входить
+            messages.success(
+                request, f'Аккаунт создан. Ваш логин: {user.username} '
+                         '(он же в профиле). Добро пожаловать!')
             return redirect('dashboard')
     return render(request, 'accounts/join.html', {
         'form': form,
