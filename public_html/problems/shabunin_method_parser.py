@@ -571,6 +571,14 @@ def renumber_items(text: str, *, answers: bool = False) -> str:
     return "".join(out)
 
 
+def work_topic(work: dict, number: int, chapter: dict, text: str) -> str:
+    """Тема задачи работы — по таблице ``works`` структуры, иначе — главы."""
+    code = work.get("topics")
+    if isinstance(code, list):
+        code = code[number - 1] if number <= len(code) else None
+    return topic_code(code or chapter["topic"], text)
+
+
 def parse_work(zone: str, work: dict, chapter: dict, diagnostics: dict) -> list[TaskDraft]:
     body = flatten_figures(zone[work["body"]:work["stop"]])
     # Остаток заголовка работы: «… (2 урока)}», « \\ по теме …}».
@@ -625,7 +633,7 @@ def parse_work(zone: str, work: dict, chapter: dict, diagnostics: dict) -> list[
             task.source_number = marker.external_id
             task.collection_title = label if number else path[-1]
             task.topic_original = work["theme"] or chapter["title"]
-            task.topic_code = topic_code(chapter["topic"], text)
+            task.topic_code = work_topic(work, int(n), chapter, text)
             if star:
                 task.stars = max(task.stars, 1)
             tasks.append(task)
@@ -863,6 +871,7 @@ def parse_shabunin_method(text: str, *, structure: dict | None = None) -> tuple[
         materials, figures = extract_answer_figures(zone[didactic.start():])
         used: set[int] = set()
         for work in work_zones(materials):
+            work["topics"] = structure.get("works", {}).get(work["key"])
             for task in parse_work(materials, work, chapter, diagnostics):
                 task.author_answer_latex = insert_answer_figures(
                     task.author_answer_latex, figures, used)
