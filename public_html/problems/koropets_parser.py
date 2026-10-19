@@ -43,6 +43,9 @@ EXAMPLE_RE = re.compile(
     r"(?m)^[ \t]*(?:\\item\[\][ \t]*)?Пример[ \t]+(?P<number>\d{1,2})\.")
 SOLUTION_RE = re.compile(r"(?:\\section\*\{)?Решение\s*\.\s*\}?")
 ANSWER_RE = re.compile(r"(?:\\item\[\]\s*)?Ответ\s*:")
+# Заголовок главы 1 в тексте (в оглавлении он строчными буквами).
+CHAPTER_ONE_RE = re.compile(
+    r"(?m)^[ \t]*(?:\\section\*\{|\\item\s*)?\s*1\.\s*МЕТОД\s+ЗАМЕНЫ\s+МНОЖИТЕЛЯ")
 SECTION_LINE_RE = re.compile(
     r"(?m)^[ \t]*(?:\\(?:sub)*section\*\{)?\d\.\d(?:\.\d)?\.[^\n]*$")
 
@@ -321,9 +324,13 @@ def parse_koropets(text: str, *, structure: dict | None = None,
     }
     tasks: list[TaskDraft] = []
     chapters = structure["chapters"]
-    # Оглавление повторяет заголовки разделов: ищем после него.
-    body_at = text.find("\\section*{1. МЕТОД ЗАМЕНЫ")
-    literature = text.find("ЛИТЕРАТУРА", max(body_at, 0))
+    # Оглавление повторяет заголовки разделов: ищем после него. Без
+    # начала главы 1 зоны глав совпали бы со строками оглавления.
+    body = CHAPTER_ONE_RE.search(text)
+    if body is None:
+        raise ValueError("Не найдено начало главы 1 «Метод замены множителя (МЗМ)»")
+    body_at = body.start()
+    literature = text.find("ЛИТЕРАТУРА", body_at)
     for index, chapter in enumerate(chapters):
         number = chapter["number"]
         exercises_at = _heading(number, "Примеры для самостоятельного").search(text, body_at)

@@ -27,6 +27,7 @@ BOOK = r"""
 \section*{СОДЕРЖАНИЕ}
 2.2. Примеры с решениями ..... 11\\
 2.3. Примеры для самостоятельного решения ..... 20\\
+ЛИТЕРАТУРА ..... 125\\
 \section*{1. МЕТОД ЗАМЕНЫ МНОЖИТЕЛЯ (МЗМ)}
 Теория.
   \item НЕРАВЕНСТВА, СОДЕРЖАЩИЕ МОДУЛИ\\
@@ -213,6 +214,11 @@ class KoropetsParserTests(SimpleTestCase):
     def test_not_this_book(self):
         with self.assertRaises(ValueError):
             parse_koropets("Другая книга", structure=STRUCTURE)
+
+    def test_missing_chapter_one_is_import_error(self):
+        text = BOOK.replace(r"\section*{1. МЕТОД ЗАМЕНЫ МНОЖИТЕЛЯ (МЗМ)}", "Теория МЕТОД ЗАМЕНЫ МНОЖИТЕЛЯ")
+        with self.assertRaisesMessage(ValueError, "начало главы 1"):
+            parse(text)
 
     def test_missing_first_examples_section_is_import_error(self):
         text = BOOK.replace("2.2. Примеры с решениями\n\nПример 1.", "Пример 1.")
