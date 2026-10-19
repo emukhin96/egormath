@@ -39,7 +39,7 @@ from .merzlyak_parser import (
 from .potoskuev_parser import (
     monotonic_numbers, renumber_appendix_lists, tabular_to_array)
 from .textbook_parser import (
-    Marker, TaskDraft, blocks, clean, cyrillic_item_label,
+    Marker, SubitemDraft, TaskDraft, blocks, clean, cyrillic_item_label,
     finalize_draft_images, split_subitems, strip_imported_answer_punct,
     task_from_block)
 from .vysotsky_parser import lift_stem_pictures, math_text_braces
@@ -476,7 +476,9 @@ def insert_answer_figures(value: str, figures: dict[int, list[str]], used: set[i
             return match.group(0)
         used.update(numbers)
         pictures = [p for n in numbers for p in figures[n]]
-        return "\n" + "\\\\\n".join(pictures) + "\n"
+        # Рисунки ответа — отдельными строками без «\\»: сборка листка выносит
+        # их из ответа, и одинокий «\\» в пустом ответе ломает PDF.
+        return "\n" + "\n".join(pictures) + "\n"
     value = _FIGURE_REF_RE.sub(repl, value or "")
     value = re.sub(r"(" + _GRAPHIC_RE.pattern + r")\n\s*[.,;]\s*", r"\1\n", value)
     # «… (рис. 42).» → «…⏎рисунок»: точка и пробелы вокруг рисунка лишние.
@@ -814,7 +816,13 @@ def apply_task_repair(task: TaskDraft, fields: dict) -> None:
     for item in task.subitems:
         for attr in _FIELDS.values():
             setattr(item, attr, expand(getattr(item, attr)))
-    if "text" in fields:
+    if "subitems" in fields:
+        # Пункты заданы явно: метки «b)» внутри формул не режут условие.
+        task.subitems = [SubitemDraft(label=i["label"], text_latex=i["text"],
+                                      author_answer_latex=i.get("answer", ""))
+                         for i in fields["subitems"]]
+        task.text_latex = fields.get("text", task.text_latex)
+    elif "text" in fields:
         # Текст без меток пунктов — только общее условие, пункты остаются.
         text, subitems = split_subitems(fields["text"])
         task.text_latex = text
