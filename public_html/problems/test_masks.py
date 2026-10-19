@@ -208,6 +208,23 @@ class MaskEndpointTests(TestCase):
             'ok': False, 'checks': {},
             'message': 'Проверка временно недоступна — попробуйте ещё раз через минуту'})
 
+    def test_check_parses_mask_like_student_when_formula_service_is_busy(self):
+        # Ревью #248: сохранённая рабочая маска с формулой при занятом вычислителе —
+        # это временная недоступность проверки (как у ученика), а не 400 «Маска не разобрана»
+        from unittest.mock import patch
+        from assignments.checks import formulas
+        formulas._reference_response.cache_clear()
+        with patch.object(formulas, '_run_worker', return_value={'unavailable': True}):
+            response = self.check('{{expression: a+53}}', preview_s1='53+a')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {
+                'ok': False, 'checks': {},
+                'message': 'Проверка временно недоступна — попробуйте ещё раз через минуту'})
+            # Превью в редакторе по-прежнему показывает, что эталон не сверен
+            response = self.client.post(reverse('task_mask_preview'), {'mask': '{{expression: a+53}}'})
+            self.assertFalse(response.json()['ok'])
+        formulas._reference_response.cache_clear()
+
     def test_endpoints_require_teacher(self):
         for url in (reverse('task_mask_preview'), reverse('task_mask_check')):
             self.client.login(username='teacher1', password='pass12345')

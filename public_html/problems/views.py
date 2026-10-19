@@ -548,9 +548,13 @@ MASK_PREFIX_RE = re.compile(r'preview(?:_[0-9]+)?')
 MASK_MAX_LENGTH = 10_000
 
 
-def _mask_request(request):
+def _mask_request(request, *, validate_references):
     """Маска и префикс имён полей из POST превью/проверки: ``(prefix, spec,
-    error)``, где error — готовый JSON-ответ 400."""
+    error)``, где error — готовый JSON-ответ 400. ``validate_references`` —
+    сверять ли эталоны формул через вычислитель: превью в редакторе — да
+    (ошибки эталона видны сразу), проверка ответа — нет, как у ученика
+    (``mask_spec_for``): занятый вычислитель там — временная недоступность
+    самой проверки, а не ошибка маски."""
     from assignments.checks import parse_mask
     prefix = request.POST.get('prefix', 'preview')
     if not MASK_PREFIX_RE.fullmatch(prefix):
@@ -558,7 +562,7 @@ def _mask_request(request):
     mask = request.POST.get('mask', '')
     if len(mask) > MASK_MAX_LENGTH:
         return prefix, None, JsonResponse({'ok': False, 'message': 'Маска слишком длинная'}, status=400)
-    return prefix, parse_mask(mask, validate_references=True), None
+    return prefix, parse_mask(mask, validate_references=validate_references), None
 
 
 @teacher_required
@@ -576,7 +580,7 @@ def task_mask_preview(request):
     from django.template.loader import render_to_string
 
     from .editor import mask_form_context
-    prefix, spec, error = _mask_request(request)
+    prefix, spec, error = _mask_request(request, validate_references=True)
     if error:
         return error
     payload = {'ok': spec.is_valid, 'errors': spec.errors,
@@ -602,12 +606,13 @@ def task_mask_check(request):
     присылает форма ученика. Ответ — тот же JSON, что получает ученик по
     кнопке «Проверить» в задании (assignments.views.check_task): ``checks`` —
     итог по ``prefix`` и результат по каждому слоту, ``message`` — подпись.
-    Сверяет тот же код (assignments.checks.check_mask); в базу ничего не
+    Сверяет тот же код (assignments.checks.check_mask) по маске, разобранной
+    как у ученика — без сверки эталонов через вычислитель; в базу ничего не
     пишется, попытки не считаются. Неразборная маска — 400.
     """
     from assignments.checks import check_mask, collect_values, has_values
     from assignments.checks.formulas import FormulaUnavailable
-    prefix, spec, error = _mask_request(request)
+    prefix, spec, error = _mask_request(request, validate_references=False)
     if error:
         return error
     if not spec.is_valid:
