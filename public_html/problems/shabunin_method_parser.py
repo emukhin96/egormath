@@ -279,6 +279,7 @@ def parse_examples(zone: str, chapter: dict, diagnostics: dict) -> list[TaskDraf
     zone = flatten_figures(_CAPTIONED_FIGURE_RE.sub(take, zone))
     for number, title, start, stop in paragraph_zones(zone):
         key = f"{chapter['roman']}.{number}"
+        title = chapter.get("titles", {}).get(str(number), title)
         # Пример в заголовке: «\section*{Пример 5. Решить …}».
         body_text = re.sub(r"(?m)^\\section\*\{(Пример[ \t]+\d[^\n]*)\}[ \t]*$", r"\1",
                            zone[start:stop])
