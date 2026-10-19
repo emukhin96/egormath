@@ -22,11 +22,33 @@ logger = logging.getLogger(__name__)
 
 
 class LatexCompileError(Exception):
-    """Ошибка компиляции или недоступность LaTeX API."""
+    """Ошибка компиляции или недоступность LaTeX API.
 
-    def __init__(self, message, log=''):
+    ``api_failure`` — сбой на нашей стороне (нет ключа, ключ отклонён,
+    сервис недоступен или ответил не JSON): учителю такое сообщение ни о
+    чём не говорит, подробности с ключом и адресом показываются только
+    суперпользователю (R24-1, ``user_message``). Ошибки в самом LaTeX и
+    занятость сервиса остаются как есть — на них учитель может повлиять.
+    """
+
+    GENERIC_MESSAGE = 'Сборка PDF временно недоступна, напишите администратору.'
+
+    def __init__(self, message, log='', api_failure=False):
         super().__init__(message)
         self.log = log
+        self.api_failure = api_failure
+
+    def user_message(self, user):
+        """Текст для пользователя: сбой API — суперпользователю целиком,
+        остальным общая фраза без ключа и адреса."""
+        if self.api_failure and not getattr(user, 'is_superuser', False):
+            return self.GENERIC_MESSAGE
+        return str(self)
+
+    def user_log(self, user):
+        if self.api_failure and not getattr(user, 'is_superuser', False):
+            return ''
+        return self.log
 
 
 # Общий latex-api (ADR-003 chemolymp) ограничивает число одновременных
@@ -57,7 +79,7 @@ def _post_with_retry(url, payload):
                 url, json=payload, timeout=settings.LATEX_API_TIMEOUT)
         except requests.RequestException as exc:
             logger.error('LaTeX API недоступен: %s', exc)
-            raise LatexCompileError(f'LaTeX API недоступен: {exc}')
+            raise LatexCompileError(f'LaTeX API недоступен: {exc}', api_failure=True)
         spent += time.monotonic() - started
         if response.status_code not in RETRY_STATUSES:
             return response
@@ -83,7 +105,8 @@ def compile_latex(tex_content, doc_id='doc', assets=None):
     if not settings.LATEX_API_KEY:
         raise LatexCompileError(
             'Не задан ключ LaTeX API (LATEX_API_KEY). '
-            'Добавьте его в .secrets/ или переменные окружения.')
+            'Добавьте его в .secrets/ или переменные окружения.',
+            api_failure=True)
     tex_file = {'team_id': doc_id, 'tex_content': tex_content}
     if assets:
         tex_file['assets'] = assets
@@ -99,13 +122,13 @@ def compile_latex(tex_content, doc_id='doc', assets=None):
             'LaTeX API занят другими сборками, попробуйте через минуту '
             f'(HTTP {response.status_code}).')
     if response.status_code == 401:
-        raise LatexCompileError('LaTeX API отклонил ключ (401).')
+        raise LatexCompileError('LaTeX API отклонил ключ (401).', api_failure=True)
     try:
         data = response.json()
     except ValueError:
         raise LatexCompileError(
             f'Неожиданный ответ LaTeX API (HTTP {response.status_code}).',
-            log=response.text[:5000])
+            log=response.text[:5000], api_failure=True)
 
     if response.status_code != 200 or not data.get('success'):
         log = (data.get('log') or data.get('error')

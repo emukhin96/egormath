@@ -335,7 +335,7 @@ class VisibilityTests(Roles, TestCase):
         self.client.force_login(self.guest)
         self.assertContains(self.client.get(reverse('task_detail', args=[self.personal.pk])), '>моя<')
         self.client.force_login(self.editor)
-        self.assertContains(self.client.get(reverse('task_detail', args=[self.personal.pk])), 'задача Иван Учителев')
+        self.assertContains(self.client.get(reverse('task_detail', args=[self.personal.pk])), 'автор: Иван Учителев')
         self.assertNotContains(self.client.get(reverse('task_detail', args=[self.shared.pk])), '>моя<')
 
     def test_import_deduplication_ignores_foreign_personal_tasks(self):

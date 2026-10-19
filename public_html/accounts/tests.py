@@ -670,7 +670,7 @@ class TeacherInviteTests(TestCase):
     def test_empty_username_is_generated_from_name(self):
         response = self.client.post(self.url, self.join_data(username=''))
         self.assertRedirects(response, reverse('dashboard'))
-        self.assertTrue(User.objects.filter(username='petrovamariya').exists())
+        self.assertTrue(User.objects.filter(username='petrova.mariya').exists())
 
     def test_invite_email_prefills_form(self):
         self.invite.email = 'maria@example.com'
@@ -738,7 +738,7 @@ class StudentRegistrationLinkTests(TestCase):
 
     def test_link_attaches_student_to_teacher(self):
         response = self.client.get(reverse('register'), {'t': self.code})
-        self.assertContains(response, 'Вы записываетесь к учителю Иван Учителев')
+        self.assertContains(response, 'Ваш учитель — Иван Учителев.')
         self.assertContains(
             response, f'name="teacher_code" value="{self.code}"')
         response = self.client.post(
@@ -938,11 +938,17 @@ class TeachersPageTests(TestCase):
             delta=timedelta(minutes=1))
         link = reverse('teacher_join', args=[invite.token])
         page = self.client.get(self.url)
-        self.assertContains(page, f'data-copy="http://testserver{link}"')
+        self.assertContains(page, 'data-new-invite')
+        self.assertContains(page, f'<code>http://testserver{link}</code>')
         self.assertContains(page, 'Непогашенные приглашения')
         self.assertContains(page, 'Мария')
+        # Разовый блок пропал, но «Скопировать» в списке непогашенных остаётся (R03-1)
         page = self.client.get(self.url)
-        self.assertNotContains(page, link)
+        self.assertNotContains(page, 'data-new-invite')
+        self.assertNotContains(page, f'<code>http://testserver{link}</code>')
+        self.assertContains(page, f'data-copy="http://testserver{link}" title="Скопировать ссылку-приглашение">Скопировать<')
+        self.assertContains(page, 'Можно ред. базу')
+        self.assertNotContains(page, 'Правит базу')
         # Ссылка действительно ведёт на регистрацию
         self.client.logout()
         self.assertContains(self.client.get(link), 'Регистрация учителя')
@@ -1029,3 +1035,68 @@ class TeacherProfileTests(TestCase):
         self.assertIn('old_password', response.context['password_form'].errors)
         self.teacher.refresh_from_db()
         self.assertTrue(self.teacher.check_password('pass12345'))
+
+
+class ReviewFixesTests(TestCase):
+    """Правки по обходу экранов 19.10.2026 (docs/USERS_PLAN.md, раздел 15):
+    логин через точку (R04-2) и подсказка (R04-1), подписи профиля без
+    двоеточий и тексты смены пароля (R46-1, R46-2), «Прогресс учеников»
+    только при учениках (R08-1), «Ваш учитель — …» (R36-1)."""
+
+    def setUp(self):
+        self.admin = make_admin()
+        self.teacher = make_teacher()
+
+    def test_generate_username_joins_with_dot(self):
+        from .forms import generate_username
+        self.assertEqual(generate_username('Ирина', 'Смирнова'), 'smirnova.irina')
+        self.assertEqual(generate_username('Петя', 'Иванов'), 'ivanov.petya')
+        User.objects.create_user(username='ivanov.petya', password='x')
+        self.assertEqual(generate_username('Петя', 'Иванов'), 'ivanov.petya2')
+        # Пустая часть не оставляет точки; обрезка до 24 символов без хвоста
+        self.assertEqual(generate_username('', 'Иванов'), 'ivanov')
+        self.assertEqual(generate_username('Александра', 'Константинопольская'),
+                         'konstantinopolskaya.alek')
+        self.assertEqual(generate_username('', ''), 'uchenik')
+
+    def test_join_form_username_hint(self):
+        invite = TeacherInvite.objects.create(
+            created_by=self.admin, expires_at=timezone.now() + timedelta(days=3))
+        response = self.client.get(reverse('teacher_join', args=[invite.token]))
+        self.assertContains(response, 'Подставится из фамилии и имени, можно изменить')
+        self.assertNotContains(response, 'Если оставить пустым')
+        self.assertContains(response, 'registration.js')
+
+    def test_student_create_uses_dotted_username(self):
+        self.client.login(username='teacher1', password='pass12345')
+        self.client.post(reverse('students'), {
+            'first_name': 'Петя', 'last_name': 'Иванов', 'grade': 7})
+        self.assertTrue(User.objects.filter(username='ivanov.petya').exists())
+
+    def test_profile_labels_and_password_texts(self):
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('profile'))
+        self.assertContains(response, '>Имя</label>')
+        self.assertContains(response, '>Текущий пароль</label>')
+        self.assertContains(response, '>Новый пароль</label>')
+        self.assertContains(response, '>Повторите новый пароль</label>')
+        self.assertContains(response, 'От 6 до 128 символов')
+        self.assertNotContains(response, 'Имя:')
+        self.assertNotContains(response, 'пароль:')
+        self.assertNotContains(response, 'Для подтверждения')
+        self.assertNotContains(response, 'как минимум')
+
+    def test_progress_button_only_with_students(self):
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('students'))
+        self.assertNotContains(response, 'Прогресс учеников')
+        student = User.objects.create_user(username='student1', password='pass12345')
+        Profile.objects.create(user=student, role=Profile.ROLE_STUDENT, teacher=self.teacher)
+        response = self.client.get(reverse('students'), {'q': 'нет такого'})
+        self.assertContains(response, 'Прогресс учеников')
+
+    def test_student_registration_names_teacher(self):
+        code = self.teacher.profile.student_code
+        response = self.client.get(reverse('register'), {'t': code})
+        self.assertContains(response, 'Ваш учитель — Иван Учителев.')
+        self.assertNotContains(response, 'записываетесь')

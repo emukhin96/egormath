@@ -60,7 +60,7 @@
 <td data-task-png-root>{% include 'problems/_catalog_content.html' %}
 <div data-worksheet-mask data-task-id="{{ task.pk }}" data-manage-url="{% url 'task_manage' task.pk %}"{% if not task.can_edit %} data-base-locked="1"{% endif %} hidden><div data-mask-tools class="problem-mask-tools"></div></div>
 {# Нижняя строка задачи: откуда задача (источник, №, раздел) и действия — в одну строку под условием, а не столбиком в узкой колонке #}
-<div class="task-meta catalog-row-meta" data-task-png-skip><span class="catalog-source">{% include 'problems/_task_owner_badge.html' %}{% for ref in task.source_refs.all %}<span>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}{% for part in ref.source_path %} › {{ part|heading_dot }}{% endfor %}</span>{% endfor %}</span><span class="catalog-row-actions"><span data-mask-links></span>{% include 'includes/task_png_button.html' %}{% if not task.block_id %}<button type="button" class="link-btn" data-quick-clone="{% url 'task_clone' task.pk %}" title="Новая задача с другими числами — не уходя со страницы">клон</button>{% endif %}<form class="inline-form" method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn">дублировать</button></form></span></div>
+<div class="task-meta catalog-row-meta" data-task-png-skip><span class="catalog-source">{% include 'problems/_task_owner_badge.html' %}{% for ref in task.source_refs.all %}<span>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}{% for part in ref.source_path %} › {{ part|heading_dot }}{% endfor %}</span>{% endfor %}</span><span class="catalog-row-actions"><span data-mask-links></span>{% include 'includes/task_png_button.html' %}{% if not task.block_id %}<button type="button" class="link-btn" data-quick-clone="{% url 'task_clone' task.pk %}" title="{% if task.can_edit %}Новая задача с другими числами — не уходя со страницы{% else %}Создать локальную копию задачи{% endif %}">клон</button>{% endif %}<form class="inline-form" method="post" action="{% url 'task_duplicate' task.pk %}">{% csrf_token %}<button class="link-btn"{% if not task.can_edit %} title="Создать локальную копию задачи"{% endif %}>дублировать</button></form></span></div>
 </td>
 <td>{# Класс и темы показаны текстом; контролы раскрываются по клику (task_catalog.js обновляет текст после правки); общая задача у приглашённого — только текст #}
 {% if task.can_edit %}<details class="row-edit" data-row-edit>
@@ -69,7 +69,7 @@
 <label>Класс<select name="grade_level" class="quick-select">{% include 'includes/grade_options.html' with selected=task.grade_option %}</select></label>
 {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True chip_full=True selected_json=task.taxonomy_json %}
 </form>
-</details>{% else %}<span class="row-edit-summary row-edit-static" title="Общая задача: класс и темы меняют редакторы базы"><span>{{ task.grade_display|default:'—' }}</span><span class="row-edit-sep">·</span><span>{% for topic in task.topics.all %}{% if topic.code %}{{ topic.code }}{% else %}{{ topic.name|truncatechars:28 }}{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}без темы{% endfor %}</span></span>{% endif %}</td><td class="col-cart">{% include 'includes/cart_button.html' with task=task %}</td></tr>{% endfor %}
+</details>{% else %}<span class="row-edit-summary row-edit-static" title="Общая задача: класс и темы меняют редакторы"><span>{{ task.grade_display|default:'—' }}</span><span class="row-edit-sep">·</span><span>{% for topic in task.topics.all %}{% if topic.code %}{{ topic.code }}{% else %}{{ topic.name|truncatechars:28 }}{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}без темы{% endfor %}</span></span>{% endif %}</td><td class="col-cart">{% include 'includes/cart_button.html' with task=task %}</td></tr>{% endfor %}
 </tbody></table></div></div>
 
 {% include 'includes/pagination.html' with page=page query=params %}
@@ -81,7 +81,7 @@
 <script defer src="{% static 'js/task_finder.js' %}"></script>
 <script defer src="{% static 'js/cart.js' %}?v=2"></script>
 {% include 'problems/_mask_dialogs.html' %}
-<script defer src="{% static 'js/problem_editor.js' %}?v=6"></script>
+<script defer src="{% static 'js/problem_editor.js' %}?v=7"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/task_catalog.js' %}?v=6"></script>
 {% endblock %}

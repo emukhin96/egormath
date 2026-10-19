@@ -8,7 +8,7 @@
   <div>
     <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a><a href="{% url 'task_detail' task.pk %}">Задача #{{ task.pk }}</a></nav>
     <h1>{{ propose.label }}</h1>
-    <p class="page-meta"><span>задача #{{ propose.task.pk }}</span>{% if propose.variant %}<span>локальная копия #{{ propose.variant.pk }}</span>{% endif %}</p>
+    <p class="page-meta"><span>задача #{{ task.pk }}</span></p>
   </div>
 </div>
 <div class="problem-columns">
@@ -20,10 +20,10 @@
   </div>
   <div class="card">
     {% if propose.open %}
-    <p>Ваше предложение по этой задаче уже ждёт ответа редактора базы.</p>
+    <p>Ваше предложение по этой задаче уже ждёт ответа редактора.</p>
     <div class="form-buttons"><a class="btn btn-secondary" href="{% url 'proposals_mine' %}">Мои предложения</a></div>
     {% else %}
-    <form method="post" action="{% url 'task_propose' propose.task.pk %}">
+    <form method="post" action="{% url 'task_propose' task.pk %}">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ next }}">
       {% include 'problems/_propose_fields.html' %}

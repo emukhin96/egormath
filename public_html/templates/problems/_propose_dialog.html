@@ -1,4 +1,4 @@
-{# Диалог предложения с карточки задачи: propose — proposals.proposal_options (у редактора базы None — он правит напрямую); открытое предложение — кнопка ведёт в «Мои предложения» вместо диалога #}
+{# Диалог предложения с карточки общей задачи: propose — proposals.proposal_options (у редактора None — он правит напрямую); открытое предложение — кнопка ведёт в «Мои предложения» вместо диалога #}
 {% if propose and not propose.open %}
 <dialog class="dialog problem-dialog" id="propose-dialog" aria-labelledby="propose-title">
   <div class="dialog-heading"><h3 id="propose-title">{{ propose.label }}</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>

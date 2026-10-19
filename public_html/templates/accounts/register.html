@@ -5,7 +5,7 @@
 <div class="card login-box">
   <h1>Регистрация ученика</h1>
   {% if link_teacher %}
-  <p class="muted">Вы записываетесь к учителю {{ link_teacher.get_full_name|default:link_teacher.username }}.</p>
+  <p class="muted">Ваш учитель — {{ link_teacher.get_full_name|default:link_teacher.username }}.</p>
   {% else %}
   <p class="muted">Создайте аккаунт, чтобы получать и сдавать задания.</p>
   {% endif %}

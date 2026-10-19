@@ -1,12 +1,13 @@
 {% load task_extras %}
+{# simple_answers (editor.simple_answers, R22-1): не-редактору одно поле «Ответ» / «Решение» без подписей про авторские и редакторские версии #}
 <section class="problem-answer" data-answer-owner="{{ sub.pk|default:'' }}">
   <div class="label-row"><h3>Ответ{% if sub %} · {{ forloop.counter0|subitem_label }}){% endif %}</h3>
-    <span class="helptext">{% if owner.author_answer_latex %}Авторский{% elif owner.answer_latex %}Редакторский / AI{% endif %}</span>
+    {% if not simple_answers %}<span class="helptext">{% if owner.author_answer_latex %}Авторский{% elif owner.answer_latex %}Редакторский / AI{% endif %}</span>{% endif %}
   </div>
   <div class="math-content">{{ owner.effective_answer_latex|default:'—'|web_text|linebreaksbr }}</div>
-  {% if not editor_readonly %}<details class="ws-add-text"><summary>Править ответ и источники</summary>
+  {% if not editor_readonly %}<details class="ws-add-text"><summary>{% if simple_answers %}Править ответ{% else %}Править ответ и источники{% endif %}</summary>
     {% include 'problems/_editor_form.html' with form=answer_form block='answer' %}
-    <p class="helptext">Основной — авторский ответ. Редакторский / AI используется при его отсутствии.</p>
+    {% if not simple_answers %}<p class="helptext">Основной — авторский ответ. Редакторский / AI используется при его отсутствии.</p>{% endif %}
     {% if owner.answer_mask %}<p class="helptext">После изменения ответа проверьте маску: правильный ответ в ней не заменяется автоматически.</p>{% endif %}
   </details>{% endif %}
   <div class="problem-mask-summary">
@@ -19,7 +20,7 @@
   {% if not owner.has_mask %}<p class="helptext">Пока ученик может прислать только фото решения.</p>{% endif %}
   <details class="problem-solution" {% if owner.effective_solution_latex %}open{% endif %}>
     <summary>Решение</summary>
-    <p class="helptext">Авторские ответ и решение имеют приоритет. Если авторское поле пустое, используется редакторская / AI-версия.</p>
+    {% if not simple_answers %}<p class="helptext">Авторские ответ и решение имеют приоритет. Если авторское поле пустое, используется редакторская / AI-версия.</p>{% endif %}
     {% for text in owner|complete_solutions %}{% if not forloop.first %}<p class="helptext">Полное решение от AI</p>{% endif %}<div class="math-content">{{ text|web_text|linebreaksbr }}</div>{% empty %}<div class="math-content">Решение пока не добавлено.</div>{% endfor %}
     {% if not editor_readonly %}<details class="ws-add-text"><summary>Править решение</summary>
       {% include 'problems/_editor_form.html' with form=solution_form block='solution' %}

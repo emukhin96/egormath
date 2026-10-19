@@ -4,7 +4,6 @@ from django.contrib import messages
 from django.contrib.auth import login as auth_login
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Prefetch, Q
@@ -21,7 +20,8 @@ from .decorators import get_role, superuser_required, teacher_required
 from .permissions import base_editor_required, catalog_tasks, is_base_editor
 from .forms import (InviteUnavailable, StudentCreateForm, StudentEditForm,
                     StudentGroupForm, StudentRegistrationForm,
-                    TeacherInviteForm, TeacherJoinForm, TeacherProfileForm,
+                    TeacherInviteForm, TeacherJoinForm,
+                    TeacherPasswordChangeForm, TeacherProfileForm,
                     generate_password)
 from .models import Profile, StudentGroup, TeacherInvite
 
@@ -126,9 +126,9 @@ def profile(request):
     """Мини-профиль учителя: имя, фамилия, почта и смена пароля."""
     user = request.user
     profile_form = TeacherProfileForm(user=user)
-    password_form = PasswordChangeForm(user)
+    password_form = TeacherPasswordChangeForm(user)
     if request.method == 'POST' and 'change_password' in request.POST:
-        password_form = PasswordChangeForm(user, request.POST)
+        password_form = TeacherPasswordChangeForm(user, request.POST)
         if password_form.is_valid():
             password_form.save()
             # Иначе смена пароля разлогинит текущую сессию
@@ -182,9 +182,15 @@ def teachers(request):
                         worksheets_count=Count('worksheets', distinct=True))
                     .order_by('-is_superuser', 'last_name', 'first_name',
                               'username'))
+    # Ссылка у непогашенного приглашения показывается и в списке (R03-1):
+    # суперпользователь и так её владелец, а окно с разовым показом легко закрыть
+    invites = list(TeacherInvite.pending().select_related('created_by'))
+    for invite in invites:
+        invite.url = request.build_absolute_uri(
+            reverse('teacher_join', args=[invite.token]))
     return render(request, 'accounts/teachers.html', {
         'teacher_list': teacher_list,
-        'invites': TeacherInvite.pending().select_related('created_by'),
+        'invites': invites,
         'invite_form': invite_form,
         'new_credentials': new_credentials,
         'new_invite': new_invite,
@@ -442,6 +448,9 @@ def students(request):
         'registration_url': request.build_absolute_uri(
             f"{reverse('register')}?t={student_code}"),
         'student_profiles': student_profiles,
+        # Кнопка «Прогресс учеников» — только когда ученики есть (R08-1),
+        # независимо от поиска и фильтра по группе
+        'has_students': Profile.students_for(request.user).exists(),
         'student_sections': student_sections,
         'groups': groups,
         'bulk_groups': bulk_groups,

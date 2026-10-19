@@ -9,7 +9,7 @@
 {% endblock %}
 {% block extra_js %}
 <script defer src="{% static 'js/task_form.js' %}?v=3"></script>
-<script defer src="{% static 'js/problem_editor.js' %}?v=6"></script>
+<script defer src="{% static 'js/problem_editor.js' %}?v=7"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/cart.js' %}?v=2"></script>
 {% if iw_finish_url %}<script>document.querySelector('[data-iw-finish]').addEventListener('submit', function(event) { if(document.querySelector('[data-editor-form][data-dirty], [data-editor-form][data-busy="1"]')) { event.preventDefault(); EgorAutosave.showSaved(false, 'Сначала сохраните изменения в редакторе задачи.'); } });</script>{% endif %}

@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" crossorigin="anonymous">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=33">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=34">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
@@ -24,16 +24,16 @@
   <script defer src="{% static 'js/autosave.js' %}?v=7"></script>
   <script defer src="{% static 'js/image_paste.js' %}?v=4"></script>
   <script defer src="{% static 'js/livefile.js' %}"></script>
-  <script defer src="{% static 'js/shell.js' %}?v=6"></script>
+  <script defer src="{% static 'js/shell.js' %}?v=7"></script>
   <script defer src="{% static 'js/dialogs.js' %}"></script>
   <script defer src="{% static 'js/quick_clone.js' %}"></script>
   <script defer src="{% static 'js/image_zoom.js' %}"></script>
   <script defer src="{% static 'js/taxonomy.js' %}?v=3"></script>
   {# Как верхнее меню: суперпользователь без профиля тоже учитель (get_role). #}
   {% if user.profile.is_teacher or user.is_superuser %}
-  {# Нейрогенерация — только редакторам базы (решение 5 плана пользователей): без адреса кнопки у остальных и так приглушены #}
+  {# Нейрогенерация — только редакторам (решение 5 плана пользователей): без адреса меню у остальных и так приглушено #}
   {% if is_base_editor %}<script>window.NEURO_SOLVE_URL = '{% url "task_neuro_solve" %}';</script>{% endif %}
-  <script defer src="{% static 'js/neuro.js' %}?v=2"></script>
+  <script defer src="{% static 'js/neuro.js' %}?v=3"></script>
   <script defer src="{% static 'js/task_png.js' %}?v=5"></script>
   {% endif %}
   {% block extra_head %}{% endblock %}
@@ -50,18 +50,19 @@
         {% if not is_teacher %}<a href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} class="is-active"{% endif %}>Задания</a>{% endif %}
         {% if is_teacher %}
           <div class="nav-group{% if 'task' in request.resolver_match.url_name or 'proposal' in request.resolver_match.url_name or request.resolver_match.url_name == 'bulk_answers' or 'textbook_import' in request.resolver_match.url_name %} is-active{% endif %}">
-            {# Счётчик новых предложений исправлений — редактору базы (accounts.context_processors.shell) #}
+            {# Счётчик новых предложений исправлений — редактору (accounts.context_processors.shell) #}
             <a href="{% url 'task_list' %}">Задачи{% if proposals_new %}<span class="badge-count nav-count" title="Новые предложения исправлений">{{ proposals_new }}</span>{% endif %}</a>
             <button type="button" class="nav-more" aria-expanded="false" aria-haspopup="true" aria-label="Разделы задач" data-nav-more>
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
             </button>
             <div class="nav-menu">
-              {# Импорт задачников и очередь предложений пишут в общие задачи — пункты только редакторам базы (accounts/permissions.py) #}
+              {# Импорт задачников и очередь предложений пишут в общие задачи — пункты только редакторам (accounts/permissions.py) #}
               {% if is_base_editor %}
               <a href="{% url 'textbook_import_list' %}"{% if 'textbook_import' in request.resolver_match.url_name %} class="is-active"{% endif %}>Импорт задачников</a>
               <a href="{% url 'proposal_list' %}"{% if request.resolver_match.url_name in 'proposal_list proposal_detail' %} class="is-active"{% endif %}>Предложения исправлений{% if proposals_new %} · {{ proposals_new }}{% endif %}</a>
               {% endif %}
-              <a href="{% url 'proposals_mine' %}"{% if request.resolver_match.url_name == 'proposals_mine' %} class="is-active"{% endif %}>Мои предложения{% if proposals_replies %} · {{ proposals_replies }}{% endif %}</a>
+              {# data-nav-last: на узком экране пункт уходит в конец ряда (R31-1), чтобы не вытеснять основные разделы #}
+              <a href="{% url 'proposals_mine' %}" data-nav-last{% if request.resolver_match.url_name == 'proposals_mine' %} class="is-active"{% endif %}>Мои предложения{% if proposals_replies %} · {{ proposals_replies }}{% endif %}</a>
             </div>
           </div>
           <a href="{% url 'collection_list' %}"{% if 'collection' in request.resolver_match.url_name %} class="is-active"{% endif %}>Подборки</a>

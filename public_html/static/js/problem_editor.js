@@ -182,7 +182,7 @@
           }
         });
       });toast(true,'AI-черновик в пустых полях — проверьте и сохраните блоки');
-    }catch(error){toast(false,error.message);}finally{ai.disabled=false;}
+    }catch(error){toast(false,error.message);}finally{ai.disabled=false;var aiMenu=ai.closest('details.ai-menu');if(aiMenu)aiMenu.open=false;}
   });
   window.EgorProblem={request,endpoint,errors,save,toast};
 })();

@@ -38,6 +38,9 @@
   --ok: #2e7d32;
   --warn: #b26a00;
   --err: #c62828;
+  /* Локальная копия задачи: фиолетовый, чтобы не читался как ошибка (R17-1) */
+  --local: #6d3fc0;
+  --local-soft: #ede5fb;
   --radius: 7px;
   --sidebar-width: 228px;
   --content-padding: clamp(20px, 3vw, 48px);
@@ -1683,6 +1686,12 @@
   .badge-reviewed {
     background: #e6f4e7;
     color: var(--ok);
+  }
+
+  /* Локальная копия задачи (карточка, форма, строка листка) — не badge-returned */
+  .badge-local {
+    background: var(--local-soft);
+    color: var(--local);
   }
 
   /* «Уже задавалась»: сворачиваемый бейдж со списком выдач */
@@ -5672,6 +5681,17 @@
       display: contents;
     }
 
+    /* Группы раскрыты в общий ряд, и пункт с data-nav-last («Мои
+       предложения») уходит в его конец, чтобы не вытеснять основные
+       разделы за край экрана (R31-1) */
+    .topbar-nav .nav-group {
+      display: contents;
+    }
+
+    .topbar-nav a[data-nav-last] {
+      order: 1;
+    }
+
     .topbar {
       position: relative;
     }
@@ -7165,84 +7185,101 @@
   }
 }
 
+/* Меню «AI» (includes/ai_menu.html): кнопка-details с выпадающим списком
+   пунктов нейрогенерации — та же плашка, что у подразделов шапки (.nav-menu) */
+@layer components {
+  .ai-menu {
+    position: relative;
+    display: inline-block;
+  }
+
+  .ai-menu > summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    cursor: pointer;
+  }
+
+  .ai-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .ai-menu > summary svg,
+  .btn[disabled] > svg {
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+  }
+
+  .btn[disabled] > svg {
+    margin-left: var(--space-1);
+  }
+
+  .ai-menu[open] > summary {
+    background: var(--accent-soft);
+  }
+
+  .ai-menu-list {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 2px);
+    min-width: 240px;
+    padding: var(--space-1);
+    display: grid;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgb(18 43 85 / 14%);
+    z-index: 70;
+  }
+
+  .ai-menu-list > button {
+    display: block;
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .ai-menu-list > button:hover {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .ai-menu-list > button[disabled] {
+    color: var(--muted);
+    cursor: progress;
+  }
+
+  /* В шапке карточки меню — крайнее справа: список открывается влево,
+     чтобы не уезжать за край страницы */
+  .page-actions .ai-menu-list {
+    left: auto;
+    right: 0;
+  }
+}
+
 /* Очередь предложений исправлений (problems/proposals.py): счётчик у пункта
-   меню, сравнение «в базе ↔ предложено», непросмотренный ответ автору */
+   меню, текст предложения, непросмотренный статус у автора */
 @layer components {
   .nav-count {
     margin-left: var(--space-1);
   }
 
-  .proposal-compare-head,
-  .proposal-row {
-    display: grid;
-    grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr);
-    gap: var(--space-3);
-    align-items: start;
-  }
-
-  .proposal-compare-head {
-    margin-bottom: var(--space-2);
-  }
-
-  .proposal-compare-head h2 {
-    margin: 0;
-  }
-
-  .proposal-row {
-    padding: var(--space-2) 0;
-    border-top: 1px solid var(--border);
-  }
-
-  .proposal-label {
-    color: var(--muted);
-    font-size: 0.85rem;
-    font-weight: 600;
-  }
-
-  .proposal-cell {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-
-  /* Отличающееся поле — подсветка предложенного значения фоном, без цветной полосы */
-  .proposal-row.is-changed .proposal-cell-proposed {
-    background: #fff6e5;
-    border-radius: var(--radius);
-    padding: var(--space-1) var(--space-2);
-  }
-
-  .proposal-subhead {
-    margin: var(--space-4) 0 var(--space-2);
-    font-size: 0.95rem;
-  }
-
   .proposal-message {
-    margin: 0;
+    margin: 0 0 var(--space-3);
     white-space: pre-wrap;
   }
 
   .list tr.proposal-unread > td {
     background: var(--accent-soft);
-  }
-
-  @media (max-width: 720px) {
-    .proposal-compare-head {
-      display: none;
-    }
-
-    .proposal-row {
-      grid-template-columns: 1fr;
-    }
-
-    .proposal-row .proposal-cell::before {
-      display: block;
-      color: var(--muted);
-      font-size: 0.8rem;
-      content: "В базе";
-    }
-
-    .proposal-row .proposal-cell-proposed::before {
-      content: "Предложено";
-    }
   }
 }

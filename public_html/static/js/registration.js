@@ -74,8 +74,9 @@
   confirmation.addEventListener('blur', validateConfirmation);
   confirmation.addEventListener('input', validateConfirmation);
 
-  // Подсказка логина транслитом из фамилии и имени — как generate_username
-  // на сервере; работает, пока логин не введён вручную.
+  // Подсказка логина транслитом из фамилии и имени через точку
+  // (smirnova.irina) — как generate_username на сервере; работает, пока
+  // логин не введён вручную.
   if (form.hasAttribute('data-suggest-username')) {
     const TRANSLIT = {
       'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
@@ -88,14 +89,17 @@
     const lastName = form.querySelector('[name="last_name"]');
     let typedByUser = username.value !== '';
     username.addEventListener('input', function () { typedByUser = username.value !== ''; });
-    const suggestUsername = function () {
-      if (typedByUser) return;
-      const raw = (lastName.value.trim() + '.' + firstName.value.trim()).toLowerCase();
-      const latin = Array.from(raw).map(function (ch) {
+    const slugPart = function (value) {
+      const latin = Array.from(value.trim().toLowerCase()).map(function (ch) {
         return Object.prototype.hasOwnProperty.call(TRANSLIT, ch) ? TRANSLIT[ch] : ch;
       }).join('');
-      username.value = latin.replace(/[^a-z0-9\s_-]/g, '').replace(/[-\s]+/g, '-')
-        .replace(/^[-_]+|[-_]+$/g, '').slice(0, 24);
+      return latin.replace(/[^a-z0-9\s_-]/g, '').replace(/[-\s]+/g, '-')
+        .replace(/^[-_]+|[-_]+$/g, '');
+    };
+    const suggestUsername = function () {
+      if (typedByUser) return;
+      username.value = [lastName.value, firstName.value].map(slugPart)
+        .filter(Boolean).join('.').slice(0, 24).replace(/[.\-_]+$/, '');
       validateUsername();
     };
     nameFields.forEach(function (field) { field.addEventListener('blur', suggestUsername); });

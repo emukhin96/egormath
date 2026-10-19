@@ -39,40 +39,25 @@ def _send(subject, body, recipients):
     return bool(sent)
 
 
-def _author_name(user):
-    return user.get_full_name() or user.username
-
-
 def notify_new_proposal(proposal, url=None):
-    """Редакторам базы: новое предложение. ``url`` — абсолютная ссылка на
+    """Редакторам: новое предложение. ``url`` — абсолютная ссылка на
     страницу предложения (view знает хост запроса, модуль — нет)."""
-    task_id = proposal.task_id
-    if proposal.kind == proposal.KIND_NEW:
-        subject = f'Задача #{task_id}: предложена в общие задачи'
-    else:
-        subject = f'Задача #{task_id}: предложено исправление'
-    lines = [
-        f'{_author_name(proposal.author)} — {proposal.get_kind_display().lower()}.',
-        '',
-        proposal.message.strip() or '(без комментария)',
-    ]
-    if proposal.variant_id:
-        lines += ['', f'Приложена локальная копия #{proposal.variant_id}.']
+    subject = f'Задача #{proposal.task_id}: предложено исправление'
+    lines = [f'{proposal.author_name} предлагает исправить задачу #{proposal.task_id}:',
+             '', proposal.message.strip()]
     if url:
         lines += ['', f'Открыть: {url}']
     return _send(subject, '\n'.join(lines), settings.PROPOSAL_NOTIFY_EMAILS)
 
 
 def notify_resolved(proposal, url=None):
-    """Автору: решение редактора, если у автора указана почта."""
+    """Автору: статус от редактора, если у автора указана почта."""
     email = (proposal.author.email or '').strip()
     if not email:
         return False
     verdict = 'принято' if proposal.status == proposal.STATUS_ACCEPTED else 'отклонено'
     subject = f'Ваше предложение по задаче #{proposal.task_id} {verdict}'
     lines = [f'Предложение по задаче #{proposal.task_id} {verdict}.']
-    if proposal.resolution_note.strip():
-        lines += ['', 'Ответ редактора:', proposal.resolution_note.strip()]
     if url:
         lines += ['', f'Мои предложения: {url}']
     return _send(subject, '\n'.join(lines), [email])

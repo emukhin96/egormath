@@ -12,9 +12,10 @@
       {% if current_group %}<span>группа «{{ current_group.name }}»</span>{% elif group_filter == 'ungrouped' %}<span>без группы</span>{% endif %}
     </p>
   </div>
-  <div class="page-actions">
+  {# Без учеников прогресс смотреть нечего — кнопки нет (R08-1) #}
+  {% if has_students %}<div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'progress_overview' %}{% if current_group %}?group={{ current_group.pk }}{% endif %}">Прогресс{% if current_group %} группы{% else %} учеников{% endif %}</a>
-  </div>
+  </div>{% endif %}
 </div>
 
 {% if new_credentials %}

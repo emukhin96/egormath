@@ -1672,9 +1672,12 @@ def worksheet_pdf(request, pk):
                 'worksheet': worksheet,
                 'for_student': True,
             }, status=502)
+        # Сбой LaTeX API (ключ, адрес) — учителю без подробностей (R24-1)
         return render(request, 'worksheets/latex_error.html', {
             'worksheet': worksheet,
             'error': exc,
+            'error_message': exc.user_message(request.user),
+            'error_log': exc.user_log(request.user),
             'tex': worksheet_to_tex(worksheet, variant),
         }, status=502)
 
@@ -1766,8 +1769,10 @@ def _editor_compile(request, worksheet, tex, doc_id, filename, collect,
                 {'ok': False, 'message': str(exc), 'log': exc.log}, status=400)
         pdf_bytes = compile_latex(tex, doc_id=doc_id, assets=assets)
     except LatexCompileError as exc:
+        # Сбой LaTeX API (ключ, адрес) — учителю без подробностей (R24-1)
         return JsonResponse(
-            {'ok': False, 'message': str(exc), 'log': exc.log}, status=502)
+            {'ok': False, 'message': exc.user_message(request.user),
+             'log': exc.user_log(request.user)}, status=502)
     finally:
         PdfCompileLock.objects.filter(user=request.user).delete()
     if on_success:

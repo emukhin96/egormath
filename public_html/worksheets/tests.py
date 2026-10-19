@@ -1433,6 +1433,42 @@ class WorksheetViewTests(TestCase):
         self.assertFalse(data['ok'])
         self.assertIn('Undefined control', data['log'])
 
+    API_FAILURE = LatexCompileError(
+        'Не задан ключ LaTeX API (LATEX_API_KEY). Добавьте его в .secrets/.',
+        log='HTTP 500 от api.example', api_failure=True)
+
+    @mock.patch('worksheets.views.compile_latex', side_effect=API_FAILURE)
+    @mock.patch('worksheets.services.compile_latex', side_effect=API_FAILURE)
+    def test_api_failure_hidden_from_teacher(self, _services, _views):
+        """R24-1: сбой LaTeX API (ключ, адрес) учитель видит общей фразой,
+        подробности — только суперпользователю; ошибки в самом LaTeX
+        (test_pdf_editor_compile_error) остаются с логом."""
+        self.login_teacher()
+        response = self.client.post(
+            reverse('worksheet_pdf_compile', args=[self.worksheet.pk]),
+            {'tex': r'\documentclass{article}'})
+        self.assertEqual(response.status_code, 502)
+        data = response.json()
+        self.assertEqual(data['message'], LatexCompileError.GENERIC_MESSAGE)
+        self.assertEqual(data['log'], '')
+        response = self.client.get(
+            reverse('worksheet_pdf', args=[self.worksheet.pk]), {'variant': 'student'})
+        self.assertEqual(response.status_code, 502)
+        self.assertContains(response, LatexCompileError.GENERIC_MESSAGE, status_code=502)
+        self.assertNotContains(response, 'LATEX_API_KEY', status_code=502)
+        self.assertNotContains(response, 'api.example', status_code=502)
+        superuser = User.objects.create_superuser('root', password='x')
+        self.client.force_login(superuser)
+        response = self.client.post(
+            reverse('worksheet_pdf_compile', args=[self.worksheet.pk]),
+            {'tex': r'\documentclass{article}'})
+        data = response.json()
+        self.assertIn('LATEX_API_KEY', data['message'])
+        self.assertIn('api.example', data['log'])
+        response = self.client.get(
+            reverse('worksheet_pdf', args=[self.worksheet.pk]), {'variant': 'student'})
+        self.assertContains(response, 'LATEX_API_KEY', status_code=502)
+
     @mock.patch('worksheets.services.compile_latex',
                 return_value=b'%PDF-1.5 fake')
     def test_student_pdf_access(self, mocked):

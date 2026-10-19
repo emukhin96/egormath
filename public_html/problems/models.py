@@ -986,23 +986,15 @@ class NeuroSolveQuota(models.Model):
 
 
 class TaskProposal(models.Model):
-    """Предложение учителя редакторам базы: исправить общую задачу (``fix``)
-    или принять его личную задачу в общую базу (``new``).
+    """Предложение учителя редакторам: исправить общую задачу — текстом.
 
     Приглашённый учитель общую задачу не меняет (accounts/permissions.py),
-    поэтому исправление идёт очередью: автор описывает, что не так, и может
-    приложить свою локальную копию как предложенную версию. ``snapshot`` —
-    поля копии (или самой личной задачи) на момент отправки: автор дальше
-    правит копию свободно, предложение не «уезжает». Применяет и отклоняет
-    редактор базы (problems/proposals.py), решение всегда за человеком.
+    поэтому исправление идёт очередью: автор описывает, что не так, редактор
+    читает, правит задачу сам на карточке и ставит статус
+    (problems/proposals.py). Снимков полей и автоприменения нет — решение
+    19.10.2026 (docs/USERS_PLAN.md, раздел 15, решение 7).
     """
 
-    KIND_FIX = 'fix'
-    KIND_NEW = 'new'
-    KIND_CHOICES = [
-        (KIND_FIX, 'Исправить общую задачу'),
-        (KIND_NEW, 'Принять в общие задачи'),
-    ]
     STATUS_NEW = 'new'
     STATUS_ACCEPTED = 'accepted'
     STATUS_REJECTED = 'rejected'
@@ -1015,19 +1007,11 @@ class TaskProposal(models.Model):
     task = models.ForeignKey(
         Task, on_delete=models.CASCADE, related_name='proposals',
         verbose_name='Задача',
-        help_text='Общая задача, к которой предложение; для вида «принять '
-                  'в базу» — сама личная задача автора')
-    kind = models.CharField('Вид', max_length=8, choices=KIND_CHOICES)
+        help_text='Общая задача, к которой предложение')
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
         related_name='task_proposals', verbose_name='Автор')
-    message = models.TextField('Что исправить', blank=True)
-    variant = models.ForeignKey(
-        Task, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='proposed_in', verbose_name='Предложенная версия',
-        help_text='Локальная копия автора; снимок полей хранится отдельно')
-    snapshot = models.JSONField(
-        'Снимок предложенной версии', default=dict, blank=True)
+    message = models.TextField('Что исправить')
     status = models.CharField(
         'Статус', max_length=10, choices=STATUS_CHOICES, default=STATUS_NEW)
     created_at = models.DateTimeField('Отправлено', auto_now_add=True)
@@ -1036,9 +1020,8 @@ class TaskProposal(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='resolved_task_proposals',
         verbose_name='Кто решил')
-    resolution_note = models.TextField('Ответ редактора', blank=True)
     seen_by_author_at = models.DateTimeField(
-        'Ответ просмотрен автором', null=True, blank=True)
+        'Статус просмотрен автором', null=True, blank=True)
 
     class Meta:
         verbose_name = 'Предложение по задаче'
@@ -1052,16 +1035,11 @@ class TaskProposal(models.Model):
         ]
 
     def __str__(self):
-        return f'Предложение #{self.pk} к задаче #{self.task_id} ({self.get_kind_display()})'
+        return f'Предложение #{self.pk} к задаче #{self.task_id}'
 
     @property
     def is_open(self):
         return self.status == self.STATUS_NEW
-
-    @property
-    def has_snapshot(self):
-        """Есть ли предложенная версия полей (не только текст автора)."""
-        return bool(self.snapshot)
 
     @staticmethod
     def _name(user, fallback):
@@ -1076,5 +1054,5 @@ class TaskProposal(models.Model):
     @property
     def resolved_by_name(self):
         """Кто решил; пользователь мог быть удалён (SET_NULL) — тогда
-        просто «редактор базы», страница не падает."""
-        return self._name(self.resolved_by, 'редактор базы')
+        просто «редактор», страница не падает."""
+        return self._name(self.resolved_by, 'редактор')

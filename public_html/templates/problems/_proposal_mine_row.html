@@ -1,12 +1,9 @@
-{# Строка «Моих предложений»: proposal — TaskProposal с флагом unread (proposals.proposals_mine); непросмотренный ответ подсвечен один раз, после показа он считается прочитанным #}
+{# Строка «Моих предложений»: proposal — TaskProposal с флагом unread (proposals.proposals_mine); непросмотренный статус подсвечен один раз, после показа он считается прочитанным #}
 <tr{% if proposal.unread %} class="proposal-unread"{% endif %}>
   <td class="stack-primary">
     <a href="{% url 'task_detail' proposal.task.pk %}">Задача #{{ proposal.task.pk }}</a>
-    {% if proposal.variant %}<div class="muted task-meta"><a href="{% url 'task_detail' proposal.variant.pk %}">Моя копия #{{ proposal.variant.pk }}</a></div>{% endif %}
-    {% if proposal.message %}<div class="muted task-meta">{{ proposal.message|truncatechars:120 }}</div>{% endif %}
+    <div class="muted task-meta">{{ proposal.message|truncatechars:120 }}</div>
   </td>
-  <td data-label="Вид">{{ proposal.get_kind_display }}</td>
   <td data-label="Отправлено">{{ proposal.created_at|date:'d.m.Y H:i' }}</td>
-  <td data-label="Статус">{% include 'problems/_proposal_status.html' %}{% if proposal.unread %} <span class="badge-count" title="Новый ответ">1</span>{% endif %}</td>
-  <td data-label="Ответ редактора">{% if proposal.is_open %}<span class="muted">ждёт ответа</span>{% else %}{{ proposal.resolution_note|default:'—'|linebreaksbr }}<div class="muted task-meta">{{ proposal.resolved_by_name }} · {{ proposal.resolved_at|date:'d.m.Y' }}</div>{% endif %}</td>
+  <td data-label="Статус">{% include 'problems/_proposal_status.html' %}{% if proposal.unread %} <span class="badge-count" title="Новый статус">1</span>{% endif %}{% if not proposal.is_open %}<div class="muted task-meta">{{ proposal.resolved_at|date:'d.m.Y' }}</div>{% endif %}</td>
 </tr>

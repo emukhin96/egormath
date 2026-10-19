@@ -13,7 +13,8 @@
     // На карточке генерация учитывает ещё не сохранённый текст выбранного источника.
     if(root.matches('[data-problem-editor]'))result.answers.forEach(function(o){
       var section=root.querySelector('[data-answer-owner="'+(o.id||'')+'"]');
-      if(section){o.condition=root.querySelector('[name=text_latex]').value+(o.id?'\n'+o.text:'');o.author=section.querySelector('[name=author_answer_latex]').value;o.editor=section.querySelector('[name=answer_latex]').value;}
+      // В простом режиме ответов (не-редактор, R22-1) авторского поля в разметке нет
+      if(section){var authorField=section.querySelector('[name=author_answer_latex]'),editorField=section.querySelector('[name=answer_latex]');o.condition=root.querySelector('[name=text_latex]').value+(o.id?'\n'+o.text:'');o.author=authorField?authorField.value:o.author;o.editor=editorField?editorField.value:o.editor;}
     });
     return result.answers;
   }
@@ -25,6 +26,8 @@
     Array.from(form.elements.source.options).forEach(opt=>opt.disabled=!o[opt.value].trim());
     form.elements.source.value=o.author.trim()?'author':'editor';
     form.querySelector('[data-mask-message]').textContent='';form.querySelector('[data-mask-errors]').textContent='';
+    // Общая задача из листка (data-base-locked): маска уйдёт в локальную копию (R16-1)
+    var lockedNote=dialog.querySelector('[data-mask-locked-note]');if(lockedNote)lockedNote.hidden=!root.dataset.baseLocked;
     document.getElementById('answer-mask-title').textContent='Маска · '+o.label;
     form.elements.reference.value=o[form.elements.source.value]||'';
     source();dialog.showModal();
@@ -68,7 +71,7 @@
       if(owners.some(o=>o.full_answer_only)){var policy=document.createElement('span');policy.className='helptext';policy.textContent='Только развёрнутый ответ. Сохранённые маски не используются.';actions.appendChild(policy);}
       if(!root.dataset.maskReadonly&&!owners.some(o=>o.full_answer_only)&&owners.filter(o=>!o.mask.trim()).length>1)actions.appendChild(button('Создать недостающие маски','maskMissing','1'));
       // Маски общей задачи приглашённый не меняет (403): вместо редактора — ссылка на предложение исправления (problems/proposals.py)
-      if(root.dataset.maskReadonly&&root.dataset.proposeUrl){var propose=document.createElement('a');propose.className='btn btn-small btn-secondary';propose.href=root.dataset.proposeUrl;propose.textContent='Предложить маску';propose.title='Маски общей задачи меняют редакторы базы — предложите свою';actions.appendChild(propose);}
+      if(root.dataset.maskReadonly&&root.dataset.proposeUrl){var propose=document.createElement('a');propose.className='btn btn-small btn-secondary';propose.href=root.dataset.proposeUrl;propose.textContent='Предложить маску';propose.title='Маски общей задачи меняют редакторы — предложите свою';actions.appendChild(propose);}
 
       for(var i=0;i<owners.length;i++){
         var o=owners[i],row=document.createElement('div');row.className='problem-mask-summary';

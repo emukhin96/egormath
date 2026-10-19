@@ -40,7 +40,7 @@
   </div>
   <div class="catalog-table-wrap"><table class="list table-stack">
     <thead><tr>
-      <th>Учитель</th><th>Логин</th><th>Учеников</th><th>Листков</th><th>Последний вход</th><th>Правит базу</th><th>Доступ</th><th></th>
+      <th>Учитель</th><th>Логин</th><th>Учеников</th><th>Листков</th><th>Последний вход</th><th>Можно ред. базу</th><th>Доступ</th><th></th>
     </tr></thead>
     <tbody>
     {% for teacher in teacher_list %}
@@ -55,7 +55,7 @@
       <td data-label="Учеников">{{ teacher.students_count }}</td>
       <td data-label="Листков">{{ teacher.worksheets_count }}</td>
       <td data-label="Последний вход">{% if teacher.last_login %}{{ teacher.last_login|date:'d.m.Y H:i' }}{% else %}—{% endif %}</td>
-      <td data-label="Правит базу">
+      <td data-label="Можно ред. базу">
         {% if teacher.is_superuser %}всегда{% else %}
         {# Переключатель отправляет форму сам (data-autosubmit в shell.js); без JS — кнопка #}
         <form method="post" action="{% url 'teacher_toggle_base_editor' teacher.pk %}" class="inline-form" data-autosubmit>
@@ -130,7 +130,7 @@
   </div>
   {% if invites %}
   <div class="catalog-table-wrap"><table class="list table-stack">
-    <thead><tr><th>Кому</th><th>Почта</th><th>Создано</th><th>Действует до</th><th>Правит базу</th><th></th></tr></thead>
+    <thead><tr><th>Кому</th><th>Почта</th><th>Создано</th><th>Действует до</th><th>Можно ред. базу</th><th></th></tr></thead>
     <tbody>
     {% for invite in invites %}
     <tr>
@@ -138,8 +138,10 @@
       <td data-label="Почта">{{ invite.email|default:'—' }}</td>
       <td data-label="Создано">{{ invite.created_at|date:'d.m.Y' }}</td>
       <td data-label="Действует до">{{ invite.expires_at|date:'d.m.Y' }}</td>
-      <td data-label="Правит базу">{% if invite.base_editor %}да{% else %}нет{% endif %}</td>
+      <td data-label="Можно ред. базу">{% if invite.base_editor %}да{% else %}нет{% endif %}</td>
       <td class="row-actions">
+        {# Ссылка показывается один раз после создания; отсюда её можно скопировать снова (R03-1, invite.url из accounts.views.teachers) #}
+        <button type="button" class="btn btn-small btn-secondary" data-copy="{{ invite.url }}" title="Скопировать ссылку-приглашение">Скопировать</button>
         <form method="post" action="{% url 'invite_revoke' invite.pk %}" class="inline-form"
               onsubmit="return confirm('Отозвать приглашение{% if invite.note %} для {{ invite.note|escapejs }}{% endif %}? Ссылка перестанет работать.');">
           {% csrf_token %}<button type="submit" class="icon-btn" title="Отозвать приглашение" aria-label="Отозвать приглашение">×</button>

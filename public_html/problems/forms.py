@@ -21,7 +21,13 @@ def clean_mask_text(text):
     return text
 
 
+# Подписи полей задачи без двоеточий — как на остальных формах сайта
+# (R22-2); распространяется и на формы блоков карточки (editor.block_form).
 class TaskForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('label_suffix', '')
+        super().__init__(*args, **kwargs)
+
     class Meta:
         model = Task
         fields = ['text_latex', 'columns',
@@ -46,6 +52,10 @@ class TaskForm(forms.ModelForm):
 
 
 class TaskSubitemForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('label_suffix', '')
+        super().__init__(*args, **kwargs)
+
     class Meta:
         model = TaskSubitem
         fields = ['order', 'text_latex', 'answer_latex', 'solution_latex',

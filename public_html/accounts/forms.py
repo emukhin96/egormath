@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from django import forms
 from django.contrib.auth import password_validation
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
 from django.core.validators import RegexValidator
 from django.db import transaction
@@ -47,7 +48,11 @@ def translit(text):
 
 
 def generate_username(first_name, last_name, fallback='uchenik'):
-    base = slugify(translit(f'{last_name}.{first_name}'))[:24] or fallback
+    """Логин из фамилии и имени транслитом через точку: ``smirnova.irina``
+    (R04-2); то же на лету делает registration.js. Занятый логин получает
+    номер: ``ivanov.petya2``."""
+    parts = [slugify(translit(part)) for part in (last_name, first_name)]
+    base = '.'.join(p for p in parts if p)[:24].strip('.-_') or fallback
     username = base
     n = 1
     while User.objects.filter(username=username).exists():
@@ -205,8 +210,7 @@ class TeacherJoinForm(RegistrationForm):
         self.fields['username'].required = False
         self.fields['username'].help_text = (
             '3–30 символов: латинские буквы, цифры, точка, дефис и '
-            'подчёркивание. Если оставить пустым — составится из фамилии '
-            'и имени.')
+            'подчёркивание. Подставится из фамилии и имени, можно изменить.')
         if invite is not None and invite.email and not self.is_bound:
             self.fields['email'].initial = invite.email
 
@@ -284,6 +288,8 @@ class TeacherProfileForm(forms.Form):
             'last_name': user.last_name,
             'email': user.email,
         })
+        # Подписи без двоеточий, как на остальных формах сайта (R46-1)
+        kwargs.setdefault('label_suffix', '')
         super().__init__(*args, **kwargs)
         self.user = user
 
@@ -293,6 +299,23 @@ class TeacherProfileForm(forms.Form):
         self.user.email = self.cleaned_data['email']
         self.user.save(update_fields=['first_name', 'last_name', 'email'])
         return self.user
+
+
+class TeacherPasswordChangeForm(PasswordChangeForm):
+    """Смена пароля в профиле: подписи и подсказки в стиле сайта, без
+    двоеточий и стандартных текстов Django (R46-1, R46-2)."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('label_suffix', '')
+        super().__init__(*args, **kwargs)
+        self.fields['old_password'].label = 'Текущий пароль'
+        self.fields['new_password1'].label = 'Новый пароль'
+        self.fields['new_password1'].help_text = (
+            'От 6 до 128 символов. Можно использовать любые символы.')
+        self.fields['new_password1'].widget.attrs['minlength'] = 6
+        self.fields['new_password2'].label = 'Повторите новый пароль'
+        self.fields['new_password2'].help_text = ''
+        self.fields['new_password2'].widget.attrs['minlength'] = 6
 
 
 class StudentCreateForm(forms.Form):

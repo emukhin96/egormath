@@ -52,9 +52,8 @@
   <a class="btn btn-secondary" href="{% url 'worksheet_beamer_editor' worksheet.pk %}"
      target="_blank" rel="noopener">Презентация</a>
   <a class="btn btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}">.tex</a>
-  {# Запись AI-ответов прямо в задачи листка — только редакторам базы (task_neuro_solve), остальным кнопки приглушены #}
-  {% include 'includes/ai_button.html' with neuro='apply-answers' label='Дописать AI-ответ к решениям' title='Ответы в пустые поля — существующие ответы и решения не трогаем' %}
-  {% include 'includes/ai_button.html' with neuro='apply-all' label='Добавить AI-решения и ответ' title='Ответ и решение для всех задач листка — проверьте после записи' %}
+  {# Запись AI-ответов прямо в задачи листка — только редакторам (task_neuro_solve), остальным меню приглушено #}
+  {% include 'includes/ai_menu.html' with kind='worksheet' %}
 </div>
 
 <div class="card worksheet-items-card">
@@ -182,7 +181,7 @@
 
       {% if item.task_id %}
       <div class="task-meta worksheet-task-meta">
-        <span class="task-meta-item"><a class="task-id" href="{% url 'task_detail' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}</span>
+        <span class="task-meta-item"><a class="task-id" href="{% url 'task_detail' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-local" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}</span>
         <span class="task-meta-item"><button type="button" class="link-btn ws-star-reset"
                   data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
                   title="Убрать все звёзды только в этом листке">сбросить звёзды</button></span>
@@ -459,7 +458,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 {% include 'problems/_mask_dialogs.html' %}
-<script defer src="{% static 'js/problem_editor.js' %}?v=6"></script>
+<script defer src="{% static 'js/problem_editor.js' %}?v=7"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=3"></script>
 <script defer src="{% static 'js/builder.js' %}?v=9"></script>

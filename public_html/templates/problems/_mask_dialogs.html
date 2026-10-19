@@ -4,6 +4,8 @@
     {% csrf_token %}
     <p><label>Источник ответа<select name="source"><option value="author">Авторский</option><option value="editor">Редакторский / AI</option></select></label></p>
     <div class="math-content" data-mask-answer></div>
+    {# Общая задача из листка (data-base-locked, problem_masks.js open): маска уйдёт в локальную копию (R16-1) #}
+    <p class="helptext" data-mask-locked-note hidden>Маска сохранится в вашу локальную копию.</p>
     <div class="form-buttons"><button type="button" class="btn" data-mask-generate>Создать из ответа</button></div>
     <p class="helptext" data-mask-message role="status"></p>
     {% include 'problems/_mask_presets.html' %}
@@ -44,7 +46,7 @@
   <div data-preview-body></div>
   <p class="helptext">Проверка пробного ответа работает тем же кодом, что у ученика.</p>
 </dialog>
-{# Диалог открывается только для задач, которые пользователь вправе менять напрямую: у редактора базы это общие задачи, у приглашённого учителя — его собственные #}
+{# Диалог открывается только для задач, которые пользователь вправе менять напрямую: у редактора это общие задачи, у приглашённого учителя — его собственные #}
 <dialog class="dialog" id="answer-scope-dialog" aria-labelledby="answer-scope-title">
   <h3 id="answer-scope-title">Где сохранить изменения?</h3>
   <p>{% if is_base_editor %}В самой задаче изменения увидят все учителя во всех листках.{% else %}В самой задаче изменения будут видны во всех ваших листках.{% endif %} Локальная копия изменит только текущий листок.</p>

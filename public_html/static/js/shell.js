@@ -40,6 +40,22 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Меню «AI» (includes/ai_menu.html, details): клик вне меню или Escape
+  // закрывают его; клик по пункту обрабатывают neuro.js / problem_editor.js
+  // и закрывают меню сами, когда генерация закончится.
+  const closeAiMenus = (except) => {
+    document.querySelectorAll("details.ai-menu[open]").forEach((menu) => {
+      if (menu !== except) menu.open = false;
+    });
+  };
+  document.addEventListener("click", (event) => {
+    const inside = event.target.closest("details.ai-menu");
+    closeAiMenus(inside);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeAiMenus();
+  });
+
   // Кнопки «Скопировать»: data-copy — текст для буфера обмена, результат —
   // тост (ссылка-приглашение, ссылка регистрации учеников).
   document.addEventListener("click", async (event) => {

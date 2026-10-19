@@ -22,8 +22,8 @@ from .models import Profile
 # и «личная» (решение 6 плана пользователей; тест гигиены шаблонов).
 BASE_LOCKED_MESSAGE = ('Общая задача: измените её для своего листка '
                        'или предложите исправление.')
-EDITORS_ONLY_MESSAGE = 'Доступно только редакторам базы задач.'
-NEURO_EDITORS_ONLY_MESSAGE = 'Нейрогенерация доступна только редакторам базы.'
+EDITORS_ONLY_MESSAGE = 'Доступно только редакторам.'
+NEURO_EDITORS_ONLY_MESSAGE = 'Нейрогенерация доступна только редакторам.'
 
 
 def is_base_editor(user):

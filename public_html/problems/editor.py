@@ -34,10 +34,38 @@ StructureFormSet = inlineformset_factory(
     widgets={'text_latex': forms.Textarea(attrs={'rows': 2})})
 
 
-def block_form(block, obj, data=None):
-    """ModelForm ограничена полями одного блока, соседние правки не затирает."""
-    cls = forms.modelform_factory(type(obj), form=TaskForm,
-                                 fields=BLOCKS[block])
+# Простой режим ответов (R22-1): не-редактору вместо пары «авторский /
+# редакторский» показывается одно поле «Ответ» и «Решение» — редакторские
+# поля. Только когда авторских полей и источника-задачника у задачи нет:
+# иначе спрятанный авторский ответ остался бы в приоритете у effective_*.
+SIMPLE_BLOCKS = {
+    'answer': (['answer_latex'], {'answer_latex': 'Ответ'}),
+    'solution': (['solution_latex'], {'solution_latex': 'Решение'}),
+}
+AUTHOR_FIELDS = ('author_answer_latex', 'author_solution_latex')
+
+
+def simple_answers(user, task):
+    """Показывать ли не-редактору одно поле ответа и решения: у задачи (и
+    её подпунктов) нет авторских полей и нет источника-задачника."""
+    if is_base_editor(user):
+        return False
+    if task is None:
+        return True
+    owners = [task, *task.subitems.all()]
+    if any((getattr(o, f) or '').strip() for o in owners for f in AUTHOR_FIELDS):
+        return False
+    return not task.source_refs.exists()
+
+
+def block_form(block, obj, data=None, simple=False):
+    """ModelForm ограничена полями одного блока, соседние правки не затирает.
+    ``simple`` — простой режим ответов: только редакторское поле с подписью
+    «Ответ» / «Решение» (на сохранение не влияет: авторские поля пусты)."""
+    fields, labels = BLOCKS[block], {}
+    if simple and block in SIMPLE_BLOCKS:
+        fields, labels = SIMPLE_BLOCKS[block]
+    cls = forms.modelform_factory(type(obj), form=TaskForm, fields=fields, labels=labels)
     form = cls(data, instance=obj, auto_id=f'id_{block}_{obj.pk}_%s')
     return form
 
@@ -68,12 +96,13 @@ def context(request, task):
                     ctx['iw_finish_url'] = reverse('independentworks:finish_analog', args=[position_id, task.pk])
                     break
     editable = can_edit_task(request.user, task)
-    # Кнопка предложения (proposals.proposal_options): редактору базы не
-    # нужна — он правит напрямую; остальным — по виду задачи.
+    # Кнопка предложения (proposals.proposal_options): редактору не нужна —
+    # он правит напрямую; остальным — только на общей задаче.
     from .proposals import proposal_options
     propose = None if is_base_editor(request.user) else proposal_options(request.user, task)
+    simple = simple_answers(request.user, task)
     ctx.update(task=task, item=item, worksheet=item.worksheet if item else None,
-               propose=propose,
+               propose=propose, simple_answers=simple,
                # Общая задача у приглашённого: в листке правки уходят в
                # локальную копию (data-base-locked), без листка карточка
                # только для чтения (accounts/permissions.py).
@@ -84,14 +113,14 @@ def context(request, task):
                mask_help=HELP, mask_kinds={**KINDS, **{k: k for k in PRESETS}},
                condition_form=block_form('condition', task),
                answer_policy_form=block_form('answer_policy', task),
-               answer_form=block_form('answer', task),
-               solution_form=block_form('solution', task),
+               answer_form=block_form('answer', task, simple=simple),
+               solution_form=block_form('solution', task, simple=simple),
                metadata_form=block_form('metadata', task),
                structure_formset=StructureFormSet(instance=task),
                image_formset=TaskImageFormSet(instance=task),
                source_formset=TaskSourceFormSet(instance=task),
-               subrows=[dict(sub=s, answer_form=block_form('answer', s),
-                             solution_form=block_form('solution', s))
+               subrows=[dict(sub=s, answer_form=block_form('answer', s, simple=simple),
+                             solution_form=block_form('solution', s, simple=simple))
                         for s in task.subitems.all()])
     return ctx
 

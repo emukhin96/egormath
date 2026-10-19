@@ -16,15 +16,12 @@
 <div class="card">
   {% if page.object_list %}
   <div class="catalog-table-wrap"><table class="list table-stack">
-    <thead><tr><th>Задача</th><th>Вид</th><th>Автор</th><th>Отправлено</th><th>Статус</th><th></th></tr></thead>
+    <thead><tr><th>Задача</th><th>Что исправить</th><th>Автор</th><th>Отправлено</th><th>Статус</th><th></th></tr></thead>
     <tbody>
     {% for proposal in page %}
     <tr>
-      <td class="stack-primary">
-        <a href="{% url 'proposal_detail' proposal.pk %}">Задача #{{ proposal.task.pk }}</a>
-        {% if proposal.message %}<div class="muted task-meta">{{ proposal.message|truncatechars:120 }}</div>{% endif %}
-      </td>
-      <td data-label="Вид">{{ proposal.get_kind_display }}{% if proposal.variant_id %}<div class="muted task-meta">с копией #{{ proposal.variant_id }}</div>{% endif %}</td>
+      <td class="stack-primary"><a href="{% url 'proposal_detail' proposal.pk %}">Задача #{{ proposal.task.pk }}</a></td>
+      <td data-label="Что исправить">{{ proposal.message|truncatechars:160 }}</td>
       <td data-label="Автор">{{ proposal.author_name }}</td>
       <td data-label="Отправлено">{{ proposal.created_at|date:'d.m.Y H:i' }}</td>
       <td data-label="Статус">{% include 'problems/_proposal_status.html' %}</td>

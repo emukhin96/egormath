@@ -51,8 +51,9 @@ def filter_tasks(params, user):
                                'facet_values', 'exam_items', 'tags',
                                'source_refs__source', 'subitems', 'images')
              .select_related('created_by').order_by('-created_at', '-pk'))
-    if params.get('mine'):
-        # Чип «Мои задачи»: свои задачи, не принятые в общие (решение 6)
+    if params.get('mine') == '1':
+        # Чип «Мои задачи»: свои задачи, не принятые в общие (решение 6);
+        # включён только при mine=1, «mine=0» фильтр не включает (R41-1)
         tasks = tasks.filter(created_by=user, is_shared=False)
     q = params.get('q', '').strip()
     if re.fullmatch(r'#?\d+', q):
@@ -170,7 +171,7 @@ def task_list(request):
     # показывается, только если такие задачи есть (у редактора обычно нет),
     # или пока фильтр включён — чтобы его можно было снять.
     ctx['show_foreign_tasks'] = ctx['is_base_editor'] and shows_foreign_tasks(request.user)
-    ctx['has_own_tasks'] = bool(request.GET.get('mine')) or own_personal_tasks(request.user).exists()
+    ctx['has_own_tasks'] = request.GET.get('mine') == '1' or own_personal_tasks(request.user).exists()
     for task in page:
         task.taxonomy_json = dumps_state(task_taxonomy_state(task))
         # Общая задача у приглашённого учителя — без inline-форм и чекбоксов.
@@ -926,6 +927,9 @@ def _task_form(request, task):
         # Приглашённому на общей задаче остаётся только локальная копия.
         'base_locked': task is not None and not can_edit_task(request.user, task),
     })
+    # Не-редактору — одно поле «Ответ» и «Решение» (R22-1)
+    from .editor import simple_answers
+    ctx['simple_answers'] = simple_answers(request.user, task)
     return render(request, 'problems/task_form.html', ctx)
 
 
