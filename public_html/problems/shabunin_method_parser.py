@@ -811,6 +811,10 @@ def apply_task_repair(task: TaskDraft, fields: dict) -> None:
         return re.sub(r"\\taskpic\{(\d+)\}", lambda m: (
             "\\includegraphics{" + task.images[int(m.group(1)) - 1] + "}"
             if 0 < int(m.group(1)) <= len(task.images) else m.group(0)), value or "")
+    if re.search(r"\\taskpic\{\d+\}", json.dumps(fields, ensure_ascii=False)):
+        # Номер \taskpic в правке не связан с рисунками задачи: после
+        # пересборки нумерации он указал бы на чужой рисунок или в никуда.
+        raise ValueError(f"{task.external_id}: рисунок в правке — только \\includegraphics{{имя}}")
     for attr in _FIELDS.values():
         setattr(task, attr, expand(getattr(task, attr)))
     for item in task.subitems:

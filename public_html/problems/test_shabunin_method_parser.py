@@ -3,7 +3,7 @@
 from django.test import SimpleTestCase
 
 from .shabunin_method_parser import (
-    is_bare_item, parse_shabunin_method, split_example,
+    apply_task_repair, is_bare_item, parse_shabunin_method, split_example,
     split_trailing_instruction)
 
 
@@ -229,3 +229,22 @@ class HelpersTests(SimpleTestCase):
         self.assertEqual(line, "Построить графики следующих функций:")
         self.assertNotIn("Построить", head)
         self.assertIn("\\includegraphics{a}", head)
+
+
+class RepairTests(SimpleTestCase):
+    def setUp(self):
+        from .textbook_parser import TaskDraft
+        self.task = TaskDraft(
+            external_id="X.1.П7", source_number="X.1.П7", source_path=[], collection_key="",
+            collection_title="", topic_original="", text_latex="Решить.",
+            author_solution_latex="Решение.\\\\\n\\taskpic{1}", images=["old-pic"])
+
+    def test_picture_by_file_name_renumbers(self):
+        apply_task_repair(self.task, {"solution": "Графики.\n\\includegraphics{new-pic}\\\\\nРис. 6"})
+        self.assertEqual(self.task.images, ["new-pic"])
+        self.assertIn("\\taskpic{1}", self.task.author_solution_latex)
+
+    def test_numbered_picture_in_repair_is_rejected(self):
+        # Номер \\taskpic в правке указал бы на чужой рисунок или в никуда.
+        with self.assertRaises(ValueError):
+            apply_task_repair(self.task, {"solution": "Графики.\n\\taskpic{1}"})
