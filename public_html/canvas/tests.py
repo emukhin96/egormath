@@ -116,6 +116,19 @@ class StudentCanvasTests(CanvasBase):
             self.assertTrue(page.background_options['square'])
         self.assertEqual(self.save(version=3, background_options={'square': 'yes'}).status_code, 400)
 
+    def test_axes_on_blank_background(self):
+        # Оси на белом фоне: plane с grid: False; grid: True не хранится, у других фонов — отбрасывается
+        options = {'square': True, 'cell': 50, 'origin': 'center', 'grid': False}
+        self.assertEqual(self.save(background='plane', background_options=options).status_code, 200)
+        self.assertEqual(CanvasPage.objects.get().background_options, options)
+        self.assertEqual(self.save(version=1, background='plane',
+                                   background_options={**options, 'grid': True}).status_code, 200)
+        self.assertNotIn('grid', CanvasPage.objects.get().background_options)
+        self.assertEqual(self.save(version=2, background='blank', background_options=options).status_code, 200)
+        self.assertEqual(CanvasPage.objects.get().background_options, {'square': True})
+        self.assertEqual(self.save(version=3, background='plane',
+                                   background_options={**options, 'grid': 'no'}).status_code, 400)
+
     def test_legacy_page_can_draw_at_top_of_square_view(self):
         element = stroke()
         element['p'] = [[0, -250], [10, -240]]
@@ -237,7 +250,9 @@ class SubmitAndTeacherTests(CanvasBase):
         # Ученик больше не пишет, учитель — пишет и может добавить свою страницу
         self.assertEqual(self.save(elements=[stroke('b2')], version=2).status_code, 403)
         self.client.force_login(self.teacher)
-        self.assertTrue(self.client.get(self.url('pages')).json()['can_add_pages'])
+        data = self.client.get(self.url('pages')).json()
+        self.assertTrue(data['can_add_pages'])
+        self.assertEqual(data['limits']['bytes'], CanvasPage.MAX_BYTES)
         response = self.save(layer='teacher', elements=[stroke('t1', '#dc2626'), stroke('t2')], version=1)
         self.assertEqual(response.status_code, 200)
         page.refresh_from_db()
