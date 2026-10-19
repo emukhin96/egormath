@@ -1405,14 +1405,31 @@ def _inverse_trig_zero(difference):
 def _split_list(value, count):
     """Элементы списка ``expressions``: основной разделитель — «;». Без него
     принимаются «, », «,» и «и», если число частей совпадает с эталоном:
-    ``8, 40`` и ``22,5, 67,5, 90`` — списки, а не одно число."""
-    if ';' in value or count < 2:
+    ``8, 40`` и ``22,5, 67,5, 90`` — списки, а не одно число.
+    Один ± в элементе — обе ветви: ``4\\pm i`` — это ``4+i; 4-i``."""
+    if count < 2:
         return value.split(';')
+    if ';' in value:
+        return _expand_plus_minus(value.split(';'))
     for separator in (r',\s+', r'\s+(?:и|or|and)\s+', ','):
-        parts = re.split(separator, value)
+        parts = _expand_plus_minus(re.split(separator, value))
         if len(parts) == count:
             return parts
-    return [value]
+    return _expand_plus_minus([value])
+
+
+_PM_RE = re.compile(r'±|\\pm(?![A-Za-z])')
+
+
+def _expand_plus_minus(parts):
+    """Элемент с одним ± → две ветви; с несколькими ± — без изменений."""
+    out = []
+    for part in parts:
+        if len(_PM_RE.findall(part)) == 1:
+            out.extend(_PM_RE.sub(sign, part) for sign in ('+', '-'))
+        else:
+            out.append(part)
+    return out
 
 
 def _check(value, reference, multiple=False, mode='expression', *, numeric=False):

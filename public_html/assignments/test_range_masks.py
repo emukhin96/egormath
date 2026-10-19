@@ -111,3 +111,70 @@ class RangeNotationTests(SimpleTestCase):
         for parser in (parse_set, parse_range):
             self.assertIsNone(parser(';'.join('±'+str(i) for i in range(1, 65))))
             self.assertEqual(len(parser(';'.join('±'+str(i) for i in range(1, 33)))), 64)
+
+    def test_bounds_with_nested_brackets_and_quad(self):
+        # Эталоны методического пособия Шабунина (партия 45): корни n-й
+        # степени, скобки и \quad внутри записи промежутка.
+        groups = {
+            r'[-\sqrt{5};-\sqrt[3]{10})\cup(0;\sqrt{5})':
+                [r'[-\sqrt5;-10^{1/3})∪(0;\sqrt{5})',
+                 r'x\in\left[-\sqrt{5};-\sqrt[3]{10}\right)\cup\left(0;\sqrt{5}\right)'],
+            r'\left[-\frac{4}{9};\frac{\sqrt[3]{9}-1}{2}\right]':
+                [r'[-4/9;(9^{1/3}-1)/2]'],
+            r'[-2;0,5(\sqrt{17}+5))': [r'[-2;\frac{\sqrt{17}+5}{2})'],
+            r'[0;(\log_3 2)^2)\cup(1,5;+\infty)':
+                [r'[0;(\log_{3}2)^{2})\cup(1.5;\infty)', r'[0;(\log_3 2)^2) \cup (\frac32;+∞)'],
+            r'(-\infty;-1) \quad \cup \quad (0,5;+\infty)':
+                [r'(-∞;-1)∪(0,5;+∞)', r'(-\infty;-1)\qquad\cup\qquad(0.5;+\infty)',
+                 r'x<-1 или x>0,5'],
+        }
+        for reference, values in groups.items():
+            self.assertIsNotNone(parse_range(reference), reference)
+            for value in values:
+                with self.subTest(value=value):
+                    self.assertEquivalent(value, reference)
+        for value, reference in (
+                (r'[-\sqrt{5};-\sqrt[3]{9})\cup(0;\sqrt{5})',
+                 r'[-\sqrt{5};-\sqrt[3]{10})\cup(0;\sqrt{5})'),
+                (r'(-\sqrt{5};-\sqrt[3]{10})\cup(0;\sqrt{5})',
+                 r'[-\sqrt{5};-\sqrt[3]{10})\cup(0;\sqrt{5})'),
+                (r'[-2;0,5(\sqrt{17}+3))', r'[-2;0,5(\sqrt{17}+5))'),
+                (r'[0;(\log_3 2)^3)\cup(1,5;+\infty)',
+                 r'[0;(\log_3 2)^2)\cup(1,5;+\infty)')):
+            with self.subTest(value=value):
+                parsed = parse_range(value)
+                self.assertIsNotNone(parsed, value)
+                self.assertFalse(ranges_equal(parsed, parse_range(reference)))
+        # Разделитель «;» — только на верхнем уровне и ровно один;
+        # скобки внутри границы должны быть сбалансированы.
+        for value in (r'[0;(1;2))', r'[0;1;2]', r'[0;(2)', r'[0;\sqrt[3{2}]',
+                      r'(0;\quadrilateral)', '(;1)', '(1;)'):
+            with self.subTest(value=value):
+                self.assertIsNone(parse_range(value))
+
+    def test_mask_with_nested_bounds(self):
+        cases = [
+            (r'{{range: [-\sqrt{5};-\sqrt[3]{10})\cup(0;\sqrt{5})}}',
+             r'[-\sqrt{5};-\sqrt[3]{10})\cup(0;\sqrt{5})', 'ok'),
+            (r'{{range: [-\sqrt{5};-\sqrt[3]{10})\cup(0;\sqrt{5})}}',
+             r'[-\sqrt{5};-\sqrt[3]{10}]\cup(0;\sqrt{5})', 'wrong'),
+            (r'{{range: \left[-\frac{4}{9};\frac{\sqrt[3]{9}-1}{2}\right]}}',
+             r'\left[-\frac{4}{9};\frac{\sqrt[3]{9}-1}{2}\right]', 'ok'),
+            (r'{{range: \left[-\frac{4}{9};\frac{\sqrt[3]{9}-1}{2}\right]}}',
+             r'\left[-\frac{4}{9};\frac{\sqrt[3]{9}+1}{2}\right]', 'wrong'),
+            (r'{{range: [-2;0,5(\sqrt{17}+5))}}', r'[-2;\frac{\sqrt{17}+5}{2})', 'ok'),
+            (r'{{range: [-2;0,5(\sqrt{17}+5))}}', r'[-2;\frac{\sqrt{17}-5}{2})', 'wrong'),
+            (r'{{range: [0;(\log_3 2)^2)\cup(1,5;+\infty)}}',
+             r'[0;(\log_3 2)^2)\cup(1,5;+\infty)', 'ok'),
+            (r'{{range: [0;(\log_3 2)^2)\cup(1,5;+\infty)}}',
+             r'[0;\log_3 2)\cup(1,5;+\infty)', 'wrong'),
+            (r'{{range: (-\infty;-1) \quad \cup \quad (0,5;+\infty)}}',
+             r'(-\infty;-1)\cup(0,5;+\infty)', 'ok'),
+            (r'{{range: (-\infty;-1) \quad \cup \quad (0,5;+\infty)}}',
+             r'(-\infty;-1]\cup(0,5;+\infty)', 'wrong'),
+        ]
+        for mask, answer, expected in cases:
+            with self.subTest(mask=mask, answer=answer):
+                spec = parse_mask(mask)
+                self.assertTrue(spec.is_valid, spec.errors)
+                self.assertEqual(check_slot(spec.slots[0], answer), expected)
