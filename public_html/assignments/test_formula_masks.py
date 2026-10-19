@@ -223,13 +223,15 @@ class FormulaMaskTests(SimpleTestCase):
         # После паузы временный сбой не подменяет правильный вердикт.
         formulas._failed_inputs.clear()
         self.assertEqual(formulas.check('17+a', reference), 'ok')
-        started = time.monotonic()
-        try:
-            slow = formulas.check('1/(a^97+a^13+3)', reference)
-        except formulas.FormulaUnavailable:
-            slow = 'unavailable'
-        self.assertIn(slow, ('unknown', 'wrong', 'unavailable'))
-        self.assertLess(time.monotonic() - started, formulas.WORKER_TIMEOUT + 1)
+        # Граница — продовый лимит, а не запас тестового раннера.
+        with patch.object(formulas, 'WORKER_TIMEOUT', 3):
+            started = time.monotonic()
+            try:
+                slow = formulas.check('1/(a^97+a^13+3)', reference)
+            except formulas.FormulaUnavailable:
+                slow = 'unavailable'
+            self.assertIn(slow, ('unknown', 'wrong', 'unavailable'))
+            self.assertLess(time.monotonic() - started, formulas.WORKER_TIMEOUT + 1)
 
     def test_worker_failure_is_not_a_wrong_mathematical_answer(self):
         reference, _ = formulas.parse_reference('a+23')
@@ -696,16 +698,52 @@ class FormulaForkTests(SimpleTestCase):
         child.close.assert_called_once()
         receiver.close.assert_called_once()
 
-    def test_child_keeps_original_linux_resource_limits(self):
+    def child_limits(self, cpu_limit=None):
         from assignments.checks import formula_worker
         resource = Mock()
-        with patch.object(formula_worker.sys, 'platform', 'linux'), \
+        with patch.dict(formula_worker.os.environ), \
+                patch.object(formula_worker.sys, 'platform', 'linux'), \
                 patch.dict('sys.modules', {'resource': resource}), \
                 patch.object(formula_worker.sys, 'stdin', StringIO('{"payload":"x","multiple":false}')), \
                 patch.object(formulas, '_parse_reference', return_value=(None, 'x')), \
                 redirect_stdout(StringIO()):
+            # Тестовый раннер поднимает лимит процессора через окружение;
+            # без переменной окружение такое же, как у процесса на проде.
+            formula_worker.os.environ.pop(formula_worker.TEST_CPU_LIMIT_ENV, None)
+            if cpu_limit is not None:
+                formula_worker.os.environ[formula_worker.TEST_CPU_LIMIT_ENV] = cpu_limit
             formula_worker.main()
-        self.assertEqual(resource.setrlimit.call_args_list[0].args,
-                         (resource.RLIMIT_AS, (512 * 1024**2, 512 * 1024**2)))
-        self.assertEqual(resource.setrlimit.call_args_list[1].args,
-                         (resource.RLIMIT_CPU, (2, 3)))
+        return resource, [call.args for call in resource.setrlimit.call_args_list]
+
+    def test_child_keeps_original_linux_resource_limits(self):
+        resource, limits = self.child_limits()
+        self.assertEqual(limits, [(resource.RLIMIT_AS, (512 * 1024**2, 512 * 1024**2)),
+                                  (resource.RLIMIT_CPU, (2, 3))])
+
+    def test_test_environment_only_raises_cpu_limit(self):
+        resource, limits = self.child_limits('20')
+        self.assertEqual(limits[1], (resource.RLIMIT_CPU, (20, 21)))
+        # Мусор и уменьшение не трогают продовый лимит.
+        for value in ('1', '2', '-5', '2.5', 'много', ''):
+            with self.subTest(value=value):
+                resource, limits = self.child_limits(value)
+                self.assertEqual(limits[1], (resource.RLIMIT_CPU, (2, 3)))
+
+    def test_runner_restores_production_limits(self):
+        from django.test.runner import DiscoverRunner
+        from assignments.checks import formula_worker
+        from core.runner import TEST_CPU_LIMIT, TEST_WORKER_TIMEOUT, TestRunner
+        name = formula_worker.TEST_CPU_LIMIT_ENV
+        with patch.object(DiscoverRunner, 'setup_test_environment'), \
+                patch.object(DiscoverRunner, 'teardown_test_environment'), \
+                patch.object(formulas, 'WORKER_TIMEOUT', 3), \
+                patch.dict(formula_worker.os.environ):
+            formula_worker.os.environ.pop(name, None)
+            runner = TestRunner()
+            runner.setup_test_environment()
+            self.assertEqual(formulas.WORKER_TIMEOUT, TEST_WORKER_TIMEOUT)
+            self.assertEqual(formula_worker._cpu_limit(), (TEST_CPU_LIMIT, TEST_CPU_LIMIT + 1))
+            runner.teardown_test_environment()
+            self.assertEqual(formulas.WORKER_TIMEOUT, 3)
+            self.assertNotIn(name, formula_worker.os.environ)
+            self.assertEqual(formula_worker._cpu_limit(), (2, 3))

@@ -1,6 +1,21 @@
 """Ограниченный по времени процесс символьной проверки; протокол JSON."""
 import json
+import os
 import sys
+
+# Процессорное время ребёнка, секунды: мягкий лимит (SIGXCPU) и жёсткий.
+CPU_LIMIT = (2, 3)
+# Тестовый раннер (core/runner.py) поднимает лимит через окружение: на
+# загруженном CI-раннере та же эквивалентность тратит больше процессора.
+# На проде переменной нет, и действует CPU_LIMIT.
+TEST_CPU_LIMIT_ENV = 'FORMULA_TEST_CPU_LIMIT'
+
+
+def _cpu_limit():
+    soft = os.environ.get(TEST_CPU_LIMIT_ENV, '')
+    if soft.isdigit() and int(soft) > CPU_LIMIT[0]:
+        return int(soft), int(soft) + 1
+    return CPU_LIMIT
 
 
 def main():
@@ -9,7 +24,7 @@ def main():
     if sys.platform == 'linux':
         import resource
         resource.setrlimit(resource.RLIMIT_AS, (512 * 1024**2, 512 * 1024**2))
-        resource.setrlimit(resource.RLIMIT_CPU, (2, 3))
+        resource.setrlimit(resource.RLIMIT_CPU, _cpu_limit())
     from .formulas import _parse_reference, _check
     from ..check_answer import MAX_EXPR_LEN
     from .sets import MAX_COLLECTION_LEN
