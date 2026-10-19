@@ -543,25 +543,27 @@ def task_edit(request, pk):
 
 
 MASK_PREFIX_RE = re.compile(r'preview(?:_[0-9]+)?')
-# Маска приходит в запросе целиком (в базу ничего не пишется): табличные маски
-# длинные, но предел нужен, чтобы разбор не крутили на мегабайтах текста
-MASK_MAX_LENGTH = 10_000
 
 
 def _mask_request(request, *, validate_references):
     """Маска и префикс имён полей из POST превью/проверки: ``(prefix, spec,
-    error)``, где error — готовый JSON-ответ 400. ``validate_references`` —
+    error)``, где error — готовый JSON-ответ 400 (причина и в ``errors`` —
+    их показывает панель превью формы задачи). Маска приходит в запросе
+    целиком, предел длины тот же, что при сохранении (MASK_MAX_LENGTH), так
+    что сохранённая маска сюда проходит всегда. ``validate_references`` —
     сверять ли эталоны формул через вычислитель: превью в редакторе — да
     (ошибки эталона видны сразу), проверка ответа — нет, как у ученика
     (``mask_spec_for``): занятый вычислитель там — временная недоступность
     самой проверки, а не ошибка маски."""
-    from assignments.checks import parse_mask
+    from assignments.checks import MASK_MAX_LENGTH, parse_mask
     prefix = request.POST.get('prefix', 'preview')
     if not MASK_PREFIX_RE.fullmatch(prefix):
         return prefix, None, JsonResponse({'ok': False, 'message': 'Некорректный префикс'}, status=400)
     mask = request.POST.get('mask', '')
     if len(mask) > MASK_MAX_LENGTH:
-        return prefix, None, JsonResponse({'ok': False, 'message': 'Маска слишком длинная'}, status=400)
+        message = f'Маска длиннее {MASK_MAX_LENGTH} символов'
+        return prefix, None, JsonResponse({'ok': False, 'message': message, 'errors': [message]},
+                                          status=400)
     return prefix, parse_mask(mask, validate_references=validate_references), None
 
 

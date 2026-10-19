@@ -93,7 +93,9 @@
       var seq = ++previewSeq;
       post(withValues ? checkUrl : previewUrl, data).then(function (res) {
         if (seq !== previewSeq || active !== textarea) return;
-        showErrors(res.errors);
+        /* Проверка (task_mask_check) разбирает маску без сверки эталонов и ошибок
+           не возвращает, кроме 400: список ошибок превью она не должна стирать */
+        if (!withValues || res.errors) showErrors(res.errors);
         if (!withValues) {
           container.innerHTML = res.html || '';
           if (typeof renderMathContent === 'function') {

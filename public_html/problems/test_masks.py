@@ -33,6 +33,16 @@ class MaskFormTests(TestCase):
         self.assertEqual(task.answer_mask, 'Ответ: {{number: 10}} см')
         self.assertTrue(task.has_mask)
 
+    def test_oversized_mask_rejected_on_save(self):
+        # Ревью #248: предел длины один и тот же при сохранении, в превью и проверке —
+        # сохранённую маску всегда можно показать и проверить «как ученик»
+        from assignments.checks import MASK_MAX_LENGTH
+        response = self.client.post(reverse('task_create'), task_form_data(
+            answer_mask='{{number: 10}} ' + 'x' * MASK_MAX_LENGTH))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'Маска длиннее {MASK_MAX_LENGTH} символов')
+        self.assertFalse(Task.objects.exists())
+
     def test_invalid_mask_rejected_with_message(self):
         form = TaskForm(data=task_form_data(answer_mask='{{number: abc}}'))
         self.assertFalse(form.is_valid())
@@ -177,10 +187,16 @@ class MaskEndpointTests(TestCase):
         self.assertEqual(data, {'ok': True, 'message': 'Сначала введите ответ', 'checks': {}})
 
     def test_check_rejects_unparsable_or_oversized_mask(self):
-        for mask in ('{{number: abc}}', '{{foo: 1}}', 'без полей', '', 'x' * 10_001):
+        from assignments.checks import MASK_MAX_LENGTH
+        for mask in ('{{number: abc}}', '{{foo: 1}}', 'без полей', '', 'x' * (MASK_MAX_LENGTH + 1)):
             response = self.check(mask, preview_s1='1')
             self.assertEqual(response.status_code, 400, mask[:20])
             self.assertFalse(response.json()['ok'])
+            # Причина и в errors — её показывает панель превью формы задачи (mask_editor.js)
+            self.assertTrue(response.json()['errors'], mask[:20])
+        for url in (reverse('task_mask_check'), reverse('task_mask_preview')):
+            data = self.client.post(url, {'mask': 'x' * (MASK_MAX_LENGTH + 1)}).json()
+            self.assertEqual(data['errors'], [f'Маска длиннее {MASK_MAX_LENGTH} символов'])
         self.assertEqual(self.check('{{foo: 1}}').json()['errors'],
                          self.client.post(reverse('task_mask_preview'),
                                           {'mask': '{{foo: 1}}'}).json()['errors'])
