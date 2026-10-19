@@ -704,7 +704,10 @@ def wrap_plain_answer(value: str) -> str:
         while body and body[-1] in ";.":
             tail = body[-1] + tail
             body = body[:-1].rstrip()
-        if body and re.search(r"\d", body) and _PLAIN_MATH_RE.match(body) \
+        if re.fullmatch(r"-?\d+(?:,\d+)?", body):
+            # Одиночное число — общий вид «$4$» (wrap_answer_numbers).
+            out.append(part)
+        elif body and re.search(r"\d", body) and _PLAIN_MATH_RE.match(body) \
                 and not re.search(r"[a-zA-Z]{4,}", body):
             for char, command in _UNICODE_MATH.items():
                 body = body.replace(char, command)
