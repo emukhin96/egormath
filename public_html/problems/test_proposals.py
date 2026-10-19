@@ -101,6 +101,23 @@ class CreateTests(ProposalBase):
         page = self.client.get(reverse('task_detail', args=[self.shared.pk]))
         self.assertContains(page, 'Напишите, что исправить')
 
+    def test_mask_prefill_alone_is_not_a_message(self):
+        """Со ссылки «Предложить маску» поле заполнено заготовкой: отправка без
+        самой маски и без копии — пустое предложение, не создаётся."""
+        from .proposals import MASK_PREFILL
+        for text in (MASK_PREFILL, MASK_PREFILL.strip(), '  ' + MASK_PREFILL + '\n'):
+            self.propose(self.shared, {'message': text})
+            self.assertFalse(TaskProposal.objects.exists(), repr(text))
+        page = self.client.get(reverse('task_detail', args=[self.shared.pk]))
+        self.assertContains(page, 'Напишите, что исправить')
+        # С приложенной копией заготовка допустима, с маской после неё — тоже
+        copy = self.make_copy()
+        self.propose(self.shared, {'message': MASK_PREFILL, 'variant': copy.pk})
+        self.assertEqual(TaskProposal.objects.get().message, '')
+        TaskProposal.objects.all().delete()
+        self.propose(self.shared, {'message': MASK_PREFILL + '{{number: 5}}'})
+        self.assertEqual(TaskProposal.objects.get().message, MASK_PREFILL + '{{number: 5}}')
+
     def test_kind_mismatch_is_refused_at_model_level(self):
         with self.assertRaises(ProposalError):
             create_proposal(self.guest, self.own, kind=TaskProposal.KIND_FIX, message='x')
