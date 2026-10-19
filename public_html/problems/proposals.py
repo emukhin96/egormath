@@ -221,11 +221,16 @@ def compare(proposal):
         for row in subitem_rows)
     # Удаление подпункта с ответами учеников предложением не применяется
     blocked = [row for row in subitem_rows if row['proposed'] is None and row['has_answers']]
+    # Для «принять в базу» свежая версия — сама задача: отличия от снимка
+    # (автор правил задачу после отправки) по умолчанию не применяются,
+    # иначе принятие молча откатило бы его правки на старый снимок
+    preselect = proposal.kind != TaskProposal.KIND_NEW
     sections = []
     for key, label in SECTIONS:
         if key == 'subitems':
-            sections.append({'key': key, 'label': label,
-                             'changed': structure_changed and not blocked, 'fields': []})
+            changed = structure_changed and not blocked
+            sections.append({'key': key, 'label': label, 'changed': changed,
+                             'checked': changed and preselect, 'fields': []})
             continue
         names = SECTION_FIELDS[key]
         fields = [_field_row(name, current.get(name, ''), proposed.get(name, ''))
@@ -235,10 +240,12 @@ def compare(proposal):
             changed = changed or any(
                 f['changed'] for row in subitem_rows for f in row['fields']
                 if f['name'] in names)
-        sections.append({'key': key, 'label': label, 'changed': changed, 'fields': fields})
+        sections.append({'key': key, 'label': label, 'changed': changed,
+                         'checked': changed and preselect, 'fields': fields})
     return {'sections': sections, 'subitems': subitem_rows,
             'structure_changed': structure_changed, 'subitems_blocked': bool(blocked),
-            'any_changed': any(s['changed'] for s in sections) or structure_changed}
+            'any_changed': any(s['changed'] for s in sections) or structure_changed,
+            'edited_after_sent': proposal.task.updated_at > proposal.created_at}
 
 
 def _apply_block(block, owner, values):

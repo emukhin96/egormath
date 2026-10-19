@@ -566,6 +566,29 @@ class ApplyTests(ProposalBase):
         from accounts.permissions import can_edit_task
         self.assertFalse(can_edit_task(self.guest, self.own))
 
+    def test_new_kind_keeps_author_edits_made_after_sending(self):
+        """Автор исправил личную задачу после отправки: на странице ничего не
+        отмечено по умолчанию и есть предупреждение, принятие без галочек
+        публикует текущую версию, а не старый снимок."""
+        proposal = create_proposal(self.guest, self.own, kind='new', message='В базу')
+        self.own.text_latex = 'Исправил опечатку после отправки'
+        self.own.save()
+        self.client.force_login(self.editor)
+        page = self.client.get(reverse('proposal_detail', args=[proposal.pk]))
+        self.assertContains(page, 'Автор менял задачу после отправки')
+        self.assertContains(page, 'Условие · отличается от снимка')
+        self.assertNotContains(page, 'name="sections" value="condition" checked')
+        self.assertNotContains(page, ' checked>')
+        self.apply(proposal, [], note='Принято')
+        self.own.refresh_from_db()
+        self.assertEqual((self.own.text_latex, self.own.is_shared),
+                         ('Исправил опечатку после отправки', True))
+        # Для исправления общей задачи отличия по-прежнему отмечены сразу
+        fix, _ = self.fix_with_copy()
+        page = self.client.get(reverse('proposal_detail', args=[fix.pk]))
+        self.assertContains(page, 'value="condition" checked')
+        self.assertNotContains(page, 'Автор менял задачу после отправки')
+
     def test_text_only_proposal_is_marked_accepted(self):
         proposal = create_proposal(self.guest, self.shared, kind='fix', message='Опечатка')
         with self.assertRaises(ProposalError):

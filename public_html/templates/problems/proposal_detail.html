@@ -31,6 +31,7 @@
 {% if diff %}
 {# Слева задача в базе сейчас, справа снимок на момент отправки; отличающиеся строки подсвечены #}
 <div class="card proposal-compare">
+  {% if proposal.kind == 'new' and diff.edited_after_sent %}<p class="helptext">Автор менял задачу после отправки: слева — её текущая версия, она и уйдёт в общую базу. Снимок справа — для справки; отмечайте его разделы, только если нужно вернуть старую версию.</p>{% endif %}
   <div class="proposal-compare-head"><span></span><h2>{% if proposal.kind == 'new' %}Сейчас в задаче{% else %}В базе{% endif %}</h2><h2>{% if proposal.kind == 'new' %}На момент отправки{% else %}Предложено{% endif %}</h2></div>
   {% for section in diff.sections %}{% for f in section.fields %}
   <div class="proposal-row{% if f.changed %} is-changed{% endif %}">
@@ -67,9 +68,9 @@
     {# Версия задачи на момент показа: если автор изменит её, пока страница открыта, применение будет отклонено #}
     <input type="hidden" name="version" value="{{ task_version }}">
     {% if diff %}
-    <p class="helptext">Отмеченные разделы копируются в задачу теми же формами, что и редактор карточки; подпункты — по порядку. По умолчанию отмечено то, что отличается.</p>
+    <p class="helptext">Отмеченные разделы копируются в задачу теми же формами, что и редактор карточки; подпункты сопоставляются по тексту. {% if proposal.kind == 'new' %}По умолчанию ничего не отмечено: в базу уходит текущая версия задачи.{% else %}По умолчанию отмечено то, что отличается.{% endif %}</p>
     <div class="choice-items">
-      {% for section in diff.sections %}<label class="choice-item"><input type="checkbox" name="sections" value="{{ section.key }}"{% if section.changed %} checked{% endif %}{% if section.key == 'subitems' and diff.subitems_blocked %} disabled{% endif %}><span>{{ section.label }}{% if section.changed %} · отличается{% endif %}</span></label>{% endfor %}
+      {% for section in diff.sections %}<label class="choice-item"><input type="checkbox" name="sections" value="{{ section.key }}"{% if section.checked %} checked{% endif %}{% if section.key == 'subitems' and diff.subitems_blocked %} disabled{% endif %}><span>{{ section.label }}{% if section.changed %} · отличается{% if proposal.kind == 'new' %} от снимка{% endif %}{% endif %}</span></label>{% endfor %}
     </div>
     {% if diff.subitems_blocked %}<p class="helptext">В предложении нет подпункта, на который уже есть ответы учеников: применить «Подпункты» нельзя (ответы были бы стёрты). Остальные разделы применяются только при совпадающем составе подпунктов — либо уберите подпункт вручную на карточке задачи, либо отклоните предложение.</p>{% endif %}
     {% endif %}
