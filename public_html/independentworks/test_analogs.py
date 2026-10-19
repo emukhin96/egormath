@@ -189,3 +189,21 @@ class AnalogDiscoveryTests(TestCase):
         groups = similar_groups([s1.pk, k1.pk, s2.pk, k3.pk])
         self.assertEqual(groups[s1.pk], groups[s2.pk])
         self.assertNotIn(k1.pk, groups)
+
+    def test_all_work_variants_by_number(self):
+        # Шабунин, методическое пособие: «КРII.1.В5/3» — один номер во всех
+        # вариантах работы, включая варианты со звёздочкой.
+        k = [self.ref(f'КРII.1.В{v}/3') for v in range(1, 7)]
+        d1, d2 = self.ref('ДКРIV.1.В1/10'), self.ref('ДКРIV.1.В2/10')
+        other = self.ref('КРII.1.В1/4')
+        lonely = self.ref('СРIX.2.В1/1')
+        report = sync_families(report=True)
+        families = {frozenset(f.tasks.all()) for f in Family.objects.all()}
+        self.assertEqual(families, {frozenset(k), frozenset({d1, d2})})
+        self.assertEqual(len(report['incomplete']), 2)
+        self.assertFalse(other.analog_families.exists())
+        self.assertFalse(lonely.analog_families.exists())
+        from .analogs import similar_groups
+        groups = similar_groups([k[0].pk, d1.pk, k[4].pk, other.pk])
+        self.assertEqual(groups[k[0].pk], groups[k[4].pk])
+        self.assertNotIn(d1.pk, groups)

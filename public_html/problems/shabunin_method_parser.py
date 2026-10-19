@@ -40,8 +40,9 @@ from .potoskuev_parser import (
     monotonic_numbers, renumber_appendix_lists, tabular_to_array)
 from .textbook_parser import (
     Marker, TaskDraft, blocks, clean, cyrillic_item_label,
-    finalize_draft_images, task_from_block)
-from .vysotsky_parser import lift_stem_pictures, math_text_braces, renumber_lists
+    finalize_draft_images, split_subitems, strip_imported_answer_punct,
+    task_from_block)
+from .vysotsky_parser import lift_stem_pictures, math_text_braces
 
 
 DATA_DIR = Path(__file__).with_name("data")
@@ -56,7 +57,11 @@ EXAMPLE_RE = re.compile(
     r"(?:(?<=\n)|(?<=\\section\*\{)|(?<=[.!?:]\s)|(?<=\\square\\\)\s)|(?<=\\square\\\)))"
     r"[ \t]*(?:\\item\[\][ \t]*)?Пример[ \t]+(?P<number>\d{1,2})[ \t]*\.")
 SOLUTION_START_RE = re.compile(r"△|\\\(\s*\\(?:triangle|Delta)\s*\\\)|\\(?:triangle|Delta)\b\s*")
-SOLUTION_END_RE = re.compile(r"\\\(\s*\\square\s*\\\)|\\square\b|□")
+# Конец решения — «□», в главах V и IX — «▲»: OCR читает его буквой «A»/«А»
+# в конце строки после точки.
+SOLUTION_END_RE = re.compile(
+    r"\\\(\s*\\square\s*\\\)|\\square\b|□|▲"
+    r"|(?<=[.)\]])[ \t]*[AА](?=[ \t]*(?:\\\\)?[ \t]*(?:\n|$))")
 
 ROMAN = r"[IVXІХ]{1,4}"
 WORK_RE = re.compile(
@@ -155,6 +160,8 @@ def topic_code(code, text: str) -> str:
 
 def prepare_text(text: str) -> str:
     text = text.replace("\r\n", "\n")
+    # «Otbet.», «Oтвет» — латинские двойники в слове «Ответ».
+    text = re.sub(r"\b[OО][тt][вb][еe][тt]\b", "Ответ", text)
     text = re.sub(r"\\\\\[0pt\]", r"\\\\", text)
     text = re.sub(r"\\hspace\{0pt\}\s*", "", text)
     text = _heal_ocr_words(text)
@@ -248,9 +255,22 @@ def split_example(body: str) -> tuple[str, str, str, list[str]]:
     return text.strip(), solution, answer, warnings
 
 
+_FIGURE_SLOT = "\u27e6Рис.{}\u27e7"
+_FIGURE_SLOT_RE = re.compile("\u27e6Рис\\.(\\d+)\u27e7")
+
+
 def parse_examples(zone: str, chapter: dict, diagnostics: dict) -> list[TaskDraft]:
+    """Примеры параграфов главы. Рисунки «Рис. N» OCR ставит где придётся
+    (часто у соседнего примера): рисунок встаёт после строки условия или
+    разбора с первой ссылкой «рис. N»; без ссылок — на своё место."""
     tasks = []
-    zone = flatten_figures(zone)
+    figures: dict[int, list[str]] = {}
+
+    def take(match: re.Match) -> str:
+        number = int(match.group("number"))
+        figures.setdefault(number, []).extend(_GRAPHIC_RE.findall(match.group("body")))
+        return _FIGURE_SLOT.format(number)
+    zone = flatten_figures(_CAPTIONED_FIGURE_RE.sub(take, zone))
     for number, title, start, stop in paragraph_zones(zone):
         key = f"{chapter['roman']}.{number}"
         # Пример в заголовке: «\section*{Пример 5. Решить …}».
@@ -282,6 +302,27 @@ def parse_examples(zone: str, chapter: dict, diagnostics: dict) -> list[TaskDraf
                 task.confidence = max(0.0, task.confidence - 0.3)
             task.tags.append("пример с решением")
             tasks.append(task)
+    used: set[int] = set()
+    for task in tasks:
+        task.text_latex = insert_solution_figures(task.text_latex, figures, used)
+        for item in task.subitems:
+            item.text_latex = insert_solution_figures(item.text_latex, figures, used)
+    for task in tasks:
+        task.author_solution_latex = insert_solution_figures(
+            task.author_solution_latex, figures, used)
+
+    def slot(match: re.Match) -> str:
+        number = int(match.group(1))
+        if number in used or number not in figures:
+            return ""
+        used.add(number)
+        diagnostics["figures_without_reference"].append(f"{chapter['roman']}: рис. {number}")
+        return "\n" + "\\\\\n".join(figures[number] + [f"Рис. {number}"]) + "\n"
+    for task in tasks:
+        task.text_latex = _FIGURE_SLOT_RE.sub(slot, task.text_latex)
+        task.author_solution_latex = _FIGURE_SLOT_RE.sub(slot, task.author_solution_latex)
+        for item in task.subitems:
+            item.text_latex = _FIGURE_SLOT_RE.sub(slot, item.text_latex)
     return tasks
 
 
@@ -424,6 +465,73 @@ def insert_solution_figures(value: str, figures: dict[int, list[str]], used: set
     return "\n".join(lines)
 
 
+_LIST_TOKEN_RE = re.compile(
+    r"\\begin\{(?P<begin>enumerate|itemize)\}|\\end\{(?:enumerate|itemize)\}"
+    r"|\\setcounter\{enum(?P<depth>i+)\}\{(?P<value>\d+)\}"
+    r"|\\item(?:\[(?P<label>[^\[\]]*)\])?[ \t]*")
+# Явный номер в строке условия: только в начале строки («\\⏎2. …»),
+# иначе «кратных 7.» сдвинул бы счётчик.
+_LINE_NUMBER_RE = re.compile(r"(?:^|\n|\\\\)\s*(?P<number>\d{1,2})\s?\.(?=\s)")
+
+
+def renumber_items(text: str, *, answers: bool = False) -> str:
+    """Списки работы → строки «N. …».
+
+    Mathpix ведёт счётчик ``\\item`` сам по себе: номер пункта без метки —
+    следующий за наибольшим из счётчика и явных номеров, встреченных после
+    предыдущего пункта. В ответах метка «Вариант N.» посреди списка
+    сбрасывает счётчик («\\item 17/4.\\\\ Вариант 2. \\item …»). Во
+    вложенных списках — свой счётчик «1)», «2)».
+    """
+    explicit = _ANSWER_NUMBER_RE if answers else _LINE_NUMBER_RE
+    out, pos = [], 0
+    stack: list[list] = []
+    counter = 0
+
+    def seen(chunk: str) -> None:
+        nonlocal counter
+        resets = list(VARIANT_RE.finditer(chunk)) if answers else []
+        if resets:
+            counter = 0
+            chunk = chunk[resets[-1].end():]
+        for match in explicit.finditer(chunk):
+            number = int(match.group("number"))
+            if counter < number <= counter + 2:
+                counter = number
+
+    for match in _LIST_TOKEN_RE.finditer(text):
+        chunk = text[pos:match.start()]
+        out.append(chunk)
+        if len(stack) <= 1:
+            seen(chunk)
+        pos = match.end()
+        if match.group("begin"):
+            stack.append([match.group("begin"), 0])
+            out.append("\n")
+        elif match.group(0).startswith("\\end"):
+            if stack:
+                stack.pop()
+            out.append("\n")
+        elif match.group("depth"):
+            if len(match.group("depth")) == 1:
+                counter = int(match.group("value"))
+            elif stack:
+                stack[-1][1] = int(match.group("value"))
+        elif match.group("label") is not None:
+            label = match.group("label").strip()
+            out.append("\n" + label + " " if label else "\n")
+            if len(stack) <= 1:
+                seen(label + " ")
+        elif len(stack) >= 2:
+            stack[-1][1] += 1
+            out.append(f"\n{stack[-1][1]}) ")
+        else:
+            counter += 1
+            out.append(f"\n{counter}. ")
+    out.append(text[pos:])
+    return "".join(out)
+
+
 def parse_work(zone: str, work: dict, chapter: dict, diagnostics: dict) -> list[TaskDraft]:
     body = flatten_figures(zone[work["body"]:work["stop"]])
     # Остаток заголовка работы: «… (2 урока)}», « \\ по теме …}».
@@ -448,7 +556,7 @@ def parse_work(zone: str, work: dict, chapter: dict, diagnostics: dict) -> list[
     for number, star, start, stop in variants:
         key = _variant_key(work, number)
         raw_chunk = re.sub(r"\\item\[(\d{1,2})\]", r"\\item[\1.]", body[start:stop])
-        chunk = _clean_body(prepare_text(renumber_lists(raw_chunk)))
+        chunk = _clean_body(prepare_text(renumber_items(raw_chunk)))
         markers = item_markers(chunk, key)
         if not markers:
             diagnostics["variants_without_tasks"].append(key)
@@ -496,15 +604,14 @@ _ANSWER_NUMBER_RE = re.compile(
 
 def answer_blocks(text: str) -> dict[int, str]:
     """«Вариант N. 1. … 2. …» → {N: «1. … 2. …»}; списки — с номерами."""
-    text = prepare_text(text)
+    text = prepare_text(renumber_items(text, answers=True))
     found = [(int(m.group("number")), m.start(), m.end()) for m in VARIANT_RE.finditer(text)]
     result = {}
     for i, (number, start, end) in enumerate(found):
         stop = found[i + 1][1] if i + 1 < len(found) else len(text)
-        chunk = renumber_lists(text[end:stop])
-        result.setdefault(number, chunk)
+        result.setdefault(number, text[end:stop])
     if not found and text.strip():
-        result[0] = renumber_lists(text)
+        result[0] = text
     return result
 
 
@@ -556,7 +663,7 @@ def attach_review(tasks: list[TaskDraft], work: dict, text: str, report: dict) -
     """«Разбор варианта № 1» — решения задач первого варианта."""
     group = {int(t.external_id.rsplit("/", 1)[1]): t for t in tasks
              if t.external_id.startswith(_variant_key(work, 1) + "/")}
-    text = prepare_text(renumber_lists(flatten_figures(text)))
+    text = prepare_text(renumber_items(flatten_figures(text)))
     text = _clean_body(text)
     markers = item_markers(text, _variant_key(work, 1), max(group) if group else None)
     found = []
@@ -574,6 +681,39 @@ def attach_review(tasks: list[TaskDraft], work: dict, text: str, report: dict) -
 # Поля
 # --------------------------------------------------------------------------
 
+_PLAIN_MATH_RE = re.compile(r"^[\d\s\-−+±∓;,.:/()\[\]=<>|^_{}\\a-zA-Zπ∞]+$")
+_UNICODE_MATH = {"±": "\\pm ", "∓": "\\mp ", "−": "-", "π": "\\pi ", "∞": "\\infty "}
+_ANSWER_LABEL_SPLIT_RE = re.compile(r"((?:^|(?<=[;.]\s)|(?<=\s))[а-е]\)\s*)")
+
+
+def wrap_plain_answer(value: str) -> str:
+    """Ответ без формул «(±1; -3)», «а) [-4;-2]; б) 17/4» — каждую
+    математическую часть целиком в формулу: ``wrap_answer_numbers``
+    обернул бы только отдельные числа («(±$1$; -3)»)."""
+    if not value or MATH_SPAN_RE.search(value) or "\\taskpic" in value:
+        return value
+    value = re.sub(r"(?:^|(?<=\s))a\)", "а)", value)
+    parts = _ANSWER_LABEL_SPLIT_RE.split(value)
+    out = []
+    for part in parts:
+        if not part or _ANSWER_LABEL_SPLIT_RE.fullmatch(part):
+            out.append(part)
+            continue
+        body = part.rstrip()
+        tail = ""
+        while body and body[-1] in ";.":
+            tail = body[-1] + tail
+            body = body[:-1].rstrip()
+        if body and re.search(r"\d", body) and _PLAIN_MATH_RE.match(body) \
+                and not re.search(r"[a-zA-Z]{4,}", body):
+            for char, command in _UNICODE_MATH.items():
+                body = body.replace(char, command)
+            out.append("\\(" + body.strip() + "\\)" + tail + part[len(part.rstrip()):])
+        else:
+            out.append(part)
+    return "".join(out)
+
+
 def _finish_fields(task: TaskDraft) -> None:
     def text_field(value: str) -> str:
         value = re.sub(r"(?<!\\)%", r"\\%", value or "")
@@ -581,7 +721,8 @@ def _finish_fields(task: TaskDraft) -> None:
         return normalize_degrees(normalize_units(_heal_ocr_math(value)))
 
     def answer_field(value: str) -> str:
-        value = wrap_answer_numbers(text_field(value))
+        value = strip_imported_answer_punct(re.sub(r"(?:\s|\\\\)+$", "", value or ""))
+        value = wrap_answer_numbers(wrap_plain_answer(text_field(value)))
         value = re.sub(r"(?<!\\right)\.\s*\$$", "$", value)
         return re.sub(r"(?<=\S)[ \t]+\$(?=[\s;,.)]|$)", "$", value)
 
@@ -599,17 +740,45 @@ def _finish_fields(task: TaskDraft) -> None:
         task.confidence = max(0.0, task.confidence - 0.3)
 
 
-def _apply_override(task: TaskDraft, fields: dict) -> None:
+_FIELDS = {"text": "text_latex", "answer": "author_answer_latex",
+           "solution": "author_solution_latex"}
+
+
+def apply_task_repair(task: TaskDraft, fields: dict) -> None:
+    """Сверенная со сканом правка готовых полей задачи.
+
+    ``text`` / ``answer`` / ``solution`` — поле целиком (у ``text`` пункты
+    «а) … б) …» делятся заново), ``stars``, ``patches`` — точечные замены
+    ``{field, before, after}``: фрагмент обязан встречаться ровно один раз;
+    ``field`` — ``text``/``answer``/``solution`` или ``subitem:б``.
+    """
     if "text" in fields:
-        rebuilt = task_from_block(Marker(0, 0, task.external_id), fields["text"], task.source_path)
-        task.text_latex, task.subitems, task.images = rebuilt.text_latex, rebuilt.subitems, rebuilt.images
-    if "answer" in fields:
-        task.author_answer_latex = fields["answer"]
-    if "solution" in fields:
-        task.author_solution_latex = fields["solution"]
+        text, subitems = split_subitems(fields["text"])
+        task.text_latex, task.subitems = text, subitems
+    for key in ("answer", "solution"):
+        if key in fields:
+            setattr(task, _FIELDS[key], fields[key])
     if "stars" in fields:
         task.stars = fields["stars"]
-    task.warnings = [w for w in task.warnings if w not in fields.get("clear_warnings", [])]
+    for patch in fields.get("patches", []):
+        name = patch["field"]
+        if name.startswith("subitem:"):
+            label = name.split(":", 1)[1]
+            items = [i for i in task.subitems if i.label.rstrip(")") == label]
+            if len(items) != 1:
+                raise ValueError(f"{task.external_id}: нет пункта {label}")
+            target, attr = items[0], "text_latex"
+        else:
+            target, attr = task, _FIELDS[name]
+        value = getattr(target, attr)
+        count = value.count(patch["before"])
+        if count != 1:
+            raise ValueError(
+                f"{task.external_id}: фрагмент правки {name} встречается {count} раз")
+        setattr(target, attr, value.replace(patch["before"], patch["after"], 1))
+    if fields.get("clear_warnings"):
+        task.warnings = []
+        task.confidence = 1.0
 
 
 def parse_shabunin_method(text: str, *, structure: dict | None = None) -> tuple[list[TaskDraft], dict]:
@@ -623,6 +792,7 @@ def parse_shabunin_method(text: str, *, structure: dict | None = None) -> tuple[
         "works": {},
         "variants_without_tasks": [],
         "unused_answer_figures": {},
+        "figures_without_reference": [],
     }
     tasks: list[TaskDraft] = []
     for chapter, start, stop in _find_chapters(text, structure):
@@ -648,14 +818,14 @@ def parse_shabunin_method(text: str, *, structure: dict | None = None) -> tuple[
             diagnostics["unused_answer_figures"][chapter["roman"]] = unused
     used = set()
     for task in tasks:
-        if task.external_id in overrides:
-            _apply_override(task, overrides[task.external_id])
-            used.add(task.external_id)
         if lift_stem_pictures(task):
             diagnostics.setdefault("stem_pictures", []).append(task.external_id)
         task.grade_band_codes = list(structure.get("grade_bands", []))
         _finish_fields(task)
         finalize_draft_images(task)
+        if task.external_id in overrides:
+            apply_task_repair(task, overrides[task.external_id])
+            used.add(task.external_id)
     diagnostics["unused_overrides"] = sorted(set(overrides) - used)
     diagnostics["unique_tasks"] = len({t.external_id for t in tasks})
     diagnostics["task_marker_occurrences"] = len(tasks)

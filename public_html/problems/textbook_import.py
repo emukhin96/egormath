@@ -1277,12 +1277,12 @@ def _attach_task_images(task, draft, batch):
 
 
 # Профили, у которых варианты работ связываются в семьи аналогов
-# при загрузке в каталог (ключи «С1.2/3», «КI.3/4»).
-ANALOG_PROFILES = {'vysotsky'}
+# при загрузке в каталог (ключи «С1.2/3», «КI.3/4», «КРII.1.В5/3»).
+ANALOG_PROFILES = {'vysotsky', 'shabunin_method'}
 # Профили, где авторский разбор общего условия — единый текст ко всей
 # задаче («Пример решения. … а) … б) …»): по пунктам делятся только ответы,
 # иначе вступление и хвосты разбора теряются.
-WHOLE_SOLUTION_PROFILES = {'vysotsky'}
+WHOLE_SOLUTION_PROFILES = {'vysotsky', 'shabunin_method'}
 
 
 @transaction.atomic
