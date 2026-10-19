@@ -105,6 +105,8 @@ def pages(request, pk, task_id):
             'teacher': CanvasPage.TEACHER_PAGE_LIMIT,
             'total': CanvasPage.TOTAL_PAGE_LIMIT,
             'elements': CanvasPage.MAX_ELEMENTS,
+            # Размер JSON слоя: клиент сверяет с ним копию страницы до сохранения
+            'bytes': CanvasPage.MAX_BYTES,
         },
     })
     response['ETag'] = etag

@@ -189,7 +189,8 @@ test('удаление пустой страницы ждёт сохранени
 test('очистка включает удаление последней страницы, а отмена снова выключает', () => {
   const {widget: w} = setup(); w.addPage();
   const page = w.page();
-  w.deletePageButton = {};
+  // Подсказка ставится через data-tip и aria-label (setTip) — заглушке нужны эти поля
+  w.deletePageButton = {dataset: {}, setAttribute() {}, removeAttribute() {}};
   w.commit(page, [stroke('a')]); w.syncDeleteButton();
   assert.equal(w.deletePageButton.disabled, true);
   w.clearPage(); w.syncDeleteButton();
@@ -327,4 +328,38 @@ test('картинки: ожидание привязано к URL, ошибка
   images[2].onload();
   assert.equal(c.waiters.length, 0);
   assert.equal(geo.pending(w.page().layers.student.elements).length, 0);
+});
+
+test('точка на осях без сетки — без подписи координат, на клетке — в узле с подписью', () => {
+  const {widget: w} = setup(); w.addPage();
+  Object.assign(w, {tool: 'dot', snap: true, scale: 1, color: '#000000', penWidth: 2, drawTop() {}, syncToolbar() {},
+    stage: {getBoundingClientRect: () => ({left: 0, top: 0}), setPointerCapture() {}}});
+  const down = () => w.onDown({button: 0, pointerType: 'mouse', pointerId: 1, clientX: 523, clientY: 481, preventDefault() {}});
+  const page = w.page();
+  page.background = 'plane';
+  page.bgOptions = {square: true, cell: 50, origin: 'center', grid: false};
+  down();
+  let dot = page.layers.student.elements.at(-1);
+  assert.equal(dot.l, false);
+  assert.deepEqual([...dot.p[0]], [523, 481]);
+  page.bgOptions = {square: true, cell: 50, origin: 'center'};
+  down();
+  dot = page.layers.student.elements.at(-1);
+  assert.equal(dot.l, true);
+  assert.deepEqual([...dot.p[0]], [500, 500]);
+});
+
+test('дублирование: копия больше лимита байт слоя не создаётся, обычная — создаётся', () => {
+  const {widget: w} = setup(); w.addPage();
+  const source = w.page();
+  source.layers.student.elements = [stroke('a'), stroke('b')];
+  w.limits = Object.assign({}, w.limits, {bytes: 50});
+  w.duplicatePage();
+  assert.equal(w.pages.length, 1);
+  w.limits.bytes = 512 * 1024;
+  w.duplicatePage();
+  assert.equal(w.pages.length, 2);
+  assert.equal(w.page().layers.student.elements.length, 2);
+  assert.notEqual(w.page().layers.student.elements[0].id, 'a');
+  assert.equal(source.layers.student.elements[0].id, 'a');
 });
