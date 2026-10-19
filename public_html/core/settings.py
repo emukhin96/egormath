@@ -195,6 +195,10 @@ if len(sys.argv) > 1 and sys.argv[1] == 'test':
     # не должны засорять рабочий каталог.
     LIVE_FILE_DIR = Path(tempfile.mkdtemp(prefix='egormath-live-'))
 
+# Тесты дают вычислителю формул запас на загруженной машине; продовые
+# лимиты не меняются (core/runner.py).
+TEST_RUNNER = 'core.runner.TestRunner'
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # На проде раздел открывается только после миграций и приёмки.
