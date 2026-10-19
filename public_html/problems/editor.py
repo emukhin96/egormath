@@ -155,6 +155,17 @@ def mask_data(task, item=None, include_preview=False):
     return answers
 
 
+def mask_form_context(mask, prefix, spec=None):
+    """Контекст problems/_mask_check_form.html — форма ученика по маске
+    ``mask`` с полями ``{prefix}_s1``… и кнопкой «Проверить как ученик»
+    (views.task_mask_check). Поля пустые: это пробный ввод, а не ответ."""
+    from assignments.checks import parse_mask, render_fragments
+    if spec is None:
+        spec = parse_mask(mask, validate_references=True)
+    return {'mask': mask, 'prefix': prefix, 'errors': spec.errors,
+            'fragments': render_fragments(spec, prefix, seed=prefix) if spec.slots else []}
+
+
 def local_copy(task, item, user):
     """Переносит ровно выбранные подпункты на копию, не расширяя листок."""
     chosen = list(item.subitems.values_list('pk', flat=True))

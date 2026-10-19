@@ -139,6 +139,7 @@
 <div class="form-buttons">{% include 'includes/ai_menu.html' with kind='form' %}</div>
     <div class="card mask-preview" id="mask-preview" hidden
          data-preview-url="{% url 'task_mask_preview' %}"
+         data-check-url="{% url 'task_mask_check' %}"
          data-draft-url="{% url 'task_mask_draft' %}">
       <div class="label-row">
         <strong data-mask-title>Превью</strong>
@@ -160,5 +161,5 @@
 <script defer src="{% static 'js/check_badge.js' %}"></script>
 <script defer src="{% static 'js/mask.js' %}?v=5"></script>
 <script defer src="{% static 'js/numberline.js' %}?v=5"></script>
-<script defer src="{% static 'js/mask_editor.js' %}?v=6"></script>
+<script defer src="{% static 'js/mask_editor.js' %}?v=8"></script>
 {% endblock %}

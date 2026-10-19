@@ -543,45 +543,96 @@ def task_edit(request, pk):
     return redirect(url)
 
 
+MASK_PREFIX_RE = re.compile(r'preview(?:_[0-9]+)?')
+
+
+def _mask_request(request, *, validate_references):
+    """Маска и префикс имён полей из POST превью/проверки: ``(prefix, spec,
+    error)``, где error — готовый JSON-ответ 400 (причина и в ``errors`` —
+    их показывает панель превью формы задачи). Маска приходит в запросе
+    целиком, предел длины тот же, что при сохранении (MASK_MAX_LENGTH), так
+    что сохранённая маска сюда проходит всегда. ``validate_references`` —
+    сверять ли эталоны формул через вычислитель: превью в редакторе — да
+    (ошибки эталона видны сразу), проверка ответа — нет, как у ученика
+    (``mask_spec_for``): занятый вычислитель там — временная недоступность
+    самой проверки, а не ошибка маски."""
+    from assignments.checks import MASK_MAX_LENGTH, parse_mask
+    prefix = request.POST.get('prefix', 'preview')
+    if not MASK_PREFIX_RE.fullmatch(prefix):
+        return prefix, None, JsonResponse({'ok': False, 'message': 'Некорректный префикс'}, status=400)
+    mask = request.POST.get('mask', '')
+    if len(mask) > MASK_MAX_LENGTH:
+        message = f'Маска длиннее {MASK_MAX_LENGTH} символов'
+        return prefix, None, JsonResponse({'ok': False, 'message': message, 'errors': [message]},
+                                          status=400)
+    return prefix, parse_mask(mask, validate_references=validate_references), None
+
+
 @teacher_required
 @require_POST
 def task_mask_preview(request):
-    """Превью маски «как увидит ученик» и самопроверка для формы задачи.
+    """Превью маски «как увидит ученик» для формы и карточки задачи.
 
-    POST: ``mask`` — текст маски; поля ``preview_s1``… — пробные значения
-    (если есть, возвращается результат проверки тем же кодом, что у ученика).
+    POST: ``mask`` — текст маски, ``prefix`` — префикс имён полей. В ответе
+    ``html`` — одни поля (панель превью формы задачи, mask_editor.js: она
+    лежит внутри формы задачи, и вложенной формы там быть не может) и
+    ``form`` — те же поля в форме с кнопкой «Проверить как ученик» (диалог
+    предпросмотра и карточка только для чтения, problem_masks.js). Сама
+    проверка — ``task_mask_check``.
     """
     from django.template.loader import render_to_string
 
-    from assignments.checks import (check_mask, collect_values, parse_mask,
-                                    render_fragments)
-    prefix = request.POST.get('prefix', 'preview')
-    if not re.fullmatch(r'preview(?:_[0-9]+)?', prefix):
-        return JsonResponse({'ok': False, 'message': 'Некорректный префикс'}, status=400)
-    spec = parse_mask(request.POST.get('mask', ''), validate_references=True)
+    from .editor import mask_form_context
+    prefix, spec, error = _mask_request(request, validate_references=True)
+    if error:
+        return error
     payload = {'ok': spec.is_valid, 'errors': spec.errors,
                'slots': len(spec.slots)}
+    if not spec.is_valid:
+        payload['message'] = 'Маска не разобрана' + (': ' + '; '.join(spec.errors) if spec.errors else '')
     if not spec.slots:
-        payload['html'] = ''
+        payload['html'] = payload['form'] = ''
         return JsonResponse(payload)
-    from assignments.checks.formulas import FormulaUnavailable
-    values = collect_values(request.POST, prefix, spec)
-    checks = {}
-    if values:
-        try:
-            overall, checks = check_mask(spec, values)
-        except FormulaUnavailable:
-            payload['unavailable'] = True
-            payload['message'] = 'Проверка временно недоступна — попробуйте ещё раз через минуту'
-        else:
-            payload['overall'] = overall
-        payload['checks'] = {f'{prefix}_{k}': v for k, v in checks.items()}
+    context = mask_form_context(request.POST.get('mask', ''), prefix, spec)
     payload['html'] = render_to_string('assignments/_mask.html', {
-        'fragments': render_fragments(spec, prefix, values, checks, seed=prefix),
-        'editable': True,
-        'show_checks': True,
-    })
+        'fragments': context['fragments'], 'editable': True, 'show_checks': True})
+    payload['form'] = render_to_string('problems/_mask_check_form.html', context)
     return JsonResponse(payload)
+
+
+@teacher_required
+@require_POST
+def task_mask_check(request):
+    """«Проверить как ученик»: сверка пробного ответа по маске из запроса.
+
+    POST: ``mask`` — текст маски, ``prefix`` и поля ``{prefix}_s1``… — как
+    присылает форма ученика. Ответ — тот же JSON, что получает ученик по
+    кнопке «Проверить» в задании (assignments.views.check_task): ``checks`` —
+    итог по ``prefix`` и результат по каждому слоту, ``message`` — подпись.
+    Сверяет тот же код (assignments.checks.check_mask) по маске, разобранной
+    как у ученика — без сверки эталонов через вычислитель; в базу ничего не
+    пишется, попытки не считаются. Неразборная маска — 400.
+    """
+    from assignments.checks import check_mask, collect_values, has_values
+    from assignments.checks.formulas import FormulaUnavailable
+    prefix, spec, error = _mask_request(request, validate_references=False)
+    if error:
+        return error
+    if not spec.is_valid:
+        return JsonResponse({'ok': False, 'message': 'Маска не разобрана',
+                             'errors': spec.errors or ['В маске нет полей для ответа']},
+                            status=400)
+    values = collect_values(request.POST, prefix, spec)
+    if not has_values(values):
+        return JsonResponse({'ok': True, 'message': 'Сначала введите ответ', 'checks': {}})
+    try:
+        overall, checks = check_mask(spec, values)
+    except FormulaUnavailable:
+        return JsonResponse({'ok': False, 'checks': {},
+                             'message': 'Проверка временно недоступна — попробуйте ещё раз через минуту'})
+    return JsonResponse({'ok': True, 'message': 'Проверено',
+                         'checks': {prefix: overall,
+                                    **{f'{prefix}_{name}': verdict for name, verdict in checks.items()}}})
 
 
 @teacher_required

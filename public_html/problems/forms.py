@@ -10,11 +10,15 @@ from .models import (Task, TaskImage, TaskSource, TaskSubitem,
 
 def clean_mask_text(text):
     """Маска сохраняется только рабочей: ошибки грамматики и эталонов
-    учитель видит сразу в форме, а не ученик на задании."""
-    from assignments.checks import parse_mask
+    учитель видит сразу в форме, а не ученик на задании. Длина — в пределах
+    MASK_MAX_LENGTH, иначе сохранённую маску нельзя было бы показать в превью
+    и проверить «как ученик» (problems.views._mask_request)."""
+    from assignments.checks import MASK_MAX_LENGTH, parse_mask
     text = (text or '').strip()
     if not text:
         return ''
+    if len(text) > MASK_MAX_LENGTH:
+        raise forms.ValidationError(f'Маска длиннее {MASK_MAX_LENGTH} символов')
     spec = parse_mask(text, validate_references=True)
     if spec.errors:
         raise forms.ValidationError(spec.errors)

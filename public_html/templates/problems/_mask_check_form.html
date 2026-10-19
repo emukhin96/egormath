@@ -1,0 +1,8 @@
+{# Форма ученика по маске с кнопкой «Проверить как ученик»: fragments — из checks.render_fragments, mask и prefix уходят на task_mask_check вместе с полями (problem_masks.js, сабмит [data-mask-check]); errors — ошибки разбора в редакторе масок. Та же разметка в диалоге предпросмотра (ответ task_mask_preview) и на карточке только для чтения (тег mask_check_form). Без action: как и предпросмотр, работает только с JS #}
+<form data-mask-check class="mask-check">
+  <input type="hidden" name="mask" value="{{ mask }}"><input type="hidden" name="prefix" value="{{ prefix }}">
+  {% include 'assignments/_mask.html' with editable=True show_checks=True %}
+  {% if errors %}<p class="errorlist">{{ errors|join:'; ' }}</p>{% endif %}
+  <div class="form-buttons"><button class="btn btn-secondary">Проверить как ученик</button><button type="button" class="btn btn-secondary" data-mask-reset>Сбросить</button>{% include 'assignments/_check_badge.html' with prefix=prefix status='' hint='' %}</div>
+  <p class="helptext" data-trial-result role="status"></p>
+</form>

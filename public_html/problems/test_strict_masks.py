@@ -16,13 +16,16 @@ class StrictMaskViewsTests(TestCase):
     def test_preview_uses_strict_verdict_and_math_keyboard(self):
         for kind, value in [('digits', '234,00'), ('decimal', '1/2'),
                             ('ratio', '0,5'), ('proportion', '0,5')]:
-            response = self.client.post(reverse('task_mask_preview'), {
-                'mask': '{{%s: %s}}' % (
-                    kind, '234' if kind == 'digits' else
-                    '-0,5' if kind == 'decimal' else '1:2'),
-                'prefix': 'preview', 'preview_s1': value})
+            mask = '{{%s: %s}}' % (
+                kind, '234' if kind == 'digits' else
+                '-0,5' if kind == 'decimal' else '1:2')
+            response = self.client.post(reverse('task_mask_check'), {
+                'mask': mask, 'prefix': 'preview', 'preview_s1': value})
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json()['overall'], 'wrong')
+            self.assertEqual(response.json()['checks']['preview'], 'wrong')
+            response = self.client.post(reverse('task_mask_preview'),
+                                        {'mask': mask, 'prefix': 'preview'})
+            self.assertEqual(response.status_code, 200)
             self.assertIn('<math-field', response.json()['html'])
             self.assertIn(f'data-mask-format="{kind}"', response.json()['html'])
             self.assertIn('type="hidden"', response.json()['html'])
@@ -44,10 +47,10 @@ class StrictMaskViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()['ok'])
         self.assertIn('повторите сохранение', ' '.join(response.json()['errors']))
-        response = self.client.post(reverse('task_mask_preview'), {
+        response = self.client.post(reverse('task_mask_check'), {
             'mask': '{{expression: a+53}}', 'preview_s1': '53+a'})
         self.assertTrue(response.json()['ok'])
-        self.assertEqual(response.json()['overall'], 'ok')
+        self.assertEqual(response.json()['checks']['preview'], 'ok')
 
     def test_admin_validates_task_inline_and_draft_references(self):
         from django.contrib import admin

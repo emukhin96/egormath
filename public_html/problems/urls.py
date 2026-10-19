@@ -11,6 +11,7 @@ urlpatterns = [
     path('bulk-update/', views.task_bulk_update, name='task_bulk_update'),
     path('solve/', views.task_neuro_solve, name='task_neuro_solve'),
     path('mask/preview/', views.task_mask_preview, name='task_mask_preview'),
+    path('mask/check/', views.task_mask_check, name='task_mask_check'),
     path('mask/draft/', views.task_mask_draft, name='task_mask_draft'),
     path('imports/', views.textbook_import_list,
          name='textbook_import_list'),
