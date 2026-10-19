@@ -8,6 +8,8 @@
 подпунктов: валидация масок, ``updated_at`` для перепроверки), или
 отклоняет с причиной. Решение всегда за человеком, авто-слияния нет.
 """
+import difflib
+
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
@@ -150,44 +152,89 @@ def _field_row(name, current, proposed):
             'is_mask': name == 'answer_mask', 'is_bool': name == 'full_answer_only'}
 
 
+def align_subitems(current, proposed):
+    """Сопоставление подпунктов базы и снимка по тексту условия (difflib).
+
+    В снимке копии нет ссылок на исходные подпункты (копия получает новые
+    pk), а позиция ненадёжна: удалённый или вставленный в середине подпункт
+    сдвинул бы все следующие, и ответы учеников (``SubmissionPart.subitem``)
+    оказались бы у чужого условия. Возвращает пары индексов
+    ``(в базе | None, в снимке | None)`` в порядке показа; пара с ``None`` —
+    удалённый или новый подпункт.
+    """
+    clean = [t.strip() for t in current]
+    other = [t.strip() for t in proposed]
+    pairs = []
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, clean, other, autojunk=False).get_opcodes():
+        if op == 'equal':
+            pairs += list(zip(range(i1, i2), range(j1, j2)))
+        elif op == 'replace':
+            # Правка текста на месте — тот же подпункт; лишние — удалённые/новые
+            size = min(i2 - i1, j2 - j1)
+            pairs += [(i1 + k, j1 + k) for k in range(size)]
+            pairs += [(i, None) for i in range(i1 + size, i2)]
+            pairs += [(None, j) for j in range(j1 + size, j2)]
+        elif op == 'delete':
+            pairs += [(i, None) for i in range(i1, i2)]
+        else:
+            pairs += [(None, j) for j in range(j1, j2)]
+    return pairs
+
+
+def answered_subitem_ids(task):
+    """Подпункты задачи, на которые уже есть ответы учеников: удалять их
+    через предложение нельзя (CASCADE стёр бы ответы во всех листках)."""
+    from assignments.models import SubmissionPart
+    return set(SubmissionPart.objects.filter(subitem__task=task)
+               .values_list('subitem_id', flat=True))
+
+
 def compare(proposal):
     """Сравнение «в базе ↔ предложено» для страницы редактора: разделы как
-    чекбоксы «Применить», подпункты по порядку; ``changed`` — есть отличия,
-    такие строки подсвечиваются и отмечены к применению по умолчанию."""
+    чекбоксы «Применить», подпункты сопоставлены по тексту
+    (``align_subitems``); ``changed`` — есть отличия, такие строки
+    подсвечиваются и отмечены к применению по умолчанию."""
     current = snapshot_of(proposal.task)
     proposed = proposal.snapshot
     cur_subs, new_subs = current['subitems'], proposed.get('subitems', [])
-    count_differs = len(cur_subs) != len(new_subs)
+    cur_ids = list(proposal.task.subitems.values_list('pk', flat=True))
+    answered = answered_subitem_ids(proposal.task) if cur_subs else set()
+    pairs = align_subitems([r['text_latex'] for r in cur_subs],
+                           [r['text_latex'] for r in new_subs])
     subitem_rows = []
-    for index in range(max(len(cur_subs), len(new_subs))):
-        cur = cur_subs[index] if index < len(cur_subs) else None
-        new = new_subs[index] if index < len(new_subs) else None
+    for i, j in pairs:
+        cur = cur_subs[i] if i is not None else None
+        new = new_subs[j] if j is not None else None
         fields = [_field_row(name, (cur or {}).get(name, ''), (new or {}).get(name, ''))
                   for name in FIELDS]
-        subitem_rows.append({'index': index, 'current': cur, 'proposed': new,
-                             'fields': fields,
-                             'changed': cur is None or new is None
-                             or any(f['changed'] for f in fields)})
+        subitem_rows.append({
+            'index': i if i is not None else j, 'current': cur, 'proposed': new,
+            'fields': fields,
+            'changed': cur is None or new is None or any(f['changed'] for f in fields),
+            'has_answers': i is not None and cur_ids[i] in answered})
+    structure_changed = any(
+        row['current'] is None or row['proposed'] is None or row['fields'][0]['changed']
+        for row in subitem_rows)
+    # Удаление подпункта с ответами учеников предложением не применяется
+    blocked = [row for row in subitem_rows if row['proposed'] is None and row['has_answers']]
     sections = []
     for key, label in SECTIONS:
         if key == 'subitems':
-            changed = count_differs or any(
-                row['fields'][0]['changed'] for row in subitem_rows
-                if row['current'] and row['proposed'])
-            sections.append({'key': key, 'label': label, 'changed': changed, 'fields': []})
+            sections.append({'key': key, 'label': label,
+                             'changed': structure_changed and not blocked, 'fields': []})
             continue
         names = SECTION_FIELDS[key]
         fields = [_field_row(name, current.get(name, ''), proposed.get(name, ''))
                   for name in names]
         changed = any(f['changed'] for f in fields)
         if key != 'condition':
-            changed = changed or (count_differs and bool(cur_subs or new_subs)) or any(
+            changed = changed or any(
                 f['changed'] for row in subitem_rows for f in row['fields']
                 if f['name'] in names)
         sections.append({'key': key, 'label': label, 'changed': changed, 'fields': fields})
     return {'sections': sections, 'subitems': subitem_rows,
-            'count_differs': count_differs,
-            'any_changed': any(s['changed'] for s in sections)}
+            'structure_changed': structure_changed, 'subitems_blocked': bool(blocked),
+            'any_changed': any(s['changed'] for s in sections) or structure_changed}
 
 
 def _apply_block(block, owner, values):
@@ -201,25 +248,45 @@ def _apply_block(block, owner, values):
     form.save()
 
 
-def _apply_subitems(task, rows):
-    """Структура подпунктов из снимка через формсет редактора: лишние строки
-    удаляются, недостающие создаются, порядок — по позиции в снимке."""
-    existing = list(task.subitems.all())
-    total = max(len(existing), len(rows))
-    data = {'subitems-TOTAL_FORMS': str(total),
-            'subitems-INITIAL_FORMS': str(len(existing)),
+def _apply_subitems(task, existing, pairs, rows):
+    """Структура подпунктов из снимка через формсет редактора по парам
+    ``align_subitems``: сопоставленные строки получают текст и место из
+    снимка, непарные в базе удаляются, непарные в снимке создаются.
+    Подпункт с ответами учеников удалить нельзя — отказ."""
+    doomed = [existing[i] for i, j in pairs if j is None]
+    if doomed:
+        answered = answered_subitem_ids(task)
+        if any(sub.pk in answered for sub in doomed):
+            raise ProposalError('Подпункты: в предложении нет подпункта, на который уже есть '
+                                'ответы учеников, — удалить его можно только вручную на '
+                                'карточке задачи. Примените остальные разделы без «Подпунктов» '
+                                'или отклоните предложение.')
+    new_rows = []
+    data = {'subitems-INITIAL_FORMS': str(len(existing)),
             'subitems-MIN_NUM_FORMS': '0', 'subitems-MAX_NUM_FORMS': '1000'}
-    for index in range(total):
-        prefix = f'subitems-{index}'
-        if index < len(existing):
-            data[f'{prefix}-id'] = str(existing[index].pk)
-        if index < len(rows):
-            data[f'{prefix}-order'] = str((index + 1) * 10)
-            data[f'{prefix}-text_latex'] = rows[index].get('text_latex', '')
+    for index, sub in enumerate(existing):
+        data[f'subitems-{index}-id'] = str(sub.pk)
+        data[f'subitems-{index}-order'] = str(sub.order)
+        data[f'subitems-{index}-text_latex'] = sub.text_latex
+    position = 0
+    for i, j in pairs:
+        if j is None:
+            data[f'subitems-{i}-DELETE'] = 'on'
+            continue
+        position += 1
+        text = rows[j].get('text_latex', '')
+        if i is None:
+            new_rows.append((position * 10, text))
         else:
-            data[f'{prefix}-order'] = str(existing[index].order)
-            data[f'{prefix}-text_latex'] = existing[index].text_latex
-            data[f'{prefix}-DELETE'] = 'on'
+            data[f'subitems-{i}-order'] = str(position * 10)
+            data[f'subitems-{i}-text_latex'] = text
+    # Новые строки — после исходных: формсет считает первые INITIAL_FORMS
+    # форм существующими, остальные создаёт
+    for extra, (order, text) in enumerate(new_rows):
+        prefix = f'subitems-{len(existing) + extra}'
+        data[f'{prefix}-order'] = str(order)
+        data[f'{prefix}-text_latex'] = text
+    data['subitems-TOTAL_FORMS'] = str(len(existing) + len(new_rows))
     formset = StructureFormSet(data, instance=task)
     if not formset.is_valid():
         errors = [str(e) for e in formset.non_form_errors()] + [
@@ -258,9 +325,14 @@ def apply_proposal(proposal, sections, user, note='', version=None):
     if chosen and not snapshot:
         raise ProposalError('У предложения нет предложенной версии — применять нечего.')
     proposed_subs = snapshot.get('subitems', [])
-    if 'subitems' in chosen:
-        _apply_subitems(task, proposed_subs)
     subs = list(task.subitems.all())
+    pairs = align_subitems([s.text_latex for s in subs],
+                           [r.get('text_latex', '') for r in proposed_subs])
+    if 'subitems' in chosen:
+        _apply_subitems(task, subs, pairs, proposed_subs)
+        # Структура теперь совпадает со снимком: k-й подпункт ↔ k-я строка
+        subs = list(task.subitems.all())
+        pairs = [(k, k) for k in range(len(proposed_subs))]
     for key in chosen:
         if key == 'subitems':
             continue
@@ -269,11 +341,11 @@ def apply_proposal(proposal, sections, user, note='', version=None):
             _apply_block('answer_policy', task, snapshot)
         if key == 'condition' or not (subs or proposed_subs):
             continue
-        if len(subs) != len(proposed_subs):
-            raise ProposalError('Число подпунктов в базе и в предложении отличается — '
+        if any(i is None or j is None for i, j in pairs):
+            raise ProposalError('Состав подпунктов в базе и в предложении отличается — '
                                 'отметьте «Подпункты», чтобы применить их вместе.')
-        for sub, row in zip(subs, proposed_subs):
-            _apply_block(key, sub, row)
+        for i, j in pairs:
+            _apply_block(key, subs[i], proposed_subs[j])
     # Как после ручной правки: дата меняется, маски перепроверяются.
     updates = {'updated_at': timezone.now()}
     if proposal.kind == TaskProposal.KIND_NEW:

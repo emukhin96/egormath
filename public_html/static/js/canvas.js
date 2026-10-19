@@ -30,21 +30,21 @@
   var GRID_COLOR = '#d4d4d8', ACCENT = '#1765b5';
   var CELLS = {grid: 25, grid_large: 50};
   var FN = {
-    parabola: {label: 'x²', title: 'Парабола y = x²', f: function (x) { return x * x; }},
-    abs: {label: '|x|', title: 'Модуль y = |x|', f: function (x) { return Math.abs(x); }},
-    sqrt: {label: '√x', title: 'Корень y = √x', f: function (x) { return x < 0 ? NaN : Math.sqrt(x); }},
-    hyperbola: {label: '1/x', title: 'Гипербола y = 1/x', f: function (x) { return x === 0 ? NaN : 1 / x; }},
+    parabola: {label: 'x²', name: 'Парабола', title: 'Парабола y = x²', f: function (x) { return x * x; }},
+    abs: {label: '|x|', name: 'Модуль', title: 'Модуль y = |x|', f: function (x) { return Math.abs(x); }},
+    sqrt: {label: '√x', name: 'Корень', title: 'Корень y = √x', f: function (x) { return x < 0 ? NaN : Math.sqrt(x); }},
+    hyperbola: {label: '1/x', name: 'Гипербола', title: 'Гипербола y = 1/x', f: function (x) { return x === 0 ? NaN : 1 / x; }},
   };
+  var FN_TEX = {parabola: 'x^2', abs: '|x|', sqrt: '\\sqrt{x}', hyperbola: '\\frac{1}{x}'};
   var SHAPE_TOOLS = {
-    line: {label: '—', title: 'Отрезок: протяните от точки до точки, с Shift — горизонтально, вертикально или под 45° (L)'},
-    dot: {label: '•', title: 'Точка: один клик; на координатной плоскости с привязкой к сетке подписываются координаты'},
-    circle: {label: '○', title: 'Окружность: протяните от центра до точки на окружности (S)'},
-    rect: {label: '▭', title: 'Прямоугольник: протяните по диагонали, с Shift — квадрат (O)'},
-    square: {label: '□', title: 'Квадрат: протяните по диагонали'},
-    tri: {label: '△', title: 'Треугольник: три клика по вершинам, Esc — отменить'},
-    para: {label: '▱', title: 'Параллелограмм: три клика по вершинам, четвёртая достроится, Esc — отменить'},
+    line: {label: '—', name: 'Отрезок', title: 'Отрезок: протяните от точки до точки, с Shift — горизонтально, вертикально или под 45° (L)'},
+    dot: {label: '•', name: 'Точка', title: 'Точка: один клик; на координатной плоскости с привязкой к сетке подписываются координаты'},
+    circle: {label: '○', name: 'Окружность', title: 'Окружность: протяните от центра до точки на окружности (S)'},
+    rect: {label: '▭', name: 'Прямоугольник', title: 'Прямоугольник: протяните по диагонали, с Shift — квадрат (O)'},
+    square: {label: '□', name: 'Квадрат', title: 'Квадрат: протяните по диагонали'},
+    tri: {label: '△', name: 'Треугольник', title: 'Треугольник: три клика по вершинам, Esc — отменить'},
+    para: {label: '▱', name: 'Параллелограмм', title: 'Параллелограмм: три клика по вершинам, четвёртая достроится, Esc — отменить'},
   };
-  var BG_LABELS = {blank: 'Белый', grid: 'Клетка', grid_large: 'Крупная клетка', plane: 'Координатная плоскость'};
 
   /* ---------- утилиты ---------- */
 
@@ -64,17 +64,25 @@
     if (text != null) node.textContent = text;
     return node;
   }
+  /* Всплывающее пояснение: CSS-подсказка по data-tip (быстрее и заметнее
+     системного title), aria-label — для экранных читалок */
+  function setTip(node, text) {
+    node.removeAttribute('title');
+    if (text) { node.dataset.tip = text; node.setAttribute('aria-label', text); }
+    else { delete node.dataset.tip; node.removeAttribute('aria-label'); }
+  }
   function button(cls, text, title, onclick) {
     var b = el('button', cls, text);
     b.type = 'button';
-    if (title) { b.title = title; b.setAttribute('aria-label', title); }
+    if (title) setTip(b, title);
     if (onclick) b.addEventListener('click', onclick);
     return b;
   }
   var ICONS = {
     pen: '<path d="m4 16-1 5 5-1L20 8l-4-4Z M14 6l4 4"/>',
     hl: '<path d="m5 14 5 5 10-10-5-5Z M5 14l-2 5 2 2 5-2 M3 22h11"/>',
-    eraser: '<path d="m3 14 10-10a2 2 0 0 1 3 0l5 5a2 2 0 0 1 0 3l-9 9H8Z M8 9l8 8 M12 21h10"/>',
+    /* Ластик — резинка с закрашенным кончиком, не похожий на маркер */
+    eraser: '<path d="M15.5 3.5 20.5 8.5 10 19H5.5L3.5 17a2 2 0 0 1 0-2.8Z"/><path d="M8.6 10.4 13.6 15.4 10 19H5.5L3.5 17a2 2 0 0 1 0-2.8Z" fill="currentColor"/><path d="M13 21h8"/>',
     select: '<path d="m5 3 14 10-7 1-3 7Z"/>',
     image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
     undo: '<path d="M9 4 3 10l6 6 M3 10h11a7 7 0 0 1 0 14" transform="translate(0 -2)"/>',
@@ -82,16 +90,76 @@
     trash: '<path d="M3 6h18 M9 6V3h6v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7"/>',
     clear: '<path d="m13 9 7-7 M3 15l6-6 6 6-6 6Z M5 17l4-4 M7 19l4-4 M15 21h7"/>',
     copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
-    group: '<rect x="3" y="3" width="12" height="12" rx="1"/><rect x="9" y="9" width="12" height="12" rx="1"/>',
-    ungroup: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><path d="m14 3 7 7 M21 3l-7 7"/>',
-    front: '<path d="m8 8 4-5 4 5 M12 3v12 M4 13v8h16v-8"/>',
-    back: '<path d="m8 13 4 5 4-5 M12 3v15 M4 13v8h16v-8"/>',
+    duplicate: '<path d="M4 15V5a1 1 0 0 1 1-1h10 M8 9a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1Z M14 11v6 M11 14h6"/>',
+    /* Группа — пунктирная рамка вокруг фигур; разгруппировать — та же рамка, перечёркнутая */
+    group: '<rect x="2" y="2" width="20" height="20" rx="2" stroke-dasharray="3 3"/><circle cx="8.5" cy="8.5" r="3"/><rect x="12.5" y="12.5" width="6" height="6"/>',
+    ungroup: '<rect x="2" y="2" width="20" height="20" rx="2" stroke-dasharray="3 3"/><circle cx="8.5" cy="8.5" r="3"/><rect x="12.5" y="12.5" width="6" height="6"/><path d="M3 21 21 3"/>',
+    /* Передний/задний план — какой из двух квадратов сверху (закрашенный — выделенное) */
+    front: '<rect x="3" y="3" width="12" height="12" rx="1"/><rect x="9" y="9" width="12" height="12" rx="1" fill="currentColor"/>',
+    back: '<rect x="3" y="3" width="12" height="12" rx="1" fill="currentColor"/><rect x="9" y="9" width="12" height="12" rx="1" fill="#fff"/>',
+    /* Фигуры — тем же штрихом, что и остальные значки (раньше были символы шрифта) */
+    line: '<path d="M4 20 20 4"/>',
+    dot: '<circle cx="12" cy="12" r="3.5" fill="currentColor"/>',
+    circle: '<circle cx="12" cy="12" r="8.5"/>',
+    rect: '<rect x="2" y="6.5" width="20" height="11" rx="1"/>',
+    square: '<rect x="4.5" y="4.5" width="15" height="15" rx="1"/>',
+    tri: '<path d="M12 3.5 21.5 20h-19Z"/>',
+    para: '<path d="M7.5 5.5H22l-5.5 13H2Z"/>',
+    shapes: '<circle cx="7" cy="7" r="4.5"/><rect x="13" y="13" width="8" height="8" rx="1"/><path d="M17 2.5 21.5 10h-9Z"/><path d="M3 21 10 14"/>',
+    graph: '<path d="M2 18h20 M12 2v20" stroke-width="1.5"/><path d="M5 3c1.8 8 4.2 11.5 7 11.5S17.2 11 19 3"/>',
+    bgBlank: '<rect x="3" y="3" width="18" height="18" rx="2"/>',
+    bgGrid: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18 M15 3v18 M3 9h18 M3 15h18" stroke-width="1.4"/>',
+    bgGridLarge: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18 M3 12h18" stroke-width="1.4"/>',
+    axesNone: '<path d="M12 21V3 M3 12h18" stroke-opacity="0.35"/><path d="M5 5l14 14"/>',
+    bgPlane: '<path d="M12 21V3 M9.5 5.5 12 3l2.5 2.5 M3 12h18 M18.5 9.5 21 12l-2.5 2.5"/>',
+    originCenter: '<path d="M12 21V3 M9.5 5.5 12 3l2.5 2.5 M3 12h18 M18.5 9.5 21 12l-2.5 2.5"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
+    originCorner: '<path d="M5 21V3 M2.5 5.5 5 3l2.5 2.5 M3 19h18 M18.5 16.5 21 19l-2.5 2.5"/><circle cx="5" cy="19" r="2" fill="currentColor"/>',
+    magnet: '<path d="M5 3h4v8a3 3 0 0 0 6 0V3h4v8a7 7 0 0 1-14 0Z M5 7h4 M15 7h4"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    eyeOff: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/>',
+    picture: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/><path d="M12 1v5 M9.5 3.5 12 6l2.5-2.5" stroke-width="2"/>',
   };
+  function svgIcon(name) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
+  }
   function addIcon(node, name) {
     node.classList.add('canvas-icon');
-    node.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
+    node.innerHTML = svgIcon(name);
     return node;
   }
+  /* Кнопка в рамке (как остальные в панели), а не голый .icon-btn */
+  function boxedIconButton(name, title, action) {
+    var b = iconButton(name, title, action);
+    b.classList.remove('icon-btn');
+    b.classList.add('btn', 'btn-small', 'btn-secondary');
+    return b;
+  }
+  /* Кнопка-меню: значок, подпись (на узкой доске прячется) и стрелка */
+  function menuButton(icon, text, title, action) {
+    var b = button('btn btn-small btn-secondary canvas-labelled canvas-menu-btn', '', title, action);
+    b.setAttribute('aria-haspopup', 'true');
+    var ic = el('span', 'canvas-btn-icon'); ic.innerHTML = svgIcon(icon);
+    b.appendChild(ic);
+    b.appendChild(el('span', 'canvas-btn-text', text));
+    b.appendChild(el('span', 'canvas-caret', '▾'));
+    return b;
+  }
+  /* Ряд связанных переключателей (фон, клетка, начало координат) */
+  function segment(items, current, disabled, onpick) {
+    var g = el('div', 'canvas-segment');
+    g.setAttribute('role', 'group');
+    items.forEach(function (item) {
+      var b = addIcon(button('canvas-seg', '', item[2], function () { if (item[0] !== current) onpick(item[0]); }), item[1]);
+      b.setAttribute('aria-pressed', String(item[0] === current));
+      b.disabled = disabled;
+      g.appendChild(b);
+    });
+    return g;
+  }
+  var BG_ITEMS = [['blank', 'bgBlank', 'Белый фон'], ['grid', 'bgGrid', 'Мелкая клетка'],
+    ['grid_large', 'bgGridLarge', 'Крупная клетка']];
+  var AXES_ITEMS = [['none', 'axesNone', 'Без осей координат'], ['center', 'originCenter', 'Оси с началом в центре'],
+    ['bottom_left', 'originCorner', 'Оси с началом слева внизу — для парабол и корней']];
   function iconButton(name, title, action) {
     return addIcon(button(name === 'trash' ? 'icon-btn' : 'btn btn-small btn-secondary', '', title, action), name);
   }
@@ -395,23 +463,39 @@
     if (page.bgOptions.origin === 'bottom_left') return [cell * 2, height - cell * 2];
     return [W / 2, Math.round(height / 2 / cell) * cell];
   }
-  function cellOf(page) {
+  /* Единичный отрезок: шаг клетки, у осей — их масштаб */
+  function unitOf(page) {
     if (page.background === 'plane') return page.bgOptions.cell || 25;
     return CELLS[page.background] || 0;
+  }
+  /* Шаг видимой сетки (0 — без сетки): оси бывают и на белом фоне (grid: false) */
+  function cellOf(page) {
+    if (page.background === 'plane' && page.bgOptions.grid === false) return 0;
+    return unitOf(page);
+  }
+  /* Фон в терминах панели: подложка (белый / клетка / крупная клетка) + оси */
+  function baseOf(page) {
+    if (page.background !== 'plane') return page.background;
+    if (page.bgOptions.grid === false) return 'blank';
+    return (page.bgOptions.cell || 25) === 50 ? 'grid_large' : 'grid';
+  }
+  function axesOf(page) {
+    return page.background === 'plane' ? (page.bgOptions.origin || 'center') : 'none';
   }
 
   function drawBackground(ctx, page) {
     ctx.fillStyle = '#fff';
     var top = -offsetOf(page), bottom = top + H;
     ctx.fillRect(0, top, W, H);
-    var cell = cellOf(page);
-    if (!cell) return;
-    ctx.strokeStyle = GRID_COLOR;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (var x = 0; x <= W; x += cell) { ctx.moveTo(x, top); ctx.lineTo(x, bottom); }
-    for (var y = Math.floor(top / cell) * cell; y <= bottom; y += cell) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
-    ctx.stroke();
+    var grid = cellOf(page), cell = unitOf(page);
+    if (grid) {
+      ctx.strokeStyle = GRID_COLOR;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (var x = 0; x <= W; x += grid) { ctx.moveTo(x, top); ctx.lineTo(x, bottom); }
+      for (var y = Math.floor(top / grid) * grid; y <= bottom; y += grid) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+      ctx.stroke();
+    }
     if (page.background !== 'plane') return;
     var o = planeOrigin(page);
     ctx.strokeStyle = '#111';
@@ -479,7 +563,7 @@
         var r = Math.max(3, element.w);
         ctx.beginPath(); ctx.arc(p[0][0], p[0][1], r, 0, Math.PI * 2); ctx.fill();
         if (element.l && page.background === 'plane') {
-          var o = planeOrigin(page), cell = cellOf(page);
+          var o = planeOrigin(page), cell = unitOf(page);
           var x = (p[0][0] - o[0]) / cell, y = (o[1] - p[0][1]) / cell;
           var fmt = function (v) { return (Math.round(v * 10) / 10).toString().replace('.', ','); };
           ctx.font = '15px "Times New Roman", serif';
@@ -726,7 +810,7 @@
   Widget.prototype.applyData = function (data) {
     var self = this;
     this.layer = this.role === 'viewer' ? null : data.layer;
-    this.limits = data.limits || {student: 5, teacher: 2, total: 10, elements: 2000};
+    this.limits = data.limits || {student: 10, teacher: 2, total: 15, elements: 2000, bytes: 512 * 1024};
     this.showTeacherLayer = !!data.show_teacher_layer;
     this.canAddPages = data.can_add_pages !== false;
     this.images = data.images || [];
@@ -788,6 +872,46 @@
     if (this.built) this.refresh();
   };
 
+  /* Копия текущей страницы в новую: исходная со своей историей остаётся как
+     была, а на копии можно стереть лишнее и продолжить. Ученик копирует свой
+     слой (пометки учителя остаются на исходной), учитель — всё, что видит,
+     в свой слой. Фон и его параметры — как у исходной, чтобы рисунок не сдвинулся. */
+  Widget.prototype.copyableElements = function (page) {
+    if (!page) return [];
+    if (this.layer === 'teacher') return page.layers.student.elements.concat(page.layers.teacher.elements);
+    return page.layers.student.elements;
+  };
+
+  Widget.prototype.duplicatePage = function () {
+    var source = this.page();
+    if (!source || !this.canAddPage() || this.removing) return;
+    var elements = this.copyableElements(source);
+    if (!elements.length) return;
+    if (elements.length > this.limits.elements) { toast(false, 'Слишком много элементов для копии'); return; }
+    var groups = {};
+    var copied = elements.map(function (element) {
+      var copy = Object.assign({}, element, {id: uid()});
+      if (element.g) copy.g = groups[element.g] || (groups[element.g] = uid());
+      return copy;
+    });
+    /* У учителя копия собирает оба слоя в один — сервер ограничивает размер
+       JSON слоя (MAX_BYTES), и такая копия не сохранилась бы никогда */
+    if (this.limits.bytes && JSON.stringify(copied).length > this.limits.bytes) {
+      toast(false, 'Рисунок слишком большой для копии — упростите его');
+      return;
+    }
+    var page = this.makePage({number: this.pages.length + 1, created_by_role: this.layer,
+      background: source.background, background_options: Object.assign({}, source.bgOptions)});
+    page.layers[this.layer].elements = copied;
+    this.flush(source);
+    this.pages.push(page);
+    this.touch(page);
+    this.index = this.pages.length - 1;
+    this.selection = [];
+    this.pending = [];
+    if (this.built) this.refresh();
+  };
+
   Widget.prototype.removeLastPage = function () {
     var self = this, page = this.pages[this.pages.length - 1];
     if (this.removing || !page || !this.editableLayer(page)) return Promise.resolve(false);
@@ -820,9 +944,9 @@
     var last = this.pages[this.pages.length - 1];
     var empty = last && !last.layers.student.elements.length && !last.layers.teacher.elements.length;
     this.deletePageButton.disabled = !last || !this.editableLayer(last) || !empty;
-    this.deletePageButton.title = !last ? 'Страниц нет' : !this.editableLayer(last)
+    setTip(this.deletePageButton, !last ? 'Страниц нет' : !this.editableLayer(last)
       ? 'Отправленную страницу нельзя удалить' : !empty
-      ? 'Сначала очистите последнюю страницу' : 'Удалить пустую последнюю страницу';
+      ? 'Удалить последнюю страницу — сначала очистите её' : 'Удалить пустую последнюю страницу');
   };
 
   /* ---------- DOM ---------- */
@@ -867,6 +991,9 @@
     head.innerHTML = '';
     var tabs = el('div', 'canvas-pages');
     tabs.appendChild(el('span', 'canvas-label', 'Доска для записей'));
+    /* Номера страниц — отдельной полосой: на узкой доске она прокручивается
+       вбок, а не переносится строками */
+    var strip = el('div', 'canvas-tabs');
     this.pages.forEach(function (p, i) {
       var b = button('btn btn-small btn-secondary canvas-page', String(p.number),
         p.locked ? 'Страница отправлена — только просмотр' : 'Страница ' + p.number, function () {
@@ -874,18 +1001,52 @@
         });
       b.setAttribute('aria-pressed', String(i === self.index));
       if (p.locked) b.classList.add('canvas-page-locked');
-      if (p.fresh && i !== self.index) { b.classList.add('canvas-page-fresh'); b.title += ' — есть новые пометки'; }
-      tabs.appendChild(b);
+      if (p.fresh && i !== self.index) { b.classList.add('canvas-page-fresh'); setTip(b, b.dataset.tip + ' — есть новые пометки'); }
+      strip.appendChild(b);
     });
+    var limitHint = this.layer === 'teacher' ? 'до ' + this.limits.teacher + ' страниц учителя' : 'до ' + this.limits.student + ' страниц';
+    tabs.appendChild(strip);
+    /* Действия со страницей целиком — рядом с вкладками, а не в панели рисования;
+       «+» — первым из них, чтобы не уезжал за край прокручиваемой полосы */
+    var actions = el('div', 'canvas-page-actions');
     if (this.canAddPage()) {
-      var limitHint = this.layer === 'teacher' ? 'до ' + this.limits.teacher + ' страниц учителя' : 'до ' + this.limits.student + ' страниц';
-      tabs.appendChild(button('btn btn-small btn-secondary', '+', 'Добавить страницу (' + limitHint + ')', function () { self.addPage(); }));
+      actions.appendChild(button('btn btn-small btn-secondary canvas-page', '+', 'Новая пустая страница (' + limitHint + ')', function () { self.addPage(); }));
     }
-    this.deletePageButton = iconButton('trash', 'Удалить пустую последнюю страницу', function () { self.removeLastPage(); });
-    if (this.layer) tabs.appendChild(this.deletePageButton);
+    if (this.layer && page) {
+      var copyable = this.copyableElements(page).length > 0;
+      var dup = button('btn btn-small btn-secondary canvas-labelled', '',
+        !this.canAddPage() ? 'Страниц уже максимум (' + limitHint + ')'
+          : !copyable ? 'На странице пока нечего копировать'
+          : 'Дублировать: новая страница с копией этого рисунка — на ней можно стереть лишнее, а эта останется как есть',
+        function () { self.duplicatePage(); });
+      var dupIcon = el('span', 'canvas-btn-icon'); dupIcon.innerHTML = svgIcon('duplicate');
+      dup.appendChild(dupIcon);
+      dup.appendChild(el('span', 'canvas-btn-text', 'Дублировать'));
+      dup.disabled = !this.canAddPage() || !copyable;
+      actions.appendChild(dup);
+    }
+    if (page) actions.appendChild(boxedIconButton('picture', 'Скопировать страницу как картинку — вставится в чат, документ или презентацию', function () { self.copyPage(); }));
+    this.deletePageButton = boxedIconButton('trash', 'Удалить пустую последнюю страницу', function () { self.removeLastPage(); });
+    if (this.layer) actions.appendChild(this.deletePageButton);
+    if (page && this.role === 'student' && this.showTeacherLayer) {
+      var eye = boxedIconButton(this.showTeacher ? 'eye' : 'eyeOff',
+        this.showTeacher ? 'Пометки учителя видны — нажмите, чтобы скрыть' : 'Пометки учителя скрыты — нажмите, чтобы показать',
+        function () {
+          self.showTeacher = !self.showTeacher;
+          try { localStorage.setItem(HIDE_TEACHER_KEY, self.showTeacher ? '0' : '1'); } catch (e) {}
+          self.refresh();
+        });
+      eye.setAttribute('aria-pressed', String(!this.showTeacher));
+      actions.appendChild(eye);
+    }
+    tabs.appendChild(actions);
     this.syncDeleteButton();
     head.appendChild(tabs);
     head.appendChild(button('icon-btn canvas-close', '×', 'Свернуть доску для записей — всё уже сохранено, откроется той же кнопкой', function () { self.close(); }));
+    requestAnimationFrame(function () {
+      var current = strip.querySelector('[aria-pressed="true"]');
+      if (current && strip.scrollWidth > strip.clientWidth) strip.scrollLeft = current.offsetLeft - strip.offsetLeft - 40;
+    });
     if (!page) {
       head.appendChild(el('span', 'helptext', this.layer ? 'Нажмите «+», чтобы добавить страницу.' : 'Страниц нет.'));
       this.toolbar.innerHTML = '';
@@ -895,83 +1056,15 @@
     this.stage.hidden = false;
     var editable = this.editableLayer(page);
 
-    var controls = el('div', 'canvas-controls');
     /* Фон — свойство страницы того, кто её создал: ученик правит свои страницы,
-       учитель — свои; чужие страницы и просмотр получают одну подпись вместо
-       трёх выпадающих списков. */
-    var ownsBackground = !!this.layer && page.createdBy === this.layer;
-    if (!ownsBackground) {
-      var plane0 = page.background === 'plane';
-      var desc = BG_LABELS[page.background] || page.background;
-      if (plane0) {
-        desc += ', ' + ((page.bgOptions.cell || 25) === 50 ? 'крупная клетка' : 'мелкая клетка')
-          + ', ' + (page.bgOptions.origin === 'bottom_left' ? 'начало слева внизу' : 'начало в центре');
-      }
-      controls.appendChild(el('span', 'canvas-bg-note', 'Фон: ' + desc.toLowerCase()));
-    }
-    function labelled(text, select) {
-      var label = el('label', 'canvas-bg-field');
-      label.appendChild(el('span', null, text));
-      label.appendChild(select);
-      return label;
-    }
-    var bg = el('select', 'canvas-bg');
-    Object.keys(BG_LABELS).forEach(function (key) {
-      var opt = el('option', null, BG_LABELS[key]);
-      opt.value = key;
-      bg.appendChild(opt);
-    });
-    bg.value = page.background;
-    bg.disabled = !editable;
-    bg.title = 'Фон страницы: белый, клетка, крупная клетка или координатная плоскость';
-    bg.addEventListener('change', function () {
-      page.background = bg.value;
-      if (bg.value === 'plane' && !page.bgOptions.cell) page.bgOptions = Object.assign({}, page.bgOptions, {cell: 50, origin: 'center'});
-      self.touch(page);
-      self.refresh();
-    });
-    if (ownsBackground) controls.appendChild(labelled('Фон', bg));
-    var plane = page.background === 'plane';
-    var cellSel = el('select', 'canvas-bg');
-    [[25, 'мелкая клетка'], [50, 'крупная клетка']].forEach(function (pair) {
-      var opt = el('option', null, pair[1]); opt.value = String(pair[0]); cellSel.appendChild(opt);
-    });
-    cellSel.value = String(page.bgOptions.cell || 25);
-    /* На старых страницах 1000×750 клетка задаёт смещение рисунка (offsetOf) — там её не меняем */
-    var legacy = !page.bgOptions.square;
-    cellSel.disabled = !editable || !plane || legacy;
-    cellSel.title = !plane ? 'Размер клетки — только для координатной плоскости'
-      : legacy ? 'На странице старого формата размер клетки фиксирован' : 'Размер клетки координатной плоскости';
-    cellSel.addEventListener('change', function () {
-      page.bgOptions = Object.assign({}, page.bgOptions, {cell: parseInt(cellSel.value, 10)});
-      self.touch(page); self.redraw();
-    });
-    if (ownsBackground) controls.appendChild(labelled('Клетка', cellSel));
-    var originSel = el('select', 'canvas-bg');
-    [['center', 'начало в центре'], ['bottom_left', 'начало слева внизу']].forEach(function (pair) {
-      var opt = el('option', null, pair[1]); opt.value = pair[0]; originSel.appendChild(opt);
-    });
-    originSel.value = page.bgOptions.origin || 'center';
-    originSel.disabled = !editable || !plane;
-    originSel.title = plane ? 'Положение начала координат: в центре или слева внизу (для парабол и корней)' : 'Начало координат — только для координатной плоскости';
-    originSel.addEventListener('change', function () {
-      page.bgOptions = Object.assign({}, page.bgOptions, {origin: originSel.value});
-      self.touch(page); self.redraw();
-    });
-    if (ownsBackground) controls.appendChild(labelled('Начало координат', originSel));
-    if (this.role === 'student' && this.showTeacherLayer) {
-      var teacherToggle = this.toggle('Скрыть пометки учителя', !this.showTeacher, function (hide) {
-        self.showTeacher = !hide;
-        try { localStorage.setItem(HIDE_TEACHER_KEY, hide ? '1' : '0'); } catch (e) {}
-        self.redraw();
-      });
-      teacherToggle.title = 'Пометки учителя появляются поверх вашего решения по мере того, как он их оставляет; тумблер их прячет';
-      controls.appendChild(teacherToggle);
-    }
+       учитель — свои; у чужих страниц переключатели только показывают фон. */
+    var controls = el('div', 'canvas-controls');
+    this.snapButton = null;
+    this.buildBackground(controls, page, editable);
     if (page.locked && this.role === 'student') {
       controls.appendChild(el('span', 'helptext', 'Страница отправлена — только просмотр'));
     }
-    head.appendChild(controls);
+    if (controls.childNodes.length) head.appendChild(controls);
 
     this.selection = [];
     this.pending = [];
@@ -979,35 +1072,80 @@
     this.resize();
   };
 
-  Widget.prototype.toggle = function (text, checked, onchange) {
-    var label = el('label', 'ws-toggle');
-    var input = el('input'); input.type = 'checkbox'; input.checked = checked;
-    input.addEventListener('change', function () { onchange(input.checked); });
-    label.appendChild(input);
-    label.appendChild(el('span', 'ws-toggle-slider'));
-    label.appendChild(el('span', 'ws-toggle-text', text));
-    return label;
+  Widget.prototype.ownsBackground = function (page) {
+    return !!this.editableLayer(page) && page.createdBy === this.layer;
+  };
+
+  /* Подложка и оси меняются независимо: оси ложатся на ту подложку, что уже
+     выбрана. В базе это прежние значения — plane с клеткой 25/50 и началом,
+     а оси на белом фоне — plane с grid: false (клетка задаёт единичный отрезок). */
+  Widget.prototype.setBackground = function (page, base, axes) {
+    base = base || baseOf(page);
+    axes = axes || axesOf(page);
+    if (axes === 'none') {
+      page.background = base;
+      page.bgOptions = page.bgOptions.square ? {square: true} : {};
+    } else {
+      var options = {cell: base === 'grid' ? 25 : 50, origin: axes};
+      if (base === 'blank') options.grid = false;
+      if (page.bgOptions.square) options.square = true;
+      page.background = 'plane';
+      page.bgOptions = options;
+    }
+    this.touch(page);
+    this.refresh();
+  };
+
+  /* Блоки выбора фона: [подпись, переключатели] */
+  Widget.prototype.backgroundParts = function (page) {
+    var self = this, owns = this.ownsBackground(page);
+    /* На старых страницах 1000×750 смещение рисунка зависит от фона и клетки
+       (offsetOf) — там фон не меняем, чтобы рисунок не съехал */
+    var locked = !owns || !page.bgOptions.square;
+    return [
+      ['Фон', segment(BG_ITEMS, baseOf(page), locked, function (v) { self.setBackground(page, v, null); })],
+      ['Оси', segment(AXES_ITEMS, axesOf(page), locked, function (v) { self.setBackground(page, null, v); })],
+    ];
+  };
+
+  Widget.prototype.makeSnapButton = function () {
+    var self = this;
+    this.snapButton = addIcon(button('canvas-seg canvas-seg-solo', '', '', function () {
+      self.snap = !self.snap; self.syncToolbar();
+    }), 'magnet');
+    return this.snapButton;
+  };
+
+  /* Строка над панелью: подложка, оси и привязка к сетке. У чужих страниц
+     и в просмотре переключатели неактивны и только показывают фон. */
+  Widget.prototype.buildBackground = function (controls, page, editable) {
+    this.backgroundParts(page).forEach(function (part) {
+      var box = el('div', 'canvas-seg-box');
+      box.appendChild(el('span', 'canvas-seg-caption', part[0]));
+      box.appendChild(part[1]);
+      controls.appendChild(box);
+    });
+    if (editable) controls.appendChild(this.makeSnapButton());
   };
 
   /* Панель строится один раз на страницу и больше не перестраивается: набор
      кнопок, их число и порядок не зависят от инструмента и выделения, меняются
      только aria-pressed/disabled и цвета слотов. Иначе появление ряда с
-     действиями над выделением сдвигало бы рабочее поле. */
+     действиями над выделением сдвигало бы рабочее поле.
+     Два ряда: «чем рисовать» (инструменты, меню «Фигуры» и «График», рисунок
+     задачи, очистка) и «как выглядит» (отмена/возврат, цвет, толщина, действия
+     с выделенным). Действия со страницей целиком — в шапке рядом с вкладками. */
   Widget.prototype.buildToolbar = function (editable) {
     var self = this, bar = this.toolbar;
+    this.closeMenu();
     bar.innerHTML = '';
     this.toolButtons = {};
     this.swatches = [];
     this.widthButtons = [];
     this.selectionButtons = [];
-    if (!editable) {
-      /* Только просмотр: единственная кнопка — скопировать картинкой */
-      var view = el('div', 'canvas-toolbar-row');
-      view.appendChild(iconButton('copy', 'Скопировать страницу как картинку — вставится в чат, документ или презентацию', function () { self.copyPage(); }));
-      bar.appendChild(view);
-      return;
-    }
-    var page = this.page();
+    this.shapesButton = null;
+    /* Только просмотр: копия картинкой уже в шапке, рисовать нечем */
+    if (!editable) return;
     var row1 = el('div', 'canvas-toolbar-row'), row2 = el('div', 'canvas-toolbar-row');
     bar.appendChild(row1);
     bar.appendChild(row2);
@@ -1021,35 +1159,35 @@
       return b;
     }
     var main = group(row1);
-    tool(main, 'pen', 'Карандаш', 'Карандаш (P)');
+    tool(main, 'pen', 'Карандаш', 'Карандаш — рисовать от руки (P)');
     tool(main, 'hl', 'Маркер', 'Маркер — полупрозрачный выделитель (Shift+P)');
-    tool(main, 'eraser', 'Ластик', 'Ластик: стирает участки карандаша и маркера; фигуры удаляются через «Выбор» (E)');
-    tool(main, 'select', 'Выбор', 'Выбор: клик или рамка выделяет, перетаскивание двигает, стрелки сдвигают на 1 (с Shift — на 10), Esc снимает выделение (V)');
+    tool(main, 'eraser', 'Ластик', 'Ластик — стирает штрихи карандаша и маркера; фигуры удаляйте через «Выбор» (E)');
+    tool(main, 'select', 'Выбор', 'Выбор — выделить кликом или рамкой и перетащить; Esc снимает выделение (V)');
 
-    var shapes = group(row1);
-    Object.keys(SHAPE_TOOLS).forEach(function (name) { tool(shapes, name, SHAPE_TOOLS[name].label, SHAPE_TOOLS[name].title); });
+    /* Семь фигур — в меню: на кнопке значок последней выбранной */
+    var shapes = group(row1, 'canvas-menu-anchor');
+    this.shapesButton = menuButton('shapes', 'Фигуры', 'Фигуры: отрезок, точка, окружность, прямоугольник, квадрат, треугольник, параллелограмм',
+      function () { self.openShapesMenu(shapes); });
+    this.shapesButton.classList.add('canvas-tool');
+    shapes.appendChild(this.shapesButton);
 
-    var graphs = group(row1, 'canvas-graphs');
-    Object.keys(FN).forEach(function (kind) {
-      var graph = button('btn btn-small btn-secondary canvas-tool', FN[kind].label,
-        FN[kind].title + ' — вставить заготовку текущим цветом и толщиной; опорную точку и ручку (1; 1) можно тянуть в режиме «Выбор»', function () {
-        self.insertFn(kind);
-      });
-      if (window.katex) window.katex.render({parabola: 'x^2', abs: '|x|', sqrt: '\\sqrt{x}', hyperbola: '1/x'}[kind], graph, {throwOnError: false});
-      graphs.appendChild(graph);
-    });
-    var pictures = group(row1, 'canvas-pictures');
-    this.imageButton = button('btn btn-small btn-secondary canvas-tool', 'Рисунок', 'Вставить рисунок из условия задачи', function () { self.pickImage(self.imageButton); });
-    if (ICONS.image) addIcon(this.imageButton, 'image');
-    pictures.appendChild(this.imageButton);
+    var graphs = group(row1, 'canvas-menu-anchor');
+    graphs.appendChild(menuButton('graph', 'График', 'График-заготовка: парабола, модуль, корень, гипербола',
+      function () { self.openGraphMenu(graphs); }));
 
-    var history = group(row1);
-    this.undoButton = iconButton('undo', 'Отменить (Ctrl+Z, на Mac ⌘Z)', function () { self.undo(); });
-    this.redoButton = iconButton('redo', 'Вернуть (Ctrl+Shift+Z или Ctrl+Y)', function () { self.redo(); });
+    var images = this.images || [];
+    if (images.length) {
+      var pictures = group(row1, 'canvas-menu-anchor');
+      pictures.appendChild(boxedIconButton('image', 'Вставить рисунок из условия задачи' + (images.length > 1 ? ' (' + images.length + ')' : ''),
+        function () { self.pickImage(pictures); }));
+    }
+    group(row1).appendChild(boxedIconButton('clear', 'Очистить страницу — свой слой целиком; отменяется через Ctrl+Z', function () { self.clearPage(); }));
+
+    var history = group(row2);
+    this.undoButton = boxedIconButton('undo', 'Отменить (Ctrl+Z, на Mac ⌘Z)', function () { self.undo(); });
+    this.redoButton = boxedIconButton('redo', 'Вернуть (Ctrl+Shift+Z или Ctrl+Y)', function () { self.redo(); });
     history.appendChild(this.undoButton);
     history.appendChild(this.redoButton);
-    history.appendChild(iconButton('clear', 'Очистить страницу — свой слой целиком; отменяется через Ctrl+Z', function () { self.clearPage(); }));
-    history.appendChild(iconButton('copy', 'Скопировать страницу как картинку — вставится в чат, документ или презентацию', function () { self.copyPage(); }));
 
     var colors = group(row2, 'canvas-colors');
     COLORS.forEach(function (_, i) {
@@ -1078,24 +1216,103 @@
       self.widthButtons.push(b);
     });
 
+    /* Подпись объясняет, к чему относятся значки и почему они неактивны,
+       пока ничего не выделено инструментом «Выбор» */
     var sel = group(row2, 'canvas-selection');
+    this.selectionCaption = el('span', 'canvas-caption', 'Выделенное:');
+    sel.appendChild(this.selectionCaption);
     [['trash', 'Удалить выделенное (Delete или Backspace)', function () { self.deleteSelection(); }],
      ['group', 'Сгруппировать выделенное: двигается и выделяется вместе (Ctrl+G)', function () { self.groupSelection(true); }],
      ['ungroup', 'Разгруппировать (Ctrl+Shift+G)', function () { self.groupSelection(false); }],
      ['front', 'На передний план (клавиша ])', function () { self.reorderSelection(true); }],
      ['back', 'На задний план (клавиша [)', function () { self.reorderSelection(false); }]].forEach(function (item) {
-      var b = iconButton(item[0], item[1], item[2]);
-      b.classList.remove('icon-btn');
-      b.classList.add('btn', 'btn-small', 'btn-secondary');
+      var b = boxedIconButton(item[0], item[1], item[2]);
       sel.appendChild(b);
       self.selectionButtons.push(b);
     });
-
-    var misc = group(row2);
-    this.snapToggle = this.toggle('Привязывать к сетке', this.snap, function (on) { self.snap = on; });
-    this.snapToggle.title = 'Концы фигур, точки и ручки заготовок притягиваются к узлам сетки; карандаша не касается';
-    misc.appendChild(this.snapToggle);
     this.syncToolbar();
+  };
+
+  /* Всплывающее меню под кнопкой: одно на виджет, закрывается кликом мимо или Esc */
+  Widget.prototype.closeMenu = function () {
+    if (this.menu) { this.menu.remove(); this.menu = null; }
+    if (this.menuCloser) {
+      document.removeEventListener('pointerdown', this.menuCloser);
+      document.removeEventListener('keydown', this.menuCloser);
+      this.menuCloser = null;
+    }
+  };
+
+  Widget.prototype.openMenu = function (anchor, menu) {
+    var self = this;
+    this.closeMenu();
+    this.menu = menu;
+    anchor.appendChild(menu);
+    /* Меню не выходит за правый край доски: иначе прижимаем его к нему */
+    var box = this.root.getBoundingClientRect(), at = anchor.getBoundingClientRect(), r = menu.getBoundingClientRect();
+    if (r.right > box.right) menu.style.left = Math.max(box.left - at.left, box.right - at.left - r.width) + 'px';
+    /* Клик внутри якоря (включая саму кнопку) не закрывает меню здесь: иначе
+       pointerdown по кнопке закрыл бы его до click, и тот открыл бы меню заново */
+    this.menuCloser = function (ev) {
+      if (ev.type === 'keydown' ? ev.key === 'Escape' : !anchor.contains(ev.target)) self.closeMenu();
+    };
+    setTimeout(function () {
+      if (self.menu !== menu) return;
+      document.addEventListener('pointerdown', self.menuCloser);
+      document.addEventListener('keydown', self.menuCloser);
+    }, 0);
+  };
+
+  Widget.prototype.menuRow = function (icon, label, title, action) {
+    var b = button('canvas-menu-row', '', title, action);
+    b.setAttribute('role', 'menuitem');
+    var ic = el('span', 'canvas-menu-icon');
+    if (typeof icon === 'string') ic.innerHTML = svgIcon(icon); else ic.appendChild(icon);
+    b.appendChild(ic);
+    b.appendChild(el('span', null, label));
+    return b;
+  };
+
+  Widget.prototype.openShapesMenu = function (anchor) {
+    var self = this;
+    if (this.menu && anchor.contains(this.menu)) { this.closeMenu(); return; }
+    var menu = el('div', 'canvas-menu canvas-menu-list canvas-menu-shapes');
+    menu.setAttribute('role', 'menu');
+    Object.keys(SHAPE_TOOLS).forEach(function (name) {
+      var b = self.menuRow(name, SHAPE_TOOLS[name].name, SHAPE_TOOLS[name].title, function () { self.closeMenu(); self.setTool(name); });
+      b.setAttribute('aria-pressed', String(self.tool === name));
+      menu.appendChild(b);
+    });
+    this.openMenu(anchor, menu);
+  };
+
+  Widget.prototype.openGraphMenu = function (anchor) {
+    var self = this;
+    if (this.menu && anchor.contains(this.menu)) { this.closeMenu(); return; }
+    var menu = el('div', 'canvas-menu canvas-menu-list');
+    menu.setAttribute('role', 'menu');
+    Object.keys(FN).forEach(function (kind) {
+      var formula = el('span', 'canvas-menu-formula', 'y = ' + FN[kind].label);
+      if (window.katex) window.katex.render('y = ' + FN_TEX[kind], formula, {throwOnError: false});
+      var b = self.menuRow(formula, FN[kind].name, FN[kind].title, function () { self.closeMenu(); self.insertFn(kind); });
+      menu.appendChild(b);
+    });
+    this.openMenu(anchor, menu);
+  };
+
+  Widget.prototype.pickImage = function (anchor) {
+    var self = this, images = this.images || [];
+    if (!images.length) return;
+    if (images.length === 1) { this.insertImage(images[0]); return; }
+    if (this.menu && anchor.contains(this.menu)) { this.closeMenu(); return; }
+    var menu = el('div', 'canvas-menu');
+    images.forEach(function (image, i) {
+      var b = button('canvas-menu-item', '', 'Вставить рисунок ' + (i + 1), function () { self.closeMenu(); self.insertImage(image); });
+      var thumb = el('img'); thumb.src = image.url; thumb.alt = 'рисунок ' + (i + 1); thumb.loading = 'lazy';
+      b.appendChild(thumb);
+      menu.appendChild(b);
+    });
+    this.openMenu(anchor, menu);
   };
 
   /* Палитра и толщины текущего инструмента (слотов всегда поровну) */
@@ -1115,36 +1332,40 @@
     this.swatches.forEach(function (b, i) {
       var c = palette.colors[i];
       b.style.setProperty('--c', c);
-      b.title = self.tool === 'eraser' ? 'У ластика нет цвета'
-        : 'Цвет: ' + (COLOR_NAMES[c] || c) + (self.selection.length ? ' — перекрасить выделенное' : '');
-      b.setAttribute('aria-label', b.title);
+      setTip(b, self.tool === 'eraser' ? 'У ластика нет цвета'
+        : 'Цвет: ' + (COLOR_NAMES[c] || c) + (self.selection.length ? ' — перекрасить выделенное' : ''));
       b.disabled = self.tool === 'eraser';
       b.setAttribute('aria-pressed', String(c === palette.current));
     });
     this.widthButtons.forEach(function (b, i) {
       var w = palette.widths[i];
-      b.title = self.tool === 'eraser' ? 'Размер ластика: ' + ERASER_NAMES[i] + ' (' + w + ')'
-        : 'Толщина: ' + SIZE_NAMES[i] + ' (' + w + ')' + (self.selection.length ? ' — применить к выделенному' : '');
-      b.setAttribute('aria-label', b.title);
+      setTip(b, self.tool === 'eraser' ? 'Размер ластика: ' + ERASER_NAMES[i]
+        : 'Толщина: ' + SIZE_NAMES[i] + (self.selection.length ? ' — применить к выделенному' : ''));
       b.setAttribute('aria-pressed', String(w === palette.width));
     });
-    if (this.imageButton) {
-      var n = (this.images || []).length;
-      this.imageButton.disabled = !n;
-      this.imageButton.title = n ? 'Вставить рисунок из условия задачи' + (n > 1 ? ' (' + n + ')' : '')
-        : 'У этой задачи нет рисунков, которые можно положить на доску';
-      this.imageButton.setAttribute('aria-label', this.imageButton.title);
-    }
     var hasSelection = this.tool === 'select' && this.selection.length > 0;
     this.selectionButtons.forEach(function (b, i) {
       b.disabled = !hasSelection || (i === 1 && self.selection.length < 2);
     });
+    if (this.selectionCaption) {
+      this.selectionCaption.classList.toggle('canvas-disabled', !hasSelection);
+      setTip(this.selectionCaption, hasSelection ? '' : 'Выделите фигуры инструментом «Выбор» — тогда станут доступны эти действия');
+    }
     if (this.undoButton) this.undoButton.disabled = !page.undo.length;
     if (this.redoButton) this.redoButton.disabled = !page.redo.length;
-    if (this.snapToggle) {
-      var input = this.snapToggle.querySelector('input');
-      input.disabled = !cellOf(page);
-      this.snapToggle.classList.toggle('canvas-disabled', !cellOf(page));
+    if (this.shapesButton) {
+      var shape = SHAPE_TOOLS[this.tool] ? this.tool : null;
+      if (shape) this.lastShape = shape;
+      this.shapesButton.setAttribute('aria-pressed', String(!!shape));
+      this.shapesButton.querySelector('.canvas-btn-icon').innerHTML = svgIcon(this.lastShape || 'shapes');
+      setTip(this.shapesButton, shape ? 'Фигуры — сейчас: ' + SHAPE_TOOLS[shape].name.toLowerCase() : 'Фигуры: отрезок, окружность, многоугольники');
+    }
+    if (this.snapButton && document.body.contains(this.snapButton)) {
+      var cell = !!cellOf(page);
+      this.snapButton.disabled = !cell;
+      this.snapButton.setAttribute('aria-pressed', String(this.snap && cell));
+      setTip(this.snapButton, !cell ? 'Привязка к сетке — только на фоне с клеткой'
+        : 'Привязка к сетке ' + (this.snap ? 'включена' : 'выключена') + ': концы фигур и точки притягиваются к узлам клетки');
     }
   };
 
@@ -1456,31 +1677,10 @@
     whenImageSettles(image.url, place);
   };
 
-  Widget.prototype.pickImage = function (anchor) {
-    var self = this, images = this.images || [];
-    if (!images.length) return;
-    if (images.length === 1) { this.insertImage(images[0]); return; }
-    var old = this.root.querySelector('.canvas-menu');
-    if (old) { old.remove(); return; }
-    var menu = el('div', 'canvas-menu');
-    images.forEach(function (image, i) {
-      var b = button('canvas-menu-item', '', 'Вставить рисунок ' + (i + 1), function () { menu.remove(); self.insertImage(image); });
-      var thumb = el('img'); thumb.src = image.url; thumb.alt = 'рисунок ' + (i + 1); thumb.loading = 'lazy';
-      b.appendChild(thumb);
-      menu.appendChild(b);
-    });
-    anchor.parentNode.appendChild(menu);
-    setTimeout(function () {
-      document.addEventListener('pointerdown', function close(ev) {
-        if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('pointerdown', close); }
-      });
-    }, 0);
-  };
-
   Widget.prototype.insertFn = function (kind) {
     var page = this.page();
     if (!page || !this.editableLayer(page)) return;
-    var cell = cellOf(page) || 25;
+    var cell = unitOf(page) || 25;
     var o = page.background === 'plane' ? planeOrigin(page) : [W / 2, H / 2 - offsetOf(page)];
     var element = {id: uid(), t: 'fn', k: kind, c: this.color, w: this.penWidth, p: [[o[0], o[1]], [o[0] + cell, o[1] - cell]]};
     this.addElement(element);
@@ -1540,7 +1740,10 @@
       this.startSelect(e, pt);
     } else if (tool === 'dot') {
       var snappedPt = roundPoint(this.snapped(pt));
-      this.addElement({id: uid(), t: 'dot', c: this.color, w: Math.max(3, this.penWidth), p: [snappedPt], l: page.background === 'plane' && this.snap});
+      /* Подпись координат — только если точка правда встала в узел: на осях
+         без сетки (grid: false) привязки нет, и подпись вышла бы дробной */
+      this.addElement({id: uid(), t: 'dot', c: this.color, w: Math.max(3, this.penWidth), p: [snappedPt],
+        l: page.background === 'plane' && this.snap && !!cellOf(page)});
     } else if (tool === 'tri' || tool === 'para') {
       this.pending.push(roundPoint(this.snapped(pt)));
       if (this.pending.length === 3) {
