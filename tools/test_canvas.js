@@ -189,7 +189,8 @@ test('удаление пустой страницы ждёт сохранени
 test('очистка включает удаление последней страницы, а отмена снова выключает', () => {
   const {widget: w} = setup(); w.addPage();
   const page = w.page();
-  w.deletePageButton = {};
+  // Подсказка ставится через data-tip и aria-label (setTip) — заглушке нужны эти поля
+  w.deletePageButton = {dataset: {}, setAttribute() {}, removeAttribute() {}};
   w.commit(page, [stroke('a')]); w.syncDeleteButton();
   assert.equal(w.deletePageButton.disabled, true);
   w.clearPage(); w.syncDeleteButton();
