@@ -52,7 +52,8 @@ egormath (`/opt/egormath`, этот документ). SSH: `ssh chemolymp-demo`
 | Откат базы/файлов на ночной слепок | `/opt/egormath/deploy/vps/restore.sh --stamp <YYYYMMDD-HHMMSS>` (см. «Восстановление после потери сервера») |
 | Сводка нагрузки | `/opt/egormath/deploy/vps/log-report.sh` (7 дней) или `… 24h`; еженедельно — `data/logs/weekly-report.log` |
 | Выключить холст | `echo 0 > /opt/egormath/data/secrets/CANVAS_ENABLED` и `docker compose … restart egormath-web` |
-| Проверить почту сайта | `/opt/egormath/deploy/vps/manage.sh mail_check адрес@example.com` (настройка — [MAIL.md](MAIL.md)) |
+| Настроить почту сайта | `ssh -t chemolymp-demo /opt/egormath/deploy/vps/mail-setup.sh` — спрашивает ящик и пароль, проверяет вход, кладёт секреты, перезапускает web и шлёт тест ([MAIL.md](MAIL.md)) |
+| Проверить почту сайта | `/opt/egormath/deploy/vps/mail-setup.sh --check адрес@example.com` или `manage.sh mail_check адрес@example.com` |
 
 `deploy.sh`: fetch → checkout → сборка образа → бэкап → `check --deploy` →
 `migrate` → `seed_rubricator` → `collectstatic` → пересоздание контейнеров →

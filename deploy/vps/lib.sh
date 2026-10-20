@@ -20,4 +20,5 @@ DATA_DIR="$(env_get DATA_DIR)"
 DATA_DIR="${DATA_DIR:-$APP_DIR/data}"
 export DATA_DIR
 export APP_UID="${APP_UID:-$(id -u)}"
-COMPOSE="docker compose --env-file $ENV_FILE -f $APP_DIR/deploy/vps/compose.yaml"
+# COMPOSE можно подменить из окружения — для прогона скриптов без Docker (тесты на Mac)
+COMPOSE="${COMPOSE:-docker compose --env-file $ENV_FILE -f $APP_DIR/deploy/vps/compose.yaml}"
