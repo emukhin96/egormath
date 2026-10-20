@@ -29,9 +29,22 @@ show() {
   echo "   PROPOSAL_NOTIFY_EMAILS: ${EDITORS_CUR:-(нет — письма о предложениях не уходят)}"
 }
 
-mail_check() { # mail_check <адрес>
+mail_check() { # mail_check <адрес>: команда из PR #254; пока на сервере main без неё — send_mail из shell
   echo "==> manage.py mail_check $1"
-  $COMPOSE exec -T egormath-web python manage.py mail_check "$1"
+  if $COMPOSE exec -T egormath-web python manage.py help mail_check >/dev/null 2>&1; then
+    $COMPOSE exec -T egormath-web python manage.py mail_check "$1"
+  else
+    echo "   (команды mail_check в этой версии сайта ещё нет — шлю тест через send_mail)"
+    TO="$1" $COMPOSE exec -T -e TO egormath-web python manage.py shell -c '
+import os
+from django.conf import settings
+from django.core.mail import send_mail
+print("Бэкенд:", settings.EMAIL_BACKEND)
+print("SMTP:", settings.EMAIL_HOST, settings.EMAIL_PORT, "SSL" if settings.EMAIL_USE_SSL else ("STARTTLS" if settings.EMAIL_USE_TLS else "без шифрования"), "логин", settings.EMAIL_HOST_USER)
+print("Отправитель:", settings.DEFAULT_FROM_EMAIL)
+sent = send_mail("Проверка почты сайта «Математика»", "Тестовое письмо с сайта: почта настроена.", settings.DEFAULT_FROM_EMAIL, [os.environ["TO"]], fail_silently=False)
+print("Отправлено:", sent, "на", os.environ["TO"])'
+  fi
 }
 
 dns_hint() { # dns_hint <домен ящика>: что видно снаружи, без оценки
