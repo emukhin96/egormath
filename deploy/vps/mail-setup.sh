@@ -88,16 +88,21 @@ ask USER_ADDR "Ящик (логин — полный адрес)" "${EMAIL_USER_
 case "$USER_ADDR" in *@*) ;; *) echo "!! логин должен быть адресом ящика: Timeweb принимает письма только от ящика авторизации" >&2; exit 1 ;; esac
 case "$PORT" in 465|587|25|2525) ;; *) echo "!! странный порт: $PORT" >&2; exit 1 ;; esac
 
+# Повтор пароля нужен только для нового: оставленный по Enter уже проверен
+# прошлым запуском, а переспрашивать его администратор может и не помнить.
+KEEP_PASS=0
 if [ -r "$SECRETS/EMAIL_HOST_PASSWORD" ] && [ "$USER_ADDR" = "$EMAIL_USER_CUR" ]; then
   read -rs -p "Пароль ящика (ввод скрыт; Enter — оставить текущий): " PASS; echo
-  [ -n "$PASS" ] || PASS="$(cat "$SECRETS/EMAIL_HOST_PASSWORD")"
+  if [ -z "$PASS" ]; then PASS="$(cat "$SECRETS/EMAIL_HOST_PASSWORD")"; KEEP_PASS=1; fi
 else
   read -rs -p "Пароль ящика $USER_ADDR (ввод скрыт): " PASS; echo
 fi
 [ -n "$PASS" ] || { echo "!! пустой пароль" >&2; exit 1; }
-read -rs -p "Пароль ещё раз: " PASS2; echo
-[ "$PASS" = "$PASS2" ] || { echo "!! пароли не совпали" >&2; exit 1; }
-unset PASS2
+if [ "$KEEP_PASS" = 0 ]; then
+  read -rs -p "Пароль ещё раз: " PASS2; echo
+  [ "$PASS" = "$PASS2" ] || { echo "!! пароли не совпали" >&2; exit 1; }
+  unset PASS2
+fi
 ask EDITORS "Адреса редакторов через запятую (письма о новых предложениях)" "$EDITORS_CUR"
 ask TEST_TO "Куда отправить тестовое письмо" "${EDITORS%%,*}"
 [ -n "$TEST_TO" ] || { echo "!! нужен адрес для теста" >&2; exit 1; }
