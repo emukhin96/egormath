@@ -12,7 +12,10 @@
 Отправитель везде — `DEFAULT_FROM_EMAIL`: «Математика <ящик>». Пока
 `EMAIL_HOST` не задан, сайт работает как раньше: письма молча не
 отправляются, ссылки «Забыли пароль?» и кнопок «Отправить письмом» нет.
-Локально при `DEBUG` письма печатаются в консоль `runserver`.
+Локально при `DEBUG` письма печатаются в консоль `runserver`. Форма
+восстановления пароля анонимная, поэтому ограничена: не больше 3 писем на
+адрес и 30 запросов с одного IP в час, сверх лимита письмо не уходит, а
+страница та же (`accounts/password_reset.py`).
 
 ## 1. Решение: почта для домена Timeweb (20.10.2026)
 
@@ -38,69 +41,54 @@
 - Обратные письма на `no-reply@` будут приходить в этот ящик: раз в
   какое-то время заглянуть в mail.timeweb.com или включить автоответ.
 
-## 2. Какой адрес
+## 2. Какой адрес: `no-reply@egor.am`
 
-| Вариант | Что делать | Когда подходит |
-|---|---|---|
-| **`no-reply@math.emukhin.ru`** | только создать ящик: зона `emukhin.ru` на NS Timeweb, записи MX, SPF, DKIM и DMARC панель ставит сама | сейчас, пока сайт живёт на `math.emukhin.ru` |
-| `no-reply@math.egor.am` | добавить домен в панель Timeweb без переноса NS, создать ящик, внести пять записей у DNS-провайдера `egor.am` (раздел 4) | если отправитель должен быть на `egor.am` уже сейчас |
+Timeweb создаёт ящики только на доменах из списка раздела «Почта» — на
+поддоменах (`math.emukhin.ru`, `math.egor.am`) нельзя. Из доменов аккаунта
+подходит `egor.am`: почта этого домена уже на Timeweb (на 21.10.2026 два
+ящика), зона на NS Timeweb, снаружи есть MX `mx1`/`mx2.timeweb.ru`, SPF
+`v=spf1 include:_spf.timeweb.ru ~all` и DMARC `p=none`. `emukhin.ru` не
+подходит: его почта на Яндексе (MX `mx.yandex.net`, SPF `redirect=_spf.yandex.net`),
+ящик Timeweb на нём спорил бы с этим.
 
 Домен в адресе отправителя не обязан совпадать с доменом сайта: ссылки в
 письмах строятся от хоста запроса (`build_absolute_uri`), а не от адреса.
+Решение 2 плана пользователей (`no-reply@math.egor.am`) остаётся для
+релея (раздел 7): там адрес на поддомене возможен.
 
 ## 3. Ящик в панели Timeweb (делает Егор)
 
-1. Панель хостинга Timeweb → «Почта» → «Создать ящик»: домен
-   `math.emukhin.ru` (или `math.egor.am`, если домен уже добавлен в
-   «Домены и SSL»), имя `no-reply`, пароль — сгенерировать длинный и сразу
-   сохранить в менеджер паролей. Это будущие `EMAIL_HOST_USER` (полный
-   адрес) и `EMAIL_HOST_PASSWORD`.
-2. Войти в ящик на mail.timeweb.com и отправить два-три письма на свой
-   адрес: после первых писем Timeweb выпускает DKIM-ключ домена. Для
-   домена на NS Timeweb запись появится в DNS сама; для `egor.am` значение
-   нужно будет скопировать из «Домены и SSL» → домен → «Настройки DNS».
-3. Проверить записи из раздела 4.
+1. Панель хостинга Timeweb → «Почта» → в выпадающем списке доменов выбрать
+   `egor.am` → «Добавить ящик»: имя `no-reply`, пароль — сгенерировать
+   длинный и сразу сохранить в менеджер паролей. Это будущие
+   `EMAIL_HOST_USER` (`no-reply@egor.am`) и `EMAIL_HOST_PASSWORD`.
+2. DNS трогать не нужно (раздел 4). DKIM у домена с работающими ящиками
+   уже выпущен; если первое письмо придёт без `DKIM: PASS` — отправить
+   два письма из ящика через mail.timeweb.com и подождать час.
 
 ## 4. DNS-записи
 
-Снаружи у `math.emukhin.ru` на 21.10.2026 есть только A-запись на VPS; MX и
-SPF отсутствуют, почта корня `emukhin.ru` живёт на Яндексе и на поддомен не
-влияет. Панель Timeweb ставит MX сама только при добавлении домена, поэтому
-для поддомена записи добавляются руками.
+Для `egor.am` ничего добавлять не нужно, всё уже стоит (проверено
+21.10.2026 с публичного резолвера и с `ns1.timeweb.ru`):
 
-**Где:** панель хостинга Timeweb → «Домены и SSL» («Мои домены») →
-`math.emukhin.ru` → «Редактор DNS» → «Добавить запись». Если у поддомена
-нет своего редактора, открыть редактор `emukhin.ru` и в поле «Хост» писать
-`math` вместо пустого (вторая колонка). Точку в конце значений не ставить.
+| Имя | Тип | Значение |
+|---|---|---|
+| `egor.am` | MX 10 | `mx1.timeweb.ru` |
+| `egor.am` | MX 20 | `mx2.timeweb.ru` |
+| `egor.am` | TXT | `v=spf1 include:_spf.timeweb.ru ~all` |
+| `_dmarc.egor.am` | TXT | `v=DMARC1;p=none` |
 
-| Тип | Хост (редактор `math.emukhin.ru`) | Хост (редактор `emukhin.ru`) | Значение | Приоритет |
-|---|---|---|---|---|
-| MX | пусто | `math` | `mx1.timeweb.ru` | `10` |
-| MX | пусто | `math` | `mx2.timeweb.ru` | `20` |
-| TXT | пусто | `math` | `v=spf1 include:_spf.timeweb.ru ~all` | — |
-| TXT | `_dmarc` | `_dmarc.math` | `v=DMARC1; p=none` | — |
-
-DKIM добавлять не нужно: для домена на NS Timeweb подпись включается сама
-после создания ящика и первого письма из него, запись появится в этом же
-редакторе. Если через сутки после писем её нет — чат поддержки Timeweb.
-Другие записи поддомена (A на VPS) не трогать.
-
-Проверка с Mac через 10–30 минут после сохранения (обновление DNS у
-Timeweb — от минут до суток), ожидаемый вывод в комментариях:
+Проверка с Mac:
 
 ```bash
-dig +short MX math.emukhin.ru @ns1.timeweb.ru      # 10 mx1.timeweb.ru.  20 mx2.timeweb.ru.
-dig +short TXT math.emukhin.ru @ns1.timeweb.ru     # "v=spf1 include:_spf.timeweb.ru ~all"
-dig +short TXT _dmarc.math.emukhin.ru @ns1.timeweb.ru   # "v=DMARC1; p=none"
-dig +short MX math.emukhin.ru                      # то же с публичного резолвера, когда кэш обновится
+dig +short MX egor.am; dig +short TXT egor.am; dig +short TXT _dmarc.egor.am
 ```
 
-`@ns1.timeweb.ru` спрашивает авторитетный сервер Timeweb напрямую и
-показывает записи сразу после сохранения, без ожидания кэшей.
-
-Для `math.egor.am` (если когда-нибудь понадобится): те же четыре записи плюс
-TXT DKIM у DNS-провайдера `egor.am`, значение DKIM берётся из редактора DNS
-домена в панели Timeweb после первых писем, имя `<селектор>._domainkey.math`.
+Если когда-нибудь ящик придётся заводить на другом домене аккаунта, те же
+четыре записи добавляются в панели: «Домены и SSL» → домен → «Редактор DNS»
+→ «Добавить запись», поле «Хост» пустое (для DMARC — `_dmarc`), точку в
+конце значения не ставить; для домена на NS Timeweb панель ставит MX сама
+при добавлении домена, DKIM — после первого письма из ящика.
 
 ## 5. Секреты: одна команда
 
@@ -143,7 +131,7 @@ ssh -t chemolymp-demo /opt/egormath/deploy/vps/mail-setup.sh
 |---|---|
 | SMTP-сервер | `smtp.timeweb.ru` (по умолчанию) |
 | Порт | `465` (по умолчанию; SSL включится сам) |
-| Ящик | `no-reply@math.emukhin.ru` (по умолчанию) |
+| Ящик | `no-reply@egor.am` (по умолчанию) |
 | Пароль | пароль ящика из панели Timeweb, ввод скрыт |
 | Адреса редакторов | свой адрес; несколько — через запятую |
 | Куда тест | по умолчанию первый из адресов редакторов |
@@ -159,7 +147,7 @@ ssh -t chemolymp-demo /opt/egormath/deploy/vps/mail-setup.sh
 cd /opt/egormath/data/secrets
 printf '%s' 'smtp.timeweb.ru' > EMAIL_HOST
 printf '%s' '465' > EMAIL_PORT
-printf '%s' 'no-reply@math.emukhin.ru' > EMAIL_HOST_USER
+printf '%s' 'no-reply@egor.am' > EMAIL_HOST_USER
 read -rs P && printf '%s' "$P" > EMAIL_HOST_PASSWORD && unset P   # пароль не попадёт в историю shell
 printf '%s' '<почта редактора>' > PROPOSAL_NOTIFY_EMAILS
 chmod 600 EMAIL_HOST_PASSWORD
@@ -184,8 +172,8 @@ ssh -t chemolymp-demo /opt/egormath/deploy/vps/mail-setup.sh --check <свой �
 
 ```
 Бэкенд: django.core.mail.backends.smtp.EmailBackend
-SMTP: smtp.timeweb.ru:465, SSL с подключения, логин no-reply@math.emukhin.ru, таймаут 10 с
-Отправитель: Математика <no-reply@math.emukhin.ru>
+SMTP: smtp.timeweb.ru:465, SSL с подключения, логин no-reply@egor.am, таймаут 10 с
+Отправитель: Математика <no-reply@egor.am>
 Адреса редакторов (PROPOSAL_NOTIFY_EMAILS): <почта редактора>
 Тестовое письмо отправлено на <свой адрес>
 ```

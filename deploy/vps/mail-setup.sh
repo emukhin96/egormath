@@ -84,7 +84,7 @@ echo
 echo "Enter — оставить значение в скобках. Инструкция: deploy/MAIL.md, раздел 5."
 ask HOST "SMTP-сервер" "${EMAIL_HOST_CUR:-smtp.timeweb.ru}"
 ask PORT "Порт (465 — SSL, 587 — STARTTLS)" "${EMAIL_PORT_CUR:-465}"
-ask USER_ADDR "Ящик (логин — полный адрес)" "${EMAIL_USER_CUR:-no-reply@math.emukhin.ru}"
+ask USER_ADDR "Ящик (логин — полный адрес)" "${EMAIL_USER_CUR:-no-reply@egor.am}"
 case "$USER_ADDR" in *@*) ;; *) echo "!! логин должен быть адресом ящика: Timeweb принимает письма только от ящика авторизации" >&2; exit 1 ;; esac
 case "$PORT" in 465|587|25|2525) ;; *) echo "!! странный порт: $PORT" >&2; exit 1 ;; esac
 
