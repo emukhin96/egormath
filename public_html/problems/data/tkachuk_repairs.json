@@ -69,10 +69,10 @@
     },
     "1970.ФЛ.2": {
      "text": "Найти все \\(x\\), для которых \\(0{,}5<x<2{,}5\\) и которые удовлетворяют неравенству\n\\[\n\\log _{3 x-x^{2}}(3 a-a x)<1\n\\]\nпри всех \\(a\\) из промежутка \\(0<a<2\\).",
-     "answer": "\\(2 \\leqslant x<2{,}5\\)"
+     "answer": ""
     },
     "1970.ФЛ.3": {
-     "answer": "\\(x=\\frac{\\pi}{2}\\)"
+     "answer": ""
     },
     "1970.ФЛ.5": {
      "text": "Не пользуясь таблицами (и калькулятором) доказать, что \\(\\operatorname{tg} 208^{\\circ}<\\sin 492^{\\circ}\\)."
@@ -9104,7 +9104,7 @@
      "solution": "Напишем цепочку эквивалентных преобразований данного неравенства:\n\\[\\sqrt{2+2 \\log _{2} \\sin x-2 \\log _{2} \\operatorname{tg} x}<1 \\Longleftrightarrow\\]\n\\[0 \\leqslant 2+2 \\log _{2} \\sin x-2 \\log _{2} \\operatorname{tg} x<1 \\Longleftrightarrow\\]\n\\[0 \\leqslant+\\log _{2} \\sin x-\\log _{2} \\operatorname{tg} x<\\frac{1}{2} \\Longleftrightarrow\\]\n\\[-1 \\leqslant \\log _{2}(\\sin x: \\operatorname{tg} x)<-\\frac{1}{2} \\Longleftrightarrow\\]\n\\[\\left\\{\\begin{array}{l}-1 \\leqslant \\log _{2} \\cos x<-\\frac{1}{2}, \\\\ \\sin x>0\\end{array}\\right. \\Longleftrightarrow\\left\\{\\begin{array}{l}\\frac{1}{2} \\leqslant \\cos x<\\frac{1}{\\sqrt{2}}, \\\\ \\sin x>0\\end{array}\\right. \\Longleftrightarrow\\]\n\\[\\frac{\\pi}{4}+2 n \\pi<x \\leqslant \\frac{\\pi}{3}+2 n \\pi, n \\in \\mathbf{Z}.\\]"
     },
     "У22.1": {
-     "text": "\\(\\displaystyle f(x)=x-\\frac{1}{3 x}, \\quad f^{\\prime}(1)=?\\)",
+     "text": "\\(\\displaystyle f(x)=x-\\frac{3}{x}, \\quad f^{\\prime}(1)=?\\)",
      "answer": "\\(4\\)",
      "solution": "Поскольку \\(f(x)=x-3 x^{-1}\\), имеем\n\\[f^{\\prime}(x)=\\left(x-3 x^{-1}\\right)^{\\prime}=x^{\\prime}-\\left(3 x^{-1}\\right)^{\\prime}=\\]\n\\[=1-3\\left(x^{-1}\\right)^{\\prime}=1-3\\left(-x^{-2}\\right)=1+\\frac{3}{x^{2}}.\\]\nЗначит, \\(f^{\\prime}(1)=1+\\frac{3}{1}=4\\)."
     },
