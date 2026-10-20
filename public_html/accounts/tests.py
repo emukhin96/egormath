@@ -1076,7 +1076,9 @@ class ReviewFixesTests(TestCase):
             created_by=self.admin, expires_at=timezone.now() + timedelta(days=3))
         response = self.client.get(reverse('teacher_join', args=[invite.token]))
         self.assertContains(response, 'составится из фамилии и имени, например smirnova.irina')
-        self.assertNotContains(response, 'Если оставить пустым')
+        # После 0c53cde подсказка логина — placeholder, поле уходит пустым:
+        # фраза «Если оставить пустым» снова точна, проверяем пример логина
+        self.assertContains(response, 'smirnova.irina')
         self.assertContains(response, 'registration.js')
 
     def test_student_create_uses_dotted_username(self):
