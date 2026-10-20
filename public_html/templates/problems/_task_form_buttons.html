@@ -8,7 +8,12 @@
           title="Создать задачу, несмотря на совпадение условия с #{{ duplicate_pk }}">
     Всё равно создать</button>
   {% endif %}
-  {% if can_save_local %}
+  {% if base_locked %}
+  {# Общая задача у приглашённого учителя: в базу не пишем, только локальная копия для листка #}
+  {% if can_save_local %}<button type="submit" name="save_local" class="btn"
+          title="Задача в базе не изменится; в листке появится её локальная копия">
+    Сохранить только для этого листка</button>{% else %}<span class="helptext">Общая задача: изменить её можно только для своего листка.</span>{% endif %}
+  {% elif can_save_local %}
   <button type="submit" name="save" class="btn">Сохранить в базе</button>
   <button type="submit" name="save_local" class="btn btn-secondary"
           title="Задача в базе не изменится; в листке появится её локальная копия">

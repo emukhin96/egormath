@@ -314,6 +314,13 @@ class Task(models.Model):
         related_name='variants', verbose_name='Вариант задачи',
         help_text='«Локальная» копия для конкретного листка: '
                   'в каталоге не показывается')
+    # Общая база против личных задач: политика — accounts/permissions.py.
+    # Новые задачи создавать через Task.new_for / make_variant(user), чтобы
+    # флаг выставлялся по автору, а не по умолчанию.
+    is_shared = models.BooleanField(
+        'В общей базе', default=False,
+        help_text='Общую задачу видят все учителя, правят только редакторы '
+                  'базы. Личная видна автору и редакторам.')
     created_at = models.DateTimeField('Создана', auto_now_add=True)
     updated_at = models.DateTimeField('Изменена', auto_now=True)
 
@@ -321,6 +328,10 @@ class Task(models.Model):
         verbose_name = 'Задача'
         verbose_name_plural = 'Задачи'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['is_shared', 'created_by'],
+                         name='problems_task_shared_author'),
+        ]
 
     def __str__(self):
         short = self.text_plain or strip_latex(self.text_latex)
@@ -345,6 +356,22 @@ class Task(models.Model):
         if update_fields is not None and 'text_latex' in update_fields:
             kwargs['update_fields'] = list(update_fields) + ['text_plain']
         super().save(*args, **kwargs)
+
+    @staticmethod
+    def shared_for(user):
+        """Попадает ли новая задача этого автора сразу в общую базу:
+        у редактора базы — да, у приглашённого учителя — личная задача."""
+        from accounts.permissions import is_base_editor
+        return is_base_editor(user)
+
+    @classmethod
+    def new_for(cls, user, *, author=None, **fields):
+        """Единая точка создания задачи: флаг общей базы — по ``user``, который
+        её создаёт; ``author`` — кто подписан автором, если это другой человек
+        (суперпользователь загружает партию задачника приглашённого учителя).
+        Все пути создания (форма, конструктор, импорт, корпус) идут сюда."""
+        return cls.objects.create(
+            created_by=author or user, is_shared=cls.shared_for(user), **fields)
 
     @property
     def has_subitem_answers(self):
@@ -439,7 +466,13 @@ class Task(models.Model):
         copy.block_position = 0
         copy.variant_of = None if standalone else original.variant_of or original
         if user is not None:
+            # Копия принадлежит тому, кто её сделал: у приглашённого учителя
+            # она личная и правится им свободно (accounts/permissions.py).
             copy.created_by = user
+            copy.is_shared = Task.shared_for(user)
+        if not standalone:
+            # Локальная копия живёт в одном листке — в общей базе её нет.
+            copy.is_shared = False
         copy.save()
         copy_task_taxonomy(original, copy)
         copy.tags.set(original.tags.all())
@@ -950,3 +983,76 @@ class NeuroSolveQuota(models.Model):
 
     def __str__(self):
         return f'Квота нейросети: {self.user}'
+
+
+class TaskProposal(models.Model):
+    """Предложение учителя редакторам: исправить общую задачу — текстом.
+
+    Приглашённый учитель общую задачу не меняет (accounts/permissions.py),
+    поэтому исправление идёт очередью: автор описывает, что не так, редактор
+    читает, правит задачу сам на карточке и ставит статус
+    (problems/proposals.py). Снимков полей и автоприменения нет — решение
+    19.10.2026 (docs/USERS_PLAN.md, раздел 15, решение 7).
+    """
+
+    STATUS_NEW = 'new'
+    STATUS_ACCEPTED = 'accepted'
+    STATUS_REJECTED = 'rejected'
+    STATUS_CHOICES = [
+        (STATUS_NEW, 'Новое'),
+        (STATUS_ACCEPTED, 'Принято'),
+        (STATUS_REJECTED, 'Отклонено'),
+    ]
+
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, related_name='proposals',
+        verbose_name='Задача',
+        help_text='Общая задача, к которой предложение')
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='task_proposals', verbose_name='Автор')
+    message = models.TextField('Что исправить')
+    status = models.CharField(
+        'Статус', max_length=10, choices=STATUS_CHOICES, default=STATUS_NEW)
+    created_at = models.DateTimeField('Отправлено', auto_now_add=True)
+    resolved_at = models.DateTimeField('Решено', null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='resolved_task_proposals',
+        verbose_name='Кто решил')
+    seen_by_author_at = models.DateTimeField(
+        'Статус просмотрен автором', null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Предложение по задаче'
+        verbose_name_plural = 'Предложения по задачам'
+        ordering = ['-created_at', '-pk']
+        indexes = [
+            models.Index(fields=['status', 'created_at'],
+                         name='problems_proposal_status'),
+            models.Index(fields=['author', 'status'],
+                         name='problems_proposal_author'),
+        ]
+
+    def __str__(self):
+        return f'Предложение #{self.pk} к задаче #{self.task_id}'
+
+    @property
+    def is_open(self):
+        return self.status == self.STATUS_NEW
+
+    @staticmethod
+    def _name(user, fallback):
+        if user is None:
+            return fallback
+        return user.get_full_name() or user.username
+
+    @property
+    def author_name(self):
+        return self._name(self.author, 'учитель')
+
+    @property
+    def resolved_by_name(self):
+        """Кто решил; пользователь мог быть удалён (SET_NULL) — тогда
+        просто «редактор», страница не падает."""
+        return self._name(self.resolved_by, 'редактор')

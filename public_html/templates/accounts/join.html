@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Регистрация учителя — Математика{% endblock %}
+{% block content %}
+<div class="card login-box">
+  <h1>Регистрация учителя</h1>
+  <p class="muted">Вас пригласил {{ invite.created_by.get_full_name|default:invite.created_by.username }}. Ссылка действует до {{ invite.expires_at|date:'d.m.Y' }}.</p>
+  <form method="post" data-registration-form data-suggest-username>
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="msg msg-error">{{ form.non_field_errors }}</div>
+    {% endif %}
+    {% for field in form.visible_fields %}
+      <p>
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field.errors }}
+        {{ field }}
+        {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
+      </p>
+    {% endfor %}
+    <p class="form-buttons">
+      <button type="submit" class="btn">Создать аккаунт</button>
+      <a class="btn btn-secondary" href="{% url 'login' %}">Уже есть аккаунт</a>
+    </p>
+  </form>
+</div>
+{% endblock %}
+{% block extra_js %}<script src="{% static 'js/registration.js' %}?v=3"></script>{% endblock %}

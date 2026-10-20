@@ -284,28 +284,35 @@ def _task_signature(text, subitems=()):
                   if s))
 
 
-def _known_signatures():
-    """Сигнатуры всех задач каталога: {(условие, подпункты): pk}."""
+def _known_signatures(user=None):
+    """Сигнатуры задач для дедупликации: {(условие, подпункты): pk}.
+
+    Общие задачи плюс собственные пользователя (accounts.permissions.dedup_tasks);
+    чужая личная задача не должна всплывать как «уже есть #id» даже у
+    редактора базы — иначе импорт допишет в неё ответы.
+    """
+    from accounts.permissions import dedup_tasks
+    catalog = dedup_tasks(user)
     subs = {}
     for task_id, sub_text in (TaskSubitem.objects
-                              .filter(task__variant_of__isnull=True)
+                              .filter(task__in=catalog)
                               .order_by('task_id', 'order', 'id')
                               .values_list('task_id', 'text_latex')):
         subs.setdefault(task_id, []).append(sub_text)
     known = {}
-    for pk, text in (Task.objects.filter(variant_of__isnull=True)
-                     .values_list('pk', 'text_latex')):
+    for pk, text in catalog.values_list('pk', 'text_latex'):
         known.setdefault(_task_signature(text, subs.get(pk, ())), pk)
     return known
 
 
-def match_existing_tasks(parsed):
+def match_existing_tasks(parsed, user=None):
     """Для каждой задачи ищет совпадение в базе по условию и подпунктам.
 
     Возвращает список той же длины, что elements: pk задачи или None
-    (None и для нетасковых элементов).
+    (None и для нетасковых элементов). ``user`` сужает поиск до видимых
+    ему задач.
     """
-    known = _known_signatures()
+    known = _known_signatures(user)
     matches = []
     for kind, data in parsed['elements']:
         if kind != 'task':
@@ -316,13 +323,14 @@ def match_existing_tasks(parsed):
     return matches
 
 
-def find_existing_task(text, subitems=()):
+def find_existing_task(text, subitems=(), user=None):
     """pk задачи каталога с тем же условием и подпунктами или None.
 
     Та же проверка, что при импорте, — используется и при ручном создании
-    задачи, чтобы не плодить дубли под разными ID.
+    задачи, чтобы не плодить дубли под разными ID. ``user`` — чьи задачи
+    считать видимыми (без него — только общие).
     """
-    return _known_signatures().get(_task_signature(text, subitems))
+    return _known_signatures(user).get(_task_signature(text, subitems))
 
 
 def create_worksheet(parsed, owner, title='', overrides=None):
@@ -339,8 +347,9 @@ def create_worksheet(parsed, owner, title='', overrides=None):
     не переносятся, missing_images — список {'task': Task, 'files': […]}
     для догрузки на страницах задач (двухшаговый импорт графики).
     """
+    from accounts.permissions import can_edit_task
     header = parsed['header']
-    matches = match_existing_tasks(parsed)
+    matches = match_existing_tasks(parsed, owner)
     overrides = overrides or {}
     worksheet = Worksheet.objects.create(
         title=title or header['title'] or 'Импортированный листок',
@@ -350,6 +359,10 @@ def create_worksheet(parsed, owner, title='', overrides=None):
         owner=owner,
     )
     missing_images = []
+    # Локальные копии общих блоков: make_variant копирует блок целиком, и
+    # один набор копий обслуживает все вопросы блока в этом листке (как в
+    # editor.local_copy), иначе остальные копии повиснут без строк.
+    block_copies = {}
     for i, (kind, data) in enumerate(parsed['elements']):
         order = (i + 1) * 10
         if kind == 'rubric':
@@ -370,9 +383,28 @@ def create_worksheet(parsed, owner, title='', overrides=None):
             sub_solutions = extra.get('subitem_solutions', {})
             task_pk = matches[i]
             if task_pk is not None:
-                task = Task.objects.get(pk=task_pk)
+                task = block_copies.get(task_pk) or Task.objects.get(pk=task_pk)
                 # Ответы/решения можно горячо править и у существующих
-                # задач (класс/тему/звёзды существующих не трогаем)
+                # задач (класс/тему/звёзды существующих не трогаем).
+                subs = list(task.subitems.all())
+                changed = (
+                    ('answer' in extra and extra['answer'] != task.answer_latex)
+                    or ('solution' in extra
+                        and extra['solution'] != task.solution_latex)
+                    or any((j in sub_answers and sub_answers[j] != sub.answer_latex)
+                           or (j in sub_solutions
+                               and sub_solutions[j] != sub.solution_latex)
+                           for j, sub in enumerate(subs)))
+                if changed and not can_edit_task(owner, task):
+                    # Общую задачу приглашённый учитель не меняет: его правки
+                    # ответов уходят в локальную копию для этого листка.
+                    task, mappings = task.make_variant(owner, with_mapping=True)
+                    for src_pk, copy_pk in mappings.get('block_tasks', {}).items():
+                        block_copies[src_pk] = Task.objects.get(pk=copy_pk)
+                        # Вопросы блока, уже поставленные в листок, — на копии
+                        WorksheetItem.objects.filter(
+                            worksheet=worksheet, task_id=src_pk).update(task_id=copy_pk)
+                    subs = list(task.subitems.all())
                 updates = []
                 if 'answer' in extra and extra['answer'] != task.answer_latex:
                     task.answer_latex = extra['answer']
@@ -384,7 +416,7 @@ def create_worksheet(parsed, owner, title='', overrides=None):
                 if updates:
                     task.save(update_fields=updates)
                 if sub_answers or sub_solutions:
-                    for j, sub in enumerate(task.subitems.all()):
+                    for j, sub in enumerate(subs):
                         sub_updates = []
                         if (j in sub_answers
                                 and sub_answers[j] != sub.answer_latex):
@@ -397,14 +429,14 @@ def create_worksheet(parsed, owner, title='', overrides=None):
                         if sub_updates:
                             sub.save(update_fields=sub_updates)
             else:
-                task = Task.objects.create(
+                task = Task.new_for(
+                    owner,
                     text_latex=data['text'],
                     stars=extra.get('stars', data['stars']),
                     columns=data['columns'],
                     answer_latex=extra.get('answer', data['answer']),
                     solution_latex=extra.get('solution', data['solution']),
-                    grade_level=extra.get('grade_level'),
-                    created_by=owner)
+                    grade_level=extra.get('grade_level'))
                 grade_code = GRADE_LEVEL_TO_CODE.get(extra.get('grade_level'))
                 if grade_code:
                     set_grade_bands(task, [grade_code], sync_legacy=False)

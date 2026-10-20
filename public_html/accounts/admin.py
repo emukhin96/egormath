@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 
-from .models import Profile, StudentGroup
+from .models import Profile, StudentGroup, TeacherInvite
 
 
 class ProfileInline(admin.StackedInline):
@@ -31,10 +31,12 @@ admin.site.register(User, UserWithProfileAdmin)
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'role', 'grade', 'teacher')
-    list_filter = ('role', 'grade')
-    search_fields = ('user__username', 'user__first_name', 'user__last_name')
-    autocomplete_fields = ('user', 'teacher')
+    list_display = ('user', 'role', 'grade', 'teacher', 'base_editor',
+                    'invited_by', 'student_code')
+    list_filter = ('role', 'grade', 'base_editor')
+    search_fields = ('user__username', 'user__first_name', 'user__last_name',
+                     'student_code')
+    autocomplete_fields = ('user', 'teacher', 'invited_by')
 
 
 @admin.register(StudentGroup)
@@ -43,3 +45,14 @@ class StudentGroupAdmin(admin.ModelAdmin):
     list_filter = ('teacher',)
     search_fields = ('name',)
     filter_horizontal = ('students',)
+
+
+@admin.register(TeacherInvite)
+class TeacherInviteAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'email', 'created_by', 'created_at',
+                    'expires_at', 'base_editor', 'used_at', 'used_by')
+    list_filter = ('base_editor',)
+    search_fields = ('note', 'email', 'token')
+    readonly_fields = ('token', 'created_at', 'used_at', 'used_by')
+    autocomplete_fields = ('created_by',)
+    date_hierarchy = 'created_at'

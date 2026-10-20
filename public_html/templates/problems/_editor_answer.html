@@ -1,28 +1,33 @@
 {% load task_extras %}
+{# simple_answers (editor.simple_answers, R22-1): не-редактору одно поле «Ответ» / «Решение» без подписей про авторские и редакторские версии #}
 <section class="problem-answer" data-answer-owner="{{ sub.pk|default:'' }}">
   <div class="label-row"><h3>Ответ{% if sub %} · {{ forloop.counter0|subitem_label }}){% endif %}</h3>
-    <span class="helptext">{% if owner.author_answer_latex %}Авторский{% elif owner.answer_latex %}Редакторский / AI{% endif %}</span>
+    {% if not simple_answers %}<span class="helptext">{% if owner.author_answer_latex %}Авторский{% elif owner.answer_latex %}Редакторский / AI{% endif %}</span>{% endif %}
   </div>
   <div class="math-content">{{ owner.effective_answer_latex|default:'—'|web_text|linebreaksbr }}</div>
-  <details class="ws-add-text"><summary>Править ответ и источники</summary>
+  {% if not editor_readonly %}<details class="ws-add-text"><summary>{% if simple_answers %}Править ответ{% else %}Править ответ и источники{% endif %}</summary>
     {% include 'problems/_editor_form.html' with form=answer_form block='answer' %}
-    <p class="helptext">Основной — авторский ответ. Редакторский / AI используется при его отсутствии.</p>
+    {% if not simple_answers %}<p class="helptext">Основной — авторский ответ. Редакторский / AI используется при его отсутствии.</p>{% endif %}
     {% if owner.answer_mask %}<p class="helptext">После изменения ответа проверьте маску: правильный ответ в ней не заменяется автоматически.</p>{% endif %}
-  </details>
+  </details>{% endif %}
   <div class="problem-mask-summary">
     <strong>Ответ ученика</strong>
     <span class="helptext">{% if task.full_answer_only %}Только развёрнутый ответ{% elif owner.has_mask %}Маска готова{% else %}Маски нет{% endif %}</span>
-    <button type="button" class="btn btn-secondary" data-mask-edit="{{ sub.pk|default:'' }}">{% if owner.answer_mask %}Настроить{% else %}Добавить маску{% endif %}</button>
-    <button type="button" class="btn btn-secondary" data-mask-preview="{{ sub.pk|default:'' }}">Предпросмотр</button>
+    {% if not editor_readonly %}<button type="button" class="btn btn-secondary" data-mask-edit="{{ sub.pk|default:'' }}">{% if owner.answer_mask %}Настроить{% else %}Добавить маску{% endif %}</button>
+    <button type="button" class="btn btn-secondary" data-mask-preview="{{ sub.pk|default:'' }}">Предпросмотр</button>{% endif %}
   </div>
-  {% if owner.answer_mask %}<div class="problem-mask-code math-content">{{ owner.answer_mask|web_text }}</div>{% endif %}
+  {% if editor_readonly %}
+  {# Только чтение (общая задача у приглашённого без листка): вместо кода маски сразу форма ученика с «Проверить как ученик» (тег mask_check_form), код — под «показать маску» #}
+  {% if owner.has_mask and not task.full_answer_only %}{% mask_check_form owner %}{% endif %}
+  {% if owner.answer_mask %}<details class="ws-add-text problem-mask-source"><summary>показать маску</summary><div class="problem-mask-code math-content">{{ owner.answer_mask|web_text }}</div></details>{% endif %}
+  {% elif owner.answer_mask %}<div class="problem-mask-code math-content">{{ owner.answer_mask|web_text }}</div>{% endif %}
   {% if not owner.has_mask %}<p class="helptext">Пока ученик может прислать только фото решения.</p>{% endif %}
   <details class="problem-solution" {% if owner.effective_solution_latex %}open{% endif %}>
     <summary>Решение</summary>
-    <p class="helptext">Авторские ответ и решение имеют приоритет. Если авторское поле пустое, используется редакторская / AI-версия.</p>
+    {% if not simple_answers %}<p class="helptext">Авторские ответ и решение имеют приоритет. Если авторское поле пустое, используется редакторская / AI-версия.</p>{% endif %}
     {% for text in owner|complete_solutions %}{% if not forloop.first %}<p class="helptext">Полное решение от AI</p>{% endif %}<div class="math-content">{{ text|web_text|linebreaksbr }}</div>{% empty %}<div class="math-content">Решение пока не добавлено.</div>{% endfor %}
-    <details class="ws-add-text"><summary>Править решение</summary>
+    {% if not editor_readonly %}<details class="ws-add-text"><summary>Править решение</summary>
       {% include 'problems/_editor_form.html' with form=solution_form block='solution' %}
-    </details>
+    </details>{% endif %}
   </details>
 </section>

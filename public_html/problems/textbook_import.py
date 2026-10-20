@@ -485,7 +485,7 @@ def mark_already_imported_drafts(drafts, source):
     refs = {
         ref.locator: ref
         for ref in TaskSource.objects.select_related('task').filter(
-            source=source, locator__in=locators)
+            source=source, locator__in=locators, task__is_shared=True)
     }
     for draft in drafts:
         ref = refs.get(draft.external_id)
@@ -1372,8 +1372,11 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
                 draft.save(update_fields=['exam_item_codes', 'tags'])
         except ValueError as exc:
             raise TextbookImportError(str(exc)) from exc
+        # Ключ задачника ищем только среди общих задач: личная задача
+        # учителя не должна перехватывать импорт в базу.
         ref = (TaskSource.objects.select_related('task')
-               .filter(source=batch.source, locator=draft.external_id).first())
+               .filter(source=batch.source, locator=draft.external_id,
+                       task__is_shared=True).first())
         if ref:
             task = ref.task
             if task.text_latex.strip() != draft.text_latex.strip():
@@ -1384,14 +1387,18 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         else:
             # Совпадение текста между изданиями — только подсказка для
             # рецензента, но не безопасное основание автоматически слить задачи.
-            task = Task.objects.create(
+            # Флаг общей базы — по тому, кто загружает (редактор базы), автор
+            # остаётся авторам партии: суперпользователь мог загрузить
+            # партию, созданную приглашённым учителем до разделения прав.
+            task = Task.new_for(
+                user, author=batch.created_by,
                 text_latex=draft.text_latex,
                 answer_mask=('' if draft.subitems else draft.answer_mask),
                 author_answer_latex=draft.author_answer_latex,
                 author_solution_latex=draft.author_solution_latex,
                 answer_latex=draft.answer_latex,
                 solution_latex=draft.solution_latex,
-                stars=0, columns=0, created_by=batch.created_by)
+                stars=0, columns=0)
             for index, item in enumerate(draft.subitems, start=1):
                 TaskSubitem.objects.create(
                     task=task, order=index * 10,

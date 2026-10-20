@@ -33,7 +33,7 @@
 {% if collection %}
 <div class="msg msg-warning">
   Это каталожная подборка из источника «{{ collection.source }}».
-  Все изменения сразу меняют её backing-листок; личную копию создаёт кнопка
+  Все изменения сразу меняют её backing-листок; свою копию создаёт кнопка
   «Взять как листок» на странице каталога.
   <a class="btn btn-small btn-secondary" href="{% url 'collection_detail' collection.pk %}">← К странице подборки</a>
 </div>
@@ -52,10 +52,8 @@
   <a class="btn btn-secondary" href="{% url 'worksheet_beamer_editor' worksheet.pk %}"
      target="_blank" rel="noopener">Презентация</a>
   <a class="btn btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}">.tex</a>
-  <button type="button" class="btn btn-secondary" data-neuro="apply-answers"
-          title="Ответы в пустые поля — существующие ответы и решения не трогаем">Дописать AI-ответ к решениям</button>
-  <button type="button" class="btn btn-secondary" data-neuro="apply-all"
-          title="Ответ и решение для всех задач листка — проверьте после записи">Добавить AI-решения и ответ</button>
+  {# Запись AI-ответов прямо в задачи листка — только редакторам (task_neuro_solve), остальным меню приглушено #}
+  {% include 'includes/ai_menu.html' with kind='worksheet' %}
 </div>
 
 <div class="card worksheet-items-card">
@@ -118,7 +116,7 @@
           {% endif %}
           {% include 'problems/_task_images.html' with images=row.statement_images %}
           {% include 'problems/_task_answers.html' with task=item.task subitems=item.task.subitems.all hide_answers=True %}
-          <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}" hidden><div data-mask-tools class="problem-mask-tools"></div></div>
+          <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}"{% if not item.task|editable_by:request.user %} data-base-locked="1"{% endif %} hidden><div data-mask-tools class="problem-mask-tools"></div></div>
         </div>
 
         {% elif item.is_rubric %}
@@ -183,7 +181,7 @@
 
       {% if item.task_id %}
       <div class="task-meta worksheet-task-meta">
-        <span class="task-meta-item"><a class="task-id" href="{% url 'task_detail' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-returned" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}</span>
+        <span class="task-meta-item"><a class="task-id" href="{% url 'task_detail' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-local" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}</span>
         <span class="task-meta-item"><button type="button" class="link-btn ws-star-reset"
                   data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
                   title="Убрать все звёзды только в этом листке">сбросить звёзды</button></span>
@@ -460,7 +458,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 {% include 'problems/_mask_dialogs.html' %}
-<script defer src="{% static 'js/problem_editor.js' %}?v=3"></script>
+<script defer src="{% static 'js/problem_editor.js' %}?v=7"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=3"></script>
 <script defer src="{% static 'js/builder.js' %}?v=9"></script>

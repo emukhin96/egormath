@@ -12,9 +12,10 @@
       {% if current_group %}<span>группа «{{ current_group.name }}»</span>{% elif group_filter == 'ungrouped' %}<span>без группы</span>{% endif %}
     </p>
   </div>
-  <div class="page-actions">
+  {# Без учеников прогресс смотреть нечего — кнопки нет (R08-1) #}
+  {% if has_students %}<div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'progress_overview' %}{% if current_group %}?group={{ current_group.pk }}{% endif %}">Прогресс{% if current_group %} группы{% else %} учеников{% endif %}</a>
-  </div>
+  </div>{% endif %}
 </div>
 
 {% if new_credentials %}
@@ -37,6 +38,15 @@
     <span class="helptext">Логин и пароль будут сгенерированы автоматически.</span>
   </form>
   {% if form.errors %}<div class="errorlist">{{ form.errors }}</div>{% endif %}
+</div>
+
+<div class="card">
+  <h2>Ссылка для самостоятельной регистрации</h2>
+  <div class="copy-row">
+    <code>{{ registration_url }}</code>
+    <button type="button" class="btn btn-small btn-secondary" data-copy="{{ registration_url }}">Скопировать</button>
+  </div>
+  <p class="helptext">Ученик, который зарегистрируется по этой ссылке, попадёт в ваш список. Ссылка постоянная — её можно разослать всему классу.</p>
 </div>
 
 {# Группа — сегменты-ссылки (если групп немного), поиск и учитель — автоотправка формы #}

@@ -1,29 +1,37 @@
 {% load task_extras %}
-<div id="task-form" data-problem-editor data-task-id="{{ task.pk }}" data-manage-url="{% url 'task_manage' task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}">
+{# data-base-locked: общая задача у приглашённого учителя — правки уходят в локальную копию листка (problem_editor.js chooseScope); без листка карточка только для чтения (editor_readonly) #}
+<div id="task-form" data-problem-editor data-task-id="{{ task.pk }}" data-manage-url="{% url 'task_manage' task.pk %}" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}"{% if not can_edit_task %} data-base-locked="1"{% endif %}>
   <div class="page-head">
     <div>
       <nav class="page-crumbs" aria-label="Путь">{% if worksheet %}<a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}" title="Вернуться в листок «{{ worksheet.title }}»">{{ worksheet.title }}</a>{% else %}<a href="{% url 'task_list' %}">Задачи</a>{% endif %}</nav>
       <h1>Задача #{{ task.pk }}</h1>
-      <p class="page-meta">{% if task.grade_display %}<span>{{ task.grade_display }} класс</span>{% endif %}{% for ref in task.source_refs.all %}<span>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}</span>{% endfor %}<span>изменена {{ task.updated_at|date:'d.m.Y' }}</span>{% if task.variant_of_id %}<span class="badge badge-returned">Локальная копия #{{ task.variant_of_id }}</span>{% endif %}</p>
+      <p class="page-meta">{% if task.grade_display %}<span>{{ task.grade_display }} класс</span>{% endif %}{% for ref in task.source_refs.all %}<span>{{ ref.source }}{% if ref.number %} · № {{ ref.number }}{% endif %}</span>{% endfor %}<span>изменена {{ task.updated_at|date:'d.m.Y' }}</span>{% if task.variant_of_id %}<span class="badge badge-local">Локальная копия #{{ task.variant_of_id }}</span>{% endif %}{% include 'problems/_task_owner_badge.html' %}{% if not can_edit_task %}<span class="badge badge-assigned" title="Общую задачу приглашённый учитель меняет только для своего листка — в базе появится локальная копия, оригинал не изменится">Общая задача · правки только для листка</span>{% endif %}</p>
     </div>
     <div class="form-buttons page-actions">
       {% if not task.variant_of_id %}{% include 'includes/cart_button.html' with task=task %}{% endif %}
-      <button type="button" class="btn btn-secondary" data-editor-ai="answer">Дописать AI-ответ</button>
-      <button type="button" class="btn btn-secondary" data-editor-ai="solution">Добавить AI-решение</button>
+      {# Очередь предложений (problems/proposals.py): исправление общей задачи текстом; у редактора кнопки нет — он правит напрямую #}
+      {% if propose %}{% if propose.open %}<a class="btn btn-secondary" href="{% url 'proposals_mine' %}" title="Ваше предложение по этой задаче ждёт ответа редактора">Предложение отправлено</a>{% else %}<button type="button" class="btn btn-secondary" data-dialog-open="propose-dialog">{{ propose.label }}</button>{% endif %}{% endif %}
+      {% if not editor_readonly %}{% include 'includes/ai_menu.html' with kind='card' %}{% endif %}
     </div>
   </div>
+  {% if editor_readonly %}
+  <div class="card problem-base-locked">
+    <p>Это общая задача. Чтобы изменить её для себя, добавьте задачу в листок (через корзину) и откройте из листка: правки сохранятся в вашу локальную копию, оригинал не изменится. Ошибку в самой общей задаче исправят редакторы — нажмите «Предложить исправление».</p>
+  </div>
+  {% endif %}
   <div class="problem-columns">
     <div class="card">
       <section class="problem-section" data-task-png-root><h2 class="task-png-heading" data-task-png-skip>Условие{% include 'includes/task_png_button.html' %}</h2>
         <div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
-        <details class="ws-add-text"><summary>Править условие</summary>
+        {% if not editor_readonly %}<details class="ws-add-text"><summary>Править условие</summary>
           {% include 'problems/_editor_form.html' with form=condition_form block='condition' %}
-        </details>
+        </details>{% endif %}
         {% if subrows %}<ol class="subitems">{% for row in subrows %}<li class="math-content">{{ row.sub.text_latex|web_text }}</li>{% endfor %}</ol>{% endif %}
         {# В редакторе видны все рисунки, включая ответы и решения; на PNG — только рисунки условия #}
         <div data-task-png-skip>{% task_images task 'all' %}</div>
         <div data-task-png-only hidden>{% task_images task %}</div>
       </section>
+      {% if not editor_readonly %}
       <details class="problem-section"><summary>Подпункты: добавить, изменить порядок</summary>
         <form method="post" data-editor-form action="{% url 'task_manage' task.pk %}">
           {% csrf_token %}<input type="hidden" name="block" value="subitems"><div data-editor-errors class="errorlist" role="alert"></div>
@@ -48,18 +56,23 @@
       <details class="problem-section"><summary>Изображения и источники</summary>
         {% include 'problems/_editor_assets.html' %}
       </details>
+      {% endif %}
       <details class="problem-section"><summary>Следующая задача</summary>
         <p class="helptext">Новая задача с текущей классификацией и источником. Закрепление значений доступно в форме создания.</p>
         <a class="btn btn-secondary" href="{% url 'task_create' %}?from={{ task.pk }}{% if worksheet %}&worksheet={{ worksheet.pk }}{% endif %}">Добавить следующую</a>
       </details>
     </div>
     <div class="card"><h2>Ответы и ввод ученика</h2>
+      {% if editor_readonly %}
+      <p class="helptext">{% if task.full_answer_only %}Только развёрнутый ответ.{% else %}Краткий ответ проверяется по маске.{% endif %}</p>
+      {% else %}
       <form method="post" action="{% url 'task_manage' task.pk %}" data-editor-form data-editor-auto>
         {% csrf_token %}<input type="hidden" name="block" value="answer_policy">
         {% include 'problems/_answer_policy.html' with field=answer_policy_form.full_answer_only %}
         <div data-editor-errors class="errorlist" role="alert"></div>
         <noscript><button class="btn">Сохранить</button></noscript>
       </form>
+      {% endif %}
       {% if subrows %}{% for row in subrows %}
         {% include 'problems/_editor_answer.html' with owner=row.sub sub=row.sub answer_form=row.answer_form solution_form=row.solution_form %}
       {% endfor %}{% else %}
@@ -67,4 +80,6 @@
       {% endif %}
     </div>
   </div>
+  {# Диалог внутри корня редактора: после сохранения блока карточка перерисовывается целиком (problem_editor.js update), и диалог обновляется вместе с кнопкой — после локальной копии кнопки больше нет #}
+  {% include 'problems/_propose_dialog.html' %}
 </div>

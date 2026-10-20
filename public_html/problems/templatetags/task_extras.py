@@ -20,11 +20,30 @@ def task_images(task, group='statement'):
     return {'images': images_for_group(task, group)}
 
 
+@register.inclusion_tag('problems/_mask_check_form.html')
+def mask_check_form(owner):
+    """Форма ученика по сохранённой маске задачи или подпункта с кнопкой
+    «Проверить как ученик»: карточка общей задачи у приглашённого учителя,
+    где маска только для чтения (problems/_editor_answer.html)."""
+    from problems.editor import mask_form_context
+    from problems.models import TaskSubitem
+    prefix = f'preview_{owner.pk}' if isinstance(owner, TaskSubitem) else 'preview'
+    return mask_form_context(owner.answer_mask, prefix, owner.mask_spec)
+
+
 @register.simple_tag
 def answer_material(task, subitems=None):
     """Рамка «Ответ / Решение»: строки с происхождением (задачник / AI)
     и расхождения между авторским и редакторским вариантами."""
     return _answer_material(task, subitems)
+
+
+@register.filter
+def editable_by(task, user):
+    """Вправе ли пользователь менять задачу напрямую (accounts/permissions.py):
+    для строк листков и подборок, где задач много и контекст общий."""
+    from accounts.permissions import can_edit_task
+    return can_edit_task(user, task)
 
 
 @register.filter

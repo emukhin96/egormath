@@ -1,0 +1,20 @@
+{# Группа «AI» (R15-1): одна кнопка-меню с пунктами нейрогенерации вместо ряда кнопок. Редактору — рабочее меню (details, закрывается shell.js по клику вне и Escape, после генерации — neuro.js / problem_editor.js); остальным — та же кнопка приглушённой (disabled, .btn[disabled][title] в input.css) с подсказкой, решение 5 плана пользователей. Контекст: kind — card (карточка задачи, data-editor-ai), form (форма задачи, data-neuro=task-form*), worksheet (конструктор листка, data-neuro=apply-*) #}
+{% if is_base_editor %}
+<details class="ai-menu" data-ai-menu>
+  <summary class="btn btn-secondary" title="Черновики ответов и решений от нейросети — проверьте перед сохранением">AI<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></summary>
+  <div class="ai-menu-list">
+    {% if kind == 'card' %}
+    <button type="button" data-editor-ai="answer">Дописать AI-ответ</button>
+    <button type="button" data-editor-ai="solution">Добавить AI-решение</button>
+    {% elif kind == 'form' %}
+    <button type="button" data-neuro="task-form-answer">Дописать AI-ответ</button>
+    <button type="button" data-neuro="task-form">Добавить AI-решение</button>
+    {% elif kind == 'worksheet' %}
+    <button type="button" data-neuro="apply-answers" title="Ответы в пустые поля — существующие ответы и решения не трогаем">Дописать AI-ответ к решениям</button>
+    <button type="button" data-neuro="apply-all" title="Ответ и решение для всех задач листка — проверьте после записи">Добавить AI-решения и ответ</button>
+    {% endif %}
+  </div>
+</details>
+{% else %}
+<button type="button" class="btn btn-secondary" disabled title="Нейрогенерация доступна только редакторам">AI<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
+{% endif %}

@@ -1103,7 +1103,7 @@ class TextbookImportTests(TestCase):
             collection_title='Чётность и нечётность функции')
         task = Task.objects.create(
             text_latex=payload['tasks'][0]['text_latex'],
-            created_by=self.teacher)
+            created_by=self.teacher, is_shared=True)
         TaskSource.objects.create(
             task=task, source=source, number='1', locator='sr/10/v1/1',
             source_path=payload['tasks'][0]['source_path'])

@@ -38,6 +38,9 @@
   --ok: #2e7d32;
   --warn: #b26a00;
   --err: #c62828;
+  /* Локальная копия задачи: фиолетовый, чтобы не читался как ошибка (R17-1) */
+  --local: #6d3fc0;
+  --local-soft: #ede5fb;
   --radius: 7px;
   --sidebar-width: 228px;
   --content-padding: clamp(20px, 3vw, 48px);
@@ -323,6 +326,10 @@
   .review-comment textarea { width: 100%; margin-top: var(--space-1); }
   table.list.progress-table td, table.list.progress-table th { white-space: nowrap; }
   .problem-mask-code { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* Форма «Проверить как ученик» (_mask_check_form.html): поля под заголовком
+     «Ответ ученика» и под подпунктом в предпросмотре, кнопки под полями */
+  .mask-check { margin-top: var(--space-3); }
+  .mask-check [data-trial-result]:empty { display: none; }
   .problem-columns textarea, .problem-dialog textarea { max-width: 100%; }
   .problem-columns .formset { table-layout: fixed; width: 100%; }
   .problem-columns .formset th:first-child { width: 80px; }
@@ -889,6 +896,15 @@
     white-space: nowrap;
   }
 
+  a.user-name {
+    text-decoration: none;
+  }
+
+  a.user-name:hover,
+  a.user-name:focus-visible {
+    color: var(--accent);
+  }
+
   .context-toggle {
     display: none;
     padding: 6px 10px;
@@ -940,24 +956,28 @@
     accent-color: var(--accent);
   }
 
-  /* Складывающаяся таблица списка. Обёртка .catalog-table-wrap — контейнер
-     запроса (порог 760px), поэтому таблица складывается и в узкой карточке
-     сетки, и в контенте рядом с боковой панелью, а не только на телефоне: строка становится карточкой — чекбокс и
-     главная ячейка (.stack-primary) в первой строке, остальные ячейки
-     подписями «Метка: значение» (data-label) в строку с переносом; пустые
-     ячейки не показываются, .row-actions — отдельной строкой. */
+  /* Карточки вместо таблицы на узком экране. Обёртка .catalog-table-wrap —
+     контейнер запроса (порог 760px), поэтому таблица складывается и в узкой
+     карточке сетки, и в контенте рядом с боковой панелью, а не только на
+     телефоне. Строка (tr) становится карточкой с рамкой и отступом --space-3
+     от соседей, без линий между «ячейками»: главная ячейка (.stack-primary) —
+     первой строкой на всю ширину (рядом с чекбоксом .col-select, если он
+     есть), остальные ячейки — одной строкой метаданных мелким шрифтом
+     через «·» (подпись data-label — только там, где без неё значение
+     непонятно: числа, даты), .row-actions — отдельной строкой кнопок внизу;
+     пустые ячейки не показываются. */
   .catalog-table-wrap { container-type: inline-size; }
   .card > .catalog-table-wrap:has(> .table-stack) {
     margin-inline: calc(var(--space-4) * -1);
     padding-inline: var(--space-4);
   }
   @container (max-width: 760px) {
-    /* Шапка скрывается, но чекбокс «выбрать все» из неё остаётся
-       отдельной строкой с подписью — иначе на телефоне массовый выбор
-       возможен только по одной строке. */
+    .table-stack, .table-stack tbody, .table-stack thead, .table-stack thead tr { display: block; width: 100%; }
+    /* Шапка скрывается, но чекбокс «выбрать все» из неё остаётся отдельной
+       строкой с подписью — иначе на телефоне массовый выбор возможен только
+       по одной строке. */
     .table-stack thead:not(:has(th.col-select)),
     .table-stack tr:has(> th):not(:has(th.col-select)) { display: none; }
-    .table-stack thead, .table-stack thead tr { display: block; width: 100%; }
     .table-stack thead th:not(.col-select) { display: none; }
     .table-stack thead th.col-select {
       display: flex;
@@ -965,8 +985,8 @@
       gap: var(--space-2);
       width: auto;
       max-width: none;
-      padding: var(--space-2) 0 !important;
-      border-bottom: 1px solid var(--border);
+      padding: 0 0 var(--space-3) !important;
+      border: 0;
       background: transparent;
     }
     .table-stack thead th.col-select::after {
@@ -976,36 +996,74 @@
       text-transform: none;
       letter-spacing: 0;
     }
-    .table-stack, .table-stack tbody { display: block; width: 100%; }
     .table-stack tr {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 2px var(--space-3);
-      padding: var(--space-2) 0;
-      border-bottom: 1px solid var(--border);
-    }
-    .table-stack tr:last-child { border-bottom: 0; }
-    .table-stack td {
       display: block;
+      padding: var(--space-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      line-height: 1.45;
+    }
+    .table-stack tr + tr { margin-top: var(--space-3); }
+    .table-stack tr:has(> th) + tr { margin-top: 0; }
+    .table-stack td {
+      display: inline;
       padding: 0 !important;
-      border: 0;
-      min-width: 0;
+      border: 0 !important;
       background: transparent !important;
-    }
-    .table-stack td.col-select { flex: 0 0 auto; width: auto; max-width: none; align-self: flex-start; padding-top: 2px !important; }
-    .table-stack td.stack-primary { flex: 1 1 60%; }
-    .table-stack td:not(.stack-primary):not(.col-select):not(.row-actions) { flex: 0 1 auto; font-size: 0.9rem; }
-    .table-stack td[data-label]:not(:empty)::before {
-      content: attr(data-label) ": ";
+      font-size: 0.85rem;
       color: var(--muted);
-      font-size: 0.8rem;
+      --sep: "· ";
     }
-    .table-stack td.row-actions { flex: 1 0 100%; padding-top: var(--space-1) !important; white-space: normal; }
-    .table-stack td:empty { display: none; }
+    /* Главная ячейка — рядом с плавающим чекбоксом, не обтекая его */
+    .table-stack td.stack-primary {
+      display: flow-root;
+      margin-bottom: var(--space-1);
+      font-size: 1rem;
+      color: var(--text);
+    }
+    .table-stack td.col-select {
+      display: block;
+      float: left;
+      width: auto;
+      max-width: none;
+      margin: 3px var(--space-2) 0 0;
+      line-height: 1;
+    }
+    /* Метаданные через «·»; у первой ячейки после главной разделителя нет */
+    .table-stack td.stack-primary + td,
+    .table-stack td.stack-primary + td:empty + td,
+    .table-stack td.stack-primary + td:empty + td:empty + td { --sep: ""; }
+    .table-stack td:not(.stack-primary):not(.col-select):not(.row-actions)::before { content: var(--sep); }
+    .table-stack td[data-label]:not(.stack-primary):not(.row-actions)::before { content: var(--sep) attr(data-label) ": "; }
+    .table-stack td:not(.stack-primary) > div { display: inline; font-size: inherit; }
+    .table-stack td:not(.stack-primary) > div::before { content: " · "; }
     .table-stack td .cell-sub { display: inline; white-space: normal; font-size: inherit; }
     .table-stack td .cell-sub::before { content: " · "; }
-    .table-stack td.num { text-align: left; }
+    .table-stack td.stack-primary .cell-sub { display: block; font-size: 0.85rem; color: var(--muted); }
+    .table-stack td.stack-primary .cell-sub::before { content: none; }
+    .table-stack td.row-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2);
+      margin-top: var(--space-2);
+      font-size: inherit;
+      color: inherit;
+      white-space: normal;
+    }
+    .table-stack td:empty { display: none; }
+    /* Ученики по группам: строка-заголовок группы — подзаголовок списка, не карточка */
+    .table-stack tr.student-group-head {
+      padding: var(--space-2) 0 var(--space-1);
+      border: 0;
+      border-bottom: 2px solid var(--accent-soft);
+      border-radius: 0;
+      background: transparent;
+    }
+    .table-stack tr.student-group-head td { margin-bottom: 0; }
+    /* Подсветка непросмотренного ответа — на карточке, не на ячейках */
+    .table-stack tr.proposal-unread { background: var(--accent-soft); }
   }
 
   .bulk-bar {
@@ -1217,6 +1275,10 @@
   .sidebar-stat + .sidebar-list,
   .sidebar-copy + .sidebar-actions {
     margin-top: var(--space-3);
+  }
+
+  .sidebar-copy + .sidebar-copy {
+    margin-top: var(--space-2);
   }
 
   .sidebar-kicker {
@@ -1672,6 +1734,12 @@
     color: var(--ok);
   }
 
+  /* Локальная копия задачи (карточка, форма, строка листка) — не badge-returned */
+  .badge-local {
+    background: var(--local-soft);
+    color: var(--local);
+  }
+
   /* «Уже задавалась»: сворачиваемый бейдж со списком выдач */
   .usage-badge {
     position: relative;
@@ -1939,6 +2007,40 @@
     border: 1px solid var(--border);
   }
 
+  /* Ссылка или код рядом с кнопкой «Скопировать» (приглашение учителя,
+     ссылка регистрации учеников): поле ↔ кнопка — --space-2 */
+  .copy-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+
+  .copy-row code {
+    background: #fff;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+  }
+
+  .copy-row + .helptext {
+    margin-top: var(--space-2);
+  }
+
+  /* Переключатели в таблице учителей и форме приглашения — без отступа слева,
+     как в колонках редактора задачи */
+  .teacher-editor-toggle,
+  .invite-editor-toggle {
+    margin-left: 0;
+  }
+
+  .filters .invite-editor-toggle {
+    min-height: 36px;
+  }
+
   .rubric-row td {
     background: #f2f6fc;
     font-weight: 600;
@@ -2161,9 +2263,11 @@
     font-weight: 600;
   }
 
-  /* Выбранное значение фильтра (тема, тег) — чип с ×; «+ тема» — пустой чип */
+  /* Выбранное значение фильтра (тема, тег) — чип с ×; «+ тема» — пустой чип;
+     .filter-chip-toggle — чип-галочка формы фильтров («Мои задачи») */
   .filter-chip,
-  .filter-chip-add {
+  .filter-chip-add,
+  .filter-chip-toggle {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
@@ -2217,7 +2321,8 @@
     background: #fdeaea;
   }
 
-  .filter-chip-add {
+  .filter-chip-add,
+  .filter-chip-toggle {
     border-color: #e3e8ef;
     background: #f1f4f8;
     color: #44505f;
@@ -2225,9 +2330,47 @@
   }
 
   .filter-chip-add:hover,
-  .filter-chip-add:focus-visible {
+  .filter-chip-add:focus-visible,
+  .filter-chip-toggle:hover {
     border-color: #c9dbf2;
     color: var(--accent);
+  }
+
+  /* Чип-галочка: сама галочка скрыта, отмеченный чип выглядит как выбранный (с ×) */
+  .filter-chip-toggle input {
+    position: absolute;
+    width: 0;
+    height: 0;
+    margin: 0;
+    opacity: 0;
+  }
+
+  .filter-chip-toggle .filter-chip-remove {
+    display: none;
+  }
+
+  .filter-chip-toggle:has(input:checked) {
+    padding-right: 4px;
+    border-color: #c9dbf2;
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+  }
+
+  .filter-chip-toggle:has(input:checked) .filter-chip-remove {
+    display: inline-flex;
+  }
+
+  .filter-chip-toggle:has(input:focus-visible) {
+    box-shadow: 0 0 0 3px rgb(36 86 166 / 35%);
+  }
+
+  /* Тумблер редактора «Показывать задачи других учителей» — справа в строке фильтров каталога */
+  .page-toolbar .catalog-foreign-toggle {
+    margin-left: auto;
+  }
+
+  .page-toolbar .sort-inline ~ .catalog-foreign-toggle {
+    margin-left: 0;
   }
 
   /* «Сортировка: по теме ▾» — select без рамки в одну строку, справа в .page-toolbar */
@@ -2569,25 +2712,65 @@
   .quick-task-form .form-buttons { margin-top: var(--space-3); }
   #add-tasks .worksheet-items-heading .linklike { margin-left: auto; font-size: 0.85rem; }
 
-  @media (max-width: 600px) {
-    .worksheet-catalog .catalog-table-wrap { overflow: visible; }
+  /* «Мои листки» на узком экране: пара строк (листок + строка ссылок) —
+     одна карточка; порог — контейнер .catalog-table-wrap, как у .table-stack */
+  @container (max-width: 760px) {
     .worksheet-catalog table, .worksheet-catalog tbody { display: block; width: 100%; }
     .worksheet-catalog tr:has(> th) { display: block; }
     .worksheet-catalog th:not(.col-select) { display: none; }
-    .worksheet-catalog th.col-select { display: block; width: auto; text-align: left; }
-    .worksheet-catalog th.col-select::after { content: "Выбрать все"; margin-left: var(--space-2); }
-    .worksheet-main-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; padding-top: var(--space-2); }
-    .worksheet-main-row td { min-width: 0; padding: var(--space-2); }
-    .worksheet-main-row .col-select { grid-column: 1; grid-row: 1; }
-    .worksheet-title-cell { grid-column: 2; grid-row: 1; }
+    .worksheet-catalog th.col-select {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      width: auto;
+      max-width: none;
+      padding: 0 0 var(--space-3) !important;
+      border: 0;
+      background: transparent;
+    }
+    .worksheet-catalog th.col-select::after { content: "Выбрать все"; font-size: 0.8rem; font-weight: 600; text-transform: none; letter-spacing: 0; }
+    .worksheet-main-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: var(--space-1) var(--space-2);
+      align-items: baseline;
+      padding: var(--space-3) var(--space-3) 0;
+      border: 1px solid var(--border);
+      border-bottom: 0;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+    .worksheet-action-row {
+      display: block;
+      padding: var(--space-2) var(--space-3) var(--space-3);
+      border: 1px solid var(--border);
+      border-top: 0;
+      border-radius: 0 0 var(--radius) var(--radius);
+    }
+    .worksheet-action-row + .worksheet-main-row { margin-top: var(--space-3); }
+    table.list .worksheet-main-row td,
+    table.list .worksheet-action-row td,
+    table.list .worksheet-main-row:hover + .worksheet-action-row td,
+    table.list .worksheet-main-row:has(+ .worksheet-action-row:hover) td {
+      min-width: 0;
+      padding: 0 !important;
+      border: 0;
+      background: transparent;
+    }
+    .worksheet-main-row .col-select { grid-column: 1; grid-row: 1; width: auto; max-width: none; }
+    .worksheet-title-cell { grid-column: 2; grid-row: 1; width: auto; min-width: 0; }
     .worksheet-main-row .row-actions { grid-column: 3; grid-row: 1; }
     .worksheet-grade-cell { grid-column: 2; grid-row: 2; }
-    .worksheet-topics-cell { grid-column: 2 / -1; }
-    .worksheet-count-cell { grid-column: 3; grid-row: 2; }
+    .worksheet-count-cell { grid-column: 3; grid-row: 2; font-size: 0.85rem; color: var(--muted); }
+    .worksheet-count-cell::before { content: "задач: "; }
+    .worksheet-topics-cell { grid-column: 2 / -1; grid-row: 3; min-width: 0; }
     .worksheet-main-row .worksheet-date-cell { display: none; }
-    .worksheet-action-row { display: block; }
     .worksheet-action-row td:first-child { display: none; }
-    .worksheet-action-row td:last-child { display: block; padding: var(--space-2); }
+    .worksheet-action-row td:last-child { display: block; }
+  }
+  /* Выпадающие списки (темы, класс) не должны обрезаться прокруткой обёртки */
+  @media (max-width: 760px) {
+    .worksheet-catalog .catalog-table-wrap,
+    .task-catalog .catalog-table-wrap { overflow: visible; }
   }
   .task-catalog,
   .worksheet-catalog {
@@ -4736,6 +4919,20 @@
     pointer-events: none;
   }
 
+  /* Приглушённая кнопка с подсказкой (нейрогенерация у не-редакторов):
+     наведение нужно, чтобы показался title; клик по disabled-кнопке браузер не отдаёт */
+  .btn[disabled][title] {
+    pointer-events: auto;
+  }
+
+  .btn[disabled][title]:hover {
+    background: var(--accent);
+  }
+
+  .btn-secondary[disabled][title]:hover {
+    background: #fff;
+  }
+
   .import-toolbar {
     flex-wrap: nowrap;
     overflow-x: auto;
@@ -4920,6 +5117,13 @@
   .row-edit-summary:hover,
   .row-edit-summary:hover .row-edit-pen {
     color: var(--accent);
+  }
+
+  /* Общая задача у приглашённого учителя: класс и темы только текстом */
+  .row-edit-static,
+  .row-edit-static:hover {
+    cursor: default;
+    color: var(--muted);
   }
 
   .row-edit-sep {
@@ -5561,6 +5765,17 @@
     .nav-menu,
     .nav-menu.is-open {
       display: contents;
+    }
+
+    /* Группы раскрыты в общий ряд, и пункт с data-nav-last («Мои
+       предложения») уходит в его конец, чтобы не вытеснять основные
+       разделы за край экрана (R31-1) */
+    .topbar-nav .nav-group {
+      display: contents;
+    }
+
+    .topbar-nav a[data-nav-last] {
+      order: 1;
     }
 
     .topbar {
@@ -7124,5 +7339,270 @@
     .qclone-edit { border-right: none; border-bottom: 1px solid var(--border); }
     .qclone-head, .qclone-foot, .qclone-edit, .qclone-preview { padding-inline: var(--space-3); }
     .qclone-foot .form-buttons { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+  }
+}
+
+/* Меню «AI» (includes/ai_menu.html): кнопка-details с выпадающим списком
+   пунктов нейрогенерации — та же плашка, что у подразделов шапки (.nav-menu) */
+@layer components {
+  .ai-menu {
+    position: relative;
+    display: inline-block;
+  }
+
+  .ai-menu > summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    cursor: pointer;
+  }
+
+  .ai-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .ai-menu > summary svg,
+  .btn[disabled] > svg {
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+  }
+
+  .btn[disabled] > svg {
+    margin-left: var(--space-1);
+  }
+
+  .ai-menu[open] > summary {
+    background: var(--accent-soft);
+  }
+
+  .ai-menu-list {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 2px);
+    min-width: 240px;
+    padding: var(--space-1);
+    display: grid;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgb(18 43 85 / 14%);
+    z-index: 70;
+  }
+
+  .ai-menu-list > button {
+    display: block;
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .ai-menu-list > button:hover {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .ai-menu-list > button[disabled] {
+    color: var(--muted);
+    cursor: progress;
+  }
+
+  /* В шапке карточки меню — крайнее справа: список открывается влево,
+     чтобы не уезжать за край страницы */
+  .page-actions .ai-menu-list {
+    left: auto;
+    right: 0;
+  }
+}
+
+/* Очередь предложений исправлений (problems/proposals.py): счётчик у пункта
+   меню, текст предложения, непросмотренный статус у автора */
+@layer components {
+  .nav-count {
+    margin-left: var(--space-1);
+  }
+
+  .proposal-message {
+    margin: 0 0 var(--space-3);
+    white-space: pre-wrap;
+  }
+
+  .list tr.proposal-unread > td {
+    background: var(--accent-soft);
+  }
+}
+
+/* Узкий экран (контейнер ≤760px, тот же порог, что у .table-stack): строки
+   каталога задач, конструктора листка и подборок, результатов поиска в
+   конструкторе — карточками, а не сжатыми колонками. */
+@layer components {
+  @container (max-width: 760px) {
+    /* Каталог задач: чекбокс и номер — первая строка, условие на всю ширину,
+       подпункты и рисунки, строка метаданных (бейдж «моя», источник, «исп.»,
+       класс · темы), внизу — корзина и действия (png, клон, дублировать).
+       Ячейка условия и её нижняя строка раскрыты (display: contents), чтобы
+       их части стали отдельными элементами карточки; порядок задаёт order. */
+    .task-catalog .catalog-table { display: block; min-width: 0; table-layout: auto; }
+    .task-catalog .catalog-table colgroup,
+    .task-catalog .catalog-table thead th { display: none; }
+    .task-catalog .catalog-table thead,
+    .task-catalog .catalog-table thead tr,
+    .task-catalog .catalog-table tbody { display: block; width: 100%; }
+    .task-catalog .catalog-table thead th:first-child:has(input) {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 0 0 var(--space-3) !important;
+      border: 0;
+      background: transparent;
+    }
+    .task-catalog .catalog-table thead th:first-child:has(input)::after {
+      content: "Выбрать все";
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .task-catalog .catalog-table tr[data-task-row] {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-1) var(--space-2);
+      padding: var(--space-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+    }
+    .task-catalog .catalog-table tr[data-task-row] + tr { margin-top: var(--space-3); }
+    .task-catalog .catalog-table td {
+      display: block;
+      min-width: 0;
+      padding: 0 !important;
+      border: 0;
+      background: transparent !important;
+    }
+    .task-catalog .catalog-table td:first-child { order: 0; flex: none; }
+    .task-catalog .catalog-table td:nth-child(2) { order: 1; flex: 1 1 auto; }
+    .task-catalog .catalog-table td[data-task-png-root],
+    .task-catalog .catalog-row-meta { display: contents; }
+    .task-catalog .catalog-table td[data-task-png-root] > * { order: 2; flex: 1 1 100%; min-width: 0; }
+    .task-catalog .catalog-table td[data-task-png-root] > .task-text { margin: 0; }
+    .task-catalog .catalog-table .task-text { max-width: 100%; overflow-x: auto; }
+    .task-catalog .catalog-source,
+    .task-catalog .catalog-table td[data-task-png-root] > .usage-badge,
+    .task-catalog .catalog-table td:nth-child(4) {
+      flex: 0 1 auto;
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+    .task-catalog .catalog-source { order: 7; display: block; }
+    .task-catalog .catalog-table td[data-task-png-root] > .usage-badge { order: 8; }
+    /* Класс · темы — последние в строке метаданных, растягиваются до её конца */
+    .task-catalog .catalog-table td:nth-child(4) { order: 9; flex-grow: 1; }
+    .task-catalog .catalog-table td:nth-child(4):has(.row-edit[open]) { flex-basis: 100%; }
+    /* Разрыв строки перед действиями: flex-grow сам по себе строку не завершает */
+    .task-catalog .catalog-table tr[data-task-row]::after { content: ""; order: 10; flex: 1 0 100%; height: 0; }
+    .task-catalog .catalog-table td.col-cart { order: 11; flex: none; align-self: center; text-align: left; }
+    .task-catalog .catalog-row-actions {
+      order: 12;
+      flex: 1 1 auto;
+      align-self: center;
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2);
+      margin-left: 0;
+      font-size: 0.8rem;
+      white-space: normal;
+    }
+    .task-catalog .catalog-table td:empty { display: none; }
+  }
+
+  /* Конструктор, подборки и поиск в конструкторе — по @media, а не по
+     контейнеру: #ws-items — список Sortable, а layout-containment контейнера
+     позиционировал бы фиксированный «призрак» перетаскивания (fallback на
+     тач-устройствах) относительно списка, а не окна; у пустого блока
+     результатов поиска containment ломает схлопывание отступов на десктопе.
+     Порог тот же — 760px. */
+  @media (max-width: 760px) {
+    /* Конструктор листка и подборка (#ws-items): элемент — карточка. .ws-body
+       раскрыт (display: contents), его части раскладываются сеткой самого
+       .ws-item: ручка перетаскивания и содержимое — первая строка, затем
+       строка ссылок (#id, звёзды, копии), внизу — ряд иконок действий.
+       Sortable по-прежнему тянет .ws-item за .drag-handle. */
+    #ws-items .ws-item {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: var(--space-2);
+      align-items: start;
+      padding: var(--space-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+    }
+    #ws-items .ws-item:hover { background: var(--card); }
+    #ws-items .ws-item + .ws-item { margin-top: var(--space-3); }
+    #ws-items .ws-item-rubric,
+    #ws-items .ws-item-rubric:hover { background: var(--accent-soft); border-color: transparent; }
+    #ws-items .ws-body { display: contents; }
+    #ws-items .drag-handle { grid-column: 1; grid-row: 1; padding: 0; }
+    #ws-items .ws-content { grid-column: 2; grid-row: 1; min-width: 0; }
+    #ws-items .ws-item:not(:has(> .ws-body > .drag-handle)) .ws-content { grid-column: 1 / -1; }
+    #ws-items .ws-item > .worksheet-task-meta { grid-column: 1 / -1; margin-left: 0; }
+    #ws-items .ws-actions {
+      grid-column: 1 / -1;
+      order: 1;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      margin-top: 0;
+      white-space: normal;
+    }
+    /* Конструктор: номер и звёзды — первая строка, условие под ними на всю
+       ширину; подпункты, рисунки, ответы и маски — без отступа колонки номера.
+       В подборках номер остаётся в своей колонке (звёзд там нет). */
+    #ws-items:not(.ws-collection) .task-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      column-gap: 6px;
+    }
+    #ws-items:not(.ws-collection) .task-line .task-copy { display: contents; }
+    #ws-items:not(.ws-collection) .task-line .ws-stars { margin-right: 0; }
+    #ws-items:not(.ws-collection) .task-line .task-text { display: block; flex: 1 1 100%; }
+    /* Длинная формула прокручивается внутри карточки, а не обрезается */
+    #ws-items .task-text { max-width: 100%; overflow-x: auto; }
+    #ws-items:not(.ws-collection) .ws-content > ol.subitems,
+    #ws-items:not(.ws-collection) .ws-content > .task-images,
+    #ws-items:not(.ws-collection) .ws-content > .ws-answers,
+    #ws-items:not(.ws-collection) .ws-content > [data-worksheet-mask] { margin-left: 0; }
+
+    /* Поиск задач в конструкторе: результат — карточка с кнопкой «Добавить» внизу */
+    .finder-results,
+    .finder-results tbody { display: block; width: 100%; }
+    .finder-results tr {
+      display: block;
+      padding: var(--space-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+    }
+    .finder-results tr + tr { margin-top: var(--space-3); }
+    .finder-results td {
+      display: block;
+      padding: 0 !important;
+      border: 0 !important;
+      background: transparent !important;
+      white-space: normal !important;
+    }
+    .finder-results td + td { margin-top: var(--space-2); }
   }
 }

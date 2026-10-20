@@ -4,13 +4,20 @@
 {% block content %}
 <div class="card login-box">
   <h1>Регистрация ученика</h1>
+  {% if link_teacher %}
+  <p class="muted">Ваш учитель — {{ link_teacher.get_full_name|default:link_teacher.username }}.</p>
+  {% else %}
   <p class="muted">Создайте аккаунт, чтобы получать и сдавать задания.</p>
+  {% endif %}
   <form method="post" data-registration-form>
     {% csrf_token %}
+    {% for field in form.hidden_fields %}{{ field }}{% endfor %}
     {% if form.non_field_errors %}
       <div class="msg msg-error">{{ form.non_field_errors }}</div>
+    {% elif link_invalid %}
+      <div class="msg msg-error">Ссылка недействительна — попросите у учителя новую ссылку для регистрации.</div>
     {% endif %}
-    {% for field in form %}
+    {% for field in form.visible_fields %}
       <p>
         <label for="{{ field.id_for_label }}">{{ field.label }}</label>
         {{ field.errors }}

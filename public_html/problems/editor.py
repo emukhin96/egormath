@@ -12,6 +12,8 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from accounts.decorators import teacher_required
+from accounts.permissions import (BASE_LOCKED_MESSAGE, can_edit_task,
+                                  forbidden_json, is_base_editor, visible_tasks)
 from assignments.checks import HELP, KINDS, PRESETS
 from .forms import TaskForm, TaskImageFormSet, TaskSourceFormSet, clean_mask_text
 from .models import Task, TaskSubitem, Tag
@@ -32,10 +34,38 @@ StructureFormSet = inlineformset_factory(
     widgets={'text_latex': forms.Textarea(attrs={'rows': 2})})
 
 
-def block_form(block, obj, data=None):
-    """ModelForm ограничена полями одного блока, соседние правки не затирает."""
-    cls = forms.modelform_factory(type(obj), form=TaskForm,
-                                 fields=BLOCKS[block])
+# Простой режим ответов (R22-1): не-редактору вместо пары «авторский /
+# редакторский» показывается одно поле «Ответ» и «Решение» — редакторские
+# поля. Только когда авторских полей и источника-задачника у задачи нет:
+# иначе спрятанный авторский ответ остался бы в приоритете у effective_*.
+SIMPLE_BLOCKS = {
+    'answer': (['answer_latex'], {'answer_latex': 'Ответ'}),
+    'solution': (['solution_latex'], {'solution_latex': 'Решение'}),
+}
+AUTHOR_FIELDS = ('author_answer_latex', 'author_solution_latex')
+
+
+def simple_answers(user, task):
+    """Показывать ли не-редактору одно поле ответа и решения: у задачи (и
+    её подпунктов) нет авторских полей и нет источника-задачника."""
+    if is_base_editor(user):
+        return False
+    if task is None:
+        return True
+    owners = [task, *task.subitems.all()]
+    if any((getattr(o, f) or '').strip() for o in owners for f in AUTHOR_FIELDS):
+        return False
+    return not task.source_refs.exists()
+
+
+def block_form(block, obj, data=None, simple=False):
+    """ModelForm ограничена полями одного блока, соседние правки не затирает.
+    ``simple`` — простой режим ответов: только редакторское поле с подписью
+    «Ответ» / «Решение» (на сохранение не влияет: авторские поля пусты)."""
+    fields, labels = BLOCKS[block], {}
+    if simple and block in SIMPLE_BLOCKS:
+        fields, labels = SIMPLE_BLOCKS[block]
+    cls = forms.modelform_factory(type(obj), form=TaskForm, fields=fields, labels=labels)
     form = cls(data, instance=obj, auto_id=f'id_{block}_{obj.pk}_%s')
     return form
 
@@ -65,19 +95,32 @@ def context(request, task):
                 if Position.objects.filter(pk=position_id, work__in=Work.visible_to(request.user)).exists():
                     ctx['iw_finish_url'] = reverse('independentworks:finish_analog', args=[position_id, task.pk])
                     break
+    editable = can_edit_task(request.user, task)
+    # Кнопка предложения (proposals.proposal_options): редактору не нужна —
+    # он правит напрямую; остальным — только на общей задаче.
+    from .proposals import proposal_options
+    propose = None if is_base_editor(request.user) else proposal_options(request.user, task)
+    simple = simple_answers(request.user, task)
     ctx.update(task=task, item=item, worksheet=item.worksheet if item else None,
+               propose=propose, simple_answers=simple,
+               # Общая задача у приглашённого: в листке правки уходят в
+               # локальную копию (data-base-locked), без листка карточка
+               # только для чтения (accounts/permissions.py).
+               can_edit_task=editable,
+               is_base_editor=is_base_editor(request.user),
+               editor_readonly=not editable and item is None,
                tags_value=', '.join(task.tags.values_list('name', flat=True)),
                mask_help=HELP, mask_kinds={**KINDS, **{k: k for k in PRESETS}},
                condition_form=block_form('condition', task),
                answer_policy_form=block_form('answer_policy', task),
-               answer_form=block_form('answer', task),
-               solution_form=block_form('solution', task),
+               answer_form=block_form('answer', task, simple=simple),
+               solution_form=block_form('solution', task, simple=simple),
                metadata_form=block_form('metadata', task),
                structure_formset=StructureFormSet(instance=task),
                image_formset=TaskImageFormSet(instance=task),
                source_formset=TaskSourceFormSet(instance=task),
-               subrows=[dict(sub=s, answer_form=block_form('answer', s),
-                             solution_form=block_form('solution', s))
+               subrows=[dict(sub=s, answer_form=block_form('answer', s, simple=simple),
+                             solution_form=block_form('solution', s, simple=simple))
                         for s in task.subitems.all()])
     return ctx
 
@@ -110,6 +153,17 @@ def mask_data(task, item=None, include_preview=False):
                             if slot.kind == 'order' else slot.reference) for slot in spec.slots}),
                 'editable': True, 'show_checks': False}) if spec.is_valid else ''
     return answers
+
+
+def mask_form_context(mask, prefix, spec=None):
+    """Контекст problems/_mask_check_form.html — форма ученика по маске
+    ``mask`` с полями ``{prefix}_s1``… и кнопкой «Проверить как ученик»
+    (views.task_mask_check). Поля пустые: это пробный ввод, а не ответ."""
+    from assignments.checks import parse_mask, render_fragments
+    if spec is None:
+        spec = parse_mask(mask, validate_references=True)
+    return {'mask': mask, 'prefix': prefix, 'errors': spec.errors,
+            'fragments': render_fragments(spec, prefix, seed=prefix) if spec.slots else []}
 
 
 def local_copy(task, item, user):
@@ -155,7 +209,7 @@ def insert_after(item, copy, mapping, after=None):
 
 @teacher_required
 def manage(request, pk, *, mask_selection=None):
-    task = get_object_or_404(Task, pk=pk)
+    task = get_object_or_404(visible_tasks(request.user), pk=pk)
     item = None if mask_selection is not None else worksheet_context(request, task)
     selected_only = request.GET.get('view') != 'task'
     selection = mask_selection if mask_selection is not None else (item if selected_only else None)
@@ -171,6 +225,12 @@ def manage(request, pk, *, mask_selection=None):
         if block not in {*BLOCKS, 'subitems', 'images', 'sources', 'masks'}:
             return JsonResponse({'ok': False, 'errors': {'__all__': ['Неизвестный блок']}}, status=400)
         scope = request.POST.get('scope', 'global' if item is None else '')
+        if not can_edit_task(request.user, task):
+            # Общая задача у приглашённого учителя: только локальная копия в
+            # своём листке; без листка (и для масок самостоятельных) — 403.
+            if item is None or scope == 'global':
+                return forbidden_json(BASE_LOCKED_MESSAGE)
+            scope = 'local'
         if scope not in ('global', 'local') or (scope == 'local' and item is None):
             return JsonResponse({'ok': False, 'errors': {'__all__': ['Выберите область сохранения']}}, status=400)
         data = request.POST.copy()
@@ -274,4 +334,7 @@ def manage(request, pk, *, mask_selection=None):
         html = render_to_string('problems/_editor.html', context(request, task), request=request)
         return JsonResponse({'ok': True, 'html': html, 'url': url,
                              'task_id': task.pk, 'answers': mask_data(task, selection),
-                             'sidebar': render_to_string('includes/sidebar/task_detail.html', {'task': task}, request=request)})
+                             'sidebar': render_to_string(
+                                 'includes/sidebar/task_detail.html',
+                                 {'task': task, 'can_edit_task': can_edit_task(request.user, task)},
+                                 request=request)})

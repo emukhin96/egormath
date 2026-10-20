@@ -13,7 +13,8 @@
     // На карточке генерация учитывает ещё не сохранённый текст выбранного источника.
     if(root.matches('[data-problem-editor]'))result.answers.forEach(function(o){
       var section=root.querySelector('[data-answer-owner="'+(o.id||'')+'"]');
-      if(section){o.condition=root.querySelector('[name=text_latex]').value+(o.id?'\n'+o.text:'');o.author=section.querySelector('[name=author_answer_latex]').value;o.editor=section.querySelector('[name=answer_latex]').value;}
+      // В простом режиме ответов (не-редактор, R22-1) авторского поля в разметке нет
+      if(section){var authorField=section.querySelector('[name=author_answer_latex]'),editorField=section.querySelector('[name=answer_latex]');o.condition=root.querySelector('[name=text_latex]').value+(o.id?'\n'+o.text:'');o.author=authorField?authorField.value:o.author;o.editor=editorField?editorField.value:o.editor;}
     });
     return result.answers;
   }
@@ -25,6 +26,8 @@
     Array.from(form.elements.source.options).forEach(opt=>opt.disabled=!o[opt.value].trim());
     form.elements.source.value=o.author.trim()?'author':'editor';
     form.querySelector('[data-mask-message]').textContent='';form.querySelector('[data-mask-errors]').textContent='';
+    // Общая задача из листка (data-base-locked): маска уйдёт в локальную копию (R16-1)
+    var lockedNote=dialog.querySelector('[data-mask-locked-note]');if(lockedNote)lockedNote.hidden=!root.dataset.baseLocked;
     document.getElementById('answer-mask-title').textContent='Маска · '+o.label;
     form.elements.reference.value=o[form.elements.source.value]||'';
     source();dialog.showModal();
@@ -39,17 +42,10 @@
       if(!owner.mask.trim()){
         var note=document.createElement('p');note.className='helptext';note.textContent='Маски нет — ученик может прислать фото решения.';section.appendChild(note);
       }else{
+        // Форма ученика с «Проверить как ученик» приходит с сервера целиком (problems/_mask_check_form.html) — та же разметка, что на карточке только для чтения
         var result=await api.request(config.previewUrl,body({mask:owner.mask,prefix}));
-        var check=document.createElement('form');check.dataset.maskCheck='1';
-        var hidden=document.createElement('input');hidden.type='hidden';hidden.name='mask';hidden.value=owner.mask;check.appendChild(hidden);
-        var pref=document.createElement('input');pref.type='hidden';pref.name='prefix';pref.value=prefix;check.appendChild(pref);
-        var fields=document.createElement('div');fields.innerHTML=result.html||'';check.appendChild(fields);
-        var errors=document.createElement('p');errors.className='errorlist';errors.textContent=(result.errors||[]).join('; ');check.appendChild(errors);
-        var button=document.createElement('button');button.className='btn btn-secondary';button.textContent='Проверить пробный ответ';check.appendChild(button);
-        var status=document.createElement('p');status.dataset.trialResult='1';status.setAttribute('role','status');check.appendChild(status);
-        section.appendChild(check);
-        fields.querySelectorAll('.mask-text,.mask-order-items li').forEach(renderMathContent);
-
+        section.insertAdjacentHTML('beforeend',result.form||'');
+        section.querySelectorAll('.mask-text,.mask-order-items li').forEach(renderMathContent);
       }
       container.appendChild(section);
       if(window.EgorMask)window.EgorMask.enhance(section);
@@ -67,6 +63,8 @@
       var actions=document.createElement('div');actions.className='problem-mask-actions';target.appendChild(actions);
       if(owners.some(o=>o.full_answer_only)){var policy=document.createElement('span');policy.className='helptext';policy.textContent='Только развёрнутый ответ. Сохранённые маски не используются.';actions.appendChild(policy);}
       if(!root.dataset.maskReadonly&&!owners.some(o=>o.full_answer_only)&&owners.filter(o=>!o.mask.trim()).length>1)actions.appendChild(button('Создать недостающие маски','maskMissing','1'));
+      // Маски общей задачи приглашённый не меняет (403): вместо редактора — ссылка на предложение исправления (problems/proposals.py)
+      if(root.dataset.maskReadonly&&root.dataset.proposeUrl){var propose=document.createElement('a');propose.className='btn btn-small btn-secondary';propose.href=root.dataset.proposeUrl;propose.textContent='Предложить маску';propose.title='Маски общей задачи меняют редакторы — предложите свою';actions.appendChild(propose);}
 
       for(var i=0;i<owners.length;i++){
         var o=owners[i],row=document.createElement('div');row.className='problem-mask-summary';
@@ -153,16 +151,35 @@
     }catch(error){api.errors(form.querySelector('[data-mask-errors]'),error);}
     finally{delete form.dataset.busy;e.submitter.disabled=false;}
   });
+  // «Проверить как ученик» (форма [data-mask-check] из _mask_check_form.html — в диалоге предпросмотра и на карточке только для чтения):
+  // ответ task_mask_check тот же, что получает ученик по кнопке «Проверить» в задании, — бейджи по слотам и итог по префиксу формы
+  function clearChecks(f){
+    f.querySelectorAll('[data-check]').forEach(function(h){if(window.EgorCheckBadge)EgorCheckBadge.render(h,'');});
+    var status=f.querySelector('[data-trial-result]');if(status)status.textContent='';
+  }
   document.addEventListener('submit',async function(e){
     var f=e.target.closest('[data-mask-check]');if(!f)return;e.preventDefault();
+    if(f.dataset.busy)return;f.dataset.busy='1';var button=f.querySelector('button:not([type=button])');if(button)button.disabled=true;
     try{
       var data=new FormData(f);f.querySelectorAll('math-field[data-mirror]').forEach(function(m){
         data.set(m.dataset.mirror,(window.EgorMask&&EgorMask.value)?EgorMask.value(m):(m.value||''));
       });
-      var result=await api.request(config.previewUrl,data);
-      if(window.EgorCheckBadge)window.EgorCheckBadge.apply(f,result.checks||{});
-      f.querySelector('[data-trial-result]').textContent=result.unavailable?result.message:(({ok:'Верно',wrong:'Неверно',unknown:'Не все поля заполнены или ответ не разобран'})[result.overall]||'Введите пробный ответ');
-    }catch(error){f.querySelector('[data-trial-result]').textContent=error.message;}
+      var result=await api.request(config.checkUrl,data);
+      clearChecks(f);
+      if(window.EgorCheckBadge)EgorCheckBadge.apply(f,result.checks||{});
+      f.querySelector('[data-trial-result]').textContent=result.message||'';
+    }catch(error){clearChecks(f);f.querySelector('[data-trial-result]').textContent=error.message;}
+    finally{delete f.dataset.busy;if(button)button.disabled=false;}
+  });
+  // Новый ввод снимает результат, как на странице ученика (assignment.js); «Сбросить» очищает поля
+  ['input','change'].forEach(function(type){document.addEventListener(type,function(e){var f=e.target.closest&&e.target.closest('[data-mask-check]');if(f)clearChecks(f);});});
+  document.addEventListener('click',function(e){
+    var reset=e.target.closest('[data-mask-reset]');if(!reset)return;var f=reset.closest('[data-mask-check]');if(!f)return;
+    f.querySelectorAll('math-field[data-mirror]').forEach(function(m){m.value='';m.dispatchEvent(new Event('input',{bubbles:true}));});
+    f.querySelectorAll('input[type=text],input[type=number]').forEach(function(i){i.value='';});
+    f.querySelectorAll('input[type=checkbox]').forEach(function(c){if(c.checked){c.checked=false;c.dispatchEvent(new Event('change',{bubbles:true}));}});
+    f.querySelectorAll('select').forEach(function(s){s.value='';});
+    clearChecks(f);
   });
   var toggle=document.getElementById('toggle-masks');
   if(toggle){

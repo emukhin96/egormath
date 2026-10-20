@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% load page_tools task_extras %}
+{% block title %}Учителя — Математика{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/teachers.html' %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Учителя</h1>
+    <p class="page-meta">
+      <span>{{ teacher_list|length }} {{ teacher_list|length|plural_ru:'учитель,учителя,учителей' }}</span>
+      {% if invites %}<span>{{ invites|length }} {{ invites|length|plural_ru:'приглашение,приглашения,приглашений' }} ждёт регистрации</span>{% endif %}
+    </p>
+  </div>
+</div>
+
+{% if new_credentials %}
+<div class="credentials">
+  <strong>Учётные данные учителя {{ new_credentials.name }}</strong> —
+  сохраните и передайте учителю, пароль показывается только один раз:<br>
+  Логин: <code>{{ new_credentials.username }}</code>
+  Пароль: <code>{{ new_credentials.password }}</code>
+</div>
+{% endif %}
+
+{% if new_invite %}
+<div class="credentials" data-new-invite>
+  <strong>Ссылка-приглашение{% if new_invite.note %} для {{ new_invite.note }}{% endif %}</strong> —
+  скопируйте и отправьте учителю, ссылка показывается только один раз:
+  <div class="copy-row">
+    <code>{{ new_invite.url }}</code>
+    <button type="button" class="btn btn-small btn-secondary" data-copy="{{ new_invite.url }}">Скопировать</button>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-head">
+    <div><h2>Учителя сайта</h2></div>
+    <span class="counter">{{ teacher_list|length }}</span>
+  </div>
+  <div class="catalog-table-wrap"><table class="list table-stack">
+    <thead><tr>
+      <th>Учитель</th><th>Логин</th><th>Учеников</th><th>Листков</th><th>Последний вход</th><th>Можно ред. базу</th><th>Доступ</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for teacher in teacher_list %}
+    <tr>
+      <td class="stack-primary">
+        {{ teacher.get_full_name|default:teacher.username }}
+        {% if teacher.pk == request.user.pk %}<span class="muted">(вы)</span>{% endif %}
+        {% if teacher.is_superuser %}<span class="badge badge-reviewed">администратор</span>{% endif %}
+        {% if teacher.profile.invited_by %}<div class="muted task-meta">пригласил {{ teacher.profile.invited_by.get_full_name|default:teacher.profile.invited_by.username }}</div>{% endif %}
+      </td>
+      <td class="mono" data-label="Логин">{{ teacher.username }}</td>
+      <td data-label="Учеников">{{ teacher.students_count }}</td>
+      <td data-label="Листков">{{ teacher.worksheets_count }}</td>
+      <td data-label="Последний вход">{% if teacher.last_login %}{{ teacher.last_login|date:'d.m.Y H:i' }}{% else %}—{% endif %}</td>
+      <td data-label="Можно ред. базу">
+        {% if teacher.is_superuser %}всегда{% else %}
+        {# Переключатель отправляет форму сам (data-autosubmit в shell.js); без JS — кнопка #}
+        <form method="post" action="{% url 'teacher_toggle_base_editor' teacher.pk %}" class="inline-form" data-autosubmit>
+          {% csrf_token %}
+          <label class="ws-toggle teacher-editor-toggle" title="Право менять общие задачи напрямую">
+            <input type="checkbox" name="base_editor" value="1"{% if teacher.profile.base_editor %} checked{% endif %}>
+            <span class="ws-toggle-slider"></span>
+            <span class="ws-toggle-text">{% if teacher.profile.base_editor %}да{% else %}нет{% endif %}</span>
+          </label>
+          <noscript><button type="submit" class="btn btn-small btn-secondary">Сохранить</button></noscript>
+        </form>
+        {% endif %}
+      </td>
+      <td data-label="Доступ">{% if teacher.is_active %}активен{% else %}<span class="badge badge-returned">отключён</span>{% endif %}</td>
+      <td class="row-actions">
+        {# Себе пароль не сбрасывают (разлогинит, пароль потеряется) и себя не отключают — свой пароль меняется в профиле #}
+        {% if teacher.pk == request.user.pk %}
+        <a class="btn btn-small btn-secondary" href="{% url 'profile' %}">Профиль</a>
+        {% else %}
+        <button type="button" class="btn btn-small btn-secondary" data-dialog-open="reset-password-{{ teacher.pk }}">Сбросить пароль</button>
+        <form method="post" action="{% url 'teacher_toggle_active' teacher.pk %}" class="inline-form"{% if teacher.is_active %} onsubmit="return confirm('Отключить учителя {{ teacher.get_full_name|default:teacher.username|escapejs }}? Он не сможет войти, его ученики и листки останутся.');"{% endif %}>
+          {% csrf_token %}
+          <button type="submit" class="btn btn-small btn-secondary">{% if teacher.is_active %}Отключить{% else %}Включить{% endif %}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% for teacher in teacher_list %}{% if teacher.pk != request.user.pk %}
+  <dialog class="dialog problem-dialog" id="reset-password-{{ teacher.pk }}" aria-labelledby="reset-password-title-{{ teacher.pk }}">
+    <div class="dialog-heading">
+      <h3 id="reset-password-title-{{ teacher.pk }}">Сбросить пароль учителя?</h3>
+      <button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button>
+    </div>
+    <p>{{ teacher.get_full_name|default:teacher.username }} · <span class="mono">{{ teacher.username }}</span></p>
+    <p>Прежний пароль перестанет действовать. Новый пароль будет показан один раз после сброса — сохраните и передайте его учителю.</p>
+    <form method="post" action="{% url 'teacher_reset_password' teacher.pk %}">
+      {% csrf_token %}
+      <div class="form-buttons">
+        <button type="submit" class="btn">Сбросить и показать новый пароль</button>
+        <button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button>
+      </div>
+    </form>
+  </dialog>
+  {% endif %}{% endfor %}
+</div>
+
+<div class="card">
+  <h2>Пригласить учителя</h2>
+  <form method="post" class="filters">
+    {% csrf_token %}
+    <div><label for="{{ invite_form.note.id_for_label }}">Кому</label>{{ invite_form.note }}</div>
+    <div><label for="{{ invite_form.email.id_for_label }}">Почта</label>{{ invite_form.email }}</div>
+    <div><label for="{{ invite_form.days.id_for_label }}">Срок, дней</label>{{ invite_form.days }}</div>
+    <div>
+      <label class="ws-toggle invite-editor-toggle" for="{{ invite_form.base_editor.id_for_label }}">
+        {{ invite_form.base_editor }}<span class="ws-toggle-slider"></span><span class="ws-toggle-text">Может править общие задачи</span>
+      </label>
+    </div>
+    <div><button type="submit" class="btn">Создать ссылку</button></div>
+    <span class="helptext">Одна ссылка — одна регистрация. Почты нет: скопируйте ссылку и отправьте сами.</span>
+  </form>
+  {% if invite_form.errors %}<div class="errorlist">{{ invite_form.errors }}</div>{% endif %}
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <div><h2>Непогашенные приглашения</h2></div>
+    <span class="counter">{{ invites|length }}</span>
+  </div>
+  {% if invites %}
+  <div class="catalog-table-wrap"><table class="list table-stack">
+    <thead><tr><th>Кому</th><th>Почта</th><th>Создано</th><th>Действует до</th><th>Можно ред. базу</th><th></th></tr></thead>
+    <tbody>
+    {% for invite in invites %}
+    <tr>
+      <td class="stack-primary">{{ invite.note|default:'—' }}</td>
+      <td data-label="Почта">{{ invite.email|default:'—' }}</td>
+      <td data-label="Создано">{{ invite.created_at|date:'d.m.Y' }}</td>
+      <td data-label="Действует до">{{ invite.expires_at|date:'d.m.Y' }}</td>
+      <td data-label="Можно ред. базу">{% if invite.base_editor %}да{% else %}нет{% endif %}</td>
+      <td class="row-actions">
+        {# Ссылка показывается один раз после создания; отсюда её можно скопировать снова (R03-1, invite.url из accounts.views.teachers) #}
+        <button type="button" class="btn btn-small btn-secondary" data-copy="{{ invite.url }}" title="Скопировать ссылку-приглашение">Скопировать</button>
+        <form method="post" action="{% url 'invite_revoke' invite.pk %}" class="inline-form"
+              onsubmit="return confirm('Отозвать приглашение{% if invite.note %} для {{ invite.note|escapejs }}{% endif %}? Ссылка перестанет работать.');">
+          {% csrf_token %}<button type="submit" class="icon-btn" title="Отозвать приглашение" aria-label="Отозвать приглашение">×</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="muted">Нет приглашений, ждущих регистрации.</p>
+  {% endif %}
+</div>
+{% endblock %}

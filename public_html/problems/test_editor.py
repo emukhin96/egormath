@@ -42,8 +42,8 @@ class EditorTests(TestCase):
     def test_number_preview_uses_math_keyboard_and_checks_radical(self):
         response = self.client.post(reverse('task_mask_preview'), {'mask': r'{{number: \sqrt{2}}}', 'prefix': 'preview'})
         self.assertContains(response, 'math-field')
-        response = self.client.post(reverse('task_mask_preview'), {'mask': r'{{number: \sqrt{2}}}', 'prefix': 'preview', 'preview_s1': r'\sqrt2'})
-        self.assertEqual(response.json()['overall'], 'ok')
+        response = self.client.post(reverse('task_mask_check'), {'mask': r'{{number: \sqrt{2}}}', 'prefix': 'preview', 'preview_s1': r'\sqrt2'})
+        self.assertEqual(response.json()['checks']['preview'], 'ok')
 
     def test_invalid_mask_does_not_change_task(self):
         response = self.client.post(self.url, {'block': 'masks', 'masks': json.dumps([
@@ -137,9 +137,9 @@ class EditorTests(TestCase):
     def test_slanted_union_and_separate_preview_prefixes(self):
         mask=draft_mask(r'$a\leqslant 1$ или $a\geqslant 2$')
         self.assertTrue(parse_mask(mask).is_valid)
-        response=self.client.post(reverse('task_mask_preview'),{
+        response=self.client.post(reverse('task_mask_check'),{
             'mask':mask,'prefix':'preview_2','preview_2_s1':r'(-\infty;1] \cup [2;\infty)'})
-        self.assertEqual(response.json()['checks'],{'preview_2_s1':'ok'})
+        self.assertEqual(response.json()['checks'],{'preview_2':'ok','preview_2_s1':'ok'})
 
     def test_sources_formset_is_rendered_and_saved_locally(self):
         from .models import Source, TaskSource

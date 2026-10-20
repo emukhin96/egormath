@@ -175,7 +175,7 @@ class CatalogPerformanceTests(TestCase):
         task.exam_items.add(ExamItem.objects.first())
         expected = task_taxonomy_state(task)
         self.assertEqual(expected['primary'], topic.pk)
-        prepared = filter_tasks(QueryDict()).get(pk=task.pk)
+        prepared = filter_tasks(QueryDict(), teacher).get(pk=task.pk)
         with self.assertNumQueries(0):
             self.assertEqual(task_taxonomy_state(prepared), expected)
         worksheet = Worksheet.objects.create(owner=teacher, title='Листок')
@@ -193,7 +193,7 @@ class CatalogPerformanceTests(TestCase):
         from .views import filter_tasks
         tasks = Task.objects.bulk_create([Task(text_latex=str(i)) for i in range(51)])
         Task.objects.update(created_at=timezone.now())
-        paginator = Paginator(filter_tasks(QueryDict()), 25)
+        paginator = Paginator(filter_tasks(QueryDict(), make_teacher()), 25)
         ids = [task.pk for n in paginator.page_range for task in paginator.page(n)]
         self.assertEqual(ids, sorted((task.pk for task in tasks), reverse=True))
         self.assertEqual(len(set(ids)), 51)
@@ -246,7 +246,8 @@ class TaxonomyCatalogCacheTests(TransactionTestCase):
         topic = Topic.objects.get(code='ALG.07.03')
         before = next(row['count'] for row in taxonomy_catalog()['topics']
                       if row['id'] == topic.pk)
-        task = Task.objects.create(text_latex='Новая задача для счётчика')
+        # Счётчики каталога — по общим задачам (кэш один на всех пользователей).
+        task = Task.objects.create(text_latex='Новая задача для счётчика', is_shared=True)
         TaskTopic.objects.create(task=task, topic=topic)
 
         after = next(row['count'] for row in taxonomy_catalog()['topics']
@@ -287,7 +288,7 @@ class TaxonomyCatalogEndpointTests(TestCase):
         url = reverse('taxonomy_catalog_json')
         before = self.client.get(url)
         topic = next(t for t in before.json()['topics'] if t['leaf'])
-        task = Task.objects.create(created_by=self.teacher, text_latex='Новая')
+        task = Task.new_for(self.teacher, text_latex='Новая')
         task.topics.add(topic['id'])
         after = self.client.get(url, HTTP_IF_NONE_MATCH=before['ETag'])
         self.assertEqual(after.status_code, 200)

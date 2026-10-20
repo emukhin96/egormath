@@ -1,0 +1,9 @@
+{# Строка «Моих предложений»: proposal — TaskProposal с флагом unread (proposals.proposals_mine); непросмотренный статус подсвечен один раз, после показа он считается прочитанным #}
+<tr{% if proposal.unread %} class="proposal-unread"{% endif %}>
+  <td class="stack-primary">
+    <a href="{% url 'task_detail' proposal.task.pk %}">Задача #{{ proposal.task.pk }}</a>
+    <div class="muted task-meta">{{ proposal.message|truncatechars:120 }}</div>
+  </td>
+  <td>{{ proposal.created_at|date:'d.m.Y H:i' }}</td>
+  <td>{% include 'problems/_proposal_status.html' %}{% if proposal.unread %} <span class="badge-count" title="Новый статус">1</span>{% endif %}{% if not proposal.is_open %}<div class="muted task-meta">{{ proposal.resolved_at|date:'d.m.Y' }}</div>{% endif %}</td>
+</tr>

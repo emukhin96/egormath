@@ -19,10 +19,10 @@
 </div></div>
 <div class="card">
   <p>Листок «{{ worksheet.title }}» не удалось собрать в PDF.</p>
-  <p class="msg msg-error">{{ error }}</p>
-  {% if error.log %}
+  <p class="msg msg-error">{{ error_message }}</p>
+  {% if error_log %}
   <h2>Фрагмент лога LaTeX</h2>
-  <pre class="log">{{ error.log }}</pre>
+  <pre class="log">{{ error_log }}</pre>
   {% endif %}
   <p>Чаще всего причина — ошибка в LaTeX-коде одной из задач.
      Проверьте недавно изменённые задачи, посмотрите

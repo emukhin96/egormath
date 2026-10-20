@@ -4,7 +4,7 @@
   <td class="stack-primary"><a href="{% url 'progress_overview' %}?student={{ profile.user_id }}">{{ profile.user.get_full_name|default:profile.user.username }}</a></td>
   <td data-label="Класс">{{ profile.grade|default:'—' }}</td>
   <td data-label="{% if student_sections %}Другие группы{% else %}Группы{% endif %}">{% for group in row_groups %}{{ group.name }}{% if request.user.is_superuser %} <span class="muted">({{ group.teacher.get_full_name|default:group.teacher.username }})</span>{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}{% if not student_sections %}—{% endif %}{% endfor %}</td>
-  <td class="mono" data-label="Логин">{{ profile.user.username }}</td>
+  <td class="mono">{{ profile.user.username }}</td>
   <td class="row-actions">
     <a class="btn btn-small btn-secondary" href="{% url 'student_edit' profile.user_id %}">Изменить</a>
     <button type="button" class="btn btn-small btn-secondary" data-dialog-open="reset-password-{{ profile.user_id }}">Сбросить пароль</button>

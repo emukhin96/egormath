@@ -10,18 +10,28 @@ from .models import (Task, TaskImage, TaskSource, TaskSubitem,
 
 def clean_mask_text(text):
     """Маска сохраняется только рабочей: ошибки грамматики и эталонов
-    учитель видит сразу в форме, а не ученик на задании."""
-    from assignments.checks import parse_mask
+    учитель видит сразу в форме, а не ученик на задании. Длина — в пределах
+    MASK_MAX_LENGTH, иначе сохранённую маску нельзя было бы показать в превью
+    и проверить «как ученик» (problems.views._mask_request)."""
+    from assignments.checks import MASK_MAX_LENGTH, parse_mask
     text = (text or '').strip()
     if not text:
         return ''
+    if len(text) > MASK_MAX_LENGTH:
+        raise forms.ValidationError(f'Маска длиннее {MASK_MAX_LENGTH} символов')
     spec = parse_mask(text, validate_references=True)
     if spec.errors:
         raise forms.ValidationError(spec.errors)
     return text
 
 
+# Подписи полей задачи без двоеточий — как на остальных формах сайта
+# (R22-2); распространяется и на формы блоков карточки (editor.block_form).
 class TaskForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('label_suffix', '')
+        super().__init__(*args, **kwargs)
+
     class Meta:
         model = Task
         fields = ['text_latex', 'columns',
@@ -46,6 +56,10 @@ class TaskForm(forms.ModelForm):
 
 
 class TaskSubitemForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('label_suffix', '')
+        super().__init__(*args, **kwargs)
+
     class Meta:
         model = TaskSubitem
         fields = ['order', 'text_latex', 'answer_latex', 'solution_latex',

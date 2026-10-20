@@ -7,7 +7,7 @@
   <div>
     <nav class="page-crumbs" aria-label="Путь">{% if worksheet %}<a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a>{% else %}<a href="{% url 'task_list' %}">Задачи</a>{% endif %}</nav>
     <h1>{% if analog_source %}Новый аналог задачи #{{ analog_source.pk }}{% elif task %}Задача #{{ task.pk }}{% else %}Новая задача{% endif %}</h1>
-    {% if task.variant_of_id or worksheet %}<p class="page-meta">{% if worksheet %}<span>из конструктора листка</span>{% endif %}{% if task.variant_of_id %}<span class="badge badge-returned">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}</p>{% endif %}
+    {% if task.variant_of_id or worksheet %}<p class="page-meta">{% if worksheet %}<span>из конструктора листка</span>{% endif %}{% if task.variant_of_id %}<span class="badge badge-local">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}</p>{% endif %}
   </div>
 </div>
 
@@ -136,9 +136,10 @@
 <input type="hidden" name="answer_policy_submitted" value="1">
 {% include 'problems/_answer_policy.html' with field=form.full_answer_only %}
 {% include 'problems/_task_answer_fields.html' with fields=form %}
-<div class="form-buttons"><button type="button" class="btn btn-secondary" data-neuro="task-form-answer">Дописать AI-ответ</button><button type="button" class="btn btn-secondary" data-neuro="task-form">Добавить AI-решение</button></div>
+<div class="form-buttons">{% include 'includes/ai_menu.html' with kind='form' %}</div>
     <div class="card mask-preview" id="mask-preview" hidden
          data-preview-url="{% url 'task_mask_preview' %}"
+         data-check-url="{% url 'task_mask_check' %}"
          data-draft-url="{% url 'task_mask_draft' %}">
       <div class="label-row">
         <strong data-mask-title>Превью</strong>
@@ -160,5 +161,5 @@
 <script defer src="{% static 'js/check_badge.js' %}"></script>
 <script defer src="{% static 'js/mask.js' %}?v=5"></script>
 <script defer src="{% static 'js/numberline.js' %}?v=5"></script>
-<script defer src="{% static 'js/mask_editor.js' %}?v=6"></script>
+<script defer src="{% static 'js/mask_editor.js' %}?v=8"></script>
 {% endblock %}

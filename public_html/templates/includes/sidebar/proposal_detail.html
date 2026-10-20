@@ -1,0 +1,16 @@
+{# Контекст предложения: кто, когда, к чему. Действия — в содержимом #}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Предложение #{{ proposal.pk }}</p>
+  <h2>Исправление общей задачи</h2>
+  <ul class="sidebar-list">
+    <li><strong>Автор:</strong> {{ proposal.author_name }}</li>
+    <li><strong>Отправлено:</strong> {{ proposal.created_at|date:'d.m.Y H:i' }}</li>
+    <li><strong>Задача:</strong> <a href="{% url 'task_detail' task.pk %}">#{{ task.pk }}</a></li>
+    <li><strong>Статус:</strong> {{ proposal.get_status_display }}</li>
+    {% if proposal.resolved_at %}<li><strong>Решено:</strong> {{ proposal.resolved_by_name }}, {{ proposal.resolved_at|date:'d.m.Y' }}</li>{% endif %}
+  </ul>
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Как решить</p>
+  <p class="sidebar-copy">Откройте задачу, внесите исправление сами и нажмите «Принято». Если предложение неверное — «Отклонено». Автор увидит статус в «Мои предложения».</p>
+</section>

@@ -70,6 +70,13 @@
       'Заменить существующий ответ или решение черновиком нейросети?');
   }
 
+  // Пункт меню «AI» (includes/ai_menu.html): после работы меню закрывается,
+  // пока идёт генерация — остаётся открытым, чтобы был виден прогресс.
+  function closeMenu(el) {
+    var menu = el.closest('details.ai-menu');
+    if (menu) menu.open = false;
+  }
+
   function withBusy(el, work) {
     var label = el.textContent;
     el.setAttribute('aria-busy', 'true');
@@ -85,6 +92,7 @@
     }).finally(function () {
       el.removeAttribute('aria-busy');
       if (el.tagName === 'BUTTON') el.disabled = false;
+      closeMenu(el);
     });
   }
 
@@ -332,6 +340,9 @@
   function onClick(ev) {
     var el = ev.target.closest('[data-neuro]');
     if (!el) return;
+    // Приглушённая кнопка у не-редактора (решение 5): не трогаем
+    if (el.disabled) return;
+    if (!window.NEURO_SOLVE_URL && el.closest('details.ai-menu')) return;
     ev.preventDefault();
     var kind = el.dataset.neuro;
     if (kind === 'task-detail' || kind === 'task-detail-answer') {
@@ -339,9 +350,11 @@
       if (answersOnly) {
         if (!detailAnswersMissing()) {
           toast(false, 'Ответ уже есть');
+          closeMenu(el);
           return;
         }
       } else if (!confirmOverwrite(detailHasExisting())) {
+        closeMenu(el);
         return;
       }
       withBusy(el, function () {
@@ -361,9 +374,11 @@
       if (formAnswersOnly) {
         if (!formAnswersMissing()) {
           toast(false, 'Ответ уже есть');
+          closeMenu(el);
           return;
         }
       } else if (!confirmOverwrite(formHasExisting())) {
+        closeMenu(el);
         return;
       }
       withBusy(el, function () {
@@ -379,6 +394,7 @@
       var missing = worksheetTasks('[data-no-answer="1"]');
       if (!missing.length) {
         toast(false, 'Нет задач без ответа');
+        closeMenu(el);
         return;
       }
       runApplyQueue(el, missing, {answersOnly: true});
@@ -388,12 +404,16 @@
       var all = worksheetTasks();
       if (!all.length) {
         toast(false, 'Нет задач в листке');
+        closeMenu(el);
         return;
       }
       var hasExisting = all.some(function (item) {
         return item.dataset.hasAnswer === '1';
       });
-      if (!confirmOverwrite(hasExisting)) return;
+      if (!confirmOverwrite(hasExisting)) {
+        closeMenu(el);
+        return;
+      }
       runApplyQueue(el, all, {overwrite: hasExisting});
     }
   }

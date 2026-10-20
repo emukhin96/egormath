@@ -21,6 +21,7 @@ from django.views.decorators.http import require_POST, require_http_methods
 from django.utils.dateparse import parse_date
 
 from accounts.decorators import get_role, teacher_required
+from accounts.permissions import EDITORS_ONLY_MESSAGE, is_base_editor, visible_tasks
 from livefile import files as livefiles
 from accounts.models import Profile, StudentGroup
 from assignments.models import Assignment, locked_check_visibility
@@ -221,7 +222,7 @@ def worksheet_import(request):
                     row['task'].pk, ', '.join(row['files'])))
             return redirect('worksheet_detail', pk=worksheet.pk)
 
-        matches = match_existing_tasks(parsed)
+        matches = match_existing_tasks(parsed, request.user)
         existing = (Task.objects.prefetch_related('subitems')
                     .in_bulk([m for m in matches if m]))
         rows = []
@@ -388,7 +389,7 @@ def worksheet_detail(request, pk):
     search_active = any(request.GET.get(k) for k in ('q', 'topic', 'grade', 'tag', 'who'))
     found_tasks = []
     if search_active:
-        found_tasks = list(filter_tasks(request.GET).exclude(pk__in=task_ids)[:15])
+        found_tasks = list(filter_tasks(request.GET, request.user).exclude(pk__in=task_ids)[:15])
 
     student_profiles = (Profile.students_for(request.user)
                         .select_related('user')
@@ -1073,10 +1074,16 @@ def collection_to_worksheets(request, pk):
 @teacher_required
 @require_POST
 def collection_publish(request, pk):
-    """Переключает видимость подборки для других учителей."""
+    """Переключает видимость подборки для других учителей. Открыть «всем
+    учителям» может только редактор базы (решение 3 плана пользователей),
+    снять с публикации — и владелец: его подборка не должна оставаться
+    открытой против его воли."""
     from .authored import set_published
     collection = _own_authored_collection(request, pk)
-    set_published(collection, request.POST.get('published') == '1')
+    published = request.POST.get('published') == '1'
+    if published and not is_base_editor(request.user):
+        raise PermissionDenied(EDITORS_ONLY_MESSAGE)
+    set_published(collection, published)
     messages.success(
         request, 'Подборка видна всем учителям.' if collection.is_published
         else 'Подборка видна только вам.')
@@ -1339,7 +1346,7 @@ def worksheet_quick_task(request, pk):
         return _builder_response(
             request, pk, ok=False, message='Введите условие задачи.')
     from .import_tex import find_existing_task
-    duplicate_pk = find_existing_task(text)
+    duplicate_pk = find_existing_task(text, user=request.user)
     if duplicate_pk is not None:
         return _builder_response(
             request, pk, ok=False,
@@ -1348,13 +1355,13 @@ def worksheet_quick_task(request, pk):
     stars = request.POST.get('stars', '1')
     stars = int(stars) if stars.isdigit() and int(stars) in range(4) else 1
     with transaction.atomic():
-        task = Task.objects.create(
+        task = Task.new_for(
+            request.user,
             text_latex=text,
             answer_latex=request.POST.get('answer_latex', '').strip(),
             solution_latex=request.POST.get('solution_latex', '').strip(),
             stars=stars,
-            grade_level=worksheet.grade,
-            created_by=request.user)
+            grade_level=worksheet.grade)
         code = GRADE_LEVEL_TO_CODE.get(worksheet.grade)
         if code:
             set_grade_bands(task, [code], sync_legacy=False)
@@ -1369,7 +1376,7 @@ def worksheet_quick_task(request, pk):
 @teacher_required
 @require_POST
 def worksheet_add_task(request, pk):
-    task = get_object_or_404(Task, pk=request.POST.get('task_id'))
+    task = get_object_or_404(visible_tasks(request.user), pk=request.POST.get('task_id'))
     return add_task_to_worksheet(request, pk, task)
 
 
@@ -1665,9 +1672,12 @@ def worksheet_pdf(request, pk):
                 'worksheet': worksheet,
                 'for_student': True,
             }, status=502)
+        # Сбой LaTeX API (ключ, адрес) — учителю без подробностей (R24-1)
         return render(request, 'worksheets/latex_error.html', {
             'worksheet': worksheet,
             'error': exc,
+            'error_message': exc.user_message(request.user),
+            'error_log': exc.user_log(request.user),
             'tex': worksheet_to_tex(worksheet, variant),
         }, status=502)
 
@@ -1759,8 +1769,10 @@ def _editor_compile(request, worksheet, tex, doc_id, filename, collect,
                 {'ok': False, 'message': str(exc), 'log': exc.log}, status=400)
         pdf_bytes = compile_latex(tex, doc_id=doc_id, assets=assets)
     except LatexCompileError as exc:
+        # Сбой LaTeX API (ключ, адрес) — учителю без подробностей (R24-1)
         return JsonResponse(
-            {'ok': False, 'message': str(exc), 'log': exc.log}, status=502)
+            {'ok': False, 'message': exc.user_message(request.user),
+             'log': exc.user_log(request.user)}, status=502)
     finally:
         PdfCompileLock.objects.filter(user=request.user).delete()
     if on_success:

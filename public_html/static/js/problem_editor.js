@@ -36,7 +36,27 @@
       container.appendChild(p);
     });
   }
+  // Общая задача у приглашённого учителя (data-base-locked): в листке правки
+  // сразу уходят в локальную копию, без листка — подсказка, как её получить
+  // (accounts/permissions.py), и ссылка «Предложить исправление» на страницу
+  // предложения этой задачи (problems/proposals.py).
+  function baseLocked(root) {
+    var dialog = document.getElementById('base-locked-dialog');
+    if (!dialog) return Promise.reject(new Error('Общая задача: измените её для своего листка.'));
+    var input = dialog.querySelector('[name=task_id]');
+    if (input) input.value = root.dataset.taskId || '';
+    var propose = dialog.querySelector('[data-propose-link]');
+    if (propose && propose.dataset.urlTemplate) {
+      propose.href = propose.dataset.urlTemplate.replace('/0/', '/' + (root.dataset.taskId || '0') + '/')
+        + '?next=' + encodeURIComponent(location.pathname + location.search);
+    }
+    return new Promise(function (resolve) {
+      dialog.addEventListener('close', function () { resolve(null); }, {once: true});
+      dialog.showModal();
+    });
+  }
   function chooseScope(root) {
+    if (root.dataset.baseLocked) return root.dataset.item ? Promise.resolve('local') : baseLocked(root);
     if (!root.dataset.item) return Promise.resolve('global');
     return new Promise(function (resolve) {
       var dialog = document.getElementById('answer-scope-dialog'), choice = null;
@@ -143,7 +163,7 @@
         if(fresh){form.replaceWith(fresh);window.EgorTaxonomy.init();window.EgorTaskForm.init();}
       }catch(error){toast(false,'Не удалось восстановить блок');}
     }
-    var ai=e.target.closest('[data-editor-ai]');if(!ai)return;
+    var ai=e.target.closest('[data-editor-ai]');if(!ai||ai.disabled)return; // disabled — приглушённая кнопка не-редактора (решение 5)
     var root=ai.closest('[data-problem-editor]');ai.disabled=true;
     try {
       if(root.querySelector('[name=block][value=subitems]').form.dataset.dirty) {
@@ -162,7 +182,7 @@
           }
         });
       });toast(true,'AI-черновик в пустых полях — проверьте и сохраните блоки');
-    }catch(error){toast(false,error.message);}finally{ai.disabled=false;}
+    }catch(error){toast(false,error.message);}finally{ai.disabled=false;var aiMenu=ai.closest('details.ai-menu');if(aiMenu)aiMenu.open=false;}
   });
   window.EgorProblem={request,endpoint,errors,save,toast};
 })();

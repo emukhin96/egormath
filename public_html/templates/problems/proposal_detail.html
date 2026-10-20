@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% load task_extras %}
+{% block title %}Предложение #{{ proposal.pk }} — Математика{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/proposal_detail.html' %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a><a href="{% url 'proposal_list' %}">Предложения</a></nav>
+    <h1>Предложение исправления · задача #{{ task.pk }}</h1>
+    <p class="page-meta"><span>{{ proposal.author_name }}</span><span>{{ proposal.created_at|date:'d.m.Y H:i' }}</span>{% include 'problems/_proposal_status.html' %}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-secondary" href="{% url 'task_detail' task.pk %}">Открыть задачу</a>
+  </div>
+</div>
+
+<div class="problem-columns">
+  <div class="card">
+    <h2>Что исправить</h2>
+    <p class="proposal-message">{{ proposal.message }}</p>
+    {% if proposal.is_open %}
+    {# Правку редактор вносит сам на карточке задачи; здесь — только статус, автор увидит его в «Мои предложения» (решение 7 от 19.10.2026) #}
+    <p class="helptext">Внесите исправление на карточке задачи и отметьте статус: автор увидит его в «Мои предложения».</p>
+    <div class="form-buttons">
+      <form method="post" action="{% url 'proposal_accept' proposal.pk %}" class="inline-form">{% csrf_token %}<button class="btn">Принято</button></form>
+      <form method="post" action="{% url 'proposal_reject' proposal.pk %}" class="inline-form">{% csrf_token %}<button class="btn btn-secondary">Отклонено</button></form>
+    </div>
+    {% else %}
+    <p class="helptext">{{ proposal.get_status_display }} · {{ proposal.resolved_by_name }} · {{ proposal.resolved_at|date:'d.m.Y H:i' }}</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>Условие задачи #{{ task.pk }}</h2>
+    <div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
+    {% if task.subitems.all %}<ol class="subitems">{% for sub in task.subitems.all %}<li class="math-content">{{ sub.text_latex|web_text }}</li>{% endfor %}</ol>{% endif %}
+    {% task_images task %}
+  </div>
+</div>
+{% endblock %}

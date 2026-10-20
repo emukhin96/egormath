@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import clone, editor, views
+from . import clone, editor, proposals, views
 
 urlpatterns = [
     path('', views.task_list, name='task_list'),
@@ -11,6 +11,7 @@ urlpatterns = [
     path('bulk-update/', views.task_bulk_update, name='task_bulk_update'),
     path('solve/', views.task_neuro_solve, name='task_neuro_solve'),
     path('mask/preview/', views.task_mask_preview, name='task_mask_preview'),
+    path('mask/check/', views.task_mask_check, name='task_mask_check'),
     path('mask/draft/', views.task_mask_draft, name='task_mask_draft'),
     path('imports/', views.textbook_import_list,
          name='textbook_import_list'),
@@ -49,7 +50,17 @@ urlpatterns = [
          views.textbook_import_block, name='textbook_import_block'),
     path('imports/<int:batch_pk>/tasks/<int:pk>/',
          views.textbook_import_review, name='textbook_import_review'),
+    # Очередь предложений исправлений (problems/proposals.py)
+    path('proposals/', proposals.proposal_list, name='proposal_list'),
+    path('proposals/mine/', proposals.proposals_mine, name='proposals_mine'),
+    path('proposals/<int:pk>/', proposals.proposal_detail,
+         name='proposal_detail'),
+    path('proposals/<int:pk>/accept/', proposals.proposal_accept,
+         name='proposal_accept'),
+    path('proposals/<int:pk>/reject/', proposals.proposal_reject,
+         name='proposal_reject'),
     path('<int:pk>/', views.task_detail, name='task_detail'),
+    path('<int:pk>/propose/', proposals.task_propose, name='task_propose'),
     path('<int:pk>/delete/', views.task_delete, name='task_delete'),
     path('<int:pk>/duplicate/', views.task_duplicate, name='task_duplicate'),
     path('<int:pk>/clone/', clone.task_clone, name='task_clone'),
