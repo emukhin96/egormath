@@ -359,6 +359,10 @@ def create_worksheet(parsed, owner, title='', overrides=None):
         owner=owner,
     )
     missing_images = []
+    # Локальные копии общих блоков: make_variant копирует блок целиком, и
+    # один набор копий обслуживает все вопросы блока в этом листке (как в
+    # editor.local_copy), иначе остальные копии повиснут без строк.
+    block_copies = {}
     for i, (kind, data) in enumerate(parsed['elements']):
         order = (i + 1) * 10
         if kind == 'rubric':
@@ -379,7 +383,7 @@ def create_worksheet(parsed, owner, title='', overrides=None):
             sub_solutions = extra.get('subitem_solutions', {})
             task_pk = matches[i]
             if task_pk is not None:
-                task = Task.objects.get(pk=task_pk)
+                task = block_copies.get(task_pk) or Task.objects.get(pk=task_pk)
                 # Ответы/решения можно горячо править и у существующих
                 # задач (класс/тему/звёзды существующих не трогаем).
                 subs = list(task.subitems.all())
@@ -394,7 +398,12 @@ def create_worksheet(parsed, owner, title='', overrides=None):
                 if changed and not can_edit_task(owner, task):
                     # Общую задачу приглашённый учитель не меняет: его правки
                     # ответов уходят в локальную копию для этого листка.
-                    task = task.make_variant(owner)
+                    task, mappings = task.make_variant(owner, with_mapping=True)
+                    for src_pk, copy_pk in mappings.get('block_tasks', {}).items():
+                        block_copies[src_pk] = Task.objects.get(pk=copy_pk)
+                        # Вопросы блока, уже поставленные в листок, — на копии
+                        WorksheetItem.objects.filter(
+                            worksheet=worksheet, task_id=src_pk).update(task_id=copy_pk)
                     subs = list(task.subitems.all())
                 updates = []
                 if 'answer' in extra and extra['answer'] != task.answer_latex:

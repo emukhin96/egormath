@@ -402,6 +402,31 @@ class VisibilityTests(Roles, TestCase):
         self.assertEqual(editor_copy.text_latex, 'Версия редактора для подборки')
         self.assertEqual(sheet.items.get().task, editor_copy)
 
+    def test_tex_import_copies_shared_block_once(self):
+        """Правка ответа у вопроса общего блока: один набор копий на блок,
+        все строки листка этого блока — на копиях, висячих копий нет."""
+        from worksheets.import_tex import create_worksheet, parse_tex
+        from .models import Source, TaskBlock
+        block = TaskBlock.objects.create(source=Source.objects.create(title='Блоки'),
+                                         key='b1', title='Блок', size=2)
+        first = Task.objects.create(text_latex='Вопрос один', block=block, block_position=1,
+                                    created_by=self.editor, is_shared=True)
+        second = Task.objects.create(text_latex='Вопрос два', block=block, block_position=2,
+                                     created_by=self.editor, is_shared=True)
+        tex = ('\\begin{document}\\bighead{Листок}{8 класс}{Автор}\n'
+               '\\task{1}{0}{Вопрос один}\n\\task{2}{0}{Вопрос два}\n\\end{document}')
+        worksheet, _ = create_worksheet(parse_tex(tex), self.guest, overrides={1: {'answer': '7'}})
+        copies = Task.objects.filter(variant_of__isnull=False)
+        self.assertEqual(copies.count(), 2)
+        rows = [item.task for item in worksheet.items.order_by('order')]
+        self.assertEqual([t.variant_of for t in rows], [first, second])
+        self.assertEqual({t.block_id for t in rows}, {rows[0].block_id})
+        self.assertNotEqual(rows[0].block_id, block.pk)
+        self.assertEqual((rows[1].answer_latex, rows[1].created_by, rows[1].is_shared), ('7', self.guest, False))
+        self.assertTrue(all(t.pk in {c.pk for c in copies} for t in rows))
+        second.refresh_from_db()
+        self.assertEqual(second.answer_latex, '')
+
     def test_taxonomy_counts_ignore_personal_tasks(self):
         from .models import TaskTopic, Topic
         from .rubricator import taxonomy_catalog
