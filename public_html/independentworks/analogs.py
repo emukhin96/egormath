@@ -27,6 +27,27 @@ def work_variant_key(source_id, locator):
     key = f'variants:{source_id}:{work}:{pair}:{number}'
     title = f'{work} · варианты {pair * 2 + 1}–{pair * 2 + 2} · №{number}'
     return key, title, variant
+# Варианты работ пособия Шабунина «КРII.1.В5/3» (работа, вариант, номер):
+# задачи под одним номером во всех вариантах работы — аналоги, включая
+# варианты повышенной сложности со звёздочкой.
+WORK_ALL_VARIANTS = re.compile(
+    r'(?P<work>(?:ДКР|КР|СР)[IVX]{1,4}\.\d)\.В(?P<variant>\d)/(?P<number>\d{1,2})')
+
+
+def work_all_variants_key(source_id, locator):
+    """Ключ и подпись семьи для «КРII.1.В5/3»; иначе ``None``."""
+    match = WORK_ALL_VARIANTS.fullmatch(locator or '')
+    if not match:
+        return None
+    work, number = match.group('work'), match.group('number')
+    key = f'variants:{source_id}:{work}:all:{number}'
+    return key, f'{work} · все варианты · №{number}', int(match.group('variant'))
+
+
+def _variant_key(source_id, locator):
+    return work_variant_key(source_id, locator) or work_all_variants_key(source_id, locator)
+
+
 PROTOTYPE = re.compile(r'прототип(?:а|у)?\s*[№:]?\s*(\d+(?:\.\d+)+)', re.I)
 SECTION = re.compile(r'прототип|аналог', re.I)
 
@@ -62,7 +83,8 @@ def task_family_keys(task_ids):
     (``Task.analog_families``, в т.ч. вручную созданные аналоги) — плюс
     автоопределение по ``TaskSource`` теми же правилами, что и
     ``discover_families``: ЗИВ ``(sr|kr|pr)/N/vK/num`` (пара вариантов),
-    варианты работ ``С1.2/3``, ``КI.3/4`` (``WORK_VARIANT``) и
+    варианты работ ``С1.2/3``, ``КI.3/4`` (``WORK_VARIANT``), все варианты
+    работы ``КРII.1.В5/3`` (``WORK_ALL_VARIANTS``) и
     «прототип N.N» банка. Подборочные рубрики без синхронизации не
     просматриваем: это полный проход по каталогу.
     """
@@ -76,8 +98,8 @@ def task_family_keys(task_ids):
         if match:
             kind, topic, variant, number = match.groups()
             keys[ref.task_id].add(f'ziv:{ref.source_id}:{kind}:{topic}:{(int(variant) - 1) // 2}:{number}')
-        elif work_variant_key(ref.source_id, locator):
-            keys[ref.task_id].add(work_variant_key(ref.source_id, locator)[0])
+        elif _variant_key(ref.source_id, locator):
+            keys[ref.task_id].add(_variant_key(ref.source_id, locator)[0])
         elif any(SECTION.search(str(p)) for p in path):
             identity = bank_identity(ref.source_id, path, locator)
             if identity:
@@ -145,8 +167,8 @@ def discover_families(*, source_id=None):
             title = f'{ref.source.title} · {kind}/{topic} · варианты {pair * 2 + 1}–{pair * 2 + 2} · №{number}'
             add(key, title, ref.task_id, evidence)
             ziv_variants[key][int(variant)].add(ref.task_id)
-        elif work_variant_key(ref.source_id, locator):
-            key, title, variant = work_variant_key(ref.source_id, locator)
+        elif _variant_key(ref.source_id, locator):
+            key, title, variant = _variant_key(ref.source_id, locator)
             add(key, f'{ref.source.title} · {title}', ref.task_id, evidence)
             ziv_variants[key][variant].add(ref.task_id)
         elif any(SECTION.search(str(p)) for p in path):
@@ -195,7 +217,9 @@ def discover_families(*, source_id=None):
 
     incomplete = []
     for key, variants in ziv_variants.items():
-        if len(variants) != 2:
+        # Пара вариантов (Зив, Высоцкий) — ровно два; все варианты работы
+        # (Шабунин) — не меньше двух.
+        if len(variants) != 2 if ':all:' not in key else len(variants) < 2:
             incomplete.append(groups[key]['title'])
             groups.pop(key)
         elif any(len(ids) != 1 for ids in variants.values()):

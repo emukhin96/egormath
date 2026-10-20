@@ -16,8 +16,6 @@ ALL_WORDS = ('r', '\\mathbb{r}', 'ℝ', 'любое число', 'любое', '
 
 _VAR = r'[a-zA-Zа-яА-Я](?:_\{?\d+\}?)?'
 _IN_RE = re.compile(r'^' + _VAR + r'\s*(?:\\in|∈)\s*')
-_INTERVAL_TOKEN_RE = re.compile(
-    r'[(\[]\s*[^;()\[\]]+?\s*;\s*[^;()\[\]]+?\s*[)\]]')
 _UNION_RE = re.compile(r'\s*(?:∪|,|;|\bили\b|\bor\b)\s*')
 _AND_RE = re.compile(r'\s+(?:\bи\b|\band\b)\s+', re.I)
 _OP = r'(<=|>=|<|>)'
@@ -174,6 +172,8 @@ def _collection_text(text):
         text = text.replace(command, '')
     for command in (r'\,', r'\;', r'\:', r'\!', r'\ ', '~'):
         text = text.replace(command, ' ')
+    # \quad/\qquad между частями ответа — тоже пробел.
+    text = re.sub(r'\\q?quad(?![A-Za-z])', ' ', text)
     # Сохраняем происхождение явных скобок \{…\}, даже внутри LaTeX.
     explicit, out = set(), []
     i = 0
@@ -487,8 +487,52 @@ def pairs_equal(a, b, tolerance=None, *, unordered=False):
 
 # --- числовые промежутки -------------------------------------------------------
 
-_INTERVAL_PARSE_RE = re.compile(
-    r'^([(\[])\s*(.+?)\s*;\s*(.+?)\s*([)\]])$')
+def _scan_interval(text, start):
+    """Промежуток от скобки ``start``: (конец, скобка, низ, верх, скобка) или None.
+
+    Внешние скобки могут быть разными ([a;b)), а скобки внутри границ —
+    только сбалансированными: \\sqrt[3]{10}, 0,5(\\sqrt{17}+5), (\\log_3 2)^2.
+    Разделитель «;» — ровно один и только на верхнем уровне.
+    """
+    closing = {'(': ')', '[': ']', '{': '}'}
+    stack, semicolon = [], None
+    for i in range(start+1, len(text)):
+        char = text[i]
+        if char in closing:
+            stack.append(closing[char])
+            if len(stack) > MAX_COLLECTION_DEPTH:
+                return None
+        elif char in ')]}':
+            if stack:
+                if stack.pop() != char:
+                    return None
+                continue
+            if char == '}' or semicolon is None:
+                return None
+            lo, hi = text[start+1:semicolon].strip(), text[semicolon+1:i].strip()
+            if not lo or not hi:
+                return None
+            return i+1, text[start], lo, hi, char
+        elif char == ';' and not stack:
+            if semicolon is not None:
+                return None
+            semicolon = i
+    return None
+
+
+def _stash_intervals(text):
+    """Заменить скобочные промежутки маркерами \\x00N\\x00; вернуть (текст, части)."""
+    out, tokens, i = [], [], 0
+    while i < len(text):
+        token = _scan_interval(text, i) if text[i] in '([' else None
+        if token is None:
+            out.append(text[i])
+            i += 1
+            continue
+        i = token[0]
+        tokens.append(token[1:])
+        out.append(f'\x00{len(tokens) - 1}\x00')
+    return ''.join(out), tokens
 
 
 def _bound_value(text, value_parser=None):
@@ -506,14 +550,12 @@ def _bound_value(text, value_parser=None):
 
 def _parse_interval_token(token, value_parser=None):
     """Скобочная запись с дробями и иррациональными концами."""
-    m = _INTERVAL_PARSE_RE.match(token.strip())
-    if not m:
-        return None
-    lo, hi = _bound_value(m.group(2), value_parser), _bound_value(m.group(3), value_parser)
+    left, lo_text, hi_text, right = token
+    lo, hi = _bound_value(lo_text, value_parser), _bound_value(hi_text, value_parser)
     if lo is None or hi is None:
         return None
-    left = '(' if lo == -INF else m.group(1)
-    right = ')' if hi == INF else m.group(4)
+    left = '(' if lo == -INF else left
+    right = ')' if hi == INF else right
     return (lo, hi, left, right)
 
 
@@ -802,13 +844,7 @@ def parse_range(text, *, value_parser=None, equal=None):
     finite = parse_set(text, value_parser=value_parser, equal=equal)
     if finite is not None:
         return _normalize_intervals([(v, v, '[', ']') for v in finite])
-    tokens = []
-
-    def _stash(m):
-        tokens.append(m.group(0))
-        return f'\x00{len(tokens) - 1}\x00'
-
-    rest = _INTERVAL_TOKEN_RE.sub(_stash, text)
+    rest, tokens = _stash_intervals(text)
     intervals = []
     saw_atom = False
     union_parts = _split_top(rest, _UNION_RE)

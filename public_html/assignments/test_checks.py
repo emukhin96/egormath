@@ -602,6 +602,21 @@ class MaskCheckTests(SimpleTestCase):
         self.assertEqual(check_slot(s, 'x^{2}'), OK)
 
 
+    def test_expressions_expand_single_plus_minus(self):
+        # Ответ книги «4±i» для корней z²−8z+17=0 — обе ветви сразу.
+        s = slot('{{expressions: 4+i; 4-i}}')
+        for value in (r'4\pm i', '4±i', '4-i; 4+i'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        for value in (r'4\pm 2i', r'-4\pm i', '4+i'):
+            self.assertEqual(check_slot(s, value), WRONG, value)
+        s = slot('{{expressions: 1; -1; 2}}')
+        for value in (r'\pm1; 2', r'\pm1, 2', '2; ±1'):
+            self.assertEqual(check_slot(s, value), OK, value)
+        self.assertEqual(check_slot(s, r'\pm1; 3'), WRONG)
+        # В поле одного выражения ± не раскрывается.
+        self.assertNotEqual(check_slot(slot('{{expression: 4+i}}'), r'4\pm i'), OK)
+
+
 class ExpressionHelpersTests(SimpleTestCase):
     def test_prepare_inserts_multiplication(self):
         self.assertEqual(expressions.prepare('(x-1)(x+1)'), r'(x-1)\cdot (x+1)')
