@@ -668,9 +668,21 @@ class TeacherInviteTests(TestCase):
         self.assertContains(response, 'Импорт задачников')
 
     def test_empty_username_is_generated_from_name(self):
-        response = self.client.post(self.url, self.join_data(username=''))
+        response = self.client.post(
+            self.url, self.join_data(username=''), follow=True)
         self.assertRedirects(response, reverse('dashboard'))
         self.assertTrue(User.objects.filter(username='petrova.mariya').exists())
+        self.assertContains(response, 'Ваш логин: petrova.mariya')
+
+    def test_generated_username_gets_suffix_when_taken(self):
+        # JS подсказывает логин только placeholder'ом, поле уходит пустым —
+        # тёзка уже зарегистрированного получает номер, а не ошибку
+        User.objects.create_user(username='petrova.mariya', password='x')
+        response = self.client.post(
+            self.url, self.join_data(username=''), follow=True)
+        self.assertRedirects(response, reverse('dashboard'))
+        self.assertTrue(User.objects.filter(username='petrova.mariya2').exists())
+        self.assertContains(response, 'Ваш логин: petrova.mariya2')
 
     def test_invite_email_prefills_form(self):
         self.invite.email = 'maria@example.com'
