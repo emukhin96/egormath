@@ -1,42 +1,16 @@
 """Почтовые уведомления об очереди предложений (docs/USERS_PLAN.md, 5.4).
 
 Уровень 1 — счётчики в кабинете — работает всегда; почта — только если в
-``.secrets/`` настроен SMTP (``EMAIL_HOST``) и адреса редакторов
-(``PROPOSAL_NOTIFY_EMAILS``). Локально при ``DEBUG`` без ``EMAIL_HOST``
-письма печатаются в консоль ``runserver`` (console backend в settings).
-Сбой SMTP не должен ломать отправку предложения: ``fail_silently=True``,
-ошибка только в лог. Значения секретов сюда не попадают.
+``.secrets/`` настроен SMTP (``EMAIL_HOST``, см. ``deploy/MAIL.md``) и адреса
+редакторов (``PROPOSAL_NOTIFY_EMAILS``). Локально при ``DEBUG`` без
+``EMAIL_HOST`` письма печатаются в консоль ``runserver`` (console backend в
+settings). Отправитель — ``DEFAULT_FROM_EMAIL``; сбой SMTP не должен ломать
+отправку предложения: ошибка только в лог (``core.mailing.send_quietly``).
+Значения секретов сюда не попадают.
 """
-import logging
-
 from django.conf import settings
-from django.core import mail
 
-log = logging.getLogger(__name__)
-
-SMTP_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-
-
-def mail_enabled():
-    """SMTP настроен или бэкенд не почтовый (console локально, locmem в
-    тестах) — тогда письмо есть куда отдать."""
-    backend = getattr(settings, 'EMAIL_BACKEND', SMTP_BACKEND)
-    return bool(getattr(settings, 'EMAIL_HOST', '')) or backend != SMTP_BACKEND
-
-
-def _send(subject, body, recipients):
-    recipients = [r for r in recipients if r]
-    if not recipients or not mail_enabled():
-        return False
-    try:
-        sent = mail.send_mail(subject, body, settings.DEFAULT_FROM_EMAIL,
-                              recipients, fail_silently=True)
-    except Exception:  # noqa: BLE001 — любой сбой почты не трогает основной сценарий
-        log.exception('Не удалось отправить письмо «%s»', subject)
-        return False
-    if not sent:
-        log.warning('Письмо «%s» не отправлено: сервер почты не принял', subject)
-    return bool(sent)
+from core.mailing import mail_enabled, send_quietly as _send  # noqa: F401 — mail_enabled реэкспорт для тестов
 
 
 def notify_new_proposal(proposal, url=None):

@@ -1,7 +1,7 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from . import views
+from . import password_reset, views
 
 urlpatterns = [
     path('register/', views.register, name='register'),
@@ -9,6 +9,16 @@ urlpatterns = [
         template_name='accounts/login.html',
         redirect_authenticated_user=True), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
+    # Восстановление пароля по почте (accounts/password_reset.py); ссылки
+    # на страницы — только при настроенной почте
+    path('password-reset/', password_reset.PasswordResetView.as_view(),
+         name='password_reset'),
+    path('password-reset/sent/', password_reset.PasswordResetDoneView.as_view(),
+         name='password_reset_done'),
+    path('reset/<uidb64>/<token>/', password_reset.PasswordResetConfirmView.as_view(),
+         name='password_reset_confirm'),
+    path('reset/done/', password_reset.PasswordResetCompleteView.as_view(),
+         name='password_reset_complete'),
     path('join/<str:token>/', views.teacher_join, name='teacher_join'),
     path('profile/', views.profile, name='profile'),
     path('welcome/', views.welcome, name='welcome'),
@@ -23,6 +33,8 @@ urlpatterns = [
          views.teacher_toggle_base_editor, name='teacher_toggle_base_editor'),
     path('teachers/invites/<int:invite_id>/revoke/',
          views.invite_revoke, name='invite_revoke'),
+    path('teachers/invites/<int:invite_id>/send/',
+         views.invite_send, name='invite_send'),
     path('students/', views.students, name='students'),
     path('students/bulk-groups/', views.students_bulk_groups,
          name='students_bulk_groups'),

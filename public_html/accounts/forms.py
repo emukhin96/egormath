@@ -201,7 +201,7 @@ class TeacherJoinForm(RegistrationForm):
     email = forms.EmailField(
         label='Почта', required=False,
         help_text=('Необязательно. Пригодится, чтобы восстановить пароль и '
-                   'получать уведомления, когда на сайте появится почта.'),
+                   'получать письма о своих предложениях.'),
         widget=forms.EmailInput(attrs={'autocomplete': 'email'}),
     )
 
@@ -280,8 +280,8 @@ class TeacherProfileForm(forms.Form):
         widget=forms.TextInput(attrs={'autocomplete': 'family-name'}))
     email = forms.EmailField(
         label='Почта', required=False,
-        help_text='Необязательно: для восстановления пароля и уведомлений, '
-                  'когда на сайте появится почта.',
+        help_text='Необязательно: для восстановления пароля и писем '
+                  'о ваших предложениях.',
         widget=forms.EmailInput(attrs={'autocomplete': 'email'}))
 
     def __init__(self, *args, user, **kwargs):
