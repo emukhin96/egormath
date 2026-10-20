@@ -12,6 +12,7 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core import mail
+from django.core.cache import cache
 from django.core.mail.backends.base import BaseEmailBackend
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -89,6 +90,7 @@ class PasswordResetTests(TestCase):
         self.teacher.save()
         self.login_url = reverse('login')
         self.reset_url = reverse('password_reset')
+        cache.clear()  # счётчики лимита сброса — в кэше default
 
     def test_login_links_reset_only_with_mail(self):
         self.assertContains(self.client.get(self.login_url), 'Забыли пароль?')
@@ -162,6 +164,38 @@ class PasswordResetTests(TestCase):
         bodies = '\n'.join(m.body for m in mail.outbox)
         self.assertIn('для логина teacher1', bodies)
         self.assertIn('для логина pupil', bodies)
+
+    def test_rate_limit_per_address(self):
+        from .password_reset import RESET_PER_EMAIL
+        for _ in range(RESET_PER_EMAIL):
+            response = self.client.post(self.reset_url, {'email': 'ivan@example.com'})
+            self.assertRedirects(response, reverse('password_reset_done'))
+        self.assertEqual(len(mail.outbox), RESET_PER_EMAIL)
+        # Сверх лимита — та же страница, но письма нет; регистр и пробелы не обходят лимит
+        with self.assertLogs('accounts.password_reset', level='WARNING'):
+            response = self.client.post(self.reset_url, {'email': '  IVAN@example.com '})
+        self.assertRedirects(response, reverse('password_reset_done'))
+        self.assertEqual(len(mail.outbox), RESET_PER_EMAIL)
+        # Другой адрес лимитом первого не задет
+        other = User.objects.create_user(username='pupil', password='pass12345', email='p@example.com')
+        Profile.objects.create(user=other, role=Profile.ROLE_STUDENT, teacher=self.teacher)
+        self.client.post(self.reset_url, {'email': 'p@example.com'})
+        self.assertEqual(len(mail.outbox), RESET_PER_EMAIL + 1)
+
+    def test_rate_limit_per_ip(self):
+        from .password_reset import RESET_PER_IP
+        # Чужие и несуществующие адреса тоже считаются: перебор адресов с одного IP
+        for i in range(RESET_PER_IP):
+            self.client.post(self.reset_url, {'email': f'guess{i}@example.com'},
+                             HTTP_X_FORWARDED_FOR='203.0.113.5, 10.0.0.1')
+        self.assertEqual(mail.outbox, [])
+        response = self.client.post(self.reset_url, {'email': 'ivan@example.com'},
+                                    HTTP_X_FORWARDED_FOR='203.0.113.5, 10.0.0.1')
+        self.assertRedirects(response, reverse('password_reset_done'))
+        self.assertEqual(mail.outbox, [])
+        # С другого IP письмо уходит
+        self.client.post(self.reset_url, {'email': 'ivan@example.com'}, HTTP_X_FORWARDED_FOR='203.0.113.6')
+        self.assertEqual(len(mail.outbox), 1)
 
     @override_settings(EMAIL_BACKEND='accounts.test_mail.FailingBackend')
     def test_smtp_failure_keeps_done_page(self):
