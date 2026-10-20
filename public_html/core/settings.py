@@ -38,6 +38,11 @@ def read_secret(name, default=None):
     return default
 
 
+def _flag(value):
+    """Выключатель из секрета: «0», «false», «no», «off» — выключено."""
+    return str(value).strip().lower() not in ('0', 'false', 'no', 'off')
+
+
 DJANGO_ENV = read_secret('DJANGO_ENV', 'development')
 IS_PRODUCTION = DJANGO_ENV == 'production'
 
@@ -266,19 +271,30 @@ SUBMISSION_PHOTO_MAX_COUNT = 6          # фото на одну задачу
 # Картинка к условию задачи (TaskImage) до сжатия
 TASK_IMAGE_MAX_SIZE_MB = 15
 
-# Почта — только для уведомлений об очереди предложений исправлений
-# (problems/notifications.py). Без EMAIL_HOST письма не отправляются, сайт
-# работает как прежде; локально при DEBUG письма печатаются в консоль
-# runserver. Адреса редакторов — PROPOSAL_NOTIFY_EMAILS через запятую.
+# Почта: уведомления об очереди предложений (problems/notifications.py),
+# восстановление пароля и приглашение учителя письмом (accounts/mailing.py,
+# accounts/password_reset.py). Настройка SMTP и DNS — deploy/MAIL.md;
+# значения — файлы .secrets/<ИМЯ> (на VPS data/secrets/). Без EMAIL_HOST на
+# проде письма молча не отправляются, а ссылки и кнопки «по почте» спрятаны
+# (core.mailing.mail_enabled); локально при DEBUG письма печатаются в
+# консоль runserver. Проверка на сервере: manage.py mail_check <адрес>.
 EMAIL_HOST = read_secret('EMAIL_HOST', '')
 EMAIL_PORT = int(read_secret('EMAIL_PORT', '587'))
 EMAIL_HOST_USER = read_secret('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = read_secret('EMAIL_HOST_PASSWORD', '')
-EMAIL_USE_TLS = read_secret('EMAIL_USE_TLS', '1').strip().lower() not in ('0', 'false', 'no', 'off')
+# 587 — STARTTLS (EMAIL_USE_TLS), 465 — TLS с самого подключения
+# (EMAIL_USE_SSL). Django не даёт включить оба сразу: SSL главнее, а по
+# умолчанию режим выбирается по порту.
+EMAIL_USE_SSL = _flag(read_secret('EMAIL_USE_SSL', '1' if EMAIL_PORT == 465 else '0'))
+EMAIL_USE_TLS = not EMAIL_USE_SSL and _flag(read_secret('EMAIL_USE_TLS', '1'))
 EMAIL_TIMEOUT = 10
-DEFAULT_FROM_EMAIL = read_secret('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'webmaster@localhost')
+# Отправитель всех писем сайта (решение 2 плана пользователей, 18.10.2026).
+# SERVER_EMAIL — отправитель писем Django об ошибках, тот же адрес.
+DEFAULT_FROM_EMAIL = read_secret('DEFAULT_FROM_EMAIL', 'Математика <no-reply@math.egor.am>')
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
 if DEBUG and not EMAIL_HOST:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# Адреса редакторов для писем о новых предложениях, через запятую.
 PROPOSAL_NOTIFY_EMAILS = [
     a.strip()
     for a in read_secret('PROPOSAL_NOTIFY_EMAILS', '').split(',')
@@ -286,7 +302,7 @@ PROPOSAL_NOTIFY_EMAILS = [
 
 # Холст (мини-доска к задаче). Выключатель на случай перегрузки:
 # CANVAS_ENABLED=0 в .secrets/ прячет панель и закрывает эндпоинты (503).
-CANVAS_ENABLED = read_secret('CANVAS_ENABLED', '1').strip().lower() not in ('0', 'false', 'no', 'off')
+CANVAS_ENABLED = _flag(read_secret('CANVAS_ENABLED', '1'))
 
 if IS_PRODUCTION:
     # На VPS Django стоит за двумя Caddy (общий сервера → egormath-front),

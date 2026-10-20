@@ -21,6 +21,8 @@
       <button type="submit" class="btn">Войти</button>
       <a class="btn btn-secondary" href="{% url 'register' %}">Зарегистрироваться</a>
     </p>
+    {# Восстановление по почте — только когда почта сайта настроена (mail_enabled из accounts.context_processors.shell) #}
+    {% if mail_enabled %}<p class="login-links"><a href="{% url 'password_reset' %}">Забыли пароль?</a></p>{% endif %}
   </form>
 </div>
 {% endblock %}

@@ -52,6 +52,7 @@ egormath (`/opt/egormath`, этот документ). SSH: `ssh chemolymp-demo`
 | Откат базы/файлов на ночной слепок | `/opt/egormath/deploy/vps/restore.sh --stamp <YYYYMMDD-HHMMSS>` (см. «Восстановление после потери сервера») |
 | Сводка нагрузки | `/opt/egormath/deploy/vps/log-report.sh` (7 дней) или `… 24h`; еженедельно — `data/logs/weekly-report.log` |
 | Выключить холст | `echo 0 > /opt/egormath/data/secrets/CANVAS_ENABLED` и `docker compose … restart egormath-web` |
+| Проверить почту сайта | `/opt/egormath/deploy/vps/manage.sh mail_check адрес@example.com` (настройка — [MAIL.md](MAIL.md)) |
 
 `deploy.sh`: fetch → checkout → сборка образа → бэкап → `check --deploy` →
 `migrate` → `seed_rubricator` → `collectstatic` → пересоздание контейнеров →
@@ -60,6 +61,16 @@ egormath (`/opt/egormath`, этот документ). SSH: `ssh chemolymp-demo`
 пользователи видят паузу, а не 502.
 
 Время ответа каждого запроса — в логе `egormath-web` (последнее поле, `…ms`).
+
+## Почта
+
+Сайт шлёт письма (предложения исправлений, восстановление пароля,
+приглашения учителей) с адреса `no-reply@math.egor.am` через SMTP-релей;
+выбор провайдера, DNS-записи домена, файлы секретов `EMAIL_*` и
+`PROPOSAL_NOTIFY_EMAILS` в `data/secrets/` и проверка командой `mail_check` —
+в [MAIL.md](MAIL.md). Пока `EMAIL_HOST` не задан, письма молча не
+отправляются, а ссылки «по почте» в интерфейсе спрятаны. Секреты читаются
+при старте: после правки файлов — `docker compose … restart egormath-web`.
 
 ## Бэкапы вне сервера и мониторинг
 

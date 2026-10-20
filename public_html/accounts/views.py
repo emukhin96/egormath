@@ -16,6 +16,8 @@ from assignments.models import Assignment
 from problems.models import Task
 from worksheets.models import Worksheet
 
+from core.mailing import mail_enabled
+
 from .decorators import get_role, superuser_required, teacher_required
 from .permissions import base_editor_required, catalog_tasks, is_base_editor
 from .forms import (InviteUnavailable, StudentCreateForm, StudentEditForm,
@@ -23,6 +25,7 @@ from .forms import (InviteUnavailable, StudentCreateForm, StudentEditForm,
                     TeacherInviteForm, TeacherJoinForm,
                     TeacherPasswordChangeForm, TeacherProfileForm,
                     generate_password)
+from .mailing import send_teacher_invite
 from .models import Profile, StudentGroup, TeacherInvite
 
 
@@ -170,9 +173,12 @@ def teachers(request):
         invite_form = TeacherInviteForm(request.POST)
         if invite_form.is_valid():
             invite = invite_form.save(created_by=request.user)
-            # Ссылка показывается один раз — после редиректа, как пароль
+            # Ссылка показывается один раз — после редиректа, как пароль;
+            # id и почта — для кнопки «Отправить письмом» в том же блоке
             request.session['new_invite'] = {
+                'id': invite.pk,
                 'note': invite.note,
+                'email': invite.email,
                 'url': request.build_absolute_uri(
                     reverse('teacher_join', args=[invite.token])),
             }
@@ -269,6 +275,30 @@ def invite_revoke(request, invite_id):
     invite = get_object_or_404(TeacherInvite, pk=invite_id, used_at__isnull=True)
     invite.delete()
     messages.success(request, 'Приглашение отозвано.')
+    return redirect('teachers')
+
+
+@superuser_required
+@require_POST
+def invite_send(request, invite_id):
+    """«Отправить письмом» на странице «Учителя»: ссылка-приглашение на
+    почту из приглашения (accounts/mailing.py). Только непогашенные и не
+    просроченные; без настроенной почты кнопки в шаблоне нет, прямой POST —
+    сообщение об ошибке, ссылку по-прежнему копируют вручную."""
+    invite = get_object_or_404(
+        TeacherInvite.pending().select_related('created_by'), pk=invite_id)
+    url = request.build_absolute_uri(reverse('teacher_join', args=[invite.token]))
+    if not invite.email:
+        messages.error(request, 'У приглашения не указана почта — скопируйте ссылку и отправьте сами.')
+    elif not mail_enabled():
+        messages.error(request, 'Почта на сайте не настроена — скопируйте ссылку и отправьте сами.')
+    elif send_teacher_invite(invite, url):
+        messages.success(request, f'Письмо отправлено на {invite.email}.')
+    else:
+        messages.error(
+            request,
+            f'Письмо на {invite.email} не отправлено: сервер почты не принял. '
+            'Подробности в логе сайта; пока скопируйте ссылку и отправьте сами.')
     return redirect('teachers')
 
 

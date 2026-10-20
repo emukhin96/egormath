@@ -8,6 +8,8 @@ from django.conf import settings
 from django.db.models import Count, Q
 from django.utils.functional import SimpleLazyObject
 
+from core.mailing import mail_enabled
+
 from .decorators import get_role
 from .models import Profile
 from .permissions import is_base_editor
@@ -23,6 +25,8 @@ def shell(request):
             'is_base_editor': False,
             'cart': None,
             'favicon_local': favicon_local,
+            # «Забыли пароль?» на странице входа — только при настроенной почте
+            'mail_enabled': mail_enabled(),
         }
     is_teacher = get_role(user) == Profile.ROLE_TEACHER
     context = {
@@ -33,6 +37,8 @@ def shell(request):
         'is_base_editor': is_teacher and is_base_editor(user),
         'cart': None,
         'favicon_local': favicon_local,
+        # Кнопки «Отправить письмом» на странице учителей (accounts/mailing.py)
+        'mail_enabled': mail_enabled(),
     }
     if is_teacher:
         from worksheets.cart import cart_context
