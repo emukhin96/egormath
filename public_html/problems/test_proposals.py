@@ -60,6 +60,18 @@ class CreateTests(ProposalBase):
         page = self.client.get(reverse('task_detail', args=[self.shared.pk]))
         self.assertContains(page, 'Напишите, что исправить')
 
+    def test_mask_prefill_alone_is_not_a_message(self):
+        """Со ссылки «Предложить маску» поле заполнено заготовкой: отправка без
+        самой маски — пустое предложение, не создаётся (перенос 7bc2877)."""
+        from .proposals import MASK_PREFILL
+        for text in (MASK_PREFILL, MASK_PREFILL.strip(), '  ' + MASK_PREFILL + '\n'):
+            self.propose(self.shared, {'message': text})
+            self.assertFalse(TaskProposal.objects.exists(), repr(text))
+        page = self.client.get(reverse('task_detail', args=[self.shared.pk]))
+        self.assertContains(page, 'Напишите, что исправить')
+        self.propose(self.shared, {'message': MASK_PREFILL + '{{number: 5}}'})
+        self.assertEqual(TaskProposal.objects.get().message, MASK_PREFILL + '{{number: 5}}')
+
     def test_only_shared_tasks_take_proposals(self):
         # Своя задача и локальная копия правятся напрямую — предложение не предусмотрено
         self.assertEqual(self.propose(self.own, {'message': 'В общие'}).status_code, 403)

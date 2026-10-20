@@ -56,6 +56,10 @@ def create_proposal(user, task, message):
     того же автора не создаётся — строка задачи блокируется, чтобы два
     клика не дали два."""
     message = (message or '').strip()
+    if message == MASK_PREFILL.strip():
+        # Одна заготовка «Предлагаю маску ответа:» без самой маски — пустое
+        # предложение; required у textarea она тоже «выполняет» (7bc2877)
+        message = ''
     task = Task.objects.select_for_update().get(pk=task.pk)
     if not task.is_shared or task.variant_of_id:
         raise ProposalError('Предложить исправление можно только для общей задачи.')

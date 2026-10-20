@@ -211,7 +211,8 @@ class TeacherJoinForm(RegistrationForm):
         self.fields['username'].required = False
         self.fields['username'].help_text = (
             '3–30 символов: латинские буквы, цифры, точка, дефис и '
-            'подчёркивание. Подставится из фамилии и имени, можно изменить.')
+            'подчёркивание. Если оставить пустым — составится из фамилии '
+            'и имени, например smirnova.irina.')
         if invite is not None and invite.email and not self.is_bound:
             self.fields['email'].initial = invite.email
 

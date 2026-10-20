@@ -1075,7 +1075,7 @@ class ReviewFixesTests(TestCase):
         invite = TeacherInvite.objects.create(
             created_by=self.admin, expires_at=timezone.now() + timedelta(days=3))
         response = self.client.get(reverse('teacher_join', args=[invite.token]))
-        self.assertContains(response, 'Подставится из фамилии и имени, можно изменить')
+        self.assertContains(response, 'составится из фамилии и имени, например smirnova.irina')
         self.assertNotContains(response, 'Если оставить пустым')
         self.assertContains(response, 'registration.js')
 
