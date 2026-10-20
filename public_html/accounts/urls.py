@@ -21,6 +21,8 @@ urlpatterns = [
          name='password_reset_complete'),
     path('join/<str:token>/', views.teacher_join, name='teacher_join'),
     path('profile/', views.profile, name='profile'),
+    path('welcome/', views.welcome, name='welcome'),
+    path('welcome/hide/', views.onboarding_hide, name='onboarding_hide'),
     path('profile/task-list/', views.task_list_prefs, name='task_list_prefs'),
     path('teachers/', views.teachers, name='teachers'),
     path('teachers/<int:user_id>/reset-password/',

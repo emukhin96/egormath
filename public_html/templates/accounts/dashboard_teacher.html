@@ -13,6 +13,25 @@
   </div>
 </div>
 
+{# «Первые шаги» — учителю без права редактора, пока не скрыта кнопкой и не пройдена до выданного задания (accounts/onboarding.py) #}
+{% if onboarding %}
+<div class="card onboarding-card">
+  <div class="card-head">
+    <h2>Первые шаги</h2>
+    <div class="card-head-actions">
+      <span class="muted">выполнено {{ onboarding.done }} из {{ onboarding.total }}</span>
+      <a href="{% url 'welcome' %}">Подробнее</a>
+      <form method="post" action="{% url 'onboarding_hide' %}" class="inline-form">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-small btn-secondary" title="Карточка исчезнет из кабинета; страница «Первые шаги» останется в профиле">Скрыть</button>
+      </form>
+    </div>
+  </div>
+  <div class="onboarding-bar" role="progressbar" aria-valuemin="0" aria-valuemax="{{ onboarding.total }}" aria-valuenow="{{ onboarding.done }}" aria-label="Выполнено шагов"><span style="width: {{ onboarding.percent }}%"></span></div>
+  {% include 'accounts/_onboarding_checklist.html' with compact=True %}
+</div>
+{% endif %}
+
 <div class="stat-strip">
   <div class="stat">
     <span class="stat-label">На проверке</span>
@@ -108,7 +127,7 @@
       {% endfor %}
     </table></div>
     {% else %}
-    <p class="muted">Листков пока нет.</p>
+    <p class="muted">Листков пока нет — <a href="{% url 'collection_list' %}">возьмите готовый из подборки</a> или <a href="{% url 'worksheet_create' %}">создайте листок</a>{% if shows_onboarding %}; план — в <a href="{% url 'welcome' %}">«Первых шагах»</a>{% endif %}.</p>
     {% endif %}
   </div>
 

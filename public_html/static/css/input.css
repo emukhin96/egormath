@@ -2030,6 +2030,148 @@
     margin-top: var(--space-2);
   }
 
+  /* «Первые шаги» (accounts/onboarding.py): шаги с номером или галочкой и
+     полоса прогресса; в кабинете — компактный список тех же шагов */
+  .onboarding-bar {
+    height: 6px;
+    margin: var(--space-3) 0 var(--space-4);
+    border-radius: 999px;
+    background: var(--accent-soft);
+    overflow: hidden;
+  }
+
+  .onboarding-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+  }
+
+  .onboarding-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .onboarding-step {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: var(--space-3);
+    align-items: start;
+  }
+
+  .onboarding-mark {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .onboarding-step.is-done .onboarding-mark {
+    background: #e6f4e7;
+    color: var(--ok);
+  }
+
+  .onboarding-note .onboarding-mark {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .onboarding-step h2 {
+    margin: 0 0 var(--space-1);
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .onboarding-step.is-done h2 {
+    color: var(--muted);
+  }
+
+  .onboarding-step p {
+    margin: 0 0 var(--space-2);
+  }
+
+  .onboarding-step .copy-row {
+    margin: 0 0 var(--space-2);
+  }
+
+  .onboarding-step .form-buttons {
+    margin: var(--space-2) 0 0;
+  }
+
+  .onboarding-compact {
+    gap: var(--space-2);
+  }
+
+  .onboarding-compact .onboarding-step {
+    grid-template-columns: 22px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .onboarding-compact .onboarding-mark {
+    width: 22px;
+    height: 22px;
+    font-size: 0.72rem;
+  }
+
+  .onboarding-compact .onboarding-step.is-done a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .onboarding-card .onboarding-bar {
+    margin: 0 0 var(--space-3);
+  }
+
+  /* Разовая подсказка на общей задаче (problem_editor.js, localStorage):
+     текст и крестик .icon-btn, не плашка .msg */
+  .hint-card {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-4);
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font-size: 0.9rem;
+  }
+
+  .hint-card p {
+    flex: 1;
+    margin: 0;
+  }
+
+  .hint-card .icon-btn {
+    flex: none;
+  }
+
+  /* Справка для учителей (templates/help/teachers.html): списки с маркерами,
+     preflight Tailwind их снимает */
+  .help-page .prose ul {
+    list-style: disc;
+    margin: 0 0 var(--space-3);
+    padding-left: 1.25em;
+  }
+
+  .help-page .prose li {
+    margin-bottom: var(--space-1);
+  }
+
+  .help-page .prose h3 {
+    margin: var(--space-3) 0 var(--space-2);
+    font-size: 0.95rem;
+  }
+
   /* Переключатели в таблице учителей и форме приглашения — без отступа слева,
      как в колонках редактора задачи */
   .teacher-editor-toggle,

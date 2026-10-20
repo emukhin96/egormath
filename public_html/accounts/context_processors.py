@@ -23,6 +23,7 @@ def shell(request):
         return {
             'is_teacher': False,
             'is_base_editor': False,
+            'shows_onboarding': False,
             'cart': None,
             'favicon_local': favicon_local,
             # «Забыли пароль?» на странице входа — только при настроенной почте
@@ -40,6 +41,9 @@ def shell(request):
         # Кнопки «Отправить письмом» на странице учителей (accounts/mailing.py)
         'mail_enabled': mail_enabled(),
     }
+    # Ссылки на «Первые шаги» в пустых состояниях и справку в футере —
+    # учителю без права редактора (accounts/onboarding.py)
+    context['shows_onboarding'] = is_teacher and not context['is_base_editor']
     if is_teacher:
         from worksheets.cart import cart_context
         context['cart'] = cart_context(request)

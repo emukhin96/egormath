@@ -638,7 +638,8 @@ class TeacherInviteTests(TestCase):
     def test_registration_creates_teacher_and_logs_in(self):
         response = self.client.post(
             self.url, self.join_data(email='maria@example.com'))
-        self.assertRedirects(response, reverse('dashboard'))
+        # Новый учитель попадает на «Первые шаги», не в кабинет (PR 4)
+        self.assertRedirects(response, reverse('welcome'))
         teacher = User.objects.get(username='petrova')
         self.assertEqual(teacher.first_name, 'Мария')
         self.assertEqual(teacher.email, 'maria@example.com')
@@ -670,7 +671,7 @@ class TeacherInviteTests(TestCase):
     def test_empty_username_is_generated_from_name(self):
         response = self.client.post(
             self.url, self.join_data(username=''), follow=True)
-        self.assertRedirects(response, reverse('dashboard'))
+        self.assertRedirects(response, reverse('welcome'))
         self.assertTrue(User.objects.filter(username='petrova.mariya').exists())
         self.assertContains(response, 'Ваш логин: petrova.mariya')
 
@@ -680,7 +681,7 @@ class TeacherInviteTests(TestCase):
         User.objects.create_user(username='petrova.mariya', password='x')
         response = self.client.post(
             self.url, self.join_data(username=''), follow=True)
-        self.assertRedirects(response, reverse('dashboard'))
+        self.assertRedirects(response, reverse('welcome'))
         self.assertTrue(User.objects.filter(username='petrova.mariya2').exists())
         self.assertContains(response, 'Ваш логин: petrova.mariya2')
 

@@ -3,7 +3,10 @@ import os
 from django.conf import settings
 from django.db import connection
 from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render
 from django.views.decorators.cache import never_cache
+
+from accounts.decorators import teacher_required
 
 
 @never_cache
@@ -37,3 +40,10 @@ ROBOTS_TXT = (
 def robots_txt(request):
     """robots.txt: поисковикам сайт не нужен (раньше отдавался 404)."""
     return HttpResponse(ROBOTS_TXT, content_type='text/plain; charset=utf-8')
+
+
+@teacher_required
+def help_teachers(request):
+    """Справка для учителей — docs/USERS.md в приложении: статичный
+    шаблон, ссылки из «Первых шагов» и футера (docs/USERS_PLAN.md, раздел 7)."""
+    return render(request, 'help/teachers.html')
