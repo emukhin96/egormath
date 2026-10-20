@@ -28,6 +28,7 @@ urlpatterns = [
     path('', accounts_views.index, name='index'),
     path('dashboard/', accounts_views.dashboard, name='dashboard'),
     path('accounts/', include('accounts.urls')),
+    path('help/teachers/', core_views.help_teachers, name='help_teachers'),
     path('problems/', include('problems.urls')),
     path('worksheets/cart/', include('worksheets.cart_urls')),
     path('worksheets/', include('worksheets.urls')),

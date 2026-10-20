@@ -11,3 +11,13 @@
   <p class="sidebar-copy">Листков пока нет.</p>
   {% endif %}
 </section>
+{# Повторный вход в «Первые шаги» после скрытия карточки и справка — учителю без права редактора (accounts/onboarding.py) #}
+{% if shows_onboarding %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Помощь</p>
+  <ul class="sidebar-list">
+    <li><a href="{% url 'welcome' %}">Первые шаги</a></li>
+    <li><a href="{% url 'help_teachers' %}">Справка для учителей</a></li>
+  </ul>
+</section>
+{% endif %}

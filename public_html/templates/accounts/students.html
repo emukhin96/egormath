@@ -153,8 +153,11 @@
           </form>
         </dialog>
   {% endfor %}
-  {% else %}
+  {% elif has_students %}
   <p class="muted">Ученики не найдены — измените фильтры или добавьте нового.</p>
+  {% else %}
+  {# Новый учитель: следующий шаг и чеклист (accounts/onboarding.py) #}
+  <p class="muted">Учеников пока нет — добавьте первого в форме выше или отправьте ученикам ссылку для регистрации. Следующий шаг — <a href="{% url 'worksheet_list' %}">собрать листок</a>{% if shows_onboarding %}; план — в <a href="{% url 'welcome' %}">«Первых шагах»</a>{% endif %}.</p>
   {% endif %}
 </div>
 

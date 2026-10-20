@@ -36,4 +36,16 @@
     </form>
   </div>
 </div>
+
+{# Чеклист нового учителя остаётся доступным отсюда и после скрытия карточки в кабинете (accounts/onboarding.py) #}
+{% if onboarding %}
+<div class="card">
+  <h2>Первые шаги и справка</h2>
+  <p>Чеклист нового учителя: выполнено {{ onboarding.done }} из {{ onboarding.total }}.{% if onboarding.hidden %} Карточка в кабинете скрыта — страница открывается отсюда.{% endif %}</p>
+  <div class="form-buttons">
+    <a class="btn btn-secondary" href="{% url 'welcome' %}">Открыть «Первые шаги»</a>
+    <a class="btn btn-secondary" href="{% url 'help_teachers' %}">Справка для учителей</a>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

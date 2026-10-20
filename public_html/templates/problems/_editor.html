@@ -14,6 +14,13 @@
       {% if not editor_readonly %}{% include 'includes/ai_menu.html' with kind='card' %}{% endif %}
     </div>
   </div>
+  {# Разовая подсказка на первой открытой общей задаче в листке (problem_editor.js, localStorage): редактору не нужна — он правит напрямую; без листка карточку объясняет блок ниже #}
+  {% if not can_edit_task and not editor_readonly %}
+  <div class="hint-card" data-shared-task-hint hidden>
+    <p>Это общая задача: правки сохраняются в вашу локальную копию для листка, оригинал не меняется. Ошибку в самой задаче можно предложить исправить редактору — кнопка «Предложить исправление».</p>
+    <button type="button" class="icon-btn" data-hint-close aria-label="Закрыть подсказку" title="Больше не показывать">×</button>
+  </div>
+  {% endif %}
   {% if editor_readonly %}
   <div class="card problem-base-locked">
     <p>Это общая задача. Чтобы изменить её для себя, добавьте задачу в листок (через корзину) и откройте из листка: правки сохранятся в вашу локальную копию, оригинал не изменится. Ошибку в самой общей задаче исправят редакторы — нажмите «Предложить исправление».</p>
