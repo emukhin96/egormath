@@ -289,8 +289,14 @@ EMAIL_USE_SSL = _flag(read_secret('EMAIL_USE_SSL', '1' if EMAIL_PORT == 465 else
 EMAIL_USE_TLS = not EMAIL_USE_SSL and _flag(read_secret('EMAIL_USE_TLS', '1'))
 EMAIL_TIMEOUT = 10
 # Отправитель всех писем сайта (решение 2 плана пользователей, 18.10.2026).
+# Почта Timeweb (deploy/MAIL.md) принимает письмо, только если From совпадает
+# с ящиком авторизации, поэтому при логине-адресе отправитель выводится из
+# него; у релеев логин — идентификатор ключа, тогда адрес по умолчанию.
 # SERVER_EMAIL — отправитель писем Django об ошибках, тот же адрес.
-DEFAULT_FROM_EMAIL = read_secret('DEFAULT_FROM_EMAIL', 'Математика <no-reply@math.egor.am>')
+DEFAULT_FROM_EMAIL = read_secret(
+    'DEFAULT_FROM_EMAIL',
+    f'Математика <{EMAIL_HOST_USER}>' if '@' in EMAIL_HOST_USER
+    else 'Математика <no-reply@math.egor.am>')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 if DEBUG and not EMAIL_HOST:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
