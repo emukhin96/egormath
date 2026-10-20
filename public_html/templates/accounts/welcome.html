@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Первые шаги — Математика{% endblock %}
+{% block sidebar %}{% include 'includes/sidebar/welcome.html' %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Первые шаги</h1>
+    <p class="page-meta"><span>{{ user.get_full_name|default:user.username }}</span><span>выполнено {{ onboarding.done }} из {{ onboarding.total }}</span></p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-secondary" href="{% url 'help_teachers' %}">Справка для учителей</a>
+    <a class="btn" href="{% url 'dashboard' %}">В кабинет</a>
+  </div>
+</div>
+
+<div class="card">
+  <p class="helptext">Четыре шага до первого выданного задания. Галочки ставятся сами по вашим данным — отмечать ничего не нужно.</p>
+  <div class="onboarding-bar" role="progressbar" aria-valuemin="0" aria-valuemax="{{ onboarding.total }}" aria-valuenow="{{ onboarding.done }}" aria-label="Выполнено шагов"><span style="width: {{ onboarding.percent }}%"></span></div>
+  {% include 'accounts/_onboarding_checklist.html' %}
+</div>
+{% endblock %}

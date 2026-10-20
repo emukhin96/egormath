@@ -190,8 +190,17 @@
   {% endfor %}
   {% else %}
   <div class="empty-state">
+    {% if filters.q or filters.status or filters.student or filters.worksheet or filters.due or filters.owner %}
     <h2>Работы не найдены</h2>
     <p class="muted">Измените фильтры или выдайте новый листок.</p>
+    {% elif filters.kind == 'independent' %}
+    {# Новый учитель: следующий шаг и чеклист (accounts/onboarding.py) #}
+    <h2>Самостоятельных пока нет</h2>
+    <p class="muted"><a href="{% url 'independentworks:create' %}">Создайте самостоятельную</a> из своего листка или подборки и выдайте её ученикам{% if shows_onboarding %}; как начать — в <a href="{% url 'welcome' %}">«Первых шагах»</a>{% endif %}.</p>
+    {% else %}
+    <h2>Заданий пока нет</h2>
+    <p class="muted"><a href="{% url 'assignment_create' %}">Выдайте листок</a> ученикам — понадобятся <a href="{% url 'students' %}">ученики</a> и <a href="{% url 'worksheet_list' %}">листок</a>{% if shows_onboarding %}; план — в <a href="{% url 'welcome' %}">«Первых шагах»</a>{% endif %}.</p>
+    {% endif %}
   </div>
   {% endif %}
 </div>

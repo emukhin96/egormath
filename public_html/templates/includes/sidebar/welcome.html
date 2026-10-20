@@ -1,0 +1,12 @@
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Первые шаги</p>
+  <h2>Выполнено {{ onboarding.done }} из {{ onboarding.total }}</h2>
+  <p class="sidebar-copy">{% if onboarding.complete %}Ученики, листок и задание есть — карточка в кабинете больше не показывается, эта страница остаётся доступной из профиля.{% else %}Карточка с этими шагами есть и в кабинете: она исчезнет сама после первого выданного задания, или нажмите на ней «Скрыть».{% endif %}</p>
+</section>
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Справка</p>
+  <ul class="sidebar-list">
+    <li><a href="{% url 'help_teachers' %}">Справка для учителей</a></li>
+    <li><a href="{% url 'profile' %}">Профиль</a></li>
+  </ul>
+</section>

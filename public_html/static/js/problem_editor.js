@@ -184,5 +184,20 @@
       });toast(true,'AI-черновик в пустых полях — проверьте и сохраните блоки');
     }catch(error){toast(false,error.message);}finally{ai.disabled=false;var aiMenu=ai.closest('details.ai-menu');if(aiMenu)aiMenu.open=false;}
   });
+  // Подсказка на первой открытой общей задаче ([data-shared-task-hint] в
+  // _editor.html): показывается, пока учитель её не закрыл; закрытие
+  // запоминается в localStorage на этот браузер.
+  var HINT_KEY='egormath.sharedTaskHintSeen';
+  document.querySelectorAll('[data-shared-task-hint]').forEach(function(hint){
+    var seen=false;
+    try{seen=localStorage.getItem(HINT_KEY)==='1';}catch(e){}
+    if(seen)return;
+    hint.hidden=false;
+    var close=hint.querySelector('[data-hint-close]');
+    if(close)close.addEventListener('click',function(){
+      hint.hidden=true;
+      try{localStorage.setItem(HINT_KEY,'1');}catch(e){}
+    });
+  });
   window.EgorProblem={request,endpoint,errors,save,toast};
 })();

@@ -1,0 +1,63 @@
+{% comment %}Чеклист «Первые шаги» (accounts/onboarding.py): onboarding — прогресс по данным.
+compact=True — карточка в кабинете: только названия шагов со ссылками;
+иначе — страница welcome с пояснениями и кнопками. Пункт про задачи — без галочки.{% endcomment %}
+{% with steps=onboarding.steps %}
+<ol class="onboarding-steps{% if compact %} onboarding-compact{% endif %}">
+  <li class="onboarding-step{% if steps.name %} is-done{% endif %}">
+    <span class="onboarding-mark" aria-hidden="true">{% if steps.name %}✓{% else %}1{% endif %}</span>
+    <div>
+      {% if compact %}<a href="{% url 'profile' %}">Проверить имя и фамилию</a>{% else %}
+      <h2>Проверьте имя и фамилию</h2>
+      <p>Они попадают в шапку PDF листка как автор и видны ученикам в заданиях. Сейчас: <strong>{{ user.get_full_name|default:'не заполнены' }}</strong>.</p>
+      <div class="form-buttons"><a class="btn btn-secondary" href="{% url 'profile' %}">Открыть профиль</a></div>
+      {% endif %}
+    </div>
+  </li>
+  <li class="onboarding-step{% if steps.students %} is-done{% endif %}">
+    <span class="onboarding-mark" aria-hidden="true">{% if steps.students %}✓{% else %}2{% endif %}</span>
+    <div>
+      {% if compact %}<a href="{% url 'students' %}">Добавить учеников</a>{% else %}
+      <h2>Добавьте учеников</h2>
+      <p>Создайте учеников вручную на странице «Ученики» — логин и пароль появятся сразу — или отправьте им персональную ссылку регистрации: кто зарегистрируется по ней, попадёт в ваш список.</p>
+      <div class="copy-row">
+        <code>{{ onboarding.registration_url }}</code>
+        <button type="button" class="btn btn-small btn-secondary" data-copy="{{ onboarding.registration_url }}">Скопировать</button>
+      </div>
+      <div class="form-buttons"><a class="btn btn-secondary" href="{% url 'students' %}">Открыть «Ученики»</a></div>
+      {% endif %}
+    </div>
+  </li>
+  <li class="onboarding-step{% if steps.worksheet %} is-done{% endif %}">
+    <span class="onboarding-mark" aria-hidden="true">{% if steps.worksheet %}✓{% else %}3{% endif %}</span>
+    <div>
+      {% if compact %}<a href="{% url 'collection_list' %}">Собрать первый листок</a>{% else %}
+      <h2>Соберите первый листок</h2>
+      <p>Быстрый путь — готовая подборка: откройте её в разделе «Подборки» и нажмите «Взять как листок», копия появится в «Моих листках», её можно править и выдавать. Или создайте пустой листок и наполните его сами.</p>
+      <p>Задачи в листок попадают из корзины: в разделе «Задачи» нажмите «+» у нужной задачи, затем в корзине в шапке выберите, куда её положить. Общие задачи при этом не меняются — в листке у вас своя копия.</p>
+      <div class="form-buttons"><a class="btn btn-secondary" href="{% url 'collection_list' %}">Из подборки</a><a class="btn btn-secondary" href="{% url 'worksheet_create' %}">Создать листок</a></div>
+      {% endif %}
+    </div>
+  </li>
+  <li class="onboarding-step{% if steps.assignment %} is-done{% endif %}">
+    <span class="onboarding-mark" aria-hidden="true">{% if steps.assignment %}✓{% else %}4{% endif %}</span>
+    <div>
+      {% if compact %}<a href="{% url 'assignment_create' %}">Выдать задание</a>{% else %}
+      <h2>Выдайте задание</h2>
+      <p>Выберите листок, группу или отдельных учеников и срок. Ученики увидят задание в своём кабинете, ответят онлайн, а вы проверите работы из кабинета учителя.</p>
+      <div class="form-buttons"><a class="btn btn-secondary" href="{% url 'assignment_create' %}">Выдать задание</a></div>
+      {% endif %}
+    </div>
+  </li>
+  {% if not compact %}
+  <li class="onboarding-step onboarding-note">
+    <span class="onboarding-mark" aria-hidden="true">?</span>
+    <div>
+      <h2>Как устроены задачи</h2>
+      <p>Общие задачи видны всем учителям; напрямую их меняют только редакторы. Когда вы правите общую задачу из своего листка, изменения сохраняются в вашу локальную копию — оригинал и листки других учителей не меняются.</p>
+      <p>Задачи, которые вы создаёте сами, — «Мои задачи»: они видны только вам и редакторам, их можно свободно менять и класть в листки.</p>
+      <p>Нашли ошибку в общей задаче — нажмите «Предложить исправление» на её карточке и опишите, что не так. Редактор прочитает, исправит и поставит статус; ответы собраны в «Моих предложениях». Подробнее — в <a href="{% url 'help_teachers' %}">справке для учителей</a>.</p>
+    </div>
+  </li>
+  {% endif %}
+</ol>
+{% endwith %}

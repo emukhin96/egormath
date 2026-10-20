@@ -170,7 +170,8 @@
 </div>
 </div>
 {% else %}
-<div class="card"><p class="muted">Листков не найдено.</p></div>
+{# Без фильтров — у учителя ещё нет листков: следующий шаг и чеклист (accounts/onboarding.py) #}
+<div class="card"><p class="muted">{% if request.GET %}Листков не найдено.{% else %}Листков пока нет — <a href="{% url 'collection_list' %}">возьмите готовый из подборки</a> или <a href="{% url 'worksheet_create' %}">создайте листок</a>; следующий шаг — <a href="{% url 'assignment_create' %}">выдать задание</a>{% if shows_onboarding %}, план — в <a href="{% url 'welcome' %}">«Первых шагах»</a>{% endif %}.{% endif %}</p></div>
 {% endif %}
 
 <script defer src="{% static 'js/bulk.js' %}?v=3"></script>

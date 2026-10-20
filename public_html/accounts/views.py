@@ -9,6 +9,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods, require_POST
 
@@ -24,6 +25,8 @@ from .forms import (InviteUnavailable, StudentCreateForm, StudentEditForm,
                     TeacherPasswordChangeForm, TeacherProfileForm,
                     generate_password)
 from .models import Profile, StudentGroup, TeacherInvite
+from .onboarding import (dashboard_onboarding, onboarding_progress,
+                         shows_onboarding)
 
 
 def index(request):
@@ -105,7 +108,8 @@ def teacher_join(request, token):
             messages.success(
                 request, f'Аккаунт создан. Ваш логин: {user.username} '
                          '(он же в профиле). Добро пожаловать!')
-            return redirect('dashboard')
+            # Новому учителю — чеклист «Первые шаги», не кабинет (раздел 7 плана)
+            return redirect('welcome')
     return render(request, 'accounts/join.html', {
         'form': form,
         'invite': invite,
@@ -149,7 +153,34 @@ def profile(request):
         'profile_form': profile_form,
         'password_form': password_form,
         'teacher_profile': Profile.for_teacher(user),
+        # «Первые шаги» с прогрессом — не редактору (accounts/onboarding.py)
+        'onboarding': onboarding_progress(request) if shows_onboarding(user) else None,
     })
+
+
+@teacher_required
+def welcome(request):
+    """«Первые шаги»: чеклист нового учителя с прогрессом по данным
+    (accounts/onboarding.py). Сюда ведёт редирект после регистрации по
+    приглашению; повторно — из кабинета и профиля."""
+    return render(request, 'accounts/welcome.html', {
+        'onboarding': onboarding_progress(request),
+        'shows_onboarding': shows_onboarding(request.user),
+    })
+
+
+@teacher_required
+@require_POST
+def onboarding_hide(request):
+    """Кнопка «Скрыть» на карточке «Первые шаги» в кабинете: запоминает
+    момент в ``Profile.onboarding_done_at``; сама страница остаётся
+    доступной из профиля."""
+    profile = Profile.for_teacher(request.user)
+    profile.onboarding_done_at = timezone.now()
+    profile.save(update_fields=['onboarding_done_at'])
+    messages.success(request, 'Карточка «Первые шаги» скрыта — страница '
+                              'остаётся доступной из профиля.')
+    return redirect('dashboard')
 
 
 def teacher_users():
@@ -320,6 +351,8 @@ def teacher_dashboard(request):
         'students_total': Profile.students_for(request.user).count(),
         'tasks_total': catalog_tasks(request.user).count(),
         'proposals': None,
+        # Карточка «Первые шаги» — не редактору, пока не скрыта и не пройдена
+        'onboarding': dashboard_onboarding(request),
     }
     if is_base_editor(request.user):
         # Очередь предложений исправлений — последние новые, как «Ожидают
