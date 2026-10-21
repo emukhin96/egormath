@@ -226,8 +226,9 @@ def _has_top_level_semicolon(text, start):
     return False
 
 
-def _split_top(text, separator):
-    """Делить только вне скобок, с ограничением вложенности и числа частей."""
+def _split_top(text, separator, separators=None):
+    """Делить только вне скобок, с ограничением вложенности и числа частей.
+    В список ``separators`` (если передан) попадают найденные разделители."""
     parts, start, depth = [], 0, 0
     i = 0
     while i < len(text):
@@ -246,6 +247,8 @@ def _split_top(text, separator):
                 parts.append(text[start:i].strip())
                 if len(parts) >= MAX_COLLECTION_ITEMS:
                     return None
+                if separators is not None:
+                    separators.append(match.group().strip())
                 i = match.end()
                 start = i
                 continue
@@ -851,11 +854,12 @@ def _punctured_line(intervals):
 def parse_range(text, *, value_parser=None, equal=None):
     """Числовое множество: скобочная запись, объединения, неравенства
     (``x>5, x<-5``; ``1<x<4``; ``x \\le -5 или x>5``), «нет решений», R.
-    Части через запятую, «;», «или» объединяются, через «и» — пересекаются.
-    Часть ``x \\ne k`` выкалывает точку из остальных частей: в записи
-    ``-1 \\le x \\le 3, x \\ne 1`` запятая — «и», а не объединение (иначе
-    вышла бы вся прямая). Без других частей ``x \\ne 1, x \\ne 2`` — прямая
-    без двух точек.
+    Части через запятую, «;», «или», ∪ объединяются, через «и» — пересекаются.
+    Часть ``x \\ne k``, отделённая только запятой или «;», выкалывает точку
+    из остальных частей: в записи ``-1 \\le x \\le 3, x \\ne 1`` запятая —
+    «и», а не объединение (иначе вышла бы вся прямая). Без других частей
+    ``x \\ne 1, x \\ne 2`` — прямая без двух точек. При «или» и ∪ рядом
+    ``x \\ne k`` остаётся объединением: ``x>0 или x \\ne 1`` — вся прямая.
     Возвращает нормализованное множество промежутков; None — не разобрано.
     ``value_parser``/``equal`` — точные значения и сравнение в вычислителе."""
     text = _collection_text(text)
@@ -873,10 +877,11 @@ def parse_range(text, *, value_parser=None, equal=None):
     rest, tokens = _stash_intervals(text)
     intervals, excluded = [], []
     saw_atom = saw_main = False
-    union_parts = _split_top(rest, _UNION_RE)
+    separators = []
+    union_parts = _split_top(rest, _UNION_RE, separators)
     if union_parts is None:
         return None
-    for union_part in union_parts:
+    for i, union_part in enumerate(union_parts):
         and_parts = _split_top(union_part, _AND_RE)
         if and_parts is None:
             return None
@@ -890,7 +895,8 @@ def parse_range(text, *, value_parser=None, equal=None):
                 return None
             saw_atom = True
             acc = parsed if acc is None else _intersect_lists(acc, parsed)
-        if len(and_parts) == 1 and '!=' in and_parts[0] and _punctured_line(acc):
+        listed = all(s in (',', ';') for s in separators[max(i-1, 0):i+1])
+        if listed and len(and_parts) == 1 and '!=' in and_parts[0] and _punctured_line(acc):
             excluded.append(acc)
             continue
         saw_main = True
