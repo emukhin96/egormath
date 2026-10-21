@@ -14,6 +14,8 @@ CLIPBOARD_CHOICES = [
 WHOLE_SHARE = 90
 # Сколько символов скопированного текста хранить в журнале.
 TEXT_LIMIT = 2000
+# Сколько затронутых условий одного копирования хранить (как и клиент).
+STATEMENTS_LIMIT = 100
 
 
 def parse_mode(value):

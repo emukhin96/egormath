@@ -270,10 +270,15 @@ class AuditTests(TestCase):
     def test_copied_text_validation_and_limit(self):
         for extra in [{'text': 5}, {'swapped': ['x']}, {'statements': 'all'}, {'statements': [{'label': '1'}]},
                       {'statements': [{'label': '1', 'share': 101}]}, {'statements': [{'label': 1, 'share': 50}]},
-                      {'statements': [{'label': '1', 'share': 50}] * 51}]:
+                      {'statements': [{'label': '1', 'share': 50}, {'label': 1}]}]:
             self.assertEqual(self.post_events([self.event(kind='copy', **extra)]).status_code, 400, extra)
         self.assertEqual(self.post_events([self.event(kind='copy', text='я' * 3000)]).status_code, 200)
         self.assertEqual(len(ActivityEvent.objects.get().text), 2000)
+        # Выделение всей страницы большого листка: пакет не теряется, условия обрезаются
+        many = [{'label': str(i), 'share': 100} for i in range(150)]
+        self.assertEqual(self.post_events([self.event(kind='copy', text='всё', statements=many)]).status_code, 200)
+        copied = ActivityEvent.objects.get(text='всё')
+        self.assertEqual((len(copied.statements), copied.whole), (100, True))
         # Текст пишется только у копирования
         self.post_events([self.event(kind='paste', text='чужой буфер')])
         self.assertEqual(ActivityEvent.objects.get(kind='paste').text, '')

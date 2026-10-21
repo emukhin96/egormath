@@ -16,7 +16,7 @@ from django.views.decorators.http import require_POST
 from accounts.decorators import teacher_required
 from assignments.models import Assignment, Submission, SubmissionPart
 from independentworks.models import Attempt, Answer, Run, Work
-from .clipboard import TEXT_LIMIT, WHOLE_SHARE, parse_mode
+from .clipboard import STATEMENTS_LIMIT, TEXT_LIMIT, WHOLE_SHARE, parse_mode
 from .models import ActivityEvent, AnswerRevision
 from .services import activity_timeline, lock_work
 
@@ -37,10 +37,12 @@ def copy_fields(row):
     клиенты полей не шлют — копирование пишется без текста, как раньше."""
     text, swapped = row.get('text', ''), row.get('swapped', '')
     statements = row.get('statements', [])
-    if type(text) is not str or type(swapped) is not str or type(statements) is not list or len(statements) > 50:
+    if type(text) is not str or type(swapped) is not str or type(statements) is not list:
         raise ValueError
     parts = []
-    for item in statements:
+    # Ctrl+A на большом листке задевает десятки условий и подпунктов: лишние
+    # отбрасываются, а не губят весь пакет событий.
+    for item in statements[:STATEMENTS_LIMIT]:
         label, share = item['label'], item['share']
         if type(label) is not str or len(label) > 30 or type(share) is not int or not 0 <= share <= 100:
             raise ValueError

@@ -132,7 +132,8 @@
       if (covered) shares.push({label: (node.dataset.auditStatement || '').slice(0, 30),
         share: Math.min(100, Math.round(100 * covered / length))});
     });
-    return shares;
+    // Как и сервер — не больше 100 условий на одно копирование.
+    return shares.slice(0, 100);
   }
   function selectionText(selection) {
     const parts = [];
