@@ -1000,8 +1000,9 @@
   /* Карточки вместо таблицы на узком экране. Обёртка .catalog-table-wrap —
      контейнер запроса (порог 760px), поэтому таблица складывается и в узкой
      карточке сетки, и в контенте рядом с боковой панелью, а не только на
-     телефоне. Строка (tr) становится карточкой с рамкой и отступом --space-3
-     от соседей, без линий между «ячейками»: главная ячейка (.stack-primary) —
+     телефоне. Строка (tr) становится карточкой с заливкой --bg и отступом
+     --space-2 от соседей — без рамки (рамка одна, у внешней .card, иначе
+     «рамка в рамке») и без линий между «ячейками»: главная ячейка (.stack-primary) —
      первой строкой на всю ширину (рядом с чекбоксом .col-select, если он
      есть), остальные ячейки — одной строкой метаданных мелким шрифтом
      через «·» (подпись data-label — только там, где без неё значение
@@ -1039,13 +1040,12 @@
     }
     .table-stack tr {
       display: block;
-      padding: var(--space-3);
-      border: 1px solid var(--border);
+      padding: var(--space-2) var(--space-3);
       border-radius: var(--radius);
-      background: var(--card);
+      background: var(--bg);
       line-height: 1.45;
     }
-    .table-stack tr + tr { margin-top: var(--space-3); }
+    .table-stack tr + tr { margin-top: var(--space-2); }
     .table-stack tr:has(> th) + tr { margin-top: 0; }
     .table-stack td {
       display: inline;
@@ -1097,7 +1097,6 @@
     /* Ученики по группам: строка-заголовок группы — подзаголовок списка, не карточка */
     .table-stack tr.student-group-head {
       padding: var(--space-2) 0 var(--space-1);
-      border: 0;
       border-bottom: 2px solid var(--accent-soft);
       border-radius: 0;
       background: transparent;
@@ -2896,7 +2895,8 @@
   #add-tasks .worksheet-items-heading .linklike { margin-left: auto; font-size: 0.85rem; }
 
   /* «Мои листки» на узком экране: пара строк (листок + строка ссылок) —
-     одна карточка; порог — контейнер .catalog-table-wrap, как у .table-stack */
+     одна карточка с заливкой, без рамки; порог — контейнер .catalog-table-wrap,
+     как у .table-stack */
   @container (max-width: 760px) {
     .worksheet-catalog table, .worksheet-catalog tbody { display: block; width: 100%; }
     .worksheet-catalog tr:has(> th) { display: block; }
@@ -2917,19 +2917,17 @@
       grid-template-columns: auto minmax(0, 1fr) auto;
       gap: var(--space-1) var(--space-2);
       align-items: baseline;
-      padding: var(--space-3) var(--space-3) 0;
-      border: 1px solid var(--border);
-      border-bottom: 0;
+      padding: var(--space-2) var(--space-3) 0;
+      background: var(--bg);
       border-radius: var(--radius) var(--radius) 0 0;
     }
     .worksheet-action-row {
       display: block;
-      padding: var(--space-2) var(--space-3) var(--space-3);
-      border: 1px solid var(--border);
-      border-top: 0;
+      padding: var(--space-1) var(--space-3) var(--space-2);
+      background: var(--bg);
       border-radius: 0 0 var(--radius) var(--radius);
     }
-    .worksheet-action-row + .worksheet-main-row { margin-top: var(--space-3); }
+    .worksheet-action-row + .worksheet-main-row { margin-top: var(--space-2); }
     table.list .worksheet-main-row td,
     table.list .worksheet-action-row td,
     table.list .worksheet-main-row:hover + .worksheet-action-row td,
@@ -7721,7 +7719,8 @@
 
 /* Узкий экран (контейнер ≤760px, тот же порог, что у .table-stack): строки
    каталога задач, конструктора листка и подборок, результатов поиска в
-   конструкторе — карточками, а не сжатыми колонками. */
+   конструкторе — карточками с заливкой --bg (без рамки: она одна, у внешней
+   .card), а не сжатыми колонками. */
 @layer components {
   @container (max-width: 760px) {
     /* Каталог задач: чекбокс и номер — первая строка, условие на всю ширину,
@@ -7755,12 +7754,11 @@
       flex-wrap: wrap;
       align-items: baseline;
       gap: var(--space-1) var(--space-2);
-      padding: var(--space-3);
-      border: 1px solid var(--border);
+      padding: var(--space-2) var(--space-3);
       border-radius: var(--radius);
-      background: var(--card);
+      background: var(--bg);
     }
-    .task-catalog .catalog-table tr[data-task-row] + tr { margin-top: var(--space-3); }
+    .task-catalog .catalog-table tr[data-task-row] + tr { margin-top: var(--space-2); }
     .task-catalog .catalog-table td {
       display: block;
       min-width: 0;
@@ -7822,15 +7820,15 @@
       grid-template-columns: auto minmax(0, 1fr);
       gap: var(--space-2);
       align-items: start;
-      padding: var(--space-3);
-      border: 1px solid var(--border);
+      padding: var(--space-2) var(--space-3);
+      border: 0;
       border-radius: var(--radius);
-      background: var(--card);
+      background: var(--bg);
     }
-    #ws-items .ws-item:hover { background: var(--card); }
-    #ws-items .ws-item + .ws-item { margin-top: var(--space-3); }
+    #ws-items .ws-item:hover { background: var(--bg); }
+    #ws-items .ws-item + .ws-item { margin-top: var(--space-2); }
     #ws-items .ws-item-rubric,
-    #ws-items .ws-item-rubric:hover { background: var(--accent-soft); border-color: transparent; }
+    #ws-items .ws-item-rubric:hover { background: var(--accent-soft); }
     #ws-items .ws-body { display: contents; }
     #ws-items .drag-handle { grid-column: 1; grid-row: 1; padding: 0; }
     #ws-items .ws-content { grid-column: 2; grid-row: 1; min-width: 0; }
@@ -7868,12 +7866,11 @@
     .finder-results tbody { display: block; width: 100%; }
     .finder-results tr {
       display: block;
-      padding: var(--space-3);
-      border: 1px solid var(--border);
+      padding: var(--space-2) var(--space-3);
       border-radius: var(--radius);
-      background: var(--card);
+      background: var(--bg);
     }
-    .finder-results tr + tr { margin-top: var(--space-3); }
+    .finder-results tr + tr { margin-top: var(--space-2); }
     .finder-results td {
       display: block;
       padding: 0 !important;
