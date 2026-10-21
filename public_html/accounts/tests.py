@@ -264,10 +264,36 @@ class StudentManagementTests(TestCase):
         self.assertEqual([a.worksheet.title for a in todo],
                          ['Новое', 'Со сроком', 'Просрочено', 'Возвращено', 'Старое без срока'])
         self.assertEqual([a.attention for a in todo], [True, True, True, True, False])
-        # Текущее для боковой панели — возвращённое, хотя в списке оно третье
+        # Текущее — возвращённое, хотя по дате оно четвёртое: оно на
+        # карточке «Сейчас», а в списке «Нужно сдать» его нет
         self.assertEqual(response.context['current'].worksheet.title, 'Возвращено')
+        self.assertEqual([a.worksheet.title for a in response.context['todo_rest']],
+                         ['Новое', 'Со сроком', 'Просрочено', 'Старое без срока'])
+        self.assertContains(response, 'class="now-card"', count=1)
+        self.assertContains(response, 'Вернули на доработку')
+        self.assertContains(response, 'class="work-row is-attention"', count=3)
         self.assertNotContains(response, 'hero-card')
-        self.assertContains(response, 'class="is-attention"', count=4)
+
+    def test_student_shell_one_row_without_dots(self):
+        """Шапка ученика — логотип и меню аватара, без ряда разделов и
+        «Контекста»; в кабинете нет фильтра по виду работы и разделителя «·»
+        (макет A, решение 22.10.2026)."""
+        from assignments.models import Assignment
+        from worksheets.models import Worksheet
+        teacher = User.objects.get(username='teacher1')
+        student = User.objects.create_user(username='student1', password='pass12345',
+                                           first_name='Петя', last_name='Ученик')
+        Profile.objects.create(user=student, role=Profile.ROLE_STUDENT, teacher=teacher)
+        Assignment.objects.create(worksheet=Worksheet.objects.create(owner=teacher, title='Листок'),
+                                  student=student, due_at=timezone.now() + timedelta(days=1))
+        self.client.login(username='student1', password='pass12345')
+        response = self.client.get(reverse('dashboard'))
+        self.assertContains(response, 'aria-label="Меню: Петя Ученик"')
+        self.assertContains(response, 'class="user-menu-item">Выйти</button>')
+        self.assertNotContains(response, 'topbar-nav')
+        self.assertNotContains(response, 'sidebar-section')
+        self.assertNotContains(response, 'work-kind')
+        self.assertNotContains(response, '·')
 
     def test_login_required(self):
         response = self.client.get(reverse('dashboard'))

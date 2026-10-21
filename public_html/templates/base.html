@@ -45,10 +45,9 @@
     <a class="brand" href="{% url 'index' %}" title="Кабинет">Математика</a>
     {% if user.is_authenticated %}
       {# Пять пунктов: подразделы «Задач» и заданий — в выпадающем меню у шеврона (shell.js); на узком экране все ссылки в одном ряду #}
+      {# Ученику меню нет: раздел у него один, в «Мои задания» ведёт логотип #}
+      {% if is_teacher %}
       <nav class="topbar-nav" aria-label="Основные разделы">
-        {# Учителю пункт «Главная» не нужен: в кабинет ведёт логотип #}
-        {% if not is_teacher %}<a href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} class="is-active"{% endif %}>Задания</a>{% endif %}
-        {% if is_teacher %}
           <div class="nav-group{% if 'task' in request.resolver_match.url_name or 'proposal' in request.resolver_match.url_name or request.resolver_match.url_name == 'bulk_answers' or 'textbook_import' in request.resolver_match.url_name %} is-active{% endif %}">
             {# Счётчик новых предложений исправлений — редактору (accounts.context_processors.shell) #}
             <a href="{% url 'task_list' %}">Задачи{% if proposals_new %}<span class="badge-count nav-count" title="Новые предложения исправлений">{{ proposals_new }}</span>{% endif %}</a>
@@ -92,8 +91,8 @@
             </div>
             {% endif %}
           </div>
-        {% endif %}
       </nav>
+      {% endif %}
       {% if is_teacher and not minimal_page %}
       <form class="topbar-search" method="get" action="{% url 'task_list' %}" role="search">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M13.5 13.5l-3-3"/></svg>
@@ -108,13 +107,29 @@
           Контекст
         </button>
         {% endif %}
+        {% if is_teacher %}
         <span class="user-avatar" aria-hidden="true">{{ user.get_full_name|default:user.username|first|upper }}</span>
-        {# Учителю имя — ссылка на профиль (имя, почта, пароль); ученику профиля нет #}
-        {% if is_teacher %}<a class="user-name" href="{% url 'profile' %}" title="Профиль">{{ user.get_full_name|default:user.username }}</a>{% else %}<span class="user-name">{{ user.get_full_name|default:user.username }}</span>{% endif %}
+        {# Учителю имя — ссылка на профиль (имя, почта, пароль) #}
+        <a class="user-name" href="{% url 'profile' %}" title="Профиль">{{ user.get_full_name|default:user.username }}</a>
         <form method="post" action="{% url 'logout' %}" class="inline-form" data-logout>
           {% csrf_token %}
           <button type="submit" class="linklike">Выйти</button>
         </form>
+        {% else %}
+        {# Ученику — кружок с инициалом; имя и «Выйти» в меню под ним (shell.js, data-nav-more): шапка в одну строку и на телефоне #}
+        <div class="user-menu">
+          <button type="button" class="user-menu-toggle" aria-expanded="false" aria-haspopup="true" aria-label="Меню: {{ user.get_full_name|default:user.username }}" data-nav-more>
+            <span class="user-menu-avatar" aria-hidden="true">{{ user.get_full_name|default:user.username|first|upper }}</span>
+          </button>
+          <div class="nav-menu user-menu-panel">
+            <span class="user-menu-name">{{ user.get_full_name|default:user.username }}</span>
+            <form method="post" action="{% url 'logout' %}" data-logout>
+              {% csrf_token %}
+              <button type="submit" class="user-menu-item">Выйти</button>
+            </form>
+          </div>
+        </div>
+        {% endif %}
       </div>
     {% endif %}
   </div>

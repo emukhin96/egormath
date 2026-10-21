@@ -1,20 +1,40 @@
 {% extends 'independentworks/base.html' %}
 {% load static task_extras %}
 {% block title %}{{ attempt.run.title }}{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/independent_attempt.html' %}{% endblock %}
+{% block sidebar %}{% if teacher_view %}{% include 'includes/sidebar/independent_attempt.html' %}{% endif %}{% endblock %}
+{% block body_class %}{% if not teacher_view %}student-page iw-student{% endif %}{% endblock %}
 {% block content %}
+{% if not teacher_view %}
+{# Ученик (макет A2, 22.10.2026): своя шапка работы вместо общей — назад, название, «Вариант N», таймер; под ней полоса времени и лента номеров. Номер окрашен состоянием ответа: saved — зелёный, wrong/ошибка сохранения — красный, empty — серый (independentworks.js) #}
+<div class="student-column">
+<header class="iw-head">
+  <div class="iw-head-row">
+    <a class="iw-head-back" href="{% url 'dashboard' %}" aria-label="К заданиям{% if editable %}, таймер не остановится{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></a>
+    <div class="iw-head-title">
+      <h1>{{ attempt.run.title }}</h1>
+      <span>Вариант {{ attempt.variant.number }}</span>
+    </div>
+    {% if editable %}
+    <span class="iw-head-timer" role="timer" aria-label="Осталось времени"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6"/></svg><span data-iw-timer data-ends="{{ attempt.ends_at|date:'c' }}" data-now="{{ now }}" data-total="{{ attempt.run.duration }}">{{ clock.remaining_label }}</span></span>
+    {% else %}
+    <span class="badge {% if attempt.finished %}badge-submitted{% else %}badge-assigned{% endif %}">{{ attempt.state }}</span>
+    {% endif %}
+  </div>
+  {% if editable %}
+  <div class="iw-time-bar" aria-hidden="true"><span data-iw-time-bar style="width: {{ clock.elapsed_percent }}%"></span></div>
+  <nav class="iw-strip" aria-label="Номера заданий">{% for row in rows %}<a class="iw-strip-item" href="#point-{{ row.point.pk }}" data-iw-strip="{{ row.point.pk }}" data-state="{{ row.state }}" aria-label="Задание {{ row.point.label }}">{{ row.point.label }}</a>{% endfor %}</nav>
+  {% endif %}
+</header>
+{% else %}
 <div class="page-head">
   <div>
-    <nav class="page-crumbs" aria-label="Путь">{% if teacher_view %}<a href="{% url 'independentworks:catalog' %}">Самостоятельные</a><a href="{% url 'independentworks:progress' attempt.run_id %}">Общий прогресс</a>{% else %}<a href="{% url 'dashboard' %}?kind=independent">Мои задания</a><span>{{ attempt.run.kind_label }}</span>{% endif %}</nav>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'independentworks:catalog' %}">Самостоятельные</a><a href="{% url 'independentworks:progress' attempt.run_id %}">Общий прогресс</a></nav>
     <h1>{{ attempt.run.title }}</h1>
-    <p class="page-meta">{% if teacher_view %}<span>{{ attempt.student.get_full_name|default:attempt.student.username }}</span>{% endif %}<span>{{ attempt.run.kind_label }}</span><span>вариант {{ attempt.variant.number }}</span><span>{{ attempt.run.duration }} мин.</span><span class="badge {% if attempt.finished %}badge-submitted{% else %}badge-assigned{% endif %}">{{ attempt.state }}</span></p>
+    <p class="page-meta"><span>{{ attempt.student.get_full_name|default:attempt.student.username }}</span><span>{{ attempt.run.kind_label }}</span><span>вариант {{ attempt.variant.number }}</span><span>{{ attempt.run.duration }} мин.</span><span class="badge {% if attempt.finished %}badge-submitted{% else %}badge-assigned{% endif %}">{{ attempt.state }}</span></p>
   </div>
 </div>
-{% if teacher_view %}{% include 'workaudit/panel.html' with kind='attempt' object=attempt %}{% elif editable or can_start %}{% include 'workaudit/notice.html' with kind='attempt' object=attempt mode=attempt.clipboard_mode active=editable %}{% endif %}
-{% if editable %}
-<div class="iw-clock" data-iw-timer data-ends="{{ attempt.ends_at|date:'c' }}" data-now="{{ now }}" role="timer" aria-label="Оставшееся время">Оставшееся время</div>
-<p class="helptext">Ответы сохраняются автоматически. Галочка у ответа означает, что он принят сервером.{% if attempt.run.self_check %} Кнопка «Проверить» показывает только верность текущего ответа и не завершает работу.{% endif %}</p>
 {% endif %}
+{% if teacher_view %}{% include 'workaudit/panel.html' with kind='attempt' object=attempt %}{% elif editable or can_start %}{% include 'workaudit/notice.html' with kind='attempt' object=attempt mode=attempt.clipboard_mode active=editable %}{% endif %}
 {% include 'independentworks/_attempt_result.html' %}
 {% if can_start and not teacher_view %}
 <div class="card assignment-submit-card">
@@ -25,18 +45,23 @@
 <p class="helptext">Работа не начата. Срок начала истёк.</p>
 {% endif %}
 {# Все номера — одним листом с разделителями, а не карточкой на номер: карточки с зазорами растягивали работу на несколько экранов. Пункты общего условия (не group_start) — без разделителя. #}
-{% if accessible and rows or accessible and tail_notes %}<div class="card ws-view iw-sheet">{% for row in rows %}{% for note in row.notes %}<div class="math-content iw-note">{{ note|web_text }}</div>{% endfor %}<section class="iw-point{% if not row.group_start %} iw-point-cont{% endif %}" id="point-{{ row.point.pk }}"><div data-audit-statement="{{ row.point.label }}">{% include 'assignments/_point_content.html' %}</div>
-{% if editable %}<form method="post" action="{% url 'independentworks:save' attempt.pk row.point.pk %}" data-iw-answer class="task-tools subitem-answer">{% csrf_token %}<input type="hidden" name="version" value="{{ row.answer.version|default:0 }}">{% if row.fragments %}{% include 'assignments/_mask.html' with fragments=row.fragments editable=True show_checks=attempt.run.self_check %}<button class="btn btn-secondary">Сохранить ответ</button>{% if attempt.run.self_check %}<button class="btn btn-secondary" type="button" data-iw-check formaction="{% url 'independentworks:check_answer' attempt.pk row.point.pk %}">Проверить</button>{% endif %}<span data-iw-save-status role="status">{% if row.answer.version %}✓ Сохранён{% else %}Ответ не введён{% endif %}</span>{% else %}{% if attempt.run.allow_photos %}<p>Загрузите фотографию развёрнутого решения.</p>{% else %}<p class="helptext">Выполните задание по указаниям учителя. Электронный ввод ответа не требуется.</p>{% endif %}{% endif %}</form>{% else %}<div class="answer-block task-tools"><span class="math-content"><strong>Ваш ответ: </strong>{{ row.display|default:'—'|web_answer }}</span>{% include 'independentworks/_attempt_badge.html' %}</div>{% endif %}
+{# В работе ученика (editable) лист — data-iw-focus: скрипт показывает по одному номеру; пояснение к блоку — подписью над номером, а не строкой листа #}
+{% if accessible and rows or accessible and tail_notes %}<div class="card ws-view iw-sheet{% if editable %} iw-sheet-edit{% endif %}"{% if editable %} data-iw-focus{% endif %}>{% for row in rows %}{% if not editable %}{% for note in row.notes %}<div class="math-content iw-note">{{ note|web_text }}</div>{% endfor %}{% endif %}<section class="iw-point{% if not row.group_start and not editable %} iw-point-cont{% endif %}" id="point-{{ row.point.pk }}">{% if editable %}<div class="iw-point-head">{% for note in row.notes %}<div class="math-content iw-point-kicker">{{ note|web_text }}</div>{% endfor %}<h2 class="iw-point-title">Задание {{ row.point.label }}</h2></div>{% endif %}<div data-audit-statement="{{ row.point.label }}">{% include 'assignments/_point_content.html' %}</div>
+{% if editable %}<form method="post" action="{% url 'independentworks:save' attempt.pk row.point.pk %}" data-iw-answer data-point="{{ row.point.pk }}" class="task-tools subitem-answer iw-answer" data-state="{{ row.state }}">{% csrf_token %}<input type="hidden" name="version" value="{{ row.answer.version|default:0 }}">{% if row.fragments %}<span class="iw-answer-label">Ваш ответ</span>{% include 'assignments/_mask.html' with fragments=row.fragments editable=True show_checks=attempt.run.self_check %}{# Ответ сохраняется сам; кнопка — для Enter и работы без скрипта #}<button class="btn btn-secondary iw-save-button">Сохранить ответ</button>{% if attempt.run.self_check %}<button class="btn btn-secondary" type="button" data-iw-check formaction="{% url 'independentworks:check_answer' attempt.pk row.point.pk %}">Проверить</button>{% endif %}<span class="iw-save-status" data-iw-save-status data-state="{{ row.state }}" role="status">{% if row.state == 'wrong' %}Неверно — исправьте ответ{% elif row.answer.version %}Сохранено{% else %}Ответа пока нет{% endif %}</span>{% else %}{% if attempt.run.allow_photos %}<p>Загрузите фотографию развёрнутого решения.</p>{% else %}<p class="helptext">Выполните задание по указаниям учителя. Электронный ввод ответа не требуется.</p>{% endif %}{% endif %}</form>{% else %}<div class="answer-block task-tools"><span class="math-content"><strong>Ваш ответ: </strong>{{ row.display|default:'—'|web_answer }}</span>{% include 'independentworks/_attempt_badge.html' %}</div>{% endif %}
 {% if teacher_view %}{% include 'workaudit/revisions.html' with kind='answer' object=row.answer %}{% endif %}
 {% if teacher_view and row.answer.check_history.all %}<details class="check-history"><summary>Самопроверки: {{ row.answer.check_history.all|length }}</summary>{% for check in row.answer.check_history.all reversed %}<div class="answer-block"><strong>Проверка {{ check.number }} · {{ check.created_at|date:'d.m.Y H:i:s' }}</strong><p>{% if check.result == 'ok' %}Верно{% elif check.result == 'wrong' %}Неверно{% else %}Не удалось проверить{% endif %}</p>{% for key, value in check.snapshot.values.items %}<p>Поле {{ forloop.counter }}: {{ value|default:'(пусто)' }}</p>{% endfor %}</div>{% endfor %}</details>{% endif %}
 {% include 'independentworks/_attempt_feedback.html' %}
 {% include 'assignments/_photo_gallery.html' with photos=row.answer.photos.all photo_route='independentworks:photo' delete_route='independentworks:delete_photo' %}
 {% if editable and attempt.run.allow_photos %}<form method="post" enctype="multipart/form-data" action="{% url 'independentworks:upload_photo' attempt.pk row.point.pk %}" data-iw-flush class="task-tools form-buttons">{% csrf_token %}<label for="photo-{{ row.point.pk }}">Фото решения</label><input id="photo-{{ row.point.pk }}" type="file" name="photo" accept="image/*" required><button class="btn btn-small btn-secondary">Загрузить</button></form>{% endif %}
-{% if teacher_view and attempt.finished %}{% include 'independentworks/_review_controls.html' %}{% endif %}</section>{% endfor %}{% for note in tail_notes %}<div class="math-content iw-note">{{ note|web_text }}</div>{% endfor %}</div>{% endif %}
+{% if teacher_view and attempt.finished %}{% include 'independentworks/_review_controls.html' %}{% endif %}
+{% if editable %}<nav class="iw-point-nav" aria-label="Соседние задания">{% if row.prev %}<a class="btn btn-secondary" href="#point-{{ row.prev.pk }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Задание {{ row.prev.label }}</a>{% else %}<span></span>{% endif %}{% if row.next %}<a class="btn btn-secondary" href="#point-{{ row.next.pk }}">Задание {{ row.next.label }}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></a>{% endif %}</nav>{% endif %}</section>{% endfor %}{% for note in tail_notes %}<div class="math-content iw-note">{{ note|web_text }}</div>{% endfor %}</div>{% endif %}
 {% if editable %}
-<div class="card assignment-submit-card">
-  <p class="helptext">После сдачи изменить ответы будет нельзя.</p>
-  {% include 'independentworks/_attempt_actions.html' %}
+{# Сдача — слева внизу, рядом счёт ответов (макет A2); счёт обновляет independentworks.js #}
+<div class="iw-submit-bar">
+  <form method="post" action="{% url 'independentworks:submit' attempt.pk %}" data-iw-flush data-confirm="Сдать работу? После сдачи изменить ответы будет нельзя." class="inline-form">
+    {% csrf_token %}<button class="btn">Сдать работу</button>
+  </form>
+  <span class="iw-submit-count" role="status">Есть <b data-iw-answered data-total="{{ rows|length }}">{{ clock.answered }} {{ clock.answered|plural_ru:'ответ,ответа,ответов' }}</b> из {{ rows|length }}</span>
 </div>
 {% elif not teacher_view and not can_start %}
 {% include 'independentworks/_attempt_actions.html' %}
@@ -51,6 +76,7 @@
 </div>
 {% endif %}
 {% if attempt.parent_id %}<p><a href="{% url 'independentworks:attempt' attempt.parent_id %}">Предыдущая попытка</a></p>{% endif %}
+{% if not teacher_view %}</div>{% endif %}
 {% endblock %}
 {% block extra_js %}
 {% if teacher_view %}<script defer src="{% static 'js/work_history.js' %}"></script>{% endif %}
@@ -59,6 +85,6 @@
 <script defer src="{% static 'js/work_activity.js' %}"></script>
 <script defer src="{% static 'js/check_badge.js' %}"></script>
 {% include 'problems/_mask_scripts.html' %}
-<script defer src="{% static 'js/independentworks.js' %}"></script>
+<script defer src="{% static 'js/independentworks.js' %}?v=2"></script>
 {% endif %}
 {% endblock %}

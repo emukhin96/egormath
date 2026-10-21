@@ -1,0 +1,20 @@
+{# Список работ ученика: строка — ссылка целиком, под названием дата или срок фразой, справа — короткий статус или стрелка. items — Assignment или проекции самостоятельных (independentworks.integration) #}
+<ul class="work-list">
+  {% for a in items %}
+  <li>
+    <a class="work-row{% if a.attention %} is-attention{% endif %}" href="{% if a.detail_url %}{{ a.detail_url }}{% else %}{% url 'assignment_detail' a.pk %}{% endif %}">
+      <span class="work-row-body">
+        <span class="work-row-title">{{ a.worksheet.title }}</span>
+        <span class="work-row-meta">{% if a.status == 'reviewed' and a.cumulative %}С исправлениями {{ a.cumulative.percent }}%, выдано {{ a.assigned_at|date:'d.m' }}{% elif a.status == 'submitted' and a.submitted_at %}Сдано {{ a.submitted_at|date:'d.m' }}{% elif a.due_at and a.status != 'reviewed' and a.status != 'submitted' %}Срок {% if a.is_overdue or a.closed_unstarted %}был {% else %}до {% endif %}{{ a.due_at|date:'d.m, H:i' }}{% else %}Выдано {{ a.assigned_at|date:'d.m' }}{% endif %}</span>
+      </span>
+      {% if a.active and a.remaining_label %}<span class="badge badge-assigned work-row-chip">идёт <span data-countdown data-ends="{{ a.ends_at|date:'c' }}" data-now="{{ now }}">{{ a.remaining_label }}</span></span>
+      {% elif a.closed_unstarted %}<span class="badge badge-assigned work-row-chip">не начато</span>
+      {% elif a.status == 'returned' %}<span class="badge badge-returned work-row-chip">на доработке</span>
+      {% elif a.is_overdue %}<span class="badge badge-returned work-row-chip">просрочено</span>
+      {% elif a.status == 'submitted' %}<span class="badge badge-submitted work-row-chip">сдано</span>
+      {% elif a.status == 'reviewed' %}{% with r=a.result %}<span class="badge badge-reviewed work-row-chip">{{ r.done }}/{{ r.total }}{% if r.percent != None %} ({{ r.percent }}%){% endif %}</span>{% endwith %}
+      {% else %}<svg class="work-row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>{% endif %}
+    </a>
+  </li>
+  {% endfor %}
+</ul>

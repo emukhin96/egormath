@@ -1,47 +1,69 @@
 {% extends 'base.html' %}
-{% load task_extras %}
+{% load static %}
 {% block title %}Мои задания — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/dashboard_student.html' %}{% endblock %}
+{% block body_class %}student-page{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <h1>Мои задания</h1>
-    {% if assignments %}
-    <p class="page-meta">
-      <span>{{ assignments|length }} {{ assignments|length|plural_ru:'задание,задания,заданий' }}</span>
-      {% if todo %}<span>сдать: {{ todo|length }}</span>{% endif %}
-      {% if submitted %}<span>на проверке: {{ submitted|length }}</span>{% endif %}
-    </p>
-    {% endif %}
+{# Кабинет ученика (макет A, 22.10.2026): без боковой панели и фильтра по виду работы — ученику тип неважен. Текущее задание — карточкой «Сейчас», остальное — списками по статусу, свежие сверху. Подписи — фразой, без «·». #}
+<div class="student-column">
+  <div class="page-head">
+    <div>
+      <h1>Мои задания</h1>
+      {% if assignments %}<p class="page-meta">Сдать {{ todo|length }}, на проверке {{ submitted|length }}</p>{% endif %}
+    </div>
   </div>
+
+  {% if not assignments %}
+  <div class="card"><p class="muted">Вам пока не назначено ни одного задания.</p></div>
+  {% endif %}
+
+  {% if current %}
+  {% with teacher=current.worksheet.owner.get_full_name|default:current.worksheet.owner.username %}
+  <section class="now-card" aria-label="Сейчас">
+    <div class="now-card-head">
+      <span class="now-card-kicker">{% if current.active %}Идёт работа{% elif current.status == 'returned' %}Вернули на доработку{% elif current.is_overdue %}Срок прошёл{% else %}Нужно сделать{% endif %}</span>
+      {% if current.active and current.remaining_label %}
+      <span class="now-card-timer" role="timer" aria-label="Осталось времени">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6"/></svg>
+        <span data-countdown data-ends="{{ current.ends_at|date:'c' }}" data-now="{{ now }}" data-total="{{ current.duration }}" data-bar="now-card-bar">{{ current.remaining_label }}</span>
+      </span>
+      {% endif %}
+    </div>
+    <h2 class="now-card-title">{{ current.worksheet.title }}</h2>
+    <p class="now-card-meta">{% if current.total %}Отвечено {{ current.answered }}/{{ current.total }}, учитель {{ teacher }}{% else %}Учитель {{ teacher }}{% endif %}</p>
+    {% if current.active and current.remaining_label %}
+    <div class="now-card-bar" aria-hidden="true"><span id="now-card-bar" style="width: {{ current.elapsed_percent }}%"></span></div>
+    {% elif current.due_at %}
+    <p class="now-card-meta">Срок {% if current.is_overdue %}был {% else %}до {% endif %}{{ current.due_at|date:'d.m, H:i' }}</p>
+    {% endif %}
+    <a class="now-card-action" href="{% if current.detail_url %}{{ current.detail_url }}{% else %}{% url 'assignment_detail' current.pk %}{% endif %}">{% if current.active or current.answered %}Продолжить{% else %}Открыть{% endif %}</a>
+  </section>
+  {% endwith %}
+  {% endif %}
+
+  {% if todo_rest %}
+  <section class="work-group">
+    <h2 class="work-group-title">Нужно сдать <span>{{ todo_rest|length }}</span></h2>
+    {% include 'accounts/_student_work_list.html' with items=todo_rest %}
+  </section>
+  {% endif %}
+  {% if submitted %}
+  <section class="work-group">
+    <h2 class="work-group-title">На проверке <span>{{ submitted|length }}</span></h2>
+    {% include 'accounts/_student_work_list.html' with items=submitted %}
+  </section>
+  {% endif %}
+  {% if reviewed %}
+  <section class="work-group">
+    <h2 class="work-group-title">Проверено <span>{{ reviewed|length }}</span></h2>
+    {% include 'accounts/_student_work_list.html' with items=reviewed %}
+  </section>
+  {% endif %}
+  {% if closed_unstarted %}
+  <section class="work-group">
+    <h2 class="work-group-title">Время вышло <span>{{ closed_unstarted|length }}</span></h2>
+    {% include 'accounts/_student_work_list.html' with items=closed_unstarted %}
+  </section>
+  {% endif %}
 </div>
-
-{% if independentworks_enabled %}{% include 'includes/work_kind_filter.html' %}{% endif %}
-
-{% if not assignments %}
-<div class="card"><p class="muted">Вам пока не назначено ни одного задания.</p></div>
-{% endif %}
-
-{# Текущее задание — подсвеченной строкой списка, не карточкой над ним: карточка читалась как заголовок #}
-{% if todo %}
-<div class="card">
-  <h2>Нужно сдать</h2>
-  {% include 'accounts/_student_assignment_table.html' with items=todo %}
-</div>
-{% endif %}
-
-{% if submitted %}
-<div class="card">
-  <h2>На проверке</h2>
-  {% include 'accounts/_student_assignment_table.html' with items=submitted %}
-</div>
-{% endif %}
-
-{% if reviewed %}
-<div class="card">
-  <h2>Проверено</h2>
-  {% include 'accounts/_student_assignment_table.html' with items=reviewed %}
-</div>
-{% endif %}
-{% if closed_unstarted %}<div class="card"><h2>Закончилось время выполнения</h2>{% include 'accounts/_student_assignment_table.html' with items=closed_unstarted %}</div>{% endif %}
 {% endblock %}
+{% block extra_js %}<script defer src="{% static 'js/countdown.js' %}"></script>{% endblock %}

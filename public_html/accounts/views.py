@@ -429,6 +429,12 @@ def student_dashboard(request):
             or a.status == Assignment.STATUS_RETURNED
             or a.due_at
             or a.assigned_at >= week_ago)
+    if current is not None and getattr(current, 'kind', 'ordinary') == 'ordinary':
+        # «Отвечено N/M» на карточке «Сейчас»; у самостоятельной счёт уже
+        # посчитан в independentworks.integration
+        submissions = current.submissions.prefetch_related('parts', 'photos')
+        current.answered = sum(1 for sub in submissions if not sub.is_empty)
+        current.total = current.visible_task_count()
     submitted = [a for a in assignments
                  if a.status == Assignment.STATUS_SUBMITTED]
     reviewed = [a for a in assignments
@@ -437,11 +443,14 @@ def student_dashboard(request):
         'assignments': assignments,
         'current': current,
         'todo': todo,
+        # Список «Нужно сдать» без текущего: оно уже на карточке «Сейчас»
+        'todo_rest': [a for a in todo if a is not current],
         'submitted': submitted,
         'reviewed': reviewed,
         'closed_unstarted': [a for a in assignments if getattr(a, 'closed_unstarted', False)],
         'kind': kind,
         'overdue_total': sum(1 for a in todo if a.is_overdue),
+        'now': timezone.now().isoformat(),
     })
 
 
