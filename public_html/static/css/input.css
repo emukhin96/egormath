@@ -478,6 +478,19 @@
     color: var(--accent);
   }
 
+  /* Фокус в меню — той же плашкой, что открытое меню, а не браузерной
+     рамкой: скруглённая обводка шеврона упиралась в линию активного раздела */
+  .topbar-nav a:focus,
+  .nav-more:focus {
+    outline: none;
+  }
+
+  .topbar-nav > a:focus-visible,
+  .nav-group:has(> :focus-visible) {
+    background: var(--accent-soft);
+    border-radius: 8px 8px 0 0;
+  }
+
   /* Открытие — классом is-open, не атрибутом hidden: preflight делает
      [hidden] display:none !important, а на узком экране меню нужно раскрыть в ряд */
   .nav-menu {
