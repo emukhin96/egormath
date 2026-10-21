@@ -79,6 +79,32 @@ class RangeNotationTests(SimpleTestCase):
             with self.subTest(value=value):
                 self.assertIsNone(parse_range(value))
 
+    def test_mixed_numbers_in_inequalities(self):
+        # Эталоны Ткачука (обход масок range 21.10): смешанное число в
+        # неравенстве — a+b/c, как в скобочной записи, а не a·b/c.
+        groups = {
+            r'2, 2 \frac{161}{163} \leqslant x \leqslant 3':
+                [r'\{2\}\cup\left[\frac{487}{163};3\right]', r'x=2 или [2\frac{161}{163};3]'],
+            r'1 \frac{31}{32} \leqslant x<2, x \leqslant 0':
+                [r'(-\infty;0]\cup\left[\frac{63}{32};2\right)', r'x<=0 или 63/32<=x<2'],
+            r'-4 \frac{3}{4} \leqslant a<4':
+                [r'\left[-\frac{19}{4};4\right)', r'[-4\frac{3}{4};4)', r'-4\frac34 \le a<4',
+                 r'-\frac{19}{4}<=a<4', '-4.75<=a<4', r'-4\frac{3}{4}-a<=0 и a<4'],
+            # Дробь с буквой — произведение, как и раньше.
+            'x<6': [r'2\frac{x}{3}<4', r'2\frac x3<4'],
+            '(-∞;4)': [r'2\frac34x<11', r'x-4\frac34<-\frac34'],
+        }
+        for reference, values in groups.items():
+            for value in values:
+                with self.subTest(value=value):
+                    self.assertEquivalent(value, reference)
+        for value, wrong in ((r'2, 2 \frac{161}{163} \leqslant x \leqslant 3', r'[\frac{322}{163};3]'),
+                             (r'1 \frac{31}{32} \leqslant x<2, x \leqslant 0', r'x<=0 или 31/32<=x<2'),
+                             (r'-4 \frac{3}{4} \leqslant a<4', '[-3;4)')):
+            with self.subTest(value=value):
+                self.assertFalse(ranges_equal(parse_range(value), parse_range(wrong)))
+        self.assertIsNone(parse_range(r'2\frac{1}{x}>1'))
+
     def test_mask_accepts_alternatives_and_rejects_wrong_boundaries(self):
         cases = [
             ('{{range: 0;1}}', '{0,1}', 'ok'),
@@ -92,6 +118,9 @@ class RangeNotationTests(SimpleTestCase):
             ('{{range: (-∞;0)∪(0;∞)}}', 'R', 'wrong'),
             ('{{range: -3;3}}', '±3', 'ok'),
             ('{{range: -3;3}}', '3', 'wrong'),
+            (r'{{range: -4 \frac{3}{4} \leqslant a<4}}', r'-4\frac34 \le a<4', 'ok'),
+            (r'{{range: -4 \frac{3}{4} \leqslant a<4}}', r'[-\frac{19}{4};4)', 'ok'),
+            (r'{{range: -4 \frac{3}{4} \leqslant a<4}}', r'-3\le a<4', 'wrong'),
         ]
         for mask, answer, expected in cases:
             with self.subTest(mask=mask, answer=answer):

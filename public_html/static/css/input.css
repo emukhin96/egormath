@@ -482,6 +482,42 @@
     color: var(--accent);
   }
 
+  /* Фокус в меню — той же плашкой, что открытое меню, а не браузерной
+     рамкой: скруглённая обводка шеврона упиралась в линию активного раздела.
+     Только у пунктов верхнего ряда — у ссылок подменю плашки на фокус нет,
+     им браузерная рамка остаётся */
+  .topbar-nav > a:focus,
+  .nav-group > a:focus,
+  .nav-more:focus {
+    outline: none;
+  }
+
+  .topbar-nav > a:focus-visible,
+  .nav-group:has(> :focus-visible) {
+    background: var(--accent-soft);
+    border-radius: 8px 8px 0 0;
+  }
+
+  /* Плашка на белой шапке малоконтрастна и совпадает с открытым меню —
+     сам пункт в фокусе ещё и акцентный, ссылка подчёркнута текстом */
+  .topbar-nav > a:focus-visible,
+  .nav-group > a:focus-visible,
+  .nav-more:focus-visible {
+    color: var(--accent);
+  }
+
+  .topbar-nav > a:focus-visible,
+  .nav-group > a:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  /* Шеврон подчёркнут так же: цвет и плашка у открытого меню те же,
+     и без черты фокус на шевроне раскрытой группы не виден */
+  .nav-more:focus-visible svg {
+    border-bottom: 2px solid currentColor;
+  }
+
   /* Открытие — классом is-open, не атрибутом hidden: preflight делает
      [hidden] display:none !important, а на узком экране меню нужно раскрыть в ряд */
   .nav-menu {
@@ -5972,6 +6008,13 @@
        разделы за край экрана (R31-1) */
     .topbar-nav .nav-group {
       display: contents;
+    }
+
+    /* У раскрытой группы нет своего бокса, и её плашка фокуса не рисуется —
+       подсвечиваем саму ссылку (рамку фокуса с неё сняли выше) */
+    .topbar-nav .nav-group > a:focus-visible {
+      background: var(--accent-soft);
+      border-radius: 8px 8px 0 0;
     }
 
     .topbar-nav a[data-nav-last] {
