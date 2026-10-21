@@ -1411,13 +1411,45 @@ _SAMPLE_ENOUGH = 3
 _SAMPLE_DIGITS = 30
 _SAMPLE_TOLERANCE = '1e-9'
 _SAMPLE_BOUND = 10**12
+# Показатель степени больше этого по модулю — не школьная запись: такие
+# выражения в точке не считаются (см. _sampleable).
+_SAMPLE_POWER = 1000
+
+
+@lru_cache(maxsize=1024)
+def _sampleable(expression):
+    """Значение в точке считается без взрыва величин: нет огромных
+    показателей (x^{10^9}, sin x^{10^9}) и башен экспонент (x^{x^{x}},
+    e^{e^x}). Иначе точка не проверяется: решает символьное сравнение,
+    как раньше, — оно отклоняет такой ввод дёшево.
+    """
+    from sympy import exp, preorder_traversal
+
+    def exponential(node):
+        return isinstance(node, exp) or (node.is_Pow and not node.exp.is_number)
+
+    for node in preorder_traversal(expression):
+        if node.is_Pow and node.exp.is_number and abs(node.exp) > _SAMPLE_POWER:
+            return False
+        if exponential(node):
+            power = node.args[0] if isinstance(node, exp) else node.exp
+            if any(exponential(inner) for inner in preorder_traversal(power)):
+                return False
+    return True
 
 
 def _sample_number(expression, point):
-    """(вещественная, мнимая части) в точной точке; None — нет надёжного числа."""
+    """(вещественная, мнимая части) в точной точке; None — нет надёжного числа.
+
+    Точка подставляется в evalf, а не в само выражение: точная подстановка
+    раскрыла бы x^{999999999} в дробь из миллиардов бит. strict отличает
+    точный нуль (полюс, корень из нуля) от числа: такая точка не годится.
+    """
     from sympy import Float, Rational
+    if not _sampleable(expression):
+        return None
     try:
-        value = expression.xreplace(point).evalf(_SAMPLE_DIGITS, strict=True)
+        value = expression.evalf(_SAMPLE_DIGITS, subs=point, strict=True)
         parts = value.as_real_imag()
     except MemoryError:
         raise

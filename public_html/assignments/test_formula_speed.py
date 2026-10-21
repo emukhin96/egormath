@@ -3,6 +3,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 import json
 import subprocess
+import time
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
@@ -216,6 +217,23 @@ class NumericRejectionTests(SimpleTestCase):
                 self.assertEqual(fast, full if full != UNKNOWN else fast)
                 if full == UNKNOWN:
                     self.assertIn(fast, (UNKNOWN, WRONG))
+
+    def test_huge_powers_are_not_expanded_at_sample_points(self):
+        reference, _ = formulas._parse_reference(r'\frac{x^{2}+1}{x}')
+        samples = formulas._sample_points(reference)
+        self.assertTrue(samples)
+        started = time.process_time()
+        for value in ('x^{999999999}', 'x^{10^{9}}', r'\sin(x^{1000000000})',
+                      'x^{x^{x^{1000000000}}}', 'e^{e^{e^{x^{100}}}}'):
+            with self.subTest(value=value):
+                student = formulas._parse(value)
+                self.assertFalse(formulas._sampleable(student.expression))
+                self.assertFalse(formulas._differs(student.expression, reference.items[0], samples))
+        # Точка подставляется в evalf: точная дробь из миллиардов бит не строится.
+        self.assertLess(time.process_time() - started, 2)
+        for value in ('x^{x}', r'(x+1)^{1000}', r'e^{\sin x}'):
+            self.assertTrue(formulas._sampleable(formulas._parse(value).expression), value)
+        self.assertEqual(self.check('x^{999999999}', r'\frac{x^{2}+1}{x}'), WRONG)
 
     def test_sample_points_lie_in_reference_domain(self):
         reference, _ = formulas._parse_reference(r'\sqrt{a-2 b}+\arcsin\frac{b}{a} | positive: a,b')
