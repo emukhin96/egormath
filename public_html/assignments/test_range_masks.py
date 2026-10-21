@@ -207,3 +207,58 @@ class RangeNotationTests(SimpleTestCase):
                 spec = parse_mask(mask)
                 self.assertTrue(spec.is_valid, spec.errors)
                 self.assertEqual(check_slot(spec.slots[0], answer), expected)
+
+
+class ExcludedPointTests(SimpleTestCase):
+    """«A, x ≠ k» — выколотая точка, а не объединение со всей прямой."""
+
+    def assertEquivalent(self, actual, reference):
+        parsed = parse_range(actual)
+        self.assertIsNotNone(parsed, actual)
+        self.assertTrue(ranges_equal(parsed, parse_range(reference)), actual)
+
+    def test_excluded_point_after_comma(self):
+        # Эталоны Ткачука (партия 43): 1974.ММ.2, 1973.ГФ.4, 1985.ММ.2, 1989.ПЧ.3.
+        groups = {
+            '[-1;1)∪(1;3]': [r'-1 \leqslant x \leqslant 3, x \neq 1', '-1<=x<=3, x≠1',
+                             r'x\in[-1;3], x\ne 1', '[-1;3]; x!=1', 'x≠1, [-1;3]'],
+            r'(\frac12;1)∪(1;\frac32)∪(\frac32;2)':
+                [r'\frac{1}{2}<x<2, x \neq 1, x \neq \frac{3}{2}'],
+            r'(-∞;-1)∪[-\frac13;1)∪(1;∞)': [r'x \geqslant-\frac{1}{3}, x<-1, x \neq 1'],
+            r'(-2;-1)∪(-1;-\frac12)∪(0;4]':
+                [r'-2<x<-\frac{1}{2}, x \neq-1, 0<x \leqslant 4'],
+            '(-∞;1)∪(1;2)∪(2;∞)': ['x≠1, x≠2', r'x \neq 1; x \neq 2'],
+            '(-∞;2)∪(2;∞)': ['x≠2', 'x<2, x>2', 'x<2 или x>2'],
+            '[0;3]': ['0<=x<=3, x≠5'],
+            '(-∞;-1)∪(1;∞)': ['x<-1, x>1'],
+            '(0;1)∪(1;∞)': ['x>0 и x≠1', 'x>0, x≠1'],
+            r'(-∞;-\sqrt2)∪(-\sqrt2;1]': [r'x\le 1, x\neq-\sqrt{2}'],
+        }
+        for reference, values in groups.items():
+            for value in values:
+                with self.subTest(value=value):
+                    self.assertEquivalent(value, reference)
+        for value in (r'-1 \leqslant x \leqslant 3, x \neq 1', 'x>=-2, x≠-1'):
+            with self.subTest(value=value):
+                self.assertFalse(ranges_equal(parse_range(value), parse_range('R')))
+
+    def test_mask_with_excluded_point(self):
+        book = r'{{range: -1 \leqslant x \leqslant 3, x \neq 1}}'
+        union = r'{{range: [-1;1)\cup(1;3]}}'
+        log = r'{{range: a \leqslant \frac{1}{5} \log _{3} 15, a \neq-\frac{1}{2}}}'
+        cases = [
+            (book, r'[-1;1)\cup(1;3]', 'ok'),
+            (book, r'-1 \le x<1 или 1<x \le 3', 'ok'),
+            (book, r'-1 \le x \le 3, x \ne 1', 'ok'),
+            (book, r'\mathbb{R}', 'wrong'),
+            (book, '[-1;3]', 'wrong'),
+            (union, r'-1 \leqslant x \leqslant 3, x \neq 1', 'ok'),
+            (union, r'-1 \leqslant x \leqslant 3, x \neq 2', 'wrong'),
+            (log, r'(-\infty;-0.5)\cup(-0.5;\log_{3}\sqrt[5]{15}]', 'ok'),
+            (log, r'(-\infty;\frac{1}{5}\log_{3}15]', 'wrong'),
+        ]
+        for mask, answer, expected in cases:
+            with self.subTest(mask=mask, answer=answer):
+                spec = parse_mask(mask)
+                self.assertTrue(spec.is_valid, spec.errors)
+                self.assertEqual(check_slot(spec.slots[0], answer), expected)
