@@ -14,7 +14,25 @@ AddDefaultCharset UTF-8
     AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/json application/xml image/svg+xml
 </IfModule>
 
+# --- PHP не используется ---
+# Сайт — Django через wsgi.py, но на shared-хостинге Timeweb обработчик PHP
+# включён на уровне панели. Чтобы ни один запрос не дошёл до PHP-интерпретатора
+# (CVE-2026-109618 / CVE-2026-109619, RCE без входа), любые *.php / *.phtml /
+# *.phar закрываем — даже если такой файл когда-нибудь окажется в public_html.
+<FilesMatch "(?i)\.(php[0-9]?|phtml|phps|phar)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
 RewriteEngine On
+
+# 0) Запросы к *.php не отдаём и не передаём в Django — 403 сразу.
+RewriteRule \.(php[0-9]?|phtml|phps|phar)$ - [NC,F,L]
 
 # 1) Статика: /static/... -> staticfiles/... (результат collectstatic)
 RewriteCond %{REQUEST_URI} ^/static/(.*)$
