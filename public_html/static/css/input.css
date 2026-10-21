@@ -508,6 +508,12 @@
     text-underline-offset: 4px;
   }
 
+  /* Шеврон подчёркнут так же: цвет и плашка у открытого меню те же,
+     и без черты фокус на шевроне раскрытой группы не виден */
+  .nav-more:focus-visible svg {
+    border-bottom: 2px solid currentColor;
+  }
+
   /* Открытие — классом is-open, не атрибутом hidden: preflight делает
      [hidden] display:none !important, а на узком экране меню нужно раскрыть в ряд */
   .nav-menu {
