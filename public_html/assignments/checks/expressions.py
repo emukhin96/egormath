@@ -1115,12 +1115,60 @@ def _terms(side):
         return set()
 
 
-def check_equation(student, reference, *, strict=False):
+def _rational_coefficients(expr):
+    """Рациональная функция с рациональными коэффициентами: для неё
+    ``cancel`` даёт несократимую дробь, и её вид решает пропорциональность.
+    Корни из чисел, π и e — не сюда: ``cancel`` считает √2 отдельной
+    переменной и не сокращает √2·x+2 на x+√2."""
+    from sympy import Poly, cancel, fraction
+    symbols = sorted(expr.free_symbols, key=str)
+    if not symbols or not expr.is_rational_function(*symbols):
+        return False
+    try:
+        domains = [Poly(part, *symbols).domain for part in fraction(cancel(expr))]
+    except Exception:  # noqa: BLE001
+        return False
+    return all(domain.is_ZZ or domain.is_QQ for domain in domains)
+
+
+def _differs_at_points(ds, dr, count=4):
+    """Разности сторон в фиксированных вещественных точках не равны ни
+    ``dr``, ни ``-dr``: уравнения не пропорциональны с множителем ±1, и
+    дорогой ``Expr.equals`` (simplify, trigsimp) не нужен. Точки — из
+    (0; 1), как и его собственные пробы: длины положительны, углы острые,
+    обратные функции на главных ветвях (``\\arcsin(\\sin α)=α`` не опровергается).
+    Точки, где значение не вещественно или не определено, пропускаются."""
+    from sympy import Rational
+    symbols = sorted(ds.free_symbols | dr.free_symbols, key=str)
+    plus = minus = False
+    for k in range(count):
+        point = {s: Rational(37 + 23 * i + 41 * k, 98 + 30 * i + 44 * k)
+                 for i, s in enumerate(symbols)}
+        try:
+            a, b = ds.evalf(30, subs=point), dr.evalf(30, subs=point)
+            if not all(v.is_number and v.is_extended_real and v.is_finite for v in (a, b)):
+                continue
+            scale = 1 + abs(a) + abs(b)
+            plus = plus or abs(a - b) > scale * 1e-15
+            minus = minus or abs(a + b) > scale * 1e-15
+        except Exception:  # noqa: BLE001
+            continue
+        if plus and minus:
+            return True
+    return False
+
+
+def check_equation(student, reference, *, strict=False, numeric=True):
     """Уравнение, равносильное эталону: разности сторон пропорциональны с
     ненулевым числовым множителем (``y=x+5``, ``y-x=5``, ``2y=2x+10``,
     ``x=y-5``, ``y-2=x+3``). В строгом режиме (``| strict``) — приведённый
     вид: буквально ``±`` эталон (``2y=2x+10`` — нет) и ни одно слагаемое не
-    повторяется в обеих частях (``y-2=x+3`` — нет)."""
+    повторяется в обеих частях (``y-2=x+3`` — нет).
+
+    ``numeric=False`` — только точные преобразования, без ``Expr.equals``:
+    его вердикт зависит от генератора случайных чисел SymPy и от
+    PYTHONHASHSEED. Там, где он нужен, возвращается None, и сравнение
+    считает вычислитель формул (``mask.check_slot``)."""
     from sympy import Eq, cancel, expand
     _, expr = parse(student)
     if not isinstance(expr, Eq) or not isinstance(reference, Eq):
@@ -1136,6 +1184,14 @@ def check_equation(student, reference, *, strict=False):
             if ratio.is_number:
                 # Пропорциональная запись той же линии/кривой: 2x-6y=4 для x-3y=2.
                 return WRONG if strict or ratio == 0 else OK
+            if _rational_coefficients(ds) and _rational_coefficients(dr):
+                # Отношение рациональных функций сократилось не до числа:
+                # уравнения не пропорциональны, численная проба не нужна.
+                return WRONG
+            if not numeric:
+                return None
+            if _differs_at_points(ds, dr):
+                return WRONG
             same = equal(ds, dr)
             if same is False:
                 same = equal(ds, -dr)

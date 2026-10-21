@@ -714,6 +714,11 @@ def _number_needs_worker(slot, value):
     return any(number is None for number in literals)
 
 
+def _equation_needs_worker(slot, value):
+    return expressions.check_equation(value, slot.data, strict=slot.strict_equation,
+                                      numeric=False) is None
+
+
 def check_slot(slot, value):
     """Значение ученика для одного слота → '' / ok / wrong / unknown."""
     result = _check_slot(slot, value)
@@ -811,7 +816,14 @@ def _check_slot(slot, value):
     if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
         return formulas.check(value, slot.data, multiple=kind == EXPRESSIONS)
     if kind == EQUATION:
-        return expressions.check_equation(value, slot.data, strict=slot.strict_equation)
+        result = expressions.check_equation(value, slot.data, strict=slot.strict_equation,
+                                            numeric=False)
+        if result is None:
+            # Численное сравнение — в вычислителе: там зафиксированы зерно
+            # SymPy и PYTHONHASHSEED, а время ограничено.
+            result = formulas.check(value, formulas.FormulaSpec(
+                slot.reference, False, 'equation', strict=slot.strict_equation))
+        return result
     if kind == ORDER:
         order = _parse_order_value(value, len(slot.items))
         if order is None:
@@ -836,6 +848,7 @@ def check_mask(spec, values, known=None):
                 slot, (values.get(slot.name, '') or '').strip()) and (
                 slot.kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR, PROPORTION, RATIO)
                 or slot.kind == NUMBER and _number_needs_worker(slot, values.get(slot.name, ''))
+                or slot.kind == EQUATION and _equation_needs_worker(slot, values.get(slot.name, ''))
                 or slot.kind in (SET, PAIR, RANGE) and formats.collection_needs_worker(
                     values.get(slot.name, ''), slot.reference, kind=slot.kind)):
             # После сбоя не ждём вычислитель заново для каждой формулы;

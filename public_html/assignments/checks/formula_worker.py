@@ -9,6 +9,17 @@ CPU_LIMIT = (2, 3)
 # загруженном CI-раннере та же эквивалентность тратит больше процессора.
 # На проде переменной нет, и действует CPU_LIMIT.
 TEST_CPU_LIMIT_ENV = 'FORMULA_TEST_CPU_LIMIT'
+# Expr.equals, simplify и порядок проверки допущений в SymPy берут случайные
+# числа из общего генератора sympy.core.random. Без зерна один и тот же ответ
+# получал в разных процессах разные вердикты и разную стоимость (при одном
+# из зёрен — больше 25 с на одной формуле). Зерно задаётся заново в каждом
+# вызове и выбрано по замеру: на тяжёлых тестах и корпусе оно не попадает
+# в медленный путь.
+SYMPY_SEED = 4
+# Порядок обхода множеств в SymPy зависит от хэшей строк, то есть от
+# PYTHONHASHSEED. Вычислитель запускается с этим значением (formulas._spawn,
+# formula_fork); сам веб-процесс остаётся со случайным зерном хэшей.
+HASH_SEED = '0'
 
 
 def _cpu_limit():
@@ -25,6 +36,8 @@ def main():
         import resource
         resource.setrlimit(resource.RLIMIT_AS, (512 * 1024**2, 512 * 1024**2))
         resource.setrlimit(resource.RLIMIT_CPU, _cpu_limit())
+    from sympy.core.random import seed
+    seed(SYMPY_SEED)
     from .formulas import _parse_reference, _check
     from ..check_answer import MAX_EXPR_LEN
     from .sets import MAX_COLLECTION_LEN
@@ -48,6 +61,20 @@ def main():
             if 'value' in data:
                 result['status'] = check(data['value'], data['payload'], kind=kind,
                                        unordered=mode == 'pair-unordered')
+            print(json.dumps(result))
+            return
+        if mode == 'equation':
+            if numeric is not False or data['multiple']:
+                raise ValueError('уравнение проверяется в отдельном режиме')
+            from sympy import Eq
+            from .expressions import check_equation, parse_expr
+            reference = parse_expr(data['payload'])
+            if not isinstance(reference, Eq):
+                raise ValueError('эталон должен быть уравнением с «=»')
+            result = {'display': data['payload']}
+            if 'value' in data:
+                result['status'] = check_equation(data['value'], reference,
+                                                  strict=data.get('strict') is True)
             print(json.dumps(result))
             return
         if not isinstance(numeric, bool) or (numeric and (data['multiple'] or mode != 'expression')):
