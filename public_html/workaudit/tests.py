@@ -18,7 +18,7 @@ from problems.tests import make_teacher, make_student
 from worksheets.tests import make_worksheet
 from worksheets.models import WorksheetItem
 from .models import ActivityEvent, AnswerRevision
-from .services import activity_timeline, answer_snapshot, format_span, record_revision, visibility_summary
+from .services import activity_timeline, answer_snapshot, format_span, record_revision, swap_marks, visibility_summary
 
 
 @override_settings(INDEPENDENT_WORKS_ENABLED=True)
@@ -41,8 +41,8 @@ class AuditTests(TestCase):
         self.client.force_login(self.student)
 
     def event(self, **kwargs):
-        return dict(id=str(uuid.uuid4()), page=str(uuid.uuid4()), seq=0, kind='hidden',
-                    blocked=False, at=timezone.now().isoformat(), elapsed=100, **kwargs)
+        return {**dict(id=str(uuid.uuid4()), page=str(uuid.uuid4()), seq=0, kind='hidden',
+                       blocked=False, at=timezone.now().isoformat(), elapsed=100), **kwargs}
 
     def post_events(self, rows, kind='assignment'):
         pk = self.assignment.pk if kind == 'assignment' else self.attempt.pk
@@ -75,7 +75,7 @@ class AuditTests(TestCase):
         self.assertEqual(self.post_events([row]*51).status_code, 400)
         self.assertEqual(self.post_events([]).status_code, 400)
         url = reverse('workaudit:events', args=['assignment', self.assignment.pk])
-        self.assertEqual(self.client.post(url, 'x'*33000, content_type='application/json').status_code, 413)
+        self.assertEqual(self.client.post(url, 'x'*140000, content_type='application/json').status_code, 413)
         csrf_client = Client(enforce_csrf_checks=True)
         csrf_client.force_login(self.student)
         self.assertEqual(csrf_client.post(url, json.dumps({'events': [row]}), content_type='application/json').status_code, 403)
@@ -223,21 +223,74 @@ class AuditTests(TestCase):
     def test_settings_and_templates(self):
         self.client.force_login(self.teacher)
         url = reverse('workaudit:run_settings', args=[self.attempt.run_id])
-        self.assertEqual(self.client.post(url, {'restrict_clipboard': 'on', 'exempt': [self.attempt.pk]}).status_code, 302)
+        self.assertEqual(self.client.post(url, {'clipboard_mode': 'block', 'exempt': [self.attempt.pk]}).status_code, 302)
         self.attempt.refresh_from_db()
-        self.assertFalse(self.attempt.restrict_clipboard)
-        self.assertEqual(self.client.post(url, {'restrict_clipboard': 'on'}).status_code, 302)
+        self.assertEqual(self.attempt.clipboard_mode, 'watch')
+        self.assertEqual(self.client.post(url, {'clipboard_mode': 'block'}).status_code, 302)
         self.attempt.refresh_from_db()
-        self.assertTrue(self.attempt.restrict_clipboard)
+        self.assertEqual(self.attempt.clipboard_mode, 'block')
+        self.assertEqual(self.client.post(url, {'clipboard_mode': 'nonsense'}).status_code, 302)
+        self.attempt.refresh_from_db()
+        self.assertEqual(self.attempt.clipboard_mode, 'watch')
+        self.client.post(url, {'clipboard_mode': 'block'})
         self.assertEqual(self.client.post(url, {'exempt': ['999999']}).status_code, 400)
         self.assertContains(self.client.get(reverse('independentworks:progress', args=[self.attempt.run_id])), 'Копирование и вставка')
         self.assertContains(self.client.get(reverse('review_assignment', args=[self.assignment.pk])), 'Активность ученика')
         self.client.force_login(self.student)
         self.assertEqual(self.client.post(url, {}).status_code, 403)
         page = self.client.get(reverse('independentworks:attempt', args=[self.attempt.pk]))
-        self.assertContains(page, 'data-restricted="1"')
-        self.assertContains(page, 'data-audit-statement')
+        self.assertContains(page, 'data-clipboard="block"')
+        self.assertContains(page, f'data-audit-statement="{self.point.label}"')
         self.assertContains(page, 'data-audit-answer')
+
+    def test_copied_text_whole_statement_and_swap(self):
+        """Копирование пишет текст и доли условий; целиком — пометка учителю."""
+        page = str(uuid.uuid4())
+        whole = self.event(page=page, seq=0, kind='copy', text='Вычислите $2^{3}+15$', swapped='Вычислите $2^{3}+17$',
+                           statements=[{'label': '1', 'share': 96}])
+        part = self.event(page=page, seq=1, kind='copy', text='Вычислите', statements=[{'label': '2а', 'share': 40}])
+        legacy = self.event(page=page, seq=2, kind='copy')
+        self.assertEqual(self.post_events([whole, part, legacy]).status_code, 200)
+        events = {e.sequence: e for e in ActivityEvent.objects.all()}
+        self.assertEqual((events[0].whole, events[1].whole, events[2].whole), (True, False, False))
+        self.assertEqual(events[0].statements, [{'label': '1', 'share': 96}])
+        self.assertEqual(events[2].text, '')
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse('workaudit:activity', args=['assignment', self.assignment.pk]))
+        self.assertContains(response, 'скопировал условие задачи 1 целиком')
+        self.assertContains(response, 'скопировал часть условия задачи 2а (40%)')
+        self.assertContains(response, 'условие целиком — 1')
+        self.assertContains(response, 'Вычислите $2^{3}+<mark>17</mark>$')
+        self.assertContains(response, 'копирование условия')
+        review = self.client.get(reverse('review_assignment', args=[self.assignment.pk]))
+        self.assertContains(review, 'копировал условие целиком')
+        progress = self.client.get(reverse('worksheet_progress', args=[self.sheet.pk]))
+        self.assertContains(progress, 'копировал условие целиком')
+
+    def test_copied_text_validation_and_limit(self):
+        for extra in [{'text': 5}, {'swapped': ['x']}, {'statements': 'all'}, {'statements': [{'label': '1'}]},
+                      {'statements': [{'label': '1', 'share': 101}]}, {'statements': [{'label': 1, 'share': 50}]},
+                      {'statements': [{'label': '1', 'share': 50}, {'label': 1}]}]:
+            self.assertEqual(self.post_events([self.event(kind='copy', **extra)]).status_code, 400, extra)
+        self.assertEqual(self.post_events([self.event(kind='copy', text='я' * 3000)]).status_code, 200)
+        self.assertEqual(len(ActivityEvent.objects.get().text), 2000)
+        # Выделение всей страницы большого листка: пакет не теряется, условия обрезаются
+        many = [{'label': str(i), 'share': 100} for i in range(150)]
+        self.assertEqual(self.post_events([self.event(kind='copy', text='всё', statements=many)]).status_code, 200)
+        copied = ActivityEvent.objects.get(text='всё')
+        self.assertEqual((len(copied.statements), copied.whole), (100, True))
+        # Текст пишется только у копирования
+        self.post_events([self.event(kind='paste', text='чужой буфер')])
+        self.assertEqual(ActivityEvent.objects.get(kind='paste').text, '')
+
+    def test_swap_marks_and_attempt_progress_flag(self):
+        self.assertEqual(swap_marks('a=2, b=0,5', 'a=3, b=0,7'), 'a=<mark>3</mark>, b=<mark>0,7</mark>')
+        self.assertEqual(swap_marks('<b>2</b>', '<b>2</b>'), '&lt;b&gt;2&lt;/b&gt;')
+        self.assertEqual(swap_marks('12', '1 3'), '1 3')
+        self.post_events([self.event(kind='copy', text='x', statements=[{'label': '1', 'share': 100}])], 'attempt')
+        self.client.force_login(self.teacher)
+        self.assertContains(self.client.get(reverse('independentworks:progress', args=[self.attempt.run_id])), 'копировал условие целиком')
+        self.assertContains(self.client.get(reverse('independentworks:attempt', args=[self.attempt.pk])), 'копировал условие целиком')
 
     def test_database_exclusive_targets(self):
         with self.assertRaises(IntegrityError), transaction.atomic():
@@ -245,11 +298,14 @@ class AuditTests(TestCase):
 
     def test_assignment_clipboard_forms_and_retention_filter(self):
         from assignments.forms import AssignmentSettingsForm, AssignmentCreateForm
-        form = AssignmentSettingsForm({'restrict_clipboard': 'yes', 'due_action': 'keep'}, recipients=[self.assignment])
+        form = AssignmentSettingsForm({'clipboard_mode': 'swap', 'due_action': 'keep'}, recipients=[self.assignment])
         self.assertTrue(form.is_valid())
-        self.assertEqual(form.changes()['restrict_clipboard'], True)
+        self.assertEqual(form.changes()['clipboard_mode'], 'swap')
+        keep = AssignmentSettingsForm({'clipboard_mode': '', 'due_action': 'keep'}, recipients=[self.assignment])
+        self.assertTrue(keep.is_valid())
+        self.assertNotIn('clipboard_mode', keep.changes())
         creation = AssignmentCreateForm(teacher=self.teacher)
-        self.assertFalse(creation.fields['restrict_clipboard'].initial)
+        self.assertEqual(creation.fields['clipboard_mode'].initial, 'watch')
         row = self.event()
         self.post_events([row])
         ActivityEvent.objects.update(received_at=timezone.now()-timedelta(days=91))

@@ -17,6 +17,7 @@ from accounts.decorators import student_required, teacher_required
 from accounts.models import Profile, StudentGroup
 from problems.models import Task
 from worksheets.models import Collection, Worksheet
+from workaudit.clipboard import CLIPBOARD_WATCH, parse_mode
 
 from .checks import reference_text, slot_display
 from .forms import AssignmentCreateForm
@@ -35,7 +36,7 @@ def _check_visibility_or_default(post):
 
 @transaction.atomic
 def _create_assignments(*, worksheet, teacher, students, check_visibility,
-                        allow_photos, due_at, groups=(), individual_ids=(), restrict_clipboard=False):
+                        allow_photos, due_at, groups=(), individual_ids=(), clipboard_mode=CLIPBOARD_WATCH):
     """Создать назначения без дублей; используется обеими точками выдачи."""
     created = 0
     memberships = {}
@@ -59,7 +60,7 @@ def _create_assignments(*, worksheet, teacher, students, check_visibility,
                 'recipient_origin_known': True,
                 'check_visibility': check_visibility,
                 'allow_photos': allow_photos,
-                'restrict_clipboard': restrict_clipboard,
+                'clipboard_mode': clipboard_mode,
                 'due_at': due_at,
             })
         if was_created and student.pk not in individual_ids:
@@ -120,7 +121,7 @@ def assign_worksheet(request, worksheet_id):
         students=(profile.user for profile in my_students),
         check_visibility=check_visibility,
         allow_photos=allow_photos,
-        restrict_clipboard='restrict_clipboard' in request.POST,
+        clipboard_mode=parse_mode(request.POST.get('clipboard_mode')),
         due_at=due_at,
         groups=selected_groups,
         individual_ids=[pk for pk in request.POST.getlist('students') if pk.isdigit()],
@@ -378,7 +379,7 @@ def assignment_group_update(request, worksheet_id):
                     'recipient_origin_known': True,
                     'check_visibility': check_visibility,
                     'allow_photos': allow_photos,
-                    'restrict_clipboard': first.restrict_clipboard if first else False,
+                    'clipboard_mode': first.clipboard_mode if first else CLIPBOARD_WATCH,
                     'due_at': due_at,
                 })
             status = request.POST.get(f'status_{student_id}', '')
@@ -490,7 +491,7 @@ def assignment_create(request):
             students=form.cleaned_data['recipients'],
             check_visibility=form.cleaned_data['check_visibility'],
             allow_photos=form.cleaned_data['allow_photos'],
-            restrict_clipboard=form.cleaned_data['restrict_clipboard'],
+            clipboard_mode=form.cleaned_data['clipboard_mode'],
             due_at=form.cleaned_data['due_at'],
             groups=form.cleaned_data['groups'],
             individual_ids=form.cleaned_data['students'].values_list('pk', flat=True),

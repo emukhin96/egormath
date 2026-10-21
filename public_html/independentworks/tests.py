@@ -285,7 +285,7 @@ class IndependentWorkTests(TestCase):
             'students': [self.student.pk],
             'duration': 35,
             'max_variants': 1,
-            'restrict_clipboard': 'on',
+            'clipboard_mode': 'swap',
             'release_mode': 'manual',
             'action': 'draft',
         })
@@ -295,7 +295,7 @@ class IndependentWorkTests(TestCase):
         self.assertIsNone(draft.superseded_at)
         self.assertEqual(draft.duration, 35)
         self.assertEqual(draft.max_variants, 1)
-        self.assertTrue(draft.restrict_clipboard)
+        self.assertEqual(draft.clipboard_mode, 'swap')
         self.assertFalse(draft.allow_photos)
         self.assertEqual(draft.plan['students'], {str(self.student.pk): 1})
         catalog = self.client.get(self.url('catalog'))
@@ -311,7 +311,7 @@ class IndependentWorkTests(TestCase):
             })
         self.assertEqual(resumed.context['draft_saved'], True)
         self.assertContains(resumed, 'value="35"')
-        self.assertContains(resumed, 'id_restrict_clipboard" checked')
+        self.assertContains(resumed, '<option value="swap" selected>')
         self.assertNotContains(resumed, 'id_allow_photos" checked')
 
     def test_catalog_redirect_keeps_student_kind(self):

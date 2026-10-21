@@ -1,8 +1,12 @@
 """Общая история двух форматов работ без записи нажатий клавиш."""
+import re
 from copy import deepcopy
 from django.db import connection
-from django.db.models import F
-from .models import AnswerRevision
+from django.db.models import Count, F
+from django.utils.html import escape
+from django.utils.safestring import mark_safe
+from .clipboard import WHOLE_SHARE
+from .models import ActivityEvent, AnswerRevision
 
 
 def answer_snapshot(obj):
@@ -55,6 +59,14 @@ def visibility_summary(events):
     return result
 
 
+def whole_copies(kind, works):
+    """Сколько раз ученик копировал условие целиком: {pk работы: число}.
+    Окно — те же 90 дней, что хранит журнал."""
+    rows = (ActivityEvent.objects.filter(**{f'{kind}__in': works}, whole=True)
+            .values(kind).annotate(n=Count('pk')).values_list(kind, 'n'))
+    return dict(rows)
+
+
 def lock_work(model, pk):
     """Блокировка перед чтением: на SQLite предотвращает upgrade deadlock."""
     if connection.vendor == 'sqlite':
@@ -82,7 +94,7 @@ def activity_timeline(events, started_at=None):
     tab_no = {page: i + 1 for i, page in enumerate(order)}
     rows = []
     summary = {'away': 0, 'away_seconds': 0, 'away_max': 0, 'unknown': 0,
-               'copy': 0, 'paste': 0, 'drop': 0, 'blocked': 0, 'tabs': len(by_page)}
+               'copy': 0, 'paste': 0, 'drop': 0, 'blocked': 0, 'whole': 0, 'tabs': len(by_page)}
     for page, items in by_page.items():
         hidden = None
         for row in sorted(items, key=lambda e: e.sequence):
@@ -104,11 +116,13 @@ def activity_timeline(events, started_at=None):
                     summary['away_max'] = max(summary['away_max'], seconds)
                 hidden = None
             else:
-                rows.append({'kind': row.kind, 'label': row.get_kind_display(), 'at': row.client_at,
-                             'received': row.received_at, 'blocked': row.blocked, 'tab': tab_no[page],
-                             'seconds': None, 'short': False})
+                rows.append({'kind': row.kind, 'label': copy_label(row) if row.kind == 'copy' else row.get_kind_display(),
+                             'at': row.client_at, 'received': row.received_at, 'blocked': row.blocked,
+                             'tab': tab_no[page], 'seconds': None, 'short': False,
+                             'text': row.text, 'swapped': row.swapped, 'whole': row.whole})
                 summary[row.kind] += 1
                 summary['blocked'] += int(row.blocked)
+                summary['whole'] += int(row.whole)
         if hidden is not None:
             rows.append(_away(hidden, None, tab_no[page], open_ended=True))
             summary['away'] += 1; summary['unknown'] += 1
@@ -123,6 +137,35 @@ def activity_timeline(events, started_at=None):
     summary['away_max'] = round(summary['away_max'])
     summary['short'] = sum(1 for r in rows if r['short'])
     return rows, summary
+
+
+def copy_label(event):
+    """«скопировал условие задачи 3 целиком», «часть условия задачи 2 (40%)»."""
+    whole = [p['label'] for p in event.statements if p['share'] >= WHOLE_SHARE]
+    parts = [f"{p['label']} ({p['share']}%)" for p in event.statements if 0 < p['share'] < WHOLE_SHARE]
+    if not whole and not parts:
+        return 'скопировал текст' if event.text else event.get_kind_display()
+    phrases = []
+    if whole:
+        phrases.append(('условие задачи ' if len(whole) == 1 else 'условия задач ') + ', '.join(whole) + ' целиком')
+    if parts:
+        phrases.append(('часть условия задачи ' if len(parts) == 1 else 'части условий задач ') + ', '.join(parts))
+    return 'скопировал ' + ' и '.join(phrases)
+
+
+NUMBER = re.compile(r'(\d+(?:[.,]\d+)?)')
+
+
+def swap_marks(text, swapped):
+    """Подменённый текст с выделенными числами, которые отличаются от исходных.
+    Подмена меняет только числа, поэтому куски между ними совпадают; если нет
+    (старая запись, обрезка) — текст без выделения."""
+    before, after = NUMBER.split(text), NUMBER.split(swapped)
+    if len(before) != len(after):
+        return escape(swapped)
+    return mark_safe(''.join(
+        f'<mark>{escape(new)}</mark>' if i % 2 and new != old else escape(new)
+        for i, (old, new) in enumerate(zip(before, after))))
 
 
 def _away(hidden, seconds, tab, open_ended=False):

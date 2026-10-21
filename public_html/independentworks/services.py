@@ -15,6 +15,7 @@ from assignments.checks import parse_mask, check_mask, collect_values, filled_te
 from livefile import files as livefiles
 from problems.models import Task
 from problems.task_images import taskpic_indices
+from workaudit.clipboard import CLIPBOARD_WATCH
 from .models import Work, Position, Candidate, Run, Variant, Point, Asset, Attempt, Answer
 
 FLAGS = {'checks', 'answer', 'solution', 'comment'}
@@ -243,7 +244,7 @@ def correction_fingerprint(parent):
 
 def prepare(work, owner, students, duration=40, deadline=None, max_variants=None,
             allow_photos=True, self_check=False, release_mode='manual', release_flags=None,
-            parent=None, kind='initial', previous=None, restrict_clipboard=False):
+            parent=None, kind='initial', previous=None, clipboard_mode=CLIPBOARD_WATCH):
     if kind not in ('initial', 'correction', 'retake') or (kind == 'initial') != (parent is None):
         raise WorkError('Исходная попытка нужна только для исправления или пересдачи.')
     if parent is not None and parent.run.work_id != work.pk:
@@ -299,7 +300,7 @@ def prepare(work, owner, students, duration=40, deadline=None, max_variants=None
             previous.save(update_fields=['superseded_at'])
         return Run.objects.create(work=work, owner=owner, title=work.title, duration=duration,
                                   deadline=deadline, max_variants=max_variants, allow_photos=allow_photos,
-                                  self_check=self_check, restrict_clipboard=restrict_clipboard,
+                                  self_check=self_check, clipboard_mode=clipboard_mode,
                                   release_mode=release_mode, release_flags=flags,
                                   fingerprint=correction_fingerprint(parent) if kind == 'correction' else digest(data),
                                   plan=plan, kind=kind, parent=parent)

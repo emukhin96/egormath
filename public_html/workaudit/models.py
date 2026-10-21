@@ -13,6 +13,12 @@ class ActivityEvent(models.Model):
         ('hidden', 'Страница скрыта'), ('visible', 'Возврат на страницу'),
         ('copy', 'Копирование условия'), ('paste', 'Вставка ответа'), ('drop', 'Перенос текста')])
     blocked = models.BooleanField(default=False)
+    # Только у копирования: что выделил ученик (формулы — LaTeX в $…$), что
+    # ушло в буфер после подмены чисел и какую долю каких условий захватил.
+    text = models.TextField(blank=True)
+    swapped = models.TextField(blank=True)
+    statements = models.JSONField(default=list, blank=True)
+    whole = models.BooleanField(default=False)
     client_at = models.DateTimeField()
     elapsed_ms = models.PositiveBigIntegerField()
     received_at = models.DateTimeField(auto_now_add=True, db_index=True)

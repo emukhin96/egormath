@@ -22,6 +22,8 @@ from accounts.permissions import catalog_tasks, visible_tasks
 from livefile import etags
 from problems.models import Task, TaskSubitem
 from worksheets.models import Worksheet, Collection
+from workaudit.clipboard import CLIPBOARD_CHOICES
+from workaudit.services import whole_copies
 from .forms import WorkForm, RunForm
 from .models import Work, Position, Candidate, Family, Run, Attempt, Answer, Photo, Asset, Point
 from . import services as svc
@@ -504,7 +506,7 @@ def prepare_run(request, pk):
         previous = teacher_run(request, request.GET['resume'])
         if previous.work_id != work.pk or previous.parent_id != (parent.pk if parent else None) or previous.kind != kind:
             raise Http404
-        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'self_check', 'release_mode', 'release_flags', 'restrict_clipboard')}
+        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'self_check', 'release_mode', 'release_flags', 'clipboard_mode')}
         initial['students'] = list(previous.plan['students'])
     form = RunForm(request.POST or None, teacher=request.user, initial=initial)
     if request.method == 'POST' and form.is_valid():
@@ -932,6 +934,7 @@ def progress_context(run):
     attempts = list(run.attempts.select_related('student', 'run', 'variant', 'root').prefetch_related('variant__points__assets', 'answers__photos', 'answers__point', 'corrections__answers__point', 'root__variant__points', 'root__answers__point', 'root__corrections__answers__point'))
     numbers = sorted(set(p.position for a in attempts for p in a.variant.points.all()))
     people = []
+    copied = whole_copies('attempt', attempts)
     variant_stats = {}
     for a in attempts:
         svc.finish_expired(a)
@@ -947,7 +950,7 @@ def progress_context(run):
                     status = 'ok' if row['answer'].credit == 1 else 'draft' if row['answer'].credit else 'wrong'
                 points.append({'detail_url': reverse('independentworks:point_detail', args=[a.pk, row['point'].pk]), 'label': row['point'].label, 'status': status, 'status_label': row['grade'] or ('На проверке' if row['pending'] else {'ok': 'Верно', 'wrong': 'Неверно'}.get(row['auto'], 'Ответ не введён')), 'mark': row['grade_symbol'], 'attempt_count': 0})
             cells.append({'item': {'pk': number}, 'owner': {'pk': number}, 'points': points, 'hidden': not points})
-        people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a), 'show_cumulative': bool(a.root_id or any(c.started_at for c in a.corrections.all()))})
+        people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a), 'show_cumulative': bool(a.root_id or any(c.started_at for c in a.corrections.all())), 'copied_whole': copied.get(a.pk, 0)})
         variant_stat = variant_stats.setdefault(a.variant_id, {
             'number': a.variant.number, 'count': 0, 'started': 0,
             'by_number': {}, 'points': 0, 'done': 0})
@@ -971,7 +974,7 @@ def progress_context(run):
             stat['cells'].append(cell)
         stat['percent'] = round(100 * stat['done'] / stat['points']) if stat['points'] else 0
         del stat['by_number']
-    return {'independent': True, 'point_groups': [{'item': {'pk': n}, 'number': n, 'columns': [{'owner': {'pk': n}, 'label': 'Пункты'}]} for n in numbers], 'run': run, 'people': people, 'numbers': numbers, 'variant_stats': sorted(variant_stats.values(), key=lambda row: row['number']), 'variants': run.variants.all(), 'available_students': Profile.student_users_for(run.owner).exclude(pk__in=[a.student_id for a in attempts]), 'can_add_students': run.kind == 'initial' and bool(run.issued_at) and not run.closed_at and not (run.deadline and run.deadline <= timezone.now())}
+    return {'independent': True, 'clipboard_choices': CLIPBOARD_CHOICES, 'point_groups': [{'item': {'pk': n}, 'number': n, 'columns': [{'owner': {'pk': n}, 'label': 'Пункты'}]} for n in numbers], 'run': run, 'people': people, 'numbers': numbers, 'variant_stats': sorted(variant_stats.values(), key=lambda row: row['number']), 'variants': run.variants.all(), 'available_students': Profile.student_users_for(run.owner).exclude(pk__in=[a.student_id for a in attempts]), 'can_add_students': run.kind == 'initial' and bool(run.issued_at) and not run.closed_at and not (run.deadline and run.deadline <= timezone.now())}
 
 
 @enabled
