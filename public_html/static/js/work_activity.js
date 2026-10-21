@@ -4,9 +4,9 @@
   'use strict';
   const config = document.querySelector('[data-work-activity]');
   if (!config) return;
-  // watch — разрешить и записывать, swap — подменять числа, block — запретить
-  const mode = config.dataset.clipboard || 'watch';
-  const restricted = mode === 'block';
+  // Две независимые настройки; при запрете копирования подменять нечего.
+  const restricted = config.dataset.restricted === '1';
+  const swap = config.dataset.swap === '1' && !restricted;
   const csrf = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
   const page = crypto.randomUUID();
   const started = performance.now();
@@ -87,30 +87,10 @@
   }
 
   const TEXT_LIMIT = 2000;
-  const BLOCKS = 'p, div, li, br, h1, h2, h3, h4, tr, .katex-display';
-  // Выделение внутри формулы KaTeX расширяется до всей формулы — иначе
-  // в журнал попадут обрывки разметки, а не LaTeX.
-  function wholeFormulas(range) {
-    const result = range.cloneRange();
-    const start = (result.startContainer.nodeType === 1 ? result.startContainer : result.startContainer.parentElement)?.closest('.katex');
-    const end = (result.endContainer.nodeType === 1 ? result.endContainer : result.endContainer.parentElement)?.closest('.katex');
-    if (start) result.setStartBefore(start);
-    if (end) result.setEndAfter(end);
-    return result;
-  }
-  // Текст выделения: формулы — исходный LaTeX в $…$, абзацы — с новой строки.
-  function plainText(range) {
-    const fragment = wholeFormulas(range).cloneContents();
-    fragment.querySelectorAll('.katex').forEach(node => {
-      const tex = node.querySelector('annotation[encoding="application/x-tex"]')?.textContent;
-      const display = node.parentElement?.classList.contains('katex-display');
-      node.replaceWith(tex == null ? '' : display ? `$$${tex}$$` : `$${tex}$`);
-    });
-    // Номер задачи и звёзды сложности — не часть условия (и не числа для подмены).
-    fragment.querySelectorAll('script, style, button, [aria-hidden="true"], .ws-num, .stars').forEach(node => node.remove());
-    fragment.querySelectorAll(BLOCKS).forEach(node => node.append('\n'));
-    return fragment.textContent.replace(/[ \t\u00a0]+/g, ' ').replace(/ *\n[\s]*/g, '\n').trim();
-  }
+  // Номер задачи и звёзды сложности — не часть условия (и не числа для подмены).
+  const NOT_STATEMENT = '.ws-num, .stars';
+  // Чистый текст без дублей формул KaTeX — общий с копированием по сайту.
+  function plainText(range) { return window.EgorCopy.plainText(range, NOT_STATEMENT); }
   function bare(text) { return text.replace(/\s+/g, ''); }
   // Какую долю каждого условия захватило выделение — по длине текста без пробелов.
   function statementShares(selection) {
@@ -135,11 +115,7 @@
     // Как и сервер — не больше 100 условий на одно копирование.
     return shares.slice(0, 100);
   }
-  function selectionText(selection) {
-    const parts = [];
-    for (let i = 0; i < selection.rangeCount; i++) parts.push(plainText(selection.getRangeAt(i)));
-    return parts.join('\n');
-  }
+  function selectionText(selection) { return window.EgorCopy.selectionText(selection, NOT_STATEMENT); }
 
   // Подмена чисел: показатели степени, индексы, номера точек (A1), 0, 1 и
   // «круглые» углы не трогаем — условие остаётся правдоподобным, но ответ по
@@ -196,7 +172,7 @@
     const selection = window.getSelection();
     const text = selectionText(selection);
     const extra = {text: text.slice(0, TEXT_LIMIT), statements: statementShares(selection)};
-    if (mode === 'swap' && !restricted && event.clipboardData && text) {
+    if (swap && event.clipboardData && text) {
       const swapped = swapNumbers(text);
       event.clipboardData.setData('text/plain', swapped);
       event.preventDefault();

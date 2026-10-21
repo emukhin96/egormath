@@ -1,1 +1,1 @@
-{% if active %}<div data-work-activity="{% url 'workaudit:events' kind object.pk %}" data-clipboard="{{ mode }}"></div>{% endif %}
+{% if active %}<div data-work-activity="{% url 'workaudit:events' kind object.pk %}" data-restricted="{{ restricted|yesno:'1,0' }}" data-swap="{{ swap|yesno:'1,0' }}"></div>{% endif %}

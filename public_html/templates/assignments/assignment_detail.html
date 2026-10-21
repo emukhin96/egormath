@@ -16,7 +16,7 @@
   <div class="page-actions"><a class="btn btn-secondary" target="_blank" rel="noopener" href="{% url 'worksheet_pdf' assignment.worksheet.pk %}?variant=student">Скачать PDF</a></div>
 </div>
 
-{% if editable %}{% include 'workaudit/notice.html' with kind='assignment' object=assignment mode=assignment.clipboard_mode active=True %}{% endif %}
+{% if editable %}{% include 'workaudit/notice.html' with kind='assignment' object=assignment restricted=assignment.restrict_clipboard swap=assignment.swap_numbers active=True %}{% endif %}
 {% if assignment.status == 'reviewed' %}
 <div class="msg msg-success">
   {% include 'assignments/_result_summary.html' with units='задач' %}
@@ -208,7 +208,7 @@
 <script defer src="{% static 'js/assignment.js' %}?v=4"></script>
 {% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=2"></script>{% endif %}
 {% if editable %}
-<script defer src="{% static 'js/work_activity.js' %}"></script>
+<script defer src="{% static 'js/work_activity.js' %}?v=2"></script>
 <script defer src="{% static 'js/mask.js' %}?v=5"></script>
 <script defer src="{% static 'js/numberline.js' %}?v=5"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script>

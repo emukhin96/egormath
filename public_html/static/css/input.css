@@ -7190,11 +7190,6 @@
   .audit-flag { color: var(--warn); font-weight: 600; }
   .audit-whole > .audit-text { color: var(--warn); }
   .audit-whole .audit-copied, .audit-whole .audit-swapped { color: var(--text); }
-  .iw-clipboard-mode { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-  .iw-clipboard-mode select { width: auto; margin: 0; }
-  .assignment-clipboard-option { margin-top: var(--space-3); }
-  .assignment-clipboard-option select { width: auto; max-width: 100%; }
-  .assignment-clipboard-option .helptext { display: block; margin-top: var(--space-1); }
   /* Все кнопки доски — одной высоты 30px; «выбрано» у режимов — заливка
      акцентом, у параметров (цвет, толщина) — кольцо акцентом в 2px */
   .canvas-widget { container-type: inline-size; }

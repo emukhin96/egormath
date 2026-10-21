@@ -10,7 +10,7 @@
     <p class="page-meta">{% if teacher_view %}<span>{{ attempt.student.get_full_name|default:attempt.student.username }}</span>{% endif %}<span>{{ attempt.run.kind_label }}</span><span>вариант {{ attempt.variant.number }}</span><span>{{ attempt.run.duration }} мин.</span><span class="badge {% if attempt.finished %}badge-submitted{% else %}badge-assigned{% endif %}">{{ attempt.state }}</span></p>
   </div>
 </div>
-{% if teacher_view %}{% include 'workaudit/panel.html' with kind='attempt' object=attempt %}{% elif editable or can_start %}{% include 'workaudit/notice.html' with kind='attempt' object=attempt mode=attempt.clipboard_mode active=editable %}{% endif %}
+{% if teacher_view %}{% include 'workaudit/panel.html' with kind='attempt' object=attempt %}{% elif editable or can_start %}{% include 'workaudit/notice.html' with kind='attempt' object=attempt restricted=attempt.restrict_clipboard swap=attempt.swap_numbers active=editable %}{% endif %}
 {% if editable %}
 <div class="iw-clock" data-iw-timer data-ends="{{ attempt.ends_at|date:'c' }}" data-now="{{ now }}" role="timer" aria-label="Оставшееся время">Оставшееся время</div>
 <p class="helptext">Ответы сохраняются автоматически. Галочка у ответа означает, что он принят сервером.{% if attempt.run.self_check %} Кнопка «Проверить» показывает только верность текущего ответа и не завершает работу.{% endif %}</p>
@@ -56,7 +56,7 @@
 {% if teacher_view %}<script defer src="{% static 'js/work_history.js' %}"></script>{% endif %}
 {% if teacher_view %}<script defer src="{% static 'js/teacher_progress.js' %}"></script>{% endif %}
 {% if editable %}
-<script defer src="{% static 'js/work_activity.js' %}"></script>
+<script defer src="{% static 'js/work_activity.js' %}?v=2"></script>
 <script defer src="{% static 'js/check_badge.js' %}"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/independentworks.js' %}"></script>

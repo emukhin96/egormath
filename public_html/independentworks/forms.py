@@ -2,7 +2,7 @@ from django import forms
 from accounts.models import Profile, StudentGroup
 from .models import Work
 from assignments.forms import StudentChoiceField
-from workaudit.clipboard import CLIPBOARD_CHOICES, CLIPBOARD_WATCH, parse_mode
+from workaudit.clipboard import RESTRICT_LABEL, SWAP_HELP, SWAP_LABEL
 
 
 class WorkForm(forms.ModelForm):
@@ -17,12 +17,8 @@ class RunForm(forms.Form):
     duration = forms.IntegerField(label='Длительность, минут', min_value=1, max_value=1440, initial=40)
     deadline = forms.DateTimeField(label='Общее окончание (необязательно)', required=False, input_formats=['%Y-%m-%dT%H:%M', '%Y-%m-%dT%H:%M:%S'], widget=forms.DateTimeInput(format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}))
     max_variants = forms.IntegerField(label='Максимально вариантов', required=False, min_value=1)
-    # Необязательное: форма без поля (быстрая выдача, старые формы) — запись в журнал
-    clipboard_mode = forms.ChoiceField(
-        label='Копирование условий', choices=CLIPBOARD_CHOICES,
-        initial=CLIPBOARD_WATCH, required=False,
-        help_text='Скопированный текст попадает в журнал активности; при подмене '
-                  'в буфер уходит условие с другими числами.')
+    restrict_clipboard = forms.BooleanField(label=RESTRICT_LABEL, required=False)
+    swap_numbers = forms.BooleanField(label=SWAP_LABEL, required=False, help_text=SWAP_HELP)
     allow_photos = forms.BooleanField(
         label='Принимать фотографии', required=False, initial=False)
     self_check = forms.BooleanField(
@@ -30,9 +26,6 @@ class RunForm(forms.Form):
     withhold_answers = forms.BooleanField(label='Не показывать ответы сразу', required=False, initial=True, widget=forms.CheckboxInput(attrs={'role': 'switch'}))
     release_mode = forms.ChoiceField(label='Публикация', choices=[('manual', 'После одобрения учителя'), ('auto', 'Сразу после сдачи')])
     release_flags = forms.MultipleChoiceField(label='Что показывать после сдачи', required=False, choices=[('checks', 'Правильность и итог'), ('answer', 'Правильный ответ'), ('solution', 'Решение'), ('comment', 'Комментарий')], widget=forms.CheckboxSelectMultiple)
-
-    def clean_clipboard_mode(self):
-        return parse_mode(self.cleaned_data.get('clipboard_mode'))
 
     def __init__(self, *args, teacher, **kwargs):
         if args and args[0] is not None and 'release_toggle' in args[0]:
