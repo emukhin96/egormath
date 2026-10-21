@@ -4,7 +4,6 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 from assignments.models import Review
-from workaudit.clipboard import CLIPBOARD_CHOICES, CLIPBOARD_WATCH
 
 
 class Family(models.Model):
@@ -77,7 +76,8 @@ class Run(models.Model):
     duration = models.PositiveIntegerField('Длительность, минут', default=40)
     deadline = models.DateTimeField('Общее окончание', null=True, blank=True)
     max_variants = models.PositiveIntegerField(null=True, blank=True)
-    clipboard_mode = models.CharField(max_length=8, choices=CLIPBOARD_CHOICES, default=CLIPBOARD_WATCH)
+    restrict_clipboard = models.BooleanField(default=False)
+    swap_numbers = models.BooleanField(default=False)
     allow_photos = models.BooleanField(default=True)
     self_check = models.BooleanField(default=False)
     release_mode = models.CharField(max_length=12, default='manual')
@@ -149,9 +149,13 @@ class Attempt(models.Model):
         constraints = [models.UniqueConstraint(fields=['run', 'student'], name='iw_run_student')]
 
     @property
-    def clipboard_mode(self):
+    def restrict_clipboard(self):
         """Исключённому ученику копирование не запрещают и числа не подменяют."""
-        return CLIPBOARD_WATCH if self.clipboard_exempt else self.run.clipboard_mode
+        return self.run.restrict_clipboard and not self.clipboard_exempt
+
+    @property
+    def swap_numbers(self):
+        return self.run.swap_numbers and not self.clipboard_exempt
 
     @property
     def finished(self):

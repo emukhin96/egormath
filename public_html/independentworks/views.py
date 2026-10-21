@@ -22,7 +22,6 @@ from accounts.permissions import catalog_tasks, visible_tasks
 from livefile import etags
 from problems.models import Task, TaskSubitem
 from worksheets.models import Worksheet, Collection
-from workaudit.clipboard import CLIPBOARD_CHOICES
 from workaudit.services import whole_copies
 from .forms import WorkForm, RunForm
 from .models import Work, Position, Candidate, Family, Run, Attempt, Answer, Photo, Asset, Point
@@ -506,7 +505,7 @@ def prepare_run(request, pk):
         previous = teacher_run(request, request.GET['resume'])
         if previous.work_id != work.pk or previous.parent_id != (parent.pk if parent else None) or previous.kind != kind:
             raise Http404
-        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'self_check', 'release_mode', 'release_flags', 'clipboard_mode')}
+        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'self_check', 'release_mode', 'release_flags', 'restrict_clipboard', 'swap_numbers')}
         initial['students'] = list(previous.plan['students'])
     form = RunForm(request.POST or None, teacher=request.user, initial=initial)
     if request.method == 'POST' and form.is_valid():
@@ -998,7 +997,7 @@ def progress_context(run):
             stat['cells'].append(cell)
         stat['percent'] = round(100 * stat['done'] / stat['points']) if stat['points'] else 0
         del stat['by_number']
-    return {'independent': True, 'clipboard_choices': CLIPBOARD_CHOICES, 'point_groups': [{'item': {'pk': n}, 'number': n, 'columns': [{'owner': {'pk': n}, 'label': 'Пункты'}]} for n in numbers], 'run': run, 'people': people, 'numbers': numbers, 'variant_stats': sorted(variant_stats.values(), key=lambda row: row['number']), 'variants': run.variants.all(), 'available_students': Profile.student_users_for(run.owner).exclude(pk__in=[a.student_id for a in attempts]), 'can_add_students': run.kind == 'initial' and bool(run.issued_at) and not run.closed_at and not (run.deadline and run.deadline <= timezone.now())}
+    return {'independent': True, 'point_groups': [{'item': {'pk': n}, 'number': n, 'columns': [{'owner': {'pk': n}, 'label': 'Пункты'}]} for n in numbers], 'run': run, 'people': people, 'numbers': numbers, 'variant_stats': sorted(variant_stats.values(), key=lambda row: row['number']), 'variants': run.variants.all(), 'available_students': Profile.student_users_for(run.owner).exclude(pk__in=[a.student_id for a in attempts]), 'can_add_students': run.kind == 'initial' and bool(run.issued_at) and not run.closed_at and not (run.deadline and run.deadline <= timezone.now())}
 
 
 @enabled

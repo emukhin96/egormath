@@ -34,7 +34,7 @@
   </div>
 </div>
 {% endif %}
-{% if teacher_view %}{% include 'workaudit/panel.html' with kind='attempt' object=attempt %}{% elif editable or can_start %}{% include 'workaudit/notice.html' with kind='attempt' object=attempt mode=attempt.clipboard_mode active=editable %}{% endif %}
+{% if teacher_view %}{% include 'workaudit/panel.html' with kind='attempt' object=attempt %}{% elif editable or can_start %}{% include 'workaudit/notice.html' with kind='attempt' object=attempt restricted=attempt.restrict_clipboard swap=attempt.swap_numbers active=editable %}{% endif %}
 {% include 'independentworks/_attempt_result.html' %}
 {% if can_start and not teacher_view %}
 <div class="card assignment-submit-card">
@@ -82,7 +82,7 @@
 {% if teacher_view %}<script defer src="{% static 'js/work_history.js' %}"></script>{% endif %}
 {% if teacher_view %}<script defer src="{% static 'js/teacher_progress.js' %}"></script>{% endif %}
 {% if editable %}
-<script defer src="{% static 'js/work_activity.js' %}"></script>
+<script defer src="{% static 'js/work_activity.js' %}?v=2"></script>
 <script defer src="{% static 'js/check_badge.js' %}"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/independentworks.js' %}?v=2"></script>
