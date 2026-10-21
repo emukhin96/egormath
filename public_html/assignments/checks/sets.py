@@ -842,7 +842,8 @@ def parse_range(text, *, value_parser=None, equal=None):
     """Числовое множество: скобочная запись, объединения, неравенства
     (``x>5, x<-5``; ``1<x<4``; ``x \\le -5 или x>5``), «нет решений», R.
     Части через запятую, «;», «или», ∪ объединяются, через «и» — пересекаются.
-    Часть ``x \\ne k``, отделённая только запятой или «;», выкалывает точку
+    Часть ``x \\ne k`` (или ``x \\ne 1 и x \\ne 2``), отделённая только
+    запятой или «;», выкалывает точку
     из остальных частей: в записи ``-1 \\le x \\le 3, x \\ne 1`` запятая —
     «и», а не объединение (иначе вышла бы вся прямая). Без других частей
     ``x \\ne 1, x \\ne 2`` — прямая без двух точек. При «или» и ∪ рядом
@@ -883,7 +884,7 @@ def parse_range(text, *, value_parser=None, equal=None):
             saw_atom = True
             acc = parsed if acc is None else _intersect_lists(acc, parsed)
         listed = all(s in (',', ';') for s in separators[max(i-1, 0):i+1])
-        if listed and len(and_parts) == 1 and '!=' in and_parts[0] and _punctured_line(acc):
+        if listed and all('!=' in p for p in and_parts) and _punctured_line(acc):
             excluded.append(acc)
             continue
         saw_main = True
