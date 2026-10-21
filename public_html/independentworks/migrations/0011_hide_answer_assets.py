@@ -13,22 +13,9 @@ def refs(owner, fields):
             for m in TASKPIC_NUM_RE.finditer(getattr(owner, field, '') or '')}
 
 
-def fixed_audiences(apps, cache, source_key, snapshot, name, audiences):
-    """Новые адресаты вложения или None, если менять нечего.
-
-    Повторяет candidate_data после исправления: рисунок без ссылки в
-    условии пункта, но со ссылкой в любом поле ответа/решения задачи,
-    — не картинка условия.
-    """
-    if 'statement' not in audiences:
-        return None
-    match = re.fullmatch(r't(\d+)(?::s(\d+))?', source_key or '')
-    if not match:
-        return None
-    task_id = int(match.group(1))
+def task_state(apps, cache, task_id):
     if task_id not in cache:
-        Task = apps.get_model('problems', 'Task')
-        task = Task.objects.filter(pk=task_id).first()
+        task = apps.get_model('problems', 'Task').objects.filter(pk=task_id).first()
         if task is None:
             cache[task_id] = None
         else:
@@ -38,46 +25,75 @@ def fixed_audiences(apps, cache, source_key, snapshot, name, audiences):
             for part in parts.values():
                 material |= refs(part, ANSWER_FIELDS + SOLUTION_FIELDS)
             cache[task_id] = (task, images, parts, material)
-    if cache[task_id] is None or name not in cache[task_id][1]:
+    return cache[task_id]
+
+
+def fixed_audiences(apps, cache, source_key, snapshot, sources):
+    """Новые адресаты вложений пункта (по порядку ``sources``) или None.
+
+    Повторяет candidate_data после исправления: рисунок без ссылки в
+    условии пункта, но со ссылкой в любом поле ответа/решения задачи,
+    — не картинка условия. ``sources`` — пары (имя, адресаты) в порядке
+    снимка. Номера \\taskpic снимка сопоставляются с текущими картинками
+    задачи, поэтому пункт пропускаем, если картинки с выдачи могли
+    сдвинуться: имена снимка не идут в текущем порядке или ссылка
+    условия указывает не на картинку условия из снимка. Сомнение
+    оставляет картинку в условии — так ученик её не теряет.
+    """
+    if not any('statement' in audiences for _, audiences in sources):
         return None
-    task, images, parts, material = cache[task_id]
-    index = images.index(name)
+    match = re.fullmatch(r't(\d+)(?::s(\d+))?', source_key or '')
+    state = match and task_state(apps, cache, int(match.group(1)))
+    if not state:
+        return None
+    task, images, parts, material = state
+    names = [name for name, _ in sources]
+    if any(name not in images for name in names):
+        return None
+    positions = [images.index(name) for name in names]
+    if positions != sorted(set(positions)):
+        return None
     statement = {int(m.group(1)) - 1 for m in TASKPIC_NUM_RE.finditer(
         (snapshot.get('common') or '') + (snapshot.get('text') or ''))}
-    if index in statement or index not in material:
+    shown = {name for name, audiences in sources if 'statement' in audiences}
+    if any(index >= len(images) or images[index] not in shown for index in statement):
         return None
     owner = parts.get(int(match.group(2))) if match.group(2) else task
     if owner is None:
         return None
-    result = []
-    if index in refs(owner, ANSWER_FIELDS):
-        result.append('answer')
-    if index in refs(owner, SOLUTION_FIELDS):
-        result.append('solution')
-    return result
+    result, changed = [], False
+    for (name, audiences), index in zip(sources, positions):
+        if 'statement' in audiences and index not in statement and index in material:
+            audiences = [kind for kind, fields in (('answer', ANSWER_FIELDS), ('solution', SOLUTION_FIELDS))
+                         if index in refs(owner, fields)]
+            changed = True
+        result.append(audiences)
+    return result if changed else None
 
 
 def forwards(apps, schema_editor):
-    Asset = apps.get_model('independentworks', 'Asset')
+    Point = apps.get_model('independentworks', 'Point')
     Run = apps.get_model('independentworks', 'Run')
     cache = {}
-    for asset in Asset.objects.select_related('point').iterator():
-        point = asset.point
-        audiences = fixed_audiences(apps, cache, point.source_key, point.snapshot, asset.name, asset.audiences)
-        if audiences is not None:
-            asset.audiences = audiences
-            asset.save(update_fields=['audiences'])
+    for point in Point.objects.filter(assets__isnull=False).distinct().iterator():
+        assets = list(point.assets.order_by('pk'))
+        audiences = fixed_audiences(apps, cache, point.source_key, point.snapshot, [(a.name, a.audiences) for a in assets])
+        for asset, new in zip(assets, audiences or []):
+            if new != asset.audiences:
+                asset.audiences = new
+                asset.save(update_fields=['audiences'])
     # Невыданные предпросмотры выдаются из плана — правим и его.
     for run in Run.objects.filter(issued_at__isnull=True).iterator():
         changed = False
         for variant in (run.plan or {}).get('variants', []):
             for row in variant:
                 snapshot = row.get('snapshot', {})
-                for source in snapshot.get('assets', []):
-                    audiences = fixed_audiences(apps, cache, row.get('source_key'), snapshot, source.get('name'), source.get('audiences', []))
-                    if audiences is not None:
-                        source['audiences'] = audiences
-                        changed = True
+                sources = snapshot.get('assets', [])
+                audiences = fixed_audiences(apps, cache, row.get('source_key'), snapshot,
+                                            [(s.get('name'), s.get('audiences', [])) for s in sources])
+                for source, new in zip(sources, audiences or []):
+                    source['audiences'] = new
+                    changed = True
         if changed:
             run.save(update_fields=['plan'])
 

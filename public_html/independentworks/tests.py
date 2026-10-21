@@ -642,6 +642,28 @@ class IndependentWorkTests(TestCase):
         self.assertEqual({s['name']: s['audiences'] for s in pending.plan['variants'][0][0]['snapshot']['assets']},
                          {'figure.png': ['statement'], 'answer.png': ['answer'], 'loose.png': ['statement']})
 
+    def test_migration_skips_points_whose_pictures_moved_after_issue(self):
+        # Номера \taskpic снимка относятся к порядку картинок на момент
+        # выдачи: если его поменяли, рисунок условия не трогаем.
+        import importlib
+        from django.apps import apps
+        migration = importlib.import_module('independentworks.migrations.0011_hide_answer_assets')
+        stream = io.BytesIO()
+        Image.new('RGB', (10, 10)).save(stream, 'PNG')
+        figure = TaskImage.objects.create(task=self.task, order=1, image=ContentFile(stream.getvalue(), name='figure.png'))
+        TaskImage.objects.create(task=self.task, order=2, image=ContentFile(stream.getvalue(), name='answer.png'))
+        self.task.text_latex += r' \taskpic{1}'
+        self.task.author_answer_latex = '4'
+        self.task.answer_latex = r'4 \taskpic{2}'
+        self.task.save()
+        a = self.issued()
+        Asset.objects.update(audiences=['statement'])
+        figure.order = 3
+        figure.save(update_fields=['order'])
+        migration.forwards(apps, None)
+        self.assertEqual({x.name: x.audiences for x in Asset.objects.filter(point__variant=a.variant)},
+                         {'figure.png': ['statement'], 'answer.png': ['statement']})
+
     def test_export_plain_text(self):
         self.student.first_name = '=1+1'; self.student.save()
         a = self.begin()
