@@ -146,7 +146,11 @@ def _run_worker(payload):
     непригоден. Обмен только JSON, ввод не исполняется как Python.
     """
     key = json.dumps(payload, sort_keys=True)
-    if _recently_failed(key):
+    # Готовые деревья эталона — производные данные: сбой помним по самому
+    # вводу, а не по многокилобайтному ключу с деревьями.
+    failure_key = key if 'trees' not in payload else json.dumps(
+        {name: value for name, value in payload.items() if name != 'trees'}, sort_keys=True)
+    if _recently_failed(failure_key):
         raise FormulaBusy('проверка этого выражения недавно не удалась; повторите позже')
     if sys.platform == 'linux':
         from .formula_fork import warmup
@@ -173,18 +177,63 @@ def _run_worker(payload):
     except (subprocess.TimeoutExpired, OSError, ValueError) as error:
         # Сбой запоминается только для этого входа: повторные форки того же
         # выражения под нагрузкой не нужны, остальные проверки продолжаются.
-        _remember_failure(key)
+        _remember_failure(failure_key)
         raise FormulaUnavailable('проверка временно недоступна') from error
     finally:
         _worker_slots.release()
 
 
 @lru_cache(maxsize=256)
-def _reference_response(payload, multiple, mode='expression'):
-    result = _run_worker({'payload': payload, 'multiple': multiple, 'mode': mode})
+def _reference_response(payload, multiple, mode='expression', numeric=False):
+    """Проверка эталона в вычислителе: показ, ошибка и деревья его разбора."""
+    request = {'payload': payload, 'multiple': multiple, 'mode': mode}
+    if numeric:
+        request['numeric'] = True
+    result = _run_worker(request)
     if result.get('unavailable'):
-        raise ValueError('временная недоступность проверки')
+        raise FormulaUnavailable('временная недоступность проверки')
     return result
+
+
+# Эталон короче этого разбирается в том же процессе, что и ответ: отдельный
+# процесс для него дороже самого разбора, а до лимита ему далеко.
+PREPARED_REFERENCE_LEN = 40
+# Эталоны, чья подготовка не удалась: до этого момента ответы на них
+# проверяются прежним путём, подготовка не повторяется при каждой попытке.
+PREPARE_RETRY_DELAY = 600
+_unprepared = {}
+
+
+def _reference_trees(reference):
+    """Деревья разбора эталона из его проверки (кэш процесса gunicorn).
+
+    Эталон — сохранённые данные учителя. Длинный эталон разбирается
+    отдельным вызовом вычислителя со своим лимитом, а проверка ответа
+    получает готовые деревья и разбирает только ввод ученика: иначе разбор
+    эталона (до 0,45 с CPU локально) съедает лимит в каждом вызове.
+
+    Подготовка — только ускорение. Её сбой (таймаут, лимит CPU, полная
+    самопроверка коллекции дороже ответа) не должен останавливать
+    проверку всех ответов на поле: ответ проверяется прежним путём, с
+    разбором эталона в том же вызове. Занятость слотов — не сбой эталона:
+    проверка откладывается целиком, как и раньше.
+    """
+    if reference.tolerance is not None or len(reference.payload) < PREPARED_REFERENCE_LEN:
+        return None
+    key = (reference.payload, reference.multiple, reference.mode, reference.numeric)
+    with _failed_lock:
+        if _unprepared.get(key, 0) > time.monotonic():
+            return None
+    try:
+        return _reference_response(*key).get('trees')
+    except FormulaBusy:
+        raise
+    except FormulaUnavailable:
+        with _failed_lock:
+            if len(_unprepared) >= _FAILED_LIMIT:
+                _unprepared.clear()
+            _unprepared[key] = time.monotonic() + PREPARE_RETRY_DELAY
+        return None
 
 
 def parse_reference(payload, multiple=False, *, validate=False, mode='expression'):
@@ -224,6 +273,9 @@ def _checked(value, reference):
         payload['tolerance'] = reference.tolerance
     if reference.strict:
         payload['strict'] = True
+    trees = _reference_trees(reference)
+    if trees:
+        payload['trees'] = trees
     result = _run_worker(payload)
     if result.get('unavailable'):
         raise FormulaUnavailable('временная недоступность проверки')
@@ -596,7 +648,7 @@ def _parse(text, positive=(), *, numeric=False):
     # Выбираем одну ветвь неоднозначной грамматики до анализа областей.
     # Повторный разбор альтернатив в каждом поддереве тратит время и
     # может подставить области от другой интерпретации того же ввода.
-    tree = expressions.resolve(expressions.raw_tree(text))
+    tree = expressions.resolved_tree(text)
     numeric_pi = marker if numeric and has_pi else None
     value = expressions.evaluate(tree, numeric=numeric, pi_marker=numeric_pi)
     if tree is None or not isinstance(value, Expr):
@@ -1350,6 +1402,144 @@ def _counterexample(difference, reference):
     return False
 
 
+# Быстрый численный отказ до simplify/equals. Точки — «неудобные» рациональные
+# значения, далёкие от школьных констант (0, 1, 1/2, π/4…): так реже нуль
+# знаменателя или особая точка. У параметра без positive знак задаёт бит
+# номера точки: в первой точке все параметры положительны, дальше
+# встречаются все сочетания знаков для трёх параметров; малые и большие
+# величины есть среди и положительных, и отрицательных значений.
+_SAMPLE_VALUES = ((13, 11), (29, 7), (41, 9), (7, 19), (5, 37), (31, 13), (23, 7), (17, 23))
+_SAMPLE_ENOUGH = 3
+# Значения считаются с 30 знаками и strict: недостижимая точность — не число.
+# Расхождение больше 1e-9 от величины — не погрешность. Модуль больше 10^12
+# в точке с параметрами — признак полюса или нуля знаменателя, такая точка
+# не годится; у числа без параметров подстановки нет, и порога тоже.
+_SAMPLE_DIGITS = 30
+_SAMPLE_TOLERANCE = '1e-9'
+_SAMPLE_BOUND = 10**12
+# Показатель степени больше этого по модулю — не школьная запись: такие
+# выражения в точке не считаются (см. _sampleable).
+_SAMPLE_POWER = 1000
+
+
+@lru_cache(maxsize=1024)
+def _sampleable(expression):
+    """Значение в точке считается без взрыва величин: нет огромных
+    показателей (x^{10^9}, sin x^{10^9}) и башен экспонент (x^{x^{x}},
+    e^{e^x}). Иначе точка не проверяется: решает символьное сравнение,
+    как раньше, — оно отклоняет такой ввод дёшево.
+    """
+    from sympy import exp, preorder_traversal
+
+    def exponential(node):
+        return isinstance(node, exp) or (node.is_Pow and not node.exp.is_number)
+
+    for node in preorder_traversal(expression):
+        if node.is_Pow and node.exp.is_number and abs(node.exp) > _SAMPLE_POWER:
+            return False
+        if exponential(node):
+            power = node.args[0] if isinstance(node, exp) else node.exp
+            if any(exponential(inner) for inner in preorder_traversal(power)):
+                return False
+    return True
+
+
+def _sample_number(expression, point):
+    """(вещественная, мнимая части) в точной точке; None — нет надёжного числа.
+
+    Точка подставляется в evalf, а не в само выражение: точная подстановка
+    раскрыла бы x^{999999999} в дробь из миллиардов бит. strict отличает
+    точный нуль (полюс, корень из нуля) от числа: такая точка не годится.
+    """
+    from sympy import Float, Rational
+    if not _sampleable(expression):
+        return None
+    try:
+        value = expression.evalf(_SAMPLE_DIGITS, subs=point, strict=True)
+        parts = value.as_real_imag()
+    except MemoryError:
+        raise
+    except Exception:  # noqa: BLE001 — нет надёжного числа: точка не годится
+        return None
+    if (not all(isinstance(part, (Float, Rational)) for part in parts)
+            or point and abs(parts[0]) + abs(parts[1]) > _SAMPLE_BOUND):
+        return None
+    return parts
+
+
+def _sample_value(expression, point):
+    """Вещественное значение в точной точке; None — не число или не вещественно."""
+    parts = _sample_number(expression, point)
+    return parts[0] if parts is not None and parts[1] == 0 else None
+
+
+def _clearly_different(parts, target):
+    """Значение заведомо отличается от вещественного эталона: разность
+    или мнимая часть больше погрешности 30 знаков. Невещественный ответ
+    там, где эталон определён, — лишняя дырка в области: «неверно», как
+    и у точной проверки области (``_domain_counterexample``)."""
+    from sympy import Float
+    if parts is None or target is None:
+        return False
+    tolerance = Float(_SAMPLE_TOLERANCE) * max(1, abs(target))
+    return abs(parts[0] - target) > tolerance or abs(parts[1]) > tolerance
+
+
+def _sample_points(reference):
+    """Точные точки, где эталон определён: все его исходные части
+    вещественны и конечны, знаменатели не равны нулю. Как и
+    ``_counterexample``, точка может только опровергнуть ответ.
+
+    Значения каждой части не считаем: сложение, умножение, целые
+    неотрицательные степени, sin, cos, arctg, exp и модуль определены при
+    любых вещественных аргументах. Проверяем только корни, отрицательные
+    степени и прочие функции — их немного даже у длинной формулы.
+    """
+    from sympy import Abs, Float, Rational, atan, cos, exp, preorder_traversal, sign, sin
+    safe = (sin, cos, atan, exp, Abs, sign)
+    parts = {part for item in reference.items for part in (item.expression, *item.components)}
+    denominators = {d for item in reference.items for d in item.denominators}
+    risky = {node for part in parts | denominators for node in preorder_traversal(part)
+             if (node.is_Pow and not (node.exp.is_Integer and node.exp >= 0))
+             or (node.is_Function and not isinstance(node, safe))}
+
+    def admissible(point):
+        if any(_sample_value(node, point) is None for node in risky):
+            return False
+        for denominator in denominators:
+            value = _sample_value(denominator, point)
+            if value is None or abs(value) <= Float('1e-12'):
+                return False
+        return True
+
+    samples = []
+    for index in range(len(_SAMPLE_VALUES)):
+        point = {}
+        for position, symbol in enumerate(reference.symbols):
+            value = Rational(*_SAMPLE_VALUES[(index + 3 * position) % len(_SAMPLE_VALUES)])
+            negative = (index >> (position % 3)) & 1 and not symbol.is_positive
+            point[symbol] = -value if negative else value
+        if admissible(point):
+            values = {id(item): _sample_value(item.expression, point) for item in reference.items}
+            if all(value is not None for value in values.values()):
+                samples.append((point, values))
+        if len(samples) >= _SAMPLE_ENOUGH or not reference.symbols:
+            break
+    return samples
+
+
+def _differs(value, expected, samples):
+    """Ответ заведомо не равен эталону: в точке его области значения различны."""
+    return any(_clearly_different(_sample_number(value, point), values[id(expected)])
+               for point, values in samples)
+
+
+def _numbers_differ(first, second):
+    """Два вещественных числа без параметров заведомо различны — без simplify."""
+    value = _sample_value(first, {})
+    return value is not None and _clearly_different((value, 0), _sample_value(second, {}))
+
+
 _INVERSE_RANGES = {'asin': (-1, 1), 'acos': (0, 2), 'atan': (-1, 1)}  # в долях π/2
 
 
@@ -1475,6 +1665,7 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
     substituted = set().union(*(v.atoms(atan) for _, v in reference.substitutions))
     # Сохраняем кратность: лишняя или повторная длина не заменяет другую.
     remaining = list(reference.items)
+    samples = None
     for item in student:
         # Сначала ищем уже совпавшее выражение: при перестановке диагоналей
         # сравнение с другой диагональю может зря исчерпать бюджет SymPy.
@@ -1487,6 +1678,13 @@ def _check(value, reference, multiple=False, mode='expression', *, numeric=False
             continue
         uncertain = False
         for index, expected in enumerate(remaining):
+            # Неверная формула видна уже в точной точке области эталона:
+            # доказывать неравенство через simplify/equals не нужно. Это
+            # самая дорогая ветка — до секунды CPU у длинных формул.
+            if samples is None:
+                samples = _sample_points(reference)
+            if _differs(item.expression, expected, samples):
+                continue
             # Полный квадрат под корнем может быть раскрыт: sqrt(x²-2x+1).
             # factor сохраняет реальный модуль, в отличие от принудительного
             # извлечения корня; исходные области уже проверены отдельно.

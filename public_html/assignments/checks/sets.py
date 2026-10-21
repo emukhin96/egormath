@@ -226,8 +226,9 @@ def _has_top_level_semicolon(text, start):
     return False
 
 
-def _split_top(text, separator):
-    """Делить только вне скобок, с ограничением вложенности и числа частей."""
+def _split_top(text, separator, separators=None):
+    """Делить только вне скобок, с ограничением вложенности и числа частей.
+    В список ``separators`` (если передан) попадают найденные разделители."""
     parts, start, depth = [], 0, 0
     i = 0
     while i < len(text):
@@ -246,6 +247,8 @@ def _split_top(text, separator):
                 parts.append(text[start:i].strip())
                 if len(parts) >= MAX_COLLECTION_ITEMS:
                     return None
+                if separators is not None:
+                    separators.append(match.group().strip())
                 i = match.end()
                 start = i
                 continue
@@ -840,9 +843,24 @@ def _parse_range_atom(piece, tokens, value_parser=None, equal=None):
     return [(v, v, '[', ']') for v in values] if values is not None else None
 
 
+def _punctured_line(intervals):
+    """Вся прямая без конечного числа точек (так разбирается ``x \\ne 1``)."""
+    if len(intervals) < 2 or intervals[0][0] != -INF or intervals[-1][1] != INF:
+        return False
+    return all(a[1] == b[0] and a[3] == ')' and b[2] == '('
+               for a, b in zip(intervals, intervals[1:]))
+
+
 def parse_range(text, *, value_parser=None, equal=None):
     """Числовое множество: скобочная запись, объединения, неравенства
     (``x>5, x<-5``; ``1<x<4``; ``x \\le -5 или x>5``), «нет решений», R.
+    Части через запятую, «;», «или», ∪ объединяются, через «и» — пересекаются.
+    Часть ``x \\ne k`` (или ``x \\ne 1 и x \\ne 2``), отделённая только
+    запятой или «;», выкалывает точку
+    из остальных частей: в записи ``-1 \\le x \\le 3, x \\ne 1`` запятая —
+    «и», а не объединение (иначе вышла бы вся прямая). Без других частей
+    ``x \\ne 1, x \\ne 2`` — прямая без двух точек. При «или» и ∪ рядом
+    ``x \\ne k`` остаётся объединением: ``x>0 или x \\ne 1`` — вся прямая.
     Возвращает нормализованное множество промежутков; None — не разобрано.
     ``value_parser``/``equal`` — точные значения и сравнение в вычислителе."""
     text = _collection_text(text)
@@ -858,12 +876,13 @@ def parse_range(text, *, value_parser=None, equal=None):
     if finite is not None:
         return _normalize_intervals([(v, v, '[', ']') for v in finite])
     rest, tokens = _stash_intervals(text)
-    intervals = []
-    saw_atom = False
-    union_parts = _split_top(rest, _UNION_RE)
+    intervals, excluded = [], []
+    saw_atom = saw_main = False
+    separators = []
+    union_parts = _split_top(rest, _UNION_RE, separators)
     if union_parts is None:
         return None
-    for union_part in union_parts:
+    for i, union_part in enumerate(union_parts):
         and_parts = _split_top(union_part, _AND_RE)
         if and_parts is None:
             return None
@@ -877,11 +896,23 @@ def parse_range(text, *, value_parser=None, equal=None):
                 return None
             saw_atom = True
             acc = parsed if acc is None else _intersect_lists(acc, parsed)
+        listed = all(s in (',', ';') for s in separators[max(i-1, 0):i+1])
+        if listed and all('!=' in p for p in and_parts) and _punctured_line(acc):
+            excluded.append(acc)
+            continue
+        saw_main = True
         intervals.extend(acc)
         if len(intervals) > MAX_COLLECTION_ITEMS:
             return None
     if not saw_atom:
         return None
+    if excluded:
+        if not saw_main:
+            intervals = [(-INF, INF, '(', ')')]
+        for points in excluded:
+            intervals = _intersect_lists(intervals, points)
+            if len(intervals) > MAX_COLLECTION_ITEMS:
+                return None
     return _normalize_intervals(intervals)
 
 

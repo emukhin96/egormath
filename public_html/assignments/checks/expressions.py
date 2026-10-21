@@ -623,7 +623,47 @@ def parse(text):
 
 def parse_expr(text):
     """Только sympy-выражение (для эталонов и простых проверок)."""
-    return parse(text)[1]
+    return evaluate(resolved_tree(text))
+
+
+# Память разборов «текст → дерево после resolve». Включается только в
+# процессе вычислителя (formula_worker): он живёт один вызов, а в процессе
+# gunicorn разборы ввода не накапливаются. Разбор Earley — основная часть
+# стоимости проверки (≈12 мс даже на одну букву-лист), а эталон и его
+# имена переменных разбираются в каждом вызове заново.
+_resolved_trees = None
+
+
+def resolved_tree(text):
+    """``resolve(raw_tree(text))``; в вычислителе — один раз на текст."""
+    if _resolved_trees is None:
+        return resolve(raw_tree(text))
+    if text not in _resolved_trees:
+        _resolved_trees[text] = resolve(raw_tree(text))
+    return _resolved_trees[text]
+
+
+def tree_to_data(node):
+    """Дерево после resolve → JSON-данные: деревья эталона передаются
+    следующему вычислителю готовыми, без повторного разбора Earley."""
+    if node is None:
+        return None
+    if _is_tree(node):
+        return {'d': str(node.data), 'c': [tree_to_data(c) for c in node.children]}
+    return [node.type, str(node)]
+
+
+def tree_from_data(data):
+    """Обратно к дереву lark; ValueError — данные не дерево разбора."""
+    from lark import Token, Tree
+    if data is None:
+        return None
+    if isinstance(data, dict) and isinstance(data.get('d'), str) and isinstance(data.get('c'), list):
+        return Tree(data['d'], [tree_from_data(c) for c in data['c']])
+    if (isinstance(data, list) and len(data) == 2
+            and isinstance(data[0], str) and isinstance(data[1], str)):
+        return Token(data[0], data[1])
+    raise ValueError('не дерево разбора')
 
 
 def _rational(expr):

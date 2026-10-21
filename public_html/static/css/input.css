@@ -351,9 +351,13 @@
     margin-top: var(--space-4);
     padding-top: var(--space-3);
   }
+  /* Текст первого пункта меню — на левом крае контента (.app-content):
+     вычитаем внутренний отступ ссылки (--space-3). Ширина окна — 100%
+     строки топбара плюс её поля, а не 100vw: 100vw включает полосу
+     прокрутки, и меню уезжало вправо на её половину. */
   @media (min-width: 761px) {
     .app-body .topbar-nav {
-      margin-left: calc(var(--content-padding) - var(--space-5) + max(0px, (100vw - var(--sidebar-width) - 1460px) / 2));
+      margin-left: calc(var(--content-padding) - var(--space-5) - var(--space-3) + max(0px, (100% + 2 * var(--space-4) - var(--sidebar-width) - 1460px) / 2));
     }
   }
 
@@ -476,6 +480,42 @@
   .topbar-nav .nav-group:has(> .nav-more[aria-expanded="true"]) > a,
   .nav-more[aria-expanded="true"] {
     color: var(--accent);
+  }
+
+  /* Фокус в меню — той же плашкой, что открытое меню, а не браузерной
+     рамкой: скруглённая обводка шеврона упиралась в линию активного раздела.
+     Только у пунктов верхнего ряда — у ссылок подменю плашки на фокус нет,
+     им браузерная рамка остаётся */
+  .topbar-nav > a:focus,
+  .nav-group > a:focus,
+  .nav-more:focus {
+    outline: none;
+  }
+
+  .topbar-nav > a:focus-visible,
+  .nav-group:has(> :focus-visible) {
+    background: var(--accent-soft);
+    border-radius: 8px 8px 0 0;
+  }
+
+  /* Плашка на белой шапке малоконтрастна и совпадает с открытым меню —
+     сам пункт в фокусе ещё и акцентный, ссылка подчёркнута текстом */
+  .topbar-nav > a:focus-visible,
+  .nav-group > a:focus-visible,
+  .nav-more:focus-visible {
+    color: var(--accent);
+  }
+
+  .topbar-nav > a:focus-visible,
+  .nav-group > a:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  /* Шеврон подчёркнут так же: цвет и плашка у открытого меню те же,
+     и без черты фокус на шевроне раскрытой группы не виден */
+  .nav-more:focus-visible svg {
+    border-bottom: 2px solid currentColor;
   }
 
   /* Открытие — классом is-open, не атрибутом hidden: preflight делает
@@ -3117,7 +3157,33 @@
     margin-bottom: 0;
   }
 
-  /* Текущее задание на главной ученика */
+  /* Задания на главной ученика: колонки одинаковые во всех группах
+     (иначе «Срок» и «Статус» скачут от таблицы к таблице), свежие сверху.
+     Строка «нужно сделать сейчас» — мягкой заливкой и залитой кнопкой,
+     без левой полосы. */
+  /* Раскладка auto: служебные колонки держат заданную ширину, остаток —
+     названию листка (при fixed название сжималось до пары слов в строке) */
+  table.student-works .sw-date { width: 116px; }
+  table.student-works .sw-due { width: 168px; }
+  table.student-works .sw-status { width: 210px; }
+  table.student-works .sw-result { width: 156px; }
+  table.student-works .sw-action { width: 96px; }
+  table.student-works td[data-label="Выдано"],
+  table.student-works td[data-label="Срок"] { white-space: nowrap; }
+  .sw-title { color: var(--text); text-decoration: none; }
+  .sw-title:hover { color: var(--accent); }
+  .sw-meta { font-size: 0.85rem; }
+  table.student-works tr.is-attention td { background: var(--accent-soft); }
+  table.student-works tbody tr.is-attention:hover td { background: #d8e6f6; }
+  table.student-works tr.is-attention .sw-title { font-weight: 600; }
+  /* «Выдано» — бейдж той же голубой заливки: на подсвеченной строке белый */
+  table.student-works tr.is-attention .badge-assigned { background: #fff; }
+  @container (max-width: 760px) {
+    table.student-works colgroup { display: none; }
+    table.student-works tr.is-attention { background: var(--accent-soft); border-color: #b6cde8; }
+  }
+
+  /* Итог самостоятельной у ученика */
   .hero-card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -5944,6 +6010,13 @@
       display: contents;
     }
 
+    /* У раскрытой группы нет своего бокса, и её плашка фокуса не рисуется —
+       подсвечиваем саму ссылку (рамку фокуса с неё сняли выше) */
+    .topbar-nav .nav-group > a:focus-visible {
+      background: var(--accent-soft);
+      border-radius: 8px 8px 0 0;
+    }
+
     .topbar-nav a[data-nav-last] {
       order: 1;
     }
@@ -6895,7 +6968,21 @@
 }
 
 @layer components {
-  .iw-stack { display: grid; gap: var(--space-3); margin-block: var(--space-4); }
+  /* Работа ученика одним листом: номера и пояснения разделены линией,
+     между ними --space-3 сверху и снизу; пункт общего условия идёт
+     вплотную к предыдущему, без линии */
+  .iw-sheet { padding-block: 0; }
+  .iw-sheet > .iw-point,
+  .iw-sheet > .iw-note { padding-block: var(--space-3); }
+  .iw-sheet > * + * { border-top: 1px solid var(--border); }
+  /* Специфичнее общего .iw-point + .iw-point (карточка группы в превью) */
+  .iw-sheet > .iw-point + .iw-point { margin-top: 0; }
+  .iw-sheet > .iw-point.iw-point-cont { border-top: 0; padding-top: 0; }
+  .iw-note { font-weight: 600; }
+  .iw-sheet .iw-point .answer-block { margin-block: var(--space-2) 0; }
+  .iw-sheet .iw-point .task-images { margin-block: var(--space-2); }
+  /* Общее условие уже отделено линией номера — своя линия была бы второй */
+  .iw-sheet .ws-common-condition { margin-bottom: var(--space-2); padding-bottom: 0; border-bottom: 0; }
   .iw-section { display: grid; gap: var(--space-3); padding: var(--space-4); margin-block: var(--space-3); }
   .iw-section h2, .iw-section h3, .iw-section p { margin: 0; }
   .iw-section form:not(.task-tools) { display: grid; gap: var(--space-2); }
