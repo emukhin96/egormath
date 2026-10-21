@@ -466,10 +466,11 @@
   }
 
   /* Открытое меню подсвечивает весь пункт — ссылку и шеврон вместе,
-     а не один шеврон: пункт меню — одна плашка */
+     а не один шеврон: пункт меню — одна плашка. Скругляем только верх:
+     у активной группы снизу линия inset-тенью, и нижний радиус загибал её концы */
   .nav-group:has(> .nav-more[aria-expanded="true"]) {
     background: var(--accent-soft);
-    border-radius: 8px;
+    border-radius: 8px 8px 0 0;
   }
 
   .topbar-nav .nav-group:has(> .nav-more[aria-expanded="true"]) > a,
