@@ -45,8 +45,9 @@ class TagAdmin(admin.ModelAdmin):
 
 @admin.register(Source)
 class SourceAdmin(admin.ModelAdmin):
-    list_display = ('title', 'author', 'year')
-    search_fields = ('title', 'author')
+    list_display = ('title', 'short_title', 'author', 'year')
+    list_editable = ('short_title',)
+    search_fields = ('title', 'short_title', 'author')
 
 
 class TaskSourceInline(admin.TabularInline):

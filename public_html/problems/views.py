@@ -133,10 +133,11 @@ def _catalog_facets(params, user):
                            'count': count, 'is_current': current_grade == level})
     current_source = (params.get('source') or '').strip()
     sources = [
-        {'pk': row['source_id'], 'title': row['source__title'], 'count': row['n'],
+        {'pk': row['source_id'], 'title': row['source__title'],
+         'short': row['source__short_title'] or row['source__title'], 'count': row['n'],
          'is_current': current_source == str(row['source_id'])}
         for row in (TaskSource.objects.filter(task__in=catalog)
-                    .values('source_id', 'source__title')
+                    .values('source_id', 'source__title', 'source__short_title')
                     .annotate(n=Count('task_id', distinct=True))
                     .order_by('-n', 'source__title')[:12])]
     return grades, sources

@@ -119,6 +119,16 @@ def heading_dot(value):
 
 
 @register.filter
+def path_tail(value, keep=2):
+    """Последние разделы пути в источнике: глава и раздел книги видны по
+    номеру, в строке каталога хватает «… › Контрольная работа › Вариант 5»."""
+    parts = [strip_heading_dot(part) for part in value or []]
+    if len(parts) <= keep:
+        return parts
+    return ['…', *parts[-keep:]]
+
+
+@register.filter
 def without_page(value):
     """Query string или QueryDict без параметра page."""
     if hasattr(value, 'copy') and hasattr(value, 'urlencode'):
