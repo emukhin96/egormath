@@ -9,7 +9,7 @@ from PIL import Image
 
 from problems.models import Task, TaskSubitem
 from worksheets.models import Worksheet
-from workaudit.clipboard import CLIPBOARD_CHOICES, CLIPBOARD_WATCH
+from workaudit.clipboard import RESTRICT_LABEL, SWAP_LABEL
 
 
 class Assignment(models.Model):
@@ -55,9 +55,8 @@ class Assignment(models.Model):
         default=CHECK_LIVE,
         help_text='Учитель видит результат всегда; эталон ученику не '
                   'показывается ни в одном режиме. После выдачи не меняется')
-    clipboard_mode = models.CharField(
-        'Копирование условий', max_length=8, choices=CLIPBOARD_CHOICES,
-        default=CLIPBOARD_WATCH)
+    restrict_clipboard = models.BooleanField(RESTRICT_LABEL, default=False)
+    swap_numbers = models.BooleanField(SWAP_LABEL, default=False)
     allow_photos = models.BooleanField(
         'Принимать фото решений', default=True,
         help_text='Кнопка загрузки фото у каждой задачи на странице ученика')

@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 
 from accounts.models import Profile, StudentGroup
 from worksheets.models import Worksheet
-from workaudit.clipboard import CLIPBOARD_CHOICES, CLIPBOARD_WATCH, parse_mode
+from workaudit.clipboard import RESTRICT_LABEL, SWAP_HELP, SWAP_LABEL
 
 from .models import Assignment, locked_check_visibility
 
@@ -56,17 +56,10 @@ class AssignmentCreateForm(forms.Form):
         label='Автосверка ответов', choices=Assignment.CHECK_CHOICES,
         initial=Assignment.CHECK_LIVE,
         help_text='По умолчанию ученик проверяет ответ кнопкой. Режим общий для всех назначений листка.')
-    # Необязательное: форма без поля (быстрая выдача, старые формы) — запись в журнал
-    clipboard_mode = forms.ChoiceField(
-        label='Копирование условий', choices=CLIPBOARD_CHOICES,
-        initial=CLIPBOARD_WATCH, required=False,
-        help_text='Скопированный текст попадает в журнал активности; при подмене '
-                  'в буфер уходит условие с другими числами.')
+    restrict_clipboard = forms.BooleanField(label=RESTRICT_LABEL, required=False)
+    swap_numbers = forms.BooleanField(label=SWAP_LABEL, required=False, help_text=SWAP_HELP)
     allow_photos = forms.BooleanField(
         label='Принимать фото решений', required=False, initial=True)
-
-    def clean_clipboard_mode(self):
-        return parse_mode(self.cleaned_data.get('clipboard_mode'))
 
     def __init__(self, *args, teacher, **kwargs):
         super().__init__(*args, **kwargs)
@@ -144,12 +137,17 @@ class AssignmentCreateForm(forms.Form):
 
 class AssignmentSettingsForm(forms.Form):
     """Параметры существующих назначений; пустой выбор сохраняет различия."""
+    YES_NO = ('allow_photos', 'restrict_clipboard', 'swap_numbers')
+
     check_visibility = forms.ChoiceField(
         label='Автосверка ответов — для всего листка', required=False,
         choices=[('', 'Не менять')] + Assignment.CHECK_CHOICES)
-    clipboard_mode = forms.ChoiceField(
-        label='Копирование условий', required=False,
-        choices=[('', 'Не менять')] + CLIPBOARD_CHOICES)
+    restrict_clipboard = forms.ChoiceField(
+        label='Копирование условий и вставка ответов', required=False,
+        choices=[('', 'Не менять'), ('yes', 'Запретить'), ('no', 'Разрешить')])
+    swap_numbers = forms.ChoiceField(
+        label='Подмена чисел при копировании', required=False,
+        choices=[('', 'Не менять'), ('yes', 'Подменять'), ('no', 'Не подменять')])
     allow_photos = forms.ChoiceField(
         label='Фото решений', required=False,
         choices=[('', 'Не менять'), ('yes', 'Принимать'), ('no', 'Не принимать')])
@@ -161,11 +159,11 @@ class AssignmentSettingsForm(forms.Form):
 
     def __init__(self, *args, recipients, whole_worksheet=False, **kwargs):
         initial = {'due_action': 'keep'}
-        for field in ('check_visibility', 'allow_photos', 'due_at', 'clipboard_mode'):
+        for field in ('check_visibility', 'allow_photos', 'due_at', 'restrict_clipboard', 'swap_numbers'):
             values = {getattr(a, field) for a in recipients}
             if len(values) == 1:
                 value = values.pop()
-                initial[field] = ('yes' if value else 'no') if field == 'allow_photos' else value
+                initial[field] = ('yes' if value else 'no') if field in self.YES_NO else value
         super().__init__(*args, initial=initial, **kwargs)
         if not whole_worksheet:
             self.fields.pop('check_visibility')
@@ -183,8 +181,9 @@ class AssignmentSettingsForm(forms.Form):
             changes['check_visibility'] = data['check_visibility']
         if data.get('allow_photos'):
             changes['allow_photos'] = data['allow_photos'] == 'yes'
-        if data.get('clipboard_mode'):
-            changes['clipboard_mode'] = data['clipboard_mode']
+        for field in self.YES_NO:
+            if data.get(field):
+                changes[field] = data[field] == 'yes'
         if data['due_action'] != 'keep':
             changes['due_at'] = data['due_at'] if data['due_action'] == 'set' else None
         return changes

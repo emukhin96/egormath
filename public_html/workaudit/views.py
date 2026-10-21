@@ -16,7 +16,7 @@ from django.views.decorators.http import require_POST
 from accounts.decorators import teacher_required
 from assignments.models import Assignment, Submission, SubmissionPart
 from independentworks.models import Attempt, Answer, Run, Work
-from .clipboard import STATEMENTS_LIMIT, TEXT_LIMIT, WHOLE_SHARE, parse_mode
+from .clipboard import STATEMENTS_LIMIT, TEXT_LIMIT, WHOLE_SHARE
 from .models import ActivityEvent, AnswerRevision
 from .services import activity_timeline, lock_work
 
@@ -156,8 +156,9 @@ def run_settings(request, pk):
     exemptions = request.POST.getlist('exempt')
     if any(not value.isdigit() for value in exemptions) or not set(map(int, exemptions)) <= set(run.attempts.values_list('pk', flat=True)):
         return JsonResponse({'error': 'Неизвестный ученик.'}, status=400)
-    run.clipboard_mode = parse_mode(request.POST.get('clipboard_mode'))
-    run.save(update_fields=['clipboard_mode'])
+    run.restrict_clipboard = 'restrict_clipboard' in request.POST
+    run.swap_numbers = 'swap_numbers' in request.POST
+    run.save(update_fields=['restrict_clipboard', 'swap_numbers'])
     run.attempts.update(clipboard_exempt=False)
     run.attempts.filter(pk__in=exemptions).update(clipboard_exempt=True)
     messages.success(request, 'Настройки копирования сохранены. В открытой работе применятся после перезагрузки страницы.')

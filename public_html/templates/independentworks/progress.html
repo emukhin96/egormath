@@ -60,8 +60,9 @@
   <summary>Копирование и вставка</summary>
   <form method="post" action="{% url 'workaudit:run_settings' run.pk %}">
     {% csrf_token %}
-    <label class="iw-clipboard-mode"><span>Копирование условий</span><select name="clipboard_mode">{% for value, label in clipboard_choices %}<option value="{{ value }}" {% if run.clipboard_mode == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-    <p class="helptext">Что ученик копировал из условий (и пытался скопировать при запрете), видно в журнале «Активность ученика». При подмене в буфер уходит условие с другими числами — ответ по нему выдаст списанное решение.</p>
+    <label class="ws-toggle iw-settings-toggle"><input type="checkbox" name="restrict_clipboard" {% if run.restrict_clipboard %}checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Запретить копирование условий и вставку ответов</span></label>
+    <label class="ws-toggle iw-settings-toggle"><input type="checkbox" name="swap_numbers" {% if run.swap_numbers %}checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Подменять числа при копировании условий</span></label>
+    <p class="helptext">Что ученик копировал из условий (и пытался скопировать при запрете), видно в журнале «Активность ученика». При подмене в буфер уходит условие с другими числами — ответ по нему выдаст списанное решение; при запрете копировать нечего, и подмена не срабатывает.</p>
     <p class="helptext">Исключения: без запрета и подмены чисел для выбранных учеников. Изменения применятся после перезагрузки страницы ученика.</p>
     <div class="iw-toggle-list">
       {% for person in people %}<label class="ws-toggle iw-settings-toggle"><input type="checkbox" name="exempt" value="{{ person.attempt.pk }}" {% if person.attempt.clipboard_exempt %}checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">{{ person.attempt.student.get_full_name|default:person.attempt.student.username }}</span></label>{% endfor %}

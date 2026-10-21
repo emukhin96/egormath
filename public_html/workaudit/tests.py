@@ -223,25 +223,33 @@ class AuditTests(TestCase):
     def test_settings_and_templates(self):
         self.client.force_login(self.teacher)
         url = reverse('workaudit:run_settings', args=[self.attempt.run_id])
-        self.assertEqual(self.client.post(url, {'clipboard_mode': 'block', 'exempt': [self.attempt.pk]}).status_code, 302)
+        both = {'restrict_clipboard': 'on', 'swap_numbers': 'on'}
+        self.assertEqual(self.client.post(url, {**both, 'exempt': [self.attempt.pk]}).status_code, 302)
         self.attempt.refresh_from_db()
-        self.assertEqual(self.attempt.clipboard_mode, 'watch')
-        self.assertEqual(self.client.post(url, {'clipboard_mode': 'block'}).status_code, 302)
+        self.assertEqual((self.attempt.restrict_clipboard, self.attempt.swap_numbers), (False, False))
+        # Настройки независимы: подмена без запрета и запрет без подмены
+        self.client.post(url, {'swap_numbers': 'on'})
         self.attempt.refresh_from_db()
-        self.assertEqual(self.attempt.clipboard_mode, 'block')
-        self.assertEqual(self.client.post(url, {'clipboard_mode': 'nonsense'}).status_code, 302)
+        self.assertEqual((self.attempt.restrict_clipboard, self.attempt.swap_numbers), (False, True))
+        self.assertContains(self.client.get(reverse('independentworks:progress', args=[self.attempt.run_id])), 'name="swap_numbers" checked')
+        self.assertEqual(self.client.post(url, {'restrict_clipboard': 'on'}).status_code, 302)
         self.attempt.refresh_from_db()
-        self.assertEqual(self.attempt.clipboard_mode, 'watch')
-        self.client.post(url, {'clipboard_mode': 'block'})
+        self.assertEqual((self.attempt.restrict_clipboard, self.attempt.swap_numbers), (True, False))
         self.assertEqual(self.client.post(url, {'exempt': ['999999']}).status_code, 400)
         self.assertContains(self.client.get(reverse('independentworks:progress', args=[self.attempt.run_id])), 'Копирование и вставка')
         self.assertContains(self.client.get(reverse('review_assignment', args=[self.assignment.pk])), 'Активность ученика')
         self.client.force_login(self.student)
         self.assertEqual(self.client.post(url, {}).status_code, 403)
         page = self.client.get(reverse('independentworks:attempt', args=[self.attempt.pk]))
-        self.assertContains(page, 'data-clipboard="block"')
+        self.assertContains(page, 'data-restricted="1" data-swap="0"')
         self.assertContains(page, f'data-audit-statement="{self.point.label}"')
         self.assertContains(page, 'data-audit-answer')
+        self.assignment.swap_numbers = True
+        self.assignment.save(update_fields=['swap_numbers'])
+        sheet = self.client.get(reverse('assignment_detail', args=[self.assignment.pk]))
+        self.assertContains(sheet, 'data-restricted="0" data-swap="1"')
+        # Формулы без дублей при копировании — на всех страницах
+        self.assertContains(sheet, 'js/katex_copy.js')
 
     def test_copied_text_whole_statement_and_swap(self):
         """Копирование пишет текст и доли условий; целиком — пометка учителю."""
@@ -298,14 +306,16 @@ class AuditTests(TestCase):
 
     def test_assignment_clipboard_forms_and_retention_filter(self):
         from assignments.forms import AssignmentSettingsForm, AssignmentCreateForm
-        form = AssignmentSettingsForm({'clipboard_mode': 'swap', 'due_action': 'keep'}, recipients=[self.assignment])
+        form = AssignmentSettingsForm({'swap_numbers': 'yes', 'restrict_clipboard': 'no', 'due_action': 'keep'}, recipients=[self.assignment])
         self.assertTrue(form.is_valid())
-        self.assertEqual(form.changes()['clipboard_mode'], 'swap')
-        keep = AssignmentSettingsForm({'clipboard_mode': '', 'due_action': 'keep'}, recipients=[self.assignment])
+        self.assertEqual((form.changes()['swap_numbers'], form.changes()['restrict_clipboard']), (True, False))
+        keep = AssignmentSettingsForm({'swap_numbers': '', 'due_action': 'keep'}, recipients=[self.assignment])
         self.assertTrue(keep.is_valid())
-        self.assertNotIn('clipboard_mode', keep.changes())
+        self.assertNotIn('swap_numbers', keep.changes())
+        self.assertEqual(keep.initial['swap_numbers'], 'no')
         creation = AssignmentCreateForm(teacher=self.teacher)
-        self.assertEqual(creation.fields['clipboard_mode'].initial, 'watch')
+        self.assertFalse(creation.fields['restrict_clipboard'].initial)
+        self.assertFalse(creation.fields['swap_numbers'].initial)
         row = self.event()
         self.post_events([row])
         ActivityEvent.objects.update(received_at=timezone.now()-timedelta(days=91))
