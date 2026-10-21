@@ -236,6 +236,38 @@ class StudentManagementTests(TestCase):
             response,
             'Сначала то, что нужно сдать, ниже — работы на проверке и проверенные.')
 
+    def test_student_dashboard_newest_first_with_attention(self):
+        """Нужно сдать — свежие сверху, без hero-карточки; срочное (срок
+        впереди, возвращено, текущее) и выданное за неделю подсвечено,
+        старое без срока — обычной строкой."""
+        from assignments.models import Assignment
+        from worksheets.models import Worksheet
+        teacher = User.objects.get(username='teacher1')
+        student = User.objects.create_user(username='student1', password='pass12345')
+        Profile.objects.create(user=student, role=Profile.ROLE_STUDENT, teacher=teacher)
+        now = timezone.now()
+
+        def give(title, days_ago, **fields):
+            sheet = Worksheet.objects.create(owner=teacher, title=title)
+            a = Assignment.objects.create(worksheet=sheet, student=student, **fields)
+            Assignment.objects.filter(pk=a.pk).update(assigned_at=now - timedelta(days=days_ago))
+            return a
+
+        give('Старое без срока', 40)
+        give('Возвращено', 30, status=Assignment.STATUS_RETURNED)
+        give('Со сроком', 20, due_at=now + timedelta(days=1))
+        give('Новое', 1)
+        self.client.login(username='student1', password='pass12345')
+        response = self.client.get(reverse('dashboard'))
+        todo = response.context['todo']
+        self.assertEqual([a.worksheet.title for a in todo],
+                         ['Новое', 'Со сроком', 'Возвращено', 'Старое без срока'])
+        self.assertEqual([a.attention for a in todo], [True, True, True, False])
+        # Текущее для боковой панели — возвращённое, хотя в списке оно третье
+        self.assertEqual(response.context['current'].worksheet.title, 'Возвращено')
+        self.assertNotContains(response, 'hero-card')
+        self.assertContains(response, 'class="is-attention"', count=3)
+
     def test_login_required(self):
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(response.status_code, 302)

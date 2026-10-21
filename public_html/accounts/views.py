@@ -1,3 +1,4 @@
+from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.contrib import messages
@@ -405,16 +406,28 @@ def student_dashboard(request):
     kind = request.GET.get("kind", "")
     if kind in ("ordinary", "independent"):
         assignments = [a for a in assignments if getattr(a, "kind", "ordinary") == kind]
-    # Группы по статусу: сначала то, что требует действия ученика
+    # Группы по статусу: сначала то, что требует действия ученика. Внутри
+    # группы — свежие сверху, как в общем списке: «срочное» не поднимаем
+    # вверх, а подсвечиваем строку (attention), иначе порядок выглядит
+    # случайным и новое задание теряется в середине таблицы.
     todo = [a for a in assignments if a.is_editable_by_student]
-    todo.sort(key=lambda a: (
+    # Текущее задание боковой панели — то, что нужно делать раньше всего
+    current = min(todo, key=lambda a: (
         0 if getattr(a, "active", False) else 1,
         0 if a.status == Assignment.STATUS_RETURNED else 1,
         0 if a.is_overdue else 1,
         a.due_at.timestamp() if a.due_at else float('inf'),
         -a.assigned_at.timestamp(),
-    ))
-    current = todo[0] if todo else None
+    ), default=None)
+    # Подсветка: текущее, идёт таймер, возвращено, срок ещё впереди или
+    # выдано за последнюю неделю; старые задания без срока — обычной строкой
+    now = timezone.now()
+    for a in todo:
+        a.attention = bool(
+            a is current or getattr(a, "active", False)
+            or a.status == Assignment.STATUS_RETURNED
+            or (a.due_at and a.due_at > now)
+            or a.assigned_at >= now - timedelta(days=7))
     submitted = [a for a in assignments
                  if a.status == Assignment.STATUS_SUBMITTED]
     reviewed = [a for a in assignments
@@ -422,7 +435,6 @@ def student_dashboard(request):
     return render(request, 'accounts/dashboard_student.html', {
         'assignments': assignments,
         'current': current,
-        'rest': [a for a in assignments if a != current],
         'todo': todo,
         'submitted': submitted,
         'reviewed': reviewed,

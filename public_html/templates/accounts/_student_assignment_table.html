@@ -1,19 +1,17 @@
-{# Таблица заданий ученика: items — список Assignment, skip — задание, уже показанное в hero-карточке #}
+{# Таблица заданий ученика: items — список Assignment, свежие сверху; учитель — в подписи под названием, не отдельной колонкой. Ширины колонок общие для всех групп страницы (.student-works); строка с attention — то, что нужно сделать сейчас #}
 <div class="catalog-table-wrap" role="region" aria-label="Список заданий" tabindex="0">
-<table class="list table-stack">
-  <tr><th>Листок</th><th>Учитель</th><th>Выдано</th><th>Срок</th><th>Статус</th><th>Результат</th><th></th></tr>
+<table class="list table-stack student-works">
+  <colgroup><col><col class="sw-date"><col class="sw-due"><col class="sw-status"><col class="sw-result"><col class="sw-action"></colgroup>
+  <tr><th>Листок</th><th>Выдано</th><th>Срок</th><th>Статус</th><th>Результат</th><th></th></tr>
   {% for a in items %}
-  {% if a != skip %}
-  <tr>
-    <td class="stack-primary">{{ a.worksheet.title }}{% if a.kind == "independent" %}<div class="muted">{{ a.kind_label }}</div>{% endif %}</td>
-    <td data-label="Учитель">{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>
+  <tr{% if a.attention %} class="is-attention"{% endif %}>
+    <td class="stack-primary"><a class="sw-title" href="{% if a.detail_url %}{{ a.detail_url }}{% else %}{% url 'assignment_detail' a.pk %}{% endif %}">{{ a.worksheet.title }}</a><div class="muted sw-meta">{% if a.kind == "independent" %}{{ a.kind_label }} · {% endif %}{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</div></td>
     <td data-label="Выдано">{{ a.assigned_at|date:'d.m.Y' }}</td>
     <td data-label="Срок">{% if a.due_at %}{{ a.due_at|date:'d.m.Y H:i' }}{% if a.is_overdue %} <span class="badge badge-returned">просрочено</span>{% endif %}{% else %}—{% endif %}</td>
     <td data-label="Статус"><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span></td>
     <td data-label="Результат">{% if a.status == 'reviewed' %}{% with r=a.result %}{{ r.done }}/{{ r.total }} ({{ r.percent }}%){% endwith %}{% if a.cumulative %}<div class="muted">С исправлениями: {{ a.cumulative.percent }}%</div>{% endif %}{% else %}—{% endif %}</td>
-    <td class="row-actions"><a class="btn btn-small btn-secondary" href="{% if a.detail_url %}{{ a.detail_url }}{% else %}{% url 'assignment_detail' a.pk %}{% endif %}">Открыть</a></td>
+    <td class="row-actions"><a class="btn btn-small{% if not a.attention %} btn-secondary{% endif %}" href="{% if a.detail_url %}{{ a.detail_url }}{% else %}{% url 'assignment_detail' a.pk %}{% endif %}">Открыть</a></td>
   </tr>
-  {% endif %}
   {% endfor %}
 </table>
 </div>

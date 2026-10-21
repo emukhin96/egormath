@@ -357,6 +357,19 @@ class IndependentWorkTests(TestCase):
         self.client.force_login(self.student)
         self.assertEqual(self.client.get(self.url('point_detail', a.pk, point.pk)).status_code, 403)
 
+    def test_attempt_points_in_one_sheet(self):
+        """Номера работы — одним листом (.iw-sheet), не карточкой на номер."""
+        Position.objects.create(work=self.work, order=2, text='Пояснение к блоку')
+        task = Task.objects.create(text_latex='Три плюс три?', answer_mask='{{number: 6}}')
+        Candidate.objects.create(position=Position.objects.create(work=self.work, order=3), task=task)
+        a = self.begin()
+        self.client.force_login(self.student)
+        response = self.client.get(self.url('attempt', a.pk))
+        self.assertContains(response, 'class="card ws-view iw-sheet"', count=1)
+        self.assertContains(response, 'class="iw-point"', count=2)
+        self.assertContains(response, '<div class="math-content iw-note">Пояснение к блоку</div>', html=False)
+        self.assertNotContains(response, 'iw-section')
+
     def test_unified_student_dashboard_disclosure_and_closed_start(self):
         a = self.issued(deadline=timezone.now() + timedelta(minutes=1))
         self.client.force_login(self.student)

@@ -17,30 +17,16 @@
 </div>
 
 {% if independentworks_enabled %}{% include 'includes/work_kind_filter.html' %}{% endif %}
-{% if current %}
-<div class="hero-card">
-  <div class="hero-body">
-    <p class="hero-title">{{ current.worksheet.title }}</p>{% if current.kind_label %}<p class="hero-meta">{{ current.kind_label }}</p>{% endif %}
-    <p class="hero-meta">
-      <span>Учитель: {{ current.worksheet.owner.get_full_name|default:current.worksheet.owner.username }}</span>
-      <span>·</span>
-      <span>Срок: {% if current.due_at %}{{ current.due_at|date:'d.m.Y H:i' }}{% else %}не задан{% endif %}</span>
-      {% if current.is_overdue %}<span class="badge badge-returned">просрочено</span>{% endif %}
-      <span class="badge badge-{{ current.status }}">{{ current.get_status_display }}</span>
-    </p>
-  </div>
-  <a class="btn" href="{% if current.detail_url %}{{ current.detail_url }}{% else %}{% url 'assignment_detail' current.pk %}{% endif %}">Открыть задание</a>
-</div>
-{% endif %}
 
 {% if not assignments %}
 <div class="card"><p class="muted">Вам пока не назначено ни одного задания.</p></div>
 {% endif %}
 
-{% if todo|length > 1 %}
+{# Текущее задание — подсвеченной строкой списка, не карточкой над ним: карточка читалась как заголовок #}
+{% if todo %}
 <div class="card">
   <h2>Нужно сдать</h2>
-  {% include 'accounts/_student_assignment_table.html' with items=todo skip=current %}
+  {% include 'accounts/_student_assignment_table.html' with items=todo %}
 </div>
 {% endif %}
 
