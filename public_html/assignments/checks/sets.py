@@ -827,9 +827,22 @@ def _parse_range_atom(piece, tokens, value_parser=None, equal=None):
     return [(v, v, '[', ']') for v in values] if values is not None else None
 
 
+def _punctured_line(intervals):
+    """Вся прямая без конечного числа точек (так разбирается ``x \\ne 1``)."""
+    if len(intervals) < 2 or intervals[0][0] != -INF or intervals[-1][1] != INF:
+        return False
+    return all(a[1] == b[0] and a[3] == ')' and b[2] == '('
+               for a, b in zip(intervals, intervals[1:]))
+
+
 def parse_range(text, *, value_parser=None, equal=None):
     """Числовое множество: скобочная запись, объединения, неравенства
     (``x>5, x<-5``; ``1<x<4``; ``x \\le -5 или x>5``), «нет решений», R.
+    Части через запятую, «;», «или» объединяются, через «и» — пересекаются.
+    Часть ``x \\ne k`` выкалывает точку из остальных частей: в записи
+    ``-1 \\le x \\le 3, x \\ne 1`` запятая — «и», а не объединение (иначе
+    вышла бы вся прямая). Без других частей ``x \\ne 1, x \\ne 2`` — прямая
+    без двух точек.
     Возвращает нормализованное множество промежутков; None — не разобрано.
     ``value_parser``/``equal`` — точные значения и сравнение в вычислителе."""
     text = _collection_text(text)
@@ -845,8 +858,8 @@ def parse_range(text, *, value_parser=None, equal=None):
     if finite is not None:
         return _normalize_intervals([(v, v, '[', ']') for v in finite])
     rest, tokens = _stash_intervals(text)
-    intervals = []
-    saw_atom = False
+    intervals, excluded = [], []
+    saw_atom = saw_main = False
     union_parts = _split_top(rest, _UNION_RE)
     if union_parts is None:
         return None
@@ -864,11 +877,22 @@ def parse_range(text, *, value_parser=None, equal=None):
                 return None
             saw_atom = True
             acc = parsed if acc is None else _intersect_lists(acc, parsed)
+        if len(and_parts) == 1 and '!=' in and_parts[0] and _punctured_line(acc):
+            excluded.append(acc)
+            continue
+        saw_main = True
         intervals.extend(acc)
         if len(intervals) > MAX_COLLECTION_ITEMS:
             return None
     if not saw_atom:
         return None
+    if excluded:
+        if not saw_main:
+            intervals = [(-INF, INF, '(', ')')]
+        for points in excluded:
+            intervals = _intersect_lists(intervals, points)
+            if len(intervals) > MAX_COLLECTION_ITEMS:
+                return None
     return _normalize_intervals(intervals)
 
 
