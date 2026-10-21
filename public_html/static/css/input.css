@@ -7397,7 +7397,7 @@
   font-size: 0.8264em;
 }
 
-.math-content .katex .cyrillic_fallback {
+.math-content:not(.sidebar-row, .ws-rubric-name) .katex .cyrillic_fallback {
   font-size: 0.9091em;
 }
 
@@ -7782,7 +7782,9 @@
 }
 
 /* Формулы в условиях — 1.1em вместо 1.21em KaTeX (вариант C, 21.10.2026).
-   Вне @layer: katex.min.css не в слое и перебил бы правило из components. */
-.math-content .katex {
+   Вне @layer: katex.min.css не в слое и перебил бы правило из components.
+   Исключения те же, что у размера текста: в пункте боковой панели и названии
+   рубрики текст прежний, формулы тоже остаются по умолчанию KaTeX. */
+.math-content:not(.sidebar-row, .ws-rubric-name) .katex {
   font-size: 1.1em;
 }
