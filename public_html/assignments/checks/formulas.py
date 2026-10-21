@@ -194,6 +194,10 @@ def _reference_response(payload, multiple, mode='expression', numeric=False):
 # Эталон короче этого разбирается в том же процессе, что и ответ: отдельный
 # процесс для него дороже самого разбора, а до лимита ему далеко.
 PREPARED_REFERENCE_LEN = 40
+# Эталоны, чья подготовка не удалась: до этого момента ответы на них
+# проверяются прежним путём, подготовка не повторяется при каждой попытке.
+PREPARE_RETRY_DELAY = 600
+_unprepared = {}
 
 
 def _reference_trees(reference):
@@ -202,13 +206,30 @@ def _reference_trees(reference):
     Эталон — сохранённые данные учителя. Длинный эталон разбирается
     отдельным вызовом вычислителя со своим лимитом, а проверка ответа
     получает готовые деревья и разбирает только ввод ученика: иначе разбор
-    эталона (до 0,45 с CPU локально) съедает лимит в каждом вызове. Сбой
-    подготовки — сбой проверки, как и прежде, без второго запуска.
+    эталона (до 0,45 с CPU локально) съедает лимит в каждом вызове.
+
+    Подготовка — только ускорение. Её сбой (таймаут, лимит CPU, полная
+    самопроверка коллекции дороже ответа) не должен останавливать
+    проверку всех ответов на поле: ответ проверяется прежним путём, с
+    разбором эталона в том же вызове. Занятость слотов — не сбой эталона:
+    проверка откладывается целиком, как и раньше.
     """
     if reference.tolerance is not None or len(reference.payload) < PREPARED_REFERENCE_LEN:
         return None
-    return _reference_response(reference.payload, reference.multiple,
-                               reference.mode, reference.numeric).get('trees')
+    key = (reference.payload, reference.multiple, reference.mode, reference.numeric)
+    with _failed_lock:
+        if _unprepared.get(key, 0) > time.monotonic():
+            return None
+    try:
+        return _reference_response(*key).get('trees')
+    except FormulaBusy:
+        raise
+    except FormulaUnavailable:
+        with _failed_lock:
+            if len(_unprepared) >= _FAILED_LIMIT:
+                _unprepared.clear()
+            _unprepared[key] = time.monotonic() + PREPARE_RETRY_DELAY
+        return None
 
 
 def parse_reference(payload, multiple=False, *, validate=False, mode='expression'):

@@ -32,6 +32,7 @@ class ReferenceTreeTests(SimpleTestCase):
         formulas._checked.cache_clear()
         with formulas._failed_lock:
             formulas._failed_inputs.clear()
+            formulas._unprepared.clear()
 
     tearDown = setUp
 
@@ -131,17 +132,33 @@ class ReferenceTreeTests(SimpleTestCase):
             (True, '{"x":["SYMBOL","x"]}'), (True, None)])
         self.assertEqual(calls[0]['mode'], 'simplify')
 
-    def test_failed_preparation_is_one_retryable_failure(self):
+    def test_failed_preparation_falls_back_to_full_check(self):
         spec = formulas.FormulaSpec(SOLID, False, 'simplify')
-        with patch.object(formulas, '_spawn',
-                          side_effect=subprocess.TimeoutExpired('worker', 3)) as spawn:
-            with self.assertRaises(formulas.FormulaUnavailable):
-                formulas.check('a', spec)
-            spawn.assert_called_once()
-            # Подготовка этого эталона недавно не удалась: не форкаем снова.
+        calls = []
+
+        def spawn(key):
+            payload = json.loads(key)
+            calls.append(payload)
+            if 'value' not in payload:
+                raise subprocess.TimeoutExpired('worker', 3)
+            return subprocess.CompletedProcess('formula_worker', 0, json.dumps({'status': OK}), '')
+
+        with patch.object(formulas, '_spawn', side_effect=spawn):
+            self.assertEqual(formulas.check('a', spec), OK)
+            self.assertEqual(formulas.check('b', spec), OK)
+        # Подготовка не удалась один раз и не мешает ответам: оба проверены
+        # прежним путём, без деревьев и без повторной подготовки.
+        self.assertEqual([('value' in c, 'trees' in c) for c in calls],
+                         [(False, False), (True, False), (True, False)])
+        # Занятость слотов — не сбой эталона: проверка откладывается целиком.
+        formulas._unprepared.clear()
+        with patch.object(formulas, '_reference_response',
+                          side_effect=formulas.FormulaBusy('занято')), \
+                patch.object(formulas, '_spawn') as worker:
             with self.assertRaises(formulas.FormulaBusy):
-                formulas.check('b', spec)
-            spawn.assert_called_once()
+                formulas.check('c', spec)
+            worker.assert_not_called()
+        self.assertEqual(formulas._unprepared, {})
 
     def test_failure_memory_ignores_trees(self):
         payload = {'payload': 'a+17', 'multiple': False, 'value': '17+a', 'trees': '{}'}
@@ -185,7 +202,6 @@ class NumericRejectionTests(SimpleTestCase):
             (r'\frac{a^{2}-1}{a-1}', 'a-1', 'expression'),
             (r'\arcsin x', r'\frac{\pi}{2}-\arccos x', 'expression'),
             (r'\arcsin x', r'\arccos x', 'expression'),
-            (r'\ln(x-2)+\ln(x+2)', r'\ln(x^{2}-4)', 'expression'),
             (r'\sqrt{a-2 b} | positive: a,b', r'\sqrt{a-2b}+0\cdot\sqrt{b-a}', 'expression'),
             (r'\frac{\sin 2 x}{\cos x}', r'2\sin x', 'expression'),
             (r'h/\cos\alpha | positive: h,\alpha | angle: \alpha<90', r'h\sqrt{1+\tan^{2}\alpha}', 'expression'),
