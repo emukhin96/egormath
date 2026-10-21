@@ -6,6 +6,7 @@ Forkserver создаёт детей из собственного однопо�
 """
 import io
 import multiprocessing
+import os
 import subprocess
 import sys
 import time
@@ -73,6 +74,13 @@ def run_worker(payload, timeout):
 def _run_process(payload, timeout):
     """JSON-протокол; процесс всегда убирается, в том числе при таймауте."""
     global _ready, _failed_until
+    from .formula_worker import HASH_SEED
+    # Forkserver берёт окружение процесса, который его запускает, а дети —
+    # хэши forkserver. Значение остаётся и для его перезапусков; хэши самого
+    # веб-процесса уже выбраны при старте и не меняются. Первый вызов —
+    # прогрев из core/wsgi.py, до приёма запросов потоками.
+    if os.environ.get('PYTHONHASHSEED') != HASH_SEED:
+        os.environ['PYTHONHASHSEED'] = HASH_SEED
     context = multiprocessing.get_context('forkserver')
     context.set_forkserver_preload(['assignments.checks.formula_preload'])
     receiver, sender = context.Pipe(duplex=False)

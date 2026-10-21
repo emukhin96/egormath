@@ -6,6 +6,7 @@
 скрывать запрещённое значение параметра.
 """
 import json
+import os
 import re
 import subprocess
 import sys
@@ -21,6 +22,7 @@ from pathlib import Path
 from ..check_answer import MAX_EXPR_LEN, OK, UNKNOWN, WRONG, normalize
 from . import expressions
 from .formula_fork import FormulaStartupUnavailable
+from .formula_worker import HASH_SEED
 
 
 @dataclass
@@ -49,6 +51,8 @@ class FormulaSpec:
     mode: str = 'expression'
     numeric: bool = False
     tolerance: str = None
+    # Только для mode='equation': приведённый вид (``| strict``).
+    strict: bool = False
 
 
 WORKER_TIMEOUT = 3
@@ -132,7 +136,7 @@ def _spawn(key):
         [sys.executable, '-m', 'assignments.checks.formula_worker'],
         input=key, capture_output=True, text=True,
         cwd=Path(__file__).resolve().parents[2], timeout=WORKER_TIMEOUT,
-        check=False)
+        env={**os.environ, 'PYTHONHASHSEED': HASH_SEED}, check=False)
 
 
 def _run_worker(payload):
@@ -267,6 +271,8 @@ def _checked(value, reference):
         payload['numeric'] = True
     if reference.tolerance is not None:
         payload['tolerance'] = reference.tolerance
+    if reference.strict:
+        payload['strict'] = True
     trees = _reference_trees(reference)
     if trees:
         payload['trees'] = trees
