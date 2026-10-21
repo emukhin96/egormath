@@ -589,6 +589,59 @@ class IndependentWorkTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(b''.join(response.streaming_content))
 
+    def test_picture_from_hidden_answer_version_not_shown_as_statement(self):
+        # Авторский ответ текстом, рисунок — только в редакторской версии:
+        # это не «картинка без ссылок», ученик не видит её до раскрытия.
+        stream = io.BytesIO()
+        Image.new('RGB', (10, 10)).save(stream, 'PNG')
+        TaskImage.objects.create(task=self.task, image=ContentFile(stream.getvalue(), name='answer.png'))
+        TaskImage.objects.create(task=self.task, image=ContentFile(stream.getvalue(), name='solution.png'))
+        self.task.author_answer_latex = '4'
+        self.task.answer_latex = r'4 \taskpic{1}'
+        self.task.author_solution_latex = 'Считаем.'
+        self.task.solution_latex = r'Считаем. \taskpic{2}'
+        self.task.save()
+        a = self.begin(release_mode='auto', release_flags=['answer', 'solution'])
+        assets = {asset.name: asset for asset in Asset.objects.all()}
+        self.assertEqual(assets['answer.png'].audiences, ['answer'])
+        self.assertEqual(assets['solution.png'].audiences, ['solution'])
+        self.client.force_login(self.student)
+        page = self.client.get(self.url('attempt', a.pk))
+        for asset in assets.values():
+            self.assertNotContains(page, self.url('asset', a.pk, asset.pk))
+            self.assertEqual(self.client.get(self.url('asset', a.pk, asset.pk)).status_code, 404)
+        svc.submit(a.pk)
+        page = self.client.get(self.url('attempt', a.pk))
+        for asset in assets.values():
+            self.assertContains(page, self.url('asset', a.pk, asset.pk))
+
+    def test_migration_hides_answer_pictures_of_issued_variants(self):
+        import importlib
+        from django.apps import apps
+        migration = importlib.import_module('independentworks.migrations.0011_hide_answer_assets')
+        stream = io.BytesIO()
+        Image.new('RGB', (10, 10)).save(stream, 'PNG')
+        for name in ('figure.png', 'answer.png', 'loose.png'):
+            TaskImage.objects.create(task=self.task, image=ContentFile(stream.getvalue(), name=name))
+        self.task.text_latex += r' \taskpic{1}'
+        self.task.author_answer_latex = '4'
+        self.task.answer_latex = r'4 \taskpic{2}'
+        self.task.save()
+        a = self.issued()
+        pending = svc.prepare(self.work, self.teacher, [self.student.pk])
+        # Так их размечал снимок до исправления.
+        Asset.objects.update(audiences=['statement'])
+        for row in pending.plan['variants'][0]:
+            for source in row['snapshot']['assets']:
+                source['audiences'] = ['statement']
+        pending.save(update_fields=['plan'])
+        migration.forwards(apps, None)
+        self.assertEqual({x.name: x.audiences for x in Asset.objects.filter(point__variant=a.variant)},
+                         {'figure.png': ['statement'], 'answer.png': ['answer'], 'loose.png': ['statement']})
+        pending.refresh_from_db()
+        self.assertEqual({s['name']: s['audiences'] for s in pending.plan['variants'][0][0]['snapshot']['assets']},
+                         {'figure.png': ['statement'], 'answer.png': ['answer'], 'loose.png': ['statement']})
+
     def test_export_plain_text(self):
         self.student.first_name = '=1+1'; self.student.save()
         a = self.begin()

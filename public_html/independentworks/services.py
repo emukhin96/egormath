@@ -14,7 +14,7 @@ from django.utils import timezone
 from assignments.checks import parse_mask, check_mask, collect_values, filled_text, reference_text
 from livefile import files as livefiles
 from problems.models import Task
-from problems.task_images import taskpic_indices
+from problems.task_images import material_indices, taskpic_indices
 from workaudit.clipboard import CLIPBOARD_WATCH
 from .models import Work, Position, Candidate, Run, Variant, Point, Asset, Attempt, Answer
 
@@ -90,14 +90,13 @@ def candidate_data(candidate, number):
     parts = selected(candidate)
     images = list(task.images.all())
     all_parts = list(task.subitems.all())
-    answer_refs = taskpic_indices(task.effective_answer_latex)
-    solution_refs = taskpic_indices(task.effective_solution_latex)
+    # Ссылки из всех полей ответа/решения, а не только из показываемого:
+    # рисунок из скрытой редакторской версии при авторском тексте иначе
+    # считался бы «без ссылок» и уходил ученику как картинка условия.
     statement_refs = taskpic_indices(task.text_latex)
+    known = statement_refs | material_indices(task)
     for part in all_parts:
-        statement_refs |= taskpic_indices(part.text_latex)
-        answer_refs |= taskpic_indices(part.effective_answer_latex)
-        solution_refs |= taskpic_indices(part.effective_solution_latex)
-    known = statement_refs | answer_refs | solution_refs
+        known |= taskpic_indices(part.text_latex) | material_indices(part)
     rows = []
     from worksheets.latex import subitem_label
     for index, owner in enumerate(parts or [task]):
@@ -118,8 +117,8 @@ def candidate_data(candidate, number):
                     text = presentation.text
         sources = []
         point_statement = taskpic_indices(common + text)
-        point_answer = taskpic_indices(owner.effective_answer_latex)
-        point_solution = taskpic_indices(owner.effective_solution_latex)
+        point_answer = taskpic_indices(owner.author_answer_latex) | taskpic_indices(owner.answer_latex)
+        point_solution = taskpic_indices(owner.author_solution_latex) | taskpic_indices(owner.solution_latex)
         for i, img in enumerate(images):
             audiences = []
             if i in point_statement or i not in known:
