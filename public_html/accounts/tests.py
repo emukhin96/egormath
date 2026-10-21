@@ -238,7 +238,7 @@ class StudentManagementTests(TestCase):
 
     def test_student_dashboard_newest_first_with_attention(self):
         """Нужно сдать — свежие сверху, без hero-карточки; срочное (срок
-        впереди, возвращено, текущее) и выданное за неделю подсвечено,
+        впереди или просрочен, возвращено, текущее) и выданное за неделю подсвечено,
         старое без срока — обычной строкой."""
         from assignments.models import Assignment
         from worksheets.models import Worksheet
@@ -255,18 +255,19 @@ class StudentManagementTests(TestCase):
 
         give('Старое без срока', 40)
         give('Возвращено', 30, status=Assignment.STATUS_RETURNED)
+        give('Просрочено', 25, due_at=now - timedelta(days=2))
         give('Со сроком', 20, due_at=now + timedelta(days=1))
         give('Новое', 1)
         self.client.login(username='student1', password='pass12345')
         response = self.client.get(reverse('dashboard'))
         todo = response.context['todo']
         self.assertEqual([a.worksheet.title for a in todo],
-                         ['Новое', 'Со сроком', 'Возвращено', 'Старое без срока'])
-        self.assertEqual([a.attention for a in todo], [True, True, True, False])
+                         ['Новое', 'Со сроком', 'Просрочено', 'Возвращено', 'Старое без срока'])
+        self.assertEqual([a.attention for a in todo], [True, True, True, True, False])
         # Текущее для боковой панели — возвращённое, хотя в списке оно третье
         self.assertEqual(response.context['current'].worksheet.title, 'Возвращено')
         self.assertNotContains(response, 'hero-card')
-        self.assertContains(response, 'class="is-attention"', count=3)
+        self.assertContains(response, 'class="is-attention"', count=4)
 
     def test_login_required(self):
         response = self.client.get(reverse('dashboard'))

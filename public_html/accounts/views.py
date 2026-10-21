@@ -419,15 +419,16 @@ def student_dashboard(request):
         a.due_at.timestamp() if a.due_at else float('inf'),
         -a.assigned_at.timestamp(),
     ), default=None)
-    # Подсветка: текущее, идёт таймер, возвращено, срок ещё впереди или
-    # выдано за последнюю неделю; старые задания без срока — обычной строкой
-    now = timezone.now()
+    # Подсветка: текущее, идёт таймер, возвращено, есть срок (впереди или
+    # уже просрочен — такое тем более сдать) или выдано за последнюю неделю;
+    # старые задания без срока — обычной строкой
+    week_ago = timezone.now() - timedelta(days=7)
     for a in todo:
         a.attention = bool(
             a is current or getattr(a, "active", False)
             or a.status == Assignment.STATUS_RETURNED
-            or (a.due_at and a.due_at > now)
-            or a.assigned_at >= now - timedelta(days=7))
+            or a.due_at
+            or a.assigned_at >= week_ago)
     submitted = [a for a in assignments
                  if a.status == Assignment.STATUS_SUBMITTED]
     reviewed = [a for a in assignments
