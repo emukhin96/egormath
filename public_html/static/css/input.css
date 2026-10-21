@@ -494,6 +494,20 @@
     border-radius: 8px 8px 0 0;
   }
 
+  /* Плашка на белой шапке малоконтрастна и совпадает с открытым меню —
+     сам пункт в фокусе ещё и акцентный, ссылка подчёркнута текстом */
+  .topbar-nav > a:focus-visible,
+  .nav-group > a:focus-visible,
+  .nav-more:focus-visible {
+    color: var(--accent);
+  }
+
+  .topbar-nav > a:focus-visible,
+  .nav-group > a:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
   /* Открытие — классом is-open, не атрибутом hidden: preflight делает
      [hidden] display:none !important, а на узком экране меню нужно раскрыть в ряд */
   .nav-menu {
