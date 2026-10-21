@@ -15,6 +15,7 @@ from .models import Assignment, Review, Submission, SubmissionCheckAttempt
 from .views import _assignment_rows, _teacher_assignment
 from .point_progress import point_progress
 from worksheets.latex import subitem_label
+from workaudit.services import whole_copies
 
 
 @teacher_required
@@ -130,6 +131,7 @@ def progress_groups(items, assignments=None):
 
 def progress_people(groups_of_points, assignments):
     people = []
+    copied = whole_copies('assignment', assignments)
     for assignment in assignments:
         hidden = {i.pk for i in assignment.hidden_items.all()}
         submissions = {s.task_id: s for s in assignment.submissions.all()}
@@ -145,7 +147,8 @@ def progress_people(groups_of_points, assignments):
                               'hidden': item.pk in hidden, 'review': review})
         visible = [c for c in cells if not c['hidden']]
         result = {'done': sum(c['status'] == 'ok' for c in visible), 'total': len(visible)}
-        people.append({'assignment': assignment, 'cells': cells, 'result': result})
+        people.append({'assignment': assignment, 'cells': cells, 'result': result,
+                       'copied_whole': copied.get(assignment.pk, 0)})
     return people
 
 

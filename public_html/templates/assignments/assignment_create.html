@@ -69,7 +69,7 @@
           </div>
         </div>
 {% endif %}
-        <label class="check-label assignment-photo-option">{{ form.restrict_clipboard }} <span>{{ form.restrict_clipboard.label }}</span></label>
+        <div class="assignment-clipboard-option">{{ form.clipboard_mode.errors }}{{ form.clipboard_mode.label_tag }}{{ form.clipboard_mode }}<span class="helptext">{{ form.clipboard_mode.help_text }}</span></div>
         <label class="check-label assignment-photo-option">{{ form.allow_photos }} <span>{{ form.allow_photos.label }}</span></label>
       </section>
     </div>

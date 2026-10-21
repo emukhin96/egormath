@@ -42,7 +42,8 @@ class BuilderTests(TestCase):
         self.assertContains(response, 'student-filter')
         self.assertContains(response, 'id_duration')
         self.assertContains(response, 'Максимально вариантов')
-        self.assertContains(response, 'id_restrict_clipboard" checked')
+        # По умолчанию копирование разрешено и записывается в журнал
+        self.assertContains(response, '<option value="watch" selected>')
         self.assertNotContains(response, 'id_allow_photos" checked')
         self.assertContains(response, 'data-save-draft-before-leave')
         self.assertContains(response, 'name="action" value="preview"', count=2)

@@ -16,6 +16,7 @@ from django.views.decorators.http import require_POST
 from accounts.decorators import teacher_required
 from assignments.models import Assignment, Submission, SubmissionPart
 from independentworks.models import Attempt, Answer, Run, Work
+from .clipboard import TEXT_LIMIT, WHOLE_SHARE, parse_mode
 from .models import ActivityEvent, AnswerRevision
 from .services import activity_timeline, lock_work
 
@@ -31,6 +32,23 @@ def work_for(user, kind, pk, teacher=False):
     return get_object_or_404(qs, pk=pk)
 
 
+def copy_fields(row):
+    """Текст выделения, текст после подмены чисел и доли условий. Старые
+    клиенты полей не шлют — копирование пишется без текста, как раньше."""
+    text, swapped = row.get('text', ''), row.get('swapped', '')
+    statements = row.get('statements', [])
+    if type(text) is not str or type(swapped) is not str or type(statements) is not list or len(statements) > 50:
+        raise ValueError
+    parts = []
+    for item in statements:
+        label, share = item['label'], item['share']
+        if type(label) is not str or len(label) > 30 or type(share) is not int or not 0 <= share <= 100:
+            raise ValueError
+        parts.append({'label': label, 'share': share})
+    return {'text': text[:TEXT_LIMIT], 'swapped': swapped[:TEXT_LIMIT], 'statements': parts,
+            'whole': any(part['share'] >= WHOLE_SHARE for part in parts)}
+
+
 @never_cache
 @login_required
 @require_POST
@@ -43,7 +61,8 @@ def events(request, kind, pk):
     # Поздний пакет при сдаче разрешён две минуты; новые действия после сдачи — нет.
     if not active and (not ended or now > ended + timedelta(minutes=2)):
         return JsonResponse({'error': 'Работа недоступна для событий.'}, status=409)
-    if len(request.body) > 32768:
+    # Копирование везёт текст условия (до 2000 символов дважды) — пакет больше.
+    if len(request.body) > 131072:
         return JsonResponse({'error': 'Слишком большой пакет.'}, status=413)
     try:
         payload = json.loads(request.body)
@@ -65,9 +84,10 @@ def events(request, kind, pk):
                     raise ValueError
             if not active and at > ended:
                 continue
+            copied = copy_fields(row) if row['kind'] == 'copy' else {}
             batch.append(ActivityEvent(**{kind: work}, event_id=event_id, page_id=page_id,
                 sequence=row['seq'], kind=row['kind'], blocked=row['blocked'],
-                client_at=at, elapsed_ms=row['elapsed']))
+                client_at=at, elapsed_ms=row['elapsed'], **copied))
     except (KeyError, TypeError, ValueError, OverflowError, AttributeError):
         return JsonResponse({'error': 'Некорректный пакет.'}, status=400)
     with transaction.atomic():
@@ -134,9 +154,9 @@ def run_settings(request, pk):
     exemptions = request.POST.getlist('exempt')
     if any(not value.isdigit() for value in exemptions) or not set(map(int, exemptions)) <= set(run.attempts.values_list('pk', flat=True)):
         return JsonResponse({'error': 'Неизвестный ученик.'}, status=400)
-    run.restrict_clipboard = 'restrict_clipboard' in request.POST
-    run.save(update_fields=['restrict_clipboard'])
+    run.clipboard_mode = parse_mode(request.POST.get('clipboard_mode'))
+    run.save(update_fields=['clipboard_mode'])
     run.attempts.update(clipboard_exempt=False)
     run.attempts.filter(pk__in=exemptions).update(clipboard_exempt=True)
-    messages.success(request, 'Ограничения сохранены. В открытой работе применятся после перезагрузки страницы.')
+    messages.success(request, 'Настройки копирования сохранены. В открытой работе применятся после перезагрузки страницы.')
     return redirect('independentworks:progress', pk=pk)

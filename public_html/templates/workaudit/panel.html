@@ -1,1 +1,1 @@
-<details class="check-history" data-audit-url="{% url 'workaudit:activity' kind object.pk %}"><summary>Активность ученика</summary><div data-audit-body></div></details>
+{% load workaudit %}{% copied_whole kind object as whole %}<details class="check-history" data-audit-url="{% url 'workaudit:activity' kind object.pk %}"><summary>Активность ученика{% if whole %} <span class="audit-flag">копировал условие целиком{% if whole > 1 %} ×{{ whole }}{% endif %}</span>{% endif %}</summary><div data-audit-body></div></details>

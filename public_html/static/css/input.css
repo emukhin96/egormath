@@ -7070,6 +7070,23 @@
   .audit-copy .audit-text::before, .audit-paste .audit-text::before, .audit-drop .audit-text::before { content: '⎘ '; color: var(--muted); }
   .audit-blocked .audit-text { color: #b45309; }
   .audit-note { margin-top: var(--space-2); }
+  .audit-text { flex: 1 1 auto; min-width: 0; }
+  /* Скопированный текст — как есть, с LaTeX в $…$; длинный прокручивается */
+  .audit-copied, .audit-swapped {
+    display: block; margin-top: var(--space-1); padding: var(--space-1) var(--space-2);
+    max-height: 7.5em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+    font-size: 0.85rem; background: #f7f9fc; border-radius: var(--radius);
+  }
+  .audit-swapped > .helptext { display: block; }
+  .audit-swapped mark { background: #fde7c2; color: inherit; border-radius: 3px; padding: 0 2px; }
+  .audit-flag { color: var(--warn); font-weight: 600; }
+  .audit-whole > .audit-text { color: var(--warn); }
+  .audit-whole .audit-copied, .audit-whole .audit-swapped { color: var(--text); }
+  .iw-clipboard-mode { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .iw-clipboard-mode select { width: auto; margin: 0; }
+  .assignment-clipboard-option { margin-top: var(--space-3); }
+  .assignment-clipboard-option select { width: auto; max-width: 100%; }
+  .assignment-clipboard-option .helptext { display: block; margin-top: var(--space-1); }
   /* Все кнопки доски — одной высоты 30px; «выбрано» у режимов — заливка
      акцентом, у параметров (цвет, толщина) — кольцо акцентом в 2px */
   .canvas-widget { container-type: inline-size; }

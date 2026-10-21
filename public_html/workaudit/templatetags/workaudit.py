@@ -1,6 +1,6 @@
 from django import template
 
-from ..services import format_span
+from ..services import format_span, swap_marks, whole_copies
 
 register = template.Library()
 
@@ -20,3 +20,14 @@ def plural(number, forms):
     if 2 <= number % 10 <= 4 and not 12 <= number % 100 <= 14:
         return few
     return many
+
+
+@register.simple_tag
+def copied_whole(kind, work):
+    """Число копирований условия целиком — для пометки на свёрнутой панели."""
+    return whole_copies(kind, [work]).get(work.pk, 0)
+
+
+@register.simple_tag
+def swapped_text(text, swapped):
+    return swap_marks(text, swapped)
