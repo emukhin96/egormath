@@ -31,7 +31,7 @@
   <p class="sidebar-kicker">Источники</p>
   <ul class="sidebar-list">
     {% for facet in source_facets %}
-    <li{% if facet.is_current %} class="is-current"{% endif %}><a class="sidebar-row sidebar-row-count" href="?source={{ facet.pk }}" title="{{ facet.title }}">{{ facet.title }}<span class="sidebar-count">{{ facet.count }}</span></a></li>
+    <li{% if facet.is_current %} class="is-current"{% endif %}><a class="sidebar-row sidebar-row-count" href="?source={{ facet.pk }}" title="{{ facet.title }}">{{ facet.short }}<span class="sidebar-count">{{ facet.count }}</span></a></li>
     {% endfor %}
   </ul>
 </section>

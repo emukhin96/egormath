@@ -466,10 +466,11 @@
   }
 
   /* Открытое меню подсвечивает весь пункт — ссылку и шеврон вместе,
-     а не один шеврон: пункт меню — одна плашка */
+     а не один шеврон: пункт меню — одна плашка. Скругляем только верх:
+     у активной группы снизу линия inset-тенью, и нижний радиус загибал её концы */
   .nav-group:has(> .nav-more[aria-expanded="true"]) {
     background: var(--accent-soft);
-    border-radius: 8px;
+    border-radius: 8px 8px 0 0;
   }
 
   .topbar-nav .nav-group:has(> .nav-more[aria-expanded="true"]) > a,
@@ -2933,11 +2934,13 @@
   .catalog-table td { overflow-wrap: anywhere; }
   table.catalog-table td { vertical-align: baseline; } /* специфичнее table.list td */
   .catalog-table .task-text { margin-bottom: var(--space-2); }
-  /* Нижняя строка задачи: источник слева, «дублировать» и маски — справа */
+  /* Нижняя строка задачи: источник слева, «дублировать» и маски — справа.
+     По нижнему краю: если источник переносится, действия стоят на его
+     последней строке, а не посреди многострочного текста. */
   .catalog-row-meta {
     display: flex;
     flex-wrap: wrap;
-    align-items: baseline;
+    align-items: flex-end;
     gap: 0 var(--space-3);
     font-size: 0.78rem;
     line-height: 1.35;
@@ -2946,12 +2949,15 @@
   .catalog-source > span + span::before { content: ' · '; }
   .catalog-row-actions {
     display: inline-flex;
-    align-items: baseline;
+    align-items: center;
     gap: var(--space-2);
     margin-left: auto;
     white-space: nowrap;
   }
   .catalog-row-actions [data-mask-links]:empty { display: none; }
+  /* Иконка картинки — по высоте строки ссылок «клон», «дублировать» */
+  .catalog-row-actions .task-png-btn { padding: 1px 3px; }
+  .catalog-row-actions .task-png-btn svg { width: 16px; height: 16px; }
   .problem-columns label { display: block; }
   .problem-columns .ws-toggle { display: inline-flex; margin-left: 0; }
   .problem-columns .inline-label, .problem-columns .label-row label { display: inline-flex; }
@@ -3181,13 +3187,14 @@
     background: #ececec;
     border-left: 4px solid #000;
     padding: 6px 12px;
-    font-size: 0.92em;
+    /* 0.92 от размера условия (0.906em, см. .math-content) */
+    font-size: 0.83em;
   }
 
   .ws-text-light {
     border-left: 2px solid #000;
     padding: 4px 12px;
-    font-size: 0.92em;
+    font-size: 0.83em;
   }
 
   .ws-text-memo {
@@ -3196,7 +3203,7 @@
     border-left: 18px solid #8a93a3;
     border-radius: 8px;
     padding: 6px 12px;
-    font-size: 0.92em;
+    font-size: 0.83em;
   }
 
   .ws-text-memo::before {
@@ -3315,6 +3322,20 @@
 
   .math-content {
     line-height: 1.55;
+  }
+
+  /* Размер условий задач (решение 21.10.2026, вариант C): 14.5px вместо 16px,
+     формулы 1.1em вместо 1.21em KaTeX — плотнее и не тяжелее текста.
+     В em, чтобы мелкие контексты уменьшались пропорционально; :where —
+     нулевая специфичность, собственный размер блока (ответ, подпись) главнее.
+     Вложенный .math-content (условие внутри листка) не уменьшается второй раз;
+     пункт боковой панели и название рубрики — не условия, их не трогаем. */
+  :where(.math-content:not(.sidebar-row, .ws-rubric-name)) {
+    font-size: 0.90625em;
+  }
+
+  :where(.math-content .math-content) {
+    font-size: 1em;
   }
 
   /* Формула — неделимый блок: не разрывается при переносе строк */
@@ -7386,11 +7407,15 @@
 
 /* Русский текст внутри формулы («если», f_наим, \operatorname{НОД}): KaTeX
    рисует его запасным шрифтом браузера. Шрифт сайта и размер текста
-   (KaTeX увеличивает формулы в 1,21 раза). Вне @layer: правила KaTeX
-   (.katex .mathrm) идут без слоя и перебили бы правило из слоя. */
+   (KaTeX увеличивает формулы в 1,21 раза, в условиях — в 1,1). Вне @layer:
+   правила KaTeX (.katex .mathrm) идут без слоя и перебили бы правило из слоя. */
 .katex .cyrillic_fallback {
   font-family: var(--font-sans);
   font-size: 0.8264em;
+}
+
+.math-content:not(.sidebar-row, .ws-rubric-name) .katex .cyrillic_fallback {
+  font-size: 0.9091em;
 }
 
 /* Диалог «Клон задачи» (static/js/quick_clone.js, problems/_clone_dialog.html):
@@ -7771,4 +7796,12 @@
     }
     .finder-results td + td { margin-top: var(--space-2); }
   }
+}
+
+/* Формулы в условиях — 1.1em вместо 1.21em KaTeX (вариант C, 21.10.2026).
+   Вне @layer: katex.min.css не в слое и перебил бы правило из components.
+   Исключения те же, что у размера текста: в пункте боковой панели и названии
+   рубрики текст прежний, формулы тоже остаются по умолчанию KaTeX. */
+.math-content:not(.sidebar-row, .ws-rubric-name) .katex {
+  font-size: 1.1em;
 }

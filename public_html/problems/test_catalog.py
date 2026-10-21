@@ -120,6 +120,22 @@ class CatalogTests(TestCase):
         self.assertIn('дублировать', meta)
         self.assertNotIn('import-section-path', html)
 
+    def test_catalog_source_uses_short_title_and_path_tail(self):
+        # Полное «Авторы. Название» и вся глава — в подсказке; в строке
+        # короткое имя книги и два последних раздела пути.
+        self.source.author = 'М. И. Шабунин'
+        self.source.short_title = 'Шабунин, пособие 10'
+        self.source.save()
+        ref = self.task.source_refs.get()
+        ref.source_path = ['Глава X. Функции', 'Дидактические материалы', 'ДКР X.1', 'Вариант 5']
+        ref.save(update_fields=['source_path'])
+        html = self.client.get(reverse('task_list')).content.decode()
+        meta = html.split('class="task-meta catalog-row-meta"', 1)[1].split('</td>', 1)[0]
+        self.assertIn('>Шабунин, пособие 10 · № 7 › … › ДКР X.1 › Вариант 5</span>', meta)
+        self.assertIn('title="М. И. Шабунин. Книга · № 7 › Глава X. Функции › '
+                      'Дидактические материалы › ДКР X.1 › Вариант 5"', meta)
+        self.assertIn('>Шабунин, пособие 10<span class="sidebar-count">', html)
+
     def test_builder_answers_are_hidden_before_scripts_run(self):
         worksheet = Worksheet.objects.create(owner=self.teacher, title='Листок')
         WorksheetItem.objects.create(worksheet=worksheet, task=self.task)

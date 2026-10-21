@@ -201,6 +201,11 @@ class Source(models.Model):
     title = models.CharField('Название', max_length=190)
     author = models.CharField('Автор(ы)', max_length=190, blank=True)
     year = models.PositiveSmallIntegerField('Год издания', null=True, blank=True)
+    # В строке задачи каталога полное «Авторы. Название» занимало больше места,
+    # чем само условие: там показываем короткое имя, полное — в подсказке.
+    short_title = models.CharField(
+        'Короткое имя', max_length=60, blank=True,
+        help_text='Для строк задач и боковой панели, например «Шабунин, задачник 10–11».')
 
     class Meta:
         verbose_name = 'Источник (учебник/задачник)'
@@ -211,6 +216,10 @@ class Source(models.Model):
         if self.author:
             return f"{self.author.rstrip('.')}. {self.title}"
         return self.title
+
+    @property
+    def short_name(self):
+        return self.short_title or self.title
 
 
 def mask_spec_for(obj):
