@@ -641,6 +641,14 @@ class _AffineParser:
             return self.factor(depth+1)
         raise ValueError
 
+    def mixed_fraction(self):
+        """Целое перед \\frac из цифр — смешанное число, как numeric._MIXED."""
+        before = self.tokens[self.index-2] if self.index > 1 else ''
+        if before.isalpha() or before == '}' or self.peek() != r'\frac':
+            return False
+        rest = ''.join(self.tokens[self.index+1:self.index+7])
+        return bool(re.match(r'(?:\{[0-9]+\}|[0-9]){2}', rest))
+
     def factor(self, depth):
         if depth > MAX_COLLECTION_DEPTH:
             raise ValueError
@@ -663,9 +671,14 @@ class _AffineParser:
             self.variables.add(token)
             return Fraction(1), Fraction(0)
         try:
-            return self.bounded((Fraction(0), Fraction(token)))
+            value = self.bounded((Fraction(0), Fraction(token)))
         except (ValueError, ZeroDivisionError):
             raise ValueError from None
+        # -4\frac34 = -(4+3/4): унарный минус относится ко всему числу.
+        # Дробь с буквой (2\frac{x}{3}) остаётся произведением.
+        if token.isdigit() and self.mixed_fraction():
+            value = self.bounded((Fraction(0), value[1]+self.factor(depth+1)[1]))
+        return value
 
     def parse(self):
         value = self.expression()
