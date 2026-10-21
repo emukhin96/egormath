@@ -5960,6 +5960,13 @@
       display: contents;
     }
 
+    /* У раскрытой группы нет своего бокса, и её плашка фокуса не рисуется —
+       подсвечиваем саму ссылку (рамку фокуса с неё сняли выше) */
+    .topbar-nav .nav-group > a:focus-visible {
+      background: var(--accent-soft);
+      border-radius: 8px 8px 0 0;
+    }
+
     .topbar-nav a[data-nav-last] {
       order: 1;
     }
