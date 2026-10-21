@@ -12,11 +12,54 @@ def literal(text):
     return parse_number(normalize(sets._strip_var(text)))
 
 
+def _group_end(text, start):
+    """Позиция после скобки, парной открытой в ``text[start]``; None — нет пары."""
+    closing = {'{': '}', '(': ')', '[': ']'}.get(text[start:start + 1])
+    if closing is None:
+        return None
+    depth = 0
+    for index in range(start, len(text)):
+        depth += (text[index] == text[start]) - (text[index] == closing)
+        if not depth:
+            return index + 1
+    return None
+
+
+def _signed_group(text):
+    """``-\\frac{a}{b}`` → ('-', ``\\frac{a}{b}``): знак перед одной группой.
+
+    Ветви ``\\pm`` и пары ``x``/``-x`` в коллекции отличаются только знаком;
+    разбор Earley — основная часть стоимости, и группа разбирается один раз.
+    Унарный знак перед дробью, корнем или скобкой относится ко всей группе
+    и не сужает её область, поэтому значение и допустимость те же.
+    """
+    text = normalize(sets._strip_var(text))
+    if text[:1] not in ('-', '+'):
+        return None
+    body = text[1:].strip()
+    position = 0
+    for command, groups in ((r'\frac', 2), (r'\sqrt', 1)):
+        if body.startswith(command + '{') or body.startswith(command + '['):
+            position = len(command)
+            if body[position] == '[':
+                position = _group_end(body, position)
+            for _ in range(groups):
+                position = position and _group_end(body, position)
+            break
+    else:
+        position = _group_end(body, 0)
+    return (text[0], body) if position == len(body) else None
+
+
 def _number(text):
     from . import formulas
     number = literal(text)
     if number is not None:
         return number
+    signed = _signed_group(text)
+    if signed is not None:
+        value = _number(signed[1])
+        return value if value is None or signed[0] == '+' else -value
     item = formulas._parse(text, numeric=True)
     if item is None:
         return None
@@ -30,9 +73,15 @@ def _number(text):
 
 def _equal(a, b, tolerance=None):
     from sympy import simplify, sympify
-    difference = sympify(a)-sympify(b)
+    a, b = sympify(a), sympify(b)
+    difference = a-b
     if difference.is_zero is not None:
         return bool(difference.is_zero)
+    from . import formulas
+    # Различие видно по 30 знакам — simplify не нужен (сравнение элементов
+    # коллекции между собой идёт попарно, и почти все пары различны).
+    if formulas._numbers_differ(a, b):
+        return False
     difference = simplify(difference)
     same = difference == 0 or difference.equals(0)
     if same is None:
