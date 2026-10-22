@@ -3314,17 +3314,35 @@
     position: relative;
   }
   .user-menu-toggle {
-    width: 44px;
+    min-width: 44px;
     height: 44px;
-    display: grid;
-    place-items: center;
-    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: 0 5px;
     border: 0;
-    border-radius: 50%;
+    border-radius: 999px;
     background: transparent;
     cursor: pointer;
   }
+  /* Имя и фамилия рядом с кружком — как у учителя в шапке; на телефоне
+     только кружок, имя — в меню */
+  .user-menu-label {
+    max-width: 220px;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .user-menu-toggle:hover .user-menu-label { color: var(--accent); }
+  @media (max-width: 760px) {
+    .user-menu-label { display: none; }
+  }
   .user-menu-avatar {
+    flex: none;
     width: 34px;
     height: 34px;
     display: grid;
@@ -3978,6 +3996,10 @@
     gap: var(--space-2);
     margin-top: var(--space-2);
   }
+
+  /* Подпись поля в строке действий («Фото решения») — по центру кнопок,
+     без нижнего отступа обычной подписи формы */
+  .task-tools > label { margin-bottom: 0; }
 
   .task-tools .btn,
   .task-tools .photo-pick {
@@ -7179,15 +7201,7 @@
      её место занимает шапка работы (назад, название, «Вариант N», таймер,
      полоса времени, лента номеров). Номер ленты окрашен состоянием ответа:
      saved — зелёный, wrong/error — красный, empty — серый; открытый обведён. */
-  .iw-student .topbar { display: none; }
-  .iw-student .app-content { padding-top: 0; padding-bottom: 0; }
-  /* Колонка во всю высоту окна: панель сдачи у низа экрана и на короткой задаче */
-  .iw-student .student-column {
-    min-height: 100dvh;
-    display: flex;
-    flex-direction: column;
-  }
-  .iw-student .student-column > .iw-submit-bar { margin-top: auto; }
+  .iw-student .app-content { padding-top: 0; }
   .iw-student .student-column > .iw-sheet { margin-bottom: var(--space-3); }
   .iw-head {
     position: sticky;
@@ -7256,13 +7270,23 @@
     height: 100%;
     background: var(--accent);
   }
+  /* Лента номеров прокручивается, «Сдать работу» справа не уезжает */
+  .iw-head-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding-right: var(--space-3);
+  }
   .iw-strip {
+    flex: 1;
+    min-width: 0;
     display: flex;
     gap: 6px;
     padding: 10px var(--space-3) 12px;
     overflow-x: auto;
     scrollbar-width: none;
   }
+  .iw-head-submit { flex: none; margin: 0; }
   .iw-strip::-webkit-scrollbar { display: none; }
   .iw-strip-item {
     flex: none;
@@ -7293,13 +7317,15 @@
      без скрипта — тот же лист целиком. Номер задачи — заголовком
      «Задание N», поэтому колонка номера в строке условия не нужна. */
   .iw-sheet.is-focus > .iw-point:not(.is-current) { display: none; }
-  .iw-sheet.is-focus > .iw-point { border-top: 0; padding-block: var(--space-1); }
+  /* Сверху и снизу — тот же --space-4, что слева и справа у .card:
+     заголовок «Задание N» не прижат к рамке */
+  .iw-sheet.is-focus > .iw-point { border-top: 0; padding-block: var(--space-4); }
   .iw-sheet-edit .task-row { grid-template-columns: minmax(0, 1fr); }
   .iw-sheet-edit .task-row > .ws-num { display: none; }
   .iw-sheet-edit .task-tools,
   .iw-sheet-edit .answer-box,
   .iw-sheet-edit .answer-block { margin-left: 0; }
-  .iw-point-head { display: grid; gap: 2px; margin-bottom: var(--space-2); }
+  .iw-point-head { display: grid; gap: var(--space-1); margin-bottom: var(--space-3); }
   .iw-point-kicker {
     color: var(--muted);
     font-size: 0.72rem;
@@ -7436,39 +7462,31 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .iw-point-nav {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: var(--space-5);
-  }
+  /* «Следующее задание» — под карточкой у левого края; на телефоне
+     во всю ширину, под палец */
+  .iw-pager:has(.iw-point-nav:not([hidden])) { margin-bottom: var(--space-3); }
+  .iw-point-nav { display: flex; }
   .iw-point-nav .btn { justify-content: center; gap: 6px; }
-  .iw-point-nav .btn:last-child:not(:first-child) { grid-column: 2; }
   .iw-point-nav svg { width: 18px; height: 18px; }
-
-  /* Сдача — слева внизу, рядом счёт ответов; панель прилипает к низу окна */
-  .iw-submit-bar {
-    position: sticky;
-    bottom: 0;
-    z-index: 30;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--border);
-    border-bottom: 0;
-    border-radius: 12px 12px 0 0;
-    background: #fff;
-  }
-  .iw-submit-bar form { margin: 0; }
-  .iw-submit-count { color: var(--muted); font-size: 0.85rem; }
-  .iw-submit-count b { color: var(--text); }
+  /* Телефон: шапка работы вместо шапки сайта, во всю ширину экрана */
   @media (max-width: 760px) {
-    .iw-head,
-    .iw-submit-bar {
+    .iw-student .topbar { display: none; }
+    .iw-head {
       margin-inline: calc(-1 * var(--space-3));
       border-inline: 0;
       border-radius: 0;
+    }
+    .iw-point-nav .btn { flex: 1; }
+  }
+  /* Компьютер: обычная шапка сайта (логотип, имя ученика), под ней
+     шапка работы карточкой, прилипает под шапкой сайта */
+  @media (min-width: 761px) {
+    .iw-student .app-content { padding-top: var(--space-4); }
+    .iw-student .student-column { max-width: 800px; }
+    .iw-head {
+      top: var(--topbar-height);
+      border-top: 1px solid var(--border);
+      border-radius: 12px;
     }
   }
 

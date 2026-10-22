@@ -376,8 +376,9 @@ class IndependentWorkTests(TestCase):
 
     def test_attempt_one_task_screen_for_student(self):
         """Работа ученика (макет A2): своя шапка с «Вариант N» и таймером,
-        лента номеров с состоянием ответа, «Задание N», сдача внизу со
-        счётом ответов; у учителя страница прежняя."""
+        лента номеров с состоянием ответа и «Сдать работу» в той же строке,
+        счёт ответов под названием, «Задание N», под карточкой — только
+        следующее задание (22.10.2026); у учителя страница прежняя."""
         Position.objects.create(work=self.work, order=2, text='Пояснение к блоку')
         task = Task.objects.create(text_latex='Три плюс три?', answer_mask='{{number: 6}}')
         Candidate.objects.create(position=Position.objects.create(work=self.work, order=3), task=task)
@@ -387,13 +388,21 @@ class IndependentWorkTests(TestCase):
         self.client.force_login(self.student)
         response = self.client.get(self.url('attempt', a.pk))
         self.assertContains(response, 'data-iw-focus')
-        self.assertContains(response, f'Вариант {a.variant.number}</span>')
+        self.assertContains(
+            response, f'Вариант {a.variant.number}, <span data-iw-answered role="status">1 ответ</span> из 2</span>',
+            html=False)
         self.assertContains(response, 'data-iw-timer')
         self.assertContains(response, f'data-iw-strip="{first.pk}" data-state="saved"')
         self.assertContains(response, f'data-iw-strip="{second.pk}" data-state="empty"')
         self.assertContains(response, 'Задание 1</h2>')
         self.assertContains(response, '<div class="math-content iw-point-kicker">Пояснение к блоку</div>', html=False)
-        self.assertContains(response, 'Есть <b data-iw-answered data-total="2">1 ответ</b> из 2', html=False)
+        self.assertNotContains(response, 'Есть ')
+        self.assertNotContains(response, 'Ваш ответ')
+        self.assertContains(response, 'class="iw-head-submit"', count=1)
+        self.assertNotContains(response, 'iw-submit-bar')
+        # Под карточкой — кнопка следующего номера; у последнего её нет
+        self.assertContains(response, f'data-iw-nav="{first.pk}"', count=1)
+        self.assertNotContains(response, f'data-iw-nav="{second.pk}"')
         self.assertNotContains(response, 'sidebar-section')
         self.assertNotContains(response, 'page-crumbs')
         self.client.force_login(self.teacher)
