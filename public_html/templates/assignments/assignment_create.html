@@ -1,30 +1,28 @@
-{% extends 'base.html' %}{% load static %}
+{% extends 'base.html' %}{% load static task_extras %}
 {% block title %}Выдать задание — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/assignment_create.html' %}{% endblock %}
+{% block sidebar %}{% if independent %}{% include 'includes/sidebar/assignment_create.html' %}{% endif %}{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <nav class="page-crumbs" aria-label="Путь">
-      {% if independent %}<a href="{% url 'assignment_list' %}?kind=ordinary" data-save-draft-before-leave>Задания</a><a href="{% url 'independentworks:catalog' %}" data-save-draft-before-leave>Самостоятельные</a>{% else %}<a href="{% url 'assignment_list' %}?kind=ordinary">Задания</a>{% endif %}
-    </nav>
+{% comment %}
+Мастер выдачи по макету E_Issue (холст «Страницы учителя», 22.10.2026): сетка
+1fr | 340px, вкладки «Листок | Самостоятельная» над итогом той же ширины.
+Обычная выдача: листки карточками с историей, «Кому» с участниками групп,
+условия переключателями, итог «Выдать N ученикам» считается в браузере
+(повторная выдача тем же ученикам пропускается сервером). Без «·».
+{% endcomment %}
+<div class="is-head">
+  <div class="is-heading">
+    {% if independent %}<a class="live-back" href="{% url 'independentworks:catalog' %}" data-save-draft-before-leave>← Самостоятельные</a>{% else %}<a class="live-back" href="{% url 'assignment_list' %}?kind=ordinary">← Задания</a>{% endif %}
     <h1>Выдать задание</h1>
-    {% if independent %}
-    <p class="page-meta">
-      <span>{% if kind == 'correction' %}работа над ошибками{% elif kind == 'retake' %}пересдача{% else %}самостоятельная{% endif %}</span>
-      {% if work %}<span>{{ work.title }}</span>{% endif %}
-      <span>варианты зафиксированы, срок — по серверу</span>
-    </p>
-    {% endif %}
+    {% if independent %}<p class="live-meta">{% if kind == 'correction' %}Работа над ошибками{% elif kind == 'retake' %}Пересдача{% else %}Самостоятельная{% endif %}{% if work %}, {{ work.title }}{% endif %}; варианты зафиксированы, срок — по серверу</p>{% endif %}
   </div>
-  {% if independent and work %}<div class="page-actions"><button class="btn" type="submit" form="assignment-create-form" name="action" value="preview">Сформировать и просмотреть</button></div>{% endif %}
+  {% if not work and independentworks_enabled %}
+  <div class="is-tabs" role="tablist" aria-label="Что выдаём">
+    <a role="tab" href="{% url 'assignment_create' %}" aria-selected="{% if independent %}false{% else %}true{% endif %}">Листок</a>
+    <a role="tab" href="{% url 'assignment_create' %}?mode=independent" aria-selected="{% if independent %}true{% else %}false{% endif %}">Самостоятельная</a>
+  </div>
+  {% elif independent and work %}<div class="page-actions"><button class="btn" type="submit" form="assignment-create-form" name="action" value="preview">Сформировать и просмотреть</button></div>{% endif %}
 </div>
 
-{% if not work and independentworks_enabled %}
-<div class="page-toolbar">
-  <nav class="seg" aria-label="Вид задания"><a class="seg-item{% if not independent %} is-active{% endif %}" href="{% url 'assignment_create' %}" {% if not independent %}aria-current="page"{% endif %}>Обычное задание</a><a class="seg-item{% if independent %} is-active{% endif %}" href="{% url 'assignment_create' %}?mode=independent" {% if independent %}aria-current="page"{% endif %}>Самостоятельная</a></nav>
-  {% if not independent %}<span class="muted">Один листок — группе, нескольким группам или отдельным ученикам.</span>{% endif %}
-</div>
-{% endif %}
 {% if choose_work %}
 <section class="card form-section"><div class="iw-workspace-heading"><h2>Шаблоны самостоятельных</h2><a class="btn" href="{% url 'independentworks:create' %}">Создать самостоятельную</a></div>
 <form method="get"><input type="hidden" name="mode" value="independent"><label>Поиск по названию<input name="q" value="{{ request.GET.q|default:'' }}" placeholder="Название самостоятельной"></label><div class="form-buttons"><button class="btn btn-secondary">Найти</button></div></form>
@@ -37,23 +35,33 @@
       data-refresh-url="{% url 'assignment_create' %}">
   {% csrf_token %}{% if independent %}<input type="hidden" name="mode" value="independent"><input type="hidden" name="work" value="{{ work.pk }}">{% endif %}
   {% if form.non_field_errors %}<div class="msg msg-error">{{ form.non_field_errors }}</div>{% endif %}
-  <div class="assignment-create-grid">
-    <div>
-      <section class="card form-section">
-        <div class="form-section-head"><span class="form-step">1</span><div><h2>Что выдаём</h2>{% if not independent %}<p class="helptext">Можно выбрать только свой листок.</p>{% endif %}</div></div>
-        {% if independent %}<h3>{{ work.title }}</h3>{% else %}        {{ form.worksheet.errors }}
-        {{ form.worksheet.label_tag }}
-        {{ form.worksheet }}
-        <p class="helptext">Если листок уже выдавался, прежний режим автосверки сохранится для всех учеников.</p>{% endif %}
+  <div class="is-grid">
+    <div class="is-steps">
+      <section class="card is-step" aria-labelledby="is-step-1">
+        <div class="is-step-head"><h2 id="is-step-1"><span class="form-step">1</span>Что выдаём</h2>{% if not independent and sheet_options %}<input type="search" class="is-search" placeholder="Найти листок" aria-label="Найти листок" data-sheet-filter>{% endif %}</div>
+        {% if independent %}<h3>{{ work.title }}</h3>{% else %}
+        {{ form.worksheet.errors }}
+        <div class="is-sheets" role="radiogroup" aria-label="Листок">
+          {% for w in sheet_options %}
+          <label class="is-sheet" data-sheet-choice{% if forloop.counter > sheets_shown %} data-sheet-more hidden{% endif %}>
+            <input type="radio" name="worksheet" value="{{ w.pk }}" data-tasks="{{ w.tasks_total }}"{% if form.selected_worksheet.pk == w.pk %} checked{% endif %}>
+            <span class="is-sheet-body"><span class="is-sheet-title">{{ w.title }}</span><span class="is-sheet-meta">{{ w.tasks_total }} {{ w.tasks_total|plural_ru:'задача,задачи,задач' }}{% if w.grade_label %}, {{ w.grade_label }}{% endif %}{% if request.user.is_superuser %}, {{ w.owner.get_full_name|default:w.owner.username }}{% endif %}</span></span>
+            <span class="is-sheet-history">{% if w.issued %}выдан {{ w.issued }} {{ w.issued|plural_ru:'ученику,ученикам,ученикам' }}, последний раз {{ w.last_issued|date:'d.m' }}{% else %}не выдавался{% endif %}</span>
+          </label>
+          {% empty %}<p class="helptext">Листков пока нет — <a href="{% url 'worksheet_create' %}">создайте листок</a>.</p>{% endfor %}
+        </div>
+        {% if sheet_options|length > sheets_shown %}<button type="button" class="linklike is-all" data-sheet-all>Все листки, {{ sheet_options|length }}</button>{% endif %}
+        {% endif %}
       </section>
 
-      <section class="card form-section">
-        <div class="form-section-head"><span class="form-step">2</span><div><h2>Кому выдаём</h2><p class="helptext">Ученики из выбранных групп и отдельного списка объединяются без дублей.</p></div></div>
+      <section class="card is-step" aria-labelledby="is-step-2">
+        <h2 id="is-step-2"><span class="form-step">2</span>Кому</h2>
         {% if parent %}<p>{{ parent.student.get_full_name|default:parent.student.username }}</p>{% else %}{% include 'assignments/_recipients.html' %}{% endif %}
+        {% if not independent %}<p class="is-skip" data-summary-skip hidden></p>{% endif %}
       </section>
 
-      <section class="card form-section">
-        <div class="form-section-head"><span class="form-step">3</span><div><h2>Условия работы</h2>{% if not independent %}<p class="helptext">Срок — ориентир: после него сдача не блокируется.</p>{% endif %}</div></div>
+      <section class="card is-step" aria-labelledby="is-step-3">
+        <h2 id="is-step-3"><span class="form-step">3</span>Условия</h2>
         {% if independent %}<div class="settings-grid">
           <div>{{ form.duration.errors }}{{ form.duration.label_tag }}{{ form.duration }}<div class="time-presets"><button type="button" class="btn btn-secondary btn-small" data-duration="10">10 мин</button><button type="button" class="btn btn-secondary btn-small" data-duration="15">15 мин</button><button type="button" class="btn btn-secondary btn-small" data-duration="30">30 мин</button></div></div>
           <div>{{ form.deadline.errors }}{{ form.deadline.label_tag }}{{ form.deadline }}<div class="time-presets"><button type="button" class="btn btn-secondary btn-small" data-deadline="0">Сейчас</button><button type="button" class="btn btn-secondary btn-small" data-deadline="15">Сейчас +15′</button><button type="button" class="btn btn-secondary btn-small" data-deadline="30">Сейчас +30′</button></div></div>
@@ -61,30 +69,62 @@
           <div>{{ form.release_mode.errors }}<input type="hidden" name="release_toggle" value="1"><label class="ws-toggle">{{ form.withhold_answers }}<span class="ws-toggle-slider"></span><span class="ws-toggle-text">Не показывать ответы сразу</span></label></div>
           <div><label class="ws-toggle">{{ form.self_check }}<span class="ws-toggle-slider"></span><span class="ws-toggle-text">Самопроверка до сдачи</span></label></div>
         </div><div data-release-flags>{{ form.release_flags.errors }}{{ form.release_flags.label_tag }}{{ form.release_flags }}</div>
-        {% else %}        <div class="settings-grid">
-          <div>{{ form.due_at.errors }}{{ form.due_at.label_tag }}{{ form.due_at }}</div>
-          <div>
-            {{ form.check_visibility.errors }}{{ form.check_visibility.label_tag }}{{ form.check_visibility }}
-            <span class="helptext">{{ form.check_visibility.help_text }}</span>
-          </div>
-        </div>
-{% endif %}
-        <label class="check-label assignment-photo-option">{{ form.restrict_clipboard }} <span>{{ form.restrict_clipboard.label }}</span></label>
+                <label class="check-label assignment-photo-option">{{ form.restrict_clipboard }} <span>{{ form.restrict_clipboard.label }}</span></label>
         <label class="check-label assignment-photo-option">{{ form.swap_numbers }} <span>{{ form.swap_numbers.label }} <span class="helptext">{{ form.swap_numbers.help_text }}</span></span></label>
         <label class="check-label assignment-photo-option">{{ form.allow_photos }} <span>{{ form.allow_photos.label }}</span></label>
+        {% else %}
+        <div class="is-conditions">
+          <span class="is-label">Срок</span>
+          <div class="is-due">
+            {{ form.due_at.errors }}{{ form.due_at }}
+            <span class="is-quick"><button type="button" class="btn btn-secondary btn-small" data-due-days="1">Завтра</button><button type="button" class="btn btn-secondary btn-small" data-due-days="3">Через 3 дня</button><button type="button" class="btn btn-secondary btn-small" data-due-days="7">Через неделю</button><button type="button" class="btn btn-secondary btn-small" data-due-days="">Без срока</button></span>
+            <span class="helptext">Срок — ориентир: после него сдача не блокируется.</span>
+          </div>
+          <span class="is-label">Автосверка</span>
+          <div class="is-checks" role="radiogroup" aria-label="Автосверка">
+            {{ form.check_visibility.errors }}
+            {% for value, label, note in check_options %}<label class="is-check"><input type="radio" name="check_visibility" value="{{ value }}"{% if value == check_value %} checked{% endif %}{% if check_locked %} disabled{% endif %}><span><span class="is-check-title">{{ label }}</span><span class="helptext">{{ note }}</span></span></label>{% endfor %}
+            {% if check_locked %}<p class="helptext">{{ form.check_visibility.help_text }}</p>{% endif %}
+          </div>
+          <span class="is-label">Ещё</span>
+          <div class="is-toggles">
+            <label class="ws-toggle">{{ form.allow_photos }}<span class="ws-toggle-slider"></span><span class="ws-toggle-text">{{ form.allow_photos.label }}</span></label>
+            <label class="ws-toggle">{{ form.restrict_clipboard }}<span class="ws-toggle-slider"></span><span class="ws-toggle-text">{{ form.restrict_clipboard.label }}</span></label>
+            <label class="ws-toggle">{{ form.swap_numbers }}<span class="ws-toggle-slider"></span><span class="ws-toggle-text">{{ form.swap_numbers.label }}<span class="helptext">{{ form.swap_numbers.help_text }}</span></span></label>
+          </div>
+        </div>
+        {% endif %}
       </section>
     </div>
 
+    {% if independent %}
     <aside class="card assignment-create-summary">
       <span class="page-eyebrow">Перед выдачей</span>
       <dl class="summary-list">
-        <div class="summary-work"><dt>{% if independent %}Самостоятельная{% else %}Листок{% endif %}</dt><dd data-summary-worksheet>{{ work.title|default:"Не выбран" }}</dd></div>
+        <div class="summary-work"><dt>Самостоятельная</dt><dd data-summary-worksheet>{{ work.title|default:"Не выбран" }}</dd></div>
         <div><dt>Групп</dt><dd data-summary-groups>0</dd></div>
         <div><dt>Учеников отдельно</dt><dd data-summary-students>0</dd></div>
       </dl>
-      <p class="helptext">{% if independent %}Перед выдачей вы увидите конкретные варианты и распределение.{% else %}Повторная выдача того же листка тому же ученику будет безопасно пропущена.{% endif %}</p>
-      {% if independent %}<div class="form-buttons summary-actions"><button class="btn" type="submit" name="action" value="preview">Сформировать и просмотреть</button><button class="btn btn-secondary" type="submit" name="action" value="draft">Сохранить черновик</button></div>{% else %}<button class="btn" type="submit">Выдать задание</button>{% endif %}
+      <p class="helptext">Перед выдачей вы увидите конкретные варианты и распределение.</p>
+      <div class="form-buttons summary-actions"><button class="btn" type="submit" name="action" value="preview">Сформировать и просмотреть</button><button class="btn btn-secondary" type="submit" name="action" value="draft">Сохранить черновик</button></div>
     </aside>
+    {% else %}
+    <aside class="card is-summary" aria-label="Итог выдачи">
+      <span class="is-label">Перед выдачей</span>
+      <span class="is-summary-title" data-summary-worksheet>{{ form.selected_worksheet.title|default:'Листок не выбран' }}</span>
+      <dl class="is-facts">
+        <dt>Задач</dt><dd data-summary-tasks>—</dd>
+        <dt>Кому</dt><dd data-summary-to>пока никому</dd>
+        <dt>Учеников</dt><dd data-summary-count>0</dd>
+        <dt>Срок</dt><dd data-summary-due>без срока</dd>
+        <dt>Автосверка</dt><dd data-summary-check>—</dd>
+        <dt>Копирование</dt><dd data-summary-copy>разрешено</dd>
+      </dl>
+      <button class="btn is-submit" type="submit" data-summary-submit>Выдать задание</button>
+      <span class="helptext">Повторная выдача того же листка тому же ученику пропускается.{% if check_locked %} Режим автосверки общий для всех выдач листка и уже выбран.{% endif %}</span>
+    </aside>
+    {{ issue_data|json_script:'issue-data' }}
+    {% endif %}
   </div>
 </form>
 {% endif %}
@@ -103,15 +143,8 @@
       form.requestSubmit(form.querySelector('[name="action"][value="draft"]'));
     }
   }); });
-  var worksheet = form.querySelector('[name="worksheet"]');
   var groupBoxes = form.querySelectorAll('[name="groups"]');
   var studentBoxes = form.querySelectorAll('[name="students"]');
-  function updateSummary() {
-    var option = worksheet && worksheet.options[worksheet.selectedIndex];
-    if (worksheet) form.querySelector('[data-summary-worksheet]').textContent = option && option.value ? option.text : 'Не выбран';
-    form.querySelector('[data-summary-groups]').textContent = Array.from(groupBoxes).filter(function (box) { return box.checked; }).length;
-    form.querySelector('[data-summary-students]').textContent = Number(form.dataset.fixedRecipients || 0) + Array.from(studentBoxes).filter(function (box) { return box.checked; }).length;
-  }
   var release = form.querySelector('[name=withhold_answers]');
   form.addEventListener('click', function (event) {
     var button = event.target.closest('[data-duration], [data-deadline]');
@@ -129,13 +162,6 @@
   });
   function releaseOptions() { var panel = form.querySelector('[data-release-flags]'); if (panel && release) panel.hidden = release.checked; }
   form.addEventListener('change', releaseOptions); releaseOptions();
-  form.addEventListener('change', updateSummary);
-  if (worksheet) worksheet.addEventListener('change', function () {
-    if (form.dataset.bound === '1') return;
-    var target = form.dataset.refreshUrl;
-    if (worksheet.value) target += '?worksheet=' + encodeURIComponent(worksheet.value);
-    window.location.assign(target);
-  });
   var filter = form.querySelector('[data-student-filter]');
   if (filter) filter.addEventListener('input', function () {
     var query = filter.value.trim().toLowerCase();
@@ -143,6 +169,92 @@
       item.hidden = query && !item.textContent.toLowerCase().includes(query);
     });
   });
+
+  var dataNode = document.getElementById('issue-data');
+  if (!dataNode) {
+    // Самостоятельная: прежняя сводка «групп / учеников отдельно»
+    var updateCounts = function () {
+      form.querySelector('[data-summary-groups]').textContent = Array.from(groupBoxes).filter(function (box) { return box.checked; }).length;
+      form.querySelector('[data-summary-students]').textContent = Number(form.dataset.fixedRecipients || 0) + Array.from(studentBoxes).filter(function (box) { return box.checked; }).length;
+    };
+    form.addEventListener('change', updateCounts); updateCounts();
+    return;
+  }
+
+  /* Обычная выдача (макет E_Issue): выбор листка карточкой перезагружает
+     мастер — сервер пересчитывает, кому листок уже выдан, и режим
+     автосверки; итог справа считается здесь же. */
+  var data = JSON.parse(dataNode.textContent);
+  var assigned = new Set(data.assigned);
+  function plural(n, forms) {
+    var a = n % 10, b = n % 100;
+    return forms[a === 1 && b !== 11 ? 0 : a >= 2 && a <= 4 && (b < 10 || b >= 20) ? 1 : 2];
+  }
+  function label(box) { return box.closest('label').querySelector('span').textContent.trim(); }
+  form.querySelectorAll('[name="worksheet"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      if (form.dataset.bound === '1') { updateSummary(); return; }
+      window.location.assign(form.dataset.refreshUrl + '?worksheet=' + encodeURIComponent(radio.value));
+    });
+  });
+  var sheetFilter = form.querySelector('[data-sheet-filter]'), showAll = form.querySelector('[data-sheet-all]');
+  function filterSheets() {
+    var query = sheetFilter ? sheetFilter.value.trim().toLowerCase() : '';
+    form.querySelectorAll('[data-sheet-choice]').forEach(function (item) {
+      var match = !query || item.textContent.toLowerCase().includes(query);
+      var more = item.hasAttribute('data-sheet-more') && !query && !(showAll && showAll.hidden);
+      item.hidden = !match || (more && !item.querySelector('input').checked);
+    });
+  }
+  if (sheetFilter) sheetFilter.addEventListener('input', filterSheets);
+  if (showAll) showAll.addEventListener('click', function () { showAll.hidden = true; filterSheets(); });
+  form.addEventListener('click', function (event) {
+    var due = event.target.closest('[data-due-days]');
+    if (!due) return;
+    var input = form.querySelector('[name=due_at]');
+    if (due.dataset.dueDays === '') { input.value = ''; }
+    else {
+      var time = input.value ? input.value.slice(11, 16) : '23:59';
+      var day = new Date(Date.now() + Number(due.dataset.dueDays) * 86400000);
+      input.value = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0') + 'T' + time;
+    }
+    input.dispatchEvent(new Event('change', {bubbles: true}));
+  });
+  function updateSummary() {
+    var sheet = form.querySelector('[name="worksheet"]:checked');
+    form.querySelector('[data-summary-worksheet]').textContent = sheet ? sheet.closest('label').querySelector('.is-sheet-title').textContent : 'Листок не выбран';
+    form.querySelector('[data-summary-tasks]').textContent = sheet ? sheet.dataset.tasks : '—';
+    var people = new Set(), skipped = new Set(), to = [];
+    groupBoxes.forEach(function (box) {
+      if (!box.checked) return;
+      to.push(label(box));
+      (data.members[box.value] || []).forEach(function (id) { (assigned.has(id) ? skipped : people).add(id); });
+    });
+    studentBoxes.forEach(function (box) {
+      if (!box.checked) return;
+      if (!people.has(Number(box.value))) to.push(label(box).split(',')[0]);
+      people.add(Number(box.value));
+    });
+    var count = people.size, total = count + skipped.size;
+    form.querySelector('[data-summary-to]').textContent = to.length ? to.join(', ') : 'пока никому';
+    form.querySelector('[data-summary-count]').textContent = total ? total + (skipped.size ? ', ' + skipped.size + ' уже ' + plural(skipped.size, ['получил', 'получили', 'получили']) : '') : '0';
+    var note = form.querySelector('[data-summary-skip]');
+    var names = Array.from(skipped).map(function (id) { return data.names[id]; }).filter(Boolean);
+    note.hidden = !names.length;
+    note.textContent = names.length ? names.join(', ') + ' уже ' + plural(names.length, ['получил', 'получили', 'получили']) + ' этот листок, повторно выдавать не будем.' : '';
+    var due = form.querySelector('[name=due_at]').value;
+    form.querySelector('[data-summary-due]').textContent = due ? due.slice(8, 10) + '.' + due.slice(5, 7) + ', ' + due.slice(11, 16) : 'без срока';
+    var check = form.querySelector('[name=check_visibility]:checked');
+    form.querySelector('[data-summary-check]').textContent = check ? check.closest('label').querySelector('.is-check-title').textContent : '—';
+    var copy = [];
+    if (form.querySelector('[name=restrict_clipboard]').checked) copy.push('запрещено');
+    if (form.querySelector('[name=swap_numbers]').checked) copy.push('подменять числа');
+    form.querySelector('[data-summary-copy]').textContent = copy.length ? copy.join(', ') : 'разрешено';
+    var submit = form.querySelector('[data-summary-submit]');
+    submit.textContent = count ? 'Выдать ' + count + ' ' + plural(count, ['ученику', 'ученикам', 'ученикам']) : 'Выдать задание';
+  }
+  form.addEventListener('change', updateSummary);
+  filterSheets();
   updateSummary();
 })();
 </script>

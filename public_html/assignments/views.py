@@ -509,8 +509,44 @@ def assignment_create(request):
                 request, f'Уже были выданы и пропущены: {skipped}.')
         return redirect('assignment_list')
     return render(request, 'assignments/assignment_create.html', {
-        'form': form,
+        'form': form, **_issue_context(form, request.user),
     })
+
+
+ISSUE_SHEETS_SHOWN = 6
+CHECK_NOTES = {
+    Assignment.CHECK_LIVE: 'Кнопка «Проверить» у каждой задачи; вы видите, сколько раз ученик проверял',
+    Assignment.CHECK_AFTER_SUBMIT: 'Ученик узнает, что верно, только после сдачи работы',
+    Assignment.CHECK_TEACHER: 'Ученик не видит автосверку; результат только у вас',
+}
+
+
+def _issue_context(form, teacher):
+    """Мастер выдачи листка по макету E_Issue (22.10.2026): листки
+    карточками с историей выдач, участники групп и уже получившие листок —
+    для итога «Выдать N ученикам» и предупреждения о пропуске повторов."""
+    sheets = (form.fields['worksheet'].queryset
+              .annotate(tasks_total=Count('items', filter=Q(items__task__isnull=False, items__deleted_at__isnull=True), distinct=True),
+                        issued=Count('assignments', distinct=True), last_issued=Max('assignments__assigned_at')))
+    selected = form.selected_worksheet
+    options = list(sheets)
+    if selected and selected not in options[:ISSUE_SHEETS_SHOWN]:
+        options.sort(key=lambda w: w.pk != selected.pk)
+    groups = list(form.fields['groups'].queryset.prefetch_related('students'))
+    names = {u.pk: u.get_full_name() or u.username for u in form.fields['students'].queryset}
+    members = {str(g.pk): [u.pk for u in g.students.all()] for g in groups}
+    for g in groups:
+        for u in g.students.all():
+            names.setdefault(u.pk, u.get_full_name() or u.username)
+    check = form['check_visibility']
+    return {
+        'sheet_options': options, 'sheets_shown': ISSUE_SHEETS_SHOWN,
+        'check_options': [(value, label, CHECK_NOTES[value]) for value, label in
+                          sorted(Assignment.CHECK_CHOICES, key=lambda c: c[0] != Assignment.CHECK_LIVE)],
+        'check_value': str(check.value() or Assignment.CHECK_LIVE), 'check_locked': check.field.disabled,
+        'issue_data': {'members': members, 'names': {str(k): v for k, v in names.items()},
+                       'assigned': sorted(int(pk) for pk in form.fields['students'].widget.assigned_ids)},
+    }
 
 
 # --- Кабинет ученика ---

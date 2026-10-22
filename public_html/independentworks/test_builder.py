@@ -50,7 +50,7 @@ class BuilderTests(TestCase):
         self.assertContains(response, 'data-save-draft-before-leave')
         self.assertContains(response, 'name="action" value="preview"', count=2)
         self.assertContains(response, 'name="action" value="draft"')
-        self.assertContains(response, 'class="page-crumbs"')
+        self.assertContains(response, 'class="live-back"')  # шапка по макету E: «← Самостоятельные»
         self.assertContains(response, 'class="summary-work"')
         self.assertContains(response, 'class="form-buttons summary-actions"')
         self.assertNotContains(response, 'Независимый шаблон самостоятельной.')
@@ -60,7 +60,7 @@ class BuilderTests(TestCase):
         self.assertNotContains(response, 'Проверить кандидатов по номерам')
         self.assertNotContains(response, 'id_check_visibility')
         ordinary = self.client.get(reverse('assignment_create'))
-        self.assertContains(ordinary, 'id_check_visibility')
+        self.assertContains(ordinary, 'name="check_visibility"')  # карточки автосверки по макету E_Issue
         self.assertNotContains(ordinary, 'id_duration')
         with override_settings(INDEPENDENT_WORKS_ENABLED=False):
             self.assertEqual(self.client.get(reverse('assignment_create'), {'mode': 'independent'}).status_code, 404)
