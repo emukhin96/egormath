@@ -27,7 +27,19 @@
     state.form.dataset.state = mark;
     if (state.status) state.status.dataset.state = mark;
     const item = strip.get(state.form.dataset.point);
-    if (item && mark !== 'dirty' && mark !== 'saving') { item.dataset.state = mark; recount(); }
+    // Фото — тоже ответ (integration.has_answer): стёртое поле при фото не гасит номер
+    const stripMark = mark === 'empty' && hasPhotos(state.form.dataset.point) ? 'saved' : mark;
+    if (item && mark !== 'dirty' && mark !== 'saving') { item.dataset.state = stripMark; recount(); }
+  }
+  function hasPhotos(point) { return !!document.querySelector('#point-' + point + ' .iw-photo'); }
+  // Номер в ленте и счёт после загрузки или удаления фото без перезагрузки;
+  // «неверно» самопроверки фото не перекрывает
+  function photosChanged(point) {
+    const item = strip.get(point);
+    if (!item || item.dataset.state === 'wrong' || item.dataset.state === 'error') return;
+    const form = forms.find(answer => answer.dataset.point === point);
+    item.dataset.state = (form && filled(form)) || hasPhotos(point) ? 'saved' : 'empty';
+    recount();
   }
   // Пустой ответ — без подписи: строка статуса под полем просто исчезает
   function savedText(form) { return filled(form) ? ['Сохранено', 'saved'] : ['', 'empty']; }
@@ -200,6 +212,7 @@
             const result = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(result.message || 'Фото не загружено');
             gallery.insertBefore(photoThumb(result, token), hint);
+            photosChanged(section.id.replace('point-', ''));
             if (window.EgorAutosave) EgorAutosave.showSaved(true, 'Фото загружено');
           } catch (error) {
             if (window.EgorAutosave) EgorAutosave.showSaved(false, error.message);
@@ -227,7 +240,9 @@
       const response = await fetch(form.action, {method: 'POST', body: new FormData(form), headers: {'X-Requested-With': 'XMLHttpRequest'}});
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || 'Фото не удалено');
+      const section = form.closest('.iw-point');
       form.closest('.iw-photo').remove();
+      if (section) photosChanged(section.id.replace('point-', ''));
     } catch (error) {
       button.disabled = false;
       if (window.EgorAutosave) EgorAutosave.showSaved(false, error.message);
