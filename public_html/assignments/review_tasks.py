@@ -204,7 +204,12 @@ def review_complete(request, worksheet_id):
             left += 1
         else:
             done.append(assignment.pk)
-    Assignment.objects.filter(pk__in=done).update(status=Assignment.STATUS_REVIEWED, reviewed_at=timezone.now())
+    # По одной через save(), как review_assignment: post_save обновляет
+    # файлы-версии карты, прогресса ученика и доски (ревью #281)
+    from .views import _set_assignment_status
+    now = timezone.now()
+    for assignment in Assignment.objects.filter(pk__in=done):
+        _set_assignment_status(assignment, Assignment.STATUS_REVIEWED, now)
     if done:
         messages.success(request, f'Проверка завершена: {len(done)}' + (f', ещё не оценены: {left}' if left else '') + '.')
     else:

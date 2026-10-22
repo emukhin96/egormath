@@ -95,6 +95,18 @@ class ReviewTasksTests(TestCase):
         self.assertContains(response, 'Проверка завершена: 1, ещё не оценены: 1.')
         statuses = dict(Assignment.objects.filter(student__username__in=['anna', 'oleg']).values_list('student__username', 'status'))
         self.assertEqual(statuses, {'anna': Assignment.STATUS_REVIEWED, 'oleg': Assignment.STATUS_SUBMITTED})
+        self.assertIsNotNone(Assignment.objects.get(pk=self.assignments['anna'].pk).reviewed_at)
+
+    def test_complete_touches_live_files(self):
+        """Ревью #281: завершение идёт через save() — открытые карта,
+        прогресс ученика и доска узнают о смене статуса."""
+        from unittest.mock import patch
+        anna = self.assignments['anna']
+        Assignment.objects.filter(pk=anna.pk).update(status=Assignment.STATUS_SUBMITTED)
+        Review.objects.create(submission=Submission.objects.get(assignment=anna), grade='+')
+        with patch('livefile.files.touch_assignment') as touch:
+            self.client.post(reverse('assignment_review_complete', args=[self.worksheet.pk]))
+        touch.assert_any_call(anna.pk, self.worksheet.pk, anna.student_id)
 
 
     def test_one_rule_for_graded_and_auto_ok(self):
