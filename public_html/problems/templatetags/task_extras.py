@@ -4,7 +4,9 @@ from django import template
 
 from problems.answer_material import (answer_material as _answer_material,
                                      solution_texts)
-from problems.task_images import TASKPIC_NUM_RE, images_for_group
+from problems.task_images import (
+    TASKPIC_NUM_RE, images_for_group, owner_material_images,
+    unplaced_material_images)
 from problems.textbook_parser import (
     apply_imported_answer, cyrillic_item_label as _cyrillic_item_label,
     normalize_imported_text, order_letter_subitems, strip_heading_dot)
@@ -18,6 +20,18 @@ register = template.Library()
 def task_images(task, group='statement'):
     """Картинки задачи: условие, ответы/решения или все."""
     return {'images': images_for_group(task, group)}
+
+
+@register.inclusion_tag('problems/_task_images.html')
+def owner_images(task, owner, kind):
+    """Рисунки к ответу или решению задачи/подпункта в карточке редактора."""
+    return {'images': owner_material_images(task, owner, kind)}
+
+
+@register.simple_tag
+def task_unplaced_images(task):
+    """Рисунки общего ответа/решения задачи с подпунктами."""
+    return unplaced_material_images(task)
 
 
 @register.inclusion_tag('problems/_mask_check_form.html')
