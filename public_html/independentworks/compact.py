@@ -286,3 +286,55 @@ def decorate(positions):
             (p.text_latex for p in candidate.selected if p.text_latex), '')
         candidate.short_answers, candidate.answers_more = _short_answers(candidate)
         candidate.is_block = bool(candidate.task.block_id)
+
+
+def _parts(candidate, ids):
+    """Отмеченные подпункты кандидата в порядке задачи; все — пустой список."""
+    if candidate.task.block_id:
+        raise WorkError('Подпункты задачи общего блока не выбираются отдельно.')
+    order = [s.pk for s in candidate.task.subitems.all()]
+    ids = set(ids)
+    if not ids:
+        raise WorkError('Отметьте хотя бы один подпункт.')
+    if not ids <= set(order):
+        raise WorkError('Подпункт не принадлежит задаче.')
+    return [pk for pk in order if pk in ids]
+
+
+@transaction.atomic
+def set_parts(work, candidate_id, ids):
+    """Подробный вид: отмеченные подпункты остаются в задаче, как в листке."""
+    work = _lock(work)
+    candidate = get_object_or_404(Candidate.objects.select_related('task'), pk=candidate_id, position__work=work)
+    parts = _parts(candidate, ids)
+    if len(parts) == candidate.task.subitems.count():
+        parts = []
+    validate_selection(candidate.position, candidate.task, parts, candidate)
+    candidate.subitem_ids = parts
+    candidate.save(update_fields=['subitem_ids'])
+    Position.objects.filter(pk=candidate.position_id).update(mismatch_confirmed=False)
+    work.save(update_fields=['updated_at'])
+    return 'Подпункты сохранены'
+
+
+@transaction.atomic
+def split_candidate(work, candidate_id, ids):
+    """Каждый отмеченный подпункт — отдельный кандидат того же номера.
+
+    Из «1абв» получаются кандидаты 1а, 1б, 1в (или только 1б и 1в, если
+    отмечены они): ученику достаётся один из них. Первый подпункт остаётся
+    в прежнем кандидате — его маски и ``pk`` не меняются.
+    """
+    work = _lock(work)
+    candidate = get_object_or_404(Candidate.objects.select_related('task'), pk=candidate_id, position__work=work)
+    parts = _parts(candidate, ids)
+    if len(parts) < 2:
+        raise WorkError('Отметьте хотя бы два подпункта, чтобы разделить задачу.')
+    validate_selection(candidate.position, candidate.task, parts, candidate)
+    candidate.subitem_ids = parts[:1]
+    candidate.save(update_fields=['subitem_ids'])
+    for pk in parts[1:]:
+        Candidate.objects.create(position_id=candidate.position_id, task=candidate.task, subitem_ids=[pk])
+    Position.objects.filter(pk=candidate.position_id).update(mismatch_confirmed=False)
+    work.save(update_fields=['updated_at'])
+    return f'Разделено на {len(parts)} кандидата' if len(parts) < 5 else f'Разделено на {len(parts)} кандидатов'
