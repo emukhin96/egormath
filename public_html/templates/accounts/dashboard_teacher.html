@@ -106,7 +106,7 @@
         {% if proposals_new %}<span class="home-row-chip home-chip-new">{{ proposals_new }}</span>{% endif %}
       </div>
       {% for p in proposals %}
-      <a class="home-signal" href="{% url 'proposal_detail' p.pk %}"><span><span class="home-row-title">Задача #{{ p.task.pk }}</span><span class="home-row-meta">{{ p.author_name }}, {{ p.created_at|date:'d.m' }}</span></span></a>
+      <a class="home-signal" href="{% url 'proposal_detail' p.pk %}"><span><span class="home-row-title">Задача #{{ p.task.pk }}</span><span class="home-row-meta">{{ p.message|truncatechars:80 }}</span><span class="home-row-meta">{{ p.author_name }}, {{ p.created_at|date:'d.m' }}</span></span></a>
       {% empty %}
       <p class="home-empty">Новых предложений нет.</p>
       {% endfor %}
