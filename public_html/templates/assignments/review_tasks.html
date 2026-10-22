@@ -71,7 +71,7 @@
       </div>
       <ul class="rv-people">
         {% for row in g.rows %}{% with person=row.person %}
-        <li class="rv-person" tabindex="-1" data-review-row>
+        <li class="rv-person" tabindex="-1" data-review-row{% if row.legacy_done %} data-done title="Старая отметка «Выполнено» засчитана; можно поставить оценку по шкале"{% endif %}>
           <span class="rv-name"><button type="button" class="linklike" data-attempt-url="{% url 'task_attempts' person.assignment.pk current.item.task_id %}?item={{ current.item.pk }}">{{ row.name }}</button>{% if row.copied %} <span class="live-copy" title="{{ person.copy_note|capfirst }}">•</span>{% endif %}</span>
           <span class="live-table rv-mark">{% for cell in row.cells %}{% if not cell.hidden %}{% include 'assignments/_progress_button.html' %}{% endif %}{% endfor %}</span>
           <span class="rv-scale" role="group" aria-label="Оценка: {{ row.name }}" data-grade-url="{{ row.grade_url }}">{% for value, label, symbol in grade_choices %}<button type="button" data-grade="{{ value }}" title="{{ label }}" aria-pressed="{% if row.grade == value %}true{% else %}false{% endif %}">{{ symbol }}</button>{% endfor %}</span>

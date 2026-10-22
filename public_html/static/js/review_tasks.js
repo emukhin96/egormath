@@ -17,9 +17,11 @@
     var value = String(on);
     if (button.getAttribute('aria-pressed') !== value) button.setAttribute('aria-pressed', value);
   }
+  // Оценка — нажатая кнопка шкалы или старая отметка «Выполнено» (data-done),
+  // как на сервере (review_tasks.is_graded)
   function gradeOf(row) {
     var pressed = row.querySelector('[data-grade][aria-pressed="true"]');
-    return pressed ? pressed.dataset.grade : '';
+    return pressed ? pressed.dataset.grade : row.hasAttribute('data-done') ? 'done' : '';
   }
   function recount() {
     var rows = Array.from(main.querySelectorAll('[data-review-row]'));

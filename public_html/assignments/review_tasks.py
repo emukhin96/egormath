@@ -23,6 +23,19 @@ def _answer_key(answer):
     return ' '.join((answer or '').split())
 
 
+def cell_status(cell):
+    """Статус ячейки для проверки: ответ, изменённый после автосверки, —
+    непроверенный (её «верно» к нему не относится)."""
+    return 'draft' if cell.get('current_changed') else cell['status']
+
+
+def is_graded(review):
+    """Оценена: шкала или старая отметка «Выполнено» (done без grade) —
+    её засчитывает Assignment.result. Одно правило для очереди, вкладки
+    «Ученики», завершения и пересчёта в браузере (data-done у строки)."""
+    return bool(review and (review.grade or review.done))
+
+
 def review_data(user, worksheet, group_id=''):
     """Строки progress_people по всему листку и разбивка по задачам:
     {item.pk: {'item', 'number', 'start', 'end', 'rows': [...]}}, где строка
@@ -60,10 +73,11 @@ def review_data(user, worksheet, group_id=''):
                 cell['shown'] = obj.mask_fragments(f'rv_{obj.pk}', for_teacher=True) if obj and obj.has_mask_values else None
             review = cells[0]['review']
             rows.append({'person': person, 'cells': cells, 'review': review, 'grade': review.grade if review else '',
+                         'graded': is_graded(review), 'legacy_done': bool(review and review.done and not review.grade),
                          'name': _name(person['assignment']), 'copied': person['copied'],
                          'grade_url': reverse('grade_task', args=[person['assignment'].pk, group['item'].task_id])})
         tasks[group['item'].pk] = {'item': group['item'], 'number': group['number'], 'rows': rows,
-                                   'pending': sum(1 for r in rows if not (r['grade'] or (r['review'] and r['review'].done)))}
+                                   'pending': sum(1 for r in rows if not r['graded'])}
         start = end
     return {'assignments': assignments, 'people': people, 'tasks': tasks}
 
@@ -75,7 +89,7 @@ def answer_groups(rows):
     for row in rows:
         # Ответ изменён после автосверки — её результат к нему не относится:
         # такой ячейке нет «верно» и подсказки «+» (ревью #281)
-        statuses = {'draft' if c.get('current_changed') else c['status'] for c in row['cells'] if not c['hidden']}
+        statuses = {cell_status(c) for c in row['cells'] if not c['hidden']}
         # Пустые подпункты вид группы не решают: верно на 1а и пусто на 1б —
         # «верно, не все подпункты», а не «автосверки нет» (ревью #281)
         answered = statuses - {'empty'}
@@ -111,7 +125,7 @@ def review_tasks(request, worksheet_id):
     answers = sum(len(t['rows']) for t in tasks)
     graded = answers - sum(t['pending'] for t in tasks)
     context = {'worksheet': worksheet, 'group_id': group_id, 'tasks': tasks, 'answers': answers, 'graded': graded,
-               'auto_ok': sum(1 for t in tasks for r in t['rows'] if all(c['status'] == 'ok' for c in r['cells'] if not c['hidden'])),
+               'auto_ok': sum(1 for t in tasks for r in t['rows'] if all(cell_status(c) == 'ok' for c in r['cells'] if not c['hidden'])),
                'view': 'students' if request.GET.get('view') == 'students' else 'tasks',
                'submitted': sum(1 for a in data['assignments'] if a.status == Assignment.STATUS_SUBMITTED),
                'grade_choices': Review.grade_options(),
@@ -121,7 +135,7 @@ def review_tasks(request, worksheet_id):
         for person in data['people']:
             mine = [r for t in tasks for r in t['rows'] if r['person'] is person]
             students.append({'person': person, 'name': _name(person['assignment']), 'answered': len(mine),
-                             'graded': sum(1 for r in mine if r['grade']), 'total': person['visible_tasks']})
+                             'graded': sum(1 for r in mine if r['graded']), 'total': person['visible_tasks']})
         context['students'] = students
         return render(request, 'assignments/review_tasks.html', context)
     item_id = request.GET.get('item', '')
@@ -179,7 +193,7 @@ def review_complete(request, worksheet_id):
     pending = {}
     for task in data['tasks'].values():
         for row in task['rows']:
-            graded = row['grade'] or (row['review'] and row['review'].done)
+            graded = row['graded']
             pending.setdefault(row['person']['assignment'].pk, 0)
             pending[row['person']['assignment'].pk] += 0 if graded else 1
     done, left = [], 0

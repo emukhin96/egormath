@@ -97,6 +97,22 @@ class ReviewTasksTests(TestCase):
         self.assertEqual(statuses, {'anna': Assignment.STATUS_REVIEWED, 'oleg': Assignment.STATUS_SUBMITTED})
 
 
+    def test_one_rule_for_graded_and_auto_ok(self):
+        """Ревью #281: старая «Выполнено» — оценка и в очереди, и на вкладке
+        «Ученики», и для браузера (data-done); ответ, изменённый после
+        автосверки, не считается в «верно по автосверке»."""
+        anna = Submission.objects.get(assignment=self.assignments['anna'])
+        Review.objects.create(submission=anna, grade='', done=True)
+        ilya = Submission.objects.get(assignment=self.assignments['ilya'])
+        Submission.objects.filter(pk=ilya.pk).update(answer_json={'s1': '31'})
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['tasks'][0]['pending'], 4)
+        self.assertEqual(response.context['auto_ok'], 1)
+        self.assertContains(response, 'data-review-row data-done')
+        students = self.client.get(self.url, {'view': 'students'}).context['students']
+        self.assertEqual(next(s['graded'] for s in students if s['person']['assignment'] == self.assignments['anna']), 1)
+
+
 class PartialSubitemsTests(TestCase):
     """Ревью #281: пустой подпункт не делает верный ответ «без автосверки»."""
 
