@@ -14,6 +14,15 @@ def attempt_status(attempt):
     return 'submitted' if services.result(attempt)['pending'] else 'reviewed'
 
 
+def has_answer(answer):
+    """Ответ ученика непустой: заполнено поле маски или приложено фото."""
+    if answer is None:
+        return False
+    if any(str(v).strip() for v in (answer.values or {}).values()):
+        return True
+    return bool(answer.photos.all())
+
+
 def student_assignments(user):
     if not settings.INDEPENDENT_WORKS_ENABLED:
         return []
@@ -21,7 +30,7 @@ def student_assignments(user):
     rows = []
     attempts = (Attempt.objects.filter(student=user, run__issued_at__isnull=False)
                 .select_related('run__owner', 'variant', 'root__variant', 'root__run')
-                .prefetch_related('variant__points', 'answers__point', 'corrections__run', 'corrections__answers__point', 'root__variant__points', 'root__answers__point', 'root__corrections__run', 'root__corrections__answers__point'))
+                .prefetch_related('variant__points', 'answers__point', 'answers__photos', 'corrections__run', 'corrections__answers__point', 'root__variant__points', 'root__answers__point', 'root__corrections__run', 'root__corrections__answers__point'))
     for a in attempts:
         closed = not a.started_at and bool(a.run.deadline and a.run.deadline <= now)
         disclosed = 'checks' in a.disclosure
@@ -39,6 +48,14 @@ def student_assignments(user):
             status=status, get_status_display=label, is_overdue=False,
             is_editable_by_student=not a.finished and not closed,
             closed_unstarted=closed, active=bool(a.started_at and not a.finished),
+            # Для карточки «Сейчас» в кабинете: таймер, полоса времени, «Отвечено N/M»
+            started=bool(a.started_at), ends_at=a.ends_at, remaining=remaining,
+            remaining_label=f'{remaining // 60}:{remaining % 60:02}' if remaining is not None else '',
+            elapsed_percent=(max(0, min(100, round(100 - 100 * remaining / (a.run.duration * 60))))
+                             if remaining is not None and a.run.duration else 0),
+            duration=a.run.duration, submitted_at=a.submitted_at or (a.ends_at if a.finished else None),
+            answered=sum(1 for answer in a.answers.all() if has_answer(answer)),
+            total=len(a.variant.points.all()),
             detail_url=reverse('independentworks:attempt', args=[a.pk]),
             result=services.result(a) if disclosed else None,
             cumulative=services.cumulative(a, student_view=True) if disclosed else None,

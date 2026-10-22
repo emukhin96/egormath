@@ -3155,30 +3155,226 @@
     margin-bottom: 0;
   }
 
-  /* Задания на главной ученика: колонки одинаковые во всех группах
-     (иначе «Срок» и «Статус» скачут от таблицы к таблице), свежие сверху.
-     Строка «нужно сделать сейчас» — мягкой заливкой и залитой кнопкой,
-     без левой полосы. */
-  /* Раскладка auto: служебные колонки держат заданную ширину, остаток —
-     названию листка (при fixed название сжималось до пары слов в строке) */
-  table.student-works .sw-date { width: 116px; }
-  table.student-works .sw-due { width: 168px; }
-  table.student-works .sw-status { width: 210px; }
-  table.student-works .sw-result { width: 156px; }
-  table.student-works .sw-action { width: 96px; }
-  table.student-works td[data-label="Выдано"],
-  table.student-works td[data-label="Срок"] { white-space: nowrap; }
-  .sw-title { color: var(--text); text-decoration: none; }
-  .sw-title:hover { color: var(--accent); }
-  .sw-meta { font-size: 0.85rem; }
-  table.student-works tr.is-attention td { background: var(--accent-soft); }
-  table.student-works tbody tr.is-attention:hover td { background: #d8e6f6; }
-  table.student-works tr.is-attention .sw-title { font-weight: 600; }
-  /* «Выдано» — бейдж той же голубой заливки: на подсвеченной строке белый */
-  table.student-works tr.is-attention .badge-assigned { background: #fff; }
-  @container (max-width: 760px) {
-    table.student-works colgroup { display: none; }
-    table.student-works tr.is-attention { background: var(--accent-soft); border-color: #b6cde8; }
+  /* Страницы ученика (макет A, 22.10.2026): без боковой панели, одна
+     колонка до 720px по центру; на телефоне — во всю ширину. */
+  .student-column {
+    max-width: 720px;
+    margin-inline: auto;
+  }
+
+  /* Карточка «Сейчас»: тёмная, с таймером и одной кнопкой — её не спутать
+     с заголовком страницы (жалоба на прежнюю hero-карточку). */
+  .now-card {
+    display: grid;
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+    padding: var(--space-4);
+    border-radius: 14px;
+    background: var(--accent-dark);
+    color: #fff;
+  }
+  .now-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+  .now-card-kicker {
+    color: #b9cff0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .now-card-timer {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 1.25rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .now-card-timer svg {
+    width: 18px;
+    height: 18px;
+    color: #b9cff0;
+  }
+  .now-card-title {
+    margin: 0;
+    color: #fff;
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+  .now-card-meta {
+    margin: calc(-1 * var(--space-2)) 0 0;
+    color: #c9d8ee;
+    font-size: 0.85rem;
+  }
+  .now-card-bar {
+    height: 6px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: #2b4a7a;
+  }
+  .now-card-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    background: #7fb0ff;
+  }
+  .now-card-action {
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: #fff;
+    color: var(--accent-dark);
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .now-card-action:hover,
+  .now-card-action:focus-visible {
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+  }
+
+  /* Списки работ: ярлык группы с числом, строки-ссылки в одной белой
+     плашке, разделитель — тонкая линия. */
+  .work-group + .work-group {
+    margin-top: var(--space-5);
+  }
+  .work-group-title {
+    margin: 0 var(--space-1) var(--space-2);
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .work-group-title span {
+    color: var(--text);
+  }
+  .work-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  .work-list li + li {
+    border-top: 1px solid #e6ebf1;
+  }
+  .work-row {
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 10px 14px;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .work-row:hover {
+    background: #f2f6fc;
+    color: var(--text);
+  }
+  .work-row-body {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+  .work-row-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
+  .work-row.is-attention .work-row-title {
+    font-weight: 600;
+  }
+  .work-row-meta {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .work-row-chip {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .work-row-arrow {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    color: #8a95a6;
+  }
+
+  /* Меню ученика в шапке: кружок с инициалом, под ним имя и «Выйти».
+     Специфичность выше правил .nav-menu узкого экрана (display: contents). */
+  .user-menu {
+    position: relative;
+  }
+  .user-menu-toggle {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+  }
+  .user-menu-avatar {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--accent-dark);
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+  .user-menu-toggle:hover .user-menu-avatar,
+  .user-menu-toggle[aria-expanded="true"] .user-menu-avatar {
+    background: var(--accent);
+  }
+  .user-menu .nav-menu {
+    display: none;
+    left: auto;
+    right: 0;
+  }
+  .user-menu .nav-menu.is-open {
+    display: grid;
+  }
+  .user-menu-panel form {
+    margin: 0;
+  }
+  .user-menu-name {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--space-1);
+    color: var(--text);
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+  .user-menu-item {
+    width: 100%;
+    min-height: 40px;
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.88rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  .user-menu-item:hover,
+  .user-menu-item:focus-visible {
+    background: var(--accent-soft);
+    color: var(--accent-dark);
   }
 
   /* Итог самостоятельной у ученика */
@@ -6979,6 +7175,209 @@
   .iw-note { font-weight: 600; }
   .iw-sheet .iw-point .answer-block { margin-block: var(--space-2) 0; }
   .iw-sheet .iw-point .task-images { margin-block: var(--space-2); }
+  /* Работа ученика (макет A2, 22.10.2026): общая шапка сайта скрыта —
+     её место занимает шапка работы (назад, название, «Вариант N», таймер,
+     полоса времени, лента номеров). Номер ленты окрашен состоянием ответа:
+     saved — зелёный, wrong/error — красный, empty — серый; открытый обведён. */
+  .iw-student .topbar { display: none; }
+  .iw-student .app-content { padding-top: 0; padding-bottom: 0; }
+  /* Колонка во всю высоту окна: панель сдачи у низа экрана и на короткой задаче */
+  .iw-student .student-column {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  .iw-student .student-column > .iw-submit-bar { margin-top: auto; }
+  .iw-student .student-column > .iw-sheet { margin-bottom: var(--space-3); }
+  .iw-head {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    margin-bottom: var(--space-3);
+    border: 1px solid var(--border);
+    border-top: 0;
+    border-radius: 0 0 12px 12px;
+    background: #fff;
+  }
+  .iw-head-row {
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 0 var(--space-2) 0 var(--space-1);
+  }
+  .iw-head-back {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    color: var(--accent-dark);
+  }
+  .iw-head-back svg { width: 22px; height: 22px; }
+  .iw-head-title {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+  }
+  .iw-head-title h1 {
+    margin: 0;
+    overflow: hidden;
+    font-size: 1rem;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .iw-head-title span {
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+  .iw-head-timer {
+    flex: none;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 var(--space-3);
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+    font-size: 0.95rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .iw-head-timer svg { width: 16px; height: 16px; }
+  .iw-time-bar {
+    height: 3px;
+    background: var(--accent-soft);
+  }
+  .iw-time-bar > span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+  }
+  .iw-strip {
+    display: flex;
+    gap: 6px;
+    padding: 10px var(--space-3) 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .iw-strip::-webkit-scrollbar { display: none; }
+  .iw-strip-item {
+    flex: none;
+    min-width: 34px;
+    height: 34px;
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    padding: 0 6px;
+    border-radius: 9px;
+    margin: 2px;
+    background: #e3e8ef;
+    color: #4a5566;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .iw-strip-item[data-state="saved"] { background: #cdebd3; color: #14511c; }
+  .iw-strip-item[data-state="wrong"],
+  .iw-strip-item[data-state="error"] { background: #f8d4d4; color: #8f1616; }
+  .iw-strip-item[aria-current] {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent-dark);
+    font-weight: 700;
+  }
+  .iw-strip-item:hover { color: var(--accent-dark); }
+
+  /* Одно задание на экран: скрипт оставляет видимой секцию .is-current;
+     без скрипта — тот же лист целиком. Номер задачи — заголовком
+     «Задание N», поэтому колонка номера в строке условия не нужна. */
+  .iw-sheet.is-focus > .iw-point:not(.is-current) { display: none; }
+  .iw-sheet.is-focus > .iw-point { border-top: 0; padding-block: var(--space-1); }
+  .iw-sheet-edit .task-row { grid-template-columns: minmax(0, 1fr); }
+  .iw-sheet-edit .task-row > .ws-num { display: none; }
+  .iw-sheet-edit .task-tools,
+  .iw-sheet-edit .answer-box,
+  .iw-sheet-edit .answer-block { margin-left: 0; }
+  .iw-point-head { display: grid; gap: 2px; margin-bottom: var(--space-2); }
+  .iw-point-kicker {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  /* Специфичнее .ws-view h2 — у того отступ под колонку номера */
+  .iw-sheet-edit .iw-point-title { margin: 0; font-size: 1.15rem; font-weight: 700; }
+
+  /* Поле ответа: подпись сверху, статус «Сохранено» строкой под полем
+     (как в варианте B макета), рамка поля — цветом состояния. */
+  .iw-answer { margin-top: var(--space-4); }
+  .iw-answer-label,
+  .iw-save-status { flex-basis: 100%; }
+  .iw-answer-label { color: var(--muted); font-size: 0.8rem; font-weight: 600; }
+  .iw-save-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+  .iw-save-status[data-state="saved"] { color: var(--ok); }
+  .iw-save-status[data-state="saved"]::before { content: "✓"; font-weight: 700; }
+  .iw-save-status[data-state="wrong"],
+  .iw-save-status[data-state="error"] { color: var(--err); }
+  .iw-save-status[data-state="wrong"]::before,
+  .iw-save-status[data-state="error"]::before { content: "✕"; font-weight: 700; }
+  .iw-answer[data-state="saved"] :is(.mask-math, .mask-input) { border-color: var(--ok); }
+  .iw-answer[data-state="wrong"] :is(.mask-math, .mask-input),
+  .iw-answer[data-state="error"] :is(.mask-math, .mask-input) { border-color: var(--err); background-color: #fff7f7; }
+  /* Ответ сохраняется сам; кнопка — для Enter и работы без скрипта */
+  .iw-save-button {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .iw-point-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: var(--space-5);
+  }
+  .iw-point-nav .btn { justify-content: center; gap: 6px; }
+  .iw-point-nav .btn:last-child:not(:first-child) { grid-column: 2; }
+  .iw-point-nav svg { width: 18px; height: 18px; }
+
+  /* Сдача — слева внизу, рядом счёт ответов; панель прилипает к низу окна */
+  .iw-submit-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: 12px 12px 0 0;
+    background: #fff;
+  }
+  .iw-submit-bar form { margin: 0; }
+  .iw-submit-count { color: var(--muted); font-size: 0.85rem; }
+  .iw-submit-count b { color: var(--text); }
+  @media (max-width: 760px) {
+    .iw-head,
+    .iw-submit-bar {
+      margin-inline: calc(-1 * var(--space-3));
+      border-inline: 0;
+      border-radius: 0;
+    }
+  }
+
   /* Общее условие уже отделено линией номера — своя линия была бы второй */
   .iw-sheet .ws-common-condition { margin-bottom: var(--space-2); padding-bottom: 0; border-bottom: 0; }
   .iw-section { display: grid; gap: var(--space-3); padding: var(--space-4); margin-block: var(--space-3); }

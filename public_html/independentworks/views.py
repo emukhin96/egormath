@@ -667,6 +667,21 @@ def point_detail(request, pk, point_id):
     return render(request, 'independentworks/_point_review.html', {'attempt': attempt, 'row': row, 'grades': [('', 'По автосверке', '↺')] + Review.grade_options()})
 
 
+def focus_rows(rows):
+    """Экран ученика «одно задание» (макет A2): состояние номера в ленте —
+    saved (есть ответ), wrong (самопроверка: неверно), empty; соседи для
+    кнопок «Задание N»; общее условие у каждого пункта блока, ведь пункты
+    показываются по одному."""
+    from .integration import has_answer
+    for index, row in enumerate(rows):
+        row['state'] = ('wrong' if row['auto'] == 'wrong'
+                        else 'saved' if has_answer(row['answer']) else 'empty')
+        row['common'] = row['point'].snapshot.get('common', '')
+        row['prev'] = rows[index - 1]['point'] if index else None
+        row['next'] = rows[index + 1]['point'] if index + 1 < len(rows) else None
+    return rows
+
+
 @enabled
 def attempt_page(request, pk):
     teacher = get_role(request.user) == 'teacher'
@@ -677,9 +692,18 @@ def attempt_page(request, pk):
         # Досверка только своей работы: общая сводка и экспорт ничего
         # не вычисляют. За открытие страницы повторяем максимум один ответ.
         svc.recheck_unavailable(attempt)
+    editable = not teacher and bool(attempt.started_at) and not attempt.finished
+    rows = group_point_rows(point_rows(attempt, teacher)) if accessible else []
+    clock = {}
+    if editable:
+        rows = focus_rows(rows)
+        remaining = max(0, int((attempt.ends_at - timezone.now()).total_seconds())) if attempt.ends_at else 0
+        clock = {'remaining_label': f'{remaining // 60}:{remaining % 60:02}',
+                 'elapsed_percent': max(0, min(100, round(100 - 100 * remaining / (attempt.run.duration * 60)))) if attempt.run.duration else 0,
+                 'answered': sum(1 for row in rows if row['state'] != 'empty')}
     return render(request, 'independentworks/attempt.html', {
-        'attempt': attempt, 'teacher_view': teacher, 'rows': group_point_rows(point_rows(attempt, teacher)) if accessible else [],
-        'editable': not teacher and bool(attempt.started_at) and not attempt.finished,
+        'attempt': attempt, 'teacher_view': teacher, 'rows': rows, 'clock': clock,
+        'editable': editable,
         'can_start': not attempt.started_at and not (attempt.run.deadline and timezone.now() >= attempt.run.deadline),
         'accessible': accessible, 'show_checks': teacher or 'checks' in attempt.disclosure,
         'tail_notes': [n['text'] for n in attempt.variant.notes if n['before'] > max((p.position for p in attempt.variant.points.all()), default=0)] if accessible else [],

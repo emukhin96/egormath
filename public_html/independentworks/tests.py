@@ -359,17 +359,47 @@ class IndependentWorkTests(TestCase):
         self.assertEqual(self.client.get(self.url('point_detail', a.pk, point.pk)).status_code, 403)
 
     def test_attempt_points_in_one_sheet(self):
-        """Номера работы — одним листом (.iw-sheet), не карточкой на номер."""
+        """Номера работы — одним листом (.iw-sheet), не карточкой на номер;
+        у сданной работы пояснение — строкой листа."""
         Position.objects.create(work=self.work, order=2, text='Пояснение к блоку')
         task = Task.objects.create(text_latex='Три плюс три?', answer_mask='{{number: 6}}')
         Candidate.objects.create(position=Position.objects.create(work=self.work, order=3), task=task)
         a = self.begin()
+        svc.submit(a.pk)
         self.client.force_login(self.student)
         response = self.client.get(self.url('attempt', a.pk))
         self.assertContains(response, 'class="card ws-view iw-sheet"', count=1)
         self.assertContains(response, 'class="iw-point"', count=2)
         self.assertContains(response, '<div class="math-content iw-note">Пояснение к блоку</div>', html=False)
         self.assertNotContains(response, 'iw-section')
+        self.assertNotContains(response, 'data-iw-focus')
+
+    def test_attempt_one_task_screen_for_student(self):
+        """Работа ученика (макет A2): своя шапка с «Вариант N» и таймером,
+        лента номеров с состоянием ответа, «Задание N», сдача внизу со
+        счётом ответов; у учителя страница прежняя."""
+        Position.objects.create(work=self.work, order=2, text='Пояснение к блоку')
+        task = Task.objects.create(text_latex='Три плюс три?', answer_mask='{{number: 6}}')
+        Candidate.objects.create(position=Position.objects.create(work=self.work, order=3), task=task)
+        a = self.begin()
+        first, second = a.variant.points.order_by('position')
+        svc.save_answer(a.pk, first.pk, 0, {'s1': '4'})
+        self.client.force_login(self.student)
+        response = self.client.get(self.url('attempt', a.pk))
+        self.assertContains(response, 'data-iw-focus')
+        self.assertContains(response, f'Вариант {a.variant.number}</span>')
+        self.assertContains(response, 'data-iw-timer')
+        self.assertContains(response, f'data-iw-strip="{first.pk}" data-state="saved"')
+        self.assertContains(response, f'data-iw-strip="{second.pk}" data-state="empty"')
+        self.assertContains(response, 'Задание 1</h2>')
+        self.assertContains(response, '<div class="math-content iw-point-kicker">Пояснение к блоку</div>', html=False)
+        self.assertContains(response, 'Есть <b data-iw-answered data-total="2">1 ответ</b> из 2', html=False)
+        self.assertNotContains(response, 'sidebar-section')
+        self.assertNotContains(response, 'page-crumbs')
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.url('attempt', a.pk))
+        self.assertContains(response, 'page-crumbs')
+        self.assertNotContains(response, 'data-iw-focus')
 
     def test_unified_student_dashboard_disclosure_and_closed_start(self):
         a = self.issued(deadline=timezone.now() + timedelta(minutes=1))
