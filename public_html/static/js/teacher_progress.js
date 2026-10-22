@@ -82,7 +82,8 @@
      task_mask_check, что на карточке задачи. Где загружен редактор масок
      (problem_masks.js, конструктор листка), форму обрабатывает он. Пока
      учитель вводит пробный ответ, окно не перерисовывается опросом. */
-  function trialActive(){return Array.from(dialog.querySelectorAll('[data-mask-check] input, [data-mask-check] math-field')).some(e=>e.value&&e.type!=='hidden');}
+  // флажки («решений нет» слота-множества) — по checked: value="1" у них всегда (ревью #276)
+  function trialActive(){return Array.from(dialog.querySelectorAll('[data-mask-check] input, [data-mask-check] math-field, [data-mask-check] select')).some(e=>e.type==='checkbox'||e.type==='radio'?e.checked:e.type!=='hidden'&&e.value);}
   document.addEventListener('submit',async function(e){
     var f=e.target.closest('#progress-dialog [data-mask-check]');if(!f||document.getElementById('answer-mask-dialog'))return;e.preventDefault();
     if(f.dataset.busy)return;f.dataset.busy='1';
@@ -102,6 +103,7 @@
     f.querySelectorAll('math-field[data-mirror]').forEach(function(m){m.value='';});
     f.querySelectorAll('input[type=text],input[type=number]').forEach(function(i){i.value='';});
     f.querySelectorAll('input[type=checkbox]').forEach(function(c){c.checked=false;});
+    f.querySelectorAll('select').forEach(function(s){s.value='';});
     f.querySelectorAll('[data-check]').forEach(function(h){if(window.EgorCheckBadge)EgorCheckBadge.render(h,'');});
     f.querySelector('[data-trial-result]').textContent='';
   });
