@@ -8,9 +8,11 @@
 Django-сайт (`public_html/`) для листков с задачами по математике: кабинеты
 учителя/ученика, база задач, конструктор листков, генерация PDF через
 внешний LaTeX API, проверка ответов. Стили — Tailwind CSS v4 standalone CLI,
-собранный `app.css` коммитится в git (Node на сервере не нужен). Прод —
-`math.emukhin.ru` на Timeweb, обновления вручную: `deploy/deploy.sh`
-(см. [deploy/DEPLOY.md](deploy/DEPLOY.md)).
+собранный `app.css` в git не хранится — `make build-css` локально, на проде
+его собирает `Dockerfile` (Node нигде не нужен). Прод — VPS (Docker),
+обновления вручную: `deploy/vps/deploy.sh` (см. [deploy/VPS.md](deploy/VPS.md)).
+Старый Timeweb-деплой (`deploy/deploy.sh`, [deploy/DEPLOY.md](deploy/DEPLOY.md))
+устарел.
 
 ## Локальный запуск и проверки
 
@@ -19,7 +21,7 @@ python3.12 -m venv venv   # подойдёт и 3.10–3.13
 ./venv/bin/pip install -r requirements.txt
 (cd public_html && ../venv/bin/python manage.py migrate)
 
-make check        # build-css + manage.py test + проверка, что app.css свежий
+make check        # build-css + manage.py test
 make build-css    # только пересборка Tailwind
 make watch-css    # пересборка в фоне при правке шаблонов/CSS
 make test         # только Django-тесты
@@ -186,7 +188,7 @@ make test         # только Django-тесты
    `.secrets/GITHUB_TOKEN`, см. раздел 5 docs/PIPELINE.md); merge, rebase и
    force-push агенту запрещены — сливает только человек.
 4. Ревью — комментарии в PR. CI (`.github/workflows/ci.yml`) должен быть
-   зелёным: тесты + проверка, что `app.css` пересобран.
+   зелёным: сборка CSS + тесты.
 5. Правки по ревью — **новые коммиты в ту же ветку**, без `--amend` и
    force-push (иначе комментарии ревьюера отвязываются от строк).
 6. Отправить исправления в GitHub (push той же ветки) и **обязательно

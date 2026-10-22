@@ -651,13 +651,14 @@ DJANGO_ENV=production ../venv/bin/python manage.py import_textbook_batches \
 | Статика админки 404                              | `collectstatic` + rewrite `/static/` → `staticfiles/` в `.htaccess`                           |
 | 401 от LaTeX API                                 | Сверить `.secrets/LATEX_API_KEY` и `/opt/latex-api/config.py`                                 |
 | PDF с `2/??` вместо `2/2`                        | Патч двух прогонов xelatex (п. 1.5)                                                           |
-| Стили «не применились»                           | Локально `make build-css`, коммитить `input.css` + `app.css`                                  |
+| Стили «не применились»                           | Локально `make build-css`; `app.css` в git не хранится (см. п. 6)                             |
 | Перезаписали `~/auto_pull.sh`                    | Вернуть скрипт chgkmsu; EgorMath запускать только через `~/egormath/deploy/deploy.sh`         |
 
 ## 6. Стили на сервере
 
-Node на Timeweb **не нужен**: `app.css` собирается локально и лежит в git.
-Серверу достаточно `collectstatic` в `deploy.sh`.
+С 22.10.2026 `app.css` не лежит в git. Актуальный прод (VPS, `deploy/VPS.md`)
+собирает его в `Dockerfile`, а `deploy/deploy.sh` этой инструкции — шагом
+`make build-css` перед `collectstatic` (Tailwind standalone, Node не нужен).
 
 ## 7. Холст (мини-доска к задаче)
 

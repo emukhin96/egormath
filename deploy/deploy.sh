@@ -86,6 +86,13 @@ if ! python manage.py seed_rubricator >>"$LOG_FILE" 2>&1; then
     exit 1
 fi
 
+# app.css не в git — собираем до collectstatic, иначе сайт уйдёт без стилей
+log "build-css..."
+if ! make -C "$SITE_DIR" build-css >>"$LOG_FILE" 2>&1; then
+    log "ERROR: make build-css failed"
+    exit 1
+fi
+
 log "collectstatic..."
 if ! python manage.py collectstatic --noinput >>"$LOG_FILE" 2>&1; then
     log "ERROR: collectstatic failed"

@@ -1,5 +1,8 @@
 # EgorMath — local helpers
 # CSS: Tailwind standalone CLI (no Node on the server).
+# app.css не хранится в git (иначе каждый PR с правкой шаблонов конфликтует
+# с соседними на однострочном минифицированном файле): локально его собирает
+# build-css, на проде — Dockerfile, в CI — workflow.
 
 ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 TOOLS := $(ROOT)tools
@@ -38,7 +41,7 @@ ensure-tailwind:
 	@mkdir -p "$(TOOLS)"
 	@if [ ! -x "$(TW)" ]; then \
 	  echo "Downloading Tailwind CLI $(TW_VERSION) ($(TW_ASSET))..."; \
-	  curl -sL -o "$(TW)" "$(TW_URL)"; \
+	  curl -fsSL -o "$(TW)" "$(TW_URL)"; \
 	  chmod +x "$(TW)"; \
 	fi
 
@@ -49,13 +52,10 @@ build-css: ensure-tailwind
 watch-css: ensure-tailwind
 	"$(TW)" -i "$(CSS_IN)" -o "$(CSS_OUT)" --watch
 
-test:
+# Тест collectstatic ждёт собранный app.css
+test: build-css
 	cd public_html && $(PYTHON) manage.py test
 
-# Полная проверка перед коммитом: собранный CSS должен совпадать с исходником.
-# git diff молчит про untracked-файлы, поэтому сначала проверяем сам факт учёта.
-check: build-css test
-	@git ls-files --error-unmatch "$(CSS_OUT)" >/dev/null 2>&1 \
-	  || { echo "$(CSS_OUT) не под git — добавьте его в коммит"; exit 1; }
-	git diff --exit-code -- "$(CSS_OUT)"
+# Полная проверка перед коммитом: CSS собирается из input.css, тесты зелёные.
+check: test
 	@echo "check: OK"
