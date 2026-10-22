@@ -463,7 +463,7 @@
   .is-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px var(--space-3); margin: 0; font-size: 13.5px; }
   .is-facts dt { color: var(--muted); }
   .is-facts dd { margin: 0; overflow-wrap: anywhere; }
-  .is-submit { width: 100%; margin: 0; }
+  .is-summary .is-submit { width: 100%; margin: 0; }  /* сильнее .btn { width: max-content } ниже по файлу */
   @media (max-width: 900px) {
     .is-head, .is-grid { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-3); }
     .is-summary { position: static; }
