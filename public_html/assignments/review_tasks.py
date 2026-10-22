@@ -190,18 +190,22 @@ def review_complete(request, worksheet_id):
     worksheet = get_object_or_404(Worksheet.visible_to(request.user), pk=worksheet_id)
     group_id = request.POST.get('group', '')
     data = review_data(request.user, worksheet, group_id)
-    pending = {}
+    # (оценено, не оценено) по работе: пустая сданная работа без единой
+    # оценки не закрывается молча (ревью #281)
+    counts = {}
     for task in data['tasks'].values():
         for row in task['rows']:
-            graded = row['graded']
-            pending.setdefault(row['person']['assignment'].pk, 0)
-            pending[row['person']['assignment'].pk] += 0 if graded else 1
-    done, left = [], 0
+            graded, waiting = counts.get(row['person']['assignment'].pk, (0, 0))
+            counts[row['person']['assignment'].pk] = (graded + row['graded'], waiting + (not row['graded']))
+    done, left, empty = [], 0, 0
     for assignment in data['assignments']:
         if assignment.status != Assignment.STATUS_SUBMITTED:
             continue
-        if pending.get(assignment.pk, 0):
+        graded, waiting = counts.get(assignment.pk, (0, 0))
+        if waiting:
             left += 1
+        elif not graded:
+            empty += 1
         else:
             done.append(assignment.pk)
     # По одной через save(), как review_assignment: post_save обновляет
@@ -210,9 +214,12 @@ def review_complete(request, worksheet_id):
     now = timezone.now()
     for assignment in Assignment.objects.filter(pk__in=done):
         _set_assignment_status(assignment, Assignment.STATUS_REVIEWED, now)
+    rest = (f', ещё не оценены: {left}' if left else '') + (f', пустые без оценок: {empty}' if empty else '')
     if done:
-        messages.success(request, f'Проверка завершена: {len(done)}' + (f', ещё не оценены: {left}' if left else '') + '.')
+        messages.success(request, f'Проверка завершена: {len(done)}{rest}.')
+    elif left or empty:
+        messages.info(request, f'Завершать нечего{rest}.')
     else:
-        messages.info(request, 'Завершать нечего: ' + (f'в {left} сданных работах есть задачи без оценки.' if left else 'сданных работ нет.'))
+        messages.info(request, 'Завершать нечего: сданных работ нет.')
     url = reverse('assignment_review_queue', args=[worksheet.pk])
     return redirect(url + (f'?group={group_id}' if group_id.isdigit() else ''))

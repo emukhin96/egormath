@@ -97,6 +97,15 @@ class ReviewTasksTests(TestCase):
         self.assertEqual(statuses, {'anna': Assignment.STATUS_REVIEWED, 'oleg': Assignment.STATUS_SUBMITTED})
         self.assertIsNotNone(Assignment.objects.get(pk=self.assignments['anna'].pk).reviewed_at)
 
+    def test_complete_skips_empty_work(self):
+        """Ревью #281: сданная пустая работа без оценок не закрывается молча."""
+        nika = self.assignments['nika']
+        Assignment.objects.filter(pk=nika.pk).update(status=Assignment.STATUS_SUBMITTED)
+        response = self.client.post(reverse('assignment_review_complete', args=[self.worksheet.pk]), follow=True)
+        self.assertContains(response, 'Завершать нечего, пустые без оценок: 1.')
+        nika.refresh_from_db()
+        self.assertEqual(nika.status, Assignment.STATUS_SUBMITTED)
+
     def test_complete_touches_live_files(self):
         """Ревью #281: завершение идёт через save() — открытые карта,
         прогресс ученика и доска узнают о смене статуса."""
