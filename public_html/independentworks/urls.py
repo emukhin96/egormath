@@ -9,6 +9,7 @@ urlpatterns = [
     path('<int:pk>/edit/', views.edit, name='edit'),
     path('<int:pk>/reorder/', views.reorder, name='reorder'),
     path('<int:pk>/move-candidate/', views.move_candidate, name='move_candidate'),
+    path('<int:pk>/candidate-parts/', views.candidate_parts, name='candidate_parts'),
     path('<int:pk>/merge-positions/', views.merge_positions, name='merge_positions'),
     path('<int:pk>/undo/', views.undo_compact, name='undo_compact'),
     path('<int:pk>/copy/', views.copy_work, name='copy'),

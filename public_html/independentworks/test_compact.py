@@ -95,17 +95,21 @@ class CompactBuilderTests(TestCase):
         self.assertContains(page, 'title="Задачи блока переносятся только вместе"')
         self.assertContains(page, 'data-closed="1"')
 
-    def test_same_task_parts_cannot_meet_in_one_position(self):
+    def test_same_task_parts_meet_in_one_position(self):
+        """Разные подпункты одной задачи — кандидаты одного номера (1а, 1б),
+        а один и тот же подпункт дважды в самостоятельную не попадает."""
         task = Task.objects.create(text_latex='С подпунктами')
         a = TaskSubitem.objects.create(task=task, text_latex='а', order=1)
         b = TaskSubitem.objects.create(task=task, text_latex='б', order=2)
         Candidate.objects.create(position=self.p2, task=task, subitem_ids=[a.pk])
         other = Candidate.objects.create(position=self.p3, task=task, subitem_ids=[b.pk])
+        twin = Candidate.objects.create(position=self.p1, task=task, subitem_ids=[b.pk])
+        response = self.client.post(self.url('move_candidate'), {'candidate': twin.pk, 'target': self.p2.pk}, **AJAX)
+        self.assertEqual(response.status_code, 400)
+        twin.delete()
         response = self.client.post(self.url('move_candidate'), {'candidate': other.pk, 'target': self.p2.pk}, **AJAX)
-        self.assertEqual(response.status_code, 400)
-        response = self.client.post(self.url('merge_positions'), {'ids': f'{self.p2.pk},{self.p3.pk}'}, **AJAX)
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(self.work.positions.count(), 3)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.p2.candidates.filter(task=task).count(), 2)
 
     def test_foreign_work_is_not_found(self):
         stranger = get_user_model().objects.create_user('compact_stranger')
