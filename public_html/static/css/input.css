@@ -7597,10 +7597,13 @@
     height: 100%;
     background: var(--accent);
   }
-  /* Лента номеров прокручивается, «Сдать работу» справа не уезжает */
+  /* Лента номеров переносится на следующие строки, когда номера не
+     помещаются (узкий экран, много подпунктов): скрытой горизонтальной
+     прокрутки на телефоне не видно (замечание Егора 22.10.2026).
+     «Сдать работу» справа, на уровне первой строки номеров. */
   .iw-head-bar {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-2);
     padding-right: var(--space-3);
   }
@@ -7608,13 +7611,11 @@
     flex: 1;
     min-width: 0;
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
     padding: 10px var(--space-3) 12px;
-    overflow-x: auto;
-    scrollbar-width: none;
   }
-  .iw-head-submit { flex: none; margin: 0; }
-  .iw-strip::-webkit-scrollbar { display: none; }
+  .iw-head-submit { flex: none; margin: 0; padding-top: 11px; }
   .iw-strip-item {
     flex: none;
     min-width: 34px;
