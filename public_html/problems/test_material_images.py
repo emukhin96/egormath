@@ -62,6 +62,29 @@ class MaterialImageTests(TestCase):
         self.assertEqual(material['answer']['rows'][0]['alt_images'], [pics[2]])
         self.assertEqual(material['solution']['rows'][0]['images'], [pics[3]])
 
+    def test_card_shows_answer_images_with_answers_not_in_condition(self):
+        """Мерзляк 6.16: рисунки графиков из ответов подпунктов не стоят
+        в «Условии» карточки, а показываются у своего ответа/решения."""
+        task = Task.objects.create(text_latex=r'Постройте график.\taskpic{1}')
+        first = TaskSubitem.objects.create(
+            task=task, order=10, text_latex='$y=|x|$',
+            author_answer_latex=r'\taskpic{2}', solution_latex=r'Строим.\taskpic{2}')
+        TaskSubitem.objects.create(
+            task=task, order=20, text_latex='$y=|x-1|$', solution_latex=r'Сдвиг.\taskpic{3}')
+        pics = [task.images.create(image=f'task_images/g{i}.png', order=i)
+                for i in range(1, 4)]
+        self.client.force_login(make_teacher())
+        html = self.client.get(reverse('task_detail', args=[task.pk])).content.decode()
+        start = html.index('task-png-heading')
+        condition = html[start:html.index('</section>', start)]
+        urls = [reverse('task_image_file', args=[pic.pk]) for pic in pics]
+        self.assertIn(urls[0], condition)
+        self.assertNotIn(urls[1], condition)
+        self.assertNotIn(urls[2], condition)
+        answers = html[html.index(f'data-answer-owner="{first.pk}"'):]
+        self.assertEqual(answers.count(f'src="{urls[1]}"'), 1)
+        self.assertEqual(answers.count(f'src="{urls[2]}"'), 1)
+
     def test_pdf_hint_keeps_full_solution_and_respects_variants(self):
         teacher = make_teacher()
         for subitem in (False, True):

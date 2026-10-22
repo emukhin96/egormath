@@ -34,9 +34,8 @@
           {% include 'problems/_editor_form.html' with form=condition_form block='condition' %}
         </details>{% endif %}
         {% if subrows %}<ol class="subitems">{% for row in subrows %}<li class="math-content">{{ row.sub.text_latex|web_text }}</li>{% endfor %}</ol>{% endif %}
-        {# В редакторе видны все рисунки, включая ответы и решения; на PNG — только рисунки условия #}
-        <div data-task-png-skip>{% task_images task 'all' %}</div>
-        <div data-task-png-only hidden>{% task_images task %}</div>
+        {# Только рисунки условия; рисунки к ответам и решениям — в их блоках ниже (owner_images) #}
+        {% task_images task %}
       </section>
       {% if not editor_readonly %}
       <details class="problem-section"><summary>Подпункты: добавить, изменить порядок</summary>
