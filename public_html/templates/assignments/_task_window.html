@@ -31,10 +31,10 @@
           {% else %}<p class="helptext">Маски нет, ответ проверяет учитель</p>{% endif %}
         </div>
         <div class="tw-answer tw-reference">
-          <span class="tw-label">Эталон в маске</span>
+          <span class="tw-label">Ответ</span>
           {% if subitems %}{% for s in subitems %}<div class="tw-value"><span class="tw-part-label">{{ s.label }}</span> {% if s.reference %}{% include 'assignments/_mask.html' with fragments=s.reference editable=False show_checks=False %}{% else %}—{% endif %}</div>{% endfor %}
           {% else %}<div class="tw-value">{% if reference %}{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}{% else %}—{% endif %}</div>{% endif %}
-          {% if task.effective_answer_latex %}<p class="tw-note">Ответ: <span class="math-content">{{ task.effective_answer_latex|web_answer }}</span></p>{% endif %}
+          {% if task.effective_answer_latex %}<p class="tw-note">Текстом: <span class="math-content">{{ task.effective_answer_latex|web_answer }}</span></p>{% endif %}
           {% if task.effective_solution_latex %}<details class="tw-solution"><summary>Решение</summary><div class="math-content">{{ task.effective_solution_latex|web_text }}</div></details>{% endif %}
         </div>
       </div>

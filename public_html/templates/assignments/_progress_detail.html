@@ -32,7 +32,7 @@ data-attempt-url (teacher_progress.js грузит их в то же окно). 
           {% if point.current_changed %}<span class="helptext">Отличается от последней проверки</span>{% elif point.status == 'draft' %}<span class="helptext">Не проверен</span>{% elif point.history %}<span class="helptext">Проверен {{ point.history.0.created_at|date:'d.m в H:i' }}</span>{% endif %}
         </div>
         <div class="tw-answer tw-reference">
-          <span class="tw-label">Эталон в маске</span>
+          <span class="tw-label">Ответ</span>
           <div class="tw-value">{% if reference %}{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}{% else %}Маски нет, ответ проверяет учитель{% endif %}</div>
           {% if solution %}<details class="tw-solution"><summary>Решение</summary><div class="math-content">{{ solution|web_text }}</div></details>{% endif %}
         </div>

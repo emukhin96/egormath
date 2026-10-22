@@ -7,7 +7,7 @@
   {% include 'problems/_subitems.html' with subitems=row.subitems %}
   {% include 'problems/_task_images.html' with images=row.statement_images %}
   {% answer_material row.item.task row.subitems as material %}
-  {% if material %}<details class="boards-peek-reference"><summary>Эталон</summary>{% include 'problems/_task_answers.html' with task=row.item.task subitems=row.subitems %}</details>{% endif %}
+  {% if material %}<details class="boards-peek-reference"><summary>Ответ</summary>{% include 'problems/_task_answers.html' with task=row.item.task subitems=row.subitems %}</details>{% endif %}
   <p class="boards-peek-links"><a href="{{ row.boards_url }}">Доски этой задачи</a></p>
 </section>
 {% empty %}<p class="helptext">В листке пока нет задач.</p>
