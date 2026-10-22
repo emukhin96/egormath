@@ -1,0 +1,62 @@
+{% load task_extras %}
+{% comment %}
+Окно «задача» (макет D_TaskView, 22.10.2026): условие, маска ответа так, как её
+видит ученик (с «Проверить как ученик»), эталон и решение; справа — как задачу
+решает класс и ответы каждого, ячейка открывает «задачу у ученика». Без «·».
+{% endcomment %}
+<div class="tw">
+  <div class="tw-head">
+    <div class="tw-heading">
+      <span class="tw-kicker">{{ worksheet.title }}, задача {{ number }} из {{ total }}</span>
+      <h2 class="tw-title" id="progress-dialog-title">Задача {{ number }}</h2>
+    </div>
+    <div class="tw-nav">
+      {% if prev_url %}<button type="button" class="btn btn-secondary btn-small" data-attempt-url="{{ prev_url }}">← Задача {{ number|add:'-1' }}</button>{% endif %}
+      {% if next_url %}<button type="button" class="btn btn-secondary btn-small" data-attempt-url="{{ next_url }}">Задача {{ number|add:'1' }} →</button>{% endif %}
+    </div>
+  </div>
+  <div class="tw-body">
+    <div class="tw-main">
+      <div class="progress-condition">
+        <span class="tw-label">Условие</span>
+        <div class="math-content">{{ task.text_latex|web_text }}</div>
+        {% task_images task %}
+        {% if subitems %}<ol class="subitems">{% for s in subitems %}<li><span class="math-content">{{ s.subitem.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
+      </div>
+      <div class="tw-answers">
+        <div class="tw-answer">
+          <span class="tw-label">Маска ответа: так видит ученик</span>
+          {% if subitems %}{% for s in subitems %}<div class="tw-part"><span class="tw-part-label">{{ s.label }}</span>{% if s.reference %}{% mask_check_form s.subitem %}{% else %}<p class="helptext">Маски нет, ответ проверяет учитель</p>{% endif %}</div>{% endfor %}
+          {% elif reference %}{% mask_check_form task %}
+          {% else %}<p class="helptext">Маски нет, ответ проверяет учитель</p>{% endif %}
+        </div>
+        <div class="tw-answer tw-reference">
+          <span class="tw-label">Эталон в маске</span>
+          {% if subitems %}{% for s in subitems %}<div class="tw-value"><span class="tw-part-label">{{ s.label }}</span> {% if s.reference %}{% include 'assignments/_mask.html' with fragments=s.reference editable=False show_checks=False %}{% else %}—{% endif %}</div>{% endfor %}
+          {% else %}<div class="tw-value">{% if reference %}{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}{% else %}—{% endif %}</div>{% endif %}
+          {% if task.effective_answer_latex %}<p class="tw-note">Ответ: <span class="math-content">{{ task.effective_answer_latex|web_answer }}</span></p>{% endif %}
+          {% if task.effective_solution_latex %}<details class="tw-solution"><summary>Решение</summary><div class="math-content">{{ task.effective_solution_latex|web_text }}</div></details>{% endif %}
+        </div>
+      </div>
+    </div>
+    <aside class="tw-side">
+      <div class="tw-stats">
+        <span class="tw-stat"><span class="tw-label">Верно</span><b>{{ ok }} из {{ answered }}</b></span>
+        <span class="tw-stat"><span class="tw-label">Решают сейчас</span><b class="is-live">{{ live }}</b></span>
+        <span class="tw-stat"><span class="tw-label">Не начали</span><b>{{ unopened }}</b></span>
+        <span class="tw-stat"><span class="tw-label">Частая ошибка</span><b>{% if common %}<span class="math-content">{{ common.0|web_answer }}</span>, у {{ common.1 }}{% else %}нет{% endif %}</b></span>
+      </div>
+      <div class="tw-block">
+        <span class="tw-label">Ответы класса</span>
+        <ul class="tw-class">
+          {% for a in answers %}{% with person=a.person %}
+          <li><span class="tw-class-name">{{ a.name }}{% if person.copied %} <span class="live-copy" title="{{ person.copy_note|capfirst }}">•</span>{% endif %}</span><span class="tw-class-marks live-table">{% for cell in a.cells %}{% include 'assignments/_progress_button.html' %}{% endfor %}</span><span class="tw-class-answer">{% for cell in a.cells %}{% if cell.shown %}{% include 'assignments/_mask.html' with fragments=cell.shown editable=False show_checks=False %}{% elif cell.answer %}<span class="math-content">{{ cell.answer|web_answer }}</span>{% endif %}{% endfor %}</span></li>
+          {% endwith %}{% empty %}<li class="helptext">Листок пока никому не выдан.</li>{% endfor %}
+        </ul>
+      </div>
+    </aside>
+  </div>
+  <div class="tw-foot">
+    <a class="btn btn-secondary btn-small" href="{% url 'task_detail' task.pk %}">Задача в базе</a>
+  </div>
+</div>

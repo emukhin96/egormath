@@ -13,7 +13,7 @@
     } else if (window.EgorAutosave) EgorAutosave.showSaved(ok, message);
   }
   async function request(url, options){var r=await fetch(url,options);if(!r.ok && r.status!==304)throw new Error('Не удалось обновить данные');return r;}
-  function math(root){if(window.renderMathContent)root.querySelectorAll('.math-content').forEach(renderMathContent);}
+  function math(root){if(window.renderMathContent)root.querySelectorAll('.math-content').forEach(renderMathContent);if(window.EgorMask)EgorMask.enhance(root);}
   function replace(root,html){
     var signature=html.replace(/name="csrfmiddlewaretoken" value="[^"]*"/g,'name="csrfmiddlewaretoken"');
     if(root.dataset.previous===signature)return;
@@ -67,11 +67,39 @@
           var data=new FormData();data.set('grade',grade.dataset.grade);data.set('csrfmiddlewaretoken',document.querySelector('[name=csrfmiddlewaretoken]').value);
           var result=await (await request(scale.dataset.gradeUrl,{method:'POST',body:data,headers:{'Accept':'application/json'}})).json();
           applyReviewResult(scale.dataset.gradeUrl,result);
+          var caption=scale.parentElement.querySelector('[data-grade-caption]');if(caption)caption.textContent=result.caption||'';
           notify(true, 'Оценка сохранена ✓');
         }finally{delete scale.dataset.busy;grading=false;}
       }
-      if(attempts){var requestedUrl=attempts.dataset.attemptUrl;detailUrl=requestedUrl;dialog.querySelector('[data-review-status]').hidden=true;var html=await(await request(requestedUrl)).text();if(detailUrl!==requestedUrl)return;var target=dialog.querySelector('[data-progress-detail]');replace(target,html);dialog.showModal();}
+      if(attempts){var requestedUrl=attempts.dataset.attemptUrl;detailUrl=requestedUrl;dialog.querySelector('[data-review-status]').hidden=true;var html=await(await request(requestedUrl)).text();if(detailUrl!==requestedUrl)return;var target=dialog.querySelector('[data-progress-detail]');replace(target,html);if(!dialog.open)dialog.showModal();dialog.scrollTop=0;}
     }catch(error){notify(false,error.message);}
+  });
+  /* «Проверить как ученик» в окне задачи (_mask_check_form.html): тот же
+     task_mask_check, что на карточке задачи. Где загружен редактор масок
+     (problem_masks.js, конструктор листка), форму обрабатывает он. Пока
+     учитель вводит пробный ответ, окно не перерисовывается опросом. */
+  function trialActive(){return Array.from(dialog.querySelectorAll('[data-mask-check] input, [data-mask-check] math-field')).some(e=>e.value&&e.type!=='hidden');}
+  document.addEventListener('submit',async function(e){
+    var f=e.target.closest('#progress-dialog [data-mask-check]');if(!f||document.getElementById('answer-mask-dialog'))return;e.preventDefault();
+    if(f.dataset.busy)return;f.dataset.busy='1';
+    var status=f.querySelector('[data-trial-result]');
+    try{
+      var data=new FormData(f);data.set('csrfmiddlewaretoken',document.querySelector('[name=csrfmiddlewaretoken]').value);
+      f.querySelectorAll('math-field[data-mirror]').forEach(function(m){data.set(m.dataset.mirror,(window.EgorMask&&EgorMask.value)?EgorMask.value(m):(m.value||''));});
+      var result=await(await fetch(dialog.dataset.maskCheckUrl,{method:'POST',body:data,headers:{'Accept':'application/json'}})).json();
+      f.querySelectorAll('[data-check]').forEach(function(h){if(window.EgorCheckBadge)EgorCheckBadge.render(h,'');});
+      if(window.EgorCheckBadge)EgorCheckBadge.apply(f,result.checks||{});
+      status.textContent=result.message||'';
+    }catch(error){status.textContent='Не удалось проверить ответ';}
+    finally{delete f.dataset.busy;}
+  });
+  document.addEventListener('click',function(e){
+    var reset=e.target.closest('#progress-dialog [data-mask-reset]');if(!reset||document.getElementById('answer-mask-dialog'))return;var f=reset.closest('[data-mask-check]');
+    f.querySelectorAll('math-field[data-mirror]').forEach(function(m){m.value='';});
+    f.querySelectorAll('input[type=text],input[type=number]').forEach(function(i){i.value='';});
+    f.querySelectorAll('input[type=checkbox]').forEach(function(c){c.checked=false;});
+    f.querySelectorAll('[data-check]').forEach(function(h){if(window.EgorCheckBadge)EgorCheckBadge.render(h,'');});
+    f.querySelector('[data-trial-result]').textContent='';
   });
   function stamp(){var status=document.querySelector('[data-live-status]');if(status)status.textContent='Обновлено в '+new Date().toLocaleTimeString();}
   /* Обратный отсчёт самостоятельной считается в браузере (data-remaining-until):
@@ -95,7 +123,7 @@
       if(review){var url=new URL(review.dataset.reviewLiveUrl,location.href);url.searchParams.set('versions',JSON.stringify(versions));var data=await(await request(url)).json();versions=data.versions||{};Object.entries(data.rows).forEach(([id,html])=>{document.querySelectorAll('[data-live-answer="'+id+'"]').forEach(root=>replace(root,html));});}
       var table=document.querySelector('[data-progress-overview]')||document.querySelector('[data-progress-table]');
       if(table){var url=new URL(table.dataset.progressUrl||location.href,location.href);url.searchParams.set('fragment','1');var key=url.toString();var response=await request(url,{headers:etags[key]?{'If-None-Match':etags[key]}:{}});if(response.status!==304){var html=await response.text();if(!grading&&pollEpoch===gradeEpoch){updateTable(table,html);etags[key]=response.headers.get('ETag');}}}
-      if(dialog&&dialog.open&&detailUrl&&!dialog.querySelector('[data-busy="1"]')){
+      if(dialog&&dialog.open&&detailUrl&&!dialog.querySelector('[data-busy="1"]')&&!trialActive()){
         // Сохраняем выбор оценки при обновлении снимка.
         var polledDetail=detailUrl;var response=await request(polledDetail,{headers:etags[polledDetail]?{'If-None-Match':etags[polledDetail]}:{}});if(response.status!==304){var html=await response.text();if(dialog.open&&detailUrl===polledDetail&&!grading&&pollEpoch===gradeEpoch){replace(dialog.querySelector('[data-progress-detail]'),html);etags[polledDetail]=response.headers.get('ETag');}}
       }
