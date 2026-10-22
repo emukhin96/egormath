@@ -16,7 +16,7 @@
   {# Кнопки над правой колонкой и той же ширины (правило «панель = контролы над ней») #}
   <form method="post" action="{% url 'save_review' assignment.pk %}" class="tl-actions">{% csrf_token %}
     <a class="btn btn-secondary" href="{% url 'review_assignment' assignment.pk %}">Комментарии</a>
-    {% if assignment.status != 'returned' %}<button class="btn btn-secondary" name="action" value="return">Вернуть на доработку</button>{% endif %}
+    {% if assignment.status != 'returned' %}<button class="btn btn-secondary" name="action" value="return" onclick="return confirm('Вернуть работу ученику на доработку?')">Вернуть на доработку</button>{% endif %}
     {% if assignment.status != 'reviewed' %}<button class="btn tl-complete" name="action" value="complete">Завершить проверку</button>{% endif %}
   </form>
 </div>
@@ -38,7 +38,7 @@
       <button type="button" class="tl-task linklike" data-attempt-url="{{ row.window_url }}"><span class="tl-task-text math-content">{{ row.task.text_latex|web_text }}</span>{% if row.note %}<span class="tl-note{% if row.copied %} is-copied{% endif %}">{{ row.note }}</span>{% endif %}</button>
       <span class="tl-answer">{% for cell in row.cells %}{% if cell.shown %}{% include 'assignments/_mask.html' with fragments=cell.shown editable=False show_checks=False %}{% elif cell.answer %}<span class="math-content">{{ cell.answer|web_answer }}</span>{% endif %}{% endfor %}{% if row.answered %}<span class="live-table tl-mark">{% for cell in row.cells %}{% include 'assignments/_progress_button.html' %}{% endfor %}</span>{% else %}<span class="tl-empty">—</span>{% endif %}</span>
       <span class="tl-ref">{% if row.reference %}{% include 'assignments/_mask.html' with fragments=row.reference editable=False show_checks=False %}{% else %}<span class="tl-empty">—</span>{% endif %}</span>
-      <button type="button" class="tl-grade{% if row.grade_tone %} tl-grade-{{ row.grade_tone }}{% elif row.pending %} tl-grade-pending{% endif %}" data-attempt-url="{{ row.window_url }}" title="{{ row.grade_title|default:'Нужна оценка' }}" aria-label="Оценка задачи {{ row.number }}: {{ row.grade_title|default:'нужна оценка' }}">{% if row.review.grade %}{{ row.review.grade_symbol }}{% elif row.pending %}?{% else %}—{% endif %}</button>
+      <button type="button" class="tl-grade{% if row.grade_tone %} tl-grade-{{ row.grade_tone }}{% elif row.pending %} tl-grade-pending{% endif %}" data-attempt-url="{{ row.window_url }}" title="{{ row.grade_title|default:'Нужна оценка' }}" aria-label="Оценка задачи {{ row.number }}: {{ row.grade_title|default:'нужна оценка' }}">{% if row.review.grade %}{{ row.review.grade_symbol }}{% elif row.graded %}+{% elif row.pending %}?{% else %}—{% endif %}</button>
     </div>
     {% endfor %}
     <div class="tl-total"><span>Итог</span><span>{{ result.done|floatformat:'-2' }} из {{ result.total }}, {{ result.percent }}%{% if pending %}, без оценки: {{ pending|join:', ' }}{% endif %}</span></div>

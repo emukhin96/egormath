@@ -56,10 +56,14 @@ def assignment_timeline(request, pk):
     for group in groups:
         cells = person['cells'][start:start + len(group['columns'])]
         start += len(group['columns'])
-        for cell in cells:
-            obj = cell['obj']
-            cell['shown'] = obj.mask_fragments(f'tl_{obj.pk}', for_teacher=True) if obj and obj.has_mask_values else None
         item, task = group['item'], group['item'].task
+        for column, cell in enumerate(cells):
+            obj = cell['obj']
+            # Submission и SubmissionPart — разные таблицы с пересекающимися pk,
+            # а одна задача может стоять в листке дважды: префикс уникален
+            # по пункту листка, колонке и типу ответа (ревью #282)
+            prefix = f'tl_{item.pk}_{column}_{type(obj).__name__.lower()}_{obj.pk}' if obj else ''
+            cell['shown'] = obj.mask_fragments(prefix, for_teacher=True) if obj and obj.has_mask_values else None
         review = cells[0]['review']
         submission = next((s for s in assignment.submissions.all() if s.task_id == task.pk), None)
         photos = len(submission.photos.all()) if submission else 0
@@ -72,12 +76,15 @@ def assignment_timeline(request, pk):
             notes.append(f'фото решения: {photos}')
         if not answered:
             notes.append('не решал')
+        # Оценена: шкала или старая отметка «Выполнено» (done без grade) —
+        # её засчитывает Assignment.result (ревью #282)
+        graded = bool(review and (review.grade or review.done))
         rows.append({'number': group['number'], 'item': item, 'task': task, 'cells': cells, 'review': review,
-                     'answered': answered, 'pending': answered and not (review and review.grade),
+                     'answered': answered, 'pending': answered and not graded, 'graded': graded,
                      'copied': any(c['words'] > 1 for c in copies), 'note': ', '.join(notes),
                      'reference': [] if item.selected_subitems() else reference_for(task, f'tl_ref_{item.pk}'),
-                     'grade_title': dict(Review.GRADE_CHOICES).get(review.grade, '') if review and review.grade else '',
-                     'grade_tone': ('' if not (review and review.grade) else 'good' if review.credit >= .75
+                     'grade_title': (dict(Review.GRADE_CHOICES).get(review.grade, '') if review.grade else 'Выполнено') if graded else '',
+                     'grade_tone': ('' if not graded else 'good' if review.credit >= .75
                                     else 'half' if review.credit >= .5 else 'bad'),
                      'window_url': reverse('task_attempts', args=[assignment.pk, task.pk]) + f'?item={item.pk}',
                      'task_window_url': reverse('worksheet_task_window', args=[assignment.worksheet_id, item.pk])})

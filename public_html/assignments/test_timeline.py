@@ -76,3 +76,18 @@ class TimelineTests(TestCase):
         self.assertContains(window, self.url)
         self.client.force_login(make_teacher('stranger'))
         self.assertEqual(self.client.get(self.url).status_code, 404)
+
+    def test_review_fixes(self):
+        """Ревью #282: старая отметка «Выполнено» (done без grade) — оценка,
+        у повторённой задачи разные префиксы полей, возврат с подтверждением."""
+        Review.objects.create(submission=Submission.objects.get(assignment=self.assignment), grade='', done=True)
+        WorksheetItem.objects.create(worksheet=self.worksheet, task=self.tasks[0], order=3)
+        response = self.client.get(self.url)
+        rows = response.context['rows']
+        self.assertEqual([(r['graded'], r['pending'], r['grade_tone']) for r in rows if r['task'] == self.tasks[0]],
+                         [(True, False, 'good'), (True, False, 'good')])
+        self.assertEqual(response.context['pending'], [])
+        names = [frag['name'] for r in rows for c in r['cells'] if c['shown'] for frag in c['shown'] if 'name' in frag]
+        self.assertEqual(len(names), 2)
+        self.assertEqual(len(names), len(set(names)))
+        self.assertContains(response, "confirm('Вернуть работу ученику на доработку?')")
