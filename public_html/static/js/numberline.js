@@ -335,13 +335,14 @@
       self.intervals = [{lo: -Infinity, hi: Infinity, lc: false, rc: false}];
       self.commit();
     });
-    this.tool(tools, 'очистить', 'Стереть ответ', function () {
+    var clear = this.tool(tools, 'очистить', 'Стереть ответ', function () {
       self.stale = false;
       self.special = '';
       self.intervals = [];
       self.writeValue('');
       self.render();
     });
+    clear.classList.add('numberline-clear');
     this.boundInput = document.createElement('input');
     this.boundInput.type = 'text';
     this.boundInput.className = 'numberline-bound';

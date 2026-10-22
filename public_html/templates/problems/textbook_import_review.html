@@ -3,7 +3,7 @@
 {% block extra_head %}<script defer src="{% static 'js/textbook_import_review.js' %}?v=7"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script>
 <script defer src="{% static 'js/mask.js' %}?v=5"></script>
-<script defer src="{% static 'js/numberline.js' %}?v=5"></script>{% endblock %}
+<script defer src="{% static 'js/numberline.js' %}?v=6"></script>{% endblock %}
 {% block title %}Сверка {{ draft.external_id }} — Математика{% endblock %}
 {% block content %}
 <div class="page-head"><div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'textbook_import_list' %}">Импорт задачников</a><a href="{% url 'textbook_import_detail' batch.pk %}">{{ batch.title }}</a><span>Ручная сверка</span></nav><h1>{{ draft.external_id }}</h1>
