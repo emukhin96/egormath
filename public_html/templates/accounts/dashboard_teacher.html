@@ -1,155 +1,141 @@
 {% extends 'base.html' %}
+{% load static task_extras %}
 {% block title %}Кабинет учителя — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/dashboard_teacher.html' %}{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
+{% comment %}
+Кабинет учителя по макету E_Home (холст «Страницы учителя», 22.10.2026): слева
+то, что требует действия (идёт сейчас, ждут проверки, сроки), справа сигналы,
+предложения и недавние листки. Шапка и содержимое на одной сетке: кнопки над
+правой колонкой той же ширины, что и она. Подписи — фразой, без «·».
+{% endcomment %}
+{% now 'Y-m-d' as today %}
+<div class="home-grid">
+  <div class="home-head">
     <h1>Кабинет учителя</h1>
-    <p class="page-meta"><span>{{ user.get_full_name|default:user.username }}</span><span>{% now 'j E Y' %}</span>{% if pending %}<span>на проверке {{ pending|length }}</span>{% endif %}</p>
+    <p class="page-meta">{% now 'l, j E' %}{% if running %}, идёт {{ running|length }} {{ running|length|plural_ru:'работа,работы,работ' }}{% endif %}{% if review_total %}, ждут проверки {{ review_total }}{% endif %}</p>
   </div>
-  <div class="page-actions">
-    <a class="btn btn-secondary" href="{% url 'assignment_list' %}">Все задания</a>
+  <div class="home-actions">
+    <a class="btn btn-secondary" href="{% url 'worksheet_create' %}">Новый листок</a>
     <a class="btn" href="{% url 'assignment_create' %}">Выдать задание</a>
   </div>
-</div>
 
-{# «Первые шаги» — учителю без права редактора, пока не скрыта кнопкой и не пройдена до выданного задания (accounts/onboarding.py) #}
-{% if onboarding %}
-<div class="card onboarding-card">
-  <div class="card-head">
-    <h2>Первые шаги</h2>
-    <div class="card-head-actions">
-      <span class="muted">выполнено {{ onboarding.done }} из {{ onboarding.total }}</span>
-      <a href="{% url 'welcome' %}">Подробнее</a>
-      <form method="post" action="{% url 'onboarding_hide' %}" class="inline-form">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-small btn-secondary" title="Карточка исчезнет из кабинета; страница «Первые шаги» останется в профиле">Скрыть</button>
-      </form>
+  <div class="home-main">
+    {# «Первые шаги» — учителю без права редактора, пока не скрыта кнопкой и не пройдена до выданного задания (accounts/onboarding.py) #}
+    {% if onboarding %}
+    <div class="card onboarding-card">
+      <div class="card-head">
+        <h2>Первые шаги</h2>
+        <div class="card-head-actions">
+          <span class="muted">выполнено {{ onboarding.done }} из {{ onboarding.total }}</span>
+          <a href="{% url 'welcome' %}">Подробнее</a>
+          <form method="post" action="{% url 'onboarding_hide' %}" class="inline-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-small btn-secondary" title="Карточка исчезнет из кабинета; страница «Первые шаги» останется в профиле">Скрыть</button>
+          </form>
+        </div>
+      </div>
+      <div class="onboarding-bar" role="progressbar" aria-valuemin="0" aria-valuemax="{{ onboarding.total }}" aria-valuenow="{{ onboarding.done }}" aria-label="Выполнено шагов"><span style="width: {{ onboarding.percent }}%"></span></div>
+      {% include 'accounts/_onboarding_checklist.html' with compact=True %}
     </div>
-  </div>
-  <div class="onboarding-bar" role="progressbar" aria-valuemin="0" aria-valuemax="{{ onboarding.total }}" aria-valuenow="{{ onboarding.done }}" aria-label="Выполнено шагов"><span style="width: {{ onboarding.percent }}%"></span></div>
-  {% include 'accounts/_onboarding_checklist.html' with compact=True %}
-</div>
-{% endif %}
+    {% endif %}
 
-<div class="stat-strip">
-  <div class="stat">
-    <span class="stat-label">На проверке</span>
-    <span class="stat-value">{{ pending|length }}</span>
-  </div>
-  <div class="stat">
-    <span class="stat-label">Листков</span>
-    <span class="stat-value">{{ worksheets_total }}</span>
-  </div>
-  <div class="stat">
-    <span class="stat-label">Учеников</span>
-    <span class="stat-value">{{ students_total }}</span>
-  </div>
-  <div class="stat">
-    <span class="stat-label">Задач</span>
-    <span class="stat-value">{{ tasks_total }}</span>
-  </div>
-</div>
-
-<div class="card panel-priority">
-  <div class="card-head">
-    <h2>Ожидают проверки</h2>
-    <div class="card-head-actions">
-      <a href="{% url 'assignment_list' %}?status=submitted">Вся очередь</a>
-      {% if pending %}<span class="counter">{{ pending|length }}</span>{% endif %}
-    </div>
-  </div>
-  {% if pending %}
-  <div class="catalog-table-wrap"><table class="list table-stack">
-    <tr><th>Листок</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Ученик</th><th>Отправлено</th><th></th></tr>
-    {% for a in pending %}
-    <tr>
-      <td class="stack-primary">{{ a.worksheet.title }}</td>
-      {% if request.user.is_superuser %}<td data-label="Владелец">{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>{% endif %}
-      <td>{{ a.student.get_full_name|default:a.student.username }}</td>
-      <td>{{ a.submitted_at|date:'d.m.Y H:i' }}</td>
-      <td class="row-actions"><a class="btn btn-small" href="{% url 'review_assignment' a.pk %}">Проверить</a></td>
-    </tr>
+    {% for r in running %}
+    <section class="now-card" aria-label="Идёт сейчас">
+      <div class="now-card-head">
+        <span class="now-card-kicker">Идёт {{ r.run.kind_label|lower }}</span>
+        <span class="now-card-timer" role="timer" aria-label="До конца последней попытки">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6"/></svg>
+          <span data-countdown data-ends="{{ r.ends_at|date:'c' }}" data-now="{{ now }}" data-total="{{ r.run.duration }}" data-bar="run-bar-{{ r.run.pk }}">{{ r.remaining_label }}</span>
+        </span>
+      </div>
+      <h2 class="now-card-title">{{ r.run.title }}</h2>
+      <p class="now-card-meta">Решают {{ r.active }}, сдали {{ r.finished }}{% if r.unopened %}, не начали {{ r.unopened }}{% endif %}</p>
+      <div class="now-card-bar" aria-hidden="true"><span id="run-bar-{{ r.run.pk }}" style="width: {{ r.elapsed_percent }}%"></span></div>
+      <a class="now-card-action" href="{{ r.url }}">Карта ответов</a>
+    </section>
     {% endfor %}
-  </table></div>
-  {% else %}
-  <p class="muted">Нет работ, ожидающих проверки.</p>
-  {% endif %}
-</div>
 
-{# Очередь предложений исправлений — только редакторам (accounts/permissions.py) #}
-{% if proposals is not None %}
-<div class="card">
-  <div class="card-head">
-    <h2>Предложения исправлений</h2>
-    <div class="card-head-actions">
+    <section class="card home-card" aria-labelledby="home-review">
+      <div class="home-card-head">
+        <h2 id="home-review">Ждут проверки{% if review_groups %} <span class="home-count">{{ review_total }}</span>{% endif %}</h2>
+        <a href="{% url 'assignment_list' %}?status=submitted">Все задания</a>
+      </div>
+      {% for g in review_groups %}
+      <a class="home-row home-row-review" href="{{ g.url }}">
+        <span class="home-row-body"><span class="home-row-title">{{ g.title }}</span><span class="home-row-meta">{{ g.kind|capfirst }}, {{ g.what }}</span></span>
+        <span class="home-row-chip">{{ g.n }}</span>
+        <svg class="home-row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </a>
+      {% empty %}
+      <p class="home-empty">Нет работ, ожидающих проверки.</p>
+      {% endfor %}
+    </section>
+
+    <section class="card home-card" aria-labelledby="home-deadlines">
+      <div class="home-card-head"><h2 id="home-deadlines">Сроки на неделе</h2></div>
+      {% for d in deadlines %}
+      <a class="home-row home-row-deadline" href="{{ d.url }}">
+        <span class="home-row-when{% if d.passed %} is-passed{% endif %}">{% if d.passed %}Прошёл {{ d.due|date:'d.m' }}{% elif d.due|date:'Y-m-d' == today %}Сегодня, {{ d.due|date:'H:i' }}{% else %}{{ d.due|date:'D, d.m' }}{% endif %}</span>
+        <span class="home-row-body"><span class="home-row-title">{{ d.title }}</span><span class="home-row-meta">{% if d.passed and d.left %}не сдали {{ d.left }}{% else %}{{ d.total }} {{ d.total|plural_ru:'ученик,ученика,учеников' }}{% endif %}</span></span>
+        <span class="home-row-progress"><span class="home-bar" aria-hidden="true"><span style="width: {{ d.percent }}%"></span></span><span>сдали {{ d.done }} из {{ d.total }}</span></span>
+      </a>
+      {% empty %}
+      <p class="home-empty">На этой неделе сроков нет.</p>
+      {% endfor %}
+    </section>
+  </div>
+
+  <aside class="home-side">
+    <section class="card home-card home-side-card" aria-labelledby="home-signals">
+      <h2 id="home-signals">Сигналы</h2>
+      {% for s in signals %}
+      <a class="home-signal" href="{{ s.url }}">
+        <span class="copy-mark" aria-hidden="true">•</span>
+        <span><span class="home-row-title">{{ s.name }}</span><span class="home-row-meta">{{ s.note }}</span></span>
+      </a>
+      {% empty %}
+      <p class="home-empty">За неделю никто не копировал условия.</p>
+      {% endfor %}
+    </section>
+
+    {# Очередь предложений исправлений — только редакторам (accounts/permissions.py) #}
+    {% if proposals is not None %}
+    <section class="card home-card home-side-card" aria-labelledby="home-proposals">
+      <div class="home-card-head">
+        <h2 id="home-proposals">Предложения исправлений</h2>
+        {% if proposals_new %}<span class="home-row-chip home-chip-new">{{ proposals_new }}</span>{% endif %}
+      </div>
+      {% for p in proposals %}
+      <a class="home-signal" href="{% url 'proposal_detail' p.pk %}"><span><span class="home-row-title">Задача #{{ p.task.pk }}</span><span class="home-row-meta">{{ p.message|truncatechars:80 }}</span><span class="home-row-meta">{{ p.author_name }}, {{ p.created_at|date:'d.m' }}</span></span></a>
+      {% empty %}
+      <p class="home-empty">Новых предложений нет.</p>
+      {% endfor %}
       <a href="{% url 'proposal_list' %}">Вся очередь</a>
-      {% if proposals_new %}<span class="counter">{{ proposals_new }}</span>{% endif %}
-    </div>
-  </div>
-  {% if proposals %}
-  <div class="catalog-table-wrap"><table class="list table-stack">
-    <tr><th>Задача</th><th>Автор</th><th>Отправлено</th><th></th></tr>
-    {% for p in proposals %}
-    <tr>
-      <td class="stack-primary">Задача #{{ p.task.pk }}<div class="muted task-meta">{{ p.message|truncatechars:80 }}</div></td>
-      <td>{{ p.author_name }}</td>
-      <td>{{ p.created_at|date:'d.m.Y H:i' }}</td>
-      <td class="row-actions"><a class="btn btn-small" href="{% url 'proposal_detail' p.pk %}">Открыть</a></td>
-    </tr>
-    {% endfor %}
-  </table></div>
-  {% else %}
-  <p class="muted">Новых предложений нет.</p>
-  {% endif %}
-</div>
-{% endif %}
+    </section>
+    {% endif %}
 
-<div class="grid-2">
-  <div class="card">
-    <h2>{% if request.user.is_superuser %}Все листки{% else %}Мои листки{% endif %}</h2>
-    {% if worksheets %}
-    <div class="catalog-table-wrap"><table class="list table-stack">
-      <tr><th>Название</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Класс</th><th>Задач</th><th></th></tr>
+    <section class="card home-card home-side-card" aria-labelledby="home-sheets">
+      <h2 id="home-sheets">{% if request.user.is_superuser %}Недавние листки{% else %}Мои листки{% endif %}</h2>
       {% for w in worksheets %}
-      <tr>
-        <td class="stack-primary">
-          <a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a>
-          {% if w.comment %}<div class="muted task-meta">{{ w.comment|truncatechars:80 }}</div>{% endif %}
-        </td>
-        {% if request.user.is_superuser %}<td data-label="Владелец">{{ w.owner.get_full_name|default:w.owner.username }}</td>{% endif %}
-        <td data-label="Класс">{{ w.grade_label }}</td>
-        <td data-label="Задач">{{ w.items_total }}</td>
-        <td class="row-actions"><a class="btn btn-small btn-secondary"
-               href="{% url 'worksheet_pdf_editor' w.pk %}"
-               title="Предпросмотр и сборка PDF">PDF</a></td>
-      </tr>
+      <div class="home-sheet">
+        <a href="{% url 'worksheet_detail' w.pk %}"><span class="home-row-title">{{ w.title }}</span><span class="home-row-meta">{{ w.items_total }} {{ w.items_total|plural_ru:'задача,задачи,задач' }}{% if w.grade_label %}, {{ w.grade_label }}{% endif %}</span></a>
+        <a class="home-sheet-issue" href="{% url 'assignment_create' %}?worksheet={{ w.pk }}">Выдать</a>
+      </div>
+      {% empty %}
+      <p class="home-empty">Листков пока нет — <a href="{% url 'collection_list' %}">возьмите готовый из подборки</a> или <a href="{% url 'worksheet_create' %}">создайте листок</a>.</p>
       {% endfor %}
-    </table></div>
-    {% else %}
-    <p class="muted">Листков пока нет — <a href="{% url 'collection_list' %}">возьмите готовый из подборки</a> или <a href="{% url 'worksheet_create' %}">создайте листок</a>{% if shows_onboarding %}; план — в <a href="{% url 'welcome' %}">«Первых шагах»</a>{% endif %}.</p>
-    {% endif %}
-  </div>
+      <p class="home-totals">{{ worksheets_total }} {{ worksheets_total|plural_ru:'листок,листка,листков' }}, {{ students_total }} {{ students_total|plural_ru:'ученик,ученика,учеников' }}, {{ tasks_total }} {{ tasks_total|plural_ru:'задача,задачи,задач' }}</p>
+    </section>
 
-  <div class="card">
-    <h2>Недавно проверенные</h2>
-    {% if reviewed %}
-    <div class="catalog-table-wrap"><table class="list table-stack">
-      <tr><th>Листок</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Ученик</th><th>Проверено</th><th>Результат</th><th></th></tr>
-      {% for a in reviewed %}
-      <tr>
-        <td class="stack-primary">{{ a.worksheet.title }}</td>
-        {% if request.user.is_superuser %}<td data-label="Владелец">{{ a.worksheet.owner.get_full_name|default:a.worksheet.owner.username }}</td>{% endif %}
-        <td>{{ a.student.get_full_name|default:a.student.username }}</td>
-        <td data-label="Проверено">{{ a.reviewed_at|date:'d.m.Y' }}</td>
-        <td>{% with r=a.result %}{{ r.done }}/{{ r.total }} ({{ r.percent }}%){% endwith %}</td>
-        <td class="row-actions"><a class="btn btn-small btn-secondary" href="{% url 'review_assignment' a.pk %}">Открыть</a></td>
-      </tr>
-      {% endfor %}
-    </table></div>
-    {% else %}
-    <p class="muted">Пока ничего не проверено.</p>
+    {# Повторный вход в «Первые шаги» после скрытия карточки и справка — учителю без права редактора (accounts/onboarding.py) #}
+    {% if shows_onboarding %}
+    <section class="card home-card home-side-card" aria-labelledby="home-help">
+      <h2 id="home-help">Помощь</h2>
+      <a href="{% url 'welcome' %}">Первые шаги</a>
+      <a href="{% url 'help_teachers' %}">Справка для учителей</a>
+    </section>
     {% endif %}
-  </div>
+  </aside>
 </div>
 {% endblock %}
+{% block extra_js %}{% if running %}<script defer src="{% static 'js/countdown.js' %}"></script>{% endif %}{% endblock %}

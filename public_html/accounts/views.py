@@ -364,26 +364,30 @@ def dashboard(request):
 
 
 def teacher_dashboard(request):
+    from . import teacher_home
     worksheets = (Worksheet.visible_to(request.user).select_related('owner')
-                  .annotate(items_total=Count('items'))[:15])
+                  .annotate(items_total=Count('items'))[:5])
     pending = (Assignment.visible_to(request.user)
                .filter(status=Assignment.STATUS_SUBMITTED)
                .select_related('worksheet', 'worksheet__owner', 'student')
                .order_by('submitted_at'))
-    reviewed = (Assignment.visible_to(request.user)
-                .filter(status=Assignment.STATUS_REVIEWED)
-                .select_related('worksheet', 'worksheet__owner', 'student')
-                .order_by('-reviewed_at')[:10])
+    review_groups = teacher_home.review_groups(request.user)
     context = {
         'worksheets': worksheets,
         'pending': pending,
-        'reviewed': reviewed,
         'worksheets_total': Worksheet.visible_to(request.user).count(),
         'students_total': Profile.students_for(request.user).count(),
         'tasks_total': catalog_tasks(request.user).count(),
         'proposals': None,
         # Карточка «Первые шаги» — не редактору, пока не скрыта и не пройдена
         'onboarding': dashboard_onboarding(request),
+        # Кабинет по макету E_Home: идёт сейчас, ждут проверки, сроки, сигналы
+        'now': timezone.now().isoformat(),
+        'running': teacher_home.running_works(request.user),
+        'review_groups': review_groups,
+        'review_total': sum(group['n'] for group in review_groups),
+        'deadlines': teacher_home.week_deadlines(request.user),
+        'signals': teacher_home.copy_signals(request.user),
     }
     if is_base_editor(request.user):
         # Очередь предложений исправлений — последние новые, как «Ожидают

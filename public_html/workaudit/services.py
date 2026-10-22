@@ -67,6 +67,24 @@ def whole_copies(kind, works):
     return dict(rows)
 
 
+def copied_words(event):
+    """Сколько слов ученик скопировал; формула $…$ считается одним словом."""
+    return len(re.sub(r'\$[^$]*\$', ' x ', event.text or '').split())
+
+
+def copy_marks(kind, works):
+    """Метка «•» у имени ученика в списках учителя (решение 22.10.2026):
+    скопировал из условия больше одного слова. {pk работы: [события]},
+    события по времени; работы без таких копирований в словарь не попадают."""
+    events = (ActivityEvent.objects.filter(**{f'{kind}__in': works}, kind='copy')
+              .order_by('received_at'))
+    marks = {}
+    for event in events:
+        if copied_words(event) > 1:
+            marks.setdefault(getattr(event, f'{kind}_id'), []).append(event)
+    return marks
+
+
 def lock_work(model, pk):
     """Блокировка перед чтением: на SQLite предотвращает upgrade deadlock."""
     if connection.vendor == 'sqlite':
