@@ -1,10 +1,10 @@
 {% load page_tools %}
-{# Фильтр по группе учеников: groups, current (pk строкой), all_label. Групп немного — сегменты-ссылки ?group=, иначе select с автоотправкой #}
+{# Фильтр по группе учеников: groups, current (pk строкой), all_label. Групп немного — сегменты-ссылки ?group=, иначе select с автоотправкой; fragment=None — фильтр бывает и во фрагменте опроса #}
 {% if groups|length <= 6 %}
-<nav class="seg" aria-label="Группа"><a class="seg-item{% if not current %} is-active{% endif %}" href="{% query_set group=None %}"{% if not current %} aria-current="true"{% endif %}>{{ all_label|default:'Все' }}</a>{% for g in groups %}<a class="seg-item{% if g.pk|stringformat:'s' == current|stringformat:'s' %} is-active{% endif %}" href="{% query_set group=g.pk %}"{% if g.pk|stringformat:'s' == current|stringformat:'s' %} aria-current="true"{% endif %}>{{ g.name }}</a>{% endfor %}</nav>
+<nav class="seg" aria-label="Группа"><a class="seg-item{% if not current %} is-active{% endif %}" href="{% query_set group=None fragment=None %}"{% if not current %} aria-current="true"{% endif %}>{{ all_label|default:'Все' }}</a>{% for g in groups %}<a class="seg-item{% if g.pk|stringformat:'s' == current|stringformat:'s' %} is-active{% endif %}" href="{% query_set group=g.pk fragment=None %}"{% if g.pk|stringformat:'s' == current|stringformat:'s' %} aria-current="true"{% endif %}>{{ g.name }}</a>{% endfor %}</nav>
 {% else %}
 <form method="get" class="progress-filters" data-autosubmit>
-  {% for key, values in request.GET.lists %}{% if key != 'group' and key != 'page' %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endif %}{% endfor %}
+  {% for key, values in request.GET.lists %}{% if key != 'group' and key != 'page' and key != 'fragment' %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endif %}{% endfor %}
   <label class="sort-inline filter-inline" for="progress-group">Группа:
     <select id="progress-group" name="group"><option value="">{{ all_label|default:'Все'|lower }}</option>{% for g in groups %}<option value="{{ g.pk }}"{% if g.pk|stringformat:'s' == current|stringformat:'s' %} selected{% endif %}>{{ g.name }}</option>{% endfor %}</select>
   </label>

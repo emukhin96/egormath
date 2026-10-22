@@ -1,5 +1,6 @@
 """Живой обзор назначенного листка и оценки по отдельным задачам."""
 import hashlib
+from datetime import timedelta
 import json
 from django.http import JsonResponse, HttpResponseNotModified
 from django.db.models import Prefetch, Max
@@ -7,6 +8,7 @@ from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.views.decorators.http import require_POST
 from django.views.decorators.cache import never_cache
+from django.utils import timezone
 from accounts.decorators import teacher_required
 from livefile import etags
 from accounts.models import StudentGroup
@@ -15,7 +17,8 @@ from .models import Assignment, Review, Submission, SubmissionCheckAttempt
 from .views import _assignment_rows, _teacher_assignment
 from .point_progress import point_progress
 from worksheets.latex import subitem_label
-from workaudit.services import whole_copies
+from workaudit.models import ActivityEvent
+from workaudit.services import copy_label, copy_marks, whole_copies
 
 
 @teacher_required
@@ -152,6 +155,78 @@ def progress_people(groups_of_points, assignments):
     return people
 
 
+LIVE_MINUTES = 15
+ORDERS = {'name': 'По фамилии', 'behind': 'Сначала отстающие', 'result': 'По результату', 'submitted': 'По времени сдачи'}
+
+
+def live_summary(groups_of_points, people, now=None):
+    """Карта ответов «в моменте» (макет D_Live, 22.10.2026): у каждого
+    ученика — что он делает сейчас и метка «•», если копировал из условия
+    больше одного слова; по колонкам — сколько верно из ответивших и сколько
+    решают сейчас; сверху — сводка класса. Дополняет people на месте."""
+    from django.utils import timezone
+    now = now or timezone.now()
+    marks = copy_marks('assignment', [p['assignment'] for p in people])
+    numbers = {g['item'].task_id: g['number'] for g in groups_of_points}
+    live_since = now - timedelta(minutes=LIVE_MINUTES)
+    summary = {'submitted': 0, 'live': 0, 'unopened': 0, 'pending': 0, 'copied': 0}
+    for person in people:
+        assignment = person['assignment']
+        events = marks.get(assignment.pk, [])
+        person['copied'] = bool(events)
+        person['copy_note'] = '; '.join(copy_label(e) for e in events[-3:])
+        stamps = []
+        for sub in assignment.submissions.all():
+            times = [sub.updated_at] + [part.updated_at for part in sub.parts.all()]
+            stamps.append((max(times), sub.task_id))
+        last = max(stamps) if stamps else None
+        person['live_task'] = None
+        if assignment.status in (Assignment.STATUS_SUBMITTED, Assignment.STATUS_REVIEWED):
+            when = assignment.submitted_at
+            person['now'] = 'сдано ' + timezone.localtime(when).strftime('%d.%m, %H:%M') if when else 'сдано'
+            person['now_kind'] = 'done'
+            summary['submitted'] += 1
+            summary['pending'] += assignment.status == Assignment.STATUS_SUBMITTED
+        elif last is None:
+            person['now'], person['now_kind'] = 'не открыто', 'never'
+            summary['unopened'] += 1
+        elif last[0] >= live_since:
+            person['live_task'] = last[1]
+            # когда статус погаснет: опрос перезапросит фрагмент сам (teacher_progress.js)
+            person['live_until'] = last[0] + timedelta(minutes=LIVE_MINUTES)
+            person['now'] = f'на №{numbers.get(last[1], "?")}, {timezone.localtime(last[0]).strftime("%H:%M")}'
+            person['now_kind'] = 'live'
+            summary['live'] += 1
+        else:
+            person['now'] = 'ответ ' + timezone.localtime(last[0]).strftime('%d.%m')
+            person['now_kind'] = 'idle'
+        summary['copied'] += person['copied']
+    stats = []
+    index = 0
+    for group in groups_of_points:
+        # «решают сейчас» — у первой колонки задачи, подпункты делят одно число
+        live = sum(1 for p in people if p['live_task'] == group['item'].task_id)
+        for position, _column in enumerate(group['columns']):
+            cells = [p['cells'][index] for p in people if not p['cells'][index]['hidden']]
+            answered = [c for c in cells if c['status'] in ('ok', 'wrong')]
+            ok = sum(c['status'] == 'ok' for c in answered)
+            rate = ok / len(answered) if answered else None
+            stats.append({'ok': ok, 'answered': len(answered), 'live': live if position == 0 else 0,
+                          'tone': '' if rate is None else 'good' if rate >= .7 else 'mid' if rate >= .5 else 'low'})
+            index += 1
+    return summary, stats
+
+
+def order_people(people, order):
+    if order == 'behind':
+        people.sort(key=lambda p: (p['result']['done'], p['assignment'].student.last_name))
+    elif order == 'result':
+        people.sort(key=lambda p: (-p['result']['done'], p['assignment'].student.last_name))
+    elif order == 'submitted':
+        people.sort(key=lambda p: (p['assignment'].submitted_at is None, p['assignment'].submitted_at or 0))
+    return people
+
+
 def progress_assignments(assignments):
     return assignments.select_related('student', 'worksheet').prefetch_related(
         'hidden_items', Prefetch('submissions', queryset=Submission.objects.select_related('review').prefetch_related('parts', 'photos', 'check_history')))
@@ -170,20 +245,33 @@ def worksheet_progress(request, worksheet_id):
     groups_of_points = progress_groups(items, assignments)
     etag = None
     if request.GET.get('fragment'):
+        submissions = list(Submission.objects.filter(assignment__in=assignments).annotate(
+            last_part=Max('parts__updated_at'), last_photo=Max('photos__uploaded_at'), last_attempt=Max('check_history__pk')).values(
+            'pk', 'updated_at', 'check_attempts', 'last_part', 'last_photo', 'last_attempt', 'review__reviewed_at'))
+        # «решает сейчас» гаснет по времени без записей в БД — признак входит в ETag
+        live_since = timezone.now() - timedelta(minutes=LIVE_MINUTES)
         state = [list(assignments.values('pk', 'status', 'student__first_name', 'student__last_name', 'student__username')),
-                 list(Submission.objects.filter(assignment__in=assignments).annotate(
-                     last_part=Max('parts__updated_at'), last_photo=Max('photos__uploaded_at'), last_attempt=Max('check_history__pk')).values(
-                     'pk', 'updated_at', 'check_attempts', 'last_part', 'last_photo', 'last_attempt', 'review__reviewed_at')),
+                 submissions,
+                 [max(filter(None, (s['updated_at'], s['last_part']))) >= live_since for s in submissions],
                  list(Assignment.hidden_items.through.objects.filter(assignment__in=assignments).values_list('assignment_id', 'worksheetitem_id')),
                  [(g['item'].pk, g['item'].task_id, g['item'].order, g['item'].task.updated_at,
-                   [(c['owner'].pk, c['owner'].answer_mask, c['label']) for c in g['columns']]) for g in groups_of_points]]
+                   [(c['owner'].pk, c['owner'].answer_mask, c['label']) for c in g['columns']]) for g in groups_of_points],
+                 # метка «•» у ученика появляется от событий копирования
+                 ActivityEvent.objects.filter(assignment__in=assignments, kind='copy').aggregate(last=Max('pk'))['last']]
         etag = '"' + hashlib.sha256(json.dumps(state, default=str).encode()).hexdigest() + '"'
         if etags.matches(request, etag):
             return HttpResponseNotModified()
     people = progress_people(groups_of_points, assignments.order_by('student__last_name', 'student__username'))
+    summary, column_stats = live_summary(groups_of_points, people)
+    order = request.GET.get('order', 'name') if request.GET.get('order') in ORDERS else 'name'
+    order_people(people, order)
+    deadline = assignments.aggregate(due=Max('due_at'))['due']
     context = {'worksheet': worksheet, 'items': items, 'point_groups': groups_of_points, 'people': people,
                'groups': StudentGroup.visible_to(request.user), 'group_id': group_id,
-               'manage_status': request.GET.get('manage') == '1'}
+               'manage_status': request.GET.get('manage') == '1',
+               'summary': summary, 'column_stats': column_stats, 'orders': ORDERS, 'order': order,
+               'deadline': deadline, 'live_map': True, 'grade_choices': Review.grade_options(),
+               'has_parts': any(c['is_part'] for g in groups_of_points for c in g['columns'])}
     template = 'assignments/_progress_table.html' if request.GET.get('fragment') else 'assignments/progress.html'
     response = render(request, template, context)
     if etag:

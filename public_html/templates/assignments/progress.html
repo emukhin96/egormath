@@ -1,20 +1,26 @@
 {% extends 'base.html' %}{% load static livefile task_extras %}
-{% block title %}Прогресс · {{ worksheet.title }}{% endblock %}
+{% block title %}{{ worksheet.title }} — карта ответов{% endblock %}
 {% block content %}
-<div class="page-head">
+{% comment %}
+Карта ответов «в моменте» по макету D_Live (холст «Страницы учителя», 22.10.2026):
+шапка с действиями, сводка «Класс сейчас», таблица с колонкой «Сейчас» и
+строкой «Верно / решают», легенда внизу. Сводка и таблица — во фрагменте
+_progress_table.html, их обновляет опрос teacher_progress.js. Без «·».
+{% endcomment %}
+<div class="page-head live-head">
   <div>
-    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a></nav>
-    <h1>Прогресс учеников</h1>
-    <p class="page-meta"><span>{{ people|length }} {{ people|length|plural_ru:'ученик,ученика,учеников' }}</span><span>{{ items|length }} {{ items|length|plural_ru:'задача,задачи,задач' }}</span></p>
+    <a class="live-back" href="{% url 'assignment_list' %}">← Задания</a>
+    <h1>{{ worksheet.title }}</h1>
+    <p class="live-meta">{{ people|length }} {{ people|length|plural_ru:'ученик,ученика,учеников' }}, листок из {{ items|length }} {{ items|length|plural_ru:'задачи,задач,задач' }}{% if deadline %}, срок {{ deadline|date:'j E, H:i' }}{% endif %}</p>
   </div>
-  {% if canvas_enabled %}<div class="page-actions"><a class="btn" href="{% url 'worksheet_boards' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">Доски всех учеников</a></div>{% endif %}
+  <div class="page-actions">
+    <a class="btn btn-secondary" href="{% url 'worksheet_detail' worksheet.pk %}">Листок</a>
+    {% if canvas_enabled %}<a class="btn btn-secondary" href="{% url 'worksheet_boards' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">Доски учеников</a>{% endif %}
+    {% if summary.pending %}<a class="btn" href="{% url 'assignment_list' %}?status=submitted&amp;worksheet={{ worksheet.pk }}">Проверить {{ summary.pending }}</a>{% endif %}
+  </div>
 </div>
-<div class="page-toolbar progress-head">
-  {% include 'assignments/_group_filter.html' with current=group_id all_label='Все назначенные' %}
-  {% if canvas_enabled %}{% include 'canvas/_toggle.html' %}{% endif %}
-</div>
-<p class="progress-legend"><span data-live-status role="status">Обновляется каждые 5 секунд, до отправки работы; нажмите ячейку для подробностей.</span><span>✓ — верно с первой</span><span>✓₂ — верно со второй</span><span>×₂ — неверно после двух</span><span>… — введено, не проверено</span><span>— не начато / не назначено</span></p><div data-progress-table data-live-file="{% live_file 'worksheet' worksheet.pk %}">{% include 'assignments/_progress_table.html' %}</div>
+<div data-progress-table data-live-file="{% live_file 'worksheet' worksheet.pk %}">{% include 'assignments/_progress_table.html' %}</div>
+{% if canvas_enabled %}<div class="live-canvas-toggle">{% include 'canvas/_toggle.html' %}</div>{% endif %}
 {% include 'assignments/_progress_dialog.html' %}
-
 {% endblock %}
-{% block extra_js %}<script defer src="{% static 'js/teacher_progress.js' %}?v=5"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=2"></script>{% endif %}{% endblock %}
+{% block extra_js %}<script defer src="{% static 'js/teacher_progress.js' %}?v=6"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=2"></script>{% endif %}{% endblock %}

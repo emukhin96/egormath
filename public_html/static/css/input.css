@@ -302,6 +302,72 @@
   .progress-filters label, .progress-filters .btn { margin: 0; }
   .progress-filters select { width: 280px; max-width: 100%; margin: 0; }
   .progress-legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); font-size: .85rem; color: var(--muted); margin: 0 0 var(--space-3); }
+  /* Карта ответов «в моменте» (макет D_Live, 22.10.2026): сводка класса,
+     карточка с фильтрами, плитки ответов, колонка «Сейчас», строка «Верно / решают» */
+  .live-head { align-items: flex-end; }
+  .live-head h1 { margin: 0; }
+  .live-back { display: inline-block; margin-bottom: var(--space-1); font-size: 13px; color: var(--muted); text-decoration: none; }
+  .live-meta { margin: var(--space-1) 0 0; color: var(--muted); }
+  .live-strip { display: grid; grid-template-columns: auto repeat(5, minmax(0, 1fr)); align-items: center; column-gap: 24px; row-gap: var(--space-3); margin: 0 0 var(--space-4); padding: 12px 20px; background: #fff; border: 1px solid var(--border); border-radius: 12px; }
+  .live-strip-lead { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 600; color: var(--muted); }
+  .live-strip-lead.is-live { color: #14511c; }
+  .live-dot { width: 10px; height: 10px; border-radius: 50%; background: #b8c3d1; }
+  .is-live .live-dot { background: #2e7d32; box-shadow: 0 0 0 4px #dcf1e0; }
+  .live-stat { display: flex; flex-direction: column; min-width: 0; }
+  .live-stat span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .live-stat b { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .live-stat-live b { color: #1765b5; }
+  .live-stat-pending b { color: #b26a00; }
+  .live-stat-copied b { color: #7c3aed; }
+  .live-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .live-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .live-toolbar .seg, .live-toolbar .progress-filters { margin: 0; }
+  .live-order { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; font-size: 13px; color: var(--muted); }
+  .live-order label { margin: 0; }
+  .live-order select { width: auto; height: 32px; margin: 0; }
+  .live-hint { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+  .live-card .progress-table-wrap { border: 0; border-radius: 0; }
+  table.list.progress-table.live-table th, table.list.progress-table.live-table td { border-right: 0; border-bottom: 1px solid #f1f4f8; padding: 4px 4px; }
+  table.list.progress-table.live-table thead th { border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--muted); padding: 8px 4px; }
+  table.list.progress-table.live-table th:first-child { padding-left: 16px; padding-right: 12px; }
+  table.list.progress-table.live-table td:last-child { padding-right: 16px; }
+  .live-task { display: inline-grid; place-items: center; min-width: 44px; height: 30px; padding: 0 6px; border-radius: 7px; background: #eef2f6; color: #102b55; font-weight: 700; text-decoration: none; }
+  .live-task:hover { background: #102b55; color: #fff; }
+  .live-table .progress-mark { width: 44px; height: 30px; font-size: 14px; font-weight: 700; }
+  .live-table .progress-ok { background: #cdebd3; color: #14511c; }
+  .live-table .progress-wrong { background: #f8d4d4; color: #8f1616; }
+  .live-table .progress-draft { background: #dbe8f8; color: #102b55; }
+  .live-table .progress-unknown { background: #ffe7b8; color: #7a4a00; }
+  .live-table .progress-empty { background: #eef2f6; color: #5d6878; }
+  .live-table td.is-live .progress-mark { box-shadow: inset 0 0 0 2px #1765b5; }
+  .live-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .live-name a { font-weight: 600; text-decoration: none; }
+  .live-copy { color: #7c3aed; font-size: 18px; line-height: 1; }
+  table.list.progress-table.live-table .live-now, table.list.progress-table.live-table .live-now-head { width: 100%; min-width: 120px; padding-left: 12px; text-align: left; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--muted); }
+  table.list.progress-table.live-table .live-now-live { color: #1765b5; font-weight: 600; }
+  table.list.progress-table.live-table .live-now-done { color: #14511c; }
+  table.list.progress-table.live-table .live-result, table.list.progress-table.live-table .live-result-head { min-width: 56px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  table.list.progress-table.live-table tfoot th, table.list.progress-table.live-table tfoot td { background: #f7f9fc; border-bottom: 0; padding-top: 10px; padding-bottom: 12px; }
+  table.list.progress-table.live-table tfoot th { position: sticky; left: 0; z-index: 1; text-align: left; font-weight: 600; color: var(--muted); text-transform: none; letter-spacing: normal; font-size: inherit; }
+  .live-stat-cell span { display: block; font-variant-numeric: tabular-nums; }
+  .live-ok { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+  .live-ok.is-good { color: #2e7d32; }
+  .live-ok.is-mid { color: #b26a00; }
+  .live-ok.is-low { color: #c62828; }
+  .live-now-count { font-size: 11.5px; font-weight: 600; color: #1765b5; }
+  .live-legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); padding: 12px 16px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+  .live-legend b { color: var(--text); }
+  .live-legend b.is-ok { color: #14511c; }
+  .live-legend b.is-wrong { color: #8f1616; }
+  .live-legend b.is-pending { color: #7a4a00; }
+  .live-legend b.live-copy { color: #7c3aed; }
+  .live-canvas-toggle .canvas-toggle { margin: var(--space-3) 0 0; }
+  .live-ring { display: inline-block; width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; border-radius: 4px; box-shadow: inset 0 0 0 2px #1765b5; }
+  @media (max-width: 760px) {
+    .live-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px 16px; }
+    .live-strip-lead { grid-column: 1 / -1; }
+    .live-hint { display: none; }
+  }
   /* Шапка прогресса и дашборда: фильтр, кнопки и тумблер в одной строке */
   .progress-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: var(--space-3) 0; }
   .progress-head .progress-filters { margin: 0; }
