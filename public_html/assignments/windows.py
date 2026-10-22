@@ -2,6 +2,7 @@
 «задача» — условие, маска глазами ученика, эталон и как её решает класс;
 «задача у ученика» — ответ, история, копирование в этой задаче, оценка и
 комментарий, переходы к соседнему ученику и к соседней задаче."""
+import hashlib
 import re
 from collections import Counter
 
@@ -166,12 +167,17 @@ def class_answer_groups(people, column, task_id, anonymous=False):
     buckets = {'ok': [], 'wrong': {}, 'draft': {}, 'live': [], 'rest': []}
     counts = Counter()
     tries = Counter()
-    for index, person in enumerate(people, 1):
+    if anonymous:
+        # Без имён порядок не алфавитный, иначе «Ученик 1» — первая фамилия
+        # журнала (ревью #280): устойчивое перемешивание по назначению и
+        # задаче, номера — по порядку на странице (ниже, после групп)
+        people = sorted(people, key=lambda p: hashlib.sha256(f'{p["assignment"].pk}:{task_id}'.encode()).hexdigest())
+    for person in people:
         cell = person['cells'][column]
         if cell['hidden']:
             continue
         row = {'person': person, 'cell': cell, 'copied': person['copied'] and not anonymous,
-               'name': f'Ученик {index}' if anonymous else _name(person['assignment'])}
+               'name': _name(person['assignment'])}
         status = cell['status']
         if status == 'ok':
             buckets['ok'].append(row)
@@ -202,6 +208,9 @@ def class_answer_groups(people, column, task_id, anonymous=False):
         groups.append({'kind': 'live', 'title': 'Решают сейчас', 'verdict': 'на этой задаче', 'rows': buckets['live']})
     if buckets['rest']:
         groups.append({'kind': 'rest', 'title': 'Ещё не дошли', 'verdict': 'ответа на эту задачу нет', 'rows': buckets['rest']})
+    if anonymous:
+        for number, row in enumerate((row for group in groups for row in group['rows']), 1):
+            row['name'] = f'Ученик {number}'
     total = sum(counts.values())
     bar = [{'key': key, 'label': label, 'count': counts[key], 'percent': round(100 * counts[key] / total, 2) if total else 0}
            for key, label in [('ok_first', 'Верно с первой'), ('ok_later', 'Верно не сразу'), ('wrong', 'Неверно'),

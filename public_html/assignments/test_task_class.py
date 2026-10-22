@@ -66,3 +66,10 @@ class TaskClassTests(TestCase):
         self.assertContains(window, self.url)
         other = WorksheetItem.objects.create(worksheet=make_worksheet(self.teacher), task=self.task, order=1)
         self.assertEqual(self.client.get(reverse('assignment_item_class', args=[self.worksheet.pk, other.pk])).status_code, 404)
+
+    def test_anonymous_numbers_follow_page_not_alphabet(self):
+        """Ревью #280: «Ученик N» — по порядку на странице, а не по журналу."""
+        response = self.client.get(self.url, {'anon': '1'})
+        shown = [row['name'] for g in response.context['answer_groups'] for row in g['rows']]
+        self.assertEqual(shown, [f'Ученик {n}' for n in range(1, len(shown) + 1)])
+        self.assertEqual(shown, [row['name'] for g in self.client.get(self.url, {'anon': '1'}).context['answer_groups'] for row in g['rows']])
