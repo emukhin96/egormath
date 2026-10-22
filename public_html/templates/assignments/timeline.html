@@ -31,7 +31,7 @@
 
 <div class="tl-grid">
   <section class="card tl-answers" aria-label="Ответы и оценки">
-    <div class="tl-row tl-row-head" role="row"><span>№</span><span>Задача</span><span>Ответ</span><span>Эталон</span><span class="tl-grade-head">Оценка</span></div>
+    <div class="tl-row tl-row-head" role="row"><span>№</span><span>Задача</span><span>Ответ ученика</span><span>Ответ</span><span class="tl-grade-head">Оценка</span></div>
     {% for row in rows %}
     <div class="tl-row{% if row.pending %} is-pending{% endif %}">
       <button type="button" class="live-task" data-attempt-url="{{ row.task_window_url }}" title="Окно задачи">{{ row.number }}</button>
