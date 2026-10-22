@@ -100,6 +100,9 @@ else
 fi
 grep -q "DB_ENGINE" "$STAGE_DIR/public_html/core/settings.py" \
   || die "ветка $BRANCH не знает DB_ENGINE (settings.py): нужна ветка с PR «Локальный стенд» или новее"
+# app.css не в git — собираем его в worktree стенда (бинарник Tailwind общий
+# с рабочей копией). На старых ветках, где файл ещё в git, просто пересоберётся.
+make -s -C "$STAGE_DIR" build-css TW="$ROOT/tools/tailwindcss" >/dev/null
 # Секреты — только API-ключи из рабочей копии, по одному симлинку: DB_* и
 # DJANGO_ENV туда не попадают, база стенда задаётся переменными окружения.
 # Симлинк .secrets целиком (первая версия скрипта) заменяется настоящим

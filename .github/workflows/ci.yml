@@ -4,9 +4,6 @@ on:
   push:
   pull_request:
 
-env:
-  TAILWIND_VERSION: v4.3.3
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -21,10 +18,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run tests
-        working-directory: public_html
-        run: python manage.py test
-
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -32,18 +25,10 @@ jobs:
       - name: Check canvas autosave
         run: node --test tools/test_canvas.js
 
-      - name: Rebuild CSS
-        run: |
-          mkdir -p tools
-          curl -sL -o tools/tailwindcss \
-            "https://github.com/tailwindlabs/tailwindcss/releases/download/${TAILWIND_VERSION}/tailwindcss-linux-x64"
-          chmod +x tools/tailwindcss
-          tools/tailwindcss -i public_html/static/css/input.css \
-            -o public_html/static/css/app.css --minify
+      # app.css не в git: собираем его до тестов (тест collectstatic ждёт файл)
+      - name: Build CSS
+        run: make build-css
 
-      - name: Check app.css is up to date
-        run: |
-          if ! git diff --exit-code -- public_html/static/css/app.css; then
-            echo "::error::app.css отличается от сборки input.css. Запустите 'make build-css' и закоммитьте результат."
-            exit 1
-          fi
+      - name: Run tests
+        working-directory: public_html
+        run: python manage.py test

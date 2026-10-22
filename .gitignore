@@ -40,6 +40,9 @@ public_html/core/local_settings.py
 *conflicted copy*
 *Конфликтующая копия*
 
+# Собранный Tailwind: make build-css локально, Dockerfile на проде, CI — сам
+public_html/static/css/app.css
+
 # Tailwind standalone CLI binary (download via `make build-css`)
 tools/tailwindcss
 tools/tailwindcss.exe
