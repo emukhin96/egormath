@@ -1,6 +1,19 @@
 # Образ egormath для VPS (стек deploy/vps/compose.yaml).
 # Python 3.12 — как в CI. Код лежит в образе, данные
 # (media, секреты, файлы-версии live/, staticfiles/) монтируются снаружи.
+
+# app.css не хранится в git — собираем его здесь тем же Tailwind standalone,
+# что и `make build-css` (версия — TW_VERSION в Makefile). Шаблоны и JS
+# копируются в те же пути, что в репозитории: input.css ищет их через @source.
+FROM debian:bookworm-slim AS css
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl make \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY Makefile .
+COPY public_html/static public_html/static
+COPY public_html/templates public_html/templates
+RUN make build-css
+
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -19,6 +32,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY --chown=app:app . .
+COPY --from=css --chown=app:app /src/public_html/static/css/app.css public_html/static/css/app.css
 
 USER app
 WORKDIR /app/public_html
