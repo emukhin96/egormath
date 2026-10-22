@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Profile
+from accounts.teacher_home import running_works
 from assignments.models import Assignment
 from independentworks import services as svc
 from independentworks.models import Candidate, Position, Work
@@ -77,3 +78,15 @@ class TeacherHomeTests(TestCase):
         formula = copy_event('Найдите $AB^2$', assignment=self.submitted)
         self.assertEqual(copied_words(formula), 2)
         self.assertEqual(copy_marks('assignment', [self.open, self.submitted]), {self.submitted.pk: [formula]})
+
+    def test_running_uses_one_now(self):
+        """Попытка истекает между отбором в SQL и разбором (ревью #272):
+        активность считается по тому же now, без 500 на пустом max()."""
+        from unittest.mock import patch
+        self.attempt.refresh_from_db()
+        moment = self.attempt.ends_at - timedelta(seconds=1)
+        later = self.attempt.ends_at + timedelta(seconds=1)
+        with patch('independentworks.models.timezone.now', return_value=later):
+            cards = running_works(self.teacher, now=moment)
+        self.assertEqual([(c['active'], c['finished']) for c in cards], [(1, 0)])
+        self.assertEqual(running_works(self.teacher, now=later), [])

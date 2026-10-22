@@ -32,7 +32,12 @@ def running_works(user, now=None):
     cards = []
     for run in Run.objects.filter(pk__in=list(live)).prefetch_related('attempts').order_by('issued_at'):
         attempts = list(run.attempts.all())
-        active = [a for a in attempts if a.started_at and not a.finished]
+        # активность — по тому же now, что и отбор в SQL: свойство finished
+        # берёт свежее время, и попытка, истёкшая между запросами, давала
+        # пустой список и 500 на max() (ревью #272)
+        active = [a for a in attempts if a.started_at and not a.submitted_at and a.ends_at and a.ends_at > now]
+        if not active:
+            continue
         ends = max(a.ends_at for a in active)
         started = min(a.started_at for a in active)
         total = run.duration * 60 or 1
@@ -40,7 +45,7 @@ def running_works(user, now=None):
         cards.append({
             'run': run,
             'active': len(active),
-            'finished': sum(1 for a in attempts if a.finished),
+            'finished': sum(1 for a in attempts if a.started_at and a not in active),
             'unopened': sum(1 for a in attempts if not a.started_at),
             'ends_at': ends,
             'remaining_label': f'{remaining // 60}:{remaining % 60:02}',
