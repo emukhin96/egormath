@@ -58,6 +58,8 @@
       var result=await (await request(form.action,{method:'POST',body:new FormData(form),headers:{'Accept':'application/json'}})).json();
       applyReviewResult(form.action,result);
       input.defaultValue=submitted;
+      // «Сохранить» во всплывающем окне закрывает его, подтверждение — тостом
+      if(dialog&&dialog.open&&dialog.contains(form))dialog.close();
       notify(true, 'Комментарий сохранён ✓');
     }catch(error){notify(false,error.message);}
     finally{delete form.dataset.busy;grading=false;}
