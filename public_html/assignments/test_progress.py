@@ -55,7 +55,7 @@ class LiveProgressTests(TestCase):
 
     def test_matrix_and_attempts_before_submission(self):
         response=self.client.get(reverse('worksheet_progress',args=[self.worksheet.pk]))
-        self.assertContains(response,'Не начато')
+        self.assertContains(response,'не открыто')
         response=self.client.get(reverse('task_attempts',args=[self.assignment.pk,self.task.pk]))
         self.assertContains(response,'Проверок пока нет')
         self.assertContains(response,'data-grade="="')

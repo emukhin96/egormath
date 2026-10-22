@@ -1,6 +1,54 @@
-<div class="progress-table-wrap"><table class="list progress-table" data-progress-structure="{% for g in point_groups %}{{ g.item.pk }}:{{ g.number }}:{% for c in g.columns %}{{ c.owner.pk }}-{{ c.label }},{% endfor %};{% endfor %}">
+{% comment %}
+Таблица прогресса: листок (live_map — карта ответов «в моменте», макет D_Live)
+и самостоятельная (independent). На карте сверху сводка «Класс сейчас» и
+фильтры: всё во фрагменте опроса, ячейки с data-progress-cell обновляются
+по одной (teacher_progress.js), остальное — при смене структуры.
+{% endcomment %}
+{% if live_map %}
+<section class="live-strip" aria-label="Класс сейчас">
+  <span class="live-strip-lead{% if summary.live %} is-live{% endif %}" data-progress-cell="summary-lead"><span class="live-dot" aria-hidden="true"></span>{% if summary.live %}Идёт работа{% else %}Класс сейчас{% endif %}</span>
+  <span class="live-stat" data-progress-cell="summary-submitted"><span>Сдали</span><b>{{ summary.submitted }} из {{ people|length }}</b></span>
+  <span class="live-stat live-stat-live" data-progress-cell="summary-live"><span>Решают сейчас</span><b>{{ summary.live }}</b></span>
+  <span class="live-stat" data-progress-cell="summary-unopened"><span>Не открыли</span><b>{{ summary.unopened }}</b></span>
+  <span class="live-stat live-stat-pending" data-progress-cell="summary-pending"><span>Ждут проверки</span><b>{{ summary.pending }}</b></span>
+  <span class="live-stat live-stat-copied" data-progress-cell="summary-copied"><span>Копировали</span><b>{{ summary.copied }}</b></span>
+</section>
+<section class="live-card" aria-label="Карта ответов">
+<div class="live-toolbar">
+  {% include 'assignments/_group_filter.html' with current=group_id all_label='Весь класс' %}
+  <form method="get" class="live-order" data-autosubmit>
+    {% for key, values in request.GET.lists %}{% if key != 'order' and key != 'fragment' %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endif %}{% endfor %}
+    <label for="progress-order">Порядок</label>
+    <select id="progress-order" name="order">{% for value, label in orders.items %}<option value="{{ value }}"{% if value == order %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <noscript><button class="btn btn-small btn-secondary">Показать</button></noscript>
+  </form>
+  <span class="live-hint">Номер открывает задачу, ячейка — ответ ученика</span>
+</div>
+{% endif %}
+<div class="progress-table-wrap"><table class="list progress-table{% if live_map %} live-table{% endif %}" data-progress-structure="{% for g in point_groups %}{{ g.item.pk }}:{{ g.number }}:{% for c in g.columns %}{{ c.owner.pk }}-{{ c.label }},{% endfor %};{% endfor %}">
+{% if live_map %}
+<thead><tr><th rowspan="{% if has_parts %}2{% else %}1{% endif %}" scope="col">Ученик</th>{% for group in point_groups %}<th colspan="{{ group.columns|length }}" scope="colgroup"><a class="live-task" href="{% url 'task_detail' group.item.task_id %}">№{{ group.number }}</a></th>{% endfor %}<th rowspan="{% if has_parts %}2{% else %}1{% endif %}" scope="col" class="live-now-head">Сейчас</th><th rowspan="{% if has_parts %}2{% else %}1{% endif %}" scope="col" class="live-result-head">Итог</th>{% if manage_status %}<th rowspan="{% if has_parts %}2{% else %}1{% endif %}" scope="col">Статус</th>{% endif %}</tr>
+{% if has_parts %}<tr>{% for group in point_groups %}{% for column in group.columns %}<th scope="col">{{ column.label }}</th>{% endfor %}{% endfor %}</tr>{% endif %}</thead>
+{% else %}
 <thead><tr><th rowspan="2" scope="col">Ученик</th>{% for group in point_groups %}<th colspan="{{ group.columns|length }}" scope="colgroup">{% if independent %}№ {{ group.number }}{% else %}<a href="{% url 'task_detail' group.item.task_id %}">№ {{ group.number }}</a>{% endif %}</th>{% endfor %}<th rowspan="2" scope="col">Верных пунктов</th>{% if manage_status %}<th rowspan="2" scope="col">Статус</th>{% endif %}</tr>
 <tr>{% for group in point_groups %}{% for column in group.columns %}<th scope="col" {% if forloop.first %}class="progress-group-start"{% endif %}>{{ column.label }}</th>{% endfor %}{% endfor %}</tr></thead>
-<tbody>{% for person in people %}<tr><th scope="row" data-progress-cell="student-{{ person.assignment.pk }}"><a href="{% if person.review_url %}{{ person.review_url }}{% else %}{% url 'review_assignment' person.assignment.pk %}{% endif %}">{{ person.assignment.student.get_full_name|default:person.assignment.student.username }}</a>{% if person.copied_whole %}<div class="audit-flag" title="Выделил и скопировал условие задачи целиком — подробности в «Активности ученика»">копировал условие целиком{% if person.copied_whole > 1 %} ×{{ person.copied_whole }}{% endif %}</div>{% endif %}{% if independent %}<div>{{ person.attempt.state }} · вариант {{ person.attempt.variant.number }}{% if person.attempt.started_at and not person.attempt.finished %} · <span data-remaining-until="{{ person.attempt.ends_at|date:'c' }}" title="Осталось времени">…</span>{% endif %}</div>{% endif %}</th>
-{% for cell in person.cells %}<td class="progress-cell" data-progress-cell="{{ person.assignment.pk }}-{{ cell.item.pk }}-{{ cell.owner.pk }}">{% if cell.hidden %}<span title="Не назначено">—</span>{% else %}{% if cell.points %}{% for point_cell in cell.points %}{% include 'assignments/_progress_button.html' with cell=point_cell %}{% endfor %}{% else %}{% include 'assignments/_progress_button.html' %}{% endif %}{% endif %}</td>{% endfor %}<td data-progress-cell="result-{{ person.assignment.pk }}">{% if person.result.done == None %}Не начато{% else %}{{ person.result.done }} / {{ person.result.total }}{% if independent %} · {{ person.result.percent }}%{% if person.result.pending %}<div>Предварительно · на проверке: {{ person.result.pending }}</div>{% endif %}{% if person.show_cumulative %}<div title="Для каждого исходного пункта берётся лучший зачёт из этой попытки и работ над ошибками.">С учётом работы над ошибками: {{ person.cumulative.done }} / {{ person.cumulative.total }} · {{ person.cumulative.percent }}%</div>{% endif %}{% endif %}{% endif %}</td>{% if manage_status %}<td class="ws-status-cell" tabindex="0" role="button" aria-label="Изменить статус" data-dialog-open="assignment-status-{{ person.assignment.pk }}" data-progress-cell="status-{{ person.assignment.pk }}"><span class="badge badge-{{ person.assignment.status }}">{{ person.assignment.get_status_display }}</span></td>{% endif %}</tr>{% empty %}<tr><td>Нет назначений для выбранной группы.</td></tr>{% endfor %}</tbody>
+{% endif %}
+<tbody>{% for person in people %}<tr><th scope="row" data-progress-cell="student-{{ person.assignment.pk }}">{% if live_map %}<span class="live-name"><a href="{% url 'review_assignment' person.assignment.pk %}">{{ person.assignment.student.get_full_name|default:person.assignment.student.username }}</a>{% if person.copied or person.copied_whole %}{% with note=person.copy_note %}<span class="live-copy" title="{% if person.copied_whole %}Копировал условие целиком{% if person.copied_whole > 1 %} ×{{ person.copied_whole }}{% endif %}{% if note %}; {% endif %}{% endif %}{{ note|capfirst }}" aria-label="{% if person.copied_whole %}копировал условие целиком{% else %}{{ note }}{% endif %}">•</span>{% endwith %}{% endif %}</span>{% else %}<a href="{% if person.review_url %}{{ person.review_url }}{% else %}{% url 'review_assignment' person.assignment.pk %}{% endif %}">{{ person.assignment.student.get_full_name|default:person.assignment.student.username }}</a>{% if person.copied_whole %}<div class="audit-flag" title="Выделил и скопировал условие задачи целиком — подробности в «Активности ученика»">копировал условие целиком{% if person.copied_whole > 1 %} ×{{ person.copied_whole }}{% endif %}</div>{% endif %}{% if independent %}<div>{{ person.attempt.state }} · вариант {{ person.attempt.variant.number }}{% if person.attempt.started_at and not person.attempt.finished %} · <span data-remaining-until="{{ person.attempt.ends_at|date:'c' }}" title="Осталось времени">…</span>{% endif %}</div>{% endif %}{% endif %}</th>
+{% for cell in person.cells %}<td class="progress-cell{% if live_map and person.live_task == cell.task.pk %} is-live{% endif %}" data-progress-cell="{{ person.assignment.pk }}-{{ cell.item.pk }}-{{ cell.owner.pk }}">{% if cell.hidden %}<span title="Не назначено">—</span>{% else %}{% if cell.points %}{% for point_cell in cell.points %}{% include 'assignments/_progress_button.html' with cell=point_cell %}{% endfor %}{% else %}{% include 'assignments/_progress_button.html' %}{% endif %}{% endif %}</td>{% endfor %}{% if live_map %}<td class="live-now live-now-{{ person.now_kind }}" data-progress-cell="now-{{ person.assignment.pk }}">{{ person.now }}</td><td class="live-result" data-progress-cell="result-{{ person.assignment.pk }}">{{ person.result.done }}/{{ person.result.total }}</td>{% else %}<td data-progress-cell="result-{{ person.assignment.pk }}">{% if person.result.done == None %}Не начато{% else %}{{ person.result.done }} / {{ person.result.total }}{% if independent %} · {{ person.result.percent }}%{% if person.result.pending %}<div>Предварительно · на проверке: {{ person.result.pending }}</div>{% endif %}{% if person.show_cumulative %}<div title="Для каждого исходного пункта берётся лучший зачёт из этой попытки и работ над ошибками.">С учётом работы над ошибками: {{ person.cumulative.done }} / {{ person.cumulative.total }} · {{ person.cumulative.percent }}%</div>{% endif %}{% endif %}{% endif %}</td>{% endif %}{% if manage_status %}<td class="ws-status-cell" tabindex="0" role="button" aria-label="Изменить статус" data-dialog-open="assignment-status-{{ person.assignment.pk }}" data-progress-cell="status-{{ person.assignment.pk }}"><span class="badge badge-{{ person.assignment.status }}">{{ person.assignment.get_status_display }}</span></td>{% endif %}</tr>{% empty %}<tr><td>Нет назначений для выбранной группы.</td></tr>{% endfor %}</tbody>
+{% if live_map and people %}<tfoot><tr><th scope="row">Верно / решают</th>{% for stat in column_stats %}<td class="live-stat-cell" data-progress-cell="stat-{{ forloop.counter }}"><span class="live-ok{% if stat.tone %} is-{{ stat.tone }}{% endif %}">{% if stat.answered %}{{ stat.ok }}/{{ stat.answered }}{% else %}—{% endif %}</span>{% if stat.live %}<span class="live-now-count">сейчас {{ stat.live }}</span>{% endif %}</td>{% endfor %}<td></td><td></td>{% if manage_status %}<td></td>{% endif %}</tr></tfoot>{% endif %}
 </table></div>
+{% if live_map %}
+<div class="live-legend">
+  <span data-live-status role="status">Обновляется каждые 5 секунд</span>
+  <span><b class="is-ok">✓</b> верно с первой</span>
+  <span><b class="is-ok">✓<sub>2</sub></b> верно со второй</span>
+  <span><b class="is-wrong">×<sub>3</sub></b> неверно, 3 попытки</span>
+  <span><b>…</b> введено, не проверено</span>
+  <span><b class="is-pending">?</b> ждёт учителя</span>
+  <span><b>—</b> пусто</span>
+  <span><b>{% for value, label, symbol in grade_choices %}{{ symbol }}{% if not forloop.last %} {% endif %}{% endfor %}</b> оценка учителя</span>
+  <span><i class="live-ring" aria-hidden="true"></i>решает сейчас</span>
+  <span><b class="live-copy">•</b> копировал текст условия, больше одного слова</span>
+</div>
+</section>
+{% endif %}
