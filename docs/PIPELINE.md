@@ -82,7 +82,7 @@ API-ключи рабочей копии (`LATEX_*`, `GEMINI_*`) и собств
 | Файл                               | Роль                                                              |
 | ---------------------------------- | ----------------------------------------------------------------- |
 | `public_html/static/css/input.css` | Единственный источник: токены, `@layer base`, `@layer components` |
-| `public_html/static/css/app.css`   | Собранный артефакт, **коммитится вместе с исходником**            |
+| `public_html/static/css/app.css`   | Собранный артефакт, **в git не хранится** (см. ниже)              |
 | `tools/tailwindcss`                | Standalone CLI, качается автоматически, в git не попадает         |
 
 
@@ -301,13 +301,23 @@ CSS, локально всё хорошо (браузер отдаёт стар�
 make check
 ```
 
-Цель делает три вещи: пересобирает `app.css`, гоняет тесты
-(`manage.py test`, 84 штуки) и падает, если пересобранный `app.css` отличается
-от закоммиченного.
+Цель пересобирает `app.css` и гоняет тесты (`manage.py test`).
 
-Сообщение `app.css не под git — добавьте его в коммит` значит, что файл ещё не
-отслеживается: `git diff` про untracked-файлы молчит, поэтому проверка была бы
-фиктивной. Достаточно `git add public_html/static/css/app.css`.
+`app.css` с 22.10.2026 не хранится в git (`.gitignore`). Пока он
+коммитился, каждый PR с правкой шаблонов менял одну минифицированную строку,
+и любые два таких PR конфликтовали между собой — после каждого merge
+остальные приходилось чинить. Теперь файл собирается там, где нужен:
+
+- локально — `make build-css` (или `make check`) после checkout/pull и правок;
+  без этого `runserver` отдаёт страницы без стилей;
+- в CI — шаг `make build-css` перед тестами;
+- на проде — стадия `css` в `Dockerfile` (тот же Tailwind и версия из
+  `Makefile`), `deploy/vps/deploy.sh` ничего дополнительно не делает;
+- стенды `tools/stage.sh` собирают его в своём worktree сами.
+
+Ветка, начатая до этого изменения, при вливании `main` получит конфликт
+«modify/delete» по `app.css`: решается `git rm --cached public_html/static/css/app.css`
+(файл остаётся на диске, `make build-css` его обновит).
 
 Отдельно:
 
@@ -404,7 +414,7 @@ tools/pr.sh comment <id> "Текст"        # ответ на общий ком
 Чеклист PR:
 
 - [ ] `make check` проходит
-- [ ] `app.css` пересобран и лежит в коммите рядом с `input.css`
+- [ ] В диффе нет `app.css` (он в `.gitignore`; собирается `make build-css`)
 - [ ] Скриншоты затронутых экранов
 - [ ] Вручную пройдены: логин, кабинет учителя, кабинет ученика, база задач,
   ```
@@ -428,9 +438,10 @@ tools/pr.sh comment <id> "Текст"        # ответ на общий ком
 `.github/workflows/ci.yml` на каждый push и pull request:
 
 1. Python 3.12 (как в CI и Docker-образе; код совместим с 3.10–3.13), `pip install -r requirements.txt`
-2. `manage.py test`
-3. Скачивание Tailwind CLI, пересборка CSS и `git diff --exit-code` по
-  `app.css` — защита от забытого `make build-css`
+2. `node --test tools/test_canvas.js`
+3. `make build-css` (скачивает Tailwind CLI, собирает `app.css`) — заодно
+  проверка, что `input.css` компилируется
+4. `manage.py test`
 
 CI не деплоит: на Timeweb входящий SSH из GitHub Actions режется.
 После merge в `main` запустите на сервере `deploy/deploy.sh`.
