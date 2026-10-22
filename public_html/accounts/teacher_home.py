@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db.models import Count, Max, Min, Q
+from django.db.models.functions import TruncDate
 from django.urls import reverse
 from django.utils import timezone
 
@@ -71,7 +72,7 @@ def review_groups(user):
         for group in assignment_groups(user, {}):
             if group['submitted_total']:
                 rows.append({'title': group['worksheet__title'], 'kind': group['kind_label'].lower(),
-                             'n': group['submitted_total'], 'what': 'пункты без автосверки',
+                             'n': group['submitted_total'], 'what': 'работы с непроверенными пунктами',
                              'last': group['last_assigned'], 'url': group['progress_url']})
     rows.sort(key=lambda r: -r['n'])
     return rows
@@ -83,8 +84,11 @@ def week_deadlines(user, now=None):
     since, until = now - timedelta(days=DEADLINE_DAYS), now + timedelta(days=DEADLINE_DAYS)
     rows = []
     done = Q(status__in=[Assignment.STATUS_SUBMITTED, Assignment.STATUS_REVIEWED])
+    # листок, выданный с разными сроками, — отдельная строка на каждый день
+    # срока: иначе прошедший срок одной группы «просрочил» бы и остальных
     by_sheet = (Assignment.visible_to(user).filter(due_at__range=(since, until))
-                .values('worksheet_id', 'worksheet__title')
+                .annotate(due_day=TruncDate('due_at'))
+                .values('worksheet_id', 'worksheet__title', 'due_day')
                 .annotate(total=Count('pk'), done=Count('pk', filter=done), due=Min('due_at')))
     for row in by_sheet:
         rows.append({'title': row['worksheet__title'], 'due': row['due'], 'total': row['total'],

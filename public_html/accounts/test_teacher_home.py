@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Profile
-from accounts.teacher_home import running_works
+from accounts.teacher_home import running_works, week_deadlines
 from assignments.models import Assignment
 from independentworks import services as svc
 from independentworks.models import Candidate, Position, Work
@@ -90,3 +90,11 @@ class TeacherHomeTests(TestCase):
             cards = running_works(self.teacher, now=moment)
         self.assertEqual([(c['active'], c['finished']) for c in cards], [(1, 0)])
         self.assertEqual(running_works(self.teacher, now=later), [])
+
+    def test_deadlines_split_by_due_day(self):
+        """Один листок, два срока (ревью #272): прошедший срок одной группы
+        не делает просроченными учеников с будущим сроком."""
+        Assignment.objects.filter(pk=self.submitted.pk).update(due_at=timezone.now() - timedelta(days=1))
+        Assignment.objects.filter(pk=self.open.pk).update(due_at=timezone.now() + timedelta(days=5))
+        sheet_rows = [r for r in week_deadlines(self.teacher) if r['title'] == self.sheet.title]
+        self.assertEqual([(r['passed'], r['total'], r['left']) for r in sheet_rows], [(True, 1, 0), (False, 1, 1)])
