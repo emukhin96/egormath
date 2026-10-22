@@ -49,6 +49,16 @@ class AuditTests(TestCase):
         return self.client.post(reverse('workaudit:events', args=[kind, pk]),
                                 data=json.dumps({'events': rows}), content_type='application/json')
 
+    def test_copy_touches_live_file(self):
+        """Копирование больше одного слова меняет файл-версию листка: «•» в
+        карте ответов появляется опросом, без перезагрузки (ревью #274)."""
+        from unittest.mock import patch
+        with patch('workaudit.views.files.touch_assignment') as touch:
+            self.post_events([self.event(kind='copy', text='Вычислите', statements=[{'label': '1', 'share': 40}])])
+            touch.assert_not_called()
+            self.post_events([self.event(kind='copy', text='Вычислите значение', statements=[{'label': '1', 'share': 80}])])
+            touch.assert_called_once_with(self.assignment.pk, self.sheet.pk, self.student.pk)
+
     def test_delivery_duplicate_and_access(self):
         row = self.event()
         self.assertEqual(self.post_events([row, row]).status_code, 200)

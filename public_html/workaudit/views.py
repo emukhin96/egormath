@@ -18,7 +18,8 @@ from assignments.models import Assignment, Submission, SubmissionPart
 from independentworks.models import Attempt, Answer, Run, Work
 from .clipboard import STATEMENTS_LIMIT, TEXT_LIMIT, WHOLE_SHARE
 from .models import ActivityEvent, AnswerRevision
-from .services import activity_timeline, lock_work
+from livefile import files
+from .services import activity_timeline, copied_words, lock_work
 
 
 def work_for(user, kind, pk, teacher=False):
@@ -104,6 +105,13 @@ def events(request, kind, pk):
         if query.filter(received_at__gte=now-timedelta(minutes=1)).count() + len(unique) > 240:
             return JsonResponse({'error': 'Слишком много событий.'}, status=429)
         ActivityEvent.objects.bulk_create(list(unique.values()), ignore_conflicts=True)
+    # bulk_create сигналов не даёт: копирование больше одного слова ставит
+    # «•» в карте ответов учителя — трогаем файл-версию, чтобы опрос её увидел
+    if any(e.kind == 'copy' and copied_words(e) > 1 for e in unique.values()):
+        if kind == 'assignment':
+            files.touch_assignment(work.pk, work.worksheet_id, work.student_id)
+        else:
+            files.touch('run', work.run_id)
     return JsonResponse({'ok': True})
 
 

@@ -32,7 +32,11 @@
       var positions=Array.from(root.querySelectorAll('.progress-table-wrap')).map(e=>[e.scrollLeft,e.scrollTop]);
       replace(root,html);root.querySelectorAll('.progress-table-wrap').forEach((e,i)=>{if(positions[i]){e.scrollLeft=positions[i][0];e.scrollTop=positions[i][1];}});return;
     }
-    oldCells.forEach((cell,i)=>{if(cell.innerHTML!==newCells[i].innerHTML)cell.innerHTML=newCells[i].innerHTML;});
+    // атрибуты ячейки тоже живые: рамка «решает сейчас», цвет «Сейчас», data-live-until
+    oldCells.forEach((cell,i)=>{var fresh=newCells[i];if(cell.outerHTML===fresh.outerHTML)return;
+      Array.from(cell.attributes).forEach(a=>{if(!fresh.hasAttribute(a.name))cell.removeAttribute(a.name);});
+      Array.from(fresh.attributes).forEach(a=>{if(cell.getAttribute(a.name)!==a.value)cell.setAttribute(a.name,a.value);});
+      if(cell.innerHTML!==fresh.innerHTML)cell.innerHTML=fresh.innerHTML;});
   }
   function applyReviewResult(url,result){
     url=new URL(url,location.href).href;
@@ -113,6 +117,11 @@
       if(isNaN(left))return;
       el.textContent=Math.floor(left/60)+':'+String(left%60).padStart(2,'0');
       if(left===0)force=true;
+    });
+    // «Решает сейчас» гаснет через 15 минут без новых ответов: в БД ничего
+    // не меняется, поэтому в момент истечения просим полный опрос
+    document.querySelectorAll('[data-live-until]').forEach(function(el){
+      var until=Date.parse(el.dataset.liveUntil);if(!isNaN(until)&&now>=until)force=true;
     });
   }
   async function poll(){

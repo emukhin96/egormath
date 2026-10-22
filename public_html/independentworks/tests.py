@@ -886,6 +886,30 @@ class IndependentWorkTests(TestCase):
         self.assertContains(broken, 'Не удалось прочитать фотографию.', status_code=broken.status_code)
         self.assertNotEqual(broken.status_code, 500)
 
+    def test_photo_fetch_returns_thumb_and_redirect_keeps_point(self):
+        """Панель ответа грузит фото fetch'ем (JSON для миниатюры); без скрипта — назад к тому же заданию."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .models import Photo
+        a = self.begin()
+        p = a.variant.points.get()
+        data = io.BytesIO()
+        Image.new('RGB', (8, 8)).save(data, format='PNG')
+        self.client.force_login(self.student)
+        page = self.client.get(self.url('attempt', a.pk))
+        self.assertContains(page, 'data-iw-photo-input')
+        self.assertContains(page, f'id="iw-photo-{p.pk}"')
+        self.assertNotContains(page, 'Ваш ответ')
+        xhr = {'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'}
+        response = self.client.post(self.url('upload_photo', a.pk, p.pk), {'photo': SimpleUploadedFile('a.png', data.getvalue(), content_type='image/png')}, **xhr)
+        photo = Photo.objects.get()
+        self.assertEqual(response.json(), {'ok': True, 'id': photo.pk, 'url': self.url('photo', photo.pk), 'delete_url': self.url('delete_photo', photo.pk)})
+        self.assertEqual(self.client.post(self.url('delete_photo', photo.pk), **xhr).json(), {'ok': True})
+        self.assertFalse(Photo.objects.exists())
+        response = self.client.post(self.url('upload_photo', a.pk, p.pk), {'photo': SimpleUploadedFile('a.png', data.getvalue(), content_type='image/png')})
+        self.assertRedirects(response, self.url('attempt', a.pk) + f'#point-{p.pk}', fetch_redirect_response=False)
+        response = self.client.post(self.url('delete_photo', Photo.objects.get().pk))
+        self.assertRedirects(response, self.url('attempt', a.pk) + f'#point-{p.pk}', fetch_redirect_response=False)
+
     def test_save_rechecks_time_after_validation(self):
         from assignments.checks import check_mask
         a = self.begin()

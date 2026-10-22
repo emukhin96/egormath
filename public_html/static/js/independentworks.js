@@ -27,9 +27,22 @@
     state.form.dataset.state = mark;
     if (state.status) state.status.dataset.state = mark;
     const item = strip.get(state.form.dataset.point);
-    if (item && mark !== 'dirty' && mark !== 'saving') { item.dataset.state = mark; recount(); }
+    // Фото — тоже ответ (integration.has_answer): стёртое поле при фото не гасит номер
+    const stripMark = mark === 'empty' && hasPhotos(state.form.dataset.point) ? 'saved' : mark;
+    if (item && mark !== 'dirty' && mark !== 'saving') { item.dataset.state = stripMark; recount(); }
   }
-  function savedText(form) { return filled(form) ? ['Сохранено', 'saved'] : ['Ответа пока нет', 'empty']; }
+  function hasPhotos(point) { return !!document.querySelector('#point-' + point + ' .iw-photo'); }
+  // Номер в ленте и счёт после загрузки или удаления фото без перезагрузки;
+  // «неверно» самопроверки фото не перекрывает
+  function photosChanged(point) {
+    const item = strip.get(point);
+    if (!item || item.dataset.state === 'wrong' || item.dataset.state === 'error') return;
+    const form = forms.find(answer => answer.dataset.point === point);
+    item.dataset.state = (form && filled(form)) || hasPhotos(point) ? 'saved' : 'empty';
+    recount();
+  }
+  // Пустой ответ — без подписи: строка статуса под полем просто исчезает
+  function savedText(form) { return filled(form) ? ['Сохранено', 'saved'] : ['', 'empty']; }
   function dataOf(form) { return new FormData(form); }
   function signature(form) {
     return JSON.stringify([...dataOf(form)].filter(([name]) => name !== 'version' && name !== 'csrfmiddlewaretoken'));
@@ -64,8 +77,9 @@
   forms.forEach(form => {
     const state = {form, saved: Number(form.elements.version.value) > 0 ? signature(form) : null, pending: null, timer: null, conflict: false, status: form.querySelector('[data-iw-save-status]')};
     states.set(form, state);
-    const changed = () => {
-      if (expired) return;
+    const changed = event => {
+      // Файл фото лежит в панели под ответом, но принадлежит своей форме
+      if (expired || event.target.matches('[data-iw-photo-input]')) return;
       clearChecks(form);
       if (signature(form) === state.saved) { const [text, kind] = savedText(form); message(state, text, false, kind); }
       else message(state, 'Изменено, ещё не сохранено', false, 'dirty');
@@ -111,6 +125,130 @@
       }
     });
   });
+  // Числовая прямая промежутка — под кнопкой «Прямая» в панели действий
+  // (вариант D): контейнеры numberline.js переезжают в свёрнутую панель под
+  // кнопками до их инициализации (DOMContentLoaded), форма у них та же.
+  const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+  forms.forEach(form => {
+    const lines = [...form.querySelectorAll('[data-numberline]')];
+    const actions = form.querySelector('[data-iw-actions]');
+    if (!lines.length || !actions) return;
+    const panel = document.createElement('div');
+    panel.className = 'iw-line-panel';
+    panel.id = 'iw-line-' + form.dataset.point;
+    panel.hidden = true;
+    lines.forEach(line => {
+      if (lines.length > 1) {
+        const field = form.querySelector('math-field[data-mirror="' + line.dataset.numberline + '"]');
+        const caption = document.createElement('span');
+        caption.className = 'iw-line-caption';
+        caption.textContent = (field && field.getAttribute('aria-label')) || '';
+        panel.appendChild(caption);
+      }
+      panel.appendChild(line);
+    });
+    const hint = document.createElement('p');
+    hint.className = 'iw-line-hint';
+    hint.textContent = coarse
+      ? 'Проведите пальцем по прямой; нажмите на конец, чтобы исключить точку.'
+      : 'Протяните по прямой, чтобы отметить промежуток; нажмите на конец, чтобы исключить точку.';
+    panel.appendChild(hint);
+    actions.after(panel);
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'btn btn-secondary iw-line-toggle';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-controls', panel.id);
+    toggle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M2.5 15h17M18 12.5l3 2.5-3 2.5"/><path d="M7 15h8" stroke-width="3.6"/><path d="M7 8.5v3M15 8.5v3"/></svg>Прямая<svg class="iw-line-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+    toggle.addEventListener('click', () => {
+      panel.hidden = !panel.hidden;
+      toggle.setAttribute('aria-expanded', String(!panel.hidden));
+    });
+    const check = actions.querySelector('[data-iw-check]');
+    if (check) check.after(toggle); else actions.prepend(toggle);
+  });
+
+  // Фото решения: уходит fetch'ем сразу после выбора, вставки (Ctrl+V) или
+  // перетаскивания в карточку задания; миниатюра дорисовывается без
+  // перезагрузки. Без скрипта остаётся форма с кнопкой «Загрузить фото».
+  const pasteKeys = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘V' : 'Ctrl+V';
+  function photoThumb(result, token) {
+    const item = document.createElement('span');
+    item.className = 'iw-photo';
+    item.innerHTML = '<a target="_blank" rel="noopener"><img alt="Фото решения"></a>'
+      + '<form method="post" data-iw-photo-delete><input type="hidden" name="csrfmiddlewaretoken">'
+      + '<button class="iw-photo-remove" aria-label="Удалить фото">×</button></form>';
+    item.querySelector('a').href = result.url;
+    item.querySelector('img').src = result.url;
+    item.querySelector('form').action = result.delete_url;
+    item.querySelector('input').value = token;
+    return item;
+  }
+  document.querySelectorAll('[data-iw-photo-input]').forEach(input => {
+    const photoForm = document.getElementById(input.getAttribute('form'));
+    const section = input.closest('.iw-point');
+    const gallery = section && section.querySelector('[data-iw-photos]');
+    if (!photoForm || !gallery) return;
+    photoForm.hidden = true;
+    const pick = input.closest('label');
+    const token = photoForm.elements.csrfmiddlewaretoken.value;
+    const hint = gallery.querySelector('[data-iw-photos-hint]');
+    if (hint && !coarse) {
+      hint.textContent = 'Фото можно вставить ' + pasteKeys + ' или перетащить в карточку';
+      hint.hidden = false;
+    }
+    let queue = Promise.resolve();
+    function upload(files) {
+      files.forEach(file => {
+        queue = queue.then(async () => {
+          if (expired) return;
+          pick.classList.add('is-busy');
+          pick.setAttribute('aria-busy', 'true');
+          try {
+            const data = new FormData();
+            data.append('csrfmiddlewaretoken', token);
+            data.append('photo', file);
+            const response = await fetch(photoForm.action, {method: 'POST', body: data, headers: {'X-Requested-With': 'XMLHttpRequest'}});
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.message || 'Фото не загружено');
+            gallery.insertBefore(photoThumb(result, token), hint);
+            photosChanged(section.id.replace('point-', ''));
+            if (window.EgorAutosave) EgorAutosave.showSaved(true, 'Фото загружено');
+          } catch (error) {
+            if (window.EgorAutosave) EgorAutosave.showSaved(false, error.message);
+          } finally {
+            pick.classList.remove('is-busy');
+            pick.removeAttribute('aria-busy');
+          }
+        });
+      });
+    }
+    input.addEventListener('change', () => {
+      const files = [...(input.files || [])];
+      input.value = '';
+      upload(files);
+    });
+    if (window.EgorImagePaste) EgorImagePaste.attach(section, file => upload([file]));
+  });
+  document.addEventListener('submit', async event => {
+    const form = event.target.closest('[data-iw-photo-delete]');
+    if (!form) return;
+    event.preventDefault();
+    const button = form.querySelector('button');
+    button.disabled = true;
+    try {
+      const response = await fetch(form.action, {method: 'POST', body: new FormData(form), headers: {'X-Requested-With': 'XMLHttpRequest'}});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || 'Фото не удалено');
+      const section = form.closest('.iw-point');
+      form.closest('.iw-photo').remove();
+      if (section) photosChanged(section.id.replace('point-', ''));
+    } catch (error) {
+      button.disabled = false;
+      if (window.EgorAutosave) EgorAutosave.showSaved(false, error.message);
+    }
+  });
+
   document.querySelectorAll('[data-iw-flush]').forEach(form => form.addEventListener('submit', async event => {
     event.preventDefault();
     if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) return;
