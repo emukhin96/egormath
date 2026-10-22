@@ -25,7 +25,7 @@ _task_class_body.html, его обновляет опрос teacher_progress.js.
     {% if subitems %}<ol class="subitems">{% for s in subitems %}<li><span class="math-content">{{ s.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
     {% if columns|length > 1 %}<nav class="seg tc-parts" aria-label="Подпункт">{% for c in columns %}<a class="seg-item{% if forloop.counter0 == column %} is-active{% endif %}" href="{% query_set point=forloop.counter0 fragment=None %}"{% if forloop.counter0 == column %} aria-current="true"{% endif %}>{{ c.label }}</a>{% endfor %}</nav>{% endif %}
     <div class="tc-reference">
-      <span class="tw-label">Эталон</span>
+      <span class="tw-label">Ответ</span>
       <div class="tw-value">{% if reference %}{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}{% else %}Маски нет, ответ проверяет учитель{% endif %}</div>
       {# Без имён окно задачи не открываем: в нём ответы класса с именами #}
       {% if not anonymous %}<button type="button" class="linklike tw-link" data-attempt-url="{{ task_window_url }}{% if group_id %}?group={{ group_id }}{% endif %}">Окно задачи и решение</button>{% endif %}
