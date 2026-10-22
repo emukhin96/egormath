@@ -7402,18 +7402,24 @@
   /* Специфичнее .ws-view h2 — у того отступ под колонку номера */
   .iw-sheet-edit .iw-point-title { margin: 0; font-size: 1.15rem; font-weight: 700; }
 
-  /* Поле ответа: подпись сверху, статус «Сохранено» строкой под полем
-     (как в варианте B макета), рамка поля — цветом состояния. */
-  .iw-answer { margin-top: var(--space-4); }
-  .iw-save-status { flex-basis: 100%; }
+  /* Блок ответа (вариант D холста «Блок ответа ученика», 22.10.2026): поле,
+     под ним статус «Сохранено», ниже одна строка одинаковых кнопок
+     «Проверить», «Прямая», «Фото»; панель числовой прямой и миниатюры фото —
+     под кнопками. Рамка поля — цветом состояния, пустой статус не виден. */
+  .iw-answer { margin-top: var(--space-4); row-gap: 0; }
+  .iw-save-status,
+  .iw-actions,
+  .iw-line-panel { flex-basis: 100%; }
   .iw-save-status {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    margin-top: var(--space-1);
     color: var(--muted);
     font-size: 0.85rem;
     font-weight: 500;
   }
+  .iw-save-status:empty { display: none; }
   .iw-save-status[data-state="saved"] { color: var(--ok); }
   .iw-save-status[data-state="saved"]::before { content: "✓"; font-weight: 700; }
   .iw-save-status[data-state="wrong"],
@@ -7423,6 +7429,96 @@
   .iw-answer[data-state="saved"] :is(.mask-math, .mask-input) { border-color: var(--ok); }
   .iw-answer[data-state="wrong"] :is(.mask-math, .mask-input),
   .iw-answer[data-state="error"] :is(.mask-math, .mask-input) { border-color: var(--err); background-color: #fff7f7; }
+  /* Меню ☰ MathLive ученику не нужно — в поле остаётся клавиатура формул;
+     на сенсорном экране она открывается сама при фокусе, значка тоже нет */
+  .iw-answer math-field::part(menu-toggle) { display: none; }
+  @media (pointer: coarse) {
+    .iw-answer math-field::part(virtual-keyboard-toggle) { display: none; }
+  }
+  .iw-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+  .iw-actions:empty { display: none; }
+  .iw-actions .btn { gap: 6px; margin: 0; }
+  .iw-actions .btn svg { width: 18px; height: 18px; flex: none; }
+  .iw-actions .btn .iw-line-chevron { width: 14px; height: 14px; margin-left: -2px; transition: transform 0.15s; }
+  .iw-line-toggle[aria-expanded="true"] { border-color: #9ec1f7; background: var(--accent-soft); }
+  .iw-line-toggle[aria-expanded="true"] .iw-line-chevron { transform: rotate(180deg); }
+  .iw-actions .photo-pick { position: relative; }
+  .iw-actions .photo-pick:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .iw-actions .photo-pick.is-busy { opacity: 0.6; pointer-events: none; }
+  /* Числовая прямая — свёрнутая панель под кнопками (открывает «Прямая») */
+  .iw-line-panel {
+    margin-top: var(--space-2);
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #f7f9fc;
+    line-height: 1.4;
+  }
+  .iw-line-panel[hidden] { display: none; }
+  .iw-line-panel .numberline-svg { width: 100%; max-width: 480px; }
+  .iw-line-panel .numberline-tools { gap: 6px; margin-top: var(--space-1); }
+  .iw-line-panel .numberline-btn { min-width: 30px; height: 30px; padding: 0 10px; border-radius: 6px; font-size: 0.85rem; }
+  .iw-line-panel .numberline-bound { height: 30px; border-radius: 6px; }
+  .iw-line-panel .numberline-clear { order: 1; margin-left: auto; }
+  .iw-line-panel .numberline-stale { order: 2; flex-basis: 100%; }
+  .iw-line-caption { display: block; margin-top: var(--space-2); color: var(--muted); font-size: 0.8rem; }
+  .iw-line-caption:first-child { margin-top: 0; }
+  .iw-line-hint { margin: var(--space-2) 0 0; color: var(--muted); font-size: 0.8rem; }
+  /* Фото решения: миниатюры 72px с × в углу; карточка задания принимает
+     перетаскиваемый файл (image_paste.js вешает .is-dragover) */
+  .iw-photos {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+  .iw-photos-hint { color: var(--muted); font-size: 0.8rem; }
+  .iw-photos-hint[hidden] { display: none; }
+  .iw-photos:not(:has(.iw-photo)):not(:has(.iw-photos-hint:not([hidden]))) { display: none; }
+  .iw-photo { position: relative; width: 72px; height: 72px; flex: none; }
+  .iw-photo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .iw-photo form { position: absolute; top: 3px; right: 3px; margin: 0; }
+  .iw-photo-remove {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 92%);
+    box-shadow: 0 0 0 1px var(--border);
+    color: var(--muted);
+    font: inherit;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .iw-photo-remove:hover { color: var(--err); background: #fdeaea; }
+  .iw-photo-form { margin-top: var(--space-2); }
+  .iw-photo-form[hidden] { display: none; }
+  .iw-point.is-dragover { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: var(--radius); }
+  @media (max-width: 760px) {
+    .iw-actions { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+    .iw-actions .btn { width: 100%; min-height: 44px; padding-inline: var(--space-2); }
+    /* Три кнопки в ряд на 375px: шеврону места нет, открытую прямую видно по заливке */
+    .iw-actions .btn .iw-line-chevron { display: none; }
+    .iw-line-panel .numberline-btn,
+    .iw-line-panel .numberline-bound { height: 36px; }
+    .iw-photo-remove { width: 24px; height: 24px; }
+  }
   /* Ответ сохраняется сам; кнопка — для Enter и работы без скрипта */
   .iw-save-button {
     position: absolute;
@@ -7490,7 +7586,6 @@
   .iw-table { width: 100%; border-collapse: collapse; }
   .iw-table th, .iw-table td { padding: var(--space-3); border-bottom: 1px solid var(--border); vertical-align: top; text-align: left; }
   .iw-point-link { display: block; white-space: nowrap; }
-  .iw-point .subitem-answer:has(.mask-math) > .btn { align-self: stretch; }
   .iw-variant-field { display: flex; align-items: center; gap: var(--space-2); width: fit-content; margin: 0; }
   .iw-variant-field select { width: auto; min-width: 140px; }
   .iw-live-status { margin-block: var(--space-2); }

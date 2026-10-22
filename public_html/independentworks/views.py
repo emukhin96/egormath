@@ -922,7 +922,13 @@ def upload_photo(request, pk, point_id):
             raise svc.WorkError('Достигнуто ограничение числа фотографий.')
         photo = Photo(answer=answer)
         photo.file.save(uuid.uuid4().hex + '.jpg', content, save=True)
-    return redirect('independentworks:attempt', pk=pk)
+    # Страница ученика грузит фото fetch'ем и сама дорисовывает миниатюру;
+    # без скрипта — обратно к тому же заданию (одно задание на экран)
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'id': photo.pk,
+                             'url': reverse('independentworks:photo', args=[photo.pk]),
+                             'delete_url': reverse('independentworks:delete_photo', args=[photo.pk])})
+    return redirect(reverse('independentworks:attempt', args=[pk]) + f'#point-{point.pk}')
 
 
 @enabled
@@ -932,8 +938,11 @@ def delete_photo(request, pk):
     with transaction.atomic():
         attempt = Attempt.objects.select_for_update().get(pk=photo.answer.attempt_id)
         svc.editable(attempt)
+        point_id = photo.answer.point_id
         photo.delete()
-    return redirect('independentworks:attempt', pk=attempt.pk)
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True})
+    return redirect(reverse('independentworks:attempt', args=[attempt.pk]) + f'#point-{point_id}')
 
 
 @enabled
