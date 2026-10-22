@@ -36,11 +36,15 @@ def review_data(user, worksheet, group_id=''):
     people = progress_people(groups, assignments)
     live_summary(groups, people)  # метка «•» и «сейчас» у учеников
     tasks, start = {}, 0
+    for person in people:
+        person['visible_tasks'] = 0  # задач, а не подпунктов (вкладка «Ученики», ревью #281)
     for group in groups:
         end = start + len(group['columns'])
         rows = []
         for person in people:
             cells = person['cells'][start:end]
+            if not all(c['hidden'] for c in cells):
+                person['visible_tasks'] += 1
             if all(c['hidden'] for c in cells) or all(c['status'] == 'empty' for c in cells):
                 continue
             for cell in cells:
@@ -106,7 +110,7 @@ def review_tasks(request, worksheet_id):
         for person in data['people']:
             mine = [r for t in tasks for r in t['rows'] if r['person'] is person]
             students.append({'person': person, 'name': _name(person['assignment']), 'answered': len(mine),
-                             'graded': sum(1 for r in mine if r['grade']), 'total': person['result']['total']})
+                             'graded': sum(1 for r in mine if r['grade']), 'total': person['visible_tasks']})
         context['students'] = students
         return render(request, 'assignments/review_tasks.html', context)
     item_id = request.GET.get('item', '')

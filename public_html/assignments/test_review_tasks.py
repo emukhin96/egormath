@@ -94,3 +94,18 @@ class PartialSubitemsTests(TestCase):
         groups = answer_groups([row([ok, empty]), row([dict(ok), dict(ok)])])
         self.assertEqual([(g['kind'], g['verdict'], g['suggested']) for g in groups],
                          [('ok', 'Верно по автосверке', '+'), ('ok', 'Верно по автосверке, не все подпункты', '')])
+
+    def test_students_tab_counts_tasks_not_subitems(self):
+        """Ревью #281: «Ответов X из Y» — в задачах, подпункты не считаются отдельно."""
+        from problems.models import TaskSubitem
+        teacher = make_teacher('subs_teacher')
+        sheet = make_worksheet(teacher)
+        WorksheetItem.objects.filter(worksheet=sheet).delete()
+        task = Task.objects.create(text_latex='Решите')
+        subs = [TaskSubitem.objects.create(task=task, text_latex=f'п{n}', order=n, answer_mask='{{number: 1}}') for n in (1, 2)]
+        item = WorksheetItem.objects.create(worksheet=sheet, task=task, order=1)
+        item.subitems.set(subs)
+        Assignment.objects.create(worksheet=sheet, student=make_student(teacher, username='subs_student'))
+        self.client.force_login(teacher)
+        response = self.client.get(reverse('assignment_review_queue', args=[sheet.pk]), {'view': 'students'})
+        self.assertEqual(response.context['students'][0]['total'], 1)
