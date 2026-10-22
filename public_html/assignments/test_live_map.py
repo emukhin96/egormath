@@ -97,3 +97,18 @@ class LiveMapTests(TestCase):
         self.assertEqual(names('behind'), ['ilya', 'anna', 'oleg'])
         self.assertEqual(names('result'), ['oleg', 'anna', 'ilya'])
         self.assertEqual(names('nonsense'), ['anna', 'ilya', 'oleg'])
+
+    def test_live_status_expires_without_writes(self):
+        """«Решает сейчас» гаснет через 15 минут без записей в БД: ETag
+        фрагмента меняется, в разметке есть момент истечения (ревью #274)."""
+        from unittest.mock import patch
+        self.answer(self.people['ilya'], self.tasks[0], 'ok')
+        fresh = self.client.get(self.url, {'fragment': '1'})
+        self.assertContains(fresh, 'data-live-until=')
+        later = timezone.now() + timedelta(minutes=16)
+        with patch('assignments.progress.timezone.now', return_value=later), \
+                patch('django.utils.timezone.now', return_value=later):
+            expired = self.client.get(self.url, {'fragment': '1'}, HTTP_IF_NONE_MATCH=fresh['ETag'])
+        self.assertEqual(expired.status_code, 200)
+        self.assertNotContains(expired, 'data-live-until=')
+        self.assertEqual(expired.context['summary']['live'], 0)

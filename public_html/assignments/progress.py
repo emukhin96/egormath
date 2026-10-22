@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.views.decorators.http import require_POST
 from django.views.decorators.cache import never_cache
+from django.utils import timezone
 from accounts.decorators import teacher_required
 from livefile import etags
 from accounts.models import StudentGroup
@@ -191,6 +192,8 @@ def live_summary(groups_of_points, people, now=None):
             summary['unopened'] += 1
         elif last[0] >= live_since:
             person['live_task'] = last[1]
+            # когда статус погаснет: опрос перезапросит фрагмент сам (teacher_progress.js)
+            person['live_until'] = last[0] + timedelta(minutes=LIVE_MINUTES)
             person['now'] = f'на №{numbers.get(last[1], "?")}, {timezone.localtime(last[0]).strftime("%H:%M")}'
             person['now_kind'] = 'live'
             summary['live'] += 1
@@ -242,10 +245,14 @@ def worksheet_progress(request, worksheet_id):
     groups_of_points = progress_groups(items, assignments)
     etag = None
     if request.GET.get('fragment'):
+        submissions = list(Submission.objects.filter(assignment__in=assignments).annotate(
+            last_part=Max('parts__updated_at'), last_photo=Max('photos__uploaded_at'), last_attempt=Max('check_history__pk')).values(
+            'pk', 'updated_at', 'check_attempts', 'last_part', 'last_photo', 'last_attempt', 'review__reviewed_at'))
+        # «решает сейчас» гаснет по времени без записей в БД — признак входит в ETag
+        live_since = timezone.now() - timedelta(minutes=LIVE_MINUTES)
         state = [list(assignments.values('pk', 'status', 'student__first_name', 'student__last_name', 'student__username')),
-                 list(Submission.objects.filter(assignment__in=assignments).annotate(
-                     last_part=Max('parts__updated_at'), last_photo=Max('photos__uploaded_at'), last_attempt=Max('check_history__pk')).values(
-                     'pk', 'updated_at', 'check_attempts', 'last_part', 'last_photo', 'last_attempt', 'review__reviewed_at')),
+                 submissions,
+                 [max(filter(None, (s['updated_at'], s['last_part']))) >= live_since for s in submissions],
                  list(Assignment.hidden_items.through.objects.filter(assignment__in=assignments).values_list('assignment_id', 'worksheetitem_id')),
                  [(g['item'].pk, g['item'].task_id, g['item'].order, g['item'].task.updated_at,
                    [(c['owner'].pk, c['owner'].answer_mask, c['label']) for c in g['columns']]) for g in groups_of_points],
