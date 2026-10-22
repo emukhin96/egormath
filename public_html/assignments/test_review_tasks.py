@@ -81,3 +81,16 @@ class ReviewTasksTests(TestCase):
         stranger = make_teacher('stranger')
         self.client.force_login(stranger)
         self.assertEqual(self.client.get(self.url).status_code, 404)
+
+
+class PartialSubitemsTests(TestCase):
+    """Ревью #281: пустой подпункт не делает верный ответ «без автосверки»."""
+
+    def test_partial_answer_is_ok_group(self):
+        from .review_tasks import answer_groups
+        ok = {'status': 'ok', 'hidden': False, 'answer': '3'}
+        empty = {'status': 'empty', 'hidden': False, 'answer': ''}
+        row = lambda cells: {'cells': cells, 'grade': '', 'person': {'assignment': type('A', (), {'pk': id(cells)})()}}
+        groups = answer_groups([row([ok, empty]), row([dict(ok), dict(ok)])])
+        self.assertEqual([(g['kind'], g['verdict'], g['suggested']) for g in groups],
+                         [('ok', 'Верно по автосверке', '+'), ('ok', 'Верно по автосверке, не все подпункты', '')])

@@ -62,23 +62,27 @@ def answer_groups(rows):
     buckets = {}
     for row in rows:
         statuses = {c['status'] for c in row['cells'] if not c['hidden']}
-        kind = 'ok' if statuses == {'ok'} else 'wrong' if 'wrong' in statuses else 'draft'
-        key = (kind, tuple(_answer_key(c['answer']) for c in row['cells']))
+        # Пустые подпункты вид группы не решают: верно на 1а и пусто на 1б —
+        # «верно, не все подпункты», а не «автосверки нет» (ревью #281)
+        answered = statuses - {'empty'}
+        kind = 'ok' if answered == {'ok'} else 'wrong' if 'wrong' in answered else 'draft'
+        partial = 'empty' in statuses
+        key = (kind, partial, tuple(_answer_key(c['answer']) for c in row['cells']))
         buckets.setdefault(key, []).append(row)
     groups = []
     order = {'wrong': 0, 'draft': 1, 'ok': 2}
-    for position, ((kind, key), members) in enumerate(sorted(buckets.items(), key=lambda kv: (order[kv[0][0]], -len(kv[1])))):
+    for position, ((kind, partial, key), members) in enumerate(sorted(buckets.items(), key=lambda kv: (order[kv[0][0]], kv[0][1], -len(kv[1])))):
         if kind == 'wrong':
             first_wrong = position == 0 and len(members) > 1
             verdict = 'Неверно по автосверке, частая ошибка' if first_wrong else 'Неверно по автосверке'
         elif kind == 'ok':
-            verdict = 'Верно по автосверке'
+            verdict = 'Верно по автосверке, не все подпункты' if partial else 'Верно по автосверке'
         else:
             verdict = 'Автосверки нет: фото или развёрнутый ответ' if not any(key) else 'Автосверки нет'
         grades = {r['grade'] for r in members}
         groups.append({'kind': kind, 'verdict': verdict, 'rows': members, 'sample': members[0]['cells'],
                        'has_answer': any(key), 'grade': grades.pop() if len(grades) == 1 else '',
-                       'suggested': '+' if kind == 'ok' else '',
+                       'suggested': '+' if kind == 'ok' and not partial else '',
                        'members': ','.join(str(r['person']['assignment'].pk) for r in members)})
     return groups
 
