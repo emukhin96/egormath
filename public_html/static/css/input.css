@@ -464,6 +464,21 @@
   .is-facts dt { color: var(--muted); }
   .is-facts dd { margin: 0; overflow-wrap: anywhere; }
   .is-submit { width: 100%; margin: 0; }
+  /* Выдача самостоятельной (макет E_IssueIW) */
+  .is-step-tools { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+  .is-inline { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; }
+  .is-inline input { width: 84px; margin: 0; }
+  .is-fixed { margin: 0; font-weight: 600; }
+  .is-after { display: flex; flex-direction: column; gap: var(--space-2); }
+  .is-release { display: inline-grid; grid-template-columns: repeat(2, auto); gap: 2px; justify-self: start; align-self: flex-start; padding: 3px; border-radius: 10px; background: #dfe6ee; }
+  .is-release label { display: inline-flex; align-items: center; margin: 0; padding: 6px 12px; border-radius: 8px; color: #4a5566; cursor: pointer; }
+  .is-release input { position: absolute; opacity: 0; pointer-events: none; }
+  .is-release label:has(input:checked) { background: #fff; color: #102b55; font-weight: 600; box-shadow: 0 1px 2px rgba(16, 43, 85, 0.12); }
+  .is-release label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .is-flags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+  .is-flags .helptext { flex-basis: 100%; margin: 0; }
+  .is-flags .check-label { margin: 0; }
+  .is-summary .is-submit + .is-submit { margin-top: calc(-1 * var(--space-1)); }
   @media (max-width: 900px) {
     .is-head, .is-grid { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-3); }
     .is-summary { position: static; }

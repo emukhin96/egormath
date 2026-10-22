@@ -467,11 +467,9 @@ def assignment_create(request):
         work_id = request.POST.get('work') or request.GET.get('work')
         if work_id:
             return prepare_run(request, work_id)
-        works = Work.visible_to(request.user).select_related('source_worksheet').filter(title__icontains=request.GET.get('q', '').strip()).annotate(
-            number_count=Count('positions', filter=Q(positions__text='') | Q(positions__candidates__isnull=False), distinct=True)).order_by('-updated_at', '-pk')
         return render(request, 'assignments/assignment_create.html', {
-            'independent': True, 'choose_work': True,
-            'work_options': Paginator(works, 30).get_page(request.GET.get('page'))})
+            'independent': True, 'choose_work': True, 'sheets_shown': ISSUE_SHEETS_SHOWN,
+            'work_options': work_options(request.user, request.GET.get('q', ''))})
     initial = {'allow_photos': True}
     worksheet_id = request.GET.get('worksheet', '')
     # Подборку из списка формы уже убрал queryset; прямой id объясняем
@@ -532,21 +530,37 @@ def _issue_context(form, teacher):
     options = list(sheets)
     if selected and selected not in options[:ISSUE_SHEETS_SHOWN]:
         options.sort(key=lambda w: w.pk != selected.pk)
-    groups = list(form.fields['groups'].queryset.prefetch_related('students'))
-    names = {u.pk: u.get_full_name() or u.username for u in form.fields['students'].queryset}
-    members = {str(g.pk): [u.pk for u in g.students.all()] for g in groups}
-    for g in groups:
-        for u in g.students.all():
-            names.setdefault(u.pk, u.get_full_name() or u.username)
     check = form['check_visibility']
     return {
         'sheet_options': options, 'sheets_shown': ISSUE_SHEETS_SHOWN,
         'check_options': [(value, label, CHECK_NOTES[value]) for value, label in
                           sorted(Assignment.CHECK_CHOICES, key=lambda c: c[0] != Assignment.CHECK_LIVE)],
         'check_value': str(check.value() or Assignment.CHECK_LIVE), 'check_locked': check.field.disabled,
-        'issue_data': {'members': members, 'names': {str(k): v for k, v in names.items()},
-                       'assigned': sorted(int(pk) for pk in form.fields['students'].widget.assigned_ids)},
+        'issue_data': recipients_data(form, assigned=form.fields['students'].widget.assigned_ids),
     }
+
+
+def recipients_data(form, assigned=()):
+    """Участники групп и имена для итога «Выдать N ученикам» в мастере
+    выдачи — листка и самостоятельной (поля groups и students формы)."""
+    groups = list(form.fields['groups'].queryset.prefetch_related('students'))
+    names = {u.pk: u.get_full_name() or u.username for u in form.fields['students'].queryset}
+    for g in groups:
+        for u in g.students.all():
+            names.setdefault(u.pk, u.get_full_name() or u.username)
+    return {'members': {str(g.pk): [u.pk for u in g.students.all()] for g in groups},
+            'names': {str(k): v for k, v in names.items()},
+            'assigned': sorted(int(pk) for pk in assigned)}
+
+
+def work_options(user, query=''):
+    """Шаблоны самостоятельных карточками (макет E_IssueIW): число номеров,
+    исходный листок и история выдач."""
+    from independentworks.models import Work
+    return list(Work.visible_to(user).select_related('source_worksheet').filter(title__icontains=query.strip()).annotate(
+        number_count=Count('positions', filter=Q(positions__text='') | Q(positions__candidates__isnull=False), distinct=True),
+        issued=Count('runs', filter=Q(runs__issued_at__isnull=False), distinct=True),
+        last_issued=Max('runs__issued_at')).order_by('-updated_at', '-pk'))
 
 
 # --- Кабинет ученика ---

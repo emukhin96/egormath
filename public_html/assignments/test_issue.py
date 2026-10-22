@@ -1,7 +1,7 @@
 """Мастер выдачи листка по макету E_Issue (assignments/views._issue_context):
 листки карточками с историей, данные для итога «Выдать N ученикам»,
 автосверка радиокнопками, в том числе зафиксированная после первой выдачи."""
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import StudentGroup
@@ -56,3 +56,48 @@ class IssueWizardTests(TestCase):
         self.assertTrue(oleg.swap_numbers)
         self.assertEqual(oleg.check_visibility, Assignment.CHECK_TEACHER)
         self.assertEqual(Assignment.objects.filter(student=self.anna).count(), 1)
+
+
+@override_settings(INDEPENDENT_WORKS_ENABLED=True)
+class IssueIndependentTests(TestCase):
+    """Выдача самостоятельной по макету E_IssueIW: шаблоны карточками,
+    «Кому и когда», «После сдачи» радиокнопками, итог справа."""
+
+    def setUp(self):
+        from independentworks.models import Candidate, Position, Work
+        self.teacher = make_teacher()
+        self.anna = make_student(self.teacher, username='anna')
+        self.group = StudentGroup.objects.create(teacher=self.teacher, name='9 А')
+        self.group.students.add(self.anna)
+        self.work = Work.objects.create(owner=self.teacher, title='Контрольная: подобие')
+        Candidate.objects.create(position=Position.objects.create(work=self.work),
+                                 task=Task.objects.create(text_latex='Два плюс два?', answer_mask='{{number: 4}}'))
+        Work.objects.create(owner=self.teacher, title='Пустой шаблон')
+        self.url = reverse('assignment_create')
+        self.client.force_login(self.teacher)
+
+    def test_choose_page_lists_templates(self):
+        response = self.client.get(self.url, {'mode': 'independent'})
+        self.assertContains(response, 'type="radio" name="work_choice"', count=2)
+        self.assertContains(response, 'Шаблон не выбран')
+        self.assertNotContains(response, 'id="assignment-create-form"')
+        self.assertContains(response, 'aria-selected="true">Самостоятельная')
+
+    def test_work_page(self):
+        response = self.client.get(self.url, {'mode': 'independent', 'work': self.work.pk})
+        self.assertContains(response, f'value="{self.work.pk}" data-work-url=', count=1)
+        self.assertContains(response, 'не выдавалась')
+        self.assertContains(response, 'data-duration="45"')
+        self.assertContains(response, 'name="withhold_answers" value="on" checked')
+        self.assertEqual(response.context['work_numbers'], 1)
+        self.assertEqual(response.context['issue_data']['members'][str(self.group.pk)], [self.anna.pk])
+        self.assertNotContains(response, '·')
+
+    def test_publish_right_away(self):
+        from independentworks.models import Run
+        response = self.client.post(f'{self.url}?mode=independent&work={self.work.pk}', {
+            'mode': 'independent', 'work': self.work.pk, 'groups': [self.group.pk], 'duration': 40,
+            'release_toggle': '1', 'withhold_answers': '', 'release_flags': ['checks'], 'action': 'preview'})
+        run = Run.objects.get(work=self.work)
+        self.assertRedirects(response, reverse('independentworks:preview', args=[run.pk]), fetch_redirect_response=False)
+        self.assertEqual(run.release_mode, 'auto')
