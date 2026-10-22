@@ -28,8 +28,9 @@ class ReviewTasksTests(TestCase):
             self.assignments[username] = assignment
             if value:
                 sub = Submission.objects.create(assignment=assignment, task=self.tasks[0], answer_json={'s1': value})
+                # снимок попытки хранит ответ так же, как его показывает display_answer
                 SubmissionCheckAttempt.objects.create(submission=sub, number=1, result=result, snapshot={
-                    'targets': [{'kind': 'task', 'id': self.tasks[0].pk, 'answer': f'S = {value}', 'result': result}]})
+                    'targets': [{'kind': 'task', 'id': self.tasks[0].pk, 'answer': sub.display_answer, 'result': result}]})
         self.url = reverse('assignment_review_queue', args=[self.worksheet.pk])
         self.client.force_login(self.teacher)
 
@@ -122,3 +123,39 @@ class PartialSubitemsTests(TestCase):
         self.client.force_login(teacher)
         response = self.client.get(reverse('assignment_review_queue', args=[sheet.pk]), {'view': 'students'})
         self.assertEqual(response.context['students'][0]['total'], 1)
+
+    def test_changed_answer_is_not_ok(self):
+        """Ревью #281: ответ изменён после проверки — без «верно» и «+»."""
+        from .review_tasks import answer_groups
+        changed = {'status': 'ok', 'hidden': False, 'answer': '4', 'current_changed': True}
+        row = {'cells': [changed], 'grade': '', 'person': {'assignment': type('A', (), {'pk': 1})()}}
+        group = answer_groups([row])[0]
+        self.assertEqual((group['kind'], group['suggested']), ('draft', ''))
+
+    def test_photo_only_subitems_task_waits_for_grade(self):
+        """Ревью #281: фото решения к задаче с подпунктами держит её в очереди,
+        и «Завершить проверку оценённых» такую работу не закрывает."""
+        import tempfile
+        from django.test import override_settings
+        from problems.models import TaskSubitem
+        from .models import SubmissionPhoto
+        from .tests import fake_photo
+        teacher = make_teacher('photo_teacher')
+        sheet = make_worksheet(teacher)
+        WorksheetItem.objects.filter(worksheet=sheet).delete()
+        task = Task.objects.create(text_latex='Докажите')
+        subs = [TaskSubitem.objects.create(task=task, text_latex=f'п{n}', order=n) for n in (1, 2)]
+        item = WorksheetItem.objects.create(worksheet=sheet, task=task, order=1)
+        item.subitems.set(subs)
+        assignment = Assignment.objects.create(worksheet=sheet, student=make_student(teacher, username='photo_student'),
+                                               status=Assignment.STATUS_SUBMITTED)
+        with override_settings(MEDIA_ROOT=tempfile.mkdtemp()):
+            SubmissionPhoto.objects.create(submission=Submission.objects.create(assignment=assignment, task=task), image=fake_photo())
+            self.client.force_login(teacher)
+            url = reverse('assignment_review_queue', args=[sheet.pk])
+            response = self.client.get(url)
+            self.assertEqual(response.context['tasks'][0]['pending'], 1)
+            self.assertEqual(response.context['groups'][0]['verdict'], 'Автосверки нет: фото или развёрнутый ответ')
+            self.client.post(reverse('assignment_review_complete', args=[sheet.pk]))
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, Assignment.STATUS_SUBMITTED)

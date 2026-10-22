@@ -45,9 +45,15 @@ def review_data(user, worksheet, group_id=''):
         rows = []
         for person in people:
             cells = person['cells'][start:end]
-            if not all(c['hidden'] for c in cells):
-                person['visible_tasks'] += 1
-            if all(c['hidden'] for c in cells) or all(c['status'] == 'empty' for c in cells):
+            if all(c['hidden'] for c in cells):
+                continue
+            person['visible_tasks'] += 1
+            # Работа на уровне задачи: у задачи с подпунктами фото решения
+            # ячейки подпунктов не видят — без этого задача выпадала из
+            # очереди и закрывалась без оценки (ревью #281)
+            submission = next((s for s in person['assignment'].submissions.all() if s.task_id == group['item'].task_id), None)
+            has_work = bool(submission and (submission.photos.all() or submission.display_answer))
+            if all(c['status'] == 'empty' for c in cells) and not has_work:
                 continue
             for cell in cells:
                 obj = cell['obj']
@@ -67,7 +73,9 @@ def answer_groups(rows):
     частая первой), без автосверки (фото, развёрнутый ответ), верные."""
     buckets = {}
     for row in rows:
-        statuses = {c['status'] for c in row['cells'] if not c['hidden']}
+        # Ответ изменён после автосверки — её результат к нему не относится:
+        # такой ячейке нет «верно» и подсказки «+» (ревью #281)
+        statuses = {'draft' if c.get('current_changed') else c['status'] for c in row['cells'] if not c['hidden']}
         # Пустые подпункты вид группы не решают: верно на 1а и пусто на 1б —
         # «верно, не все подпункты», а не «автосверки нет» (ревью #281)
         answered = statuses - {'empty'}
