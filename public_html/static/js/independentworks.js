@@ -137,15 +137,18 @@
     setInterval(tick, 250); tick();
   }
   // Одно задание на экран (макет A2): видна секция из #point-N, номер в
-  // ленте обведён. Без скрипта лист остаётся целиком.
+  // ленте обведён, под карточкой — кнопка «Задание N ›» следующего
+  // номера. Без скрипта лист остаётся целиком.
   const sheet = document.querySelector('[data-iw-focus]');
   if (sheet) {
     const sections = [...sheet.querySelectorAll('.iw-point')];
+    const navs = [...document.querySelectorAll('[data-iw-nav]')];
     function show() {
       const match = location.hash.match(/^#point-(\d+)$/);
       const target = sections.find(section => match && section.id === 'point-' + match[1]) || sections[0];
       if (!target) return;
       sections.forEach(section => section.classList.toggle('is-current', section === target));
+      navs.forEach(nav => { nav.hidden = 'point-' + nav.dataset.iwNav !== target.id; });
       strip.forEach((item, key) => {
         if ('point-' + key === target.id) { item.setAttribute('aria-current', 'step'); item.scrollIntoView({block: 'nearest', inline: 'nearest'}); }
         else item.removeAttribute('aria-current');
