@@ -9,9 +9,10 @@ Django-сайт (`public_html/`) для листков с задачами по 
 учителя/ученика, база задач, конструктор листков, генерация PDF через
 внешний LaTeX API, проверка ответов. Стили — Tailwind CSS v4 standalone CLI,
 собранный `app.css` в git не хранится — `make build-css` локально, на проде
-его собирает `Dockerfile` (Node нигде не нужен). Прод —
-`math.emukhin.ru` на Timeweb, обновления вручную: `deploy/deploy.sh`
-(см. [deploy/DEPLOY.md](deploy/DEPLOY.md)).
+его собирает `Dockerfile` (Node нигде не нужен). Прод — VPS (Docker),
+обновления вручную: `deploy/vps/deploy.sh` (см. [deploy/VPS.md](deploy/VPS.md)).
+Старый Timeweb-деплой (`deploy/deploy.sh`, [deploy/DEPLOY.md](deploy/DEPLOY.md))
+устарел.
 
 ## Локальный запуск и проверки
 

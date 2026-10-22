@@ -657,8 +657,8 @@ DJANGO_ENV=production ../venv/bin/python manage.py import_textbook_batches \
 ## 6. Стили на сервере
 
 С 22.10.2026 `app.css` не лежит в git. Актуальный прод (VPS, `deploy/VPS.md`)
-собирает его в `Dockerfile`. Если когда-нибудь деплоить по этой инструкции,
-перед `collectstatic` нужен `make build-css` (Tailwind standalone, Node не нужен).
+собирает его в `Dockerfile`, а `deploy/deploy.sh` этой инструкции — шагом
+`make build-css` перед `collectstatic` (Tailwind standalone, Node не нужен).
 
 ## 7. Холст (мини-доска к задаче)
 
