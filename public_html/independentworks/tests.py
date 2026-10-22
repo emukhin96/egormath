@@ -10,6 +10,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from accounts.models import Profile
+from problems.tests import make_student, make_teacher
 from problems.models import Task, TaskSubitem, TaskSource, Source, TaskImage
 from .models import (Work, Position, Candidate, Run, Attempt, Answer,
                      AnswerCheckAttempt, Asset, Family)
@@ -1144,7 +1145,7 @@ class IndependentWorkTests(TestCase):
         self.client.force_login(self.teacher)
         response = self.client.get(self.url('preview', run.pk))
         self.assertContains(response, 'Общее условие уникальное', count=1)
-        self.assertContains(response, 'Ответ и решение — только учителю')
+        self.assertContains(response, 'Ответ и решение видите только вы')  # макет E_Preview
         self.assertNotContains(response, 'data-preview-select="1"')
         svc.issue(run.pk)
         attempt = svc.start(run.attempts.get().pk)
@@ -1355,3 +1356,33 @@ class ConcurrentWorkTests(TransactionTestCase):
             results = list(pool.map(save, range(8)))
         self.assertEqual(results.count('saved'), 1)
         self.assertEqual(results.count('conflict'), 7)
+
+
+@override_settings(INDEPENDENT_WORKS_ENABLED=True)
+class PreviewScreenTests(TestCase):
+    """«Перед выдачей» по макету E_Preview: шапка с «Выдать N», распределение
+    радиокнопками сохраняется тем же POST, без «·»."""
+
+    def setUp(self):
+        self.teacher = make_teacher('preview_teacher')
+        self.students = [make_student(self.teacher, username=f'preview_student{n}') for n in (1, 2)]
+        self.work = Work.objects.create(owner=self.teacher, title='Контрольная: подобие')
+        position = Position.objects.create(work=self.work)
+        for n in (1, 2):
+            Candidate.objects.create(position=position, task=Task.objects.create(text_latex=f'Сколько будет {n}+{n}?', answer_mask=f'{{{{number: {2 * n}}}}}'))
+        self.run = svc.prepare(self.work, self.teacher, [s.pk for s in self.students])
+        self.client.force_login(self.teacher)
+        self.url = reverse('independentworks:preview', args=[self.run.pk])
+
+    def test_screen_and_distribution(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, 'Перед выдачей: Контрольная: подобие')
+        self.assertContains(response, 'Выдать 2</button>')
+        self.assertContains(response, 'data-variant-count="1"')
+        self.assertContains(response, f'name="student_{self.students[0].pk}" value="1"')
+        self.assertNotContains(response, '·')
+        variants = len(self.run.plan['variants'])
+        data = {f'student_{s.pk}': str(variants) for s in self.students}
+        self.assertEqual(self.client.post(self.url, data).status_code, 302)
+        self.run.refresh_from_db()
+        self.assertEqual(set(self.run.plan['students'].values()), {variants})

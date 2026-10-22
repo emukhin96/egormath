@@ -412,6 +412,50 @@
     #progress-dialog.progress-window { padding: 16px; }
     .tw-head, .tw-body { grid-template-columns: minmax(0, 1fr); }
   }
+  /* «Перед выдачей» самостоятельной (макет E_Preview): сетка 1fr | 340px,
+     «Изменить» и «Выдать N» над распределением той же ширины */
+  .pv-head, .pv-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; column-gap: var(--space-4); }
+  .pv-head { align-items: end; margin-bottom: var(--space-4); }
+  .pv-heading { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+  .pv-heading h1 { margin: 0; }
+  .pv-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin: 0; }
+  .pv-actions .btn { width: 100%; margin: 0; justify-content: center; }
+  .pv-confirm { grid-column: 1 / -1; margin: 0; font-size: 13px; }
+  .pv-grid { align-items: start; row-gap: var(--space-4); }
+  .pv-variants { margin: 0; padding: 0; overflow: hidden; }
+  .pv-variants-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .pv-tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 10px; background: #dfe6ee; }
+  .pv-tabs button { height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: #4a5566; font: inherit; font-weight: 500; cursor: pointer; }
+  .pv-tabs button[aria-selected="true"] { background: #fff; color: #102b55; font-weight: 600; box-shadow: 0 1px 2px rgba(16, 43, 85, 0.12); }
+  .pv-single { font-weight: 600; }
+  .pv-variant { display: flex; flex-direction: column; }
+  .pv-note { padding: 12px 16px; background: #f7f9fc; border-bottom: 1px solid #f1f4f8; }
+  .pv-point { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: var(--space-4); padding: 14px 16px; border-bottom: 1px solid #f1f4f8; }
+  .pv-point-body { position: relative; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+  .pv-mask { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .pv-mask .mask-answer { margin: 0; }
+  .pv-reference { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; background: #f7f9fc; align-self: start; }
+  .pv-side { position: sticky; top: var(--space-4); margin: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+  .pv-side-head { display: flex; flex-direction: column; gap: var(--space-2); }
+  .pv-side-head .btn { align-self: flex-start; margin: 0; }
+  .pv-counts { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: var(--space-2); }
+  .pv-count { display: flex; flex-direction: column; font-size: 12.5px; color: var(--muted); }
+  .pv-count b { font-size: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .pv-students { margin: 0; }
+  .pv-students ul { display: flex; flex-direction: column; max-height: 60vh; margin: 0; padding: 0; overflow: auto; list-style: none; }
+  .pv-students li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 5px 0; border-top: 1px solid #f1f4f8; }
+  .pv-name { min-width: 0; overflow: hidden; font-size: 13.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .pv-pick { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+  .pv-pick label { margin: 0; cursor: pointer; }
+  .pv-pick input { position: absolute; opacity: 0; pointer-events: none; }
+  .pv-pick span { display: inline-grid; place-items: center; min-width: 28px; height: 26px; border: 1px solid #dfe6ee; border-radius: 6px; font-size: 13px; font-weight: 600; color: #4a5566; }
+  .pv-pick input:checked + span { border-color: #102b55; background: #102b55; color: #fff; }
+  .pv-pick input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (max-width: 900px) {
+    .pv-head, .pv-grid { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-3); }
+    .pv-side { position: static; }
+    .pv-point { grid-template-columns: minmax(0, 1fr); }
+  }
   .live-ring { display: inline-block; width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; border-radius: 4px; box-shadow: inset 0 0 0 2px #1765b5; }
   @media (max-width: 760px) {
     .live-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px 16px; }
