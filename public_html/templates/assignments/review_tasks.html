@@ -58,7 +58,7 @@
       <div class="math-content">{{ task.text_latex|web_text }}</div>
       {% task_images task %}
       {% if subitems %}<ol class="subitems">{% for s in subitems %}<li><span class="math-content">{{ s.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
-      {% if reference %}<div class="rv-reference"><span class="tw-label">Эталон</span><div class="tw-value">{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}</div></div>{% endif %}
+      {% if reference %}<div class="rv-reference"><span class="tw-label">Ответ</span><div class="tw-value">{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}</div></div>{% endif %}
     </div>
     {% for g in groups %}
     <article class="card rv-group rv-group-{{ g.kind }}" data-review-group>
