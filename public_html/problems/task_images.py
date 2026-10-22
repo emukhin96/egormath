@@ -73,6 +73,21 @@ def owner_material_images(task, owner, kind):
             if i < len(images) and images[i].pk in answer_ids]
 
 
+def unplaced_material_images(task):
+    """Рисунки ответов/решений, на которые не ссылается ни один подпункт.
+
+    Карточка задачи с подпунктами показывает ответы только подпунктов;
+    рисунок общего ответа или решения самой задачи выводим отдельно,
+    чтобы он не пропал из карточки.
+    """
+    placed = set()
+    for subitem in task.subitems.all():
+        placed.update(material_indices(subitem))
+    images = list(task.images.all())
+    _, answers = classify_task_images(task)
+    return [image for image in answers if images.index(image) not in placed]
+
+
 def images_for_group(task, group='statement'):
     """Картинки для веб-блока: ``statement``, ``answers`` или ``all``."""
     if group == 'all':

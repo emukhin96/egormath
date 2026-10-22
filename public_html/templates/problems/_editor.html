@@ -81,7 +81,10 @@
       {% endif %}
       {% if subrows %}{% for row in subrows %}
         {% include 'problems/_editor_answer.html' with owner=row.sub sub=row.sub answer_form=row.answer_form solution_form=row.solution_form %}
-      {% endfor %}{% else %}
+      {% endfor %}
+        {# Рисунки общего ответа/решения задачи: подпункты на них не ссылаются, иначе они пропали бы из карточки #}
+        {% task_unplaced_images task as task_pics %}{% if task_pics %}<section class="problem-answer"><h3>Рисунки к ответу и решению задачи</h3>{% include 'problems/_task_images.html' with images=task_pics only %}</section>{% endif %}
+      {% else %}
         {% include 'problems/_editor_answer.html' with owner=task %}
       {% endif %}
     </div>

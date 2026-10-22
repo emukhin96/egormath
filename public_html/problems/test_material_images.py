@@ -85,6 +85,26 @@ class MaterialImageTests(TestCase):
         self.assertEqual(answers.count(f'src="{urls[1]}"'), 1)
         self.assertEqual(answers.count(f'src="{urls[2]}"'), 1)
 
+    def test_card_keeps_task_level_solution_image_with_subitems(self):
+        """Общее решение задачи с подпунктами: его рисунок не пропадает."""
+        task = Task.objects.create(text_latex='Постройте графики.',
+                                   solution_latex=r'Общая схема.\taskpic{2}')
+        TaskSubitem.objects.create(task=task, order=10, text_latex='$y=|x|$',
+                                   author_answer_latex=r'\taskpic{1}')
+        pics = [task.images.create(image=f'task_images/s{i}.png', order=i)
+                for i in range(1, 3)]
+        self.client.force_login(make_teacher())
+        html = self.client.get(reverse('task_detail', args=[task.pk])).content.decode()
+        start = html.index('task-png-heading')
+        condition = html[start:html.index('</section>', start)]
+        for pic in pics:
+            url = reverse('task_image_file', args=[pic.pk])
+            self.assertNotIn(url, condition)
+            # без превью в форме «Картинки»
+            self.assertEqual(html.count(f'src="{url}" alt="иллюстрация'), 1)
+        rest = html[html.index('Рисунки к ответу и решению задачи'):]
+        self.assertIn(reverse('task_image_file', args=[pics[1].pk]), rest)
+
     def test_pdf_hint_keeps_full_solution_and_respects_variants(self):
         teacher = make_teacher()
         for subitem in (False, True):
