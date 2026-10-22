@@ -10,6 +10,7 @@ urlpatterns = [
     path('progress/<int:worksheet_id>/task/<int:item_id>/', windows.task_window, name='worksheet_task_window'),
     path('progress/<int:worksheet_id>/review/', review_tasks.review_tasks, name='assignment_review_queue'),
     path('progress/<int:worksheet_id>/review/<int:item_id>/grade/', review_tasks.review_group_grade, name='assignment_review_group_grade'),
+    path('progress/<int:worksheet_id>/review/complete/', review_tasks.review_complete, name='assignment_review_complete'),
     path('progress/<int:worksheet_id>/boards/', boards.worksheet_boards, name='worksheet_boards'),
     path('progress/<int:worksheet_id>/boards/live/', boards.worksheet_boards_live, name='worksheet_boards_live'),
     path('progress/<int:worksheet_id>/boards/tasks/', boards.worksheet_boards_tasks, name='worksheet_boards_tasks'),

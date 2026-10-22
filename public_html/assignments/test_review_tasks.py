@@ -83,6 +83,19 @@ class ReviewTasksTests(TestCase):
         self.assertEqual(self.client.get(self.url).status_code, 404)
 
 
+    def test_complete_graded(self):
+        """Ревью #281: «Завершить проверку оценённых» ставит «проверено»
+        только сданным работам, где оценены все отвеченные задачи."""
+        Assignment.objects.filter(pk__in=[self.assignments['anna'].pk, self.assignments['oleg'].pk]).update(status=Assignment.STATUS_SUBMITTED)
+        Review.objects.create(submission=Submission.objects.get(assignment=self.assignments['anna']), grade='+')
+        self.assertContains(self.client.get(self.url), 'Завершить проверку оценённых')
+        response = self.client.post(reverse('assignment_review_complete', args=[self.worksheet.pk]), follow=True)
+        self.assertRedirects(response, self.url)
+        self.assertContains(response, 'Проверка завершена: 1, ещё не оценены: 1.')
+        statuses = dict(Assignment.objects.filter(student__username__in=['anna', 'oleg']).values_list('student__username', 'status'))
+        self.assertEqual(statuses, {'anna': Assignment.STATUS_REVIEWED, 'oleg': Assignment.STATUS_SUBMITTED})
+
+
 class PartialSubitemsTests(TestCase):
     """Ревью #281: пустой подпункт не делает верный ответ «без автосверки»."""
 

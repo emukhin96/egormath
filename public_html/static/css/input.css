@@ -422,6 +422,8 @@
   .rv-head { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
   .rv-head h1 { margin: 0; }
   .rv-next { align-self: end; }
+  .rv-next { display: flex; flex-direction: column; gap: var(--space-2); }
+  .rv-next form { margin: 0; }
   .rv-next .btn { width: 100%; margin: 0; }
   .rv-students { grid-column: 1 / -1; margin: 0; }
   .rv-queue { margin: 0; padding: 0; overflow: hidden; }

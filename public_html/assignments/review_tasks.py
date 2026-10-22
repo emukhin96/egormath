@@ -4,8 +4,10 @@
 
 Зачёт по-прежнему только из оценки учителя (Review.grade, Assignment.result):
 автосверка «верно» оценку не ставит, а подсказывает «+» группе верных."""
+from django.contrib import messages
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
@@ -55,7 +57,7 @@ def review_data(user, worksheet, group_id=''):
                          'name': _name(person['assignment']), 'copied': person['copied'],
                          'grade_url': reverse('grade_task', args=[person['assignment'].pk, group['item'].task_id])})
         tasks[group['item'].pk] = {'item': group['item'], 'number': group['number'], 'rows': rows,
-                                   'pending': sum(1 for r in rows if not r['grade'])}
+                                   'pending': sum(1 for r in rows if not (r['grade'] or (r['review'] and r['review'].done)))}
         start = end
     return {'assignments': assignments, 'people': people, 'tasks': tasks}
 
@@ -103,6 +105,7 @@ def review_tasks(request, worksheet_id):
     context = {'worksheet': worksheet, 'group_id': group_id, 'tasks': tasks, 'answers': answers, 'graded': graded,
                'auto_ok': sum(1 for t in tasks for r in t['rows'] if all(c['status'] == 'ok' for c in r['cells'] if not c['hidden'])),
                'view': 'students' if request.GET.get('view') == 'students' else 'tasks',
+               'submitted': sum(1 for a in data['assignments'] if a.status == Assignment.STATUS_SUBMITTED),
                'grade_choices': Review.grade_options(),
                'credits': [(symbol, label, round(100 * Review.CREDITS.get(value, 0))) for value, label, symbol in Review.grade_options()]}
     if context['view'] == 'students':
@@ -153,3 +156,36 @@ def review_group_grade(request, worksheet_id, item_id):
         urls.append(reverse('grade_task', args=[assignment.pk, item.task_id]))
     return JsonResponse({'ok': True, 'grade': grade, 'urls': urls,
                          'message': f'Оценка {Review.SYMBOLS.get(grade, grade)} поставлена: {len(urls)}'})
+
+
+@teacher_required
+@require_POST
+def review_complete(request, worksheet_id):
+    """«Завершить проверку оценённых»: сданные работы листка (с учётом
+    ?group), где у каждой отвеченной задачи есть оценка, получают статус
+    «проверено» — ученик видит результаты, работа уходит из «Ждут проверки»
+    (ревью #281: раньше это делала только проверка работы целиком)."""
+    worksheet = get_object_or_404(Worksheet.visible_to(request.user), pk=worksheet_id)
+    group_id = request.POST.get('group', '')
+    data = review_data(request.user, worksheet, group_id)
+    pending = {}
+    for task in data['tasks'].values():
+        for row in task['rows']:
+            graded = row['grade'] or (row['review'] and row['review'].done)
+            pending.setdefault(row['person']['assignment'].pk, 0)
+            pending[row['person']['assignment'].pk] += 0 if graded else 1
+    done, left = [], 0
+    for assignment in data['assignments']:
+        if assignment.status != Assignment.STATUS_SUBMITTED:
+            continue
+        if pending.get(assignment.pk, 0):
+            left += 1
+        else:
+            done.append(assignment.pk)
+    Assignment.objects.filter(pk__in=done).update(status=Assignment.STATUS_REVIEWED, reviewed_at=timezone.now())
+    if done:
+        messages.success(request, f'Проверка завершена: {len(done)}' + (f', ещё не оценены: {left}' if left else '') + '.')
+    else:
+        messages.info(request, 'Завершать нечего: ' + (f'в {left} сданных работах есть задачи без оценки.' if left else 'сданных работ нет.'))
+    url = reverse('assignment_review_queue', args=[worksheet.pk])
+    return redirect(url + (f'?group={group_id}' if group_id.isdigit() else ''))

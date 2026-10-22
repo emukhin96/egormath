@@ -18,7 +18,11 @@
     <h1>Проверка</h1>
     <p class="live-meta">Оценено <span data-review-graded data-base="{{ graded }}">{{ graded }}</span> {{ answers|plural_ru:'ответ,ответа,ответов' }} из {{ answers }}, верно по автосверке {{ auto_ok }}</p>
   </div>
-  <div class="rv-next">{% if view == 'tasks' and next %}<a class="btn" href="{% query_set item=next.item.pk %}">Дальше: №{{ next.number }}</a>{% endif %}</div>
+  {# «Дальше» и завершение — над шкалой справа той же ширины. Завершение ставит статус «проверено» сданным работам, где оценены все отвеченные задачи: ученик видит результаты #}
+  <div class="rv-next">
+    {% if view == 'tasks' and next %}<a class="btn" href="{% query_set item=next.item.pk %}">Дальше: №{{ next.number }}</a>{% endif %}
+    {% if submitted %}<form method="post" action="{% url 'assignment_review_complete' worksheet.pk %}">{% csrf_token %}{% if group_id %}<input type="hidden" name="group" value="{{ group_id }}">{% endif %}<button class="btn{% if view == 'tasks' and next %} btn-secondary{% endif %}" title="Сданные работы, где оценены все отвеченные задачи, станут проверенными, и ученики увидят результаты">Завершить проверку оценённых</button></form>{% endif %}
+  </div>
 
   {% if view == 'students' %}
   <section class="card rv-students" aria-label="Ученики">
