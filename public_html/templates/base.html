@@ -169,7 +169,8 @@
 
 <div id="ws-saved" class="ws-saved" hidden>Сохранено ✓</div>
 
-<footer class="footer">Егор Мухин, 2026{% if is_teacher %} · <a href="{% url 'help_teachers' %}">Справка для учителей</a>{% endif %}</footer>
+{# Без разделителя «·»: части подвала разнесены отступом (.footer gap) #}
+<footer class="footer"><span>Егор Мухин, 2026</span>{% if is_teacher %}<a href="{% url 'help_teachers' %}">Справка для учителей</a>{% endif %}</footer>
 {% include 'includes/taxonomy_catalog.html' %}
 {% block extra_js %}{% endblock %}
 </body>
