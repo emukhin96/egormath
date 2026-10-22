@@ -1,0 +1,38 @@
+{% extends 'base.html' %}{% load static livefile page_tools task_extras %}
+{% block title %}Задача {{ number }} у класса — {{ worksheet.title }}{% endblock %}
+{% block content %}
+{% comment %}
+«Задача у класса» по макету D_Task (холст «Страницы учителя», 22.10.2026):
+как одно задание решает вся группа прямо сейчас. Слева условие и эталон,
+справа прогресс по задаче, ниже ответы класса группами; номер или ячейка
+открывают окна «задача» и «задача у ученика». Прогресс и группы — фрагмент
+_task_class_body.html, его обновляет опрос teacher_progress.js. Без «·».
+{% endcomment %}
+<div class="tc-head">
+  <div class="tc-heading">
+    <a class="live-back" href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">← {{ worksheet.title }}, карта ответов</a>
+    <h1>Задача {{ number }}</h1>
+    <nav class="tc-strip" aria-label="Задачи работы">{% for n in strip %}<a href="{{ n.url }}{% query_set point=None fragment=None %}"{% if n.current %} aria-current="page"{% endif %}>{{ n.number }}</a>{% endfor %}</nav>
+  </div>
+  {# Кнопка над правой колонкой и той же ширины (правило «панель = контролы над ней») #}
+  <div class="tc-actions">{% if anonymous %}<a class="btn btn-secondary" href="{% query_set anon=None fragment=None %}">Показать имена</a>{% else %}<a class="btn btn-secondary" href="{% query_set anon=1 fragment=None %}">Показать классу без имён</a>{% endif %}</div>
+</div>
+
+<div class="tc-grid">
+  <section class="card tc-task" aria-label="Условие">
+    <div class="math-content">{{ task.text_latex|web_text }}</div>
+    {% task_images task %}
+    {% if subitems %}<ol class="subitems">{% for s in subitems %}<li><span class="math-content">{{ s.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
+    {% if columns|length > 1 %}<nav class="seg tc-parts" aria-label="Подпункт">{% for c in columns %}<a class="seg-item{% if forloop.counter0 == column %} is-active{% endif %}" href="{% query_set point=forloop.counter0 fragment=None %}"{% if forloop.counter0 == column %} aria-current="true"{% endif %}>{{ c.label }}</a>{% endfor %}</nav>{% endif %}
+    <div class="tc-reference">
+      <span class="tw-label">Эталон</span>
+      <div class="tw-value">{% if reference %}{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}{% else %}Маски нет, ответ проверяет учитель{% endif %}</div>
+      {# Без имён окно задачи не открываем: в нём ответы класса с именами #}
+      {% if not anonymous %}<button type="button" class="linklike tw-link" data-attempt-url="{{ task_window_url }}{% if group_id %}?group={{ group_id }}{% endif %}">Окно задачи и решение</button>{% endif %}
+    </div>
+  </section>
+  <div data-progress-table data-live-file="{% live_file 'worksheet' worksheet.pk %}" class="tc-live">{% include 'assignments/_task_class_body.html' %}</div>
+</div>
+{% include 'assignments/_progress_dialog.html' %}
+{% endblock %}
+{% block extra_js %}{# mathlive, mask.js и check_badge.js — маска «так видит ученик» в окне задачи #}<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/check_badge.js' %}"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=9"></script>{% endblock %}
