@@ -1,0 +1,78 @@
+"""Хронология работы ученика (макет D_Timeline, assignments/timeline.py):
+лента событий, дорожка, таблица ответов с оценкой, действия и входы."""
+import uuid
+from datetime import timedelta
+
+from django.test import TestCase
+from django.urls import reverse
+from django.utils import timezone
+
+from problems.models import Task
+from problems.tests import make_student, make_teacher
+from workaudit.models import ActivityEvent
+from worksheets.models import WorksheetItem
+from worksheets.tests import make_worksheet
+from .models import Assignment, Review, Submission, SubmissionCheckAttempt
+
+
+class TimelineTests(TestCase):
+    def setUp(self):
+        self.teacher = make_teacher()
+        self.worksheet = make_worksheet(self.teacher)
+        WorksheetItem.objects.filter(worksheet=self.worksheet).delete()
+        self.tasks = [Task.objects.create(text_latex=f'Найдите площадь фигуры {n}', answer_mask='S = {{number: 30}}') for n in (1, 2)]
+        self.items = [WorksheetItem.objects.create(worksheet=self.worksheet, task=t, order=n) for n, t in enumerate(self.tasks, 1)]
+        student = make_student(self.teacher, username='oleg')
+        self.assignment = Assignment.objects.create(worksheet=self.worksheet, student=student, assigned_by=self.teacher)
+        sub = Submission.objects.create(assignment=self.assignment, task=self.tasks[0], answer_json={'s1': '30'})
+        for number, (value, result) in enumerate([('23', 'wrong'), ('30', 'ok')], 1):
+            SubmissionCheckAttempt.objects.create(submission=sub, number=number, result=result, snapshot={
+                'targets': [{'kind': 'task', 'id': self.tasks[0].pk, 'answer': f'S = {value}', 'result': result}]})
+        start = timezone.now() - timedelta(minutes=30)
+        page = uuid.uuid4()
+        for sequence, (kind, offset, extra) in enumerate([
+                ('copy', 60, {'text': 'Найдите площадь фигуры', 'statements': [{'label': '1', 'share': 100}], 'whole': True}),
+                ('hidden', 120, {}), ('visible', 240, {})]):
+            ActivityEvent.objects.create(assignment=self.assignment, event_id=uuid.uuid4(), page_id=page, sequence=sequence,
+                                         kind=kind, client_at=start + timedelta(seconds=offset), elapsed_ms=offset * 1000, **extra)
+        self.assignment.status = Assignment.STATUS_SUBMITTED
+        self.assignment.submitted_at = timezone.now()
+        self.assignment.save()
+        self.url = reverse('assignment_timeline', args=[self.assignment.pk])
+        self.client.force_login(self.teacher)
+
+    def test_page(self):
+        response = self.client.get(self.url)
+        texts = [e['text'] for e in response.context['events']]
+        self.assertEqual(texts[0], 'Начал работу')
+        self.assertEqual(texts[-1], 'Сдал работу')
+        self.assertIn('Скопировал условие задачи 1 целиком', texts)
+        self.assertIn('Ушёл со страницы', texts)
+        self.assertIn('Задача 1: S = 23', texts)
+        away = next(e for e in response.context['events'] if e['kind'] == 'away')
+        self.assertEqual(away['detail'], 'вернулся через 2 мин')
+        self.assertEqual({s['kind'] for s in response.context['track']['segments']}, {'away', 'clipboard', 'wrong'})
+        rows = response.context['rows']
+        self.assertEqual([(r['number'], r['answered'], r['pending'], r['copied']) for r in rows],
+                         [(1, True, True, True), (2, False, False, False)])
+        self.assertContains(response, 'без оценки: 1')
+        self.assertContains(response, 'class="live-copy"')
+        self.assertContains(response, 'Завершить проверку')
+        self.assertNotContains(response, '·')
+
+    def test_grade_and_actions(self):
+        Review.objects.create(submission=Submission.objects.get(assignment=self.assignment), grade='+-')
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['rows'][0]['grade_tone'], 'good')
+        self.assertEqual(response.context['pending'], [])
+        self.client.post(reverse('save_review', args=[self.assignment.pk]), {'action': 'complete'})
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.status, Assignment.STATUS_REVIEWED)
+        self.assertEqual(Review.objects.get().grade, '+-')
+
+    def test_entry_points_and_access(self):
+        self.assertContains(self.client.get(reverse('worksheet_progress', args=[self.worksheet.pk])), self.url)
+        window = self.client.get(reverse('task_attempts', args=[self.assignment.pk, self.tasks[0].pk]), {'item': self.items[0].pk})
+        self.assertContains(window, self.url)
+        self.client.force_login(make_teacher('stranger'))
+        self.assertEqual(self.client.get(self.url).status_code, 404)
