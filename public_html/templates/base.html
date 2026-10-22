@@ -75,6 +75,7 @@
             </button>
             <div class="nav-menu">
               <a href="{% url 'independentworks:catalog' %}"{% if request.resolver_match.namespace == 'independentworks' or request.GET.mode == 'independent' or request.GET.kind == 'independent' %} class="is-active"{% endif %}>Самостоятельные</a>
+              <a href="{% url 'assignment_journal' %}"{% if request.resolver_match.url_name == 'assignment_journal' %} class="is-active"{% endif %}>Журнал оценивания</a>
             </div>
           </div>
           {% else %}

@@ -1,0 +1,78 @@
+{% extends 'base.html' %}{% load static page_tools task_extras %}
+{% block title %}Журнал оценивания{% endblock %}
+{% block content %}
+{% comment %}
+Журнал оценивания по макету D_Journal (холст «Страницы учителя», 22.10.2026):
+ученики × работы периода, отметка и процент, одна работа раскрывается по
+задачам (?open=), справа средний, отметка по порогам и опоздания. Без «·».
+{% endcomment %}
+<div class="jr-head">
+  <div>
+    <h1>Журнал оценивания</h1>
+    <p class="live-meta">{% if group %}{{ group.name }}, {% endif %}{{ period_label|lower }}, {{ works|length }} {{ works|length|plural_ru:'работа,работы,работ' }}; отметка по среднему проценту, пороги {{ thresholds|join:', ' }}</p>
+  </div>
+  <div class="jr-controls">
+    {% include 'assignments/_group_filter.html' with current=group_id all_label='Все ученики' %}
+    <form method="get" class="live-order" data-autosubmit>
+      {% for key, values in request.GET.lists %}{% if key != 'period' and key != 'open' %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endif %}{% endfor %}
+      <label for="journal-period">Период</label>
+      <select id="journal-period" name="period">{% for value, label in periods.items %}<option value="{{ value }}"{% if value == period %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <noscript><button class="btn btn-small btn-secondary">Показать</button></noscript>
+    </form>
+    <nav class="seg" aria-label="Показывать"><a class="seg-item{% if not percent_only %} is-active{% endif %}" href="{% query_set show=None %}"{% if not percent_only %} aria-current="true"{% endif %}>Отметки и %</a><a class="seg-item{% if percent_only %} is-active{% endif %}" href="{% query_set show='pct' %}"{% if percent_only %} aria-current="true"{% endif %}>Только %</a></nav>
+    <a class="btn btn-secondary" href="{% query_set format='xlsx' %}">Скачать XLSX</a>
+  </div>
+</div>
+
+<section class="card jr-card" aria-label="Журнал">
+  {% if rows %}
+  <div class="jr-wrap"><table class="jr-table">
+    <thead>
+      <tr>
+        <th scope="col" class="jr-name"{% if opened %} rowspan="2"{% endif %}>Ученик</th>
+        {% for w in works %}{% if opened and w.pk == opened.pk %}
+        <th scope="colgroup" colspan="{{ opened_numbers|length }}" class="jr-open-head"><a href="{% query_set open=None %}" title="Свернуть">{{ w.title }}, по задачам</a></th>
+        {% else %}
+        <th scope="col"{% if opened %} rowspan="2"{% endif %} class="jr-work"><a href="{% query_set open=w.pk %}" title="Развернуть по задачам: {{ w.title }}">{{ w.title }}</a></th>
+        {% endif %}{% endfor %}
+        <th scope="col" class="jr-sum jr-sum-avg"{% if opened %} rowspan="2"{% endif %}>Средний</th>
+        <th scope="col" class="jr-sum jr-sum-mark"{% if opened %} rowspan="2"{% endif %}>Отметка</th>
+        <th scope="col" class="jr-sum jr-sum-late"{% if opened %} rowspan="2"{% endif %}>Опоздания</th>
+      </tr>
+      {% if opened %}<tr>{% for item in opened_items %}<th scope="col" class="jr-task-head"><button type="button" class="live-task" data-attempt-url="{% url 'worksheet_task_window' opened.pk item.pk %}" title="Окно задачи">№{{ forloop.counter }}</button></th>{% endfor %}</tr>{% endif %}
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <th scope="row" class="jr-name"><span class="live-name">{{ row.name }}{% if row.copied %} <span class="live-copy" title="Копировал текст условия в этом периоде">•</span>{% endif %}</span></th>
+        {% for cell in row.cells %}
+        {% if opened and cell.work.pk == opened.pk %}
+          {% if cell.tasks %}{% for t in cell.tasks %}<td class="jr-task">{% if t.kind != 'hidden' %}<button type="button" class="jr-pill jr-pill-{{ t.kind }}" title="{{ t.title }}" data-attempt-url="{% url 'task_attempts' cell.assignment.pk t.cell.task.pk %}?item={{ t.cell.item.pk }}">{{ t.sym }}{% if t.sub %}<sub>{{ t.sub }}</sub>{% endif %}</button>{% endif %}</td>{% endfor %}
+          {% else %}{% for n in opened_numbers %}<td class="jr-task"></td>{% endfor %}{% endif %}
+        {% elif cell.kind == 'none' %}<td class="jr-cell"></td>
+        {% else %}
+        <td class="jr-cell"><a class="jr-work-cell jr-{{ cell.kind }}{% if cell.mark %} jr-mark-{{ cell.mark }}{% endif %}{% if cell.late %} is-late{% endif %}" href="{% url 'review_assignment' cell.assignment.pk %}" title="{{ cell.work.title }}: {% if cell.kind == 'missing' %}не сдано{% elif cell.kind == 'open' %}ещё не сдано{% else %}{{ cell.mark }}, {{ cell.percent }}%{% endif %}{% if cell.late %}, после срока{% endif %}">{% if cell.kind == 'missing' %}<b>—</b>{% elif cell.kind == 'open' %}<b>…</b>{% else %}{% if not percent_only %}<b>{{ cell.mark }}</b>{% endif %}<span>{{ cell.percent }}%</span>{% endif %}</a></td>
+        {% endif %}
+        {% endfor %}
+        <td class="jr-num jr-sum jr-sum-avg">{% if row.average is not None %}{{ row.average }}%{% else %}—{% endif %}</td>
+        <td class="jr-num jr-sum jr-sum-mark">{% if row.mark %}<span class="jr-final jr-mark-{{ row.mark }}">{{ row.mark }}</span>{% else %}—{% endif %}</td>
+        <td class="jr-num jr-sum jr-sum-late{% if row.late %} jr-late-count{% endif %}">{% if row.late %}{{ row.late }}{% else %}нет{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="live-legend">
+    <span><b>5 4 3 2</b> отметка за работу и процент выполнения</span>
+    <span><b>{% for value, label, symbol in grade_choices %}{{ symbol }}{% if not forloop.last %} {% endif %}{% endfor %}</b> оценка за задачу</span>
+    <span><b class="is-ok">✓<sub>2</sub></b> автосверка, верно со второй</span>
+    <span><b class="is-pending">?</b> ждёт оценки</span>
+    <span><i class="jr-late-key" aria-hidden="true"></i>сдано после срока или не сдано</span>
+    <span><b class="live-copy">•</b> копировал текст условия</span>
+  </div>
+  {% else %}
+  <p class="jr-empty helptext">За этот период работ не выдавали.</p>
+  {% endif %}
+</section>
+{% include 'assignments/_progress_dialog.html' %}
+{% endblock %}
+{% block extra_js %}<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/check_badge.js' %}"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=8"></script>{% endblock %}

@@ -2,10 +2,11 @@ from django.urls import path
 
 from canvas import boards
 
-from . import bulk, views, progress, windows
+from . import bulk, journal, views, progress, windows
 
 urlpatterns = [
     path('progress/', progress.progress_overview, name='progress_overview'),
+    path('journal/', journal.journal, name='assignment_journal'),
     path('progress/<int:worksheet_id>/', progress.worksheet_progress, name='worksheet_progress'),
     path('progress/<int:worksheet_id>/task/<int:item_id>/', windows.task_window, name='worksheet_task_window'),
     path('progress/<int:worksheet_id>/boards/', boards.worksheet_boards, name='worksheet_boards'),
