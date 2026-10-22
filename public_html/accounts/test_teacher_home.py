@@ -9,10 +9,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Profile
-from accounts.teacher_home import running_works, week_deadlines
+from accounts.teacher_home import review_groups, review_runs, running_works, week_deadlines
 from assignments.models import Assignment
 from independentworks import services as svc
-from independentworks.models import Candidate, Position, Work
+from independentworks.models import Answer, Candidate, Position, Work
 from problems.models import Task
 from workaudit.models import ActivityEvent
 from workaudit.services import copied_words, copy_marks
@@ -98,3 +98,17 @@ class TeacherHomeTests(TestCase):
         Assignment.objects.filter(pk=self.open.pk).update(due_at=timezone.now() + timedelta(days=5))
         sheet_rows = [r for r in week_deadlines(self.teacher) if r['title'] == self.sheet.title]
         self.assertEqual([(r['passed'], r['total'], r['left']) for r in sheet_rows], [(True, 1, 0), (False, 1, 1)])
+
+    def test_review_runs_cheap_prefilter(self):
+        """«Ждут проверки» по самостоятельным берёт только проведения с
+        нерешёнными пунктами в завершённых попытках (ревью #272)."""
+        self.assertEqual(review_runs(self.teacher), [])  # попытка ещё идёт
+        self.attempt.submitted_at = timezone.now()
+        self.attempt.save(update_fields=['submitted_at'])
+        point = self.attempt.variant.points.get()
+        answer = Answer.objects.create(attempt=self.attempt, point=point, values={'s1': '5'})
+        self.assertEqual([r.pk for r in review_runs(self.teacher)], [self.attempt.run_id])
+        self.assertIn('Контрольная: подобие', [g['title'] for g in review_groups(self.teacher)])
+        answer.grade = '+'
+        answer.save(update_fields=['grade'])
+        self.assertEqual(review_runs(self.teacher), [])

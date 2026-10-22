@@ -4,7 +4,7 @@
 from datetime import timedelta
 
 from django.conf import settings
-from django.db.models import Count, Max, Min, Q
+from django.db.models import Count, F, Max, Min, Q
 from django.db.models.functions import TruncDate
 from django.urls import reverse
 from django.utils import timezone
@@ -56,6 +56,24 @@ def running_works(user, now=None):
     return cards
 
 
+def review_runs(user, now=None):
+    """Проведения, где могут быть непроверенные пункты, — дешёвым запросом
+    вместо всех самостоятельных учителя за всё время (ревью #272): есть
+    завершённая попытка, у которой решённых пунктов (оценка учителя или
+    автосверка «верно/неверно») меньше, чем пунктов в варианте. Отбор с
+    запасом — точный статус дальше считает attempt_status."""
+    from independentworks.models import Attempt, Run, Work
+    now = now or timezone.now()
+    resolved = ~Q(answers__grade='') | Q(answers__auto_check__in=['ok', 'wrong'])
+    open_attempts = (Attempt.objects.filter(run__work__in=Work.visible_to(user), run__issued_at__isnull=False)
+                     .filter(Q(submitted_at__isnull=False) | Q(ends_at__lte=now))
+                     .annotate(points=Count('variant__points', distinct=True),
+                               resolved=Count('answers', filter=resolved, distinct=True))
+                     .filter(resolved__lt=F('points')).values('run_id'))
+    return list(Run.objects.filter(pk__in=open_attempts).select_related('owner', 'work')
+                .prefetch_related('attempts__student', 'attempts__answers', 'attempts__variant__points'))
+
+
 def review_groups(user):
     """«Ждут проверки» по работам: обычные листки — сданные и не проверенные
     назначения, самостоятельные — сданные попытки с непроверенными пунктами."""
@@ -69,7 +87,7 @@ def review_groups(user):
                      'url': reverse('worksheet_progress', args=[row['worksheet_id']])})
     if settings.INDEPENDENT_WORKS_ENABLED:
         from independentworks.integration import assignment_groups
-        for group in assignment_groups(user, {}):
+        for group in assignment_groups(user, {}, runs=review_runs(user)):
             if group['submitted_total']:
                 rows.append({'title': group['worksheet__title'], 'kind': group['kind_label'].lower(),
                              'n': group['submitted_total'], 'what': 'работы с непроверенными пунктами',
