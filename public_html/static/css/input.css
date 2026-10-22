@@ -331,7 +331,7 @@
   table.list.progress-table.live-table thead th { border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--muted); padding: 8px 4px; }
   table.list.progress-table.live-table th:first-child { padding-left: 16px; padding-right: 12px; }
   table.list.progress-table.live-table td:last-child { padding-right: 16px; }
-  .live-task { display: inline-grid; place-items: center; min-width: 44px; height: 30px; padding: 0 6px; border-radius: 7px; background: #eef2f6; color: #102b55; font-weight: 700; text-decoration: none; }
+  .live-task { display: inline-grid; place-items: center; min-width: 44px; height: 30px; padding: 0 6px; border: 0; border-radius: 7px; background: #eef2f6; color: #102b55; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
   .live-task:hover { background: #102b55; color: #fff; }
   .live-table .progress-mark { width: 44px; height: 30px; font-size: 14px; font-weight: 700; }
   .live-table .progress-ok { background: #cdebd3; color: #14511c; }
@@ -362,6 +362,56 @@
   .live-legend b.is-pending { color: #7a4a00; }
   .live-legend b.live-copy { color: #7c3aed; }
   .live-canvas-toggle .canvas-toggle { margin: var(--space-3) 0 0; }
+  /* Окна карты ответов «задача» и «задача у ученика» (макеты D_TaskView,
+     D_AnswerView): шапка и тело на одной сетке, правая колонка 320px —
+     кнопки соседних учеников над ней той же ширины */
+  #progress-dialog.progress-window { width: min(1040px, calc(100vw - 32px)); max-width: none; padding: 20px 24px; }
+  .progress-window-close { position: absolute; top: 12px; right: 12px; }
+  .tw-head, .tw-body { display: grid; grid-template-columns: minmax(0, 1fr) 320px; column-gap: 24px; }
+  .tw-head { align-items: end; row-gap: var(--space-3); margin: 0 40px var(--space-4) 0; }
+  .tw-heading { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+  .tw-kicker, .tw-label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .tw-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+  .tw-nav { display: flex; gap: var(--space-2); min-width: 0; }
+  .tw-nav .btn { flex: 1 1 0; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tw-body { row-gap: var(--space-4); }
+  .tw-main, .tw-side { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+  .tw-side { gap: var(--space-4); }
+  .tw-main .progress-condition { margin: 0; }
+  .tw-link { display: inline-block; margin-top: var(--space-2); }
+  .tw-answers { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); }
+  .tw-answer { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; }
+  .tw-answer .mask-check { margin: 0; }
+  .tw-answer-ok { background: #f1faf3; border-color: #cdebd3; }
+  .tw-answer-wrong { background: #fdf3f3; border-color: #f8d4d4; }
+  .tw-reference { background: #f7f9fc; }
+  .tw-value { font-size: 16px; overflow-wrap: anywhere; }
+  .tw-verdict sub { font-size: 10px; }
+  .tw-part { display: flex; flex-direction: column; gap: var(--space-1); }
+  .tw-part-label { font-weight: 700; }
+  .tw-note, .tw-copy-row { margin: 0; font-size: 13px; }
+  .tw-solution summary, .tw-history summary { cursor: pointer; }
+  .tw-history .attempt-row:last-child { border-bottom: 0; }
+  .tw-block { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; }
+  .tw-block .review-comment label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .tw-block .form-buttons { margin: 0; }
+  .tw-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; }
+  .tw-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .tw-stat b { font-size: 16px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .tw-stat b.is-live { color: #1765b5; }
+  .tw-class { display: flex; flex-direction: column; max-height: 360px; margin: 0; padding: 0; overflow: auto; list-style: none; }
+  .tw-class li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px var(--space-2); padding: 6px 0; border-bottom: 1px solid #f1f4f8; }
+  .tw-class-name { overflow: hidden; font-size: 13.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .tw-class-marks { display: flex; gap: var(--space-1); }
+  .tw-class .progress-mark { width: 36px; height: 26px; font-size: 13px; }
+  .tw-class-answer { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }
+  .tw-class-answer:empty { display: none; }
+  .tw-foot { display: flex; gap: var(--space-2); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+  .tw-foot .tw-next, .tw-foot > a:last-child { margin-left: auto; }
+  @media (max-width: 760px) {
+    #progress-dialog.progress-window { padding: 16px; }
+    .tw-head, .tw-body { grid-template-columns: minmax(0, 1fr); }
+  }
   .live-ring { display: inline-block; width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; border-radius: 4px; box-shadow: inset 0 0 0 2px #1765b5; }
   @media (max-width: 760px) {
     .live-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px 16px; }

@@ -83,6 +83,6 @@
 </details>
 {% endblock %}
 {% block extra_js %}
-{% include 'assignments/_progress_dialog.html' %}
+{% include 'assignments/_progress_dialog.html' with heading='Ответы и попытки' %}
 <script defer src="{% static 'js/teacher_progress.js' %}?v=2"></script>
 {% endblock %}

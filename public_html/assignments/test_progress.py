@@ -111,7 +111,7 @@ class LiveProgressTests(TestCase):
         self.assertContains(response,'>±</button>')
         self.assertContains(response,'>.–</button>')
         self.assertContains(response,'>–</button>')
-        self.assertContains(response,'class="check-history" open')
+        self.assertContains(response,'class="check-history tw-history" open')
 
     def test_duplicate_live_rows_have_item_keys_and_unchanged_rows_are_omitted(self):
         import json

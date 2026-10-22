@@ -1,15 +1,65 @@
 {% load task_extras %}
-<h3>{{ assignment.student.get_full_name|default:assignment.student.username }} · №{{ point_number }}{% if selected_point %}{% for sr in row.subrows %}{% if sr.subitem.pk == selected_point.pk %}{{ forloop.counter0|subitem_label }}{% endif %}{% endfor %}{% endif %}</h3>
-<div class="progress-condition">
-<div class="math-content">{{ row.task.text_latex|web_text }}</div>
-{% task_images row.task %}
-{% if row.subrows %}<ol class="subitems">{% for sr in row.subrows %}<li {% if sr.subitem.pk == selected_point.pk %}class="progress-selected-part"{% endif %}><span class="math-content">{{ sr.subitem.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
+{% comment %}
+Окно «задача у ученика» (макет D_AnswerView, 22.10.2026): слева условие,
+последний ответ с автосверкой, эталон и история; справа копирование в этой
+задаче, оценка, комментарий. Соседние ученики и задачи — кнопки
+data-attempt-url (teacher_progress.js грузит их в то же окно). Без «·».
+{% endcomment %}
+<div class="tw">
+  <div class="tw-head">
+    <div class="tw-heading">
+      <span class="tw-kicker">Задача {{ row.number }}{% if selected_point %}{% for sr in row.subrows %}{% if sr.subitem.pk == selected_point.pk %}{{ forloop.counter0|subitem_label }}{% endif %}{% endfor %}{% endif %} из {{ total }}</span>
+      <h2 class="tw-title" id="progress-dialog-title">{{ student_name }}{% if copied %} <span class="live-copy" title="Копировал текст условия этой задачи">•</span>{% endif %}</h2>
+    </div>
+    <div class="tw-nav">
+      {% if prev_student %}<button type="button" class="btn btn-secondary btn-small" data-attempt-url="{{ prev_student.url }}" title="Предыдущий ученик">← {{ prev_student.name }}</button>{% endif %}
+      {% if next_student %}<button type="button" class="btn btn-secondary btn-small" data-attempt-url="{{ next_student.url }}" title="Следующий ученик">{{ next_student.name }} →</button>{% endif %}
+    </div>
+  </div>
+  <div class="tw-body">
+    <div class="tw-main">
+      <div class="progress-condition">
+        <div class="math-content">{{ row.task.text_latex|web_text }}</div>
+        {% task_images row.task %}
+        {% if row.subrows %}<ol class="subitems">{% for sr in row.subrows %}<li {% if sr.subitem.pk == selected_point.pk %}class="progress-selected-part"{% endif %}><span class="math-content">{{ sr.subitem.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
+        <button type="button" class="linklike tw-link" data-attempt-url="{{ task_window_url }}">Окно задачи</button>
+      </div>
+      {% if point %}
+      <div class="tw-answers">
+        <div class="tw-answer tw-answer-{{ point.status }}">
+          <span class="tw-label">Последний ответ{% if point.attempt_count %}, автосверка <b class="tw-verdict">{% if point.status == 'ok' %}✓{% if point.attempt_count > 1 %}<sub>{{ point.attempt_count }}</sub>{% endif %}{% elif point.status == 'wrong' %}×<sub>{{ point.attempt_count }}</sub>{% else %}?{% endif %}</b>{% endif %}</span>
+          <div class="tw-value">{% if point.fragments %}{% include 'assignments/_mask.html' with fragments=point.fragments editable=False show_checks=False %}{% else %}<span class="math-content">{{ point.answer|default:'—'|web_answer }}</span>{% endif %}</div>
+          {% if point.current_changed %}<span class="helptext">Отличается от последней проверки</span>{% elif point.status == 'draft' %}<span class="helptext">Не проверен</span>{% elif point.history %}<span class="helptext">Проверен {{ point.history.0.created_at|date:'d.m в H:i' }}</span>{% endif %}
+        </div>
+        <div class="tw-answer tw-reference">
+          <span class="tw-label">Эталон в маске</span>
+          <div class="tw-value">{% if reference %}{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}{% else %}Маски нет, ответ проверяет учитель{% endif %}</div>
+          {% if solution %}<details class="tw-solution"><summary>Решение</summary><div class="math-content">{{ solution|web_text }}</div></details>{% endif %}
+        </div>
+      </div>
+      <details class="check-history tw-history" open><summary class="tw-label">История ответа, попыток: {{ point.attempt_count }}</summary>{% include 'assignments/_attempts.html' %}</details>
+      {% if row.submission.photos.all %}<div class="photo-grid">{% for photo in row.submission.photos.all %}<a href="{% url 'photo_file' photo.pk %}" target="_blank"><img src="{% url 'photo_file' photo.pk %}" alt="Фото решения"></a>{% endfor %}</div>{% endif %}
+      {% else %}<div data-detail-answer>{% include 'assignments/_live_answer.html' %}</div>{% endif %}
+    </div>
+    <aside class="tw-side">
+      <div class="tw-block">
+        <span class="tw-label">Копирование в этой задаче</span>
+        {% for copy in copies %}<p class="tw-copy-row">{{ copy.event.received_at|date:'d.m, H:i' }} {{ copy.label }}{% if copy.event.text %}: «{{ copy.event.text|truncatechars:80 }}»{% endif %}</p>{% empty %}<p class="helptext">Не копировал условие.</p>{% endfor %}
+      </div>
+      <div class="tw-block tw-grade">
+        <span class="tw-label">Оценка за задачу</span>
+        {% include 'assignments/_grade_scale.html' %}
+        <span class="helptext" data-grade-caption>{{ grade_caption }}</span>
+      </div>
+      <form method="post" action="{% url 'grade_task' assignment.pk row.task.pk %}" class="tw-block" data-point-review>{% csrf_token %}
+        <div class="review-comment"><label>Комментарий ученику<textarea name="comment" rows="3" data-preserve-input>{{ row.review.comment|default:'' }}</textarea></label></div>
+        <div class="form-buttons"><button class="btn btn-secondary btn-small">Сохранить комментарий</button></div>
+      </form>
+      <a href="{% url 'review_assignment' assignment.pk %}#task-{{ row.number }}">Вся работа ученика</a>
+    </aside>
+  </div>
+  <div class="tw-foot">
+    {% if prev_task %}<button type="button" class="btn btn-secondary btn-small" data-attempt-url="{{ prev_task.url }}">← Задача {{ prev_task.number }}</button>{% endif %}
+    {% if next_task %}<button type="button" class="btn btn-secondary btn-small tw-next" data-attempt-url="{{ next_task.url }}">Задача {{ next_task.number }} →</button>{% endif %}
+  </div>
 </div>
-{% if point %}
-<div class="progress-current-answer"><strong>Текущий ввод:</strong> {% if point.fragments %}{% include 'assignments/_mask.html' with fragments=point.fragments editable=False show_checks=False %}{% else %}<span class="math-content">{{ point.answer|default:'—'|web_answer }}</span>{% endif %}{% if point.current_changed %}<span class="helptext">Отличается от последней проверки</span>{% elif point.status == 'draft' %} <span class="helptext">Не проверен</span>{% endif %}</div>
-<details class="check-history" open><summary>Самопроверки · {{ point.attempt_count }}</summary>{% include 'assignments/_attempts.html' %}</details>
-{% if row.submission.photos.all %}<div class="photo-grid">{% for photo in row.submission.photos.all %}<a href="{% url 'photo_file' photo.pk %}" target="_blank"><img src="{% url 'photo_file' photo.pk %}" alt="Фото решения"></a>{% endfor %}</div>{% endif %}
-{% else %}<div data-detail-answer>{% include 'assignments/_live_answer.html' %}</div>{% endif %}
-<p class="helptext">Оценка учителя за всю задачу:</p>
-{% include 'assignments/_grade_scale.html' %}
-<p><a href="{% url 'review_assignment' assignment.pk %}#task-{{ row.number }}">Открыть проверку работы</a></p>

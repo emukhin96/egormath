@@ -16,6 +16,7 @@ from worksheets.models import Worksheet
 from .models import Assignment, Review, Submission, SubmissionCheckAttempt
 from .views import _assignment_rows, _teacher_assignment
 from .point_progress import point_progress
+from .windows import grade_caption, reference_for, student_window
 from worksheets.latex import subitem_label
 from workaudit.models import ActivityEvent
 from workaudit.services import copy_label, copy_marks, whole_copies
@@ -29,13 +30,21 @@ def grade_task(request, pk, task_id):
     if not items.exists():
         from django.http import Http404
         raise Http404
-    grade = request.POST.get('grade', '')
-    if grade not in dict(Review.GRADE_CHOICES):
+    # Оценка и/или комментарий: окно «задача у ученика» сохраняет комментарий
+    # отдельно от оценки (форма [data-point-review], поле comment)
+    grade = request.POST.get('grade')
+    comment = request.POST.get('comment')
+    if grade is None and comment is None or grade is not None and grade not in dict(Review.GRADE_CHOICES):
         return JsonResponse({'message': 'Неизвестная оценка'}, status=400)
     submission, _ = Submission.objects.get_or_create(assignment=assignment, task_id=task_id)
-    Review.objects.update_or_create(submission=submission, defaults={
-        'grade': grade, 'done': grade in ('+', '.+'), 'reviewer': request.user})
-    return JsonResponse({'grade': grade, 'result': assignment.result()})
+    defaults = {'reviewer': request.user}
+    if grade is not None:
+        defaults.update(grade=grade, done=grade in ('+', '.+'))
+    if comment is not None:
+        defaults['comment'] = comment.strip()
+    review, _ = Review.objects.update_or_create(submission=submission, defaults=defaults)
+    return JsonResponse({'grade': review.grade, 'result': assignment.result(), 'feedback': review.comment,
+                         'caption': grade_caption(review)})
 
 
 def answer_versions(assignment, item_ids=None):
@@ -95,7 +104,8 @@ def task_attempts(request, pk, task_id):
         if selected_point is None:
             from django.http import Http404
             raise Http404
-    version = answer_versions(assignment, {item.pk}).get(str(item.pk), '') + str(point_id)
+    version = answer_versions(assignment, {item.pk}).get(str(item.pk), '') + str(point_id) + str(
+        ActivityEvent.objects.filter(assignment=assignment, kind='copy').aggregate(last=Max('pk'))['last'])
     grade = list(assignment.submissions.filter(task_id=task_id).values_list('review__grade', 'review__comment'))
     etag = '"' + hashlib.sha256((version + repr(grade)).encode()).hexdigest() + '"'
     if etags.matches(request, etag):
@@ -113,7 +123,10 @@ def task_attempts(request, pk, task_id):
     response = render(request, 'assignments/_progress_detail.html', {
         'point': detail, 'selected_point': selected_point,
         'point_number': next(n for n, i in enumerate(assignment.worksheet.ordered_items().filter(task__isnull=False), 1) if i.pk == item.pk),
-        'assignment': assignment, 'row': row, 'expand_history': True, 'grade_choices': Review.grade_options()})
+        'assignment': assignment, 'row': row, 'expand_history': True, 'grade_choices': Review.grade_options(),
+        'reference': reference_for(selected_point or item.task) if detail else '',
+        'solution': (selected_point or item.task).effective_solution_latex,
+        **student_window(assignment, item, row)})
     response['ETag'] = etag
     return response
 
