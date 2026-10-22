@@ -39,7 +39,7 @@
         <th scope="col" class="jr-sum jr-sum-mark"{% if opened %} rowspan="2"{% endif %}>Отметка</th>
         <th scope="col" class="jr-sum jr-sum-late"{% if opened %} rowspan="2"{% endif %}>Опоздания</th>
       </tr>
-      {% if opened %}<tr>{% for item in opened_items %}<th scope="col" class="jr-task-head"><button type="button" class="live-task" data-attempt-url="{% url 'worksheet_task_window' opened.pk item.pk %}" title="Окно задачи">№{{ forloop.counter }}</button></th>{% endfor %}</tr>{% endif %}
+      {% if opened %}<tr>{% for number, item in opened_columns %}<th scope="col" class="jr-task-head"><button type="button" class="live-task" data-attempt-url="{% url 'worksheet_task_window' opened.pk item.pk %}" title="Окно задачи">№{{ number }}</button></th>{% endfor %}</tr>{% endif %}
     </thead>
     <tbody>
       {% for row in rows %}
@@ -51,7 +51,7 @@
           {% else %}{% for n in opened_numbers %}<td class="jr-task"></td>{% endfor %}{% endif %}
         {% elif cell.kind == 'none' %}<td class="jr-cell"></td>
         {% else %}
-        <td class="jr-cell"><a class="jr-work-cell jr-{{ cell.kind }}{% if cell.mark %} jr-mark-{{ cell.mark }}{% endif %}{% if cell.late %} is-late{% endif %}" href="{% url 'review_assignment' cell.assignment.pk %}" title="{{ cell.work.title }}: {% if cell.kind == 'missing' %}не сдано{% elif cell.kind == 'open' %}ещё не сдано{% else %}{{ cell.mark }}, {{ cell.percent }}%{% endif %}{% if cell.late %}, после срока{% endif %}">{% if cell.kind == 'missing' %}<b>—</b>{% elif cell.kind == 'open' %}<b>…</b>{% else %}{% if not percent_only %}<b>{{ cell.mark }}</b>{% endif %}<span>{{ cell.percent }}%</span>{% endif %}</a></td>
+        <td class="jr-cell"><a class="jr-work-cell jr-{{ cell.kind }}{% if cell.mark %} jr-mark-{{ cell.mark }}{% endif %}{% if cell.late %} is-late{% endif %}" href="{% url 'review_assignment' cell.assignment.pk %}" title="{{ cell.work.title }}: {% if cell.kind == 'missing' %}не сдано{% elif cell.kind == 'open' %}ещё не сдано{% elif cell.kind == 'pending' %}сдано, ждёт проверки{% else %}{{ cell.mark }}, {{ cell.percent }}%{% endif %}{% if cell.late %}, после срока{% endif %}">{% if cell.kind == 'missing' %}<b>—</b>{% elif cell.kind == 'open' %}<b>…</b>{% elif cell.kind == 'pending' %}<b>?</b>{% else %}{% if not percent_only %}<b>{{ cell.mark }}</b>{% endif %}<span>{{ cell.percent }}%</span>{% endif %}</a></td>
         {% endif %}
         {% endfor %}
         <td class="jr-num jr-sum jr-sum-avg">{% if row.average is not None %}{{ row.average }}%{% else %}—{% endif %}</td>
@@ -65,7 +65,7 @@
     <span><b>5 4 3 2</b> отметка за работу и процент выполнения</span>
     <span><b>{% for value, label, symbol in grade_choices %}{{ symbol }}{% if not forloop.last %} {% endif %}{% endfor %}</b> оценка за задачу</span>
     <span><b class="is-ok">✓<sub>2</sub></b> автосверка, верно со второй</span>
-    <span><b class="is-pending">?</b> ждёт оценки</span>
+    <span><b class="is-pending">?</b> ждёт проверки или оценки; в средний не входит</span>
     <span><i class="jr-late-key" aria-hidden="true"></i>сдано после срока или не сдано</span>
     <span><b class="live-copy">•</b> копировал текст условия</span>
   </div>

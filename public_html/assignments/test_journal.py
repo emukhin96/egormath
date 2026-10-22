@@ -60,11 +60,12 @@ class JournalTests(TestCase):
         rows = self.rows(response)
         anna, oleg = rows['anna'], rows['oleg']
         self.assertEqual([(c['kind'], c['mark'], c['percent']) for c in anna['cells']], [('done', '5', 88), ('missing', '', None)])
-        self.assertEqual([(c['kind'], c['late']) for c in oleg['cells']], [('done', True), ('open', False)])
+        # сдана после срока, но не проверена — «ждёт проверки», без отметки и не в среднем (ревью #283)
+        self.assertEqual([(c['kind'], c['late'], c['mark']) for c in oleg['cells']], [('pending', True, ''), ('open', False, '')])
         self.assertEqual((anna['average'], anna['mark'], anna['late']), (88, '5', 1))
-        self.assertEqual((oleg['average'], oleg['mark'], oleg['late']), (0, '2', 1))
+        self.assertEqual((oleg['average'], oleg['mark'], oleg['late']), (None, '', 1))
         self.assertContains(response, 'Журнал оценивания')
-        self.assertContains(response, 'jr-work-cell jr-done jr-mark-2 is-late')
+        self.assertContains(response, 'jr-work-cell jr-pending is-late')
         self.assertNotContains(response, '·')
 
     def test_open_by_tasks(self):
@@ -98,3 +99,21 @@ class JournalTests(TestCase):
     @override_settings(INDEPENDENT_WORKS_ENABLED=True)
     def test_nav(self):
         self.assertContains(self.client.get(reverse('dashboard')), self.url)
+
+
+    def test_review_fixes(self):
+        """Ревью #283: возвращённая без пересдачи после срока — не сдано и
+        опоздание; номера раскрытой работы — как в листке; журнал в меню
+        и без самостоятельных."""
+        Assignment.objects.filter(pk=self.o1.pk).update(status=Assignment.STATUS_RETURNED,
+                                                        submitted_at=self.o1.due_at - timedelta(hours=1))
+        oleg = self.rows(self.client.get(self.url))['oleg']
+        self.assertEqual((oleg['cells'][0]['kind'], oleg['cells'][0]['late']), ('missing', True))
+        first = self.sheets[0].ordered_items()[0]
+        for a in Assignment.objects.filter(worksheet=self.sheets[0]):
+            a.hidden_items.add(first)
+        response = self.client.get(self.url, {'open': self.sheets[0].pk})
+        self.assertEqual([n for n, _ in response.context['opened_columns']], [2])
+        self.assertContains(response, '№2</button>')
+        with override_settings(INDEPENDENT_WORKS_ENABLED=False):
+            self.assertContains(self.client.get(reverse('dashboard')), self.url)

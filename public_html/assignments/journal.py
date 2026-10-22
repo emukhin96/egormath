@@ -128,20 +128,29 @@ def journal_data(user, group_id='', period='month', open_id=''):
             done = sum(scores.get(t, 0) for t in task_ids)
             percent = round(100 * done / len(task_ids)) if task_ids else 0
             submitted = a.status in (Assignment.STATUS_SUBMITTED, Assignment.STATUS_REVIEWED)
-            is_late = bool(a.due_at and (a.submitted_at > a.due_at if a.submitted_at else now > a.due_at))
-            late += is_late
-            missing = not submitted and a.due_at and now > a.due_at
-            cell = {'work': w, 'assignment': a, 'late': is_late, 'percent': None if missing else percent,
-                    'kind': 'missing' if missing else 'done' if submitted else 'open', 'tasks': task_cells.get(a.pk)}
-            cell['mark'] = mark_for(cell['percent']) if submitted else ''
+            # Опоздание: у сданной — сдана после срока; у несданной (выдана или
+            # возвращена на доработку, где submitted_at остаётся от прошлой
+            # сдачи) — срок прошёл (ревью #283)
             if submitted:
+                is_late = bool(a.due_at and a.submitted_at and a.submitted_at > a.due_at)
+            else:
+                is_late = bool(a.due_at and now > a.due_at)
+            late += is_late
+            missing = not submitted and is_late
+            # Отметка и вклад в средний — только у проверенной работы: процент
+            # идёт из оценок учителя, у сданной без проверки он занижен (ревью #283)
+            reviewed = a.status == Assignment.STATUS_REVIEWED
+            kind = 'missing' if missing else 'done' if reviewed else 'pending' if submitted else 'open'
+            cell = {'work': w, 'assignment': a, 'late': is_late, 'percent': percent if reviewed else None,
+                    'kind': kind, 'tasks': task_cells.get(a.pk), 'mark': mark_for(percent) if reviewed else ''}
+            if reviewed:
                 percents.append(percent)
             cells.append(cell)
         average = round(sum(percents) / len(percents)) if percents else None
         rows.append({'student': row['student'], 'name': row['student'].get_full_name() or row['student'].username,
                      'copied': row['copied'], 'cells': cells, 'average': average, 'mark': mark_for(average), 'late': late})
     return {'group': group, 'works': works, 'rows': rows, 'opened': opened, 'opened_numbers': opened_numbers,
-            'opened_items': opened_items, 'start': start, 'end': end}
+            'opened_columns': list(zip(opened_numbers, opened_items)), 'start': start, 'end': end}
 
 
 @teacher_required
@@ -173,6 +182,8 @@ def journal_xlsx(data, period):
                 values.append('не сдано')
             elif cell['kind'] == 'open':
                 values.append('не сдано, срок не прошёл')
+            elif cell['kind'] == 'pending':
+                values.append('ждёт проверки' + (', после срока' if cell['late'] else ''))
             else:
                 values.append(f"{cell['mark']}, {cell['percent']}%" + (', после срока' if cell['late'] else ''))
         sheet.append([row['name']] + values + [row['average'], row['mark'], row['late']])
