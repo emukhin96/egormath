@@ -16,19 +16,22 @@ Django 5.2 LTS (Python 3.12), SQLite локально / MySQL 8 на проде 
 PDF — внешний LaTeX API-сервер (LuaLaTeX), KaTeX для формул на сайте.
 Стили — Tailwind CSS v4 (standalone CLI): исходник
 `public_html/static/css/input.css`, собранный артефакт
-`public_html/static/css/app.css` (коммитится в git).
+`public_html/static/css/app.css` (в git **не** хранится: собирается
+локально `make build-css`, на проде — при сборке Docker-образа).
 
 ### Сборка CSS
 
-На сервере Node **не нужен**. После изменений в `input.css` или новых
-utility-классов в шаблонах локально:
+Node **не нужен** нигде. После свежего checkout, `git pull` и правок
+`input.css` или utility-классов в шаблонах локально:
 
 ```bash
 make build-css   # скачает CLI в tools/ при необходимости
-make check       # сборка + тесты + проверка, что app.css закоммичен свежим
+make check       # сборка CSS + тесты
 ```
 
-Правило: **новый utility в шаблоне → `make build-css` → закоммитить `app.css`**.
+Правило: **коммитим только `input.css` и шаблоны, `app.css` не коммитим** —
+иначе любые два PR с правками шаблонов конфликтуют на однострочном
+минифицированном файле.
 Повторяющиеся куски лучше выносить в `@layer components` в `input.css`,
 а не копировать длинные class-строки. Подробности — в
 [docs/PIPELINE.md](docs/PIPELINE.md).
