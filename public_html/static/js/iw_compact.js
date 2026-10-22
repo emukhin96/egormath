@@ -3,7 +3,9 @@
    перетаскивание номеров и плашек кандидатов, выбор номеров для
    объединения, подсказки «Похожи» и тост с «Отменить».
    Сервер после переноса или объединения отвечает JSON; страница
-   перезагружается и показывает тост из #iw-undo. */
+   перезагружается и показывает тост из #iw-undo.
+   В подробном виде (#ws-items) — перетаскивание задачи за ⠿ в другой номер
+   и выбор подпунктов кандидата с «Разделить на кандидаты». */
 (function () {
   'use strict';
 
@@ -195,6 +197,72 @@
         group: {name: 'iw-cand', pull: false, put: true},
         draggable: '.iw-compact-cand',
       }));
+    });
+  });
+
+  // --- Подробный вид: задача в другой номер, подпункты кандидата ---
+  document.addEventListener('DOMContentLoaded', function () {
+    var items = document.getElementById('ws-items');
+    if (!items || !items.dataset.partsUrl) return;
+    var showSaved = window.EgorAutosave ? window.EgorAutosave.showSaved : function () {};
+    var csrf = items.querySelector('input[name=csrfmiddlewaretoken]');
+
+    function send(url, body) {
+      return fetch(url, {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrf ? csrf.value : '', 'X-Requested-With': 'XMLHttpRequest'},
+        body: body,
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (json) {
+          if (!r.ok) throw new Error(json.message || 'Не удалось сохранить изменение');
+          return json;
+        });
+      }, function () { throw new Error('Нет связи — изменение не сохранено'); });
+    }
+    function fail(error) {
+      showSaved(false, error.message);
+      setTimeout(function () { location.reload(); }, 1500);
+    }
+
+    // Подпункты: снятая галочка убирает подпункт из задачи, как в листке.
+    items.querySelectorAll('[data-iw-detail-parts]').forEach(function (form) {
+      function submit(mode) {
+        var body = new URLSearchParams();
+        body.append('candidate', form.dataset.candidate);
+        body.append('mode', mode);
+        form.querySelectorAll('input[name=parts]:checked').forEach(function (box) {
+          body.append('parts', box.value);
+        });
+        send(items.dataset.partsUrl, body).then(function () { location.reload(); }).catch(fail);
+      }
+      form.addEventListener('change', function (event) {
+        if (event.target.name === 'parts') submit('keep');
+      });
+      form.querySelector('[data-split]').addEventListener('click', function () { submit('split'); });
+    });
+
+    if (typeof Sortable === 'undefined') return;
+    items.querySelectorAll('.iw-candidate-grid[data-target]').forEach(function (grid) {
+      Sortable.create(grid, {
+        group: {name: 'iw-detail-cand', pull: true, put: grid.dataset.closed !== '1'},
+        handle: '.iw-detail-grip',
+        draggable: '.iw-workspace-candidate',
+        sort: false,
+        animation: 120,
+        ghostClass: 'iw-compact-ghost',
+        onStart: function () { items.classList.add('is-cand-dragging'); },
+        onEnd: function (evt) {
+          items.classList.remove('is-cand-dragging');
+          if (evt.to === evt.from) return;
+          var body = new URLSearchParams();
+          body.append('candidate', evt.item.dataset.candidate);
+          body.append('target', evt.to.dataset.target);
+          send(items.dataset.moveUrl, body).then(function () { location.reload(); }).catch(function (error) {
+            evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex] || null);
+            showSaved(false, error.message);
+          });
+        },
+      });
     });
   });
 })();

@@ -213,6 +213,11 @@ def edit(request, pk):
         counts = sorted({c.point_count for c in p.rows})
         p.point_summary = ' / '.join(str(n) for n in counts) or '—'
         p.needs_manual = any(c.mask_count < c.point_count for c in p.rows)
+    # Подпункт, занятый другим кандидатом той же задачи, отметить нельзя.
+    rows = [c for p in positions for c in p.rows]
+    for candidate in rows:
+        candidate.taken_parts = {i for c in rows if c.task_id == candidate.task_id and c.pk != candidate.pk
+                                 for i in c.subitem_ids}
     selected = next((p for p in positions if str(p.pk) == request.GET.get('position')), positions[0] if positions else None)
     from . import compact
     compact.decorate(positions)
@@ -260,6 +265,23 @@ def move_candidate(request, pk):
     state, after, message = result
     compact.remember(request, work, state, after, message)
     return JsonResponse({'ok': True, 'changed': True, 'message': message})
+
+
+@enabled
+@teacher_required
+@require_POST
+def candidate_parts(request, pk):
+    """Подробный вид: оставить отмеченные подпункты или разделить их на кандидатов."""
+    from . import compact
+    work = get_object_or_404(Work.visible_to(request.user), pk=pk)
+    candidate = (_ids(request.POST.get('candidate')) or [None])[0]
+    if candidate is None:
+        raise svc.WorkError('Укажите задачу.')
+    parts = _ids(','.join(request.POST.getlist('parts')), 'Неверный подпункт.')
+    action = compact.split_candidate if request.POST.get('mode') == 'split' else compact.set_parts
+    message = action(work, candidate, parts)
+    messages.success(request, message)
+    return JsonResponse({'ok': True, 'message': message})
 
 
 @enabled

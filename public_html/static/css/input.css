@@ -7492,6 +7492,11 @@
 @layer components {
   .iw-workspace-heading > form { flex: 0 0 auto; width: auto; margin: 0; }
   .iw-workspace-heading > h3 { min-width: 0; overflow-wrap: anywhere; }
+  /* Подробный вид: задачу тянут за ⠿ в другой номер, подпункты — галочками. */
+  .iw-detail-grip { color: #a2adbb; cursor: grab; user-select: none; line-height: 1.4; }
+  .iw-workspace-heading:has(> .iw-detail-grip) { justify-content: flex-start; }
+  #ws-items.is-cand-dragging .iw-candidate-grid:not([data-closed]) { min-height: 72px; border: 1px dashed var(--border); border-radius: var(--radius); }
+  .iw-parts-actions { display: flex; gap: var(--space-2); margin-block: var(--space-2); }
   .summary-list > div { flex-wrap: wrap; }
   .summary-list dd { min-width: 0; max-width: 100%; overflow-wrap: anywhere; margin-left: auto; }
   .iw-point { min-width: 0; }
