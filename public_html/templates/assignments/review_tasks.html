@@ -1,0 +1,100 @@
+{% extends 'base.html' %}{% load static page_tools task_extras %}
+{% block title %}Проверка — {{ worksheet.title }}{% endblock %}
+{% block content %}
+{% comment %}
+Проверка листка по задачам (макет D_Review, 22.10.2026). Сетка 250px | 1fr |
+250px: вкладки «Задачи | Ученики» над очередью той же ширины, «Дальше» над
+шкалой справа. Одна задача у всех — ответы группами (review_tasks.answer_groups),
+оценка группе «Всем N» и каждому; имя и плитка открывают «задачу у ученика».
+Без «·».
+{% endcomment %}
+<div class="rv-grid">
+  <div class="rv-tabs" role="tablist" aria-label="Как проверять">
+    <a role="tab" href="{% query_set view=None item=None %}" aria-selected="{% if view == 'tasks' %}true{% else %}false{% endif %}">Задачи</a>
+    <a role="tab" href="{% query_set view='students' item=None %}" aria-selected="{% if view == 'students' %}true{% else %}false{% endif %}">Ученики</a>
+  </div>
+  <div class="rv-head">
+    <a class="live-back" href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">← {{ worksheet.title }}, карта ответов</a>
+    <h1>Проверка</h1>
+    <p class="live-meta">Оценено <span data-review-graded data-base="{{ graded }}">{{ graded }}</span> {{ answers|plural_ru:'ответ,ответа,ответов' }} из {{ answers }}, верно по автосверке {{ auto_ok }}</p>
+  </div>
+  {# «Дальше» и завершение — над шкалой справа той же ширины. Завершение ставит статус «проверено» сданным работам, где оценены все отвеченные задачи: ученик видит результаты #}
+  <div class="rv-next">
+    {% if view == 'tasks' and next %}<a class="btn" href="{% query_set item=next.item.pk %}">Дальше: №{{ next.number }}</a>{% endif %}
+    {% if submitted %}<form method="post" action="{% url 'assignment_review_complete' worksheet.pk %}">{% csrf_token %}{% if group_id %}<input type="hidden" name="group" value="{{ group_id }}">{% endif %}<button class="btn{% if view == 'tasks' and next %} btn-secondary{% endif %}" title="Сданные работы, где оценены все отвеченные задачи, станут проверенными, и ученики увидят результаты">Завершить проверку оценённых</button></form>{% endif %}
+  </div>
+
+  {% if view == 'students' %}
+  <section class="card rv-students" aria-label="Ученики">
+    <table class="list">
+      <thead><tr><th scope="col">Ученик</th><th scope="col">Статус</th><th scope="col">Ответов</th><th scope="col">Оценено</th><th scope="col"></th></tr></thead>
+      <tbody>{% for s in students %}<tr>
+        <td><span class="live-name">{{ s.name }}{% if s.person.copied %} <span class="live-copy" title="{{ s.person.copy_note|capfirst }}">•</span>{% endif %}</span></td>
+        <td><span class="badge badge-{{ s.person.assignment.status }}">{{ s.person.assignment.get_status_display }}</span></td>
+        <td>{{ s.answered }} из {{ s.total }}</td>
+        <td>{{ s.graded }} из {{ s.answered }}</td>
+        <td class="row-actions"><a class="btn btn-small btn-secondary" href="{% url 'review_assignment' s.person.assignment.pk %}">Проверить работу</a></td>
+      </tr>{% empty %}<tr><td colspan="5">Листок пока никому не выдан.</td></tr>{% endfor %}</tbody>
+    </table>
+  </section>
+  {% else %}
+  <nav class="card rv-queue" aria-label="Очередь по задачам">
+    <div class="rv-queue-title tw-label">Ждут оценки</div>
+    <ul>
+      {% for t in tasks %}{% if t.pending or t.item.pk == current.item.pk %}
+      <li><a href="{% query_set item=t.item.pk %}"{% if t.item.pk == current.item.pk %} aria-current="page"{% endif %}>
+        <span class="rv-queue-number">№{{ t.number }}</span>
+        <span class="rv-queue-left" data-queue-left="{{ t.item.pk }}">{{ t.pending }}</span>
+      </a></li>
+      {% endif %}{% empty %}<li class="helptext">Задач в листке нет.</li>{% endfor %}
+    </ul>
+    {% if auto_done %}<p class="rv-queue-note">Задачи {{ auto_done|join:', ' }} оценены; любую оценку можно поменять.</p>{% endif %}
+  </nav>
+
+  <section class="rv-main" aria-label="Задача у всех"{% if current %} data-group-grade-url="{{ group_grade_url }}" data-item="{{ current.item.pk }}" data-rows="{{ current.rows|length }}" data-pending="{{ current.pending }}"{% endif %}>
+    {% if current %}
+    <div class="card rv-task">
+      <div class="rv-task-head"><span class="tw-label">№{{ current.number }}</span><button type="button" class="linklike" data-attempt-url="{{ task_window_url }}">Окно задачи</button></div>
+      <div class="math-content">{{ task.text_latex|web_text }}</div>
+      {% task_images task %}
+      {% if subitems %}<ol class="subitems">{% for s in subitems %}<li><span class="math-content">{{ s.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
+      {% if reference %}<div class="rv-reference"><span class="tw-label">Ответ</span><div class="tw-value">{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}</div></div>{% endif %}
+    </div>
+    {% for g in groups %}
+    <article class="card rv-group rv-group-{{ g.kind }}" data-review-group>
+      <div class="rv-group-head">
+        <span class="rv-group-title">{% if g.has_answer %}{% for cell in g.sample %}{% if cell.shown %}{% include 'assignments/_mask.html' with fragments=cell.shown editable=False show_checks=False %}{% elif cell.answer %}<span class="math-content">{{ cell.answer|web_answer }}</span>{% endif %}{% endfor %}{% endif %}<span class="rv-verdict">{{ g.verdict }}</span></span>
+        <span class="rv-group-grade">
+          <span class="tw-label">Всем {{ g.rows|length }}</span>
+          <span class="rv-scale" role="group" aria-label="Оценка всей группе" data-group-grade data-members="{{ g.members }}">{% for value, label, symbol in grade_choices %}<button type="button" data-group-value="{{ value }}" title="{{ label }}, всем в группе" aria-pressed="{% if g.grade == value %}true{% else %}false{% endif %}"{% if g.suggested == value and not g.grade %} class="is-suggested"{% endif %}>{{ symbol }}</button>{% endfor %}</span>
+        </span>
+      </div>
+      <ul class="rv-people">
+        {% for row in g.rows %}{% with person=row.person %}
+        <li class="rv-person" tabindex="-1" data-review-row{% if row.legacy_done %} data-done title="Старая отметка «Выполнено» засчитана; можно поставить оценку по шкале"{% endif %}>
+          <span class="rv-name"><button type="button" class="linklike" data-attempt-url="{% url 'task_attempts' person.assignment.pk current.item.task_id %}?item={{ current.item.pk }}">{{ row.name }}</button>{% if row.copied %} <span class="live-copy" title="{{ person.copy_note|capfirst }}">•</span>{% endif %}</span>
+          <span class="live-table rv-mark">{% for cell in row.cells %}{% if not cell.hidden %}{% include 'assignments/_progress_button.html' %}{% endif %}{% endfor %}</span>
+          <span class="rv-scale" role="group" aria-label="Оценка: {{ row.name }}" data-grade-url="{{ row.grade_url }}">{% for value, label, symbol in grade_choices %}<button type="button" data-grade="{{ value }}" title="{{ label }}" aria-pressed="{% if row.grade == value %}true{% else %}false{% endif %}">{{ symbol }}</button>{% endfor %}</span>
+          {% if not g.has_answer %}<button type="button" class="linklike rv-open" data-attempt-url="{% url 'task_attempts' person.assignment.pk current.item.task_id %}?item={{ current.item.pk }}">Решение</button>{% endif %}
+        </li>
+        {% endwith %}{% endfor %}
+      </ul>
+    </article>
+    {% empty %}
+    <p class="helptext">На эту задачу пока никто не ответил.</p>
+    {% endfor %}
+    {% endif %}
+  </section>
+
+  <aside class="rv-side" aria-label="Шкала оценок">
+    <div class="card rv-legend">
+      <span class="tw-label">Шкала</span>
+      {% for symbol, label, credit in credits %}<span class="rv-legend-row"><b>{{ symbol }}</b><span>{{ label }}</span><span class="rv-credit">{{ credit }}%</span></span>{% endfor %}
+      <span class="helptext">Клавиши 1–8 ставят оценку выбранному ученику, ↑ и ↓ — соседний ученик</span>
+    </div>
+  </aside>
+  {% endif %}
+</div>
+{% include 'assignments/_progress_dialog.html' %}
+{% endblock %}
+{% block extra_js %}<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/check_badge.js' %}"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=8"></script><script defer src="{% static 'js/review_tasks.js' %}"></script>{% endblock %}
