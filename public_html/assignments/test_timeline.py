@@ -107,3 +107,15 @@ class TimelineTests(TestCase):
         self.assertEqual(response.context['track']['end'], later.created_at)
         self.assertContains(response, 'возвращена на доработку')
         self.assertIn('Задача 1, 3: S = 30', [e['text'] for e in response.context['events']])
+
+    def test_device_clock_skew(self):
+        """Ревью #282: часы устройства на час вперёд — копирование всё равно
+        встаёт до сдачи, по времени сервера (received_at)."""
+        ActivityEvent.objects.filter(assignment=self.assignment).delete()
+        submitted = timezone.now() + timedelta(minutes=5)
+        Assignment.objects.filter(pk=self.assignment.pk).update(submitted_at=submitted)
+        ActivityEvent.objects.create(assignment=self.assignment, event_id=uuid.uuid4(), page_id=uuid.uuid4(), sequence=1,
+                                     kind='copy', text='Найдите площадь фигуры', statements=[{'label': '1', 'share': 100}],
+                                     client_at=timezone.now() + timedelta(hours=1), elapsed_ms=1000)
+        kinds = [e['kind'] for e in self.client.get(self.url).context['events']]
+        self.assertLess(kinds.index('clipboard'), kinds.index('submit'))

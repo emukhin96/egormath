@@ -96,6 +96,17 @@ def assignment_timeline(request, pk):
 
     # Лента событий
     activity, summary = activity_timeline(ActivityEvent.objects.filter(assignment=assignment))
+    # Журнал активности идёт по часам устройства ученика (client_at), а
+    # самопроверки, фото и сдача — по часам сервера. Сдвиг часов вкладки —
+    # наименьшая разница «получено сервером − время устройства» (пачки уходят
+    # раз в 30 с, самая быстрая почти без задержки); события вкладки переносим
+    # на время сервера, иначе при сбитых часах лента перемешивается (ревью #282)
+    offsets = {}
+    for row in activity:
+        shift = row['received'] - row['at']
+        offsets[row['tab']] = min(offsets.get(row['tab'], shift), shift)
+    for row in activity:
+        row['at'] = row['at'] + offsets[row['tab']]
     events = []
     for row in activity:
         if row['kind'] == 'away':
