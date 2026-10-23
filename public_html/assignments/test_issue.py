@@ -69,6 +69,12 @@ class IssueWizardTests(TestCase):
         self.assertEqual(oleg.check_visibility, Assignment.CHECK_TEACHER)
         self.assertEqual(Assignment.objects.filter(student=self.anna).count(), 1)
 
+    def test_due_buttons_use_site_timezone(self):
+        """«Завтра» считает дату в поясе сайта, а не браузера (ревью #284)."""
+        response = self.client.get(self.url, {'worksheet': self.sheet.pk})
+        self.assertTrue(response.context['timezone'])
+        self.assertContains(response, f"timeZone: '{response.context['timezone']}', year: 'numeric'")
+
     def test_refresh_recomputes_for_new_sheet(self):
         """Смена листка после ошибки отправки (ревью #284): контекст под новый
         листок, введённое сохраняется, ничего не выдаётся и ошибок нет."""

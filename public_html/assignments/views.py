@@ -552,6 +552,8 @@ def _issue_context(form, teacher):
         'check_value': str(check.value() or Assignment.CHECK_LIVE), 'check_locked': check.field.disabled,
         'issue_data': {'members': members, 'names': {str(k): v for k, v in names.items()},
                        'assigned': sorted(int(pk) for pk in form.fields['students'].widget.assigned_ids)},
+        # «Завтра» / «Через неделю» считают дату в поясе сайта, как due_at на сервере
+        'timezone': timezone.get_current_timezone_name(),
     }
 
 

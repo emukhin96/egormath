@@ -251,9 +251,11 @@
     var input = form.querySelector('[name=due_at]');
     if (due.dataset.dueDays === '') { input.value = ''; }
     else {
+      // Дата — в поясе сайта (сервер разбирает due_at в нём), а не браузера
       var time = input.value ? input.value.slice(11, 16) : '23:59';
-      var day = new Date(Date.now() + Number(due.dataset.dueDays) * 86400000);
-      input.value = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0') + 'T' + time;
+      var parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {timeZone: '{{ timezone|escapejs }}', year: 'numeric', month: '2-digit', day: '2-digit'})
+        .formatToParts(new Date(Date.now() + Number(due.dataset.dueDays) * 86400000)).map(function (p) { return [p.type, p.value]; }));
+      input.value = parts.year + '-' + parts.month + '-' + parts.day + 'T' + time;
     }
     input.dispatchEvent(new Event('change', {bubbles: true}));
   });
