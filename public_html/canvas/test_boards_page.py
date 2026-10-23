@@ -57,3 +57,19 @@ class BoardsPageTests(TestCase):
                                      statements=[{'label': '1', 'share': 100}], whole=True)
         self.assertContains(self.page(task=self.task.pk), 'title="Копировал текст условия"', count=1)
         self.assertContains(self.page(), 'title="Копировал текст условия"', count=1)
+
+    def test_order_keeps_freshest_on_screen(self):
+        """«По фамилии» переставляет 15 самых свежих досок, а не отбирает
+        первых по алфавиту (ревью #295)."""
+        from canvas import boards
+        from canvas.models import CanvasPage
+        submission = Submission.objects.get(assignment=self.a_oleg)
+        CanvasPage.objects.create(submission=submission, number=1, student_updated_at=timezone.now())
+        with self.settings():
+            original, boards.BOARDS_MAX = boards.BOARDS_MAX, 1
+            try:
+                states = self.live(task=self.task.pk, order='name')
+            finally:
+                boards.BOARDS_MAX = original
+        self.assertEqual([s['assignment'] for s in states['states']], [self.a_oleg.pk])
+        self.assertEqual(states['overflow'], 1)

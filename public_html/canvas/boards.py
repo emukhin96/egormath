@@ -51,14 +51,20 @@ def _selection(request, worksheet, task_id=None):
         group = get_object_or_404(StudentGroup.visible_to(request.user), pk=group_id if group_id.isdigit() else 0)
         assignments = assignments.filter(student__in=group.students.all())
     by_name = ('student__last_name', 'student__first_name', 'student__username')
-    order = _order(request, task_id)
+    # На экран всегда попадают BOARDS_MAX самых свежих досок (пишущие сейчас
+    # не пропадают), а ?order= лишь переставляет их (ревью #295)
     assignments = list(assignments.annotate(last_canvas=Max('submissions__canvas_pages__student_updated_at'))
-                       .order_by(*(by_name if order == 'name' else ('-last_canvas', *by_name))))
-    if order == 'wrong':
-        wrong = set(Submission.objects.filter(assignment__in=assignments, task_id=task_id,
+                       .order_by('-last_canvas', *by_name))
+    overflow = max(0, len(assignments) - BOARDS_MAX)
+    shown = assignments[:BOARDS_MAX]
+    order = _order(request, task_id)
+    if order == 'name':
+        shown.sort(key=lambda a: (a.student.last_name, a.student.first_name, a.student.username))
+    elif order == 'wrong':
+        wrong = set(Submission.objects.filter(assignment__in=shown, task_id=task_id,
                                               auto_check=Submission.CHECK_WRONG).values_list('assignment_id', flat=True))
-        assignments.sort(key=lambda a: a.pk not in wrong)  # sort устойчив: внутри — по свежести
-    return assignments[:BOARDS_MAX], max(0, len(assignments) - BOARDS_MAX), group
+        shown.sort(key=lambda a: a.pk not in wrong)  # sort устойчив: внутри — по свежести
+    return shown, overflow, group
 
 
 def _task_numbers(worksheet):
