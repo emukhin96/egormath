@@ -57,6 +57,23 @@ class IssueWizardTests(TestCase):
         self.assertEqual(oleg.check_visibility, Assignment.CHECK_TEACHER)
         self.assertEqual(Assignment.objects.filter(student=self.anna).count(), 1)
 
+    def test_refresh_recomputes_for_new_sheet(self):
+        """Смена листка после ошибки отправки (ревью #284): контекст под новый
+        листок, введённое сохраняется, ничего не выдаётся и ошибок нет."""
+        failed = self.client.post(self.url, {'worksheet': self.sheet.pk, 'allow_photos': 'on'})
+        self.assertTrue(failed.context['check_locked'])
+        other = make_worksheet(self.teacher, title='Листок Б')
+        response = self.client.post(self.url, {'worksheet': other.pk, 'groups': [self.group.pk],
+                                               'allow_photos': 'on', 'swap_numbers': 'on', 'refresh': '1'})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['check_locked'])
+        self.assertEqual(response.context['issue_data']['assigned'], [])
+        self.assertNotContains(response, 'errorlist')
+        self.assertContains(response, f'name="groups" value="{self.group.pk}" id="id_groups_0" checked')
+        self.assertEqual(Assignment.objects.count(), 1)
+        back = self.client.post(self.url, {'worksheet': self.sheet.pk, 'refresh': '1'})
+        self.assertTrue(back.context['check_locked'])
+        self.assertEqual(back.context['issue_data']['assigned'], [self.anna.pk])
 
 @override_settings(INDEPENDENT_WORKS_ENABLED=True)
 class IssueIndependentTests(TestCase):

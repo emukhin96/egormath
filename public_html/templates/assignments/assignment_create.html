@@ -208,12 +208,18 @@
     return;
   }
 
-  /* Обычная выдача (E_Issue): выбор листка перезагружает мастер — сервер
-     пересчитывает, кому листок уже выдан, и режим автосверки */
+  /* Обычная выдача (E_Issue): выбор листка отправляет мастер на пересчёт
+     (refresh) — сервер заново считает, кому листок уже выдан, и режим
+     автосверки, введённые адресаты и настройки остаются */
   form.querySelectorAll('[name="worksheet"]').forEach(function (radio) {
     radio.addEventListener('change', function () {
-      if (form.dataset.bound === '1') { updateSummary(); return; }
-      window.location.assign(form.dataset.refreshUrl + '?worksheet=' + encodeURIComponent(radio.value));
+      var refresh = document.createElement('input');
+      refresh.type = 'hidden'; refresh.name = 'refresh'; refresh.value = '1';
+      form.appendChild(refresh);
+      // Отключённые радиокнопки автосверки в POST не попадут — режим для
+      // нового листка сервер выберет сам
+      form.action = form.dataset.refreshUrl;
+      form.submit();
     });
   });
   function updateSummary() {
