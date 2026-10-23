@@ -39,7 +39,7 @@ class TaskWindowsTests(TestCase):
         self.assertContains(response, 'Найдите отрезок 1')
         self.assertContains(response, 'Маска ответа: так видит ученик')
         self.assertContains(response, 'data-mask-check')
-        self.assertContains(response, 'Эталон в маске')
+        self.assertContains(response, '<span class="tw-label">Ответ</span>')
         self.assertEqual((response.context['ok'], response.context['answered']), (1, 2))
         self.assertEqual([a['name'] for a in response.context['answers']], ['Петя Белова', 'Петя Жуков'])
         self.assertContains(response, reverse('task_attempts', args=[self.oleg.pk, self.tasks[0].pk]))
@@ -64,7 +64,7 @@ class TaskWindowsTests(TestCase):
         self.assertContains(response, '← Петя Белова')
         self.assertContains(response, 'Задача 2 →')
         self.assertContains(response, '–+ существенное продвижение, 0%')
-        self.assertContains(response, 'Эталон в маске')
+        self.assertContains(response, '<span class="tw-label">Ответ</span>')
         self.assertNotContains(response, '·')
         # у первого по фамилии нет «предыдущего» ученика и задачи
         first = self.client.get(reverse('task_attempts', args=[self.anna.pk, self.tasks[0].pk]), {'item': self.items[0].pk})

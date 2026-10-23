@@ -53,7 +53,7 @@ class Assignment(models.Model):
     check_visibility = models.CharField(
         'Кому видна автосверка', max_length=12, choices=CHECK_CHOICES,
         default=CHECK_LIVE,
-        help_text='Учитель видит результат всегда; эталон ученику не '
+        help_text='Учитель видит результат всегда; правильный ответ ученику не '
                   'показывается ни в одном режиме. После выдачи не меняется')
     restrict_clipboard = models.BooleanField(RESTRICT_LABEL, default=False)
     swap_numbers = models.BooleanField(SWAP_LABEL, default=False)
@@ -197,7 +197,7 @@ class AnswerFields(models.Model):
     auto_check = models.CharField(
         'Автосверка', max_length=8, blank=True, default='',
         choices=CHECK_CHOICES,
-        help_text='Результат сравнения с эталоном; отметку ставит учитель')
+        help_text='Результат сравнения с правильным ответом; отметку ставит учитель')
     check_json = models.JSONField(
         'Сверка по слотам', default=dict, blank=True,
         help_text='Результат по каждому слоту маски: {"s1": "ok", "s2": "wrong"}')

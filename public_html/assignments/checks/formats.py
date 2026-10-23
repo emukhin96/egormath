@@ -198,7 +198,7 @@ def validate_collection_reference(reference, *, kind, unordered=False):
     if result.get('error'):
         raise ValueError(result['error'])
     if result.get('display') != reference:
-        raise formulas.FormulaUnavailable('не удалось проверить эталон коллекции')
+        raise formulas.FormulaUnavailable('не удалось проверить ответ из нескольких значений')
 
 
 def check_collection_exact(value, reference, *, kind, unordered=False):

@@ -85,7 +85,7 @@ class TableParseTests(SimpleTestCase):
     def test_slot_error_inside_cell_reported_with_number(self):
         spec = parse_mask('|---|---|\n| a | {{number: 1}} |\n| b | {{number: abc}} |')
         self.assertFalse(spec.is_valid)
-        self.assertEqual(spec.errors, ['слот 2 ({{number: …}}): эталон не разобран как число'])
+        self.assertEqual(spec.errors, ['слот 2 ({{number: …}}): ответ не разобран как число'])
 
     def test_table_without_slots_is_not_a_mask(self):
         self.assertEqual(parse_mask('| a | b |\n|---|---|').errors,

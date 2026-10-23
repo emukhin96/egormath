@@ -24,7 +24,7 @@
       {% include 'assignments/_photo_gallery.html' with photos=row.submission.photos.all photo_route='photo_file' editable=False %}
     </div>
     {% answer_material row.task subitems as material %}
-    {% if material %}<details class="boards-peek-reference" data-peek-reference><summary>Эталон</summary>{% include 'problems/_task_answers.html' with task=row.task %}</details>{% endif %}
+    {% if material %}<details class="boards-peek-reference" data-peek-reference><summary>Ответ</summary>{% include 'problems/_task_answers.html' with task=row.task %}</details>{% endif %}
     <p class="boards-peek-links"><a href="{% url 'review_assignment' assignment.pk %}#task-{{ row.number }}">Открыть в проверке</a></p>
   </div>
   {% endif %}

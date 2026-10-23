@@ -107,7 +107,7 @@ def _calculate():
                 # включая исходные области и стоимость коллекции.
                 if check(data['payload'], data['payload'], kind=kind,
                          unordered=mode == 'pair-unordered') != 'ok':
-                    raise ValueError('эталон коллекции не прошёл проверку')
+                    raise ValueError('ответ из нескольких значений не прошёл проверку')
                 result['trees'] = _export_trees()
             if 'value' in data:
                 result['status'] = check(data['value'], data['payload'], kind=kind,
@@ -121,7 +121,7 @@ def _calculate():
             from .expressions import check_equation, parse_expr
             reference = parse_expr(data['payload'])
             if not isinstance(reference, Eq):
-                raise ValueError('эталон должен быть уравнением с «=»')
+                raise ValueError('ответ должен быть уравнением с «=»')
             result = {'display': data['payload']}
             if 'value' in data:
                 result['status'] = check_equation(data['value'], reference,
@@ -146,7 +146,7 @@ def _calculate():
             return
         reference, display = _parse_reference(data['payload'], data['multiple'], numeric=numeric)
         if numeric and (reference.input_symbols or reference.positive or reference.substitutions):
-            raise ValueError('числовой эталон не должен содержать параметры')
+            raise ValueError('числовой ответ не должен содержать параметры')
         if reference.substitutions and mode != 'expression':
             raise ValueError('domain поддерживается только для expression')
         result = {'display': display}

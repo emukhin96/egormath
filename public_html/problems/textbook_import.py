@@ -156,7 +156,7 @@ def normalize_answer_mask(value, *, key='answer_mask'):
     spec = parse_mask(value, validate_references=True)
     if any(slot.reference_unavailable for slot in spec.slots):
         raise TextbookImportUnavailable(
-            f'Проверка эталона маски {key} временно недоступна. Повторите загрузку позже.')
+            f'Проверка ответа в маске {key} временно недоступна. Повторите загрузку позже.')
     if spec.errors or not spec.slots:
         details = '; '.join(spec.errors) or 'нет полей ответа'
         raise TextbookImportError(f'Некорректная маска {key}: {details}.')

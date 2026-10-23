@@ -48,7 +48,7 @@ class BoardsPeekFragmentTests(BoardsPeekBase):
         self.assertIn('data-status="wrong"', html)
         self.assertIn('✗ неверно', html)
         # эталон — под отдельным свёрнутым «Эталон», не рядом с ответом
-        self.assertIn('<summary>Эталон</summary>', html)
+        self.assertIn('<summary>Ответ</summary>', html)
         self.assertNotIn('review-reference', html)
         self.assertIn(reverse('review_assignment', args=[self.assignment.pk]) + '#task-1', html)
         # блок свёрнут по умолчанию: атрибута open нет
@@ -167,7 +167,7 @@ class BoardsConditionsPanelTests(BoardsPeekBase):
         positions = [html.index(text) for text in ('Найдите корень уравнения', 'Условие задачи 3', 'Условие задачи 4')]
         self.assertEqual(positions, sorted(positions))
         self.assertNotIn('Текстовый блок', html)
-        self.assertEqual(html.count('<summary>Эталон</summary>'), 3)
+        self.assertEqual(html.count('<summary>Ответ</summary>'), 3)
         self.assertIn('<span class="ws-num">3.</span>', html)
         self.assertIn(reverse('worksheet_boards', args=[self.worksheet.pk]) + '?task=%d' % third.pk, html)
         self.assertNotIn('is-current', html)

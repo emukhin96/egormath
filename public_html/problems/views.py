@@ -650,7 +650,7 @@ def task_mask_draft(request):
         'message': '' if mask else
         ('Ответ не добавлен — выберите другой источник или заполните ответ'
          if not request.POST.get('answer', '').strip() else
-         'Не удалось определить тип — выберите тип поля и проверьте эталон')})
+         'Не удалось определить тип — выберите тип поля и проверьте ответ')})
 
 
 def _worksheet_context(request):

@@ -97,10 +97,10 @@ def check_number_with_tolerance(value, reference, tolerance):
     from sympy import simplify, sympify
     from ..check_answer import MAX_EXPR_LEN
     if len(reference) > MAX_EXPR_LEN or len(tolerance) > MAX_EXPR_LEN:
-        raise ValueError('слишком длинный эталон или допуск')
+        raise ValueError('слишком длинный ответ или допуск')
     expected, limit = _number(reference), _number(tolerance)
     if expected is None or limit is None or sympify(limit).is_nonnegative is not True:
-        raise ValueError('эталон или допуск не разобран как допустимое число')
+        raise ValueError('ответ или допуск не разобран как допустимое число')
     if len(value) > MAX_EXPR_LEN:
         return UNKNOWN
     try:
@@ -135,7 +135,7 @@ def _pairs_equal(a, b, *, unordered=False):
 def check(value, reference, *, kind, unordered=False):
     parser = {'set': sets.parse_set, 'range': sets.parse_range}.get(kind, sets.parse_pairs)
     if len(reference) > sets.MAX_COLLECTION_LEN:
-        raise ValueError('слишком длинный эталон')
+        raise ValueError('слишком длинный ответ')
     # Эталон и ответ часто повторяют одни и те же выражения. Кэш
     # живёт только в этом вызове, не сохраняет ввод между задачами.
     parsed = {}
@@ -145,7 +145,7 @@ def check(value, reference, *, kind, unordered=False):
         return parsed[text]
     expected = parser(reference, value_parser=number, equal=_equal)
     if expected is None:
-        raise ValueError('числовой эталон не разобран')
+        raise ValueError('числовой ответ не разобран')
     if len(value) > sets.MAX_COLLECTION_LEN:
         return UNKNOWN
     try:

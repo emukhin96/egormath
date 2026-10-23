@@ -86,7 +86,7 @@ HELP = (
     ('{{truefalse: верно}}', 'пресет верно / неверно'),
     ('{{parity: чётная}}', 'пресет чётная / нечётная / общего вида '
                            '(к любому пресету можно дописать свои варианты через |)'),
-    ('{{simplify: \\frac{2}{a+3}}}', 'выражение: эквивалентно эталону и не менее упрощено'),
+    ('{{simplify: \\frac{2}{a+3}}}', 'выражение: эквивалентно ответу и не менее упрощено'),
     ('{{expression: 2a | positive: a}}', 'любое эквивалентное выражение; a — положительный параметр'),
     ('{{expression: ab/(a+b) | positive: a,b | domain: a<2b}}',
      'эквивалентное выражение при 0<a<2b; параметры и область берутся из условия задачи'),
@@ -317,7 +317,7 @@ def _parse_number(slot, payload):
         slot.tolerance_reference = tol_text.strip()
     value = sets.numeric_value(payload)
     if value is None:
-        slot.error = 'эталон не разобран как число'
+        slot.error = 'ответ не разобран как число'
         return
     slot.data, slot.tolerance, slot.reference = value, tolerance, payload.strip()
 
@@ -331,10 +331,10 @@ def _parse_format(slot, payload):
         slot.allow_quotient = True
     if slot.kind == DIGITS:
         value = payload if formats.digits(payload) else None
-        hint = 'эталон должен содержать только цифры 0–9 без пробелов'
+        hint = 'ответ должен содержать только цифры 0–9 без пробелов'
     elif slot.kind == DECIMAL:
         value = formats.decimal(payload)
-        hint = 'эталон: целое или десятичное число с запятой'
+        hint = 'ответ: целое или десятичное число с запятой'
     else:
         from . import numeric
         try:
@@ -342,7 +342,7 @@ def _parse_format(slot, payload):
                      else formats.ratio(payload))
         except numeric.Uncertain:
             value = None
-        hint = 'эталон: два числа через двоеточие, второе не равно нулю'
+        hint = 'ответ: два числа через двоеточие, второе не равно нулю'
     if value is None:
         slot.error = hint
         return
@@ -359,17 +359,17 @@ def _parse_expression(slot, payload):
     expr = expressions.parse_expr(payload)
     if slot.kind == EQUATION:
         if not isinstance(expr, Eq):
-            slot.error = 'эталон должен быть уравнением с «=»'
+            slot.error = 'ответ должен быть уравнением с «=»'
             return
     elif not isinstance(expr, Expr) or isinstance(expr, Eq):
-        slot.error = 'эталон не разобран как выражение'
+        slot.error = 'ответ не разобран как выражение'
         return
     slot.data, slot.reference = expr, payload.strip()
 
 
 def _parse_pair(slot, payload):
     if len(payload) > sets.MAX_COLLECTION_LEN:
-        slot.error = 'слишком длинный эталон пар'
+        slot.error = 'слишком длинный ответ из пар'
         return
     option = re.search(r'\|\s*unordered\s*$', payload)
     if option:
@@ -377,7 +377,7 @@ def _parse_pair(slot, payload):
         slot.unordered_pair = True
     pairs = sets.parse_pairs(payload)
     if not pairs:
-        slot.error = 'эталон: пары вида (a; b), несколько пар через ;'
+        slot.error = 'ответ: пары вида (a; b), несколько пар через ;'
         return
     slot.data, slot.reference = pairs, payload.strip()
 
@@ -397,7 +397,7 @@ def _parse_formula(slot, payload, *, validate=False):
 def _parse_set(slot, payload):
     values = sets.parse_set(payload) if payload.strip() else []
     if values is None:
-        slot.error = 'эталон: числа через ; (пусто — «нет решений»)'
+        slot.error = 'ответ: числа через ; (пусто — «нет решений»)'
         return
     slot.data = values
     slot.reference = payload.strip() or '∅'
@@ -406,14 +406,14 @@ def _parse_set(slot, payload):
 def _parse_range(slot, payload):
     value = sets.parse_range(payload)
     if value is None:
-        slot.error = 'эталон не разобран как число, множество чисел, промежуток или неравенство'
+        slot.error = 'ответ не разобран как число, множество чисел, промежуток или неравенство'
         return
     slot.data, slot.reference = value, payload.strip()
 
 def _parse_series(slot, payload):
     value = series.parse(payload)
     if value is None or series.canonical(value) is None:
-        slot.error = 'эталон: объединение серий вида π+2π*n'
+        slot.error = 'ответ: объединение серий вида π+2π*n'
         return
     slot.data, slot.reference = value, payload.strip()
 
