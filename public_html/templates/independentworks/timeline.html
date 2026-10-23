@@ -11,7 +11,7 @@
 <div class="tl-head">
   <div>
     <a class="live-back" href="{% url 'independentworks:progress' attempt.run_id %}">← {{ attempt.run.title }}, прогресс</a>
-    <h1>{{ student_name }}{% if copied %} <span class="live-copy" title="Копировал текст условия">•</span>{% endif %}</h1>
+    <h1>{{ student_name }}{% if copied or copied_whole %} <span class="live-copy" title="{% if copied_whole %}Копировал условие целиком{% if copied_whole > 1 %} ×{{ copied_whole }}{% endif %}{% else %}Копировал текст условия{% endif %}" aria-label="{% if copied_whole %}копировал условие целиком{% else %}копировал текст условия{% endif %}">•</span>{% endif %}</h1>
     <p class="live-meta">{{ attempt.run.kind_label }}, вариант {{ attempt.variant.number }}, {{ attempt.run.duration }} мин; {% if track %}{% with fmt=track.days|yesno:'d.m H:i,H:i' %}начал {{ attempt.started_at|date:fmt }}{% if attempt.submitted_at %}, сдал {{ attempt.submitted_at|date:fmt }}{% elif attempt.finished %}, время вышло {{ attempt.ends_at|date:fmt }}{% else %}, решает, до {{ attempt.ends_at|date:fmt }}{% endif %}{% endwith %}; работал {{ track.duration }}{% if track.away %}, из них {{ track.away }} вне страницы{% endif %}{% else %}ещё не начал{% endif %}</p>
   </div>
   {# Кнопки над правой колонкой и той же ширины (правило «панель = контролы над ней») #}

@@ -13,7 +13,7 @@ from assignments.checks import parse_mask, render_fragments
 from assignments.models import Review
 from assignments.timeline import activity_events, finish_events
 from workaudit.models import ActivityEvent
-from workaudit.services import copied_words, copy_label
+from workaudit.services import copied_words, copy_label, whole_copies
 from . import services as svc
 from .views import group_point_rows, point_rows
 
@@ -98,4 +98,6 @@ def attempt_timeline(request, attempt):
         'pending': pending, 'locked': bool(attempt.locked_at) and not attempt.finished,
         'student_name': attempt.student.get_full_name() or attempt.student.username,
         'copied': any(c['words'] > 1 for c in copies), 'now': timezone.now(),
+        # «копировал условие целиком» — как у имени в таблице прогресса
+        'copied_whole': whole_copies('attempt', [attempt]).get(attempt.pk, 0),
     })
