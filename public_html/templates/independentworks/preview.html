@@ -1,47 +1,160 @@
 {% extends 'independentworks/base.html' %}
 {% load task_extras %}
+{% block title %}Перед выдачей: {{ run.title }} — Математика{% endblock %}
+{% block sidebar %}{% endblock %}
 {% block content %}
-<div class="page-head"><div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'independentworks:catalog' %}">Самостоятельные</a><a href="{% url 'independentworks:edit' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Кандидаты по номерам</a></nav><h1>{{ run.title }} · перед выдачей</h1><p class="page-meta"><span>{{ recipients|length }} {{ recipients|length|plural_ru:'ученик,ученика,учеников' }}</span><span>{{ variants|length }} {{ variants|length|plural_ru:'вариант,варианта,вариантов' }}</span><span>{{ run.duration }} мин.</span></p></div></div>
+{% comment %}
+«Перед выдачей» по макету E_Preview (холст «Страницы учителя», 22.10.2026):
+сетка 1fr | 340px, «Изменить» и «Выдать N» над распределением той же ширины.
+Слева варианты вкладками, справа распределение по ученикам: смена варианта
+сохраняется сразу (тот же POST preview, без перезагрузки), «Перемешать» —
+поровну по вариантам. Выдача — independentworks:issue, как раньше. Без «·».
+{% endcomment %}
+<div class="pv-head">
+  <div class="pv-heading">
+    <a class="live-back" href="{% url 'independentworks:prepare' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">← Выдать задание</a>
+    <h1>Перед выдачей: {{ run.title }}</h1>
+    <p class="live-meta">{{ variants|length }} {{ variants|length|plural_ru:'вариант,варианта,вариантов' }}, {{ recipients|length }} {{ recipients|length|plural_ru:'ученик,ученика,учеников' }}, {{ run.duration }} мин{% if run.deadline %}, закончить до {{ run.deadline|date:'j E, H:i' }}{% endif %}</p>
+  </div>
+  {# Кнопки над распределением и той же ширины (правило «панель = контролы над ней») #}
+  <form method="post" action="{% url 'independentworks:issue' run.pk %}" class="pv-actions" id="issue-form">{% csrf_token %}
+    {% if run.plan.shortage or run.plan.repeats %}<label class="check-label pv-confirm"><input type="checkbox" name="confirm" required><span>Подтверждаю выдачу с повторениями</span></label>{% endif %}
+    <a class="btn btn-secondary" href="{% url 'independentworks:prepare' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Изменить</a>
+    <button class="btn"{% if run.superseded_at %} disabled{% endif %}>Выдать {{ recipients|length }}</button>
+  </form>
+</div>
 {% if run.superseded_at %}<p class="msg msg-warning">Этот предпросмотр заменён новым. Выдача из него недоступна; откройте актуальный предпросмотр.</p>{% endif %}
 {% if run.plan.shortage or run.plan.repeats %}<p class="msg msg-warning">Есть повторные варианты или ранее выданные пункты. Проверьте распределение и состав ниже.</p>{% endif %}
-<div class="iw-preview-layout"><div class="iw-preview-document">
-{% if variants|length > 1 %}<div class="form-buttons" role="group" aria-label="Выбрать вариант">{% for variant in variants %}<button type="button" class="btn btn-secondary" data-preview-select="{{ variant.number }}" aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}">Вариант {{ variant.number }}</button>{% endfor %}</div>{% endif %}
-{% for variant in variants %}
-<section data-preview-variant="{{ variant.number }}" {% if not forloop.first %}hidden{% endif %}>
-<h2>Вариант {{ variant.number }}</h2>
-{% for row in variant.rows %}
-{% for note in row.notes %}<div class="card ws-view math-content">{{ note|web_text }}</div>{% endfor %}
-<!-- Общее условие и подпункты одного номера остаются в одной карточке. -->
-{% if row.group_start %}<div class="card ws-view">{% endif %}<section class="iw-point" data-task-png-root>
-<div class="task-png-corner">{% include 'includes/task_png_button.html' %}</div>
-<div data-task-png-content>{% include 'assignments/_point_content.html' %}</div>
-{% if row.repeated %}<p class="msg msg-warning">№{{ row.point.label }} · этот пункт уже выдавался в предыдущих попытках.</p>{% endif %}
-{% if row.fragments %}<div>{% include 'assignments/_mask.html' with fragments=row.fragments editable=True show_checks=False %}</div><p class="helptext">Пробный ввод не сохраняется.</p>{% else %}<p class="helptext">{% if run.allow_photos %}Фото решения · ручная проверка.{% else %}Задание без электронного ввода ответа.{% endif %}</p>{% endif %}
-<details class="problem-section"><summary>Ответ и решение — только учителю</summary><div class="math-content">{{ row.reference|web_answer }} {{ row.solution|web_text }}</div>{% include 'problems/_task_images.html' with images=row.reference_images %}</details>
-</section>{% if row.group_end %}</div>{% endif %}
-{% endfor %}
-{% for note in variant.tail_notes %}<div class="card ws-view math-content">{{ note|web_text }}</div>{% endfor %}
-</section>
-{% endfor %}
+
+<div class="pv-grid">
+  <section class="card pv-variants" aria-label="Варианты">
+    <div class="pv-variants-head">
+      {% if variants|length > 1 %}<div class="pv-tabs" role="tablist" aria-label="Вариант">{% for variant in variants %}<button type="button" role="tab" data-preview-select="{{ variant.number }}" aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">Вариант {{ variant.number }}</button>{% endfor %}</div>{% else %}<span class="pv-single">Вариант 1</span>{% endif %}
+      <span class="helptext">Ответ и решение видите только вы</span>
+    </div>
+    {% for variant in variants %}
+    <div class="pv-variant" data-preview-variant="{{ variant.number }}"{% if not forloop.first %} hidden{% endif %}>
+      {% for row in variant.rows %}
+      {% for note in row.notes %}<div class="pv-note math-content">{{ note|web_text }}</div>{% endfor %}
+      {# Общее условие и подпункты одного номера — одна группа без разделителей, как у ученика #}
+      {% if row.group_start %}<div class="pv-group">{% endif %}
+      <article class="pv-point" data-task-png-root>
+        <div class="pv-point-body">
+          <div class="task-png-corner">{% include 'includes/task_png_button.html' %}</div>
+          <div data-task-png-content>{% include 'assignments/_point_content.html' %}</div>
+          {% if row.repeated %}<p class="msg msg-warning">Задание {{ row.point.label }} уже выдавалось в предыдущих попытках.</p>{% endif %}
+          {% if row.fragments %}<div class="pv-mask">{% include 'assignments/_mask.html' with fragments=row.fragments editable=True show_checks=False %}<span class="helptext">Пробный ввод не сохраняется.</span></div>
+          {% else %}<p class="helptext">{% if run.allow_photos %}Фото решения, проверяете вы.{% else %}Задание без электронного ввода ответа.{% endif %}</p>{% endif %}
+        </div>
+        <div class="pv-reference">
+          <span class="tw-label">Ответ</span>
+          <div class="math-content">{{ row.reference|default:'—'|web_answer }}</div>
+          {% include 'problems/_task_images.html' with images=row.reference_images %}
+          {% if row.solution %}<details class="tw-solution"><summary>Решение</summary><div class="math-content">{{ row.solution|web_text }}</div></details>{% endif %}
+        </div>
+      </article>
+      {% if row.group_end %}</div>{% endif %}
+      {% endfor %}
+      {% for note in variant.tail_notes %}<div class="pv-note math-content">{{ note|web_text }}</div>{% endfor %}
+    </div>
+    {% endfor %}
+  </section>
+
+  <aside class="card pv-side" aria-label="Распределение по ученикам">
+    <div class="pv-side-head">
+      <span class="tw-label">Распределение</span>
+      <div class="pv-counts">{% for variant in variants %}<span class="pv-count"><span>вариант {{ variant.number }}</span><b data-variant-count="{{ variant.number }}">0</b></span>{% endfor %}</div>
+      {% if variants|length > 1 %}<button type="button" class="btn btn-secondary btn-small" data-shuffle>Перемешать поровну</button>{% endif %}
+    </div>
+    <form method="post" class="pv-students" data-distribution>{% csrf_token %}
+      <ul>
+        {% for id, name, num in recipients %}
+        <li><span class="pv-name">{{ name }}</span><span class="pv-pick" role="radiogroup" aria-label="Вариант: {{ name }}">{% for variant in variants %}<label><input type="radio" name="student_{{ id }}" value="{{ variant.number }}"{% if variant.number == num %} checked{% endif %}><span>{{ variant.number }}</span></label>{% endfor %}</span></li>
+        {% endfor %}
+      </ul>
+      <noscript><button class="btn btn-secondary">Сохранить распределение</button></noscript>
+    </form>
+    <span class="helptext">Распределение сохраняется сразу.</span>
+  </aside>
 </div>
-<aside class="card form-section iw-workspace-sticky"><h2>Распределение по ученикам</h2>
-<form method="post" class="form-section">{% csrf_token %}
-{% for id, name, num in recipients %}<label>{{ name }}<select name="student_{{ id }}">{% for variant in variants %}<option value="{{ variant.number }}" {% if variant.number == num %}selected{% endif %}>Вариант {{ variant.number }}</option>{% endfor %}</select></label>{% endfor %}
-<button class="btn btn-secondary">Сохранить распределение</button></form></aside>
-</div>
-<form method="post" action="{% url 'independentworks:issue' run.pk %}" class="card form-section">{% csrf_token %}
-{% if run.plan.shortage or run.plan.repeats %}<label class="check-label assignment-photo-option"><input type="checkbox" name="confirm" required><span>Подтверждаю выдачу с повторениями</span></label>{% endif %}
-<div class="form-buttons"><button class="btn" {% if run.superseded_at %}disabled{% endif %}>Выдать просмотренные варианты</button><a class="btn btn-secondary" href="{% url 'independentworks:prepare' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Изменить параметры</a></div>
-</form>
 {% endblock %}
 {% block extra_js %}
 {% include 'problems/_mask_scripts.html' %}
 <script>
-document.addEventListener('click', function(event) {
-  var button = event.target.closest('[data-preview-select]');
-  if (!button) return;
-  document.querySelectorAll('[data-preview-variant]').forEach(function(panel) { panel.hidden = panel.dataset.previewVariant !== button.dataset.previewSelect; });
-  document.querySelectorAll('[data-preview-select]').forEach(function(item) { item.setAttribute('aria-pressed', String(item === button)); });
-});
+(function () {
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-preview-select]');
+    if (!button) return;
+    document.querySelectorAll('[data-preview-variant]').forEach(function (panel) { panel.hidden = panel.dataset.previewVariant !== button.dataset.previewSelect; });
+    document.querySelectorAll('[data-preview-select]').forEach(function (item) { item.setAttribute('aria-selected', String(item === button)); });
+  });
+  var form = document.querySelector('[data-distribution]');
+  if (!form) return;
+  function counts() {
+    document.querySelectorAll('[data-variant-count]').forEach(function (node) {
+      node.textContent = form.querySelectorAll('input[value="' + node.dataset.variantCount + '"]:checked').length;
+    });
+  }
+  /* Сохранения идут строго по очереди (EgorAutosave.enqueue), снимок формы —
+     в момент изменения: устаревший ответ не перезапишет свежий. Пока очередь
+     не пуста, «Выдать» недоступна; после неудачи выбор возвращается к
+     последнему сохранённому распределению — выдают то, что на экране. */
+  var issueButton = document.querySelector('#issue-form button:not([type=button])');
+  var locked = !issueButton || issueButton.disabled, pending = 0, saved = snapshot(), tail = Promise.resolve();
+  function snapshot() {
+    return Array.from(form.querySelectorAll('input[type=radio]:checked')).map(function (input) { return [input.name, input.value]; });
+  }
+  function restore(state) {
+    state.forEach(function (pair) {
+      var input = form.querySelector('input[name="' + pair[0] + '"][value="' + pair[1] + '"]');
+      if (input) input.checked = true;
+    });
+    counts();
+  }
+  function busy(delta) {
+    pending += delta;
+    if (!locked) issueButton.disabled = pending > 0;
+  }
+  function enqueue(operation) {
+    if (window.EgorAutosave && EgorAutosave.enqueue) return EgorAutosave.enqueue(form, operation);
+    tail = tail.catch(function () {}).then(operation);
+    return tail;
+  }
+  function save() {
+    counts();
+    var body = new FormData(form), state = snapshot();
+    busy(1);
+    enqueue(function () {
+      /* Успех — только JSON {ok: true}: редирект (истекла сессия, работу
+         выдали в другой вкладке) fetch не проходит, он считается ошибкой */
+      return fetch(window.location.href, {method: 'POST', body: body, redirect: 'manual',
+                                          headers: {'X-Requested-With': 'XMLHttpRequest'}}).then(function (response) {
+        return response.json().catch(function () { return {}; }).then(function (data) {
+          if (!response.ok || !data.ok) throw new Error(data.message || 'Не удалось сохранить распределение');
+        });
+      }).then(function () {
+        saved = state;
+        if (window.EgorAutosave) EgorAutosave.showSaved(true, 'Распределение сохранено');
+      });
+    }).catch(function (error) {
+      if (window.EgorAutosave) EgorAutosave.showSaved(false, error.message || 'Не удалось сохранить распределение');
+    }).then(function () {
+      busy(-1);
+      if (!pending) restore(saved);
+    });
+  }
+  document.getElementById('issue-form').addEventListener('submit', function (event) {
+    if (pending) event.preventDefault();
+  });
+  form.addEventListener('change', save);
+  var shuffle = document.querySelector('[data-shuffle]');
+  if (shuffle) shuffle.addEventListener('click', function () {
+    var rows = Array.from(form.querySelectorAll('li')), total = document.querySelectorAll('[data-variant-count]').length;
+    for (var i = rows.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = rows[i]; rows[i] = rows[j]; rows[j] = t; }
+    rows.forEach(function (row, index) { row.querySelector('input[value="' + (index % total + 1) + '"]').checked = true; });
+    save();
+  });
+  counts();
+})();
 </script>
 {% endblock %}
