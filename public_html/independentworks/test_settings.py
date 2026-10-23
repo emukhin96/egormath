@@ -57,3 +57,15 @@ class RunSettingsDrawerTests(TestCase):
         self.assertIsNone(self.run.deadline)
         response = self.client.post(url, {'deadline': 'завтра'}, follow=True)
         self.assertContains(response, 'Не удалось разобрать срок')
+
+    def test_past_deadline_rejected(self):
+        """Срок в прошлом не принимается: иначе начатые попытки необратимо
+        закрылись бы (ревью #289)."""
+        url = reverse('independentworks:run_deadline', args=[self.run.pk])
+        past = timezone.localtime(timezone.now() - timedelta(hours=1)).replace(second=0, microsecond=0)
+        response = self.client.post(url, {'deadline': past.strftime('%Y-%m-%dT%H:%M')}, follow=True)
+        self.assertContains(response, 'Срок уже прошёл')
+        self.run.refresh_from_db()
+        self.started.refresh_from_db()
+        self.assertIsNone(self.run.deadline)
+        self.assertFalse(self.started.finished)

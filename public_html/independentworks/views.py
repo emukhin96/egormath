@@ -1067,9 +1067,11 @@ def settings_context(context):
 @teacher_required
 @require_POST
 def run_deadline(request, pk):
-    """«Начать не позже» из панели настроек выдачи: общий срок проведения;
-    services.set_deadline пересчитывает срок начатых попыток (продление даёт
-    время, сокращение завершает работу по новому сроку)."""
+    """«Закончить не позже» из панели настроек выдачи: общий срок
+    проведения; services.set_deadline пересчитывает срок начатых попыток
+    (продление даёт время, сокращение завершает работу по новому сроку).
+    Срок в прошлом не принимаем, как prepare и issue: он необратимо закрыл
+    бы все начатые попытки."""
     run = teacher_run(request, pk)
     raw = request.POST.get('deadline', '').strip()
     deadline = None
@@ -1078,6 +1080,9 @@ def run_deadline(request, pk):
             deadline = timezone.make_aware(datetime.strptime(raw, '%Y-%m-%dT%H:%M'))
         except ValueError:
             messages.error(request, 'Не удалось разобрать срок')
+            return redirect('independentworks:progress', pk=pk)
+        if deadline <= timezone.now():
+            messages.error(request, 'Срок уже прошёл. Укажите время в будущем.')
             return redirect('independentworks:progress', pk=pk)
     with transaction.atomic():
         svc.set_deadline(run.pk, deadline)
