@@ -34,9 +34,8 @@
           {% include 'problems/_editor_form.html' with form=condition_form block='condition' %}
         </details>{% endif %}
         {% if subrows %}<ol class="subitems">{% for row in subrows %}<li class="math-content">{{ row.sub.text_latex|web_text }}</li>{% endfor %}</ol>{% endif %}
-        {# В редакторе видны все рисунки, включая ответы и решения; на PNG — только рисунки условия #}
-        <div data-task-png-skip>{% task_images task 'all' %}</div>
-        <div data-task-png-only hidden>{% task_images task %}</div>
+        {# Только рисунки условия; рисунки к ответам и решениям — в их блоках ниже (owner_images) #}
+        {% task_images task %}
       </section>
       {% if not editor_readonly %}
       <details class="problem-section"><summary>Подпункты: добавить, изменить порядок</summary>
@@ -82,7 +81,10 @@
       {% endif %}
       {% if subrows %}{% for row in subrows %}
         {% include 'problems/_editor_answer.html' with owner=row.sub sub=row.sub answer_form=row.answer_form solution_form=row.solution_form %}
-      {% endfor %}{% else %}
+      {% endfor %}
+        {# Рисунки общего ответа/решения задачи: подпункты на них не ссылаются, иначе они пропали бы из карточки #}
+        {% task_unplaced_images task as task_pics %}{% if task_pics %}<section class="problem-answer"><h3>Рисунки к ответу и решению задачи</h3>{% include 'problems/_task_images.html' with images=task_pics only %}</section>{% endif %}
+      {% else %}
         {% include 'problems/_editor_answer.html' with owner=task %}
       {% endif %}
     </div>
