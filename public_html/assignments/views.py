@@ -470,7 +470,8 @@ def assignment_create(request):
             return prepare_run(request, work_id)
         return render(request, 'assignments/assignment_create.html', {
             'independent': True, 'choose_work': True, 'sheets_shown': ISSUE_SHEETS_SHOWN,
-            'work_options': work_options(request.user, request.GET.get('q', ''))})
+            'work_options': work_options(request.user, request.GET.get('q', '')),
+            'works_limit': ISSUE_WORKS_LIMIT})
     initial = {'allow_photos': True}
     worksheet_id = request.GET.get('worksheet', '')
     # Подборку из списка формы уже убрал queryset; прямой id объясняем
@@ -543,6 +544,8 @@ def _issue_context(form, teacher):
                           sorted(Assignment.CHECK_CHOICES, key=lambda c: c[0] != Assignment.CHECK_LIVE)],
         'check_value': str(check.value() or Assignment.CHECK_LIVE), 'check_locked': check.field.disabled,
         'issue_data': recipients_data(form, assigned=form.fields['students'].widget.assigned_ids),
+        # Кнопки «Завтра» / «Через неделю» считают дату в поясе сайта
+        'timezone': timezone.get_current_timezone_name(),
     }
 
 
@@ -559,14 +562,27 @@ def recipients_data(form, assigned=()):
             'assigned': sorted(int(pk) for pk in assigned)}
 
 
-def work_options(user, query=''):
-    """Шаблоны самостоятельных карточками (макет E_IssueIW): число номеров,
-    исходный листок и история выдач."""
-    from independentworks.models import Work
-    return list(Work.visible_to(user).select_related('source_worksheet').filter(title__icontains=query.strip()).annotate(
+ISSUE_WORKS_LIMIT = 100
+
+
+def _work_cards(works):
+    return works.select_related('source_worksheet').annotate(
         number_count=Count('positions', filter=Q(positions__text='') | Q(positions__candidates__isnull=False), distinct=True),
         issued=Count('runs', filter=Q(runs__issued_at__isnull=False), distinct=True),
-        last_issued=Max('runs__issued_at')).order_by('-updated_at', '-pk'))
+        last_issued=Max('runs__issued_at'))
+
+
+def work_options(user, query='', current=None):
+    """Шаблоны самостоятельных карточками (макет E_IssueIW): число номеров,
+    исходный листок и история выдач. Не больше ISSUE_WORKS_LIMIT последних
+    (у суперпользователя visible_to — все шаблоны); выбранный шаблон в
+    списке всегда."""
+    from independentworks.models import Work
+    visible = Work.visible_to(user)
+    works = list(_work_cards(visible.filter(title__icontains=query.strip())).order_by('-updated_at', '-pk')[:ISSUE_WORKS_LIMIT])
+    if current is not None and current.pk not in {w.pk for w in works}:
+        works = list(_work_cards(visible.filter(pk=current.pk))) + works
+    return works
 
 
 # --- Кабинет ученика ---

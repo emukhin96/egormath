@@ -18,13 +18,14 @@ independentworks.views.prepare_run. Повторная попытка (parent): 
         <div class="is-sheets" role="radiogroup" aria-label="Шаблон">
           {% for t in work_options %}
           <label class="is-sheet" data-sheet-choice{% if forloop.counter > sheets_shown %} data-sheet-more hidden{% endif %}>
-            <input type="radio" name="work_choice" value="{{ t.pk }}" data-work-url="{% url 'assignment_create' %}?mode=independent&amp;work={{ t.pk }}"{% if work.pk == t.pk %} checked{% endif %}>
+            <input type="radio" name="work_choice" value="{{ t.pk }}"{% if work.pk == t.pk %} data-current{% endif %} data-work-url="{% url 'assignment_create' %}?mode=independent&amp;work={{ t.pk }}"{% if work.pk == t.pk %} checked{% endif %}>
             <span class="is-sheet-body"><span class="is-sheet-title">{{ t.title }}</span><span class="is-sheet-meta">{{ t.number_count }} {{ t.number_count|plural_ru:'номер,номера,номеров' }}{% if t.source_worksheet_id %}, из листка «{{ t.source_worksheet.title }}»{% endif %}</span></span>
             <span class="is-sheet-history">{% if t.issued %}выдавалась {{ t.issued }} {{ t.issued|plural_ru:'раз,раза,раз' }}, последний {{ t.last_issued|date:'d.m' }}{% else %}не выдавалась{% endif %}</span>
           </label>
           {% empty %}<p class="helptext">Шаблонов пока нет — <a href="{% url 'independentworks:create' %}">создайте самостоятельную</a>.</p>{% endfor %}
         </div>
         {% if work_options|length > sheets_shown %}<button type="button" class="linklike is-all" data-sheet-all>Все шаблоны, {{ work_options|length }}</button>{% endif %}
+        {% if work_options|length >= works_limit %}<p class="helptext">Здесь {{ works_limit }} последних шаблонов, остальные — в разделе <a href="{% url 'independentworks:catalog' %}">«Самостоятельные»</a>.</p>{% endif %}
         {% endif %}
       </section>
 

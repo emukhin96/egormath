@@ -546,7 +546,7 @@ def prepare_run(request, pk):
                     'из раздела «Самостоятельные».')
                 return redirect('independentworks:catalog')
             return redirect('independentworks:preview', pk=run.pk)
-    from assignments.views import ISSUE_SHEETS_SHOWN, recipients_data, work_options
+    from assignments.views import ISSUE_SHEETS_SHOWN, ISSUE_WORKS_LIMIT, recipients_data, work_options
     return render(request, 'assignments/assignment_create.html', {
         'independent': True,
         'work': work,
@@ -557,7 +557,8 @@ def prepare_run(request, pk):
         'timezone': timezone.get_current_timezone_name(),
         # Макет E_IssueIW: шаблоны карточками (кроме повторной попытки — там
         # шаблон задан), итог «Кому» по участникам групп
-        'work_options': [] if parent else work_options(request.user),
+        'work_options': [] if parent else work_options(request.user, current=work),
+        'works_limit': ISSUE_WORKS_LIMIT,
         'sheets_shown': ISSUE_SHEETS_SHOWN,
         'work_numbers': work.positions.filter(Q(text='') | Q(candidates__isnull=False)).distinct().count(),
         'issue_data': recipients_data(form),

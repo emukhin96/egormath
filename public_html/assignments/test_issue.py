@@ -57,6 +57,13 @@ class IssueWizardTests(TestCase):
         self.assertEqual(oleg.check_visibility, Assignment.CHECK_TEACHER)
         self.assertEqual(Assignment.objects.filter(student=self.anna).count(), 1)
 
+    def test_timezone_for_due_buttons(self):
+        """«Завтра» / «Через неделю» считают дату в поясе сайта: пустой
+        timeZone ломал Intl.DateTimeFormat (ревью #285)."""
+        response = self.client.get(self.url, {'worksheet': self.sheet.pk})
+        self.assertTrue(response.context['timezone'])
+        self.assertNotContains(response, "timeZone: ''")
+
     def test_refresh_recomputes_for_new_sheet(self):
         """Смена листка после ошибки отправки (ревью #284): контекст под новый
         листок, введённое сохраняется, ничего не выдаётся и ошибок нет."""
@@ -102,7 +109,7 @@ class IssueIndependentTests(TestCase):
 
     def test_work_page(self):
         response = self.client.get(self.url, {'mode': 'independent', 'work': self.work.pk})
-        self.assertContains(response, f'value="{self.work.pk}" data-work-url=', count=1)
+        self.assertContains(response, f'value="{self.work.pk}" data-current data-work-url=', count=1)
         self.assertContains(response, 'не выдавалась')
         self.assertContains(response, 'data-duration="45"')
         self.assertContains(response, 'name="withhold_answers" value="on" checked')
@@ -118,3 +125,18 @@ class IssueIndependentTests(TestCase):
         run = Run.objects.get(work=self.work)
         self.assertRedirects(response, reverse('independentworks:preview', args=[run.pk]), fetch_redirect_response=False)
         self.assertEqual(run.release_mode, 'auto')
+
+    def test_template_switch_and_limit(self):
+        """Смена шаблона с введёнными настройками — с подтверждением; в
+        карточках не больше ISSUE_WORKS_LIMIT, выбранный — всегда (ревью #285)."""
+        from unittest import mock
+        from independentworks.models import Work
+        for n in range(3):
+            Work.objects.create(owner=self.teacher, title=f'Свежий {n}')
+        with mock.patch('assignments.views.ISSUE_WORKS_LIMIT', 2):
+            response = self.client.get(self.url, {'mode': 'independent', 'work': self.work.pk})
+        titles = [w.title for w in response.context['work_options']]
+        self.assertEqual(titles[0], 'Контрольная: подобие')
+        self.assertEqual(len(titles), 3)
+        self.assertContains(response, f'value="{self.work.pk}" data-current')
+        self.assertContains(response, 'Перейти к другому шаблону?')

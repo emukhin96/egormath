@@ -113,16 +113,33 @@
   }
   if (sheetFilter) sheetFilter.addEventListener('input', filterCards);
   if (showAll) showAll.addEventListener('click', function () { showAll.hidden = true; filterCards(); });
-  document.querySelectorAll('[name="work_choice"]').forEach(function (radio) {
-    radio.addEventListener('change', function () { window.location.assign(radio.dataset.workUrl); });
-  });
   filterCards();
 
   var form = document.getElementById('assignment-create-form');
+  /* Состояние настроек без выбора шаблона: карточка шаблона сама по себе
+     не «изменение» */
+  function formState() {
+    var data = new FormData(form);
+    data.delete('work_choice');
+    return new URLSearchParams(data).toString();
+  }
+  var initialState = form ? formState() : '';
+  /* Другой шаблон — переход на его страницу; введённое (или вернувшееся с
+     ошибками) пропадёт, поэтому сначала спрашиваем */
+  document.querySelectorAll('[name="work_choice"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      var dirty = form && (form.dataset.bound === '1' || formState() !== initialState);
+      if (dirty && !window.confirm('Введённые настройки выдачи пропадут. Перейти к другому шаблону?')) {
+        var current = document.querySelector('[name="work_choice"][data-current]');
+        if (current) current.checked = true; else radio.checked = false;
+        return;
+      }
+      window.location.assign(radio.dataset.workUrl);
+    });
+  });
   if (!form) return;
-  var initialState = new URLSearchParams(new FormData(form)).toString();
   document.querySelectorAll('[data-save-draft-before-leave]').forEach(function (backLink) { backLink.addEventListener('click', function (event) {
-    var currentState = new URLSearchParams(new FormData(form)).toString();
+    var currentState = formState();
     if (form.dataset.draftSaved === '1' && currentState === initialState) return;
     event.preventDefault();
     if (window.confirm('Настройки ещё не сохранены как черновик. Сохранить перед выходом?')) {
