@@ -31,7 +31,7 @@ class StudentChoiceField(forms.ModelMultipleChoiceField):
     def label_from_instance(self, user):
         name = user.get_full_name() or user.username
         grade = getattr(user.profile, 'grade', None)
-        return f'{name} · {grade} класс' if grade else name
+        return f'{name}, {grade} класс' if grade else name
 
 
 class AssignmentCreateForm(forms.Form):
