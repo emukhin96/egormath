@@ -16,11 +16,11 @@ _progress_table.html, их обновляет опрос teacher_progress.js. Б
   <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'worksheet_detail' worksheet.pk %}">Листок</a>
     {% if canvas_enabled %}<a class="btn btn-secondary" href="{% url 'worksheet_boards' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">Доски учеников</a>{% endif %}
-    {% if summary.pending %}<a class="btn" href="{% url 'assignment_list' %}?status=submitted&amp;worksheet={{ worksheet.pk }}">Проверить {{ summary.pending }}</a>{% endif %}
+    {% if summary.pending %}<a class="btn" href="{% url 'assignment_review_queue' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">Проверить {{ summary.pending }}</a>{% endif %}
   </div>
 </div>
 <div data-progress-table data-live-file="{% live_file 'worksheet' worksheet.pk %}">{% include 'assignments/_progress_table.html' %}</div>
 {% if canvas_enabled %}<div class="live-canvas-toggle">{% include 'canvas/_toggle.html' %}</div>{% endif %}
 {% include 'assignments/_progress_dialog.html' %}
 {% endblock %}
-{% block extra_js %}{# mathlive, mask.js и check_badge.js — маска «так видит ученик» в окне задачи #}<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/check_badge.js' %}"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=8"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=2"></script>{% endif %}{% endblock %}
+{% block extra_js %}{# mathlive, mask.js и check_badge.js — маска «так видит ученик» в окне задачи #}<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/check_badge.js' %}"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=9"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=2"></script>{% endif %}{% endblock %}

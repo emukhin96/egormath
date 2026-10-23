@@ -5,6 +5,7 @@
     {% if not simple_answers %}<span class="helptext">{% if owner.author_answer_latex %}Авторский{% elif owner.answer_latex %}Редакторский / AI{% endif %}</span>{% endif %}
   </div>
   <div class="math-content">{{ owner.effective_answer_latex|default:'—'|web_text|linebreaksbr }}</div>
+  {% owner_images task owner 'answer' %}
   {% if not editor_readonly %}<details class="ws-add-text"><summary>{% if simple_answers %}Править ответ{% else %}Править ответ и источники{% endif %}</summary>
     {% include 'problems/_editor_form.html' with form=answer_form block='answer' %}
     {% if not simple_answers %}<p class="helptext">Основной — авторский ответ. Редакторский / AI используется при его отсутствии.</p>{% endif %}
@@ -26,6 +27,7 @@
     <summary>Решение</summary>
     {% if not simple_answers %}<p class="helptext">Авторские ответ и решение имеют приоритет. Если авторское поле пустое, используется редакторская / AI-версия.</p>{% endif %}
     {% for text in owner|complete_solutions %}{% if not forloop.first %}<p class="helptext">Полное решение от AI</p>{% endif %}<div class="math-content">{{ text|web_text|linebreaksbr }}</div>{% empty %}<div class="math-content">Решение пока не добавлено.</div>{% endfor %}
+    {% owner_images task owner 'solution' %}
     {% if not editor_readonly %}<details class="ws-add-text"><summary>Править решение</summary>
       {% include 'problems/_editor_form.html' with form=solution_form block='solution' %}
     </details>{% endif %}

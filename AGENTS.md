@@ -74,6 +74,8 @@ make test         # только Django-тесты
 - Уведомления об успехе — тост `#ws-saved` справа снизу (`EgorAutosave.showSaved`),
   не новые плашки `.msg-success`. Подробности — в [docs/PIPELINE.md](docs/PIPELINE.md),
   раздел «Уведомления пользователя».
+- «Сохранить» во всплывающем окне после успеха закрывает окно, подтверждение —
+  тостом (раздел «Уведомления пользователя» в [docs/PIPELINE.md](docs/PIPELINE.md)).
 - Новый повторяющийся набор Tailwind-утилит — в `@layer components`
   (`public_html/static/css/input.css`), а не длинной строкой `class="..."`
   по шаблонам.

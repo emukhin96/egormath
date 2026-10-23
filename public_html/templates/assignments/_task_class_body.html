@@ -1,0 +1,35 @@
+{% load task_extras %}{% comment %}
+Фрагмент «задачи у класса»: прогресс по задаче (полоса и счётчики) и ответы
+класса группами (windows.class_answer_groups). Плитка или имя ученика
+открывают «задачу у ученика» в окне (data-attempt-url). Без имён (anonymous)
+— «Ученик N», без метки «•» и без ссылок на работу.
+{% endcomment %}
+<section class="card tc-progress" aria-label="Прогресс по задаче">
+  <div class="tc-progress-head"><h2>Прогресс по задаче</h2><span class="tw-label" data-live-status role="status">обновляется каждые 5 секунд</span></div>
+  <div class="tc-bar" aria-hidden="true">{% for b in bar %}{% if b.count %}<span class="tc-bar-{{ b.key }}" style="width: {{ b.percent|stringformat:'s' }}%"></span>{% endif %}{% endfor %}</div>
+  <div class="tc-legend">{% for b in bar %}<span class="tc-legend-item"><span class="tc-dot tc-bar-{{ b.key }}" aria-hidden="true"></span><span class="tw-label">{{ b.label }}</span><b>{{ b.count }}</b></span>{% endfor %}</div>
+  <dl class="tc-facts">
+    <dt>Ответили</dt><dd>{{ answered }} из {{ total }}</dd>
+    <dt>Попыток до верного</dt><dd>{% for count, n in tries %}✓{% if count > 1 %}<sub>{{ count }}</sub>{% endif %} {{ n }}{% if not forloop.last %}, {% endif %}{% empty %}пока никто{% endfor %}</dd>
+  </dl>
+</section>
+<section class="tc-groups" aria-label="Ответы класса">
+  {% for g in answer_groups %}
+  <article class="card tc-group tc-group-{{ g.kind }}">
+    <div class="tc-group-head">
+      <span class="tc-group-title">{% if g.sample %}{% if g.sample.shown %}{% include 'assignments/_mask.html' with fragments=g.sample.shown editable=False show_checks=False %}{% else %}<span class="math-content">{{ g.sample.answer|default:'—'|web_answer }}</span>{% endif %}{% else %}<b>{{ g.title }}</b>{% endif %}<span class="tc-verdict">{{ g.verdict }}</span></span>
+      <span class="tc-count">{{ g.rows|length }}</span>
+    </div>
+    <ul class="tc-people">
+      {% for row in g.rows %}{% with person=row.person cell=row.cell %}
+      <li>
+        <span class="tc-name">{% if anonymous %}{{ row.name }}{% else %}<button type="button" class="linklike" data-attempt-url="{% url 'task_attempts' person.assignment.pk cell.task.pk %}?item={{ cell.item.pk }}{% if cell.is_part %}&amp;subitem={{ cell.owner.pk }}{% endif %}">{{ row.name }}</button>{% if row.copied %} <span class="live-copy" title="{{ person.copy_note|capfirst }}">•</span>{% endif %}{% endif %}</span>
+        {% if g.kind == 'live' or g.kind == 'rest' %}<span class="tc-now">{{ person.now }}</span>{% else %}<span class="live-table tc-mark">{% if anonymous %}<span class="progress-mark progress-{{ cell.status }}" title="{{ cell.status_label }}">{% if cell.status == 'ok' %}✓{% if cell.attempt_count > 1 %}<sub>{{ cell.attempt_count }}</sub>{% endif %}{% elif cell.status == 'wrong' %}×<sub>{{ cell.attempt_count }}</sub>{% else %}…{% endif %}</span>{% else %}{% include 'assignments/_progress_button.html' %}{% endif %}</span>{% endif %}
+      </li>
+      {% endwith %}{% endfor %}
+    </ul>
+  </article>
+  {% empty %}
+  <p class="helptext">Листок пока никому не выдан.</p>
+  {% endfor %}
+</section>

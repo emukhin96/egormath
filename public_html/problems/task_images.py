@@ -51,6 +51,43 @@ def classify_task_images(task):
     return statement, answers
 
 
+def owner_material_images(task, owner, kind):
+    """Рисунки ответа (``kind='answer'``) или решения подпункта/задачи.
+
+    Для карточки редактора: берутся ссылки из обеих версий (авторской и
+    редакторской / AI), чтобы ни один рисунок не потерялся; рисунки
+    условия и уже показанные в ответе к решению не повторяются.
+    """
+    fields = {'answer': ('author_answer_latex', 'answer_latex'),
+              'solution': ('author_solution_latex', 'solution_latex')}
+    indices = set()
+    for field in fields[kind]:
+        indices.update(taskpic_indices(getattr(owner, field, '')))
+    if kind == 'solution':
+        for field in fields['answer']:
+            indices.difference_update(taskpic_indices(getattr(owner, field, '')))
+    images = list(task.images.all())
+    _, answers = classify_task_images(task)
+    answer_ids = {image.pk for image in answers}
+    return [images[i] for i in sorted(indices)
+            if i < len(images) and images[i].pk in answer_ids]
+
+
+def unplaced_material_images(task):
+    """Рисунки ответов/решений, на которые не ссылается ни один подпункт.
+
+    Карточка задачи с подпунктами показывает ответы только подпунктов;
+    рисунок общего ответа или решения самой задачи выводим отдельно,
+    чтобы он не пропал из карточки.
+    """
+    placed = set()
+    for subitem in task.subitems.all():
+        placed.update(material_indices(subitem))
+    images = list(task.images.all())
+    _, answers = classify_task_images(task)
+    return [image for image in answers if images.index(image) not in placed]
+
+
 def images_for_group(task, group='statement'):
     """Картинки для веб-блока: ``statement``, ``answers`` или ``all``."""
     if group == 'all':
