@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import windows
 
 app_name = 'independentworks'
 urlpatterns = [
@@ -40,7 +41,7 @@ urlpatterns = [
     path('attempt/<int:pk>/assign/', views.reassign, name='reassign'),
     path('attempt/<int:pk>/repeat/', views.repeat, name='repeat'),
     path('attempt/<int:pk>/point/<int:point_id>/save/', views.save, name='save'),
-    path('attempt/<int:pk>/point/<int:point_id>/detail/', views.point_detail, name='point_detail'),
+    path('attempt/<int:pk>/point/<int:point_id>/detail/', windows.point_window, name='point_detail'),
     path('attempt/<int:pk>/point/<int:point_id>/review/', views.review, name='review'),
     path('attempt/<int:pk>/point/<int:point_id>/photo/', views.upload_photo, name='upload_photo'),
     path('attempt/<int:pk>/asset/<int:asset_id>/', views.asset_file, name='asset'),

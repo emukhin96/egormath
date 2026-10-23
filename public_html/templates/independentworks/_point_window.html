@@ -1,0 +1,68 @@
+{% load task_extras %}
+{% comment %}
+Окно «задание у ученика» самостоятельной (макет D_AnswerView, 22.10.2026) —
+та же разметка .tw, что «задача у ученика» листка (_progress_detail.html):
+слева условие, последний ответ с автосверкой, ответ и решение, история;
+справа копирование в этом задании, оценка и комментарий (после сдачи).
+Соседние ученики и задания — кнопки data-attempt-url (teacher_progress.js
+грузит их в то же окно). Без «·».
+{% endcomment %}
+<div class="tw">
+  <div class="tw-head">
+    <div class="tw-heading">
+      <span class="tw-kicker">Задание {{ row.point.label }} из {{ total }}, вариант {{ attempt.variant.number }}</span>
+      <h2 class="tw-title" id="progress-dialog-title">{{ student_name }}{% if copied %} <span class="live-copy" title="Копировал текст условия этого задания">•</span>{% endif %}</h2>
+    </div>
+    <div class="tw-nav">
+      {% if prev_student %}<button type="button" class="btn btn-secondary btn-small" data-attempt-url="{{ prev_student.url }}" title="Предыдущий ученик">← {{ prev_student.name }}</button>{% endif %}
+      {% if next_student %}<button type="button" class="btn btn-secondary btn-small" data-attempt-url="{{ next_student.url }}" title="Следующий ученик">{{ next_student.name }} →</button>{% endif %}
+    </div>
+  </div>
+  <div class="tw-body">
+    <div class="tw-main">
+      <div class="progress-condition">{% include 'assignments/_point_content.html' %}</div>
+      <div class="tw-answers">
+        <div class="tw-answer tw-answer-{{ status }}">
+          <span class="tw-label">Последний ответ{% if row.answer.grade %}, оценка <b class="tw-verdict">{{ row.answer.grade_symbol }}</b>{% elif row.auto == 'ok' or row.auto == 'wrong' %}, автосверка <b class="tw-verdict">{% if row.auto == 'ok' %}✓{% else %}×{% endif %}{% if checks|length > 1 %}<sub>{{ checks|length }}</sub>{% endif %}</b>{% endif %}</span>
+          <div class="tw-value">{% if row.fragments %}{% include 'assignments/_mask.html' with fragments=row.fragments editable=False show_checks=False %}{% else %}<span class="math-content">{{ row.display|default:'—'|web_answer }}</span>{% endif %}</div>
+          {% if not row.answer %}<span class="helptext">Ответ не введён</span>{% elif row.pending %}<span class="helptext">Ждёт проверки учителем</span>{% elif not attempt.finished %}<span class="helptext">Работа ещё не сдана</span>{% endif %}
+        </div>
+        <div class="tw-answer tw-reference">
+          <span class="tw-label">Ответ</span>
+          <div class="tw-value">{% if reference %}{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}{% elif row.reference %}<span class="math-content">{{ row.reference|web_answer }}</span>{% else %}Маски нет, ответ проверяет учитель{% endif %}</div>
+          {% if reference and row.reference %}<p class="tw-note">Текстом: <span class="math-content">{{ row.reference|web_answer }}</span></p>{% endif %}
+          {% if row.solution %}<details class="tw-solution"><summary>Решение</summary><div class="math-content">{{ row.solution|web_text }}</div></details>{% endif %}
+        </div>
+      </div>
+      {% if checks %}<details class="check-history tw-history" open><summary class="tw-label">Самопроверки до сдачи: {{ checks|length }}</summary>
+        <ol class="tw-checks">{% for check in checks reversed %}<li><span>{{ check.created_at|date:'d.m, H:i:s' }}</span> <b class="tw-check-{{ check.result }}">{% if check.result == 'ok' %}верно{% elif check.result == 'wrong' %}неверно{% else %}не удалось проверить{% endif %}</b>{% if check.values_text %}: <span class="math-content">{{ check.values_text }}</span>{% endif %}</li>{% endfor %}</ol>
+      </details>{% endif %}
+      {% include 'workaudit/revisions.html' with kind='answer' object=row.answer %}
+      {% include 'assignments/_photo_gallery.html' with photos=row.answer.photos.all photo_route='independentworks:photo' %}
+    </div>
+    <aside class="tw-side">
+      <div class="tw-block">
+        <span class="tw-label">Копирование в этом задании</span>
+        {% for copy in copies %}<p class="tw-copy-row">{{ copy.event.received_at|date:'d.m, H:i' }} {{ copy.label }}{% if copy.event.text %}: «{{ copy.event.text|truncatechars:80 }}»{% endif %}</p>{% empty %}<p class="helptext">Не копировал условие.</p>{% endfor %}
+      </div>
+      {% if attempt.finished %}
+      <div class="tw-block tw-grade">
+        <span class="tw-label">Оценка за задание</span>
+        {% include 'assignments/_grade_scale.html' with grade_url=row.grade_url selected_grade=row.answer.grade|default:'' %}
+        <span class="helptext" data-grade-caption>{{ grade_caption }}</span>
+      </div>
+      <form method="post" action="{{ row.grade_url }}" class="tw-block" data-point-review>{% csrf_token %}
+        <div class="review-comment"><label>Комментарий ученику<textarea name="{{ row.comment_name }}" rows="3" data-preserve-input>{{ row.comment }}</textarea></label></div>
+        <div class="form-buttons"><button class="btn btn-secondary btn-small">Сохранить комментарий</button></div>
+      </form>
+      {% else %}
+      <div class="tw-block"><span class="tw-label">Оценка за задание</span><p class="helptext">Оценить и прокомментировать можно после сдачи работы.</p></div>
+      {% endif %}
+      <a href="{% url 'independentworks:attempt' attempt.pk %}">Вся работа ученика</a>
+    </aside>
+  </div>
+  <div class="tw-foot">
+    {% if prev_task %}<button type="button" class="btn btn-secondary btn-small" data-attempt-url="{{ prev_task.url }}">← Задание {{ prev_task.label }}</button>{% endif %}
+    {% if next_task %}<button type="button" class="btn btn-secondary btn-small tw-next" data-attempt-url="{{ next_task.url }}">Задание {{ next_task.label }} →</button>{% endif %}
+  </div>
+</div>
