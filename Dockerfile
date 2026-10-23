@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY Makefile .
+# Tailwind (~110 МБ) — отдельным слоем до копирования стилей и шаблонов:
+# качается заново только при правке Makefile, а не на каждом деплое.
+RUN make ensure-tailwind
 COPY public_html/static public_html/static
 COPY public_html/templates public_html/templates
 RUN make build-css
