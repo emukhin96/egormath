@@ -238,8 +238,12 @@
     });
     studentBoxes.forEach(function (box) {
       if (!box.checked) return;
-      if (!people.has(Number(box.value))) to.push(label(box).split(',')[0]);
-      people.add(Number(box.value));
+      var id = Number(box.value);
+      // Уже получившему листок чекбокс приходит checked disabled: в POST
+      // его нет, в итоге — среди пропущенных
+      if (box.disabled || assigned.has(id)) { skipped.add(id); return; }
+      if (!people.has(id)) to.push(label(box).split(',')[0]);
+      people.add(id);
     });
     var count = people.size, total = count + skipped.size;
     form.querySelector('[data-summary-to]').textContent = to.length ? to.join(', ') : 'пока никому';
