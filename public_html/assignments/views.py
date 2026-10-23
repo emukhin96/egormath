@@ -6,7 +6,8 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Case, Count, DateTimeField, IntegerField, Prefetch, Q, When, Min, Max
+from django.db.models import Case, Count, DateTimeField, IntegerField, OuterRef, Prefetch, Q, Subquery, When, Min, Max
+from django.db.models.functions import Coalesce
 from django.forms.utils import ErrorDict
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -17,7 +18,7 @@ from django.views.decorators.http import require_POST
 from accounts.decorators import student_required, teacher_required
 from accounts.models import Profile, StudentGroup
 from problems.models import Task
-from worksheets.models import Collection, Worksheet
+from worksheets.models import Collection, Worksheet, WorksheetItem
 
 from .checks import reference_text, slot_display
 from .forms import AssignmentCreateForm
@@ -531,9 +532,17 @@ def _issue_context(form, teacher):
     """Мастер выдачи листка по макету E_Issue (22.10.2026): листки
     карточками с историей выдач, участники групп и уже получившие листок —
     для итога «Выдать N ученикам» и предупреждения о пропуске повторов."""
-    sheets = (form.fields['worksheet'].queryset
-              .annotate(tasks_total=Count('items', filter=Q(items__task__isnull=False, items__deleted_at__isnull=True), distinct=True),
-                        issued=Count('assignments', distinct=True), last_issued=Max('assignments__assigned_at')))
+    # Задачи и выдачи — отдельными подзапросами: два Count по разным связям
+    # в одном JOIN дали бы произведение «задачи × выдачи» на каждый листок
+    tasks = (WorksheetItem.objects.filter(worksheet=OuterRef('pk'), task__isnull=False, deleted_at__isnull=True)
+             .order_by().values('worksheet').annotate(n=Count('pk')).values('n'))
+    issued = (Assignment.objects.filter(worksheet=OuterRef('pk'))
+              .order_by().values('worksheet').annotate(n=Count('pk')).values('n'))
+    last = Assignment.objects.filter(worksheet=OuterRef('pk')).order_by('-assigned_at').values('assigned_at')[:1]
+    sheets = form.fields['worksheet'].queryset.annotate(
+        tasks_total=Coalesce(Subquery(tasks, output_field=IntegerField()), 0),
+        issued=Coalesce(Subquery(issued, output_field=IntegerField()), 0),
+        last_issued=Subquery(last, output_field=DateTimeField()))
     selected = form.selected_worksheet
     options = list(sheets)
     if selected and selected not in options[:ISSUE_SHEETS_SHOWN]:
