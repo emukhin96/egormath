@@ -225,6 +225,7 @@ def live_summary(groups_of_points, people, now=None):
             ok = sum(c['status'] == 'ok' for c in answered)
             rate = ok / len(answered) if answered else None
             stats.append({'ok': ok, 'answered': len(answered), 'live': live if position == 0 else 0,
+                          'item': group['item'], 'point': position,
                           'tone': '' if rate is None else 'good' if rate >= .7 else 'mid' if rate >= .5 else 'low'})
             index += 1
     return summary, stats
