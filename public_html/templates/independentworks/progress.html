@@ -11,6 +11,8 @@
 </div>
 <p class="helptext iw-live-status" data-live-status role="status">Обновляется каждые 5 секунд</p>
 <div data-progress-table data-progress-url="{% url 'independentworks:progress' run.pk %}" data-live-file="{% live_file 'run' run.pk %}">{% include 'independentworks/_progress.html' %}</div>
+{# «Разблокировать» в таблице — кнопки form="iw-unlock" с formaction: токен CSRF вне опрашиваемого фрагмента, иначе ETag менялся бы каждый раз #}
+<form id="iw-unlock" method="post" hidden>{% csrf_token %}</form>
 
 {% if can_add_students %}
 <section class="card iw-section">
@@ -38,6 +40,20 @@
       <span class="ws-toggle-text">Разрешить проверять ответы до сдачи</span>
     </label>
     <p class="helptext">Ученик увидит только «верно» или «неверно». Каждое нажатие и версия ответа сохраняются в истории.</p>
+    <div class="form-buttons"><button class="btn">Сохранить</button></div>
+  </form>
+</section>
+
+<section class="card iw-section">
+  <h2>Уход со страницы</h2>
+  <form method="post" action="{% url 'independentworks:lock_settings' run.pk %}">
+    {% csrf_token %}
+    <label class="ws-toggle iw-settings-toggle">
+      <input type="checkbox" name="lock_on_leave" {% if run.lock_on_leave %}checked{% endif %}>
+      <span class="ws-toggle-slider"></span>
+      <span class="ws-toggle-text">Блокировать задания, если ученик ушёл со страницы</span>
+    </label>
+    <p class="helptext">Дольше 2 секунд на другой вкладке или в другом приложении — и ученик видит заглушку «Вы ушли со страницы». Разблокировать — кнопкой у ученика в таблице, каждый раз заново. Таймер работы не останавливается. Включённая настройка сразу действует и в начатых работах, при выключении заглушки снимаются у всех.</p>
     <div class="form-buttons"><button class="btn">Сохранить</button></div>
   </form>
 </section>
@@ -84,5 +100,5 @@
 {% endblock %}
 {% block extra_js %}
 {% include 'assignments/_progress_dialog.html' with heading='Ответы и попытки' %}
-<script defer src="{% static 'js/teacher_progress.js' %}?v=3"></script>
+<script defer src="{% static 'js/teacher_progress.js' %}?v=10"></script>
 {% endblock %}

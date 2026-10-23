@@ -71,6 +71,7 @@
         </div><div data-release-flags>{{ form.release_flags.errors }}{{ form.release_flags.label_tag }}{{ form.release_flags }}</div>
                 <label class="check-label assignment-photo-option">{{ form.restrict_clipboard }} <span>{{ form.restrict_clipboard.label }}</span></label>
         <label class="check-label assignment-photo-option">{{ form.swap_numbers }} <span>{{ form.swap_numbers.label }} <span class="helptext">{{ form.swap_numbers.help_text }}</span></span></label>
+        {% if independent %}<label class="check-label assignment-photo-option">{{ form.lock_on_leave }} <span>{{ form.lock_on_leave.label }} <span class="helptext">{{ form.lock_on_leave.help_text }}</span></span></label>{% endif %}
         <label class="check-label assignment-photo-option">{{ form.allow_photos }} <span>{{ form.allow_photos.label }}</span></label>
         {% else %}
         <div class="is-conditions">
