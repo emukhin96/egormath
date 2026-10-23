@@ -1382,6 +1382,16 @@ class RunSettingsDrawerTests(TestCase):
         self.assertContains(response, 'name="deadline"')
         self.assertNotContains(response, '·')
 
+    def test_drawer_on_add_students_error(self):
+        """Ошибка «Выдать ещё» открывает ту же панель целиком: сводка,
+        не начавшие и флажки показа (ревью #289)."""
+        response = self.client.post(reverse('independentworks:add_students', args=[self.run.pk]), {})
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'data-open-on-load', status_code=400)
+        self.assertContains(response, 'Решают 1, сдали 0, не начали 1', status_code=400)
+        self.assertContains(response, 'Вариант не начавшим', status_code=400)
+        self.assertContains(response, 'name="flags" value="answer"', status_code=400)
+
     def test_deadline(self):
         url = reverse('independentworks:run_deadline', args=[self.run.pk])
         soon = timezone.localtime(self.started.started_at + timedelta(minutes=10)).replace(second=0, microsecond=0)
