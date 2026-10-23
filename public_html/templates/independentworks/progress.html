@@ -12,7 +12,7 @@
   <div>
     <a class="live-back" href="{% url 'independentworks:catalog' %}">← Самостоятельные</a>
     <h1>{{ run.title }}</h1>
-    <p class="live-meta">{{ run.kind_label }}, {{ run.duration }} мин{% if run.deadline %}, начать до {{ run.deadline|date:'j E, H:i' }}{% endif %}{% if run.issued_at %}, выдана {{ run.issued_at|date:'d.m.Y' }}{% endif %}</p>
+    <p class="live-meta">{{ run.kind_label }}, {{ run.duration }} мин{% if run.deadline %}, закончить до {{ run.deadline|date:'j E, H:i' }}{% endif %}{% if run.issued_at %}, выдана {{ run.issued_at|date:'d.m.Y' }}{% endif %}</p>
   </div>
   <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'independentworks:export' run.pk %}">Скачать XLSX</a>
@@ -32,9 +32,9 @@
       <h3 id="sd-time">Время</h3>
       <p class="helptext">Решают {{ time_summary.active }}, сдали {{ time_summary.finished }}, не начали {{ time_summary.unopened }}; на работу {{ run.duration }} мин от кнопки «Начать».</p>
       <form method="post" action="{% url 'independentworks:run_deadline' run.pk %}" class="sd-row">{% csrf_token %}
-        <label class="sd-field">Начать не позже<input type="datetime-local" name="deadline" value="{{ run.deadline|date:'Y-m-d\TH:i' }}"></label>
+        <label class="sd-field">Закончить не позже<input type="datetime-local" name="deadline" value="{{ run.deadline|date:'Y-m-d\TH:i' }}"></label>
         <span class="sd-quick"><button type="button" class="btn btn-secondary btn-small" data-deadline-add="10">+10 мин</button><button type="button" class="btn btn-secondary btn-small" data-deadline-add="30">+30 мин</button><button type="button" class="btn btn-secondary btn-small" data-deadline-clear>Без срока</button></span>
-        <span class="helptext">Новый срок пересчитывает время у начатых попыток: продление даёт время, сокращение завершает работу.</span>
+        <span class="helptext">В это время работа заканчивается у всех, даже если её минуты не истекли; кто не начал, получит «не начато». Новый срок пересчитывает начатые попытки: продление даёт время, сокращение завершает работу.</span>
         <button class="btn">Сохранить срок</button>
       </form>
     </section>

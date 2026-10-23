@@ -1361,7 +1361,7 @@ class ConcurrentWorkTests(TransactionTestCase):
 @override_settings(INDEPENDENT_WORKS_ENABLED=True)
 class RunSettingsDrawerTests(TestCase):
     """Панель «Настройки выдачи» (макет E_Settings) на прогрессе самостоятельной
-    и смена срока «Начать не позже» через services.set_deadline."""
+    и смена срока «Закончить не позже» через services.set_deadline."""
 
     def setUp(self):
         self.teacher = make_teacher('settings_teacher')
@@ -1380,6 +1380,7 @@ class RunSettingsDrawerTests(TestCase):
         self.assertContains(response, 'Решают 1, сдали 0, не начали 1')
         self.assertContains(response, 'Вариант не начавшим')
         self.assertContains(response, 'name="deadline"')
+        self.assertContains(response, 'Закончить не позже')  # Run.deadline — общее окончание
         self.assertNotContains(response, '·')
 
     def test_drawer_on_add_students_error(self):
