@@ -31,11 +31,16 @@ TW_URL := https://github.com/tailwindlabs/tailwindcss/releases/download/$(TW_VER
 
 CSS_IN := public_html/static/css/input.css
 CSS_OUT := public_html/static/css/app.css
+# Стили экранов — по файлу на экран в screens/ (новый экран = новый файл,
+# общих строк у параллельных PR нет). Перед сборкой склеиваются в
+# _screens.css (не в git), который input.css подключает одной строкой.
+SCREENS := $(sort $(wildcard public_html/static/css/screens/*.css))
+SCREENS_OUT := public_html/static/css/_screens.css
 
 # В CI venv нет — тогда берётся системный python
 PYTHON := $(shell test -x "$(ROOT)venv/bin/python" && echo ../venv/bin/python || echo python)
 
-.PHONY: build-css watch-css ensure-tailwind test check
+.PHONY: build-css watch-css ensure-tailwind screens-css test check
 
 ensure-tailwind:
 	@mkdir -p "$(TOOLS)"
@@ -45,11 +50,15 @@ ensure-tailwind:
 	  chmod +x "$(TW)"; \
 	fi
 
-build-css: ensure-tailwind
+screens-css:
+	@cat $(SCREENS) /dev/null > "$(SCREENS_OUT)"
+
+build-css: ensure-tailwind screens-css
 	"$(TW)" -i "$(CSS_IN)" -o "$(CSS_OUT)" --minify
 	@echo "Built $(CSS_OUT)"
 
-watch-css: ensure-tailwind
+# Правки в screens/*.css при watch не подхватываются: после них — make build-css
+watch-css: ensure-tailwind screens-css
 	"$(TW)" -i "$(CSS_IN)" -o "$(CSS_OUT)" --watch
 
 # Тест collectstatic ждёт собранный app.css
