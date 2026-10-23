@@ -36,6 +36,8 @@
     <div class="pv-variant" data-preview-variant="{{ variant.number }}"{% if not forloop.first %} hidden{% endif %}>
       {% for row in variant.rows %}
       {% for note in row.notes %}<div class="pv-note math-content">{{ note|web_text }}</div>{% endfor %}
+      {# Общее условие и подпункты одного номера — одна группа без разделителей, как у ученика #}
+      {% if row.group_start %}<div class="pv-group">{% endif %}
       <article class="pv-point" data-task-png-root>
         <div class="pv-point-body">
           <div class="task-png-corner">{% include 'includes/task_png_button.html' %}</div>
@@ -51,6 +53,7 @@
           {% if row.solution %}<details class="tw-solution"><summary>Решение</summary><div class="math-content">{{ row.solution|web_text }}</div></details>{% endif %}
         </div>
       </article>
+      {% if row.group_end %}</div>{% endif %}
       {% endfor %}
       {% for note in variant.tail_notes %}<div class="pv-note math-content">{{ note|web_text }}</div>{% endfor %}
     </div>

@@ -1380,6 +1380,8 @@ class PreviewScreenTests(TestCase):
         self.assertContains(response, 'Выдать 2</button>')
         self.assertContains(response, 'data-variant-count="1"')
         self.assertContains(response, f'name="student_{self.students[0].pk}" value="1"')
+        # Номер с подпунктами — одна группа pv-group, как карточка у ученика (ревью #286)
+        self.assertContains(response, 'class="pv-group"', count=len(self.run.plan['variants']))
         # Сохранения распределения — очередью, «Выдать» ждёт её (ревью #286)
         self.assertContains(response, 'EgorAutosave.enqueue(form, operation)')
         self.assertContains(response, 'if (pending) event.preventDefault()')
