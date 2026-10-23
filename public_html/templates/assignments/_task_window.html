@@ -57,6 +57,7 @@
     </aside>
   </div>
   <div class="tw-foot">
+    <a class="btn btn-secondary btn-small" href="{{ class_url }}{% if request.GET.group %}?group={{ request.GET.group }}{% endif %}">Открыть у всего класса</a>
     <a class="btn btn-secondary btn-small" href="{% url 'task_detail' task.pk %}">Задача в базе</a>
   </div>
 </div>
