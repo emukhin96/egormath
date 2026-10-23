@@ -47,3 +47,4 @@ public_html/static/css/_screens.css
 # Tailwind standalone CLI binary (download via `make build-css`)
 tools/tailwindcss
 tools/tailwindcss.exe
+tools/tailwindcss.part

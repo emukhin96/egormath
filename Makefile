@@ -42,12 +42,25 @@ PYTHON := $(shell test -x "$(ROOT)venv/bin/python" && echo ../venv/bin/python ||
 
 .PHONY: build-css watch-css ensure-tailwind screens-css test check
 
+# С VPS соединения с CDN GitHub часто глохнут после первых сотен КБ и висят
+# без обрыва (так завис деплой 23.10), а нормальная загрузка идёт за секунды.
+# Поэтому медленнее 100 КБ/с 10 секунд — обрываем и пробуем снова, до 20 раз.
+# Каждая попытка — новый curl: встроенный --retry на сервере проваливал
+# 21 попытку подряд, а следующий запуск curl тут же качал файл. Качаем во
+# временный файл, чтобы оборванная загрузка не осталась на месте CLI.
 ensure-tailwind:
 	@mkdir -p "$(TOOLS)"
 	@if [ ! -x "$(TW)" ]; then \
 	  echo "Downloading Tailwind CLI $(TW_VERSION) ($(TW_ASSET))..."; \
-	  curl -fsSL -o "$(TW)" "$(TW_URL)"; \
-	  chmod +x "$(TW)"; \
+	  ok=; for i in $$(seq 20); do \
+	    curl -fsSL --connect-timeout 15 --speed-limit 102400 --speed-time 10 \
+	      -o "$(TW).part" "$(TW_URL)" && { ok=1; break; }; \
+	    sleep 2; \
+	  done; \
+	  if [ -z "$$ok" ]; then \
+	    rm -f "$(TW).part"; echo "Tailwind CLI download failed after 20 attempts" >&2; exit 1; \
+	  fi; \
+	  chmod +x "$(TW).part" && mv "$(TW).part" "$(TW)"; \
 	fi
 
 screens-css:

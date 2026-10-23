@@ -29,5 +29,6 @@ public_html/staticfiles
 public_html/live/*.txt
 tools/tailwindcss
 tools/tailwindcss.exe
+tools/tailwindcss.part
 *.log
 .DS_Store
