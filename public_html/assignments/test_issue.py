@@ -38,6 +38,8 @@ class IssueWizardTests(TestCase):
         self.assertEqual(data['members'][str(self.group.pk)], [self.anna.pk, self.oleg.pk])
         self.assertEqual(data['assigned'], [self.anna.pk])
         self.assertNotContains(response, '·')
+        # Enter в поиске не отправляет форму выдачи (ревью #284)
+        self.assertContains(response, "matches('[data-sheet-filter], [data-student-filter]')) event.preventDefault()")
 
     def test_members_only_own_students(self):
         """Участник группы, ставший учеником другого учителя, в итог
