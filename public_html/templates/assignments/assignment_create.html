@@ -30,7 +30,7 @@
 {% include 'includes/pagination.html' with page=work_options query=request.GET %}</section>
 {% else %}
 <form method="post" class="assignment-create-form" id="assignment-create-form" data-fixed-recipients="{% if parent %}1{% else %}0{% endif %}"
-      data-bound="{{ form.is_bound|yesno:'1,0' }}"
+      data-bound="{{ form.is_bound|yesno:'1,0' }}"{% if request.POST.refresh %} data-refreshed{% endif %}
       data-draft-saved="{{ draft_saved|yesno:'1,0' }}"
       data-refresh-url="{% url 'assignment_create' %}">
   {% csrf_token %}{% if independent %}<input type="hidden" name="mode" value="independent"><input type="hidden" name="work" value="{{ work.pk }}">{% endif %}
@@ -192,17 +192,35 @@
     return forms[a === 1 && b !== 11 ? 0 : a >= 2 && a <= 4 && (b < 10 || b >= 20) ? 1 : 2];
   }
   function label(box) { return box.closest('label').querySelector('span').textContent.trim(); }
+  /* Метку refresh убираем при возврате «Назад» (страница из bfcache):
+     иначе «Выдать» ушла бы как пересчёт и ничего не выдала. Мышью листок
+     пересчитывается сразу, стрелками — после паузы, чтобы можно было
+     дойти до нужного; после пересчёта фокус снова на выбранном листке. */
+  function dropRefresh() { form.querySelectorAll('input[name="refresh"]').forEach(function (node) { node.remove(); }); }
+  window.addEventListener('pageshow', dropRefresh);
+  var refreshTimer, byPointer = false;
+  form.addEventListener('pointerdown', function () { byPointer = true; });
+  form.addEventListener('keydown', function () { byPointer = false; });
+  function refreshSheet() {
+    dropRefresh();
+    var refresh = document.createElement('input');
+    refresh.type = 'hidden'; refresh.name = 'refresh'; refresh.value = '1';
+    form.appendChild(refresh);
+    // Отключённые радиокнопки автосверки в POST не попадут — режим для
+    // нового листка сервер выберет сам
+    form.action = form.dataset.refreshUrl;
+    form.submit();
+  }
   form.querySelectorAll('[name="worksheet"]').forEach(function (radio) {
     radio.addEventListener('change', function () {
-      var refresh = document.createElement('input');
-      refresh.type = 'hidden'; refresh.name = 'refresh'; refresh.value = '1';
-      form.appendChild(refresh);
-      // Отключённые радиокнопки автосверки в POST не попадут — режим для
-      // нового листка сервер выберет сам
-      form.action = form.dataset.refreshUrl;
-      form.submit();
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(refreshSheet, byPointer ? 0 : 900);
     });
   });
+  if (form.hasAttribute('data-refreshed')) {
+    var picked = form.querySelector('[name="worksheet"]:checked');
+    if (picked) picked.focus({preventScroll: true});
+  }
   var sheetFilter = form.querySelector('[data-sheet-filter]'), showAll = form.querySelector('[data-sheet-all]');
   function filterSheets() {
     var query = sheetFilter ? sheetFilter.value.trim().toLowerCase() : '';

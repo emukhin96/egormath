@@ -80,6 +80,8 @@ class IssueWizardTests(TestCase):
         self.assertEqual(response.context['issue_data']['assigned'], [])
         self.assertNotContains(response, 'errorlist')
         self.assertContains(response, f'name="groups" value="{self.group.pk}" id="id_groups_0" checked')
+        self.assertContains(response, 'data-refreshed')
+        self.assertContains(response, "window.addEventListener('pageshow', dropRefresh)")
         self.assertEqual(Assignment.objects.count(), 1)
         back = self.client.post(self.url, {'worksheet': self.sheet.pk, 'refresh': '1'})
         self.assertTrue(back.context['check_locked'])
