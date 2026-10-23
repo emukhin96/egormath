@@ -75,10 +75,20 @@
             </button>
             <div class="nav-menu">
               <a href="{% url 'independentworks:catalog' %}"{% if request.resolver_match.namespace == 'independentworks' or request.GET.mode == 'independent' or request.GET.kind == 'independent' %} class="is-active"{% endif %}>Самостоятельные</a>
+              <a href="{% url 'assignment_journal' %}"{% if request.resolver_match.url_name == 'assignment_journal' %} class="is-active"{% endif %}>Журнал оценивания</a>
             </div>
           </div>
           {% else %}
-          <a href="{% url 'assignment_list' %}?kind=ordinary"{% if 'assignment' in request.resolver_match.url_name or 'review' in request.resolver_match.url_name %} class="is-active"{% endif %}>Задания</a>
+          {# Без самостоятельных в меню «Задания» — только журнал оценивания (ревью #283) #}
+          <div class="nav-group{% if 'assignment' in request.resolver_match.url_name or 'review' in request.resolver_match.url_name %} is-active{% endif %}">
+            <a href="{% url 'assignment_list' %}?kind=ordinary">Задания</a>
+            <button type="button" class="nav-more" aria-expanded="false" aria-haspopup="true" aria-label="Разделы заданий" data-nav-more>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </button>
+            <div class="nav-menu">
+              <a href="{% url 'assignment_journal' %}"{% if request.resolver_match.url_name == 'assignment_journal' %} class="is-active"{% endif %}>Журнал оценивания</a>
+            </div>
+          </div>
           {% endif %}
           <div class="nav-group{% if 'student' in request.resolver_match.url_name or 'group' in request.resolver_match.url_name or request.resolver_match.url_name == 'teachers' %} is-active{% endif %}">
             <a href="{% url 'students' %}">Ученики</a>
