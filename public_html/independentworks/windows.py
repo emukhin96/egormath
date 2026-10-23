@@ -73,6 +73,9 @@ def point_window(request, pk, point_id):
         'status': point_status(answer),
         'checks': checks,
         'reference': reference_fragments(spec, f'reference_p{point.pk}') if spec.is_valid else [],
+        # Эталон промежутка и множества записан LaTeX'ом — поле маски показало
+        # бы его сырой строкой, такие показываем текстом ответа
+        'text_reference': bool(row['reference']) and spec.is_valid and any(s.kind in ('range', 'set') for s in spec.slots),
         'copies': copies, 'copied': any(c['words'] > 1 for c in copies),
         'grade_choices': [('', 'По автосверке', '↺')] + Review.grade_options(),
         'grade_caption': grade_caption(answer),

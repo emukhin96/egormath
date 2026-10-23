@@ -29,8 +29,7 @@
         </div>
         <div class="tw-answer tw-reference">
           <span class="tw-label">Ответ</span>
-          <div class="tw-value">{% if reference %}{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}{% elif row.reference %}<span class="math-content">{{ row.reference|web_answer }}</span>{% else %}Маски нет, ответ проверяет учитель{% endif %}</div>
-          {% if reference and row.reference %}<p class="tw-note">Текстом: <span class="math-content">{{ row.reference|web_answer }}</span></p>{% endif %}
+          <div class="tw-value">{% if text_reference %}<span class="math-content">{{ row.reference|web_answer }}</span>{% elif reference %}{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}{% elif row.reference %}<span class="math-content">{{ row.reference|web_answer }}</span>{% else %}Маски нет, ответ проверяет учитель{% endif %}</div>
           {% if row.solution %}<details class="tw-solution"><summary>Решение</summary><div class="math-content">{{ row.solution|web_text }}</div></details>{% endif %}
         </div>
       </div>
