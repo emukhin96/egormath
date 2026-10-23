@@ -27,6 +27,7 @@ urlpatterns = [
     path('run/<int:pk>/add-students/', views.add_students, name='add_students'),
     path('run/<int:pk>/recipients/', views.recipients, name='recipients'),
     path('run/<int:pk>/self-check/', views.self_check_settings, name='self_check_settings'),
+    path('run/<int:pk>/deadline/', views.run_deadline, name='run_deadline'),
     path('attempt/<int:pk>/point/<int:point_id>/check/', views.check_answer, name='check_answer'),
     path('run/<int:pk>/publish/', views.publish, name='publish'),
     path('run/<int:pk>/export/', views.export, name='export'),

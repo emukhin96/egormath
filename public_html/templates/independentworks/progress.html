@@ -1,88 +1,119 @@
 {% extends 'independentworks/base.html' %}
 {% load static livefile task_extras %}
+{% block title %}{{ run.title }}: прогресс — Математика{% endblock %}
 {% block content %}
-<div class="page-head">
+{% comment %}
+Прогресс самостоятельной: шапка в стиле карт ответов (ряд D) и панель
+«Настройки выдачи» по макету E_Settings (22.10.2026) — выдвигается справа
+поверх таблицы. Каждое «Сохранить» отправляет форму, страница обновляется,
+панель закрыта (правило «Сохранить закрывает окно»). Без «·».
+{% endcomment %}
+<div class="page-head live-head">
   <div>
-    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'independentworks:catalog' %}">Самостоятельные</a><span>{{ run.kind_label }}</span></nav>
-    <h1>{{ run.title }} · прогресс</h1>
-    <p class="page-meta"><span>{{ run.duration }} мин.</span>{% if run.deadline %}<span>до {{ run.deadline|date:'d.m.Y H:i' }}</span>{% endif %}{% if run.issued_at %}<span>выдана {{ run.issued_at|date:'d.m.Y' }}</span>{% endif %}</p>
+    <a class="live-back" href="{% url 'independentworks:catalog' %}">← Самостоятельные</a>
+    <h1>{{ run.title }}</h1>
+    <p class="live-meta">{{ run.kind_label }}, {{ run.duration }} мин{% if run.deadline %}, начать до {{ run.deadline|date:'j E, H:i' }}{% endif %}{% if run.issued_at %}, выдана {{ run.issued_at|date:'d.m.Y' }}{% endif %}</p>
   </div>
-  <div class="page-actions"><a class="btn btn-secondary" href="{% url 'independentworks:export' run.pk %}">Скачать XLSX</a></div>
+  <div class="page-actions">
+    <a class="btn btn-secondary" href="{% url 'independentworks:export' run.pk %}">Скачать XLSX</a>
+    <button type="button" class="btn" data-dialog-open="run-settings">Настройки выдачи</button>
+  </div>
 </div>
 <p class="helptext iw-live-status" data-live-status role="status">Обновляется каждые 5 секунд</p>
 <div data-progress-table data-progress-url="{% url 'independentworks:progress' run.pk %}" data-live-file="{% live_file 'run' run.pk %}">{% include 'independentworks/_progress.html' %}</div>
 
-{% if can_add_students %}
-<section class="card iw-section">
-  <h2>Выдать другим ученикам</h2>
-  {% if recipient_error %}<p class="msg msg-error" role="alert">{{ recipient_error }}</p>{% endif %}
-  <form method="post" action="{% url 'independentworks:add_students' run.pk %}">
-    {% csrf_token %}
-    <div class="choice-items choice-items-compact">
-      {% for student in available_students %}
-      <label class="choice-item"><input type="checkbox" name="students" value="{{ student.pk }}"><span>{{ student.get_full_name|default:student.username }}</span></label>
-      {% empty %}<p>Все доступные ученики уже добавлены.</p>{% endfor %}
-    </div>
-    <div class="iw-add-students-controls"><select name="variant" aria-label="Вариант">{% for variant in variants %}<option value="{{ variant.pk }}">Вариант {{ variant.number }}</option>{% endfor %}</select><button class="btn">Добавить учеников</button></div>
-  </form>
-</section>
-{% endif %}
+<dialog class="settings-drawer" id="run-settings" aria-labelledby="run-settings-title"{% if recipient_error %} data-open-on-load{% endif %}>
+  <div class="sd-head">
+    <div><h2 id="run-settings-title">Настройки выдачи</h2><span class="tw-label">{{ run.title }}</span></div>
+    <button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button>
+  </div>
+  <div class="sd-body">
+    <section class="sd-section" aria-labelledby="sd-time">
+      <h3 id="sd-time">Время</h3>
+      <p class="helptext">Решают {{ time_summary.active }}, сдали {{ time_summary.finished }}, не начали {{ time_summary.unopened }}; на работу {{ run.duration }} мин от кнопки «Начать».</p>
+      <form method="post" action="{% url 'independentworks:run_deadline' run.pk %}" class="sd-row">{% csrf_token %}
+        <label class="sd-field">Начать не позже<input type="datetime-local" name="deadline" value="{{ run.deadline|date:'Y-m-d\TH:i' }}"></label>
+        <span class="sd-quick"><button type="button" class="btn btn-secondary btn-small" data-deadline-add="10">+10 мин</button><button type="button" class="btn btn-secondary btn-small" data-deadline-add="30">+30 мин</button><button type="button" class="btn btn-secondary btn-small" data-deadline-clear>Без срока</button></span>
+        <span class="helptext">Новый срок пересчитывает время у начатых попыток: продление даёт время, сокращение завершает работу.</span>
+        <button class="btn">Сохранить срок</button>
+      </form>
+    </section>
 
-<section class="card iw-section">
-  <h2>Самопроверка</h2>
-  <form method="post" action="{% url 'independentworks:self_check_settings' run.pk %}">
-    {% csrf_token %}
-    <label class="ws-toggle iw-settings-toggle">
-      <input type="checkbox" name="self_check" {% if run.self_check %}checked{% endif %}>
-      <span class="ws-toggle-slider"></span>
-      <span class="ws-toggle-text">Разрешить проверять ответы до сдачи</span>
-    </label>
-    <p class="helptext">Ученик увидит только «верно» или «неверно». Каждое нажатие и версия ответа сохраняются в истории.</p>
-    <div class="form-buttons"><button class="btn">Сохранить</button></div>
-  </form>
-</section>
+    {% if can_add_students or not_started %}
+    <section class="sd-section" aria-labelledby="sd-who">
+      <h3 id="sd-who">Ученики</h3>
+      {% if can_add_students %}
+      {% if recipient_error %}<p class="msg msg-error" role="alert">{{ recipient_error }}</p>{% endif %}
+      <form method="post" action="{% url 'independentworks:add_students' run.pk %}" class="sd-row">{% csrf_token %}
+        <span class="tw-label">Выдать ещё</span>
+        <div class="choice-items choice-items-compact sd-choices">
+          {% for student in available_students %}<label class="choice-item"><input type="checkbox" name="students" value="{{ student.pk }}"><span>{{ student.get_full_name|default:student.username }}</span></label>
+          {% empty %}<p class="helptext">Все доступные ученики уже добавлены.</p>{% endfor %}
+        </div>
+        {% if available_students %}<div class="sd-inline"><select name="variant" aria-label="Вариант">{% for variant in variants %}<option value="{{ variant.pk }}">Вариант {{ variant.number }}</option>{% endfor %}</select><button class="btn">Выдать</button></div>{% endif %}
+      </form>
+      {% endif %}
+      {% if not_started %}
+      <span class="tw-label">Вариант не начавшим</span>
+      {% for attempt in not_started %}
+      <form class="sd-inline" method="post" action="{% url 'independentworks:reassign' attempt.pk %}">{% csrf_token %}
+        <span class="sd-name">{{ attempt.student.get_full_name|default:attempt.student.username }}</span>
+        <select name="variant" aria-label="Вариант: {{ attempt.student.get_full_name|default:attempt.student.username }}">{% for variant in variants %}<option value="{{ variant.pk }}"{% if attempt.variant_id == variant.pk %} selected{% endif %}>Вариант {{ variant.number }}</option>{% endfor %}</select>
+        <button class="btn btn-secondary btn-small">Сохранить</button>
+      </form>
+      {% endfor %}
+      {% endif %}
+    </section>
+    {% endif %}
 
-<section class="card iw-section">
-  <h2>Показ после сдачи</h2>
-  <form method="post" action="{% url 'independentworks:publish' run.pk %}">
-    {% csrf_token %}
-    <div class="iw-toggle-list">
-      <label class="ws-toggle iw-settings-toggle"><input type="checkbox" name="flags" value="checks" {% if 'checks' in run.release_flags and run.release_mode == 'auto' %}checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Правильность и итог</span></label>
-      <label class="ws-toggle iw-settings-toggle"><input type="checkbox" name="flags" value="answer" {% if 'answer' in run.release_flags and run.release_mode == 'auto' %}checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Правильный ответ</span></label>
-      <label class="ws-toggle iw-settings-toggle"><input type="checkbox" name="flags" value="solution" {% if 'solution' in run.release_flags and run.release_mode == 'auto' %}checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Решение</span></label>
-      <label class="ws-toggle iw-settings-toggle"><input type="checkbox" name="flags" value="comment" {% if 'comment' in run.release_flags and run.release_mode == 'auto' %}checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Комментарий учителя</span></label>
-    </div>
-    <div class="form-buttons"><button class="btn">Сохранить</button></div>
-  </form>
-</section>
+    <section class="sd-section" aria-labelledby="sd-check">
+      <h3 id="sd-check">Проверка и показ</h3>
+      <form method="post" action="{% url 'independentworks:self_check_settings' run.pk %}" class="sd-row">{% csrf_token %}
+        <label class="ws-toggle"><input type="checkbox" name="self_check"{% if run.self_check %} checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Самопроверка до сдачи<span class="helptext">Ученик видит только «верно» или «неверно»; выключение не стирает сделанные попытки.</span></span></label>
+        <button class="btn btn-secondary btn-small">Сохранить</button>
+      </form>
+      <form method="post" action="{% url 'independentworks:publish' run.pk %}" class="sd-row">{% csrf_token %}
+        <span class="tw-label">Сразу после сдачи ученик увидит</span>
+        <div class="sd-flags">
+          {% for value, label in release_choices %}<label class="check-label"><input type="checkbox" name="flags" value="{{ value }}"{% if value in run.release_flags and run.release_mode == 'auto' %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}
+        </div>
+        <span class="helptext">Ничего не отмечено — результаты увидят, когда вы их опубликуете.</span>
+        <button class="btn btn-secondary btn-small">Сохранить</button>
+      </form>
+    </section>
 
-<details class="card problem-section">
-  <summary>Копирование и вставка</summary>
-  <form method="post" action="{% url 'workaudit:run_settings' run.pk %}">
-    {% csrf_token %}
-    <label class="ws-toggle iw-settings-toggle"><input type="checkbox" name="restrict_clipboard" {% if run.restrict_clipboard %}checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Запретить копирование условий и вставку ответов</span></label>
-    <label class="ws-toggle iw-settings-toggle"><input type="checkbox" name="swap_numbers" {% if run.swap_numbers %}checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Подменять числа при копировании условий</span></label>
-    <p class="helptext">Что ученик копировал из условий (и пытался скопировать при запрете), видно в журнале «Активность ученика». При подмене в буфер уходит условие с другими числами — ответ по нему выдаст списанное решение; при запрете копировать нечего, и подмена не срабатывает.</p>
-    <p class="helptext">Исключения: без запрета и подмены чисел для выбранных учеников. Изменения применятся после перезагрузки страницы ученика.</p>
-    <div class="iw-toggle-list">
-      {% for person in people %}<label class="ws-toggle iw-settings-toggle"><input type="checkbox" name="exempt" value="{{ person.attempt.pk }}" {% if person.attempt.clipboard_exempt %}checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">{{ person.attempt.student.get_full_name|default:person.attempt.student.username }}</span></label>{% endfor %}
-    </div>
-    <div class="form-buttons"><button class="btn">Сохранить</button></div>
-  </form>
-</details>
-
-<details class="card problem-section">
-  <summary>Изменить распределение не начавшим</summary>
-  {% for person in people %}{% if not person.attempt.started_at %}
-  <form class="iw-inline iw-reassign-row" method="post" action="{% url 'independentworks:reassign' person.attempt.pk %}">
-    {% csrf_token %}
-    <label class="choice-item iw-reassign-student"><span>{{ person.attempt.student.get_full_name|default:person.attempt.student.username }}</span><select name="variant" aria-label="Вариант для {{ person.attempt.student.get_full_name|default:person.attempt.student.username }}">{% for variant in variants %}<option value="{{ variant.pk }}" {% if person.attempt.variant_id == variant.pk %}selected{% endif %}>Вариант {{ variant.number }}</option>{% endfor %}</select></label>
-    <button class="btn btn-secondary">Сохранить</button>
-  </form>
-  {% endif %}{% endfor %}
-</details>
+    <section class="sd-section" aria-labelledby="sd-copy">
+      <h3 id="sd-copy">Копирование</h3>
+      <form method="post" action="{% url 'workaudit:run_settings' run.pk %}" class="sd-row">{% csrf_token %}
+        <label class="ws-toggle"><input type="checkbox" name="restrict_clipboard"{% if run.restrict_clipboard %} checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Запретить копирование условий и вставку ответов</span></label>
+        <label class="ws-toggle"><input type="checkbox" name="swap_numbers"{% if run.swap_numbers %} checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Подменять числа при копировании условий<span class="helptext">В буфер уходит условие с другими числами; ответ по нему выдаст списанное решение.</span></span></label>
+        {% if people %}<details class="sd-exempt"><summary>Исключения: без запрета и подмены</summary><div class="sd-choices">{% for person in people %}<label class="check-label"><input type="checkbox" name="exempt" value="{{ person.attempt.pk }}"{% if person.attempt.clipboard_exempt %} checked{% endif %}><span>{{ person.attempt.student.get_full_name|default:person.attempt.student.username }}</span></label>{% endfor %}</div></details>{% endif %}
+        <span class="helptext">Что ученик копировал, видно в «Активности ученика». Изменения применятся после перезагрузки страницы ученика.</span>
+        <button class="btn btn-secondary btn-small">Сохранить</button>
+      </form>
+    </section>
+  </div>
+  <p class="sd-foot helptext">Каждый блок сохраняется своей кнопкой; ученики увидят изменения при следующем обновлении страницы.</p>
+</dialog>
 {% endblock %}
+{% block sidebar %}{% endblock %}
 {% block extra_js %}
 {% include 'assignments/_progress_dialog.html' with heading='Ответы и попытки' %}
 <script defer src="{% static 'js/teacher_progress.js' %}?v=3"></script>
+<script>
+/* Ошибка добавления учеников видна в открытой панели */
+(function () { var d = document.querySelector('dialog[data-open-on-load]'); if (d) d.showModal(); })();
+/* Быстрые кнопки срока в панели настроек выдачи: +N минут к текущему сроку
+   (или к «сейчас», если срока нет) и «Без срока» */
+document.addEventListener('click', function (event) {
+  var add = event.target.closest('[data-deadline-add]'), clear = event.target.closest('[data-deadline-clear]');
+  if (!add && !clear) return;
+  var input = event.target.closest('form').querySelector('[name=deadline]');
+  if (clear) { input.value = ''; return; }
+  var base = input.value ? new Date(input.value) : new Date();
+  var next = new Date(base.getTime() + Number(add.dataset.deadlineAdd) * 60000);
+  var pad = function (n) { return String(n).padStart(2, '0'); };
+  input.value = next.getFullYear() + '-' + pad(next.getMonth() + 1) + '-' + pad(next.getDate()) + 'T' + pad(next.getHours()) + ':' + pad(next.getMinutes());
+});
+</script>
 {% endblock %}

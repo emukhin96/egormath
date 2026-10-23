@@ -10,6 +10,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from accounts.models import Profile
+from problems.tests import make_student, make_teacher
 from problems.models import Task, TaskSubitem, TaskSource, Source, TaskImage
 from .models import (Work, Position, Candidate, Run, Attempt, Answer,
                      AnswerCheckAttempt, Asset, Family)
@@ -1185,8 +1186,8 @@ class IndependentWorkTests(TestCase):
         stat = response.context['variant_stats'][0]
         self.assertEqual((stat['number'], stat['count'], stat['started']), (1, 2, 2))
         self.assertEqual((stat['done'], stat['points'], stat['percent']), (1, 2, 50))
-        self.assertContains(response, 'Учеников: 2')
-        self.assertContains(response, '1 / 2 · 50%')
+        self.assertContains(response, 'Учеников 2')  # без «·»: «Учеников 2, начали …»
+        self.assertContains(response, '1 / 2, 50%')
 
     def test_self_check_persists_and_logs_every_checked_answer(self):
         attempt = self.begin(self_check=False)
@@ -1355,3 +1356,42 @@ class ConcurrentWorkTests(TransactionTestCase):
             results = list(pool.map(save, range(8)))
         self.assertEqual(results.count('saved'), 1)
         self.assertEqual(results.count('conflict'), 7)
+
+
+@override_settings(INDEPENDENT_WORKS_ENABLED=True)
+class RunSettingsDrawerTests(TestCase):
+    """Панель «Настройки выдачи» (макет E_Settings) на прогрессе самостоятельной
+    и смена срока «Начать не позже» через services.set_deadline."""
+
+    def setUp(self):
+        self.teacher = make_teacher('settings_teacher')
+        self.students = [make_student(self.teacher, username=f'settings_student{n}') for n in (1, 2)]
+        work = Work.objects.create(owner=self.teacher, title='Контрольная: подобие')
+        Candidate.objects.create(position=Position.objects.create(work=work),
+                                 task=Task.objects.create(text_latex='Сколько будет 2+2?', answer_mask='{{number: 4}}'))
+        self.run = svc.prepare(work, self.teacher, [s.pk for s in self.students])
+        svc.issue(self.run.pk, True)
+        self.started = svc.start(self.run.attempts.get(student=self.students[0]).pk)
+        self.client.force_login(self.teacher)
+
+    def test_drawer(self):
+        response = self.client.get(reverse('independentworks:progress', args=[self.run.pk]))
+        self.assertContains(response, 'data-dialog-open="run-settings"')
+        self.assertContains(response, 'Решают 1, сдали 0, не начали 1')
+        self.assertContains(response, 'Вариант не начавшим')
+        self.assertContains(response, 'name="deadline"')
+        self.assertNotContains(response, '·')
+
+    def test_deadline(self):
+        url = reverse('independentworks:run_deadline', args=[self.run.pk])
+        soon = timezone.localtime(self.started.started_at + timedelta(minutes=10)).replace(second=0, microsecond=0)
+        self.client.post(url, {'deadline': soon.strftime('%Y-%m-%dT%H:%M')})
+        self.run.refresh_from_db()
+        self.started.refresh_from_db()
+        self.assertEqual(self.run.deadline, soon)
+        self.assertEqual(self.started.ends_at, soon)  # срок начатой попытки сокращён до общего
+        self.client.post(url, {'deadline': ''})
+        self.run.refresh_from_db()
+        self.assertIsNone(self.run.deadline)
+        response = self.client.post(url, {'deadline': 'завтра'}, follow=True)
+        self.assertContains(response, 'Не удалось разобрать срок')

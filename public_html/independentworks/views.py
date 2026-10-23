@@ -1,5 +1,6 @@
 """Интерфейсы самостоятельных с проверкой прав на каждом маршруте."""
 import io
+from datetime import datetime
 import json
 import uuid
 from functools import wraps
@@ -1043,7 +1044,39 @@ def progress(request, pk):
         response = HttpResponseNotModified() if etags.matches(request, etag) else HttpResponse(html)
         response['ETag'] = etag
         return response
+    # Панель «Настройки выдачи» (макет E_Settings): сводка по времени
+    attempts = [person['attempt'] for person in context['people']]
+    context['time_summary'] = {
+        'active': sum(1 for a in attempts if a.started_at and not a.finished),
+        'finished': sum(1 for a in attempts if a.finished),
+        'unopened': sum(1 for a in attempts if not a.started_at),
+    }
+    context['not_started'] = [person['attempt'] for person in context['people'] if not person['attempt'].started_at]
+    context['release_choices'] = [('checks', 'Правильность и итог'), ('answer', 'Правильный ответ'),
+                                  ('solution', 'Решение'), ('comment', 'Комментарий учителя')]
     return render(request, 'independentworks/progress.html', context)
+
+
+@enabled
+@teacher_required
+@require_POST
+def run_deadline(request, pk):
+    """«Начать не позже» из панели настроек выдачи: общий срок проведения;
+    services.set_deadline пересчитывает срок начатых попыток (продление даёт
+    время, сокращение завершает работу по новому сроку)."""
+    run = teacher_run(request, pk)
+    raw = request.POST.get('deadline', '').strip()
+    deadline = None
+    if raw:
+        try:
+            deadline = timezone.make_aware(datetime.strptime(raw, '%Y-%m-%dT%H:%M'))
+        except ValueError:
+            messages.error(request, 'Не удалось разобрать срок')
+            return redirect('independentworks:progress', pk=pk)
+    with transaction.atomic():
+        svc.set_deadline(run.pk, deadline)
+    messages.success(request, 'Срок сохранён' if deadline else 'Срок снят')
+    return redirect('independentworks:progress', pk=pk)
 
 
 @enabled
