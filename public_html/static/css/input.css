@@ -470,6 +470,7 @@
   @media (max-width: 860px) {
     .tc-head, .tc-grid { grid-template-columns: minmax(0, 1fr); }
     .tc-progress { grid-column: 1; grid-row: auto; }
+  }
   /* Проверка по задачам (макет D_Review): сетка 250px | 1fr | 250px,
      вкладки «Задачи | Ученики» над очередью той же ширины, «Дальше» — над
      шкалой справа */
