@@ -14,7 +14,7 @@
   <div class="pv-heading">
     <a class="live-back" href="{% url 'independentworks:prepare' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">← Выдать задание</a>
     <h1>Перед выдачей: {{ run.title }}</h1>
-    <p class="live-meta">{{ variants|length }} {{ variants|length|plural_ru:'вариант,варианта,вариантов' }}, {{ recipients|length }} {{ recipients|length|plural_ru:'ученик,ученика,учеников' }}, {{ run.duration }} мин{% if run.deadline %}, начать до {{ run.deadline|date:'j E, H:i' }}{% endif %}</p>
+    <p class="live-meta">{{ variants|length }} {{ variants|length|plural_ru:'вариант,варианта,вариантов' }}, {{ recipients|length }} {{ recipients|length|plural_ru:'ученик,ученика,учеников' }}, {{ run.duration }} мин{% if run.deadline %}, закончить до {{ run.deadline|date:'j E, H:i' }}{% endif %}</p>
   </div>
   {# Кнопки над распределением и той же ширины (правило «панель = контролы над ней») #}
   <form method="post" action="{% url 'independentworks:issue' run.pk %}" class="pv-actions" id="issue-form">{% csrf_token %}
