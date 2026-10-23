@@ -216,7 +216,7 @@
         text('count', String(r.people.size));
       }
       var minutes = form.querySelector('[name=duration]').value, deadline = form.querySelector('[name=deadline]').value;
-      text('time', (minutes ? minutes + ' мин' : '—') + (deadline ? ', начать до ' + dateText(deadline) : ''));
+      text('time', (minutes ? minutes + ' мин' : '—') + (deadline ? ', закончить до ' + dateText(deadline) : ''));
       var variants = form.querySelector('[name=max_variants]').value;
       text('variants', variants ? 'не больше ' + variants : 'каждому свой');
       text('self', form.querySelector('[name=self_check]').checked ? 'да' : 'нет');

@@ -41,11 +41,11 @@ independentworks.views.prepare_run. Повторная попытка (parent): 
             <span class="is-quick">{% for minutes in durations %}<button type="button" class="btn btn-secondary btn-small" data-duration="{{ minutes }}">{{ minutes }} мин</button>{% endfor %}</span>
             <span class="helptext">Таймер у каждого ученика идёт с его кнопки «Начать».</span>
           </div>
-          <span class="is-label">Начать не позже</span>
+          <span class="is-label">Закончить не позже</span>
           <div class="is-due">
             {{ form.deadline.errors }}{{ form.deadline }}
             <span class="is-quick"><button type="button" class="btn btn-secondary btn-small" data-deadline="15">Через 15 мин</button><button type="button" class="btn btn-secondary btn-small" data-deadline="45">Через 45 мин</button><button type="button" class="btn btn-secondary btn-small" data-deadline-clear>Без срока</button></span>
-            <span class="helptext">Например, конец урока: кто не начал к этому времени, получит «не начато». Время — по серверу.</span>
+            <span class="helptext">Например, конец урока: в это время работа заканчивается у всех, даже если её минуты не истекли; кто не начал, получит «не начато». Время — по серверу.</span>
           </div>
         </div>
       </section>
