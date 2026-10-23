@@ -7,6 +7,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Case, Count, DateTimeField, IntegerField, Q, When, Min, Max
+from django.forms.utils import ErrorDict
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -487,7 +488,12 @@ def assignment_create(request):
             pk=worksheet_id).first()
     form = AssignmentCreateForm(
         request.POST or None, teacher=request.user, initial=initial)
-    if request.method == 'POST' and form.is_valid():
+    if request.POST.get('refresh'):
+        # Смена листка в мастере: введённое сохраняется, а кто уже получил
+        # листок и режим автосверки пересчитываются под новый листок — без
+        # проверки формы и без выдачи.
+        form._errors = ErrorDict()
+    elif request.method == 'POST' and form.is_valid():
         created = _create_assignments(
             worksheet=form.cleaned_data['worksheet'],
             teacher=request.user,

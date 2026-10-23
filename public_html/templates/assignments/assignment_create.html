@@ -181,9 +181,10 @@
     return;
   }
 
-  /* Обычная выдача (макет E_Issue): выбор листка карточкой перезагружает
-     мастер — сервер пересчитывает, кому листок уже выдан, и режим
-     автосверки; итог справа считается здесь же. */
+  /* Обычная выдача (макет E_Issue): выбор листка карточкой отправляет
+     мастер на пересчёт (refresh) — сервер заново считает, кому листок уже
+     выдан, и режим автосверки, введённые адресаты и настройки остаются;
+     итог справа считается здесь же. */
   var data = JSON.parse(dataNode.textContent);
   var assigned = new Set(data.assigned);
   function plural(n, forms) {
@@ -193,8 +194,13 @@
   function label(box) { return box.closest('label').querySelector('span').textContent.trim(); }
   form.querySelectorAll('[name="worksheet"]').forEach(function (radio) {
     radio.addEventListener('change', function () {
-      if (form.dataset.bound === '1') { updateSummary(); return; }
-      window.location.assign(form.dataset.refreshUrl + '?worksheet=' + encodeURIComponent(radio.value));
+      var refresh = document.createElement('input');
+      refresh.type = 'hidden'; refresh.name = 'refresh'; refresh.value = '1';
+      form.appendChild(refresh);
+      // Отключённые радиокнопки автосверки в POST не попадут — режим для
+      // нового листка сервер выберет сам
+      form.action = form.dataset.refreshUrl;
+      form.submit();
     });
   });
   var sheetFilter = form.querySelector('[data-sheet-filter]'), showAll = form.querySelector('[data-sheet-all]');
