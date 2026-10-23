@@ -39,6 +39,16 @@ class IssueWizardTests(TestCase):
         self.assertEqual(data['assigned'], [self.anna.pk])
         self.assertNotContains(response, '·')
 
+    def test_members_only_own_students(self):
+        """Участник группы, ставший учеником другого учителя, в итог
+        «Выдать N» не попадает — сервер ему не выдаст (ревью #284)."""
+        other = make_teacher('other_issue_teacher')
+        moved = make_student(other, username='moved')
+        self.group.students.add(moved)
+        data = self.client.get(self.url, {'worksheet': self.sheet.pk}).context['issue_data']
+        self.assertEqual(data['members'][str(self.group.pk)], [self.anna.pk, self.oleg.pk])
+        self.assertNotIn(str(moved.pk), data['names'])
+
     def test_locked_check_visibility(self):
         response = self.client.get(self.url, {'worksheet': self.sheet.pk})
         self.assertTrue(response.context['check_locked'])

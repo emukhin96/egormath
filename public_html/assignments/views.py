@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Case, Count, DateTimeField, IntegerField, Q, When, Min, Max
+from django.db.models import Case, Count, DateTimeField, IntegerField, Prefetch, Q, When, Min, Max
 from django.forms.utils import ErrorDict
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -538,12 +538,12 @@ def _issue_context(form, teacher):
     options = list(sheets)
     if selected and selected not in options[:ISSUE_SHEETS_SHOWN]:
         options.sort(key=lambda w: w.pk != selected.pk)
-    groups = list(form.fields['groups'].queryset.prefetch_related('students'))
-    names = {u.pk: u.get_full_name() or u.username for u in form.fields['students'].queryset}
+    # Участники групп — из того же набора, что и выдача в AssignmentCreateForm
+    # (ученики этого учителя): перешедший к другому учителю в итог не попадёт
+    students = form.fields['students'].queryset
+    groups = list(form.fields['groups'].queryset.prefetch_related(Prefetch('students', queryset=students)))
+    names = {u.pk: u.get_full_name() or u.username for u in students}
     members = {str(g.pk): [u.pk for u in g.students.all()] for g in groups}
-    for g in groups:
-        for u in g.students.all():
-            names.setdefault(u.pk, u.get_full_name() or u.username)
     check = form['check_visibility']
     return {
         'sheet_options': options, 'sheets_shown': ISSUE_SHEETS_SHOWN,
