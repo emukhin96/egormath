@@ -575,10 +575,16 @@ ISSUE_WORKS_LIMIT = 100
 
 
 def _work_cards(works):
+    """Номера и выдачи шаблона — отдельными подзапросами: позиции и запуски
+    в одном JOIN перемножились бы."""
+    from independentworks.models import Position, Run
+    numbers = (Position.objects.filter(Q(text='') | Q(candidates__isnull=False), work=OuterRef('pk'))
+               .order_by().values('work').annotate(n=Count('pk', distinct=True)).values('n'))
+    issued = Run.objects.filter(work=OuterRef('pk'), issued_at__isnull=False)
     return works.select_related('source_worksheet').annotate(
-        number_count=Count('positions', filter=Q(positions__text='') | Q(positions__candidates__isnull=False), distinct=True),
-        issued=Count('runs', filter=Q(runs__issued_at__isnull=False), distinct=True),
-        last_issued=Max('runs__issued_at'))
+        number_count=Coalesce(Subquery(numbers, output_field=IntegerField()), 0),
+        issued=Coalesce(Subquery(issued.order_by().values('work').annotate(n=Count('pk')).values('n'), output_field=IntegerField()), 0),
+        last_issued=Subquery(issued.order_by('-issued_at').values('issued_at')[:1], output_field=DateTimeField()))
 
 
 def work_options(user, query='', current=None):
