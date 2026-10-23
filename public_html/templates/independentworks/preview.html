@@ -92,16 +92,51 @@
       node.textContent = form.querySelectorAll('input[value="' + node.dataset.variantCount + '"]:checked').length;
     });
   }
-  async function save() {
-    counts();
-    try {
-      var response = await fetch(window.location.href, {method: 'POST', body: new FormData(form)});
-      if (!response.ok) throw new Error('Не удалось сохранить распределение');
-      if (window.EgorAutosave) EgorAutosave.showSaved(true, 'Распределение сохранено');
-    } catch (error) {
-      if (window.EgorAutosave) EgorAutosave.showSaved(false, error.message);
-    }
+  /* Сохранения идут строго по очереди (EgorAutosave.enqueue), снимок формы —
+     в момент изменения: устаревший ответ не перезапишет свежий. Пока очередь
+     не пуста, «Выдать» недоступна; после неудачи выбор возвращается к
+     последнему сохранённому распределению — выдают то, что на экране. */
+  var issueButton = document.querySelector('#issue-form button:not([type=button])');
+  var locked = !issueButton || issueButton.disabled, pending = 0, saved = snapshot(), tail = Promise.resolve();
+  function snapshot() {
+    return Array.from(form.querySelectorAll('input[type=radio]:checked')).map(function (input) { return [input.name, input.value]; });
   }
+  function restore(state) {
+    state.forEach(function (pair) {
+      var input = form.querySelector('input[name="' + pair[0] + '"][value="' + pair[1] + '"]');
+      if (input) input.checked = true;
+    });
+    counts();
+  }
+  function busy(delta) {
+    pending += delta;
+    if (!locked) issueButton.disabled = pending > 0;
+  }
+  function enqueue(operation) {
+    if (window.EgorAutosave && EgorAutosave.enqueue) return EgorAutosave.enqueue(form, operation);
+    tail = tail.catch(function () {}).then(operation);
+    return tail;
+  }
+  function save() {
+    counts();
+    var body = new FormData(form), state = snapshot();
+    busy(1);
+    enqueue(function () {
+      return fetch(window.location.href, {method: 'POST', body: body}).then(function (response) {
+        if (!response.ok) throw new Error('Не удалось сохранить распределение');
+        saved = state;
+        if (window.EgorAutosave) EgorAutosave.showSaved(true, 'Распределение сохранено');
+      });
+    }).catch(function (error) {
+      if (window.EgorAutosave) EgorAutosave.showSaved(false, error.message || 'Не удалось сохранить распределение');
+    }).then(function () {
+      busy(-1);
+      if (!pending) restore(saved);
+    });
+  }
+  document.getElementById('issue-form').addEventListener('submit', function (event) {
+    if (pending) event.preventDefault();
+  });
   form.addEventListener('change', save);
   var shuffle = document.querySelector('[data-shuffle]');
   if (shuffle) shuffle.addEventListener('click', function () {
