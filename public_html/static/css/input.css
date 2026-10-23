@@ -7778,6 +7778,54 @@
     font-variant-numeric: tabular-nums;
   }
   .iw-head-timer svg { width: 16px; height: 16px; }
+  /* Заглушка «Вы ушли со страницы» (Run.lock_on_leave): закрывает работу
+     целиком, пока учитель не разблокирует; таймер под ней идёт */
+  .iw-lock {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    place-items: center;
+    padding: var(--space-4);
+    background: var(--bg);
+  }
+  .iw-lock[hidden] { display: none; }
+  .iw-lock:focus { outline: none; }
+  .iw-lock-card {
+    max-width: 420px;
+    display: grid;
+    justify-items: center;
+    gap: var(--space-3);
+    padding: var(--space-6) var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+    text-align: center;
+  }
+  .iw-lock-icon {
+    width: 56px;
+    height: 56px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: #fdeaea;
+    color: var(--err);
+  }
+  .iw-lock-icon svg { width: 28px; height: 28px; }
+  .iw-lock-card h2 { margin: 0; font-size: 1.25rem; }
+  .iw-lock-card p { margin: 0; color: var(--muted); }
+  /* Учителю: ученик под заглушкой — в таблице прогресса и на странице попытки */
+  .badge-locked { background: #fdeaea; color: var(--err); }
+  .iw-locked-row,
+  .iw-locked-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .iw-locked-row { margin-top: var(--space-1); }
+  .iw-locked-note { margin-bottom: var(--space-3); }
+  .iw-locked-note form { margin: 0; }
   .iw-time-bar {
     height: 3px;
     background: var(--accent-soft);
