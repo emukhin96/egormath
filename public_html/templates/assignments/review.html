@@ -103,4 +103,4 @@
   </div>
 </form>
 {% endblock %}
-{% block extra_js %}<script defer src="{% static 'js/work_history.js' %}"></script><div data-review-live-url="{% url 'assignment_live' assignment.pk %}" data-live-file="{% live_file 'assignment' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=3"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=2"></script>{% endif %}{% endblock %}
+{% block extra_js %}<script defer src="{% static 'js/work_history.js' %}"></script><div data-review-live-url="{% url 'assignment_live' assignment.pk %}" data-live-file="{% live_file 'assignment' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=4"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=2"></script>{% endif %}{% endblock %}
