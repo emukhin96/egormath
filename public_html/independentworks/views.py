@@ -527,7 +527,7 @@ def prepare_run(request, pk):
         previous = teacher_run(request, request.GET['resume'])
         if previous.work_id != work.pk or previous.parent_id != (parent.pk if parent else None) or previous.kind != kind:
             raise Http404
-        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'self_check', 'release_mode', 'release_flags', 'restrict_clipboard', 'swap_numbers')}
+        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'self_check', 'release_mode', 'release_flags', 'restrict_clipboard', 'swap_numbers', 'lock_on_leave')}
         initial['students'] = list(previous.plan['students'])
     form = RunForm(request.POST or None, teacher=request.user, initial=initial)
     if request.method == 'POST' and form.is_valid():
@@ -594,7 +594,12 @@ def preview_context(run):
 @teacher_required
 def preview(request, pk):
     run = teacher_run(request, pk)
+    # Распределение сохраняется fetch-запросом: ему — JSON, а не редирект,
+    # иначе fetch пройдёт по редиректу и примет чужую страницу за успех
+    ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     if run.issued_at:
+        if ajax:
+            raise svc.WorkError('Работа уже выдана, распределение не изменить.', 409)
         return redirect('independentworks:progress', pk=pk)
     if request.method == 'POST':
         with transaction.atomic():
@@ -607,6 +612,8 @@ def preview(request, pk):
                     raise svc.WorkError('Выберите существующий вариант каждому ученику.')
                 run.plan['students'][student] = int(value)
             run.save(update_fields=['plan'])
+        if ajax:
+            return JsonResponse({'ok': True})
         messages.success(request, 'Распределение сохранено')
         return redirect('independentworks:preview', pk=pk)
     return render(request, 'independentworks/preview.html', preview_context(run))
@@ -735,13 +742,40 @@ def attempt_page(request, pk):
                  'answered': sum(1 for row in rows if row['state'] != 'empty')}
     return render(request, 'independentworks/attempt.html', {
         'attempt': attempt, 'teacher_view': teacher, 'rows': rows, 'clock': clock,
-        'editable': editable,
+        'editable': editable, 'locked': bool(attempt.locked_at) and not attempt.finished,
         'can_start': not attempt.started_at and not (attempt.run.deadline and timezone.now() >= attempt.run.deadline),
         'accessible': accessible, 'show_checks': teacher or 'checks' in attempt.disclosure,
         'tail_notes': [n['text'] for n in attempt.variant.notes if n['before'] > max((p.position for p in attempt.variant.points.all()), default=0)] if accessible else [],
         'result': svc.result(attempt) if teacher or 'checks' in attempt.disclosure else None,
         'grades': [('', 'По автосверке', '↺')] + Review.grade_options(), 'now': timezone.now().isoformat(),
         'cumulative': svc.cumulative(attempt, student_view=not teacher) if teacher or 'checks' in attempt.disclosure else None})
+
+
+@enabled
+def attempt_lock(request, pk):
+    """Заглушка «Вы ушли со страницы»: POST — ученик ушёл дольше порога,
+    GET — опрос, пока страница закрыта (не разблокировал ли учитель)."""
+    attempt = own_attempt(request, pk)
+    if request.method == 'POST':
+        attempt = svc.lock_on_leave(attempt.pk)
+    else:
+        svc.finish_expired(attempt)
+    return JsonResponse({'locked': bool(attempt.locked_at) and not attempt.finished,
+                         'enabled': attempt.run.lock_on_leave, 'finished': attempt.finished})
+
+
+@enabled
+@teacher_required
+@require_POST
+def unlock_attempt(request, pk):
+    attempt = own_attempt(request, pk, teacher=True)
+    svc.unlock(Attempt.objects.filter(pk=attempt.pk))
+    if request.headers.get('Accept') == 'application/json':
+        return JsonResponse({'ok': True})
+    messages.success(request, 'Задания разблокированы')
+    if request.POST.get('back') == 'attempt':
+        return redirect('independentworks:attempt', pk=pk)
+    return redirect('independentworks:progress', pk=attempt.run_id)
 
 
 @enabled
@@ -850,6 +884,20 @@ def self_check_settings(request, pk):
     if not run.self_check:
         Answer.objects.filter(attempt__run=run).update(check_revealed=False)
     messages.success(request, 'Настройка самопроверки сохранена')
+    return redirect('independentworks:progress', pk=pk)
+
+
+@enabled
+@teacher_required
+@require_POST
+def lock_settings(request, pk):
+    run = teacher_run(request, pk)
+    run.lock_on_leave = 'lock_on_leave' in request.POST
+    run.save(update_fields=['lock_on_leave'])
+    # Выключили — заглушки снимаются у всех сразу, без кнопки у каждого
+    if not run.lock_on_leave:
+        svc.unlock(run.attempts.all())
+    messages.success(request, 'Настройка блокировки сохранена')
     return redirect('independentworks:progress', pk=pk)
 
 

@@ -242,7 +242,8 @@ def correction_fingerprint(parent):
 
 def prepare(work, owner, students, duration=40, deadline=None, max_variants=None,
             allow_photos=True, self_check=False, release_mode='manual', release_flags=None,
-            parent=None, kind='initial', previous=None, restrict_clipboard=False, swap_numbers=False):
+            parent=None, kind='initial', previous=None, restrict_clipboard=False, swap_numbers=False,
+            lock_on_leave=False):
     if kind not in ('initial', 'correction', 'retake') or (kind == 'initial') != (parent is None):
         raise WorkError('Исходная попытка нужна только для исправления или пересдачи.')
     if parent is not None and parent.run.work_id != work.pk:
@@ -299,6 +300,7 @@ def prepare(work, owner, students, duration=40, deadline=None, max_variants=None
         return Run.objects.create(work=work, owner=owner, title=work.title, duration=duration,
                                   deadline=deadline, max_variants=max_variants, allow_photos=allow_photos,
                                   self_check=self_check, restrict_clipboard=restrict_clipboard, swap_numbers=swap_numbers,
+                                  lock_on_leave=lock_on_leave,
                                   release_mode=release_mode, release_flags=flags,
                                   fingerprint=correction_fingerprint(parent) if kind == 'correction' else digest(data),
                                   plan=plan, kind=kind, parent=parent)
@@ -423,9 +425,41 @@ def start(attempt_id):
     return attempt
 
 
+LOCKED_MESSAGE = 'Вы ушли со страницы. Попросите учителя разблокировать задания.'
+
+
 def editable(attempt):
     if not attempt.started_at or attempt.finished:
         raise WorkError('Работа не начата или время закончилось.', 409)
+    # Заглушку можно убрать из страницы вручную — ответы всё равно не примем
+    if attempt.locked_at:
+        raise WorkError(LOCKED_MESSAGE, 423)
+
+
+@transaction.atomic
+def lock_on_leave(attempt_id):
+    """Ученик ушёл со страницы дольше порога (решает браузер, см.
+    iw_leave_lock.js). Блокирует, только если в проведении включена
+    блокировка: страница сообщает о каждом долгом уходе, поэтому настройка,
+    включённая посреди работы, действует без перезагрузки у ученика."""
+    from workaudit.services import lock_work
+    attempt = lock_work(Attempt, attempt_id)
+    finish_expired(attempt)
+    if attempt.run.lock_on_leave and attempt.started_at and not attempt.finished and not attempt.locked_at:
+        attempt.locked_at = timezone.now()
+        attempt.save(update_fields=['locked_at'])
+    return attempt
+
+
+def unlock(attempts):
+    """Разово снять заглушку: открытая страница ученика узнаёт об этом
+    опросом файла-версии ``attempt:<pk>``."""
+    ids = list(attempts.filter(locked_at__isnull=False).values_list('pk', flat=True))
+    Attempt.objects.filter(pk__in=ids).update(locked_at=None)
+    for attempt in Attempt.objects.filter(pk__in=ids):
+        livefiles.touch('attempt', attempt.pk)
+        touch_attempt(attempt)
+    return len(ids)
 
 
 @transaction.atomic

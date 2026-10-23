@@ -1144,7 +1144,7 @@ class IndependentWorkTests(TestCase):
         self.client.force_login(self.teacher)
         response = self.client.get(self.url('preview', run.pk))
         self.assertContains(response, 'Общее условие уникальное', count=1)
-        self.assertContains(response, 'Ответ и решение — только учителю')
+        self.assertContains(response, 'Ответ и решение видите только вы')  # макет E_Preview
         self.assertNotContains(response, 'data-preview-select="1"')
         svc.issue(run.pk)
         attempt = svc.start(run.attempts.get().pk)
