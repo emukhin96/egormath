@@ -78,6 +78,10 @@ class Run(models.Model):
     max_variants = models.PositiveIntegerField(null=True, blank=True)
     restrict_clipboard = models.BooleanField(default=False)
     swap_numbers = models.BooleanField(default=False)
+    # Ушёл со страницы дольше 2 секунд (порог — iw_leave_lock.js) — задания под
+    # заглушкой, пока учитель не разблокирует (Attempt.locked_at). Можно
+    # включить и после выдачи.
+    lock_on_leave = models.BooleanField(default=False)
     allow_photos = models.BooleanField(default=True)
     self_check = models.BooleanField(default=False)
     release_mode = models.CharField(max_length=12, default='manual')
@@ -139,6 +143,9 @@ class Attempt(models.Model):
     parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='children')
     root = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='corrections')
     clipboard_exempt = models.BooleanField(default=False)
+    # Когда страницу закрыла заглушка «Вы ушли со страницы»; учитель
+    # разблокирует разово — при следующем уходе блокировка повторится.
+    locked_at = models.DateTimeField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     ends_at = models.DateTimeField(null=True, blank=True, db_index=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
