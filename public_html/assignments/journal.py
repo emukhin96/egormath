@@ -187,6 +187,12 @@ def journal_xlsx(data, period):
             else:
                 values.append(f"{cell['mark']}, {cell['percent']}%" + (', после срока' if cell['late'] else ''))
         sheet.append([row['name']] + values + [row['average'], row['mark'], row['late']])
+    # Строки — только текст: название листка или имя, начинающееся с «=»,
+    # не должно стать формулой в Excel (как в independentworks.export, ревью #283)
+    for row in sheet.iter_rows():
+        for cell in row:
+            if isinstance(cell.value, str):
+                cell.data_type = 's'
     sheet.freeze_panes = 'B2'
     for column in sheet.columns:
         sheet.column_dimensions[column[0].column_letter].width = 22

@@ -117,3 +117,15 @@ class JournalTests(TestCase):
         self.assertContains(response, '№2</button>')
         with override_settings(INDEPENDENT_WORKS_ENABLED=False):
             self.assertContains(self.client.get(reverse('dashboard')), self.url)
+
+    def test_xlsx_cells_are_text(self):
+        """Ревью #283: название, начинающееся с «=», в XLSX — текст, не формула."""
+        import io
+        from openpyxl import load_workbook
+        sheet = self.sheets[0]
+        sheet.title = '=HYPERLINK("http://example.com","x")'
+        sheet.save()
+        response = self.client.get(self.url, {'format': 'xlsx'})
+        book = load_workbook(io.BytesIO(b''.join(response.streaming_content)))
+        header = book.active['B1']
+        self.assertEqual((header.value, header.data_type), ('=HYPERLINK("http://example.com","x")', 's'))
