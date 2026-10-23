@@ -243,7 +243,7 @@ def parse_reference(payload, multiple=False, *, validate=False, mode='expression
     от временной доступности символьного вычислителя.
     """
     if len(payload) > MAX_EXPR_LEN:
-        raise ValueError('слишком длинный эталон')
+        raise ValueError('слишком длинный ответ')
     if mode not in ('expression', 'simplify', 'factor') or (multiple and mode != 'expression'):
         raise ValueError('неизвестный режим проверки формулы')
     texts, _, domain, angle, bounds = _reference_context(payload, multiple)
@@ -257,7 +257,7 @@ def parse_reference(payload, multiple=False, *, validate=False, mode='expression
     except (subprocess.TimeoutExpired, OSError, ValueError):
         # Новую маску нельзя сохранить с непроверенным эталоном. Уже
         # сохранённые поля продолжают отображаться через ветку выше.
-        raise FormulaUnavailable('не удалось проверить эталон; повторите сохранение чуть позже') from None
+        raise FormulaUnavailable('не удалось проверить ответ; повторите сохранение чуть позже') from None
     if result.get('error'):
         raise ValueError(result['error'])
     return spec, result['display']
@@ -962,14 +962,14 @@ def _parse_reference(payload, multiple=False, *, numeric=False):
     positive = tuple(dict.fromkeys(names))
     items = tuple(_parse(t.strip(), positive, numeric=numeric) for t in texts)
     if any(x is None for x in items):
-        raise ValueError('эталон не разобран как выражение')
+        raise ValueError('ответ не разобран как выражение')
     symbols = set()
     for item in items:
         symbols.update(item.expression.free_symbols)
         for component in (*item.denominators, *item.components):
             symbols.update(component.free_symbols)
     if set(positive) - {str(s) for s in symbols}:
-        raise ValueError('positive содержит параметр, которого нет в эталоне')
+        raise ValueError('positive содержит параметр, которого нет в ответе')
     input_symbols = tuple(sorted(symbols, key=str))
     substitutions = ()
     if domain:
@@ -1022,7 +1022,7 @@ def _parse_reference(payload, multiple=False, *, numeric=False):
     reference = Reference(items, positive, tuple(sorted(symbols, key=str)),
                           input_symbols, substitutions, angle, bounds)
     if any(_defined(item, reference) is False for item in items):
-        raise ValueError('эталон не определён на указанной области параметров')
+        raise ValueError('ответ не определён на указанной области параметров')
     return reference, ';'.join(texts).strip()
 
 

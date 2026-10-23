@@ -184,7 +184,7 @@ class FormulaMaskTests(SimpleTestCase):
                                             validate_references=True).is_valid)
         # При отображении сохранённой маски проверяется только структура.
         # Неиспользуемый параметр запрещается при проверке перед сохранением.
-        with self.assertRaisesRegex(ValueError, 'которого нет в эталоне'):
+        with self.assertRaisesRegex(ValueError, 'которого нет в ответе'):
             formulas._parse_reference(r'\alpha | positive: \beta')
         self.assertFalse(parse_mask(
             r'{{expression: \alpha | positive: \beta}}',
