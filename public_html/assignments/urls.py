@@ -2,7 +2,7 @@ from django.urls import path
 
 from canvas import boards
 
-from . import bulk, journal, views, progress, windows
+from . import bulk, journal, views, progress, review_tasks, windows
 
 urlpatterns = [
     path('progress/', progress.progress_overview, name='progress_overview'),
@@ -10,6 +10,9 @@ urlpatterns = [
     path('progress/<int:worksheet_id>/', progress.worksheet_progress, name='worksheet_progress'),
     path('progress/<int:worksheet_id>/task/<int:item_id>/', windows.task_window, name='worksheet_task_window'),
     path('progress/<int:worksheet_id>/task/<int:item_id>/class/', windows.task_class, name='assignment_item_class'),
+    path('progress/<int:worksheet_id>/review/', review_tasks.review_tasks, name='assignment_review_queue'),
+    path('progress/<int:worksheet_id>/review/<int:item_id>/grade/', review_tasks.review_group_grade, name='assignment_review_group_grade'),
+    path('progress/<int:worksheet_id>/review/complete/', review_tasks.review_complete, name='assignment_review_complete'),
     path('progress/<int:worksheet_id>/boards/', boards.worksheet_boards, name='worksheet_boards'),
     path('progress/<int:worksheet_id>/boards/live/', boards.worksheet_boards_live, name='worksheet_boards_live'),
     path('progress/<int:worksheet_id>/boards/tasks/', boards.worksheet_boards_tasks, name='worksheet_boards_tasks'),

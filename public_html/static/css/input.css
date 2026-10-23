@@ -471,6 +471,71 @@
     .tc-head, .tc-grid { grid-template-columns: minmax(0, 1fr); }
     .tc-progress { grid-column: 1; grid-row: auto; }
   }
+  /* Проверка по задачам (макет D_Review): сетка 250px | 1fr | 250px,
+     вкладки «Задачи | Ученики» над очередью той же ширины, «Дальше» — над
+     шкалой справа */
+  .rv-grid { display: grid; grid-template-columns: 250px minmax(0, 1fr) 250px; gap: var(--space-4); align-items: start; }
+  .rv-tabs { align-self: end; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; padding: 3px; border-radius: 10px; background: #dfe6ee; }
+  .rv-tabs a { display: grid; place-items: center; height: 32px; border-radius: 8px; color: #4a5566; font-weight: 500; text-decoration: none; }
+  .rv-tabs a[aria-selected="true"] { background: #fff; color: #102b55; font-weight: 600; box-shadow: 0 1px 2px rgba(16, 43, 85, 0.12); }
+  .rv-head { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+  .rv-head h1 { margin: 0; }
+  .rv-next { align-self: end; }
+  .rv-next { display: flex; flex-direction: column; gap: var(--space-2); }
+  .rv-next form { margin: 0; }
+  .rv-next .btn { width: 100%; margin: 0; }
+  .rv-students { grid-column: 1 / -1; margin: 0; }
+  .rv-queue { margin: 0; padding: 0; overflow: hidden; }
+  .rv-queue-title { padding: 12px 14px 6px; }
+  .rv-queue ul { margin: 0; padding: 0 6px 6px; list-style: none; }
+  .rv-queue a { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 8px 10px; border-radius: 8px; color: var(--text); text-decoration: none; }
+  .rv-queue a[aria-current] { background: #e4eef9; font-weight: 700; }
+  .rv-queue a:hover { background: #f2f6fc; }
+  .rv-queue-left { min-width: 26px; padding: 1px 8px; border-radius: 999px; background: #fff3d6; color: #7a4a00; font-size: 12.5px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+  .rv-queue-note { margin: 0; padding: 10px 14px 12px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+  .rv-main { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+  .rv-task, .rv-group { margin: 0; }
+  .rv-task-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
+  .rv-reference { display: flex; flex-direction: column; gap: 6px; margin-top: var(--space-3); padding: 12px 14px; border-radius: 10px; background: #f7f9fc; }
+  .rv-group { padding: 12px 14px; border-top: 4px solid var(--border); }
+  .rv-group-wrong { border-top-color: #f2c0c0; }
+  .rv-group-ok { border-top-color: #b7dcbc; }
+  .rv-group-draft { border-top-color: #f5d79a; }
+  .rv-group-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-2) var(--space-3); margin-bottom: var(--space-2); }
+  .rv-group-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 16px; }
+  .rv-group-title .mask-answer { margin: 0; }
+  .rv-verdict { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .rv-group-ok .rv-verdict { color: #14511c; }
+  .rv-group-wrong .rv-verdict { color: #8f1616; }
+  .rv-group-grade { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .rv-scale { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+  .rv-scale button { min-width: 30px; height: 28px; padding: 0 6px; border: 1px solid #dfe6ee; border-radius: 6px; background: #fff; color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .rv-scale button:hover { border-color: #9fc0e6; }
+  .rv-scale button.is-suggested { border-color: #9fc0e6; background: #e4eef9; }
+  .rv-scale button[aria-pressed="true"] { border-color: #102b55; background: #102b55; color: #fff; }
+  .rv-people { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+  .rv-person { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: 6px 8px; margin: 0 -8px; border-radius: 8px; border-top: 1px solid #f1f4f8; outline: none; }
+  .rv-person .rv-name { flex: 1 1 120px; }
+  .rv-person.is-selected { background: #f2f6fc; box-shadow: inset 0 0 0 1px #9fc0e6; }
+  .rv-name { min-width: 0; overflow: hidden; font-size: 13.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .rv-name .linklike { font-weight: 600; }
+  .rv-mark { display: inline-flex; gap: 4px; }
+  .rv-mark .progress-mark { width: 36px; height: 26px; font-size: 13px; }
+  .rv-open { font-size: 13px; }
+  .rv-side { display: flex; flex-direction: column; gap: var(--space-3); }
+  .rv-legend { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+  .rv-legend-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: var(--space-2); font-size: 13px; }
+  .rv-credit { color: var(--muted); font-variant-numeric: tabular-nums; }
+  @media (max-width: 1100px) {
+    .rv-grid { grid-template-columns: 220px minmax(0, 1fr); }
+    .rv-next { grid-column: 2; }
+    .rv-side { grid-column: 1 / -1; }
+  }
+  @media (max-width: 760px) {
+    .rv-grid { grid-template-columns: minmax(0, 1fr); }
+    .rv-next, .rv-side { grid-column: auto; }
+    .rv-person .rv-scale { flex-basis: 100%; }
+  }
   /* Журнал оценивания (макет D_Journal): ученики × работы периода,
      ячейка — отметка и процент цветом, рамка — после срока или не сдано */
   .jr-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-3) var(--space-4); margin-bottom: var(--space-4); }
