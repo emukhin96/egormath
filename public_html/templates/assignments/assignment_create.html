@@ -214,8 +214,16 @@
   form.querySelectorAll('[name="worksheet"]').forEach(function (radio) {
     radio.addEventListener('change', function () {
       clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(refreshSheet, byPointer ? 0 : 900);
+      refreshTimer = setTimeout(function () { refreshTimer = null; refreshSheet(); }, byPointer ? 0 : 900);
     });
+  });
+  // Пересчёт ещё не прошёл, а мастер уже отправляют: сначала пересчёт под
+  // новый листок, выдача — после него, иначе две отправки столкнутся
+  form.addEventListener('submit', function (event) {
+    if (!refreshTimer) return;
+    event.preventDefault();
+    clearTimeout(refreshTimer); refreshTimer = null;
+    refreshSheet();
   });
   if (form.hasAttribute('data-refreshed')) {
     var picked = form.querySelector('[name="worksheet"]:checked');
