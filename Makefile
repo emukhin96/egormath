@@ -28,6 +28,9 @@ else
 endif
 
 TW_URL := https://github.com/tailwindlabs/tailwindcss/releases/download/$(TW_VERSION)/$(TW_ASSET)
+# Порог обрыва загрузки, байт/с (см. ensure-tailwind). На честно медленном
+# канале — make build-css TW_SPEED_LIMIT=0: тогда без обрыва.
+TW_SPEED_LIMIT ?= 102400
 
 CSS_IN := public_html/static/css/input.css
 CSS_OUT := public_html/static/css/app.css
@@ -44,16 +47,18 @@ PYTHON := $(shell test -x "$(ROOT)venv/bin/python" && echo ../venv/bin/python ||
 
 # С VPS соединения с CDN GitHub часто глохнут после первых сотен КБ и висят
 # без обрыва (так завис деплой 23.10), а нормальная загрузка идёт за секунды.
-# Поэтому медленнее 100 КБ/с 10 секунд — обрываем и пробуем снова, до 20 раз.
-# Каждая попытка — новый curl: встроенный --retry на сервере проваливал
-# 21 попытку подряд, а следующий запуск curl тут же качал файл. Качаем во
-# временный файл, чтобы оборванная загрузка не осталась на месте CLI.
+# Заглохшее соединение — не ноль, а струйка 14–32 КБ/с, поэтому порог
+# TW_SPEED_LIMIT по умолчанию 100 КБ/с: медленнее 10 секунд — обрываем и
+# пробуем снова, до 20 раз. Каждая попытка — новый curl: встроенный --retry
+# на сервере проваливал 21 попытку подряд, а следующий запуск curl тут же
+# качал файл. Качаем во временный файл, чтобы оборванная загрузка не
+# осталась на месте CLI.
 ensure-tailwind:
 	@mkdir -p "$(TOOLS)"
 	@if [ ! -x "$(TW)" ]; then \
 	  echo "Downloading Tailwind CLI $(TW_VERSION) ($(TW_ASSET))..."; \
 	  ok=; for i in $$(seq 20); do \
-	    curl -fsSL --connect-timeout 15 --speed-limit 102400 --speed-time 10 \
+	    curl -fsSL --connect-timeout 15 --speed-limit $(TW_SPEED_LIMIT) --speed-time 10 \
 	      -o "$(TW).part" "$(TW_URL)" && { ok=1; break; }; \
 	    sleep 2; \
 	  done; \
