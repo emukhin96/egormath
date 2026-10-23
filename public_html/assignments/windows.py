@@ -2,6 +2,7 @@
 «задача» — условие, маска глазами ученика, эталон и как её решает класс;
 «задача у ученика» — ответ, история, копирование в этой задаче, оценка и
 комментарий, переходы к соседнему ученику и к соседней задаче."""
+import hashlib
 import re
 from collections import Counter
 
@@ -89,11 +90,10 @@ def student_window(assignment, item, row):
     }
 
 
-@teacher_required
-@never_cache
-def task_window(request, worksheet_id, item_id):
-    """Окно «задача»: условие, маска «так видит ученик», эталон, решение и
-    как задачу решает класс (или выбранная группа) — счётчики и ответы."""
+def class_for_item(request, worksheet_id, item_id):
+    """Как класс (или группа ?group=) решает пункт листка: строки
+    progress_people по одной задаче и сводка live_summary — общая основа
+    окна «задача» и страницы «задача у класса»."""
     from .progress import live_summary, progress_assignments, progress_groups, progress_people
     worksheet = get_object_or_404(Worksheet.visible_to(request.user), pk=worksheet_id)
     items = list(worksheet.ordered_items().filter(task__isnull=False))
@@ -110,14 +110,28 @@ def task_window(request, worksheet_id, item_id):
     groups = [dict(g, number=number) for g in progress_groups([item], assignments)]
     people = progress_people(groups, assignments)
     summary, stats = live_summary(groups, people)
-    answers, wrong = [], Counter()
     for person in people:
+        for cell in person['cells']:
+            obj = cell['obj']
+            cell['shown'] = obj.mask_fragments(f'class_{obj.pk}', for_teacher=True) if obj and obj.has_mask_values else None
+    return {'worksheet': worksheet, 'items': items, 'item': item, 'number': number, 'groups': groups,
+            'people': people, 'summary': summary, 'stats': stats, 'group_id': group_id}
+
+
+@teacher_required
+@never_cache
+def task_window(request, worksheet_id, item_id):
+    """Окно «задача»: условие, маска «так видит ученик», эталон, решение и
+    как задачу решает класс (или выбранная группа) — счётчики и ответы."""
+    data = class_for_item(request, worksheet_id, item_id)
+    worksheet, items, item, number = data['worksheet'], data['items'], data['item'], data['number']
+    summary, stats = data['summary'], data['stats']
+    answers, wrong = [], Counter()
+    for person in data['people']:
         cells = [c for c in person['cells'] if not c['hidden']]
         if not cells:
             continue
         for cell in cells:
-            obj = cell['obj']
-            cell['shown'] = obj.mask_fragments(f'class_{obj.pk}', for_teacher=True) if obj and obj.has_mask_values else None
             if cell['status'] == 'wrong' and cell['answer']:
                 wrong[cell['answer']] += 1
         answers.append({'person': person, 'cells': cells, 'name': _name(person['assignment'])})
@@ -136,4 +150,104 @@ def task_window(request, worksheet_id, item_id):
         'prev_url': reverse('worksheet_task_window', args=[worksheet.pk, items[index - 1].pk]) if index else '',
         'next_url': reverse('worksheet_task_window', args=[worksheet.pk, items[index + 1].pk]) if index + 1 < len(items) else '',
         'summary': summary,
+        'class_url': reverse('assignment_item_class', args=[worksheet.pk, item.pk]),
     })
+
+
+def _answer_key(answer):
+    return ' '.join((answer or '').split())
+
+
+def class_answer_groups(people, column, task_id, anonymous=False):
+    """Ответы класса на один пункт (column — индекс колонки в cells),
+    сгруппированные по одинаковому ответу (макет D_Task): верные одной
+    группой, неверные по ответу — частая ошибка первой, введённые без
+    проверки, «решают сейчас» (последний ответ на этой задаче в окне
+    LIVE_MINUTES) и «ещё не дошли». Плюс счётчики для полосы прогресса."""
+    buckets = {'ok': [], 'wrong': {}, 'draft': {}, 'live': [], 'rest': []}
+    counts = Counter()
+    tries = Counter()
+    if anonymous:
+        # Без имён порядок не алфавитный, иначе «Ученик 1» — первая фамилия
+        # журнала (ревью #280): устойчивое перемешивание по назначению и
+        # задаче, номера — по порядку на странице (ниже, после групп)
+        people = sorted(people, key=lambda p: hashlib.sha256(f'{p["assignment"].pk}:{task_id}'.encode()).hexdigest())
+    for person in people:
+        cell = person['cells'][column]
+        if cell['hidden']:
+            continue
+        row = {'person': person, 'cell': cell, 'copied': person['copied'] and not anonymous,
+               'name': _name(person['assignment'])}
+        status = cell['status']
+        if status == 'ok':
+            buckets['ok'].append(row)
+            counts['ok_first' if cell['attempt_count'] <= 1 else 'ok_later'] += 1
+            tries[cell['attempt_count'] or 1] += 1
+        elif status in ('wrong', 'draft', 'unknown'):
+            kind = 'wrong' if status == 'wrong' else 'draft'
+            buckets[kind].setdefault(_answer_key(cell['answer']), []).append(row)
+            counts[kind] += 1
+        elif person['live_task'] == task_id:
+            buckets['live'].append(row)
+            counts['live'] += 1
+        else:
+            buckets['rest'].append(row)
+            counts['rest'] += 1
+    groups = []
+    if buckets['ok']:
+        common = Counter(_answer_key(r['cell']['answer']) for r in buckets['ok']).most_common(1)[0][0]
+        sample = next(r['cell'] for r in buckets['ok'] if _answer_key(r['cell']['answer']) == common)
+        groups.append({'kind': 'ok', 'verdict': 'Верно', 'sample': sample, 'rows': buckets['ok']})
+    wrong = sorted(buckets['wrong'].values(), key=lambda rows: -len(rows))
+    for position, rows in enumerate(wrong):
+        verdict = 'Неверно, частая ошибка' if position == 0 and len(rows) > 1 else 'Неверно'
+        groups.append({'kind': 'wrong', 'verdict': verdict, 'sample': rows[0]['cell'], 'rows': rows})
+    for rows in sorted(buckets['draft'].values(), key=lambda rows: -len(rows)):
+        groups.append({'kind': 'draft', 'verdict': 'Введено, не проверено', 'sample': rows[0]['cell'], 'rows': rows})
+    if buckets['live']:
+        groups.append({'kind': 'live', 'title': 'Решают сейчас', 'verdict': 'на этой задаче', 'rows': buckets['live']})
+    if buckets['rest']:
+        groups.append({'kind': 'rest', 'title': 'Ещё не дошли', 'verdict': 'ответа на эту задачу нет', 'rows': buckets['rest']})
+    if anonymous:
+        for number, row in enumerate((row for group in groups for row in group['rows']), 1):
+            row['name'] = f'Ученик {number}'
+    total = sum(counts.values())
+    bar = [{'key': key, 'label': label, 'count': counts[key], 'percent': round(100 * counts[key] / total, 2) if total else 0}
+           for key, label in [('ok_first', 'Верно с первой'), ('ok_later', 'Верно не сразу'), ('wrong', 'Неверно'),
+                              ('draft', 'Не проверено'), ('live', 'Решают сейчас'), ('rest', 'Не дошли')]
+           if counts[key] or key not in ('draft',)]
+    return {'answer_groups': groups, 'bar': bar, 'total': total,
+            'tries': sorted(tries.items()), 'answered': counts['ok_first'] + counts['ok_later'] + counts['wrong']}
+
+
+@teacher_required
+@never_cache
+def task_class(request, worksheet_id, item_id):
+    """Страница «задача у класса» (макет D_Task): условие и эталон, прогресс
+    по задаче и ответы класса группами; ?anon=1 — «показать классу без
+    имён» (для проектора), ?point= — подпункт. Сводка и группы обновляются
+    опросом (?fragment=1, teacher_progress.js)."""
+    data = class_for_item(request, worksheet_id, item_id)
+    worksheet, items, item, number = data['worksheet'], data['items'], data['item'], data['number']
+    columns = data['groups'][0]['columns'] if data['groups'] else []
+    point = request.GET.get('point', '0')
+    column = int(point) if point.isdigit() and int(point) < len(columns) else 0
+    anonymous = request.GET.get('anon') == '1'
+    context = {
+        'worksheet': worksheet, 'item': item, 'task': item.task, 'number': number, 'items': items,
+        'columns': columns, 'column': column, 'anonymous': anonymous, 'group_id': data['group_id'],
+        'people_total': len(data['people']),
+        **(class_answer_groups(data['people'], column, item.task_id, anonymous) if columns else
+           {'answer_groups': [], 'bar': [], 'total': 0, 'tries': [], 'answered': 0}),
+    }
+    if request.GET.get('fragment'):
+        return render(request, 'assignments/_task_class_body.html', context)
+    owner = columns[column]['owner'] if columns else item.task
+    context.update({
+        'strip': [{'number': n, 'url': reverse('assignment_item_class', args=[worksheet.pk, i.pk]), 'current': i.pk == item.pk}
+                  for n, i in enumerate(items, 1)],
+        'reference': reference_for(owner),
+        'subitems': item.selected_subitems(),
+        'task_window_url': reverse('worksheet_task_window', args=[worksheet.pk, item.pk]),
+    })
+    return render(request, 'assignments/task_class.html', context)
