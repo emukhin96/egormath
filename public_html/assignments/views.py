@@ -469,11 +469,10 @@ def assignment_create(request):
         work_id = request.POST.get('work') or request.GET.get('work')
         if work_id:
             return prepare_run(request, work_id)
-        works = Work.visible_to(request.user).select_related('source_worksheet').filter(title__icontains=request.GET.get('q', '').strip()).annotate(
-            number_count=Count('positions', filter=Q(positions__text='') | Q(positions__candidates__isnull=False), distinct=True)).order_by('-updated_at', '-pk')
         return render(request, 'assignments/assignment_create.html', {
-            'independent': True, 'choose_work': True,
-            'work_options': Paginator(works, 30).get_page(request.GET.get('page'))})
+            'independent': True, 'choose_work': True, 'sheets_shown': ISSUE_SHEETS_SHOWN,
+            'work_options': work_options(request.user, request.GET.get('q', '')),
+            'works_limit': ISSUE_WORKS_LIMIT})
     initial = {'allow_photos': True}
     worksheet_id = request.GET.get('worksheet', '')
     # Подборку из списка формы уже убрал queryset; прямой id объясняем
@@ -547,23 +546,60 @@ def _issue_context(form, teacher):
     options = list(sheets)
     if selected and selected not in options[:ISSUE_SHEETS_SHOWN]:
         options.sort(key=lambda w: w.pk != selected.pk)
-    # Участники групп — из того же набора, что и выдача в AssignmentCreateForm
-    # (ученики этого учителя): перешедший к другому учителю в итог не попадёт
-    students = form.fields['students'].queryset
-    groups = list(form.fields['groups'].queryset.prefetch_related(Prefetch('students', queryset=students)))
-    names = {u.pk: u.get_full_name() or u.username for u in students}
-    members = {str(g.pk): [u.pk for u in g.students.all()] for g in groups}
     check = form['check_visibility']
     return {
         'sheet_options': options, 'sheets_shown': ISSUE_SHEETS_SHOWN,
         'check_options': [(value, label, CHECK_NOTES[value]) for value, label in
                           sorted(Assignment.CHECK_CHOICES, key=lambda c: c[0] != Assignment.CHECK_LIVE)],
         'check_value': str(check.value() or Assignment.CHECK_LIVE), 'check_locked': check.field.disabled,
-        'issue_data': {'members': members, 'names': {str(k): v for k, v in names.items()},
-                       'assigned': sorted(int(pk) for pk in form.fields['students'].widget.assigned_ids)},
-        # «Завтра» / «Через неделю» считают дату в поясе сайта, как due_at на сервере
+        'issue_data': recipients_data(form, assigned=form.fields['students'].widget.assigned_ids),
+        # Кнопки «Завтра» / «Через неделю» считают дату в поясе сайта
         'timezone': timezone.get_current_timezone_name(),
     }
+
+
+def recipients_data(form, assigned=()):
+    """Участники групп и имена для итога «Выдать N ученикам» в мастере
+    выдачи — листка и самостоятельной (поля groups и students формы)."""
+    # Участники групп — из того же набора, что и выдача (ученики этого
+    # учителя): перешедший к другому учителю в итог не попадёт
+    students = form.fields['students'].queryset
+    groups = list(form.fields['groups'].queryset.prefetch_related(Prefetch('students', queryset=students)))
+    names = {u.pk: u.get_full_name() or u.username for u in students}
+    return {'members': {str(g.pk): [u.pk for u in g.students.all()] for g in groups},
+            'names': {str(k): v for k, v in names.items()},
+            'assigned': sorted(int(pk) for pk in assigned)}
+
+
+ISSUE_WORKS_LIMIT = 100
+
+
+def _work_cards(works):
+    """Номера и выдачи шаблона — отдельными подзапросами: позиции и запуски
+    в одном JOIN перемножились бы."""
+    from independentworks.models import Position, Run
+    numbers = (Position.objects.filter(Q(text='') | Q(candidates__isnull=False), work=OuterRef('pk'))
+               .order_by().values('work').annotate(n=Count('pk', distinct=True)).values('n'))
+    # Выдачи шаблона — только первичные запуски: работа над ошибками и
+    # пересдача (parent задан) — повторные попытки одного ученика
+    issued = Run.objects.filter(work=OuterRef('pk'), issued_at__isnull=False, parent__isnull=True)
+    return works.select_related('source_worksheet').annotate(
+        number_count=Coalesce(Subquery(numbers, output_field=IntegerField()), 0),
+        issued=Coalesce(Subquery(issued.order_by().values('work').annotate(n=Count('pk')).values('n'), output_field=IntegerField()), 0),
+        last_issued=Subquery(issued.order_by('-issued_at').values('issued_at')[:1], output_field=DateTimeField()))
+
+
+def work_options(user, query='', current=None):
+    """Шаблоны самостоятельных карточками (макет E_IssueIW): число номеров,
+    исходный листок и история выдач. Не больше ISSUE_WORKS_LIMIT последних
+    (у суперпользователя visible_to — все шаблоны); выбранный шаблон в
+    списке всегда."""
+    from independentworks.models import Work
+    visible = Work.visible_to(user)
+    works = list(_work_cards(visible.filter(title__icontains=query.strip())).order_by('-updated_at', '-pk')[:ISSUE_WORKS_LIMIT])
+    if current is not None and current.pk not in {w.pk for w in works}:
+        works = list(_work_cards(visible.filter(pk=current.pk))) + works
+    return works
 
 
 # --- Кабинет ученика ---

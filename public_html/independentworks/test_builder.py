@@ -41,18 +41,18 @@ class BuilderTests(TestCase):
         self.assertTemplateUsed(response, 'assignments/_recipients.html')
         self.assertContains(response, 'student-filter')
         self.assertContains(response, 'id_duration')
-        self.assertContains(response, 'Максимально вариантов')
+        self.assertContains(response, 'Не больше <input')  # варианты по макету E_IssueIW
         # По умолчанию копирование разрешено и записывается в журнал, без подмены
         self.assertContains(response, 'id="id_restrict_clipboard"')
         self.assertNotContains(response, 'id="id_restrict_clipboard" checked')
         self.assertNotContains(response, 'id="id_swap_numbers" checked')
         self.assertNotContains(response, 'id_allow_photos" checked')
         self.assertContains(response, 'data-save-draft-before-leave')
-        self.assertContains(response, 'name="action" value="preview"', count=2)
+        self.assertContains(response, 'name="action" value="preview"', count=1)  # кнопки — в итоге справа
         self.assertContains(response, 'name="action" value="draft"')
         self.assertContains(response, 'class="live-back"')  # шапка по макету E: «← Самостоятельные»
-        self.assertContains(response, 'class="summary-work"')
-        self.assertContains(response, 'class="form-buttons summary-actions"')
+        self.assertContains(response, 'class="card is-summary"')
+        self.assertContains(response, 'Сохранить черновик')
         self.assertNotContains(response, 'Независимый шаблон самостоятельной.')
         self.assertNotContains(response, 'Время на сервере.')
         self.assertNotContains(response, 'Проверьте параметры')
@@ -124,9 +124,13 @@ class BuilderTests(TestCase):
             Position.objects.create(work=work, text='Пояснение')
             Position.objects.create(work=work)
         url = reverse('assignment_create')
-        page = self.client.get(url, {'mode': 'independent', 'page': 2}).context['work_options']
-        self.assertEqual(len(page.object_list), 1)
-        self.assertEqual(page.object_list[0].number_count, 1)
+        # Макет E_IssueIW: шаблоны карточками без страниц — шесть видно сразу,
+        # остальные по «Все шаблоны, N» и поиску в браузере
+        response = self.client.get(url, {'mode': 'independent'})
+        options = response.context['work_options']
+        self.assertEqual(len(options), 31)
+        self.assertEqual(options[0].number_count, 1)
+        self.assertContains(response, 'Все шаблоны, 31')
         page = self.client.get(url, {'mode': 'independent', 'q': 'Материал 12'}).context['work_options']
         self.assertEqual([w.title for w in page], ['Материал 12'])
 
@@ -182,7 +186,7 @@ class BuilderTests(TestCase):
         self.assertNotContains(response, 'Состав работы')
         self.assertFalse(Family.objects.exists())
         response = self.client.get(reverse('assignment_create'), {'mode': 'independent', 'work': work.pk})
-        self.assertContains(response, '<h3>Темы</h3>')
+        self.assertContains(response, '<span class="is-summary-title">Темы</span>')
         self.assertNotContains(response, '<span class="page-eyebrow">Самостоятельная</span>')
         self.assertNotContains(response, '>Обычное задание</a>')
 

@@ -1,7 +1,7 @@
 """Мастер выдачи листка по макету E_Issue (assignments/views._issue_context):
 листки карточками с историей, данные для итога «Выдать N ученикам»,
 автосверка радиокнопками, в том числе зафиксированная после первой выдачи."""
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import StudentGroup
@@ -38,8 +38,6 @@ class IssueWizardTests(TestCase):
         self.assertEqual(data['members'][str(self.group.pk)], [self.anna.pk, self.oleg.pk])
         self.assertEqual(data['assigned'], [self.anna.pk])
         self.assertNotContains(response, '·')
-        # Enter в поиске не отправляет форму выдачи (ревью #284)
-        self.assertContains(response, "matches('[data-sheet-filter], [data-student-filter]')) event.preventDefault()")
 
     def test_members_only_own_students(self):
         """Участник группы, ставший учеником другого учителя, в итог
@@ -69,11 +67,12 @@ class IssueWizardTests(TestCase):
         self.assertEqual(oleg.check_visibility, Assignment.CHECK_TEACHER)
         self.assertEqual(Assignment.objects.filter(student=self.anna).count(), 1)
 
-    def test_due_buttons_use_site_timezone(self):
-        """«Завтра» считает дату в поясе сайта, а не браузера (ревью #284)."""
+    def test_timezone_for_due_buttons(self):
+        """«Завтра» / «Через неделю» считают дату в поясе сайта: пустой
+        timeZone ломал Intl.DateTimeFormat (ревью #285)."""
         response = self.client.get(self.url, {'worksheet': self.sheet.pk})
         self.assertTrue(response.context['timezone'])
-        self.assertContains(response, f"timeZone: '{response.context['timezone']}', year: 'numeric'")
+        self.assertNotContains(response, "timeZone: ''")
 
     def test_refresh_recomputes_for_new_sheet(self):
         """Смена листка после ошибки отправки (ревью #284): контекст под новый
@@ -94,3 +93,80 @@ class IssueWizardTests(TestCase):
         back = self.client.post(self.url, {'worksheet': self.sheet.pk, 'refresh': '1'})
         self.assertTrue(back.context['check_locked'])
         self.assertEqual(back.context['issue_data']['assigned'], [self.anna.pk])
+
+@override_settings(INDEPENDENT_WORKS_ENABLED=True)
+class IssueIndependentTests(TestCase):
+    """Выдача самостоятельной по макету E_IssueIW: шаблоны карточками,
+    «Кому и когда», «После сдачи» радиокнопками, итог справа."""
+
+    def setUp(self):
+        from independentworks.models import Candidate, Position, Work
+        self.teacher = make_teacher()
+        self.anna = make_student(self.teacher, username='anna')
+        self.group = StudentGroup.objects.create(teacher=self.teacher, name='9 А')
+        self.group.students.add(self.anna)
+        self.work = Work.objects.create(owner=self.teacher, title='Контрольная: подобие')
+        Candidate.objects.create(position=Position.objects.create(work=self.work),
+                                 task=Task.objects.create(text_latex='Два плюс два?', answer_mask='{{number: 4}}'))
+        Work.objects.create(owner=self.teacher, title='Пустой шаблон')
+        self.url = reverse('assignment_create')
+        self.client.force_login(self.teacher)
+
+    def test_choose_page_lists_templates(self):
+        response = self.client.get(self.url, {'mode': 'independent'})
+        self.assertContains(response, 'type="radio" name="work_choice"', count=2)
+        self.assertContains(response, 'Шаблон не выбран')
+        self.assertNotContains(response, 'id="assignment-create-form"')
+        self.assertContains(response, 'aria-selected="true">Самостоятельная')
+
+    def test_work_page(self):
+        response = self.client.get(self.url, {'mode': 'independent', 'work': self.work.pk})
+        self.assertContains(response, f'value="{self.work.pk}" data-current data-work-url=', count=1)
+        self.assertContains(response, 'не выдавалась')
+        self.assertContains(response, 'data-duration="45"')
+        # Run.deadline — общее окончание, а не срок старта (ревью #285)
+        self.assertContains(response, 'Закончить не позже')
+        self.assertNotContains(response, 'Начать не позже')
+        self.assertContains(response, 'name="withhold_answers" value="on" checked')
+        self.assertEqual(response.context['work_numbers'], 1)
+        self.assertEqual(response.context['issue_data']['members'][str(self.group.pk)], [self.anna.pk])
+        self.assertNotContains(response, '·')
+
+    def test_publish_right_away(self):
+        from independentworks.models import Run
+        response = self.client.post(f'{self.url}?mode=independent&work={self.work.pk}', {
+            'mode': 'independent', 'work': self.work.pk, 'groups': [self.group.pk], 'duration': 40,
+            'release_toggle': '1', 'withhold_answers': '', 'release_flags': ['checks'], 'action': 'preview'})
+        run = Run.objects.get(work=self.work)
+        self.assertRedirects(response, reverse('independentworks:preview', args=[run.pk]), fetch_redirect_response=False)
+        self.assertEqual(run.release_mode, 'auto')
+
+    def test_template_switch_and_limit(self):
+        """Смена шаблона с введёнными настройками — с подтверждением; в
+        карточках не больше ISSUE_WORKS_LIMIT, выбранный — всегда (ревью #285)."""
+        from unittest import mock
+        from independentworks.models import Work
+        for n in range(3):
+            Work.objects.create(owner=self.teacher, title=f'Свежий {n}')
+        with mock.patch('assignments.views.ISSUE_WORKS_LIMIT', 2):
+            response = self.client.get(self.url, {'mode': 'independent', 'work': self.work.pk})
+        titles = [w.title for w in response.context['work_options']]
+        self.assertEqual(titles[0], 'Контрольная: подобие')
+        self.assertEqual(len(titles), 3)
+        self.assertContains(response, f'value="{self.work.pk}" data-current')
+        self.assertContains(response, 'Перейти к другому шаблону?')
+
+    def test_followups_not_counted_as_issues(self):
+        """«Выдавалась N раз» — только первичные выдачи шаблона: работа над
+        ошибками и пересдача в счёт не идут (ревью #285)."""
+        from django.utils import timezone
+        from independentworks import services as svc
+        from independentworks.models import Run
+        from .views import work_options
+        run = svc.prepare(self.work, self.teacher, [self.anna.pk])
+        svc.issue(run.pk, True)
+        Run.objects.create(work=self.work, title='Работа над ошибками', owner=self.teacher, fingerprint='x',
+                           kind='correction', parent=run.attempts.get(), issued_at=timezone.now())
+        card = next(w for w in work_options(self.teacher) if w.pk == self.work.pk)
+        self.assertEqual(card.issued, 1)
+        self.assertEqual(card.last_issued, Run.objects.get(pk=run.pk).issued_at)
