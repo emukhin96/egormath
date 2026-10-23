@@ -11,7 +11,7 @@
   <div>
     <a class="live-back" href="{% url 'worksheet_progress' assignment.worksheet_id %}">← {{ assignment.worksheet.title }}, карта ответов</a>
     <h1>{{ student_name }}{% if copied %} <span class="live-copy" title="{{ person.copy_note|capfirst }}">•</span>{% endif %}</h1>
-    <p class="live-meta">{% if track %}{% with fmt=track.days|yesno:'d.m H:i,H:i' %}Начал {{ track.begin|date:fmt }}{% if assignment.submitted_at %}, сдал {{ assignment.submitted_at|date:fmt }}{% else %}, ещё не сдал{% endif %}{% endwith %}; работал {{ track.duration }}{% if track.away %}, из них {{ track.away }} вне страницы{% endif %}{% else %}Работу ещё не открывал{% endif %}</p>
+    <p class="live-meta">{% if track %}{% with fmt=track.days|yesno:'d.m H:i,H:i' %}Начал {{ track.begin|date:fmt }}{% if assignment.status == 'returned' %}{% if assignment.submitted_at %}, сдавал {{ assignment.submitted_at|date:fmt }}{% endif %}, возвращена на доработку{% elif assignment.submitted_at %}, сдал {{ assignment.submitted_at|date:fmt }}{% else %}, ещё не сдал{% endif %}{% endwith %}; работал {{ track.duration }}{% if track.away %}, из них {{ track.away }} вне страницы{% endif %}{% else %}Работу ещё не открывал{% endif %}</p>
   </div>
   {# Кнопки над правой колонкой и той же ширины (правило «панель = контролы над ней») #}
   <form method="post" action="{% url 'save_review' assignment.pk %}" class="tl-actions">{% csrf_token %}

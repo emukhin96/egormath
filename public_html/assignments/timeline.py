@@ -88,7 +88,11 @@ def assignment_timeline(request, pk):
                                     else 'half' if review.credit >= .5 else 'bad'),
                      'window_url': reverse('task_attempts', args=[assignment.pk, task.pk]) + f'?item={item.pk}',
                      'task_window_url': reverse('worksheet_task_window', args=[assignment.worksheet_id, item.pk])})
-    numbers = {row['task'].pk: row['number'] for row in rows}
+    # Задача может стоять в листке дважды (одна Submission на задачу): у
+    # событий — все её номера, «Задача 1, 3» (ревью #282)
+    numbers = {}
+    for row in rows:
+        numbers.setdefault(row['task'].pk, []).append(str(row['number']))
 
     # Лента событий
     activity, summary = activity_timeline(ActivityEvent.objects.filter(assignment=assignment))
@@ -107,8 +111,8 @@ def assignment_timeline(request, pk):
                 detail = (detail + ', ' if detail else '') + 'заблокировано'
             events.append({'at': row['at'], 'kind': 'clipboard', 'text': text, 'detail': detail})
     for submission in assignment.submissions.all():
-        number = numbers.get(submission.task_id)
-        if number is None:
+        number = ', '.join(numbers.get(submission.task_id, []))
+        if not number:
             continue
         for attempt in submission.check_history.all():
             targets = attempt.snapshot.get('targets', [])
@@ -129,7 +133,9 @@ def assignment_timeline(request, pk):
     track = None
     if events:
         begin = events[0]['at']
-        end = assignment.submitted_at or max(e['at'] for e in events)
+        # После возврата на доработку submitted_at остаётся от прошлой сдачи,
+        # а ученик продолжает работать: конец — позднейшее из сдачи и событий
+        end = max(e['at'] for e in events)  # «Сдал работу» — тоже событие ленты
         total = max((end - begin).total_seconds(), 60)
         segments = []
         for e in events:

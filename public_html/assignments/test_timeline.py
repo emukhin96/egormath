@@ -91,3 +91,19 @@ class TimelineTests(TestCase):
         self.assertEqual(len(names), 2)
         self.assertEqual(len(names), len(set(names)))
         self.assertContains(response, "confirm('Вернуть работу ученику на доработку?')")
+
+    def test_returned_work_and_repeated_task(self):
+        """Ревью #282: после возврата дорожка тянется до последнего события, в
+        шапке «сдавал …, возвращена на доработку»; у задачи, стоящей в листке
+        дважды, события подписаны обоими номерами."""
+        self.assignment.status = Assignment.STATUS_RETURNED
+        self.assignment.submitted_at = timezone.now() - timedelta(minutes=20)
+        self.assignment.save()
+        sub = Submission.objects.get(assignment=self.assignment)
+        later = SubmissionCheckAttempt.objects.create(submission=sub, number=3, result='ok', snapshot={
+            'targets': [{'kind': 'task', 'id': self.tasks[0].pk, 'answer': 'S = 30', 'result': 'ok'}]})
+        WorksheetItem.objects.create(worksheet=self.worksheet, task=self.tasks[0], order=3)
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['track']['end'], later.created_at)
+        self.assertContains(response, 'возвращена на доработку')
+        self.assertIn('Задача 1, 3: S = 30', [e['text'] for e in response.context['events']])
