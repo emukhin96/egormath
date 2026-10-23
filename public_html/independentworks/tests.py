@@ -1185,8 +1185,8 @@ class IndependentWorkTests(TestCase):
         stat = response.context['variant_stats'][0]
         self.assertEqual((stat['number'], stat['count'], stat['started']), (1, 2, 2))
         self.assertEqual((stat['done'], stat['points'], stat['percent']), (1, 2, 50))
-        self.assertContains(response, 'Учеников: 2')
-        self.assertContains(response, '1 / 2 · 50%')
+        self.assertContains(response, 'Учеников 2')  # без «·»: «Учеников 2, начали …»
+        self.assertContains(response, '1 / 2, 50%')
 
     def test_self_check_persists_and_logs_every_checked_answer(self):
         attempt = self.begin(self_check=False)

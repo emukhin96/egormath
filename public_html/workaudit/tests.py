@@ -246,7 +246,7 @@ class AuditTests(TestCase):
         self.attempt.refresh_from_db()
         self.assertEqual((self.attempt.restrict_clipboard, self.attempt.swap_numbers), (True, False))
         self.assertEqual(self.client.post(url, {'exempt': ['999999']}).status_code, 400)
-        self.assertContains(self.client.get(reverse('independentworks:progress', args=[self.attempt.run_id])), 'Копирование и вставка')
+        self.assertContains(self.client.get(reverse('independentworks:progress', args=[self.attempt.run_id])), 'id="sd-copy">Копирование')  # панель «Настройки выдачи»
         self.assertContains(self.client.get(reverse('review_assignment', args=[self.assignment.pk])), 'Активность ученика')
         self.client.force_login(self.student)
         self.assertEqual(self.client.post(url, {}).status_code, 403)

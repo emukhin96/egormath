@@ -1,5 +1,6 @@
 """Интерфейсы самостоятельных с проверкой прав на каждом маршруте."""
 import io
+from datetime import datetime
 import json
 import uuid
 from functools import wraps
@@ -924,7 +925,7 @@ def add_students(request, pk):
                 choices.setdefault(student, variant)
             svc.update_recipients(run.pk, set(choices), choices)
     except (ValueError, svc.WorkError) as error:
-        context = progress_context(run)
+        context = settings_context(progress_context(run))
         context['recipient_error'] = str(error) if isinstance(error, svc.WorkError) else 'Выберите вариант.'
         return render(request, 'independentworks/progress.html', context, status=400)
     messages.success(request, 'Ученики добавлены в этот запуск')
@@ -1091,7 +1092,50 @@ def progress(request, pk):
         response = HttpResponseNotModified() if etags.matches(request, etag) else HttpResponse(html)
         response['ETag'] = etag
         return response
-    return render(request, 'independentworks/progress.html', context)
+    return render(request, 'independentworks/progress.html', settings_context(context))
+
+
+def settings_context(context):
+    """Панель «Настройки выдачи» (макет E_Settings) поверх progress_context:
+    сводка по времени, не начавшие, флажки показа после сдачи. Нужна везде,
+    где рендерится progress.html, в том числе на ошибке add_students."""
+    attempts = [person['attempt'] for person in context['people']]
+    context['time_summary'] = {
+        'active': sum(1 for a in attempts if a.started_at and not a.finished),
+        'finished': sum(1 for a in attempts if a.finished),
+        'unopened': sum(1 for a in attempts if not a.started_at),
+    }
+    context['not_started'] = [a for a in attempts if not a.started_at]
+    context['release_choices'] = [('checks', 'Правильность и итог'), ('answer', 'Правильный ответ'),
+                                  ('solution', 'Решение'), ('comment', 'Комментарий учителя')]
+    return context
+
+
+@enabled
+@teacher_required
+@require_POST
+def run_deadline(request, pk):
+    """«Закончить не позже» из панели настроек выдачи: общий срок
+    проведения; services.set_deadline пересчитывает срок начатых попыток
+    (продление даёт время, сокращение завершает работу по новому сроку).
+    Срок в прошлом не принимаем, как prepare и issue: он необратимо закрыл
+    бы все начатые попытки."""
+    run = teacher_run(request, pk)
+    raw = request.POST.get('deadline', '').strip()
+    deadline = None
+    if raw:
+        try:
+            deadline = timezone.make_aware(datetime.strptime(raw, '%Y-%m-%dT%H:%M'))
+        except ValueError:
+            messages.error(request, 'Не удалось разобрать срок')
+            return redirect('independentworks:progress', pk=pk)
+        if deadline <= timezone.now():
+            messages.error(request, 'Срок уже прошёл. Укажите время в будущем.')
+            return redirect('independentworks:progress', pk=pk)
+    with transaction.atomic():
+        svc.set_deadline(run.pk, deadline)
+    messages.success(request, 'Срок сохранён' if deadline else 'Срок снят')
+    return redirect('independentworks:progress', pk=pk)
 
 
 @enabled
