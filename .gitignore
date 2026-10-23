@@ -42,6 +42,7 @@ public_html/core/local_settings.py
 
 # Собранный Tailwind: make build-css локально, Dockerfile на проде, CI — сам
 public_html/static/css/app.css
+public_html/static/css/_screens.css
 
 # Tailwind standalone CLI binary (download via `make build-css`)
 tools/tailwindcss
