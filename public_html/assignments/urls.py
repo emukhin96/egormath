@@ -2,7 +2,13 @@ from django.urls import path
 
 from canvas import boards
 
-from . import bulk, journal, views, progress, review_tasks, timeline, windows
+from . import bulk
+from . import journal
+from . import progress
+from . import review_tasks
+from . import timeline
+from . import views
+from . import windows
 
 urlpatterns = [
     path('progress/', progress.progress_overview, name='progress_overview'),

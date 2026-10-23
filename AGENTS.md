@@ -79,6 +79,11 @@ make test         # только Django-тесты
 - Новый повторяющийся набор Tailwind-утилит — в `@layer components`
   (`public_html/static/css/input.css`), а не длинной строкой `class="..."`
   по шаблонам.
+- Стили нового экрана — отдельным файлом `public_html/static/css/screens/<экран>.css`
+  со своим `@layer components`, не дописыванием в `input.css`; импорты — по
+  модулю на строку; PR — от свежего `main`, не стопкой. Иначе каждое слияние
+  ломает остальные открытые PR (раздел «Параллельные PR без конфликтов» в
+  [docs/PIPELINE.md](docs/PIPELINE.md)).
 - Основные разделы приложения — только в горизонтальной навигации
   `base.html`. Боковая панель (`{% block sidebar %}`,
   `public_html/templates/includes/sidebar/`) — только контекст текущей
