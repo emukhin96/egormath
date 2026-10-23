@@ -7,8 +7,10 @@
    сообщает серверу, а блокирует он, только если настройка включена: так её
    можно включить посреди работы без перезагрузки у ученика.
 
-   Не уход: окно выбора фото (на телефоне — камера), подтверждение «Сдать
-   работу?» (пока оно открыто, скрипты стоят) и перезагрузка страницы.
+   Не уход: окно выбора фото (на телефоне — камера), ссылка работы в новой
+   вкладке (PDF-иллюстрация без встроенного просмотра), подтверждение «Сдать
+   работу?» (пока оно открыто, скрипты стоят) и перезагрузка страницы. Фото
+   решения открываются просмотром на этой же странице, без новой вкладки.
    Уход совсем (другой адрес, закрытая вкладка) браузер запоминает и
    сравнивает с порогом при следующем открытии работы. */
 (function () {
@@ -16,8 +18,9 @@
   const lock = document.querySelector('[data-iw-lock]');
   if (!lock) return;
   const LIMIT = 2000;
-  // Выбор фото дольше этого — всё же уход: снимок не делают минутами
-  const PICKER_LIMIT = 180000;
+  // Выбор фото или ссылка работы дольше этого — всё же уход: снимок не
+  // делают минутами
+  const EXCUSE_LIMIT = 180000;
   const csrf = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
   const column = document.querySelector('.student-column');
   const storageKey = 'iw-left-' + lock.dataset.attempt;
@@ -25,7 +28,8 @@
   // мало, после разблокировки страница перезагружается
   const bare = !lock.hidden;
   let awaySince = null, excused = false, reported = false, timer = null;
-  let blurred = false, pickingAt = -Infinity;
+  // excuseAt — когда ученик открыл окно выбора фото или ссылку работы
+  let blurred = false, excuseAt = -Infinity;
   // pending — блокировка ещё не дошла до сервера (сбой сети): опрос повторит её
   let pending = false, busy = false, polling = null, watch = null;
 
@@ -86,10 +90,10 @@
   function leave() {
     if (awaySince !== null || !away()) return;
     awaySince = Date.now();
-    excused = awaySince - pickingAt < 60000;
+    excused = awaySince - excuseAt < 60000;
     reported = false;
     clearTimeout(timer);
-    timer = setTimeout(expire, (excused ? PICKER_LIMIT : LIMIT) + 50);
+    timer = setTimeout(expire, (excused ? EXCUSE_LIMIT : LIMIT) + 50);
   }
   // Ещё не вернулся, а время вышло — блокируем сразу: учитель видит это в
   // таблице, не дожидаясь возвращения (на телефоне таймер может и не сработать)
@@ -101,18 +105,30 @@
   function back() {
     if (awaySince === null || away()) return;
     clearTimeout(timer);
-    if (!reported && Date.now() - awaySince >= (excused ? PICKER_LIMIT : LIMIT)) lockNow();
+    if (!reported && Date.now() - awaySince >= (excused ? EXCUSE_LIMIT : LIMIT)) lockNow();
     awaySince = null;
-    pickingAt = -Infinity;
+    excuseAt = -Infinity;
     // Вернулся к заглушке — сразу узнать, не разблокировал ли учитель
     if (!lock.hidden) poll();
   }
 
   document.addEventListener('click', event => {
-    if (event.target instanceof Element && event.target.matches('input[type=file]')) pickingAt = Date.now();
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    if (target.matches('input[type=file]')) { excuseAt = Date.now(); return; }
+    const link = target.closest('a[target=_blank]');
+    if (!link || !column || !column.contains(link)) return;
+    // Своё фото — просмотром здесь же: новая вкладка скрыла бы работу (ревью #290)
+    const photo = link.closest('.iw-photo') && link.querySelector('img');
+    if (photo && window.EgorImageZoom) {
+      event.preventDefault();
+      EgorImageZoom.open(photo);
+      return;
+    }
+    excuseAt = Date.now();
   }, true);
   document.addEventListener('cancel', event => {
-    if (event.target instanceof Element && event.target.matches('input[type=file]') && awaySince === null) pickingAt = -Infinity;
+    if (event.target instanceof Element && event.target.matches('input[type=file]') && awaySince === null) excuseAt = -Infinity;
   }, true);
   // Видимость — главный признак (на телефоне фокус окна ненадёжен); видимая
   // страница считается и вернувшей фокус
