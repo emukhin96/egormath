@@ -46,6 +46,11 @@ class AttemptPageTests(TestCase):
         self.assertContains(response, 'Работа над ошибками')
         self.assertContains(response, 'progress-mark progress-ok')
         self.assertContains(response, '1 из 2, 50%')
+        # Оценка учителя — символом в колонке «Оценка» (ревью #294)
+        self.client.post(reverse('independentworks:review', args=[self.attempt.pk, self.point.pk]), {'grade': '+-'})
+        graded = self.client.get(self.url)
+        self.assertContains(graded, 'tl-grade tl-grade-good')
+        self.assertContains(graded, '>±</button>')
 
     def test_range_reference_as_text(self):
         """Эталон промежутка — текстом ответа, а не LaTeX в поле маски."""
