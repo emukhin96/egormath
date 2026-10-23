@@ -30,17 +30,34 @@ from .models import CanvasPage
 BOARDS_MAX = 15
 
 
-def _selection(request, worksheet):
+ORDERS = [('recent', 'Сначала пишущие'), ('name', 'По фамилии'), ('wrong', 'Сначала с неверным ответом')]
+
+
+def _order(request, task_id):
+    """?order= — порядок карточек (макет E_Boards); «с неверным ответом» —
+    только когда выбрана задача."""
+    order = request.GET.get('order', '')
+    return order if order in ('name', 'wrong') and (order != 'wrong' or task_id) else 'recent'
+
+
+def _selection(request, worksheet, task_id=None):
     """Назначения листка, которые попадают на экран: не больше BOARDS_MAX,
-    сначала те, где недавно писали. Возвращает (список, сколько не поместилось, группа)."""
+    по порядку ?order= (по умолчанию сначала те, где недавно писали).
+    Возвращает (список, сколько не поместилось, группа)."""
     assignments = Assignment.visible_to(request.user).filter(worksheet=worksheet).select_related('student')
     group_id = request.GET.get('group', '')
     group = None
     if group_id:
         group = get_object_or_404(StudentGroup.visible_to(request.user), pk=group_id if group_id.isdigit() else 0)
         assignments = assignments.filter(student__in=group.students.all())
+    by_name = ('student__last_name', 'student__first_name', 'student__username')
+    order = _order(request, task_id)
     assignments = list(assignments.annotate(last_canvas=Max('submissions__canvas_pages__student_updated_at'))
-                       .order_by('-last_canvas', 'student__last_name', 'student__first_name', 'student__username'))
+                       .order_by(*(by_name if order == 'name' else ('-last_canvas', *by_name))))
+    if order == 'wrong':
+        wrong = set(Submission.objects.filter(assignment__in=assignments, task_id=task_id,
+                                              auto_check=Submission.CHECK_WRONG).values_list('assignment_id', flat=True))
+        assignments.sort(key=lambda a: a.pk not in wrong)  # sort устойчив: внутри — по свежести
     return assignments[:BOARDS_MAX], max(0, len(assignments) - BOARDS_MAX), group
 
 
@@ -62,31 +79,92 @@ def _updated(page):
     return max(stamps) if stamps else page.created_at
 
 
-def _states(assignments):
+def _marks(assignments, task_id):
+    """Отметка ответа на выбранную задачу у каждого: (символ, сколько раз
+    проверял) — ✓ / × с числом проверок подстрочно, «…» введено без сверки."""
+    if not task_id:
+        return {}
+    rows = (Submission.objects.filter(assignment__in=assignments, task_id=task_id)
+            .annotate(checks=Count('check_history')).values_list('assignment_id', 'auto_check', 'checks', 'answer_json'))
+    marks = {}
+    for assignment_id, check, checks, answer in rows:
+        if check == Submission.CHECK_OK:
+            marks[assignment_id] = ('✓', checks if checks > 1 else '')
+        elif check == Submission.CHECK_WRONG:
+            marks[assignment_id] = ('×', checks or '')
+        elif answer:
+            marks[assignment_id] = ('…', '')
+    return marks
+
+
+def _states(assignments, task_id=None):
+    marks = _marks(assignments, task_id)
     return [{
         'assignment': a.pk,
         'student': a.student.get_full_name() or a.student.username,
         'status': a.status, 'status_label': a.get_status_display(),
         'review_url': reverse('review_assignment', args=[a.pk]),
+        'mark': marks.get(a.pk, ('', ''))[0], 'mark_sub': str(marks.get(a.pk, ('', ''))[1]),
     } for a in assignments]
+
+
+def _copied(assignments, number=None):
+    """Кто копировал больше одного слова условия (фиолетовая «•» у имени):
+    выбранной задачи (number) или любой."""
+    from assignments.windows import task_copies
+    from workaudit.models import ActivityEvent
+    from workaudit.services import copied_words
+    if number:
+        return {a.pk for a in assignments if any(c['words'] > 1 for c in task_copies(a, number))}
+    events = ActivityEvent.objects.filter(assignment__in=assignments, kind='copy').only('assignment_id', 'text')
+    return {e.assignment_id for e in events if copied_words(e) > 1}
+
+
+def _task_panel(request, worksheet, task_id, numbers):
+    """Панель условия выбранной задачи (макет E_Boards): условие, ответ маской
+    и текстом, сколько верно / неверно / решают сейчас, ссылки на окно задачи
+    и «задачу у класса»."""
+    from assignments.windows import class_for_item, reference_for
+    item = (WorksheetItem.objects.filter(worksheet=worksheet, task_id=task_id, deleted_at__isnull=True)
+            .select_related('task').order_by('order', 'pk').first())
+    data = class_for_item(request, worksheet.pk, item.pk)
+    ok = sum(s['ok'] for s in data['stats'])
+    answered = sum(s['answered'] for s in data['stats'])
+    return {
+        'item': item, 'task': item.task, 'number': numbers[task_id], 'subitems': item.selected_subitems(),
+        'reference': [] if item.selected_subitems() else reference_for(item.task, 'boards_ref'),
+        'ok': ok, 'wrong': answered - ok, 'live': data['stats'][0]['live'] if data['stats'] else 0,
+        'task_window_url': reverse('worksheet_task_window', args=[worksheet.pk, item.pk]),
+        'class_url': reverse('assignment_item_class', args=[worksheet.pk, item.pk]),
+    }
 
 
 @teacher_required
 @never_cache
 def worksheet_boards(request, worksheet_id):
     worksheet = get_object_or_404(Worksheet.visible_to(request.user), pk=worksheet_id)
-    assignments, overflow, group = _selection(request, worksheet)
     numbers = _task_numbers(worksheet)
     task_id = _task_filter(request, numbers)
-    query = {k: v for k, v in (('group', request.GET.get('group', '')), ('task', task_id)) if v}
+    assignments, overflow, group = _selection(request, worksheet, task_id)
+    order = _order(request, task_id)
+    query = {k: v for k, v in (('group', request.GET.get('group', '')), ('task', task_id),
+                               ('order', '' if order == 'recent' else order)) if v}
     # Кнопки задач — только те, где у кого-то из выбранных учеников есть доска
     # (плюс выбранная в адресе, чтобы её кнопка не пропала)
     with_boards = set(CanvasPage.objects.filter(submission__assignment__in=[a.pk for a in assignments])
                       .values_list('submission__task_id', flat=True).distinct())
     if task_id:
         with_boards.add(task_id)
+    states = {state['assignment']: state for state in _states(assignments, task_id)}
+    copied = _copied(assignments, numbers.get(task_id))
+    for a in assignments:
+        a.board_state = states[a.pk]
+        a.copied = a.pk in copied
     return render(request, 'canvas/boards.html', {
         'worksheet': worksheet, 'assignments': assignments, 'overflow': overflow,
+        'order': order, 'orders': [(value, label) for value, label in ORDERS if value != 'wrong' or task_id],
+        'strip': [{'id': tid, 'no': no} for tid, no in numbers.items()],
+        'panel': _task_panel(request, worksheet, task_id, numbers) if task_id else None,
         'groups': StudentGroup.visible_to(request.user), 'group': group,
         'group_id': request.GET.get('group', ''), 'boards_max': BOARDS_MAX,
         'tasks': [{'id': tid, 'no': no} for tid, no in numbers.items() if tid in with_boards], 'task_id': task_id,
@@ -104,18 +182,18 @@ def worksheet_boards_live(request, worksheet_id):
     if not services.enabled():
         return JsonResponse({'ok': False, 'message': 'Доска для записей временно отключена'}, status=503)
     worksheet = get_object_or_404(Worksheet.visible_to(request.user), pk=worksheet_id)
-    assignments, overflow, _ = _selection(request, worksheet)
+    numbers = _task_numbers(worksheet)
+    task_id = _task_filter(request, numbers)
+    assignments, overflow, _ = _selection(request, worksheet, task_id)
     ids = [a.pk for a in assignments]
     since = parse_datetime(request.GET.get('since') or '')
     if since is not None and timezone.is_naive(since):
         since = None
     now = timezone.now()
-    numbers = _task_numbers(worksheet)
-    task_id = _task_filter(request, numbers)
     pages = CanvasPage.objects.filter(submission__assignment_id__in=ids).select_related('submission')
     if task_id:
         pages = pages.filter(submission__task_id=task_id)
-    states = _states(assignments)
+    states = _states(assignments, task_id)
     # Подпись экрана: статусы учеников + сводка по всем страницам выборки.
     # Не зависит от since, поэтому пустой опрос после первой загрузки — сразу 304.
     # Лёгкий список всех задач со страницами у каждого ученика — для диалога,
@@ -143,7 +221,7 @@ def worksheet_boards_live(request, worksheet_id):
     summary = pages.aggregate(n=Count('pk'), s=Max('student_updated_at'), t=Max('teacher_updated_at'),
                               c=Max('created_at'), sv=Sum('student_version'), tv=Sum('teacher_version'))
     signature = hashlib.sha256(repr([
-        [(s['assignment'], s['status']) for s in states], overflow, task_id, sorted(summary.items()),
+        [(s['assignment'], s['status'], s['mark'], s['mark_sub']) for s in states], overflow, task_id, sorted(summary.items()),
         sorted(per_task.items()), sorted(answers.items()),
     ]).encode()).hexdigest()
     etag = f'"{signature}"'
