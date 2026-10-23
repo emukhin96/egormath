@@ -1389,3 +1389,11 @@ class PreviewScreenTests(TestCase):
         self.assertEqual(self.client.post(self.url, data).status_code, 302)
         self.run.refresh_from_db()
         self.assertEqual(set(self.run.plan['students'].values()), {variants})
+        # fetch получает JSON, а не редирект; после выдачи — ошибка, не «успех» (ревью #286)
+        ajax = {'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'}
+        self.assertEqual(self.client.post(self.url, data, **ajax).json(), {'ok': True})
+        self.run.issued_at = timezone.now()
+        self.run.save(update_fields=['issued_at'])
+        late = self.client.post(self.url, data, **ajax)
+        self.assertEqual(late.status_code, 409)
+        self.assertIn('уже выдана', late.json()['message'])

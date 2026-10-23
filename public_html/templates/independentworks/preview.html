@@ -122,8 +122,14 @@
     var body = new FormData(form), state = snapshot();
     busy(1);
     enqueue(function () {
-      return fetch(window.location.href, {method: 'POST', body: body}).then(function (response) {
-        if (!response.ok) throw new Error('Не удалось сохранить распределение');
+      /* Успех — только JSON {ok: true}: редирект (истекла сессия, работу
+         выдали в другой вкладке) fetch не проходит, он считается ошибкой */
+      return fetch(window.location.href, {method: 'POST', body: body, redirect: 'manual',
+                                          headers: {'X-Requested-With': 'XMLHttpRequest'}}).then(function (response) {
+        return response.json().catch(function () { return {}; }).then(function (data) {
+          if (!response.ok || !data.ok) throw new Error(data.message || 'Не удалось сохранить распределение');
+        });
+      }).then(function () {
         saved = state;
         if (window.EgorAutosave) EgorAutosave.showSaved(true, 'Распределение сохранено');
       });

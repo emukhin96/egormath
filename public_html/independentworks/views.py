@@ -584,7 +584,12 @@ def preview_context(run):
 @teacher_required
 def preview(request, pk):
     run = teacher_run(request, pk)
+    # Распределение сохраняется fetch-запросом: ему — JSON, а не редирект,
+    # иначе fetch пройдёт по редиректу и примет чужую страницу за успех
+    ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     if run.issued_at:
+        if ajax:
+            raise svc.WorkError('Работа уже выдана, распределение не изменить.', 409)
         return redirect('independentworks:progress', pk=pk)
     if request.method == 'POST':
         with transaction.atomic():
@@ -597,6 +602,8 @@ def preview(request, pk):
                     raise svc.WorkError('Выберите существующий вариант каждому ученику.')
                 run.plan['students'][student] = int(value)
             run.save(update_fields=['plan'])
+        if ajax:
+            return JsonResponse({'ok': True})
         messages.success(request, 'Распределение сохранено')
         return redirect('independentworks:preview', pk=pk)
     return render(request, 'independentworks/preview.html', preview_context(run))
