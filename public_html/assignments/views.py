@@ -6,7 +6,9 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Case, Count, DateTimeField, IntegerField, Q, When, Min, Max
+from django.db.models import Case, Count, DateTimeField, IntegerField, OuterRef, Prefetch, Q, Subquery, When, Min, Max
+from django.db.models.functions import Coalesce
+from django.forms.utils import ErrorDict
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -16,7 +18,7 @@ from django.views.decorators.http import require_POST
 from accounts.decorators import student_required, teacher_required
 from accounts.models import Profile, StudentGroup
 from problems.models import Task
-from worksheets.models import Collection, Worksheet
+from worksheets.models import Collection, Worksheet, WorksheetItem
 
 from .checks import reference_text, slot_display
 from .forms import AssignmentCreateForm
@@ -487,7 +489,12 @@ def assignment_create(request):
             pk=worksheet_id).first()
     form = AssignmentCreateForm(
         request.POST or None, teacher=request.user, initial=initial)
-    if request.method == 'POST' and form.is_valid():
+    if request.POST.get('refresh'):
+        # Смена листка в мастере: введённое сохраняется, а кто уже получил
+        # листок и режим автосверки пересчитываются под новый листок — без
+        # проверки формы и без выдачи.
+        form._errors = ErrorDict()
+    elif request.method == 'POST' and form.is_valid():
         created = _create_assignments(
             worksheet=form.cleaned_data['worksheet'],
             teacher=request.user,
@@ -509,8 +516,54 @@ def assignment_create(request):
                 request, f'Уже были выданы и пропущены: {skipped}.')
         return redirect('assignment_list')
     return render(request, 'assignments/assignment_create.html', {
-        'form': form,
+        'form': form, **_issue_context(form, request.user),
     })
+
+
+ISSUE_SHEETS_SHOWN = 6
+CHECK_NOTES = {
+    Assignment.CHECK_LIVE: 'Кнопка «Проверить» у каждой задачи; вы видите, сколько раз ученик проверял',
+    Assignment.CHECK_AFTER_SUBMIT: 'Ученик узнает, что верно, только после сдачи работы',
+    Assignment.CHECK_TEACHER: 'Ученик не видит автосверку; результат только у вас',
+}
+
+
+def _issue_context(form, teacher):
+    """Мастер выдачи листка по макету E_Issue (22.10.2026): листки
+    карточками с историей выдач, участники групп и уже получившие листок —
+    для итога «Выдать N ученикам» и предупреждения о пропуске повторов."""
+    # Задачи и выдачи — отдельными подзапросами: два Count по разным связям
+    # в одном JOIN дали бы произведение «задачи × выдачи» на каждый листок
+    tasks = (WorksheetItem.objects.filter(worksheet=OuterRef('pk'), task__isnull=False, deleted_at__isnull=True)
+             .order_by().values('worksheet').annotate(n=Count('pk')).values('n'))
+    issued = (Assignment.objects.filter(worksheet=OuterRef('pk'))
+              .order_by().values('worksheet').annotate(n=Count('pk')).values('n'))
+    last = Assignment.objects.filter(worksheet=OuterRef('pk')).order_by('-assigned_at').values('assigned_at')[:1]
+    sheets = form.fields['worksheet'].queryset.annotate(
+        tasks_total=Coalesce(Subquery(tasks, output_field=IntegerField()), 0),
+        issued=Coalesce(Subquery(issued, output_field=IntegerField()), 0),
+        last_issued=Subquery(last, output_field=DateTimeField()))
+    selected = form.selected_worksheet
+    options = list(sheets)
+    if selected and selected not in options[:ISSUE_SHEETS_SHOWN]:
+        options.sort(key=lambda w: w.pk != selected.pk)
+    # Участники групп — из того же набора, что и выдача в AssignmentCreateForm
+    # (ученики этого учителя): перешедший к другому учителю в итог не попадёт
+    students = form.fields['students'].queryset
+    groups = list(form.fields['groups'].queryset.prefetch_related(Prefetch('students', queryset=students)))
+    names = {u.pk: u.get_full_name() or u.username for u in students}
+    members = {str(g.pk): [u.pk for u in g.students.all()] for g in groups}
+    check = form['check_visibility']
+    return {
+        'sheet_options': options, 'sheets_shown': ISSUE_SHEETS_SHOWN,
+        'check_options': [(value, label, CHECK_NOTES[value]) for value, label in
+                          sorted(Assignment.CHECK_CHOICES, key=lambda c: c[0] != Assignment.CHECK_LIVE)],
+        'check_value': str(check.value() or Assignment.CHECK_LIVE), 'check_locked': check.field.disabled,
+        'issue_data': {'members': members, 'names': {str(k): v for k, v in names.items()},
+                       'assigned': sorted(int(pk) for pk in form.fields['students'].widget.assigned_ids)},
+        # «Завтра» / «Через неделю» считают дату в поясе сайта, как due_at на сервере
+        'timezone': timezone.get_current_timezone_name(),
+    }
 
 
 # --- Кабинет ученика ---

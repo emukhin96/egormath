@@ -646,6 +646,64 @@
   .jr-late-count { color: #c62828; }
   .jr-late-key { display: inline-block; width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px #e08a8a; }
   .jr-empty { margin: 0; padding: var(--space-4); }
+  /* Мастер выдачи (макет E_Issue): сетка 1fr | 340px, вкладки «Листок |
+     Самостоятельная» над итогом той же ширины; листки карточками */
+  .is-head, .is-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; column-gap: var(--space-4); }
+  .is-head { align-items: end; margin-bottom: var(--space-4); }
+  .is-heading { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+  .is-heading h1 { margin: 0; }
+  .is-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; padding: 3px; border-radius: 10px; background: #dfe6ee; }
+  .is-tabs a { display: grid; place-items: center; height: 34px; border-radius: 8px; color: #4a5566; font-weight: 500; text-decoration: none; }
+  .is-tabs a[aria-selected="true"] { background: #fff; color: #102b55; font-weight: 600; box-shadow: 0 1px 2px rgba(16, 43, 85, 0.12); }
+  .is-head .page-actions { justify-self: stretch; }
+  .is-head .page-actions .btn { width: 100%; }
+  .is-grid { align-items: start; row-gap: var(--space-4); }
+  .is-steps { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+  .is-step { margin: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+  .is-step h2 { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: 1.05rem; }
+  .is-step-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); }
+  .is-search { width: 240px; max-width: 100%; margin: 0; }
+  .is-sheets { display: flex; flex-direction: column; gap: 6px; }
+  .is-sheet { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+  .is-sheet:hover { border-color: #9fc0e6; }
+  .is-sheet:has(input:checked) { border-color: #1765b5; background: #f2f6fc; box-shadow: inset 0 0 0 1px #1765b5; }
+  .is-sheet input { margin: 0; }
+  .is-sheet-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .is-sheet-title { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .is-sheet-meta, .is-sheet-history { font-size: 12.5px; color: var(--muted); }
+  .is-sheet-history { text-align: right; }
+  .is-all { align-self: flex-start; }
+  .is-skip { margin: 0; padding: 8px 12px; border-radius: 8px; background: #fff7e6; color: #7a4a00; font-size: 13px; }
+  .is-conditions { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: var(--space-4) var(--space-3); align-items: start; }
+  .is-label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .is-conditions > .is-label { padding-top: 8px; }
+  .is-due { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .is-due input { width: auto; margin: 0; }
+  .is-quick { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+  .is-quick .btn { margin: 0; }
+  .is-due .helptext { flex-basis: 100%; margin: 0; }
+  .is-checks { display: flex; flex-direction: column; gap: 6px; }
+  .is-check { display: flex; align-items: flex-start; gap: var(--space-2); margin: 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+  .is-check:has(input:checked) { border-color: #1765b5; background: #f2f6fc; }
+  .is-check:has(input:disabled) { cursor: default; opacity: 0.75; }
+  .is-check input { margin-top: 3px; }
+  .is-check > span { display: flex; flex-direction: column; gap: 2px; }
+  .is-check-title { font-weight: 600; }
+  .is-toggles { display: flex; flex-direction: column; gap: var(--space-2); }
+  .is-toggles .ws-toggle { margin: 0; }
+  .is-toggles .ws-toggle-text .helptext { display: block; }
+  .is-summary { position: sticky; top: var(--space-4); margin: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+  .is-summary-title { font-size: 1.1rem; font-weight: 700; }
+  .is-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px var(--space-3); margin: 0; font-size: 13.5px; }
+  .is-facts dt { color: var(--muted); }
+  .is-facts dd { margin: 0; overflow-wrap: anywhere; }
+  .is-summary .is-submit { width: 100%; margin: 0; }  /* сильнее .btn { width: max-content } ниже по файлу */
+  @media (max-width: 900px) {
+    .is-head, .is-grid { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-3); }
+    .is-summary { position: static; }
+    .is-conditions { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+    .is-conditions > .is-label { padding-top: var(--space-2); }
+  }
   /* Панель «Настройки выдачи» (макет E_Settings): выдвигается справа поверх
      прогресса самостоятельной, таблица видна под затемнением */
   .settings-drawer { position: fixed; inset: 0 0 0 auto; width: min(440px, 100vw); max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #fff; box-shadow: -12px 0 32px rgba(16, 43, 85, 0.18); display: none; flex-direction: column; }
