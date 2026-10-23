@@ -31,6 +31,11 @@
     const stripMark = mark === 'empty' && hasPhotos(state.form.dataset.point) ? 'saved' : mark;
     if (item && mark !== 'dirty' && mark !== 'saving') { item.dataset.state = stripMark; recount(); }
   }
+  // 423 — работа под заглушкой «Вы ушли со страницы» (в этой или другой
+  // вкладке): показать её здесь же (iw_leave_lock.js)
+  function rejected(response) {
+    if (response.status === 423) document.dispatchEvent(new Event('iw:locked'));
+  }
   function hasPhotos(point) { return !!document.querySelector('#point-' + point + ' .iw-photo'); }
   // Номер в ленте и счёт после загрузки или удаления фото без перезагрузки;
   // «неверно» самопроверки фото не перекрывает
@@ -63,7 +68,7 @@
     const request = (async () => {
       const response = await fetch(form.action, {method: 'POST', body: data, headers: {'X-Requested-With': 'XMLHttpRequest'}});
       const result = await response.json();
-      if (!response.ok) { if (response.status === 409) state.conflict = true; throw new Error(result.message || 'Ошибка сохранения'); }
+      if (!response.ok) { if (response.status === 409) state.conflict = true; rejected(response); throw new Error(result.message || 'Ошибка сохранения'); }
       form.elements.version.value = result.version;
       state.saved = sent;
       if (signature(form) === sent) { const [text, kind] = savedText(form); message(state, text, false, kind); }
@@ -103,7 +108,7 @@
           method: 'POST', body: data, headers: {'X-Requested-With': 'XMLHttpRequest'}
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.message || 'Ошибка проверки');
+        if (!response.ok) { rejected(response); throw new Error(result.message || 'Ошибка проверки'); }
         if (result.version !== undefined) {
           form.elements.version.value = result.version;
           state.saved = signature(form);
@@ -210,7 +215,7 @@
             data.append('photo', file);
             const response = await fetch(photoForm.action, {method: 'POST', body: data, headers: {'X-Requested-With': 'XMLHttpRequest'}});
             const result = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(result.message || 'Фото не загружено');
+            if (!response.ok) { rejected(response); throw new Error(result.message || 'Фото не загружено'); }
             gallery.insertBefore(photoThumb(result, token), hint);
             photosChanged(section.id.replace('point-', ''));
             if (window.EgorAutosave) EgorAutosave.showSaved(true, 'Фото загружено');
@@ -239,7 +244,7 @@
     try {
       const response = await fetch(form.action, {method: 'POST', body: new FormData(form), headers: {'X-Requested-With': 'XMLHttpRequest'}});
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.message || 'Фото не удалено');
+      if (!response.ok) { rejected(response); throw new Error(result.message || 'Фото не удалено'); }
       const section = form.closest('.iw-point');
       form.closest('.iw-photo').remove();
       if (section) photosChanged(section.id.replace('point-', ''));

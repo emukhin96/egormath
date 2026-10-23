@@ -21,6 +21,8 @@
 </div>
 <p class="helptext iw-live-status" data-live-status role="status">Обновляется каждые 5 секунд</p>
 <div data-progress-table data-progress-url="{% url 'independentworks:progress' run.pk %}" data-live-file="{% live_file 'run' run.pk %}">{% include 'independentworks/_progress.html' %}</div>
+{# «Разблокировать» в таблице — кнопки form="iw-unlock" с formaction: токен CSRF вне опрашиваемого фрагмента, иначе ETag менялся бы каждый раз #}
+<form id="iw-unlock" method="post" hidden>{% csrf_token %}</form>
 
 <dialog class="settings-drawer" id="run-settings" aria-labelledby="run-settings-title"{% if recipient_error %} data-open-on-load{% endif %}>
   <div class="sd-head">
@@ -82,6 +84,14 @@
       </form>
     </section>
 
+    <section class="sd-section" aria-labelledby="sd-leave">
+      <h3 id="sd-leave">Уход со страницы</h3>
+      <form method="post" action="{% url 'independentworks:lock_settings' run.pk %}" class="sd-row">{% csrf_token %}
+        <label class="ws-toggle"><input type="checkbox" name="lock_on_leave"{% if run.lock_on_leave %} checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Блокировать задания, если ученик ушёл со страницы<span class="helptext">Дольше 2 секунд на другой вкладке или в другом приложении — и ученик видит заглушку «Вы ушли со страницы». Разблокировать — кнопкой у ученика в таблице, каждый раз заново. Таймер работы не останавливается. Включённая настройка сразу действует и в начатых работах, при выключении заглушки снимаются у всех.</span></span></label>
+        <button class="btn btn-secondary btn-small">Сохранить</button>
+      </form>
+    </section>
+
     <section class="sd-section" aria-labelledby="sd-copy">
       <h3 id="sd-copy">Копирование</h3>
       <form method="post" action="{% url 'workaudit:run_settings' run.pk %}" class="sd-row">{% csrf_token %}
@@ -99,7 +109,7 @@
 {% block sidebar %}{% endblock %}
 {% block extra_js %}
 {% include 'assignments/_progress_dialog.html' with heading='Ответы и попытки' %}
-<script defer src="{% static 'js/teacher_progress.js' %}?v=3"></script>
+<script defer src="{% static 'js/teacher_progress.js' %}?v=10"></script>
 <script>
 /* Ошибка добавления учеников видна в открытой панели */
 (function () { var d = document.querySelector('dialog[data-open-on-load]'); if (d) d.showModal(); })();

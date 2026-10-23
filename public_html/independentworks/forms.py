@@ -4,6 +4,11 @@ from .models import Work
 from assignments.forms import StudentChoiceField
 from workaudit.clipboard import RESTRICT_LABEL, SWAP_HELP, SWAP_LABEL
 
+# Порог ухода — в iw_leave_lock.js (LIMIT); сервер только хранит блокировку.
+LOCK_LABEL = 'Блокировать задания, если ученик ушёл со страницы'
+LOCK_HELP = ('Дольше 2 секунд на другой вкладке или в другом приложении — '
+             'и задания закрываются, пока вы не разблокируете их на странице прогресса.')
+
 
 class WorkForm(forms.ModelForm):
     class Meta:
@@ -19,6 +24,7 @@ class RunForm(forms.Form):
     max_variants = forms.IntegerField(label='Максимально вариантов', required=False, min_value=1)
     restrict_clipboard = forms.BooleanField(label=RESTRICT_LABEL, required=False)
     swap_numbers = forms.BooleanField(label=SWAP_LABEL, required=False, help_text=SWAP_HELP)
+    lock_on_leave = forms.BooleanField(label=LOCK_LABEL, required=False, help_text=LOCK_HELP)
     allow_photos = forms.BooleanField(
         label='Принимать фотографии', required=False, initial=False)
     self_check = forms.BooleanField(

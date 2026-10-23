@@ -145,6 +145,15 @@
       stamp();
     }catch(error){var status=document.querySelector('[data-live-status]');if(status)status.textContent='Связь прервана. Повторим обновление автоматически.';}finally{busy=false;}
   }
+  /* «Разблокировать» ученика самостоятельной (заглушка «Вы ушли со
+     страницы»): кнопки form="iw-unlock" в таблице. Без перезагрузки —
+     таблица перечитывается сразу, а не через 5 секунд опроса. */
+  document.addEventListener('submit',async function(e){
+    if(e.target.id!=='iw-unlock'||!e.submitter)return;e.preventDefault();
+    var button=e.submitter;if(button.disabled)return;button.disabled=true;
+    try{await request(button.formAction,{method:'POST',body:new FormData(e.target),headers:{'Accept':'application/json'}});force=true;notify(true,'Задания разблокированы');poll();}
+    catch(error){button.disabled=false;notify(false,error.message);}
+  });
   if(dialog)dialog.addEventListener('close',function(){detailUrl=null;});
   setInterval(poll,5000);
   setInterval(tickRemaining,1000);tickRemaining();
