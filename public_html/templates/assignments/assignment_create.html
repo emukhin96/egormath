@@ -100,6 +100,11 @@
 {% block extra_js %}
 <script>
 (function () {
+  // Enter в поиске листка, шаблона или ученика только ищет: неявная
+  // отправка формы выдала бы прежний листок всем отмеченным
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter' && event.target.matches && event.target.matches('[data-sheet-filter], [data-student-filter]')) event.preventDefault();
+  });
   /* Карточки листков и шаблонов (макеты E_Issue, E_IssueIW): поиск, «Все…»,
      выбор шаблона перезагружает мастер с ?work= — работает и без формы */
   var sheetFilter = document.querySelector('[data-sheet-filter]'), showAll = document.querySelector('[data-sheet-all]');
