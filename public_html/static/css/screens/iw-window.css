@@ -1,0 +1,7 @@
+/* Окно «задание у ученика» самостоятельной (макет D_AnswerView): разметка .tw
+   общая с окном листка, здесь только список самопроверок до сдачи */
+@layer components {
+  .tw-checks { display: flex; flex-direction: column; gap: 4px; margin: var(--space-2) 0 0; padding-left: 1.25em; font-size: 13px; }
+  .tw-check-ok { color: #1f7a3d; }
+  .tw-check-wrong { color: #b42318; }
+}

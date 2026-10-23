@@ -108,7 +108,8 @@
 {% endblock %}
 {% block sidebar %}{% endblock %}
 {% block extra_js %}
-{% include 'assignments/_progress_dialog.html' with heading='Ответы и попытки' %}
+{% include 'assignments/_progress_dialog.html' %}
+<script defer src="{% static 'js/work_history.js' %}"></script>{# «История сохранённых ответов» в окне задания #}
 <script defer src="{% static 'js/teacher_progress.js' %}?v=10"></script>
 <script>
 /* Ошибка добавления учеников видна в открытой панели */
