@@ -55,7 +55,7 @@ data-attempt-url (teacher_progress.js грузит их в то же окно). 
         <div class="review-comment"><label>Комментарий ученику<textarea name="comment" rows="3" data-preserve-input>{{ row.review.comment|default:'' }}</textarea></label></div>
         <div class="form-buttons"><button class="btn btn-secondary btn-small">Сохранить комментарий</button></div>
       </form>
-      <a href="{% url 'review_assignment' assignment.pk %}#task-{{ row.number }}">Вся работа ученика</a>
+      <a href="{% url 'assignment_timeline' assignment.pk %}">Вся работа ученика с хронологией</a>
     </aside>
   </div>
   <div class="tw-foot">
