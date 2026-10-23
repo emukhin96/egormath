@@ -149,16 +149,22 @@ class BoardsConditionsPanelTests(BoardsPeekBase):
             tasks.append(task)
         return tasks
 
-    def test_page_has_toggle_and_lazy_panel(self):
-        response = self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk]), {'task': self.task.pk})
-        self.assertContains(response, 'data-peek-panel-toggle')
+    def test_page_panels(self):
+        """Макет E_Boards: без задачи справа условия всех задач (фрагментом,
+        не со страницей), с задачей — её условие, ответ и счётчики."""
+        response = self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk]))
+        self.assertContains(response, 'data-inline')
         self.assertContains(response, 'Условия задач')
-        # условия не рендерятся со страницей — только адрес фрагмента с тем же фильтром
         self.assertNotContains(response, 'Найдите корень уравнения')
-        self.assertContains(response, 'data-url="%s?task=%d"' % (
-            reverse('worksheet_boards_tasks', args=[self.worksheet.pk]), self.task.pk))
+        self.assertContains(response, 'data-url="%s"' % reverse('worksheet_boards_tasks', args=[self.worksheet.pk]))
         self.assertContains(response, 'data-peek-url="%s"' % reverse(
             'worksheet_boards_peek', args=[self.worksheet.pk, 0, 0]))
+        response = self.client.get(reverse('worksheet_boards', args=[self.worksheet.pk]), {'task': self.task.pk})
+        self.assertContains(response, 'aria-label="Условие задачи 1"')
+        self.assertContains(response, 'Найдите корень уравнения')
+        self.assertContains(response, 'Ответы класса по задаче')
+        self.assertContains(response, reverse('worksheet_task_window', args=[self.worksheet.pk, self.item.pk]))
+        self.assertNotContains(response, '·')
 
     def test_all_tasks_in_order_with_reference(self):
         WorksheetItem.objects.create(worksheet=self.worksheet, order=2, text_latex='Текстовый блок')

@@ -129,7 +129,11 @@
     });
   }
   async function poll(){
-    if(document.hidden||busy||grading)return;busy=true;var pollEpoch=gradeEpoch;
+    if(document.hidden||busy||grading)return;
+    // Нечего обновлять — ни живых таблиц, ни открытого окна (например, на
+    // досках, где свой опрос в boards.js): файл-версию лишний раз не трогаем
+    if(!document.querySelector('[data-review-live-url],[data-progress-overview],[data-progress-table]')&&!(dialog&&dialog.open))return;
+    busy=true;var pollEpoch=gradeEpoch;
     try{
       if(watch&&!force&&!(await watch.changed())){stamp();return;}
       var review=document.querySelector('[data-review-live-url]');
