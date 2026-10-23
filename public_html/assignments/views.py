@@ -580,7 +580,9 @@ def _work_cards(works):
     from independentworks.models import Position, Run
     numbers = (Position.objects.filter(Q(text='') | Q(candidates__isnull=False), work=OuterRef('pk'))
                .order_by().values('work').annotate(n=Count('pk', distinct=True)).values('n'))
-    issued = Run.objects.filter(work=OuterRef('pk'), issued_at__isnull=False)
+    # Выдачи шаблона — только первичные запуски: работа над ошибками и
+    # пересдача (parent задан) — повторные попытки одного ученика
+    issued = Run.objects.filter(work=OuterRef('pk'), issued_at__isnull=False, parent__isnull=True)
     return works.select_related('source_worksheet').annotate(
         number_count=Coalesce(Subquery(numbers, output_field=IntegerField()), 0),
         issued=Coalesce(Subquery(issued.order_by().values('work').annotate(n=Count('pk')).values('n'), output_field=IntegerField()), 0),

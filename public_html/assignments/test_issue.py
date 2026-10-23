@@ -155,3 +155,18 @@ class IssueIndependentTests(TestCase):
         self.assertEqual(len(titles), 3)
         self.assertContains(response, f'value="{self.work.pk}" data-current')
         self.assertContains(response, 'Перейти к другому шаблону?')
+
+    def test_followups_not_counted_as_issues(self):
+        """«Выдавалась N раз» — только первичные выдачи шаблона: работа над
+        ошибками и пересдача в счёт не идут (ревью #285)."""
+        from django.utils import timezone
+        from independentworks import services as svc
+        from independentworks.models import Run
+        from .views import work_options
+        run = svc.prepare(self.work, self.teacher, [self.anna.pk])
+        svc.issue(run.pk, True)
+        Run.objects.create(work=self.work, title='Работа над ошибками', owner=self.teacher, fingerprint='x',
+                           kind='correction', parent=run.attempts.get(), issued_at=timezone.now())
+        card = next(w for w in work_options(self.teacher) if w.pk == self.work.pk)
+        self.assertEqual(card.issued, 1)
+        self.assertEqual(card.last_issued, Run.objects.get(pk=run.pk).issued_at)
