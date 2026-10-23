@@ -84,7 +84,7 @@ def review_groups(user):
     for row in pending:
         rows.append({'title': row['worksheet__title'], 'kind': 'листок', 'n': row['n'],
                      'what': 'сданные работы', 'last': row['last'],
-                     'url': reverse('worksheet_progress', args=[row['worksheet_id']])})
+                     'url': reverse('assignment_review_queue', args=[row['worksheet_id']])})
     if settings.INDEPENDENT_WORKS_ENABLED:
         from independentworks.integration import assignment_groups
         for group in assignment_groups(user, {}, runs=review_runs(user)):
