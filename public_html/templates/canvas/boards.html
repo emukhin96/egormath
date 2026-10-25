@@ -1,43 +1,82 @@
-{% extends 'base.html' %}{% load static livefile %}
-{% block title %}Доски · {{ worksheet.title }}{% endblock %}
+{% extends 'base.html' %}{% load static livefile page_tools task_extras %}
+{% block title %}Доски учеников: {{ worksheet.title }} — Математика{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a><a href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">Прогресс учеников</a></nav>
+{% comment %}
+Доски учеников по макету E_Boards (22.10.2026): шапка как у карты ответов,
+справа над панелью — лента номеров задач той же ширины (правило «панель =
+контролы над ней»); слева доски сеткой (имя, отметка по выбранной задаче,
+миниатюра, «пишет сейчас» / «N мин назад»), справа — условие выбранной
+задачи с ответом и счётчиками, без задачи — условия всех задач. Живое
+обновление и диалог доски — boards.js. Без «·».
+{% endcomment %}
+<div class="bd-layout">
+  <div class="bd-head">
+    <a class="live-back" href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">← {{ worksheet.title }}, карта ответов</a>
     <h1>Доски учеников</h1>
+    <p class="bd-status" data-boards-status role="status"><span class="bd-live-dot" aria-hidden="true"></span>Обновляются каждые 5 секунд</p>
   </div>
+  <nav class="bd-strip" data-boards-tasks data-all-tasks aria-label="Задача">
+    <a href="{% query_set task=None %}"{% if not task_id %} aria-current="page"{% endif %} title="У каждого ученика — последняя изменённая доска">Все</a>
+    {% for t in strip %}<a data-task-link="{{ t.id }}" href="{% query_set task=t.id %}"{% if t.id == task_id %} aria-current="page"{% endif %} aria-label="Задача {{ t.no }}" title="Доски задачи {{ t.no }} у всех учеников">{{ t.no }}</a>{% endfor %}
+    <span class="helptext" data-tasks-empty hidden>досок пока нет</span>
+  </nav>
+
+  <section class="bd-main" aria-label="Доски">
+    <div class="bd-tools">
+      {% include 'assignments/_group_filter.html' with current=group_id all_label='Весь класс' %}
+      <form method="get" class="bd-order" data-autosubmit>
+        {% for key, values in request.GET.lists %}{% if key != 'order' %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endif %}{% endfor %}
+        <label>Порядок <select name="order">{% for value, label in orders %}<option value="{{ value }}"{% if value == order %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+        <noscript><button class="btn btn-small btn-secondary">Показать</button></noscript>
+      </form>
+      <span class="helptext bd-hint">Нажмите доску, чтобы открыть её с инструментами и пометками</span>
+    </div>
+    {% if not canvas_enabled %}<p class="helptext">Доски для записей временно отключены.</p>{% else %}
+    <div class="boards-grid bd-grid" data-boards data-live-url="{{ live_url }}" data-peek-url="{{ peek_url }}" data-live-file="{% live_file 'worksheet' worksheet.pk %}"{% if task_id %} data-task="{{ task_id }}"{% endif %}>
+      {% for a in assignments %}<article class="board-card bd-card" data-board="{{ a.pk }}" tabindex="0" role="button" aria-label="Доска: {{ a.student.get_full_name|default:a.student.username }}">
+        <div class="bd-card-head"><strong class="board-name">{{ a.student.get_full_name|default:a.student.username }}{% if a.copied %} <span class="live-copy" title="Копировал текст условия">•</span>{% endif %}</strong><span class="bd-mark" data-board-mark data-mark="{{ a.board_state.mark }}">{{ a.board_state.mark }}{% if a.board_state.mark_sub %}<sub>{{ a.board_state.mark_sub }}</sub>{% endif %}</span><span class="board-state" data-board-state hidden>{{ a.get_status_display }}</span></div>
+        <canvas class="board-thumb" width="300" height="300" aria-hidden="true"></canvas>
+        <div class="bd-card-foot"><span class="bd-activity" data-activity="none" aria-hidden="true"></span><span data-board-updated>{% if task_id %}по задаче {{ task_no }} доски нет{% else %}доски пока нет{% endif %}</span><span class="bd-page" data-board-task></span><button type="button" class="icon-btn board-copy" data-board-copy title="Скопировать доску как картинку" aria-label="Скопировать доску как картинку" hidden><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
+      </article>{% empty %}<p class="helptext">Листок никому не назначен{% if group %} в этой группе{% endif %}.</p>{% endfor %}
+    </div>
+    {% if overflow %}<p class="helptext">На экране {{ boards_max }} досок с самой свежей активностью; ещё {{ overflow }} — выберите группу поменьше.</p>{% endif %}
+    <dialog class="dialog boards-dialog" id="boards-dialog">
+      <div class="dialog-heading"><h3 data-dialog-title>Доска</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
+      <p class="boards-dialog-tasks" data-dialog-tasks></p>
+      <div class="boards-dialog-peek" data-dialog-peek></div>
+      <div data-dialog-canvas></div>
+      <p><a data-dialog-review href="#">Открыть проверку работы</a></p>
+    </dialog>
+    {% endif %}
+  </section>
+
+  {% if panel %}
+  <aside class="card bd-panel" aria-label="Условие задачи {{ panel.number }}">
+    <div class="bd-panel-head"><span class="bd-panel-title">Задача {{ panel.number }}</span><button type="button" class="linklike" data-attempt-url="{{ panel.task_window_url }}">Окно задачи</button></div>
+    <div class="bd-panel-condition math-content">{{ panel.task.text_latex|web_text }}</div>
+    {% task_images panel.task %}
+    {% if panel.subitems %}<ol class="subitems">{% for s in panel.subitems %}<li><span class="math-content">{{ s.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
+    {% answer_material panel.task panel.subitems as material %}
+    {# Ответ задачи — тем же блоком, что в карточке (у него свой заголовок); без текста ответа — маска с эталоном #}
+    <div class="bd-panel-answer">
+      {% if material %}{% include 'problems/_task_answers.html' with task=panel.task subitems=panel.subitems %}
+      {% else %}<span class="tw-label">Ответ</span>{% if panel.reference %}{% include 'assignments/_mask.html' with fragments=panel.reference editable=False show_checks=False %}{% else %}<span class="helptext">Ответа нет, проверяет учитель</span>{% endif %}{% endif %}
+    </div>
+    <div class="bd-panel-stats">
+      <span><b class="is-ok">{{ panel.ok }}</b>верно</span>
+      <span><b class="is-wrong">{{ panel.wrong }}</b>неверно</span>
+      <span><b class="is-live">{{ panel.live }}</b>решают</span>
+    </div>
+    <a class="btn btn-secondary bd-panel-link" href="{{ panel.class_url }}{% if group_id %}?group={{ group_id }}{% endif %}">Ответы класса по задаче</a>
+  </aside>
+  {% else %}
+  {# Без выбранной задачи — условия всех задач листка; фрагмент грузится сразу после страницы (boards_tasks.js, data-inline) #}
+  <aside class="card bd-panel boards-peek-panel" id="boards-peek-panel" data-peek-panel data-inline data-url="{{ conditions_url }}" aria-labelledby="boards-peek-panel-title">
+    <div class="bd-panel-head"><h2 class="bd-panel-title" id="boards-peek-panel-title">Условия задач</h2></div>
+    <div class="boards-peek-panel-body" data-peek-panel-body><p class="helptext">Загружаем условия…</p></div>
+  </aside>
+  {% endif %}
 </div>
-<div class="page-toolbar progress-head">
-  {% include 'assignments/_group_filter.html' with current=group_id all_label='Все назначенные' %}
-</div>
-<p class="boards-tasks" data-boards-tasks><span class="boards-tasks-label" id="boards-tasks-label">Задача</span>
-  <a class="btn btn-small btn-secondary" href="?{% if group_id %}group={{ group_id }}{% endif %}"{% if not task_id %} aria-current="page"{% endif %} title="У каждого ученика — последняя изменённая доска">Последняя</a>
-  {% for t in tasks %}<a class="btn btn-small btn-secondary" data-task-link="{{ t.id }}" href="?{% if group_id %}group={{ group_id }}&{% endif %}task={{ t.id }}"{% if t.id == task_id %} aria-current="page"{% endif %} aria-label="Задача {{ t.no }}" title="Доски задачи {{ t.no }} у всех учеников">{{ t.no }}</a>{% endfor %}
-  <span class="helptext" data-tasks-empty{% if tasks %} hidden{% endif %}>досок пока нет</span>
-  <button type="button" class="btn btn-small btn-secondary boards-peek-toggle" data-peek-panel-toggle aria-controls="boards-peek-panel" aria-expanded="false">Условия задач</button>
-</p>
-{% if not canvas_enabled %}<p class="helptext">Доски для записей временно отключены.</p>{% else %}
-<p class="helptext boards-status" data-boards-status role="status">Доски обновляются каждые 5 секунд. Нажмите на доску, чтобы открыть её с инструментами и оставить пометки.</p>
-{% if overflow %}<p class="helptext boards-overflow">На экране {{ boards_max }} учеников с самой свежей активностью; ещё {{ overflow }} не поместились — выберите группу поменьше.</p>{% endif %}
-<div class="boards-grid" data-boards data-live-url="{{ live_url }}" data-peek-url="{{ peek_url }}" data-live-file="{% live_file 'worksheet' worksheet.pk %}"{% if task_id %} data-task="{{ task_id }}"{% endif %}>
-  {% for a in assignments %}<article class="board-card" data-board="{{ a.pk }}" tabindex="0" role="button" aria-label="Доска: {{ a.student.get_full_name|default:a.student.username }}">
-    <div class="board-meta"><strong class="board-name">{{ a.student.get_full_name|default:a.student.username }}</strong><span class="board-state" data-board-state>{{ a.get_status_display }}</span></div>
-    <canvas class="board-thumb" width="300" height="300" aria-hidden="true"></canvas>
-    <div class="board-meta helptext"><span data-board-task>{% if task_id %}по задаче {{ task_no }} доски нет{% else %}доски пока нет{% endif %}</span><span data-board-updated></span><button type="button" class="icon-btn board-copy" data-board-copy title="Скопировать доску как картинку" aria-label="Скопировать доску как картинку" hidden><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
-  </article>{% empty %}<p class="helptext">Листок никому не назначен{% if group %} в этой группе{% endif %}.</p>{% endfor %}
-</div>
-<dialog class="dialog boards-dialog" id="boards-dialog">
-  <div class="dialog-heading"><h3 data-dialog-title>Доска</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
-  <p class="boards-dialog-tasks" data-dialog-tasks></p>
-  <div class="boards-dialog-peek" data-dialog-peek></div>
-  <div data-dialog-canvas></div>
-  <p><a data-dialog-review href="#">Открыть проверку работы</a></p>
-</dialog>
-{% endif %}
-{# Условия всех задач листка: немодальная панель справа, доски остаются видны и обновляются. Содержимое — фрагментом по первому открытию (boards_tasks.js) #}
-<aside class="boards-peek-panel" id="boards-peek-panel" data-peek-panel data-url="{{ conditions_url }}" data-storage-key="boards-peek-panel:{{ worksheet.pk }}" aria-labelledby="boards-peek-panel-title" hidden>
-  <div class="boards-peek-panel-head"><h2 id="boards-peek-panel-title">Условия задач</h2><button type="button" class="icon-btn" data-peek-panel-close aria-label="Закрыть условия задач">×</button></div>
-  <div class="boards-peek-panel-body" data-peek-panel-body><p class="helptext">Загружаем условия…</p></div>
-</aside>
+{% include 'assignments/_progress_dialog.html' %}
 {% endblock %}
-{% block extra_js %}{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=3"></script><script defer src="{% static 'js/boards.js' %}?v=2"></script>{% endif %}<script defer src="{% static 'js/boards_tasks.js' %}"></script>{% endblock %}
+{% block extra_js %}{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=3"></script><script defer src="{% static 'js/boards.js' %}?v=3"></script>{% endif %}<script defer src="{% static 'js/boards_tasks.js' %}?v=2"></script><script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=11"></script>{% endblock %}

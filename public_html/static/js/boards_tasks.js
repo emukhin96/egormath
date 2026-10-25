@@ -8,7 +8,10 @@
   'use strict';
   var panel = document.querySelector('[data-peek-panel]');
   var toggle = document.querySelector('[data-peek-panel-toggle]');
-  if (!panel || !toggle) return;
+  if (!panel) return;
+  /* Доски по макету E_Boards: условия — постоянная колонка справа (data-inline), грузим сразу */
+  var inline = panel.hasAttribute('data-inline');
+  if (!toggle && !inline) return;
   var body = panel.querySelector('[data-peek-panel-body]');
   var key = panel.dataset.storageKey, loaded = false, loading = false;
 
@@ -46,6 +49,7 @@
     if (value) { load(); if (loaded) scrollToCurrent(); }
   }
 
+  if (inline) { load(); return; }
   toggle.addEventListener('click', function () { setOpen(panel.hidden); });
   panel.querySelector('[data-peek-panel-close]').addEventListener('click', function () {
     setOpen(false);
