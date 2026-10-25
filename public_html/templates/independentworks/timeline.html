@@ -1,0 +1,62 @@
+{% extends 'independentworks/base.html' %}{% load static task_extras %}
+{% block title %}{{ student_name }}: {{ attempt.run.title }} — Математика{% endblock %}
+{% block sidebar %}{% endblock %}
+{% block content %}
+{% comment %}
+Работа ученика в самостоятельной по макету D_Timeline — как хронология
+ученика в листке (assignments/timeline.html): дорожка работы, ответы с
+эталоном и оценкой, лента событий. Строка и оценка открывают окно
+«задание у ученика» (оценка, комментарий, история). Без «·».
+{% endcomment %}
+<div class="tl-head">
+  <div>
+    <a class="live-back" href="{% url 'independentworks:progress' attempt.run_id %}">← {{ attempt.run.title }}, прогресс</a>
+    <h1>{{ student_name }}{% if copied or copied_whole %} <span class="live-copy" title="{% if copied_whole %}Копировал условие целиком{% if copied_whole > 1 %} ×{{ copied_whole }}{% endif %}{% else %}Копировал текст условия{% endif %}" aria-label="{% if copied_whole %}копировал условие целиком{% else %}копировал текст условия{% endif %}">•</span>{% endif %}</h1>
+    <p class="live-meta">{{ attempt.run.kind_label }}, вариант {{ attempt.variant.number }}, {{ attempt.run.duration }} мин; {% if track %}{% with fmt=track.days|yesno:'d.m H:i,H:i' %}начал {{ attempt.started_at|date:fmt }}{% if attempt.submitted_at %}, сдал {{ attempt.submitted_at|date:fmt }}{% elif attempt.finished %}, время вышло {{ attempt.ends_at|date:fmt }}{% else %}, решает, до {{ attempt.ends_at|date:fmt }}{% endif %}{% endwith %}; работал {{ track.duration }}{% if track.away %}, из них {{ track.away }} вне страницы{% endif %}{% else %}ещё не начал{% endif %}</p>
+  </div>
+  {# Кнопки над правой колонкой и той же ширины (правило «панель = контролы над ней») #}
+  <div class="tl-actions">
+    {% if locked %}<button class="btn tl-complete" form="tl-unlock">Разблокировать задания</button>{% endif %}
+    {% if attempt.finished %}<button class="btn btn-secondary" form="tl-repeat" name="kind" value="correction">Работа над ошибками</button><button class="btn btn-secondary" form="tl-repeat" name="kind" value="retake">Пересдача</button>{% endif %}
+  </div>
+</div>
+{% if locked %}<form id="tl-unlock" method="post" action="{% url 'independentworks:unlock' attempt.pk %}" hidden>{% csrf_token %}<input type="hidden" name="back" value="attempt"></form>{% endif %}
+{% if attempt.finished %}<form id="tl-repeat" method="post" action="{% url 'independentworks:repeat' attempt.pk %}" hidden>{% csrf_token %}</form>{% endif %}
+{% if locked %}<p class="msg msg-warning">Задания заблокированы. Ученик ушёл со страницы в {{ attempt.locked_at|date:'H:i' }}.</p>{% endif %}
+
+{% if track %}
+<section class="card tl-track" aria-label="Дорожка работы">
+  <div class="tl-ticks">{% for t in track.ticks %}<span>{% if track.days %}{{ t|date:'d.m H:i' }}{% else %}{{ t|date:'H:i' }}{% endif %}</span>{% endfor %}</div>
+  <div class="tl-bar" aria-hidden="true">{% for s in track.segments %}<span class="tl-seg tl-seg-{{ s.kind }}" style="left: {{ s.left|stringformat:'s' }}%{% if s.width %}; width: {{ s.width|stringformat:'s' }}%{% endif %}"></span>{% endfor %}</div>
+  <div class="tl-legend"><span><i class="tl-key tl-key-page"></i>на странице</span><span><i class="tl-key tl-key-away"></i>вне страницы</span><span><i class="tl-key tl-key-clipboard"></i>копирование и вставка</span><span><i class="tl-key tl-key-wrong"></i>неверная самопроверка</span></div>
+</section>
+{% endif %}
+
+<div class="tl-grid">
+  <section class="card tl-answers" aria-label="Ответы и оценки">
+    <div class="tl-row tl-row-head" role="row"><span>№</span><span>Задание</span><span>Ответ ученика</span><span>Ответ</span><span class="tl-grade-head">Оценка</span></div>
+    {% for row in rows %}
+    <div class="tl-row{% if row.needs_grade %} is-pending{% endif %}">
+      <span class="live-task">{{ row.point.label }}</span>
+      <button type="button" class="tl-task linklike" data-attempt-url="{{ row.window_url }}"><span class="tl-task-text math-content">{% if row.common %}{{ row.common|web_text }} {% endif %}{{ row.text|web_text }}</span>{% if row.note %}<span class="tl-note{% if row.copied %} is-copied{% endif %}">{{ row.note }}</span>{% endif %}</button>
+      <span class="tl-answer">{% if row.answered %}{% if row.fragments %}{% include 'assignments/_mask.html' with fragments=row.fragments editable=False show_checks=False %}{% else %}<span class="math-content">{{ row.display|default:'фото'|web_answer }}</span>{% endif %}<span class="live-table tl-mark"><span class="progress-mark progress-{{ row.mark }}" title="{% if row.mark == 'ok' %}Автосверка: верно{% elif row.mark == 'wrong' %}Автосверка: неверно{% else %}Проверяет учитель{% endif %}">{% if row.mark == 'ok' %}✓{% elif row.mark == 'wrong' %}×{% else %}…{% endif %}</span></span>{% else %}<span class="tl-empty">—</span>{% endif %}</span>
+      <span class="tl-ref">{% if row.ref %}{% include 'assignments/_mask.html' with fragments=row.ref editable=False show_checks=False %}{% elif row.reference %}<span class="math-content">{{ row.reference|web_answer }}</span>{% else %}<span class="tl-empty">—</span>{% endif %}</span>
+      <button type="button" class="tl-grade{% if row.grade_tone %} tl-grade-{{ row.grade_tone }}{% elif row.needs_grade %} tl-grade-pending{% endif %}" data-attempt-url="{{ row.window_url }}" title="{{ row.grade_title|default:'Оценка по автосверке' }}" aria-label="Оценка задания {{ row.point.label }}: {{ row.grade_title|default:'по автосверке' }}">{% if row.answer.grade %}{{ row.grade_symbol }}{% elif row.needs_grade %}?{% elif row.answered %}↺{% else %}—{% endif %}</button>
+    </div>
+    {% endfor %}
+    <div class="tl-total"><span>Итог</span><span>{% if result.done is None %}не начато{% else %}{{ result.done|floatformat:'-2' }} из {{ result.total }}, {{ result.percent }}%{% if cumulative %}; с учётом работы над ошибками {{ cumulative.done|floatformat:'-2' }} из {{ cumulative.total }}, {{ cumulative.percent }}%{% endif %}{% if pending %}, без оценки: {{ pending|join:', ' }}{% endif %}{% endif %}</span></div>
+  </section>
+
+  <aside class="card tl-events" aria-label="Хронология">
+    <h2>Хронология</h2>
+    <ol>
+      {% for e in events %}
+      <li class="tl-event tl-event-{{ e.kind }}"><time datetime="{{ e.at|date:'c' }}"{% if track.days %} title="{{ e.at|date:'d.m.Y' }}"{% endif %}>{{ e.at|date:'H:i' }}</time><span class="tl-dot" aria-hidden="true"></span><span><span class="tl-event-text">{{ e.text }}</span>{% if e.detail %}<span class="tl-event-detail{% if e.kind == 'clipboard' %} math-content{% endif %}">{{ e.detail }}</span>{% endif %}</span></li>
+      {% empty %}<li class="helptext">Событий пока нет.</li>{% endfor %}
+    </ol>
+  </aside>
+</div>
+{% if attempt.parent_id %}<p><a href="{% url 'independentworks:attempt' attempt.parent_id %}">Предыдущая попытка</a></p>{% endif %}
+{% include 'assignments/_progress_dialog.html' %}
+{% endblock %}
+{% block extra_js %}<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/check_badge.js' %}?v=2"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/work_history.js' %}"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=10"></script>{% endblock %}

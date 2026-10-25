@@ -716,6 +716,10 @@ def attempt_page(request, pk):
     teacher = get_role(request.user) == 'teacher'
     attempt = own_attempt(request, pk, teacher=teacher)
     svc.finish_expired(attempt)
+    if teacher:
+        # Учителю — работа ученика по макету D_Timeline (timeline.py)
+        from .timeline import attempt_timeline
+        return attempt_timeline(request, attempt)
     accessible = teacher or bool(attempt.started_at)
     if accessible and not teacher:
         # Досверка только своей работы: общая сводка и экспорт ничего
