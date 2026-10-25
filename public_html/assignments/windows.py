@@ -33,27 +33,35 @@ def reference_for(owner, prefix='reference'):
     """Эталон маски полями «так видит ученик» с эталонными значениями
     (как предпросмотр ответа в редакторе, problems/editor.py) — фрагменты
     для _mask.html; без маски — пустой список."""
-    spec = owner.mask_spec
+    return reference_fragments(owner.mask_spec, f'{prefix}_{owner.pk}')
+
+
+def reference_fragments(spec, prefix):
+    """То же по уже разобранной маске (пункт самостоятельной хранит маску
+    снимком, не задачей)."""
     if spec is None or not spec.is_valid or not spec.slots:
         return []
     values = {slot.name: ('|'.join(str(i) for i in range(len(slot.items))) if slot.kind == 'order' else slot.reference)
               for slot in spec.slots}
-    return render_fragments(spec, f'{prefix}_{owner.pk}', values=values)
+    return render_fragments(spec, prefix, values=values)
 
 
 def grade_caption(review):
-    """«–+ существенное продвижение, 0%» — подпись к выбранной оценке."""
+    """«–+ существенное продвижение, 0%» — подпись к выбранной оценке
+    (Review листка или Answer самостоятельной)."""
     if not review or not review.grade:
         return ''
     label = dict(Review.GRADE_CHOICES)[review.grade]
     return f'{review.grade_symbol} {label.lower()}, {round(100 * review.credit)}%'
 
 
-def task_copies(assignment, number):
-    """Копирования из условия этой задачи (метка условия «3» или «3а»)."""
+def task_copies(assignment, number, attempt=None):
+    """Копирования из условия этой задачи (метка условия «3» или «3а»);
+    attempt — то же в попытке самостоятельной."""
     pattern = re.compile(rf'^{re.escape(str(number))}(\D|$)')
     rows = []
-    for event in ActivityEvent.objects.filter(assignment=assignment, kind='copy').order_by('received_at'):
+    events = ActivityEvent.objects.filter(attempt=attempt) if attempt else ActivityEvent.objects.filter(assignment=assignment)
+    for event in events.filter(kind='copy').order_by('received_at'):
         if any(pattern.match(str(part.get('label', ''))) for part in event.statements):
             rows.append({'event': event, 'label': copy_label(event), 'words': copied_words(event)})
     return rows

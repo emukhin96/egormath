@@ -206,6 +206,10 @@ class Answer(models.Model):
     def pending(self):
         return not self.grade and self.auto_check not in ('ok', 'wrong')
 
+    @property
+    def grade_symbol(self):
+        return Review.SYMBOLS.get(self.grade, self.grade)
+
 
 class AnswerCheckAttempt(models.Model):
     """Неизменяемый снимок одного нажатия «Проверить»."""
