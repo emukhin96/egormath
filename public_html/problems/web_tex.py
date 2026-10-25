@@ -4,7 +4,8 @@
 Обрабатываются «форматирующие» конструкции пакета egor, которые иначе
 видны как сырой код: комментарии %, переносы \\ и \\par, пометки на полях
 (\annot, \annotnoframe, \\oge, \fipi, \rev, \\complex, \\starred, \\home),
-\\source, \textbit, неразрывный пробел ~, экранированные символы
+\\source, \textbit, \textbf, \textit/\emph, \\underline, списки
+itemize/enumerate (строками), неразрывный пробел ~, экранированные символы
 (\\%, \\& …) и таблицы tabular (превращаются в HTML-таблицу).
 """
 
@@ -25,6 +26,12 @@ _SOURCE_OPEN = '\x0b'
 _SOURCE_CLOSE = '\x0c'
 _BOLDIT_OPEN = '\x0e'
 _BOLDIT_CLOSE = '\x0f'
+_BOLD_OPEN = '\x10'
+_BOLD_CLOSE = '\x11'
+_ITALIC_OPEN = '\x12'
+_ITALIC_CLOSE = '\x13'
+_UNDER_OPEN = '\x14'
+_UNDER_CLOSE = '\x15'
 
 # Все разделители формул, которые рендерит KaTeX (static/js/math.js):
 # $$…$$, \[…\], $…$, \(…\) — внутри них текст не преобразуем
@@ -38,6 +45,13 @@ _ANNOT_RE = re.compile(r'\\annot' + _ARG, re.S)
 _NOFRAME_RE = re.compile(r'\\annotnoframe' + _ARG, re.S)
 _SOURCE_RE = re.compile(r'\\source' + _ARG, re.S)
 _TEXTBIT_RE = re.compile(r'\\textbit' + _ARG, re.S)
+_TEXTBF_RE = re.compile(r'\\textbf' + _ARG, re.S)
+_TEXTIT_RE = re.compile(r'\\(?:textit|emph)' + _ARG, re.S)
+_UNDERLINE_RE = re.compile(r'\\underline' + _ARG, re.S)
+# Списки из авторских листков: пункты — строками с тире (нумерованные — с номером)
+_LIST_RE = re.compile(
+    r'\\begin\{(itemize|enumerate)\}(.*?)\\end\{\1\}', re.S)
+_ITEM_RE = re.compile(r'\\item\b\s*')
 _COMMENT_RE = re.compile(r'(?<!\\)%[^\n]*')
 _TASKPIC_RE = re.compile(r'\s*\\taskpic(?:\[[^\]]*\])?\{[^}]*\}')
 
@@ -60,7 +74,19 @@ _COMMANDS = [
     (_NOFRAME_RE, _wrap(_NOFRAME_OPEN, _NOFRAME_CLOSE)),
     (_SOURCE_RE, _wrap(_SOURCE_OPEN, _SOURCE_CLOSE)),
     (_TEXTBIT_RE, _wrap(_BOLDIT_OPEN, _BOLDIT_CLOSE)),
+    (_TEXTBF_RE, _wrap(_BOLD_OPEN, _BOLD_CLOSE)),
+    (_TEXTIT_RE, _wrap(_ITALIC_OPEN, _ITALIC_CLOSE)),
+    (_UNDERLINE_RE, _wrap(_UNDER_OPEN, _UNDER_CLOSE)),
 ]
+
+
+def _list_lines(match):
+    items = [x.strip() for x in _ITEM_RE.split(match.group(2)) if x.strip()]
+    if match.group(1) == 'enumerate':
+        lines = [f'{n}) {x}' for n, x in enumerate(items, 1)]
+    else:
+        lines = ['— ' + x for x in items]
+    return '\n' + '\n'.join(lines) + '\n'
 
 # Замены в тексте вне формул (внутри $…$ всё это понимает KaTeX)
 _UNESCAPE = [('\\%', '%'), ('\\&', '&'), ('\\_', '_'), ('\\#', '#'),
@@ -170,7 +196,13 @@ def _markers_to_html(html):
             .replace(_SOURCE_OPEN, '<span class="tex-source">')
             .replace(_SOURCE_CLOSE, '</span>')
             .replace(_BOLDIT_OPEN, '<b><i>')
-            .replace(_BOLDIT_CLOSE, '</i></b>'))
+            .replace(_BOLDIT_CLOSE, '</i></b>')
+            .replace(_BOLD_OPEN, '<b>')
+            .replace(_BOLD_CLOSE, '</b>')
+            .replace(_ITALIC_OPEN, '<i>')
+            .replace(_ITALIC_CLOSE, '</i>')
+            .replace(_UNDER_OPEN, '<u>')
+            .replace(_UNDER_CLOSE, '</u>'))
 
 
 def _fragment_html(text):
@@ -255,6 +287,7 @@ def tex_to_web_html(source):
 
     text = _sub_outside_math(_TABULAR_RE, stash, text)
     text = _sub_outside_math(_TASKPIC_RE, '', text)
+    text = _sub_outside_math(_LIST_RE, _list_lines, text)
     for pattern, repl in _COMMANDS:
         text = _sub_outside_math(pattern, repl, text)
 
