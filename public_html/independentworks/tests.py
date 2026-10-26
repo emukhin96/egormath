@@ -407,7 +407,7 @@ class IndependentWorkTests(TestCase):
         self.assertNotContains(response, 'page-crumbs')
         self.client.force_login(self.teacher)
         response = self.client.get(self.url('attempt', a.pk))
-        self.assertContains(response, 'page-crumbs')
+        self.assertContains(response, 'class="tl-head"')  # учителю — работа по макету D_Timeline
         self.assertNotContains(response, 'data-iw-focus')
 
     def test_unified_student_dashboard_disclosure_and_closed_start(self):
@@ -1213,8 +1213,10 @@ class IndependentWorkTests(TestCase):
         self.assertEqual(AnswerRevision.objects.filter(answer__attempt=attempt).count(), 2)
         self.client.force_login(self.teacher)
         teacher_page = self.client.get(self.url('attempt', attempt.pk))
-        self.assertContains(teacher_page, 'Самопроверки: 2')
-        self.assertContains(teacher_page, 'Поле 1: 3')
+        # Самопроверки — в ленте хронологии работы (макет D_Timeline)
+        self.assertContains(teacher_page, 'tl-event-wrong')
+        self.assertContains(teacher_page, f'Задание {point.label}: 3')
+        self.assertContains(teacher_page, f'Задание {point.label}: 4')
         self.assertRedirects(self.client.post(url, {}), self.url('progress', attempt.run_id))
         attempt.run.refresh_from_db()
         self.assertFalse(attempt.run.self_check)

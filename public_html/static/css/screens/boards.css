@@ -1,0 +1,57 @@
+/* Доски учеников (макет E_Boards): шапка и лента номеров над колонками,
+   доски сеткой слева, условие задачи справа той же ширины, что лента. */
+@layer components {
+  .bd-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--space-4) var(--space-4); align-items: start; }
+  .bd-head { display: flex; flex-direction: column; gap: 4px; align-self: end; min-width: 0; }
+  .bd-head h1 { margin: 0; }
+  .bd-status { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--muted); font-size: 13.5px; }
+  .bd-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #2e7d32; flex: none; }
+  .bd-strip { align-self: end; display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 4px; margin: 0; }
+  .bd-strip a { height: 38px; border-radius: 8px; display: grid; place-items: center; padding: 0 6px; border: 1px solid var(--border); background: #fff; color: #102b55; font-weight: 700; text-decoration: none; }
+  .bd-strip a:hover { border-color: #9fb3c8; }
+  .bd-strip a[aria-current="page"] { background: #102b55; border-color: #102b55; color: #fff; }
+  .bd-main { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+  .bd-tools { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+  .bd-tools .seg, .bd-tools .progress-filters { margin: 0; }
+  .bd-order { margin: 0; }
+  .bd-order label { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--muted); font-size: 13px; }
+  .bd-order select { width: auto; margin: 0; }
+  .bd-hint { margin-left: auto; font-size: 12.5px; }
+  .bd-grid.boards-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin: 0; }
+  .bd-card.board-card { padding: 0; gap: 0; overflow: hidden; border-radius: 12px; background: #fff; display: flex; flex-direction: column; }
+  .bd-card-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding: 10px 12px; border-bottom: 1px solid #eef2f6; }
+  .bd-card-head .board-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bd-mark { font-size: 13px; font-weight: 700; color: var(--muted); }
+  .bd-mark[data-mark="✓"] { color: #14511c; }
+  .bd-mark[data-mark="×"] { color: #8f1616; }
+  .bd-mark sub { font-size: 10px; }
+  .bd-card .board-thumb { border: 0; border-radius: 0; background: #fbfcfe; }
+  .bd-card-foot { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 12.5px; color: #4a5566; }
+  .bd-card-foot .board-copy { margin-left: auto; }
+  .bd-page { color: var(--muted); }
+  .bd-activity { width: 8px; height: 8px; border-radius: 50%; background: #c7d3e1; flex: none; }
+  .bd-activity[data-activity="live"] { background: #2e7d32; }
+  .bd-activity[data-activity="idle"] { background: #e39a1c; }
+  .bd-activity[data-activity="live"] + span { color: #14511c; }
+  .bd-panel { position: sticky; top: var(--space-4); margin: 0; display: flex; flex-direction: column; gap: var(--space-3); padding: 16px; }
+  .bd-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+  .bd-panel-title { margin: 0; font-size: 1rem; font-weight: 700; }
+  .bd-panel-condition { line-height: 1.6; }
+  .bd-panel-answer { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid #eef2f6; padding-top: var(--space-3); }
+  .bd-panel-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; border-top: 1px solid #eef2f6; padding-top: var(--space-3); text-align: center; }
+  .bd-panel-stats span { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); }
+  .bd-panel-stats b { font-size: 20px; color: var(--text); }
+  .bd-panel-stats b.is-ok { color: #2e7d32; }
+  .bd-panel-stats b.is-wrong { color: #c62828; }
+  .bd-panel-stats b.is-live { color: #1765b5; }
+  .bd-panel-link { width: 100%; justify-content: center; margin: 0; }
+  .bd-panel.boards-peek-panel { position: sticky; inset: auto; width: auto; max-height: calc(100vh - 2 * var(--space-4)); box-shadow: none; z-index: auto; }
+  .bd-panel .boards-peek-panel-body { overflow: auto; }
+  @media (max-width: 1100px) { .bd-grid.boards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 900px) {
+    .bd-layout { grid-template-columns: minmax(0, 1fr); }
+    .bd-panel, .bd-panel.boards-peek-panel { position: static; max-height: none; }
+    .bd-hint { margin-left: 0; }
+  }
+  @media (max-width: 560px) { .bd-grid.boards-grid { grid-template-columns: minmax(0, 1fr); } }
+}

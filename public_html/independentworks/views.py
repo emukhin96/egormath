@@ -696,17 +696,6 @@ def point_rows(attempt, teacher=False):
     return rows
 
 
-@enabled
-@teacher_required
-def point_detail(request, pk, point_id):
-    attempt = own_attempt(request, pk, teacher=True)
-    svc.finish_expired(attempt)
-    row = next((r for r in point_rows(attempt, teacher=True) if r['point'].pk == point_id), None)
-    if row is None:
-        raise Http404
-    return render(request, 'independentworks/_point_review.html', {'attempt': attempt, 'row': row, 'grades': [('', 'По автосверке', '↺')] + Review.grade_options()})
-
-
 def focus_rows(rows):
     """Экран ученика «одно задание» (макет A2): состояние номера в ленте —
     saved (есть ответ), wrong (самопроверка: неверно), empty; соседи для
@@ -727,6 +716,10 @@ def attempt_page(request, pk):
     teacher = get_role(request.user) == 'teacher'
     attempt = own_attempt(request, pk, teacher=teacher)
     svc.finish_expired(attempt)
+    if teacher:
+        # Учителю — работа ученика по макету D_Timeline (timeline.py)
+        from .timeline import attempt_timeline
+        return attempt_timeline(request, attempt)
     accessible = teacher or bool(attempt.started_at)
     if accessible and not teacher:
         # Досверка только своей работы: общая сводка и экспорт ничего
@@ -869,8 +862,10 @@ def review(request, pk, point_id):
     if request.headers.get('Accept') == 'application/json':
         # own_attempt заранее загрузил ответы; после проверки нужен свежий итог.
         attempt._prefetched_objects_cache.pop('answers', None)
+        from assignments.windows import grade_caption
         feedback = (Review.SYMBOLS.get(answer.grade, answer.grade) + ' · ' + answer.get_grade_display()) if answer.grade else ('На проверке' if answer.pending else {'ok': 'Верно', 'wrong': 'Неверно'}.get(answer.auto_check, 'Ответ не введён'))
-        return JsonResponse({'grade': answer.grade, 'feedback': feedback, 'result': svc.result(attempt), 'cumulative': svc.cumulative(attempt)})
+        return JsonResponse({'grade': answer.grade, 'feedback': feedback, 'result': svc.result(attempt), 'cumulative': svc.cumulative(attempt),
+                             'caption': grade_caption(answer)})
     messages.success(request, 'Проверка сохранена')
     return redirect('independentworks:attempt', pk=pk)
 

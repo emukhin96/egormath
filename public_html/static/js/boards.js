@@ -27,20 +27,46 @@
   var peekState = {open: false, reference: false}, peekShown = null, peekSeq = 0, answerVersions = {};
 
   function card(id) { return root.querySelector('[data-board="' + id + '"]'); }
+  /* «пишет сейчас» — доска менялась за последние LIVE мс (макет E_Boards) */
+  var LIVE = 90 * 1000, IDLE_MARK = 15 * 60 * 1000;
   function ago(iso) {
     var s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-    if (s < 60) return s + ' с назад';
-    if (s < 3600) return Math.round(s / 60) + ' мин назад';
+    if (s * 1000 < LIVE) return 'пишет сейчас';
+    if (s < 3600) return Math.max(1, Math.round(s / 60)) + ' мин назад';
     return new Date(iso).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
+  }
+  function activity(iso) {
+    var ms = Date.now() - new Date(iso).getTime();
+    return ms < LIVE ? 'live' : ms < IDLE_MARK ? 'idle' : 'old';
+  }
+  function setMark(el, state) {
+    var mark = el.querySelector('[data-board-mark]');
+    if (!mark) return;
+    mark.dataset.mark = state.mark || '';
+    mark.textContent = state.mark || '';
+    if (state.mark_sub) { var sub = document.createElement('sub'); sub.textContent = state.mark_sub; mark.appendChild(sub); }
+  }
+  function liveCount() {
+    var cards = root.querySelectorAll('[data-board]'), n = 0;
+    Array.prototype.forEach.call(cards, function (el) { if (el.dataset.updated && activity(el.dataset.updated) === 'live') n++; });
+    return 'Обновляются каждые 5 секунд; пишут сейчас ' + n + ' из ' + cards.length;
+  }
+  function setStatus(text) {
+    if (!status) return;
+    status.textContent = text;
+    var dot = document.createElement('span');
+    dot.className = 'bd-live-dot'; dot.setAttribute('aria-hidden', 'true');
+    status.insertBefore(dot, status.firstChild);
   }
   function ensureCard(state) {
     var el = card(state.assignment);
     if (el) return el;
     el = document.createElement('article');
     el.className = 'board-card'; el.dataset.board = state.assignment; el.tabIndex = 0; el.setAttribute('role', 'button');
-    el.innerHTML = '<div class="board-meta"><strong class="board-name"></strong><span class="board-state" data-board-state></span></div>'
+    el.className = 'board-card bd-card';
+    el.innerHTML = '<div class="bd-card-head"><strong class="board-name"></strong><span class="bd-mark" data-board-mark></span><span class="board-state" data-board-state hidden></span></div>'
       + '<canvas class="board-thumb" width="300" height="300" aria-hidden="true"></canvas>'
-      + '<div class="board-meta helptext"><span data-board-task>доски пока нет</span><span data-board-updated></span>'
+      + '<div class="bd-card-foot"><span class="bd-activity" data-activity="none" aria-hidden="true"></span><span data-board-updated>доски пока нет</span><span class="bd-page" data-board-task></span>'
       + '<button type="button" class="icon-btn board-copy" data-board-copy title="Скопировать доску как картинку" aria-label="Скопировать доску как картинку" hidden>' + COPY_ICON + '</button></div>';
     el.querySelector('.board-name').textContent = state.student;
     root.appendChild(el);
@@ -53,6 +79,8 @@
     el.querySelector('[data-board-task]').textContent = (taskFilter ? '' : 'задача ' + page.task_no + ', ') + 'стр. ' + page.number;
     el.querySelector('[data-board-updated]').textContent = ago(page.updated);
     el.dataset.updated = page.updated;
+    var dot = el.querySelector('[data-activity]');
+    if (dot) dot.dataset.activity = activity(page.updated);
     var copyBtn = el.querySelector('[data-board-copy]');
     if (copyBtn) copyBtn.hidden = false;
     el.classList.add('board-fresh');
@@ -62,7 +90,8 @@
      первая доска по задаче добавляет кнопку, удаление последней — убирает */
   function syncTaskLinks(tasks) {
     var bar = document.querySelector('[data-boards-tasks]');
-    if (!bar || !tasks) return;
+    /* Лента E_Boards (data-all-tasks) показывает все задачи листка — не пересобираем */
+    if (!bar || !tasks || bar.hasAttribute('data-all-tasks')) return;
     var wanted = {};
     tasks.forEach(function (t) { if (t.count > 0 || t.task === taskFilter) wanted[t.task] = t.task_no; });
     Array.prototype.forEach.call(bar.querySelectorAll('[data-task-link]'), function (a) {
@@ -97,6 +126,7 @@
       var el = ensureCard(state);
       el.dataset.reviewUrl = state.review_url; el.dataset.student = state.student;
       el.querySelector('[data-board-state]').textContent = state.status_label;
+      setMark(el, state);
       el.style.order = i;
     });
     Array.prototype.forEach.call(root.querySelectorAll('[data-board]'), function (el) {
@@ -122,6 +152,8 @@
   function tickAgo() {
     Array.prototype.forEach.call(root.querySelectorAll('[data-board][data-updated]'), function (el) {
       el.querySelector('[data-board-updated]').textContent = ago(el.dataset.updated);
+      var dot = el.querySelector('[data-activity]');
+      if (dot) dot.dataset.activity = activity(el.dataset.updated);
     });
   }
   function fetchLive() {
@@ -147,10 +179,9 @@
     (watch ? watch.changed() : Promise.resolve(true))
       .then(function (changed) { return changed ? fetchLive() : null; })
       .then(function () {
-        if (status) status.textContent = 'Доски обновляются каждые 5 секунд. Нажмите на доску, чтобы открыть её с инструментами.';
       })
-      .catch(function () { if (status) status.textContent = 'Нет связи с сервером — попробуем снова через несколько секунд.'; })
-      .finally(function () { busy = false; tickAgo(); });
+      .catch(function () { if (status) status.textContent = 'Нет связи с сервером — попробуем снова через несколько секунд.'; busy = 'failed'; })
+      .finally(function () { var failed = busy === 'failed'; busy = false; tickAgo(); if (!failed) setStatus(liveCount()); });
   }
   function schedule() {
     clearInterval(timer);

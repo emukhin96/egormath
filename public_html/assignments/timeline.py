@@ -37,6 +37,71 @@ def _answer_text(target):
     return target.get('readable_answer') or target.get('answer') or '—'
 
 
+def activity_events(queryset):
+    """События журнала активности для ленты: уходы со страницы (короткие
+    пропускаем), копирование и вставка — по времени сервера, и сводка."""
+    activity, summary = activity_timeline(queryset)
+    # Журнал активности идёт по часам устройства ученика (client_at), а
+    # самопроверки, фото и сдача — по часам сервера. Сдвиг часов вкладки —
+    # наименьшая разница «получено сервером − время устройства» (пачки уходят
+    # раз в 30 с, самая быстрая почти без задержки); события вкладки переносим
+    # на время сервера, иначе при сбитых часах лента перемешивается (ревью #282)
+    offsets = {}
+    for row in activity:
+        shift = row['received'] - row['at']
+        offsets[row['tab']] = min(offsets.get(row['tab'], shift), shift)
+    for row in activity:
+        row['at'] = row['at'] + offsets[row['tab']]
+    events = []
+    for row in activity:
+        if row['kind'] == 'away':
+            if row['short']:
+                continue
+            detail = ('не вернулся' if row.get('open_ended') else 'время ухода неизвестно') if row['seconds'] is None \
+                else 'вернулся через ' + format_span(row['seconds'])
+            events.append({'at': row['at'], 'kind': 'away', 'text': 'Ушёл со страницы', 'detail': detail, 'seconds': row['seconds']})
+        else:
+            text = row['label'][:1].upper() + row['label'][1:]
+            detail = f'«{row["text"][:120]}»' if row['text'] else ''
+            if row['blocked']:
+                detail = (detail + ', ' if detail else '') + 'заблокировано'
+            events.append({'at': row['at'], 'kind': 'clipboard', 'text': text, 'detail': detail})
+    return events, summary
+
+
+def finish_events(events, summary, start=None):
+    """Сортирует ленту, добавляет «Начал работу» (start — известное время
+    начала, иначе первое событие) и строит дорожку работы."""
+    events.sort(key=lambda e: e['at'])
+    if start is not None:
+        events.insert(0, {'at': start, 'kind': 'start', 'text': 'Начал работу', 'detail': ''})
+        events.sort(key=lambda e: e['at'])
+    elif events and events[0]['kind'] != 'submit':
+        events.insert(0, {'at': events[0]['at'], 'kind': 'start', 'text': 'Начал работу', 'detail': ''})
+
+    # Дорожка: от первого события до сдачи (или последнего события)
+    track = None
+    if events:
+        begin = events[0]['at']
+        # После возврата на доработку submitted_at остаётся от прошлой сдачи,
+        # а ученик продолжает работать: конец — позднейшее из сдачи и событий
+        end = max(e['at'] for e in events)  # «Сдал работу» — тоже событие ленты
+        total = max((end - begin).total_seconds(), 60)
+        segments = []
+        for e in events:
+            if e['kind'] == 'away' and e['seconds']:
+                segments.append({'kind': 'away', 'left': _percent(e['at'], begin, total),
+                                 'width': max(0.6, round(100 * e['seconds'] / total, 2))})
+            elif e['kind'] in ('clipboard', 'wrong'):
+                segments.append({'kind': e['kind'], 'left': _percent(e['at'], begin, total)})
+        ticks = [begin + (end - begin) * k / 4 for k in range(5)]
+        # работа дольше суток (открыл вечером, сдал утром) — у отметок дата
+        days = timezone.localtime(begin).date() != timezone.localtime(end).date()
+        track = {'begin': begin, 'end': end, 'segments': segments, 'ticks': ticks, 'days': days,
+                 'duration': _duration(total), 'away': _duration(summary['away_seconds']) if summary['away_seconds'] >= 60 else ''}
+    return events, track
+
+
 @teacher_required
 @never_cache
 def assignment_timeline(request, pk):
@@ -95,32 +160,7 @@ def assignment_timeline(request, pk):
         numbers.setdefault(row['task'].pk, []).append(str(row['number']))
 
     # Лента событий
-    activity, summary = activity_timeline(ActivityEvent.objects.filter(assignment=assignment))
-    # Журнал активности идёт по часам устройства ученика (client_at), а
-    # самопроверки, фото и сдача — по часам сервера. Сдвиг часов вкладки —
-    # наименьшая разница «получено сервером − время устройства» (пачки уходят
-    # раз в 30 с, самая быстрая почти без задержки); события вкладки переносим
-    # на время сервера, иначе при сбитых часах лента перемешивается (ревью #282)
-    offsets = {}
-    for row in activity:
-        shift = row['received'] - row['at']
-        offsets[row['tab']] = min(offsets.get(row['tab'], shift), shift)
-    for row in activity:
-        row['at'] = row['at'] + offsets[row['tab']]
-    events = []
-    for row in activity:
-        if row['kind'] == 'away':
-            if row['short']:
-                continue
-            detail = ('не вернулся' if row.get('open_ended') else 'время ухода неизвестно') if row['seconds'] is None \
-                else 'вернулся через ' + format_span(row['seconds'])
-            events.append({'at': row['at'], 'kind': 'away', 'text': 'Ушёл со страницы', 'detail': detail, 'seconds': row['seconds']})
-        else:
-            text = row['label'][:1].upper() + row['label'][1:]
-            detail = f'«{row["text"][:120]}»' if row['text'] else ''
-            if row['blocked']:
-                detail = (detail + ', ' if detail else '') + 'заблокировано'
-            events.append({'at': row['at'], 'kind': 'clipboard', 'text': text, 'detail': detail})
+    events, summary = activity_events(ActivityEvent.objects.filter(assignment=assignment))
     for submission in assignment.submissions.all():
         number = ', '.join(numbers.get(submission.task_id, []))
         if not number:
@@ -136,30 +176,7 @@ def assignment_timeline(request, pk):
         empty = [str(r['number']) for r in rows if not r['answered']]
         events.append({'at': assignment.submitted_at, 'kind': 'submit', 'text': 'Сдал работу',
                        'detail': ('без ответа: ' + ', '.join(empty)) if empty else ''})
-    events.sort(key=lambda e: e['at'])
-    if events and events[0]['kind'] != 'submit':
-        events.insert(0, {'at': events[0]['at'], 'kind': 'start', 'text': 'Начал работу', 'detail': ''})
-
-    # Дорожка: от первого события до сдачи (или последнего события)
-    track = None
-    if events:
-        begin = events[0]['at']
-        # После возврата на доработку submitted_at остаётся от прошлой сдачи,
-        # а ученик продолжает работать: конец — позднейшее из сдачи и событий
-        end = max(e['at'] for e in events)  # «Сдал работу» — тоже событие ленты
-        total = max((end - begin).total_seconds(), 60)
-        segments = []
-        for e in events:
-            if e['kind'] == 'away' and e['seconds']:
-                segments.append({'kind': 'away', 'left': _percent(e['at'], begin, total),
-                                 'width': max(0.6, round(100 * e['seconds'] / total, 2))})
-            elif e['kind'] in ('clipboard', 'wrong'):
-                segments.append({'kind': e['kind'], 'left': _percent(e['at'], begin, total)})
-        ticks = [begin + (end - begin) * k / 4 for k in range(5)]
-        # работа дольше суток (открыл вечером, сдал утром) — у отметок дата
-        days = timezone.localtime(begin).date() != timezone.localtime(end).date()
-        track = {'begin': begin, 'end': end, 'segments': segments, 'ticks': ticks, 'days': days,
-                 'duration': _duration(total), 'away': _duration(summary['away_seconds']) if summary['away_seconds'] >= 60 else ''}
+    events, track = finish_events(events, summary)
 
     result = assignment.result()
     return render(request, 'assignments/timeline.html', {
