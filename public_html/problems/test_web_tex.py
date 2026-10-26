@@ -40,3 +40,20 @@ class WebTexFormattingTests(SimpleTestCase):
             '\\item две цифры.\\end{enumerate}')
         self.assertIn('1) одну цифру;', html)
         self.assertIn('2) две цифры.', html)
+
+    def test_item_labels_replace_numbers(self):
+        html = tex_to_web_html(
+            '\\begin{enumerate}\\item[а)] $x=1$;\\item[б)] $x=2$.\\end{enumerate}')
+        self.assertIn('а) $x=1$;', html)
+        self.assertIn('б) $x=2$.', html)
+        self.assertNotIn('[', html)
+        self.assertNotIn('1)', html)
+
+    def test_nested_lists(self):
+        html = tex_to_web_html(
+            '\\begin{enumerate}\\item первый\\begin{itemize}\\item а\\item б'
+            '\\end{itemize}\\item второй\\end{enumerate}')
+        self.assertNotIn('\\begin', html)
+        self.assertNotIn('\\end', html)
+        self.assertIn('— а', html)
+        self.assertIn('2) второй', html)

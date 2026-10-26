@@ -48,10 +48,14 @@ _TEXTBIT_RE = re.compile(r'\\textbit' + _ARG, re.S)
 _TEXTBF_RE = re.compile(r'\\textbf' + _ARG, re.S)
 _TEXTIT_RE = re.compile(r'\\(?:textit|emph)' + _ARG, re.S)
 _UNDERLINE_RE = re.compile(r'\\underline' + _ARG, re.S)
-# Списки из авторских листков: пункты — строками с тире (нумерованные — с номером)
+# Списки из авторских листков: пункты — строками с тире (нумерованные — с номером).
+# Берётся самый внутренний список (без вложенного \begin{itemize|enumerate}),
+# подстановка повторяется, пока списки не кончатся.
 _LIST_RE = re.compile(
-    r'\\begin\{(itemize|enumerate)\}(.*?)\\end\{\1\}', re.S)
-_ITEM_RE = re.compile(r'\\item\b\s*')
+    r'\\begin\{(itemize|enumerate)\}'
+    r'((?:(?!\\begin\{(?:itemize|enumerate)\}).)*?)\\end\{\1\}', re.S)
+# \item[а)] — явная метка пункта заменяет номер или тире
+_ITEM_RE = re.compile(r'\\item\b(?:\s*\[([^\]]*)\])?\s*')
 _COMMENT_RE = re.compile(r'(?<!\\)%[^\n]*')
 _TASKPIC_RE = re.compile(r'\s*\\taskpic(?:\[[^\]]*\])?\{[^}]*\}')
 
@@ -81,12 +85,27 @@ _COMMANDS = [
 
 
 def _list_lines(match):
-    items = [x.strip() for x in _ITEM_RE.split(match.group(2)) if x.strip()]
-    if match.group(1) == 'enumerate':
-        lines = [f'{n}) {x}' for n, x in enumerate(items, 1)]
-    else:
-        lines = ['— ' + x for x in items]
+    parts = _ITEM_RE.split(match.group(2))
+    # split с группой: [до первого \item, метка, текст, метка, текст, …]
+    items = [(parts[i], parts[i + 1].strip()) for i in range(1, len(parts), 2)
+             if parts[i + 1].strip()]
+    lines = []
+    for n, (label, item) in enumerate(items, 1):
+        if label is not None:
+            lines.append(f'{label.strip()} {item}')
+        elif match.group(1) == 'enumerate':
+            lines.append(f'{n}) {item}')
+        else:
+            lines.append('— ' + item)
     return '\n' + '\n'.join(lines) + '\n'
+
+
+def _expand_lists(text):
+    prev = None
+    while prev != text:
+        prev = text
+        text = _sub_outside_math(_LIST_RE, _list_lines, text)
+    return text
 
 # Замены в тексте вне формул (внутри $…$ всё это понимает KaTeX)
 _UNESCAPE = [('\\%', '%'), ('\\&', '&'), ('\\_', '_'), ('\\#', '#'),
@@ -287,7 +306,7 @@ def tex_to_web_html(source):
 
     text = _sub_outside_math(_TABULAR_RE, stash, text)
     text = _sub_outside_math(_TASKPIC_RE, '', text)
-    text = _sub_outside_math(_LIST_RE, _list_lines, text)
+    text = _expand_lists(text)
     for pattern, repl in _COMMANDS:
         text = _sub_outside_math(pattern, repl, text)
 
