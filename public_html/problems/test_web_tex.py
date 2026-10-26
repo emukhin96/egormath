@@ -38,8 +38,9 @@ class WebTexFormattingTests(SimpleTestCase):
         html = tex_to_web_html(
             'Вычеркните:\\begin{enumerate}\\item одну цифру;'
             '\\item две цифры.\\end{enumerate}')
-        self.assertIn('1) одну цифру;', html)
-        self.assertIn('2) две цифры.', html)
+        # как в PDF (egor.sty, enumerate второго уровня): а) б) в)
+        self.assertIn('а) одну цифру;', html)
+        self.assertIn('б) две цифры.', html)
 
     def test_item_labels_replace_numbers(self):
         html = tex_to_web_html(
@@ -56,4 +57,4 @@ class WebTexFormattingTests(SimpleTestCase):
         self.assertNotIn('\\begin', html)
         self.assertNotIn('\\end', html)
         self.assertIn('— а', html)
-        self.assertIn('2) второй', html)
+        self.assertIn('б) второй', html)

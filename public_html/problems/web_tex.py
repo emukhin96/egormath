@@ -48,7 +48,7 @@ _TEXTBIT_RE = re.compile(r'\\textbit' + _ARG, re.S)
 _TEXTBF_RE = re.compile(r'\\textbf' + _ARG, re.S)
 _TEXTIT_RE = re.compile(r'\\(?:textit|emph)' + _ARG, re.S)
 _UNDERLINE_RE = re.compile(r'\\underline' + _ARG, re.S)
-# Списки из авторских листков: пункты — строками с тире (нумерованные — с номером).
+# Списки из авторских листков: пункты — строками с тире (нумерованные — буквами).
 # Берётся самый внутренний список (без вложенного \begin{itemize|enumerate}),
 # подстановка повторяется, пока списки не кончатся.
 _LIST_RE = re.compile(
@@ -84,6 +84,11 @@ _COMMANDS = [
 ]
 
 
+# Как \\cyrillicnumeral в egor.sty: в PDF список в условии — второй уровень
+# enumerate листка, и его пункты печатаются «а) б) в)».
+_ENUM_LABELS = 'абвгдежзиклмнопрстуфхцчшщэюя'
+
+
 def _list_lines(match):
     parts = _ITEM_RE.split(match.group(2))
     # split с группой: [до первого \item, метка, текст, метка, текст, …]
@@ -94,7 +99,8 @@ def _list_lines(match):
         if label is not None:
             lines.append(f'{label.strip()} {item}')
         elif match.group(1) == 'enumerate':
-            lines.append(f'{n}) {item}')
+            mark = _ENUM_LABELS[n - 1] if n <= len(_ENUM_LABELS) else str(n)
+            lines.append(f'{mark}) {item}')
         else:
             lines.append('— ' + item)
     return '\n' + '\n'.join(lines) + '\n'
