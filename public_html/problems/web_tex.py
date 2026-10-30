@@ -4,7 +4,8 @@
 Обрабатываются «форматирующие» конструкции пакета egor, которые иначе
 видны как сырой код: комментарии %, переносы \\ и \\par, пометки на полях
 (\annot, \annotnoframe, \\oge, \fipi, \rev, \\complex, \\starred, \\home),
-\\source, \textbit, неразрывный пробел ~, экранированные символы
+\\source, \textbit, \textbf, \textit/\emph, \\underline, списки
+itemize/enumerate (строками), неразрывный пробел ~, экранированные символы
 (\\%, \\& …) и таблицы tabular (превращаются в HTML-таблицу).
 """
 
@@ -25,6 +26,12 @@ _SOURCE_OPEN = '\x0b'
 _SOURCE_CLOSE = '\x0c'
 _BOLDIT_OPEN = '\x0e'
 _BOLDIT_CLOSE = '\x0f'
+_BOLD_OPEN = '\x10'
+_BOLD_CLOSE = '\x11'
+_ITALIC_OPEN = '\x12'
+_ITALIC_CLOSE = '\x13'
+_UNDER_OPEN = '\x14'
+_UNDER_CLOSE = '\x15'
 
 # Все разделители формул, которые рендерит KaTeX (static/js/math.js):
 # $$…$$, \[…\], $…$, \(…\) — внутри них текст не преобразуем
@@ -38,6 +45,17 @@ _ANNOT_RE = re.compile(r'\\annot' + _ARG, re.S)
 _NOFRAME_RE = re.compile(r'\\annotnoframe' + _ARG, re.S)
 _SOURCE_RE = re.compile(r'\\source' + _ARG, re.S)
 _TEXTBIT_RE = re.compile(r'\\textbit' + _ARG, re.S)
+_TEXTBF_RE = re.compile(r'\\textbf' + _ARG, re.S)
+_TEXTIT_RE = re.compile(r'\\(?:textit|emph)' + _ARG, re.S)
+_UNDERLINE_RE = re.compile(r'\\underline' + _ARG, re.S)
+# Списки из авторских листков: пункты — строками с тире (нумерованные — буквами).
+# Берётся самый внутренний список (без вложенного \begin{itemize|enumerate}),
+# подстановка повторяется, пока списки не кончатся.
+_LIST_RE = re.compile(
+    r'\\begin\{(itemize|enumerate)\}'
+    r'((?:(?!\\begin\{(?:itemize|enumerate)\}).)*?)\\end\{\1\}', re.S)
+# \item[а)] — явная метка пункта заменяет номер или тире
+_ITEM_RE = re.compile(r'\\item\b(?:\s*\[([^\]]*)\])?\s*')
 _COMMENT_RE = re.compile(r'(?<!\\)%[^\n]*')
 _TASKPIC_RE = re.compile(r'\s*\\taskpic(?:\[[^\]]*\])?\{[^}]*\}')
 
@@ -60,7 +78,40 @@ _COMMANDS = [
     (_NOFRAME_RE, _wrap(_NOFRAME_OPEN, _NOFRAME_CLOSE)),
     (_SOURCE_RE, _wrap(_SOURCE_OPEN, _SOURCE_CLOSE)),
     (_TEXTBIT_RE, _wrap(_BOLDIT_OPEN, _BOLDIT_CLOSE)),
+    (_TEXTBF_RE, _wrap(_BOLD_OPEN, _BOLD_CLOSE)),
+    (_TEXTIT_RE, _wrap(_ITALIC_OPEN, _ITALIC_CLOSE)),
+    (_UNDERLINE_RE, _wrap(_UNDER_OPEN, _UNDER_CLOSE)),
 ]
+
+
+# Как \\cyrillicnumeral в egor.sty: в PDF список в условии — второй уровень
+# enumerate листка, и его пункты печатаются «а) б) в)».
+_ENUM_LABELS = 'абвгдежзиклмнопрстуфхцчшщэюя'
+
+
+def _list_lines(match):
+    parts = _ITEM_RE.split(match.group(2))
+    # split с группой: [до первого \item, метка, текст, метка, текст, …]
+    items = [(parts[i], parts[i + 1].strip()) for i in range(1, len(parts), 2)
+             if parts[i + 1].strip()]
+    lines = []
+    for n, (label, item) in enumerate(items, 1):
+        if label is not None:
+            lines.append(f'{label.strip()} {item}')
+        elif match.group(1) == 'enumerate':
+            mark = _ENUM_LABELS[n - 1] if n <= len(_ENUM_LABELS) else str(n)
+            lines.append(f'{mark}) {item}')
+        else:
+            lines.append('— ' + item)
+    return '\n' + '\n'.join(lines) + '\n'
+
+
+def _expand_lists(text):
+    prev = None
+    while prev != text:
+        prev = text
+        text = _sub_outside_math(_LIST_RE, _list_lines, text)
+    return text
 
 # Замены в тексте вне формул (внутри $…$ всё это понимает KaTeX)
 _UNESCAPE = [('\\%', '%'), ('\\&', '&'), ('\\_', '_'), ('\\#', '#'),
@@ -170,7 +221,13 @@ def _markers_to_html(html):
             .replace(_SOURCE_OPEN, '<span class="tex-source">')
             .replace(_SOURCE_CLOSE, '</span>')
             .replace(_BOLDIT_OPEN, '<b><i>')
-            .replace(_BOLDIT_CLOSE, '</i></b>'))
+            .replace(_BOLDIT_CLOSE, '</i></b>')
+            .replace(_BOLD_OPEN, '<b>')
+            .replace(_BOLD_CLOSE, '</b>')
+            .replace(_ITALIC_OPEN, '<i>')
+            .replace(_ITALIC_CLOSE, '</i>')
+            .replace(_UNDER_OPEN, '<u>')
+            .replace(_UNDER_CLOSE, '</u>'))
 
 
 def _fragment_html(text):
@@ -255,6 +312,7 @@ def tex_to_web_html(source):
 
     text = _sub_outside_math(_TABULAR_RE, stash, text)
     text = _sub_outside_math(_TASKPIC_RE, '', text)
+    text = _expand_lists(text)
     for pattern, repl in _COMMANDS:
         text = _sub_outside_math(pattern, repl, text)
 
