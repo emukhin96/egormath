@@ -666,12 +666,13 @@ def split_example(body: str) -> tuple[str, str, str]:
     else:
         return body, "", ""
     solution = re.sub(r"^\s*(?:\\\\)?\s*", "", solution)
-    ends = list(EXAMPLE_END_RE.finditer(solution))
+    # Разбор кончается первым «Ответ:», а без ответа — первым «Что и
+    # требовалось доказать»: дальше в 8–9 классах идёт теория параграфа.
+    end = EXAMPLE_ANSWER_RE.search(solution) or EXAMPLE_END_RE.search(solution)
     trimmed = ""
-    if ends:
-        tail = solution[ends[-1].end():]
-        trimmed = tail.strip()
-        solution = solution[:ends[-1].end()]
+    if end:
+        trimmed = solution[end.end():].strip()
+        solution = solution[:end.end()]
     return condition, solution.strip(), trimmed
 
 
