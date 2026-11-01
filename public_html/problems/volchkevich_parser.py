@@ -575,9 +575,36 @@ def cut_bodies(zone: str, classified: list[tuple[Event, Item | None]]) -> list[I
         body = zone[item.end:stop]
         if item.kind != KIND_EXAMPLE:
             body = cut_at_list_end(body)
+        if item.kind == KIND_EXERCISE:
+            body = cut_at_paragraph_end(body)
         item.body = body
         items.append(item)
     return items
+
+
+_NEXT_PART_RE = re.compile(
+    r"\s*(?:\\item|\\begin\{(?:itemize|enumerate)\}|\\\[|[а-и]\)|\(?[а-и]\)|[a-z]\)\s)")
+
+
+def cut_at_paragraph_end(body: str) -> str:
+    """Упражнение — один абзац (с пунктами «а) б)»): дальше теория.
+
+    Упражнения стоят посреди текста параграфа, и список OCR закрывает не
+    всегда. Пустая строка перед пунктом, формулой или следующим списком —
+    не конец упражнения.
+    """
+    text = body.lstrip()
+    lead = len(body) - len(text)
+    for match in re.finditer(r"\n[ \t]*\n", text):
+        rest = text[match.end():]
+        if not rest.strip():
+            break
+        if _NEXT_PART_RE.match(rest):
+            continue
+        if not re.search(r"[.?!:)»]\s*(?:\\\\)?\s*$", text[:match.start()]):
+            continue
+        return body[:lead + match.start()]
+    return body
 
 
 _LIST_EDGE_RE = re.compile(r"\\(?P<edge>begin|end)\{(?:itemize|enumerate)\}")
@@ -636,6 +663,8 @@ _LATIN_LABEL = {"a": "а", "b": "б", "B": "в", "e": "е"}
 
 def clean_body(body: str) -> str:
     body = remove_group_commands(body, FOOTNOTE_RE)
+    # «Рис. 6.18» строкой — подпись рисунка, оставшаяся без figure.
+    body = re.sub(r"(?m)^[ \t]*Рис\.\s*\d{1,2}(?:\.\d{1,3})?[ \t]*(?:\\\\)?[ \t]*$", "", body)
     body = re.sub(r"\\setcounter\{[^{}]*\}\{\d+\}", "", body)
     # Звёзды уровня у вопросов внутри задачи («★★ Найдите …») и след полой
     # звезды OCR.
