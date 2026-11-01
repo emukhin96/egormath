@@ -122,6 +122,7 @@
       }
       inFlight = true;
       inFlightKey = buildKey();
+      var builtVariant = variant;
       clearResult();
       preview.busy();
       status.textContent = '';
@@ -139,6 +140,9 @@
         if (r.ok) return r.blob().then(function (blob) {
           currentUrl = URL.createObjectURL(blob);
           builtKey = inFlightKey;
+          // Имя файла — от варианта, по которому собран PDF, а не от
+          // выбранного сейчас: после переключения на экране старый PDF
+          download.setAttribute('download', variants[builtVariant].filename);
           // navpanes=0 прячет боковую панель миниатюр страниц во встроенном
           // просмотрщике (как в Adobe Acrobat по умолчанию)
           preview.ready(currentUrl + '#navpanes=0&view=FitH');
@@ -183,8 +187,6 @@
       });
       source.value = tex;
       editedByHand = false;
-      root.dataset.filename = variants[value].filename;
-      download.setAttribute('download', variants[value].filename);
       var url = new URL(window.location.href);
       url.searchParams.set('variant', value);
       window.history.replaceState(null, '', url);
