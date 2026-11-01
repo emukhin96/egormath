@@ -65,7 +65,7 @@
       <button type="button" data-value="off">Нет</button>
     </div>
     <div class="sidebar-actions sidebar-compile">
-      <button type="button" class="btn" id="sidebar-compile-btn">Собрать PDF</button>
+      <button type="button" class="btn" id="sidebar-compile-btn" data-pdf-compile>Собрать PDF</button>
     </div>
   </div>
 </section>
@@ -73,7 +73,7 @@
   <p class="sidebar-kicker">Листок</p>
   <div class="sidebar-actions">
     <a class="sidebar-action" href="{% url 'worksheet_detail' worksheet.pk %}">← Конструктор листка</a>
-    <a class="sidebar-action" href="{% url 'worksheet_pdf_editor' worksheet.pk %}">Собрать PDF листка</a>
+    <a class="sidebar-action" href="{% url 'worksheet_pdf_editor' worksheet.pk %}" data-busy="Открываем…">Собрать PDF листка</a>
   </div>
 </section>
 {% endblock %}
@@ -90,7 +90,7 @@
      data-filename="{{ pdf_filename }}">
   <div class="pdf-editor-pane">
     <div class="form-buttons pdf-editor-toolbar">
-      <button type="button" class="btn" id="compile-btn">Собрать PDF</button>
+      <button type="button" class="btn" id="compile-btn" data-pdf-compile>Собрать PDF</button>
       <a class="btn btn-secondary" id="download-btn" download="{{ pdf_filename }}"
          hidden>Скачать PDF</a>
       <button type="button" class="btn btn-secondary" id="reset-btn"
@@ -103,11 +103,9 @@
     <textarea id="tex-original" hidden>{{ tex }}</textarea>
     <pre class="log" id="compile-log" hidden></pre>
   </div>
-  <div class="pdf-editor-pane">
-    <iframe id="pdf-frame" class="pdf-editor-frame"
-            title="Предпросмотр презентации"></iframe>
-  </div>
+  {% include 'includes/pdf_preview.html' with title='Предпросмотр презентации' hint='Выберите оформление слева в любом порядке, затем соберите презентацию.' %}
 </div>
 
-<script defer src="{% static 'js/beamer_editor.js' %}"></script>
+<script defer src="{% static 'js/pdf_preview.js' %}"></script>
+<script defer src="{% static 'js/beamer_editor.js' %}?v=2"></script>
 {% endblock %}

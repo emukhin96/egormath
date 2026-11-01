@@ -1,0 +1,29 @@
+/* Предпросмотр сборки PDF листка и презентации (pdf_preview.js):
+   empty / busy / ready / stale / error. Спиннер — .pdf-spinner из busy.css. */
+@layer components {
+  .pdf-preview-stage { position: relative; flex: 1; display: flex; min-height: 70vh; }
+  .pdf-preview-stage > .pdf-editor-frame { min-height: 0; }
+  .pdf-preview-empty, .pdf-preview-busy, .pdf-preview-error {
+    position: absolute; inset: 0; display: none; flex-direction: column;
+    align-items: center; justify-content: center; gap: var(--space-2);
+    padding: var(--space-5); border-radius: var(--radius); text-align: center;
+    background: #f6f8fb;
+  }
+  .pdf-preview[data-state="empty"] .pdf-preview-empty,
+  .pdf-preview[data-state="busy"] .pdf-preview-busy,
+  .pdf-preview[data-state="error"] .pdf-preview-error { display: flex; }
+  .pdf-preview-title { margin: 0; color: var(--text); font-weight: 600; }
+  .pdf-preview-copy { margin: 0 0 var(--space-2); max-width: 34ch; color: var(--muted); font-size: 0.85rem; }
+  .pdf-preview-busy .pdf-spinner { width: 28px; height: 28px; border-width: 3px; color: var(--accent); }
+  .pdf-elapsed { font-variant-numeric: tabular-nums; color: var(--text); }
+  .pdf-preview-error .pdf-preview-title { color: var(--err); }
+
+  .pdf-preview-stale {
+    display: none; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+    min-height: 34px; padding: 4px 4px 4px var(--space-3); border-radius: 6px;
+    background: #fff4dc; color: #6b4a00; font-size: 0.85rem;
+  }
+  .pdf-preview-stale span { flex: 1; }
+  .pdf-preview[data-state="stale"] .pdf-preview-stale { display: flex; }
+  .pdf-preview[data-state="stale"] .pdf-editor-frame { opacity: 0.55; }
+}

@@ -308,6 +308,13 @@ SchoolBook. Если чего-то не хватает — это правитс
 |---|---|---|
 | `tex/*.sty` (`egor`, `egorweb`, `egorbeamer`, `egorbeamer-grid`) | `/opt/latex-api/data/assets/egormath/` | `TEXINPUTS` (`assets//`) |
 | `tex/fonts/*` (Inter, STIX Two) | `/opt/latex-api/data/fonts/egormath/` | fontconfig + `OSFONTDIR` |
+| `data/fonts/*` на сервере (SchoolBookC, TextBookC — не в git) | `/opt/latex-api/data/fonts/egormath/` | fontconfig + `OSFONTDIR` |
+
+Шрифты ParaType для `font=school` коммерческие, а репозиторий публичный,
+поэтому их нет в `tex/fonts`. Один раз с Mac: `deploy/vps/fonts-upload.sh`
+— кладёт `~/Library/Fonts/SchoolBookC*.ttf` и `TextBookC*.ttf` в
+`/opt/egormath/data/fonts/` и сразу в папку шрифтов latex-api; дальше их
+поддерживает `latex-files.sh` при каждом деплое.
 
 Листок подключает `\usepackage{egor}` и `\usepackage{egorweb}` (правки egor
 для сайта — бывшие вставки в преамбулу каждого `.tex`), в запросе уходят

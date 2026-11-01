@@ -921,17 +921,18 @@ class WorksheetViewTests(TestCase):
         self.worksheet.title = 'Квадратные уравнения'
         self.worksheet.save()
         self.worksheet.topics.add(Topic.objects.get(code='ALG'))
-        self.assertEqual(self.worksheet.pdf_filename('student'), 'alg8-kv_ur.pdf')
-        self.assertEqual(
-            self.worksheet.pdf_filename('answers'), 'alg8-kv_ur-otvety.pdf')
-        self.assertEqual(
-            self.worksheet.pdf_filename('teacher'), 'alg8-kv_ur-uchitel.pdf')
+        self.assertEqual(self.worksheet.pdf_filename('student'),
+                         'alg8-kvad_urav.pdf')
+        self.assertEqual(self.worksheet.pdf_filename('answers'),
+                         'alg8-kvad_urav-otvety.pdf')
+        self.assertEqual(self.worksheet.pdf_filename('teacher'),
+                         'alg8-kvad_urav-resheniya.pdf')
         # Ручное имя приоритетнее автогенерации
         self.worksheet.pdf_basename = 'custom_name'
         self.assertEqual(self.worksheet.pdf_filename('student'), 'custom_name.pdf')
-        # Без темы и класса — безопасный fallback
+        # Без темы и класса — предмет math
         other = Worksheet.objects.create(title='Тест', owner=self.teacher)
-        self.assertEqual(other.pdf_filename('student'), 'list-te.pdf')
+        self.assertEqual(other.pdf_filename('student'), 'math-test.pdf')
 
     def test_delete(self):
         # Чужой учитель удалить не может
@@ -1269,6 +1270,10 @@ class WorksheetViewTests(TestCase):
         self.assertContains(response, 'id="tex-source"')
         self.assertContains(response, '\\documentclass')
         self.assertContains(response, 'С ответами')
+        # Вариант — переключатель без перезагрузки: код всех трёх в странице
+        self.assertContains(response, 'data-switch="variant"')
+        self.assertContains(response, 'id="pdf-variants"')
+        self.assertContains(response, self.worksheet.pdf_filename('teacher'))
         # LaTeX API настроен — все три шрифта доступны по умолчанию
         self.assertContains(response, 'data-value="cm"')
         self.assertContains(response, 'data-value="school"')
