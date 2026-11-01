@@ -72,6 +72,20 @@ class SeriesArcTests(SimpleTestCase):
         self.assertEqualSeries(r'\frac{\pi}{2}+\pi n, n \in \mathbf{Z} ; \pm \frac{\pi}{6}+\pi k, k \in \mathbf{Z}',
                                r'\pi/2+\pi n; \pi/6+\pi n; -\pi/6+\pi n', True)
 
+    def test_letters_and_spacing(self):
+        # Так набирает MathLive: буква параметра вплотную к \pi.
+        self.assertEqualSeries(r'2k\pi', r'2\pi n', True)
+        self.assertEqualSeries(r'(-1)^{k}\frac{\pi}{6}+k\pi', r'\frac{\pi}{6}+2\pi n; \frac{5\pi}{6}+2\pi n', True)
+        self.assertEqualSeries(r'\frac{k\pi}{2}', r'\frac{\pi n}{2}', True)
+        # Книжная запись дроби через пробел.
+        self.assertEqualSeries(r'\frac{2}{5} n \pi', r'\frac{2\pi n}{5}', True)
+
+    def test_dependent_constants_same_record(self):
+        # Корни a sin x + b cos x = c: две константы связаны, но одинаковая
+        # запись всё равно совпадает сама с собой.
+        text = r'2\operatorname{arctg}\frac{10\pm\sqrt{87}}{\sqrt{29}-4}+2n\pi'
+        self.assertEqualSeries(text, text, True)
+
     def test_rejects_unsupported(self):
         for value in (r'\arcsin 2+\pi n', r'\arcsin x+\pi n', r'2^n\pi', r'(-1)^n(-1)^n\pi',
                       r'\sin 1+\pi n', r'\operatorname{arctg}(n)+\pi n', r'\log 2+\pi n'):

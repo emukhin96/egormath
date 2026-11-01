@@ -189,7 +189,10 @@ def _branch(choice, parity):
     # Не разрешаем другие функции, степени параметра и произвольные переменные.
     if re.search(r'[^0-9Qnkml{}()\[\]\s+*/.\-^]', residual):
         return None
-    choice = re.sub(r'(?<![A-Za-z])[kml](?![A-Za-z])', 'n', choice)
+    # π уже заменено на Q: «2k\\pi» — это «2kQ», буква k стоит вплотную к Q.
+    choice = re.sub(r'(?<![A-PR-Za-z])[kml](?![A-PR-Za-z])', 'n', choice)
+    # Разбор формул не умножает дробь на букву через пробел (\\frac{2}{5} n \\pi).
+    choice = re.sub(r'(?<=[}\dnQ)])\s+(?=[nQ(\\])', '', choice)
     expr = parse_expr(choice)
     n, marker = Symbol('n'), Symbol('Q')
     if expr is None or not getattr(expr, 'free_symbols', set()) <= {n, marker}:
@@ -390,13 +393,15 @@ def equal(left, right):
                 break
         else:
             pairs.append((residues, None))
+    if not unmatched and all(other is not None for _, other in pairs):
+        results = [_equal_residues(residues, other) for residues, other in pairs]
+        if all(result is True for result in results):
+            # Совпали и константы, и остатки — равенство не зависит от того,
+            # связаны ли константы между собой.
+            return True
+        if any(result is None for result in results):
+            return None
     keys = [key for key, _ in a] + [key for key, _ in unmatched]
     if len(keys) > 1 and not _independent(keys):
         return None
-    if unmatched or any(other is None for _, other in pairs):
-        return False
-    for residues, other in pairs:
-        result = _equal_residues(residues, other)
-        if result is not True:
-            return result
-    return True
+    return False
