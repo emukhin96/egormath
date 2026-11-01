@@ -6440,10 +6440,10 @@
     margin: var(--space-3) 0 var(--space-2);
   }
 
+  /* Карточка без полей (белый лист): таблица по ширине раздела, крайние
+     колонки — как у .card > table.list */
   .import-drafts-wrap {
     overflow-x: auto;
-    margin-inline: calc(var(--space-4) * -1);
-    width: calc(100% + var(--space-4) * 2);
   }
 
   .import-drafts-wrap > table.list {
@@ -6454,12 +6454,12 @@
 
   .import-drafts-wrap > table.list th:first-child,
   .import-drafts-wrap > table.list td:first-child {
-    padding-left: var(--space-4);
+    padding-left: var(--space-1);
   }
 
   .import-drafts-wrap > table.list th:last-child,
   .import-drafts-wrap > table.list td:last-child {
-    padding-right: var(--space-4);
+    padding-right: var(--space-1);
   }
 
   table.list th.col-answer,
