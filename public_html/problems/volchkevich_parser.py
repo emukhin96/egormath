@@ -38,7 +38,8 @@ from .potoskuev_parser import (
     _finish_fields, apply_source_repairs, distribute_labeled_answer,
     lift_common_tail, prepare_text)
 from .textbook_parser import (
-    Marker, TaskDraft, clean, finalize_draft_images, task_from_block)
+    Marker, TaskDraft, clean, finalize_draft_images, remove_group_commands,
+    task_from_block)
 
 
 DATA_DIR = Path(__file__).with_name("data")
@@ -91,6 +92,8 @@ PLAIN_TASK_RE = re.compile(
     r"(?m)^[ \t]*(?P<label>\d{1,2}\.\d{1,2})\.?[ \t]+(?=[★☆*]|[А-ЯЁA-Z(\\])")
 # 8–9 классы: «13. ★★ …» строкой без \item.
 PLAIN_STAR_RE = re.compile(r"(?m)^[ \t]*(?P<label>\d{1,2})\.[ \t]+(?=[★☆*])")
+# 8–9 классы: «13. На рисунке …» строкой без \item (OCR потерял список).
+PLAIN_NUMBER_RE = re.compile(r"(?m)^[ \t]*(?P<label>\d{1,2})\.[ \t]+(?=[А-ЯЁ])")
 # 7 класс: упражнение «1 Посмотрите …» строкой без \item.
 PLAIN_EXERCISE_RE = re.compile(r"(?m)^[ \t]*(?P<label>\d{1,2})[ \t]+(?=[А-ЯЁ])")
 
@@ -106,6 +109,8 @@ EXAMPLE_END_RE = re.compile(
 # Звёзды уровня и след полой звезды OCR («★ Д», «★ 山», «0 Две …»).
 LEAD_STARS_RE = re.compile(
     r"^\s*(?P<stars>(?:[★☆*]\s*){1,3})(?:(?:[Д山એ0О○◯]|\(\))\s+(?=[А-ЯЁA-Z\\]))?")
+LIST_START_RE = re.compile(r"\\begin\{itemize\}\s*$")
+FOOTNOTE_RE = re.compile(r"\\footnotetext\{")
 STARRED_RE = re.compile(r"\s*[★☆]")
 LEAD_JUNK_RE = re.compile(r"^\s*(?:[山એ0○◯]|\(\))\s+(?=[А-ЯЁA-Z\\])")
 
@@ -370,7 +375,7 @@ def scan_events(zone: str, grade: int) -> list[Event]:
         events.append(Event(match.start(), match.end(), "example", match.group("label")))
     for match in ITEM_RE.finditer(zone):
         events.append(Event(match.start(), match.end(), "item", match.group("label")))
-    plain = [PLAIN_STAR_RE]
+    plain = [PLAIN_STAR_RE, PLAIN_NUMBER_RE]
     if grade == 7:
         plain = [PLAIN_TASK_RE, PLAIN_EXERCISE_RE]
     for regex in plain:
@@ -439,10 +444,19 @@ def classify_items(zone: str, events: list[Event], paragraph: Paragraph, grade: 
                 if not event.plain:
                     result.append((event, None))
                 continue
+            elif (mode == "example" and number == last[KIND_EXERCISE] + 1
+                  and LIST_START_RE.search(zone[max(0, event.start - 40):event.start])):
+                # Упражнения после примера посреди теории (9 класс): новый
+                # список со следующим номером.
+                kind = KIND_EXERCISE
+            elif mode == "example":
+                # Нумерованный список внутри разбора примера.
+                continue
             elif last_list and number == last[last_list] + 1 and not event.plain:
                 # Продолжение списка после ложного заголовка OCR.
                 kind = last_list
-            elif mode == "theory" and number == last[KIND_EXERCISE] + 1 and not event.plain:
+            elif (mode == "theory" and paragraph.number
+                  and number == last[KIND_EXERCISE] + 1 and not event.plain):
                 # Упражнения по ходу теории, чей заголовок OCR потерял.
                 kind = KIND_EXERCISE
             else:
@@ -459,6 +473,10 @@ def classify_items(zone: str, events: list[Event], paragraph: Paragraph, grade: 
                 continue
             if event.plain and grade == 7 and kind == KIND_EXERCISE and mode != "exercises":
                 continue
+        if event.plain and not starred and number != last[kind] + 1:
+            # Номер строкой без \item — только следующий по порядку: иначе
+            # это нумерованный список внутри условия или теории.
+            continue
         if not accept(kind, number):
             diagnostics["rejected_numbers"].append(f"{paragraph.key}: {KIND_TITLES[kind]} {label}")
             if not event.plain:
@@ -466,6 +484,8 @@ def classify_items(zone: str, events: list[Event], paragraph: Paragraph, grade: 
             continue
         last[kind] = number
         last_list = kind
+        if kind == KIND_EXERCISE and mode == "example":
+            mode = "exercises"
         result.append((event, Item(kind, number, event.start, event.end, label)))
     return result
 
@@ -482,9 +502,51 @@ def cut_bodies(zone: str, classified: list[tuple[Event, Item | None]]) -> list[I
                 continue
             stop = next_event.start
             break
-        item.body = zone[item.end:stop]
+        body = zone[item.end:stop]
+        if item.kind != KIND_EXAMPLE:
+            body = cut_at_list_end(body)
+        item.body = body
         items.append(item)
     return items
+
+
+_LIST_EDGE_RE = re.compile(r"\\(?P<edge>begin|end)\{(?:itemize|enumerate)\}")
+
+
+def cut_at_list_end(body: str) -> str:
+    """Пункт кончается вместе со своим списком.
+
+    После ``\\end{itemize}`` идёт теория или подписи — не условие. Исключение —
+    перенос на другую колонку или страницу: следующий список начинается с
+    пункта без номера (``\\item[]``) или фраза оборвана на полуслове.
+    """
+    depth = 0
+    pos = 0
+    while True:
+        match = _LIST_EDGE_RE.search(body, pos)
+        if not match:
+            return body
+        pos = match.end()
+        if match.group("edge") == "begin":
+            depth += 1
+            continue
+        if depth:
+            depth -= 1
+            continue
+        before = body[:match.start()].rstrip()
+        rest = body[match.end():]
+        lead = re.sub(r"^(?:\s|\\footnotetext\{.*?\n\}|\\section\*?\{[^{}]*\})*", "", rest, flags=re.S)
+        if re.match(r"\\begin\{(?:itemize|enumerate)\}\s*\\item\[\]", lead):
+            # Продолжение пункта: ``\\item[]`` открывает следующий список.
+            start = body.index("\\item[]", match.end())
+            body = before + "\n" + body[start + len("\\item[]"):]
+            pos = len(before)
+            continue
+        if re.search(r"[-,а-яё]$", before) and re.match(r"[а-яё]", lead):
+            body = before + "\n" + lead
+            pos = len(before)
+            continue
+        return before
 
 
 # --------------------------------------------------------------------------
@@ -499,8 +561,21 @@ def strip_lead(body: str) -> str:
     return LEAD_JUNK_RE.sub("", body, count=1).lstrip()
 
 
+_LATIN_LABEL = {"a": "а", "b": "б", "B": "в", "e": "е"}
+
+
 def clean_body(body: str) -> str:
-    body = re.sub(r"\\footnotetext\{.*?\n\}", "\n", body, flags=re.S)
+    body = remove_group_commands(body, FOOTNOTE_RE)
+    body = re.sub(r"\\setcounter\{[^{}]*\}\{\d+\}", "", body)
+    # Звёзды уровня у вопросов внутри задачи («★★ Найдите …») и след полой
+    # звезды OCR.
+    body = re.sub(r"(?m)(^|\\item\[\]|\\\\)[ \t]*(?:[★☆][ \t]*)+(?:[Д山એ][ \t]+)?", r"\1", body)
+    body = re.sub(r"[ \t]*(?:[★☆][ \t]*)+", " ", body)
+    # «\(a\) ) большой комнаты» — метка пункта ушла в формулу.
+    body = re.sub(r"\\\(\s*([abBe])\s*\\\)\s*\)", lambda m: _LATIN_LABEL[m.group(1)] + ")", body)
+    # «\left(\mathrm{~m}^{2}\right)» — скобки вокруг единицы: иначе
+    # нормализация единиц разорвёт \left и \right по разным формулам.
+    body = re.sub(r"\\left\(\s*(\\mathrm\{[^{}]*\}(?:\^\{?\d\}?)?)\s*\\right\)", r"(\1)", body)
     body = ANSWER_WORD_RE.sub(r"\g<lead>Ответ:", body)
     body = HEADING_RE.sub(lambda m: "\n" + clean(m.group("title")) + "\n", body)
     body = re.sub(r"\\(?:begin|end)\{(?:center|figure)\}", "\n", body)
@@ -628,9 +703,10 @@ def build_draft(item: Item, paragraph: Paragraph, diagnostics: dict) -> TaskDraf
 # Разбор целиком
 # --------------------------------------------------------------------------
 
-def parse_volchkevich(text: str) -> tuple[list[TaskDraft], dict]:
+def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[TaskDraft], dict]:
+    """Разбор TEX; ``edition`` — описание издания вместо поиска по sha256."""
     text = text.replace("\r\n", "\n")
-    edition = load_edition(text)
+    edition = edition or load_edition(text)
     text, source_repairs = apply_source_repairs(text, REPAIRS_PATH)
     text, skipped = apply_skips(text, edition)
     grade = edition["grade"]
@@ -668,7 +744,6 @@ def parse_volchkevich(text: str) -> tuple[list[TaskDraft], dict]:
         zones.append((paragraph, zone, figures))
 
     tasks: list[TaskDraft] = []
-    used_numbers: set[str] = set()
     for paragraph, zone, figures in zones:
         events = scan_events(zone, grade)
         items = cut_bodies(zone, classify_items(zone, events, paragraph, grade, diagnostics))
@@ -691,10 +766,6 @@ def parse_volchkevich(text: str) -> tuple[list[TaskDraft], dict]:
             if missing:
                 task.warnings.append(
                     "Не найден рисунок по подписи: " + ", ".join(missing))
-            for value in re.findall(r"\\taskpic\{([^{}]+)\}", " ".join(
-                    [task.text_latex, task.author_solution_latex]
-                    + [s.text_latex for s in task.subitems])):
-                used_numbers.add(value)
             if lift_common_tail(task):
                 diagnostics["lifted_tails"].append(task.external_id)
             if distribute_labeled_answer(task):
