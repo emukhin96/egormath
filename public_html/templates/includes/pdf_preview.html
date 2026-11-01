@@ -1,0 +1,25 @@
+{# Предпросмотр PDF редакторов листка и презентации; состояния — pdf_preview.js #}
+<div class="pdf-editor-pane pdf-preview" data-state="empty">
+  <div class="pdf-preview-stale" role="status">
+    <span>Параметры изменились — PDF ниже собран по прежним.</span>
+    <button type="button" class="btn btn-small" data-pdf-compile>Собрать заново</button>
+  </div>
+  <div class="pdf-preview-stage">
+    <iframe id="pdf-frame" class="pdf-editor-frame" title="{{ title }}"></iframe>
+    <div class="pdf-preview-empty">
+      <p class="pdf-preview-title">PDF ещё не собран</p>
+      <p class="pdf-preview-copy">{{ hint }}</p>
+      <button type="button" class="btn" data-pdf-compile>Собрать PDF</button>
+    </div>
+    <div class="pdf-preview-busy" role="status" aria-live="polite">
+      <span class="pdf-spinner" aria-hidden="true"></span>
+      <p class="pdf-preview-title">Собираем PDF…</p>
+      <p class="pdf-preview-copy">Прошло <span class="pdf-elapsed" data-pdf-elapsed>0:00</span></p>
+    </div>
+    <div class="pdf-preview-error" role="alert">
+      <p class="pdf-preview-title">Не удалось собрать PDF</p>
+      <p class="pdf-preview-copy" data-pdf-error></p>
+      <button type="button" class="btn btn-secondary" data-pdf-compile>Попробовать ещё раз</button>
+    </div>
+  </div>
+</div>

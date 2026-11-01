@@ -1,0 +1,19 @@
+/* Мгновенный отклик кнопок: нажатие (:active) и спиннер долгого
+   действия (.is-busy, busy.js) — на всех экранах. */
+@layer components {
+  .btn:active, .switch-group button:active { transform: translateY(1px); }
+  .btn:active { background: var(--accent-dark); }
+  .btn-secondary:active, .switch-group button:active { background: #dfe9f5; }
+
+  .btn.is-busy { gap: var(--space-2); cursor: progress; }
+  .btn.is-busy:not(.btn-secondary) { background: var(--accent-dark); }
+  .btn.is-busy::before, .pdf-spinner {
+    content: ""; flex: none; width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid currentColor; border-right-color: transparent;
+    animation: egor-spin 0.7s linear infinite;
+  }
+  @keyframes egor-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .btn.is-busy::before, .pdf-spinner { animation-duration: 2.4s; }
+  }
+}

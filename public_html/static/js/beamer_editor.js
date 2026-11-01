@@ -80,13 +80,18 @@
     if (!root) return;
     var source = document.getElementById('tex-source');
     var original = document.getElementById('tex-original');
-    var frame = document.getElementById('pdf-frame');
     var log = document.getElementById('compile-log');
     var status = document.getElementById('compile-status');
     var download = document.getElementById('download-btn');
     var csrf = root.querySelector('input[name=csrfmiddlewaretoken]').value;
+    var compileButtons = Array.prototype.slice.call(
+      document.querySelectorAll('[data-pdf-compile]'));
+    var preview = window.EgorPdfPreview(
+      root.querySelector('.pdf-preview'), compileButtons);
     var currentUrl = null;
     var inFlight = false;
+    var inFlightTex = null;
+    var builtTex = null;
     var pendingCompile = false;
     var state = readState();
 
@@ -108,8 +113,7 @@
       };
     }
 
-    function writeState() {
-      var tex = source.value;
+    function texWithState(tex) {
       var doc = setKeyed(stripClassSize(docOptions(tex)),
                          'aspectratio', state.aspect);
       var pkg = pkgOptions(tex);
@@ -122,27 +126,38 @@
       pkg = setKeyed(pkg, 'fontsize', state.size);
       pkg = setFlag(pkg, 'stars', 'nostars', state.stars === 'on');
       pkg = setFlag(pkg, 'footer', 'nofooter', state.footer === 'on');
-      source.value = withPkgOptions(withDocOptions(tex, doc), pkg);
+      return withPkgOptions(withDocOptions(tex, doc), pkg);
+    }
+
+    function writeState() {
+      source.value = texWithState(source.value);
     }
 
     function clearResult() {
       if (currentUrl) URL.revokeObjectURL(currentUrl);
       currentUrl = null;
-      frame.removeAttribute('src');
+      builtTex = null;
       download.hidden = true;
       download.removeAttribute('href');
+    }
+
+    // Сравнивается код с учётом переключателей — то, что ушло бы в сборку
+    function refreshStale() {
+      preview.stale(builtTex !== null
+                    && builtTex !== texWithState(source.value));
     }
 
     function compile() {
       writeState();
       if (inFlight) {
-        pendingCompile = true;
-        status.textContent = 'Сборка…';
+        if (inFlightTex !== source.value) pendingCompile = true;
         return;
       }
       inFlight = true;
+      inFlightTex = source.value;
       clearResult();
-      status.textContent = 'Сборка…';
+      preview.busy();
+      status.textContent = '';
       log.hidden = true;
       var body = new URLSearchParams();
       body.append('tex', source.value);
@@ -155,20 +170,24 @@
         if (pendingCompile) return null;
         if (r.ok) return r.blob().then(function (blob) {
           currentUrl = URL.createObjectURL(blob);
-          frame.src = currentUrl + '#navpanes=0&view=Fit';
+          builtTex = inFlightTex;
+          preview.ready(currentUrl + '#navpanes=0&view=Fit');
           download.href = currentUrl;
           download.hidden = false;
-          status.textContent = '';
+          refreshStale();
+          if (window.EgorAutosave) window.EgorAutosave.showSaved(true, 'PDF собран ✓');
         });
         return r.json().then(function (data) {
-          status.textContent = data.message || 'Ошибка компиляции';
+          var message = data.message || 'Ошибка компиляции';
+          preview.error(message);
+          status.textContent = message;
           if (data.log) {
             log.textContent = data.log;
             log.hidden = false;
           }
         });
       }).catch(function () {
-        if (!pendingCompile) status.textContent = 'Нет связи с сервером';
+        if (!pendingCompile) preview.error('Нет связи с сервером');
       }).finally(function () {
         inFlight = false;
         if (pendingCompile) {
@@ -191,23 +210,24 @@
       btn.addEventListener('click', function () {
         state[btn.closest('.switch-group').dataset.switch] = btn.dataset.value;
         markActive();
+        refreshStale();
       });
     });
 
     source.addEventListener('input', function () {
       state = readState();
       markActive();
+      refreshStale();
     });
 
-    document.getElementById('compile-btn').addEventListener('click', compile);
-    var sidebarCompile = document.getElementById('sidebar-compile-btn');
-    if (sidebarCompile) {
-      sidebarCompile.addEventListener('click', compile);
-    }
+    compileButtons.forEach(function (btn) {
+      btn.addEventListener('click', compile);
+    });
     document.getElementById('reset-btn').addEventListener('click', function () {
       source.value = original.value;
       state = readState();
       markActive();
+      refreshStale();
     });
 
     markActive();

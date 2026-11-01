@@ -5,11 +5,18 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Оформление</p>
   <h2>Быстрые настройки</h2>
-  <p class="sidebar-copy">Первая версия PDF собирается автоматически.
-    После изменения настроек нажмите кнопку ниже, чтобы пересобрать её.</p>
-  {% if variant == 'student' %}<p class="sidebar-copy">После успешной сборки
-    это оформление станет вариантом по умолчанию для учеников.</p>{% endif %}
+  <p class="sidebar-copy">Выберите вариант и оформление в любом порядке —
+    PDF собирается только кнопкой «Собрать PDF».</p>
+  <p class="sidebar-copy">Оформление варианта «Без ответов» после сборки
+    станет вариантом по умолчанию для учеников.</p>
   <div class="sidebar-switches" id="pdf-switches">
+    {# Вариант — такой же переключатель, как оформление: код меняется на месте, без сборки #}
+    <p class="sidebar-kicker">Вариант</p>
+    <div class="switch-group" data-switch="variant">
+      {% for v in variants %}
+      <button type="button" data-value="{{ v.value }}">{{ v.label }}</button>
+      {% endfor %}
+    </div>
     <p class="sidebar-kicker">Размер текста</p>
     <div class="switch-group" data-switch="size">
       <button type="button" data-value="10pt">10</button>
@@ -37,16 +44,7 @@
     </div>
   </div>
   <div class="sidebar-actions sidebar-compile">
-    <button type="button" class="btn" id="sidebar-compile-btn">Собрать PDF</button>
-  </div>
-</section>
-<section class="sidebar-section">
-  <p class="sidebar-kicker">Вариант</p>
-  <div class="sidebar-actions">
-    {% for v, label in variant_choices %}
-    <a class="sidebar-action" href="{% url 'worksheet_pdf_editor' worksheet.pk %}?variant={{ v }}">
-      {% if v == variant %}▸ {% endif %}{{ label }}</a>
-    {% endfor %}
+    <button type="button" class="btn" id="sidebar-compile-btn" data-pdf-compile>Собрать PDF</button>
   </div>
 </section>
 <section class="sidebar-section">
@@ -60,7 +58,7 @@
 <div class="page-head">
   <div><nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a><span>PDF</span></nav>
     <h1>{{ worksheet.title }}</h1>
-    <p class="page-meta"><span>PDF · {{ variant_label }}</span><span>первая версия собирается автоматически, после правки кода или настроек — «Собрать PDF»; код в листок не сохраняется</span></p>
+    <p class="page-meta"><span>PDF</span><span>параметры слева, правка кода — здесь; собирается кнопкой «Собрать PDF», код в листок не сохраняется</span></p>
   </div>
 </div>
 
@@ -70,7 +68,7 @@
      data-filename="{{ pdf_filename }}">
   <div class="pdf-editor-pane">
     <div class="form-buttons pdf-editor-toolbar">
-      <button type="button" class="btn" id="compile-btn">Собрать PDF</button>
+      <button type="button" class="btn" id="compile-btn" data-pdf-compile>Собрать PDF</button>
       <a class="btn btn-secondary" id="download-btn" download="{{ pdf_filename }}"
          hidden>Скачать PDF</a>
       <button type="button" class="btn btn-secondary" id="reset-btn"
@@ -83,11 +81,10 @@
     <textarea id="tex-original" hidden>{{ tex }}</textarea>
     <pre class="log" id="compile-log" hidden></pre>
   </div>
-  <div class="pdf-editor-pane">
-    <iframe id="pdf-frame" class="pdf-editor-frame"
-            title="Предпросмотр PDF"></iframe>
-  </div>
+  {% include 'includes/pdf_preview.html' with title='Предпросмотр PDF' hint='Выберите вариант и оформление слева в любом порядке, затем соберите PDF.' %}
 </div>
+{{ variants|json_script:'pdf-variants' }}
 
-<script defer src="{% static 'js/pdf_editor.js' %}"></script>
+<script defer src="{% static 'js/pdf_preview.js' %}"></script>
+<script defer src="{% static 'js/pdf_editor.js' %}?v=2"></script>
 {% endblock %}

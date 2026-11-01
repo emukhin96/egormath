@@ -1,4 +1,3 @@
-import re
 import secrets
 
 from django.conf import settings
@@ -7,6 +6,8 @@ from django.db.models.deletion import ProtectedError
 
 from problems.models import (GradeBand, Task, TaskSubitem, Topic,
                              normalize_grade_level)
+
+from .filenames import VARIANT_SUFFIX, auto_basename
 
 
 def _new_token():
@@ -25,21 +26,6 @@ def delete_trashed_worksheet_items(collector, field, sub_objs, using):
     # нарушает worksheetitem_task_or_text, поэтому строки корзины удаляем
     # напрямую до удаления самой задачи.
     collector.fast_deletes.append(sub_objs)
-
-
-_TRANSLIT = {
-    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
-    'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
-    'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
-    'ф': 'f', 'х': 'h', 'ц': 'c', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
-    'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
-}
-
-
-def _translit(text):
-    """Транслитерация для имён файлов: кириллица → латиница, без спецсимволов."""
-    out = ''.join(_TRANSLIT.get(ch, ch) for ch in text.lower())
-    return re.sub(r'[^a-z0-9]+', '', out)
 
 
 class Worksheet(models.Model):
@@ -70,8 +56,8 @@ class Worksheet(models.Model):
         help_text='Третий аргумент \\bighead; если пусто — имя владельца')
     pdf_basename = models.CharField(
         'Имя PDF-файла', max_length=80, blank=True,
-        help_text='Без расширения, например alg8-kv_ur; '
-                  'пусто — сгенерируется из темы, класса и названия')
+        help_text='Без расширения, например alg8-kvadratnye-uravneniya; '
+                  'пусто — сгенерируется из предмета, класса и названия')
     student_pdf_options = models.JSONField(
         'Оформление PDF для ученика', default=dict, blank=True,
         help_text='Последние параметры ученического PDF, собранного учителем')
@@ -124,24 +110,14 @@ class Worksheet(models.Model):
                 .prefetch_related('task__subitems', 'task__images', 'subitems')
                 .order_by('order', 'id'))
 
-    def _auto_pdf_basename(self):
-        """Имя файла по шаблону «тема + класс — короткое название»: alg8-kv_ur."""
-        topic = self.topics.order_by('pk').first()
-        prefix = _translit(topic.name)[:3] if topic else 'list'
-        grade = str(self.grade) if self.grade else ''
-        words = re.findall(r'[а-яёa-z0-9]+', self.title.lower())[:3]
-        short = '_'.join(filter(None, (_translit(w)[:2] for w in words)))
-        return f'{prefix}{grade}-{short}' if short else f'{prefix}{grade}'
-
     def pdf_filename(self, variant=''):
         """Имя PDF: ручное pdf_basename или автогенерация + суффикс варианта."""
-        base = self.pdf_basename.strip() or self._auto_pdf_basename()
-        suffix = {'answers': '-otvety', 'teacher': '-uchitel'}.get(variant, '')
-        return f'{base}{suffix}.pdf'
+        base = self.pdf_basename.strip() or auto_basename(self)
+        return f'{base}{VARIANT_SUFFIX.get(variant, "")}.pdf'
 
     def beamer_filename(self):
         """Имя PDF презентации — тот же базис, что у листка."""
-        base = self.pdf_basename.strip() or self._auto_pdf_basename()
+        base = self.pdf_basename.strip() or auto_basename(self)
         return f'{base}-prezentaciya.pdf'
 
     def duplicate(self, owner=None):

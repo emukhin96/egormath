@@ -1692,6 +1692,13 @@ PDF_EDITOR_FONT_LABELS = (
     ('stix', 'STIX Two'),
 )
 
+# Короткие подписи вариантов для переключателя в редакторе PDF
+PDF_EDITOR_VARIANT_LABELS = {
+    WorksheetPdf.VARIANT_STUDENT: 'Без ответов',
+    WorksheetPdf.VARIANT_ANSWERS: 'С ответами',
+    WorksheetPdf.VARIANT_TEACHER: 'С решениями',
+}
+
 
 @teacher_required
 def worksheet_pdf_editor(request, pk):
@@ -1702,17 +1709,28 @@ def worksheet_pdf_editor(request, pk):
         raise Http404
     font_choices = [(v, label) for v, label in PDF_EDITOR_FONT_LABELS
                     if v in settings.PDF_EDITOR_FONTS]
-    tex = worksheet_to_tex(worksheet, variant)
-    if variant == WorksheetPdf.VARIANT_STUDENT and worksheet.student_pdf_options:
-        from .latex import apply_pdf_options
-        tex = apply_pdf_options(tex, worksheet.student_pdf_options)
+    # Код всех трёх вариантов — сразу в странице: вариант переключается
+    # без перезагрузки и без сборки, как остальные параметры оформления
+    from .latex import apply_pdf_options
+    variants = []
+    for value, _label in WorksheetPdf.VARIANT_CHOICES:
+        tex = worksheet_to_tex(worksheet, value)
+        if (value == WorksheetPdf.VARIANT_STUDENT
+                and worksheet.student_pdf_options):
+            tex = apply_pdf_options(tex, worksheet.student_pdf_options)
+        variants.append({
+            'value': value,
+            'label': PDF_EDITOR_VARIANT_LABELS[value],
+            'tex': tex,
+            'filename': worksheet.pdf_filename(value),
+        })
+    current = next(v for v in variants if v['value'] == variant)
     return render(request, 'worksheets/pdf_editor.html', {
         'worksheet': worksheet,
         'variant': variant,
-        'variant_label': dict(WorksheetPdf.VARIANT_CHOICES)[variant],
-        'variant_choices': WorksheetPdf.VARIANT_CHOICES,
-        'tex': tex,
-        'pdf_filename': worksheet.pdf_filename(variant),
+        'variants': variants,
+        'tex': current['tex'],
+        'pdf_filename': current['filename'],
         'font_choices': font_choices,
     })
 
