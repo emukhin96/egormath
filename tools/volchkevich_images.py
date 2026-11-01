@@ -20,7 +20,9 @@ import argparse
 import hashlib
 import json
 import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from PIL import Image
@@ -32,6 +34,7 @@ INK = 170          # темнее — «чернила»
 MIN_INK = 0.004    # доля тёмных пикселей, с которой столбец не пустой
 MIN_GAP = 25       # ширина белого промежутка между рисунками
 MIN_PART = 40      # части уже — шум (тень с обратной стороны листа)
+SCAN_DPI = 150     # разрешение страниц скана для ``pdf_box``
 
 
 def segments(image: Image.Image, min_gap: int = MIN_GAP) -> list[tuple[int, int]]:
@@ -82,9 +85,24 @@ def cut(image: Image.Image, repair: dict) -> Image.Image:
 
 def derived_name(repair: dict) -> str:
     """То же имя, что ставит в задачи профиль (``derived_figure``)."""
+    if repair.get("pdf_page"):
+        return f"scan-{int(repair['pdf_page']):03d}-" + "_".join(
+            str(int(v)) for v in repair["pdf_box"])
     if repair.get("box"):
         return f"{repair['file']}-box" + "_".join(str(int(v)) for v in repair["box"])
     return f"{repair['file']}-{repair['part']}of{repair['of']}"
+
+
+def page_image(pdf: Path, page: int, cache: dict) -> Image.Image:
+    """Страница скана при 150 dpi — в этих координатах записан ``pdf_box``."""
+    if page not in cache:
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["pdftoppm", "-f", str(page), "-l", str(page), "-r", str(SCAN_DPI),
+                            "-png", str(pdf), f"{tmp}/p"], check=True)
+            [path] = Path(tmp).glob("p-*.png")
+            with Image.open(path) as image:
+                cache[page] = image.copy()
+    return cache[page]
 
 
 def figure_repairs(tex: Path) -> list[dict]:
@@ -102,7 +120,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tex", required=True, type=Path)
     parser.add_argument("--images", required=True, type=Path, help="папка images Mathpix")
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--pdf", type=Path, help="скан: для рисунков, которых нет у Mathpix")
     args = parser.parse_args(argv)
+    pages: dict[int, Image.Image] = {}
 
     target = args.output / "images"
     target.mkdir(parents=True, exist_ok=True)
@@ -114,10 +134,23 @@ def main(argv: list[str] | None = None) -> int:
     made = set()
     errors = []
     for repair in figure_repairs(args.tex):
-        if not (repair.get("part") or repair.get("box")):
+        if not (repair.get("part") or repair.get("box") or repair.get("pdf_page")):
             continue
         name = derived_name(repair) + ".jpg"
         if name in made:
+            continue
+        if repair.get("pdf_page"):
+            if not args.pdf:
+                errors.append(f"{name}: нужен --pdf (рисунок вырезается из скана)")
+                continue
+            try:
+                page_image(args.pdf, int(repair["pdf_page"]), pages).crop(
+                    tuple(int(v) for v in repair["pdf_box"])).convert("RGB").save(
+                        target / name, quality=92)
+            except (OSError, subprocess.CalledProcessError) as error:
+                errors.append(f"{name}: {error}")
+                continue
+            made.add(name)
             continue
         source = args.images / f"{repair['file']}.jpg"
         try:

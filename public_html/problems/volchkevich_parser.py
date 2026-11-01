@@ -280,8 +280,14 @@ def extract_figures(zone: str, figures: Figures) -> str:
 
 def derived_figure(repair: dict) -> str:
     """Имя вырезанного рисунка: ``<файл>-2of3``, ``<файл>-1-3of4`` (части
-    полосы слева направо) или ``<файл>-box0_0_1120_670`` (прямоугольник:
-    рисунки друг над другом); без части — сам файл."""
+    полосы слева направо), ``<файл>-box0_0_1120_670`` (прямоугольник:
+    рисунки друг над другом) или ``scan-043-…`` (прямоугольник страницы
+    скана); без части — сам файл."""
+    if repair.get("pdf_page"):
+        # Рисунок, которого нет среди картинок Mathpix: вырезан из скана
+        # (страница PDF при 150 dpi).
+        return f"scan-{int(repair['pdf_page']):03d}-" + "_".join(
+            str(int(v)) for v in repair["pdf_box"])
     if repair.get("box"):
         return f"{repair['file']}-box" + "_".join(str(int(v)) for v in repair["box"])
     if repair.get("part"):
@@ -560,7 +566,9 @@ def cut_bodies(zone: str, classified: list[tuple[Event, Item | None]]) -> list[I
         stop = len(zone)
         for next_event, next_item in classified[index + 1:]:
             if item.kind == KIND_EXAMPLE and next_event.kind == "heading" \
-                    and next_event.value == "solution":
+                    and next_event.value in ("solution", "theory"):
+                # «ЛЕММА», «РЕШЕНИЕ» внутри разбора; хвост теории после
+                # «Ответ:» отрежет split_example.
                 continue
             stop = next_event.start
             break
@@ -645,19 +653,24 @@ def clean_body(body: str) -> str:
     return body.strip()
 
 
-def split_example(body: str) -> tuple[str, str, int]:
+def split_example(body: str) -> tuple[str, str, str]:
     """Условие, решение примера и длина отрезанного хвоста теории."""
     match = SOLUTION_SPLIT_RE.search(body)
-    if not match:
-        return body, "", 0
-    condition = body[:match.start()].rstrip()
-    solution = body[match.end():]
+    if match:
+        condition = body[:match.start()].rstrip()
+        solution = body[match.end():]
+    elif EXAMPLE_END_RE.search(body) and "\n" in body.strip():
+        # Заголовок «РЕШЕНИЕ» OCR потерял: условие примера — первый абзац.
+        head, _, solution = body.strip().partition("\n")
+        condition = head.rstrip()
+    else:
+        return body, "", ""
     solution = re.sub(r"^\s*(?:\\\\)?\s*", "", solution)
     ends = list(EXAMPLE_END_RE.finditer(solution))
-    trimmed = 0
+    trimmed = ""
     if ends:
         tail = solution[ends[-1].end():]
-        trimmed = len(tail.strip())
+        trimmed = tail.strip()
         solution = solution[:ends[-1].end()]
     return condition, solution.strip(), trimmed
 
@@ -733,8 +746,10 @@ def build_draft(item: Item, paragraph: Paragraph, diagnostics: dict) -> TaskDraf
     solution = ""
     if item.kind == KIND_EXAMPLE:
         body, solution, trimmed = split_example(body)
-        if trimmed > 200:
-            diagnostics["examples_trimmed_tail"].append(f"{external_id}: {trimmed}")
+        if len(trimmed) > 200:
+            # Хвост после «Ответ:» — обычно теория; начало — для сверки.
+            diagnostics["examples_trimmed_tail"].append(
+                f"{external_id}: {len(trimmed)} зн., «{trimmed[:80]}…»")
     body = prepare_text(strip_lead(body))
     task = task_from_block(Marker(0, 0, external_id), body, path)
     task.stars = 0
