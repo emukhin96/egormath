@@ -112,7 +112,7 @@ class VolchkevichParserTests(SimpleTestCase):
     def test_example_solution_answer_and_theory_tail(self):
         example = self.tasks["1.П1"]
         self.assertTrue(example.text_latex.startswith("Две стороны"))
-        self.assertIn("Пример с решением", example.tags)
+        self.assertEqual(example.source_path[-1], "Примеры решения задач")
         self.assertEqual(example.author_answer_latex, "является")
         self.assertNotIn("Дальше снова", example.author_solution_latex)
         self.assertEqual(example.stars, 0)

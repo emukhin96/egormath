@@ -65,7 +65,8 @@ BARE_GRAPHICS_RE = re.compile(
     r"(?:\\begin\{center\}\s*)?\\includegraphics\s*(?:\[[^\]]*\])?\s*\{[^{}\s\\]+\}"
     r"(?:\s*\\end\{center\})?")
 CAPTION_RE = re.compile(r"\\caption\{(?P<text>[^{}]*)\}")
-FIG_CAPTION_RE = re.compile(r"^\s*Рис\.?\s*(?P<num>\d{1,2}(?:\.\d{1,3})?)\s*$")
+# «Рис. 36\\ Описание» — номер и пояснение под рисунком.
+FIG_CAPTION_RE = re.compile(r"^\s*Рис\.?\s*(?P<num>\d{1,2}(?:\.\d{1,3})?)\s*(?:$|\\\\)")
 TASK_CAPTION_RE = re.compile(
     r"задач[аи]\s*(?P<num>\d{1,3})(?:\s*(?:,|и)\s*(?P<more>\d{1,3}))?\s*$")
 PAGE_RE = re.compile(r"-(?P<page>\d{3})_\d+_\d+_\d+_\d+\}")
@@ -86,7 +87,7 @@ BARE_HEADING_RE = re.compile(
 EXAMPLE_RE = re.compile(
     r"(?m)^[ \t]*(?:\\item\[\][ \t]*)?(?:[★☆*][ \t]*){0,3}(?:ПРИМЕР|[Пп]ример)[ \t]+"
     r"(?P<label>\d{1,2}(?:\.\d{1,2})?)\.?")
-ITEM_RE = re.compile(r"\\item\[(?P<label>\d{1,2}(?:\.\d{1,2})?)\.?\]")
+ITEM_RE = re.compile(r"\\item\[(?P<label>\d{1,2}(?:\.\d{1,2})?|\+)\.?\]")
 # 7 класс: задачи «1.18 ★★★ …» строкой без \item.
 PLAIN_TASK_RE = re.compile(
     r"(?m)^[ \t]*(?P<label>\d{1,2}\.\d{1,2})\.?[ \t]+(?=[★☆*]|[А-ЯЁA-Z(\\])")
@@ -277,6 +278,50 @@ def extract_figures(zone: str, figures: Figures) -> str:
     return BARE_GRAPHICS_RE.sub(bare, zone)
 
 
+def derived_figure(repair: dict) -> str:
+    """Имя вырезанного рисунка: ``<файл>-2of3``, ``<файл>-1-3of4`` (части
+    полосы слева направо) или ``<файл>-box0_0_1120_670`` (прямоугольник:
+    рисунки друг над другом); без части — сам файл."""
+    if repair.get("box"):
+        return f"{repair['file']}-box" + "_".join(str(int(v)) for v in repair["box"])
+    if repair.get("part"):
+        return f"{repair['file']}-{repair['part']}of{repair['of']}"
+    return repair["file"]
+
+
+def load_figure_repairs(text: str, path: Path = REPAIRS_PATH) -> list[dict]:
+    """Сверенные со сканом рисунки (``figures``) для этого TEX."""
+    if not path.exists():
+        return []
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    spec = json.loads(path.read_text(encoding="utf-8"))
+    for edition in spec.get("editions", []):
+        if edition.get("source_sha256") == digest:
+            return list(edition.get("figures", []))
+    return []
+
+
+def apply_figure_repairs(paragraph: Paragraph, figures: Figures,
+                         repairs: list[dict], grade: int) -> None:
+    """Подменяет рисунки задачи или «Рис. N» сверенными частями полос.
+
+    Mathpix склеивает соседние рисунки в одну полосу с одной подписью; часть
+    полосы режет ``tools/volchkevich_images.py`` по белым столбцам.
+    """
+    by_task: dict[int, list[str]] = {}
+    by_number: dict[str, list[str]] = {}
+    for repair in repairs:
+        name = derived_figure(repair)
+        if "task" in repair and repair.get("paragraph") == paragraph.key:
+            by_task.setdefault(int(repair["task"]), []).append(name)
+        elif "figure" in repair and (
+                repair.get("paragraph") == paragraph.key
+                or (grade == 7 and str(repair["figure"]).split(".")[0] == paragraph.key)):
+            by_number.setdefault(str(repair["figure"]), []).append(name)
+    figures.by_task.update(by_task)
+    figures.by_number.update(by_number)
+
+
 def running_headers(edition: dict) -> re.Pattern:
     """Колонтитулы «§5. Теоремы Чевы и Менелая», «Глава 2. Подобие»."""
     parts = []
@@ -343,7 +388,11 @@ def number_enumerates(zone: str) -> str:
     for match in _ENUM_TOKEN_RE.finditer(zone):
         token = match.group(0)
         if token.startswith("\\begin"):
-            stack.append([0, False])
+            # Список сразу под «УПРАЖНЕНИЕ»: номер — следующий по порядку,
+            # его поставит разбор (``\\item[+]``).
+            after_heading = re.search(
+                r"\\section\*?\{\s*УПРАЖНЕНИ[ЕЯ]\s*\}\s*$", zone[max(0, match.start() - 60):match.start()])
+            stack.append([0, False, bool(after_heading)])
             continue
         if token.startswith("\\end"):
             if stack:
@@ -352,9 +401,13 @@ def number_enumerates(zone: str) -> str:
         if not stack or len(stack) > 1:
             continue
         if match.group("value"):
-            stack[-1] = [int(match.group("value")), True]
+            stack[-1] = [int(match.group("value")), True, False]
             continue
-        if stack[-1][1]:
+        if stack[-1][2]:
+            out.append(zone[pos:match.start()])
+            out.append("\\item[+]")
+            pos = match.end()
+        elif stack[-1][1]:
             stack[-1][0] += 1
             out.append(zone[pos:match.start()])
             out.append(f"\\item[{stack[-1][0]}.]")
@@ -403,7 +456,10 @@ def classify_items(zone: str, events: list[Event], paragraph: Paragraph, grade: 
         previous = last[kind]
         return previous < number <= previous + 6
 
-    for event in events:
+    def next_item(index: int) -> str:
+        return next((e.value for e in events[index + 1:] if e.kind == "item"), "")
+
+    for index, event in enumerate(events):
         if event.kind == "heading":
             if event.value == "solution" and mode == "example":
                 continue
@@ -431,8 +487,11 @@ def classify_items(zone: str, events: list[Event], paragraph: Paragraph, grade: 
                 continue
             kind, number = KIND_TASK, int(tail)
         else:
-            number = int(label)
-            if starred and mode != "questions":
+            # «+» — пункт без номера в списке под «УПРАЖНЕНИЕ».
+            number = last[KIND_EXERCISE] + 1 if label == "+" else int(label)
+            if label == "+":
+                mode = "exercises"
+            if starred:
                 # Звёзды уровня — только у задач: заголовок «ЗАДАЧИ» OCR
                 # нередко теряет, и список идёт сразу за примерами.
                 kind = KIND_TASK
@@ -463,7 +522,10 @@ def classify_items(zone: str, events: list[Event], paragraph: Paragraph, grade: 
                 if not event.plain:
                     result.append((event, None))
                 continue
-            if kind == KIND_EXERCISE and number == 1 and last[KIND_EXERCISE] >= 2:
+            if starred:
+                mode = "tasks"
+            if (kind == KIND_EXERCISE and number == 1 and last[KIND_EXERCISE] >= 2
+                    and next_item(index) == "2"):
                 # Нумерация с 1 после упражнений — «Вопросы», чей заголовок
                 # OCR потерял: в импорт не идут, но обрывают упражнение.
                 mode = "questions"
@@ -681,7 +743,6 @@ def build_draft(item: Item, paragraph: Paragraph, diagnostics: dict) -> TaskDraf
     task.topic_original = paragraph.heading
     task.topic_code = paragraph.topic
     if item.kind == KIND_EXAMPLE:
-        task.tags.append("Пример с решением")
         if solution:
             solution = prepare_text(solution)
             task.author_solution_latex = clean(solution)
@@ -707,6 +768,7 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
     """Разбор TEX; ``edition`` — описание издания вместо поиска по sha256."""
     text = text.replace("\r\n", "\n")
     edition = edition or load_edition(text)
+    figure_repairs = load_figure_repairs(text)
     text, source_repairs = apply_source_repairs(text, REPAIRS_PATH)
     text, skipped = apply_skips(text, edition)
     grade = edition["grade"]
@@ -721,6 +783,7 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
         "figures_numbered": 0,
         "figures_by_task": 0,
         "figures_dropped": 0,
+        "figure_repairs": len(figure_repairs),
         "figures_missing_by_task": {},
         "figures_unreferenced": [],
         "examples_without_solution": [],
@@ -735,6 +798,7 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
         figures = Figures()
         zone = extract_figures(text[paragraph.start:paragraph.end], figures)
         zone = number_enumerates(strip_running_headers(zone, headers))
+        apply_figure_repairs(paragraph, figures, figure_repairs, grade)
         if global_index is not None:
             for number, paths in figures.by_number.items():
                 global_index.setdefault(number, []).extend(paths)
