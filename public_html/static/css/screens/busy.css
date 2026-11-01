@@ -1,10 +1,6 @@
-/* Мгновенный отклик кнопок: нажатие (:active) и спиннер долгого
-   действия (.is-busy, busy.js) — на всех экранах. */
+/* Мгновенный отклик кнопок долгих действий: спиннер в кнопке
+   (.is-busy, busy.js) — на всех экранах. */
 @layer components {
-  .btn:active, .switch-group button:active { transform: translateY(1px); }
-  .btn:active { background: var(--accent-dark); }
-  .btn-secondary:active, .switch-group button:active { background: #dfe9f5; }
-
   .btn.is-busy { gap: var(--space-2); cursor: progress; }
   .btn.is-busy:not(.btn-secondary) { background: var(--accent-dark); }
   .btn.is-busy::before, .pdf-spinner {

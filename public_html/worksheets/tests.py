@@ -922,11 +922,11 @@ class WorksheetViewTests(TestCase):
         self.worksheet.save()
         self.worksheet.topics.add(Topic.objects.get(code='ALG'))
         self.assertEqual(self.worksheet.pdf_filename('student'),
-                         'alg8-kvadratnye-uravneniya.pdf')
+                         'alg8-kvad_urav.pdf')
         self.assertEqual(self.worksheet.pdf_filename('answers'),
-                         'alg8-kvadratnye-uravneniya-otvety.pdf')
+                         'alg8-kvad_urav-otvety.pdf')
         self.assertEqual(self.worksheet.pdf_filename('teacher'),
-                         'alg8-kvadratnye-uravneniya-resheniya.pdf')
+                         'alg8-kvad_urav-resheniya.pdf')
         # Ручное имя приоритетнее автогенерации
         self.worksheet.pdf_basename = 'custom_name'
         self.assertEqual(self.worksheet.pdf_filename('student'), 'custom_name.pdf')

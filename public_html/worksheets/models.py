@@ -56,7 +56,7 @@ class Worksheet(models.Model):
         help_text='Третий аргумент \\bighead; если пусто — имя владельца')
     pdf_basename = models.CharField(
         'Имя PDF-файла', max_length=80, blank=True,
-        help_text='Без расширения, например alg8-kvadratnye-uravneniya; '
+        help_text='Без расширения, например alg8-kvad_urav; '
                   'пусто — сгенерируется из предмета, класса и названия')
     student_pdf_options = models.JSONField(
         'Оформление PDF для ученика', default=dict, blank=True,

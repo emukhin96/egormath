@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='worksheet',
             name='pdf_basename',
-            field=models.CharField(blank=True, help_text='Без расширения, например alg8-kvadratnye-uravneniya; пусто — сгенерируется из предмета, класса и названия', max_length=80, verbose_name='Имя PDF-файла'),
+            field=models.CharField(blank=True, help_text='Без расширения, например alg8-kvad_urav; пусто — сгенерируется из предмета, класса и названия', max_length=80, verbose_name='Имя PDF-файла'),
         ),
     ]

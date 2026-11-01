@@ -7,6 +7,9 @@
 #                             (в контейнере /opt/latex-api/assets, TEXINPUTS)
 # worksheets/tex/fonts/*    → /opt/latex-api/data/fonts/egormath/
 #                             (fontconfig и OSFONTDIR контейнера)
+# $DATA_DIR/fonts/*         → туда же: лицензионные шрифты (SchoolBookC,
+#                             TextBookC), которым нельзя в публичный git;
+#                             кладёт их с Mac deploy/vps/fonts-upload.sh
 #
 # Листки подключают \usepackage{egor} и \usepackage{egorweb}, презентации —
 # egorbeamer; шрифты Inter и STIX Two ищутся по имени файла. В запросе к API
@@ -80,4 +83,7 @@ copy() {  # copy <файл> <каталог>: только изменившие�
 }
 for path in "$SRC"/*.sty; do copy "$path" "$STY_DIR"; done
 for path in "$SRC"/fonts/*; do copy "$path" "$FONT_DIR"; done
+for path in "$DATA_DIR"/fonts/*.ttf "$DATA_DIR"/fonts/*.otf; do
+  if [ -e "$path" ]; then copy "$path" "$FONT_DIR"; fi
+done
 echo "LaTeX files: обновлено $changed (пакеты — $STY_DIR, шрифты — $FONT_DIR)"

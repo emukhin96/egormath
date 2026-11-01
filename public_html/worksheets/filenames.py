@@ -1,6 +1,6 @@
-"""Имена PDF листка: «предмет + класс — название латиницей».
+"""Имена PDF листка: «предмет + класс — сокращённое название».
 
-math8-kvadratnye-uravneniya.pdf, geom9-podobie-treugolnikov-otvety.pdf.
+alg7-razl_mnozh.pdf, geom9-podob_treug-otvety.pdf.
 Предмет — по корневой теме рубрикатора (ALG → alg, GEO → geom, STA →
 stat или teorver); если тем несколько или их нет — math. В 5–6 классах
 предмет один — математика, поэтому там всегда math.
@@ -23,10 +23,14 @@ _STAT_ONLY = ('STA.01', 'STA.02')
 DEFAULT_SUBJECT = 'math'
 
 # Служебные слова в имени файла не нужны: «Отрезки в треугольнике» →
-# otrezki-treugolnike
+# otrez_treug
 _STOP_WORDS = {'и', 'в', 'во', 'на', 'с', 'со', 'к', 'ко', 'о', 'об', 'по',
                'для', 'от', 'до', 'из', 'а', 'у', 'за', 'при'}
-SLUG_LIMIT = 40
+SLUG_WORDS = 3
+# Сокращение слова — 4 буквы, но не на гласную: «разложение» → разл,
+# «подобие» → подоб, «треугольник» → треуг (не длиннее 6 букв)
+ABBR_MIN, ABBR_MAX = 4, 6
+_VOWELS = set('аеёиоуыэюяьъ')
 
 VARIANT_SUFFIX = {'answers': '-otvety', 'teacher': '-resheniya'}
 
@@ -37,17 +41,21 @@ def translit(text):
     return re.sub(r'[^a-z0-9]+', '', out)
 
 
-def title_slug(title, limit=SLUG_LIMIT):
-    """Первые значимые слова названия целиком, через дефис, до limit символов."""
-    words = [translit(w) for w in re.findall(r'[а-яёa-z0-9]+', title.lower())
+def abbreviate(word):
+    """Короткое сокращение слова: множители → mnozh, подобие → podob."""
+    if not re.fullmatch(r'[а-яё]+', word):
+        return translit(word)[:ABBR_MAX]
+    cut = ABBR_MIN
+    while cut < min(len(word), ABBR_MAX) and word[cut - 1] in _VOWELS:
+        cut += 1
+    return translit(word[:cut])
+
+
+def title_slug(title, words=SLUG_WORDS):
+    """Первые значимые слова названия сокращениями через «_»: razl_mnozh."""
+    parts = [abbreviate(w) for w in re.findall(r'[а-яёa-z0-9]+', title.lower())
              if w not in _STOP_WORDS]
-    slug = ''
-    for word in filter(None, words):
-        candidate = f'{slug}-{word}' if slug else word
-        if slug and len(candidate) > limit:
-            break
-        slug = candidate[:limit]
-    return slug
+    return '_'.join([p for p in parts if p][:words])
 
 
 def _majority(values):
@@ -121,7 +129,7 @@ def worksheet_grade(worksheet):
 
 
 def auto_basename(worksheet):
-    """math8-kvadratnye-uravneniya: предмет, класс, название латиницей."""
+    """alg8-kvad_urav: предмет, класс, сокращённое название."""
     grade = worksheet_grade(worksheet)
     prefix = f'{worksheet_subject(worksheet, grade)}{grade or ""}'
     slug = title_slug(worksheet.title)

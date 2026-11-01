@@ -1,4 +1,4 @@
-"""Имена PDF листка: предмет и класс в начале, название латиницей."""
+"""Имена PDF листка: предмет и класс в начале, сокращённое название."""
 from django.contrib.auth.models import User
 from django.test import TestCase
 
@@ -27,11 +27,11 @@ class PdfFilenameTests(TestCase):
 
     def test_subject_from_root_topic(self):
         self.assertEqual(self.sheet(grade=9, topics=['GEO']).pdf_filename(),
-                         'geom9-podobie-treugolnikov.pdf')
+                         'geom9-podob_treug.pdf')
         self.assertEqual(self.sheet(grade=7, topics=['ALG.01']).pdf_filename(),
-                         'alg7-podobie-treugolnikov.pdf')
+                         'alg7-podob_treug.pdf')
         self.assertEqual(self.sheet(grade=8, topics=['ARI']).pdf_filename(),
-                         'math8-podobie-treugolnikov.pdf')
+                         'math8-podob_treug.pdf')
 
     def test_statistics_and_probability(self):
         self.assertTrue(self.sheet(grade=7, topics=['STA.02'])
@@ -56,7 +56,7 @@ class PdfFilenameTests(TestCase):
         self.add_task(worksheet, 'GEO', grade=8)
         self.add_task(worksheet, 'ALG', grade=9)
         self.assertEqual(worksheet.pdf_filename('answers'),
-                         'geom8-podobie-treugolnikov-otvety.pdf')
+                         'geom8-podob_treug-otvety.pdf')
 
     def test_grade_from_single_band(self):
         worksheet = self.sheet(topics=['GEO'])
@@ -65,14 +65,15 @@ class PdfFilenameTests(TestCase):
 
     def test_beamer_filename(self):
         self.assertEqual(self.sheet(grade=9, topics=['GEO']).beamer_filename(),
-                         'geom9-podobie-treugolnikov-prezentaciya.pdf')
+                         'geom9-podob_treug-prezentaciya.pdf')
 
     def test_title_slug(self):
-        # Служебные слова выпадают, длинное название режется по словам
-        self.assertEqual(title_slug('Отрезки в треугольнике'),
-                         'otrezki-treugolnike')
-        slug = title_slug('Пропорциональные отрезки в прямоугольном '
-                          'треугольнике и не только')
-        self.assertEqual(slug, 'proporcionalnye-otrezki-pryamougolnom')
-        self.assertEqual(title_slug('§ 12. Степень'), '12-stepen')
+        # Слово — 4 буквы, но не на гласную; служебные слова выпадают
+        self.assertEqual(title_slug('Разложение на множители'), 'razl_mnozh')
+        self.assertEqual(title_slug('Отрезки в треугольнике'), 'otrez_treug')
+        # Не больше трёх слов
+        self.assertEqual(title_slug('Пропорциональные отрезки в прямоугольном '
+                                    'треугольнике'), 'prop_otrez_pryam')
+        self.assertEqual(title_slug('§ 12. Степень'), '12_step')
+        self.assertEqual(title_slug('Площадь'), 'plosch')
         self.assertEqual(title_slug('???'), '')
