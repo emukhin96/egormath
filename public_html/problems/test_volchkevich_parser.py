@@ -143,6 +143,17 @@ class VolchkevichParserTests(SimpleTestCase):
         self.assertIn(r"углом \taskpic{1} (рис. а, б, в). Найдите угол на рисунке.", task.text_latex)
         self.assertNotIn("\u2060", task.text_latex)
 
+    def test_repeated_figure_ref_leaves_no_space(self):
+        tasks, _ = parse_volchkevich(BOOK.replace(
+            "углом (рис. 1).", "углом (рис. 1). Ещё раз взгляните на угол (рис. 1)."), EDITION)
+        task = {t.external_id: t for t in tasks}["2.1"]
+        self.assertIn("взгляните на угол.", task.text_latex)
+
+    def test_latin_part_letters_by_shape(self):
+        tasks, _ = parse_volchkevich(BOOK.replace("углом (рис. 1).", r"углом (рис. \(1, a-e\))."), EDITION)
+        task = {t.external_id: t for t in tasks}["2.1"]
+        self.assertIn("(рис. а–е)", task.text_latex)
+
     def test_running_header_is_not_text(self):
         self.assertNotIn("§1", self.tasks["1.П1"].text_latex)
 

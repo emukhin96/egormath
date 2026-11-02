@@ -690,7 +690,7 @@ def _fig_ref_rest(rest: str) -> str:
         return ""
     if re.fullmatch(r"[a-eа-е\d\s,\-–—]+", rest):
         letters = re.sub(r"\s*([,\-–—])\s*", lambda m: ", " if m.group(1) == "," else "–", rest.strip())
-        return ", " + letters.translate(str.maketrans("abcde", "абвгд"))
+        return ", " + letters.translate(_LATIN_PART_LETTERS)
     return f", \\({rest}\\)"
 
 
@@ -759,10 +759,15 @@ def split_example(body: str) -> tuple[str, str, str]:
     return condition, solution.strip(), trimmed
 
 
+# Буквы частей рисунка, которые OCR дал латиницей, — по начертанию
+# («e» — «е», а не пятая буква). «b» в книге — «б» (вид курсива).
+_LATIN_PART_LETTERS = str.maketrans("abeBdc", "абевдс")
+
+
 def _sub_labels(raw: str | None) -> str:
     """«, a и b» → «а и б»: буквы частей рисунка кириллицей."""
     value = re.sub(r"^\s*,?\s*", "", raw or "").strip()
-    return value.translate(str.maketrans("abcde", "абвгд"))
+    return value.translate(_LATIN_PART_LETTERS)
 
 
 def attach_figures(task: TaskDraft, item: Item, figures: Figures,
@@ -816,7 +821,7 @@ def attach_figures(task: TaskDraft, item: Item, figures: Figures,
                 return match.group(0)
             subs = _sub_labels(match.group("subs"))
             text = tokens(found)
-            return (text + (f" (рис. {subs})" if subs else "")) or (f"(рис. {subs})" if subs else "")
+            return (text + (f" (рис. {subs})" if subs else "")) or (f"(рис. {subs})" if subs else "\x00")
 
         def inline(match: re.Match) -> str:
             found = resolve(match)
@@ -827,6 +832,9 @@ def attach_figures(task: TaskDraft, item: Item, figures: Figures,
             return match.group("word") + (" " + text if text else "") + (f" (рис. {subs})" if subs else "")
 
         value = PAREN_FIG_REF_RE.sub(paren, value or "")
+        # Повторная ссылка на уже поставленный рисунок исчезает целиком —
+        # вместе с пробелом перед ней: «углом (рис. 1).» → «углом.».
+        value = re.sub(r"[ \t]*\x00", "", value)
         value = INLINE_FIG_REF_RE.sub(inline, value)
         return re.sub(r"(?<=\S)[ \t]{2,}(?=\S)", " ", value)
 
