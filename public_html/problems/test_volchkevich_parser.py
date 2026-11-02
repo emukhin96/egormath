@@ -262,3 +262,81 @@ class VolchkevichGrade7Tests(SimpleTestCase):
     def test_lowercase_example_and_ocr_answer(self):
         self.assertEqual(self.tasks["6.П1"].author_answer_latex, "$135^{\\circ}$")
         self.assertTrue(self.tasks["6.2"].text_latex.startswith("Найдите угол"))
+
+
+class VolchkevichCanonTests(SimpleTestCase):
+    """Канон оформления: docs/TEXTBOOK_PARSE_QA.md, § 5."""
+
+    def test_numbers_units_and_decimal_comma(self):
+        from .volchkevich_parser import canon_field
+        self.assertEqual(canon_field("Стороны равны 2 и 5, площадь равна 11,25."),
+                         "Стороны равны $2$ и $5$, площадь равна $11{,}25$.")
+        self.assertEqual(canon_field(r"площадь равна \(2,5 м^{2}\)."), "площадь равна $2{,}5$ м$^{2}$.")
+        self.assertEqual(canon_field("периметр 15см"), "периметр $15$ см")
+        self.assertEqual(canon_field(r"участка \(0,02 км^{2}\)"), "участка $0{,}02$ км$^{2}$")
+
+    def test_points_lookalikes_and_part_letters(self):
+        from .volchkevich_parser import canon_field
+        self.assertEqual(canon_field("B четырёхугольнике угол CKD прямой."),
+                         "В четырёхугольнике угол $CKD$ прямой.")
+        self.assertEqual(canon_field("жил в XIX веке"), "жил в XIX веке")
+        self.assertEqual(canon_field(r"на рисунках \taskpic{a.jpg}, \(a-i\)."),
+                         r"на рисунках \taskpic{a.jpg} (рис. а–и).")
+        self.assertEqual(canon_field("Пусть эта\\\\\nпрямая"), "Пусть эта прямая")
+
+    def test_point_names_versus_prepositions_and_roman(self):
+        from .volchkevich_parser import canon_field
+        self.assertEqual(canon_field("C лежит на отрезке $AB$."), "$C$ лежит на отрезке $AB$.")
+        self.assertEqual(canon_field("K находится вне круга."), "$K$ находится вне круга.")
+        self.assertEqual(canon_field("C помощью линейки"), "С помощью линейки")
+        self.assertEqual(canon_field("основание трапеции CD и угол MDC"),
+                         "основание трапеции $CD$ и угол $MDC$")
+        self.assertEqual(canon_field("в XII в. и в XIX веке"), "в XII в. и в XIX веке")
+
+    def test_fix_for_missing_task_is_an_error(self):
+        from unittest import mock
+        from . import volchkevich_parser as parser
+        with mock.patch.object(parser, "load_text_fixes", return_value=[
+                {"id": "9.99", "field": "text_latex", "old": "a", "new": "b"}]):
+            with self.assertRaisesMessage(ValueError, "отсутствующих задач: 9.99"):
+                parser.parse_volchkevich(BOOK, EDITION)
+
+    def test_nested_table_columns_do_not_leak(self):
+        from .volchkevich_parser import _flatten_nested_tabular
+        text = (r"\begin{tabular}{|l|l|} A & \begin{tabular}[t]{ll} a & b \\ c & d \\ \end{tabular} \\ "
+                r"\end{tabular}")
+        self.assertEqual(_flatten_nested_tabular(text),
+                         r"\begin{tabular}{|l|l|} A & a | b c | d \\ \end{tabular}")
+
+    def test_restructure_checks_stem_pictures(self):
+        from .textbook_parser import TaskDraft
+        from .volchkevich_parser import restructure
+        task = TaskDraft(external_id="7.У1", source_number="7.У1", source_path=[],
+                         collection_key="", collection_title="", topic_original="",
+                         text_latex=r"Найдите \taskpic{p1}.")
+        with self.assertRaisesMessage(ValueError, "7.У1: в правке пунктов рисунки [2]"):
+            restructure(task, {"text": "Найдите.", "pics": [2], "items": [{"label": "а"}]})
+
+    def test_draft_figure_for_missing_task_is_an_error(self):
+        from unittest import mock
+        from . import volchkevich_parser as parser
+        with mock.patch.object(parser, "load_figure_repairs", return_value=[
+                {"draft": "1.У99", "file": "x"}]):
+            with self.assertRaisesMessage(ValueError, "отсутствующих задач: 1.У99"):
+                parser.parse_volchkevich(BOOK, EDITION)
+
+    def test_restructure_and_text_fix(self):
+        from .textbook_parser import TaskDraft
+        from .volchkevich_parser import apply_text_fix, restructure
+        task = TaskDraft(external_id="7.У1", source_number="7.У1", source_path=[],
+                         collection_key="", collection_title="", topic_original="",
+                         text_latex=r"Найдите $x$ на рисунке \taskpic{p1} \taskpic{p2} (рис. а–б).")
+        restructure(task, {"text": "Найдите $x$.", "items": [
+            {"label": "а", "pics": [1]}, {"label": "б", "text": "Параллелограмм.", "pics": [2]}]})
+        self.assertEqual(task.text_latex, "Найдите $x$.")
+        self.assertEqual([(i.label, i.text_latex) for i in task.subitems],
+                         [("а", r"\taskpic{p1}"), ("б", r"Параллелограмм. \taskpic{p2}")])
+        apply_text_fix(task, {"field": "subitem:б", "old": "Параллелограмм.", "new": "Ромб."})
+        self.assertEqual(task.subitems[1].text_latex, r"Ромб. \taskpic{p2}")
+        with self.assertRaisesMessage(ValueError, "встречается 0 раз"):
+            apply_text_fix(task, {"field": "text_latex", "old": "нет такого", "new": ""})

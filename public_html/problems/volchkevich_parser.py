@@ -37,8 +37,10 @@ from pathlib import Path
 from .potoskuev_parser import (
     _LABEL_GUARD, _finish_fields, apply_source_repairs, distribute_labeled_answer,
     lift_common_tail, prepare_text)
+from .merzlyak_parser import MATH_SPAN_RE, wrap_answer_numbers
 from .textbook_parser import (
-    Marker, TaskDraft, clean, finalize_draft_images, remove_group_commands,
+    Marker, SubitemDraft, TaskDraft, clean, finalize_draft_images, remove_group_commands,
+    strip_subitem_punct,
     task_from_block)
 
 
@@ -84,14 +86,15 @@ _FIG_SUBS = (r"(?P<subs>(?:\s*,?\s*[а-зa-e](?:\s*(?:[-–—]|и|,)\s*[а-зa-
 PAREN_FIG_REF_RE = re.compile(
     r"\(\s*(?:см\.\s*)?[Рр]ис(?:ун(?:ок|ке|ки|ках))?\.?\s*(?P<first>" + _FIG_NUM + r")"
     r"(?:\s*[-–—]\s*(?P<last>" + _FIG_NUM + r"))?"
-    r"(?P<more>(?:\s*,\s*" + _FIG_NUM + r"(?![\d.]))*)" + _FIG_SUBS + r"\s*\u2060?\)")
+    r"(?P<more>(?:\s*,\s*" + _FIG_NUM + r"(?!\d|\.\d))*)" + _FIG_SUBS + r"\s*\u2060?\)")
 # «на рисунке 1.28, а показан», «рисунках 4–18».
 INLINE_FIG_REF_RE = re.compile(
     r"(?P<word>[Рр]ис(?:ун(?:ок|ке|ка|ки|ках|кам|ком|ками))?\.?)\s*"
-    r"(?P<first>" + _FIG_NUM + r")(?:\s*[-–—]\s*(?P<last>" + _FIG_NUM + r"))?(?!\d)" + _FIG_SUBS)
+    r"(?P<first>" + _FIG_NUM + r")(?:\s*[-–—]\s*(?P<last>" + _FIG_NUM + r"))?(?!\d)"
+    r"(?P<more>(?:\s*(?:,|и)\s*" + _FIG_NUM + r"(?!\d|\.\d))*)" + _FIG_SUBS)
 # «(» рис.)» — ссылка на рисунок задачи с подписью «» задача N».
 TASK_FIG_REF_RE = re.compile(
-    r"\(\s*['\"‘’]?\s*(?:»|>>|►|▸|\\gg|\\triangleright)?\s*рис\.?\s*\)")
+    r"\(\s*['\"‘’`]{0,3}\s*(?:»|》|>>|►|▸|\\gg|\\triangleright)?\s*рис\.?\s*\)")
 
 HEADING_RE = re.compile(r"\\section\*?\{(?P<title>(?:[^{}]|\{[^{}]*\})*)\}")
 BARE_HEADING_RE = re.compile(
@@ -117,7 +120,7 @@ SOLUTION_SPLIT_RE = re.compile(
     r"|(?:(?<=\n)|(?<=[.?!)]\s)|(?<=\\\\\s))[ \t]*(?:РЕШЕНИЕ|ДОКАЗАТЕЛЬСТВО|Решение|Доказательство)\s*[:.]"
     r"|(?m:^[ \t]*(?:РЕШЕНИЕ|ДОКАЗАТЕЛЬСТВО)[ \t]*(?:\\\\)?[ \t]*$))")
 ANSWER_WORD_RE = re.compile(
-    r"(?m)^(?P<lead>[ \t]*)(?:Ответ|ОТВЕТ|OTBET|OmBem|Ombem|OmBеm|Omвem|Отвeт|Oтвет|ОmВеm|Om6em)[ \t]*:")
+    r"(?m)(?:^|(?<=[.!?]))(?P<lead>[ \t]*)(?:Ответ|ОТВЕТ|OTBET|OmBem|Ombem|OmBеm|Omвem|Отвeт|Oтвет|ОmВеm|Om6em)[ \t]*:")
 EXAMPLE_ANSWER_RE = re.compile(r"(?m)^[ \t]*Ответ\s*:\s*(?P<answer>[^\n]+)")
 EXAMPLE_END_RE = re.compile(
     r"(?m)^[ \t]*(?:Ответ\s*:[^\n]*|[^\n]*Что и требовалось доказать\.?)[ \t]*(?:\\\\)?[ \t]*$")
@@ -255,6 +258,8 @@ def paragraphs(text: str, edition: dict) -> list[Paragraph]:
 class Figures:
     by_number: dict[str, list[str]] = field(default_factory=dict)
     by_task: dict[int, list[str]] = field(default_factory=dict)
+    # Рисунок, на который задача ссылается без номера («в таблице»).
+    by_draft: dict[str, list[str]] = field(default_factory=dict)
     dropped: int = 0
 
 
@@ -323,6 +328,80 @@ def load_figure_repairs(text: str, path: Path = REPAIRS_PATH) -> list[dict]:
     return []
 
 
+def load_restructures(text: str, path: Path = REPAIRS_PATH) -> dict[str, dict]:
+    """Сверенные «пункты из подрисунков» (``subitems``) для этого TEX."""
+    if not path.exists():
+        return {}
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    spec = json.loads(path.read_text(encoding="utf-8"))
+    for edition in spec.get("editions", []):
+        if edition.get("source_sha256") == digest:
+            return dict(edition.get("subitems", {}))
+    return {}
+
+
+def load_text_fixes(text: str, path: Path = REPAIRS_PATH) -> list[dict]:
+    """Сверенные точечные правки готового текста карточки (``fixes``)."""
+    if not path.exists():
+        return []
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    spec = json.loads(path.read_text(encoding="utf-8"))
+    for edition in spec.get("editions", []):
+        if edition.get("source_sha256") == digest:
+            return list(edition.get("fixes", []))
+    return []
+
+
+def apply_text_fix(task: TaskDraft, fix: dict) -> None:
+    """«old» → «new» в одном поле карточки; «old» обязан встречаться ровно раз.
+
+    Поле — ``text_latex``, ``author_solution_latex``, ``author_answer_latex``
+    или ``subitem:<метка>``. Правка применяется к тексту после всей
+    нормализации профиля, поэтому совпадает с тем, что видно на сверке.
+    """
+    field = fix["field"]
+    if field.startswith("subitem:"):
+        label = field.split(":", 1)[1]
+        target = next((item for item in task.subitems if item.label == label), None)
+        if target is None:
+            raise ValueError(f"{task.external_id}: нет пункта {label}")
+        obj, attr = target, "text_latex"
+    else:
+        obj, attr = task, field
+    value = getattr(obj, attr) or ""
+    if fix["old"] == "":
+        # Пустое поле, которое заполняет правка (ответ книги, потерянный OCR).
+        if value:
+            raise ValueError(f"{task.external_id} {field}: поле не пустое")
+        setattr(obj, attr, fix["new"])
+        return
+    count = value.count(fix["old"])
+    if count != 1:
+        raise ValueError(f"{task.external_id} {field}: «{fix['old'][:40]}» встречается {count} раз")
+    setattr(obj, attr, value.replace(fix["old"], fix["new"], 1))
+
+
+def restructure(task: TaskDraft, spec: dict) -> None:
+    """Задача, где пункты — подрисунки «а) … м)»: шапка без ссылок на
+    рисунок, у каждого пункта свой подрисунок и своя пометка.
+
+    ``pics`` — номера рисунков задачи по порядку (1 — первый поставленный).
+    """
+    fields = [task.text_latex] + [item.text_latex for item in task.subitems]
+    paths = list(dict.fromkeys(re.findall(r"\\taskpic\{([^{}]+)\}", " ".join(fields))))
+    used = {n for item in spec["items"] for n in item.get("pics", [])} | set(spec.get("pics", []))
+    if used and (min(used) < 1 or max(used) > len(paths)):
+        raise ValueError(f"{task.external_id}: в правке пунктов рисунки {sorted(used)}, "
+                         f"а у задачи их {len(paths)}")
+    stem_pics = " ".join(rf"\taskpic{{{paths[n - 1]}}}" for n in spec.get("pics", []))
+    task.text_latex = " ".join(part for part in (spec["text"], stem_pics) if part)
+    task.subitems = []
+    for item in spec["items"]:
+        pics = " ".join(rf"\taskpic{{{paths[n - 1]}}}" for n in item.get("pics", []))
+        text = " ".join(part for part in (item.get("text", ""), pics) if part)
+        task.subitems.append(SubitemDraft(item["label"], text))
+
+
 def apply_figure_repairs(paragraph: Paragraph, figures: Figures,
                          repairs: list[dict], grade: int) -> None:
     """Подменяет рисунки задачи или «Рис. N» сверенными частями полос.
@@ -334,7 +413,10 @@ def apply_figure_repairs(paragraph: Paragraph, figures: Figures,
     by_number: dict[str, list[str]] = {}
     for repair in repairs:
         name = derived_figure(repair)
-        if "task" in repair and repair.get("paragraph") == paragraph.key:
+        if "draft" in repair:
+            if repair["draft"].split(".")[0] == paragraph.key:
+                figures.by_draft.setdefault(repair["draft"], []).append(name)
+        elif "task" in repair and repair.get("paragraph") == paragraph.key:
             by_task.setdefault(int(repair["task"]), []).append(name)
         elif "figure" in repair and (
                 repair.get("paragraph") == paragraph.key
@@ -630,6 +712,20 @@ def cut_at_paragraph_end(body: str) -> str:
     return body
 
 
+def _leading_table(text: str) -> str:
+    """Таблица в начале текста целиком, с вложенными ``tabular``."""
+    start = re.match(r"(?:\\begin\{center\}\s*)?\\begin\{tabular\}", text)
+    if not start:
+        return ""
+    depth = 0
+    for edge in re.finditer(r"\\(begin|end)\{tabular\}", text):
+        depth += 1 if edge.group(1) == "begin" else -1
+        if depth == 0:
+            tail = re.match(r"\s*\\end\{center\}", text[edge.end():])
+            return text[:edge.end() + (tail.end() if tail else 0)]
+    return ""
+
+
 _LIST_EDGE_RE = re.compile(r"\\(?P<edge>begin|end)\{(?:itemize|enumerate)\}")
 
 
@@ -662,6 +758,10 @@ def cut_at_list_end(body: str) -> str:
             body = before + "\n" + body[start + len("\\item[]"):]
             pos = len(before)
             continue
+        table = _leading_table(lead)
+        if table and re.search(r"(?i)таблиц", before):
+            # «Заполните таблицу…» — таблица стоит сразу за списком.
+            return before + "\n" + table
         if re.search(r"[-,а-яё]$", before) and re.match(r"[а-яё]", lead):
             body = before + "\n" + lead
             pos = len(before)
@@ -694,8 +794,34 @@ def _fig_ref_rest(rest: str) -> str:
     return f", \\({rest}\\)"
 
 
+_LOOKALIKE_LEAD = str.maketrans({"B": "В", "C": "С", "K": "К"})
+
+
+def _flatten_nested_tabular(body: str) -> str:
+    """Таблица в ячейке таблицы («Прямое утверждение | Обратное…») — строки
+    внутренней таблицы через пробел: KaTeX не знает вложенный ``tabular``."""
+    inner = re.compile(r"\\begin\{tabular\}(?:\[[^\]]*\])?\{[^{}]*\}(?P<body>(?:(?!\\begin\{tabular\}).)*?)\\end\{tabular\}", re.S)
+    while True:
+        found = [m for m in inner.finditer(body)
+                 if body[:m.start()].count("\\begin{tabular}") > body[:m.start()].count("\\end{tabular}")]
+        if not found:
+            return body
+        m = found[0]
+        # «&» внутренней таблицы — разделитель «|», иначе у внешней строки
+        # окажется больше столбцов, чем в её преамбуле.
+        rows = [re.sub(r"\s*(?<!\\)&\s*", " | ", r.strip())
+                for r in re.split(r"\\\\", m.group("body").replace("\\hline", "")) if r.strip()]
+        body = body[:m.start()] + " ".join(rows) + body[m.end():]
+
+
 def clean_body(body: str) -> str:
     body = remove_group_commands(body, FOOTNOTE_RE)
+    body = _flatten_nested_tabular(body)
+    # «( » рис.)» внутри выносной формулы: «\\text { ( } \\text { » рис.) }».
+    body = re.sub(r"\\text\s*\{\s*\(\s*\}\s*\\text\s*\{\s*[»》]\s*рис\.?\)\s*\}", "", body)
+    # «км», «мм», «см» в формуле OCR разрывает пробелом: «\\(0,02 к м^{2}\\)».
+    body = re.sub(r"(?<=\d)\s*([кмсд])\s+м(?=\s*\^|\s*\\\)|[^а-яё])", r" \1м", body)
+    body = re.sub(r"\\mathrm\{\s*KM\s*\}", r"\\mathrm{км}", body)
     # «Рис. 6.18» и «» задача 23» строкой или в конце строки — подписи
     # рисунков, оставшиеся без figure.
     body = re.sub(r"(?m)(?:^|(?<=[.?!)]))[ \t]*Рис\.\s*\d{1,2}(?:\.\d{1,3})?[ \t]*(?:\\\\)?[ \t]*$", "", body)
@@ -728,8 +854,22 @@ def clean_body(body: str) -> str:
     body = re.sub(r"\\\(\s*([abBe])\s*\\\)\s*\)", lambda m: _LATIN_LABEL[m.group(1)] + ")", body)
     # «\left(\mathrm{~m}^{2}\right)» — скобки вокруг единицы: иначе
     # нормализация единиц разорвёт \left и \right по разным формулам.
-    body = re.sub(r"\\left\(\s*(\\mathrm\{[^{}]*\}(?:\^\{?\d\}?)?)\s*\\right\)", r"(\1)", body)
-    body = ANSWER_WORD_RE.sub(r"\g<lead>Ответ:", body)
+    def unit_out(match: re.Match) -> str:
+        unit = re.sub(r"[~\s]", "", match.group("unit")).replace("m", "м").replace("c", "с").replace("k", "к")
+        power = f"$^{{{match.group('power')}}}$" if match.group("power") else ""
+        return f"\\) ({unit}{power}) \\("
+    unit_paren = r"\\left\(\s*\\mathrm\{(?P<unit>[^{}]*)\}(?:\^\{?(?P<power>\d)\}?)?\s*\\right\)"
+
+    def unit_text(match: re.Match) -> str:
+        unit = re.sub(r"[~\s]", "", match.group("unit")).replace("m", "м").replace("c", "с").replace("k", "к")
+        power = f"^{{{match.group('power')}}}" if match.group("power") else ""
+        return f"\\;(\\text{{{unit}}}{power})"
+    # В выносной формуле единица остаётся в ней текстом.
+    body = re.sub(r"\\\[.*?\\\]", lambda m: re.sub(unit_paren, unit_text, m.group(0)), body, flags=re.S)
+    # Единица в скобках выносится из формулы: «7,5 (м$^{2}$)».
+    body = re.sub(r"\\left\(\s*\\mathrm\{(?P<unit>[^{}]*)\}(?:\^\{?(?P<power>\d)\}?)?\s*\\right\)", unit_out, body)
+    # «… \\(n=4,5,6\\). OTBET: 4, 5, 6.» — ответ всегда с новой строки.
+    body = ANSWER_WORD_RE.sub("\nОтвет:", body)
     body = HEADING_RE.sub(lambda m: "\n" + clean(m.group("title")) + "\n", body)
     body = re.sub(r"\\(?:begin|end)\{(?:center|figure)\}", "\n", body)
     body = re.sub(r"\n{3,}", "\n\n", body)
@@ -749,6 +889,10 @@ def split_example(body: str) -> tuple[str, str, str]:
     else:
         return body, "", ""
     solution = re.sub(r"^\s*(?:\\\\)?\s*", "", solution)
+    # «ДЛЯ ТЕХ, КТО ХОЧЕТ ЗНАТЬ БОЛЬШЕ», «ЗАДАЧИ» — начало следующего раздела.
+    tail = re.search(r"(?m)^[ \t]*(?:\$?\d*\$?\s*)?(?:ДЛЯ ТЕХ, КТО ХОЧЕТ ЗНАТЬ БОЛЬШЕ|РЕШИТЕ ЗАДАЧИ|ЗАДАЧИ)[ \t]*$", solution)
+    if tail:
+        solution = solution[:tail.start()]
     # Разбор кончается первым «Ответ:», а без ответа — первым «Что и
     # требовалось доказать»: дальше в 8–9 классах идёт теория параграфа.
     end = EXAMPLE_ANSWER_RE.search(solution) or EXAMPLE_END_RE.search(solution)
@@ -829,7 +973,7 @@ def attach_figures(task: TaskDraft, item: Item, figures: Figures,
                 return match.group(0)
             subs = _sub_labels(match.group("subs"))
             text = tokens(found)
-            return match.group("word") + (" " + text if text else "") + (f" (рис. {subs})" if subs else "")
+            return match.group("word") + (" " + text if text else "") + (f" {subs}" if subs else "")
 
         value = PAREN_FIG_REF_RE.sub(paren, value or "")
         # Повторная ссылка на уже поставленный рисунок исчезает целиком —
@@ -859,6 +1003,9 @@ def attach_figures(task: TaskDraft, item: Item, figures: Figures,
         setattr(task, attr, rewrite(own_ref(getattr(task, attr))))
     # Ссылка в скобках без рисунка проверяется дважды (в скобках и в тексте).
     missing[:] = list(dict.fromkeys(missing))
+    extra = figures.by_draft.get(task.external_id, [])
+    if extra:
+        task.text_latex = task.text_latex.rstrip() + " " + tokens(extra)
     rest = [path for path in own if path not in placed]
     if rest:
         task.text_latex = task.text_latex.rstrip() + "\n" + tokens(rest)
@@ -866,6 +1013,66 @@ def attach_figures(task: TaskDraft, item: Item, figures: Figures,
             [task.text_latex] + [s.text_latex for s in task.subitems])) and not own:
         missing.append(f"задача {item.number}")
     return missing
+
+
+_INLINE_LABEL_RE = re.compile(r"(?<![\w(\\\u2060])(?P<label>[а-и])\)(?=\s)")
+_LABEL_ORDER = "абвгдежзи"
+
+
+def split_inline_labels(body: str) -> str:
+    """«Докажите, что а) …; б) …» — пункты посреди фразы: с новой строки.
+
+    Общий разбор делит пункты, только когда метка стоит в начале строки или
+    после «:»/«;». Здесь метки идут подряд с «а)» вне формул — значит, это
+    пункты; общая фраза после последнего уйдёт в шапку (lift_common_tail).
+    """
+    spans = [(m.start(), m.end()) for m in MATH_SPAN_RE.finditer(body)]
+    labels = [m for m in _INLINE_LABEL_RE.finditer(body)
+              if not any(a <= m.start() < b for a, b in spans)]
+    chain = []
+    for match in labels:
+        if match.group("label") == _LABEL_ORDER[len(chain)]:
+            chain.append(match)
+        if len(chain) == len(_LABEL_ORDER):
+            break
+    if len(chain) < 2 or all(body[:m.start()].rstrip(" \t").endswith(("\n", ":", ";")) or
+                             not body[:m.start()].strip() for m in chain):
+        return body
+    out = []
+    pos = 0
+    for match in chain:
+        out.append(body[pos:match.start()].rstrip(" \t"))
+        out.append("\n")
+        pos = match.start()
+    out.append(body[pos:])
+    return "".join(out)
+
+
+def lift_last_item_tail(task: TaskDraft) -> bool:
+    """Общее к пунктам из последнего пункта — в шапку.
+
+    «в) 120°. Найдите длину общей хорды…» — фраза с заглавной после точки.
+    lift_common_tail Потоскуева этого не делает, если пункты — числа.
+    """
+    if len(task.subitems) < 2:
+        return False
+    last = task.subitems[-1]
+    changed = False
+    def fragment(value: str) -> bool:
+        head = MATH_SPAN_RE.sub("x", value or "").lstrip()[:1]
+        return head.islower() or head.isdigit()
+    if not all(fragment(item.text_latex) for item in task.subitems):
+        return changed
+    plain = MATH_SPAN_RE.sub(lambda m: "x" * len(m.group(0)), last.text_latex)
+    tail = re.search(r"(?<=[.?!])\s+(?=[А-ЯЁ][^\n]{8,}$)", plain)
+    if tail and last.text_latex[:tail.start()].strip():
+        sentence = last.text_latex[tail.end():].strip()
+        last.text_latex = strip_subitem_punct(last.text_latex[:tail.start()].strip())
+        if not re.search(r"[.?!]\)?$", sentence):
+            sentence += "."
+        task.text_latex = task.text_latex.rstrip() + "\n" + sentence
+        changed = True
+    return changed
 
 
 def build_draft(item: Item, paragraph: Paragraph, diagnostics: dict) -> TaskDraft:
@@ -880,9 +1087,16 @@ def build_draft(item: Item, paragraph: Paragraph, diagnostics: dict) -> TaskDraf
             # Хвост после «Ответ:» — обычно теория; начало — для сверки.
             diagnostics["examples_trimmed_tail"].append(
                 f"{external_id}: {len(trimmed)} зн., «{trimmed[:80]}…»")
-    body = prepare_text(strip_lead(body))
+    body = split_inline_labels(prepare_text(strip_lead(body)))
     task = task_from_block(Marker(0, 0, external_id), body, path)
     task.stars = 0
+    # «(» рис.)» в конце последнего пункта — рисунок всей задачи, не пункта.
+    if task.subitems:
+        last = task.subitems[-1]
+        marker = re.search(r"\s*" + TASK_FIG_REF_RE.pattern + r"\s*$", last.text_latex)
+        if marker:
+            last.text_latex = last.text_latex[:marker.start()].rstrip()
+            task.text_latex = task.text_latex.rstrip() + " " + marker.group(0).strip()
     # «а)» без текста в конце — подпись подрисунка из сетки рисунков.
     task.text_latex = re.sub(r"\n[ \t]*[а-г]\)[ \t]*$", "", task.text_latex)
     task.source_number = external_id
@@ -908,6 +1122,144 @@ def build_draft(item: Item, paragraph: Paragraph, diagnostics: dict) -> TaskDraf
 
 
 # --------------------------------------------------------------------------
+# Канон оформления (docs/TEXTBOOK_PARSE_QA.md, § 5)
+# --------------------------------------------------------------------------
+
+_UNITS = r"(?:мм|см|дм|км|м|га|кг|мг|г|т|ч|мин|с|л|мл|руб|р|Н)"
+# «\(2,5 м^{2}\)», «\(AB=2 см\)» — единица внутри формулы.
+_MATH_UNIT_RE = re.compile(
+    r"(?P<num>\d+(?:[.,]\d+)?)\s*(?:\\mathrm\{\s*~?\s*)?(?P<unit>" + _UNITS + r")"
+    r"(?:\s*\})?(?P<power>\s*\^\{?[23]\}?)?(?![а-яёА-ЯЁA-Za-z])")
+# «5см», «$5$см» — единица вплотную к числу.
+_GLUED_UNIT_RE = re.compile(r"(?<=[\d$])(?=" + _UNITS + r"(?![а-яё]))")
+
+
+def _split_math_units(value: str) -> str:
+    """Число — математика, единица — текст: «\\(2,5 м^{2}\\)» → «$2,5$ м$^{2}$»."""
+    def fix(match: re.Match) -> str:
+        raw = match.group(0)
+        if raw.startswith(("\\[", "$$")) or not re.search("[а-яё]", raw, re.I):
+            return raw
+        inner = raw[2:-2] if raw.startswith("\\(") else raw[1:-1]
+        if "\\text" in inner:
+            return raw
+        parts: list[str] = []
+        pos = 0
+        for unit in _MATH_UNIT_RE.finditer(inner):
+            math = inner[pos:unit.end("num")].strip()
+            if math:
+                parts.append((" " if parts else "") + f"${math}$")
+            power = re.sub(r"[\s{}^]", "", unit.group("power") or "")
+            parts.append(" " + unit.group("unit") + (f"$^{{{power}}}$" if power else ""))
+            pos = unit.end()
+        if not parts:
+            return raw
+        tail = inner[pos:].strip()
+        if tail:
+            parts.append(f" ${tail}$")
+        return "".join(parts).strip()
+    return MATH_SPAN_RE.sub(fix, value or "")
+
+
+def _tidy_dollars(value: str) -> str:
+    """Пустые «$ $» и пробелы у краёв формул после разреза."""
+    value = re.sub(r"\$\s*\$", " ", value)
+    value = re.sub(r"\$\s+([^$]*?)\s*\$", lambda m: "$" + m.group(1).strip() + "$", value)
+    return re.sub(r"[ \t]{2,}", " ", value).strip()
+
+
+def _protect_decimal_commas(value: str) -> str:
+    """«$11,25$» → «$11{,}25$»: ординарная запятая не разделитель списка."""
+    def fix(match: re.Match) -> str:
+        return re.sub(r"(?<=\d),(?=\d)", "{,}", match.group(0))
+    return MATH_SPAN_RE.sub(fix, value or "")
+
+
+_ROMAN_RE = re.compile(r"^M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$")
+# Буквы частей рисунка в формуле после картинки: «\\taskpic{1}, \\(a-i\\)».
+_PART_RANGE_MATH_RE = re.compile(
+    r"(?P<pics>\\taskpic\{[^{}]+\}(?:\s*\\taskpic\{[^{}]+\})*)\s*,\s*\\\(\s*(?P<a>[a-zа-я])\s*-\s*(?P<b>[a-zа-я])\s*\\\)")
+_PART_SHAPES = str.maketrans("abeBdciu", "абевдсии")
+
+
+def _prose(value: str, fix) -> str:
+    """Применяет ``fix`` только к тексту вне формул."""
+    out = []
+    pos = 0
+    for match in MATH_SPAN_RE.finditer(value):
+        out.append(fix(value[pos:match.start()]))
+        out.append(match.group(0))
+        pos = match.end()
+    out.append(fix(value[pos:]))
+    return "".join(out)
+
+
+def _wrap_point_names(chunk: str) -> str:
+    """«треугольника CKE», «угла CKD» — обозначения точек в «$…$»."""
+    def wrap(match: re.Match) -> str:
+        word = match.group(0)
+        # «XIX веке», «XII в.» — век римскими цифрами, «CD» — отрезок.
+        if _ROMAN_RE.match(word) and re.match(r"\s+(?:век|в\.|столет)", chunk[match.end():]):
+            return word
+        return "$" + word + "$"
+    chunk = re.sub(r"(?<![\w\\{$])[A-Z]{2,4}(?![\w}$])", wrap, chunk)
+    # «C лежит на отрезке» — точка в начале фразы (предлоги уже кириллицей).
+    chunk = re.sub(r"(?m)(?:(?<=^)|(?<=[.!?] ))([A-Z])(?= [а-яё])", r"$\1$", chunk)
+    # «Буква H», «точкой P» — одиночная латинская буква после слова.
+    return re.sub(r"(?<=[а-яё] )([A-Z])(?=[\s.,;:!?)]|$)", r"$\1$", chunk)
+
+
+def canon_field(value: str) -> str:
+    if not value:
+        return value
+    # «B четырёхугольнике», «C помощью» — латинский двойник предлога в начале
+    # фразы; перед глаголом («C лежит…», «K находится…») это точка.
+    value = re.sub(r"(?m)(?:(?<=^)|(?<=[.!?:] ))([BCK])(?= [а-яё]{2,})(?! [а-яё]*(?:ит|ет|ют|ут|ат|ят|ся|ен|ена|ено|ны|на|но)\b)",
+                   lambda m: m.group(1).translate(_LOOKALIKE_LEAD), value)
+    # Перенос строки посреди фразы: «Пусть эта\\ прямая», «специ-\\ альной».
+    value = re.sub(r"(?<=[а-яё])-\s*\\\\\s*\n?\s*(?=[а-яё])", "", value)
+    value = re.sub(r"(?<=[а-яё,)])\s*\\\\\s*\n\s*(?=[а-яё])", " ", value)
+    # Заголовки внутри разбора — словами: «РЕШЕНИЕ» → «Решение.».
+    value = re.sub(r"(?m)^[ \t]*(РЕШЕНИЕ|ДОКАЗАТЕЛЬСТВО)[ \t]*:?[ \t]*$",
+                   lambda m: m.group(1).capitalize() + ".", value)
+    value = _PART_RANGE_MATH_RE.sub(
+        lambda m: m.group("pics") + " (рис. " + m.group("a").translate(_PART_SHAPES)
+        + "–" + m.group("b").translate(_PART_SHAPES) + ")", value)
+    value = _prose(value, _wrap_point_names)
+    # «( \\(A C\\) )», «( \\(2 ;-3\\) )» — скобки OCR вынес из формулы.
+    value = re.sub(r"\(\s*\\\(([^()]*?)\\\)\s*\)", r"\\((\1)\\)", value)
+    # «(рис. а, б), \\(в\\)» — последняя буква части ушла в формулу.
+    value = re.sub(r"\(рис\. ([а-з](?:, [а-з])*)\),\s*\\\(\s*([а-з])\s*\\\)", r"(рис. \1, \2)", value)
+    value = re.sub(r"(?<=[)$])[ \t]+(?=[.,;:)](?:\s|$|[)»]))", "", value)
+    value = re.sub(r"(?<=\\\))[ \t]+(?=[.,;:)](?:\s|$))", "", value)
+    # Пустые формулы и формулы из одного знака препинания после разреза.
+    value = re.sub(r"\\\(\s*\\\)|\$\s+\$", "", value)
+    value = re.sub(r"\s*\\\(\s*([.,;:])\s*\\\)", r"\1", value)
+    # «\\mathbf{4 , 6 4 к м}» — жирный ответ OCR: без \\mathbf, иначе
+    # разрез единицы рвёт скобки.
+    value = re.sub(r"\\mathbf\{([^{}]*[а-яё][^{}]*)\}", r"\1", value)
+    value = _split_math_units(value)
+    value = _prose(value, lambda chunk: _GLUED_UNIT_RE.sub(" ", chunk))
+    value = wrap_answer_numbers(value)
+    # «(3, 4, 6)» — последнее число перед скобкой wrap_answer_numbers не
+    # трогает (боится метки «6)»); в перечислении после запятой это число.
+    value = _prose(value, lambda chunk: re.sub(r"(?<=, )(\d+(?:[.,]\d+)?)(?=\))", r"$\1$", chunk))
+    value = _protect_decimal_commas(value)
+    return _GLUED_UNIT_RE.sub(" ", value)
+
+
+def canon_fields(task: TaskDraft) -> None:
+    """Голые числа — в «$…$», запятая «{,}», единицы текстом через пробел."""
+    task.text_latex = canon_field(task.text_latex)
+    task.author_solution_latex = canon_field(task.author_solution_latex)
+    task.author_answer_latex = canon_field(task.author_answer_latex)
+    for item in task.subitems:
+        item.text_latex = canon_field(item.text_latex)
+        item.author_solution_latex = canon_field(item.author_solution_latex)
+        item.author_answer_latex = canon_field(item.author_answer_latex)
+
+
+# --------------------------------------------------------------------------
 # Разбор целиком
 # --------------------------------------------------------------------------
 
@@ -916,6 +1268,10 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
     text = text.replace("\r\n", "\n")
     edition = edition or load_edition(text)
     figure_repairs = load_figure_repairs(text)
+    restructures = load_restructures(text)
+    text_fixes: dict[str, list[dict]] = {}
+    for fix in load_text_fixes(text):
+        text_fixes.setdefault(fix["id"], []).append(fix)
     text, source_repairs = apply_source_repairs(text, REPAIRS_PATH)
     text, skipped = apply_skips(text, edition)
     grade = edition["grade"]
@@ -931,6 +1287,8 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
         "figures_by_task": 0,
         "figures_dropped": 0,
         "figure_repairs": len(figure_repairs),
+        "restructured": [],
+        "text_fixes_applied": 0,
         "figures_missing_by_task": {},
         "figures_unreferenced": [],
         "examples_without_solution": [],
@@ -955,6 +1313,7 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
         zones.append((paragraph, zone, figures))
 
     tasks: list[TaskDraft] = []
+    seen_ids: set[str] = set()
     for paragraph, zone, figures in zones:
         events = scan_events(zone, grade)
         items = cut_bodies(zone, classify_items(zone, events, paragraph, grade, diagnostics))
@@ -977,12 +1336,20 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
             if missing:
                 task.warnings.append(
                     "Не найден рисунок по подписи: " + ", ".join(missing))
-            if lift_common_tail(task):
+            seen_ids.add(task.external_id)
+            if task.external_id in restructures:
+                restructure(task, restructures[task.external_id])
+                diagnostics["restructured"].append(task.external_id)
+            if lift_common_tail(task) or lift_last_item_tail(task):
                 diagnostics["lifted_tails"].append(task.external_id)
             if distribute_labeled_answer(task):
                 diagnostics["labeled_answers_distributed"].append(task.external_id)
             _finish_fields(task)
+            canon_fields(task)
             finalize_draft_images(task)
+            for fix in text_fixes.get(task.external_id, []):
+                apply_text_fix(task, fix)
+                diagnostics["text_fixes_applied"] += 1
             tasks.append(task)
         unused_task_figures = sorted(
             n for n in figures.by_task
@@ -990,6 +1357,12 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
         if unused_task_figures:
             diagnostics["figures_unreferenced"].extend(
                 f"{paragraph.key}: задача {n}" for n in unused_task_figures)
+    # Правка, не нашедшая задачу, — ошибка: иначе после смены разбора она
+    # молча перестала бы работать.
+    drafts = {repair["draft"] for repair in figure_repairs if "draft" in repair}
+    orphans = sorted((set(restructures) | set(text_fixes) | drafts) - seen_ids)
+    if orphans:
+        raise ValueError("Правки subitems/fixes/draft для отсутствующих задач: " + ", ".join(orphans))
     diagnostics["task_marker_occurrences"] = len(tasks)
     diagnostics["unique_tasks"] = len(tasks)
     diagnostics["duplicate_task_ids"] = [
