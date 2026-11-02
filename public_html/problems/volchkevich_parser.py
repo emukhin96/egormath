@@ -56,8 +56,9 @@ KIND_TITLES = {
 }
 KIND_PREFIX = {KIND_EXERCISE: "У", KIND_EXAMPLE: "П", KIND_TASK: ""}
 
+# ``table`` — сетка подрисунков «а) … е)» под общей подписью «Рис. 4».
 FIGURE_RE = re.compile(
-    r"\\begin\{figure\}.*?\\end\{figure\}(?:\s*\n[ \t]*Рис\.\s*(?P<after>\d{1,2}(?:\.\d{1,3})?)[ \t]*(?=\n))?",
+    r"\\begin\{(?P<env>figure|table)\}.*?\\end\{(?P=env)\}(?:\s*\n[ \t]*Рис\.\s*(?P<after>\d{1,2}(?:\.\d{1,3})?)[ \t]*(?=\n))?",
     re.S)
 GRAPHICS_RE = re.compile(
     r"\\includegraphics\s*(?:\[[^\]]*\])?\s*\{(?P<path>[^{}\s\\]+)\}")
@@ -681,6 +682,13 @@ def clean_body(body: str) -> str:
     # Сноска «*» после вопроса — пометка сноски на поле страницы.
     body = re.sub(r"(?<=[.?!])\*(?=\s|$)", "", body)
     body = re.sub(r"\\setcounter\{[^{}]*\}\{\d+\}", "", body)
+    # ``displayquote`` — врезка на полях (история, справка), не задание.
+    body = re.sub(r"\\begin\{displayquote\}.*?\\end\{displayquote\}", "\n", body, flags=re.S)
+    # «рисунке \(2.21 a\)», «рис. \(4, a-e\)» — номер рисунка ушёл в формулу.
+    body = re.sub(
+        r"(?P<word>[Рр]ис(?:ун[а-я]*)?\.?)\s*\\\(\s*(?P<num>\d{1,2}(?:\.\d{1,3})?)\s*,?\s*(?P<rest>[^()]*?)\s*\\\)",
+        lambda m: f"{m.group('word')} {m.group('num')}" + (f", \\({m.group('rest')}\\)" if m.group("rest") else ""),
+        body)
     # Звёзды уровня у вопросов внутри задачи («★★ Найдите …») и след полой
     # звезды OCR.
     body = re.sub(r"(?m)(^|\\item\[\]|\\\\)[ \t]*(?:[★☆][ \t]*)+(?:[Д山એ][ \t]+)?", r"\1", body)
