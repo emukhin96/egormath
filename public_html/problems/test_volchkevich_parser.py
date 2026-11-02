@@ -284,6 +284,23 @@ class VolchkevichCanonTests(SimpleTestCase):
                          r"на рисунках \taskpic{a.jpg} (рис. а–и).")
         self.assertEqual(canon_field("Пусть эта\\\\\nпрямая"), "Пусть эта прямая")
 
+    def test_point_names_versus_prepositions_and_roman(self):
+        from .volchkevich_parser import canon_field
+        self.assertEqual(canon_field("C лежит на отрезке $AB$."), "$C$ лежит на отрезке $AB$.")
+        self.assertEqual(canon_field("K находится вне круга."), "$K$ находится вне круга.")
+        self.assertEqual(canon_field("C помощью линейки"), "С помощью линейки")
+        self.assertEqual(canon_field("основание трапеции CD и угол MDC"),
+                         "основание трапеции $CD$ и угол $MDC$")
+        self.assertEqual(canon_field("в XII в. и в XIX веке"), "в XII в. и в XIX веке")
+
+    def test_fix_for_missing_task_is_an_error(self):
+        from unittest import mock
+        from . import volchkevich_parser as parser
+        with mock.patch.object(parser, "load_text_fixes", return_value=[
+                {"id": "9.99", "field": "text_latex", "old": "a", "new": "b"}]):
+            with self.assertRaisesMessage(ValueError, "отсутствующих задач: 9.99"):
+                parser.parse_volchkevich(BOOK, EDITION)
+
     def test_restructure_and_text_fix(self):
         from .textbook_parser import TaskDraft
         from .volchkevich_parser import apply_text_fix, restructure

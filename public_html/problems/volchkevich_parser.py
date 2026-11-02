@@ -376,10 +376,6 @@ def apply_text_fix(task: TaskDraft, fix: dict) -> None:
         setattr(obj, attr, fix["new"])
         return
     count = value.count(fix["old"])
-    squeeze = lambda text: re.sub(r"\s+", "", text)
-    if count == 0 and fix["new"] and squeeze(fix["new"]) in squeeze(value):
-        # То же уже сделало общее правило профиля — правка лишняя.
-        return
     if count != 1:
         raise ValueError(f"{task.external_id} {field}: «{fix['old'][:40]}» встречается {count} раз")
     setattr(obj, attr, value.replace(fix["old"], fix["new"], 1))
@@ -1176,7 +1172,7 @@ def _protect_decimal_commas(value: str) -> str:
     return MATH_SPAN_RE.sub(fix, value or "")
 
 
-_ROMAN_RE = re.compile(r"^[IVXLCDM]+$")
+_ROMAN_RE = re.compile(r"^M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$")
 # Буквы частей рисунка в формуле после картинки: «\\taskpic{1}, \\(a-i\\)».
 _PART_RANGE_MATH_RE = re.compile(
     r"(?P<pics>\\taskpic\{[^{}]+\}(?:\s*\\taskpic\{[^{}]+\})*)\s*,\s*\\\(\s*(?P<a>[a-zа-я])\s*-\s*(?P<b>[a-zа-я])\s*\\\)")
@@ -1199,10 +1195,13 @@ def _wrap_point_names(chunk: str) -> str:
     """«треугольника CKE», «угла CKD» — обозначения точек в «$…$»."""
     def wrap(match: re.Match) -> str:
         word = match.group(0)
-        if _ROMAN_RE.match(word):
+        # «XIX веке», «XII в.» — век римскими цифрами, «CD» — отрезок.
+        if _ROMAN_RE.match(word) and re.match(r"\s+(?:век|в\.|столет)", chunk[match.end():]):
             return word
         return "$" + word + "$"
     chunk = re.sub(r"(?<![\w\\{$])[A-Z]{2,4}(?![\w}$])", wrap, chunk)
+    # «C лежит на отрезке» — точка в начале фразы (предлоги уже кириллицей).
+    chunk = re.sub(r"(?m)(?:(?<=^)|(?<=[.!?] ))([A-Z])(?= [а-яё])", r"$\1$", chunk)
     # «Буква H», «точкой P» — одиночная латинская буква после слова.
     return re.sub(r"(?<=[а-яё] )([A-Z])(?=[\s.,;:!?)]|$)", r"$\1$", chunk)
 
@@ -1211,8 +1210,8 @@ def canon_field(value: str) -> str:
     if not value:
         return value
     # «B четырёхугольнике», «C помощью» — латинский двойник предлога в начале
-    # фразы; «A и B» посреди фразы — обозначения точек, не трогаются.
-    value = re.sub(r"(?m)(?:(?<=^)|(?<=[.!?:] ))([BCK])(?= [а-яё]{2,})",
+    # фразы; перед глаголом («C лежит…», «K находится…») это точка.
+    value = re.sub(r"(?m)(?:(?<=^)|(?<=[.!?:] ))([BCK])(?= [а-яё]{2,})(?! [а-яё]*(?:ит|ет|ют|ут|ат|ят|ся|ен|ена|ено|ны|на|но)\b)",
                    lambda m: m.group(1).translate(_LOOKALIKE_LEAD), value)
     # Перенос строки посреди фразы: «Пусть эта\\ прямая», «специ-\\ альной».
     value = re.sub(r"(?<=[а-яё])-\s*\\\\\s*\n?\s*(?=[а-яё])", "", value)
@@ -1311,6 +1310,7 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
         zones.append((paragraph, zone, figures))
 
     tasks: list[TaskDraft] = []
+    seen_ids: set[str] = set()
     for paragraph, zone, figures in zones:
         events = scan_events(zone, grade)
         items = cut_bodies(zone, classify_items(zone, events, paragraph, grade, diagnostics))
@@ -1333,6 +1333,7 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
             if missing:
                 task.warnings.append(
                     "Не найден рисунок по подписи: " + ", ".join(missing))
+            seen_ids.add(task.external_id)
             if task.external_id in restructures:
                 restructure(task, restructures[task.external_id])
                 diagnostics["restructured"].append(task.external_id)
@@ -1353,6 +1354,11 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
         if unused_task_figures:
             diagnostics["figures_unreferenced"].extend(
                 f"{paragraph.key}: задача {n}" for n in unused_task_figures)
+    # Правка, не нашедшая задачу, — ошибка: иначе после смены разбора она
+    # молча перестала бы работать.
+    orphans = sorted((set(restructures) | set(text_fixes)) - seen_ids)
+    if orphans:
+        raise ValueError("Правки subitems/fixes для отсутствующих задач: " + ", ".join(orphans))
     diagnostics["task_marker_occurrences"] = len(tasks)
     diagnostics["unique_tasks"] = len(tasks)
     diagnostics["duplicate_task_ids"] = [
