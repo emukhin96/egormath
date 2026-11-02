@@ -719,7 +719,7 @@ def clean_body(body: str) -> str:
         body)
     # «(рис. 16, а, б, в)» — «в)» не метка пункта: скобка защищается
     # невидимым знаком, его убирает _finish_fields.
-    body = re.sub(r"(\([Рр]ис[а-я]*\.?\s*\d[^()\n]{0,30}?[а-зa-e])\)", "\\1" + _LABEL_GUARD + ")", body)
+    body = re.sub(r"(\((?:см\.\s*)?[Рр]ис[а-я]*\.?\s*\d[^()\n]{0,30}?[а-зa-e])\)", "\\1" + _LABEL_GUARD + ")", body)
     # Звёзды уровня у вопросов внутри задачи («★★ Найдите …») и след полой
     # звезды OCR.
     body = re.sub(r"(?m)(^|\\item\[\]|\\\\)[ \t]*(?:[★☆][ \t]*)+(?:[Д山એ][ \t]+)?", r"\1", body)
@@ -850,10 +850,13 @@ def attach_figures(task: TaskDraft, item: Item, figures: Figures,
             return tokens(own) or "\x00"
         return TASK_FIG_REF_RE.sub(replace, value or "")
 
-    for attr in ("text_latex", "author_solution_latex", "author_answer_latex"):
-        setattr(task, attr, rewrite(own_ref(getattr(task, attr))))
+    # Сначала условие и его пункты: рисунок встаёт туда, где его видит
+    # ученик, а повторная ссылка исчезает уже в решении и ответе.
+    task.text_latex = rewrite(own_ref(task.text_latex))
     for sub in task.subitems:
         sub.text_latex = rewrite(own_ref(sub.text_latex))
+    for attr in ("author_solution_latex", "author_answer_latex"):
+        setattr(task, attr, rewrite(own_ref(getattr(task, attr))))
     # Ссылка в скобках без рисунка проверяется дважды (в скобках и в тексте).
     missing[:] = list(dict.fromkeys(missing))
     rest = [path for path in own if path not in placed]

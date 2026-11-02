@@ -169,6 +169,22 @@ class VolchkevichParserTests(SimpleTestCase):
         self.assertNotIn("»", task.text_latex)
         self.assertIn("Ещё раз.", task.text_latex)
 
+    def test_see_figure_with_part_letter_is_not_subitem(self):
+        tasks, _ = parse_volchkevich(BOOK.replace("углом (рис. 1).", "углом (см. рис. 1, в)."), EDITION)
+        task = {t.external_id: t for t in tasks}["2.1"]
+        self.assertEqual(task.subitems, [])
+        self.assertIn(r"углом \taskpic{1} (рис. в).", task.text_latex)
+
+    def test_figure_goes_to_subitem_before_solution(self):
+        book = BOOK.replace(
+            r"Найдите угол \(A K D\). ('» рис.)",
+            r"Найдите угол \(A K D\). ('» рис.)").replace(
+            "    \\item[б)] разность двух его углов равна 40°.",
+            "    \\item[б)] разность двух его углов равна 40° (рис. 31).")
+        tasks, _ = parse_volchkevich(book, EDITION)
+        task = {t.external_id: t for t in tasks}["1.3"]
+        self.assertIn(r"\taskpic{1}", task.subitems[1].text_latex)
+
     def test_running_header_is_not_text(self):
         self.assertNotIn("§1", self.tasks["1.П1"].text_latex)
 
