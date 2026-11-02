@@ -79,6 +79,10 @@ class SeriesArcTests(SimpleTestCase):
         self.assertEqualSeries(r'\frac{k\pi}{2}', r'\frac{\pi n}{2}', True)
         # Книжная запись дроби через пробел.
         self.assertEqualSeries(r'\frac{2}{5} n \pi', r'\frac{2\pi n}{5}', True)
+        # После (-1)^n — явное умножение или деление.
+        self.assertEqualSeries(r'(-1)^n*\pi/6+\pi n', r'\frac{\pi}{6}+2\pi n; \frac{5\pi}{6}+2\pi n', True)
+        self.assertEqualSeries(r'(-1)^n/2\cdot\arcsin\frac34+\frac{\pi n}{2}',
+                               r'\frac12\arcsin\frac34+\pi n; \frac{\pi}{2}-\frac12\arcsin\frac34+\pi n', True)
 
     def test_dependent_constants_same_record(self):
         # Корни a sin x + b cos x = c: две константы связаны, но одинаковая
@@ -88,6 +92,11 @@ class SeriesArcTests(SimpleTestCase):
 
     def test_rejects_unsupported(self):
         for value in (r'\arcsin 2+\pi n', r'\arcsin x+\pi n', r'2^n\pi', r'(-1)^n(-1)^n\pi',
+                      # Степени не разбираются: 9^{9^9} считалась бы без лимита времени.
+                      r'9^{9^{9}}+\pi n', r'2^{10^{10}}\pi+\pi n', r'\pi^{2}+\pi n',
+                      # Много корней в аргументе — minimal_polynomial большой степени.
+                      r'\operatorname{arctg}(\sqrt2+\sqrt3+\sqrt5+\sqrt7+\sqrt{11})+\pi n',
+                      r'\arcsin\frac{\sqrt[3]{2}}{2}+\pi n',
                       r'\sin 1+\pi n', r'\operatorname{arctg}(n)+\pi n', r'\log 2+\pi n'):
             with self.subTest(value=value):
                 self.assertIsNone(series.parse(value))
@@ -106,3 +115,14 @@ class SeriesArcTests(SimpleTestCase):
         self.assertEqual(check_slot(slot, r'\frac{\pi}{6}+2\pi n; \frac{5\pi}{6}+2\pi n'), 'ok')
         self.assertEqual(check_slot(slot, r'(-1)^{k}\frac{\pi}{6}+\pi k'), 'ok')
         self.assertEqual(check_slot(slot, r'\pm\frac{\pi}{6}+2\pi n'), 'wrong')
+
+    def test_slot_is_formula_field(self):
+        # π, дроби и (-1)^n набираются в поле формулы, а не в поле «число».
+        from django.template.loader import render_to_string
+        from .checks import render_fragments, slot_display
+        spec = parse_mask(r'$x =$ {{series: \frac{\pi}{4}+\pi n}}')
+        html = render_to_string('assignments/_mask.html', {
+            'fragments': render_fragments(spec, 'p1'), 'editable': True})
+        self.assertIn('<math-field data-mirror="p1_s1"', html)
+        self.assertNotIn('placeholder="число"', html)
+        self.assertEqual(slot_display(spec.slots[0], r'\frac{\pi}{4}+\pi n'), r'$\frac{\pi}{4}+\pi n$')

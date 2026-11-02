@@ -17,6 +17,9 @@ MAX_BRANCHES = 24
 # Серии проверяются в процессе приложения, без вычислителя: аргумент
 # arc-функции — короткое алгебраическое число, иначе «не удалось проверить».
 MAX_ARGUMENT_OPS = 24
+# Точное равенство констант — minimal_polynomial: только квадратные корни,
+# не больше MAX_RADICALS разных, чтобы степень многочлена оставалась малой.
+MAX_RADICALS = 4
 # Независимых знаков ± в одной записи серии (2³ ветви).
 MAX_PM = 3
 _PRECISION = 60
@@ -43,10 +46,18 @@ def _numeric(value):
     return N(value, _PRECISION)
 
 
+def _few_radicals(value):
+    from sympy import Pow, Rational
+    radicals = {p for p in value.atoms(Pow) if not p.exp.is_Integer}
+    return len(radicals) <= MAX_RADICALS and all(p.exp == Rational(1, 2) for p in radicals)
+
+
 def _is_zero(value):
     """Точный ноль алгебраического числа; None — не удалось решить."""
     if abs(_numeric(value)) > Fraction(1, 10 ** 40):
         return False
+    if not _few_radicals(value):
+        return None
     from sympy import minimal_polynomial, Symbol
     try:
         x = Symbol('x')
@@ -93,7 +104,8 @@ def _arctg(t):
 def _arc_term(func, arg):
     """Значение arc-функции → (рациональное кратное π, знак, u)."""
     from sympy import asin, acos, atan, sqrt, radsimp
-    if arg.free_symbols or arg.count_ops() > MAX_ARGUMENT_OPS or not arg.is_real:
+    if (arg.free_symbols or arg.count_ops() > MAX_ARGUMENT_OPS
+            or not _few_radicals(arg) or not arg.is_real):
         return None
     if func is atan:
         return _arctg(arg)
@@ -157,7 +169,7 @@ def _sign_choices(piece):
     rest = piece[match.end():]
     # Множитель (±1) перед следующим сомножителем — явное умножение:
     # разбор формул не умножает скобку на \frac без знака.
-    times = '' if re.match(r'\s*(?:\\cdot|[-+)}]|$)', rest) else '\\cdot '
+    times = '' if re.match(r'\s*(?:\\cdot|[-+)}*/]|$)', rest) else '\\cdot '
     for parity in (0, 1):
         value = '(1)' if (parity + shift) % 2 == 0 else '(-1)'
         out.append((piece[:match.start()] + value + times + rest, parity))
@@ -186,8 +198,10 @@ def _branch(choice, parity):
     from .expressions import parse_expr
     residual = _ARC_TOKEN_RE.sub('', choice)
     residual = _ALLOWED_RE.sub('', residual)
-    # Не разрешаем другие функции, степени параметра и произвольные переменные.
-    if re.search(r'[^0-9Qnkml{}()\[\]\s+*/.\-^]', residual):
+    # Не разрешаем другие функции, степени и произвольные переменные: (-1)^n
+    # уже раскрыто, а целая степень вроде 9^{9^9} считалась бы в процессе
+    # приложения без лимита времени.
+    if re.search(r'[^0-9Qnkml{}()\[\]\s+*/.\-]', residual):
         return None
     # π уже заменено на Q: «2k\\pi» — это «2kQ», буква k стоит вплотную к Q.
     choice = re.sub(r'(?<![A-PR-Za-z])[kml](?![A-PR-Za-z])', 'n', choice)

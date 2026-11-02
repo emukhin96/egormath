@@ -168,7 +168,7 @@ class Slot:
 
     @property
     def uses_math_field(self):
-        return self.kind in (SIMPLIFY, FACTOR, EQUATION, EXPRESSION, EXPRESSIONS)
+        return self.kind in (SIMPLIFY, FACTOR, EQUATION, EXPRESSION, EXPRESSIONS, SERIES)
 
     @property
     def format_hint(self):
