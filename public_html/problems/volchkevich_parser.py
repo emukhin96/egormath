@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .potoskuev_parser import (
-    _finish_fields, apply_source_repairs, distribute_labeled_answer,
+    _LABEL_GUARD, _finish_fields, apply_source_repairs, distribute_labeled_answer,
     lift_common_tail, prepare_text)
 from .textbook_parser import (
     Marker, TaskDraft, clean, finalize_draft_images, remove_group_commands,
@@ -76,6 +76,19 @@ FIG_REF_RE = re.compile(
     r"(?P<word>[Рр]ис(?:ун(?:ок|ке|ка|ки|ках|кам|ком|ками))?\.?)\s*"
     r"(?P<first>\d{1,2}(?:\.\d{1,3})?)"
     r"(?:\s*[-–—]\s*(?P<last>\d{1,2}(?:\.\d{1,3})?))?(?![\d])")
+_FIG_NUM = r"\d{1,2}(?:\.\d{1,3})?"
+# Буквы частей рисунка: «, а», «, а и б», «, а–в»; «, а показан» — союз.
+_FIG_SUBS = (r"(?P<subs>(?:\s*,?\s*[а-зa-e](?:\s*(?:[-–—]|и|,)\s*[а-зa-e])*"
+             r"(?=\u2060?\s*[).,;:]|\s*$|\s+(?:показан|изображ|дан|приведен|видн)))?)")
+# «(рис. 1.34)», «(см. рис. 14.18, а)», «(рисунок 6, а–в)».
+PAREN_FIG_REF_RE = re.compile(
+    r"\(\s*(?:см\.\s*)?[Рр]ис(?:ун(?:ок|ке|ки|ках))?\.?\s*(?P<first>" + _FIG_NUM + r")"
+    r"(?:\s*[-–—]\s*(?P<last>" + _FIG_NUM + r"))?"
+    r"(?P<more>(?:\s*,\s*" + _FIG_NUM + r"(?![\d.]))*)" + _FIG_SUBS + r"\s*\u2060?\)")
+# «на рисунке 1.28, а показан», «рисунках 4–18».
+INLINE_FIG_REF_RE = re.compile(
+    r"(?P<word>[Рр]ис(?:ун(?:ок|ке|ка|ки|ках|кам|ком|ками))?\.?)\s*"
+    r"(?P<first>" + _FIG_NUM + r")(?:\s*[-–—]\s*(?P<last>" + _FIG_NUM + r"))?(?!\d)" + _FIG_SUBS)
 # «(» рис.)» — ссылка на рисунок задачи с подписью «» задача N».
 TASK_FIG_REF_RE = re.compile(
     r"\(\s*['\"‘’]?\s*(?:»|>>|►|▸|\\gg|\\triangleright)?\s*рис\.?\s*\)")
@@ -671,6 +684,16 @@ def strip_lead(body: str) -> str:
 _LATIN_LABEL = {"a": "а", "b": "б", "B": "в", "e": "е"}
 
 
+def _fig_ref_rest(rest: str) -> str:
+    """«a-e», «a, b, b» после номера рисунка — буквы частей, не формула."""
+    if not rest:
+        return ""
+    if re.fullmatch(r"[a-eа-е\d\s,\-–—]+", rest):
+        letters = re.sub(r"\s*([,\-–—])\s*", lambda m: ", " if m.group(1) == "," else "–", rest.strip())
+        return ", " + letters.translate(str.maketrans("abcde", "абвгд"))
+    return f", \\({rest}\\)"
+
+
 def clean_body(body: str) -> str:
     body = remove_group_commands(body, FOOTNOTE_RE)
     # «Рис. 6.18» и «» задача 23» строкой или в конце строки — подписи
@@ -684,11 +707,19 @@ def clean_body(body: str) -> str:
     body = re.sub(r"\\setcounter\{[^{}]*\}\{\d+\}", "", body)
     # ``displayquote`` — врезка на полях (история, справка), не задание.
     body = re.sub(r"\\begin\{displayquote\}.*?\\end\{displayquote\}", "\n", body, flags=re.S)
+    # «(рис. 22, \(a-г\))» — буквы частей рисунка в формуле.
+    body = re.sub(
+        r"(?P<head>[Рр]ис[а-я]*\.?\s*\d{1,2}(?:\.\d{1,3})?\s*,\s*)\\\(\s*(?P<subs>[a-eа-е3](?:\s*-\s*(?:[a-eа-е3]|\\beta))?)\s*\\\)",
+        lambda m: m.group("head") + m.group("subs").replace("\\beta", "в").replace("3", "з").replace(" ", ""),
+        body)
     # «рисунке \(2.21 a\)», «рис. \(4, a-e\)» — номер рисунка ушёл в формулу.
     body = re.sub(
         r"(?P<word>[Рр]ис(?:ун[а-я]*)?\.?)\s*\\\(\s*(?P<num>\d{1,2}(?:\.\d{1,3})?)\s*,?\s*(?P<rest>[^()]*?)\s*\\\)",
-        lambda m: f"{m.group('word')} {m.group('num')}" + (f", \\({m.group('rest')}\\)" if m.group("rest") else ""),
+        lambda m: f"{m.group('word')} {m.group('num')}" + _fig_ref_rest(m.group("rest")),
         body)
+    # «(рис. 16, а, б, в)» — «в)» не метка пункта: скобка защищается
+    # невидимым знаком, его убирает _finish_fields.
+    body = re.sub(r"(\([Рр]ис[а-я]*\.?\s*\d[^()\n]{0,30}?[а-зa-e])\)", "\\1" + _LABEL_GUARD + ")", body)
     # Звёзды уровня у вопросов внутри задачи («★★ Найдите …») и след полой
     # звезды OCR.
     body = re.sub(r"(?m)(^|\\item\[\]|\\\\)[ \t]*(?:[★☆][ \t]*)+(?:[Д山એ][ \t]+)?", r"\1", body)
@@ -728,6 +759,12 @@ def split_example(body: str) -> tuple[str, str, str]:
     return condition, solution.strip(), trimmed
 
 
+def _sub_labels(raw: str | None) -> str:
+    """«, a и b» → «а и б»: буквы частей рисунка кириллицей."""
+    value = re.sub(r"^\s*,?\s*", "", raw or "").strip()
+    return value.translate(str.maketrans("abcde", "абвгд"))
+
+
 def attach_figures(task: TaskDraft, item: Item, figures: Figures,
                    global_index: dict[str, list[str]] | None) -> list[str]:
     """«рис. 17» → рисунок параграфа, «(» рис.)» → рисунок «задача N»."""
@@ -757,25 +794,48 @@ def attach_figures(task: TaskDraft, item: Item, figures: Figures,
             return [first, last]
         return [f"{head}.{n}" if head else str(n) for n in range(int(a), int(b) + 1)]
 
+    def resolve(match: re.Match) -> list[str]:
+        found = []
+        more = re.findall(_FIG_NUM, match.groupdict().get("more") or "")
+        for number in numbers(match.group("first"), match.group("last")) + more:
+            paths = index.get(number)
+            if paths:
+                found.extend(paths)
+            else:
+                missing.append(number)
+        return found
+
     def rewrite(value: str) -> str:
-        def replace(match: re.Match) -> str:
-            found = []
-            for number in numbers(match.group("first"), match.group("last")):
-                paths = index.get(number)
-                if paths:
-                    found.extend(paths)
-                else:
-                    missing.append(number)
+        # Номер рисунка книги в задаче не нужен — рисунок стоит в ней самой:
+        # «(рис. 1.34)» → \taskpic, «на рисунке 1.34» → «на рисунке \taskpic»,
+        # буква части остаётся: «(рис. 14.18, а)» → «\taskpic (а)».
+        # Ссылка на рисунок, которого у задачи нет, остаётся как в книге.
+        def paren(match: re.Match) -> str:
+            found = resolve(match)
+            if not found:
+                return match.group(0)
+            subs = _sub_labels(match.group("subs"))
             text = tokens(found)
-            return match.group(0) + (" " + text if text else "")
-        return FIG_REF_RE.sub(replace, value or "")
+            return (text + (f" (рис. {subs})" if subs else "")) or (f"(рис. {subs})" if subs else "")
+
+        def inline(match: re.Match) -> str:
+            found = resolve(match)
+            if not found:
+                return match.group(0)
+            subs = _sub_labels(match.group("subs"))
+            text = tokens(found)
+            return match.group("word") + (" " + text if text else "") + (f" (рис. {subs})" if subs else "")
+
+        value = PAREN_FIG_REF_RE.sub(paren, value or "")
+        value = INLINE_FIG_REF_RE.sub(inline, value)
+        return re.sub(r"(?<=\S)[ \t]{2,}(?=\S)", " ", value)
 
     own = figures.by_task.get(item.number, []) if item.kind == KIND_TASK else []
 
     def own_ref(value: str) -> str:
         def replace(match: re.Match) -> str:
             text = tokens(own)
-            return "(рис.)" + (" " + text if text else "")
+            return text or match.group(0)
         return TASK_FIG_REF_RE.sub(replace, value or "")
 
     for attr in ("text_latex", "author_solution_latex", "author_answer_latex"):

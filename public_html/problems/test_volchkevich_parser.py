@@ -125,13 +125,23 @@ class VolchkevichParserTests(SimpleTestCase):
 
     def test_figures_by_caption_and_task_caption(self):
         self.assertEqual(self.tasks["1.У1"].images, ["bk-010_1_1_1_1"])
-        self.assertIn(r"\taskpic{1}", self.tasks["1.У1"].text_latex)
+        # Номер рисунка книги из текста убран: рисунок стоит в задаче.
+        self.assertIn(r"На рисунке \taskpic{1} показана", self.tasks["1.У1"].text_latex)
         self.assertEqual(self.tasks["1.2"].images, ["bk-017_1_1_1_1"])
-        self.assertIn(r"(рис.) \taskpic{1}", self.tasks["1.2"].text_latex)
+        self.assertTrue(self.tasks["1.2"].text_latex.endswith(r"\(A K D\). \taskpic{1}"))
+        self.assertIn(r"видна под прямым углом \taskpic{1}.", self.tasks["2.1"].text_latex)
         # Нумерация рисунков начинается заново в каждом параграфе.
         self.assertEqual(self.tasks["2.1"].images, ["bk-020_1_1_1_1"])
         # Колонтитул-подпись «Глава 1. …» — не рисунок задачи.
         self.assertFalse(any("017_2" in path for t in self.tasks.values() for path in t.images))
+
+    def test_figure_refs_keep_part_letters(self):
+        tasks, _ = parse_volchkevich(BOOK.replace(
+            "углом (рис. 1).", "углом (рис. 1, а, б, в). Найдите угол на рисунке 1."), EDITION)
+        task = {t.external_id: t for t in tasks}["2.1"]
+        self.assertEqual(task.subitems, [])
+        self.assertIn(r"углом \taskpic{1} (рис. а, б, в). Найдите угол на рисунке.", task.text_latex)
+        self.assertNotIn("\u2060", task.text_latex)
 
     def test_running_header_is_not_text(self):
         self.assertNotIn("§1", self.tasks["1.П1"].text_latex)
