@@ -154,6 +154,21 @@ class VolchkevichParserTests(SimpleTestCase):
         task = {t.external_id: t for t in tasks}["2.1"]
         self.assertIn("(рис. а–е)", task.text_latex)
 
+    def test_missing_figure_reported_once(self):
+        tasks, diagnostics = parse_volchkevich(BOOK.replace("углом (рис. 1).", "углом (рис. 5)."), EDITION)
+        task = {t.external_id: t for t in tasks}["2.1"]
+        self.assertEqual(diagnostics["figures_missing_by_task"]["2.1"], ["5"])
+        self.assertIn("(рис. 5)", task.text_latex)
+
+    def test_repeated_task_figure_marker_disappears(self):
+        tasks, _ = parse_volchkevich(BOOK.replace(
+            "Найдите угол \\(A K D\\). ('» рис.)",
+            "Найдите угол \\(A K D\\). ('» рис.) Ещё раз (» рис.)."), EDITION)
+        task = {t.external_id: t for t in tasks}["1.2"]
+        self.assertNotIn("рис.", task.text_latex)
+        self.assertNotIn("»", task.text_latex)
+        self.assertIn("Ещё раз.", task.text_latex)
+
     def test_running_header_is_not_text(self):
         self.assertNotIn("§1", self.tasks["1.П1"].text_latex)
 

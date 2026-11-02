@@ -842,14 +842,20 @@ def attach_figures(task: TaskDraft, item: Item, figures: Figures,
 
     def own_ref(value: str) -> str:
         def replace(match: re.Match) -> str:
-            text = tokens(own)
-            return text or match.group(0)
+            if not own:
+                # Своего рисунка нет: маркер OCR («\\gg», «►») — к «(рис.)».
+                return "(рис.)"
+            # Повторная ссылка на уже поставленный рисунок исчезает, как
+            # и ссылка по номеру (маркер \x00 убирает rewrite).
+            return tokens(own) or "\x00"
         return TASK_FIG_REF_RE.sub(replace, value or "")
 
     for attr in ("text_latex", "author_solution_latex", "author_answer_latex"):
         setattr(task, attr, rewrite(own_ref(getattr(task, attr))))
     for sub in task.subitems:
         sub.text_latex = rewrite(own_ref(sub.text_latex))
+    # Ссылка в скобках без рисунка проверяется дважды (в скобках и в тексте).
+    missing[:] = list(dict.fromkeys(missing))
     rest = [path for path in own if path not in placed]
     if rest:
         task.text_latex = task.text_latex.rstrip() + "\n" + tokens(rest)
