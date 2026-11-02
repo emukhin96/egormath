@@ -124,6 +124,7 @@ class Paragraph:
     chapter_number: int
     chapter_title: str
     topic: str
+    topics: dict = field(default_factory=dict)
     start: int = 0
     end: int = 0
 
@@ -220,6 +221,7 @@ def paragraphs(text: str, edition: dict) -> list[Paragraph]:
                 chapter_number=chapter["number"],
                 chapter_title=chapter["title"],
                 topic=spec.get("topic", ""),
+                topics=spec.get("topics", {}),
                 start=start,
             ))
     result.sort(key=lambda p: p.start)
@@ -341,6 +343,10 @@ def running_headers(edition: dict) -> re.Pattern:
                 words = spec["title"].replace("́", "").split()
                 title = r"\s+".join(re.escape(w) for w in words)
                 parts.append(rf"§\s?{spec['number']}\.?\s+{title}")
+    for header in edition.get("extra_headers", []):
+        # Колонтитул, которого нет в оглавлении (опечатка вёрстки); раньше
+        # «ГЛАВА N», иначе та съест начало.
+        parts.insert(0, r"\s+".join(re.escape(w) for w in header.split()))
     return re.compile(r"(?:\\item\[\][ \t]*)?(?:" + "|".join(parts) + r")[ \t]*(?:\\\\)?",
                       re.I)
 
@@ -348,8 +354,9 @@ def running_headers(edition: dict) -> re.Pattern:
 def strip_running_headers(zone: str, pattern: re.Pattern) -> str:
     def replace(match: re.Match) -> str:
         # Заголовок раздела «\section*{§1 …}» — не колонтитул, но в задачи
-        # он не попадает: граница параграфа уже найдена.
-        return " "
+        # он не попадает: граница параграфа уже найдена. «\item[] §6. … ность,
+        # касающуюся» — продолжение пункта после колонтитула: метка остаётся.
+        return "\\item[] " if match.group(0).startswith("\\item[]") else " "
     zone = pattern.sub(replace, zone.replace("́", ""))
     zone = re.sub(r"\\section\*?\{\s*\}", "", zone)
     # Номера страниц отдельной строкой.
@@ -665,8 +672,14 @@ _LATIN_LABEL = {"a": "а", "b": "б", "B": "в", "e": "е"}
 
 def clean_body(body: str) -> str:
     body = remove_group_commands(body, FOOTNOTE_RE)
-    # «Рис. 6.18» строкой — подпись рисунка, оставшаяся без figure.
-    body = re.sub(r"(?m)^[ \t]*Рис\.\s*\d{1,2}(?:\.\d{1,3})?[ \t]*(?:\\\\)?[ \t]*$", "", body)
+    # «Рис. 6.18» и «» задача 23» строкой или в конце строки — подписи
+    # рисунков, оставшиеся без figure.
+    body = re.sub(r"(?m)(?:^|(?<=[.?!)]))[ \t]*Рис\.\s*\d{1,2}(?:\.\d{1,3})?[ \t]*(?:\\\\)?[ \t]*$", "", body)
+    body = re.sub(r"(?m)^[ \t]*(?:[»\-–—\"]|b\))?[ \t]*задач[аи][ \t]+\d{1,3}[ \t]*(?:\\\\)?[ \t]*$", "", body)
+    # Подписи подрисунков «а)» и пустые строки «\\» из сетки рисунков.
+    body = re.sub(r"(?m)^[ \t]*(?:[а-г]\)|\\\\)[ \t]*$", "", body)
+    # Сноска «*» после вопроса — пометка сноски на поле страницы.
+    body = re.sub(r"(?<=[.?!])\*(?=\s|$)", "", body)
     body = re.sub(r"\\setcounter\{[^{}]*\}\{\d+\}", "", body)
     # Звёзды уровня у вопросов внутри задачи («★★ Найдите …») и след полой
     # звезды OCR.
@@ -785,10 +798,12 @@ def build_draft(item: Item, paragraph: Paragraph, diagnostics: dict) -> TaskDraf
     body = prepare_text(strip_lead(body))
     task = task_from_block(Marker(0, 0, external_id), body, path)
     task.stars = 0
+    # «а)» без текста в конце — подпись подрисунка из сетки рисунков.
+    task.text_latex = re.sub(r"\n[ \t]*[а-г]\)[ \t]*$", "", task.text_latex)
     task.source_number = external_id
     task.collection_title = paragraph.heading
     task.topic_original = paragraph.heading
-    task.topic_code = paragraph.topic
+    task.topic_code = paragraph.topics.get(external_id, paragraph.topic)
     if item.kind == KIND_EXAMPLE:
         if solution:
             solution = prepare_text(solution)
