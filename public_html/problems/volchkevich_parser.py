@@ -389,9 +389,9 @@ def restructure(task: TaskDraft, spec: dict) -> None:
     """
     fields = [task.text_latex] + [item.text_latex for item in task.subitems]
     paths = list(dict.fromkeys(re.findall(r"\\taskpic\{([^{}]+)\}", " ".join(fields))))
-    used = {n for item in spec["items"] for n in item.get("pics", [])}
-    if used and max(used) > len(paths):
-        raise ValueError(f"{task.external_id}: в правке пунктов рисунок {max(used)}, "
+    used = {n for item in spec["items"] for n in item.get("pics", [])} | set(spec.get("pics", []))
+    if used and (min(used) < 1 or max(used) > len(paths)):
+        raise ValueError(f"{task.external_id}: в правке пунктов рисунки {sorted(used)}, "
                          f"а у задачи их {len(paths)}")
     stem_pics = " ".join(rf"\taskpic{{{paths[n - 1]}}}" for n in spec.get("pics", []))
     task.text_latex = " ".join(part for part in (spec["text"], stem_pics) if part)
@@ -807,7 +807,10 @@ def _flatten_nested_tabular(body: str) -> str:
         if not found:
             return body
         m = found[0]
-        rows = [r.strip() for r in re.split(r"\\\\", m.group("body").replace("\\hline", "")) if r.strip()]
+        # «&» внутренней таблицы — разделитель «|», иначе у внешней строки
+        # окажется больше столбцов, чем в её преамбуле.
+        rows = [re.sub(r"\s*(?<!\\)&\s*", " | ", r.strip())
+                for r in re.split(r"\\\\", m.group("body").replace("\\hline", "")) if r.strip()]
         body = body[:m.start()] + " ".join(rows) + body[m.end():]
 
 
@@ -1356,9 +1359,10 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
                 f"{paragraph.key}: задача {n}" for n in unused_task_figures)
     # Правка, не нашедшая задачу, — ошибка: иначе после смены разбора она
     # молча перестала бы работать.
-    orphans = sorted((set(restructures) | set(text_fixes)) - seen_ids)
+    drafts = {repair["draft"] for repair in figure_repairs if "draft" in repair}
+    orphans = sorted((set(restructures) | set(text_fixes) | drafts) - seen_ids)
     if orphans:
-        raise ValueError("Правки subitems/fixes для отсутствующих задач: " + ", ".join(orphans))
+        raise ValueError("Правки subitems/fixes/draft для отсутствующих задач: " + ", ".join(orphans))
     diagnostics["task_marker_occurrences"] = len(tasks)
     diagnostics["unique_tasks"] = len(tasks)
     diagnostics["duplicate_task_ids"] = [

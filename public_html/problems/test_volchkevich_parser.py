@@ -301,6 +301,30 @@ class VolchkevichCanonTests(SimpleTestCase):
             with self.assertRaisesMessage(ValueError, "отсутствующих задач: 9.99"):
                 parser.parse_volchkevich(BOOK, EDITION)
 
+    def test_nested_table_columns_do_not_leak(self):
+        from .volchkevich_parser import _flatten_nested_tabular
+        text = (r"\begin{tabular}{|l|l|} A & \begin{tabular}[t]{ll} a & b \\ c & d \\ \end{tabular} \\ "
+                r"\end{tabular}")
+        self.assertEqual(_flatten_nested_tabular(text),
+                         r"\begin{tabular}{|l|l|} A & a | b c | d \\ \end{tabular}")
+
+    def test_restructure_checks_stem_pictures(self):
+        from .textbook_parser import TaskDraft
+        from .volchkevich_parser import restructure
+        task = TaskDraft(external_id="7.У1", source_number="7.У1", source_path=[],
+                         collection_key="", collection_title="", topic_original="",
+                         text_latex=r"Найдите \taskpic{p1}.")
+        with self.assertRaisesMessage(ValueError, "7.У1: в правке пунктов рисунки [2]"):
+            restructure(task, {"text": "Найдите.", "pics": [2], "items": [{"label": "а"}]})
+
+    def test_draft_figure_for_missing_task_is_an_error(self):
+        from unittest import mock
+        from . import volchkevich_parser as parser
+        with mock.patch.object(parser, "load_figure_repairs", return_value=[
+                {"draft": "1.У99", "file": "x"}]):
+            with self.assertRaisesMessage(ValueError, "отсутствующих задач: 1.У99"):
+                parser.parse_volchkevich(BOOK, EDITION)
+
     def test_restructure_and_text_fix(self):
         from .textbook_parser import TaskDraft
         from .volchkevich_parser import apply_text_fix, restructure
