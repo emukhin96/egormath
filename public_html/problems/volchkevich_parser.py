@@ -39,7 +39,7 @@ from .potoskuev_parser import (
     lift_common_tail, prepare_text)
 from .merzlyak_parser import MATH_SPAN_RE, wrap_answer_numbers
 from .textbook_parser import (
-    Marker, TaskDraft, clean, finalize_draft_images, remove_group_commands,
+    Marker, SubitemDraft, TaskDraft, clean, finalize_draft_images, remove_group_commands,
     task_from_block)
 
 
@@ -323,6 +323,38 @@ def load_figure_repairs(text: str, path: Path = REPAIRS_PATH) -> list[dict]:
         if edition.get("source_sha256") == digest:
             return list(edition.get("figures", []))
     return []
+
+
+def load_restructures(text: str, path: Path = REPAIRS_PATH) -> dict[str, dict]:
+    """Сверенные «пункты из подрисунков» (``subitems``) для этого TEX."""
+    if not path.exists():
+        return {}
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    spec = json.loads(path.read_text(encoding="utf-8"))
+    for edition in spec.get("editions", []):
+        if edition.get("source_sha256") == digest:
+            return dict(edition.get("subitems", {}))
+    return {}
+
+
+def restructure(task: TaskDraft, spec: dict) -> None:
+    """Задача, где пункты — подрисунки «а) … м)»: шапка без ссылок на
+    рисунок, у каждого пункта свой подрисунок и своя пометка.
+
+    ``pics`` — номера рисунков задачи по порядку (1 — первый поставленный).
+    """
+    fields = [task.text_latex] + [item.text_latex for item in task.subitems]
+    paths = list(dict.fromkeys(re.findall(r"\\taskpic\{([^{}]+)\}", " ".join(fields))))
+    used = {n for item in spec["items"] for n in item.get("pics", [])}
+    if used and max(used) > len(paths):
+        raise ValueError(f"{task.external_id}: в правке пунктов рисунок {max(used)}, "
+                         f"а у задачи их {len(paths)}")
+    task.text_latex = spec["text"]
+    task.subitems = []
+    for item in spec["items"]:
+        pics = " ".join(rf"\taskpic{{{paths[n - 1]}}}" for n in item.get("pics", []))
+        text = " ".join(part for part in (item.get("text", ""), pics) if part)
+        task.subitems.append(SubitemDraft(item["label"], text))
 
 
 def apply_figure_repairs(paragraph: Paragraph, figures: Figures,
@@ -1073,6 +1105,7 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
     text = text.replace("\r\n", "\n")
     edition = edition or load_edition(text)
     figure_repairs = load_figure_repairs(text)
+    restructures = load_restructures(text)
     text, source_repairs = apply_source_repairs(text, REPAIRS_PATH)
     text, skipped = apply_skips(text, edition)
     grade = edition["grade"]
@@ -1088,6 +1121,7 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
         "figures_by_task": 0,
         "figures_dropped": 0,
         "figure_repairs": len(figure_repairs),
+        "restructured": [],
         "figures_missing_by_task": {},
         "figures_unreferenced": [],
         "examples_without_solution": [],
@@ -1134,6 +1168,9 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
             if missing:
                 task.warnings.append(
                     "Не найден рисунок по подписи: " + ", ".join(missing))
+            if task.external_id in restructures:
+                restructure(task, restructures[task.external_id])
+                diagnostics["restructured"].append(task.external_id)
             if lift_common_tail(task):
                 diagnostics["lifted_tails"].append(task.external_id)
             if distribute_labeled_answer(task):
