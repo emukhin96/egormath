@@ -337,6 +337,41 @@ def load_restructures(text: str, path: Path = REPAIRS_PATH) -> dict[str, dict]:
     return {}
 
 
+def load_text_fixes(text: str, path: Path = REPAIRS_PATH) -> list[dict]:
+    """Сверенные точечные правки готового текста карточки (``fixes``)."""
+    if not path.exists():
+        return []
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    spec = json.loads(path.read_text(encoding="utf-8"))
+    for edition in spec.get("editions", []):
+        if edition.get("source_sha256") == digest:
+            return list(edition.get("fixes", []))
+    return []
+
+
+def apply_text_fix(task: TaskDraft, fix: dict) -> None:
+    """«old» → «new» в одном поле карточки; «old» обязан встречаться ровно раз.
+
+    Поле — ``text_latex``, ``author_solution_latex``, ``author_answer_latex``
+    или ``subitem:<метка>``. Правка применяется к тексту после всей
+    нормализации профиля, поэтому совпадает с тем, что видно на сверке.
+    """
+    field = fix["field"]
+    if field.startswith("subitem:"):
+        label = field.split(":", 1)[1]
+        target = next((item for item in task.subitems if item.label == label), None)
+        if target is None:
+            raise ValueError(f"{task.external_id}: нет пункта {label}")
+        obj, attr = target, "text_latex"
+    else:
+        obj, attr = task, field
+    value = getattr(obj, attr) or ""
+    count = value.count(fix["old"])
+    if count != 1:
+        raise ValueError(f"{task.external_id} {field}: «{fix['old'][:40]}» встречается {count} раз")
+    setattr(obj, attr, value.replace(fix["old"], fix["new"], 1))
+
+
 def restructure(task: TaskDraft, spec: dict) -> None:
     """Задача, где пункты — подрисунки «а) … м)»: шапка без ссылок на
     рисунок, у каждого пункта свой подрисунок и своя пометка.
@@ -989,18 +1024,21 @@ def _split_math_units(value: str) -> str:
         inner = raw[2:-2] if raw.startswith("\\(") else raw[1:-1]
         if "\\text" in inner:
             return raw
-        out = []
+        parts: list[str] = []
         pos = 0
         for unit in _MATH_UNIT_RE.finditer(inner):
-            out.append(inner[pos:unit.end("num")])
-            power = re.sub(r"\s+", "", unit.group("power") or "")
-            power = ("$" + (power if power.startswith("^{") else "^{" + power[1:].strip("{}") + "}") + "$") if power else ""
-            out.append("$ " + unit.group("unit") + power + " $")
+            math = inner[pos:unit.end("num")].strip()
+            if math:
+                parts.append((" " if parts else "") + f"${math}$")
+            power = re.sub(r"[\s{}^]", "", unit.group("power") or "")
+            parts.append(" " + unit.group("unit") + (f"$^{{{power}}}$" if power else ""))
             pos = unit.end()
-        if not out:
+        if not parts:
             return raw
-        out.append(inner[pos:])
-        return _tidy_dollars("$" + "".join(out) + "$")
+        tail = inner[pos:].strip()
+        if tail:
+            parts.append(f" ${tail}$")
+        return "".join(parts).strip()
     return MATH_SPAN_RE.sub(fix, value or "")
 
 
@@ -1076,13 +1114,13 @@ def canon_field(value: str) -> str:
     # разрез единицы рвёт скобки.
     value = re.sub(r"\\mathbf\{([^{}]*[а-яё][^{}]*)\}", r"\1", value)
     value = _split_math_units(value)
+    value = _prose(value, lambda chunk: _GLUED_UNIT_RE.sub(" ", chunk))
     value = wrap_answer_numbers(value)
     # «(3, 4, 6)» — последнее число перед скобкой wrap_answer_numbers не
     # трогает (боится метки «6)»); в перечислении после запятой это число.
     value = _prose(value, lambda chunk: re.sub(r"(?<=, )(\d+(?:[.,]\d+)?)(?=\))", r"$\1$", chunk))
     value = _protect_decimal_commas(value)
-    value = _GLUED_UNIT_RE.sub(" ", value)
-    return value
+    return _GLUED_UNIT_RE.sub(" ", value)
 
 
 def canon_fields(task: TaskDraft) -> None:
@@ -1106,6 +1144,9 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
     edition = edition or load_edition(text)
     figure_repairs = load_figure_repairs(text)
     restructures = load_restructures(text)
+    text_fixes: dict[str, list[dict]] = {}
+    for fix in load_text_fixes(text):
+        text_fixes.setdefault(fix["id"], []).append(fix)
     text, source_repairs = apply_source_repairs(text, REPAIRS_PATH)
     text, skipped = apply_skips(text, edition)
     grade = edition["grade"]
@@ -1122,6 +1163,7 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
         "figures_dropped": 0,
         "figure_repairs": len(figure_repairs),
         "restructured": [],
+        "text_fixes_applied": 0,
         "figures_missing_by_task": {},
         "figures_unreferenced": [],
         "examples_without_solution": [],
@@ -1178,6 +1220,9 @@ def parse_volchkevich(text: str, edition: dict | None = None) -> tuple[list[Task
             _finish_fields(task)
             canon_fields(task)
             finalize_draft_images(task)
+            for fix in text_fixes.get(task.external_id, []):
+                apply_text_fix(task, fix)
+                diagnostics["text_fixes_applied"] += 1
             tasks.append(task)
         unused_task_figures = sorted(
             n for n in figures.by_task

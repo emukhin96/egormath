@@ -262,3 +262,40 @@ class VolchkevichGrade7Tests(SimpleTestCase):
     def test_lowercase_example_and_ocr_answer(self):
         self.assertEqual(self.tasks["6.П1"].author_answer_latex, "$135^{\\circ}$")
         self.assertTrue(self.tasks["6.2"].text_latex.startswith("Найдите угол"))
+
+
+class VolchkevichCanonTests(SimpleTestCase):
+    """Канон оформления: docs/TEXTBOOK_PARSE_QA.md, § 5."""
+
+    def test_numbers_units_and_decimal_comma(self):
+        from .volchkevich_parser import canon_field
+        self.assertEqual(canon_field("Стороны равны 2 и 5, площадь равна 11,25."),
+                         "Стороны равны $2$ и $5$, площадь равна $11{,}25$.")
+        self.assertEqual(canon_field(r"площадь равна \(2,5 м^{2}\)."), "площадь равна $2{,}5$ м$^{2}$.")
+        self.assertEqual(canon_field("периметр 15см"), "периметр $15$ см")
+        self.assertEqual(canon_field(r"участка \(0,02 км^{2}\)"), "участка $0{,}02$ км$^{2}$")
+
+    def test_points_lookalikes_and_part_letters(self):
+        from .volchkevich_parser import canon_field
+        self.assertEqual(canon_field("B четырёхугольнике угол CKD прямой."),
+                         "В четырёхугольнике угол $CKD$ прямой.")
+        self.assertEqual(canon_field("жил в XIX веке"), "жил в XIX веке")
+        self.assertEqual(canon_field(r"на рисунках \taskpic{a.jpg}, \(a-i\)."),
+                         r"на рисунках \taskpic{a.jpg} (рис. а–и).")
+        self.assertEqual(canon_field("Пусть эта\\\\\nпрямая"), "Пусть эта прямая")
+
+    def test_restructure_and_text_fix(self):
+        from .textbook_parser import TaskDraft
+        from .volchkevich_parser import apply_text_fix, restructure
+        task = TaskDraft(external_id="7.У1", source_number="7.У1", source_path=[],
+                         collection_key="", collection_title="", topic_original="",
+                         text_latex=r"Найдите $x$ на рисунке \taskpic{p1} \taskpic{p2} (рис. а–б).")
+        restructure(task, {"text": "Найдите $x$.", "items": [
+            {"label": "а", "pics": [1]}, {"label": "б", "text": "Параллелограмм.", "pics": [2]}]})
+        self.assertEqual(task.text_latex, "Найдите $x$.")
+        self.assertEqual([(i.label, i.text_latex) for i in task.subitems],
+                         [("а", r"\taskpic{p1}"), ("б", r"Параллелограмм. \taskpic{p2}")])
+        apply_text_fix(task, {"field": "subitem:б", "old": "Параллелограмм.", "new": "Ромб."})
+        self.assertEqual(task.subitems[1].text_latex, r"Ромб. \taskpic{p2}")
+        with self.assertRaisesMessage(ValueError, "встречается 0 раз"):
+            apply_text_fix(task, {"field": "text_latex", "old": "нет такого", "new": ""})
