@@ -155,3 +155,58 @@ class VolchkevichHelpersTests(SimpleTestCase):
         self.assertEqual(cut_at_list_end(" Условие.\n\\end{itemize}\nТеория."), " Условие.")
         self.assertIn("продолжение", cut_at_list_end(
             " Условие на-\n\\end{itemize}\nпродолжение строки."))
+
+
+EDITION_7 = {
+    "grade": 7,
+    "title": "Тестовое издание 7",
+    "chapters": [
+        {"number": 2, "title": "Углы и многоугольники", "paragraphs": [
+            {"number": 6, "title": "Углы", "anchor": r"\section*{§6 Углы}",
+             "topic": "GEO.01.02"},
+        ]},
+    ],
+}
+
+BOOK_7 = r"""
+\section*{§6 Углы}
+\section*{Аксиомы углов}
+\begin{itemize}
+  \item[1] Каждый плоский угол имеет определённую градусную меру.
+  \item[2] Градусная мера угла равна сумме мер его частей.
+\end{itemize}
+? ВОПРОСЫ
+\begin{itemize}
+  \item[1] Что такое геометрический угол?
+  \item[2] Какие углы называются смежными?
+\end{itemize}
+\section*{УПРАЖНЕНИЯ}
+\begin{itemize}
+  \item[1] Нарисуйте любой треугольник и измерьте его углы транспортиром.
+\end{itemize}
+\section*{ДАВАЙТЕ РАЗБЕРЁМ НЕСКОЛЬКО ПРИМЕРОВ}
+★★★ пример 6.1 Часы показывают 10:30. Найдите угол между стрелками.
+
+РЕШЕНИЕ: Минутная стрелка смотрит на 6, часовая — между 10 и 11.
+
+OTBET: 135°.\\
+\section*{РЕШИТЕ ЗАДАЧИ}
+\begin{itemize}
+  \item[6.1] ★★ Найдите угол между биссектрисами смежных углов.
+\end{itemize}
+6.2 ★★★ Найдите угол между стрелками часов в 9:30.\\
+"""
+
+
+class VolchkevichGrade7Tests(SimpleTestCase):
+    def setUp(self):
+        tasks, _ = parse_volchkevich(BOOK_7, EDITION_7)
+        self.tasks = {task.external_id: task for task in tasks}
+
+    def test_axioms_and_questions_are_not_exercises(self):
+        self.assertEqual(list(self.tasks), ["6.У1", "6.П1", "6.1", "6.2"])
+        self.assertIn("транспортиром", self.tasks["6.У1"].text_latex)
+
+    def test_lowercase_example_and_ocr_answer(self):
+        self.assertEqual(self.tasks["6.П1"].author_answer_latex, "$135^{\\circ}$")
+        self.assertTrue(self.tasks["6.2"].text_latex.startswith("Найдите угол"))
