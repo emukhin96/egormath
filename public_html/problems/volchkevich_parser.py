@@ -81,7 +81,7 @@ TASK_FIG_REF_RE = re.compile(
 
 HEADING_RE = re.compile(r"\\section\*?\{(?P<title>(?:[^{}]|\{[^{}]*\})*)\}")
 BARE_HEADING_RE = re.compile(
-    r"(?m)^[ \t]*(?P<title>УПРАЖНЕНИЯ|УПРАЖНЕНИЕ|ВОПРОСЫ|ЗАДАЧИ|РЕШИТЕ ЗАДАЧИ"
+    r"(?m)^[ \t]*(?:\?[ \t]*)?(?P<title>УПРАЖНЕНИЯ|УПРАЖНЕНИЕ|ВОПРОСЫ|ЗАДАЧИ|РЕШИТЕ ЗАДАЧИ"
     r"|ПРИМЕРЫ РЕШЕНИЯ ЗАДАЧ|ДАВАЙТЕ РАЗБЕР[ЕЁ]М НЕСКОЛЬКО ПРИМЕРОВ"
     r"|ДЛЯ ТЕХ, КТО ХОЧЕТ ЗНАТЬ БОЛЬШЕ)[ \t]*(?:\\\\)?[ \t]*$")
 EXAMPLE_RE = re.compile(
@@ -520,8 +520,10 @@ def classify_items(zone: str, events: list[Event], paragraph: Paragraph, grade: 
             elif last_list and number == last[last_list] + 1 and not event.plain:
                 # Продолжение списка после ложного заголовка OCR.
                 kind = last_list
-            elif (mode == "theory" and paragraph.number
+            elif (mode == "theory" and paragraph.number and grade != 7
                   and number == last[KIND_EXERCISE] + 1 and not event.plain):
+                # 7 класс заголовки упражнений сохранил, а нумерованные
+                # списки в теории (аксиомы, свойства) там — не упражнения.
                 # Упражнения по ходу теории, чей заголовок OCR потерял.
                 kind = KIND_EXERCISE
             else:
