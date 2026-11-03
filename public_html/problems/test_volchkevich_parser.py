@@ -279,6 +279,8 @@ class VolchkevichCanonTests(SimpleTestCase):
         from .volchkevich_parser import canon_field
         self.assertEqual(canon_field("часы в 16:00 и 20:00, после 9:00"), "часы в 16:00 и 20:00, после 9:00")
         self.assertEqual(canon_field("точкой делится в 1:10"), "точкой делится в $1:10$")
+        self.assertEqual(canon_field("Часы отмечены стрелками. Отрезок делится в 1:2."),
+                         "Часы отмечены стрелками. Отрезок делится в $1:2$.")
         self.assertEqual(canon_field("Часы показывают 10:30."), "Часы показывают 10:30.")
         self.assertEqual(canon_field("в отношении 5:13"), "в отношении $5:13$")
 

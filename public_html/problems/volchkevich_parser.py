@@ -1210,8 +1210,17 @@ def _wrap_point_names(chunk: str) -> str:
 
 
 # «в 9:00», «после 16:00 и 20:00», «показывают 10:30» — время, а не отношение;
-# только в тексте про часы, иначе «делится в $1:10$» — отношение.
-_CLOCK_RE = re.compile(r"[Чч]ас(?:ы|ов|ах|ам)\b|стрелк|момент времени")
+# только во фразе про часы, иначе «делится в $1:10$» — отношение.
+_CLOCK_RE = re.compile(r"[Чч]ас(?:ы|ов|ах|ам|овая|овой)\b|минутн|момент\w* времени")
+
+
+def _unwrap_time(value: str) -> str:
+    def plain(match: re.Match) -> str:
+        start = max(value.rfind(mark, 0, match.start()) for mark in ".!?\n") + 1
+        ends = [i for i in (value.find(mark, match.end()) for mark in ".!?\n") if i >= 0]
+        sentence = value[start:min(ends, default=len(value))]
+        return match.group("lead") + match.group("time") if _CLOCK_RE.search(sentence) else match.group(0)
+    return _TIME_RE.sub(plain, value)
 _TIME_RE = re.compile(r"(?P<lead>(?:\b(?:после|показывают|в|до|к)|\d и) )\$(?P<time>(?:[01]?\d|2[0-3]):[0-5]\d)\$")
 _ALIGNED_RE = re.compile(r"\\begin\{aligned\}(?P<body>.*?)\\end\{aligned\}", re.S)
 
@@ -1273,8 +1282,8 @@ def canon_field(value: str) -> str:
     # трогает (боится метки «6)»); в перечислении после запятой это число.
     value = _prose(value, lambda chunk: re.sub(r"(?<=, )(\d+(?:[.,]\d+)?)(?=\))", r"$\1$", chunk))
     value = _protect_decimal_commas(value)
-    for _ in range(2 if _CLOCK_RE.search(value) else 0):  # второй проход — «16:00 и 20:00»
-        value = _TIME_RE.sub(r"\g<lead>\g<time>", value)
+    for _ in range(2):  # второй проход — «16:00 и 20:00»
+        value = _unwrap_time(value)
     return _GLUED_UNIT_RE.sub(" ", value)
 
 
