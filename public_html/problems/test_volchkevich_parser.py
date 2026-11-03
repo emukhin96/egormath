@@ -275,6 +275,19 @@ class VolchkevichCanonTests(SimpleTestCase):
         self.assertEqual(canon_field("периметр 15см"), "периметр $15$ см")
         self.assertEqual(canon_field(r"участка \(0,02 км^{2}\)"), "участка $0{,}02$ км$^{2}$")
 
+    def test_time_is_text_and_ratio_is_math(self):
+        from .volchkevich_parser import canon_field
+        self.assertEqual(canon_field("в 16:00 и 20:00, после 9:00"), "в 16:00 и 20:00, после 9:00")
+        self.assertEqual(canon_field("Часы показывают 10:30."), "Часы показывают 10:30.")
+        self.assertEqual(canon_field("в отношении 5:13"), "в отношении $5:13$")
+
+    def test_formula_wrapped_by_book_is_one_line(self):
+        from .volchkevich_parser import canon_field
+        self.assertEqual(canon_field("\\[\n\\begin{aligned}\n& d^{2}=a^{2}+ \\\\\n& +b^{2}.\n\\end{aligned}\n\\]"),
+                         "\\[\nd^{2}=a^{2}+ b^{2}.\n\\]")
+        system = "\\[\n\\begin{aligned}\nx & =1, \\\\\ny & =2 .\n\\end{aligned}\n\\]"
+        self.assertEqual(canon_field(system), system)
+
     def test_points_lookalikes_and_part_letters(self):
         from .volchkevich_parser import canon_field
         self.assertEqual(canon_field("B четырёхугольнике угол CKD прямой."),
