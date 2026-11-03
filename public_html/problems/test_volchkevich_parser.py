@@ -277,7 +277,8 @@ class VolchkevichCanonTests(SimpleTestCase):
 
     def test_time_is_text_and_ratio_is_math(self):
         from .volchkevich_parser import canon_field
-        self.assertEqual(canon_field("в 16:00 и 20:00, после 9:00"), "в 16:00 и 20:00, после 9:00")
+        self.assertEqual(canon_field("часы в 16:00 и 20:00, после 9:00"), "часы в 16:00 и 20:00, после 9:00")
+        self.assertEqual(canon_field("точкой делится в 1:10"), "точкой делится в $1:10$")
         self.assertEqual(canon_field("Часы показывают 10:30."), "Часы показывают 10:30.")
         self.assertEqual(canon_field("в отношении 5:13"), "в отношении $5:13$")
 
@@ -285,6 +286,9 @@ class VolchkevichCanonTests(SimpleTestCase):
         from .volchkevich_parser import canon_field
         self.assertEqual(canon_field("\\[\n\\begin{aligned}\n& d^{2}=a^{2}+ \\\\\n& +b^{2}.\n\\end{aligned}\n\\]"),
                          "\\[\nd^{2}=a^{2}+ b^{2}.\n\\]")
+        self.assertEqual(canon_field("\\[\nS & =a+ \\\\\n& +b\n\\]".replace("\\[\n", "\\[\n\\begin{aligned}\n")
+                                     .replace("\n\\]", "\n\\end{aligned}\n\\]")),
+                         "\\[\nS =a+ b\n\\]")
         system = "\\[\n\\begin{aligned}\nx & =1, \\\\\ny & =2 .\n\\end{aligned}\n\\]"
         self.assertEqual(canon_field(system), system)
 

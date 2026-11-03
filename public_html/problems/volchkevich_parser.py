@@ -1209,7 +1209,9 @@ def _wrap_point_names(chunk: str) -> str:
     return re.sub(r"(?<=[а-яё] )([A-Z])(?=[\s.,;:!?)]|$)", r"$\1$", chunk)
 
 
-# «в 9:00», «после 16:00 и 20:00», «показывают 10:30» — время, а не отношение.
+# «в 9:00», «после 16:00 и 20:00», «показывают 10:30» — время, а не отношение;
+# только в тексте про часы, иначе «делится в $1:10$» — отношение.
+_CLOCK_RE = re.compile(r"[Чч]ас(?:ы|ов|ах|ам)\b|стрелк|момент времени")
 _TIME_RE = re.compile(r"(?P<lead>(?:\b(?:после|показывают|в|до|к)|\d и) )\$(?P<time>(?:[01]?\d|2[0-3]):[0-5]\d)\$")
 _ALIGNED_RE = re.compile(r"\\begin\{aligned\}(?P<body>.*?)\\end\{aligned\}", re.S)
 
@@ -1229,7 +1231,8 @@ def _join_wrapped_formula(match: re.Match) -> str:
     if len(joined) == len(rows):
         return match.group(0)
     if len(joined) == 1:
-        return re.sub(r"^&\s*", "", joined[0]).rstrip()
+        # Без aligned метки выравнивания — ошибка LaTeX: убираются все.
+        return re.sub(r"\s*(?<!\\)&\s*", " ", joined[0]).strip()
     return "\\begin{aligned}\n" + " \\\\\n".join(joined) + "\n\\end{aligned}"
 
 
@@ -1270,7 +1273,7 @@ def canon_field(value: str) -> str:
     # трогает (боится метки «6)»); в перечислении после запятой это число.
     value = _prose(value, lambda chunk: re.sub(r"(?<=, )(\d+(?:[.,]\d+)?)(?=\))", r"$\1$", chunk))
     value = _protect_decimal_commas(value)
-    for _ in range(2):  # второй проход — «16:00 и 20:00»
+    for _ in range(2 if _CLOCK_RE.search(value) else 0):  # второй проход — «16:00 и 20:00»
         value = _TIME_RE.sub(r"\g<lead>\g<time>", value)
     return _GLUED_UNIT_RE.sub(" ", value)
 
