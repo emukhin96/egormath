@@ -1209,9 +1209,46 @@ def _wrap_point_names(chunk: str) -> str:
     return re.sub(r"(?<=[а-яё] )([A-Z])(?=[\s.,;:!?)]|$)", r"$\1$", chunk)
 
 
+# «в 9:00», «после 16:00 и 20:00», «показывают 10:30» — время, а не отношение;
+# только во фразе про часы, иначе «делится в $1:10$» — отношение.
+_CLOCK_RE = re.compile(r"[Чч]ас(?:ы|ов|ах|ам|овая|овой)\b|минутн|момент\w* времени")
+
+
+def _unwrap_time(value: str) -> str:
+    def plain(match: re.Match) -> str:
+        start = max(value.rfind(mark, 0, match.start()) for mark in ".!?\n") + 1
+        ends = [i for i in (value.find(mark, match.end()) for mark in ".!?\n") if i >= 0]
+        sentence = value[start:min(ends, default=len(value))]
+        return match.group("lead") + match.group("time") if _CLOCK_RE.search(sentence) else match.group(0)
+    return _TIME_RE.sub(plain, value)
+_TIME_RE = re.compile(r"(?P<lead>(?:\b(?:после|показывают|в|до|к)|\d и) )\$(?P<time>(?:[01]?\d|2[0-3]):[0-5]\d)\$")
+_ALIGNED_RE = re.compile(r"\\begin\{aligned\}(?P<body>.*?)\\end\{aligned\}", re.S)
+
+
+def _join_wrapped_formula(match: re.Match) -> str:
+    """Строка формулы, перенесённая в книге по знаку («…+ \\\\ & +…»), — одной строкой."""
+    rows = [row.strip() for row in re.split(r"\\\\", match.group("body"))]
+    rows = [row for row in rows if row]
+    joined = [rows[0]]
+    for row in rows[1:]:
+        tail = re.search(r"([+\-=])\s*$", joined[-1])
+        head = re.match(r"&\s*([+\-=])\s*", row)
+        if tail and head and tail.group(1) == head.group(1):
+            joined[-1] = joined[-1][:tail.end(1)] + " " + row[head.end():]
+        else:
+            joined.append(row)
+    if len(joined) == len(rows):
+        return match.group(0)
+    if len(joined) == 1:
+        # Без aligned метки выравнивания — ошибка LaTeX: убираются все.
+        return re.sub(r"\s*(?<!\\)&\s*", " ", joined[0]).strip()
+    return "\\begin{aligned}\n" + " \\\\\n".join(joined) + "\n\\end{aligned}"
+
+
 def canon_field(value: str) -> str:
     if not value:
         return value
+    value = _ALIGNED_RE.sub(_join_wrapped_formula, value)
     # «B четырёхугольнике», «C помощью» — латинский двойник предлога в начале
     # фразы; перед глаголом («C лежит…», «K находится…») это точка.
     value = re.sub(r"(?m)(?:(?<=^)|(?<=[.!?:] ))([BCK])(?= [а-яё]{2,})(?! [а-яё]*(?:ит|ет|ют|ут|ат|ят|ся|ен|ена|ено|ны|на|но)\b)",
@@ -1245,6 +1282,8 @@ def canon_field(value: str) -> str:
     # трогает (боится метки «6)»); в перечислении после запятой это число.
     value = _prose(value, lambda chunk: re.sub(r"(?<=, )(\d+(?:[.,]\d+)?)(?=\))", r"$\1$", chunk))
     value = _protect_decimal_commas(value)
+    for _ in range(2):  # второй проход — «16:00 и 20:00»
+        value = _unwrap_time(value)
     return _GLUED_UNIT_RE.sub(" ", value)
 
 
