@@ -13,7 +13,7 @@
   .pdf-preview[data-state="busy"] .pdf-preview-busy,
   .pdf-preview[data-state="error"] .pdf-preview-error { display: flex; }
   .pdf-preview-title { margin: 0; color: var(--text); font-weight: 600; }
-  .pdf-preview-copy { margin: 0 0 var(--space-2); max-width: 34ch; color: var(--muted); font-size: 0.85rem; }
+  .pdf-preview-copy { margin: 0 0 var(--space-2); max-width: 34ch; color: var(--muted); font-size: var(--fs-md); }
   .pdf-preview-busy .pdf-spinner { width: 28px; height: 28px; border-width: 3px; color: var(--accent); }
   .pdf-elapsed { font-variant-numeric: tabular-nums; color: var(--text); }
   .pdf-preview-error .pdf-preview-title { color: var(--err); }
@@ -21,7 +21,7 @@
   .pdf-preview-stale {
     display: none; align-items: center; gap: var(--space-2); flex-wrap: wrap;
     min-height: 34px; padding: 4px 4px 4px var(--space-3); border-radius: 6px;
-    background: #fff4dc; color: #6b4a00; font-size: 0.85rem;
+    background: #fff4dc; color: #6b4a00; font-size: var(--fs-md);
   }
   .pdf-preview-stale span { flex: 1; }
   .pdf-preview[data-state="stale"] .pdf-preview-stale { display: flex; }
