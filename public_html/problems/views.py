@@ -27,6 +27,7 @@ from assignments.checks import HELP as MASK_HELP
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
                     TaskSubitemFormSet, TextbookBundleUploadForm,
                     TextbookDraftReviewForm, TextbookImageArchiveForm)
+from .import_groups import group_import_batches
 from .models import (Source, Tag, Task, TaskImage, TaskSource, TaskSubitem,
                      TextbookImportAsset, TextbookImportBatch,
                      TextbookTaskDraft, Topic, topic_tree)
@@ -1483,11 +1484,19 @@ def textbook_import_list(request):
         batches = batches.filter(created_by=request.user)
     # Без diagnostics: MySQL сортирует (-created_at) и группирует строки
     # целиком, большой JSON переполняет буфер сортировки.
-    batches = (batches.select_related('source', 'created_by')
-               .defer('diagnostics')
-               .annotate(total=Count('drafts')))
+    batches = list(batches.select_related('source', 'created_by')
+                   .defer('diagnostics')
+                   .annotate(total=Count('drafts'),
+                             imported_total=Count('drafts', filter=Q(
+                                 drafts__status=TextbookTaskDraft.STATUS_IMPORTED))))
+    # По книгам: текущая партия на виду, пробные и устаревшие — в «Архиве»
+    # (правило — в problems/import_groups.py)
+    active_books, archive_books = group_import_batches(batches)
     return render(request, 'problems/textbook_import_list.html', {
         'batches': batches,
+        'active_books': active_books,
+        'archive_books': archive_books,
+        'archive_total': sum(len(book.batches) for book in archive_books),
     })
 
 

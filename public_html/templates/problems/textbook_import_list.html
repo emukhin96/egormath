@@ -6,25 +6,23 @@
   <div>
     <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a></nav>
     <h1>Импорт задачников</h1>
-    <p class="page-meta"><span>{{ batches|length }} {{ batches|length|plural_ru:'партия,партии,партий' }}</span></p>
+    <p class="page-meta"><span>{{ active_books|length }} {{ active_books|length|plural_ru:'книга,книги,книг' }}</span><span>{{ batches|length }} {{ batches|length|plural_ru:'партия,партии,партий' }}</span></p>
   </div>
   <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'textbook_import_help' %}">Инструкция</a>
     <a class="btn" href="{% url 'textbook_import_upload' %}">Новая партия</a>
   </div>
 </div>
-<div class="card">
+{# Партии по книгам (ревизия 03.11, T4): книга — одной строкой-заголовком, под ней партии; пробные и устаревшие — в свёрнутом «Архиве». Правило отбора — problems/import_groups.py #}
+<div class="card import-books">
 {% if batches %}
-<div class="catalog-table-wrap"><table class="list table-stack">
-  <tr><th>Партия</th><th>Источник</th><th>Профиль</th><th>Задач</th><th>Статус</th><th>Создана</th></tr>
-  {% for batch in batches %}
-  <tr>
-    <td class="stack-primary"><a href="{% url 'textbook_import_detail' batch.pk %}">{{ batch.title }}</a></td>
-    <td data-label="Источник">{{ batch.source }}</td><td data-label="Профиль">{{ batch.profile }}</td><td data-label="Задач">{{ batch.total }}</td>
-    <td data-label="Статус">{{ batch.get_status_display }}</td><td data-label="Создана">{{ batch.created_at|date:'d.m.Y H:i' }}</td>
-  </tr>
-  {% endfor %}
-</table></div>
+{% include 'problems/_import_book_table.html' with books=active_books %}
+{% if archive_books %}
+<details class="import-archive">
+  <summary>Архив: {{ archive_total }} {{ archive_total|plural_ru:'партия,партии,партий' }}<span class="muted">, пробные прогоны и старые версии</span></summary>
+  {% include 'problems/_import_book_table.html' with books=archive_books %}
+</details>
+{% endif %}
 {% else %}<p class="muted">Партий пока нет.</p>{% endif %}
 </div>
 {% endblock %}

@@ -1,0 +1,121 @@
+/* Задачи и подборки (ревизия интерфейса 03.11: T1–T4, P1, P3):
+   строка каталога, фильтры в один ряд, карточка задачи, импорт задачников,
+   авторские листки. */
+@layer components {
+  /* T2: «Показать: ответы, маски» справа над списком, без второго заголовка
+     с числом задач (число — в подзаголовке страницы) */
+  .catalog-list-head {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--space-2);
+  }
+
+  /* T2: «Ещё ▾» в строке фильтров — «Задавалась» и тумблер редактора */
+  .catalog-more .more-menu-list { min-width: 300px; }
+  .catalog-more .sort-inline { margin: 0; }
+  .catalog-more.is-set > summary::after {
+    content: '';
+    width: 6px;
+    height: 6px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* T1: «7, Формулы сокращённого умноже… ✎» — тема названием, текстом
+     в строку (не flex: иначе класс, тема и карандаш встают столбиком) */
+  .catalog-table .row-edit-summary { display: block; line-height: 1.4; }
+  .catalog-table .row-edit-summary .row-edit-sep { margin-right: 0.25em; }
+
+  /* T1: «⋯» строки каталога — на линии источника, без лишней высоты */
+  .catalog-row-actions .more-menu > summary { width: 24px; height: 20px; }
+}
+
+/* T3: карточка задачи — «+» и «AI» у заголовка, карандаши правки у блоков */
+@layer components {
+  .task-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  /* Заголовок в ряду сразу под крошками: отступ под крошки (page-frame.css) не нужен */
+  .app-content .page-head .task-title-row > h1 { margin: 0 var(--space-1) 0 0; }
+  .task-title-row > details { margin: 0; }
+
+  /* Карандаш в правом верхнем углу блока; форма раскрывается под текстом */
+  .problem-section[data-task-png-root],
+  .problem-answer,
+  .problem-solution { position: relative; }
+  .ws-add-text.block-edit { margin: 0; }
+  .ws-add-text.block-edit > summary.edit-pen {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 8px;
+    color: var(--muted);
+    list-style: none;
+    cursor: pointer;
+  }
+  .ws-add-text.block-edit > summary.edit-pen::-webkit-details-marker { display: none; }
+  .ws-add-text.block-edit > summary.edit-pen::before { content: none; }
+  .ws-add-text.block-edit > summary.edit-pen svg { width: 17px; height: 17px; }
+  .ws-add-text.block-edit > summary.edit-pen:hover,
+  .ws-add-text.block-edit[open] > summary.edit-pen { background: var(--accent-soft); color: var(--accent); }
+  .ws-add-text.block-edit > summary.edit-pen:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .ws-add-text.block-edit[open] { margin: var(--space-2) 0 var(--space-3); }
+  /* У ответа — на линии «Ответ а)» (под отступом блока), у решения — на линии «Решение» */
+  .problem-answer > .block-edit > summary.edit-pen { top: calc(var(--space-4) - 4px); }
+  .problem-solution > .block-edit > summary.edit-pen { top: -6px; }
+  .problem-section > .block-edit > summary.edit-pen { top: -2px; }
+  /* Текст заголовка блока не заезжает под карандаш */
+  .problem-section[data-task-png-root] > h2,
+  .problem-answer > .label-row { padding-right: 40px; }
+  .problem-solution > summary { margin-right: 40px; }
+
+  /* «?» в правой колонке — пояснение открывается влево, не за край экрана */
+  .problem-columns > .card + .card .help-tip-body,
+  .problem-answer .help-tip-body { left: auto; right: -8px; }
+  .problem-answer .label-row .help-tip { vertical-align: 0; margin-left: var(--space-1); }
+}
+
+/* T4: импорт задачников — книги строками-заголовками, «Архив» свёрнут */
+@layer components {
+  .import-book-table col.col-profile { width: 9rem; }
+  .import-book-table col.col-num { width: 5rem; }
+  .import-book-table col.col-status { width: 11rem; }
+  .import-book-table col.col-date { width: 7.5rem; }
+  .import-book-table .import-book-row th {
+    padding-top: var(--space-4);
+    border-bottom: 1px solid var(--hairline);
+    text-align: left;
+    color: var(--text);
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .import-book-table tbody:first-of-type .import-book-row th { padding-top: var(--space-2); }
+  .import-book-title {
+    margin-left: var(--space-2);
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 400;
+  }
+  .import-book-table .badge { white-space: nowrap; }
+  .import-archive { margin-top: var(--space-5); }
+  .import-archive > summary { cursor: pointer; font-weight: 600; }
+  .import-archive[open] > summary { margin-bottom: var(--space-3); }
+  .import-archive > summary .muted { font-weight: 400; }
+  @media (max-width: 760px) {
+    .import-book-table .import-book-row { display: block; }
+    .import-book-table .import-book-row th { display: block; padding-inline: 0; }
+    .import-book-title { display: block; margin-left: 0; }
+  }
+}

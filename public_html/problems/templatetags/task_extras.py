@@ -132,11 +132,25 @@ def heading_dot(value):
     return strip_heading_dot(value)
 
 
+def _is_file_part(part):
+    """Часть пути — исходный файл («7 класс/matvert7-alg-dist3.tex»), а не
+    раздел книги: такие части учителю не показываем (ревизия 03.11, T1)."""
+    text = str(part or '').strip()
+    return '/' in text or text.lower().endswith('.tex')
+
+
+@register.filter
+def section_path(value):
+    """Разделы пути в источнике без исходных файлов, без точек в конце."""
+    return [strip_heading_dot(part) for part in value or [] if not _is_file_part(part)]
+
+
 @register.filter
 def path_tail(value, keep=2):
     """Последние разделы пути в источнике: глава и раздел книги видны по
-    номеру, в строке каталога хватает «… › Контрольная работа › Вариант 5»."""
-    parts = [strip_heading_dot(part) for part in value or []]
+    номеру, в строке каталога хватает «… › Контрольная работа › Вариант 5».
+    Исходные файлы (путь к .tex) в строку не попадают."""
+    parts = section_path(value)
     if len(parts) <= keep:
         return parts
     return ['…', *parts[-keep:]]

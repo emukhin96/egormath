@@ -4,15 +4,16 @@
   <div class="page-head">
     <div>
       <nav class="page-crumbs" aria-label="Путь">{% if worksheet %}<a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}" title="Вернуться в листок «{{ worksheet.title }}»">{{ worksheet.title }}</a>{% else %}<a href="{% url 'task_list' %}">Задачи</a>{% endif %}</nav>
-      <h1>Задача #{{ task.pk }}</h1>
+      {# «+» и «AI» — рядом с заголовком, а не в правом краю (ревизия 03.11, T3) #}
+      <div class="task-title-row"><h1>Задача #{{ task.pk }}</h1>{% if not task.variant_of_id %}{% include 'includes/cart_button.html' with task=task %}{% endif %}{% if not editor_readonly %}{% include 'includes/ai_menu.html' with kind='card' %}{% endif %}
+      {# Удаление — в «⋯» шапки рядом с «+» и «AI», а не в панели рядом с метаданными (T3); форма внутри корня редактора перерисовывается вместе с карточкой (после локальной копии — уже для копии) #}
+      {% if can_edit_task %}<details class="more-menu is-head"><summary aria-label="Действия с задачей" title="Действия с задачей"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg></summary><div class="more-menu-list is-left"><form method="post" action="{% url 'task_delete' task.pk %}" onsubmit="return confirm('Удалить задачу #{{ task.pk }}? Это действие нельзя отменить.');">{% csrf_token %}<button type="submit" class="is-danger">Удалить задачу</button></form></div></details>{% endif %}</div>
       <p class="page-meta">{% if task.grade_display %}<span>{{ task.grade_display }} класс</span>{% endif %}{% for ref in task.source_refs.all %}<span>{{ ref.source }}{% if ref.number %}, № {{ ref.number }}{% endif %}</span>{% endfor %}<span>изменена {{ task.updated_at|date:'d.m.Y' }}</span>{% if task.variant_of_id %}<span class="badge badge-local">Локальная копия #{{ task.variant_of_id }}</span>{% endif %}{% include 'problems/_task_owner_badge.html' %}{% if not can_edit_task %}<span class="badge badge-assigned" title="Общую задачу приглашённый учитель меняет только для своего листка — в базе появится локальная копия, оригинал не изменится">Общая задача, правки только для листка</span>{% endif %}</p>
     </div>
-    <div class="form-buttons page-actions">
-      {% if not task.variant_of_id %}{% include 'includes/cart_button.html' with task=task %}{% endif %}
-      {# Очередь предложений (problems/proposals.py): исправление общей задачи текстом; у редактора кнопки нет — он правит напрямую #}
-      {% if propose %}{% if propose.open %}<a class="btn btn-secondary" href="{% url 'proposals_mine' %}" title="Ваше предложение по этой задаче ждёт ответа редактора">Предложение отправлено</a>{% else %}<button type="button" class="btn btn-secondary" data-dialog-open="propose-dialog">{{ propose.label }}</button>{% endif %}{% endif %}
-      {% if not editor_readonly %}{% include 'includes/ai_menu.html' with kind='card' %}{% endif %}
-    </div>
+    {# Очередь предложений (problems/proposals.py): исправление общей задачи текстом; у редактора кнопки нет — он правит напрямую #}
+    {% if propose %}<div class="form-buttons page-actions">
+      {% if propose.open %}<a class="btn btn-secondary" href="{% url 'proposals_mine' %}" title="Ваше предложение по этой задаче ждёт ответа редактора">Предложение отправлено</a>{% else %}<button type="button" class="btn btn-secondary" data-dialog-open="propose-dialog">{{ propose.label }}</button>{% endif %}
+    </div>{% endif %}
   </div>
   {# Разовая подсказка на первой открытой общей задаче в листке (problem_editor.js, localStorage): редактору не нужна — он правит напрямую; без листка карточку объясняет блок ниже #}
   {% if not can_edit_task and not editor_readonly %}
@@ -30,7 +31,7 @@
     <div class="card">
       <section class="problem-section" data-task-png-root><h2 class="task-png-heading" data-task-png-skip>Условие{% include 'includes/task_png_button.html' %}</h2>
         <div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
-        {% if not editor_readonly %}<details class="ws-add-text"><summary>Править условие</summary>
+        {% if not editor_readonly %}<details class="ws-add-text block-edit">{% include 'problems/_edit_pen.html' with label='Править условие' %}
           {% include 'problems/_editor_form.html' with form=condition_form block='condition' %}
         </details>{% endif %}
         {% if subrows %}<ol class="subitems">{% for row in subrows %}<li class="math-content">{{ row.sub.text_latex|web_text }}</li>{% endfor %}</ol>{% endif %}
