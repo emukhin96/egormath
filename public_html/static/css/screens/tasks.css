@@ -119,3 +119,25 @@
     .import-book-title { display: block; margin-left: 0; }
   }
 }
+
+/* P3: авторские листки — «Тема ▾» над колонкой листков, вид — в «⋯» шапки */
+@layer components {
+  .authored-topic-filter .more-menu-list { min-width: 300px; max-height: 60vh; overflow-y: auto; }
+  .authored-topic-filter .more-menu-list > a {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    white-space: normal;
+  }
+  .authored-topic-filter .more-menu-list > a .muted { flex: none; }
+  .authored-topic-filter.is-set > summary { color: var(--accent); }
+  .authored-topic-filter > summary [data-authored-topic-label] {
+    max-width: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .more-menu-list > a.is-current { color: var(--accent); font-weight: 600; }
+  /* Темы листка — строкой чипов под подзаголовком */
+  .authored-preview-head > .authored-preview-topics { display: flex; margin-top: var(--space-1); }
+}

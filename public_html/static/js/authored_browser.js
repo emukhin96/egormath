@@ -17,31 +17,64 @@
     });
   }
 
+  // Фильтры колонки листков: «Найти листок…» по названию и «Тема ▾»
+  // (ревизия 03.11, P3: темы — над колонкой вместо панели). Оба условия
+  // применяются вместе; тема — id группы [data-authored-group].
   function setupFilter(browser) {
     var wrap = document.querySelector('[data-authored-filter-wrap]');
     var input = document.querySelector('[data-authored-filter]');
-    if (!wrap || !input) return;
-    wrap.hidden = false;
+    var menu = document.querySelector('[data-authored-topic-menu]');
     var empty = browser.querySelector('[data-authored-empty]');
-    input.addEventListener('input', function () {
-      var query = input.value.trim().toLowerCase();
+    var topic = '';
+
+    function apply() {
+      var query = input ? input.value.trim().toLowerCase() : '';
       var shown = 0;
       browser.querySelectorAll('[data-authored-group]').forEach(function (group) {
         var visible = 0;
+        var inTopic = !topic || group.id === topic;
         group.querySelectorAll('[data-authored-row]').forEach(function (row) {
           var title = row.querySelector('[data-authored-title]');
           var name = (title ? title.textContent : row.textContent).toLowerCase();
-          var match = !query || name.indexOf(query) !== -1;
+          var match = inTopic && (!query || name.indexOf(query) !== -1);
           row.hidden = !match;
           if (match) visible += 1;
         });
         group.hidden = !visible;
         // В таблице свёрнутая глава с найденным листком раскрывается
-        if (query && visible && group.tagName === 'DETAILS') group.open = true;
+        if ((query || topic) && visible && group.tagName === 'DETAILS') group.open = true;
         shown += visible;
       });
       if (empty) empty.hidden = shown > 0;
-    });
+    }
+
+    if (wrap && input) {
+      wrap.hidden = false;
+      input.addEventListener('input', apply);
+    }
+    if (menu) {
+      menu.addEventListener('click', function (event) {
+        var link = event.target.closest('a[data-authored-topic]');
+        if (!link) return;
+        var anchor = link.dataset.authoredTopic;
+        // Группы темы нет на странице (сортировка не по теме) — обычный переход
+        if (anchor && !document.getElementById(anchor)) return;
+        event.preventDefault();
+        topic = anchor;
+        menu.querySelectorAll('a[data-authored-topic]').forEach(function (a) {
+          a.classList.toggle('is-current', a === link);
+        });
+        var label = menu.querySelector('[data-authored-topic-label]');
+        if (label) label.textContent = anchor ? link.firstChild.textContent.trim() : 'Все темы';
+        menu.classList.toggle('is-set', Boolean(anchor));
+        menu.open = false;
+        apply();
+      });
+      // Пришли по ссылке с якорем темы — сразу показываем только её
+      var initial = location.hash.slice(1);
+      var start = initial && menu.querySelector('a[data-authored-topic="' + CSS.escape(initial) + '"]');
+      if (start) start.click();
+    }
   }
 
   function setupPreview(browser) {
