@@ -2113,7 +2113,7 @@
     border-radius: 6px;
     padding: 7px 14px;
     font: inherit;
-    font-size: 0.88rem;
+    font-size: 0.875rem;
     font-weight: 600;
     text-decoration: none;
     cursor: pointer;
@@ -2144,6 +2144,7 @@
   .ws-item .btn-small.btn-secondary {
     background: transparent;
     color: var(--muted);
+    font-weight: 500;
   }
 
   tr:hover td .btn-secondary,
@@ -2164,10 +2165,13 @@
     background: #8e1c1c;
   }
 
+  /* Две высоты кнопок (ревизия 03.11, G5): 36 px — шапка и формы,
+     28 px (.btn-small) — внутри строк и тулбаров. Правило — docs/PIPELINE.md,
+     «Кнопки и символы закрытия». */
   .btn-small {
     min-height: 28px;
-    padding: 3px 9px;
-    font-size: 0.78rem;
+    padding: 3px 10px;
+    font-size: 0.8125rem;
     border-radius: 6px;
   }
 
@@ -5287,14 +5291,24 @@
     color: #f6c744;
   }
 
+  /* Текстовое действие — один стиль на всех экранах (G5): тихий серый,
+     синий при наведении, без подчёркивания. Так же выглядят .linklike и
+     вторичные кнопки в строках таблиц. */
   .link-btn {
     background: none;
     border: none;
     padding: 0;
     cursor: pointer;
-    color: var(--accent);
+    color: var(--muted);
+    font: inherit;
     font-size: inherit;
-    text-decoration: underline;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .link-btn:hover,
+  .link-btn:focus-visible {
+    color: var(--accent);
   }
 
   #ws-items .ws-answers,

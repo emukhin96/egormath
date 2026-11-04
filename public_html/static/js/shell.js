@@ -1,12 +1,39 @@
 document.addEventListener("DOMContentLoaded", () => {
   // После входа в другой вкладке Django меняет CSRF-cookie, а старая форма
   // остаётся в DOM. Перед выходом берём актуальный токен той же сессии.
-  const logout = document.querySelector("form[data-logout]");
-  if (logout) {
+  // Форм выхода две: в шапке и в меню ☰ на телефоне.
+  document.querySelectorAll("form[data-logout]").forEach((logout) => {
     logout.addEventListener("submit", () => {
       const token = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
       const field = logout.querySelector('[name="csrfmiddlewaretoken"]');
       if (token && field) field.value = decodeURIComponent(token[1]);
+    });
+  });
+
+  // Меню ☰ на телефоне (G12): разделы сайта списком под шапкой. Клик вне,
+  // Escape и переход на широкий экран закрывают.
+  const burger = document.querySelector("[data-nav-burger]");
+  const nav = document.getElementById("topbar-nav");
+  if (burger && nav) {
+    const setNav = (open) => {
+      nav.classList.toggle("is-open", open);
+      burger.setAttribute("aria-expanded", String(open));
+    };
+    burger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setNav(!nav.classList.contains("is-open"));
+    });
+    document.addEventListener("click", (event) => {
+      if (!nav.contains(event.target)) setNav(false);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && nav.classList.contains("is-open")) {
+        setNav(false);
+        burger.focus();
+      }
+    });
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > 760) setNav(false);
     });
   }
 
