@@ -62,12 +62,12 @@
 </td>
 <td>{# Класс и темы показаны текстом; контролы раскрываются по клику (task_catalog.js обновляет текст после правки); общая задача у приглашённого — только текст #}
 {% if task.can_edit %}<details class="row-edit" data-row-edit>
-<summary class="row-edit-summary" title="Изменить класс и темы"><span data-row-edit-grade>{{ task.grade_display|default:'—' }}</span><span class="row-edit-sep">,</span><span data-row-edit-topics>{% for topic in task.topics.all %}<span{% if topic.code %} title="{{ topic.code }}"{% endif %}>{{ topic.name|truncatechars:28 }}</span>{% if not forloop.last %}, {% endif %}{% empty %}без темы{% endfor %}</span><span class="row-edit-pen" aria-hidden="true">✎</span></summary>
+<summary class="row-edit-summary" title="Изменить класс и темы"><span data-row-edit-grade>{{ task.grade_display|default:'—' }}</span><span class="row-edit-sep">,</span><span data-row-edit-topics>{% for topic in task.topics.all %}<span{% if topic.code %} title="{{ topic.code }}"{% endif %}>{{ topic.name|truncatechars:24 }}</span>{% if not forloop.last %}, {% endif %}{% empty %}без темы{% endfor %}</span><span class="row-edit-pen" aria-hidden="true">✎</span></summary>
 <form method="post" action="{% url 'task_quick_update' task.pk %}" data-autosave="change">{% csrf_token %}
 <label>Класс<select name="grade_level" class="quick-select">{% include 'includes/grade_options.html' with selected=task.grade_option %}</select></label>
 {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True chip_full=True selected_json=task.taxonomy_json %}
 </form>
-</details>{% else %}<span class="row-edit-summary row-edit-static" title="Общая задача: класс и темы меняют редакторы"><span>{{ task.grade_display|default:'—' }}</span><span class="row-edit-sep">,</span><span>{% for topic in task.topics.all %}<span{% if topic.code %} title="{{ topic.code }}"{% endif %}>{{ topic.name|truncatechars:28 }}</span>{% if not forloop.last %}, {% endif %}{% empty %}без темы{% endfor %}</span></span>{% endif %}</td><td class="col-cart">{% include 'includes/cart_button.html' with task=task %}</td></tr>{% endfor %}
+</details>{% else %}<span class="row-edit-summary row-edit-static" title="Общая задача: класс и темы меняют редакторы"><span>{{ task.grade_display|default:'—' }}</span><span class="row-edit-sep">,</span><span>{% for topic in task.topics.all %}<span{% if topic.code %} title="{{ topic.code }}"{% endif %}>{{ topic.name|truncatechars:24 }}</span>{% if not forloop.last %}, {% endif %}{% empty %}без темы{% endfor %}</span></span>{% endif %}</td><td class="col-cart">{% include 'includes/cart_button.html' with task=task %}</td></tr>{% endfor %}
 </tbody></table></div></div>
 
 {% include 'includes/pagination.html' with page=page query=params %}

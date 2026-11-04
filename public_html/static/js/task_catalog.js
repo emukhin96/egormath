@@ -31,7 +31,7 @@
 (function () {
   // Как в шаблоне строки: код темы, если он есть, иначе название до 28 символов.
   // Код и название берутся из data-атрибутов чипа (taxonomy.js), текст метки не разбирается.
-  var NAME_LIMIT = 28;
+  var NAME_LIMIT = 24;
   function truncate(text) {
     return text.length > NAME_LIMIT ? text.slice(0, NAME_LIMIT - 1) + '…' : text;
   }

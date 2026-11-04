@@ -56,7 +56,7 @@ class CatalogRowTests(Roles, TestCase):
     def test_topic_by_name_with_code_in_title(self):
         for user in (self.guest, self.editor):
             _, row = self.row(user)
-            self.assertIn('<span title="UIT.02.03">Формулы сокращённого умноже…</span>', row)
+            self.assertIn('<span title="UIT.02.03">Формулы сокращённого ум…</span>', row)
 
     def test_rare_actions_in_row_menu(self):
         _, row = self.row(self.editor)
