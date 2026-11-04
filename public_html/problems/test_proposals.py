@@ -196,7 +196,7 @@ class CounterTests(ProposalBase):
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(response.context['proposals_new'], 1)
         self.assertContains(response, 'nav-count')
-        self.assertContains(response, 'Предложения исправлений · 1')
+        self.assertContains(response, 'Предложения исправлений <span class="badge-count">1</span>')
         self.assertContains(response, f'Задача #{self.shared.pk}')
         self.assertContains(response, 'Опечатка')
         self.assertEqual(list(response.context['proposals']), [TaskProposal.objects.get()])
@@ -217,7 +217,7 @@ class CounterTests(ProposalBase):
         self.client.force_login(self.guest)
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(response.context['proposals_replies'], 1)
-        self.assertContains(response, 'Мои предложения · 1')
+        self.assertContains(response, 'Мои предложения <span class="badge-count">1</span>')
         response = self.client.get(reverse('proposals_mine'))
         self.assertContains(response, 'proposal-unread')
         self.assertContains(response, 'Отклонено')
@@ -263,7 +263,7 @@ class MinePageTests(ProposalBase):
         # Решивший редактор удалён (SET_NULL) — страницы не падают
         self.client.force_login(self.editor)
         response = self.client.get(reverse('proposal_detail', args=[older.pk]))
-        self.assertContains(response, 'редактор ·')
+        self.assertContains(response, 'редактор,')
         self.assertNotContains(response, 'редактор базы')
 
 

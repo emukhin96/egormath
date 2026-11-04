@@ -38,7 +38,7 @@ def student_assignments(user):
         remaining = max(0, int((a.ends_at - now).total_seconds())) if a.ends_at else None
         label = a.state
         if remaining is not None and not a.finished:
-            label += f' · осталось {remaining // 60}:{remaining % 60:02}'
+            label += f', осталось {remaining // 60}:{remaining % 60:02}'
         if closed:
             label = 'Не начато'
         rows.append(SimpleNamespace(

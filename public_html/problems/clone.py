@@ -143,7 +143,7 @@ def dialog_context(request, task, item, position):
         note = 'Сохранится как новая задача в базе и встанет в листок следующей строкой.'
     elif position is not None:
         number = _position_number(position)
-        target = f'Добавится вариантом в №{number} · {position.work.title}' if number else \
+        target = f'Добавится вариантом в №{number}, {position.work.title}' if number else \
             f'Добавится вариантом в «{position.work.title}»'
         note = 'Сохранится как новая задача в базе, связанная с исходной как аналог.'
     else:

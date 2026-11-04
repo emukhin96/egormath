@@ -302,7 +302,7 @@ class AuthoredBrowserTests(TestCase):
         self.assertEqual(response.context['selected'].pk, self.sheet10.pk)
         self.assertFalse(response.context['explicit_sheet'])
         self.assertContains(response, 'Взять как листок')
-        self.assertContains(response, 'Всё в корзину · 3')
+        self.assertContains(response, 'Всё в корзину (3)')
         self.assertContains(response, 'Е.А. Мухин')
         self.assertContains(response, '3 листка')
 

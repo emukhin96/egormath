@@ -42,7 +42,7 @@ class BoardsPeekFragmentTests(BoardsPeekBase):
         response = self.peek()
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
-        self.assertIn('Задание №1 · ответ ученика', html)
+        self.assertIn('Задание №1, ответ ученика', html)
         self.assertIn('Найдите корень уравнения', html)
         # ответ ученика по маске с отметкой слота и итог в заголовке
         self.assertIn('data-status="wrong"', html)

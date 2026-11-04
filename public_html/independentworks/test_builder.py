@@ -253,7 +253,7 @@ class BuilderTests(TestCase):
         page = self.client.get(reverse('independentworks:edit', args=[work.pk]))
         self.assertTemplateUsed(page, 'includes/builder_masks_toggle.html')
         self.assertNotContains(page, '>Кандидаты и подпункты</a>')
-        self.assertContains(page, '№1 · кандидатов: 1</a>')
+        self.assertContains(page, '№1</a> <span class="muted iw-cand-count">кандидатов: 1</span>')
         student = get_user_model().objects.create_user('mask_student')
         self.client.force_login(student)
         self.assertIn(self.client.get(reverse('independentworks:candidate_masks', args=[c.pk])).status_code, (302,403))

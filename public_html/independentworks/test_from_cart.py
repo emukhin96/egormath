@@ -127,7 +127,7 @@ class CartToIndependentTests(TestCase):
         Work.objects.create(owner=self.teacher, title='Контрольная С-1')
         self._fill(self.viet_a, self.plain, self.viet_b)
         page = self.client.get(reverse('task_list'))
-        self.assertContains(page, 'Корзина · 3 задачи')
+        self.assertContains(page, 'В корзине 3 задачи')
         self.assertContains(page, 'Зив 8, №2')
         self.assertContains(page, f'Задача #{self.plain.pk}')
         self.assertContains(page, 'cart-fam cart-fam-1', count=2)

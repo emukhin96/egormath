@@ -2021,7 +2021,7 @@ def public_worksheet(request, token):
     from .block_presentation import decorate_block_rows
     decorate_block_rows(rows)
     # Подзаголовок — только непустые части, без «висячих» разделителей
-    subtitle_line = ' · '.join(
+    subtitle_line = ', '.join(
         part.strip() for part in (worksheet.grade_label, worksheet.subtitle,
                                   worksheet.display_author)
         if part and part.strip())

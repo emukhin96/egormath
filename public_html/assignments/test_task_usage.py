@@ -132,7 +132,7 @@ class TaskUsageTests(TestCase):
     def test_catalog_shows_badge_and_remembers_audience(self):
         self.assign(self.student)
         response = self.client.get(reverse('task_list'))
-        self.assertContains(response, 'задавалась · 1 уч.')
+        self.assertContains(response, 'задавалась, 1 уч.')
         # Выбор группы запоминается в сессии и применяется на подборе.
         response = self.client.get(
             reverse('task_list'), {'who': f'group:{self.group.pk}'})
