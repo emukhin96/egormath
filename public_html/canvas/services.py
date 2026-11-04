@@ -3,7 +3,8 @@ from django.conf import settings
 from django.db.models import Count, Max, Q
 from django.utils import timezone
 
-from problems.models import TaskImage
+from problems.models import Task
+from problems.task_images import classify_task_images
 
 from .models import CanvasPage
 
@@ -127,21 +128,42 @@ def creation_allowed(pages, access, layer):
     return None
 
 
+def statement_images(task_id):
+    """Растровые иллюстрации условия задачи — только их можно положить на доску.
+
+    Рисунки, на которые ссылаются лишь ответ или решение (``\\taskpic`` в
+    полях материала), сюда не входят: кнопка «Вставить рисунок из условия»
+    иначе подкладывала ученику рисунок из решения. Деление — то же, что в
+    ученическом листке (``problems.task_images.classify_task_images``).
+    PDF Canvas не рисует.
+    """
+    task = Task.objects.filter(pk=task_id).prefetch_related('images', 'subitems').first()
+    if task is None:
+        return []
+    statement, _ = classify_task_images(task)
+    return [image for image in statement if not image.is_pdf]
+
+
 def task_images(task_id):
-    """Растровые иллюстрации задачи, которые можно положить на доску
-    (PDF Canvas не рисует). Размер клиент узнаёт сам при загрузке."""
+    """Иллюстрации условия для кнопки доски. Размер клиент узнаёт сам при загрузке."""
     from django.urls import reverse
     return [{'id': image.pk, 'url': reverse('task_image_file', args=[image.pk]), 'name': image.filename}
-            for image in TaskImage.objects.filter(task_id=task_id) if not image.is_pdf]
+            for image in statement_images(task_id)]
 
 
-def foreign_images(elements, task_id):
-    """id картинок из элементов, которые не принадлежат этой задаче."""
+def foreign_images(elements, task_id, kept=()):
+    """id картинок из элементов, которых нельзя класть на доску этой задачи.
+
+    Разрешены рисунки условия и те, что уже лежат в сохранённом слое
+    (``kept``): рисунок решения, вставленный до исправления кнопки, не
+    должен навсегда запирать страницу — его можно удалить или оставить.
+    """
     wanted = {e['s'] for e in elements if e.get('t') == 'img'}
     if not wanted:
         return set()
-    own = {image.pk for image in TaskImage.objects.filter(task_id=task_id, pk__in=wanted) if not image.is_pdf}
-    return wanted - own
+    allowed = {image.pk for image in statement_images(task_id)}
+    allowed.update(e.get('s') for e in kept if e.get('t') == 'img')
+    return wanted - allowed
 
 
 def attach_image_urls(elements):
