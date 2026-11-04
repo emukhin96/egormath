@@ -299,7 +299,7 @@ class WriteEndpointMatrixTests(Roles, TestCase):
         self.assertNotContains(self.client.get(reverse('worksheet_list')), 'Сверка корпуса')
         self.login(self.editor)
         response = self.client.get(reverse('task_list'))
-        self.assertContains(response, 'Массовые ответы')
+        # «Массовые ответы» — не в шапке каталога, а в меню «Задачи» верхней навигации (ревизия 03.11, T2)
         self.assertContains(response, 'Импорт задачников')
         self.assertContains(self.client.get(reverse('worksheet_list')), 'Сверка корпуса')
 
@@ -565,7 +565,8 @@ class GuestLocalEditTests(Roles, TestCase):
         data = response.json()
         self.assertEqual(data['task_id'], copy.pk)
         self.assertNotIn('data-base-locked', data['html'])
-        self.assertIn('Удалить задачу', data['sidebar'])
+        # «Удалить задачу» — в «⋯» шапки карточки, она перерисовывается вместе с html
+        self.assertIn('Удалить задачу', data['html'])
         # Дальше копия правится напрямую, в том числе маски
         response = self.client.post(reverse('task_manage', args=[copy.pk]) + f'?worksheet={self.sheet.pk}&item={self.item.pk}',
                                     {'block': 'masks', 'scope': 'global',
