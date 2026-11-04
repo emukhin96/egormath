@@ -114,8 +114,19 @@
   .import-archive[open] > summary { margin-bottom: var(--space-3); }
   .import-archive > summary .muted { font-weight: 400; }
   @media (max-width: 760px) {
-    .import-book-table .import-book-row { display: block; }
-    .import-book-table .import-book-row th { display: block; padding-inline: 0; }
+    /* table-stack прячет строки с th — строку книги показываем */
+    .table-stack.import-book-table tr.import-book-row {
+      display: block;
+      margin: var(--space-3) 0 0;
+      padding: 0;
+      background: none;
+    }
+    .table-stack.import-book-table tr.import-book-row th {
+      display: block;
+      padding: 0 0 var(--space-1);
+      border: 0;
+      white-space: normal;
+    }
     .import-book-title { display: block; margin-left: 0; }
   }
 }
