@@ -1,9 +1,12 @@
 /* Меню «⋯» (includes/more_menu.html): редкие действия строки или шапки —
    ревизия интерфейса 03.11. Плашка — как у меню «AI» и подразделов шапки. */
 @layer components {
-  .more-menu {
+  /* .more-menu — <details>: общий отступ details снизу сдвигал шапку */
+  .more-menu,
+  .page-head .page-actions > .more-menu {
     position: relative;
     display: inline-block;
+    margin: 0;
     vertical-align: middle;
   }
   .more-menu > summary {
