@@ -1,0 +1,107 @@
+/* Меню «⋯» (includes/more_menu.html): редкие действия строки или шапки —
+   ревизия интерфейса 03.11. Плашка — как у меню «AI» и подразделов шапки. */
+@layer components {
+  .more-menu {
+    position: relative;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .more-menu > summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: var(--muted);
+    list-style: none;
+    cursor: pointer;
+  }
+  .more-menu > summary::-webkit-details-marker { display: none; }
+  .more-menu > summary svg { width: 16px; height: 16px; fill: currentColor; }
+  .more-menu > summary:hover,
+  .more-menu[open] > summary { background: var(--tone-hover); color: var(--accent-dark); }
+  .more-menu > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* В шапке страницы — в размер кнопки .btn (36 px) */
+  .more-menu.is-head > summary { width: 36px; height: 36px; background: var(--bg); color: var(--accent-dark); }
+  .more-menu.is-head > summary:hover,
+  .more-menu.is-head[open] > summary { background: var(--tone-hover); }
+
+  /* Кнопка в строке появляется при наведении на строку и при фокусе
+     с клавиатуры; на сенсорных экранах видна всегда */
+  @media (hover: hover) {
+    .more-menu.on-hover:not([open]) > summary { opacity: 0; }
+    :is(tr, li, .ws-item, .more-menu-row):hover .more-menu.on-hover > summary,
+    .more-menu.on-hover > summary:focus-visible { opacity: 1; }
+  }
+
+  .more-menu-list {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 2px);
+    z-index: 70;
+    min-width: 200px;
+    padding: var(--space-1);
+    display: grid;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgb(18 43 85 / 14%);
+    text-align: left;
+  }
+  .more-menu-list.is-left { right: auto; left: 0; }
+  .more-menu-list form { display: contents; }
+  .more-menu-list > a,
+  .more-menu-list > button,
+  .more-menu-list > form > button {
+    display: block;
+    width: 100%;
+    padding: 6px var(--space-3);
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 400;
+    line-height: 1.4;
+    text-align: left;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .more-menu-list > a:hover,
+  .more-menu-list > button:hover,
+  .more-menu-list > form > button:hover { background: var(--accent-soft); color: var(--accent); }
+  /* Удаление — последним пунктом, красным только при наведении */
+  .more-menu-list .is-danger:hover { background: #fdeaea; color: var(--err); }
+  .more-menu-list hr { margin: var(--space-1) 0; border: 0; border-top: 1px solid var(--hairline); }
+  .more-menu-list .more-menu-note { padding: 4px var(--space-3); color: var(--muted); font-size: 0.78rem; }
+}
+
+/* «Показать: ответы, маски» над списком задач (includes/show_toggles.html, G8)
+   и меню «Ещё» с редкими фильтрами рядом */
+@layer components {
+  .show-toggles {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-3);
+    margin-left: auto;
+    font-size: 0.82rem;
+    font-weight: 400;
+  }
+  .show-toggles-label { color: var(--muted); }
+  .show-toggles .ws-toggle { margin: 0; }
+  .more-menu.show-more > summary {
+    width: auto;
+    gap: 2px;
+    padding: 0 var(--space-2);
+    font-size: 0.82rem;
+    font-weight: 400;
+  }
+  .more-menu.show-more > summary svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .more-menu.show-more .more-menu-list { padding: var(--space-2) var(--space-3); gap: var(--space-2); min-width: 240px; }
+  .more-menu.show-more .ws-toggle { margin: 0; }
+}

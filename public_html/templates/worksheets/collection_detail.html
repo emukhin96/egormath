@@ -41,26 +41,20 @@
 </div>
 {% if tasks_total or flat_groups %}
 <div class="collection-view-options">
-  <label class="ws-toggle" title="Показывать ответы и решения задач">
-    <input type="checkbox" id="toggle-answers">
-    <span class="ws-toggle-slider"></span>
-    <span class="ws-toggle-text">ответы и решения</span>
-  </label>
-  <label class="ws-toggle" title="Скрыть редакторские / AI-ответы и решения: только то, что есть в задачнике">
-    <input type="checkbox" id="toggle-author-only" data-storage-key="collection-author-only">
-    <span class="ws-toggle-slider"></span>
-    <span class="ws-toggle-text">только из задачника</span>
-  </label>
-  <label class="ws-toggle" title="Показывать поля масок ответов">
-    <input type="checkbox" id="toggle-masks" data-storage-key="collection-masks">
-    <span class="ws-toggle-slider"></span>
-    <span class="ws-toggle-text">маски ответов</span>
-  </label>
-  {% if rows and audience_students or rows and audience_groups %}
-  <form method="get" class="inline-form audience-form">
-    {% include 'includes/audience_select.html' with label='Отмечать задававшиеся' %}
-  </form>
-  {% endif %}
+  {% include 'includes/show_toggles.html' with masks_key='collection-masks' %}
+  {# Редкие фильтры — в «Ещё» (G8) #}
+  <details class="more-menu show-more"><summary aria-label="Ещё фильтры" title="Ещё фильтры">Ещё<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></summary><div class="more-menu-list">
+    <label class="ws-toggle" title="Скрыть редакторские / AI-ответы и решения: только то, что есть в задачнике">
+      <input type="checkbox" id="toggle-author-only" data-storage-key="collection-author-only">
+      <span class="ws-toggle-slider"></span>
+      <span class="ws-toggle-text">только из задачника</span>
+    </label>
+    {% if rows and audience_students or rows and audience_groups %}
+    <form method="get" class="inline-form audience-form">
+      {% include 'includes/audience_select.html' with label='Отмечать задававшиеся' %}
+    </form>
+    {% endif %}
+  </div></details>
 </div>
 {% endif %}
 

@@ -43,14 +43,19 @@ document.addEventListener("DOMContentLoaded", () => {
   // Меню «AI» (includes/ai_menu.html, details): клик вне меню или Escape
   // закрывают его; клик по пункту обрабатывают neuro.js / problem_editor.js
   // и закрывают меню сами, когда генерация закончится.
+  // То же для меню «⋯» (includes/more_menu.html) и пояснений «?»: открыто
+  // одно, клик по пункту-ссылке закрывает меню.
+  const MENUS = "details.ai-menu, details.more-menu, details.help-tip";
   const closeAiMenus = (except) => {
-    document.querySelectorAll("details.ai-menu[open]").forEach((menu) => {
+    document.querySelectorAll("details.ai-menu[open], details.more-menu[open], details.help-tip[open]").forEach((menu) => {
       if (menu !== except) menu.open = false;
     });
   };
   document.addEventListener("click", (event) => {
-    const inside = event.target.closest("details.ai-menu");
+    const inside = event.target.closest(MENUS);
     closeAiMenus(inside);
+    const item = event.target.closest(".more-menu-list a");
+    if (item) item.closest("details").open = false;
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeAiMenus();
