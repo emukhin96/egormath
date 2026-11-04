@@ -291,6 +291,23 @@ def map_outside_tables(text, func):
         for part in re.split(r'(\x05\d+\x06)', text))
 
 
+_DISPLAY_OPENERS = ('$$', '\\[')
+
+
+def _trim_display_gap(text, after_display, before_display):
+    """Переносы строк вокруг выносной формулы (\\[…\\], $$…$$) сжимаются:
+    KaTeX рисует её блоком со своими отступами, и <br> после блока дал бы
+    лишнюю пустую строку, а перед блоком пустую строку даёт только второй
+    <br>. В TeX такой перенос — просто пробел. Явные \\\\ и \\par
+    остаются: их автор ставил намеренно."""
+    if after_display:
+        text = text.lstrip()
+    if before_display:
+        stripped = text.rstrip()
+        text = stripped + ('\n' if '\n' in text[len(stripped):] else '')
+    return text
+
+
 def tex_to_web_html(source):
     """HTML-версия текста задачи для веб-страниц (формулы рендерит KaTeX).
 
@@ -318,11 +335,15 @@ def tex_to_web_html(source):
 
     parts = []
     pos = 0
+    after_display = False
     for m in _MATH_RE.finditer(text):
-        parts.append(_plain(text[pos:m.start()]))
+        display = m.group(0).startswith(_DISPLAY_OPENERS)
+        parts.append(_plain(_trim_display_gap(
+            text[pos:m.start()], after_display, display)))
         parts.append(_math_for_web(m.group(0), _at_line_start(text[:m.start()])))
         pos = m.end()
-    parts.append(_plain(text[pos:]))
+        after_display = display
+    parts.append(_plain(_trim_display_gap(text[pos:], after_display, False)))
 
     html = _markers_to_html(escape(''.join(parts)))
     for i, body in enumerate(tables):
