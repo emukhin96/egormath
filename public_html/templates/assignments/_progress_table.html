@@ -22,7 +22,20 @@
     <select id="progress-order" name="order">{% for value, label in orders.items %}<option value="{{ value }}"{% if value == order %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
     <noscript><button class="btn btn-small btn-secondary">Показать</button></noscript>
   </form>
+  {% if canvas_enabled %}{% include 'canvas/_toggle.html' %}{% endif %}
   <span class="live-hint">Номер открывает задачу, ячейка — ответ ученика</span>
+  {# Легенда значков — по «?», а не строкой под таблицей (ревизия 03.11, Z5) #}
+  <details class="help-tip live-help"><summary aria-label="Значки в таблице" title="Значки в таблице">?</summary><div class="help-tip-body live-legend">
+    <span><b class="is-ok">✓</b> верно с первой</span>
+    <span><b class="is-ok">✓<sub>2</sub></b> верно со второй</span>
+    <span><b class="is-wrong">×<sub>3</sub></b> неверно, 3 попытки</span>
+    <span><b>…</b> введено, не проверено</span>
+    <span><b class="is-pending">?</b> ждёт учителя</span>
+    <span><b>—</b> пусто</span>
+    <span><b>{% for value, label, symbol in grade_choices %}{{ symbol }}{% if not forloop.last %} {% endif %}{% endfor %}</b> оценка учителя</span>
+    <span><i class="live-ring" aria-hidden="true"></i>решает сейчас</span>
+    <span><b class="live-copy">•</b> копировал текст условия, больше одного слова</span>
+  </div></details>
 </div>
 {% endif %}
 <div class="progress-table-wrap"><table class="list progress-table{% if live_map %} live-table{% endif %}" data-progress-structure="{% for g in point_groups %}{{ g.item.pk }}:{{ g.number }}:{% for c in g.columns %}{{ c.owner.pk }}-{{ c.label }},{% endfor %};{% endfor %}">
@@ -38,17 +51,6 @@
 {% if live_map and people %}<tfoot><tr><th scope="row">Верно / решают</th>{% for stat in column_stats %}<td class="live-stat-cell" data-progress-cell="stat-{{ forloop.counter }}"><a href="{% url 'assignment_item_class' worksheet.pk stat.item.pk %}?{% if stat.point %}point={{ stat.point }}&amp;{% endif %}{% if group_id %}group={{ group_id }}{% endif %}" title="Задача у всего класса"><span class="live-ok{% if stat.tone %} is-{{ stat.tone }}{% endif %}">{% if stat.answered %}{{ stat.ok }}/{{ stat.answered }}{% else %}—{% endif %}</span>{% if stat.live %}<span class="live-now-count">сейчас {{ stat.live }}</span>{% endif %}</a></td>{% endfor %}<td></td><td></td>{% if manage_status %}<td></td>{% endif %}</tr></tfoot>{% endif %}
 </table></div>
 {% if live_map %}
-<div class="live-legend">
-  <span data-live-status role="status">Обновляется каждые 5 секунд</span>
-  <span><b class="is-ok">✓</b> верно с первой</span>
-  <span><b class="is-ok">✓<sub>2</sub></b> верно со второй</span>
-  <span><b class="is-wrong">×<sub>3</sub></b> неверно, 3 попытки</span>
-  <span><b>…</b> введено, не проверено</span>
-  <span><b class="is-pending">?</b> ждёт учителя</span>
-  <span><b>—</b> пусто</span>
-  <span><b>{% for value, label, symbol in grade_choices %}{{ symbol }}{% if not forloop.last %} {% endif %}{% endfor %}</b> оценка учителя</span>
-  <span><i class="live-ring" aria-hidden="true"></i>решает сейчас</span>
-  <span><b class="live-copy">•</b> копировал текст условия, больше одного слова</span>
-</div>
+<p class="live-status" data-live-status role="status">Обновляется каждые 5 секунд</p>
 </section>
 {% endif %}

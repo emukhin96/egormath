@@ -220,7 +220,6 @@ def assignment_list(request):
         reviewed_total=Count('pk', filter=Q(status=Assignment.STATUS_REVIEWED)),
         queue_priority=Min('queue_order')).order_by('-last_assigned', 'worksheet_id')
     from independentworks.integration import assignment_groups, assignment_runs
-    from independentworks.models import Run, Work
     kind = request.GET.get('kind', '')
     grouped = list(grouped) if kind != 'independent' else []
     for group in grouped:
@@ -295,19 +294,6 @@ def assignment_list(request):
             {'student': u, 'assignment': existing.get(u.pk),
              'locked': bool(existing.get(u.pk) and (existing[u.pk].started_at or run.kind != 'initial'))}
             for u in users.values() if run.kind == 'initial' or u.pk in existing]
-    draft_runs = []
-    if kind == 'independent':
-        drafts = (Run.objects
-                  .filter(work__in=Work.visible_to(request.user),
-                          issued_at__isnull=True,
-                          superseded_at__isnull=True)
-                  .select_related('owner', 'work', 'parent')
-                  .order_by('-created_at', '-pk'))
-        if q:
-            drafts = drafts.filter(title__icontains=q)
-        if request.user.is_superuser and owner_id.isdigit():
-            drafts = drafts.filter(owner_id=owner_id)
-        draft_runs = list(drafts)
     worksheets = Worksheet.visible_to(request.user).order_by('-updated_at')
     return render(request, 'assignments/assignment_list.html', {
         'page': page,
@@ -340,7 +326,6 @@ def assignment_list(request):
             'worksheet': worksheet_id, 'due': due, 'owner': owner_id, 'kind': kind,
         },
         'return_query': request.GET.urlencode(),
-        'draft_runs': draft_runs,
     })
 
 
@@ -1376,7 +1361,9 @@ def review_assignment(request, pk):
         'queue_position': queue_position,
         'next_pending': next_pending,
         'owner_filter': owner_id,
-        'grade_choices': Review.grade_options(),
+        # Расшифровка шкалы — подсказкой на кнопках, как в «Проверке по задачам»
+        'grade_choices': [(value, f'{label}, {round(100 * Review.CREDITS.get(value, 0))}%', symbol)
+                          for value, label, symbol in Review.grade_options()],
         'has_stale_checks': any(
             getattr(obj, 'check_stale', False) for row in rows
             for obj in [row.get('submission'), *[sr['part'] for sr in row.get('subrows', [])]]),

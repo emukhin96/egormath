@@ -73,10 +73,24 @@ def own_attempt(request, pk, teacher=False):
 def catalog(request):
     if get_role(request.user) != 'teacher':
         return redirect(reverse('dashboard') + '?kind=independent')
-    from assignments.views import assignment_list
-    request.GET = request.GET.copy()
-    request.GET['kind'] = 'independent'
-    return assignment_list(request)
+    # Раздел — про шаблоны и черновики выдачи (ревизия 03.11, Z2); выданные
+    # самостоятельные — в «Заданиях» с фильтром, ссылкой из шапки.
+    from django.core.paginator import Paginator
+    from assignments.views import _work_cards
+    q = request.GET.get('q', '').strip()
+    drafts = (Run.objects
+              .filter(work__in=Work.visible_to(request.user),
+                      issued_at__isnull=True, superseded_at__isnull=True)
+              .select_related('owner', 'work', 'parent')
+              .order_by('-created_at', '-pk'))
+    works = _work_cards(Work.visible_to(request.user)).select_related('owner')
+    if q:
+        drafts = drafts.filter(title__icontains=q)
+        works = works.filter(title__icontains=q)
+    page = Paginator(works.order_by('-updated_at', '-pk'), 30).get_page(request.GET.get('page'))
+    issued = Run.objects.filter(work__in=Work.visible_to(request.user), issued_at__isnull=False).exists()
+    return render(request, 'independentworks/catalog.html', {
+        'draft_runs': list(drafts), 'page': page, 'q': q, 'has_issued': issued})
 
 
 @enabled
@@ -146,7 +160,9 @@ def create_from_worksheet(request, pk):
 def edit(request, pk):
     work = get_object_or_404(Work.visible_to(request.user), pk=pk)
     if request.method == 'POST':
-        action = request.POST.get('action')
+        # Правка заголовка на месте (builder.js) шлёт только title: поле
+        # с именем action заслонило бы form.action у автосохранения
+        action = request.POST.get('action') or ('title' if 'title' in request.POST else None)
         with transaction.atomic():
             work = Work.objects.select_for_update().get(pk=pk)
             if action == 'title':
@@ -187,6 +203,9 @@ def edit(request, pk):
             else:
                 raise svc.WorkError('Неизвестное действие.')
             work.save(update_fields=['updated_at'])
+        if action == 'title' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            # Заголовок правится на месте (builder.js), подтверждение — тостом
+            return JsonResponse({'ok': True, 'message': 'Название сохранено'})
         messages.success(request, 'Сохранено')
         if action == 'add':
             params = request.GET.copy()

@@ -1,1 +1,2 @@
-<label>Комментарий<textarea name="{{ comment_name }}" rows="2" data-preserve-input>{{ comment_value|default:'' }}</textarea></label>
+{# Комментарий раскрывается по «+ комментарий»; уже написанный показан сразу (ревизия 03.11, Z3) #}
+<details class="comment-toggle"{% if comment_value %} open{% endif %}><summary>{% if comment_value %}Комментарий{% else %}+ комментарий{% endif %}</summary><textarea name="{{ comment_name }}" rows="2" aria-label="Комментарий" data-preserve-input>{{ comment_value|default:'' }}</textarea></details>

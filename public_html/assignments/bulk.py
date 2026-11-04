@@ -62,7 +62,10 @@ def _parse_due(raw):
 def _back(request):
     query = request.POST.get('return_query', '')
     kind = request.POST.get('kind', '')
-    base = reverse('independentworks:catalog') if kind == 'independent' else reverse('assignment_list')
+    # Выданные самостоятельные — в «Заданиях» с фильтром вида (ревизия 03.11, Z2)
+    if not query and kind == 'independent':
+        query = 'kind=independent'
+    base = reverse('assignment_list')
     return redirect(f'{base}?{query}' if query else base)
 
 

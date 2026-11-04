@@ -123,7 +123,7 @@ class IndependentBulkTests(TestCase):
         from independentworks.models import Run
         response = self.post('apply', due_action='set', due_at='2026-10-02T09:00',
                              status='reviewed')
-        self.assertRedirects(response, reverse('independentworks:catalog'))
+        self.assertRedirects(response, reverse('assignment_list') + '?kind=independent')
         self.run.refresh_from_db()
         self.assertEqual(timezone.localtime(self.run.deadline).strftime('%d.%m %H:%M'),
                          '02.10 09:00')

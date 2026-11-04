@@ -1694,7 +1694,7 @@ class AutoCheckFlowTests(TestCase):
 
         response = self.client.get(
             reverse('review_assignment', args=[self.assignment.pk]))
-        self.assertContains(response, 'Самопроверка — нажатий: 3')
+        self.assertContains(response, '3 самопроверки, последняя — ')
         self.assertContains(response, 'Попытка 1')
         self.assertContains(response, 'Ранних попыток без сохранённого ответа: 2')
 

@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% load task_extras %}
+{% block title %}Самостоятельные — Математика{% endblock %}
+{% block content %}
+{# Раздел — шаблоны и черновики выдачи; выданные — в «Заданиях» (ревизия 03.11, Z2) #}
+<div class="page-head">
+  <div>
+    <h1>Самостоятельные</h1>
+    <p class="page-meta"><span>{{ page.paginator.count }} {{ page.paginator.count|plural_ru:'шаблон,шаблона,шаблонов' }}</span>{% if has_issued %}<a href="{% url 'assignment_list' %}?kind=independent">Выданные самостоятельные</a>{% endif %}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'independentworks:create' %}">Создать самостоятельную</a>
+  </div>
+</div>
+
+<form method="get" class="page-toolbar iw-catalog-filters">
+  <div class="filter-search">
+    <input type="search" name="q" value="{{ q }}" placeholder="Название самостоятельной" aria-label="Поиск: название самостоятельной">
+  </div>
+  {% if q %}<a class="filter-reset" href="{% url 'independentworks:catalog' %}">Сбросить</a>{% endif %}
+</form>
+
+{% if draft_runs %}
+<section class="iw-catalog-block" aria-labelledby="iw-drafts">
+  <h2 id="iw-drafts">Черновики выдачи</h2>
+  <div class="catalog-table-wrap"><table class="list assignment-sheet-table table-stack">
+    <thead><tr><th>Самостоятельная</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th class="num">Учеников</th><th>Срок</th><th>Сохранён</th><th></th></tr></thead>
+    <tbody>{% for run in draft_runs %}<tr>
+      <td class="assignment-title-cell stack-primary"><strong>{{ run.title }}</strong><span class="cell-sub">{{ run.kind_label }}, {{ run.duration }} мин.</span></td>
+      {% if request.user.is_superuser %}<td data-label="Владелец">{{ run.owner.get_full_name|default:run.owner.username }}</td>{% endif %}
+      <td class="num" data-label="Учеников">{{ run.plan.students|length }}</td>
+      <td data-label="Срок">{{ run.deadline|date:'d.m.Y H:i'|default:'—' }}</td>
+      <td data-label="Сохранён">{{ run.created_at|date:'d.m.Y H:i' }}</td>
+      <td class="row-actions"><a class="btn btn-secondary btn-small" href="{% url 'assignment_create' %}?mode=independent&amp;work={{ run.work_id }}&amp;resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Продолжить</a></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+
+<section class="iw-catalog-block" aria-labelledby="iw-works">
+  {% if draft_runs %}<h2 id="iw-works">Шаблоны</h2>{% endif %}
+  {% if page.object_list %}
+  <div class="catalog-table-wrap"><table class="list assignment-sheet-table table-stack">
+    <thead><tr><th>Шаблон</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Выдачи</th><th></th></tr></thead>
+    <tbody>{% for work in page.object_list %}<tr>
+      <td class="assignment-title-cell stack-primary"><a class="assignment-title" href="{% url 'independentworks:edit' work.pk %}">{{ work.title }}</a><span class="cell-sub">{{ work.number_count }} {{ work.number_count|plural_ru:'номер,номера,номеров' }}{% if work.source_worksheet_id %}, из листка «{{ work.source_worksheet.title }}»{% endif %}</span></td>
+      {% if request.user.is_superuser %}<td data-label="Владелец">{{ work.owner.get_full_name|default:work.owner.username }}</td>{% endif %}
+      <td data-label="Выдачи">{% if work.issued %}{{ work.issued }} {{ work.issued|plural_ru:'раз,раза,раз' }}, последний {{ work.last_issued|date:'d.m.Y' }}{% else %}<span class="muted">не выдавалась</span>{% endif %}</td>
+      <td class="row-actions"><a class="btn btn-secondary btn-small" href="{% url 'assignment_create' %}?mode=independent&amp;work={{ work.pk }}">Выдать</a></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% elif q %}
+  <p class="empty-line">Ничего не найдено.</p>
+  {% else %}
+  <div class="empty-state">
+    {# Новый учитель: следующий шаг и чеклист (accounts/onboarding.py) #}
+    <h2>Самостоятельных пока нет</h2>
+    <p class="muted"><a href="{% url 'independentworks:create' %}">Создайте самостоятельную</a> из своего листка или подборки и выдайте её ученикам{% if shows_onboarding %}; как начать — в <a href="{% url 'welcome' %}">«Первых шагах»</a>{% endif %}.</p>
+  </div>
+  {% endif %}
+</section>
+{% include 'includes/pagination.html' with page=page query=request.GET %}
+{% endblock %}
