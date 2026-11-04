@@ -3810,23 +3810,6 @@
     gap: var(--space-4) var(--section-gap);
     align-items: start;
   }
-  .home-head {
-    align-self: end;
-  }
-  .home-head h1 {
-    margin: 0;
-  }
-  .home-actions {
-    align-self: end;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-2);
-  }
-  .home-actions .btn {
-    width: 100%;
-    min-height: 40px;
-    justify-content: center;
-  }
   .home-main,
   .home-side {
     min-width: 0;

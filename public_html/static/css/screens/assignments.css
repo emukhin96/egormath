@@ -46,3 +46,36 @@
   .help-tip-body.live-legend { display: grid; gap: var(--space-1); padding: var(--space-3); border-top: 0; }
   .live-status { margin: 0; padding: var(--space-2) 0; font-size: 12.5px; color: var(--muted); }
 }
+
+@layer components {
+  /* U1: «Добавить ученика ▾» в шапке и окна добавления */
+  .add-menu { position: relative; display: inline-block; }
+  .add-menu > summary { list-style: none; gap: 6px; }
+  .add-menu > summary::-webkit-details-marker { display: none; }
+  .add-menu > summary svg { width: 12px; height: 12px; }
+  .dialog-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-2); margin-top: var(--space-3); }
+  .dialog-fields label { display: block; margin-bottom: var(--space-1); }
+  .dialog-fields input { width: 100%; }
+  #student-link-dialog .copy-row { margin-top: var(--space-3); }
+
+  /* U1: группы в панели — «⋯» у строки, переименование и «+ группа» на месте */
+  .student-groups-panel .group-row { display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; }
+  .student-groups-panel .group-row > a { flex: 1; min-width: 0; }
+  .student-groups-panel .group-row.is-renaming > a,
+  .student-groups-panel .group-row.is-renaming > .more-menu { display: none; }
+  .student-groups-panel a[aria-current] { font-weight: 600; }
+  .group-inline-form { display: flex; flex-wrap: wrap; gap: var(--space-2); width: 100%; margin-top: var(--space-1); }
+  .group-inline-form input[type=text], .group-inline-form select { flex: 1; min-width: 0; }
+  .group-add { margin-top: var(--space-3); }
+  .group-add > summary { list-style: none; color: var(--accent); cursor: pointer; font-size: 14px; }
+  .group-add > summary::-webkit-details-marker { display: none; }
+  .student-group-head .more-menu { margin-left: var(--space-2); }
+}
+
+@layer components {
+  /* U2, G10: кабинет учителя — ссылки блоков одним тихим стилем, пустое — 14 px серым */
+  .home-link { font-size: 13px; font-weight: 500; color: var(--accent); text-decoration: none; }
+  .home-link:hover { text-decoration: underline; }
+  .home-empty { font-size: 14px; }
+  .home-main > .empty-line { margin: 0; }
+}
