@@ -7,11 +7,9 @@
     {% if sheet.main_topic %}<span>{{ sheet.main_topic.topic.name }}</span>{% endif %}
   </nav>
   <h2 class="authored-preview-title">{{ sheet.title }}</h2>
-  <p class="page-meta">
-    <span>{{ sheet.tasks_total }} {{ sheet.tasks_total|plural_ru:'задача,задачи,задач' }}</span>
-    <span>{{ sheet.month_year }}</span>
-    {% if sheet.topics %}<span class="collection-topics authored-preview-topics">{% for info in sheet.topics|slice:':5' %}<span class="collection-topic" title="{{ info.label }}">{{ info.topic.name }}</span>{% endfor %}</span>{% endif %}
-  </p>
+  <p class="page-meta"><span>{{ sheet.tasks_total }} {{ sheet.tasks_total|plural_ru:'задача,задачи,задач' }}</span><span>{{ sheet.month_year }}</span></p>
+  {# Темы — чипами отдельной строкой, а не через запятую в подзаголовке #}
+  {% if sheet.topics %}<div class="collection-topics authored-preview-topics">{% for info in sheet.topics|slice:':5' %}<span class="collection-topic" title="{{ info.label }}">{{ info.topic.name }}</span>{% endfor %}</div>{% endif %}
   {% if is_owner %}
   <div class="authored-controls authored-preview-owner">{% include 'worksheets/_authored_controls.html' with next_url=next_url %}</div>
   {% endif %}
