@@ -10,7 +10,7 @@
 {% endcomment %}
 <div class="is-head">
   <div class="is-heading">
-    {% if independent %}<a class="live-back" href="{% url 'independentworks:catalog' %}" data-save-draft-before-leave>← Самостоятельные</a>{% else %}<a class="live-back" href="{% url 'assignment_list' %}?kind=ordinary">← Задания</a>{% endif %}
+    <nav class="page-crumbs" aria-label="Путь">{% if independent %}<a href="{% url 'independentworks:catalog' %}" data-save-draft-before-leave>Самостоятельные</a>{% else %}<a href="{% url 'assignment_list' %}?kind=ordinary">Задания</a>{% endif %}</nav>
     <h1>Выдать задание</h1>
     {% if parent %}<p class="live-meta">{% if kind == 'correction' %}Работа над ошибками{% else %}Пересдача{% endif %}, {{ work.title }}</p>{% endif %}
   </div>

@@ -86,7 +86,7 @@
         {% if item.task_id %}
         {# --- Задача --- #}
         <div class="ws-content" data-task-png-content>
-          {% if item.task.block_id %}<p class="page-subtitle" data-task-png-skip>{{ item.task.block.title }} · вопрос {{ item.task.block_position }} из {{ item.task.block.size }}. Кнопки ↑/↓ перемещают весь блок.</p>{% endif %}
+          {% if item.task.block_id %}<p class="page-subtitle" data-task-png-skip>{{ item.task.block.title }}, вопрос {{ item.task.block_position }} из {{ item.task.block.size }}. Кнопки ↑/↓ перемещают весь блок.</p>{% endif %}
           <form id="settings-{{ item.pk }}" method="post" class="ws-settings"
                 data-autosave="change"
                 action="{% url 'worksheet_item_settings' worksheet.pk item.pk %}">
@@ -228,7 +228,7 @@
             <label class="dialog-topic">
               <input type="checkbox" name="hide_links" value="{{ link.pk }}"
                      {% if link.pk in row.hidden_links %}checked{% endif %}>
-              {{ link.comment|default:'Ссылка' }} · {{ link.created_at|date:'d.m.Y H:i' }}{% if not link.is_active %} <span class="muted">(отключена)</span>{% endif %}
+              {{ link.comment|default:'Ссылка' }}, {{ link.created_at|date:'d.m.Y H:i' }}{% if not link.is_active %} <span class="muted">(отключена)</span>{% endif %}
             </label>
             {% endfor %}
           </div>
@@ -241,7 +241,7 @@
               <input type="checkbox" name="hide_groups" value="{{ section.group.pk }}"
                      data-group-toggle="{% for a in section.assignments %}{{ a.pk }}{% if not forloop.last %},{% endif %}{% endfor %}"
                      {% if section.group.pk in row.hidden_groups %}checked{% endif %}>
-              {{ section.group.name }} <span class="muted">· {{ section.assignments|length }} уч.</span>
+              {{ section.group.name }} <span class="muted">{{ section.assignments|length }} уч.</span>
             </label>
             {% endfor %}
             <p class="muted">Скрытое для группы целиком наследуют и ученики, которым листок выдадут через эту группу позже.</p>
@@ -299,7 +299,7 @@
       <tr data-task-row>
         <td>
           <div class="math-content task-text">{{ task.text_latex|web_text_preview:180 }}</div>
-          <span class="task-meta"><a href="{% url 'task_detail' task.pk %}" title="Открыть задачу">#{{ task.pk }}</a>{% if task.grade_display %} · {{ task.grade_display }} класс{% endif %} {% include 'includes/task_usage_badge.html' %}</span>
+          <span class="task-meta"><a href="{% url 'task_detail' task.pk %}" title="Открыть задачу">#{{ task.pk }}</a>{% if task.grade_display %}, {{ task.grade_display }} класс{% endif %} {% include 'includes/task_usage_badge.html' %}</span>
         </td>
         <td style="white-space:nowrap">
           <form method="post" action="{% url 'worksheet_add_task' worksheet.pk %}" class="inline-form" data-builder-action>

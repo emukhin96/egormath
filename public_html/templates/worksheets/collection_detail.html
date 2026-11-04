@@ -5,9 +5,9 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <span class="page-eyebrow">{{ collection.source }}{% for part in collection.source_path %}{% if not forloop.last %} · {{ part }}{% endif %}{% endfor %}</span>
+    <span class="page-eyebrow">{{ collection.source }}{% for part in collection.source_path %}{% if not forloop.last %} › {{ part }}{% endif %}{% endfor %}</span>
     <h1>{{ collection.catalog_title }}</h1>
-    <p class="page-subtitle">{% if children %}Раздел: {{ children|length }} {{ children|length|plural_ru:'подборка,подборки,подборок' }}{% if flat_groups %} · {{ cart_task_ids|length }} {{ cart_task_ids|length|plural_ru:'задача,задачи,задач' }}{% endif %}{% elif tasks_total %}{{ tasks_total }} {{ tasks_total|plural_ru:'задача,задачи,задач' }}{% if section_nav %} · {{ section_nav|length }} {{ section_nav|length|plural_ru:'параграф,параграфа,параграфов' }}{% endif %}{% if page.has_other_pages %} · страница {{ page.number }} из {{ page.paginator.num_pages }}{% endif %}{% else %}Подборка{% endif %}</p>
+    <p class="page-subtitle">{% if children %}Раздел: {{ children|length }} {{ children|length|plural_ru:'подборка,подборки,подборок' }}{% if flat_groups %}, {{ cart_task_ids|length }} {{ cart_task_ids|length|plural_ru:'задача,задачи,задач' }}{% endif %}{% elif tasks_total %}{{ tasks_total }} {{ tasks_total|plural_ru:'задача,задачи,задач' }}{% if section_nav %}, {{ section_nav|length }} {{ section_nav|length|plural_ru:'параграф,параграфа,параграфов' }}{% endif %}{% if page.has_other_pages %}, страница {{ page.number }} из {{ page.paginator.num_pages }}{% endif %}{% else %}Подборка{% endif %}</p>
   </div>
   {# Действия над подборкой — одна заливная кнопка; настройки просмотра ниже, отдельным рядом #}
   <div class="form-buttons collection-head-actions">
@@ -28,7 +28,7 @@
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
       {% for task_id in cart_task_ids %}<input type="hidden" name="task_ids" value="{{ task_id }}">{% endfor %}
-      <button class="btn btn-secondary" type="submit">{% if page.has_other_pages %}Страницу в корзину{% else %}Всё в корзину{% endif %} · {{ cart_task_ids|length }}</button>
+      <button class="btn btn-secondary" type="submit">{% if page.has_other_pages %}Страницу в корзину{% else %}Всё в корзину{% endif %} ({{ cart_task_ids|length }})</button>
     </form>
     {% endif %}
     {% if can_edit %}
@@ -81,7 +81,7 @@
     <section class="collection-flat-group depth-{{ group.depth }}" id="collection-{{ group.collection.pk }}">
       <h3 class="collection-flat-heading">
         <a href="{% url 'collection_detail' group.collection.pk %}" title="{{ group.collection.catalog_title }}">{{ group.collection.short_title }}</a>
-        <span class="muted">· {{ group.collection.items_total }} {{ group.collection.items_total|plural_ru:'задача,задачи,задач' }}{% if group.has_children %} · <a href="{% url 'collection_detail' group.collection.pk %}">открыть раздел</a>{% endif %}</span>
+        <span class="muted">{{ group.collection.items_total }} {{ group.collection.items_total|plural_ru:'задача,задачи,задач' }}{% if group.has_children %}, <a href="{% url 'collection_detail' group.collection.pk %}">открыть раздел</a>{% endif %}</span>
       </h3>
       {% if group.rows %}{% include 'worksheets/_collection_rows.html' with rows=group.rows %}{% endif %}
     </section>
@@ -92,7 +92,7 @@
     <tr><th>Подборка</th><th>Задач</th></tr>
     {% for child in children %}
     <tr>
-      <td class="stack-primary"><a href="{% url 'collection_detail' child.pk %}" title="{{ child.catalog_title }}">{{ child.short_title }}</a>{% if child.children_total %} <span class="muted">· раздел</span>{% endif %}</td>
+      <td class="stack-primary"><a href="{% url 'collection_detail' child.pk %}" title="{{ child.catalog_title }}">{{ child.short_title }}</a>{% if child.children_total %} <span class="muted">раздел</span>{% endif %}</td>
       <td data-label="Задач">{{ child.items_total }}</td>
     </tr>
     {% endfor %}
@@ -106,7 +106,7 @@
     {# Заголовок параграфа повторяется на каждой его странице #}
     <div class="ws-item ws-item-rubric" id="section-{{ entry.block.section.index }}">
       <div class="ws-body"><div class="ws-content">
-        <h3 class="math-content">{{ entry.block.section.heading.rubric }}{% if entry.block.continued %} <span class="muted collection-continued">· продолжение, часть {{ entry.block.part }} из {{ entry.block.parts }}</span>{% endif %}</h3>
+        <h3 class="math-content">{{ entry.block.section.heading.rubric }}{% if entry.block.continued %} <span class="muted collection-continued">продолжение, часть {{ entry.block.part }} из {{ entry.block.parts }}</span>{% endif %}</h3>
         {% if entry.block.section.heading.rubric_note and not entry.block.continued %}<p class="math-content">{{ entry.block.section.heading.rubric_note|web_text }}</p>{% endif %}
       </div></div>
     </div>

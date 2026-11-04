@@ -10,7 +10,7 @@
 {% endcomment %}
 <div class="page-head live-head">
   <div>
-    <a class="live-back" href="{% url 'independentworks:catalog' %}">← Самостоятельные</a>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'independentworks:catalog' %}">Самостоятельные</a></nav>
     <h1>{{ run.title }}</h1>
     <p class="live-meta">{{ run.kind_label }}, {{ run.duration }} мин{% if run.deadline %}, закончить до {{ run.deadline|date:'j E, H:i' }}{% endif %}{% if run.issued_at %}, выдана {{ run.issued_at|date:'d.m.Y' }}{% endif %}</p>
   </div>

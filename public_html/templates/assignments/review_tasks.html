@@ -14,7 +14,7 @@
     <a role="tab" href="{% query_set view='students' item=None %}" aria-selected="{% if view == 'students' %}true{% else %}false{% endif %}">Ученики</a>
   </div>
   <div class="rv-head">
-    <a class="live-back" href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">← {{ worksheet.title }}, карта ответов</a>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'assignment_list' %}?kind=ordinary">Задания</a><a href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">{{ worksheet.title }}</a></nav>
     <h1>Проверка</h1>
     <p class="live-meta">Оценено <span data-review-graded data-base="{{ graded }}">{{ graded }}</span> {{ answers|plural_ru:'ответ,ответа,ответов' }} из {{ answers }}, верно по автосверке {{ auto_ok }}</p>
   </div>

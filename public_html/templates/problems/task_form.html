@@ -1,12 +1,11 @@
 {% extends 'base.html' %}
 {% load static task_extras %}
 {% block title %}{% if task %}Задача #{{ task.pk }}{% else %}Новая задача{% endif %} — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/task_form.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <nav class="page-crumbs" aria-label="Путь">{% if worksheet %}<a href="{% url 'worksheet_list' %}">Листки</a><a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a>{% else %}<a href="{% url 'task_list' %}">Задачи</a>{% endif %}</nav>
-    <h1>{% if analog_source %}Новый аналог задачи #{{ analog_source.pk }}{% elif task %}Задача #{{ task.pk }}{% else %}Новая задача{% endif %}</h1>
+    <h1>{% if analog_source %}Новый аналог задачи #{{ analog_source.pk }}{% elif task %}Задача #{{ task.pk }}{% else %}Новая задача{% endif %}<details class="help-tip"><summary aria-label="Пояснение" title="Пояснение">?</summary><div class="help-tip-body"><ul><li>Математика: <code>$...$</code> и <code>\[...\]</code></li><li>Картинка в тексте: <code>\taskpic{1}</code></li><li>Закреплённые поля сохраняются для следующей задачи</li></ul></div></details></h1>
     {% if task.variant_of_id or worksheet %}<p class="page-meta">{% if worksheet %}<span>из конструктора листка</span>{% endif %}{% if task.variant_of_id %}<span class="badge badge-local">локальная копия задачи #{{ task.variant_of_id }}</span>{% endif %}</p>{% endif %}
   </div>
 </div>

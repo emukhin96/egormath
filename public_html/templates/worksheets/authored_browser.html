@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load static task_extras %}
-{% block title %}{% if section %}{{ page_title }} · {% endif %}{{ source.title }} — Математика{% endblock %}
+{% block title %}{% if section %}{{ page_title }} — {% endif %}{{ source.title }} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/authored.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -49,20 +49,20 @@
   <details class="card authored-topic" id="{{ group.anchor }}" open data-authored-group>
     <summary class="authored-topic-head">
       <span class="authored-topic-title">{{ group.label|default:'Все листки' }}</span>
-      <span class="muted">{{ group.sheets|length }} {{ group.sheets|length|plural_ru:'листок,листка,листков' }} · {{ group.tasks_total }} {{ group.tasks_total|plural_ru:'задача,задачи,задач' }}</span>
+      <span class="muted">{{ group.sheets|length }} {{ group.sheets|length|plural_ru:'листок,листка,листков' }}, {{ group.tasks_total }} {{ group.tasks_total|plural_ru:'задача,задачи,задач' }}</span>
       {% with ids=group.cart_task_ids %}{% if ids and ids|length <= cart_limit %}
       <form method="post" action="{% url 'cart_add_many' %}" class="authored-topic-cart" title="Все задачи листков темы — в корзину">
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
         {% for task_id in ids %}<input type="hidden" name="task_ids" value="{{ task_id }}">{% endfor %}
-        <button class="btn btn-small btn-secondary" type="submit">Всё в корзину · {{ ids|length }}</button>
+        <button class="btn btn-small btn-secondary" type="submit">Всё в корзину ({{ ids|length }})</button>
       </form>
       {% endif %}{% endwith %}
     </summary>
     {% for sheet in group.sheets %}
     <div class="authored-sr" data-authored-row>
       <div class="authored-sr-main">
-        <a class="authored-sr-title" href="{{ list_url }}{% if '?' in list_url %}&amp;{% else %}?{% endif %}sheet={{ sheet.pk }}" data-authored-title>{{ sheet.title }}</a>{% if not sheet.collection.is_published %} <span class="muted authored-private" title="Подборку видите только вы">· видна только вам</span>{% endif %}
+        <a class="authored-sr-title" href="{{ list_url }}{% if '?' in list_url %}&amp;{% else %}?{% endif %}sheet={{ sheet.pk }}" data-authored-title>{{ sheet.title }}</a>{% if not sheet.collection.is_published %} <span class="muted authored-private" title="Подборку видите только вы">видна только вам</span>{% endif %}
         {% if sheet.other_topics %}<div class="authored-also">также: {% for info in sheet.other_topics|slice:':3' %}{{ info.topic.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
         {% if sort != 'topic' and sheet.main_topic %}<div class="authored-also">{{ sheet.main_topic.label }}</div>{% endif %}
       </div>
@@ -92,7 +92,7 @@
          data-detail-url="{% url 'collection_detail' sheet.pk %}">
         <span class="authored-li-name" data-authored-title>{{ sheet.title }}</span>
         <span class="authored-li-count" title="Задач в листке">{{ sheet.tasks_total }}</span>
-        <span class="authored-li-sub">{{ sheet.month_year }}{% if not sheet.collection.is_published %} · видна только вам{% endif %}</span>
+        <span class="authored-li-sub">{{ sheet.month_year }}{% if not sheet.collection.is_published %}, видна только вам{% endif %}</span>
       </a>
       {% endfor %}
     </section>

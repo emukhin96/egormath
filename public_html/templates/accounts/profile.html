@@ -1,6 +1,5 @@
 {% extends 'base.html' %}
 {% block title %}Профиль — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/profile.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
@@ -15,6 +14,7 @@
 <div class="grid-2">
   <div class="card">
     <h2>Имя и почта</h2>
+    <p class="helptext">Имя и фамилия попадают в шапку PDF листка как автор и видны ученикам в заданиях.</p>
     <form method="post">
       {% csrf_token %}
       {{ profile_form.as_p }}

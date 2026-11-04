@@ -10,7 +10,7 @@ _task_class_body.html, его обновляет опрос teacher_progress.js.
 {% endcomment %}
 <div class="tc-head">
   <div class="tc-heading">
-    <a class="live-back" href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">← {{ worksheet.title }}, карта ответов</a>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'assignment_list' %}?kind=ordinary">Задания</a><a href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">{{ worksheet.title }}</a></nav>
     <h1>Задача {{ number }}</h1>
     <nav class="tc-strip" aria-label="Задачи работы">{% for n in strip %}<a href="{{ n.url }}{% query_set point=None fragment=None %}"{% if n.current %} aria-current="page"{% endif %}>{{ n.number }}</a>{% endfor %}</nav>
   </div>

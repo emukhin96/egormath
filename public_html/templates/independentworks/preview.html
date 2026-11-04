@@ -12,7 +12,7 @@
 {% endcomment %}
 <div class="pv-head">
   <div class="pv-heading">
-    <a class="live-back" href="{% url 'independentworks:prepare' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">← Выдать задание</a>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'independentworks:catalog' %}">Самостоятельные</a><a href="{% url 'independentworks:prepare' run.work_id %}?resume={{ run.pk }}{% if run.parent_id %}&amp;parent={{ run.parent_id }}&amp;kind={{ run.kind }}{% endif %}">Выдача</a></nav>
     <h1>Перед выдачей: {{ run.title }}</h1>
     <p class="live-meta">{{ variants|length }} {{ variants|length|plural_ru:'вариант,варианта,вариантов' }}, {{ recipients|length }} {{ recipients|length|plural_ru:'ученик,ученика,учеников' }}, {{ run.duration }} мин{% if run.deadline %}, закончить до {{ run.deadline|date:'j E, H:i' }}{% endif %}</p>
   </div>

@@ -1,11 +1,10 @@
 {% extends 'base.html' %}
 {% load page_tools task_extras %}
 {% block title %}Учителя — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/teachers.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Учителя</h1>
+    <h1>Учителя<details class="help-tip"><summary aria-label="Пояснение" title="Пояснение">?</summary><div class="help-tip-body"><p>Приглашение — одна ссылка на одну регистрацию, по умолчанию на 14 дней. {% if mail_enabled %}Если в приглашении указана почта, ссылку можно отправить письмом отсюда или скопировать и переслать самому.{% else %}Почты на сайте нет: ссылку копируете и отправляете сами.{% endif %}</p><p>Приглашённый учитель видит общие задачи, но правит их только копией для своего листка. Право менять общие задачи напрямую включается здесь.</p><p>Отключённый учитель не может войти; его ученики, листки и задания остаются.</p></div></details></h1>
     <p class="page-meta">
       <span>{{ teacher_list|length }} {{ teacher_list|length|plural_ru:'учитель,учителя,учителей' }}</span>
       {% if invites %}<span>{{ invites|length }} {{ invites|length|plural_ru:'приглашение,приглашения,приглашений' }} ждёт регистрации</span>{% endif %}
@@ -97,7 +96,7 @@
       <h3 id="reset-password-title-{{ teacher.pk }}">Сбросить пароль учителя?</h3>
       <button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button>
     </div>
-    <p>{{ teacher.get_full_name|default:teacher.username }} · <span class="mono">{{ teacher.username }}</span></p>
+    <p>{{ teacher.get_full_name|default:teacher.username }}, <span class="mono">{{ teacher.username }}</span></p>
     <p>Прежний пароль перестанет действовать. Новый пароль будет показан один раз после сброса — сохраните и передайте его учителю.</p>
     <form method="post" action="{% url 'teacher_reset_password' teacher.pk %}">
       {% csrf_token %}

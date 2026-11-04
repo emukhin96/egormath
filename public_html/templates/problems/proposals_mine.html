@@ -1,12 +1,11 @@
 {% extends 'base.html' %}
 {% load task_extras %}
 {% block title %}Мои предложения — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/proposals_mine.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a></nav>
-    <h1>Мои предложения</h1>
+    <h1>Мои предложения<details class="help-tip"><summary aria-label="Пояснение" title="Пояснение">?</summary><div class="help-tip-body"><p>Предложение видят редакторы. «Принято» — исправление внесено в общую задачу, «Отклонено» — редактор оставил задачу как есть.</p></div></details></h1>
     <p class="page-meta"><span>{{ page.paginator.count }} {{ page.paginator.count|plural_ru:'предложение,предложения,предложений' }}</span>{% if unread_total %}<span>{{ unread_total }} {{ unread_total|plural_ru:'новый статус,новых статуса,новых статусов' }}</span>{% endif %}</p>
   </div>
 </div>

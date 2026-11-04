@@ -50,7 +50,7 @@ class BuilderTests(TestCase):
         self.assertContains(response, 'data-save-draft-before-leave')
         self.assertContains(response, 'name="action" value="preview"', count=1)  # кнопки — в итоге справа
         self.assertContains(response, 'name="action" value="draft"')
-        self.assertContains(response, 'class="live-back"')  # шапка по макету E: «← Самостоятельные»
+        self.assertContains(response, 'class="page-crumbs"')  # крошка «Самостоятельные» вместо «←» (ревизия 03.11, G3)
         self.assertContains(response, 'class="card is-summary"')
         self.assertContains(response, 'Сохранить черновик')
         self.assertNotContains(response, 'Независимый шаблон самостоятельной.')

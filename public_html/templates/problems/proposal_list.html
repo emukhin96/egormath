@@ -1,12 +1,11 @@
 {% extends 'base.html' %}
 {% load page_tools task_extras %}
 {% block title %}Предложения исправлений — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/proposals.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a></nav>
-    <h1>Предложения исправлений</h1>
+    <h1>Предложения исправлений<details class="help-tip"><summary aria-label="Пояснение" title="Пояснение">?</summary><div class="help-tip-body"><p>Приглашённые учителя не меняют общие задачи: что исправить, они описывают текстом, и это приходит сюда.</p><p>Правку вы вносите на карточке задачи сами и отмечаете статус.</p></div></details></h1>
     <p class="page-meta"><span>{{ new_total }} {{ new_total|plural_ru:'новое,новых,новых' }}</span></p>
   </div>
 </div>

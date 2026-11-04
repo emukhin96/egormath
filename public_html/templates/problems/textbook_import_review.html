@@ -14,7 +14,7 @@
   </div>
 </div>
 {% if import_exam_items %}<p class="helptext">Метки экзамена: {% for item in import_exam_items %}{{ item.name }}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
-{% if draft.block_id %}<p class="page-subtitle">{{ draft.block.title }} · вопрос {{ draft.block_position }} из {{ draft.block.size }}. При загрузке и добавлении в листок вопросы блока сохраняются вместе.</p>{% endif %}
+{% if draft.block_id %}<p class="page-subtitle">{{ draft.block.title }}, вопрос {{ draft.block_position }} из {{ draft.block.size }}. При загрузке и добавлении в листок вопросы блока сохраняются вместе.</p>{% endif %}
 {% if draft.imported_task %}<p class="msg">Эта задача уже в базе: <a href="{% url 'task_detail' draft.imported_task_id %}" target="_blank" rel="noopener">открыть сохранённую версию</a>.</p>{% endif %}
 {% if review_locked %}<p class="helptext">Черновик только для просмотра: после загрузки в каталог сверка его не меняет. Исправления — в карточке задачи.</p>{% endif %}
 {% if content_warnings %}<div class="msg msg-warning"><strong>Требует внимания:</strong> {{ content_warnings|join:'; ' }}</div>{% endif %}

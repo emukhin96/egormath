@@ -1,7 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block title %}Импорт .tex — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/import.html' %}{% endblock %}
 {% block content %}
 <div class="page-head"><div>
   <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a></nav>
@@ -43,9 +42,9 @@
   </h2>
   <p>
     <strong>{{ preview.header.title|default:'(без названия)' }}</strong>
-    {% if preview.header.left %} · {{ preview.header.left }}{% endif %}
-    {% if preview.header.right %} · {{ preview.header.right }}{% endif %}
-    {% if preview.header.subtitle %} · {{ preview.header.subtitle }}{% endif %}
+    {% if preview.header.left %}, {{ preview.header.left }}{% endif %}
+    {% if preview.header.right %}, {{ preview.header.right }}{% endif %}
+    {% if preview.header.subtitle %}, {{ preview.header.subtitle }}{% endif %}
   </p>
   {% if not gemini_ready %}
   <p class="helptext">Нейрогенерация выключена: положите ключ в

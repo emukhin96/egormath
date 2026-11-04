@@ -124,7 +124,7 @@
       {# Заголовок группы — ячейка, а не th: в сложенной таблице строки с th скрываются #}
       <tr class="student-group-head"><td colspan="6" class="stack-primary">
         <span class="student-group-title">{% if section.group %}{{ section.group.name }}{% if request.user.is_superuser %} <span class="muted">— {{ section.group.teacher.get_full_name|default:section.group.teacher.username }}</span>{% endif %}{% else %}Без группы{% endif %}</span>
-        <span class="muted">· {{ section.profiles|length }}</span>
+        <span class="muted">{{ section.profiles|length }}</span>
         {% if section.group %}<span class="student-group-links"><a href="?group={{ section.group.pk }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if teacher_filter %}&amp;teacher={{ teacher_filter }}{% endif %}">только эта группа</a> · <a href="{% url 'progress_overview' %}?group={{ section.group.pk }}">прогресс</a></span>{% endif %}
       </td></tr>
       {% for profile, row_groups in section.rows %}{% include 'accounts/_student_row.html' %}{% endfor %}
@@ -142,7 +142,7 @@
             <h3 id="reset-password-title-{{ profile.user_id }}">Сбросить пароль ученика?</h3>
             <button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button>
           </div>
-          <p>{{ profile.user.get_full_name|default:profile.user.username }} · <span class="mono">{{ profile.user.username }}</span></p>
+          <p>{{ profile.user.get_full_name|default:profile.user.username }}, <span class="mono">{{ profile.user.username }}</span></p>
           <p>Прежний пароль перестанет действовать. Новый пароль будет показан один раз после сброса — сохраните и передайте его ученику.</p>
           <form method="post" action="{% url 'reset_student_password' profile.user_id %}">
             {% csrf_token %}

@@ -1,7 +1,6 @@
 {% extends 'base.html' %}
 {% load task_extras %}
 {% block title %}{{ propose.label }} — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/task_detail.html' with task=task %}{% endblock %}
 {% block content %}
 {# Та же форма, что в диалоге карточки: сюда ведут «Предложить маску» из самостоятельных и диалог «Это общая задача» со страниц без карточки #}
 <div class="page-head">

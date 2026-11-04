@@ -1,0 +1,73 @@
+/* Каркас страницы после ревизии 03.11 (G1–G3): пояснение «?» у заголовка
+   вместо боковой панели с абзацем, оглавление справки над текстом.
+   Разметка: <details class="help-tip"><summary aria-label="Пояснение">?</summary>
+   <div class="help-tip-body">…</div></details> внутри h1. */
+@layer components {
+  /* «?» рядом с заголовком: по нажатию — всплывающее пояснение.
+     <details> работает без JS и с клавиатуры; закрывается повторным нажатием. */
+  .help-tip {
+    position: relative;
+    display: inline-block;
+    margin-left: var(--space-2);
+    vertical-align: 0.15em;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+  .help-tip > summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--tile);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+  }
+  .help-tip > summary::-webkit-details-marker { display: none; }
+  .help-tip > summary:hover,
+  .help-tip[open] > summary { background: var(--accent-soft); color: var(--accent); }
+  .help-tip > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .help-tip-body {
+    position: absolute;
+    z-index: 60;
+    top: calc(100% + 6px);
+    left: -8px;
+    width: min(360px, calc(100vw - 32px));
+    padding: var(--space-3);
+    border-radius: var(--radius);
+    background: var(--card);
+    box-shadow: 0 6px 24px rgb(16 43 85 / 0.14), 0 0 0 1px var(--hairline);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .help-tip-body p { margin: 0; }
+  .help-tip-body p + p,
+  .help-tip-body p + ul,
+  .help-tip-body ul + p { margin-top: var(--space-2); }
+  .help-tip-body ul { margin: 0; padding-left: 1.1em; }
+
+  /* Шапки-колонки с gap 4px (доски, проверка по задачам): крошки на той же
+     высоте, что в .page-head (там отступ 2px, здесь его даёт gap) */
+  :is(.bd-head, .rv-head) > .page-crumbs { margin-bottom: -2px; }
+
+  /* Оглавление справки — строкой ссылок над текстом (бывшая панель) */
+  .help-toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    margin: 0 0 var(--space-5);
+    font-size: 0.875rem;
+  }
+  .help-toc a { color: var(--muted); text-decoration: none; }
+  .help-toc a:hover { color: var(--accent); }
+
+  /* Счётчик кандидатов номера самостоятельной — серым после номера (Z4) */
+  .iw-cand-count { font-size: 0.875rem; font-weight: 400; }
+}

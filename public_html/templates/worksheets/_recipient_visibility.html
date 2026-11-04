@@ -46,7 +46,7 @@
     {% for section in recipient_groups %}<button type="button" class="link-btn" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'group' section.group.pk %}">{{ section.group.name }}</button>{% endfor %}
   </div>{% endif %}
   {% if members %}<h4>Ученики</h4><div class="ws-recipient-members">
-    {% for member in members %}<button type="button" class="link-btn" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'assignment' member.pk %}">{{ member.student.get_full_name|default:member.student.username }} · {{ member.get_status_display }}</button>{% endfor %}
+    {% for member in members %}<button type="button" class="link-btn" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'assignment' member.pk %}">{{ member.student.get_full_name|default:member.student.username }}, {{ member.get_status_display }}</button>{% endfor %}
   </div>{% endif %}
   <div class="form-buttons">
     <button type="submit" class="btn">Сохранить</button>

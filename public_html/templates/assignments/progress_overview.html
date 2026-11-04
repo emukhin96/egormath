@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'students' %}">Ученики</a>{% if student %}<span>{{ student.get_full_name|default:student.username }}</span>{% elif group %}<span>{{ group.name }}</span>{% endif %}</nav>
-    <h1>Прогресс{% if student %} · {{ student.get_full_name|default:student.username }}{% elif group %} · {{ group.name }}{% endif %}</h1>
+    <h1>Прогресс{% if student %}: {{ student.get_full_name|default:student.username }}{% elif group %}: {{ group.name }}{% endif %}</h1>
     <p class="page-meta"><span>{{ page.paginator.count }} {{ page.paginator.count|plural_ru:'работа,работы,работ' }}</span></p>
   </div>
 </div>

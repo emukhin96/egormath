@@ -2,7 +2,7 @@
 {# Блок над доской в диалоге «Доски»: условие задачи, ответ ученика (как на странице проверки) и эталон. Свёрнут по умолчанию; boards.js помнит, развернул ли его учитель #}
 <details class="boards-peek" data-peek data-version="{{ version }}">
   <summary class="boards-peek-summary">
-    <span class="boards-peek-title">Задание №{{ task_no }} · ответ ученика</span>
+    <span class="boards-peek-title">Задание №{{ task_no }}, ответ ученика</span>
     {% if row %}<span class="boards-peek-status" data-status="{{ status }}">{% if status == 'ok' %}✓ {% elif status == 'wrong' %}✗ {% endif %}{{ status_label }}</span>
     {% else %}<span class="boards-peek-status" data-status="hidden">задача скрыта у ученика</span>{% endif %}
   </summary>

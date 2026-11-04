@@ -9,7 +9,7 @@ _progress_table.html, их обновляет опрос teacher_progress.js. Б
 {% endcomment %}
 <div class="page-head live-head">
   <div>
-    <a class="live-back" href="{% url 'assignment_list' %}">← Задания</a>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'assignment_list' %}?kind=ordinary">Задания</a></nav>
     <h1>{{ worksheet.title }}</h1>
     <p class="live-meta">{{ people|length }} {{ people|length|plural_ru:'ученик,ученика,учеников' }}, листок из {{ items|length }} {{ items|length|plural_ru:'задачи,задач,задач' }}{% if deadline %}, срок {{ deadline|date:'j E, H:i' }}{% endif %}</p>
   </div>

@@ -1,12 +1,11 @@
 {% extends 'base.html' %}
 {% load task_extras %}
 {% block title %}Предложение #{{ proposal.pk }} — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/proposal_detail.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'task_list' %}">Задачи</a><a href="{% url 'proposal_list' %}">Предложения</a></nav>
-    <h1>Предложение исправления · задача #{{ task.pk }}</h1>
+    <h1>Исправление к задаче #{{ task.pk }}<details class="help-tip"><summary aria-label="Пояснение" title="Пояснение">?</summary><div class="help-tip-body"><p>Откройте задачу, внесите исправление сами и нажмите «Принято». Если предложение неверное — «Отклонено». Автор увидит статус в «Мои предложения».</p></div></details></h1>
     <p class="page-meta"><span>{{ proposal.author_name }}</span><span>{{ proposal.created_at|date:'d.m.Y H:i' }}</span>{% include 'problems/_proposal_status.html' %}</p>
   </div>
   <div class="page-actions">
@@ -26,7 +25,7 @@
       <form method="post" action="{% url 'proposal_reject' proposal.pk %}" class="inline-form">{% csrf_token %}<button class="btn btn-secondary">Отклонено</button></form>
     </div>
     {% else %}
-    <p class="helptext">{{ proposal.get_status_display }} · {{ proposal.resolved_by_name }} · {{ proposal.resolved_at|date:'d.m.Y H:i' }}</p>
+    <p class="helptext">{{ proposal.get_status_display }}, {{ proposal.resolved_by_name }}, {{ proposal.resolved_at|date:'d.m.Y H:i' }}</p>
     {% endif %}
   </div>
   <div class="card">

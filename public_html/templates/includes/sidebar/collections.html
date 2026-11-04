@@ -31,7 +31,7 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Параграфы</p>
   <ul class="sidebar-list collection-sidebar-tree">
-    {% for entry in section_nav %}<li style="--collection-depth: 0"{% if page.has_other_pages and entry.section.index in chunk.section_indexes %} class="is-current"{% endif %}><a href="?page={{ entry.page }}#section-{{ entry.section.index }}" class="sidebar-row math-content">{% if entry.section.title %}{{ entry.section.title }}{% else %}Без параграфа{% endif %}{% if entry.total %}<span>{% if entry.first != entry.last %}{{ entry.first }}–{{ entry.last }}{% else %}{{ entry.first }}{% endif %} · {{ entry.total }} {{ entry.total|plural_ru:'задача,задачи,задач' }}</span>{% endif %}</a></li>{% endfor %}
+    {% for entry in section_nav %}<li style="--collection-depth: 0"{% if page.has_other_pages and entry.section.index in chunk.section_indexes %} class="is-current"{% endif %}><a href="?page={{ entry.page }}#section-{{ entry.section.index }}" class="sidebar-row math-content">{% if entry.section.title %}{{ entry.section.title }}{% else %}Без параграфа{% endif %}{% if entry.total %}<span>{% if entry.first != entry.last %}{{ entry.first }}–{{ entry.last }}{% else %}{{ entry.first }}{% endif %}, {{ entry.total }} {{ entry.total|plural_ru:'задача,задачи,задач' }}</span>{% endif %}</a></li>{% endfor %}
   </ul>
 </section>
 {% endif %}
