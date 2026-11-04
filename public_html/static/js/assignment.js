@@ -111,11 +111,31 @@
       // срабатывает обычная автоотправка по change ниже.
       var card = input.closest('[data-task-card]');
       if (card && window.EgorImagePaste && window.DataTransfer) {
+        // Файлы одной вставки или перетаскивания приходят в onFile по
+        // одному: копим их в один список и шлём change один раз после пачки,
+        // иначе поле перезаписывается и сохраняется только последнее фото.
+        var accept = (input.accept || '').split(',').map(function (t) { return t.trim().toLowerCase(); }).filter(Boolean);
+        var allowed = function (file) {
+          if (!accept.length) return true;
+          var name = (file.name || '').toLowerCase();
+          return accept.some(function (t) {
+            if (t.charAt(0) === '.') return name.slice(-t.length) === t;
+            if (t.slice(-2) === '/*') return (file.type || '').indexOf(t.slice(0, -1)) === 0;
+            return file.type === t;
+          });
+        };
+        var batch = null;
         EgorImagePaste.attach(card, function (file) {
-          var list = new DataTransfer();
-          list.items.add(file);
-          input.files = list.files;
-          input.dispatchEvent(new Event('change', {bubbles: true}));
+          if (!allowed(file)) return;
+          if (!batch) {
+            batch = new DataTransfer();
+            setTimeout(function () {
+              input.files = batch.files;
+              batch = null;
+              input.dispatchEvent(new Event('change', {bubbles: true}));
+            }, 0);
+          }
+          batch.items.add(file);
         });
       }
       input.addEventListener('change', function () {
