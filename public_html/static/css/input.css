@@ -2774,9 +2774,22 @@
     line-height: 1.5;
   }
 
-  /* Части через запятую, без «·» (ревизия 03.11, G4) */
+  /* Части через запятую, без «·» (ревизия 03.11, G4). Мета — flex: пробелы
+     шаблона между <span> не попадают перед запятой («Иванов , 3 задачи») */
+  .page-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+
   .page-meta > * + *::before {
     content: ", ";
+    white-space: pre;
+  }
+
+  .page-meta > .badge,
+  .page-meta > .filter-chip {
+    margin-left: 6px;
   }
 
   .page-meta > .filter-chip::before,
