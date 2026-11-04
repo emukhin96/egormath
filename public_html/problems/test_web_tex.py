@@ -58,3 +58,27 @@ class WebTexFormattingTests(SimpleTestCase):
         self.assertNotIn('\\end', html)
         self.assertIn('— а', html)
         self.assertIn('б) второй', html)
+
+
+class WebTexDisplayGapTests(SimpleTestCase):
+    """Переносы вокруг выносной формулы не дают лишних пустых строк."""
+
+    def test_newlines_around_display_dropped(self):
+        html = tex_to_web_html(
+            'уравнение\n\n\\[\n4^{x}=2\n\\]\n\nимеет ровно один корень.')
+        self.assertEqual(html, 'уравнение<br>\\[ 4^{x}=2 \\]имеет ровно один корень.')
+
+    def test_single_newline_after_dollars(self):
+        html = tex_to_web_html('функции\n$$\nf(x)=|x|\n$$\nменьше 2.')
+        self.assertEqual(html, 'функции<br>$$ f(x)=|x| $$меньше 2.')
+
+    def test_inline_math_keeps_breaks(self):
+        self.assertEqual(tex_to_web_html('$x$\n\nтекст'), '$x$<br><br>текст')
+
+    def test_explicit_breaks_kept(self):
+        html = tex_to_web_html('\\[x\\]\n\\par Ответ: 1')
+        self.assertEqual(html, '\\[x\\]<br><br> Ответ: 1')
+
+    def test_picture_marker_between_formula_and_text(self):
+        html = tex_to_web_html('\\[x\\]\n\\taskpic{1}\n\nДалее')
+        self.assertEqual(html, '\\[x\\]Далее')
