@@ -127,13 +127,14 @@
       {% endif %}
       {% if can_upload %}
       {# Файл привязан к отдельной multipart-форме (атрибут form): формы не вкладываются #}
-      <label class="btn btn-small btn-secondary photo-pick">Фото решения
-        <input type="file" name="photos" form="photo-form-{{ row.task.pk }}" data-photo-input data-image-paste-fallback="off"
-               accept="image/jpeg,image/png,image/webp" multiple></label>
+      {# Вставка из буфера и перетаскивание — на всю карточку (assignment.js), без отдельной зоны в строке #}
+      <label class="btn btn-small btn-secondary photo-pick" title="Выберите файл; фото можно и вставить из буфера или перетащить в карточку задачи">Фото решения
+        <input type="file" name="photos" form="photo-form-{{ row.task.pk }}" data-photo-input data-image-paste="off"
+               accept="image/jpeg,image/png,image/webp" multiple aria-label="Фото решения: выберите файл, вставьте из буфера или перетащите в карточку"></label>
       <button type="submit" class="btn btn-small btn-secondary" form="photo-form-{{ row.task.pk }}" data-photo-submit>Загрузить</button>
       {% endif %}
       {% if canvas_enabled %}
-      <button type="button" class="btn btn-small btn-secondary" data-canvas-open="board-{{ row.item.pk }}" aria-controls="board-{{ row.item.pk }}" aria-expanded="false" title="Открыть доску для записей: решение от руки мышью или стилусом, сохраняется само">Доска для записей</button>
+      <button type="button" class="btn btn-small btn-secondary" data-canvas-open="board-{{ row.item.pk }}" aria-controls="board-{{ row.item.pk }}" aria-expanded="false" title="Открыть доску для записей: решение от руки мышью или стилусом, сохраняется само">Доска</button>
       {% endif %}
     </div>
     {% endif %}
@@ -205,8 +206,8 @@
 {% endblock %}
 {% block extra_js %}
 <script defer src="{% static 'js/check_badge.js' %}?v=2"></script>
-<script defer src="{% static 'js/assignment.js' %}?v=4"></script>
-{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=2"></script>{% endif %}
+<script defer src="{% static 'js/assignment.js' %}?v=5"></script>
+{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=4"></script>{% endif %}
 {% if editable %}
 <script defer src="{% static 'js/work_activity.js' %}?v=2"></script>
 <script defer src="{% static 'js/mask.js' %}?v=5"></script>

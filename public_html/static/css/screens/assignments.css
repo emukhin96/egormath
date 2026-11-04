@@ -79,3 +79,8 @@
   .home-empty { font-size: 14px; }
   .home-main > .empty-line { margin: 0; }
 }
+
+@layer components {
+  /* S1: фото перетаскивают на всю карточку задачи */
+  [data-task-card].is-dragover { outline: 2px dashed var(--accent); outline-offset: 4px; }
+}

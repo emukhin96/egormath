@@ -106,6 +106,18 @@
 
     document.querySelectorAll('[data-photo-submit]').forEach(function (b) { b.hidden = true; });
     document.querySelectorAll('[data-photo-input]').forEach(function (input) {
+      // Ctrl+V и перетаскивание — на всю карточку задачи, а не отдельной
+      // зоной в строке кнопок (ревизия 03.11, S1): файл кладём в поле, и
+      // срабатывает обычная автоотправка по change ниже.
+      var card = input.closest('[data-task-card]');
+      if (card && window.EgorImagePaste && window.DataTransfer) {
+        EgorImagePaste.attach(card, function (file) {
+          var list = new DataTransfer();
+          list.items.add(file);
+          input.files = list.files;
+          input.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+      }
       input.addEventListener('change', function () {
         if (!(input.files && input.files.length && input.form)) return;
         var go = function () { input.form.submit(); };
