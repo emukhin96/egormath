@@ -30,11 +30,9 @@ DOT_ALLOWED = {
     'templates/assignments/assignment_list.html': 2,  # «шаблон · исходный листок»
     'templates/assignments/review.html': 1,         # «Следующая работа · К заданиям»
     'templates/worksheets/worksheet_detail.html': 2,  # действия ссылки доступа
-    'templates/worksheets/worksheet_list.html': 4,  # строка действий листка
     'static/js/problem_masks.js': 1,                # ссылки масок подпунктов
     'static/js/numberline.js': 1,                   # \cdot → умножение
     'static/js/quick_clone.js': 1,                  # \cdot → умножение
-    'static/css/input.css': 1,                      # мета задачи в конструкторе
 }
 
 TEMPLATE_COMMENTS = re.compile(r'{#.*?#}|{%\s*comment\s*%}.*?{%\s*endcomment\s*%}', re.DOTALL)

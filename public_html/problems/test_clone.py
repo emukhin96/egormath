@@ -322,7 +322,7 @@ class CloneViewTests(TestCase):
         detail = self.client.get(reverse('worksheet_detail', args=[ws.pk]))
         # Успех показывает тост диалога, flash-плашки не копятся
         self.assertNotContains(detail, 'ws-toast-src')
-        self.assertContains(detail, 'клон рядом')
+        self.assertContains(detail, 'Клон рядом')
 
     def test_next_clones_follow_previous_clone(self):
         ws = Worksheet.objects.create(owner=self.teacher, title='Листок')
