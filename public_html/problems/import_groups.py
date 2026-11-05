@@ -43,12 +43,17 @@ def group_import_batches(batches):
     ожидаются аннотации total и imported_total."""
     books = {}
     for batch in sorted(batches, key=lambda b: (b.created_at, b.pk), reverse=True):
-        key = batch.source.short_name
+        # Одна книга — записи Source с общим коротким именем (у Шестакова
+        # их четыре); без короткого имени — сам источник: одноимённые
+        # «Алгебра 8» разных авторов не сливаются в одну книгу.
+        source = batch.source
+        key = ('short', source.short_title) if source.short_title else ('pk', source.pk)
         if key not in books:
-            books[key] = (batch.source, [])
+            books[key] = (source, [])
         books[key][1].append(batch)
     active, archive = [], []
-    for short, (source, items) in books.items():
+    for (source, items) in books.values():
+        short = source.short_name
         current, loaded = _current(items)
         keep, old = [], []
         for batch in items:
