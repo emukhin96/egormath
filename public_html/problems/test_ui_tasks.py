@@ -173,3 +173,16 @@ class ImportListTests(Roles, TestCase):
         self.assertIn('<details class="import-archive">', html)
         self.assertIn('Архив: 3 партии', html)
         self.assertIn('badge badge-submitted">На проверке<', html)
+
+    def test_same_title_without_short_name_stays_separate(self):
+        makarychev = Source.objects.create(title='Алгебра 8', author='Макарычев')
+        mordkovich = Source.objects.create(title='Алгебра 8', author='Мордкович')
+        first = self.batch(makarychev, 'Макарычев', 2, drafts=3)
+        second = self.batch(mordkovich, 'Мордкович', 1, drafts=3)
+
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('textbook_import_list'))
+        books = [(b.title, [x.pk for x in b.batches]) for b in response.context['active_books']]
+        self.assertIn(('Макарычев', [first.pk]), books)
+        self.assertIn(('Мордкович', [second.pk]), books)
+        self.assertEqual(response.context['archive_books'], [])
