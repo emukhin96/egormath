@@ -383,14 +383,18 @@ def _drop_empty_rubrics(items):
     return kept
 
 
-def worksheet_to_tex(worksheet, variant='student', exclude_ids=None):
-    """exclude_ids — pk элементов, скрытых для конкретной ссылки/ученика."""
+def worksheet_to_tex(worksheet, variant='student', exclude_ids=None, items=None):
+    """exclude_ids — pk элементов, скрытых для конкретной ссылки/ученика;
+    items — уже загруженные ``ordered_items()``, когда один листок
+    собирается в нескольких вариантах подряд (редактор PDF)."""
     exclude_ids = exclude_ids or set()
     options = VARIANT_OPTIONS[variant]
     usepackage = ('\\usepackage[%s]{egor}' % options) if options \
         else '\\usepackage{egor}'
+    if items is None:
+        items = worksheet.ordered_items()
     items = _drop_empty_rubrics([
-        item for item in worksheet.ordered_items()
+        item for item in items
         if item.pk not in exclude_ids
     ])
     has_images = any(item.task_id and item.task.images.all() for item in items)

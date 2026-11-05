@@ -5,6 +5,7 @@
 import math
 import re
 from fractions import Fraction
+from functools import lru_cache
 
 from ..check_answer import _strip_var, normalize, parse_number
 
@@ -31,9 +32,20 @@ INF = float('inf')
 
 def numeric_value(text):
     """Строка → Fraction (точно) или float (иррациональное); None — не число.
-    Понимает школьные дроби и любое числовое LaTeX-выражение без переменных."""
+    Понимает школьные дроби и любое числовое LaTeX-выражение без переменных.
+
+    Результат зависит только от текста и неизменяем (Fraction, float, None),
+    поэтому запоминается на процесс: маски пунктов самостоятельных и
+    эталоны чисел разбираются при каждом показе кабинета, каталога
+    самостоятельных и страницы попытки, а разбор Earley формульного
+    эталона стоит десятки миллисекунд (аудит быстродействия 06.11.2026)."""
+    return _numeric_value(text or '')
+
+
+@lru_cache(maxsize=4096)
+def _numeric_value(text):
     # MathLive сокращает односимвольный аргумент: \sqrt8 вместо \sqrt{8}.
-    text = re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text or '')
+    text = re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text)
     text = normalize(_strip_var(text))
     text = re.sub(r'\\operatorname\{arctg\}|\\arctg\b', r'\\arctan', text)
     if not text:
