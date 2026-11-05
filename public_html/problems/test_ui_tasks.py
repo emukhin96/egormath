@@ -186,3 +186,13 @@ class ImportListTests(Roles, TestCase):
         self.assertIn(('Макарычев', [first.pk]), books)
         self.assertIn(('Мордкович', [second.pk]), books)
         self.assertEqual(response.context['archive_books'], [])
+
+    def test_foreign_toggle_only_where_prefs_form_exists(self):
+        from worksheets.models import Worksheet
+        self.client.force_login(self.superuser)
+        self.assertContains(self.client.get(reverse('task_list')), 'form="task-list-prefs"')
+        sheet = Worksheet.objects.create(title='Подбор', owner=self.superuser)
+        builder = self.client.get(reverse('worksheet_detail', args=[sheet.pk]))
+        self.assertEqual(builder.status_code, 200)
+        self.assertNotContains(builder, 'form="task-list-prefs"')
+
