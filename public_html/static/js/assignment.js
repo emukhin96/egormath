@@ -136,7 +136,7 @@
             }, 0);
           }
           batch.items.add(file);
-        });
+        }, {explicit: true});
       }
       input.addEventListener('change', function () {
         if (!(input.files && input.files.length && input.form)) return;
