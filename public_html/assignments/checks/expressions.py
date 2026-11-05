@@ -141,7 +141,9 @@ def function_powers(text):
 
 def prepare(text):
     """Нормализация школьной записи + явное умножение перед скобкой."""
-    text = function_powers(normalize_roots(normalize(text)))
+    from .numeric import unmix
+    # Смешанное число — сумма: a=-9\frac{1}{9} не равно a=-1.
+    text = function_powers(normalize_roots(unmix(normalize(text))))
     text = _insert_cdot_after_group(text)
     def product(match):
         # Цифра завершает индекс/степень функции, а корень или скобка —

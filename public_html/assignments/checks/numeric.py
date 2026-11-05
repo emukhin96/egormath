@@ -121,6 +121,16 @@ def root(value, degree=2):
     return bounded(-result if value < 0 else result)
 
 
+def unmix(text):
+    """Смешанное число из цифр — сумма: 25\\frac{11}{13}\\pi = (25+11/13)·π.
+
+    Так школьная запись читается и с множителем после неё (π, корень,
+    буква), а не как произведение 25·11/13.
+    """
+    return _MIXED.sub(lambda m: '(' + m[1] + '+\\frac{'
+                      + (m[2] or m[3]) + '}{' + (m[4] or m[5]) + '})', text)
+
+
 def prepare(text):
     """Одинаковый смысл смешанных чисел в быстром и точном вычислителях."""
     if len(text) > 300 or r'\{' in text or r'\}' in text or '=' in text:
@@ -131,9 +141,7 @@ def prepare(text):
     lexical = re.sub(r'\\(?:dfrac|tfrac|frac|sqrt|pi|left|right|cdot|times|displaystyle)(?![A-Za-z])', '', text)
     if re.search(r'[^\d\s.,+*/^(){}\[\]|$−–—-]', lexical):
         return None
-    text = normalize(text)
-    text = _MIXED.sub(lambda m: '(' + m[1] + '+\\frac{'
-                      + (m[2] or m[3]) + '}{' + (m[4] or m[5]) + '})', text)
+    text = unmix(normalize(text))
     # Здесь функции и переменные уже запрещены: } после степени завершает
     # числовой множитель, а не степень sin или индекс log.
     text = expressions._insert_cdot_after_group(text, allow_script_products=True)

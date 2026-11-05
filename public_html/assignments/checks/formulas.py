@@ -637,7 +637,9 @@ def _parse(text, positive=(), *, numeric=False):
         # R*sin(30°) = R/2. Символьные angle/range остаются отдельным
         # контекстом; преобразуются только явные числовые аргументы.
         text = _numeric_degree_arguments(normalize(text))
-    text = _prepare(text)
+    # Смешанное число — сумма и с множителем после него: 3\frac{1}{2}a = 3,5a.
+    from .numeric import unmix
+    text = _prepare(unmix(text))
     # Константа π не поддерживается штатной Lark-грамматикой.
     marker = next((c for c in 'QZXVW' if c not in text), None)
     has_pi = bool(re.search(r'\\pi\b|π', text))
