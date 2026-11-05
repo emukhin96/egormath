@@ -39,7 +39,7 @@ def enabled(view):
             response = view(request, *args, **kwargs)
         except svc.WorkError as error:
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                response = JsonResponse({'message': str(error)}, status=error.status)
+                response = JsonResponse({'ok': False, 'message': str(error)}, status=error.status)
             else:
                 response = render(request, 'independentworks/error.html', {'error': str(error)}, status=error.status)
         response['Cache-Control'] = 'no-store, private'
