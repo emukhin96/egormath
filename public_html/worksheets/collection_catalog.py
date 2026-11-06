@@ -258,10 +258,16 @@ def _on_topics_changed(sender, instance, using=None, **kwargs):
 
 
 def connect_collection_catalog_signals():
-    """Подборка, её листок, элементы листка и темы — всё, от чего зависит дерево."""
+    """Подборка, её листок, элементы листка и темы — всё, от чего зависит
+    дерево; источники и темы лежат в кэше объектами, поэтому их
+    переименование и порядок тоже сбрасывают кэш (ревью #319). Массовый
+    ``update()`` элементов сигналов не шлёт — такие места
+    (``soft_remove_item``) зовут ``invalidate_collection_catalog`` сами."""
     from django.db.models.signals import m2m_changed, post_delete, post_save
 
     for model, handler in ((Collection, _on_collection_changed),
+                           (Source, _on_collection_changed),
+                           (Topic, _on_collection_changed),
                            (Worksheet, _on_worksheet_changed),
                            (WorksheetItem, _on_item_changed)):
         label = model._meta.label_lower

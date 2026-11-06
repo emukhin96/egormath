@@ -36,7 +36,8 @@ from problems.rubricator import (GRADE_LEVEL_TO_CODE, apply_worksheet_taxonomy,
 from problems.views import filter_tasks
 
 from .collection_catalog import (catalog_title, collection_catalog,
-                                 natural_key, sort_key)
+                                 invalidate_collection_catalog, natural_key,
+                                 sort_key)
 from .collection_pages import build_chunks, section_pages
 from .corpus import corpus_key_from_comment
 from .forms import WorksheetForm
@@ -1219,6 +1220,9 @@ def soft_remove_item(worksheet, item):
             worksheet.items.filter(task__block_id=item.task.block_id).update(
                 deleted_at=timezone.now())
             livefiles.touch('worksheet', worksheet.pk)
+            # update() не шлёт сигналов — дерево подборок сбрасываем сами
+            if Collection.objects.filter(worksheet_id=worksheet.pk).exists():
+                invalidate_collection_catalog()
         else:
             item.deleted_at = timezone.now()
             item.save(update_fields=['deleted_at'])

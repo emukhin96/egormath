@@ -4,7 +4,7 @@ from django.core.cache import caches
 from django.test import TransactionTestCase
 from django.urls import reverse
 
-from problems.models import Source, Task, Topic
+from problems.models import Source, Task, TaskBlock, Topic
 from problems.tests import make_teacher
 
 from .collection_catalog import CACHE_ALIAS, catalog_nodes, collection_catalog
@@ -59,6 +59,29 @@ class CollectionCatalogCacheTests(TransactionTestCase):
         self.assertIsNotNone(self.row(self.owner))
         self.collection.delete()
         self.assertIsNone(self.row(self.owner))
+
+    def test_source_topic_and_block_removal_refresh_tree(self):
+        # Источник и тема лежат в кэше объектами: их правки сбрасывают дерево (ревью #319)
+        topic = Topic.objects.create(name='Тема до переименования')
+        self.worksheet.topics.add(topic)
+        self.assertEqual(self.row(self.owner)['topics'][0].name, 'Тема до переименования')
+        topic.name = 'Тема после'
+        topic.save()
+        self.assertEqual(self.row(self.owner)['topics'][0].name, 'Тема после')
+        self.source.title = 'Задачник (новое издание)'
+        self.source.save()
+        groups = collection_catalog(self.owner)
+        self.assertEqual(groups[0]['source'].title, 'Задачник (новое издание)')
+        # Удаление блока из подборки идёт update() без сигналов
+        from .views import soft_remove_item
+        block = TaskBlock.objects.create(source=self.source, key='b1', title='Блок', size=2)
+        blocked = [Task.objects.create(text_latex=f'Блок {i}', block=block, block_position=i,
+                                       created_by=self.owner) for i in (1, 2)]
+        items = [WorksheetItem.objects.create(worksheet=self.worksheet, task=t, order=30 + i)
+                 for i, t in enumerate(blocked)]
+        self.assertEqual(self.row(self.owner)['item_total'], 3)
+        soft_remove_item(self.worksheet, items[0])
+        self.assertEqual(self.row(self.owner)['item_total'], 1)
 
     def test_visibility_is_computed_per_user_from_shared_nodes(self):
         private_sheet = Worksheet.objects.create(title='Личная', owner=self.owner)
