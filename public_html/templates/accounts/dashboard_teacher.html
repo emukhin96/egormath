@@ -5,20 +5,23 @@
 {% comment %}
 Кабинет учителя по макету E_Home (холст «Страницы учителя», 22.10.2026): слева
 то, что требует действия (идёт сейчас, ждут проверки, сроки), справа сигналы,
-предложения и недавние листки. Шапка и содержимое на одной сетке: кнопки над
-правой колонкой той же ширины, что и она. Подписи — фразой, без «·».
+предложения и недавние листки. Кнопки — в шапке страницы; пустые блоки не
+показываются (ревизия 03.11, G10), если пусто всё — одна строка. Подписи —
+фразой, без «·».
 {% endcomment %}
 {% now 'Y-m-d' as today %}
-<div class="home-grid">
-  <div class="home-head">
+{# Кнопки — в шапке, как на остальных экранах (ревизия 03.11, U2) #}
+<div class="page-head">
+  <div>
     <h1>Кабинет учителя</h1>
     <p class="page-meta">{% now 'l, j E' %}{% if running %}, идёт {{ running|length }} {{ running|length|plural_ru:'работа,работы,работ' }}{% endif %}{% if review_total %}, ждут проверки {{ review_total }}{% endif %}</p>
   </div>
-  <div class="home-actions">
+  <div class="page-actions">
     <a class="btn btn-secondary" href="{% url 'worksheet_create' %}">Новый листок</a>
     <a class="btn" href="{% url 'assignment_create' %}">Выдать задание</a>
   </div>
-
+</div>
+<div class="home-grid">
   <div class="home-main">
     {# «Первые шаги» — учителю без права редактора, пока не скрыта кнопкой и не пройдена до выданного задания (accounts/onboarding.py) #}
     {% if onboarding %}
@@ -55,10 +58,11 @@
     </section>
     {% endfor %}
 
+    {% if review_groups %}
     <section class="card home-card" aria-labelledby="home-review">
       <div class="home-card-head">
-        <h2 id="home-review">Ждут проверки{% if review_groups %} <span class="home-count">{{ review_total }}</span>{% endif %}</h2>
-        <a href="{% url 'assignment_list' %}?status=submitted">Все задания</a>
+        <h2 id="home-review">Ждут проверки <span class="home-count">{{ review_total }}</span></h2>
+        <a class="home-link" href="{% url 'assignment_list' %}?status=submitted">Все задания</a>
       </div>
       {% for g in review_groups %}
       <a class="home-row home-row-review" href="{{ g.url }}">
@@ -66,11 +70,11 @@
         <span class="home-row-chip">{{ g.n }}</span>
         <svg class="home-row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </a>
-      {% empty %}
-      <p class="home-empty">Нет работ, ожидающих проверки.</p>
       {% endfor %}
     </section>
+    {% endif %}
 
+    {% if deadlines %}
     <section class="card home-card" aria-labelledby="home-deadlines">
       <div class="home-card-head"><h2 id="home-deadlines">Сроки на неделе</h2></div>
       {% for d in deadlines %}
@@ -79,13 +83,17 @@
         <span class="home-row-body"><span class="home-row-title">{{ d.title }}</span><span class="home-row-meta">{% if d.passed and d.left %}не сдали {{ d.left }}{% else %}{{ d.total }} {{ d.total|plural_ru:'ученик,ученика,учеников' }}{% endif %}</span></span>
         <span class="home-row-progress"><span class="home-bar" aria-hidden="true"><span style="width: {{ d.percent }}%"></span></span><span>сдали {{ d.done }} из {{ d.total }}</span></span>
       </a>
-      {% empty %}
-      <p class="home-empty">На этой неделе сроков нет.</p>
       {% endfor %}
     </section>
+    {% endif %}
+
+    {% if not running and not review_groups and not deadlines %}
+    <p class="empty-line">На этой неделе проверять нечего.</p>
+    {% endif %}
   </div>
 
   <aside class="home-side">
+    {% if signals %}
     <section class="card home-card home-side-card" aria-labelledby="home-signals">
       <h2 id="home-signals">Сигналы</h2>
       {% for s in signals %}
@@ -93,13 +101,12 @@
         <span class="copy-mark" aria-hidden="true">•</span>
         <span><span class="home-row-title">{{ s.name }}</span><span class="home-row-meta">{{ s.note }}</span></span>
       </a>
-      {% empty %}
-      <p class="home-empty">За неделю никто не копировал условия.</p>
       {% endfor %}
     </section>
+    {% endif %}
 
-    {# Очередь предложений исправлений — только редакторам (accounts/permissions.py) #}
-    {% if proposals is not None %}
+    {# Очередь предложений исправлений — только редакторам (accounts/permissions.py); пустая не показывается #}
+    {% if proposals %}
     <section class="card home-card home-side-card" aria-labelledby="home-proposals">
       <div class="home-card-head">
         <h2 id="home-proposals">Предложения исправлений</h2>
@@ -107,10 +114,8 @@
       </div>
       {% for p in proposals %}
       <a class="home-signal" href="{% url 'proposal_detail' p.pk %}"><span><span class="home-row-title">Задача #{{ p.task.pk }}</span><span class="home-row-meta">{{ p.message|truncatechars:80 }}</span><span class="home-row-meta">{{ p.author_name }}, {{ p.created_at|date:'d.m' }}</span></span></a>
-      {% empty %}
-      <p class="home-empty">Новых предложений нет.</p>
       {% endfor %}
-      <a href="{% url 'proposal_list' %}">Вся очередь</a>
+      <a class="home-link" href="{% url 'proposal_list' %}">Вся очередь</a>
     </section>
     {% endif %}
 
@@ -119,7 +124,7 @@
       {% for w in worksheets %}
       <div class="home-sheet">
         <a href="{% url 'worksheet_detail' w.pk %}"><span class="home-row-title">{{ w.title }}</span><span class="home-row-meta">{{ w.items_total }} {{ w.items_total|plural_ru:'задача,задачи,задач' }}{% if w.grade_label %}, {{ w.grade_label }}{% endif %}</span></a>
-        <a class="home-sheet-issue" href="{% url 'assignment_create' %}?worksheet={{ w.pk }}">Выдать</a>
+        <a class="home-link home-sheet-issue" href="{% url 'assignment_create' %}?worksheet={{ w.pk }}">Выдать</a>
       </div>
       {% empty %}
       <p class="home-empty">Листков пока нет — <a href="{% url 'collection_list' %}">возьмите готовый из подборки</a> или <a href="{% url 'worksheet_create' %}">создайте листок</a>.</p>

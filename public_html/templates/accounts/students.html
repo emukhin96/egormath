@@ -12,10 +12,15 @@
       {% if current_group %}<span>группа «{{ current_group.name }}»</span>{% elif group_filter == 'ungrouped' %}<span>без группы</span>{% endif %}
     </p>
   </div>
-  {# Без учеников прогресс смотреть нечего — кнопки нет (R08-1) #}
-  {% if has_students %}<div class="page-actions">
-    <a class="btn btn-secondary" href="{% url 'progress_overview' %}{% if current_group %}?group={{ current_group.pk }}{% endif %}">Прогресс{% if current_group %} группы{% else %} учеников{% endif %}</a>
-  </div>{% endif %}
+  <div class="page-actions">
+    {# Без учеников прогресс смотреть нечего — кнопки нет (R08-1) #}
+    {% if has_students %}<a class="btn btn-secondary" href="{% url 'progress_overview' %}{% if current_group %}?group={{ current_group.pk }}{% endif %}">Прогресс{% if current_group %} группы{% else %} учеников{% endif %}</a>{% endif %}
+    {# «Добавить ученика ▾»: вручную или по ссылке — окна ниже (ревизия 03.11, U1) #}
+    <details class="add-menu" data-add-menu><summary class="btn">Добавить ученика<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="more-menu-list">
+      <button type="button" data-dialog-open="student-add-dialog">Вручную</button>
+      <button type="button" data-dialog-open="student-link-dialog">По ссылке</button>
+    </div></details>
+  </div>
 </div>
 
 {% if new_credentials %}
@@ -27,27 +32,29 @@
 </div>
 {% endif %}
 
-<div class="card">
-  <h2>Добавить ученика</h2>
-  <form method="post" class="filters">
+<dialog class="dialog" id="student-add-dialog" aria-labelledby="student-add-title"{% if form.errors %} data-open-on-load{% endif %}>
+  <form method="post" action="{% url 'students' %}">
     {% csrf_token %}
-    <div><label for="{{ form.first_name.id_for_label }}">Имя</label>{{ form.first_name }}</div>
-    <div><label for="{{ form.last_name.id_for_label }}">Фамилия</label>{{ form.last_name }}</div>
-    <div><label for="{{ form.grade.id_for_label }}">Класс</label>{{ form.grade }}</div>
-    <div><button type="submit" class="btn">Создать ученика</button></div>
-    <span class="helptext">Логин и пароль будут сгенерированы автоматически.</span>
+    <div class="dialog-heading"><h3 id="student-add-title">Добавить ученика</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
+    <div class="dialog-fields">
+      <div><label for="{{ form.first_name.id_for_label }}">Имя</label>{{ form.first_name }}</div>
+      <div><label for="{{ form.last_name.id_for_label }}">Фамилия</label>{{ form.last_name }}</div>
+      <div><label for="{{ form.grade.id_for_label }}">Класс</label>{{ form.grade }}</div>
+    </div>
+    {% if form.errors %}<div class="errorlist">{{ form.errors }}</div>{% endif %}
+    <p class="helptext">Логин и пароль будут сгенерированы автоматически и показаны один раз.</p>
+    <div class="form-buttons"><button type="submit" class="btn">Создать ученика</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
   </form>
-  {% if form.errors %}<div class="errorlist">{{ form.errors }}</div>{% endif %}
-</div>
+</dialog>
 
-<div class="card">
-  <h2>Ссылка для самостоятельной регистрации</h2>
+<dialog class="dialog" id="student-link-dialog" aria-labelledby="student-link-title">
+  <div class="dialog-heading"><h3 id="student-link-title">Ссылка для самостоятельной регистрации</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
   <div class="copy-row">
     <code>{{ registration_url }}</code>
     <button type="button" class="btn btn-small btn-secondary" data-copy="{{ registration_url }}">Скопировать</button>
   </div>
   <p class="helptext">Ученик, который зарегистрируется по этой ссылке, попадёт в ваш список. Ссылка постоянная — её можно разослать всему классу.</p>
-</div>
+</dialog>
 
 {# Группа — сегменты-ссылки (если групп немного), поиск и учитель — автоотправка формы #}
 <form method="get" class="page-toolbar" data-autosubmit>
@@ -90,7 +97,6 @@
 <div class="card">
   <div class="card-head">
     <div><h2>Список{% if current_group %}: {{ current_group.name }}{% elif group_filter == 'ungrouped' %}: без группы{% endif %}</h2></div>
-    <span class="counter">{{ student_profiles|length }}</span>
   </div>
   {% if student_profiles %}
   <form id="students-bulk-form" method="post" action="{% url 'students_bulk_groups' %}"
@@ -125,7 +131,10 @@
       <tr class="student-group-head"><td colspan="6" class="stack-primary">
         <span class="student-group-title">{% if section.group %}{{ section.group.name }}{% if request.user.is_superuser %} <span class="muted">— {{ section.group.teacher.get_full_name|default:section.group.teacher.username }}</span>{% endif %}{% else %}Без группы{% endif %}</span>
         <span class="muted">{{ section.profiles|length }}</span>
-        {% if section.group %}<span class="student-group-links"><a href="?group={{ section.group.pk }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if teacher_filter %}&amp;teacher={{ teacher_filter }}{% endif %}">только эта группа</a> · <a href="{% url 'progress_overview' %}?group={{ section.group.pk }}">прогресс</a></span>{% endif %}
+        {% if section.group %}<details class="more-menu on-hover"><summary aria-label="Действия с группой" title="Действия с группой"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg></summary><div class="more-menu-list is-left">
+          <a href="?group={{ section.group.pk }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if teacher_filter %}&amp;teacher={{ teacher_filter }}{% endif %}">Только эта группа</a>
+          <a href="{% url 'progress_overview' %}?group={{ section.group.pk }}">Прогресс группы</a>
+        </div></details>{% endif %}
       </td></tr>
       {% for profile, row_groups in section.rows %}{% include 'accounts/_student_row.html' %}{% endfor %}
     </tbody>
@@ -154,50 +163,13 @@
         </dialog>
   {% endfor %}
   {% elif has_students %}
-  <p class="muted">Ученики не найдены — измените фильтры или добавьте нового.</p>
+  <p class="empty-line">Ученики не найдены — измените фильтры или добавьте нового.</p>
   {% else %}
   {# Новый учитель: следующий шаг и чеклист (accounts/onboarding.py) #}
-  <p class="muted">Учеников пока нет — добавьте первого в форме выше или отправьте ученикам ссылку для регистрации. Следующий шаг — <a href="{% url 'worksheet_list' %}">собрать листок</a>{% if shows_onboarding %}; план — в <a href="{% url 'welcome' %}">«Первых шагах»</a>{% endif %}.</p>
+  <p class="muted">Учеников пока нет — добавьте первого кнопкой «Добавить ученика» — вручную или ссылкой для регистрации. Следующий шаг — <a href="{% url 'worksheet_list' %}">собрать листок</a>{% if shows_onboarding %}; план — в <a href="{% url 'welcome' %}">«Первых шагах»</a>{% endif %}.</p>
   {% endif %}
 </div>
 
-<div class="card">
-  <h2>Группы</h2>
-  <form method="post" class="filters">
-    {% csrf_token %}
-    <input type="hidden" name="create_group" value="1">
-    <div><label for="{{ group_form.name.id_for_label }}">Новая группа</label>{{ group_form.name }}</div>
-    {% if request.user.is_superuser %}<div><label for="{{ group_form.teacher.id_for_label }}">Владелец</label>{{ group_form.teacher }}</div>{% endif %}
-    <div><button type="submit" class="btn btn-small">Создать группу</button></div>
-    {% if group_form.errors %}<div class="errorlist">{{ group_form.errors }}</div>{% endif %}
-  </form>
-  {% if groups %}
-  <div class="catalog-table-wrap"><table class="list table-stack">
-    <thead><tr><th>Название</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th>Учеников</th><th></th></tr></thead>
-    <tbody>
-    {% for group in groups %}
-    <tr>
-      <td class="stack-primary">
-        <form method="post" action="{% url 'group_rename' group.pk %}" class="filters">
-          {% csrf_token %}<input type="text" name="name" value="{{ group.name }}" maxlength="100" required>
-          <button type="submit" class="btn btn-small btn-secondary">Переименовать</button>
-        </form>
-      </td>
-      {% if request.user.is_superuser %}<td data-label="Владелец">{{ group.teacher.get_full_name|default:group.teacher.username }}</td>{% endif %}
-      <td data-label="Учеников"><a href="{% url 'students' %}?group={{ group.pk }}">{{ group.students.count }}</a></td>
-      <td class="row-actions"><a href="{% url 'progress_overview' %}?group={{ group.pk }}">Прогресс группы</a>
-        <form method="post" action="{% url 'group_delete' group.pk %}" class="inline-form"
-              onsubmit="return confirm('Удалить группу «{{ group.name|escapejs }}»? Ученики останутся.');">
-          {% csrf_token %}<button type="submit" class="icon-btn" title="Удалить группу" aria-label="Удалить группу">×</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table></div>
-  {% else %}<p class="muted">Групп пока нет.</p>{% endif %}
-  <p class="helptext">Ученик может состоять в нескольких группах.</p>
-</div>
-
 <script defer src="{% static 'js/bulk.js' %}?v=4"></script>
+<script defer src="{% static 'js/screen_menus.js' %}"></script>
 {% endblock %}

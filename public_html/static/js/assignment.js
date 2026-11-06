@@ -106,6 +106,38 @@
 
     document.querySelectorAll('[data-photo-submit]').forEach(function (b) { b.hidden = true; });
     document.querySelectorAll('[data-photo-input]').forEach(function (input) {
+      // Ctrl+V и перетаскивание — на всю карточку задачи, а не отдельной
+      // зоной в строке кнопок (ревизия 03.11, S1): файл кладём в поле, и
+      // срабатывает обычная автоотправка по change ниже.
+      var card = input.closest('[data-task-card]');
+      if (card && window.EgorImagePaste && window.DataTransfer) {
+        // Файлы одной вставки или перетаскивания приходят в onFile по
+        // одному: копим их в один список и шлём change один раз после пачки,
+        // иначе поле перезаписывается и сохраняется только последнее фото.
+        var accept = (input.accept || '').split(',').map(function (t) { return t.trim().toLowerCase(); }).filter(Boolean);
+        var allowed = function (file) {
+          if (!accept.length) return true;
+          var name = (file.name || '').toLowerCase();
+          return accept.some(function (t) {
+            if (t.charAt(0) === '.') return name.slice(-t.length) === t;
+            if (t.slice(-2) === '/*') return (file.type || '').indexOf(t.slice(0, -1)) === 0;
+            return file.type === t;
+          });
+        };
+        var batch = null;
+        EgorImagePaste.attach(card, function (file) {
+          if (!allowed(file)) return;
+          if (!batch) {
+            batch = new DataTransfer();
+            setTimeout(function () {
+              input.files = batch.files;
+              batch = null;
+              input.dispatchEvent(new Event('change', {bubbles: true}));
+            }, 0);
+          }
+          batch.items.add(file);
+        }, {explicit: true});
+      }
       input.addEventListener('change', function () {
         if (!(input.files && input.files.length && input.form)) return;
         var go = function () { input.form.submit(); };

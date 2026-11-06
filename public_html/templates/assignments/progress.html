@@ -4,7 +4,7 @@
 {% comment %}
 Карта ответов «в моменте» по макету D_Live (холст «Страницы учителя», 22.10.2026):
 шапка с действиями, сводка «Класс сейчас», таблица с колонкой «Сейчас» и
-строкой «Верно / решают», легенда внизу. Сводка и таблица — во фрагменте
+строкой «Верно / решают», легенда по «?» в строке фильтров. Сводка и таблица — во фрагменте
 _progress_table.html, их обновляет опрос teacher_progress.js. Без «·».
 {% endcomment %}
 <div class="page-head live-head">
@@ -20,7 +20,6 @@ _progress_table.html, их обновляет опрос teacher_progress.js. Б
   </div>
 </div>
 <div data-progress-table data-live-file="{% live_file 'worksheet' worksheet.pk %}">{% include 'assignments/_progress_table.html' %}</div>
-{% if canvas_enabled %}<div class="live-canvas-toggle">{% include 'canvas/_toggle.html' %}</div>{% endif %}
 {% include 'assignments/_progress_dialog.html' %}
 {% endblock %}
-{% block extra_js %}{# mathlive, mask.js и check_badge.js — маска «так видит ученик» в окне задачи #}<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/check_badge.js' %}?v=2"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=9"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=2"></script>{% endif %}{% endblock %}
+{% block extra_js %}{# mathlive, mask.js и check_badge.js — маска «так видит ученик» в окне задачи #}<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/check_badge.js' %}?v=2"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=9"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=4"></script>{% endif %}{% endblock %}

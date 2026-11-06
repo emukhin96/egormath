@@ -28,9 +28,13 @@
        отправляют форму сразу по change.
 
    API для загрузчиков без <input type=file>:
-     EgorImagePaste.attach(element, onFile) — element становится зоной
-       приёма (фокус/курсор/последний активный), onFile(file) получает
-       вставленную или перетащенную картинку.
+     EgorImagePaste.attach(element, onFile, {explicit: true}) — element
+       становится зоной приёма, onFile(file) получает вставленную или
+       перетащенную картинку. explicit — зона с полями ввода внутри
+       (карточка задачи ученика): файл принимается перетаскиванием, по
+       курсору над зоной, когда человек не печатает, или с фокусом на
+       нетекстовом элементе зоны; вставка в поле ответа внутри зоны
+       остаётся вставкой текста, «последний активный» зону не помнит.
      EgorImagePaste.addResolver(fn) — fn(file) возвращает поле или зону
        для вставки, когда пользователь не указал её сам. */
 (function () {
@@ -362,7 +366,16 @@
   // файл только по явному выбору: фокус в поле/зоне или нажатая кнопка
   // «Вставить из буфера» этой зоны.
   function explicitOnly(t) {
-    return t.input && t.input.getAttribute('data-image-paste-fallback') === 'off';
+    return !!t.explicit
+      || (t.input && t.input.getAttribute('data-image-paste-fallback') === 'off');
+  }
+
+  // Фокус в текстовом поле, которое не является выбором зоны: вне всех
+  // зон или внутри зоны explicit (поле ответа в карточке задачи)
+  function typingOutside(focus) {
+    if (!isTextField(focus)) return false;
+    var t = findTarget(focus);
+    return !t || !!t.explicit;
   }
 
   // Строка формсета с уже сохранённым файлом (заполнен скрытый
@@ -391,7 +404,7 @@
     // поэтому заполненное поле (без multiple) пропускаем — в форме задачи
     // картинка уйдёт в новую строку. Заменить файл — кнопкой или ×.
     var active = findTarget(focus);
-    if (active && isUsable(active)
+    if (active && isUsable(active) && !(active.explicit && isTextField(focus))
         && (isEmpty(active) || (active.input && active.input.multiple))) return active;
     // Человек печатает в текстовом поле вне зон: курсор мог случайно
     // остаться над чужой зоной, а «последнее активное» — устареть.
@@ -401,7 +414,8 @@
     // выбранный/вставленный файл, ни сохранённую картинку строки формсета
     // (поле с multiple не перезаписывается, а дополняется — его можно).
     if (!typing) {
-      if (hovered && implicitOk(hovered)) return hovered;
+      // Зона explicit под курсором — выбор, если человек сейчас не печатает
+      if (hovered && (implicitOk(hovered) || (hovered.explicit && isUsable(hovered)))) return hovered;
       if (lastActive && implicitOk(lastActive)) return lastActive;
     }
     for (var i = 0; i < resolvers.length; i += 1) {
@@ -452,7 +466,7 @@
     var focus = document.activeElement;
     // Фокус в текстовом поле и в буфере есть текст (например, копия
     // картинки со страницы приносит и HTML) — пусть вставляется текст.
-    if (isTextField(focus) && !findTarget(focus) && clipboardHasText(e.clipboardData)) return;
+    if (typingOutside(focus) && clipboardHasText(e.clipboardData)) return;
     var t = resolveTarget(file);
     if (!t) {
       var visible = targets.some(function (x) { return isUsable(x) && isVisible(x); });
@@ -471,17 +485,18 @@
   // загрузки больше не считается выбранным: иначе скриншот, вставленный
   // в ответ к задаче 5, уехал бы фотографией к задаче 3.
   document.addEventListener('focusin', function (e) {
-    if (isTextField(e.target) && !findTarget(e.target)) {
+    if (typingOutside(e.target)) {
       lastActive = null;
       armed = null;
     }
   });
 
   // --- API ---
-  function attach(element, onFile) {
+  function attach(element, onFile, options) {
+    var explicit = !!(options && options.explicit);
     var existing = findTarget(element);
-    if (existing) { existing.onFile = onFile; return existing; }
-    var t = {zone: element, onFile: onFile};
+    if (existing) { existing.onFile = onFile; existing.explicit = explicit; return existing; }
+    var t = {zone: element, onFile: onFile, explicit: explicit};
     targets.push(t);
     element.setAttribute('data-paste-zone', '');
     bindZone(t);

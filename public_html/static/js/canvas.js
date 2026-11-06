@@ -2197,15 +2197,22 @@
     (scope || document).querySelectorAll('[data-canvas]').forEach(init);
   }
 
+  /* Тумблер может жить во фрагменте, который подменяет живой опрос (строка
+     фильтров карты ответов), — поэтому слушаем документ, а состояние
+     восстанавливаем у каждого нового тумблера. */
+  function syncToggle(scope) {
+    var toggle = (scope || document).querySelector('#toggle-canvas');
+    if (toggle) toggle.checked = Widget.showEnabled();
+  }
+  document.addEventListener('change', function (e) {
+    var toggle = e.target;
+    if (toggle.id !== 'toggle-canvas') return;
+    try { localStorage.setItem(SHOW_KEY, toggle.checked ? '1' : '0'); } catch (err) {}
+    Widget.all.forEach(function (w) { if (w.role !== 'student' && !w.root.dataset.always) w.applyTeacherToggle(); });
+  });
+
   document.addEventListener('DOMContentLoaded', function () {
-    var toggle = document.getElementById('toggle-canvas');
-    if (toggle) {
-      toggle.checked = Widget.showEnabled();
-      toggle.addEventListener('change', function () {
-        try { localStorage.setItem(SHOW_KEY, toggle.checked ? '1' : '0'); } catch (e) {}
-        Widget.all.forEach(function (w) { if (w.role !== 'student' && !w.root.dataset.always) w.applyTeacherToggle(); });
-      });
-    }
+    syncToggle();
     initAll();
     /* Живой обзор подменяет фрагменты с ответами — холсты в них поднимаем заново */
     if (window.MutationObserver) {
@@ -2213,6 +2220,7 @@
         records.forEach(function (record) {
           record.addedNodes.forEach(function (node) {
             if (node.nodeType !== 1) return;
+            if (node.querySelector) syncToggle(node.matches('#toggle-canvas') ? node.parentNode : node);
             if (node.matches && node.matches('[data-canvas]')) init(node);
             else if (node.querySelectorAll) initAll(node);
           });

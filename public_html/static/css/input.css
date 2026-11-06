@@ -375,7 +375,6 @@
   .live-legend b.is-wrong { color: #8f1616; }
   .live-legend b.is-pending { color: #7a4a00; }
   .live-legend b.live-copy { color: #7c3aed; }
-  .live-canvas-toggle .canvas-toggle { margin: var(--space-3) 0 0; }
   /* Окна карты ответов «задача» и «задача у ученика» (макеты D_TaskView,
      D_AnswerView): шапка и тело на одной сетке, правая колонка 320px —
      кнопки соседних учеников над ней той же ширины */
@@ -3810,23 +3809,6 @@
     grid-template-columns: minmax(0, 1fr) 340px;
     gap: var(--space-4) var(--section-gap);
     align-items: start;
-  }
-  .home-head {
-    align-self: end;
-  }
-  .home-head h1 {
-    margin: 0;
-  }
-  .home-actions {
-    align-self: end;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-2);
-  }
-  .home-actions .btn {
-    width: 100%;
-    min-height: 40px;
-    justify-content: center;
   }
   .home-main,
   .home-side {
@@ -8279,15 +8261,12 @@
   .iw-position-heading h2 { margin: 0; }
   .iw-template-toolbar { align-items: flex-end; }
   .iw-template-toolbar .btn { line-height: 20px; }
-  .iw-title-form { align-items: end; display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: var(--space-2); }
-  .iw-title-form label { grid-column: 1 / -1; margin: 0; }
   .iw-pool-layout { display: grid; gap: var(--space-5); }
   .iw-pool-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); align-items: start; }
   .iw-pool-layout .iw-candidate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .iw-pool-layout > * { min-width: 0; }
   .iw-pool-layout [data-worksheet-mask] { margin-block: var(--space-3); }
   @media (max-width: 760px) { .iw-pool-list, .iw-pool-layout .iw-candidate-grid { grid-template-columns: minmax(0, 1fr); } }
-  @media (max-width: 600px) { .iw-title-form { grid-template-columns: minmax(0, 1fr); } }
 }
 
 @layer components {

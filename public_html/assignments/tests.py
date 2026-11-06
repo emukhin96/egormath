@@ -687,14 +687,15 @@ class StudentAnswerTests(TestCase):
         self.assertTrue(any('paste-20261014-153000' in n for n in names))
 
     def test_photo_input_opts_out_of_paste_fallback(self):
-        """Поле фото отправляет форму сразу по change, поэтому вставка из
-        буфера кладёт туда файл только по явному выбору (image_paste.js)."""
+        """Поле фото без своей зоны вставки: Ctrl+V и перетаскивание
+        принимает вся карточка задачи (assignment.js, ревизия 03.11, S1)."""
         self.assignment.allow_photos = True
         self.assignment.save(update_fields=['allow_photos'])
         response = self.client.get(
             reverse('assignment_detail', args=[self.assignment.pk]))
         self.assertContains(
-            response, 'data-photo-input data-image-paste-fallback="off"')
+            response, 'data-photo-input data-image-paste="off"')
+        self.assertContains(response, 'data-task-card')
 
     def test_post_without_answer_fields_does_not_clear(self):
         """POST без полей ответа (форма фото) не затирает сохранённое."""
@@ -1694,7 +1695,7 @@ class AutoCheckFlowTests(TestCase):
 
         response = self.client.get(
             reverse('review_assignment', args=[self.assignment.pk]))
-        self.assertContains(response, 'Самопроверка — нажатий: 3')
+        self.assertContains(response, '3 самопроверки, последняя — ')
         self.assertContains(response, 'Попытка 1')
         self.assertContains(response, 'Ранних попыток без сохранённого ответа: 2')
 

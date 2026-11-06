@@ -1,0 +1,86 @@
+/* Экраны «Задания и ученики» (ревизия интерфейса 03.11: Z1–Z5, U1, U2, S1). */
+@layer components {
+  /* Z1, Z2: строки выданных заданий и раздел самостоятельных */
+  .assignment-queue-chip { margin-left: var(--space-2); text-decoration: none; }
+  .iw-catalog-block { margin-top: var(--space-5); }
+  .iw-catalog-block h2 { font-size: 16px; margin: 0 0 var(--space-2); }
+
+  /* Пустые состояния списков — одной строкой 14 px серым (G10) */
+  .empty-line { margin: var(--space-2) 0; font-size: 14px; color: var(--muted); }
+
+  /* Z3: задача на проверке — ответ и свёрнутые блоки одной строкой */
+  .review-task-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-4);
+    margin-top: var(--space-2);
+  }
+  .review-task-foot > .review-live { display: contents; }
+  .review-task-foot .answer-block,
+  .review-task-foot .photo-grid,
+  .review-task-foot > .canvas-widget,
+  .review-task-foot details[open] { flex-basis: 100%; }
+  .review-task-foot details { margin: 0; }
+  .review-task-foot details > summary { font-size: 13px; color: var(--muted); cursor: pointer; }
+  .review-task-foot details[open] > summary { color: var(--text); }
+  .review-grade-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    margin-top: var(--space-3);
+  }
+  .review-grade-row .review-comment:has(.comment-toggle[open]) { flex-basis: 100%; }
+  .comment-toggle > summary { list-style: none; font-size: 13px; color: var(--accent); cursor: pointer; }
+  .comment-toggle > summary::-webkit-details-marker { display: none; }
+  .comment-toggle[open] > summary { color: var(--muted); margin-bottom: var(--space-1); }
+  .review-links { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-1) var(--space-3); }
+}
+
+@layer components {
+  /* Z5: карта ответов — тумблер досок в строке фильтров, легенда по «?» */
+  .live-toolbar .canvas-toggle { margin: 0; font-size: 13px; }
+  .live-toolbar .live-help { margin-left: 0; vertical-align: baseline; }
+  .live-toolbar .live-help .help-tip-body { left: auto; right: -8px; }
+  .help-tip-body.live-legend { display: grid; gap: var(--space-1); padding: var(--space-3); border-top: 0; }
+  .live-status { margin: 0; padding: var(--space-2) 0; font-size: 12.5px; color: var(--muted); }
+}
+
+@layer components {
+  /* U1: «Добавить ученика ▾» в шапке и окна добавления */
+  .add-menu { position: relative; display: inline-block; }
+  .add-menu > summary { list-style: none; gap: 6px; }
+  .add-menu > summary::-webkit-details-marker { display: none; }
+  .add-menu > summary svg { width: 12px; height: 12px; }
+  .dialog-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-2); margin-top: var(--space-3); }
+  .dialog-fields label { display: block; margin-bottom: var(--space-1); }
+  .dialog-fields input { width: 100%; }
+  #student-link-dialog .copy-row { margin-top: var(--space-3); }
+
+  /* U1: группы в панели — «⋯» у строки, переименование и «+ группа» на месте */
+  .student-groups-panel .group-row { display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; }
+  .student-groups-panel .group-row > a { flex: 1; min-width: 0; }
+  .student-groups-panel .group-row.is-renaming > a,
+  .student-groups-panel .group-row.is-renaming > .more-menu { display: none; }
+  .student-groups-panel a[aria-current] { font-weight: 600; }
+  .group-inline-form { display: flex; flex-wrap: wrap; gap: var(--space-2); width: 100%; margin-top: var(--space-1); }
+  .group-inline-form input[type=text], .group-inline-form select { flex: 1; min-width: 0; }
+  .group-add { margin-top: var(--space-3); }
+  .group-add > summary { list-style: none; color: var(--accent); cursor: pointer; font-size: 14px; }
+  .group-add > summary::-webkit-details-marker { display: none; }
+  .student-group-head .more-menu { margin-left: var(--space-2); }
+}
+
+@layer components {
+  /* U2, G10: кабинет учителя — ссылки блоков одним тихим стилем, пустое — 14 px серым */
+  .home-link { font-size: 13px; font-weight: 500; color: var(--accent); text-decoration: none; }
+  .home-link:hover { text-decoration: underline; }
+  .home-empty { font-size: 14px; }
+  .home-main > .empty-line { margin: 0; }
+}
+
+@layer components {
+  /* S1: фото перетаскивают на всю карточку задачи */
+  [data-task-card].is-dragover { outline: 2px dashed var(--accent); outline-offset: 4px; }
+}

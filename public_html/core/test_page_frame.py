@@ -26,9 +26,6 @@ DOT = '·'
 # Егора по G4: «Действия оставим пока как исключение») и знак умножения в
 # разборе формул. Убрали действие в меню «⋯» — уменьшите число.
 DOT_ALLOWED = {
-    'templates/accounts/students.html': 1,          # «только эта группа · прогресс»
-    'templates/assignments/assignment_list.html': 2,  # «шаблон · исходный листок»
-    'templates/assignments/review.html': 1,         # «Следующая работа · К заданиям»
     'templates/worksheets/worksheet_detail.html': 2,  # действия ссылки доступа
     'static/js/problem_masks.js': 1,                # ссылки масок подпунктов
     'static/js/numberline.js': 1,                   # \cdot → умножение
