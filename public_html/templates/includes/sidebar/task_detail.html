@@ -1,12 +1,4 @@
-<section class="sidebar-section">
-  <p class="sidebar-kicker">Задача #{{ task.pk }}</p>
-  <h2>Метаданные</h2>
-  <ul class="sidebar-list">
-    <li><strong>Класс:</strong> {% for g in task.grade_bands.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% empty %}{{ task.grade_display|default:"—" }}{% endfor %}</li>
-    <li><strong>Создана:</strong> {{ task.created_at|date:"d.m.Y" }}</li>
-    {% if task.created_by %}<li><strong>Автор:</strong> {{ task.created_by.get_full_name|default:task.created_by.username }}</li>{% endif %}
-  </ul>
-</section>
+{# Панель карточки задачи — только классификация (ревизия 03.11, T3): класс, автор и даты уже в подзаголовке, «Удалить задачу» — в «⋯» шапки (_editor.html). Без тем и меток панели нет #}
 {% if task.topics.all or task.tags.all %}
 <section class="sidebar-section">
   <p class="sidebar-kicker">Классификация</p>
@@ -14,13 +6,5 @@
     {% for topic in task.topics.all %}<li>{{ topic }}</li>{% endfor %}
     {% for tag in task.tags.all %}<li>#{{ tag.name }}</li>{% endfor %}
   </ul>
-</section>
-{% endif %}
-
-{% if can_edit_task %}
-<section class="sidebar-section">
-  <form class="sidebar-actions" method="post" action="{% url 'task_delete' task.pk %}" onsubmit="return confirm('Удалить задачу #{{ task.pk }}? Это действие нельзя отменить.');">
-    {% csrf_token %}<button class="sidebar-action">Удалить задачу</button>
-  </form>
 </section>
 {% endif %}

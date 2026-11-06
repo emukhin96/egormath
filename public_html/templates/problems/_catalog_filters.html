@@ -15,20 +15,25 @@
   {% include 'includes/taxonomy_picker.html' with mode='filter' primary=False facets=False grades=False compact=True chip_full=True selected_json=selected_json placeholder='+ тема' %}
   {# «Мои задачи» — свои задачи, не принятые в общие (?mine=1): галочка той же GET-формы, живой поиск и data-autosubmit учитывают её вместе с q, классом и темой; отмеченная выглядит как выбранный чип с × (CSS :has). Чип есть, только если такие задачи есть или фильтр уже включён #}
   {% if has_own_tasks %}<label class="filter-chip-toggle" title="Только мои задачи, не принятые в общие"><input type="checkbox" name="mine" value="1" data-autosubmit{% if params.mine == '1' %} checked{% endif %}><span>Мои задачи</span><span class="filter-chip-remove" aria-hidden="true">×</span></label>{% endif %}
+  {# Редкие фильтры — «Ещё ▾» в том же ряду (ревизия 03.11, T2): «Задавалась» и тумблер редактора. Метка у «Ещё», если что-то из них включено #}
+  {% if audience_students or audience_groups or is_base_editor and toolbar %}
+  <details class="more-menu show-more catalog-more{% if audience_value or show_foreign_tasks and is_base_editor and toolbar %} is-set{% endif %}"><summary aria-label="Ещё фильтры" title="Ещё фильтры">Ещё<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></summary><div class="more-menu-list">
+    {% if audience_students or audience_groups %}
+    <span class="sort-inline catalog-more-who">{% include 'includes/audience_select.html' with label='Задавалась:' %}</span>
+    {% endif %}
+    {% if is_base_editor and toolbar %}
+    {# Переключатель принадлежит POST-форме #task-list-prefs (task_list.html), а не GET-форме фильтров: data-autosubmit в shell.js отправляет форму чекбокса, живой поиск его не видит. Форма есть только в разделе «Задачи» (toolbar=True), в подборе в листок и в самостоятельную тумблера нет #}
+    <label class="ws-toggle catalog-foreign-toggle" title="Задачи других учителей, не принятые в общие: показывать в каталоге, поиске и подборе. По ссылке такая задача открывается всегда">
+      <input type="checkbox" name="show_foreign_tasks" value="1" form="task-list-prefs" data-autosubmit{% if show_foreign_tasks %} checked{% endif %}>
+      <span class="ws-toggle-slider"></span>
+      <span class="ws-toggle-text">Показывать задачи других учителей</span>
+    </label>
+    <noscript><button type="submit" form="task-list-prefs" class="btn btn-small btn-secondary">Сохранить</button></noscript>
+    {% endif %}
+  </div></details>
+  {% endif %}
   <span class="finder-status muted" data-finder-status aria-live="polite" hidden>Ищу…</span>
   <a class="filter-reset" href="{{ request.path }}{% if finder_anchor %}#{{ finder_anchor }}{% endif %}" data-finder-reset>Сбросить</a>
-  {% if audience_students or audience_groups %}
-  <span class="sort-inline">{% include 'includes/audience_select.html' with label='Задавалась:' %}</span>
-  {% endif %}
-  {% if is_base_editor and toolbar %}
-  {# Переключатель принадлежит POST-форме #task-list-prefs (task_list.html), а не GET-форме фильтров: data-autosubmit в shell.js отправляет форму чекбокса, живой поиск его не видит #}
-  <label class="ws-toggle catalog-foreign-toggle" title="Задачи других учителей, не принятые в общие: показывать в каталоге, поиске и подборе. По ссылке такая задача открывается всегда">
-    <input type="checkbox" name="show_foreign_tasks" value="1" form="task-list-prefs" data-autosubmit{% if show_foreign_tasks %} checked{% endif %}>
-    <span class="ws-toggle-slider"></span>
-    <span class="ws-toggle-text">Показывать задачи других учителей</span>
-  </label>
-  <noscript><button type="submit" form="task-list-prefs" class="btn btn-small btn-secondary">Сохранить</button></noscript>
-  {% endif %}
   <noscript><button type="submit" class="btn btn-small">Найти</button></noscript>
 </form>
 {% else %}

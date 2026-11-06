@@ -1,0 +1,18 @@
+{# Таблица партий импорта по книгам: books — список import_groups.BookGroup. Название книги — один раз, в строке-заголовке; статус — чипом #}
+<div class="catalog-table-wrap"><table class="list table-stack import-book-table">
+  <colgroup><col><col class="col-profile"><col class="col-num"><col class="col-status"><col class="col-date"></colgroup>
+  <thead><tr><th>Партия</th><th>Профиль</th><th>Задач</th><th>Статус</th><th>Создана</th></tr></thead>
+  {% for book in books %}
+  <tbody>
+  <tr class="import-book-row"><th colspan="5" scope="rowgroup"><span class="import-book-short">{{ book.short }}</span>{% if book.title %}<span class="import-book-title">{{ book.title }}</span>{% endif %}</th></tr>
+  {% for batch in book.batches %}
+  <tr>
+    <td class="stack-primary"><a href="{% url 'textbook_import_detail' batch.pk %}">{{ batch.title }}</a></td>
+    <td data-label="Профиль">{{ batch.profile }}</td><td data-label="Задач">{{ batch.total }}</td>
+    <td data-label="Статус"><span class="badge {% if batch.status == 'imported' %}badge-reviewed{% elif batch.status == 'ready' %}badge-assigned{% else %}badge-submitted{% endif %}">{{ batch.get_status_display }}</span></td>
+    <td data-label="Создана" title="{{ batch.created_at|date:'d.m.Y H:i' }}">{{ batch.created_at|date:'d.m.Y' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+  {% endfor %}
+</table></div>

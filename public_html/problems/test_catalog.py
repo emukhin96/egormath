@@ -117,7 +117,7 @@ class CatalogTests(TestCase):
         html = response.content.decode()
         meta = html.split('class="task-meta catalog-row-meta"', 1)[1].split('</td>', 1)[0]
         self.assertIn('Книга, № 7 › Глава 1. Дроби › § 2. Сокращение', meta)
-        self.assertIn('дублировать', meta)
+        self.assertIn('>Дублировать<', meta)
         self.assertNotIn('import-section-path', html)
 
     def test_catalog_source_uses_short_title_and_path_tail(self):

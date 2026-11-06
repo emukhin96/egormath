@@ -416,12 +416,12 @@ class ClonesAndBadgesTests(Roles, TestCase):
     def test_clone_titles_for_guest_and_editor(self):
         self.client.force_login(self.guest)
         response = self.client.get(reverse('task_list'), {'q': f'#{self.shared.pk}'})
-        self.assertContains(response, 'title="Создать локальную копию задачи">клон<')
-        self.assertContains(response, 'title="Создать локальную копию задачи">дублировать<')
+        self.assertContains(response, 'title="Создать локальную копию задачи">Клон с другими числами<')
+        self.assertContains(response, 'title="Создать локальную копию задачи">Дублировать<')
         self.client.force_login(self.editor)
         response = self.client.get(reverse('task_list'), {'q': f'#{self.shared.pk}'})
         self.assertNotContains(response, 'Создать локальную копию задачи')
-        self.assertContains(response, 'title="Новая задача с другими числами — не уходя со страницы">клон<')
+        self.assertContains(response, 'title="Новая задача с другими числами — не уходя со страницы">Клон с другими числами<')
 
     def test_local_copy_badge_is_purple(self):
         copy = self.shared.make_variant(self.guest)

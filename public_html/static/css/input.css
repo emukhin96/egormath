@@ -3014,15 +3014,6 @@
     box-shadow: 0 0 0 3px rgb(36 86 166 / 35%);
   }
 
-  /* Тумблер редактора «Показывать задачи других учителей» — справа в строке фильтров каталога */
-  .page-toolbar .catalog-foreign-toggle {
-    margin-left: auto;
-  }
-
-  .page-toolbar .sort-inline ~ .catalog-foreign-toggle {
-    margin-left: 0;
-  }
-
   /* «Сортировка: по теме ▾» — select без рамки в одну строку, справа в .page-toolbar */
   .sort-inline {
     display: inline-flex;
@@ -3406,9 +3397,6 @@
     white-space: nowrap;
   }
   .catalog-row-actions [data-mask-links]:empty { display: none; }
-  /* Иконка картинки — по высоте строки ссылок «клон», «дублировать» */
-  .catalog-row-actions .task-png-btn { padding: 1px 3px; }
-  .catalog-row-actions .task-png-btn svg { width: 16px; height: 16px; }
   .problem-columns label { display: block; }
   .problem-columns .ws-toggle { display: inline-flex; margin-left: 0; }
   .problem-columns .inline-label, .problem-columns .label-row label { display: inline-flex; }

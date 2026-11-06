@@ -31,7 +31,7 @@
 (function () {
   // Как в шаблоне строки: код темы, если он есть, иначе название до 28 символов.
   // Код и название берутся из data-атрибутов чипа (taxonomy.js), текст метки не разбирается.
-  var NAME_LIMIT = 28;
+  var NAME_LIMIT = 24;
   function truncate(text) {
     return text.length > NAME_LIMIT ? text.slice(0, NAME_LIMIT - 1) + '…' : text;
   }
@@ -49,12 +49,20 @@
     // а при ошибке загрузки .tax-empty появляется в другом месте — сводку не трогаем.
     var chips = details.querySelector('[data-tax-chips]');
     if (!chips || !chips.querySelector('.tax-chip, .tax-empty')) return;
-    var labels = Array.prototype.map.call(chips.querySelectorAll('.tax-chip'), function (chip) {
+    // Тема — коротким названием, код — в подсказке (ревизия 03.11, T1)
+    topicsOut.textContent = '';
+    var count = 0;
+    Array.prototype.forEach.call(chips.querySelectorAll('.tax-chip'), function (chip) {
       var code = (chip.dataset.topicCode || '').trim();
-      var name = (chip.dataset.topicName || '').trim();
-      return code || truncate(name);
-    }).filter(Boolean);
-    topicsOut.textContent = labels.length ? labels.join(', ') : 'без темы';
+      var name = (chip.dataset.topicName || '').trim() || code;
+      if (!name) return;
+      if (count++) topicsOut.appendChild(document.createTextNode(', '));
+      var span = document.createElement('span');
+      span.textContent = truncate(name);
+      if (code) span.title = code;
+      topicsOut.appendChild(span);
+    });
+    if (!count) topicsOut.textContent = 'без темы';
   }
   function watch(details) {
     if (details.dataset.rowEditReady) return;
