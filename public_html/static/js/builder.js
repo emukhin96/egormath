@@ -58,34 +58,41 @@
       widget.dataset.effective = count;
     }
 
+    // Записать звёзды в форму настроек элемента; null — как у задачи в базе
+    function setStars(widget, value) {
+      var form = document.getElementById(widget.dataset.form);
+      if (!form) return;
+      var hidden = form.querySelector('input[name=stars]');
+      var reset = document.querySelector(
+        '.ws-star-reset[data-form="' + widget.dataset.form + '"]');
+      hidden.value = value === null ? '' : String(value);
+      paintStars(widget, value === null ? Number(reset && reset.dataset.base) : value);
+      autosave(form);
+    }
+
     function initStars() {
       document.querySelectorAll('.ws-stars:not([data-initialized])').forEach(function (widget) {
         widget.dataset.initialized = '1';
-        var form = document.getElementById(widget.dataset.form);
-        if (!form) return;
-        var hidden = form.querySelector('input[name=stars]');
-        var reset = document.querySelector(
-          '.ws-star-reset[data-form="' + widget.dataset.form + '"]');
-
-        function setStars(value) {
-          hidden.value = value === null ? '' : String(value);
-          paintStars(widget, value === null ? Number(reset.dataset.base) : value);
-          autosave(form);
-        }
-
         widget.querySelectorAll('.ws-star').forEach(function (btn) {
           btn.addEventListener('click', function () {
             var value = Number(btn.dataset.value);
             // Клик по текущему значению — на звезду меньше (так можно дойти до 0)
             if (value === Number(widget.dataset.effective)) value -= 1;
-            setStars(value);
+            setStars(widget, value);
           });
         });
-        if (reset) {
-          reset.addEventListener('click', function () { setStars(0); });
-        }
       });
     }
+    // «Сбросить звёзды» — пункт меню «⋯», который worksheet_controls.js
+    // пересоздаёт после действий, поэтому слушаем делегированием
+    document.addEventListener('click', function (e) {
+      var reset = e.target.closest('.ws-star-reset');
+      if (!reset) return;
+      var widget = document.querySelector('.ws-stars[data-form="' + reset.dataset.form + '"]');
+      if (widget) setStars(widget, 0);
+      var menu = reset.closest('details[open]');
+      if (menu) menu.open = false;
+    });
     initStars();
     document.addEventListener('worksheet:updated', initStars);
 

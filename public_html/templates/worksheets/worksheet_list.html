@@ -6,14 +6,14 @@
 <div class="page-head">
   <div>
     <h1>{% if request.user.is_superuser %}Все листки{% else %}Мои листки{% endif %}</h1>
-    <p class="page-meta">
-      <span>{{ worksheets|length }} {{ worksheets|length|plural_ru:'листок,листка,листков' }}</span>
-      {% if current_topic %}<span>{{ current_topic.name }}</span>{% endif %}
-    </p>
+    {% if current_topic %}<p class="page-meta"><span>{{ current_topic.name }}</span></p>{% endif %}
   </div>
+  {# Ревизия 03.11, L2: заливная одна — «Создать листок», редкое — в «⋯» #}
   <div class="page-actions">
-    <a class="btn btn-secondary" href="{% url 'worksheet_import' %}">Импорт из .tex</a>
-    {% if is_base_editor %}<a class="btn btn-secondary" href="{% url 'worksheet_corpus_list' %}">Сверка корпуса</a>{% endif %}
+    <details class="more-menu is-head"><summary aria-label="Ещё действия" title="Ещё действия"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg></summary><div class="more-menu-list">
+      <a href="{% url 'worksheet_import' %}">Импорт из .tex</a>
+      {% if is_base_editor %}<a href="{% url 'worksheet_corpus_list' %}">Сверка корпуса</a>{% endif %}
+    </div></details>
     <a class="btn" href="{% url 'worksheet_create' %}">Создать листок</a>
   </div>
 </div>
@@ -93,22 +93,23 @@
           onclick="return confirm('Удалить выбранные листки? Будут удалены и их назначения ученикам.');">Удалить выбранные</button>
 </form>
 <div class="card worksheet-catalog">
-<div class="table-summary"><strong>Листков: {{ worksheets|length }}</strong><span>Тема учитывается у листка и его задач</span></div>
 <div class="catalog-table-wrap">
-<table class="list">
+{% comment %}Ревизия 03.11, L1: листок — одна строка. Класс и темы — текстом (менять —
+выделением строк или в «Свойствах»), путь корпуса — в подсказке названия, действия — в «⋯».{% endcomment %}
+<table class="list ws-list">
   <tr>
     <th class="col-select"><input type="checkbox" data-bulk-all="ws-bulk-form"
         title="Выбрать все листки"></th>
-    <th>Название</th><th>Класс</th><th>Темы</th><th>Задач</th><th>Даты</th><th></th>
+    <th>Название</th><th class="ws-list-grade">Класс</th><th class="ws-list-topics" title="Тема учитывается у листка и его задач">Темы</th><th class="ws-list-count">Задач</th><th class="ws-list-date">Изменён</th><th></th>
   </tr>
   {% for w in worksheets %}
-  <tr class="worksheet-main-row">
+  <tr class="ws-list-row">
     <td class="col-select">
       <input type="checkbox" class="row-select" name="ids" value="{{ w.pk }}"
              form="ws-bulk-form" title="Выбрать листок">
     </td>
-    <td class="worksheet-title-cell">
-      <a href="{% url 'worksheet_detail' w.pk %}">{{ w.title }}</a>{% if w.was_assigned %}
+    <td class="ws-list-title">
+      <a href="{% url 'worksheet_detail' w.pk %}"{% if w.comment %} title="{{ w.comment }}"{% endif %}>{{ w.title }}</a>{% if w.was_assigned %}
       <span class="worksheet-issued-badge" role="img" aria-label="Выдан ученикам" title="Выдан ученикам">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
@@ -116,55 +117,36 @@
           <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path>
         </svg>
       </span>{% endif %}
-      {% if w.comment %}<div class="muted ws-comment" style="font-size:.85rem">{{ w.comment|truncatechars:120 }}</div>{% endif %}
-
+      {% if w.owner_id != request.user.pk %}<span class="ws-list-author">{{ w.owner.get_full_name|default:w.owner.username }}</span>{% endif %}
     </td>
-    <td class="worksheet-grade-cell">
-      <form method="post" action="{% url 'worksheet_quick_update' w.pk %}"
-            data-autosave="change" class="inline-form">
-        {% csrf_token %}
-        <select name="grade" class="quick-select" aria-label="Класс листка">
-          {% include 'includes/grade_options.html' with selected=w.grade_option %}
-        </select>
-      </form>
-    </td>
-    <td class="worksheet-topics-cell">
-      <form method="post" action="{% url 'worksheet_quick_update' w.pk %}"
-            data-autosave="change" class="inline-form">
-        {% csrf_token %}
-        {% include 'includes/taxonomy_picker.html' with mode='assign' primary=True facets=False grades=False compact=True chip_full=True selected_json=w.taxonomy_json %}
-      </form>
-    </td>
-    <td class="worksheet-count-cell">{{ w.items_total }}</td>
-    <td class="worksheet-date-cell">
-      <time datetime="{{ w.created_at|date:'c' }}" title="Создан" aria-label="Создан {{ w.created_at|date:'d.m.Y' }}">{{ w.created_at|date:'d.m.Y' }}</time>
-      <time datetime="{{ w.updated_at|date:'c' }}" title="Изменён" aria-label="Изменён {{ w.updated_at|date:'d.m.Y H:i' }}">{{ w.updated_at|date:'d.m.Y H:i' }}</time>
-    </td>
+    <td class="ws-list-grade">{% if w.grade_option == 10 %}10–11{% elif w.grade_option %}{{ w.grade_option }}{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td class="ws-list-topics">{% for topic in w.topics.all %}{% if forloop.counter < 3 %}<span class="ws-topic-chip" title="{{ topic.name }}">{% if topic.code %}{{ topic.code }}{% else %}{{ topic.name }}{% endif %}</span>{% elif forloop.counter == 3 %}<span class="ws-topic-more">+{{ forloop.revcounter }}</span>{% endif %}{% endfor %}</td>
+    <td class="ws-list-count">{{ w.items_total }}</td>
+    <td class="ws-list-date"><time datetime="{{ w.updated_at|date:'c' }}" title="Изменён {{ w.updated_at|date:'d.m.Y H:i' }}, создан {{ w.created_at|date:'d.m.Y' }}">{{ w.updated_at|date:'d.m.y' }}</time></td>
     <td class="row-actions">
-      <form method="post" action="{% url 'worksheet_delete' w.pk %}" class="inline-form"
-            onsubmit="return confirm('Удалить листок «{{ w.title|escapejs }}»? Будут удалены и его назначения ученикам.');">
-        {% csrf_token %}
-        <button type="submit" class="icon-btn" title="Удалить листок" aria-label="Удалить листок">×</button>
-      </form>
+      <details class="more-menu on-hover"><summary aria-label="Действия с листком" title="Действия с листком"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg></summary><div class="more-menu-list">
+        <a href="{% url 'worksheet_pdf_editor' w.pk %}">PDF</a>
+        <form method="post" action="{% url 'worksheet_copy' w.pk %}">{% csrf_token %}<button type="submit">Дублировать</button></form>
+        <a href="{% url 'worksheet_progress' w.pk %}">Прогресс учеников</a>
+        {% if w.corpus_key %}
+        <form method="post" action="{% url 'worksheet_corpus_unpush' w.pk %}"
+              onsubmit="return confirm('Убрать «{{ w.title|escapejs }}» из каталога? Черновик останется в корпусе.');">
+          {% csrf_token %}<button type="submit" title="Вернуть листок в корпус">Убрать из каталога</button>
+        </form>
+        {% else %}
+        <form method="post" action="{% url 'worksheet_to_collections' w.pk %}"
+              onsubmit="return confirm('Перенести «{{ w.title|escapejs }}» в подборки? Из «Моих листков» он исчезнет, назначения ученикам сохранятся.');">
+          {% csrf_token %}<button type="submit">В подборки</button>
+        </form>
+        {% endif %}
+        <hr>
+        <form method="post" action="{% url 'worksheet_delete' w.pk %}"
+              onsubmit="return confirm('Удалить листок «{{ w.title|escapejs }}»? Будут удалены и его назначения ученикам.');">
+          {% csrf_token %}<button type="submit" class="is-danger">Удалить</button>
+        </form>
+      </div></details>
     </td>
   </tr>
-  <tr class="worksheet-action-row"><td></td><td colspan="6">
-      <div class="task-meta">
-      <a href="{% url 'worksheet_pdf_editor' w.pk %}" title="Предпросмотр и сборка PDF">PDF</a> ·
-      <form method="post" action="{% url 'worksheet_copy' w.pk %}" class="inline-form">
-        {% csrf_token %}
-        <button type="submit" class="link-btn" title="Создать дубликат листка">Дублировать</button>
-      </form>
-      {% if w.corpus_key %} ·
-      <form method="post" action="{% url 'worksheet_corpus_unpush' w.pk %}" class="inline-form"
-            onsubmit="return confirm('Убрать «{{ w.title|escapejs }}» из каталога? Черновик останется в корпусе.');">
-        {% csrf_token %}
-        <button type="submit" class="link-btn" title="Вернуть листок в корпус">Убрать из каталога</button>
-      </form>
-      {% endif %}
-       · <a href="{% url 'worksheet_progress' w.pk %}">Прогресс учеников</a>
-      {% if request.user.is_superuser %} · <span>{{ w.owner.get_full_name|default:w.owner.username }}</span>{% endif %}</div>
-  </td></tr>
   {% endfor %}
 </table>
 </div>

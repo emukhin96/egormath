@@ -2281,19 +2281,6 @@
     font-size: 0.85rem;
   }
 
-  .worksheet-catalog .task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-  .worksheet-catalog .task-meta a, .worksheet-catalog .task-meta button { white-space: nowrap; }
-  table.list .worksheet-main-row td { border-bottom: 0; }
-  .worksheet-action-row td { padding-top: 0; }
-  table.list .worksheet-main-row:hover + .worksheet-action-row td,
-  table.list .worksheet-main-row:has(+ .worksheet-action-row:hover) td {
-    background: #f2f6fc;
-  }
-  .worksheet-title-cell { width: 100%; min-width: 200px; }
-  .worksheet-count-cell { white-space: nowrap; }
-  .worksheet-topics-cell { min-width: 240px; }
-  .worksheet-date-cell { font-size: .75rem; color: var(--muted); }
-  .worksheet-date-cell time { display: block; white-space: nowrap; }
   .worksheet-issued-badge {
     display: inline-flex;
     align-items: center;
@@ -3375,60 +3362,6 @@
   .quick-task-form .form-buttons { margin-top: var(--space-3); }
   #add-tasks .worksheet-items-heading .linklike { margin-left: auto; font-size: 0.85rem; }
 
-  /* «Мои листки» на узком экране: пара строк (листок + строка ссылок) —
-     одна карточка с заливкой, без рамки; порог — контейнер .catalog-table-wrap,
-     как у .table-stack */
-  @container (max-width: 760px) {
-    .worksheet-catalog table, .worksheet-catalog tbody { display: block; width: 100%; }
-    .worksheet-catalog tr:has(> th) { display: block; }
-    .worksheet-catalog th:not(.col-select) { display: none; }
-    .worksheet-catalog th.col-select {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      width: auto;
-      max-width: none;
-      padding: 0 0 var(--space-3) !important;
-      border: 0;
-      background: transparent;
-    }
-    .worksheet-catalog th.col-select::after { content: "Выбрать все"; font-size: 0.8rem; font-weight: 600; text-transform: none; letter-spacing: 0; }
-    .worksheet-main-row {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: var(--space-1) var(--space-2);
-      align-items: baseline;
-      padding: var(--space-2) var(--space-3) 0;
-      background: var(--bg);
-      border-radius: var(--radius) var(--radius) 0 0;
-    }
-    .worksheet-action-row {
-      display: block;
-      padding: var(--space-1) var(--space-3) var(--space-2);
-      background: var(--bg);
-      border-radius: 0 0 var(--radius) var(--radius);
-    }
-    .worksheet-action-row + .worksheet-main-row { margin-top: var(--space-2); }
-    table.list .worksheet-main-row td,
-    table.list .worksheet-action-row td,
-    table.list .worksheet-main-row:hover + .worksheet-action-row td,
-    table.list .worksheet-main-row:has(+ .worksheet-action-row:hover) td {
-      min-width: 0;
-      padding: 0 !important;
-      border: 0;
-      background: transparent;
-    }
-    .worksheet-main-row .col-select { grid-column: 1; grid-row: 1; width: auto; max-width: none; }
-    .worksheet-title-cell { grid-column: 2; grid-row: 1; width: auto; min-width: 0; }
-    .worksheet-main-row .row-actions { grid-column: 3; grid-row: 1; }
-    .worksheet-grade-cell { grid-column: 2; grid-row: 2; }
-    .worksheet-count-cell { grid-column: 3; grid-row: 2; font-size: 0.85rem; color: var(--muted); }
-    .worksheet-count-cell::before { content: "задач: "; }
-    .worksheet-topics-cell { grid-column: 2 / -1; grid-row: 3; min-width: 0; }
-    .worksheet-main-row .worksheet-date-cell { display: none; }
-    .worksheet-action-row td:first-child { display: none; }
-    .worksheet-action-row td:last-child { display: block; }
-  }
   /* Выпадающие списки (темы, класс) не должны обрезаться прокруткой обёртки */
   @media (max-width: 760px) {
     .worksheet-catalog .catalog-table-wrap,
@@ -5849,15 +5782,6 @@
     transform: translateY(1px);
   }
 
-  .worksheet-page-head > div:first-child { width: 100%; }
-  .worksheet-title-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-2) var(--space-4);
-  }
-  .worksheet-title-row > .page-subtitle { margin: 0; }
   .worksheet-task-meta .ws-column-control { gap: var(--space-1); }
   .worksheet-task-meta .ws-column-control input { margin: 0; }
   .ws-share-create { margin-bottom: var(--space-3); }
@@ -5942,12 +5866,6 @@
 
   .worksheet-task-meta .task-meta-item:empty {
     display: none;
-  }
-
-  .worksheet-task-meta .task-meta-item:not(:first-child)::before {
-    content: "·";
-    margin-right: var(--space-1);
-    color: var(--muted);
   }
 
   .collection-source-grid {

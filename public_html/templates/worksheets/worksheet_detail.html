@@ -1,14 +1,14 @@
 {% extends 'base.html' %}
 {% load static task_extras livefile %}
 {% block title %}{{ worksheet.title }} — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/worksheet_detail.html' %}{% endblock %}
 {% block content %}
-{# Шапка в стандартном .page-head — как на остальных страницах #}
+{% comment %}Шапка в стандартном .page-head (ревизия 03.11, L4): заливная «PDF», вторичная
+«Выдать», редкое — в «⋯», AI — своим меню. Боковой панели нет: подборка — в крошках,
+кому выдан — в блоке «Ученикам».{% endcomment %}
 <div class="page-head worksheet-page-head">
 <div>
 <nav class="page-crumbs" aria-label="Путь">{% if collection %}<a href="{% url 'collection_list' %}">Подборки</a><a href="{% url 'collection_detail' collection.pk %}">{{ collection.source }}</a><span>Конструктор подборки</span>{% else %}<a href="{% url 'worksheet_list' %}">Листки</a><span>Конструктор листка</span>{% endif %}</nav>
 {# Заголовок и подзаголовок редактируются кликом по тексту (builder.js) #}
-<div class="worksheet-title-row">
 <h1 class="ws-title">
   <span class="ws-editable" data-edit="title" contenteditable="plaintext-only" role="textbox" aria-label="Название листка"
         title="Нажмите, чтобы переименовать">{{ worksheet.title }}</span>
@@ -23,38 +23,65 @@
          maxlength="100" hidden>
 </h1>
 <p class="page-meta">{% if request.user.is_superuser %}<span>владелец {{ worksheet.owner.get_full_name|default:worksheet.owner.username }}</span>{% endif %}<span>создан {{ worksheet.created_at|date:'d.m.Y' }}</span><span>изменён {{ worksheet.updated_at|date:'d.m.Y H:i' }}</span></p>
-</div>
 {% if worksheet.comment %}
 <p class="ws-comment muted">{{ worksheet.comment|linebreaksbr }}</p>
 {% endif %}
 </div>
-
+<div class="page-actions">
+  {# Запись AI-ответов прямо в задачи листка — только редакторам (task_neuro_solve), остальным меню приглушено #}
+  {% include 'includes/ai_menu.html' with kind='worksheet' %}
+  <details class="more-menu is-head"><summary aria-label="Ещё действия с листком" title="Ещё действия с листком"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg></summary><div class="more-menu-list">
+    {% if independentworks_enabled %}<form method="post" action="{% url 'independentworks:create_from_worksheet' worksheet.pk %}">{% csrf_token %}<button type="submit">Создать самостоятельную</button></form>{% endif %}
+    <a href="{% url 'worksheet_edit' worksheet.pk %}">Свойства</a>
+    <button type="button" data-dialog-open="copy-dialog">Дублировать</button>
+    <a href="{% url 'worksheet_beamer_editor' worksheet.pk %}" target="_blank" rel="noopener">Презентация</a>
+    <a href="{% url 'worksheet_tex' worksheet.pk %}">.tex</a>
+    {% if collection %}{% if is_authored %}
+    <hr>
+    {% if is_base_editor or collection.is_published %}
+    <p class="more-menu-note">{% if collection.is_published %}Подборка видна всем учителям{% else %}Подборка видна только вам{% endif %}</p>
+    <form method="post" action="{% url 'collection_publish' collection.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.path }}">
+      <input type="hidden" name="published" value="{% if collection.is_published %}0{% else %}1{% endif %}">
+      <button type="submit">{% if collection.is_published %}Скрыть от других{% else %}Открыть всем учителям{% endif %}</button>
+    </form>
+    {% else %}
+    <p class="more-menu-note">Подборка видна только вам; сделать её общей может редактор</p>
+    {% endif %}
+    <form method="post" action="{% url 'collection_to_worksheets' collection.pk %}"
+          onsubmit="return confirm('Вернуть «{{ worksheet.title|escapejs }}» в мои листки? Из подборок он исчезнет.');">
+      {% csrf_token %}<button type="submit">Вернуть в мои листки</button>
+    </form>
+    {% if corpus_key %}
+    <form method="post" action="{% url 'worksheet_corpus_unpush' worksheet.pk %}"
+          onsubmit="return confirm('Убрать «{{ worksheet.title|escapejs }}» из каталога? Листок будет удалён, черновик вернётся в корпус на сверку.');">
+      {% csrf_token %}<button type="submit">Вернуть в корпус</button>
+    </form>
+    {% endif %}
+    {% endif %}{% else %}
+    <hr>
+    <form method="post" action="{% url 'worksheet_to_collections' worksheet.pk %}"
+          onsubmit="return confirm('Перенести листок в подборки? Из «Моих листков» он исчезнет, назначения ученикам сохранятся.');">
+      {% csrf_token %}<button type="submit" title="Законченный авторский листок удобнее хранить в подборках и брать из него задачи">В подборки</button>
+    </form>
+    {% endif %}
+  </div></details>
+  {% if not collection %}<a class="btn btn-secondary" href="{% url 'assignment_create' %}?worksheet={{ worksheet.pk }}">Выдать</a>{% endif %}
+  {# Одна кнопка PDF: варианты (ученик/ответы/учитель) выбираются на странице сборки #}
+  <a class="btn" href="{% url 'worksheet_pdf_editor' worksheet.pk %}" data-busy="Открываем…">PDF</a>
+</div>
 </div>
 {% if collection %}
-<div class="msg msg-warning">
-  Это каталожная подборка из источника «{{ collection.source }}».
-  Все изменения сразу меняют её backing-листок; свою копию создаёт кнопка
-  «Взять как листок» на странице каталога.
-  <a class="btn btn-small btn-secondary" href="{% url 'collection_detail' collection.pk %}">← К странице подборки</a>
+<div class="msg msg-warning ws-collection-note">
+  <span>Это подборка из каталога: правки видят все.</span>
+  <form method="post" action="{% url 'collection_use' collection.pk %}">{% csrf_token %}<button type="submit" class="link-btn">Взять как листок</button></form>
 </div>
 {% endif %}
 <form id="title-inline-form" method="post" hidden
       action="{% url 'worksheet_rename' worksheet.pk %}">{% csrf_token %}</form>
 <form id="subtitle-inline-form" method="post" hidden
       action="{% url 'worksheet_quick_update' worksheet.pk %}">{% csrf_token %}</form>
-
-<div class="ws-toolbar">
-  {% if independentworks_enabled %}<form method="post" action="{% url 'independentworks:create_from_worksheet' worksheet.pk %}">{% csrf_token %}<button class="btn btn-secondary">Создать самостоятельную</button></form>{% endif %}
-  <a class="btn btn-secondary" href="{% url 'worksheet_edit' worksheet.pk %}">Свойства</a>
-  <button type="button" class="btn btn-secondary" data-dialog-open="copy-dialog">Дублировать</button>
-  {# Одна кнопка PDF: варианты (ученик/ответы/учитель) выбираются на странице сборки #}
-  <a class="btn" href="{% url 'worksheet_pdf_editor' worksheet.pk %}" data-busy="Открываем…">PDF</a>
-  <a class="btn btn-secondary" href="{% url 'worksheet_beamer_editor' worksheet.pk %}"
-     target="_blank" rel="noopener">Презентация</a>
-  <a class="btn btn-secondary" href="{% url 'worksheet_tex' worksheet.pk %}">.tex</a>
-  {# Запись AI-ответов прямо в задачи листка — только редакторам (task_neuro_solve), остальным меню приглушено #}
-  {% include 'includes/ai_menu.html' with kind='worksheet' %}
-</div>
 
 <div class="card worksheet-items-card">
   <h2 class="worksheet-items-heading"><span>Задачи листка</span>
@@ -85,7 +112,7 @@
         {% if item.task_id %}
         {# --- Задача --- #}
         <div class="ws-content" data-task-png-content>
-          {% if item.task.block_id %}<p class="page-subtitle" data-task-png-skip>{{ item.task.block.title }}, вопрос {{ item.task.block_position }} из {{ item.task.block.size }}. Кнопки ↑/↓ перемещают весь блок.</p>{% endif %}
+          {% if item.task.block_id %}<p class="page-subtitle" data-task-png-skip>{{ item.task.block.title }}, вопрос {{ item.task.block_position }} из {{ item.task.block.size }}. Пункты «Выше» и «Ниже» в меню «⋯» перемещают весь блок.</p>{% endif %}
           <form id="settings-{{ item.pk }}" method="post" class="ws-settings"
                 data-autosave="change"
                 action="{% url 'worksheet_item_settings' worksheet.pk item.pk %}">
@@ -154,54 +181,50 @@
         </div>
         {% endif %}
 
+        {% comment %}Ревизия 03.11, L3: справа всегда «+» (в корзину), остальное — в «⋯» по наведению.
+        Стрелки ↑↓ — пунктами «Выше»/«Ниже»: единственный способ с клавиатуры и у блоков без ручки.
+        worksheet_controls.js после действий заменяет .ws-actions целиком.{% endcomment %}
         <div class="ws-actions">
-          {% if item.task_id and not item.task.variant_of_id %}{% include 'includes/cart_button.html' with task=item.task %}{% endif %}
-          {% if item.task_id %}
-          {% include 'includes/task_png_button.html' %}
           {% if row.hidden_links or row.hidden_assignments %}
-          <button type="button"
-                  class="icon-btn vis-btn vis-on"
-                  data-dialog-open="vis-{{ item.pk }}"
+          {# Пометка, что задача скрыта у части получателей; клик — тот же диалог видимости #}
+          <button type="button" class="icon-btn vis-btn vis-on" data-dialog-open="vis-{{ item.pk }}"
                   title="Скрыта у части ссылок или учеников"
                   aria-label="Скрыта у части ссылок или учеников"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button>
-          {% else %}
-          <button type="button"
-                  class="icon-btn vis-btn"
-                  data-dialog-open="vis-{{ item.pk }}"
-                  title="Видна всем ссылкам и ученикам"
-                  aria-label="Видна всем ссылкам и ученикам"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
           {% endif %}
-          {% endif %}
-          <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'up' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.first %}disabled{% endif %}>↑</button></form>
-          <form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'down' %}" class="inline-form">{% csrf_token %}<button class="btn btn-small btn-secondary" {% if forloop.last %}disabled{% endif %}>↓</button></form>
-          <form method="post" action="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" class="inline-form" data-builder-action>{% csrf_token %}<button class="icon-btn" title="Убрать из листка" aria-label="Убрать из листка">×</button></form>
+          {% if item.task_id and not item.task.variant_of_id %}{% include 'includes/cart_button.html' with task=item.task %}{% endif %}
+          <details class="more-menu on-hover"><summary aria-label="Действия с задачей" title="Действия с задачей"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg></summary><div class="more-menu-list">
+            {% if item.task_id %}
+            <button type="button" class="ws-star-reset" data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
+                    title="Убрать все звёзды только в этом листке">Сбросить звёзды</button>
+            <form method="post" data-answer-policy-form
+                  action="{% url 'task_manage' item.task.pk %}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}">
+              {% csrf_token %}
+              <input type="hidden" name="block" value="answer_policy">
+              <input type="hidden" name="worksheet" value="{{ worksheet.pk }}">
+              <input type="hidden" name="item" value="{{ item.pk }}">
+              <label title="Переключить тип ответа и сразу сохранить"><input type="checkbox" name="full_answer_only"{% if item.task.full_answer_only %} checked{% endif %}>Только полный ответ</label>
+            </form>
+            <hr>
+            <form method="post" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button type="submit" title="Добавить локальную копию следующей строкой">Дублировать локально</button></form>
+            <form method="post" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><input type="hidden" name="standalone" value="1"><button type="submit" title="Создать копию в разделе «Задачи» и добавить в листок">Дублировать</button></form>
+            {% if not item.task.block_id %}<button type="button" data-quick-clone="{% url 'task_clone' item.task.pk %}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}" title="Клон с другими числами — следующей строкой листка">Клон рядом</button>{% endif %}
+            <button type="button" data-task-png title="Скопировать условие картинкой (PNG) — для Miro и других досок">Скопировать картинкой</button>
+            <button type="button" class="vis-btn" data-dialog-open="vis-{{ item.pk }}" title="{% if row.hidden_links or row.hidden_assignments %}Скрыта у части ссылок или учеников{% else %}Видна всем ссылкам и ученикам{% endif %}">Видимость для учеников</button>
+            <hr>
+            {% endif %}
+            {% if not forloop.first %}<form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'up' %}">{% csrf_token %}<button type="submit">Выше</button></form>{% endif %}
+            {% if not forloop.last %}<form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'down' %}">{% csrf_token %}<button type="submit">Ниже</button></form>{% endif %}
+            <form method="post" action="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" data-builder-action>{% csrf_token %}<button type="submit" class="is-danger">Убрать из листка</button></form>
+          </div></details>
         </div>
       </div>
 
       {% if item.task_id %}
       <div class="task-meta worksheet-task-meta">
         <span class="task-meta-item"><a class="task-id" href="{% url 'task_detail' item.task.pk %}?worksheet={{ worksheet.pk }}&item={{ item.pk }}" title="Открыть задачу">#{{ item.task.pk }}</a>{% if item.task.variant_of_id %} <span class="badge badge-local" title="Локальная копия задачи #{{ item.task.variant_of_id }}">локальная</span>{% endif %}</span>
-        <span class="task-meta-item"><button type="button" class="link-btn ws-star-reset"
-                  data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
-                  title="Убрать все звёзды только в этом листке">сбросить звёзды</button></span>
+        <span class="task-meta-item ws-full-only-note">только полный ответ</span>
         <span class="task-meta-item" data-mask-links></span>
         <span class="task-meta-item">{% include 'includes/task_usage_badge.html' with task=item.task %}</span>
-        <form method="post" class="inline-form task-meta-item" data-answer-policy-form
-              action="{% url 'task_manage' item.task.pk %}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}">
-          {% csrf_token %}
-          <input type="hidden" name="block" value="answer_policy">
-          <input type="hidden" name="worksheet" value="{{ worksheet.pk }}">
-          <input type="hidden" name="item" value="{{ item.pk }}">
-          <label class="ws-toggle" title="Переключить тип ответа и сразу сохранить">
-            <span class="ws-toggle-text">краткий ответ</span>
-            <input type="checkbox" name="full_answer_only"{% if item.task.full_answer_only %} checked{% endif %}>
-            <span class="ws-toggle-slider"></span>
-            <span class="ws-toggle-text">только полный</span>
-          </label>
-        </form>
-        <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button class="link-btn" title="Добавить локальную копию следующей строкой">дублировать локально</button></form>
-        <form method="post" class="inline-form task-meta-item" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><input type="hidden" name="standalone" value="1"><button class="link-btn" title="Создать копию в разделе «Задачи» и добавить в листок">дублировать</button></form>
-        {% if not item.task.block_id %}<button type="button" class="link-btn task-meta-item" data-quick-clone="{% url 'task_clone' item.task.pk %}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}" title="Клон с другими числами — следующей строкой листка">клон рядом</button>{% endif %}
         {% if item.task.subitems.all %}
         <label class="inline-label task-meta-item ws-column-control">колонки
           <input type="number" name="columns" form="settings-{{ item.pk }}"
@@ -366,6 +389,18 @@
   {% endif %}
 
   {% if assignments %}
+  {# Кому выдан (бывшая панель «Назначения»): клик — какие номера видит группа или ученик #}
+  <div class="ws-recipients" id="worksheet-recipients">
+    <h3>Кому выдан</h3>
+    <ul>
+      {% for section in assignment_groups %}
+      <li><button type="button" class="ws-recipient-link" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'group' section.group.pk %}"><strong>{{ section.group.name }}</strong><span>учеников: {{ section.assignments|length }}</span></button></li>
+      {% endfor %}
+      {% for assignment in individual_assignments %}
+      <li><button type="button" class="ws-recipient-link" data-visibility-url="{% url 'worksheet_recipient_visibility' worksheet.pk 'assignment' assignment.pk %}">{{ assignment.student.get_full_name|default:assignment.student.username }}<span>{{ assignment.get_status_display|lower }}</span></button></li>
+      {% endfor %}
+    </ul>
+  </div>
   <h2><a href="{% url 'worksheet_progress' worksheet.pk %}">Прогресс</a></h2>
   <div data-progress-table data-progress-url="{% url 'worksheet_progress' worksheet.pk %}?manage=1" data-live-file="{% live_file 'worksheet' worksheet.pk %}">
     {% include 'assignments/_progress_table.html' with people=progress_people point_groups=point_groups manage_status=True %}
@@ -460,7 +495,7 @@
 <script defer src="{% static 'js/problem_editor.js' %}?v=8"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=3"></script>
-<script defer src="{% static 'js/builder.js' %}?v=9"></script>
+<script defer src="{% static 'js/builder.js' %}?v=10"></script>
 <script defer src="{% static 'js/worksheet_controls.js' %}?v=7"></script>
 <script defer src="{% static 'js/task_finder.js' %}"></script>
 <script defer src="{% static 'js/cart.js' %}?v=2"></script>
