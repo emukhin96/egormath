@@ -11,6 +11,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.functional import cached_property
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
@@ -24,6 +25,7 @@ from accounts.permissions import (BASE_LOCKED_MESSAGE, NEURO_EDITORS_ONLY_MESSAG
                                   shows_foreign_tasks, visible_tasks)
 from assignments.checks import HELP as MASK_HELP
 
+from .catalog_counts import catalog_facets, section_counts
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
                     TaskSubitemFormSet, TextbookBundleUploadForm,
                     TextbookDraftReviewForm, TextbookImageArchiveForm)
@@ -73,13 +75,25 @@ def filter_tasks(params, user):
     return tasks
 
 
+class CatalogPaginator(Paginator):
+    """Счётчик страниц без DISTINCT по всем полям задачи: после фильтра по
+    темам или классам queryset помечен distinct, и обычный ``count()``
+    считал ``SELECT DISTINCT`` по текстам всех задач (аудит быстродействия
+    06.11.2026). По одному ``pk`` то же число получается на порядок дешевле."""
+
+    @cached_property
+    def count(self):
+        return self.object_list.values('pk').count()
+
+
 def _rubricator_blocks(topics_flat, user, active_topic=None):
     """Разделы рубрикатора (корневые темы) с числом задач в поддереве.
 
     Поддеревья берутся из плоского списка topic_tree() (один запрос),
-    счётчик — по одному запросу на раздел; разделов несколько. У раздела,
-    в котором лежит выбранная тема, раскрываются подтемы первого уровня
-    (тоже со счётчиками), чтобы панель вела дальше по дереву.
+    счётчики — ``catalog_counts.section_counts`` (кэш на учителя и
+    открытый раздел). У раздела, в котором лежит выбранная тема,
+    раскрываются подтемы первого уровня (тоже со счётчиками), чтобы
+    панель вела дальше по дереву.
     """
     blocks = []
     subtree_ids = []
@@ -99,59 +113,28 @@ def _rubricator_blocks(topics_flat, user, active_topic=None):
                 children.append(topic)
             elif children:
                 children[-1].subtree_ids.append(topic.pk)
-    # Та же база, что у каталога (filter_tasks): видимые задачи без локальных копий.
-    catalog = catalog_tasks(user)
+    active_root = next((b for b in blocks if active_topic in b.subtree_ids), None)
+    counts = section_counts(user, blocks, active_root)
     for block in blocks:
-        block.task_total = catalog.filter(topics__in=block.subtree_ids).distinct().count()
+        block.task_total = counts.get(block.pk, 0)
         block.is_current = active_topic == block.pk
-        if active_topic in block.subtree_ids:
+        if block is active_root:
             for child in block.children_topics:
-                child.task_total = catalog.filter(topics__in=child.subtree_ids).distinct().count()
+                child.task_total = counts.get(child.pk, 0)
                 child.is_current = active_topic in child.subtree_ids
             block.children_visible = block.children_topics
     return blocks
 
 
-def _catalog_facets(params, user):
-    """Классы и источники для панели каталога — с числом задач и текущим выбором."""
-    catalog = catalog_tasks(user)
-    # Условие то же, что у фильтра ?grade=N (filter_by_taxonomy): полоса
-    # классов ИЛИ старое поле grade_level — иначе счётчик расходится с выдачей.
-    levels_of = {level: [10, 11] if level == 10 else [level]
-                 for level in GRADE_LEVEL_TO_CODE if level != 11}
-    counts = catalog.aggregate(**{
-        f'g{level}': Count('id', distinct=True, filter=(
-            Q(grade_bands__code=GRADE_LEVEL_TO_CODE[level]) | Q(grade_level__in=levels)))
-        for level, levels in levels_of.items()})
-    labels = dict(Task.GRADE_CHOICES)
-    current_grade, _ = parse_grade_choice(params.get('grade'))
-    grades = []
-    for level in sorted(levels_of):
-        count = counts[f'g{level}']
-        if count:
-            grades.append({'value': level, 'label': labels.get(level, str(level)),
-                           'count': count, 'is_current': current_grade == level})
-    current_source = (params.get('source') or '').strip()
-    sources = [
-        {'pk': row['source_id'], 'title': row['source__title'],
-         'short': row['source__short_title'] or row['source__title'], 'count': row['n'],
-         'is_current': current_source == str(row['source_id'])}
-        for row in (TaskSource.objects.filter(task__in=catalog)
-                    .values('source_id', 'source__title', 'source__short_title')
-                    .annotate(n=Count('task_id', distinct=True))
-                    .order_by('-n', 'source__title')[:12])]
-    return grades, sources
-
-
 @teacher_required
 def task_list(request):
     tasks = filter_tasks(request.GET, request.user)
-    paginator = Paginator(tasks, 25)
+    paginator = CatalogPaginator(tasks, 25)
     page = paginator.get_page(request.GET.get('page'))
     topics_flat = topic_tree()
     active_topic = request.GET.get('topic', '')
     active_topic = int(active_topic) if active_topic.isdigit() else None
-    grade_facets, source_facets = _catalog_facets(request.GET, request.user)
+    grade_facets, source_facets = catalog_facets(request.GET, request.user)
     ctx = taxonomy_page_context(filter_state_from_params(request.GET))
     ctx.update({
         'page': page,
