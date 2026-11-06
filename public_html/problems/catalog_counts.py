@@ -40,10 +40,15 @@ def _cache():
     return caches[CACHE_ALIAS]
 
 
-def _version(using):
-    """Метка поколения счётчиков: сброс — новая метка, старые записи
-    остаются до истечения TIMEOUT и больше не читаются."""
-    key = f'{VERSION_KEY}:{using}'
+def _version_key(using, user_pk=None):
+    return f'{VERSION_KEY}:{using}' + (f':u{user_pk}' if user_pk else '')
+
+
+def _version(using, user_pk=None):
+    """Метка поколения счётчиков — общая и отдельная для учителя: сброс —
+    новая метка, старые записи остаются до истечения TIMEOUT и больше не
+    читаются."""
+    key = _version_key(using, user_pk)
     try:
         version = _cache().get(key)
         if version is None:
@@ -54,13 +59,15 @@ def _version(using):
     return version
 
 
-def invalidate_catalog_counts(*, using=None):
-    """Сбросить счётчики после успешной транзакции."""
+def invalidate_catalog_counts(*, using=None, user_pk=None):
+    """Сбросить счётчики после успешной транзакции: всем (правка задач,
+    тем, источников) или одному учителю (изменился состав его листков —
+    у приглашённого от него зависит база каталога, ревью #318)."""
     using = using or 'default'
 
     def bump():
         try:
-            _cache().set(f'{VERSION_KEY}:{using}', uuid.uuid4().hex, None)
+            _cache().set(_version_key(using, user_pk), uuid.uuid4().hex, None)
         except OSError:
             pass
     transaction.on_commit(bump, using=using)
@@ -79,9 +86,10 @@ def _key(user, suffix):
     database = str(connections[using].settings_dict.get('NAME', ''))
     digest = hashlib.sha256(database.encode()).hexdigest()[:12]
     version = _version(using)
-    if version is None:
+    own = _version(using, user.pk)
+    if version is None or own is None:
         return None
-    return f'catalog-counts:{digest}:{version}:{user.pk}:{_mode(user)}:{suffix}'
+    return f'catalog-counts:{digest}:{version}-{own}:{user.pk}:{_mode(user)}:{suffix}'
 
 
 def _cached(user, suffix, build):
@@ -182,9 +190,24 @@ def _on_task_data_changed(sender, using=None, **kwargs):
     invalidate_catalog_counts(using=using or 'default')
 
 
+def _on_worksheet_item_changed(sender, instance, using=None, **kwargs):
+    """Состав листка меняет базу каталога его владельца (visible_tasks):
+    сбрасываем счётчики только ему. Листок уже мог быть удалён вместе с
+    элементами — тогда сбрасываем всем."""
+    from worksheets.models import Worksheet
+    owner_id = (Worksheet.objects.filter(pk=instance.worksheet_id)
+                .values_list('owner_id', flat=True).first())
+    invalidate_catalog_counts(using=using or 'default', user_pk=owner_id)
+
+
 def connect_catalog_counts_signals():
-    """Задача, её темы, источники и классы — всё, от чего зависят числа."""
+    """Задача, её темы, источники и классы — всё, от чего зависят числа;
+    темы и источники через add()/set() идут bulk_create связки без
+    post_save, поэтому ещё и m2m_changed. Элементы листков — для базы
+    приглашённого учителя."""
     from django.db.models.signals import m2m_changed, post_delete, post_save
+
+    from worksheets.models import WorksheetItem
 
     for model in (Task, TaskTopic, TaskSource):
         label = model._meta.label_lower
@@ -192,5 +215,11 @@ def connect_catalog_counts_signals():
                           dispatch_uid=f'problems.invalidate_catalog_counts.save.{label}')
         post_delete.connect(_on_task_data_changed, sender=model,
                             dispatch_uid=f'problems.invalidate_catalog_counts.delete.{label}')
-    m2m_changed.connect(_on_task_data_changed, sender=Task.grade_bands.through,
-                        dispatch_uid='problems.invalidate_catalog_counts.grade_bands')
+    for name in ('grade_bands', 'topics', 'sources'):
+        m2m_changed.connect(_on_task_data_changed,
+                            sender=getattr(Task, name).through,
+                            dispatch_uid=f'problems.invalidate_catalog_counts.{name}')
+    post_save.connect(_on_worksheet_item_changed, sender=WorksheetItem,
+                      dispatch_uid='problems.invalidate_catalog_counts.save.worksheetitem')
+    post_delete.connect(_on_worksheet_item_changed, sender=WorksheetItem,
+                        dispatch_uid='problems.invalidate_catalog_counts.delete.worksheetitem')

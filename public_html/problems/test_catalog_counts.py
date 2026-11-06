@@ -105,6 +105,24 @@ class CatalogCountsCacheTests(Roles, TransactionTestCase):
         another.delete()
         self.assertEqual(self.root_block().task_total, 1)
 
+    def test_bulk_topic_add_and_guest_worksheet_invalidate(self):
+        # topics.add() создаёт связки bulk_create без post_save (ревью #318)
+        another = shared_task(self.editor, 'Через add')
+        self.assertEqual(self.root_block().task_total, 1)
+        another.topics.add(self.root)
+        self.assertEqual(self.root_block().task_total, 2)
+        # У приглашённого база каталога зависит от состава его листков
+        private = Task.new_for(self.editor, text_latex='Личная редактора')
+        private.is_shared = False
+        private.save(update_fields=['is_shared'])
+        link(private, self.root, TaskTopic.ROLE_PRIMARY)
+        self.assertEqual(self.root_block(self.guest).task_total, 2)
+        sheet = Worksheet.objects.create(title='Взятый листок', owner=self.guest)
+        item = WorksheetItem.objects.create(worksheet=sheet, task=private, order=10)
+        self.assertEqual(self.root_block(self.guest).task_total, 3)
+        item.delete()
+        self.assertEqual(self.root_block(self.guest).task_total, 2)
+
     def test_counts_separate_for_teachers(self):
         own = Task.new_for(self.guest, text_latex='Личная гостя')
         link(own, self.root, TaskTopic.ROLE_PRIMARY)
