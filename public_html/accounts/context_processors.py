@@ -46,8 +46,7 @@ def shell(request):
     # учителю без права редактора (accounts/onboarding.py)
     context['shows_onboarding'] = is_teacher and not context['is_base_editor']
     if is_teacher:
-        from worksheets.cart import cart_context
-        context['cart'] = cart_context(request)
+        context['cart'] = _request_cart(request)
         # Очередь предложений исправлений (problems/proposals.py): редактору
         # базы — новые, автору — ответы, которых он ещё не видел. Один запрос
         # на страницу, и только когда шаблон дошёл до счётчиков: частичные
@@ -58,6 +57,21 @@ def shell(request):
             context['proposals_new'] = SimpleLazyObject(lambda: counts['new'])
         context['proposals_replies'] = SimpleLazyObject(lambda: counts['replies'])
     return context
+
+
+def _request_cart(request):
+    """Контекст корзины один раз на запрос: живая страница задания,
+    хронология и прогресс рендерят частичные шаблоны через
+    ``render_to_string`` с request, и контекст-процессор вызывался на
+    каждый из них — до 12 одинаковых запросов «последние листки и
+    самостоятельные» (аудит быстродействия 06.11.2026). Ключ — состав
+    корзины: если представление её изменило, контекст пересчитывается."""
+    from worksheets.cart import cart_context, cart_ids
+    key = tuple(cart_ids(request))
+    cached = getattr(request, '_shell_cart', None)
+    if cached is None or cached[0] != key:
+        cached = request._shell_cart = (key, cart_context(request))
+    return cached[1]
 
 
 def proposal_counts(user, editor):

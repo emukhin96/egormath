@@ -1712,9 +1712,12 @@ def worksheet_pdf_editor(request, pk):
     # Код всех трёх вариантов — сразу в странице: вариант переключается
     # без перезагрузки и без сборки, как остальные параметры оформления
     from .latex import apply_pdf_options
+    # Элементы с подпунктами и рисунками — один раз на три варианта, а не
+    # три набора одинаковых запросов (аудит быстродействия 06.11.2026)
+    items = list(worksheet.ordered_items())
     variants = []
     for value, _label in WorksheetPdf.VARIANT_CHOICES:
-        tex = worksheet_to_tex(worksheet, value)
+        tex = worksheet_to_tex(worksheet, value, items=items)
         if (value == WorksheetPdf.VARIANT_STUDENT
                 and worksheet.student_pdf_options):
             tex = apply_pdf_options(tex, worksheet.student_pdf_options)
