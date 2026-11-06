@@ -1,0 +1,100 @@
+/* Шапка на телефоне (ревизия 03.11, G12): логотип, корзина, значок панели
+   страницы и меню ☰ с разделами сайта списком. Раньше на 390 px под
+   логотипом стоял горизонтальный ряд подразделов с обрезанным краем и
+   кнопка со словом «Контекст».
+   _screens.css подключается в начале input.css, поэтому правила здесь
+   сильнее на один класс (.topbar …), чем мобильные правила input.css. */
+@layer components {
+  .nav-burger,
+  .topbar .nav-mobile-only { display: none; }
+
+  .topbar .context-toggle {
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+  }
+  .topbar .context-toggle svg { width: 20px; height: 20px; }
+
+  @media (max-width: 760px) {
+    .topbar .topbar-inner { flex-wrap: nowrap; }
+    .topbar .topbar-inner > .topbar-user { order: 1; margin-left: auto; }
+    .topbar .topbar-user > form[data-logout] { display: none; }
+
+    .topbar .nav-burger {
+      order: 2;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      flex: none;
+      border: 0;
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--accent-dark);
+      cursor: pointer;
+    }
+    .topbar .nav-burger svg { width: 20px; height: 20px; }
+    .topbar .nav-burger[aria-expanded="true"] { background: var(--accent-soft); }
+
+    /* Разделы — выпадающим списком под шапкой */
+    .topbar .topbar-nav {
+      display: none;
+      position: absolute;
+      z-index: 70;
+      top: 100%;
+      left: 0;
+      right: 0;
+      width: auto;
+      margin: 0;
+      padding: var(--space-2) var(--space-3) var(--space-3);
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0;
+      overflow: visible;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 12px 24px rgb(18 43 85 / 10%);
+    }
+    .topbar .topbar-nav.is-open { display: flex; }
+    .topbar .topbar-nav a,
+    .topbar .topbar-nav .nav-mobile-only button {
+      display: flex;
+      align-items: center;
+      min-height: 40px;
+      padding: 8px var(--space-2);
+      border-radius: 6px;
+      font-size: 0.95rem;
+      box-shadow: none;
+    }
+    /* Подразделы — с отступом под своим разделом */
+    .topbar .topbar-nav .nav-menu a { padding-left: var(--space-5); font-size: 0.9rem; }
+    .topbar .topbar-nav .nav-group.is-active > a,
+    .topbar .topbar-nav .nav-menu a.is-active,
+    .topbar .topbar-nav > a.is-active {
+      box-shadow: none;
+      background: var(--accent-soft);
+      color: var(--accent-dark);
+      font-weight: 600;
+    }
+    .topbar .topbar-nav .nav-group.is-active:has(.nav-menu a.is-active) > a {
+      background: transparent;
+      font-weight: 500;
+    }
+    .topbar .topbar-nav a[data-nav-last] { order: 0; }
+
+    .topbar .nav-mobile-only { display: block; }
+    .topbar a.nav-mobile-only { display: flex; margin-top: var(--space-2); border-top: 1px solid var(--hairline); border-radius: 0; }
+    .topbar .nav-mobile-only button {
+      width: 100%;
+      border: 0;
+      background: none;
+      color: var(--muted);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+  }
+}

@@ -146,3 +146,18 @@ class PanelTests(TestCase):
         self.assertEqual(response.context['nav_section'], 'assignments')
         self.assertContains(response, 'class="page-crumbs"')
         self.assertNotContains(response, 'live-back')
+
+
+class TemplateCommentTests(SimpleTestCase):
+    """{# … #} в Django однострочный: многострочный попадает на страницу
+    текстом (так случилось с блоком «Показать»). Длинный — {% comment %}."""
+
+    def test_no_multiline_short_comments(self):
+        base = Path(settings.BASE_DIR) / 'templates'
+        found = []
+        for path in sorted(base.rglob('*.html')):
+            for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                tail = line[line.rfind('{#'):] if '{#' in line else ''
+                if tail and '#}' not in tail:
+                    found.append(f'{path.relative_to(base)}:{number}')
+        self.assertEqual(found, [])

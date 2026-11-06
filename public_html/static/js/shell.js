@@ -1,12 +1,39 @@
 document.addEventListener("DOMContentLoaded", () => {
   // После входа в другой вкладке Django меняет CSRF-cookie, а старая форма
   // остаётся в DOM. Перед выходом берём актуальный токен той же сессии.
-  const logout = document.querySelector("form[data-logout]");
-  if (logout) {
+  // Форм выхода две: в шапке и в меню ☰ на телефоне.
+  document.querySelectorAll("form[data-logout]").forEach((logout) => {
     logout.addEventListener("submit", () => {
       const token = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
       const field = logout.querySelector('[name="csrfmiddlewaretoken"]');
       if (token && field) field.value = decodeURIComponent(token[1]);
+    });
+  });
+
+  // Меню ☰ на телефоне (G12): разделы сайта списком под шапкой. Клик вне,
+  // Escape и переход на широкий экран закрывают.
+  const burger = document.querySelector("[data-nav-burger]");
+  const nav = document.getElementById("topbar-nav");
+  if (burger && nav) {
+    const setNav = (open) => {
+      nav.classList.toggle("is-open", open);
+      burger.setAttribute("aria-expanded", String(open));
+    };
+    burger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setNav(!nav.classList.contains("is-open"));
+    });
+    document.addEventListener("click", (event) => {
+      if (!nav.contains(event.target)) setNav(false);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && nav.classList.contains("is-open")) {
+        setNav(false);
+        burger.focus();
+      }
+    });
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > 760) setNav(false);
     });
   }
 
@@ -43,14 +70,19 @@ document.addEventListener("DOMContentLoaded", () => {
   // Меню «AI» (includes/ai_menu.html, details): клик вне меню или Escape
   // закрывают его; клик по пункту обрабатывают neuro.js / problem_editor.js
   // и закрывают меню сами, когда генерация закончится.
+  // То же для меню «⋯» (includes/more_menu.html) и пояснений «?»: открыто
+  // одно, клик по пункту-ссылке закрывает меню.
+  const MENUS = "details.ai-menu, details.more-menu, details.help-tip";
   const closeAiMenus = (except) => {
-    document.querySelectorAll("details.ai-menu[open]").forEach((menu) => {
+    document.querySelectorAll("details.ai-menu[open], details.more-menu[open], details.help-tip[open]").forEach((menu) => {
       if (menu !== except) menu.open = false;
     });
   };
   document.addEventListener("click", (event) => {
-    const inside = event.target.closest("details.ai-menu");
+    const inside = event.target.closest(MENUS);
     closeAiMenus(inside);
+    const item = event.target.closest(".more-menu-list a");
+    if (item) item.closest("details").open = false;
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeAiMenus();

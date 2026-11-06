@@ -102,16 +102,14 @@
   <section class="card authored-pane" data-authored-pane>
     <a class="authored-back" href="{{ list_url }}">← Все листки</a>
     <div class="collection-view-options">
-      <label class="ws-toggle" title="Показывать ответы и решения задач">
-        <input type="checkbox" id="toggle-answers">
-        <span class="ws-toggle-slider"></span>
-        <span class="ws-toggle-text">ответы и решения</span>
-      </label>
-      <label class="ws-toggle" title="Скрыть редакторские / AI-ответы и решения: только то, что есть в листке">
-        <input type="checkbox" id="toggle-author-only" data-storage-key="collection-author-only">
-        <span class="ws-toggle-slider"></span>
-        <span class="ws-toggle-text">только авторские</span>
-      </label>
+      {% include 'includes/show_toggles.html' with no_masks=True %}
+      <details class="more-menu show-more"><summary aria-label="Ещё фильтры" title="Ещё фильтры">Ещё<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></summary><div class="more-menu-list">
+        <label class="ws-toggle" title="Скрыть редакторские / AI-ответы и решения: только то, что есть в листке">
+          <input type="checkbox" id="toggle-author-only" data-storage-key="collection-author-only">
+          <span class="ws-toggle-slider"></span>
+          <span class="ws-toggle-text">только авторские</span>
+        </label>
+      </div></details>
     </div>
     {% include 'worksheets/_authored_preview.html' %}
   </section>

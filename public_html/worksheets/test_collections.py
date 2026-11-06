@@ -63,7 +63,7 @@ class CollectionTests(TestCase):
         self.assertContains(detail, 'Взять как листок')
         self.assertContains(detail, 'Поясните вычисление')
         self.assertContains(detail, 'toggle-answers')
-        self.assertContains(detail, 'ответы и решения')
+        self.assertContains(detail, 'class="show-toggles"')  # «Показать: ответы, маски» (G8)
         self.assertContains(detail, 'id="toggle-author-only"')
         self.assertContains(detail, 'data-answers-key="collection-show-answers"')
         self.assertContains(detail, 'id="toggle-masks"')

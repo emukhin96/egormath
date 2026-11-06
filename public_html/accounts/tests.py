@@ -608,7 +608,8 @@ const form = {
 const document = {
   cookie: 'csrftoken=initial-token',
   querySelector: () => form,
-  querySelectorAll: () => [],
+  // Форм выхода две (шапка и меню ☰ на телефоне) — shell.js берёт все
+  querySelectorAll: (selector) => selector === 'form[data-logout]' ? [form] : [],
   getElementById: () => null,
   addEventListener: (name, handler) => { if (name === 'DOMContentLoaded') handler(); },
 };

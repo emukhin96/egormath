@@ -26,7 +26,7 @@
   <script defer src="{% static 'js/image_paste.js' %}?v=4"></script>
   <script defer src="{% static 'js/livefile.js' %}"></script>
   <script defer src="{% static 'js/busy.js' %}"></script>
-  <script defer src="{% static 'js/shell.js' %}?v=7"></script>
+  <script defer src="{% static 'js/shell.js' %}?v=9"></script>
   <script defer src="{% static 'js/dialogs.js' %}"></script>
   <script defer src="{% static 'js/quick_clone.js' %}"></script>
   <script defer src="{% static 'js/image_zoom.js' %}?v=2"></script>
@@ -49,7 +49,11 @@
       {# Пять пунктов: подразделы «Задач» и заданий — в выпадающем меню у шеврона (shell.js); на узком экране все ссылки в одном ряду #}
       {# Ученику меню нет: раздел у него один, в «Мои задания» ведёт логотип #}
       {% if is_teacher %}
-      <nav class="topbar-nav" aria-label="Основные разделы">
+      {# На телефоне разделы — в меню ☰ (ревизия 03.11, G12), shell.js #}
+      <button type="button" class="nav-burger" aria-controls="topbar-nav" aria-expanded="false" aria-label="Разделы сайта" data-nav-burger>
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
+      </button>
+      <nav class="topbar-nav" id="topbar-nav" aria-label="Основные разделы">
           {# Раздел страницы — accounts.context_processors.nav_section #}
           <div class="nav-group{% if nav_section == 'tasks' %} is-active{% endif %}">
             {# Счётчик новых предложений исправлений — редактору (accounts.context_processors.shell) #}
@@ -60,6 +64,7 @@
             <div class="nav-menu">
               {# Импорт задачников и очередь предложений пишут в общие задачи — пункты только редакторам (accounts/permissions.py) #}
               {% if is_base_editor %}
+              <a href="{% url 'bulk_answers' %}"{% if request.resolver_match.url_name == 'bulk_answers' %} class="is-active"{% endif %}>Массовые ответы</a>
               <a href="{% url 'textbook_import_list' %}"{% if 'textbook_import' in request.resolver_match.url_name %} class="is-active"{% endif %}>Импорт задачников</a>
               <a href="{% url 'proposal_list' %}"{% if request.resolver_match.url_name in 'proposal_list proposal_detail' %} class="is-active"{% endif %}>Предложения исправлений{% if proposals_new %} <span class="badge-count">{{ proposals_new }}</span>{% endif %}</a>
               {% endif %}
@@ -104,6 +109,9 @@
             </div>
             {% endif %}
           </div>
+          {# На телефоне имя и «Выйти» не помещаются в шапку — они в конце меню ☰ #}
+          <a class="nav-mobile-only" href="{% url 'profile' %}">Профиль</a>
+          <form method="post" action="{% url 'logout' %}" class="nav-mobile-only" data-logout>{% csrf_token %}<button type="submit">Выйти</button></form>
       </nav>
       {% endif %}
       {% if is_teacher and not minimal_page %}
@@ -115,9 +123,10 @@
       <div class="topbar-user">
         {% if is_teacher and not minimal_page %}{% include 'includes/cart_menu.html' %}{% endif %}
         {% if not minimal_page %}
+        {# Кнопка панели страницы на телефоне — значком фильтра, не словом «Контекст» (G12) #}
         <button type="button" class="context-toggle" id="context-toggle"
-                aria-controls="context-sidebar" aria-expanded="false">
-          Контекст
+                aria-controls="context-sidebar" aria-expanded="false" aria-label="Фильтры и разделы страницы" title="Фильтры и разделы страницы">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 5h14M6 10h8M8.5 15h3"/></svg>
         </button>
         {% endif %}
         {% if is_teacher %}
@@ -151,16 +160,16 @@
 
 {% if user.is_authenticated and not minimal_page %}
 <div class="app-shell">
-  <aside class="context-sidebar" id="context-sidebar" aria-label="Контекст страницы">
+  <aside class="context-sidebar" id="context-sidebar" aria-label="Панель страницы">
     <div class="sidebar-mobile-head">
-      <strong>Контекст</strong>
+      <strong>Фильтры</strong>
       <button type="button" class="sidebar-close" id="sidebar-close" aria-label="Закрыть панель">×</button>
     </div>
     {# Пустой блок — страница без контекста: панель и кнопка «Контекст» скрываются CSS (.context-sidebar без .sidebar-section) #}
     {% block sidebar %}{% endblock %}
   </aside>
   <button type="button" class="sidebar-backdrop" id="sidebar-backdrop"
-          aria-label="Закрыть контекстную панель" tabindex="-1"></button>
+          aria-label="Закрыть панель страницы" tabindex="-1"></button>
   <main class="app-content">
 {% else %}
 <main class="container minimal-content">

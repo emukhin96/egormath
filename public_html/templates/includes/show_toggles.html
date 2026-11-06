@@ -1,0 +1,6 @@
+{% comment %} «Показать: ответы, маски» — один блок справа над списком задач на всех экранах (ревизия 03.11, G8).
+   answers_id — id тумблера ответов (по умолчанию toggle-answers; в каталоге toggle-catalog-answers),
+   masks_key — ключ localStorage тумблера масок, no_masks — без тумблера масок.
+   Дополнительные фильтры экрана (только из задачника, задававшиеся) — меню «Ещё» после блока.
+{% endcomment %}
+<span class="show-toggles" role="group" aria-label="Показать"><span class="show-toggles-label">Показать:</span><label class="ws-toggle" title="Показывать ответы и решения задач"><input type="checkbox" id="{{ answers_id|default:'toggle-answers' }}"><span class="ws-toggle-slider"></span><span class="ws-toggle-text">ответы</span></label>{% if not no_masks %}<label class="ws-toggle" title="Показывать поля масок ответов"><input type="checkbox" id="toggle-masks"{% if masks_key %} data-storage-key="{{ masks_key }}"{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">маски</span></label>{% endif %}</span>
