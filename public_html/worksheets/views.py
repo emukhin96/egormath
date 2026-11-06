@@ -35,6 +35,9 @@ from problems.rubricator import (GRADE_LEVEL_TO_CODE, apply_worksheet_taxonomy,
                                  worksheet_taxonomy_state)
 from problems.views import filter_tasks
 
+from .collection_catalog import (catalog_title, collection_catalog,
+                                 invalidate_collection_catalog, natural_key,
+                                 sort_key)
 from .collection_pages import build_chunks, section_pages
 from .corpus import corpus_key_from_comment
 from .forms import WorksheetForm
@@ -471,31 +474,13 @@ def collection_list(request):
 
 def _collection_title(collection):
     """Короткое название каталога с двузначным номером задания."""
-    title = collection.worksheet.title.strip()
-    title = re.sub(
-        r'^№\s*1[–-]5\.\s*Практические\s+(?:задачи|задания)\s*:\s*',
-        '№01–05. ', title, flags=re.IGNORECASE)
-    title = re.sub(
-        r'^№\s*1[–-]5\.\s*Практические\s+(?:задачи|задания)\s*$',
-        '№01–05', title, flags=re.IGNORECASE)
-    match = re.match(r'^№\s*([1-9])([.\s])', title)
-    if match:
-        title = f'№0{match.group(1)}{match.group(2)}{title[match.end():]}'
-    return title
+    return catalog_title(collection.worksheet.title)
 
 
-def _natural_key(text):
-    """Числа в названии сравниваются как числа: «прототип 1.2» раньше
-    «прототип 1.10», а не после «1.19», как при строковом сравнении."""
-    return tuple((0, int(part)) if part.isdigit() else (1, part.casefold())
-                 for part in re.split(r'(\d+)', text) if part)
-
-
-def _collection_sort_key(collection):
-    title = _collection_title(collection)
-    match = re.match(r'^№\s*(\d+)', title)
-    return (int(match.group(1)) if match else 10_000,
-            collection.order, _natural_key(title), collection.pk)
+# Порядок соседей и естественное сравнение чисел — в collection_catalog;
+# имена оставлены для прежних вызовов.
+_natural_key = natural_key
+_collection_sort_key = sort_key
 
 
 def _child_title(child, parent):
@@ -514,85 +499,10 @@ def _child_title(child, parent):
 
 
 def _collection_catalog(user):
-    """Строит доступное дерево и отсекает ветви без единого элемента."""
-    collections = list(
-        Collection.objects.all()
-        .select_related('worksheet', 'source', 'parent')
-        .prefetch_related('worksheet__topics')
-        .annotate(direct_items_total=models.Count(
-            'worksheet__items',
-            filter=models.Q(worksheet__items__deleted_at__isnull=True),
-            distinct=True))
-        .order_by('source__title', 'order', 'pk'))
-    ids = {collection.pk for collection in collections}
-    by_source = {}
-    for collection in collections:
-        collection.catalog_title = _collection_title(collection)
-        collection.catalog_visible = (
-            user.is_superuser or collection.is_published
-            or collection.worksheet.owner_id == user.pk)
-        by_source.setdefault(collection.source_id, {
-            'source': collection.source, 'collections': [],
-        })['collections'].append(collection)
-
-    result = []
-    for group in by_source.values():
-        by_parent = {}
-        for collection in group['collections']:
-            parent_id = (collection.parent_id
-                         if collection.parent_id in ids else None)
-            by_parent.setdefault(parent_id, []).append(collection)
-        for siblings in by_parent.values():
-            siblings.sort(key=_collection_sort_key)
-
-        def walk(collection, depth=0):
-            children = [row for child in by_parent.get(collection.pk, [])
-                        if (row := walk(child, depth + 1))]
-            direct_items_total = (collection.direct_items_total
-                                  if collection.catalog_visible else 0)
-            direct_topics = (list(collection.worksheet.topics.all())
-                             if collection.catalog_visible else [])
-            topics = {topic.pk: topic for topic in direct_topics}
-            for child in children:
-                topics.update({topic.pk: topic for topic in child['topics']})
-            item_total = (direct_items_total
-                          + sum(child['item_total'] for child in children))
-            if not item_total:
-                return None
-            return {
-                'collection': collection,
-                'depth': depth,
-                'children': children,
-                'direct_items_total': direct_items_total,
-                'item_total': item_total,
-                'leaf_total': ((1 if direct_items_total else 0)
-                               + sum(child['leaf_total'] for child in children)),
-                'topics': sorted(topics.values(),
-                                 key=lambda topic: (topic.order, topic.name)),
-            }
-
-        roots = [row for root in by_parent.get(None, [])
-                 if (row := walk(root))]
-
-        def flatten(rows):
-            return [item for row in rows
-                    for item in [row, *flatten(row['children'])]]
-
-        flat_rows = flatten(roots)
-        if not flat_rows:
-            continue
-        group.update(
-            roots=roots,
-            rows=flat_rows,
-            item_total=sum(row['item_total'] for row in roots),
-            leaf_total=sum(row['leaf_total'] for row in roots),
-            topics=sorted(
-                {topic.pk: topic for row in roots
-                 for topic in row['topics']}.values(),
-                key=lambda topic: (topic.order, topic.name)),
-        )
-        result.append(group)
-    return result
+    """Доступное учителю дерево подборок без пустых ветвей
+    (``collection_catalog.collection_catalog``: узлы из кэша, видимость —
+    по пользователю)."""
+    return collection_catalog(user)
 
 
 def _visible_collection(request, pk):
@@ -1310,6 +1220,9 @@ def soft_remove_item(worksheet, item):
             worksheet.items.filter(task__block_id=item.task.block_id).update(
                 deleted_at=timezone.now())
             livefiles.touch('worksheet', worksheet.pk)
+            # update() не шлёт сигналов — дерево подборок сбрасываем сами
+            if Collection.objects.filter(worksheet_id=worksheet.pk).exists():
+                invalidate_collection_catalog()
         else:
             item.deleted_at = timezone.now()
             item.save(update_fields=['deleted_at'])
