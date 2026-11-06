@@ -10,6 +10,7 @@ itemize/enumerate (строками), неразрывный пробел ~, э�
 """
 
 import re
+from functools import lru_cache
 
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
@@ -308,6 +309,15 @@ def _trim_display_gap(text, after_display, before_display):
     return text
 
 
+# Результат зависит только от исходника и не меняется (SafeString), поэтому
+# кэшируется в процессе: одни и те же условия, подпункты и ответы рендерятся
+# в конструкторе листка, редакторе PDF, карточке задачи и каталоге, а
+# книжный листок на сотни задач вызывает преобразование тысячи раз за
+# запрос. Размер — с запасом на несколько больших листков, память ~1 КБ
+# на запись.
+CACHE_SIZE = 8192
+
+
 def tex_to_web_html(source):
     """HTML-версия текста задачи для веб-страниц (формулы рендерит KaTeX).
 
@@ -317,7 +327,12 @@ def tex_to_web_html(source):
     нетронутыми. Комментарии режутся первыми: в TeX % — комментарий
     и в тексте, и в математике.
     """
-    text = _COMMENT_RE.sub('', source or '').strip()
+    return _tex_to_web_html(str(source) if source else '')
+
+
+@lru_cache(maxsize=CACHE_SIZE)
+def _tex_to_web_html(source):
+    text = _COMMENT_RE.sub('', source).strip()
     text = _SECTION_RE.sub('', text)
     text = re.sub(r'(?:\n|\\\\)*Вариант\s+\d+\s*$', '', text)
 
@@ -380,7 +395,12 @@ def tex_preview_html(source, limit=220):
     или команды) и только потом преобразует в HTML — усечённого
     HTML или сломанных формул не бывает.
     """
-    text = _COMMENT_RE.sub('', source or '').strip()
+    return _tex_preview_html(str(source) if source else '', int(limit))
+
+
+@lru_cache(maxsize=CACHE_SIZE)
+def _tex_preview_html(source, limit):
+    text = _COMMENT_RE.sub('', source).strip()
     if len(text) > limit:
         text = _safe_cut(text, limit) + '…'
     return tex_to_web_html(text)
