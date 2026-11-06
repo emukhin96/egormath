@@ -137,8 +137,6 @@ def save_page(request, pk, task_id, number):
         return _error(str(exc))
     if len(json.dumps(elements, separators=(',', ':'))) > CanvasPage.MAX_BYTES:
         return _error('Страница слишком большая — упростите рисунок', status=413)
-    if services.foreign_images(elements, task_id):
-        return _error('На доску можно положить только иллюстрации этой задачи')
     services.attach_image_urls(elements)
     try:
         version = int(data.get('version', 0))
@@ -162,6 +160,8 @@ def save_page(request, pk, task_id, number):
         elif not services.can_edit_page(page, access, layer):
             return _error('Эта страница заморожена — изменения не сохранены', status=403)
         current_elements, current_version = page.layer(layer)
+        if services.foreign_images(elements, task_id, kept=current_elements):
+            return _error('На доску можно положить только иллюстрации условия этой задачи')
         if page.pk and version != current_version:
             return _error(
                 'Страница изменена в другом окне', status=409,
