@@ -3,10 +3,10 @@
   /* Z1, Z2: строки выданных заданий и раздел самостоятельных */
   .assignment-queue-chip { margin-left: var(--space-2); text-decoration: none; }
   .iw-catalog-block { margin-top: var(--space-5); }
-  .iw-catalog-block h2 { font-size: 16px; margin: 0 0 var(--space-2); }
+  .iw-catalog-block h2 { font-size: var(--fs-lg); margin: 0 0 var(--space-2); }
 
   /* Пустые состояния списков — одной строкой 14 px серым (G10) */
-  .empty-line { margin: var(--space-2) 0; font-size: 14px; color: var(--muted); }
+  .empty-line { margin: var(--space-2) 0; font-size: var(--fs-md); color: var(--muted); }
 
   /* Z3: задача на проверке — ответ и свёрнутые блоки одной строкой */
   .review-task-foot {
@@ -22,7 +22,7 @@
   .review-task-foot > .canvas-widget,
   .review-task-foot details[open] { flex-basis: 100%; }
   .review-task-foot details { margin: 0; }
-  .review-task-foot details > summary { font-size: 13px; color: var(--muted); cursor: pointer; }
+  .review-task-foot details > summary { font-size: var(--fs-sm); color: var(--muted); cursor: pointer; }
   .review-task-foot details[open] > summary { color: var(--text); }
   .review-grade-row {
     display: flex;
@@ -32,7 +32,7 @@
     margin-top: var(--space-3);
   }
   .review-grade-row .review-comment:has(.comment-toggle[open]) { flex-basis: 100%; }
-  .comment-toggle > summary { list-style: none; font-size: 13px; color: var(--accent); cursor: pointer; }
+  .comment-toggle > summary { list-style: none; font-size: var(--fs-sm); color: var(--accent); cursor: pointer; }
   .comment-toggle > summary::-webkit-details-marker { display: none; }
   .comment-toggle[open] > summary { color: var(--muted); margin-bottom: var(--space-1); }
   .review-links { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-1) var(--space-3); }
@@ -40,11 +40,11 @@
 
 @layer components {
   /* Z5: карта ответов — тумблер досок в строке фильтров, легенда по «?» */
-  .live-toolbar .canvas-toggle { margin: 0; font-size: 13px; }
+  .live-toolbar .canvas-toggle { margin: 0; font-size: var(--fs-sm); }
   .live-toolbar .live-help { margin-left: 0; vertical-align: baseline; }
   .live-toolbar .live-help .help-tip-body { left: auto; right: -8px; }
   .help-tip-body.live-legend { display: grid; gap: var(--space-1); padding: var(--space-3); border-top: 0; }
-  .live-status { margin: 0; padding: var(--space-2) 0; font-size: 12.5px; color: var(--muted); }
+  .live-status { margin: 0; padding: var(--space-2) 0; font-size: var(--fs-sm); color: var(--muted); }
 }
 
 @layer components {
@@ -67,16 +67,16 @@
   .group-inline-form { display: flex; flex-wrap: wrap; gap: var(--space-2); width: 100%; margin-top: var(--space-1); }
   .group-inline-form input[type=text], .group-inline-form select { flex: 1; min-width: 0; }
   .group-add { margin-top: var(--space-3); }
-  .group-add > summary { list-style: none; color: var(--accent); cursor: pointer; font-size: 14px; }
+  .group-add > summary { list-style: none; color: var(--accent); cursor: pointer; font-size: var(--fs-md); }
   .group-add > summary::-webkit-details-marker { display: none; }
   .student-group-head .more-menu { margin-left: var(--space-2); }
 }
 
 @layer components {
   /* U2, G10: кабинет учителя — ссылки блоков одним тихим стилем, пустое — 14 px серым */
-  .home-link { font-size: 13px; font-weight: 500; color: var(--accent); text-decoration: none; }
+  .home-link { font-size: var(--fs-sm); font-weight: 500; color: var(--accent); text-decoration: none; }
   .home-link:hover { text-decoration: underline; }
-  .home-empty { font-size: 14px; }
+  .home-empty { font-size: var(--fs-md); }
   .home-main > .empty-line { margin: 0; }
 }
 

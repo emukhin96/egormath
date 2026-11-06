@@ -66,11 +66,11 @@
       min-height: 40px;
       padding: 8px var(--space-2);
       border-radius: 6px;
-      font-size: 0.95rem;
+      font-size: var(--fs-lg);
       box-shadow: none;
     }
     /* Подразделы — с отступом под своим разделом */
-    .topbar .topbar-nav .nav-menu a { padding-left: var(--space-5); font-size: 0.9rem; }
+    .topbar .topbar-nav .nav-menu a { padding-left: var(--space-5); font-size: var(--fs-md); }
     .topbar .topbar-nav .nav-group.is-active > a,
     .topbar .topbar-nav .nav-menu a.is-active,
     .topbar .topbar-nav > a.is-active {
