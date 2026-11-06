@@ -116,7 +116,7 @@ class CatalogTests(TestCase):
         response = self.client.get(reverse('task_list'))
         html = response.content.decode()
         meta = html.split('class="task-meta catalog-row-meta"', 1)[1].split('</td>', 1)[0]
-        self.assertIn('Книга · № 7 › Глава 1. Дроби › § 2. Сокращение', meta)
+        self.assertIn('Книга, № 7 › Глава 1. Дроби › § 2. Сокращение', meta)
         self.assertIn('дублировать', meta)
         self.assertNotIn('import-section-path', html)
 
@@ -131,8 +131,8 @@ class CatalogTests(TestCase):
         ref.save(update_fields=['source_path'])
         html = self.client.get(reverse('task_list')).content.decode()
         meta = html.split('class="task-meta catalog-row-meta"', 1)[1].split('</td>', 1)[0]
-        self.assertIn('>Шабунин, пособие 10 · № 7 › … › ДКР X.1 › Вариант 5</span>', meta)
-        self.assertIn('title="М. И. Шабунин. Книга · № 7 › Глава X. Функции › '
+        self.assertIn('>Шабунин, пособие 10, № 7 › … › ДКР X.1 › Вариант 5</span>', meta)
+        self.assertIn('title="М. И. Шабунин. Книга, № 7 › Глава X. Функции › '
                       'Дидактические материалы › ДКР X.1 › Вариант 5"', meta)
         self.assertIn('>Шабунин, пособие 10<span class="sidebar-count">', html)
 

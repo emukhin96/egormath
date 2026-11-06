@@ -1,6 +1,5 @@
 {% extends 'base.html' %}
 {% block title %}Справка для учителей — Математика{% endblock %}
-{% block sidebar %}{% include 'includes/sidebar/help_teachers.html' %}{% endblock %}
 {% block body_class %}help-page{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -10,6 +9,17 @@
   </div>
   {% if shows_onboarding %}<div class="page-actions"><a class="btn btn-secondary" href="{% url 'welcome' %}">Первые шаги</a></div>{% endif %}
 </div>
+{# Оглавление — строкой над текстом, а не боковой панелью (ревизия 03.11, G1) #}
+<nav class="help-toc" aria-label="На этой странице">
+  <a href="#roles">Кто есть кто</a>
+  <a href="#can">Что можно и чего нельзя</a>
+  <a href="#local-copy">Локальные копии</a>
+  <a href="#proposals">Предложения исправлений</a>
+  <a href="#students">Ученики и ссылка</a>
+  <a href="#worksheets">Листки и задания</a>
+  <a href="#ai">Меню «AI»</a>
+  <a href="#profile">Профиль и первые шаги</a>
+</nav>
 
 <section class="card prose" id="roles">
   <h2>Кто есть кто</h2>

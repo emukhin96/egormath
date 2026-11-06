@@ -10,7 +10,7 @@
 {% endif %}
 {% for row in rows %}
 <section class="card">
-<h2>Задание {{ row.draft.block_position }} · {{ row.draft.external_id }}</h2>
+<h2>Задание {{ row.draft.block_position }}, {{ row.draft.external_id }}</h2>
 {% include 'problems/_import_block_parts.html' with parts=row.parts %}
 <details><summary>Авторский ответ</summary><div class="math-content">{{ row.draft.author_answer_latex|web_text }}</div></details>
 <p class="form-buttons"><a class="btn btn-secondary" href="{% url 'textbook_import_review' batch.pk row.draft.pk %}">Сверить вопрос {{ row.draft.block_position }}</a></p>

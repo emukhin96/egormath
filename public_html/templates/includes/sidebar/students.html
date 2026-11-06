@@ -9,7 +9,7 @@
     <li><a href="{% url 'students' %}">Все ученики</a></li>
     <li><a href="{% url 'students' %}?group=ungrouped">Без группы</a></li>
     {% for group in groups %}
-    <li><a href="{% url 'students' %}?group={{ group.pk }}">{{ group.name }}{% if request.user.is_superuser %} · {{ group.teacher.get_full_name|default:group.teacher.username }}{% endif %} ({{ group.students.count }})</a></li>
+    <li><a href="{% url 'students' %}?group={{ group.pk }}">{{ group.name }}{% if request.user.is_superuser %}, {{ group.teacher.get_full_name|default:group.teacher.username }}{% endif %} ({{ group.students.count }})</a></li>
     {% endfor %}
   </ul>
 </section>

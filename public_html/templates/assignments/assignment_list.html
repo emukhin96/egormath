@@ -13,7 +13,7 @@
   </div>
   <div class="page-actions">
     {% if filters.kind == 'independent' %}
-    <a class="btn btn-secondary" href="{% url 'assignment_create' %}?mode=independent">Шаблоны · выдать</a>
+    <a class="btn btn-secondary" href="{% url 'assignment_create' %}?mode=independent">Шаблоны</a>
     <a class="btn" href="{% url 'independentworks:create' %}">Создать самостоятельную</a>
     {% else %}
     <a class="btn" href="{% url 'assignment_create' %}">Выдать задание</a>
@@ -27,7 +27,7 @@
   <div class="catalog-table-wrap"><table class="list assignment-sheet-table table-stack">
     <thead><tr><th>Самостоятельная</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th class="num">Учеников</th><th>Срок</th><th>Сохранён</th><th></th></tr></thead>
     <tbody>{% for run in draft_runs %}<tr>
-      <td class="assignment-title-cell stack-primary"><strong>{{ run.title }}</strong><span class="cell-sub">{{ run.kind_label }} · {{ run.duration }} мин.</span></td>
+      <td class="assignment-title-cell stack-primary"><strong>{{ run.title }}</strong><span class="cell-sub">{{ run.kind_label }}, {{ run.duration }} мин.</span></td>
       {% if request.user.is_superuser %}<td data-label="Владелец">{{ run.owner.get_full_name|default:run.owner.username }}</td>{% endif %}
       <td class="num" data-label="Учеников">{{ run.plan.students|length }}</td>
       <td data-label="Срок">{{ run.deadline|date:'d.m.Y H:i'|default:'—' }}</td>
@@ -148,13 +148,13 @@
   </div>
   {% if worksheet_groups %}
   <div class="catalog-table-wrap"><table class="list assignment-sheet-table table-stack">
-    <thead><tr><th class="col-select"><input type="checkbox" data-bulk-all="assignment-bulk-form" title="Выбрать все работы на странице"></th><th>Работа</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th class="num">Ученики</th><th>Выдано · срок</th><th></th></tr></thead>
+    <thead><tr><th class="col-select"><input type="checkbox" data-bulk-all="assignment-bulk-form" title="Выбрать все работы на странице"></th><th>Работа</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th class="num">Ученики</th><th>Выдано, срок</th><th></th></tr></thead>
     <tbody>{% for group in worksheet_groups %}<tr data-assignment-row data-title="{{ group.worksheet__title }}" data-recipients="{% for row in group.recipient_rows %}{% if row.assignment %}{% if group.kind == 'independent' %}{{ row.student.get_full_name|default:row.student.username }}{% if row.locked %} ({{ row.assignment.state|lower }}){% endif %}{% else %}{{ row.profile.user.get_full_name|default:row.profile.user.username }} ({{ row.assignment.get_status_display|lower }}){% endif %}, {% endif %}{% endfor %}">
       <td class="col-select"><input type="checkbox" class="row-select" name="ids" value="{{ group.key }}" form="assignment-bulk-form" title="Выбрать работу"></td>
       <td class="assignment-title-cell stack-primary"><a class="assignment-title" href="{% if group.progress_url %}{{ group.progress_url }}{% else %}{% url 'worksheet_progress' group.worksheet_id %}{% endif %}">{{ group.worksheet__title }}</a>
         <div class="muted assignment-links">{% if group.kind == "independent" %}{{ group.kind_label }} · <a href="{% url 'independentworks:edit' group.run.work_id %}">шаблон</a>{% if group.run.work.source_worksheet_id %} · <a href="{% url 'worksheet_detail' group.run.work.source_worksheet_id %}">исходный листок</a>{% endif %}{% else %}<a href="{% url 'worksheet_detail' group.worksheet_id %}">листок</a>{% endif %}</div></td>
       {% if request.user.is_superuser %}<td data-label="Владелец">{% if group.worksheet__owner__first_name or group.worksheet__owner__last_name %}{{ group.worksheet__owner__first_name }} {{ group.worksheet__owner__last_name }}{% else %}{{ group.worksheet__owner__username }}{% endif %}</td>{% endif %}
-      <td class="num" data-label="Ученики"><strong>{{ group.students_total }}</strong><span class="cell-sub">{% if group.submitted_total %}<span class="badge badge-submitted" title="На проверке">{{ group.submitted_total }} на проверке</span>{% else %}0 на проверке{% endif %} · {{ group.reviewed_total }} проверено</span></td>
+      <td class="num" data-label="Ученики"><strong>{{ group.students_total }}</strong><span class="cell-sub">{% if group.submitted_total %}<span class="badge badge-submitted" title="На проверке">{{ group.submitted_total }} на проверке</span>{% else %}0 на проверке{% endif %}, {{ group.reviewed_total }} проверено</span></td>
       <td data-label="Выдано">{{ group.last_assigned|date:'d.m.Y' }}<span class="cell-sub" title="Ближайший срок">срок {{ group.nearest_due|date:'d.m.Y H:i'|default:'—' }}</span></td>
       <td class="row-actions"><button type="button" class="btn btn-small btn-secondary" data-dialog-open="assignment-group-{{ group.key }}">Изменить</button></td>
     </tr>{% endfor %}</tbody>
@@ -169,7 +169,7 @@
         {% for row in group.recipient_rows %}
         {% if group.kind == "independent" %}
         <div class="assignment-recipient-row">
-          <label><input type="checkbox" name="students" value="{{ row.student.pk }}"{% if row.assignment %} checked{% endif %}{% if row.locked %} disabled{% endif %}> <span>{{ row.student.get_full_name|default:row.student.username }}{% if row.locked %} · {{ row.assignment.state }}{% endif %}</span></label>
+          <label><input type="checkbox" name="students" value="{{ row.student.pk }}"{% if row.assignment %} checked{% endif %}{% if row.locked %} disabled{% endif %}> <span>{{ row.student.get_full_name|default:row.student.username }}{% if row.locked %}, {{ row.assignment.state }}{% endif %}</span></label>
           {% if row.locked %}<input type="hidden" name="students" value="{{ row.student.pk }}">{% endif %}
           <select name="variant_{{ row.student.pk }}" aria-label="Вариант: {{ row.student.get_full_name|default:row.student.username }}"{% if row.locked %} disabled{% endif %}>
             {% for variant in group.variants %}<option value="{{ variant.pk }}"{% if row.assignment.variant_id == variant.pk %} selected{% endif %}>Вариант {{ variant.number }}</option>{% endfor %}

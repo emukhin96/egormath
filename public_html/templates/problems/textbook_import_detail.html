@@ -46,7 +46,7 @@
     <tr>
       <td>{% if row.work_href %}<a href="{{ row.work_href }}"{% if row.work_current %} class="is-current"{% endif %}>{{ row.work|heading_dot }}</a>{% else %}{{ row.work|heading_dot }}{% endif %}</td>
       <td>{% if row.title_href %}<a href="{{ row.title_href }}"{% if row.title_current %} class="is-current"{% endif %}>{{ row.title|heading_dot }}</a>{% else %}{{ row.title|heading_dot }}{% endif %}
-        {% if row.levels %}<div class="import-section-levels">{% for level in row.levels %}<a href="{{ level.href }}"{% if level.current %} class="is-current"{% endif %}>{{ level.title }}</a>&nbsp;{{ level.count }}{% if not forloop.last %} · {% endif %}{% endfor %}</div>{% endif %}</td>
+        {% if row.levels %}<div class="import-section-levels">{% for level in row.levels %}<a href="{{ level.href }}"{% if level.current %} class="is-current"{% endif %}>{{ level.title }}</a>&nbsp;{{ level.count }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}</td>
       <td>{{ row.count }}</td>
     </tr>
     {% endfor %}
@@ -58,7 +58,7 @@
     <span class="muted">{{ selected_group.level_label }}</span>
     <a class="btn btn-secondary btn-small" href="{{ all_sections_href }}">Все задачи</a>
   </div>
-  <p class="muted">Путь: {{ selected_group.path|join:' › ' }} · Задач: {{ selected_group.count }}</p>
+  <p class="muted">Путь: {{ selected_group.path|join:' › ' }}, Задач: {{ selected_group.count }}</p>
   <p><strong>Текущие темы:</strong> {% for item in selected_group.topic_counts %}{{ item.label }} — {{ item.count }}{% if not forloop.last %}; {% endif %}{% endfor %}</p>
   {% if selected_group.topic_candidates %}<p class="helptext">Кандидаты рубрикатора: {% for item in selected_group.topic_candidates %}{{ item.name }} ({{ item.reason_label }}){% if not forloop.last %}; {% endif %}{% endfor %}. Точное совпадение ставится при импорте. Кнопка ниже назначит выбранные или единственную предложенную тему всему разделу.</p>{% endif %}
   {% if batch.diagnostics.ziv_uneven_variant_topics %}<p class="msg msg-warning">Жёлтые строки в сводке выше — темы, где число задач в парных вариантах не совпадает. Откройте такой раздел и проверьте, не слиплись ли формулировки.</p>{% endif %}

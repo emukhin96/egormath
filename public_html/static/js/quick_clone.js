@@ -221,7 +221,7 @@
       var link = document.createElement('a');
       link.href = url;
       link.textContent = 'открыть';
-      badge.appendChild(document.createTextNode(' · '));
+      badge.appendChild(document.createTextNode(' '));
       badge.appendChild(link);
     }
     badge.classList.toggle('ws-saved-error', !ok);

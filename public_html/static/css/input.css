@@ -97,10 +97,12 @@
   }
 
   /* Preflight обнуляет размеры, вес и отступы заголовков — задаём заново */
+  /* Один заголовок страницы на всех экранах — 22 px (ревизия 03.11, G3) */
   h1 {
-    font-size: 1.6rem;
+    font-size: 1.375rem;
     font-weight: 700;
     line-height: 1.25;
+    letter-spacing: -0.02em;
     margin: 0 0 var(--space-4);
   }
 
@@ -318,7 +320,6 @@
      карточка с фильтрами, плитки ответов, колонка «Сейчас», строка «Верно / решают» */
   .live-head { align-items: flex-end; }
   .live-head h1 { margin: 0; }
-  .live-back { display: inline-block; margin-bottom: var(--space-1); font-size: 13px; color: var(--muted); text-decoration: none; }
   .live-meta { margin: var(--space-1) 0 0; color: var(--muted); }
   .live-strip { display: grid; grid-template-columns: auto repeat(5, minmax(0, 1fr)); align-items: center; column-gap: 24px; row-gap: var(--space-3); margin: 0 0 var(--space-4); padding: 12px 0; }
   .live-strip-lead { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 600; color: var(--muted); }
@@ -1487,7 +1488,7 @@
       background: transparent !important;
       font-size: 0.85rem;
       color: var(--muted);
-      --sep: "· ";
+      --sep: ", ";
     }
     /* Главная ячейка — рядом с плавающим чекбоксом, не обтекая его */
     .table-stack td.stack-primary {
@@ -1511,9 +1512,9 @@
     .table-stack td:not(.stack-primary):not(.col-select):not(.row-actions)::before { content: var(--sep); }
     .table-stack td[data-label]:not(.stack-primary):not(.row-actions)::before { content: var(--sep) attr(data-label) ": "; }
     .table-stack td:not(.stack-primary) > div { display: inline; font-size: inherit; }
-    .table-stack td:not(.stack-primary) > div::before { content: " · "; }
+    .table-stack td:not(.stack-primary) > div::before { content: ", "; }
     .table-stack td .cell-sub { display: inline; white-space: normal; font-size: inherit; }
-    .table-stack td .cell-sub::before { content: " · "; }
+    .table-stack td .cell-sub::before { content: ", "; }
     .table-stack td.stack-primary .cell-sub { display: block; font-size: 0.85rem; color: var(--muted); }
     .table-stack td.stack-primary .cell-sub::before { content: none; }
     .table-stack td.row-actions {
@@ -1702,11 +1703,14 @@
     color: var(--accent);
   }
 
+  /* Фон панели — фоном всей сетки, чтобы на длинной странице серая
+     колонка шла до конца, а не обрывалась на высоте экрана (G11) */
   .app-shell {
     min-height: calc(100vh - var(--topbar-height));
     display: grid;
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
     flex: 1 0 auto;
+    background: linear-gradient(to right, var(--sidebar-bg) var(--sidebar-width), transparent var(--sidebar-width));
   }
 
   .context-sidebar {
@@ -1728,6 +1732,7 @@
      :has() нельзя вкладывать в :has(), поэтому условие записано через :not(:has()) */
   .app-shell:not(:has(.context-sidebar .sidebar-section)) {
     grid-template-columns: minmax(0, 1fr);
+    background: none;
   }
 
   .app-shell:not(:has(.context-sidebar .sidebar-section)) > .context-sidebar,
@@ -2725,6 +2730,18 @@
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
+    min-height: var(--crumbs-h);
+  }
+
+  /* Строка крошек одной высоты на всех экранах (G3): у корневой страницы
+     крошек нет, но место под них резервируется, чтобы заголовок не прыгал
+     при переходе. Высота = строка 0.78rem × 1.5 + отступ 2px. */
+  .app-content {
+    --crumbs-h: 1.17rem;
+  }
+
+  .app-content h1:not(.page-crumbs + h1, .page-eyebrow + h1, .iw-head-title h1) {
+    margin-top: calc(var(--crumbs-h) + 2px);
   }
 
   .page-crumbs > * + *::before {
@@ -2757,9 +2774,22 @@
     line-height: 1.5;
   }
 
+  /* Части через запятую, без «·» (ревизия 03.11, G4). Мета — flex: пробелы
+     шаблона между <span> не попадают перед запятой («Иванов , 3 задачи») */
+  .page-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+
   .page-meta > * + *::before {
-    content: "·";
-    margin: 0 6px;
+    content: ", ";
+    white-space: pre;
+  }
+
+  .page-meta > .badge,
+  .page-meta > .filter-chip {
+    margin-left: 6px;
   }
 
   .page-meta > .filter-chip::before,
@@ -3431,7 +3461,7 @@
     line-height: 1.35;
   }
   .catalog-source { flex: 1 1 18rem; min-width: 0; }
-  .catalog-source > span + span::before { content: ' · '; }
+  .catalog-source > span + span::before { content: ', '; }
   .catalog-row-actions {
     display: inline-flex;
     align-items: center;
@@ -6254,7 +6284,7 @@
   }
 
   .row-edit-sep {
-    color: #b8c2cf;
+    margin-right: 0.25em;
   }
 
   .row-edit-pen {
@@ -6961,6 +6991,7 @@
     .app-shell {
       min-height: calc(100vh - var(--topbar-height));
       grid-template-columns: minmax(0, 1fr);
+      background: none;
     }
 
     .context-sidebar {
@@ -7028,7 +7059,8 @@
       align-items: flex-start;
     }
 
-    .page-head h1 {
+    .page-head h1,
+    .app-content h1 {
       font-size: 1.25rem;
     }  }
 

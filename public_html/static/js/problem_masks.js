@@ -28,7 +28,7 @@
     form.querySelector('[data-mask-message]').textContent='';form.querySelector('[data-mask-errors]').textContent='';
     // Общая задача из листка (data-base-locked): маска уйдёт в локальную копию (R16-1)
     var lockedNote=dialog.querySelector('[data-mask-locked-note]');if(lockedNote)lockedNote.hidden=!root.dataset.baseLocked;
-    document.getElementById('answer-mask-title').textContent='Маска · '+o.label;
+    document.getElementById('answer-mask-title').textContent='Маска: '+o.label;
     form.elements.reference.value=o[form.elements.source.value]||'';
     source();dialog.showModal();
   }
@@ -73,9 +73,9 @@
           var fields=document.createElement('div');fields.className='problem-mask-inline';fields.innerHTML=o.preview_html||'';row.appendChild(fields);
           fields.querySelectorAll('.mask-text,.mask-order-items li').forEach(renderMathContent);
         }
-        if(root.dataset.maskReadonly){if(!o.mask||o.full_answer_only){var note=document.createElement('span');note.className='helptext';note.textContent='Фото решения · ручная проверка';row.appendChild(note);}actions.appendChild(row);if(window.EgorMask)window.EgorMask.enhance(row);continue;}
+        if(root.dataset.maskReadonly){if(!o.mask||o.full_answer_only){var note=document.createElement('span');note.className='helptext';note.textContent='Фото решения, ручная проверка';row.appendChild(note);}actions.appendChild(row);if(window.EgorMask)window.EgorMask.enhance(row);continue;}
         var editButton=button(o.mask?'Настроить':'Добавить маску','maskEdit',o.id||'');
-        if(links){editButton.className='link-btn';editButton.textContent=(o.mask?'настроить маску':'добавить маску')+(o.id?' · '+o.label:'');if(links.children.length)links.append(' · ');links.append(editButton);}else row.appendChild(editButton);
+        if(links){editButton.className='link-btn';editButton.textContent=(o.mask?'настроить маску':'добавить маску')+(o.id?' '+o.label:'');if(links.children.length)links.append(' · ');links.append(editButton);}else row.appendChild(editButton);
         actions.appendChild(row);
         if(window.EgorMask)window.EgorMask.enhance(row);
       }

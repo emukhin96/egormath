@@ -11,7 +11,7 @@
 {% endcomment %}
 <div class="bd-layout">
   <div class="bd-head">
-    <a class="live-back" href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">← {{ worksheet.title }}, карта ответов</a>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'assignment_list' %}?kind=ordinary">Задания</a><a href="{% url 'worksheet_progress' worksheet.pk %}{% if group_id %}?group={{ group_id }}{% endif %}">{{ worksheet.title }}</a></nav>
     <h1>Доски учеников</h1>
     <p class="bd-status" data-boards-status role="status"><span class="bd-live-dot" aria-hidden="true"></span>Обновляются каждые 5 секунд</p>
   </div>

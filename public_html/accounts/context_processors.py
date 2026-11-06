@@ -41,6 +41,7 @@ def shell(request):
         # Кнопки «Отправить письмом» на странице учителей (accounts/mailing.py)
         'mail_enabled': mail_enabled(),
     }
+    context['nav_section'] = nav_section(request)
     # Ссылки на «Первые шаги» в пустых состояниях и справку в футере —
     # учителю без права редактора (accounts/onboarding.py)
     context['shows_onboarding'] = is_teacher and not context['is_base_editor']
@@ -70,3 +71,29 @@ def proposal_counts(user, editor):
     fresh = Q(status=TaskProposal.STATUS_NEW)
     return TaskProposal.objects.filter(fresh | mine).aggregate(
         new=Count('pk', filter=fresh), replies=Count('pk', filter=mine))
+
+
+def nav_section(request):
+    """Раздел верхнего меню, который подсвечивается на странице.
+
+    Решается по приложению (префиксу пути), а не по подстроке имени URL:
+    прогресс листка, доски и проверка живут в «Заданиях», хотя в их именах
+    есть «worksheet», а сверка импорта (``textbook_import_review``) — в
+    «Задачах», хотя в имени есть «review» (ревизия 03.11, G9).
+    """
+    match = getattr(request, 'resolver_match', None)
+    name = getattr(match, 'url_name', '') or ''
+    path = request.path
+    if name == 'progress_overview':
+        return 'students'
+    if (path.startswith(('/assignments/', '/independent-works/'))
+            or request.GET.get('mode') == 'independent'
+            or request.GET.get('kind') == 'independent'):
+        return 'assignments'
+    if path.startswith('/problems/'):
+        return 'tasks'
+    if path.startswith('/worksheets/'):
+        return 'collections' if 'collection' in name else 'worksheets'
+    if 'student' in name or 'group' in name or name == 'teachers':
+        return 'students'
+    return ''

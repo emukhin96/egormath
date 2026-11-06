@@ -25,7 +25,7 @@
         badge.hidden = true;
         action.onClick();
       });
-      badge.appendChild(document.createTextNode(' · '));
+      badge.appendChild(document.createTextNode(' '));
       badge.appendChild(button);
       delay = 8000;
     }

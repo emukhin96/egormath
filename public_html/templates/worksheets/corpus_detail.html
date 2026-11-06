@@ -8,7 +8,7 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Черновик</p>
   <h2>{{ draft.title|default:draft.id }}</h2>
-  <p class="sidebar-copy">{{ draft.rel_path }} · {{ draft.dialect }}{% if draft.grade %} · {{ draft.grade }} класс{% endif %}</p>
+  <p class="sidebar-copy">{{ draft.rel_path }}, {{ draft.dialect }}{% if draft.grade %}, {{ draft.grade }} класс{% endif %}</p>
   <a class="sidebar-action" href="{% url 'worksheet_corpus_list' %}">К списку корпуса</a>
   <a class="sidebar-action" href="{{ egor_url }}">Нормализованный .egor.tex</a>
   {% if imported %}

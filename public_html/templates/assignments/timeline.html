@@ -9,7 +9,7 @@
 {% endcomment %}
 <div class="tl-head">
   <div>
-    <a class="live-back" href="{% url 'worksheet_progress' assignment.worksheet_id %}">← {{ assignment.worksheet.title }}, карта ответов</a>
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'assignment_list' %}?kind=ordinary">Задания</a><a href="{% url 'worksheet_progress' assignment.worksheet_id %}">{{ assignment.worksheet.title }}</a></nav>
     <h1>{{ student_name }}{% if copied %} <span class="live-copy" title="{{ person.copy_note|capfirst }}">•</span>{% endif %}</h1>
     <p class="live-meta">{% if track %}{% with fmt=track.days|yesno:'d.m H:i,H:i' %}Начал {{ track.begin|date:fmt }}{% if assignment.status == 'returned' %}{% if assignment.submitted_at %}, сдавал {{ assignment.submitted_at|date:fmt }}{% endif %}, возвращена на доработку{% elif assignment.submitted_at %}, сдал {{ assignment.submitted_at|date:fmt }}{% else %}, ещё не сдал{% endif %}{% endwith %}; работал {{ track.duration }}{% if track.away %}, из них {{ track.away }} вне страницы{% endif %}{% else %}Работу ещё не открывал{% endif %}</p>
   </div>

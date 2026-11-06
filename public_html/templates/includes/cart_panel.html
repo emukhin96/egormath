@@ -3,7 +3,7 @@
 {% with next=cart_next|default:request.get_full_path %}
 <div class="cart-panel" data-cart-panel>
   <div class="cart-panel-head">
-    <p class="cart-panel-title">{% if cart.count %}Корзина · {{ cart.count }} {{ cart.count|plural_ru:'задача,задачи,задач' }}{% else %}Корзина пуста{% endif %}</p>
+    <p class="cart-panel-title">{% if cart.count %}В корзине {{ cart.count }} {{ cart.count|plural_ru:'задача,задачи,задач' }}{% else %}Корзина пуста{% endif %}</p>
     {% if cart.count %}
     <form method="post" action="{% url 'cart_clear' %}">
       {% csrf_token %}
@@ -17,7 +17,7 @@
     {% for item in cart.items %}
     <li class="cart-item">
       <span class="cart-fam{% if item.family %} cart-fam-{{ item.family }}{% endif %}"{% if item.family %} title="Похожие: одна семья аналогов"{% endif %} aria-hidden="true"></span>
-      <span class="cart-item-text"><span class="cart-item-source">{{ item.label }}</span> · <span class="math-content">{{ item.preview }}</span></span>
+      <span class="cart-item-text"><span class="cart-item-source">{{ item.label }}</span> — <span class="math-content">{{ item.preview }}</span></span>
       <form method="post" action="{% url 'cart_remove' %}" data-cart-remove>
         {% csrf_token %}
         <input type="hidden" name="task_id" value="{{ item.pk }}">

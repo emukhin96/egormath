@@ -684,7 +684,7 @@ def point_rows(attempt, teacher=False):
                      'reference': point.snapshot['answer'] if 'answer' in disclosure else '',
                      'solution': point.snapshot['solution'] if 'solution' in disclosure else '',
                      'comment': answer.comment if answer and 'comment' in disclosure else '',
-                     'grade': (Review.SYMBOLS.get(answer.grade, answer.grade) + ' · ' + answer.get_grade_display()) if answer and answer.grade and 'checks' in disclosure else '',
+                     'grade': (Review.SYMBOLS.get(answer.grade, answer.grade) + ' ' + answer.get_grade_display()) if answer and answer.grade and 'checks' in disclosure else '',
                      'grade_symbol': Review.SYMBOLS.get(answer.grade, answer.grade) if answer and 'checks' in disclosure else '',
                      'grade_url': reverse('independentworks:review', args=[attempt.pk, point.pk]) if teacher else '',
                      'comment_name': f'p{point.pk}_comment',
@@ -863,7 +863,7 @@ def review(request, pk, point_id):
         # own_attempt заранее загрузил ответы; после проверки нужен свежий итог.
         attempt._prefetched_objects_cache.pop('answers', None)
         from assignments.windows import grade_caption
-        feedback = (Review.SYMBOLS.get(answer.grade, answer.grade) + ' · ' + answer.get_grade_display()) if answer.grade else ('На проверке' if answer.pending else {'ok': 'Верно', 'wrong': 'Неверно'}.get(answer.auto_check, 'Ответ не введён'))
+        feedback = (Review.SYMBOLS.get(answer.grade, answer.grade) + ' ' + answer.get_grade_display()) if answer.grade else ('На проверке' if answer.pending else {'ok': 'Верно', 'wrong': 'Неверно'}.get(answer.auto_check, 'Ответ не введён'))
         return JsonResponse({'grade': answer.grade, 'feedback': feedback, 'result': svc.result(attempt), 'cumulative': svc.cumulative(attempt),
                              'caption': grade_caption(answer)})
     messages.success(request, 'Проверка сохранена')

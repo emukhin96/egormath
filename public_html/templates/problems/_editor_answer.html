@@ -1,7 +1,7 @@
 {% load task_extras %}
 {# simple_answers (editor.simple_answers, R22-1): не-редактору одно поле «Ответ» / «Решение» без подписей про авторские и редакторские версии #}
 <section class="problem-answer" data-answer-owner="{{ sub.pk|default:'' }}">
-  <div class="label-row"><h3>Ответ{% if sub %} · {{ forloop.counter0|subitem_label }}){% endif %}</h3>
+  <div class="label-row"><h3>Ответ{% if sub %} {{ forloop.counter0|subitem_label }}){% endif %}</h3>
     {% if not simple_answers %}<span class="helptext">{% if owner.author_answer_latex %}Авторский{% elif owner.answer_latex %}Редакторский / AI{% endif %}</span>{% endif %}
   </div>
   <div class="math-content">{{ owner.effective_answer_latex|default:'—'|web_text|linebreaksbr }}</div>

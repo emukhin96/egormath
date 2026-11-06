@@ -168,7 +168,7 @@ class CloneViewTests(TestCase):
 
     def test_dialog_fragment(self):
         response = self.client.get(self.url)
-        self.assertContains(response, 'Клон задачи · Книга, №398')
+        self.assertContains(response, 'Клон задачи: Книга, №398')
         self.assertContains(response, 'Источник: аналог к Книга, №398')
         self.assertContains(response, 'class="num-in"', count=4)
         self.assertContains(response, '✓ следует за ответом', count=2)
@@ -346,7 +346,7 @@ class CloneViewTests(TestCase):
         position = Position.objects.create(work=work)
         Candidate.objects.create(position=position, task=self.task)
         page = self.client.get(self.url + f'?position={position.pk}')
-        self.assertContains(page, 'Добавится вариантом в №1 · С-3')
+        self.assertContains(page, 'Добавится вариантом в №1, С-3')
         response = self.client.post(self.url, self.data(position=position.pk))
         copy = Task.objects.get(pk=response.json()['task_id'])
         self.assertTrue(response.json()['reload'])

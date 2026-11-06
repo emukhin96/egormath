@@ -197,7 +197,7 @@ class CollectionTests(TestCase):
         self.assertNotContains(first, 'Задача 26.')
         self.assertContains(first, '?page=2')
         # В корзину уходит только страница — так и написано на кнопке
-        self.assertContains(first, 'Страницу в корзину · 25')
+        self.assertContains(first, 'Страницу в корзину (25)')
         self.assertContains(first, 'страница 1 из 2')
 
         second = self.client.get(
@@ -249,7 +249,7 @@ class CollectionFlatViewTests(TestCase):
         # Третий уровень — только ссылкой «открыть раздел».
         self.assertNotContains(response, '5.2.2.1 Аналог: задача 1.')
         self.assertContains(response, 'открыть раздел')
-        self.assertContains(response, 'Всё в корзину · 3')
+        self.assertContains(response, 'Всё в корзину (3)')
         self.assertContains(response, 'href="?view=tree"')
 
     def test_book_section_keeps_its_page(self):
@@ -349,8 +349,8 @@ class CollectionTitleTests(TestCase):
         # Заголовок раздела — из каталога, с двузначным номером
         self.assertContains(response, '<h1>№01. Планиметрия 1</h1>', html=True)
         self.assertContains(response, 'Прототип 1.1</a>')
-        self.assertContains(response, '· 1 задача')
-        self.assertContains(response, 'Всё в корзину · 5')
+        self.assertContains(response, '>1 задача')
+        self.assertContains(response, 'Всё в корзину (5)')
         # Панель «На этой странице» различает пункты
         sidebar = response.content.decode().split('На этой странице', 1)[1]
         self.assertIn('Прототип 1.20', sidebar)
@@ -512,7 +512,7 @@ class CollectionSectionPagesTests(TestCase):
         self.assertContains(first, '<h3 class="math-content">§ 3. Чётные функции</h3>', html=True)
         self.assertContains(first, '<span class="ws-num">3.1.</span>', html=True)
         self.assertNotContains(first, 'Задача 1.1.')
-        self.assertContains(first, '90 задач · 3 параграфа · страница 1 из 2')
+        self.assertContains(first, '90 задач, 3 параграфа, страница 1 из 2')
         # Короткие параграфы подряд — на одной странице, каждый со своим заголовком
         second = self.page(2)
         self.assertContains(second, '§ 1. Функция')
@@ -524,8 +524,8 @@ class CollectionSectionPagesTests(TestCase):
         sidebar = second.content.decode().split('Параграфы', 1)[1].split('</section>')[0]
         self.assertIn('href="?page=1#section-0"', sidebar)
         self.assertIn('href="?page=2#section-2"', sidebar)
-        self.assertIn('3.1–3.40 · 40 задач', sidebar)
-        self.assertIn('2.1–2.20 · 20 задач', sidebar)
+        self.assertIn('3.1–3.40, 40 задач', sidebar)
+        self.assertIn('2.1–2.20, 20 задач', sidebar)
         self.assertEqual(sidebar.count('is-current'), 2)
 
     def test_short_variants_stay_on_one_page(self):

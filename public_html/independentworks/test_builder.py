@@ -50,7 +50,7 @@ class BuilderTests(TestCase):
         self.assertContains(response, 'data-save-draft-before-leave')
         self.assertContains(response, 'name="action" value="preview"', count=1)  # кнопки — в итоге справа
         self.assertContains(response, 'name="action" value="draft"')
-        self.assertContains(response, 'class="live-back"')  # шапка по макету E: «← Самостоятельные»
+        self.assertContains(response, 'class="page-crumbs"')  # крошка «Самостоятельные» вместо «←» (ревизия 03.11, G3)
         self.assertContains(response, 'class="card is-summary"')
         self.assertContains(response, 'Сохранить черновик')
         self.assertNotContains(response, 'Независимый шаблон самостоятельной.')
@@ -253,7 +253,7 @@ class BuilderTests(TestCase):
         page = self.client.get(reverse('independentworks:edit', args=[work.pk]))
         self.assertTemplateUsed(page, 'includes/builder_masks_toggle.html')
         self.assertNotContains(page, '>Кандидаты и подпункты</a>')
-        self.assertContains(page, '№1 · кандидатов: 1</a>')
+        self.assertContains(page, '№1</a> <span class="muted iw-cand-count">кандидатов: 1</span>')
         student = get_user_model().objects.create_user('mask_student')
         self.client.force_login(student)
         self.assertIn(self.client.get(reverse('independentworks:candidate_masks', args=[c.pk])).status_code, (302,403))

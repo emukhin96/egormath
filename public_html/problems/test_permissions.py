@@ -465,7 +465,7 @@ class GuestLocalEditTests(Roles, TestCase):
     def test_card_without_worksheet_is_read_only(self):
         response = self.client.get(reverse('task_detail', args=[self.shared.pk]))
         self.assertContains(response, 'data-base-locked="1"')
-        self.assertContains(response, 'Общая задача · правки только для листка')
+        self.assertContains(response, 'Общая задача, правки только для листка')
         self.assertNotContains(response, 'data-editor-form')
         self.assertNotContains(response, 'data-mask-edit')
         self.assertNotContains(response, 'Удалить задачу')
