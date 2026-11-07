@@ -287,3 +287,25 @@ class FragmentTests(SimpleTestCase):
             "Найдите диаметр окружности на рисунке \\taskpic{1}"))
         for task in tasks:
             self.assertNotIn("Рис.", task.text_latex)
+
+    def test_caption_line_below_each_picture(self):
+        # Две картинки подряд, у каждой подпись строкой ниже: рисунки не
+        # должны поменяться местами.
+        text = (TITLE + "\\section*{Вариант 1}\n"
+                "1. Сравните отрезки (рис. 5).\n"
+                "\\includegraphics[max width=\\textwidth, center]{a}\\\\\n"
+                "Рис. 5\n"
+                "\\includegraphics[max width=\\textwidth, center]{b}\\\\\n"
+                "Рис. 6\n"
+                "2. Измерьте угол (рис. 6).\n"
+                "\\begin{figure}[h]\n\\includegraphics{c}\n\\end{figure}\n"
+                "Рис. 7\n"
+                "3. Найдите площадь фигуры на рисунке 7.\n\\end{document}")
+        tasks, diagnostics = parse_merzlyak_dm(text, book={"title": "т", "grade": 6})
+        by_id = {task.external_id: task for task in tasks}
+        self.assertEqual(by_id["ДМ.В1/1"].images, ["a"])
+        self.assertEqual(by_id["ДМ.В1/2"].images, ["b"])
+        self.assertEqual(by_id["ДМ.В1/3"].images, ["c"])
+        self.assertEqual(diagnostics["figures_unreferenced"], [])
+        for task in tasks:
+            self.assertNotIn("Рис.", task.text_latex)
