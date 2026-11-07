@@ -115,6 +115,22 @@ class SeedTests(TestCase):
         self.assertEqual(codes, {'G', 'G_A', 'H', 'H_A'})
 
 
+class ReplaceStaleTests(TestCase):
+    def test_replace_removes_value_dropped_from_dictionary(self):
+        groups = [('G', 'Группа', [
+            ('G_A', 'А', 'Ставить, когда есть А в условии.', ''),
+            ('G_B', 'Б', 'Ставить, когда есть Б в условии.', '')])]
+        seed_content_facet(groups)
+        task = Task.objects.create(text_latex='т')
+        ct.apply_labels({task.pk: ['G_A', 'G_B']})
+        # G_A убрали из словаря, но оно стоит у задачи — сид его оставил.
+        stats = seed_content_facet([('G', 'Группа', [groups[0][2][1]])])
+        self.assertEqual(stats['kept'], ['G_A'])
+        ct.apply_labels({task.pk: ['G_B']}, replace=True)
+        self.assertEqual(
+            list(task.facet_values.values_list('code', flat=True)), ['G_B'])
+
+
 class ApplyTests(TestCase):
     def setUp(self):
         seed_content_facet()

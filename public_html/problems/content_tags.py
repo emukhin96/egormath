@@ -228,6 +228,11 @@ def task_item(task):
 
 
 def content_values_by_code():
+    """Значения CONTENT из базы (не из словаря в коде), {код: FacetValue}.
+
+    Сюда входят и значения, которые сид оставил в ``kept`` (убраны из
+    словаря, но стоят у задач): ``apply_labels(replace=True)`` их снимает.
+    """
     from .models import FacetValue
     return {v.code: v for v in FacetValue.objects.filter(
         facet_type__code=CONTENT_FACET_CODE, parent__isnull=False)}
