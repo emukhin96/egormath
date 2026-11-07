@@ -299,6 +299,8 @@ def assignment_list(request):
         'page': page,
         'assignments': assignments.filter(worksheet_id__in=worksheet_ids),
         'worksheet_groups': groups_on_page,
+        'recipient_dialogs': recipient_dialogs_data(
+            groups_on_page, request.GET.urlencode()),
         'stats': stats,
         'students': students,
         'worksheets': worksheets,
@@ -327,6 +329,51 @@ def assignment_list(request):
         },
         'return_query': request.GET.urlencode(),
     })
+
+
+def recipient_dialogs_data(groups, return_query=''):
+    """Данные диалогов «Изменить получателей» для JS (assignment_recipients.js).
+
+    Диалог на каждую работу не рендерится: в HTML один <template>, а здесь —
+    имена учеников один раз на страницу и по группе только id ученика,
+    статус или вариант и флаги. Строка обычной группы —
+    [id, статус | null, можно ли «Проверено»], самостоятельной —
+    [id, вариант | null, закреплён ли ученик, подпись состояния].
+    """
+    query = f'?{return_query}' if return_query else ''
+    students = {}
+    result = {}
+    for group in groups:
+        rows = []
+        if group['kind'] == 'independent':
+            action = reverse('independentworks:recipients',
+                             args=[group['run'].pk]) + query
+            for row in group['recipient_rows']:
+                user = row['student']
+                students[user.pk] = user.get_full_name() or user.username
+                attempt = row['assignment']
+                rows.append([user.pk, attempt.variant_id if attempt else None,
+                             row['locked'],
+                             attempt.state if row['locked'] else ''])
+            data = {'kind': 'independent',
+                    'variants': [[v.pk, v.number] for v in group['variants']]}
+        else:
+            action = reverse('assignment_group_update',
+                             args=[group['worksheet_id']]) + query
+            for row in group['recipient_rows']:
+                user = row['profile'].user
+                students[user.pk] = user.get_full_name() or user.username
+                assignment = row['assignment']
+                rows.append([user.pk,
+                             assignment.status if assignment else None,
+                             row['can_mark_reviewed']])
+            data = {'kind': 'collection' if group['is_collection']
+                    else 'ordinary'}
+        data.update(title=group['worksheet__title'], action=action, rows=rows)
+        result[group['key']] = data
+    return {'students': students,
+            'statuses': [list(pair) for pair in Assignment.STATUS_CHOICES],
+            'groups': result}
 
 
 @teacher_required
