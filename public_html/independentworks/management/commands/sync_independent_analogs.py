@@ -7,7 +7,7 @@ from independentworks.analogs import sync_families
 
 
 class Command(BaseCommand):
-    help = 'Заполнить связи аналогов ФИПИ и парных вариантов Зива'
+    help = 'Заполнить связи аналогов: варианты работ задачников и прототипы банков ФИПИ'
 
     def add_arguments(self, parser):
         parser.add_argument('--source', type=int, help='ID источника в этой базе')
@@ -34,6 +34,8 @@ class Command(BaseCommand):
                 self.stdout.write('В этой базе нет импортированных задач и подборок источника. Связи не заполнены.')
         self.stdout.write(('Предварительный отчёт. ' if options['dry_run'] else '') +
             f"Семейств: {report['families']}; новых: {report['created']}; новых участников: {report['members_added']}; уточнённых ключей: {report['keys_updated']}")
+        for row in report['by_source']:
+            self.stdout.write(f"  #{row['id']} {row['title']}: семейств {row['families']}, новых {row['created']}, новых участников {row['members_added']}")
         for category, label in [('incomplete', 'Неполные пары'), ('ambiguous', 'Неоднозначности')]:
             self.stdout.write(f'{label}: {len(report[category])}')
             for message in report[category]:

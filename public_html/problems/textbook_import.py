@@ -1276,9 +1276,6 @@ def _attach_task_images(task, draft, batch):
         existing[stem] = image
 
 
-# Профили, у которых варианты работ связываются в семьи аналогов
-# при загрузке в каталог (ключи «С1.2/3», «КI.3/4», «КРII.1.В5/3»).
-ANALOG_PROFILES = {'vysotsky', 'shabunin_method'}
 # Профили, где авторский разбор общего условия — единый текст ко всей
 # задаче («Пример решения. … а) … б) …»): по пунктам делятся только ответы,
 # иначе вступление и хвосты разбора теряются.
@@ -1549,13 +1546,14 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
         'reused': reused,
         'collections': max(0, collection_count),
     }
+    from independentworks.analogs import ANALOG_PROFILES, sync_families
     if batch.profile in ANALOG_PROFILES:
-        # Один номер в парных вариантах самостоятельных и контрольных —
-        # семья аналогов сразу после загрузки, без ручного
-        # sync_independent_analogs.
-        from independentworks.analogs import sync_families
-        # Только новое: по пустому результату представление сообщает
-        # «Изменений нет» при повторной загрузке раздела.
+        # Один номер в вариантах самостоятельных и контрольных, прототип
+        # банка и его аналоги — семья сразу после загрузки, без ручного
+        # sync_independent_analogs. Профили и правила — в
+        # independentworks/analogs.py. Только новое: по пустому результату
+        # представление сообщает «Изменений нет» при повторной загрузке
+        # раздела.
         report = sync_families(report=True, source_id=batch.source_id)
         result['analog_families'] = report['created']
         result['analog_members'] = report['members_added']
