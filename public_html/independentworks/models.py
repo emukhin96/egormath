@@ -45,6 +45,10 @@ class Work(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        # Меню корзины берёт последние самостоятельные по updated_at
+        indexes = [models.Index(fields=['updated_at'], name='iw_work_updated_at_idx')]
+
     @classmethod
     def visible_to(cls, user):
         return cls.objects.all() if user.is_superuser else cls.objects.filter(owner=user)

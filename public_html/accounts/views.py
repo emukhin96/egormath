@@ -16,7 +16,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from assignments.models import Assignment
 from problems.models import Task
-from worksheets.models import Worksheet
+from worksheets.models import Worksheet, WorksheetItem
 
 from core.mailing import mail_enabled
 
@@ -363,10 +363,28 @@ def dashboard(request):
     return render(request, 'accounts/no_role.html')
 
 
+def recent_worksheets(user, limit=5):
+    """Последние листки кабинета с числом задач в каждом.
+
+    ``annotate(Count('items'))`` на том же запросе группировал все листки
+    учителя с их элементами ради пяти строк (аудит быстродействия
+    06.11.2026: 54 мс у суперпользователя на 3 тыс. листков). Берём
+    листки по индексу ``updated_at``, число элементов — отдельным
+    запросом по их id.
+    """
+    worksheets = list(Worksheet.visible_to(user).select_related('owner')[:limit])
+    counts = dict(
+        WorksheetItem.objects.filter(worksheet__in=[w.pk for w in worksheets])
+        .order_by().values_list('worksheet_id').annotate(n=Count('pk'))
+        .values_list('worksheet_id', 'n'))
+    for worksheet in worksheets:
+        worksheet.items_total = counts.get(worksheet.pk, 0)
+    return worksheets
+
+
 def teacher_dashboard(request):
     from . import teacher_home
-    worksheets = (Worksheet.visible_to(request.user).select_related('owner')
-                  .annotate(items_total=Count('items'))[:5])
+    worksheets = recent_worksheets(request.user)
     pending = (Assignment.visible_to(request.user)
                .filter(status=Assignment.STATUS_SUBMITTED)
                .select_related('worksheet', 'worksheet__owner', 'student')
