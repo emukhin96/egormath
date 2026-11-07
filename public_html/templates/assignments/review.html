@@ -38,7 +38,11 @@
     {% endif %}
   </div>
   {% else %}
-  <div class="card ws-view" id="task-{{ row.number }}">
+  {# Вариант A «Лента» (выбор Егора 07.11): условие свёрнуто до двух строк, ответ и шкала — одной плашкой, остальное — тихой строкой под ней #}
+  <div class="card ws-view review-task" id="task-{{ row.number }}" data-review-task="{{ row.number }}" data-task-png-root>
+    {# Картинкой, в корзину, открыть задачу — панель в углу; на картинку идёт только условие #}
+    <div class="task-actions-corner">{% include 'includes/task_actions.html' with task=row.task compact=True %}</div>
+    <div data-task-png-content>
     {% include 'worksheets/_common_condition.html' %}
     {% include 'includes/task_row.html' with number=row.number stars=row.item.effective_stars text=row.statement %}
     {% include 'problems/_task_images.html' with images=row.review_images %}
@@ -51,35 +55,37 @@
       {% endfor %}
     </ol>
     {% endif %}
+    </div>
 
-    {# Ответ, самопроверки, доска, история и решение — одной строкой свёрнутых блоков (ревизия 03.11, Z3) #}
-    <div class="review-task-foot">
+    <div class="review-work">
     <div class="review-live" data-live-answer="{{ row.item.pk }}">{% include 'assignments/_live_answer.html' %}</div>
+    {% include 'assignments/_grade_scale.html' %}
+    <span class="review-break" aria-hidden="true"></span>
     {% if canvas_enabled %}
     {# Холст вне живого фрагмента: пометки учителя не должны пропадать при обновлении ответов #}
     <div data-canvas data-url="{% url 'canvas:pages' assignment.pk row.task.pk %}" data-role="teacher" data-pages="{{ row.canvas_pages }}"></div>
     {% endif %}
     {% if row.subrows %}{% for sr in row.subrows %}{% if sr.part %}{% include 'workaudit/revisions.html' with kind='part' object=sr.part %}{% endif %}{% endfor %}{% else %}{% include 'workaudit/revisions.html' with kind='submission' object=row.submission %}{% endif %}
     {% if row.has_solution %}
-    <details class="review-solution"><summary>Ответ и решение</summary>
+    <details class="review-solution"><summary>Решение</summary>
       {% for text in row.task|complete_solutions %}<div class="solution-box math-content">{% if not forloop.first %}<p class="helptext">Полное решение от AI</p>{% endif %}{{ text|web_text|linebreaksbr }}</div>{% endfor %}
       {% for sr in row.subrows %}{% with label=forloop.counter0|subitem_label %}{% for text in sr.subitem|complete_solutions %}
       <div class="solution-box math-content">{% if forloop.first %}<strong>{{ label }})</strong> {% else %}<p class="helptext">Полное решение от AI</p>{% endif %}{{ text|web_text|linebreaksbr }}</div>
       {% endfor %}{% endwith %}{% endfor %}
     </details>
     {% endif %}
+    <div class="review-comment">{% with task_id=row.task.pk|stringformat:"s" %}{% include 'assignments/_review_comment.html' with comment_name="task"|add:task_id|add:"_comment" comment_value=row.review.comment %}{% endwith %}</div>
     </div>
-    <div class="review-grade-row">{% include 'assignments/_grade_scale.html' %}
-    <div class="review-comment">{% with task_id=row.task.pk|stringformat:"s" %}{% include 'assignments/_review_comment.html' with comment_name="task"|add:task_id|add:"_comment" comment_value=row.review.comment %}{% endwith %}</div></div>
 
   </div>
   {% endif %}
   {% endfor %}
   </div>
   <aside class="card review-summary">
-    <span class="page-eyebrow">Итог проверки</span>
-    <p class="review-total">Зачтено: <strong><span data-review-total-done>{{ result.done }}</span> из {{ result.total }}</strong>
+    <p class="review-total">Зачтено <strong><span data-review-total-done>{{ result.done }}</span> из {{ result.total }}</strong>
       (<span data-review-total-percent>{{ result.percent }}</span>%)</p>
+    {# Карта задач цветом оценки; клик — к задаче (review_ribbon.js) #}
+    <nav class="review-map" aria-label="Задачи работы">{% for row in rows %}{% if row.task %}<a href="#task-{{ row.number }}" data-review-map="{{ row.number }}" data-map-grade="{{ row.review.grade|default:'' }}" title="№{{ row.number }}">{{ row.number }}</a>{% endif %}{% endfor %}</nav>
     <p class="helptext">С ответом {{ answered_count }} из {{ task_count }}{% if queue_position %}, в очереди {{ queue_position }} из {{ queue_total }}{% elif queue_total %}, ждут проверки {{ queue_total }}{% endif %}.</p>
     <p class="helptext" title="Автосверка — подсказка; оценку решения ставите вы. Режим задан при выдаче и не меняется.">Автосверка: {{ assignment.get_check_visibility_display|lower }}.</p>
     {% if canvas_enabled %}{% include 'canvas/_toggle.html' %}{% endif %}
@@ -105,4 +111,4 @@
   </div>
 </form>
 {% endblock %}
-{% block extra_js %}<script defer src="{% static 'js/work_history.js' %}"></script><div data-review-live-url="{% url 'assignment_live' assignment.pk %}" data-live-file="{% live_file 'assignment' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=4"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=4"></script>{% endif %}{% endblock %}
+{% block extra_js %}<script defer src="{% static 'js/work_history.js' %}"></script><div data-review-live-url="{% url 'assignment_live' assignment.pk %}" data-live-file="{% live_file 'assignment' assignment.pk %}"></div><script defer src="{% static 'js/teacher_progress.js' %}?v=4"></script><script defer src="{% static 'js/review_ribbon.js' %}"></script>{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=4"></script>{% endif %}{% endblock %}

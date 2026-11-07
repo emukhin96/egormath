@@ -1,6 +1,7 @@
 import re
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
@@ -139,6 +140,44 @@ def assign_worksheet(request, worksheet_id):
 
 # --- Все назначения учителя ---
 
+def _recipient_sections(user, rows, by_worksheet):
+    """Выданные работы страницы — секциями по получателям (ревизия 03.11, Z2):
+    группа, которой выдано, или ученик, получивший работу не через группу.
+    Работа, выданная двум группам, стоит в обеих секциях. Секции и строки
+    внутри — от свежих выдач к старым."""
+    from worksheets.recipients import assignment_sections
+    groups = list(StudentGroup.visible_to(user).prefetch_related('students'))
+    members = {g.pk: {s.pk for s in g.students.all()} for g in groups}
+    sections = {}
+
+    def put(key, label, row):
+        section = sections.setdefault(key, {'key': key, 'label': label, 'rows': [], 'is_group': key[0] == 'g'})
+        section['rows'].append(row)
+
+    for row in rows:
+        if row['kind'] == 'ordinary':
+            assignments = list(by_worksheet.get(row['worksheet_id'], {}).values())
+            by_group, individual = assignment_sections(assignments, groups)
+            for section in by_group:
+                put(('g', section['group'].pk), section['group'].name, row)
+            students = [a.student for a in individual]
+        else:
+            attempts = row.get('attempts') or list(row['run'].attempts.all())
+            given = {a.student_id for a in attempts}
+            covered = set()
+            for group in groups:
+                if members[group.pk] and members[group.pk] <= given:
+                    put(('g', group.pk), group.name, row)
+                    covered |= members[group.pk]
+            students = [a.student for a in attempts if a.student_id not in covered]
+        for student in students:
+            put(('s', student.pk), student.get_full_name() or student.username, row)
+    for section in sections.values():
+        section['rows'].sort(key=lambda r: (-r['last_assigned'].timestamp(), r['key']))
+        section['latest'] = section['rows'][0]['last_assigned']
+    return sorted(sections.values(), key=lambda s: (-s['latest'].timestamp(), not s['is_group'], s['label']))
+
+
 @teacher_required
 def assignment_list(request):
     """Единая очередь выданных работ с рабочими фильтрами."""
@@ -220,13 +259,18 @@ def assignment_list(request):
         reviewed_total=Count('pk', filter=Q(status=Assignment.STATUS_REVIEWED)),
         queue_priority=Min('queue_order')).order_by('-last_assigned', 'worksheet_id')
     from independentworks.integration import assignment_groups, assignment_runs
-    kind = request.GET.get('kind', '')
+    # Вид работы — переключатель из двух положений (ревизия 03.11, Z2):
+    # «Задания» по умолчанию, «Самостоятельные» — kind=independent
+    kind = 'independent' if (request.GET.get('kind') == 'independent'
+                             and settings.INDEPENDENT_WORKS_ENABLED) else 'ordinary'
+    params = request.GET.copy()
+    params['kind'] = kind
     grouped = list(grouped) if kind != 'independent' else []
     for group in grouped:
         group['kind'] = 'ordinary'
         group['key'] = f"ordinary-{group['worksheet_id']}"
-    independent_runs = assignment_runs(request.user, request.GET)
-    independent_groups = assignment_groups(request.user, request.GET, runs=independent_runs)
+    independent_runs = assignment_runs(request.user, params)
+    independent_groups = assignment_groups(request.user, params, runs=independent_runs)
     grouped += independent_groups
     # Свежие выдачи сверху независимо от статуса: очередь проверки доступна
     # плиткой «На проверке» и фильтром по статусу.
@@ -248,7 +292,8 @@ def assignment_list(request):
     page_assignments = list(
         Assignment.visible_to(request.user)
         .filter(worksheet_id__in=worksheet_ids)
-        .select_related('student').order_by('student__last_name',
+        .select_related('student').prefetch_related('source_groups')
+        .order_by('student__last_name',
                                              'student__first_name'))
     known_profiles = {profile.user_id: profile for profile in students}
     missing_ids = {a.student_id for a in page_assignments} - set(known_profiles)
@@ -294,9 +339,16 @@ def assignment_list(request):
             {'student': u, 'assignment': existing.get(u.pk),
              'locked': bool(existing.get(u.pk) and (existing[u.pk].started_at or run.kind != 'initial'))}
             for u in users.values() if run.kind == 'initial' or u.pk in existing]
+    # Секции — по выдачам, прошедшим фильтры (поиск, ученик, статус, срок),
+    # а не по всем выдачам листка (ревью #326)
+    filtered_by_worksheet = {}
+    for assignment in assignments.filter(worksheet_id__in=worksheet_ids).prefetch_related('source_groups'):
+        filtered_by_worksheet.setdefault(assignment.worksheet_id, {})[assignment.student_id] = assignment
+    recipient_sections = _recipient_sections(request.user, groups_on_page, filtered_by_worksheet)
     worksheets = Worksheet.visible_to(request.user).order_by('-updated_at')
     return render(request, 'assignments/assignment_list.html', {
         'page': page,
+        'recipient_sections': recipient_sections,
         'assignments': assignments.filter(worksheet_id__in=worksheet_ids),
         'worksheet_groups': groups_on_page,
         'recipient_dialogs': recipient_dialogs_data(
@@ -316,7 +368,7 @@ def assignment_list(request):
             (Assignment.STATUS_RETURNED, 'На доработке'),
             (Assignment.STATUS_REVIEWED, 'Проверено'),
         ],
-        'kind_choices': [('ordinary', 'Обычные'), ('independent', 'Самостоятельные')],
+        'kind_choices': [('ordinary', 'Задания'), ('independent', 'Самостоятельные')],
         'due_choices': [
             ('overdue', 'Просроченные'),
             ('today', 'Срок сегодня'),

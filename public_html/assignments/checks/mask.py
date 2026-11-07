@@ -715,9 +715,38 @@ def _number_needs_worker(slot, value):
     return any(number is None for number in literals)
 
 
+# Координаты: {{equation: x=2}} — обычно прямая (ось симметрии, ГМТ),
+# и голое «2» уравнением прямой не является.
+_LINE_VARIABLES = {'x', 'y'}
+
+
+def equation_value(slot, value):
+    """Ответ без левой части для маски «величина = число».
+
+    Поле ученика не показывает «α =», и одно значение — естественный ответ:
+    ``\\arcsin\\frac{1}{\\sqrt3}`` при эталоне ``\\alpha=\\operatorname{arctg}
+    \\frac{1}{\\sqrt2}`` (Шабунин 16195), ``-6`` при ``a=-6``. Такой ответ
+    читается как «левая часть эталона = значение». Только если слева в
+    эталоне одна буква (не x и не y), справа нет переменных, а в ответе нет
+    «=» и букв: ``x+5`` при ``y=x+5`` остаётся «не проверено»."""
+    from sympy import Expr, Symbol
+    data = slot.data
+    text = (value or '').strip()
+    if (not text or '=' in text or not isinstance(data.lhs, Symbol)
+            or data.lhs.name in _LINE_VARIABLES or data.rhs.free_symbols):
+        return value
+    try:
+        _, expr = expressions.parse(text)
+    except Exception:  # noqa: BLE001 — не разобрано, проверка как была
+        return value
+    if not isinstance(expr, Expr) or expr.free_symbols:
+        return value
+    return slot.reference.split('=', 1)[0].strip() + '=' + text
+
+
 def _equation_needs_worker(slot, value):
-    return expressions.check_equation(value, slot.data, strict=slot.strict_equation,
-                                      numeric=False) is None
+    return expressions.check_equation(equation_value(slot, value), slot.data,
+                                      strict=slot.strict_equation, numeric=False) is None
 
 
 def check_slot(slot, value):
@@ -817,6 +846,7 @@ def _check_slot(slot, value):
     if kind in (EXPRESSION, EXPRESSIONS, SIMPLIFY, FACTOR):
         return formulas.check(value, slot.data, multiple=kind == EXPRESSIONS)
     if kind == EQUATION:
+        value = equation_value(slot, value)
         result = expressions.check_equation(value, slot.data, strict=slot.strict_equation,
                                             numeric=False)
         if result is None:

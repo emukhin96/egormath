@@ -392,7 +392,9 @@ def worksheet_detail(request, pk):
     search_active = any(request.GET.get(k) for k in ('q', 'topic', 'grade', 'tag', 'who'))
     found_tasks = []
     if search_active:
-        found_tasks = list(filter_tasks(request.GET, request.user).exclude(pk__in=task_ids)[:15])
+        # subitems — для полного условия на картинке (панель действий в строке)
+        found_tasks = list(filter_tasks(request.GET, request.user).exclude(pk__in=task_ids)
+                           .prefetch_related('subitems')[:15])
 
     student_profiles = (Profile.students_for(request.user)
                         .select_related('user')

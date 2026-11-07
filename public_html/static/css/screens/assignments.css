@@ -8,30 +8,107 @@
   /* Пустые состояния списков — одной строкой 14 px серым (G10) */
   .empty-line { margin: var(--space-2) 0; font-size: var(--fs-md); color: var(--muted); }
 
-  /* Z3: задача на проверке — ответ и свёрнутые блоки одной строкой */
-  .review-task-foot {
+  /* Z3, вариант A «Лента» (выбор Егора 07.11): условие свёрнуто до двух
+     строк, ответ ученика и шкала — одной плашкой, под ней тихой строкой
+     самопроверки, доска, история, решение, комментарий; раскрытое и фото —
+     во всю ширину. Порядок — через order, разметка не дублируется. */
+  .review-task .task-copy.is-clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .review-task .task-copy[aria-expanded="true"] { cursor: pointer; }
+  .review-task .task-images img { max-height: 120px; width: auto; }
+  .review-work {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-4);
+    align-items: stretch;
+    gap: 0 var(--space-4);
     margin-top: var(--space-2);
   }
-  .review-task-foot > .review-live { display: contents; }
-  .review-task-foot .answer-block,
-  .review-task-foot .photo-grid,
-  .review-task-foot > .canvas-widget,
-  .review-task-foot details[open] { flex-basis: 100%; }
-  .review-task-foot details { margin: 0; }
-  .review-task-foot details > summary { font-size: var(--fs-sm); color: var(--muted); cursor: pointer; }
-  .review-task-foot details[open] > summary { color: var(--text); }
-  .review-grade-row {
+  .review-work > .review-live { display: contents; }
+  /* По умолчанию всё — в тихую строку под плашкой (в том числе кнопка
+     доски, которую canvas.js подставляет вместо своего контейнера) */
+  .review-work > *,
+  .review-work > .review-live > * { order: 4; margin: 0; align-self: center; }
+  .review-work .answer-block {
+    order: 1;
+    flex: 1 1 300px;
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: 8px 0 0 8px;
+    background: var(--tile);
+  }
+  .review-work .review-answer-row { font-size: var(--fs-lg); }
+  .review-work .review-reference { color: var(--muted); font-size: var(--fs-sm); }
+  .review-work > .grade-scale {
+    order: 2;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-2) var(--space-3);
-    margin-top: var(--space-3);
+    gap: 3px;
+    margin: 0 0 0 calc(var(--space-4) * -1);
+    padding: var(--space-2) var(--space-3);
+    border-radius: 0 8px 8px 0;
+    background: var(--tile);
   }
-  .review-grade-row .review-comment:has(.comment-toggle[open]) { flex-basis: 100%; }
+  .review-work > .grade-scale .btn-secondary { background: var(--card); color: var(--text); }
+  .review-work > .grade-scale .btn-secondary[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .review-work > .review-break { order: 3; flex-basis: 100%; height: var(--space-2); }
+  /* Тихая строка под плашкой */
+  .review-work details,
+  .review-work > [data-canvas],
+  .review-work > .review-comment { order: 4; margin: 0; }
+  /* Плашка (ответ и шкала) — во всю высоту строки, остальное по центру:
+     иначе кнопку доски тянуло на высоту открытой доски */
+  .review-work > * { align-self: center; }
+  .review-work .answer-block,
+  .review-work > .grade-scale { align-self: stretch; }
+  .review-work details > summary,
+  .review-work .comment-toggle > summary {
+    font-size: var(--fs-sm);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .review-work details > summary:hover,
+  .review-work .comment-toggle > summary:hover { color: var(--accent); }
+  .review-work details[open] > summary { color: var(--text); }
+  /* Раскрытое, фото и доска ученика — отдельной строкой во всю ширину */
+  .review-work details[open],
+  .review-work .photo-grid,
+  .review-work .review-live > [data-canvas],
+  .review-work > .canvas-widget:not([hidden]),
+  .review-work > .review-comment:has(.comment-toggle[open]) { order: 5; flex-basis: 100%; margin-top: var(--space-2); }
+  @media (max-width: 760px) {
+    .review-work .answer-block { border-radius: 8px; }
+    .review-work > .grade-scale { margin: var(--space-1) 0 0; border-radius: 8px; flex-basis: 100%; }
+  }
+
+  /* Карта задач в итоге: цвет — по оценке (как в «Проверке по задачам») */
+  .review-map { display: flex; flex-wrap: wrap; gap: 4px; margin: var(--space-2) 0; }
+  .review-map a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    background: var(--tile);
+    color: var(--text);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .review-map a[data-map-grade="+"],
+  .review-map a[data-map-grade=".+"] { background: #e6f4ea; color: var(--ok); }
+  .review-map a[data-map-grade="+-"],
+  .review-map a[data-map-grade="="],
+  .review-map a[data-map-grade="-+"] { background: #fff3e0; color: var(--warn); }
+  .review-map a[data-map-grade=".-"],
+  .review-map a[data-map-grade="-"],
+  .review-map a[data-map-grade="0"] { background: #fdeaea; color: var(--err); }
   .comment-toggle > summary { list-style: none; font-size: var(--fs-sm); color: var(--accent); cursor: pointer; }
   .comment-toggle > summary::-webkit-details-marker { display: none; }
   .comment-toggle[open] > summary { color: var(--muted); margin-bottom: var(--space-1); }
@@ -83,4 +160,24 @@
 @layer components {
   /* S1: фото перетаскивают на всю карточку задачи */
   [data-task-card].is-dragover { outline: 2px dashed var(--accent); outline-offset: 4px; }
+}
+
+/* Выданные работы секциями по получателям (ответ Егора к Z2, 07.11):
+   заголовок секции — строкой на всю ширину таблицы */
+@layer components {
+  .assignment-sheet-table tr.asg-section-head th {
+    padding: var(--space-4) var(--space-2) var(--space-1);
+    border-bottom: 1px solid var(--hairline);
+    background: none;
+    color: var(--text);
+    font-size: var(--fs-md);
+    font-weight: 600;
+    text-align: left;
+  }
+  .assignment-sheet-table tbody.asg-section:first-of-type tr.asg-section-head th { padding-top: var(--space-2); }
+  .asg-section-kind { color: var(--muted); font-weight: 400; }
+  @media (max-width: 760px) {
+    .table-stack tr.asg-section-head { display: block; }
+    .table-stack tr.asg-section-head th { display: block; padding-inline: 0; }
+  }
 }

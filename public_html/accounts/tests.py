@@ -208,7 +208,7 @@ class StudentManagementTests(TestCase):
         old_hash = student.password
         page = self.client.get(reverse('students'))
         self.assertContains(page, f'data-dialog-open="reset-password-{student.pk}"')
-        self.assertContains(page, 'Сбросить и показать новый пароль')
+        self.assertContains(page, 'Сбросить пароль')
         response = self.client.post(reverse('reset_student_password', args=[student.pk]))
         self.assertRedirects(response, reverse('students'), fetch_redirect_response=False)
         student.refresh_from_db()

@@ -157,7 +157,7 @@ class IndependentRecipientDialogTests(TestCase):
         self.assertEqual(dialogs_data(response)['students'][str(self.student.pk)], 'Пётр Первый')
 
         iw.start(self.attempt.pk)
-        group = dialogs_data(self.client.get(reverse('assignment_list')))['groups'][f'independent-{run.pk}']
+        group = dialogs_data(self.client.get(reverse('assignment_list') + '?kind=independent'))['groups'][f'independent-{run.pk}']
         rows = {row[0]: row[1:] for row in group['rows']}
         self.assertEqual(rows[self.student.pk], [self.attempt.variant_id, True, 'Выполняется'])
 

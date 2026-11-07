@@ -582,7 +582,7 @@
   .tl-key-wrong { background: #c62828; }
   .tl-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--space-4); align-items: start; }
   .tl-answers { margin: 0; padding: 0; overflow: hidden; }
-  .tl-row { display: grid; grid-template-columns: 44px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.8fr) 48px; align-items: center; gap: var(--space-3); padding: 8px 16px; border-bottom: 1px solid #f1f4f8; }
+  .tl-row { display: grid; grid-template-columns: 44px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.8fr) 48px 92px; align-items: center; gap: var(--space-3); padding: 8px 16px; border-bottom: 1px solid #f1f4f8; }
   .tl-row.is-pending { background: #fffaf0; }
   .tl-row-head { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); border-bottom-color: var(--border); }
   .tl-grade-head { text-align: center; }
@@ -621,7 +621,7 @@
   @media (max-width: 760px) {
     .tl-row { grid-template-columns: 40px minmax(0, 1fr) 44px; }
     .tl-row-head { display: none; }
-    .tl-answer, .tl-ref { grid-column: 2 / 3; }
+    .tl-answer, .tl-ref, .tl-actions { grid-column: 2 / 3; }
     .tl-ref::before { content: "Ответ:"; font-size: var(--fs-xs); color: var(--muted); }
   }
   /* Журнал оценивания (макет D_Journal): ученики × работы периода,
@@ -2402,6 +2402,13 @@
     margin-top: var(--space-1);
     padding-left: var(--space-3);
     border-left: 2px solid var(--border);
+  }
+
+  /* Ответ книги помечен ошибочным: исправленный — основной, книжный — серой строкой */
+  .answer-book {
+    margin-top: var(--space-1);
+    font-size: var(--fs-md);
+    color: var(--muted);
   }
 
   /* Тумблер «только из задачника»: AI-ответы и спойлеры скрыты */

@@ -19,10 +19,13 @@ _task_class_body.html, его обновляет опрос teacher_progress.js.
 </div>
 
 <div class="tc-grid">
-  <section class="card tc-task" aria-label="Условие">
+  <section class="card tc-task" aria-label="Условие" data-task-png-root>
+    <div class="task-actions-corner">{% include 'includes/task_actions.html' with task=task compact=True %}</div>
+    <div data-task-png-content>
     <div class="math-content">{{ task.text_latex|web_text }}</div>
     {% task_images task %}
     {% if subitems %}<ol class="subitems">{% for s in subitems %}<li><span class="math-content">{{ s.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
+    </div>
     {% if columns|length > 1 %}<nav class="seg tc-parts" aria-label="Подпункт">{% for c in columns %}<a class="seg-item{% if forloop.counter0 == column %} is-active{% endif %}" href="{% query_set point=forloop.counter0 fragment=None %}"{% if forloop.counter0 == column %} aria-current="true"{% endif %}>{{ c.label }}</a>{% endfor %}</nav>{% endif %}
     <div class="tc-reference">
       <span class="tw-label">Ответ</span>

@@ -178,7 +178,8 @@ class IndependentWorkTests(TestCase):
         extra = get_user_model().objects.create_user('extra_recipient')
         Profile.objects.create(user=extra, teacher=self.teacher, role='student')
         self.client.force_login(self.teacher)
-        page = self.client.get(reverse('assignment_list'))
+        # Самостоятельные — второе положение переключателя «Задания / Самостоятельные» (Z2)
+        page = self.client.get(reverse('assignment_list'), {'kind': 'independent'})
         self.assertContains(page, f'data-dialog-open="assignment-group-independent-{a.run_id}"')
         self.assertContains(page, self.url('recipients', a.run_id))
         response = self.client.post(self.url('recipients', a.run_id), {'students': [extra.pk], f'variant_{extra.pk}': a.variant_id})
@@ -444,13 +445,16 @@ class IndependentWorkTests(TestCase):
         for _ in range(31):
             self.issued()
         self.client.force_login(self.teacher)
-        response = self.client.get(reverse('assignment_list'))
-        self.assertEqual(response.context['page'].paginator.count, 32)
+        # Виды не смешиваются (переключатель Z2): листок — в «Заданиях»,
+        # 31 самостоятельная — во втором положении, постранично
+        self.assertEqual(self.client.get(reverse('assignment_list')).context['page'].paginator.count, 1)
+        response = self.client.get(reverse('assignment_list'), {'kind': 'independent'})
+        self.assertEqual(response.context['page'].paginator.count, 31)
         first = {g['key'] for g in response.context['worksheet_groups']}
-        response = self.client.get(reverse('assignment_list'), {'page': 2})
+        response = self.client.get(reverse('assignment_list'), {'kind': 'independent', 'page': 2})
         second = {g['key'] for g in response.context['worksheet_groups']}
         self.assertFalse(first & second)
-        self.assertEqual(len(first | second), 32)
+        self.assertEqual(len(first | second), 31)
         response = self.client.get(reverse('assignment_list'), {'kind': 'ordinary'})
         self.assertEqual(response.context['page'].paginator.count, 1)
         response = self.client.get(reverse('assignment_list'), {'kind': 'independent', 'q': 'Уравнения'})
