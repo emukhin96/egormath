@@ -31,11 +31,18 @@
         if (number && nextNumber) number.textContent = nextNumber.textContent;
         var actions = row.querySelector('.ws-actions');
         if (actions) actions.replaceWith(fresh.querySelector('.ws-actions'));
-        var visibility = row.querySelector('dialog');
-        if (visibility) visibility.replaceWith(fresh.querySelector('dialog'));
+        // Данные общего диалога видимости живут в атрибутах строки
+        ['number', 'visUrl', 'hiddenLinks', 'hiddenGroups', 'hiddenAssignments'].forEach(function (key) {
+          if (fresh.dataset[key] === undefined) delete row.dataset[key];
+          else row.dataset[key] = fresh.dataset[key];
+        });
       }
       list.appendChild(row);
     });
+    var visibility = document.getElementById('ws-visibility-dialog');
+    if (visibility && !visibility.open && doc.getElementById(visibility.id)) {
+      visibility.replaceWith(doc.getElementById(visibility.id));
+    }
     document.getElementById('ws-undo').innerHTML = doc.getElementById('ws-undo').innerHTML;
     document.getElementById('ws-empty').hidden = freshRows.length > 0;
     document.querySelectorAll('[data-worksheet-item-count]').forEach(function (count) { count.textContent = freshRows.length; });
@@ -154,8 +161,10 @@
   });
 })();
 
-/* Диалог видимости задачи: галочка группы отмечает её учеников, а по
-   ученикам группа показывает состояние (все / часть / никто). */
+/* Диалог видимости задачи — один на страницу (#ws-visibility-dialog):
+   кнопка [data-vis-open] в строке ставит action формы и галочки из
+   data-vis-url и data-hidden-* своей строки. Галочка группы отмечает её
+   учеников, а по ученикам группа показывает состояние (все / часть / никто). */
 (function () {
   function members(toggle) {
     var dialog = toggle.closest('dialog');
@@ -182,11 +191,34 @@
       syncGroups(input.closest('dialog'));
     }
   });
+  function ids(value) {
+    return new Set(String(value || '').split(',').filter(Boolean));
+  }
+  function openVisibility(row) {
+    var dialog = document.getElementById('ws-visibility-dialog');
+    if (!dialog) return;
+    var form = dialog.querySelector('form');
+    form.action = row.dataset.visUrl;
+    dialog.querySelector('[data-vis-number]').textContent = row.dataset.number || '';
+    var hidden = {hide_links: ids(row.dataset.hiddenLinks), hide_groups: ids(row.dataset.hiddenGroups),
+                  hide_assignments: ids(row.dataset.hiddenAssignments)};
+    Object.keys(hidden).forEach(function (name) {
+      form.querySelectorAll('input[name="' + name + '"]').forEach(function (box) {
+        box.checked = hidden[name].has(box.value);
+        box.indeterminate = false;
+      });
+    });
+    syncGroups(dialog);
+    dialog.showModal();
+  }
   document.addEventListener('click', function (e) {
-    var button = e.target.closest('.vis-btn, [data-dialog-open^="vis-"]');
+    var button = e.target.closest('[data-vis-open]');
     if (!button) return;
-    setTimeout(function () {
-      document.querySelectorAll('dialog[id^="vis-"][open]').forEach(syncGroups);
-    }, 0);
+    var row = button.closest('.ws-item');
+    if (!row) return;
+    // Пункт меню «⋯» открывает окно — меню за окном больше не нужно
+    var menu = button.closest('details');
+    if (menu) menu.open = false;
+    openVisibility(row);
   });
 })();
