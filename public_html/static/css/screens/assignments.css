@@ -32,7 +32,7 @@
   /* По умолчанию всё — в тихую строку под плашкой (в том числе кнопка
      доски, которую canvas.js подставляет вместо своего контейнера) */
   .review-work > *,
-  .review-work > .review-live > * { order: 4; margin: 0; }
+  .review-work > .review-live > * { order: 4; margin: 0; align-self: center; }
   .review-work .answer-block {
     order: 1;
     flex: 1 1 300px;
@@ -61,6 +61,11 @@
   .review-work details,
   .review-work > [data-canvas],
   .review-work > .review-comment { order: 4; margin: 0; }
+  /* Плашка (ответ и шкала) — во всю высоту строки, остальное по центру:
+     иначе кнопку доски тянуло на высоту открытой доски */
+  .review-work > * { align-self: center; }
+  .review-work .answer-block,
+  .review-work > .grade-scale { align-self: stretch; }
   .review-work details > summary,
   .review-work .comment-toggle > summary {
     font-size: var(--fs-sm);
@@ -74,6 +79,7 @@
   .review-work details[open],
   .review-work .photo-grid,
   .review-work .review-live > [data-canvas],
+  .review-work > .canvas-widget:not([hidden]),
   .review-work > .review-comment:has(.comment-toggle[open]) { order: 5; flex-basis: 100%; margin-top: var(--space-2); }
   @media (max-width: 760px) {
     .review-work .answer-block { border-radius: 8px; }
