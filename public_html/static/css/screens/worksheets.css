@@ -139,6 +139,9 @@
   }
   .ws-recipients .ws-recipient-link span { margin-left: var(--space-1); }
 
+  /* Символы иконок строк (<use> в меню «⋯» и у глаза видимости) — вне потока */
+  .ws-icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
   /* --- L3: строка задачи в конструкторе --- */
   /* Справа только «+» и «⋯»; строка под задачей — номер серой ссылкой и пометки */
   #ws-items .ws-actions { align-items: center; gap: 2px; }

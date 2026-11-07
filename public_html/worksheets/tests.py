@@ -2046,14 +2046,23 @@ class ShareLinkTests(TestCase):
         self.client.post(url, {'hide_groups': [group.pk]})
         for assignment in assignments:
             self.assertEqual(set(assignment.hidden_items.all()), {first})
-        # В диалоге группа отмечена: задача скрыта у всех её учеников
+        # В диалоге группа отмечена: задача скрыта у всех её учеников.
+        # Диалог один на страницу, галочки строки — в её data-hidden-*
         response = self.client.get(
             reverse('worksheet_detail', args=[self.worksheet.pk]))
+        html = response.content.decode()
         self.assertRegex(
-            response.content.decode(),
+            html,
             rf'name="hide_groups" value="{group.pk}"\s+'
             rf'data-group-toggle="({assignments[0].pk},{assignments[1].pk}'
-            rf'|{assignments[1].pk},{assignments[0].pk})"\s+checked')
+            rf'|{assignments[1].pk},{assignments[0].pk})"')
+        self.assertIn(f'data-id="{first.pk}"', html)
+        row = html.split(f'data-id="{first.pk}"', 1)[1].split('>', 1)[0]
+        self.assertIn(f'data-hidden-groups="{group.pk}"', row)
+        self.assertRegex(
+            row,
+            rf'data-hidden-assignments="({assignments[0].pk},{assignments[1].pk}'
+            rf'|{assignments[1].pk},{assignments[0].pk})"')
         # Снятие галочки группы (POST без hide_groups) снова показывает задачу
         self.client.post(url, {})
         for assignment in assignments:

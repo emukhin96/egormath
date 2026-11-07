@@ -68,6 +68,9 @@ class Worksheet(models.Model):
         verbose_name = 'Листок'
         verbose_name_plural = 'Листки'
         ordering = ['-updated_at']
+        # Списки «последние листки» (корзина, кабинет) читают хвост по
+        # updated_at: без индекса MySQL сортировал всю таблицу.
+        indexes = [models.Index(fields=['updated_at'], name='worksheet_updated_at_idx')]
 
     def __str__(self):
         return self.title

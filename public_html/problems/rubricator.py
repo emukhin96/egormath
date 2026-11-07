@@ -462,13 +462,21 @@ def apply_worksheet_taxonomy(worksheet, post):
 
 
 def expand_topic_ids(raw_ids):
-    """Родительский узел раскрывается во всех потомков (включая себя)."""
+    """Родительский узел раскрывается во всех потомков (включая себя).
+
+    Неизвестные id отбрасываются. Дерево тем читается одним запросом
+    (``Topic.children_map``): рекурсивный обход давал запрос на каждую
+    подтему — ~50 на ``?topic=<раздел>``.
+    """
     ids = parse_int_ids(raw_ids)
     if not ids:
         return []
+    by_parent = Topic.children_map()
+    known = {pk for children in by_parent.values() for pk in children}
     expanded = set()
-    for topic in Topic.objects.filter(pk__in=ids).prefetch_related('children'):
-        expanded.update(topic.descendants_ids())
+    for pk in ids:
+        if pk in known:
+            expanded.update(Topic.subtree_ids(pk, by_parent))
     return list(expanded)
 
 

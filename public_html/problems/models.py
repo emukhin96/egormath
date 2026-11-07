@@ -36,12 +36,32 @@ class Topic(models.Model):
             return f'{self.parent} / {self.name}'
         return self.name
 
-    def descendants_ids(self):
-        """id темы и всех подтем (рекурсивно). Дерево маленькое — рекурсия ок."""
-        ids = [self.pk]
-        for child in self.children.all():
-            ids.extend(child.descendants_ids())
+    @classmethod
+    def children_map(cls):
+        """``{id родителя: [id подтем]}`` для всего дерева одним запросом;
+        подтемы — в порядке ``Meta.ordering``."""
+        by_parent = {}
+        for pk, parent_id in cls.objects.values_list('pk', 'parent_id'):
+            by_parent.setdefault(parent_id, []).append(pk)
+        return by_parent
+
+    @staticmethod
+    def subtree_ids(root_id, by_parent):
+        """id темы ``root_id`` и всех её подтем в глубину по ``children_map``."""
+        ids = []
+
+        def walk(pk):
+            ids.append(pk)
+            for child_pk in by_parent.get(pk, ()):
+                walk(child_pk)
+        walk(root_id)
         return ids
+
+    def descendants_ids(self):
+        """id темы и всех подтем (в глубину). Раньше — запрос на каждый
+        узел; теперь дерево читается одним запросом (аудит быстродействия
+        06.11.2026)."""
+        return self.subtree_ids(self.pk, self.children_map())
 
 
 def topic_tree():

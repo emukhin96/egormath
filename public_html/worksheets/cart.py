@@ -15,6 +15,7 @@
 """
 from django.conf import settings
 from django.contrib import messages
+from django.db.models import Exists, OuterRef
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -29,7 +30,7 @@ from accounts.permissions import cart_tasks
 from problems.models import Task
 from problems.task_blocks import block_members
 
-from .models import Worksheet
+from .models import Collection, Worksheet
 from .views import append_task
 
 SESSION_KEY = 'cart_tasks'
@@ -37,8 +38,17 @@ NEW_TITLE = 'Новый листок'
 
 
 def personal_worksheets(user):
-    """Листки, в которые учитель вправе собирать задачи."""
-    return Worksheet.visible_to(user).filter(collection__isnull=True)
+    """Листки, в которые учитель вправе собирать задачи (не подборки).
+
+    ``NOT EXISTS`` вместо ``collection__isnull=True`` (``LEFT JOIN … IS
+    NULL``): без join, и «последние 30 листков» меню корзины могут идти
+    по индексу ``updated_at``. На копии прода (2 751 подборка из 3 131
+    листка) оптимизатор MySQL всё же сортирует таблицу — ~3 мс в тёплом
+    кэше, как и раньше; выигрыш индекса — у «последних N» без условий
+    (кабинет). Аудит быстродействия 06.11.2026.
+    """
+    collections = Collection.objects.filter(worksheet_id=OuterRef('pk'))
+    return Worksheet.visible_to(user).filter(~Exists(collections))
 
 
 def cart_ids(request):
