@@ -1,13 +1,15 @@
 """Профиль дидактических материалов Мерзляка, базовый уровень.
 
 А. Г. Мерзляк, В. Б. Полонский, Е. М. Рабинович, М. С. Якир.
-«Математика 5, 6», «Алгебра 7–9», «Геометрия 7–9». Дидактические
-материалы (серия «Алгоритм успеха», Вентана-Граф), OCR Mathpix.
+«Математика 5, 6», «Алгебра 7–9», «Геометрия 7–9»; «Алгебра и начала
+математического анализа 10» — Мерзляк, Номировский, Полонский, Якир.
+Дидактические материалы (серия «Алгоритм успеха», Вентана-Граф), OCR Mathpix.
 
 Особенности книг (сверено по ДМ-6 с текстовым слоем):
 
-- «Упражнения» — четыре однотипных варианта с одинаковой нумерацией:
-  № 170 в вариантах 1–4 — аналоги (одна семья, решение Егора 07.11.2026).
+- «Упражнения» — однотипные варианты с одинаковой нумерацией (4 у
+  «Математики», 3 у алгебры): № 170 во всех вариантах — аналоги (одна
+  семья, решение Егора 07.11.2026).
   Внутри варианта — заголовки тем; темы и их первые номера одинаковы во
   всех вариантах и сверены в ``data/merzlyak_dm_structure.json``;
 - «Контрольные работы» — два варианта, в каждом «Контрольная работа № n»
@@ -42,12 +44,14 @@ from .merzlyak_parser import (
 from .potoskuev_parser import _finish_fields, lift_common_tail, monotonic_numbers
 from .textbook_parser import (
     Marker, TaskDraft, blocks, finalize_draft_images, numeric_subitem_labels,
-    remove_group_commands, task_from_block)
+    read_group, remove_group_commands, task_from_block)
 from .volchkevich_parser import canon_fields
+from .vysotsky_parser import apply_source_repairs
 
 
 PROFILE = "merzlyak_dm"
 STRUCTURE_PATH = Path(__file__).with_name("data") / "merzlyak_dm_structure.json"
+REPAIRS_PATH = Path(__file__).with_name("data") / "merzlyak_dm_repairs.json"
 
 EXERCISES_TITLE = "Упражнения"
 TESTS_TITLE = "Контрольные работы"
@@ -66,8 +70,10 @@ RUNNING_LINE_RE = re.compile(
     r"[ \t]*(?:\\\\)?[ \t]*$\n?")
 # Номер страницы отдельной строкой.
 PAGE_NUMBER_RE = re.compile(r"(?m)^[ \t]*\d{1,3}[ \t]*(?:\\\\)?[ \t]*$\n?")
-HEADING_RE = re.compile(r"(?m)^[ \t]*" + _SECTION + r"(?P<title>(?:[^{}]|\{[^{}]*\})*)\}[ \t]*$")
 TASK_RE = re.compile(r"(?m)^[ \t]*(?P<number>\d{1,3})[ \t]?\.(?=\s)")
+# После контрольных: оглавление, справочный материал, ответы.
+BOOK_END_RE = re.compile(
+    r"(?m)^[ \t]*" + _SECTION + r"\s*(?:Содержание|Справочный\s+материал|Ответы)\b")
 THEME_RE = re.compile(r"^\s*(?:" + _SECTION + r")?\s*Тема\s*\.\s*")
 BOOK_RE = re.compile(
     r"(?P<subject>Математика|Алгебра|Геометрия)\s*[.:,]?\s*(?P<grade>\d{1,2})\s*(?:-?\s*й\s+)?класс",
@@ -86,6 +92,10 @@ def detect_book(text: str, structure: dict | None = None) -> dict | None:
     """Книга по титулу: первое «Математика : 6 класс» до упражнений."""
     structure = structure or load_structure()
     head = text[:max(4000, text.find("Вариант 1") + 1)]
+    # Книга без титула в TEX (Алгебра 10) — по фразе из «От авторов».
+    for book in structure["books"]:
+        if book.get("detect") and re.search(book["detect"], head):
+            return book
     match = BOOK_RE.search(head)
     if not match:
         return None
@@ -109,16 +119,17 @@ _EXPLICIT_NUMBER_RE = re.compile(r"(?m)^[ \t]*(?P<number>\d{1,3})\s?\.(?=\s)")
 def flatten_lists(text: str) -> str:
     """Списки Mathpix → строки «N. …» (задачи) и «k) …» (пункты).
 
-    Внешний ``enumerate`` — номера задач: счётчик OCR (``\\setcounter``)
-    и явные номера «12.» в тексте между пунктами дают следующий номер.
-    Вложенный список — пункты задачи «1) 2) 3)».
+    Задачи у Mathpix — ``\\item[12.]``; ``enumerate`` с пунктами без меток —
+    либо номера задач (счётчик ``\\setcounter{enumi}{122}`` подходит к
+    текущему номеру, текст пункта — слова), либо пункты задачи: продолжение
+    после колонки («\\setcounter{enumi}{4}» при задаче 121 — пункты 5, 6, …)
+    или пункты формулами сразу после условия «Решите уравнение:».
+    Вложенный список — всегда пункты.
     """
     out = []
     pos = 0
-    depth = 0
-    counter = 0
-    last = 0
-    inner: list[int] = []
+    last = 0          # последний номер задачи
+    stack: list[list] = []  # [режим "tasks"|"items", счётчик]
 
     def seen(chunk: str) -> None:
         nonlocal last
@@ -128,51 +139,351 @@ def flatten_lists(text: str) -> str:
             if last < number <= last + 8 or number < min(last, 3):
                 last = number
 
+    def list_mode(after: int) -> list:
+        """Режим верхнего ``enumerate`` по счётчику и первому пункту."""
+        head = text[after:after + 400]
+        counter = re.match(r"\s*\\setcounter\{enumi\}\{(\d+)\}", head)
+        item = re.search(r"\\item(?:\[[^\]]*\])?\s*(?P<body>.{0,30})", head, re.S)
+        wordy = bool(item and re.match(r"[А-ЯЁ][а-яё]", item.group("body")))
+        if counter:
+            value = int(counter.group(1))
+            if wordy and last - 3 <= value and (value <= last + 8 or last == 0):
+                return ["tasks", value]
+            return ["items", value]
+        return ["tasks", last] if wordy else ["items", 0]
+
     for match in _LIST_TOKEN_RE.finditer(text):
         chunk = text[pos:match.start()]
         out.append(chunk)
-        if depth <= 1:
+        if not stack or stack[0][0] == "tasks":
             seen(chunk)
         pos = match.end()
         token = match.group(0)
         if match.group("begin"):
-            depth += 1
-            if depth > 1:
-                inner.append(0)
+            if match.group("begin") == "enumerate" and not stack:
+                stack.append(list_mode(match.end()))
             else:
-                counter = 0
+                stack.append(["items", 0] if stack else ["tasks", last])
             out.append("\n")
         elif token.startswith("\\end"):
-            if depth > 1 and inner:
-                inner.pop()
-            depth = max(0, depth - 1)
+            if stack:
+                stack.pop()
             out.append("\n")
         elif match.group("depth"):
-            value = int(match.group("value"))
-            if len(match.group("depth")) == 1:
-                # Счётчик OCR надёжнее номеров предыдущего списка.
-                counter = last = value
-            elif inner:
-                inner[-1] = value
+            if stack and len(match.group("depth")) == len(stack):
+                stack[-1][1] = int(match.group("value"))
         elif match.group("label") is not None:
             label = match.group("label").strip()
             out.append("\n" + label + " " if label else "\n")
-            if depth <= 1:
+            if not stack or stack[0][0] == "tasks":
                 seen(label + " ")
-        elif depth > 1 and inner:
-            inner[-1] += 1
-            out.append(f"\n{inner[-1]}) ")
-        elif depth:
-            number = max(counter, last) + 1
-            counter = last = number
-            out.append(f"\n{number}. ")
+        elif stack:
+            mode = stack[-1]
+            if len(stack) == 1 and mode[0] == "tasks":
+                number = max(mode[1], last) + 1
+                mode[1] = last = number
+                out.append(f"\n{number}. ")
+            else:
+                mode[1] += 1
+                out.append(f"\n{mode[1]}) ")
         else:
             out.append("\n")
     out.append(text[pos:])
     return "".join(out)
 
 
-def prepare_text(text: str) -> str:
+_LATIN_TO_CYRILLIC = str.maketrans("acepoxyACEHKMOPTX", "асеролуАСЕНКМОРТХ")
+# Опечатки OCR в словах книг (сверено по TEX Mathpix 08.11.2026).
+OCR_WORDS = {
+    "аначен": "значен", "Аначен": "Значен", "ураннен": "уравнен", "фуннц": "функц",
+    "графин ": "график ", "поназател": "показател", "Спожение": "Сложение",
+    "Состввьте": "Составьте", "имяет": "имеет", "алreбр": "алгебр", "сонращ": "сокращ",
+}
+# Искажённые слова целиком (вычитка ДМ 7, 08.11.2026): только с границами слова.
+OCR_WHOLE_WORDS = {
+    "сранните": "сравните", "звачение": "значение", "равеиство": "равенство", "пропёл": "прошёл",
+    "пагревания": "нагревания", "равпо": "равно", "пайдите": "найдите", "Пайдите": "Найдите",
+    "знячение": "значение", "знячения": "значения", "произнедение": "произведение",
+    "равпые": "равные", "значепия": "значения", "значепиях": "значениях", "Нвляется": "Является",
+    "выряжение": "выражение", "кнадрата": "квадрата", "кнадрат": "квадрат", "уравиение": "уравнение",
+    "Иавестно": "Известно", "Пользулсь": "Пользуясь", "польаулсь": "пользуясь", "черев": "через",
+    "каждото": "каждого", "нядо": "надо", "сумми": "суммы", "степепи": "степени",
+    "проивведения": "произведения", "оспованием": "основанием", "ныражение": "выражение",
+    "зтих": "этих", "одночленями": "одночленами", "ныше": "выше", "повыщалась": "повышалась",
+    "снорость": "скорость", "ранный": "равный", "коитейнера": "контейнера", "стецени": "степени",
+    "принимеет": "принимает", "зпачение": "значение", "зпачения": "значения", "циф": "цифр",
+}
+# Контекстные: слово само по себе бывает правильным.
+OCR_PHRASES = {
+    "На авводе изготовили дна вида": "На заводе изготовили два вида",
+    "не имеет решении": "не имеет решений",
+}
+_NAMED_FUNCTIONS = {"sin", "cos", "tg", "ctg", "arcsin", "arccos", "arctg", "arcctg", "log", "lg", "ln"}
+
+
+def _operator_name(match: re.Match) -> str:
+    """«\\operatorname { a r c s i n }» → «\\arcsin», «tg» → «\\operatorname{tg}»."""
+    name = re.sub(r"\s+", "", match.group("name"))
+    if name in {"sin", "cos", "arcsin", "arccos", "log", "lg", "ln"}:
+        return "\\" + name + " "
+    return "\\operatorname{" + name + "}" if name in _NAMED_FUNCTIONS else match.group(0)
+
+
+def heal_bold_math(text: str) -> str:
+    """Жирные цифры и буквы Mathpix: «\\mathbf{1 6}» → «16», «\\boldsymbol{\\pi}» → «\\pi»."""
+    # «\\mathbf{1}, \\mathbf{2 1}» и «\\mathbf{0 , 2 5}» — десятичная дробь.
+    text = re.sub(r"\\mathbf\{\s*(\d+)\s*\}\s*,\s*\\mathbf\{\s*(\d(?:\s*\d)*)\s*\}",
+                  lambda m: m.group(1) + "{,}" + re.sub(r"\s+", "", m.group(2)), text)
+    text = re.sub(r"\\mathbf\{\s*(\d(?:\s*\d)*)\s*,\s*(\d(?:\s*\d)*)\s*\}",
+                  lambda m: re.sub(r"\s+", "", m.group(1)) + "{,}" + re.sub(r"\s+", "", m.group(2)), text)
+    text = re.sub(r"\\mathbf\{\s*(\d(?:\s*\d)*)\s*\}", lambda m: re.sub(r"\s+", "", m.group(1)), text)
+    # N, Z, Q, R — числовые множества (в книге одним шрифтом).
+    text = re.sub(r"\\(?:mathbf|boldsymbol)\{\s*([A-Za-z]|\\pi)\s*\}",
+                  lambda m: f"\\mathbb{{{m.group(1)}}}" if m.group(1) in "NZQR" else m.group(1), text)
+    text = re.sub(r"\\boldsymbol\{\s*(\\operatorname\s*\{[^{}]*\})\s*\}", r"\1", text)
+    return re.sub(r"\\operatorname\s*\{(?P<name>\s*[a-z](?:\s*[a-z])*\s*)\}", _operator_name, text)
+
+
+# Позиция метки пункта: начало строки, после «\\», «;», «:» или «\item[».
+_LABEL_LEAD = r"(?m)(?P<lead>(?:^|\\\\|[;:]|\\item\[\][ \t]*|\\item\[)[ \t]*)"
+
+
+def heal_item_labels(text: str) -> str:
+    """Метки пунктов, испорченные OCR.
+
+    - «з)» вместо «3)»: буквенных меток дальше «е)» в книгах нет;
+    - метка внутри формулы: «\\(5)-5,4 \\in N\\)», «\\(\\displaystyle 2)\\left(…\\)».
+    """
+    text = re.sub(_LABEL_LEAD + r"[зЗ]\)", r"\g<lead>3)", text)
+    # «\\(\\left.[-1 ; 2] ; 2\\right)(-\\infty ; 0]\\)» — метка «2)» стала скобкой.
+    text = re.sub(r"\\left\.(?P<body>[^\n]*?)[;,]\s*(?P<label>\d{1,2})\\right\)",
+                  r"\g<body>\\); \g<label>) \\(", text)
+    return re.sub(_LABEL_LEAD + r"\\\(\s*(?P<ds>\\displaystyle\s*)?(?P<label>\d{1,2})\)\s*",
+                  lambda m: m.group("lead") + m.group("label") + ") \\(" + (m.group("ds") or ""), text)
+
+
+_UNITS_ONLY_RE = re.compile(
+    r"(?:\s|~|\d|[,;.]|\^\{[23]\}|(?<![а-яё])(?:мм|см|дм|км|кг|мин|га|м|а|г|т|ц|ч|с|л)(?![а-яё]))+")
+
+
+_INF_RE = re.compile(r"\\\(\s*([+-]?)\s*\\infty\s*\\\)")
+_INTERVAL_RE = re.compile(
+    r"(?<![\w\\$])([\[(])\s*(-?\s?\d+(?:,\d+)?|\x00-\x00)\s*;\s*"
+    r"(\+?\s*-?\d+(?:,\d+)?|\+?\s*\x00\+?\x00)\s*([\])])")
+
+
+def wrap_prose_intervals(text: str) -> str:
+    """«[-4; 2)», «(-4; + ∞)» вне формул → «\\([-4; 2)\\)»."""
+    text = _INF_RE.sub(lambda m: "\x00" + m.group(1) + "\x00", text)
+
+    def end(value: str) -> str:
+        value = re.sub(r"\s", "", value)
+        return re.sub(r"\x00([+-]?)\x00", lambda m: m.group(1) + "\\infty ", value).strip()
+
+    def prose(chunk: str) -> str:
+        return _INTERVAL_RE.sub(
+            lambda m: "\\(" + m.group(1) + end(m.group(2)) + "; " + end(m.group(3)) + m.group(4) + "\\)", chunk)
+
+    out, pos = [], 0
+    for span in MATH_SPAN_RE.finditer(text):
+        out.append(prose(text[pos:span.start()]))
+        out.append(span.group(0))
+        pos = span.end()
+    out.append(prose(text[pos:]))
+    return re.sub(r"\x00([+-]?)\x00", r"\\(\1\\infty\\)", "".join(out))
+
+
+_DELIMITER_RE = re.compile(r"(?<!\\)\$\$|(?<!\\)\$|\\[()\[\]]")
+
+
+def math_delimiters_broken(value: str) -> bool:
+    """Вложенные или незакрытые \\( \\) \\[ \\] $ $$ — LaTeX такое не соберёт."""
+    open_token = None
+    pairs = {"\\(": "\\)", "\\[": "\\]", "$": "$", "$$": "$$"}
+    for match in _DELIMITER_RE.finditer(value or ""):
+        token = match.group(0)
+        if open_token is None:
+            if token in pairs:
+                open_token = token
+            else:
+                return True
+        elif token == pairs[open_token]:
+            open_token = None
+        else:
+            return True
+    return open_token is not None
+
+
+def heal_math_details(text: str) -> str:
+    """Мелочи формул OCR (сверено вычиткой ДМ 5 и 8, 08.11.2026)."""
+    # Единицы, разорванные OCR: «к м^{2}», «4 м м», «\\mathrm{kM} / \\mathrm{u}».
+    text = re.sub(r"(?<![а-яёА-ЯЁA-Za-z\\])([кcсдм]) м(?=[\s^;,.}\\)$]|$)",
+                  lambda m: {"c": "с"}.get(m.group(1), m.group(1)) + "м", text)
+    text = re.sub(r"\\mathrm\{kM\}\s*/\s*\\mathrm\{u\}", r"\\text{км/ч}", text)
+    text = re.sub(r"\s*/\s*\\mathrm\{u\}", r"\\text{/ч}", text)
+    text = text.replace("\\mathrm{мm}", "\\text{мм}")
+    # «4 дм \\({ }^{3} 126\\) см³» — степень единицы ушла в формулу.
+    text = re.sub(r"(?<=[а-яё])\s*\\\(\s*\{\s*\}\^\{([23])\}\s*([^\\]*?)\s*\\\)",
+                  lambda m: "$^{" + m.group(1) + "}$" + (" " + m.group(2) if m.group(2) else ""), text)
+    text = re.sub(r"(?<=[а-яё])²", "$^{2}$", text)
+    text = re.sub(r"(?<=[а-яё])³", "$^{3}$", text)
+
+    def in_math(span: re.Match) -> str:
+        value = span.group(0)
+        inner = re.sub(r"^\\\(|\\\)$", "", value)
+        # «\\(340000 м^{2} ; 56 км^{2} ; 4 км^{2} 17\\)» — числа с единицами,
+        # а не формула: единицы текстом, числа обернёт канон.
+        if (value.startswith("\\(") and re.search(r"[а-яё]", inner) and re.search(r"\d", inner)
+                and _UNITS_ONLY_RE.fullmatch(inner)):
+            inner = re.sub(r"\^\{([23])\}", r"$^{\1}$", inner.replace("~", " "))
+            return re.sub(r"\s*;\s*", "; ", re.sub(r"\s+", " ", inner)).strip()
+        # «\\{8,12\\}» — перечисление элементов, не десятичная дробь.
+        value = re.sub(r"\\\{([^{};]*?)\\\}",
+                       lambda m: "\\{" + re.sub(r"(?<=\d),(?=-?\d)", ", ", m.group(1)) + "\\}", value)
+        # Две оценки в одной формуле: «30<a<50,10<b<40», «tg β=1,5,0<α».
+        value = re.sub(r"(?<=\d),(?=-?\d+(?:\^\{?\\circ\}?)?\s*(?:<|>|\\leq|\\geq|\\leqslant|\\geqslant|\\le\b|\\ge\b)\s*\\?[A-Za-z])",
+                       ", ", value)
+        # Ряд чисел «1,9,25,49» — запятые-разделители (в десятичной дроби одна).
+        value = re.sub(r"(?<![\d,.{])\d+(?:,\d+){2,}(?![\d,])",
+                       lambda m: m.group(0).replace(",", ", "), value)
+        # «4.5» — десятичная точка OCR; «\\simeq» — «=».
+        value = re.sub(r"(?<=\d)\.(?=\d)", ",", value).replace("\\simeq", "=")
+        # Периодическая дробь «5,(16)».
+        value = re.sub(r"(?<=\d),(?=\(\d+\))", "{,}", value)
+        # «8 \\in N» — числовые множества.
+        value = re.sub(r"(\\(?:not)?in|\\subset)\s*([NZQ])(?![\w{])", r"\1 \\mathbb{\2}", value)
+        return value
+
+    text = MATH_SPAN_RE.sub(in_math, text)
+    # Черта корня, прочитанная как черта над переменной: «\\sqrt{64 \\bar{a}}».
+    out, pos = [], 0
+    for match in re.finditer(r"\\sqrt(?:\[[^\]]*\])?\{", text):
+        if match.start() < pos:
+            continue
+        try:
+            body, end = read_group(text, match.end() - 1)
+        except ValueError:
+            continue
+        fixed = re.sub(r"\\bar\{([a-z])\}", r"\1", body)
+        fixed = re.sub(r"\\overline\{([^{}]*)\}", r"\1", fixed)
+        out.append(text[pos:match.end()] + fixed + "}")
+        pos = end
+    out.append(text[pos:])
+    text = "".join(out)
+    # Перенос по знаку, хвост формулы голым текстом: «\\(x^{2}-4 x-\\) -10 = 0».
+    text = re.sub(r"(?P<sign>[-+=])\s*\\\)\s*(?P=sign)\s*(?P<tail>[\dA-Za-z][\dA-Za-z \t=+\-^]*?)(?=\s*(?:[.;,]|$))",
+                  r"\g<sign>\g<tail>\)", text, flags=re.M)
+    # «(-2,8) \\({ }^{4}\\)» — показатель степени оторван от скобки.
+    text = re.sub(r"(\([^()\n]{1,30}\))\s*\\\(\s*\{\s*\}\^\{([^{}]+)\}\s*\\\)", r"\\(\1^{\2}\\)", text)
+    # Промежуток прозой: «[-4; 2)», «(-4; + \\(\\infty\\))» — только вне формул:
+    # внутри \\(…\\) обёртка дала бы вложенную формулу (LaTeX падает).
+    text = wrap_prose_intervals(text)
+    # Латиница в единицах: «2 m» → «2 м».
+    text = re.sub(r"(?<=\d) m(?=[\s.,;]|$)", " м", text)
+    # Периодическая дробь прозой: «6,(23)».
+    return re.sub(r"(?<![\w.,$\\])(-?\d+),\((\d+)\)", r"\\(\1{,}(\2)\\)", text)
+
+
+# Арифметика прозой: «28 • 13-4 228: 14», «608 • 76» — «•» значит умножение.
+_ARITH_RE = re.compile(r"(?<![\w,$\\{])\(*-?\d[\d \t,()\-−+•·⋅:]*[\d)]")
+
+
+def _arith_inner(expr: str) -> str:
+    inner = re.sub(r"\s*[•·⋅]\s*", r" \\cdot ", expr).replace("−", "-")
+    inner = re.sub(r"(?<![\w,.])\d+(?: \d{3})+(?!\d)|(?<![\w,.])\d{5,}(?![\w]|[.,]\d)",
+                   lambda m: thin_groups(m.group(0)), inner)
+    return inner.strip()
+
+
+# Пункт целиком из чисел и знаков: «7,3 - 5,8», «(12 078+1485)+(6922+3515)».
+_PURE_ARITH_RE = re.compile(r"\(*-?\d[\d \t,()+\-−•·⋅:=<>]*")
+_HAS_OPERATOR_RE = re.compile(r"[\d)]\s*[-−+•·⋅:=<>]\s*\(?-?\d")
+# Метка пункта в начале куска прозы — граница кусков.
+_PIECE_SPLIT_RE = re.compile(
+    r"((?:^|(?<=\n)|(?<=;)|(?<=:)|(?<=\\\\))[ \t]*\d{1,2}\)[ \t]+|;[ \t]*|\\\\|\n)")
+# Минус между величинами с единицами: «54 м 24 см - 18 м 19 см».
+_QUANTITY_MINUS_RE = re.compile(
+    r"(\d(?:[ \t](?:мм|см|дм|км|кг|мин|га|м|г|т|ц|ч|с|л))?)[ \t]+[-–][ \t]+(?=\d)")
+
+
+def _arith_piece(piece: str) -> str:
+    body = piece.strip()
+    core = body.rstrip(".,?! \t")
+    if core and _PURE_ARITH_RE.fullmatch(core) and _HAS_OPERATOR_RE.search(core):
+        lead = piece[:len(piece) - len(piece.lstrip())]
+        tail = piece[len(lead) + len(core):]
+        return lead + "\\(" + _arith_inner(core) + "\\)" + tail
+    piece = _ARITH_RE.sub(_inline_arith, piece)
+    return _QUANTITY_MINUS_RE.sub(r"\1 $-$ ", piece)
+
+
+def _inline_arith(match: re.Match) -> str:
+    expr = match.group(0)
+    if not re.search(r"[•·⋅]", expr) and not re.search(r"\d\s*:\s*\(?-?\d", expr):
+        return expr
+    tail = ""
+    while expr.endswith(")") and expr.count(")") > expr.count("("):
+        expr, tail = expr[:-1], ")" + tail
+    stripped = expr.rstrip(" ,")
+    tail = expr[len(stripped):] + tail
+    return "\\(" + _arith_inner(stripped) + "\\)" + tail
+
+
+def wrap_bare_arithmetic(value: str) -> str:
+    """Арифметика вне формул — одной формулой, а не по числам.
+
+    Пункт целиком из чисел и знаков («7,3 - 5,8») и выражение со знаком «•»
+    (так OCR читает точку умножения) или делением «a : b» → «\\(…\\)».
+    Многострочные выносные формулы не трогаются.
+    """
+    def prose(chunk: str) -> str:
+        parts = _PIECE_SPLIT_RE.split(chunk)
+        return "".join(part if index % 2 else _arith_piece(part)
+                       for index, part in enumerate(parts))
+
+    out, pos = [], 0
+    for span in MATH_SPAN_RE.finditer(value):
+        out.append(prose(value[pos:span.start()]))
+        out.append(span.group(0))
+        pos = span.end()
+    out.append(prose(value[pos:]))
+    return "".join(out)
+
+
+def restore_stars(body: str) -> str:
+    """Задачи со звёздочками вместо цифр: Mathpix читает пару «*…*» как
+    курсив (``\\textit{…}``), иногда через границы пунктов. Звёздочки
+    возвращаются, числа со звёздочками — в формулу: «63 ***» → «\\(63{*}{*}{*}\\)»."""
+    if not re.search(r"звёздоч|звездоч", body):
+        return body
+    while "\\textit{" in body:  # бывает вложенный: «**\\textit{;\\\\ 3) * \\textit{1} и 99}»
+        match = re.search(r"\\textit\{", body)
+        try:
+            content, end = read_group(body, match.end() - 1)
+        except ValueError:
+            break
+        body = body[:match.start()] + "*" + content + "*" + body[end:]
+    body = re.sub(r"\^\{\s*\*\s*\}", "*", body)
+
+    def star(match: re.Match) -> str:
+        token = re.sub(r"\s+", "", match.group(0))
+        return "\\(" + token.replace(",", "{,}").replace("*", "{*}") + "\\)"
+
+    def prose(chunk: str) -> str:
+        return re.sub(r"(?<![\w{*,])(?=[\d*, ]*\*)[\d*][\d*,]*(?: [\d*][\d*,]*)*", star, chunk)
+
+    parts, pos = [], 0
+    for span in MATH_SPAN_RE.finditer(body):
+        parts.append(prose(body[pos:span.start()]))
+        math = re.sub(r"(?<![{^])\*", "{*}", span.group(0))
+        parts.append(re.sub(r"(?<=\d),\s*(?=\{\*\})|(?<=\d),(?=\d)", "{,}", re.sub(r"\{\*\}\s+(?=\d)", "{*}", math)))
+        pos = span.end()
+    parts.append(prose(body[pos:]))
+    # «\\(3454>3\\) \\(4{*}9\\)» — число разорвано между формулами.
+    return re.sub(r"(\d)\\\)[ \t]+\\\((?=[\d{])", r"\1", "".join(parts))
+
+
+def prepare_text(text: str, figures: "Figures | None" = None) -> str:
     text = text.replace("\r\n", "\n")
     begin = text.find("\\begin{document}")
     if begin >= 0:
@@ -180,13 +491,34 @@ def prepare_text(text: str) -> str:
     text = text.replace("\\end{document}", "")
     text = re.sub(r"\\textbackslash\s+item", r"\\item", text)
     text = _unwrap_footnotes(text)
+    text = heal_item_labels(text)
     text = flatten_lists(text)
     text = re.sub(r"\\\\\[0pt\]", r"\\\\", text)
     text = re.sub(r"\\includegraphics(?:\[[^\]]*\])?\{image-not-found\}", "", text)
     text = _heal_numeric_item_labels(text)
+    # «На рисунке \(11 \angle A B C=54^{\circ}\)» — номер рисунка ушёл в формулу.
+    text = re.sub(r"(?i)(рисун\w*|рис\.)\s*\\\(\s*(\d{1,3})\s+(?=\\|[A-Za-z])", r"\1 \2 \\(", text)
+    if figures is not None:
+        # До tabular → array: таблица «Рис. 2 & Рис. 3» над картинками.
+        text = extract_figure_tables(text, figures)
     text = _tabular_to_array(text)
     text = _join_hyphenation(text)
+    # До _heal_ocr_words: тот снимает \boldsymbol{R}, а это множество ℝ.
+    text = heal_bold_math(text)
     text = _heal_ocr_words(text)
+    text = heal_math_details(text)
+    for wrong, right in OCR_WORDS.items():
+        text = text.replace(wrong, right)
+    for wrong, right in OCR_PHRASES.items():
+        text = text.replace(wrong, right)
+    text = re.sub(r"(?<![а-яёА-ЯЁ])(" + "|".join(OCR_WHOLE_WORDS) + r")(?![а-яёА-ЯЁ])",
+                  lambda m: OCR_WHOLE_WORDS[m.group(1)], text)
+    # Латинские двойники в начале русского слова: «apбуза», «cм»; «250 p.» — рубли.
+    text = re.sub(r"(?<![\w\\{])([acepoxyACEHKMOPTX]{1,3})(?=[а-яё]{1,})",
+                  lambda m: m.group(1).translate(_LATIN_TO_CYRILLIC), text)
+    text = re.sub(r"(?<=\d) p\.", " р.", text)
+    # Украинская «є» в русском слове («Разложитє»).
+    text = re.sub(r"(?<=[а-яё])є|є(?=[а-яё])", "е", text)
     return re.sub(r"\n{3,}", "\n\n", text)
 
 
@@ -227,20 +559,68 @@ class Figures:
             paths.append(path)
 
 
+def register_figures(figures: Figures, numbers: list[str], paths: list[str]) -> str:
+    """Рисунки с подписью → ``\\dmfig{N}``; без подписи — картинки как есть."""
+    if not numbers or not paths:
+        return "\n".join(f"\\includegraphics{{{path}}}" for path in paths)
+    if len(paths) == len(numbers):
+        pairs = list(zip(numbers, paths))
+    else:
+        # Mathpix склеил соседние рисунки в одну картинку (или наоборот).
+        figures.merged.append(", ".join(numbers))
+        pairs = [(number, path) for number in numbers for path in paths]
+    for number, path in pairs:
+        figures.add(number, path)
+    return "\n" + "".join(FIGURE_TOKEN.format(n) for n in dict.fromkeys(numbers)) + "\n"
+
+
+TABULAR_RE = re.compile(
+    r"\\begin\{tabular\}(?:\[[^\]]*\])?\{[^{}]*\}(?P<body>.*?)\\end\{tabular\}", re.S)
+
+
+def extract_figure_tables(text: str, figures: Figures) -> str:
+    """Таблица рисунков Mathpix: строка «Рис. 2 & Рис. 3», под ней картинки.
+
+    Подпись и картинка — в одной колонке, подпись в ближайшей строке выше
+    (или ниже). Таблицы, где есть другой текст, остаются таблицами.
+    """
+    def fix(match: re.Match) -> str:
+        body = match.group("body")
+        if "\\includegraphics" not in body or "\\begin{tabular}" in body:
+            return match.group(0)
+        rows = [row.split("&") for row in re.split(r"\\\\", body.replace("\\hline", " "))]
+        captions: dict[tuple[int, int], list[str]] = {}
+        pictures: dict[tuple[int, int], list[str]] = {}
+        for r, row in enumerate(rows):
+            for c, cell in enumerate(row):
+                paths = [m.group("path") for m in GRAPHICS_RE.finditer(cell)]
+                numbers = CAPTION_NUMBERS_RE.findall(cell)
+                rest = GRAPHICS_RE.sub("", CAPTION_NUMBERS_RE.sub("", cell)).strip()
+                if rest:
+                    return match.group(0)
+                if paths:
+                    pictures[(r, c)] = paths
+                elif numbers:
+                    captions[(r, c)] = numbers
+        if not captions:
+            return match.group(0)
+        out = []
+        for (r, c), paths in sorted(pictures.items()):
+            column = sorted(row for row, col in captions if col == c)
+            above = [row for row in column if row < r]
+            below = [row for row in column if row > r]
+            row = above[-1] if above else (below[0] if below else None)
+            numbers = captions.get((row, c), []) if row is not None else []
+            out.append(register_figures(figures, numbers, paths))
+        return "\n" + "\n".join(out) + "\n"
+
+    return TABULAR_RE.sub(fix, text)
+
+
 def extract_figures(text: str, figures: Figures) -> str:
     """Подписанные рисунки → ``\\dmfig{N}`` на их месте; без подписи — как есть."""
     def register(numbers: list[str], paths: list[str]) -> str:
-        if not numbers or not paths:
-            return "\n".join(f"\\includegraphics{{{path}}}" for path in paths)
-        if len(paths) == len(numbers):
-            pairs = list(zip(numbers, paths))
-        else:
-            # Mathpix склеил соседние рисунки в одну картинку (или наоборот).
-            figures.merged.append(", ".join(numbers))
-            pairs = [(number, path) for number in numbers for path in paths]
-        for number, path in pairs:
-            figures.add(number, path)
-        return "\n" + "".join(FIGURE_TOKEN.format(n) for n in dict.fromkeys(numbers)) + "\n"
+        return register_figures(figures, numbers, paths)
 
     def env(match: re.Match) -> str:
         block = match.group(0)
@@ -319,7 +699,8 @@ def extract_figures(text: str, figures: Figures) -> str:
                 pos = pick.start() + len(token) + (start - pick.end())
 
     text = stray(text)
-    text = re.sub(r"\\(?:begin|end)\{center\}", "", text)
+    # Обёртки float без картинок (рисунки уже вынесены) — не нужны условию.
+    text = re.sub(r"\\(?:begin|end)\{(?:center|table|figure)\}(?:\[[^\]]*\])?", "", text)
     return remove_group_commands(text, re.compile(r"\\captionsetup\s*\{"))
 
 
@@ -385,28 +766,34 @@ def replace_figure_refs(body: str, figures: Figures) -> tuple[str, list[str]]:
 # Разряды «4 325», «20 104 050»: книга отделяет тысячи пробелом, OCR даёт
 # обычный или неразрывный пробел. Иначе канон обернёт части порознь:
 # «$4$ $325$».
+# Разряды: «4 325», «20 104 050», а также как попало у OCR — «3616 356»
+# (книга: 3 616 356) и «3617009». Число от пяти цифр — с тонкими пробелами.
 _THOUSANDS_RE = re.compile(
-    r"(?<![\d.,{}\\])(?P<num>\d{1,3}(?:[ \u00a0\u2009\u202f]\d{3})+)(?![\d]|[.,]\d)")
+    r"(?<![\w.,{}\\-])(?P<num>\d{1,4}(?:[ \u00a0\u2009\u202f]\d{3})+|\d{5,})(?![\w]|[.,]\d)")
 _MATH_NUMBER_RE = re.compile(
-    r"^(?P<open>\\\(|\$)\s*(?P<num>\d{1,3}(?:\s*(?:\\,|\\ |~)?\s*\d{3})+)\s*(?P<close>\\\)|\$)$")
+    r"^(?P<open>\\\(|\$)\s*(?P<num>\d{1,4}(?:\s*(?:\\,|\\ |~)?\s*\d{3})+)\s*(?P<close>\\\)|\$)$")
+
+
+def thin_groups(digits: str) -> str:
+    """«3616356» → «3\\,616\\,356»."""
+    digits = re.sub(r"\\,|\\ |~|\s", "", digits)
+    groups = []
+    while digits:
+        groups.insert(0, digits[-3:])
+        digits = digits[:-3]
+    return r"\,".join(groups)
 
 
 def group_thousands(value: str) -> str:
     """«4 325» → «$4\\,325$» в тексте и в формуле из одного числа."""
     def prose(chunk: str) -> str:
-        return _THOUSANDS_RE.sub(
-            lambda m: "$" + re.sub(r"\s+", r"\\,", m.group("num")) + "$", chunk)
+        return _THOUSANDS_RE.sub(lambda m: "$" + thin_groups(m.group("num")) + "$", chunk)
 
     def math(span: str) -> str:
         match = _MATH_NUMBER_RE.match(span)
         if not match:
             return span
-        digits = re.sub(r"\\,|\\ |~|\s", "", match.group("num"))
-        groups = []
-        while digits:
-            groups.insert(0, digits[-3:])
-            digits = digits[:-3]
-        return match.group("open") + r"\,".join(groups) + match.group("close")
+        return match.group("open") + thin_groups(match.group("num")) + match.group("close")
 
     out, pos = [], 0
     for span in MATH_SPAN_RE.finditer(value):
@@ -534,19 +921,63 @@ def _similar(a: str, b: str) -> float:
     return SequenceMatcher(None, norm(a), norm(b)).ratio()
 
 
+_SECTION_START_RE = re.compile(r"(?m)^[ \t]*" + _SECTION)
+
+
+def heading_text(title: str) -> str:
+    """«Ряд натуральных чисел. \\\\ Десятичная…», «\\(\\frac{\\text { A }}{\\text { B }}\\)» → текст."""
+    title = re.sub(r"\\text\s*\{([^{}]*)\}", r" \1 ", title)
+    title = re.sub(r"\\\\|\\frac|\\[()\[\]]|[{}]", " ", title)
+    return re.sub(r"\s+", " ", title).strip()
+
+
+def headings(text: str) -> list[tuple[int, int, str]]:
+    """``\\section*{…}`` отдельной строкой: (начало, конец, текст заголовка)."""
+    found = []
+    for match in _SECTION_START_RE.finditer(text):
+        try:
+            title, end = read_group(text, match.end() - 1)
+        except ValueError:
+            continue
+        line_end = text.find("\n", end)
+        if text[end:line_end if line_end >= 0 else len(text)].strip():
+            continue
+        found.append((match.start(), end, heading_text(title)))
+    return found
+
+
+def replace_headings(text: str) -> str:
+    """Заголовки посреди условия (подпись диаграммы, таблицы) — текстом."""
+    for start, end, title in reversed(headings(text)):
+        text = text[:start] + title + text[end:]
+    return text
+
+
 def split_trailing_headings(body: str) -> tuple[str, list[str]]:
     """Заголовки в конце блока — тема следующей задачи; внутри — текст."""
-    headings = []
+    found = []
     while True:
-        match = None
-        for match in HEADING_RE.finditer(body):
-            pass
-        if match is None or body[match.end():].strip():
+        items = headings(body)
+        if not items or body[items[-1][1]:].strip():
             break
-        headings.insert(0, match.group("title").strip())
-        body = body[:match.start()].rstrip()
-    body = HEADING_RE.sub(lambda m: m.group("title").strip(), body)
-    return body, headings
+        start, _end, title = items[-1]
+        found.insert(0, title)
+        body = body[:start].rstrip()
+    return replace_headings(body), found
+
+
+def strip_plain_heading(body: str, title: str) -> tuple[str, str]:
+    """Заголовок темы простой строкой (OCR потерял ``\\section*``) в конце
+    блока: «…\\⏎Прямая. Луч». Снимается, если совпадает с темой из таблицы."""
+    lines = body.rstrip().split("\n")
+    for size in (1, 2, 3):
+        if len(lines) <= size:
+            break
+        tail = " ".join(re.sub(r"\\\\\s*$", "", line).strip() for line in lines[-size:])
+        plain = MATH_SPAN_RE.sub(" ", tail)
+        if tail and len(plain) <= len(title) + 15 and _similar(tail, title) >= 0.8:
+            return "\n".join(lines[:-size]).rstrip(), tail
+    return body, ""
 
 
 def _topic_for(number: int, topics: list[dict]) -> dict | None:
@@ -555,6 +986,51 @@ def _topic_for(number: int, topics: list[dict]) -> dict | None:
         if topic["first"] <= number:
             current = topic
     return current
+
+
+def adopt_following_pictures(text: str, figures: Figures, diagnostics: dict) -> str:
+    """Подпись потеряна, картинка — ниже ссылки, иногда в блоке следующей
+    задачи (после её пунктов): ссылка на неизвестный рисунок берёт первую
+    картинку без подписи после себя в пределах страницы."""
+    plain = _without_math(text)
+    claims = []
+    taken = set()
+    for match in FIG_REF_RE.finditer(plain):
+        for number in _figure_numbers(match.group("nums")):
+            if number in figures.by_number or number in {n for n, _p in claims}:
+                continue
+            picture = next((m for m in GRAPHICS_RE.finditer(text, match.end(), match.end() + 1500)
+                            if m.start() not in taken), None)
+            if picture is None:
+                continue
+            taken.add(picture.start())
+            claims.append((number, picture))
+    for number, picture in sorted(claims, key=lambda item: -item[1].start()):
+        figures.add(number, picture.group("path"))
+        diagnostics["figures_caption_lost"].append(f"рис. {number}")
+        text = text[:picture.start()] + FIGURE_TOKEN.format(number) + text[picture.end():]
+    return text
+
+
+def adopt_uncaptioned(marker: Marker, body: str, figures: Figures,
+                      used_figures: set[str], diagnostics: dict) -> str:
+    """Подпись потеряна, а картинка стоит в самой задаче со ссылкой
+    («…на рисунке 16.\\⏎\\includegraphics{…}»): ссылка получает её."""
+    unknown = []
+    for match in FIG_REF_RE.finditer(_without_math(body)):
+        for number in _figure_numbers(match.group("nums")):
+            if number not in figures.by_number and number not in unknown:
+                unknown.append(number)
+    bare = list(GRAPHICS_RE.finditer(body))
+    if not unknown or len(bare) < len(unknown):
+        return body
+    for number, picture in zip(unknown, bare):
+        figures.add(number, picture.group("path"))
+        used_figures.add(number)
+        diagnostics["figures_caption_lost"].append(f"{marker.external_id}: рис. {number}")
+    for picture in reversed(bare[:len(unknown)]):
+        body = body[:picture.start()] + body[picture.end():]
+    return body
 
 
 def build_task(marker: Marker, body: str, path: list[str], figures: Figures,
@@ -573,7 +1049,10 @@ def build_task(marker: Marker, body: str, path: list[str], figures: Figures,
             positional.extend(figures.by_number[number])
         return ""
     body = FIGURE_TOKEN_RE.sub(place, body)
+    body = adopt_uncaptioned(marker, body, figures, used_figures, diagnostics)
     body, missing = replace_figure_refs(body, figures)
+    body = restore_stars(body)
+    body = wrap_bare_arithmetic(body)
     body = group_thousands(body)
     body, reordered = reorder_column_items(body)
     if reordered:
@@ -590,12 +1069,55 @@ def build_task(marker: Marker, body: str, path: list[str], figures: Figures,
     return task
 
 
+_TAIL_RE = re.compile(r"(?<=[.?!])\s+(?=[А-ЯЁ][а-яё]+(?:\s+[^\s]+){2,}[.?!]?\s*$)")
+
+
+def tidy_fields(task: TaskDraft) -> bool:
+    """Хвосты OCR в полях: «\\\\» в конце, перенос строки посреди фразы и
+    общая фраза после последнего пункта («2) 374? Ответ запишите в виде
+    двойного неравенства») — в условие, иначе при выборе части пунктов она
+    пропадёт. Вернуть, перенесён ли хвост."""
+    def tidy(value: str) -> str:
+        value = re.sub(r"(?<=[а-яё,])[ \t]*\n[ \t]*(?=[а-яё])", " ", value or "")
+        value = re.sub(r"^(?:\s*\\\\)+\s*", "", value)
+        return re.sub(r"(?:\s*\\\\)+\s*$", "", value).rstrip()
+
+    task.text_latex = tidy(task.text_latex)
+    for item in task.subitems:
+        item.text_latex = tidy(item.text_latex)
+    if len(task.subitems) < 2:
+        return False
+    last = task.subitems[-1]
+    plain = MATH_SPAN_RE.sub(lambda m: "x" * len(m.group(0)), last.text_latex)
+    match = _TAIL_RE.search(plain)
+    if not match or any(_TAIL_RE.search(MATH_SPAN_RE.sub("x", item.text_latex))
+                        for item in task.subitems[:-1]):
+        return False
+    head = last.text_latex[:match.start()].strip()
+    if not head:
+        return False
+    tail = last.text_latex[match.end():].strip()
+    if not re.search(r"[.?!]\)?$", tail):
+        tail += "."
+    last.text_latex = re.sub(r"[.;,]$", "", head)
+    task.text_latex = task.text_latex.rstrip() + "\n" + tail
+    return True
+
+
 def _finish(task: TaskDraft, grade: int) -> None:
     lift_common_tail(task)
+    tidy_fields(task)
     _finish_fields(task)
     canon_fields(task)
+    # «-$140^{\\circ}$» — минус снаружи формулы выйдет дефисом.
+    for item in [task, *task.subitems]:
+        item.text_latex = re.sub(r"(?:(?<=^)|(?<=[\s(]))-(\$|\\\()(?=\d)", r"\1-", item.text_latex)
     finalize_draft_images(task)
     task.grade_band_codes = [f"GRADE_{grade}"] if grade else []
+    fields = [task.text_latex] + [item.text_latex for item in task.subitems]
+    if any(math_delimiters_broken(value) for value in fields):
+        task.warnings.append("Вложенные или незакрытые формулы: сверить с книгой")
+        task.confidence = max(0.0, task.confidence - 0.3)
 
 
 def parse_exercises(text: str, zones: list, book: dict, figures: Figures,
@@ -616,14 +1138,20 @@ def parse_exercises(text: str, zones: list, book: dict, figures: Figures,
         diagnostics["missing_task_ids"].extend(
             f"ДМ.В{k}/{n}" for n in range(1, top + 1) if n not in set(numbers))
         # Заголовок перед первой задачей варианта.
-        _preamble, lead = split_trailing_headings(zone[:markers[0].start] if markers else zone)
+        preamble, lead = split_trailing_headings(zone[:markers[0].start] if markers else zone)
         heading = " ".join(lead)
+        first_topic = _topic_for(numbers[0], topics) if numbers else None
+        if not heading and first_topic:
+            heading = strip_plain_heading(preamble, first_topic["title"])[1]
         found_titles = []
         for index, (marker, raw) in enumerate(blocks(zone, markers)):
             number = numbers[index]
             topic = _topic_for(number, topics)
             if topic:
-                title, code = topic["title"], topic.get("topic", "")
+                # Смешанная тема («Повторение»): темы отдельных задач по номеру.
+                title = topic["title"]
+                code = ((spec.get("numbers") or {}).get(str(number))
+                        or topic.get("topic", ""))
                 if number == topic["first"]:
                     found_titles.append((topic["title"], heading))
             else:
@@ -631,6 +1159,12 @@ def parse_exercises(text: str, zones: list, book: dict, figures: Figures,
                 code = ""
             by_number_topic.setdefault(number, title)
             body, next_heading = split_trailing_headings(raw)
+            following = numbers[index + 1] if index + 1 < len(numbers) else None
+            next_topic = _topic_for(following, topics) if following else None
+            if not next_heading and next_topic and next_topic["first"] == following:
+                body, plain = strip_plain_heading(body, next_topic["title"])
+                if plain:
+                    next_heading = [plain]
             path = [EXERCISES_TITLE, title, f"Вариант {k}"]
             task = build_task(marker, body, path, figures, used, diagnostics)
             task.source_number = str(number)
@@ -677,8 +1211,9 @@ def parse_tests(text: str, zones: list, book: dict, figures: Figures,
         key = f"КР{n}.В{k}"
         # «Тема. …» — до первой задачи, иногда в две строки.
         head = zone[:chain[0][0]] if chain else zone
-        theme = THEME_RE.sub("", HEADING_RE.sub(lambda m: m.group("title"), head))
-        theme = re.sub(r"\s*\\\\\s*|\s+", " ", theme).strip().rstrip(".")
+        theme = THEME_RE.sub("", replace_headings(head))
+        theme = re.sub(r"\s*\\\\\s*|\s+|[{}]", " ", theme)
+        theme = re.sub(r"\s+", " ", theme).strip().rstrip(".")
         title = work.get("title") or theme
         if work.get("title") and theme and _similar(work["title"], theme[:len(work["title"]) + 5]) < 0.6:
             diagnostics["topic_headings_mismatch"].append(f"{key}: «{work['title']}» — в тексте «{theme}»")
@@ -710,7 +1245,9 @@ def parse_tests(text: str, zones: list, book: dict, figures: Figures,
 
 def parse_merzlyak_dm(text: str, book: dict | None = None) -> tuple[list[TaskDraft], dict]:
     """Разбор TEX Mathpix; ``book`` — описание книги вместо поиска по титулу."""
-    text = prepare_text(text)
+    text, repairs = apply_source_repairs(text.replace("\r\n", "\n"), REPAIRS_PATH)
+    figures = Figures()
+    text = prepare_text(text, figures)
     book = book or detect_book(text)
     diagnostics: dict = {
         "book": book["title"] if book else "",
@@ -723,18 +1260,28 @@ def parse_merzlyak_dm(text: str, book: dict | None = None) -> tuple[list[TaskDra
         "column_items": [],
         "figures_positional": [],
         "figures_missing_by_task": {},
+        "figures_caption_lost": [],
+        "source_repairs_applied": repairs,
     }
     book = book or {"title": "", "grade": 0}
-    figures = Figures()
+    if book.get("grade") == 5:
+        # «Саша \\(-\\frac{5}{10}\\) арбуза» — тире OCR прочитал как минус
+        # (в 5 классе отрицательных чисел нет).
+        text = re.sub(r"([а-яё])\s*\\\((\\displaystyle\s*)?-\s*(?=\\frac)", r"\1 — \\(\2", text)
     text = extract_figures(text, figures)
+    text = adopt_following_pictures(text, figures, diagnostics)
     variants, works = _line_events(text)
     first_work = next((s for s, _e, n in works if n == 1), None)
     exercises_end = first_work if first_work is not None else len(text)
     # Начало контрольных — «Вариант 1» прямо перед «Контрольная работа № 1».
+    tests_end = len(text)
     if first_work is not None:
         before = [s for s, _e, k in variants if k == 1 and 0 <= first_work - s < 300]
         if before:
             exercises_end = before[-1]
+        tail = BOOK_END_RE.search(text, first_work)
+        if tail:
+            tests_end = tail.start()
     expected_variants = (book.get("exercises") or {}).get("variants", 4)
     zones = exercise_variants(text, 0, exercises_end, variants, expected_variants)
     if not zones:
@@ -750,7 +1297,7 @@ def parse_merzlyak_dm(text: str, book: dict | None = None) -> tuple[list[TaskDra
         tasks = parse_exercises(text, zones, book, figures, used, diagnostics)
         if first_work is not None:
             tasks += parse_tests(
-                text, work_zones(text, exercises_end, len(text), works),
+                text, work_zones(text, exercises_end, tests_end, works),
                 book, figures, used, diagnostics)
     diagnostics["figures_numbered"] = len(figures.by_number)
     diagnostics["figures_merged"] = figures.merged

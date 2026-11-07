@@ -1,0 +1,50 @@
+{
+  "note": "Сверенные правки исходного TEX Mathpix ДМ Мерзляка до разбора: применяются только к TEX с тем же sha256, фрагмент before обязан встречаться ровно один раз (problems.vysotsky_parser.apply_source_repairs).",
+  "editions": [
+    {
+      "title": "Математика. 5 класс",
+      "tex": "8345699a-3b3d-45a5-aee2-12bc29d75c60.tex",
+      "source_sha256": "eac594853ba6328e8f5ed5565dc42aefbd53e935872c4c40168e2d318d934c9f",
+      "patches": [
+        {
+          "id": "mat5-В4-6",
+          "before": "1) 9; 2) 71; 2) 432.",
+          "after": "1) 9; 2) 71; 3) 432.",
+          "source": "опечатка книги «2)» вместо «3)», PDF 98"
+        },
+        {
+          "id": "mat5-В4-7",
+          "before": "1) 10; 2) 69; 2) 3120.",
+          "after": "1) 10; 2) 69; 3) 3120.",
+          "source": "опечатка книги «2)» вместо «3)», PDF 98"
+        }
+      ]
+    },
+    {
+      "title": "Алгебра. 7 класс",
+      "tex": "666e51e3-f294-4e56-ba6d-8ef57041ca2e.tex",
+      "source_sha256": "6af382efad84c0c761183411928f16a404bd29c2d8e9c64da0aa3a52daab952b",
+      "patches": [
+        {
+          "id": "alg7-В3-9",
+          "before": "г) \\(0,9 x=-5,4\\);",
+          "after": "2) \\(0,9 x=-5,4\\);",
+          "source": "OCR «г)» вместо «2)», qa/alg7.md"
+        }
+      ]
+    },
+    {
+      "title": "Алгебра. 9 класс",
+      "tex": "f563d0ec-d05b-4041-9cfc-c23cdf082af3.tex",
+      "source_sha256": "076b2daff3d6e1e5c5ec20f3b2ee3485f1a0e9684271ca86dcdc8b3f93fbf034",
+      "patches": [
+        {
+          "id": "alg9-В3-24",
+          "before": "г) \\(-5 x \\leq 20\\);",
+          "after": "2) \\(-5 x \\leq 20\\);",
+          "source": "OCR «г)» вместо «2)», qa/alg9.md"
+        }
+      ]
+    }
+  ]
+}
