@@ -253,6 +253,26 @@ class TaskBlock(models.Model):
         return self.title
 
 
+def corrected(owner):
+    """Ответ книги помечен ошибочным и есть редакторский ответ на замену."""
+    return bool(getattr(owner, 'author_answer_wrong', False)
+                and (owner.answer_latex or '').strip())
+
+
+def effective_text(owner, author_field, editor_field):
+    """Авторский текст, иначе редакторский; при ошибочном ответе книги —
+    редакторский (ответ и решение книги с ним расходятся)."""
+    author = (getattr(owner, author_field) or '').strip()
+    editor = (getattr(owner, editor_field) or '').strip()
+    if corrected(owner) and editor:
+        return editor
+    return author or editor
+
+
+def wrong_book_answer(owner):
+    return (owner.author_answer_latex or '').strip() if corrected(owner) else ''
+
+
 class Task(models.Model):
     block = models.ForeignKey(
         TaskBlock, null=True, blank=True, on_delete=models.PROTECT,
@@ -283,6 +303,10 @@ class Task(models.Model):
     author_solution_latex = models.TextField(
         'Авторское решение (LaTeX)', blank=True,
         help_text='Решение или указание из задачника; AI это поле не меняет')
+    author_answer_wrong = models.BooleanField(
+        'Ответ книги ошибочен', default=False,
+        help_text='Показывать редакторский ответ и решение вместо книжных; '
+                  'ответ книги остаётся серой строкой «В книге: …»')
     text_plain = models.TextField(
         'Текст для поиска', blank=True, editable=False,
         help_text='Автоматически: условие без LaTeX-команд')
@@ -393,14 +417,17 @@ class Task(models.Model):
     @property
     def effective_answer_latex(self):
         """Авторский ответ, иначе редакторская/AI-версия."""
-        return (self.author_answer_latex or '').strip() or \
-            (self.answer_latex or '').strip()
+        return effective_text(self, 'author_answer_latex', 'answer_latex')
 
     @property
     def effective_solution_latex(self):
         """Авторское решение, иначе редакторская/AI-версия."""
-        return (self.author_solution_latex or '').strip() or \
-            (self.solution_latex or '').strip()
+        return effective_text(self, 'author_solution_latex', 'solution_latex')
+
+    @property
+    def wrong_book_answer(self):
+        """Ответ книги, который заменён исправленным, — для строки «В книге: …»."""
+        return wrong_book_answer(self)
 
     @property
     def mask_spec(self):
@@ -499,6 +526,7 @@ class Task(models.Model):
                 solution_latex=sub.solution_latex,
                 author_answer_latex=sub.author_answer_latex,
                 author_solution_latex=sub.author_solution_latex,
+                author_answer_wrong=sub.author_answer_wrong,
                 answer_mask=sub.answer_mask)
             mapping['subitems'][sub.pk] = cloned.pk
         for img in original.images.all():
@@ -640,6 +668,9 @@ class TaskSubitem(models.Model):
         'Авторский ответ (LaTeX)', blank=True)
     author_solution_latex = models.TextField(
         'Авторское решение (LaTeX)', blank=True)
+    author_answer_wrong = models.BooleanField(
+        'Ответ книги ошибочен', default=False,
+        help_text='Показывать редакторский ответ и решение вместо книжных')
     answer_mask = models.TextField('Маска ответа для ученика', blank=True)
 
     class Meta:
@@ -662,13 +693,18 @@ class TaskSubitem(models.Model):
 
     @property
     def effective_answer_latex(self):
-        return (self.author_answer_latex or '').strip() or \
-            (self.answer_latex or '').strip()
+        """Авторский ответ, иначе редакторская/AI-версия."""
+        return effective_text(self, 'author_answer_latex', 'answer_latex')
 
     @property
     def effective_solution_latex(self):
-        return (self.author_solution_latex or '').strip() or \
-            (self.solution_latex or '').strip()
+        """Авторское решение, иначе редакторская/AI-версия."""
+        return effective_text(self, 'author_solution_latex', 'solution_latex')
+
+    @property
+    def wrong_book_answer(self):
+        """Ответ книги, который заменён исправленным, — для строки «В книге: …»."""
+        return wrong_book_answer(self)
 
 
 class TaskSource(models.Model):

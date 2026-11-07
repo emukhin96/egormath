@@ -10,6 +10,7 @@
 import re
 
 from worksheets.latex import subitem_label
+from .models import corrected
 from .task_images import classify_task_images, taskpic_indices
 
 SOURCE_AUTHOR = 'author'
@@ -40,11 +41,17 @@ def _row(owner, label, author_field, ai_field):
     ai = _clean(getattr(owner, ai_field))
     if not author and not ai:
         return None
+    if ai and corrected(owner):
+        # Ответ книги ошибочен: основной — исправленный редакторский вариант;
+        # книжный ответ — строкой «В книге: …», книжное решение не показываем.
+        return {'label': label, 'text': ai, 'source': SOURCE_AI, 'alt': '',
+                'book': author if author_field == 'author_answer_latex' else ''}
     return {
         'label': label,
         'text': author or ai,
         'source': SOURCE_AUTHOR if author else SOURCE_AI,
         'alt': ai if author and ai and not _same(author, ai) else '',
+        'book': '',
     }
 
 

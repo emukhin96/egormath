@@ -3,9 +3,10 @@
 <section class="problem-answer" data-answer-owner="{{ sub.pk|default:'' }}">
   <div class="label-row"><h3>Ответ{% if sub %} {{ forloop.counter0|subitem_label }}){% endif %}</h3>
     {# Пояснение про приоритет авторских версий — «?» у подписи, а не постоянным абзацем под «Решением» (ревизия 03.11, T3) #}
-    {% if not simple_answers %}<span class="helptext">{% if owner.author_answer_latex %}Авторский{% elif owner.answer_latex %}Редакторский / AI{% endif %}<details class="help-tip"><summary aria-label="Пояснение" title="Пояснение">?</summary><div class="help-tip-body"><p>Авторские ответ и решение имеют приоритет. Если авторское поле пустое, используется редакторская / AI-версия.</p></div></details></span>{% endif %}
+    {% if not simple_answers %}<span class="helptext">{% if owner.wrong_book_answer %}Исправленный{% elif owner.author_answer_latex %}Авторский{% elif owner.answer_latex %}Редакторский / AI{% endif %}<details class="help-tip"><summary aria-label="Пояснение" title="Пояснение">?</summary><div class="help-tip-body"><p>Авторские ответ и решение имеют приоритет. Если авторское поле пустое, используется редакторская / AI-версия.</p></div></details></span>{% endif %}
   </div>
   <div class="math-content">{{ owner.effective_answer_latex|default:'—'|web_text|linebreaksbr }}</div>
+  {% if owner.wrong_book_answer %}<p class="answer-book math-content">В книге: {{ owner.wrong_book_answer|web_text }}</p>{% endif %}
   {% owner_images task owner 'answer' %}
   {% if not editor_readonly %}<details class="ws-add-text block-edit">{% if simple_answers %}{% include 'problems/_edit_pen.html' with label='Править ответ' %}{% else %}{% include 'problems/_edit_pen.html' with label='Править ответ и источники' %}{% endif %}
     {% include 'problems/_editor_form.html' with form=answer_form block='answer' %}

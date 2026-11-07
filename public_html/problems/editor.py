@@ -24,7 +24,7 @@ from .rubricator import (apply_task_taxonomy, taxonomy_page_context,
 BLOCKS = {
     'condition': ['text_latex'],
     'answer_policy': ['full_answer_only'],
-    'answer': ['author_answer_latex', 'answer_latex'],
+    'answer': ['author_answer_latex', 'answer_latex', 'author_answer_wrong'],
     'solution': ['author_solution_latex', 'solution_latex'],
     'metadata': ['stars', 'columns'],
     'mask': ['answer_mask'],
