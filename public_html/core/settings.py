@@ -160,6 +160,15 @@ CACHES = {
         'TIMEOUT': 300,
         'OPTIONS': {'MAX_ENTRIES': 10},
     },
+    # Счётчики каталога задач (разделы рубрикатора, классы, источники) —
+    # по записи на учителя и открытый раздел (problems/catalog_counts.py);
+    # сбрасываются сигналами при правке задач, иначе живут 5 минут.
+    'catalog': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': SITE_ROOT / '.cache' / 'catalog',
+        'TIMEOUT': 300,
+        'OPTIONS': {'MAX_ENTRIES': 500},
+    },
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -203,6 +212,7 @@ if len(sys.argv) > 1 and sys.argv[1] == 'test':
     # clear() в соседнем параллельном прогоне сбрасывал бы его посреди
     # теста. Каждому прогону — свой каталог вне рабочей копии.
     CACHES['taxonomy']['LOCATION'] = tempfile.mkdtemp(prefix='egormath-taxonomy-')
+    CACHES['catalog']['LOCATION'] = tempfile.mkdtemp(prefix='egormath-catalog-')
 
 # Тесты дают вычислителю формул запас на загруженной машине; продовые
 # лимиты не меняются (core/runner.py).

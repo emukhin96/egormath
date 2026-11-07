@@ -55,11 +55,16 @@ def visible_tasks(user):
     их листках: «Взять как листок» копирует подборку вместе с чужими
     локальными копиями и личными задачами автора подборки."""
     from problems.models import Task
+    from worksheets.models import WorksheetItem
     if is_base_editor(user):
         return Task.objects.all()
+    # Задачи из своих листков — подзапросом, а не join с DISTINCT: иначе
+    # каждый count() каталога считал DISTINCT по всем полям задачи,
+    # включая тексты (аудит быстродействия 06.11.2026).
+    in_own_worksheets = (WorksheetItem.objects.filter(worksheet__owner=user)
+                         .values('task_id'))
     return Task.objects.filter(
-        Q(is_shared=True) | Q(created_by=user)
-        | Q(worksheet_items__worksheet__owner=user)).distinct()
+        Q(is_shared=True) | Q(created_by=user) | Q(pk__in=in_own_worksheets))
 
 
 def shows_foreign_tasks(user):
