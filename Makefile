@@ -96,10 +96,11 @@ watch-css: ensure-tailwind screens-css build-js
 
 # Пересборка app.js при правке склеиваемых скриптов (runserver отдаёт только
 # app.js): опрос раз в 2 с, без inotify и Node. Запускать во втором
-# терминале рядом с watch-css; Ctrl-C — выход.
+# терминале рядом с watch-css; Ctrl-C — выход. Отпечаток — по содержимому
+# файлов: время в ls -l с точностью до минуты пропускало правку той же длины.
 watch-js: build-js
 	@echo "watch-js: слежу за $(JS_BASE)"
-	@last=""; while :; do now=$$(ls -l $(JS_FILES) | cksum); \
+	@last=""; while :; do now=$$(cat $(JS_FILES) | cksum); \
 	  if [ "$$now" != "$$last" ]; then last=$$now; $(MAKE) --no-print-directory build-js; fi; \
 	  sleep 2; done
 
