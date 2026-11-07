@@ -40,9 +40,22 @@ def _order(request, task_id):
     return order if order in ('name', 'wrong') and (order != 'wrong' or task_id) else 'recent'
 
 
+def _opened(request, worksheet):
+    """?open=<id назначения> — доска, которую страница открывает сразу
+    (вход из карты ответов, проверки, окна задачи). Только назначение этого
+    листка, видимое учителю: чужое или неизвестное — как без параметра."""
+    raw = request.GET.get('open', '')
+    if not raw.isdigit():
+        return None
+    return (Assignment.visible_to(request.user).filter(worksheet=worksheet, pk=int(raw))
+            .select_related('student').first())
+
+
 def _selection(request, worksheet, task_id=None):
     """Назначения листка, которые попадают на экран: не больше BOARDS_MAX,
     по порядку ?order= (по умолчанию сначала те, где недавно писали).
+    Ученик из ?open= на экране всегда — даже вне первых BOARDS_MAX или вне
+    выбранной группы: его доску открыли по ссылке.
     Возвращает (список, сколько не поместилось, группа)."""
     assignments = Assignment.visible_to(request.user).filter(worksheet=worksheet).select_related('student')
     group_id = request.GET.get('group', '')
@@ -57,6 +70,11 @@ def _selection(request, worksheet, task_id=None):
                        .order_by('-last_canvas', *by_name))
     overflow = max(0, len(assignments) - BOARDS_MAX)
     shown = assignments[:BOARDS_MAX]
+    opened = _opened(request, worksheet)
+    if opened is not None and all(a.pk != opened.pk for a in shown):
+        rest = next((a for a in assignments[BOARDS_MAX:] if a.pk == opened.pk), None)
+        overflow -= rest is not None
+        shown.append(rest or opened)
     order = _order(request, task_id)
     if order == 'name':
         shown.sort(key=lambda a: (a.student.last_name, a.student.first_name, a.student.username))
@@ -153,8 +171,11 @@ def worksheet_boards(request, worksheet_id):
     task_id = _task_filter(request, numbers)
     assignments, overflow, group = _selection(request, worksheet, task_id)
     order = _order(request, task_id)
+    opened = _opened(request, worksheet)
     query = {k: v for k, v in (('group', request.GET.get('group', '')), ('task', task_id),
                                ('order', '' if order == 'recent' else order)) if v}
+    # Живой опрос держит на экране и открытого по ссылке ученика
+    live_query = {**query, 'open': opened.pk} if opened else query
     # Кнопки задач — только те, где у кого-то из выбранных учеников есть доска
     # (плюс выбранная в адресе, чтобы её кнопка не пропала)
     with_boards = set(CanvasPage.objects.filter(submission__assignment__in=[a.pk for a in assignments])
@@ -175,7 +196,9 @@ def worksheet_boards(request, worksheet_id):
         'group_id': request.GET.get('group', ''), 'boards_max': BOARDS_MAX,
         'tasks': [{'id': tid, 'no': no} for tid, no in numbers.items() if tid in with_boards], 'task_id': task_id,
         'task_no': numbers.get(task_id),
-        'live_url': reverse('worksheet_boards_live', args=[worksheet.pk]) + ('?' + urlencode(query) if query else ''),
+        'live_url': reverse('worksheet_boards_live', args=[worksheet.pk]) + ('?' + urlencode(live_query) if live_query else ''),
+        'open_id': opened.pk if opened else '',
+        'canvas_url': reverse('canvas:pages', args=[0, 0]),
         'peek_url': reverse('worksheet_boards_peek', args=[worksheet.pk, 0, 0]),
         'conditions_url': reverse('worksheet_boards_tasks', args=[worksheet.pk]) + ('?' + urlencode(query) if query else ''),
     })

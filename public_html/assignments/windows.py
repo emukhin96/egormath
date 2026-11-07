@@ -116,7 +116,8 @@ def class_for_item(request, worksheet_id, item_id):
         assignments = assignments.filter(student__in=group.students.all())
     assignments = assignments.order_by('student__last_name', 'student__username')
     groups = [dict(g, number=number) for g in progress_groups([item], assignments)]
-    people = progress_people(groups, assignments)
+    from canvas.services import board_tasks
+    people = progress_people(groups, assignments, board_tasks(assignments))
     summary, stats = live_summary(groups, people)
     for person in people:
         for cell in person['cells']:
@@ -159,6 +160,8 @@ def task_window(request, worksheet_id, item_id):
         'next_url': reverse('worksheet_task_window', args=[worksheet.pk, items[index + 1].pk]) if index + 1 < len(items) else '',
         'summary': summary,
         'class_url': reverse('assignment_item_class', args=[worksheet.pk, item.pk]),
+        # значок доски у ученика в «Ответах класса» и «Доски по задаче»
+        'boards_url': reverse('worksheet_boards', args=[worksheet.pk]), 'group_id': data['group_id'],
     })
 
 

@@ -35,6 +35,17 @@ def assignment_page_stats(assignment):
     return {row['submission__task_id']: (row['n'], row['updated'], row['answered']) for row in rows}
 
 
+def board_tasks(assignments):
+    """Задачи, по которым у ученика есть доска: {id назначения: {id задачи}} —
+    одним запросом на всю карту ответов (значок «есть доска» в ячейке)."""
+    pairs = (CanvasPage.objects.filter(submission__assignment__in=assignments)
+             .values_list('submission__assignment_id', 'submission__task_id').distinct())
+    boards = {}
+    for assignment_id, task_id in pairs:
+        boards.setdefault(assignment_id, set()).add(task_id)
+    return boards
+
+
 class Access:
     """Что текущий пользователь может делать с холстом одной задачи."""
 
