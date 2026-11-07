@@ -29,11 +29,13 @@
   сохраните и передайте ученику, пароль показывается только один раз:<br>
   Логин: <code>{{ new_credentials.username }}</code>
   Пароль: <code>{{ new_credentials.password }}</code>
+  <span class="muted" data-credentials-note hidden>Уже в буфере обмена.</span>
 </div>
 {% endif %}
 
 <dialog class="dialog" id="student-add-dialog" aria-labelledby="student-add-title"{% if form.errors %} data-open-on-load{% endif %}>
-  <form method="post" action="{% url 'students' %}">
+  {# data-credentials-copy: логин и пароль сразу в буфер (credentials_copy.js) #}
+  <form method="post" action="{% url 'students' %}" data-credentials-copy>
     {% csrf_token %}
     <div class="dialog-heading"><h3 id="student-add-title">Добавить ученика</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
     <div class="dialog-fields">
@@ -42,7 +44,7 @@
       <div><label for="{{ form.grade.id_for_label }}">Класс</label>{{ form.grade }}</div>
     </div>
     {% if form.errors %}<div class="errorlist">{{ form.errors }}</div>{% endif %}
-    <p class="helptext">Логин и пароль будут сгенерированы автоматически и показаны один раз.</p>
+    <p class="helptext">Логин и пароль сгенерируются автоматически и сразу скопируются в буфер обмена.</p>
     <div class="form-buttons"><button type="submit" class="btn">Создать ученика</button><button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button></div>
   </form>
 </dialog>
@@ -152,11 +154,11 @@
             <button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button>
           </div>
           <p>{{ profile.user.get_full_name|default:profile.user.username }}, <span class="mono">{{ profile.user.username }}</span></p>
-          <p>Прежний пароль перестанет действовать. Новый пароль будет показан один раз после сброса — сохраните и передайте его ученику.</p>
-          <form method="post" action="{% url 'reset_student_password' profile.user_id %}">
+          <p>Прежний пароль перестанет действовать. Новые логин и пароль сразу скопируются в буфер обмена — передайте их ученику.</p>
+          <form method="post" action="{% url 'reset_student_password' profile.user_id %}" data-credentials-copy>
             {% csrf_token %}
             <div class="form-buttons">
-              <button type="submit" class="btn">Сбросить и показать новый пароль</button>
+              <button type="submit" class="btn">Сбросить пароль</button>
               <button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button>
             </div>
           </form>
@@ -172,4 +174,5 @@
 
 <script defer src="{% static 'js/bulk.js' %}?v=4"></script>
 <script defer src="{% static 'js/screen_menus.js' %}"></script>
+<script defer src="{% static 'js/credentials_copy.js' %}"></script>
 {% endblock %}

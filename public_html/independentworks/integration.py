@@ -111,6 +111,8 @@ def assignment_groups(user, params, *, runs=None):
             'students_total': len(attempts), 'last_assigned': run.issued_at,
             'nearest_due': min(deadlines) if deadlines else None,
             'submitted_total': submitted, 'reviewed_total': reviewed,
+            # Попытки, прошедшие фильтры: по ним — секции получателей в списке
+            'attempts': attempts,
             'queue_priority': 0 if submitted else 2 if reviewed < len(attempts) else 3,
             'progress_url': reverse('independentworks:progress', args=[run.pk])})
     return rows
