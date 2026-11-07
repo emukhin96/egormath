@@ -172,6 +172,15 @@ class BoardsEntryTests(TestCase):
         url = reverse('task_attempts', args=[assignment.pk, self.task2.pk]) + f'?item={self.items[1].pk}'
         self.assertNotContains(self.client.get(url), 'data-board-thumb')
 
+    def test_thumb_script_with_detail_window(self):
+        """Скрипт миниатюры идёт вместе с окном ответа: и на карте ответов, и на
+        экране досок (ревью #332), и только при включённых досках."""
+        for url in (reverse('worksheet_progress', args=[self.worksheet.pk]),
+                    reverse('worksheet_boards', args=[self.worksheet.pk])):
+            self.assertContains(self.client.get(url), 'js/board_thumbs.js', count=1)
+            with self.settings(CANVAS_ENABLED=False):
+                self.assertNotContains(self.client.get(url), 'js/board_thumbs.js')
+
     def test_task_window_links(self):
         self.board(self.assignments[2], self.task1)
         page = self.client.get(reverse('worksheet_task_window', args=[self.worksheet.pk, self.items[0].pk]))
