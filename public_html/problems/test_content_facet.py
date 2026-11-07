@@ -107,7 +107,9 @@ class SeedTests(TestCase):
         task.facet_values.add(FacetValue.objects.get(code='G_A'))
         stats = seed_content_facet([('H', 'Другая', [
             ('H_A', 'В', 'Ставить, когда есть В в условии.', '')])])
-        self.assertEqual(stats['kept'], ['G_A'])
+        # G_B удалено; G_A стоит у задачи — остаётся, а с ним и группа G.
+        self.assertEqual(stats['removed'], 1)
+        self.assertEqual(sorted(stats['kept']), ['G', 'G_A'])
         codes = set(FacetValue.objects.filter(
             facet_type__code=CONTENT_FACET_CODE).values_list('code', flat=True))
         self.assertEqual(codes, {'G', 'G_A', 'H', 'H_A'})
@@ -232,3 +234,50 @@ class GuardTests(TestCase):
         self.assertEqual(stats, {'removed': [self.task.pk], 'kept': [plain.pk]})
         self.assertFalse(self.task.tags.exists())
         self.assertTrue(plain.tags.exists())
+
+    def test_backup_failure_leaves_tag(self):
+        from .models import Tag
+        tag = Tag.objects.create(name='задача с параметром')
+        self.task.tags.add(tag)
+        ct.apply_labels({self.task.pk: ['PARAM_EQ']})
+        with self.assertRaises(OSError):
+            call_command('label_content', '--drop-param-tag', '--apply',
+                         '--backup', '/нет/такого/каталога/rollback.json',
+                         stdout=StringIO())
+        self.assertTrue(self.task.tags.filter(pk=tag.pk).exists())
+
+
+class BatchHashesTests(TestCase):
+    def setUp(self):
+        call_command('label_content', '--seed', stdout=StringIO())
+
+    def test_folder_brings_its_own_hashes(self):
+        same = Task.objects.create(text_latex='Куб')
+        edited = Task.objects.create(text_latex='Трапеция')
+        with tempfile.TemporaryDirectory() as tmp:
+            call_command('label_content', '--make-batches', tmp, '--ids',
+                         f'{same.pk},{edited.pk}', stdout=StringIO())
+            hashes = json.loads((Path(tmp) / ct.HASHES_NAME).read_text())
+            self.assertEqual(hashes[str(same.pk)], ct.task_text_hash(same))
+            (Path(tmp) / 'batch_001.answer.json').write_text(json.dumps(
+                {'items': [{'id': same.pk, 'codes': ['ST_CUBE']},
+                           {'id': edited.pk, 'codes': ['QUAD_TRAPEZOID']}]}))
+            edited.text_latex = 'Трапеция, исправленное условие'
+            edited.save(update_fields=['text_latex'])
+            out, err = StringIO(), StringIO()
+            call_command('label_content', '--from', tmp, '--apply',
+                         stdout=out, stderr=err)
+        self.assertIn('пропущено задач 1', out.getvalue())
+        self.assertNotIn('Без отпечатков', err.getvalue())
+        self.assertTrue(same.facet_values.filter(code='ST_CUBE').exists())
+        self.assertFalse(edited.facet_values.exists())
+
+    def test_warns_without_hashes(self):
+        task = Task.objects.create(text_latex='Куб')
+        with tempfile.NamedTemporaryFile('w', suffix='.json',
+                                         delete=False) as fh:
+            json.dump({str(task.pk): ['ST_CUBE']}, fh)
+        err = StringIO()
+        call_command('label_content', '--from', fh.name, stdout=StringIO(),
+                     stderr=err)
+        self.assertIn('Без отпечатков', err.getvalue())

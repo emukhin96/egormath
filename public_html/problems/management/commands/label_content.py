@@ -10,7 +10,8 @@
   label_content --from DIR|файл --apply     — записать (--replace — снять
       значения CONTENT, которых нет в ответе)
       --hashes FILE — {id: отпечаток текста}: задачи, чей текст изменился
-      после разметки, пропускаются; --backup FILE — до записи сохранить
+      после разметки, пропускаются (--make-batches пишет DIR/hashes.json,
+      --from DIR берёт его сам; без отпечатков — предупреждение); --backup FILE — до записи сохранить
       прежние значения CONTENT этих задач (файл отката)
   label_content --drop-param-tag [--apply]  — снять тег «задача с
       параметром» у задач со значением группы «Параметр» (решение 07.11)
@@ -86,6 +87,10 @@ class Command(BaseCommand):
             manifest[name] = [item['id'] for item in chunk]
         (out / 'manifest.json').write_text(
             json.dumps(manifest, ensure_ascii=False), encoding='utf-8')
+        # Отпечатки текста на момент нарезки: --from DIR берёт их сам и
+        # пропускает задачи, чьё условие успели изменить.
+        (out / ct.HASHES_NAME).write_text(json.dumps(
+            {str(t.pk): ct.task_text_hash(t) for t in tasks}), encoding='utf-8')
         self.stdout.write(f'Пакетов {len(manifest)}, задач {len(tasks)}: {out}')
 
     def _labels_from_dir(self, folder):
@@ -118,8 +123,15 @@ class Command(BaseCommand):
         source = Path(opts['source'])
         labels = (self._labels_from_dir(source) if source.is_dir()
                   else ct.load_labels(source))
-        if opts['hashes']:
-            hashes = json.loads(Path(opts['hashes']).read_text('utf-8'))
+        hashes_path = opts['hashes']
+        if not hashes_path and source.is_dir() and (
+                source / ct.HASHES_NAME).exists():
+            hashes_path = source / ct.HASHES_NAME
+        if not hashes_path:
+            self.stderr.write('Без отпечатков текста (--hashes): задачи, '
+                              'изменённые после разметки, не отсеиваются.')
+        if hashes_path:
+            hashes = json.loads(Path(hashes_path).read_text('utf-8'))
             stale = ct.stale_tasks(labels, hashes)
             if stale:
                 self.stdout.write(
@@ -159,12 +171,14 @@ class Command(BaseCommand):
             self.stdout.write(f'Тег «{ct.PARAM_TAG_NAME}» у задач: {n}. '
                               'Снятие — с --apply.')
             return
-        stats = ct.drop_param_tag()
+        plan = ct.param_tag_plan()
         if opts['backup']:
+            # Список — до снятия: не записался файл, не трогаем и базу.
             Path(opts['backup']).write_text(json.dumps(
-                {'tag': ct.PARAM_TAG_NAME, 'removed_from': stats['removed']}),
+                {'tag': ct.PARAM_TAG_NAME, 'removed_from': plan['removed']}),
                 'utf-8')
             self.stdout.write(f'Откат: {opts["backup"]}')
+        stats = ct.drop_param_tag(plan)
         self.stdout.write(
             f'Тег снят у {len(stats["removed"])} задач; оставлен у '
             f'{len(stats["kept"])} без значения «Параметр»: '

@@ -148,6 +148,7 @@ def read_answer(path, ids, valid_codes=None):
 
 
 PARAM_TAG_NAME = 'задача с параметром'
+HASHES_NAME = 'hashes.json'
 
 
 def text_hash(text, subitem_texts=()):
@@ -184,11 +185,10 @@ def current_content(task_ids):
     return out
 
 
-def drop_param_tag():
-    """Снять тег «задача с параметром» у задач со значением группы PARAM.
+def param_tag_plan():
+    """Кому снимать тег «задача с параметром»: {'removed', 'kept'} — id.
 
-    Решение Егора 07.11: тег заменяется группой «Параметр». Задачи с тегом,
-    но без значения PARAM_*, не трогаем — их список возвращаем на проверку.
+    Снимаем только у задач со значением группы PARAM; остальные — на проверку.
     """
     from .models import Tag, Task
     tag = Tag.objects.filter(name__iexact=PARAM_TAG_NAME).first()
@@ -199,9 +199,20 @@ def drop_param_tag():
         facet_values__facet_type__code=CONTENT_FACET_CODE,
         facet_values__parent__code='PARAM').values_list('pk', flat=True))
     kept = sorted(set(tagged.values_list('pk', flat=True)) - with_param)
-    if with_param:
-        tag.tasks.remove(*with_param)
     return {'removed': sorted(with_param), 'kept': kept}
+
+
+def drop_param_tag(plan=None):
+    """Снять тег «задача с параметром» по плану ``param_tag_plan``.
+
+    Решение Егора 07.11: тег заменяется группой «Параметр».
+    """
+    from .models import Tag
+    plan = plan or param_tag_plan()
+    tag = Tag.objects.filter(name__iexact=PARAM_TAG_NAME).first()
+    if tag is not None and plan['removed']:
+        tag.tasks.remove(*plan['removed'])
+    return plan
 
 
 def task_item(task):

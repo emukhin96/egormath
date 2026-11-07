@@ -179,10 +179,14 @@ def seed_content_facet(groups=None):
     kept = [v.code for v in stale if v.n]
     removable = [v.pk for v in stale if not v.n]
     # Сначала значения, потом опустевшие группы (PROTECT на parent).
-    FacetValue.objects.filter(pk__in=removable, parent__isnull=False).delete()
-    FacetValue.objects.filter(pk__in=removable).exclude(
+    removed, _ = FacetValue.objects.filter(
+        pk__in=removable, parent__isnull=False).delete()
+    groups, _ = FacetValue.objects.filter(pk__in=removable).exclude(
         children__isnull=False).delete()
-    return {'created': created, 'removed': len(removable), 'kept': kept}
+    # Группа, у которой осталось значение с задачами, тоже остаётся.
+    kept += list(FacetValue.objects.filter(pk__in=removable).values_list(
+        'code', flat=True))
+    return {'created': created, 'removed': removed + groups, 'kept': kept}
 
 
 def migrate_legacy_grades():
