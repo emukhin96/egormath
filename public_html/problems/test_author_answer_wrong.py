@@ -118,3 +118,20 @@ class AuthorAnswerWrongNoEditorSolutionTests(TestCase):
         self.assertIsNone(answer_material(task)['solution'])
         self.assertEqual(solution_texts(task), [])
         self.assertNotIn('Книга', _combined_solution(task, []))
+
+
+class AuthorAnswerWrongCloneKeepSolutionTests(TestCase):
+    """Ревью #324: клон с «сохранить решение» не показывает книжное решение."""
+
+    def test_clone_keeps_editor_solution_only(self):
+        from .clone import _apply_owner
+        task = Task.objects.create(
+            text_latex='Найдите вероятность.', author_answer_latex='$0{,}8$',
+            answer_latex='$0{,}75$', author_solution_latex='Книга: $16/20=0{,}8$.',
+            solution_latex='$15/20=0{,}75$.', author_answer_wrong=True)
+        clone = task.make_variant(standalone=True)
+        _apply_owner(task, clone, {'answer': '$0{,}7$', 'mask': '{{decimal: 0,7}}'}, True)
+        clone.refresh_from_db()
+        self.assertEqual(clone.author_solution_latex, '')
+        self.assertEqual(clone.effective_solution_latex, '$15/20=0{,}75$.')
+        self.assertNotIn('Книга', ' '.join(solution_texts(clone)))

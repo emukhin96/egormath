@@ -268,8 +268,11 @@ def _apply_owner(original, clone, values, keep_solution):
                 # Ответ книги и отметка относятся к исходным числам — у клона
                 # их нет (ревью #324).
                 clone.author_answer_latex = ''
+                # Книжное решение ведёт к ошибочному ответу — у клона без
+                # отметки оно стало бы основным; остаётся редакторское.
+                clone.author_solution_latex = ''
                 clone.author_answer_wrong = False
-                fields.append('author_answer_wrong')
+                fields += ['author_answer_wrong', 'author_solution_latex']
         clone.answer_mask = values['mask']
         fields += ['author_answer_latex', 'answer_latex', 'answer_mask']
     if not keep_solution:
