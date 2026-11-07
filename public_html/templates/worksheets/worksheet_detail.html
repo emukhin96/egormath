@@ -102,11 +102,18 @@
   </div>
   {% endif %}
   </div>
+  {% comment %}Быстродействие 11.2026: иконки строк — символами один раз (в строках <use>),
+  действия меню «⋯» — одна форма на список: кнопки с form="ws-row-form" и formaction,
+  CSRF-токен и обёртки не повторяются в каждой строке. ws-row-action-form — то же для
+  действий без перезагрузки (data-builder-action, worksheet_controls.js).{% endcomment %}
+  <svg class="ws-icon-defs" width="0" height="0" aria-hidden="true" focusable="false"><symbol id="ws-icon-more" viewBox="0 0 16 16"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></symbol><symbol id="ws-icon-eye-off" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></symbol></svg>
+  <form id="ws-row-form" method="post" hidden>{% csrf_token %}</form>
+  <form id="ws-row-action-form" method="post" hidden data-builder-action>{% csrf_token %}</form>
   <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}">
     {% for row in rows %}
     {% with item=row.item %}
     {# data-vis-url и data-hidden-* — данные для общего диалога видимости (#ws-visibility-dialog), его заполняет worksheet_controls.js #}
-    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" data-id="{{ item.pk }}"{% if item.task_id %} data-task-id="{{ item.task.pk }}" data-has-answer="{% if item.task.effective_answer_latex or item.task.effective_solution_latex or item.task.has_subitem_answers %}1{% endif %}" data-no-answer="{% if item.task.has_blank_answer %}1{% endif %}" data-task-png-root data-number="{{ row.number }}" data-vis-url="{% url 'worksheet_item_visibility' worksheet.pk item.pk %}" data-hidden-links="{{ row.hidden_links|join:',' }}" data-hidden-groups="{{ row.hidden_groups|join:',' }}" data-hidden-assignments="{{ row.hidden_assignments|join:',' }}"{% endif %}>
+    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" data-id="{{ item.pk }}"{% if item.task_id %} data-task-id="{{ item.task.pk }}" data-has-answer="{% if item.task.effective_answer_latex or item.task.effective_solution_latex or item.task.has_subitem_answers %}1{% endif %}" data-no-answer="{% if item.task.has_blank_answer %}1{% endif %}" data-task-png-root data-vis-url="{% url 'worksheet_item_visibility' worksheet.pk item.pk %}" data-hidden-links="{{ row.hidden_links|join:',' }}" data-hidden-groups="{{ row.hidden_groups|join:',' }}" data-hidden-assignments="{{ row.hidden_assignments|join:',' }}"{% endif %}>
       <div class="ws-body">
         {% if not item.task.block_id %}{% include 'includes/builder_drag_handle.html' %}{% endif %}
 
@@ -190,32 +197,27 @@
           {# Пометка, что задача скрыта у части получателей; клик — тот же диалог видимости #}
           <button type="button" class="icon-btn vis-btn vis-on" data-vis-open
                   title="Скрыта у части ссылок или учеников"
-                  aria-label="Скрыта у части ссылок или учеников"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></button>
+                  aria-label="Скрыта у части ссылок или учеников"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#ws-icon-eye-off"/></svg></button>
           {% endif %}
           {% if item.task_id and not item.task.variant_of_id %}{% include 'includes/cart_button.html' with task=item.task %}{% endif %}
-          <details class="more-menu on-hover"><summary aria-label="Действия с задачей" title="Действия с задачей"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg></summary><div class="more-menu-list">
+          <details class="more-menu on-hover"><summary aria-label="Действия с задачей" title="Действия с задачей"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ws-icon-more"/></svg></summary><div class="more-menu-list">
             {% if item.task_id %}
             <button type="button" class="ws-star-reset" data-form="settings-{{ item.pk }}" data-base="{{ item.task.stars }}"
                     title="Убрать все звёзды только в этом листке">Сбросить звёзды</button>
-            <form method="post" data-answer-policy-form
-                  action="{% url 'task_manage' item.task.pk %}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}">
-              {% csrf_token %}
-              <input type="hidden" name="block" value="answer_policy">
-              <input type="hidden" name="worksheet" value="{{ worksheet.pk }}">
-              <input type="hidden" name="item" value="{{ item.pk }}">
-              <label title="Переключить тип ответа и сразу сохранить"><input type="checkbox" name="full_answer_only"{% if item.task.full_answer_only %} checked{% endif %}>Только полный ответ</label>
-            </form>
+            {# Тумблер шлёт problem_masks.js на data-manage-url строки (block=answer_policy, worksheet, item) #}
+            <label data-answer-policy-form title="Переключить тип ответа и сразу сохранить"><input type="checkbox" name="full_answer_only" data-worksheet="{{ worksheet.pk }}" data-item="{{ item.pk }}"{% if item.task.full_answer_only %} checked{% endif %}>Только полный ответ</label>
             <hr>
-            <form method="post" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><button type="submit" title="Добавить локальную копию следующей строкой">Дублировать локально</button></form>
-            <form method="post" action="{% url 'task_duplicate' item.task.pk %}">{% csrf_token %}<input type="hidden" name="worksheet" value="{{ worksheet.pk }}"><input type="hidden" name="item" value="{{ item.pk }}"><input type="hidden" name="standalone" value="1"><button type="submit" title="Создать копию в разделе «Задачи» и добавить в листок">Дублировать</button></form>
+            {% url 'task_duplicate' item.task.pk as duplicate_url %}
+            <button type="submit" form="ws-row-form" formaction="{{ duplicate_url }}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}" title="Добавить локальную копию следующей строкой">Дублировать локально</button>
+            <button type="submit" form="ws-row-form" formaction="{{ duplicate_url }}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}" name="standalone" value="1" title="Создать копию в разделе «Задачи» и добавить в листок">Дублировать</button>
             {% if not item.task.block_id %}<button type="button" data-quick-clone="{% url 'task_clone' item.task.pk %}?worksheet={{ worksheet.pk }}&amp;item={{ item.pk }}" title="Клон с другими числами — следующей строкой листка">Клон рядом</button>{% endif %}
             <button type="button" data-task-png title="Скопировать условие картинкой (PNG) — для Miro и других досок">Скопировать картинкой</button>
             <button type="button" class="vis-btn" data-vis-open title="{% if row.hidden_links or row.hidden_assignments %}Скрыта у части ссылок или учеников{% else %}Видна всем ссылкам и ученикам{% endif %}">Видимость для учеников</button>
             <hr>
             {% endif %}
-            {% if not forloop.first %}<form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'up' %}">{% csrf_token %}<button type="submit">Выше</button></form>{% endif %}
-            {% if not forloop.last %}<form method="post" action="{% url 'worksheet_move_item' worksheet.pk item.pk 'down' %}">{% csrf_token %}<button type="submit">Ниже</button></form>{% endif %}
-            <form method="post" action="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" data-builder-action>{% csrf_token %}<button type="submit" class="is-danger">Убрать из листка</button></form>
+            {% if not forloop.first %}<button type="submit" form="ws-row-form" formaction="{% url 'worksheet_move_item' worksheet.pk item.pk 'up' %}">Выше</button>{% endif %}
+            {% if not forloop.last %}<button type="submit" form="ws-row-form" formaction="{% url 'worksheet_move_item' worksheet.pk item.pk 'down' %}">Ниже</button>{% endif %}
+            <button type="submit" form="ws-row-action-form" formaction="{% url 'worksheet_remove_item' worksheet.pk item.pk %}" class="is-danger">Убрать из листка</button>
           </div></details>
         </div>
       </div>

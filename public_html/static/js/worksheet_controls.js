@@ -32,7 +32,7 @@
         var actions = row.querySelector('.ws-actions');
         if (actions) actions.replaceWith(fresh.querySelector('.ws-actions'));
         // Данные общего диалога видимости живут в атрибутах строки
-        ['number', 'visUrl', 'hiddenLinks', 'hiddenGroups', 'hiddenAssignments'].forEach(function (key) {
+        ['visUrl', 'hiddenLinks', 'hiddenGroups', 'hiddenAssignments'].forEach(function (key) {
           if (fresh.dataset[key] === undefined) delete row.dataset[key];
           else row.dataset[key] = fresh.dataset[key];
         });
@@ -136,9 +136,11 @@
     if (busy) return;
     busy = true;
     var data = new FormData(form), button = e.submitter, saved = false;
+    // Общая форма действий строк (#ws-row-action-form): адрес — formaction кнопки
+    var url = (button && button.getAttribute('formaction')) || form.action;
     if (button) button.disabled = true;
     try {
-      var result = await window.EgorProblem.request(form.action, data);
+      var result = await window.EgorProblem.request(url, data);
       saved = true;
       var modal = form.closest('dialog');
       if (modal) modal.close();
@@ -199,7 +201,9 @@
     if (!dialog) return;
     var form = dialog.querySelector('form');
     form.action = row.dataset.visUrl;
-    dialog.querySelector('[data-vis-number]').textContent = row.dataset.number || '';
+    // Номер — из строки (после перетаскивания builder.js перенумеровывает .ws-num)
+    var number = row.querySelector('.ws-num');
+    dialog.querySelector('[data-vis-number]').textContent = number ? number.textContent.replace(/\.$/, '') : '';
     var hidden = {hide_links: ids(row.dataset.hiddenLinks), hide_groups: ids(row.dataset.hiddenGroups),
                   hide_assignments: ids(row.dataset.hiddenAssignments)};
     Object.keys(hidden).forEach(function (name) {
