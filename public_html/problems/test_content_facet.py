@@ -5,6 +5,7 @@
 import json
 import re
 import tempfile
+from pathlib import Path
 from io import StringIO
 
 from django.core.management import call_command
@@ -69,16 +70,16 @@ class PromptTests(SimpleTestCase):
         with self.assertRaises(ct.ContentLabelError):
             ct.parse_response('не JSON', [1])
 
-    def test_classify_uses_call(self):
-        seen = []
-
-        def call(prompt):
-            seen.append(prompt)
-            return '{"items": [{"id": 7, "codes": ["ABS_EQ"]}]}'
-
-        labels, _ = ct.classify(self.items, call)
+    def test_batch_file_and_answer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            answer = ct.write_batch(self.items, Path(tmp) / 'batch_001.md')
+            text = (Path(tmp) / 'batch_001.md').read_text(encoding='utf-8')
+            self.assertIn('### id=9', text)
+            self.assertIn(answer.name, text)
+            answer.write_text('{"items": [{"id": 7, "codes": ["ABS_EQ"]}]}',
+                              encoding='utf-8')
+            labels, _ = ct.read_answer(answer, [7, 9])
         self.assertEqual(labels, {7: ['ABS_EQ']})   # 9 не вернулся
-        self.assertEqual(len(seen), 1)
 
 
 class SeedTests(TestCase):
@@ -173,3 +174,22 @@ class CommandTests(TestCase):
                                          delete=False) as fh:
             json.dump({str(self.task.pk): ['ST_CUBE']}, fh)
         self.assertEqual(ct.load_labels(fh.name), {self.task.pk: ['ST_CUBE']})
+
+    def test_batches_and_answers_from_folder(self):
+        other = Task.objects.create(text_latex='Трапеция')
+        with tempfile.TemporaryDirectory() as tmp:
+            out = self.run_cmd('--make-batches', tmp, '--size', '1',
+                               '--ids', f'{self.task.pk},{other.pk}')
+            self.assertIn('Пакетов 2', out)
+            manifest = json.loads((Path(tmp) / 'manifest.json').read_text())
+            self.assertEqual(sorted(manifest), ['batch_001.md', 'batch_002.md'])
+            (Path(tmp) / 'batch_001.answer.json').write_text(json.dumps(
+                {'items': [{'id': self.task.pk, 'codes': ['ST_CUBE']}]}))
+            err = StringIO()
+            call_command('label_content', '--from', tmp, '--apply',
+                         stdout=StringIO(), stderr=err)
+        self.assertIn('batch_002.md', err.getvalue())   # нет ответа
+        self.assertEqual(
+            list(self.task.facet_values.values_list('code', flat=True)),
+            ['ST_CUBE'])
+        self.assertFalse(other.facet_values.exists())

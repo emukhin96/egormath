@@ -1,20 +1,17 @@
 """Разметка задач фасетом CONTENT («Содержание задачи»).
 
 Каркас этапа 07.11.2026: словарь — ``content_data.py`` (черновик, ждёт
-решений Егора), здесь — промпт AI-классификатора пакетами, разбор ответа
-и запись значений задаче. Классификатор возвращает только коды из
-словаря; всё прочее отбрасывается и попадает в отчёт.
-
-Сеть вызывается через ``call(prompt) -> str``: команда
-``label_content`` передаёт вызов Gemini по настройкам сайта, пилот на
-слепке прода — свой; тесты — заглушку.
+решений Егора). Размечают агенты Claude Code (решение Егора 07.11: без
+Gemini и внешних API): ``write_batch`` готовит файл-пакет — правила,
+словарь и задачи, агент читает его и пишет ответ JSON рядом;
+``read_answer`` проверяет ответ (только коды словаря, только задачи
+пакета), ``apply_labels`` записывает значения задачам.
 """
 
 import json
 import re
+from pathlib import Path
 
-import requests
-from django.conf import settings
 from django.db import transaction
 
 from .content_data import (CONTENT_FACET_CODE, CONTENT_GROUPS,
@@ -25,7 +22,7 @@ from .latex_utils import loads_neuro_json
 # дороже и почти никогда не меняет ответ (конструкции видны в начале).
 TEXT_LIMIT = 1500
 SOLUTION_LIMIT = 500
-BATCH_SIZE = 15
+BATCH_SIZE = 30
 
 _INSTRUCTION = (
     'Ты — методист по математике. Для каждой задачи ниже выбери из '
@@ -52,27 +49,8 @@ _INSTRUCTION = (
     'по одному элементу на каждую задачу, в том же порядке.'
 )
 
-_RESPONSE_SCHEMA = {
-    'type': 'OBJECT',
-    'properties': {
-        'items': {
-            'type': 'ARRAY',
-            'items': {
-                'type': 'OBJECT',
-                'properties': {
-                    'id': {'type': 'INTEGER'},
-                    'codes': {'type': 'ARRAY', 'items': {'type': 'STRING'}},
-                },
-                'required': ['id', 'codes'],
-            },
-        },
-    },
-    'required': ['items'],
-}
-
-
 class ContentLabelError(Exception):
-    """Сбой классификатора: сеть, формат ответа."""
+    """Ответ агента не разобрать: не JSON, нет списка items."""
 
 
 def vocabulary_text(groups=None):
@@ -148,46 +126,24 @@ def parse_response(raw, ids, valid_codes=None):
     return labels, dropped
 
 
-def classify(items, call, groups=None):
-    """Один пакет задач → ({id: [коды]}, отброшенные коды)."""
-    raw = call(build_prompt(items, groups))
-    return parse_response(raw, [i['id'] for i in items])
+def write_batch(items, path, groups=None):
+    """Файл-пакет для агента: промпт и куда положить ответ.
+
+    Ответ ждём рядом: ``<имя пакета>.answer.json``.
+    """
+    path = Path(path)
+    answer = path.with_suffix('.answer.json')
+    text = (build_prompt(items, groups)
+            + f'\n\nЗАПИШИ ОТВЕТ в файл {answer.name} рядом с этим файлом '
+            f'(полный путь: {answer}). Задач в пакете: {len(items)}.\n')
+    path.write_text(text, encoding='utf-8')
+    return answer
 
 
-def gemini_call(prompt, *, model=None, timeout=None):
-    """Вызов Gemini по настройкам сайта (ключ, прокси), ответ — JSON-текст."""
-    api_key = (getattr(settings, 'GEMINI_API_KEY', '')
-               or getattr(settings, 'GOOGLE_API_KEY', ''))
-    if not api_key:
-        raise ContentLabelError('Нет ключа GEMINI_API_KEY.')
-    model = model or settings.GEMINI_MODEL
-    base = (settings.GEMINI_API_BASE or
-            'https://generativelanguage.googleapis.com').strip().rstrip('/')
-    headers = {'x-goog-api-key': api_key}
-    if settings.GEMINI_API_BASE and settings.GEMINI_PROXY_SECRET:
-        headers['X-Egor-Proxy-Secret'] = settings.GEMINI_PROXY_SECRET
-    payload = {
-        'contents': [{'parts': [{'text': prompt}]}],
-        'generationConfig': {
-            'response_mime_type': 'application/json',
-            'response_schema': _RESPONSE_SCHEMA,
-            'maxOutputTokens': 8192,
-            'temperature': 0,
-        },
-    }
-    try:
-        response = requests.post(
-            f'{base}/v1beta/models/{model}:generateContent',
-            json=payload, headers=headers,
-            timeout=timeout or settings.GEMINI_TIMEOUT * 2)
-    except requests.RequestException as exc:
-        raise ContentLabelError(f'Сеть: {exc.__class__.__name__}') from exc
-    if response.status_code != 200:
-        raise ContentLabelError(f'HTTP {response.status_code}')
-    try:
-        return response.json()['candidates'][0]['content']['parts'][0]['text']
-    except (KeyError, IndexError, ValueError) as exc:
-        raise ContentLabelError('Неожиданный формат ответа.') from exc
+def read_answer(path, ids, valid_codes=None):
+    """Ответ агента из файла → ({id: [коды]}, отброшенные коды)."""
+    return parse_response(Path(path).read_text(encoding='utf-8'), ids,
+                          valid_codes)
 
 
 def task_item(task):
