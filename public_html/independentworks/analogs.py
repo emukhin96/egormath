@@ -2,50 +2,122 @@
 import hashlib
 import re
 from collections import defaultdict
+from dataclasses import dataclass
+from typing import Callable
 
 from django.db import transaction
 from django.db.models import Prefetch
-from problems.models import TaskSource
+from problems.models import Source, Task, TaskSource
 from worksheets.models import Collection, WorksheetItem
 from .models import Family, FamilyMember
 
-ZIV = re.compile(r'(sr|kr|pr)/(\d+)/v([1-8])/(.+)')
-# Варианты работ с кодом в ключе (Высоцкий): самостоятельная «С1.2/3»,
-# контрольная «КI.3/4» — работа, вариант, номер. Аналоги — один номер в паре
-# вариантов 1–2, 3–4 (КI: 1–2 базовые, 3–4 — более сложные).
-WORK_VARIANT = re.compile(r'(?P<work>С\d{1,2}|КI{1,3})\.(?P<variant>[1-4])/(?P<number>\d{1,2})')
+# Ключи Зива ``(sr|kr|pr)/NN/vK/num`` для мастера «пара вариантов»
+# (``preparation.ziv_rows``). Семьи строит правило ``ziv`` ниже. Номер —
+# одна-две цифры: трёхзначные «sr/01/v1/001» — Феоктистов, у него не пары.
+ZIV = re.compile(r'(sr|kr|pr)/(\d{1,2})/v([1-8])/(\d{1,2}[а-я]?)')
+
+# Профили импорта, у которых при «Загрузить в каталог» сразу строятся
+# семьи аналогов (``problems.textbook_import.commit_batch``): варианты
+# работ по правилам ``VARIANT_RULES`` и прототипы банков ФИПИ по рубрикам
+# (``bank_identity``). Новому профилю с вариантами достаточно выдавать
+# локаторы по одному из правил и вписать себя сюда; новый формат
+# локатора — новое правило, не пересекающееся с остальными
+# (``test_analog_rules.RuleContractTests``).
+ANALOG_PROFILES = frozenset({
+    'ziv', 'feoktistov', 'vysotsky', 'shabunin_method', 'merzlyak_dm',
+    'ostromogilsky', 'ostromogilsky_ege',
+})
 
 
-def work_variant_key(source_id, locator):
-    """Ключ и подпись семьи для «С1.2/3», «КI.3/4»; иначе ``None``."""
-    match = WORK_VARIANT.fullmatch(locator or '')
-    if not match:
-        return None
-    work, number = match.group('work'), match.group('number')
-    variant = int(match.group('variant'))
-    pair = (variant - 1) // 2
-    key = f'variants:{source_id}:{work}:{pair}:{number}'
-    title = f'{work} · варианты {pair * 2 + 1}–{pair * 2 + 2} · №{number}'
-    return key, title, variant
-# Варианты работ пособия Шабунина «КРII.1.В5/3» (работа, вариант, номер):
-# задачи под одним номером во всех вариантах работы — аналоги, включая
-# варианты повышенной сложности со звёздочкой.
-WORK_ALL_VARIANTS = re.compile(
-    r'(?P<work>(?:ДКР|КР|СР)[IVX]{1,4}\.\d)\.В(?P<variant>\d)/(?P<number>\d{1,2})')
+@dataclass(frozen=True)
+class VariantRule:
+    """«Один номер в вариантах одной работы — аналоги» для формата локатора.
+
+    ``pattern`` — полный локатор с группами ``work`` (работа, вместе с темой),
+    ``variant`` и ``number``. ``pairs`` — семья в паре вариантов 1–2, 3–4, …
+    (авторские уровни сложности, Зив и контрольные Высоцкого), иначе —
+    во всех вариантах работы. ``prefix`` — начало ключа семьи: ключи уже
+    созданных семей не меняются.
+    """
+    name: str
+    pattern: re.Pattern
+    pairs: bool
+    prefix: str = 'variants'
+    work_title: Callable[[str], str] = str
+
+    def variant_number(self, variant):
+        """«prep» → 0, «v3» → 3, «5» → 5; без варианта — 1."""
+        if not variant:
+            return 1
+        if variant == 'prep':
+            return 0
+        return int(variant.lstrip('v'))
 
 
-def work_all_variants_key(source_id, locator):
-    """Ключ и подпись семьи для «КРII.1.В5/3»; иначе ``None``."""
-    match = WORK_ALL_VARIANTS.fullmatch(locator or '')
-    if not match:
-        return None
-    work, number = match.group('work'), match.group('number')
-    key = f'variants:{source_id}:{work}:all:{number}'
-    return key, f'{work} · все варианты · №{number}', int(match.group('variant'))
+def _feoktistov_work(work):
+    kind, number = work.split('/')
+    return f"{({'sr': 'СР', 'kr': 'КР', 'test': 'Тест'})[kind]} {int(number)}"
 
 
-def _variant_key(source_id, locator):
-    return work_variant_key(source_id, locator) or work_all_variants_key(source_id, locator)
+# Порядок важен только для читаемости: форматы не пересекаются.
+VARIANT_RULES = (
+    # Феоктистов: «sr/01/prep/001», «kr/01/v3/002», «test/02/v1/001» —
+    # подготовительный и варианты 1–3 (тесты 1–2) одной работы однотипны.
+    VariantRule('feoktistov', re.compile(
+        r'(?P<work>(?:sr|kr|test)/\d{2})/(?P<variant>prep|v\d)/(?P<number>\d{3})'),
+        pairs=False, work_title=_feoktistov_work),
+    # Зив: «sr/03/v5/2». Варианты 1–2, 3–4, 5–6, 7–8 — уровни сложности:
+    # один номер в разных парах — разные приёмы, аналоги только в паре.
+    # «v0» (тема и вариант не распознаны) — в отчёт, без связи.
+    VariantRule('ziv', re.compile(
+        r'(?P<work>(?:sr|kr|pr)/\d{1,2})/v(?P<variant>[1-9])/(?P<number>\d{1,2}[а-я]?)'),
+        pairs=True, prefix='ziv'),
+    # Высоцкий: самостоятельные «С1.2/3» (два варианта) и контрольные
+    # «КI.3/4» (1–2 базовые, 3–4 более содержательные — разные пары).
+    VariantRule('vysotsky', re.compile(
+        r'(?P<work>С\d{1,2}|КI{1,3})\.(?P<variant>[1-4])/(?P<number>\d{1,2})'),
+        pairs=True),
+    # Шабунин, методическое пособие: «КРII.1.В5/3», включая варианты со
+    # звёздочкой; у работы без вариантов «СРIX.2/1» — один вариант.
+    VariantRule('shabunin_method', re.compile(
+        r'(?P<work>(?:ДКР|КР|СР)[IVX]{1,4}\.\d)(?:\.В(?P<variant>\d))?/(?P<number>\d{1,2})'),
+        pairs=False),
+    # ДМ Мерзляка, базовый уровень (договор 07.11.2026): упражнения
+    # «ДМ.В2/170» в вариантах 1–4, контрольные «КР3.В1/4».
+    VariantRule('merzlyak_dm', re.compile(
+        r'(?P<work>ДМ|КР\d{1,2})\.В(?P<variant>\d)/(?P<number>\d{1,4})'),
+        pairs=False),
+)
+ZIV_UNKNOWN_VARIANT = re.compile(r'(sr|kr|pr)/\d{1,2}/v0/.+')
+RULES = {rule.name: rule for rule in VARIANT_RULES}
+# Прежние имена регулярок Высоцкого и Шабунина (на них ссылаются docs).
+WORK_VARIANT = RULES['vysotsky'].pattern
+WORK_ALL_VARIANTS = RULES['shabunin_method'].pattern
+
+
+def variant_identity(source_id, locator):
+    """``(ключ, подпись, номер варианта, правило)`` для варианта работы.
+
+    Подпись — без названия источника. Не вариант работы — ``None``.
+    """
+    for rule in VARIANT_RULES:
+        match = rule.pattern.fullmatch(locator or '')
+        if not match:
+            continue
+        work, number = match.group('work'), match.group('number')
+        variant = rule.variant_number(match.group('variant'))
+        shown = number.lstrip('0') or number
+        if rule.pairs:
+            pair = (variant - 1) // 2
+            group = str(pair)
+            label = f'варианты {pair * 2 + 1}–{pair * 2 + 2}'
+        else:
+            group, label = 'all', 'все варианты'
+        # Ключ Зива — «ziv:ист:sr:03:пара:номер», как до общих правил.
+        work_key = work.replace('/', ':') if rule.prefix == 'ziv' else work
+        key = f'{rule.prefix}:{source_id}:{work_key}:{group}:{number}'
+        return key, f'{rule.work_title(work)} · {label} · №{shown}', variant, rule
+    return None
 
 
 PROTOTYPE = re.compile(r'прототип(?:а|у)?\s*[№:]?\s*(\d+(?:\.\d+)+)', re.I)
@@ -82,28 +154,32 @@ def task_family_keys(task_ids):
     Сохранённые семьи — как вкладка «Связанные аналоги» в подборе
     (``Task.analog_families``, в т.ч. вручную созданные аналоги) — плюс
     автоопределение по ``TaskSource`` теми же правилами, что и
-    ``discover_families``: ЗИВ ``(sr|kr|pr)/N/vK/num`` (пара вариантов),
-    варианты работ ``С1.2/3``, ``КI.3/4`` (``WORK_VARIANT``), все варианты
-    работы ``КРII.1.В5/3`` (``WORK_ALL_VARIANTS``) и
-    «прототип N.N» банка. Подборочные рубрики без синхронизации не
-    просматриваем: это полный проход по каталогу.
+    ``discover_families``: варианты работ (``VARIANT_RULES``) и «прототип
+    N.N» банка. Локальная копия (``variant_of``) наследует признаки
+    исходной задачи, как ``compact._families``. Подборочные рубрики без
+    синхронизации не просматриваем: это полный проход по каталогу.
     """
-    keys = defaultdict(set)
     ids = list(task_ids)
-    for task_id, family_id in FamilyMember.objects.filter(task_id__in=ids).values_list('task_id', 'family_id'):
-        keys[task_id].add(f'family:{family_id}')
-    for ref in TaskSource.objects.filter(task_id__in=ids):
+    origins = dict(Task.objects.filter(pk__in=ids, variant_of__isnull=False)
+                   .values_list('pk', 'variant_of_id'))
+    lookup = set(ids) | set(origins.values())
+    own = defaultdict(set)
+    for task_id, family_id in FamilyMember.objects.filter(task_id__in=lookup).values_list('task_id', 'family_id'):
+        own[task_id].add(f'family:{family_id}')
+    for ref in TaskSource.objects.filter(task_id__in=lookup):
         path, locator = ref.source_path or [], ref.locator or ''
-        match = ZIV.fullmatch(locator)
-        if match:
-            kind, topic, variant, number = match.groups()
-            keys[ref.task_id].add(f'ziv:{ref.source_id}:{kind}:{topic}:{(int(variant) - 1) // 2}:{number}')
-        elif _variant_key(ref.source_id, locator):
-            keys[ref.task_id].add(_variant_key(ref.source_id, locator)[0])
+        identity = variant_identity(ref.source_id, locator)
+        if identity:
+            own[ref.task_id].add(identity[0])
         elif any(SECTION.search(str(p)) for p in path):
             identity = bank_identity(ref.source_id, path, locator)
             if identity:
-                keys[ref.task_id].add(identity[0])
+                own[ref.task_id].add(identity[0])
+    keys = defaultdict(set)
+    for pk in ids:
+        found = own.get(pk, set()) | own.get(origins.get(pk), set())
+        if found:
+            keys[pk] = found
     return keys
 
 
@@ -145,10 +221,12 @@ def similar_groups(task_ids):
 def discover_families(*, source_id=None):
     groups = {}
     ambiguous = []
-    ziv_variants = defaultdict(lambda: defaultdict(set))
+    # Ключ семьи варианта работы → (пары ли, {вариант: задачи}).
+    work_variants = {}
 
     def add(key, title, task_id, evidence):
-        group = groups.setdefault(key, {'title': title[:255], 'members': defaultdict(list)})
+        group = groups.setdefault(key, {'title': title[:255], 'members': defaultdict(list),
+                                        'source_id': evidence['source_id']})
         if evidence not in group['members'][task_id]:
             group['members'][task_id].append(evidence)
 
@@ -158,19 +236,14 @@ def discover_families(*, source_id=None):
     for ref in refs:
         ref_index[(ref.source_id, ref.task_id)].append(ref)
         path, locator = ref.source_path or [], ref.locator or ''
-        match = ZIV.fullmatch(locator)
         evidence = {'source_id': ref.source_id, 'locator': locator, 'path': path}
-        if match:
-            kind, topic, variant, number = match.groups()
-            pair = (int(variant) - 1) // 2
-            key = f'ziv:{ref.source_id}:{kind}:{topic}:{pair}:{number}'
-            title = f'{ref.source.title} · {kind}/{topic} · варианты {pair * 2 + 1}–{pair * 2 + 2} · №{number}'
-            add(key, title, ref.task_id, evidence)
-            ziv_variants[key][int(variant)].add(ref.task_id)
-        elif _variant_key(ref.source_id, locator):
-            key, title, variant = _variant_key(ref.source_id, locator)
+        identity = variant_identity(ref.source_id, locator)
+        if identity:
+            key, title, variant, rule = identity
             add(key, f'{ref.source.title} · {title}', ref.task_id, evidence)
-            ziv_variants[key][variant].add(ref.task_id)
+            work_variants.setdefault(key, (rule.pairs, defaultdict(set)))[1][variant].add(ref.task_id)
+        elif ZIV_UNKNOWN_VARIANT.fullmatch(locator):
+            ambiguous.append(f'Задача #{ref.task_id}: вариант не распознан ({locator}), сверить с книгой')
         elif any(SECTION.search(str(p)) for p in path):
             identity = bank_identity(ref.source_id, path, locator)
             if identity:
@@ -216,10 +289,10 @@ def discover_families(*, source_id=None):
                  'item_id': item.pk, 'path': context})
 
     incomplete = []
-    for key, variants in ziv_variants.items():
+    for key, (pairs, variants) in work_variants.items():
         # Пара вариантов (Зив, Высоцкий) — ровно два; все варианты работы
-        # (Шабунин) — не меньше двух.
-        if len(variants) != 2 if ':all:' not in key else len(variants) < 2:
+        # (Феоктистов, Шабунин, ДМ Мерзляка) — не меньше двух.
+        if len(variants) != 2 if pairs else len(variants) < 2:
             incomplete.append(groups[key]['title'])
             groups.pop(key)
         elif any(len(ids) != 1 for ids in variants.values()):
@@ -232,6 +305,8 @@ def sync_families(*, dry_run=False, report=False, source_id=None):
     groups, incomplete, ambiguous = discover_families(source_id=source_id)
     result = {'families': len(groups), 'created': 0, 'members_added': 0,
               'keys_updated': 0, 'incomplete': incomplete, 'ambiguous': ambiguous, 'dry_run': dry_run}
+    # По источникам: найдено семей, из них новых, новых участников.
+    by_source = defaultdict(lambda: {'families': 0, 'created': 0, 'members_added': 0})
     with transaction.atomic():
         # Старый ключ не различал главы. Переносим только однозначное
         # семейство; ручных участников сохраняем вместе с его идентификатором.
@@ -263,8 +338,11 @@ def sync_families(*, dry_run=False, report=False, source_id=None):
             if key in blocked:
                 continue
             family = aliases.get(key) or Family.objects.filter(key=key).first()
+            counts = by_source[group['source_id']]
+            counts['families'] += 1
             if family is None:
                 result['created'] += 1
+                counts['created'] += 1
                 if not dry_run:
                     family = Family.objects.create(key=key, title=group['title'], origin='source')
             existing = {m.task_id: m for m in family.familymember_set.all()} if family else {}
@@ -272,6 +350,7 @@ def sync_families(*, dry_run=False, report=False, source_id=None):
                 member = existing.get(task_id)
                 if member is None:
                     result['members_added'] += 1
+                    counts['members_added'] += 1
                     if not dry_run:
                         FamilyMember.objects.get_or_create(family=family, task_id=task_id,
                             defaults={'origin': 'source', 'evidence': evidence})
@@ -280,4 +359,7 @@ def sync_families(*, dry_run=False, report=False, source_id=None):
                     if combined != member.evidence:
                         member.evidence = combined
                         member.save(update_fields=['evidence'])
+    titles = dict(Source.objects.filter(pk__in=by_source).values_list('pk', 'title'))
+    result['by_source'] = [{'id': pk, 'title': titles.get(pk, ''), **counts}
+                           for pk, counts in sorted(by_source.items())]
     return result if report else result['families']
