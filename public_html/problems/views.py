@@ -162,6 +162,9 @@ def task_list(request):
         # Общая задача у приглашённого учителя — без inline-форм и чекбоксов.
         task.can_edit = can_edit_task(request.user, task)
     ctx.update(audience_context(request, attach_usage(request, page.object_list)))
+    # Значок «аналоги N» в строке — два запроса на страницу
+    from independentworks.analog_lists import attach_analog_counts
+    attach_analog_counts(request.user, page.object_list)
     return render(request, 'problems/task_list.html', ctx)
 
 
@@ -450,7 +453,11 @@ def task_detail(request, pk):
     from .editor import context
     task = get_object_or_404(visible_tasks(request.user).prefetch_related(
         'subitems', 'images', 'topics', 'tags', 'source_refs__source'), pk=pk)
-    return render(request, 'problems/task_detail.html', context(request, task))
+    ctx = context(request, task)
+    # Блок «Аналоги» под карточкой (problems/_analogs.html)
+    from .analog_views import card_context
+    ctx.update(card_context(request, task, ctx['item']))
+    return render(request, 'problems/task_detail.html', ctx)
 
 
 @teacher_required

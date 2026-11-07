@@ -1,0 +1,12 @@
+{% load task_extras %}{# Список аналогов строки конструктора: worksheets.analog_views.worksheet_item_analogs, подгружает static/js/analogs.js #}
+<div class="ws-analogs-list">
+  {% if analogs %}
+  <form id="{{ form_id }}" method="post" hidden>{% csrf_token %}</form>
+  <ul class="analog-list">
+    {% for a in analogs %}{% include 'includes/analogs/row.html' %}{% endfor %}
+  </ul>
+  {% if analogs_more %}<p class="helptext">И ещё {{ analogs_more }} {{ analogs_more|plural_ru:'аналог,аналога,аналогов' }} — на <a href="{% url 'task_detail' task.pk %}#analogs">карточке задачи</a>.</p>{% endif %}
+  {% else %}
+  <p class="helptext">Аналогов нет.</p>
+  {% endif %}
+</div>

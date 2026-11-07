@@ -1,5 +1,6 @@
 from django.urls import path
 
+from . import analog_views
 from . import corpus_views, views
 
 urlpatterns = [
@@ -90,6 +91,14 @@ urlpatterns = [
          name='worksheet_edit_text'),
     path('<int:pk>/items/<int:item_id>/settings/',
          views.worksheet_item_settings, name='worksheet_item_settings'),
+    path('<int:pk>/items/<int:item_id>/analogs/',
+         analog_views.worksheet_item_analogs, name='worksheet_item_analogs'),
+    path('<int:pk>/items/<int:item_id>/analogs/replace/',
+         analog_views.worksheet_item_analog_replace,
+         name='worksheet_item_analog_replace'),
+    path('<int:pk>/items/<int:item_id>/analogs/after/',
+         analog_views.worksheet_item_analog_after,
+         name='worksheet_item_analog_after'),
     path('<int:pk>/items/<int:item_id>/visibility/',
          views.worksheet_item_visibility, name='worksheet_item_visibility'),
     path('<int:pk>/recipients/<str:kind>/<int:recipient_id>/visibility/',

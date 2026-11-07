@@ -1,5 +1,6 @@
 from django.urls import path
 
+from . import analog_views
 from . import clone, editor, proposals, views
 
 urlpatterns = [
@@ -63,6 +64,10 @@ urlpatterns = [
     path('<int:pk>/propose/', proposals.task_propose, name='task_propose'),
     path('<int:pk>/delete/', views.task_delete, name='task_delete'),
     path('<int:pk>/duplicate/', views.task_duplicate, name='task_duplicate'),
+    path('<int:pk>/analogs/link/', analog_views.task_analog_link,
+         name='task_analog_link'),
+    path('<int:pk>/analogs/unlink/', analog_views.task_analog_unlink,
+         name='task_analog_unlink'),
     path('<int:pk>/clone/', clone.task_clone, name='task_clone'),
     path('<int:pk>/clone/preview/', clone.task_clone_preview,
          name='task_clone_preview'),

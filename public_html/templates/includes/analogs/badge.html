@@ -1,0 +1,2 @@
+{# Значок «N аналогов» в строке каталога: task.analog_count — independentworks.analog_lists.attach_analog_counts (два запроса на страницу) #}
+{% if task.analog_count %}<a class="badge badge-analogs" href="{% url 'task_detail' task.pk %}#analogs" title="Аналоги задачи — список на карточке">{% include 'includes/analogs/count.html' with count=task.analog_count %}</a>{% endif %}

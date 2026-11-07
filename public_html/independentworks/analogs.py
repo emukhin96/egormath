@@ -9,7 +9,7 @@ from django.db import transaction
 from django.db.models import Prefetch
 from problems.models import Source, Task, TaskSource
 from worksheets.models import Collection, WorksheetItem
-from .models import Family, FamilyMember
+from .models import Family, FamilyExclusion, FamilyMember
 
 # Ключи Зива ``(sr|kr|pr)/NN/vK/num`` для мастера «пара вариантов»
 # (``preparation.ziv_rows``). Семьи строит правило ``ziv`` ниже. Номер —
@@ -362,7 +362,13 @@ def sync_families(*, dry_run=False, report=False, source_id=None):
                 if not dry_run:
                     family = Family.objects.create(key=key, title=group['title'], origin='source')
             existing = {m.task_id: m for m in family.familymember_set.all()} if family else {}
+            # Отвязанные редактором («Отвязать» в блоке «Аналоги») по
+            # локатору не возвращаются (FamilyExclusion).
+            excluded = (set(FamilyExclusion.objects.filter(family=family).values_list('task_id', flat=True))
+                        if family else set())
             for task_id, evidence in group['members'].items():
+                if task_id in excluded:
+                    continue
                 member = existing.get(task_id)
                 if member is None:
                     result['members_added'] += 1

@@ -37,6 +37,25 @@ class FamilyMember(models.Model):
         constraints = [models.UniqueConstraint(fields=['family', 'task'], name='iw_family_task')]
 
 
+class FamilyExclusion(models.Model):
+    """Редактор отвязал задачу от семьи («Отвязать» в блоке «Аналоги»).
+
+    Участник семьи при этом удаляется — все, кто читает ``FamilyMember``
+    (подбор, корзина, компактный состав), сразу перестают видеть связь, —
+    а пара (семья, задача) остаётся здесь, чтобы ``sync_families`` и
+    автосвязывание при загрузке не вернули её по локатору. Ручное
+    «Связать» снимает исключение.
+    """
+    family = models.ForeignKey(Family, on_delete=models.CASCADE, related_name='exclusions')
+    task = models.ForeignKey('problems.Task', on_delete=models.CASCADE, related_name='+')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['family', 'task'], name='iw_family_exclusion')]
+
+
 class Work(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     title = models.CharField('Название', max_length=190)
