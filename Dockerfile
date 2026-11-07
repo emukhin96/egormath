@@ -36,6 +36,7 @@ RUN pip install -r requirements.txt
 
 COPY --chown=app:app . .
 COPY --from=css --chown=app:app /src/public_html/static/css/app.css public_html/static/css/app.css
+COPY --from=css --chown=app:app /src/public_html/static/js/app.js public_html/static/js/app.js
 
 USER app
 WORKDIR /app/public_html

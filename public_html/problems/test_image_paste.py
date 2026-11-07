@@ -49,7 +49,8 @@ class ImagePasteTests(TestCase):
 
     def test_base_includes_script_and_marks_formset_input(self):
         response = self.client.get(reverse('task_create'))
-        self.assertContains(response, 'js/image_paste.js')
+        # image_paste.js — внутри общей сборки app.js (make build-js)
+        self.assertContains(response, 'js/app.js')
         # У строки формсета своё превью — зона вставки без миниатюры
         self.assertContains(response, 'data-image-paste-thumb="off"')
 

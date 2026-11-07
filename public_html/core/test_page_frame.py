@@ -48,7 +48,8 @@ def visible_dots(base):
     for folder, pattern, comments in sets:
         for path in sorted((base / folder).rglob(pattern)):
             name = str(path.relative_to(base))
-            if name.endswith(('app.css', '_screens.css')):
+            # Собранные файлы (make build-css / build-js): их источники уже проверены
+            if name.endswith(('app.css', '_screens.css', 'js/app.js')):
                 continue  # сборки: проверяются исходники
             text = comments.sub('', path.read_text(encoding='utf-8'))
             if folder == 'static/css':

@@ -142,6 +142,16 @@ class CatalogCountsCacheTests(Roles, TransactionTestCase):
         source.save()
         self.assertEqual(source_rows(self.editor)[0]['title'], 'Задачник после')
 
+    def test_catalog_total_cached_and_refreshed(self):
+        from .catalog_counts import catalog_total
+        total = catalog_total(self.editor)
+        with self.assertNumQueries(0):
+            self.assertEqual(catalog_total(self.editor), total)
+        shared_task(self.editor, 'Ещё одна')
+        self.assertEqual(catalog_total(self.editor), total + 1)
+        self.assertTrue(self.client.login(username='editor', password='pass12345'))
+        self.assertEqual(self.client.get(reverse('dashboard')).context['tasks_total'], total + 1)
+
     def test_counts_separate_for_teachers(self):
         own = Task.new_for(self.guest, text_latex='Личная гостя')
         link(own, self.root, TaskTopic.ROLE_PRIMARY)
