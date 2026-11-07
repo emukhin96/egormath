@@ -51,11 +51,13 @@
   </section>
 
   {% if panel %}
-  <aside class="card bd-panel" aria-label="Условие задачи {{ panel.number }}">
-    <div class="bd-panel-head"><span class="bd-panel-title">Задача {{ panel.number }}</span><button type="button" class="linklike" data-attempt-url="{{ panel.task_window_url }}">Окно задачи</button></div>
+  <aside class="card bd-panel" aria-label="Условие задачи {{ panel.number }}" data-task-png-root>
+    <div class="bd-panel-head"><span class="bd-panel-title">Задача {{ panel.number }}</span><span class="task-actions-head"><button type="button" class="linklike" data-attempt-url="{{ panel.task_window_url }}">Окно задачи</button>{% include 'includes/task_actions.html' with task=panel.task compact=True %}</span></div>
+    <div data-task-png-content>
     <div class="bd-panel-condition math-content">{{ panel.task.text_latex|web_text }}</div>
     {% task_images panel.task %}
     {% if panel.subitems %}<ol class="subitems">{% for s in panel.subitems %}<li><span class="math-content">{{ s.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
+    </div>
     {% answer_material panel.task panel.subitems as material %}
     {# Ответ задачи — тем же блоком, что в карточке (у него свой заголовок); без текста ответа — маска с эталоном #}
     <div class="bd-panel-answer">

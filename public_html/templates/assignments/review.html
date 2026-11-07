@@ -39,7 +39,10 @@
   </div>
   {% else %}
   {# Вариант A «Лента» (выбор Егора 07.11): условие свёрнуто до двух строк, ответ и шкала — одной плашкой, остальное — тихой строкой под ней #}
-  <div class="card ws-view review-task" id="task-{{ row.number }}" data-review-task="{{ row.number }}">
+  <div class="card ws-view review-task" id="task-{{ row.number }}" data-review-task="{{ row.number }}" data-task-png-root>
+    {# Картинкой, в корзину, открыть задачу — панель в углу; на картинку идёт только условие #}
+    <div class="task-actions-corner">{% include 'includes/task_actions.html' with task=row.task compact=True %}</div>
+    <div data-task-png-content>
     {% include 'worksheets/_common_condition.html' %}
     {% include 'includes/task_row.html' with number=row.number stars=row.item.effective_stars text=row.statement %}
     {% include 'problems/_task_images.html' with images=row.review_images %}
@@ -52,6 +55,7 @@
       {% endfor %}
     </ol>
     {% endif %}
+    </div>
 
     <div class="review-work">
     <div class="review-live" data-live-answer="{{ row.item.pk }}">{% include 'assignments/_live_answer.html' %}</div>

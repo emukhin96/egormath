@@ -67,6 +67,22 @@ def visible_tasks(user):
         Q(is_shared=True) | Q(created_by=user) | Q(pk__in=in_own_worksheets))
 
 
+def can_view_task(user, task):
+    """Та же граница, что у ``visible_tasks``, для одной уже загруженной
+    задачи: общие и свои — без запроса, чужие — запросом «стоит ли в моём
+    листке». Нужна ссылкам «Открыть задачу» в панели действий
+    (``includes/task_actions.html``): учитель не должен получать ссылку,
+    которая ответит 404."""
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    if is_base_editor(user):
+        return True
+    if task.is_shared or task.created_by_id == user.pk:
+        return True
+    from worksheets.models import WorksheetItem
+    return WorksheetItem.objects.filter(worksheet__owner=user, task_id=task.pk).exists()
+
+
 def shows_foreign_tasks(user):
     """Тумблер редактора «Показывать задачи других учителей»
     (``Profile.show_foreign_tasks``): по умолчанию выключен, у

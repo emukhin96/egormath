@@ -53,11 +53,13 @@
 
   <section class="rv-main" aria-label="Задача у всех"{% if current %} data-group-grade-url="{{ group_grade_url }}" data-item="{{ current.item.pk }}" data-rows="{{ current.rows|length }}" data-pending="{{ current.pending }}"{% endif %}>
     {% if current %}
-    <div class="card rv-task">
-      <div class="rv-task-head"><span class="tw-label">№{{ current.number }}</span><button type="button" class="linklike" data-attempt-url="{{ task_window_url }}">Окно задачи</button></div>
+    <div class="card rv-task" data-task-png-root>
+      <div class="rv-task-head"><span class="tw-label">№{{ current.number }}</span><span class="task-actions-head"><button type="button" class="linklike" data-attempt-url="{{ task_window_url }}">Окно задачи</button>{% include 'includes/task_actions.html' with task=task compact=True %}</span></div>
+      <div data-task-png-content>
       <div class="math-content">{{ task.text_latex|web_text }}</div>
       {% task_images task %}
       {% if subitems %}<ol class="subitems">{% for s in subitems %}<li><span class="math-content">{{ s.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
+      </div>
       {% if reference %}<div class="rv-reference"><span class="tw-label">Ответ</span><div class="tw-value">{% include 'assignments/_mask.html' with fragments=reference editable=False show_checks=False %}</div></div>{% endif %}
     </div>
     {% for g in groups %}
