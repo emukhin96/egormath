@@ -28,6 +28,7 @@ from .clone_numbers import (follow_mask, mask_follows_answer, mask_numbers,
                             split_numbers)
 from .forms import clean_mask_text
 from .models import Task, TaskImage
+from .models import corrected
 from .task_images import TASKPIC_NUM_RE, taskpic_indices
 
 IMAGE_ACTIONS = ('keep', 'replace', 'remove')
@@ -105,7 +106,8 @@ def _owner_data(owner, key, title):
         'text': owner.text_latex,
         'segments': split_numbers(owner.text_latex),
         'answer': answer,
-        'answer_source': 'author' if (owner.author_answer_latex or '').strip() else 'editor',
+        'answer_source': ('editor' if corrected(owner) or not (owner.author_answer_latex or '').strip()
+                          else 'author'),
         'mask': mask,
         'mask_raw': mask_raw,
         'mask_follows': follows,
@@ -255,12 +257,22 @@ def _apply_owner(original, clone, values, keep_solution):
         clone.text_latex = values['text']
         fields.append('text_latex')
     if 'answer' in values:
-        if (original.author_answer_latex or '').strip():
-            # Правим действующий (авторский) ответ; AI-версия устарела
+        if (original.author_answer_latex or '').strip() and not corrected(original):
+            # Правим действующий (авторский) ответ; AI-версия устарела.
+            # При ошибочном ответе книги действующий — редакторский: его и правим.
             clone.author_answer_latex = values['answer']
             clone.answer_latex = ''
         else:
             clone.answer_latex = values['answer']
+            if corrected(original):
+                # Ответ книги и отметка относятся к исходным числам — у клона
+                # их нет (ревью #324).
+                clone.author_answer_latex = ''
+                # Книжное решение ведёт к ошибочному ответу — у клона без
+                # отметки оно стало бы основным; остаётся редакторское.
+                clone.author_solution_latex = ''
+                clone.author_answer_wrong = False
+                fields += ['author_answer_wrong', 'author_solution_latex']
         clone.answer_mask = values['mask']
         fields += ['author_answer_latex', 'answer_latex', 'answer_mask']
     if not keep_solution:
