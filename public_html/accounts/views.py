@@ -385,6 +385,7 @@ def recent_worksheets(user, limit=5):
 
 def teacher_dashboard(request):
     from . import teacher_home
+    from problems.catalog_counts import catalog_total
     worksheets = recent_worksheets(request.user)
     pending = (Assignment.visible_to(request.user)
                .filter(status=Assignment.STATUS_SUBMITTED)
@@ -396,7 +397,7 @@ def teacher_dashboard(request):
         'pending': pending,
         'worksheets_total': Worksheet.visible_to(request.user).count(),
         'students_total': Profile.students_for(request.user).count(),
-        'tasks_total': catalog_tasks(request.user).count(),
+        'tasks_total': catalog_total(request.user),
         'proposals': None,
         # Карточка «Первые шаги» — не редактору, пока не скрыта и не пройдена
         'onboarding': dashboard_onboarding(request),

@@ -67,6 +67,29 @@ class VendorTemplatesTests(SimpleTestCase):
             staticfiles_storage._wrapped = empty
 
 
+class BundledScriptsTests(SimpleTestCase):
+    """Общие скрипты страниц — одним app.js (make build-js, JS_BASE в Makefile)."""
+
+    BASE = ('math', 'katex_copy', 'autosave', 'image_paste', 'livefile', 'busy',
+            'shell', 'dialogs', 'quick_clone', 'image_zoom', 'taxonomy')
+
+    def test_base_template_loads_one_bundle(self):
+        text = (TEMPLATES_DIR / 'base.html').read_text(encoding='utf-8')
+        self.assertIn("{% static 'js/app.js' %}", text)
+        for name in self.BASE:
+            self.assertNotIn(f"'js/{name}.js'", text, name)
+
+    def test_bundle_contains_every_base_script_in_order(self):
+        bundle = finders.find('js/app.js')
+        self.assertIsNotNone(bundle, 'нет static/js/app.js — make build-js')
+        text = Path(bundle).read_text(encoding='utf-8')
+        positions = [text.index(f'/* === public_html/static/js/{name}.js === */') for name in self.BASE]
+        self.assertEqual(positions, sorted(positions))
+        for name in self.BASE:
+            source = Path(finders.find(f'js/{name}.js')).read_text(encoding='utf-8')
+            self.assertIn(source.strip(), text, name)
+
+
 class VendorPagesTests(TestCase):
     def test_pages_link_local_assets(self):
         login = self.client.get(reverse('login'))

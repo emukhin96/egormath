@@ -19,17 +19,8 @@
   <link rel="stylesheet" href="{% static 'vendor/katex/katex.min.css' %}">
   <script defer src="{% static 'vendor/katex/katex.min.js' %}"></script>
   <script defer src="{% static 'vendor/katex/contrib/auto-render.min.js' %}"></script>
-  <script defer src="{% static 'js/math.js' %}?v=3"></script>
-  <script defer src="{% static 'js/katex_copy.js' %}"></script>
-  <script defer src="{% static 'js/autosave.js' %}?v=7"></script>
-  <script defer src="{% static 'js/image_paste.js' %}?v=5"></script>
-  <script defer src="{% static 'js/livefile.js' %}"></script>
-  <script defer src="{% static 'js/busy.js' %}"></script>
-  <script defer src="{% static 'js/shell.js' %}?v=9"></script>
-  <script defer src="{% static 'js/dialogs.js' %}"></script>
-  <script defer src="{% static 'js/quick_clone.js' %}"></script>
-  <script defer src="{% static 'js/image_zoom.js' %}?v=2"></script>
-  <script defer src="{% static 'js/taxonomy.js' %}?v=3"></script>
+  {# Общие скрипты страниц одним файлом: make build-js (JS_BASE в Makefile) склеивает math, katex_copy, autosave, image_paste, livefile, busy, shell, dialogs, quick_clone, image_zoom, taxonomy; app.js не в git, как app.css #}
+  <script defer src="{% static 'js/app.js' %}"></script>
   {# Как верхнее меню: суперпользователь без профиля тоже учитель (get_role). #}
   {% if user.profile.is_teacher or user.is_superuser %}
   {# Нейрогенерация — только редакторам (решение 5 плана пользователей): без адреса меню у остальных и так приглушено #}

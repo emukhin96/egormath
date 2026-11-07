@@ -39,11 +39,18 @@ CSS_OUT := public_html/static/css/app.css
 # _screens.css (не в git), который input.css подключает одной строкой.
 SCREENS := $(sort $(wildcard public_html/static/css/screens/*.css))
 SCREENS_OUT := public_html/static/css/_screens.css
+# Скрипты base.html, которые нужны каждой странице, склеиваются в один
+# app.js (не в git, как app.css): один запрос вместо одиннадцати. Порядок —
+# как раньше стояли теги <script defer>: math.js до остальных (renderMathContent).
+JS_DIR := public_html/static/js
+JS_BASE := math katex_copy autosave image_paste livefile busy shell dialogs quick_clone image_zoom taxonomy
+JS_FILES := $(addprefix $(JS_DIR)/,$(addsuffix .js,$(JS_BASE)))
+JS_OUT := $(JS_DIR)/app.js
 
 # В CI venv нет — тогда берётся системный python
 PYTHON := $(shell test -x "$(ROOT)venv/bin/python" && echo ../venv/bin/python || echo python)
 
-.PHONY: build-css watch-css ensure-tailwind screens-css test check
+.PHONY: build-css build-js watch-css ensure-tailwind screens-css test check
 
 # С VPS соединения с CDN GitHub часто глохнут после первых сотен КБ и висят
 # без обрыва (так завис деплой 23.10), а нормальная загрузка идёт за секунды.
@@ -71,9 +78,17 @@ ensure-tailwind:
 screens-css:
 	@cat $(SCREENS) /dev/null > "$(SCREENS_OUT)"
 
-build-css: ensure-tailwind screens-css
+build-css: ensure-tailwind screens-css build-js
 	"$(TW)" -i "$(CSS_IN)" -o "$(CSS_OUT)" --minify
 	@echo "Built $(CSS_OUT)"
+
+# Склейка без минификации и без Node: между файлами «;» на отдельной строке,
+# чтобы IIFE соседей не слиплись в вызов. Каждый файл — замыкание или
+# глобальные функции, как при отдельных тегах, поведение не меняется.
+build-js: $(JS_FILES)
+	@{ echo "/* Собрано make build-js из: $(JS_BASE). Не править руками. */"; \
+	   for f in $(JS_FILES); do echo; echo "/* === $$f === */"; cat "$$f"; echo; echo ";"; done; } > "$(JS_OUT)"
+	@echo "Built $(JS_OUT)"
 
 # Правки в screens/*.css при watch не подхватываются: после них — make build-css
 watch-css: ensure-tailwind screens-css

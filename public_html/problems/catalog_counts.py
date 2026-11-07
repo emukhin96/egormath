@@ -137,6 +137,13 @@ def section_counts(user, blocks, active_root=None):
     return _cached(user, suffix, build)
 
 
+def catalog_total(user):
+    """Число задач каталога учителя (счётчик в кабинете): тот же кэш и те
+    же метки поколения, что у разделов и фасетов — полный COUNT по 30 тыс.
+    задач не выполняется на каждое открытие кабинета."""
+    return _cached(user, 'total', lambda: catalog_tasks(user).count())
+
+
 # --- классы и источники ------------------------------------------------------
 
 def grade_counts(user):
