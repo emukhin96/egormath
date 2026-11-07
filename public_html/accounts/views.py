@@ -8,6 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Prefetch, Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -499,7 +500,12 @@ def students(request):
                     'password': password,
                 }
                 messages.success(request, f'Ученик {user.get_full_name()} создан.')
+                if _wants_json(request):
+                    return _credentials_json(user, password)
                 return redirect('students')
+            if _wants_json(request):
+                # Ошибки формы — обычной отправкой, окно откроется с подсказками
+                return JsonResponse({'ok': False})
     q = request.GET.get('q', '').strip()
     group_id = request.GET.get('group', '').strip()
     teacher_id = request.GET.get('teacher', '').strip()
@@ -727,4 +733,22 @@ def reset_student_password(request, user_id):
         }
         messages.success(
             request, f'Пароль ученика {profile.user.get_full_name()} сброшен.')
+        if _wants_json(request):
+            return _credentials_json(profile.user, password)
     return redirect('students')
+
+
+def _wants_json(request):
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+
+def _credentials_json(user, password):
+    """Логин и пароль для автоматического копирования в буфер (ответ Егора
+    к U1, 07.11): credentials_copy.js кладёт их в буфер прямо из клика.
+    Плашка над списком после перезагрузки остаётся запасным путём."""
+    return JsonResponse({
+        'ok': True,
+        'name': user.get_full_name(),
+        'username': user.username,
+        'password': password,
+    })

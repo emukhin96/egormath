@@ -2404,6 +2404,13 @@
     border-left: 2px solid var(--border);
   }
 
+  /* Ответ книги помечен ошибочным: исправленный — основной, книжный — серой строкой */
+  .answer-book {
+    margin-top: var(--space-1);
+    font-size: var(--fs-md);
+    color: var(--muted);
+  }
+
   /* Тумблер «только из задачника»: AI-ответы и спойлеры скрыты */
   .author-only .answer-box[data-src="ai"],
   .author-only .solution-box[data-src="ai"],
