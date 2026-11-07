@@ -20,8 +20,9 @@
 {# Фильтры применяются сразу: вид и статус — сегменты-ссылки, остальное — автоотправка формы #}
 <form method="get" class="page-toolbar assignment-filters" data-autosubmit>
   {% if independentworks_enabled %}
-  {% seg_links 'kind' kind_choices label='Вид работы' %}
-  {% if filters.kind %}<input type="hidden" name="kind" value="{{ filters.kind }}">{% endif %}
+  {# Переключатель из двух положений (ревизия 03.11, Z2): без «Все», по умолчанию «Задания» #}
+  {% seg_links 'kind' kind_choices label='Вид работы' all_label=None current=filters.kind %}
+  {% if filters.kind == 'independent' %}<input type="hidden" name="kind" value="independent">{% endif %}
   {% endif %}
   {% seg_links 'status' status_short_choices label='Статус' current=filters.status %}
   {% if filters.status %}<input type="hidden" name="status" value="{{ filters.status }}">{% endif %}
@@ -29,8 +30,8 @@
     <input type="search" name="q" id="assignment-q" value="{{ filters.q }}"
            placeholder="Листок или ученик" aria-label="Поиск: листок или ученик">
   </div>
-  {% if filters.q or filters.status or filters.student or filters.worksheet or filters.due or filters.owner or filters.kind %}
-  <a class="filter-reset" href="{% url 'assignment_list' %}">Сбросить</a>
+  {% if filters.q or filters.status or filters.student or filters.worksheet or filters.due or filters.owner %}
+  <a class="filter-reset" href="{% url 'assignment_list' %}{% if filters.kind == 'independent' %}?kind=independent{% endif %}">Сбросить</a>
   {% endif %}
   <details class="filter-more"{% if filters.student or filters.worksheet or filters.due or filters.owner %} open{% endif %}>
     <summary>Ещё фильтры</summary>
@@ -107,7 +108,10 @@
   {% if worksheet_groups %}
   <div class="catalog-table-wrap"><table class="list assignment-sheet-table table-stack">
     <thead><tr><th class="col-select"><input type="checkbox" data-bulk-all="assignment-bulk-form" title="Выбрать все работы на странице"></th><th>Работа</th>{% if request.user.is_superuser %}<th>Владелец</th>{% endif %}<th class="num">Ученики</th><th>Выдано, срок</th><th></th></tr></thead>
-    <tbody>{% for group in worksheet_groups %}<tr data-assignment-row data-title="{{ group.worksheet__title }}" data-recipients="{% for row in group.recipient_rows %}{% if row.assignment %}{% if group.kind == 'independent' %}{{ row.student.get_full_name|default:row.student.username }}{% if row.locked %} ({{ row.assignment.state|lower }}){% endif %}{% else %}{{ row.profile.user.get_full_name|default:row.profile.user.username }} ({{ row.assignment.get_status_display|lower }}){% endif %}, {% endif %}{% endfor %}">
+    {# Секции по получателям: группа или ученик, свежие выдачи сверху (ревизия 03.11, Z2) #}
+    {% for section in recipient_sections %}<tbody class="asg-section">
+    <tr class="asg-section-head"><th colspan="{% if request.user.is_superuser %}6{% else %}5{% endif %}" scope="rowgroup">{% if section.is_group %}<span class="asg-section-kind">Группа</span> {% endif %}{{ section.label }}</th></tr>
+    {% for group in section.rows %}<tr data-assignment-row data-title="{{ group.worksheet__title }}" data-recipients="{% for row in group.recipient_rows %}{% if row.assignment %}{% if group.kind == 'independent' %}{{ row.student.get_full_name|default:row.student.username }}{% if row.locked %} ({{ row.assignment.state|lower }}){% endif %}{% else %}{{ row.profile.user.get_full_name|default:row.profile.user.username }} ({{ row.assignment.get_status_display|lower }}){% endif %}, {% endif %}{% endfor %}">
       <td class="col-select"><input type="checkbox" class="row-select" name="ids" value="{{ group.key }}" form="assignment-bulk-form" title="Выбрать работу"></td>
       <td class="assignment-title-cell stack-primary"><a class="assignment-title" href="{% if group.progress_url %}{{ group.progress_url }}{% else %}{% url 'worksheet_progress' group.worksheet_id %}{% endif %}">{{ group.worksheet__title }}</a>
 {% if group.kind == "independent" %}<span class="cell-sub">{{ group.kind_label }}</span>{% endif %}</td>
@@ -118,7 +122,7 @@
         <button type="button" data-dialog-open="assignment-group-{{ group.key }}">Изменить получателей</button>
         {% if group.kind == "independent" %}<a href="{% url 'independentworks:edit' group.run.work_id %}">Шаблон</a>{% if group.run.work.source_worksheet_id %}<a href="{% url 'worksheet_detail' group.run.work.source_worksheet_id %}">Исходный листок</a>{% endif %}{% else %}<a href="{% url 'worksheet_detail' group.worksheet_id %}">Листок</a>{% endif %}
       </div></details></td>
-    </tr>{% endfor %}</tbody>
+    </tr>{% endfor %}</tbody>{% endfor %}
   </table></div>
   {% for group in worksheet_groups %}
   <dialog id="assignment-group-{{ group.key }}" class="dialog assignment-group-dialog">

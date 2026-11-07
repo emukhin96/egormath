@@ -84,3 +84,23 @@
   /* S1: фото перетаскивают на всю карточку задачи */
   [data-task-card].is-dragover { outline: 2px dashed var(--accent); outline-offset: 4px; }
 }
+
+/* Выданные работы секциями по получателям (ответ Егора к Z2, 07.11):
+   заголовок секции — строкой на всю ширину таблицы */
+@layer components {
+  .assignment-sheet-table tr.asg-section-head th {
+    padding: var(--space-4) var(--space-2) var(--space-1);
+    border-bottom: 1px solid var(--hairline);
+    background: none;
+    color: var(--text);
+    font-size: var(--fs-md);
+    font-weight: 600;
+    text-align: left;
+  }
+  .assignment-sheet-table tbody.asg-section:first-of-type tr.asg-section-head th { padding-top: var(--space-2); }
+  .asg-section-kind { color: var(--muted); font-weight: 400; }
+  @media (max-width: 760px) {
+    .table-stack tr.asg-section-head { display: block; }
+    .table-stack tr.asg-section-head th { display: block; padding-inline: 0; }
+  }
+}
