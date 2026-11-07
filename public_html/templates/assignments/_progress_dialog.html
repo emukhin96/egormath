@@ -1,5 +1,5 @@
 {# Окно карты ответов: «задача у ученика» и «задача» (_progress_detail.html, _task_window.html) приносят свой заголовок; heading — старый общий заголовок для самостоятельных. data-mask-check-url — «Проверить как ученик» в окне задачи (teacher_progress.js) #}
 <dialog class="dialog problem-dialog{% if not heading %} progress-window{% endif %}" id="progress-dialog" aria-labelledby="progress-dialog-title" data-mask-check-url="{% url 'task_mask_check' %}">{% if heading %}<div class="dialog-heading"><h3 id="progress-dialog-title">{{ heading }}</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>{% else %}<button type="button" class="icon-btn progress-window-close" data-dialog-close aria-label="Закрыть">×</button>{% endif %}<p data-review-status role="status" hidden></p><div data-progress-detail></div></dialog>
 <form hidden>{% csrf_token %}</form>
-{# Миниатюра доски в окне «задача у ученика» — на всех страницах с этим окном (экран досок, хронология, журнал…) #}
-{% if canvas_enabled %}{% load static %}<script defer src="{% static 'js/board_thumbs.js' %}?v=2"></script>{% endif %}
+{# Миниатюра доски в окне «задача у ученика» — на всех страницах с этим окном (экран досок, хронология, журнал…); где canvas.js нет, скрипт подгрузит его сам при первой миниатюре #}
+{% if canvas_enabled %}{% load static %}<script defer src="{% static 'js/board_thumbs.js' %}?v=3" data-canvas-src="{% static 'js/canvas.js' %}?v=4"></script>{% endif %}

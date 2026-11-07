@@ -9,14 +9,33 @@
   if (window.EgorBoardThumbs) return;   /* окно подключено на странице дважды */
   window.EgorBoardThumbs = true;
   var SIZE = 240;
+  /* canvas.js (EgorCanvas.render) есть не на всех страницах с окном ответа
+     (хронология, журнал, листок…): там он грузится один раз, когда в окне
+     впервые появилась доска, — страницы без досок его не тянут */
+  var canvasSrc = document.currentScript && document.currentScript.dataset.canvasSrc, loading = null;
+  function canvasReady() {
+    if (window.EgorCanvas) return Promise.resolve();
+    if (!canvasSrc) return Promise.reject(new Error('нет canvas.js'));
+    if (!loading) {
+      loading = new Promise(function (resolve, reject) {
+        var script = document.createElement('script');
+        script.src = canvasSrc;
+        script.onload = function () { window.EgorCanvas ? resolve() : reject(new Error('canvas.js без EgorCanvas')); };
+        script.onerror = function () { loading = null; reject(new Error('canvas.js не загрузился')); };
+        document.head.appendChild(script);
+      });
+    }
+    return loading;
+  }
   function filled(page) {
     return (page.student && page.student.elements.length) || (page.teacher && page.teacher.elements.length);
   }
   function draw(canvas) {
     var key = canvas.dataset.url + '#' + (canvas.dataset.version || '');
-    if (!window.EgorCanvas || canvas.dataset.drawn === key) return;
+    if (canvas.dataset.drawn === key) return;
     canvas.dataset.drawn = key;
-    fetch(canvas.dataset.url, {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
+    canvasReady()
+      .then(function () { return fetch(canvas.dataset.url, {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}}); })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (data) {
         var pages = (data && data.pages) || [], page = pages.filter(filled).pop() || pages[pages.length - 1];
