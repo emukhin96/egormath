@@ -259,7 +259,8 @@ class AuditTests(TestCase):
         sheet = self.client.get(reverse('assignment_detail', args=[self.assignment.pk]))
         self.assertContains(sheet, 'data-restricted="0" data-swap="1"')
         # Формулы без дублей при копировании — на всех страницах
-        self.assertContains(sheet, 'js/katex_copy.js')
+        # katex_copy.js — внутри общей сборки app.js (make build-js)
+        self.assertContains(sheet, 'js/app.js')
 
     def test_copied_text_whole_statement_and_swap(self):
         """Копирование пишет текст и доли условий; целиком — пометка учителю."""
