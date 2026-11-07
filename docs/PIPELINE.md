@@ -31,6 +31,9 @@ cd public_html && ../venv/bin/python manage.py runserver
 
 # терминал 2: пересборка стилей при правках шаблонов и CSS
 make watch-css
+
+# терминал 3 (при правке static/js/*): пересборка общего app.js
+make watch-js
 ```
 
 
@@ -413,6 +416,13 @@ make check
   отключается: `make build-css TW_SPEED_LIMIT=0`;
 - стенды `tools/stage.sh` собирают его в своём worktree сами.
 
+Так же живёт `static/js/app.js` — общие скрипты `base.html` (`math`,
+`katex_copy`, `autosave`, `image_paste`, `livefile`, `busy`, `shell`,
+`dialogs`, `quick_clone`, `image_zoom`, `taxonomy`; список `JS_BASE` в
+`Makefile`) одним файлом: `make build-js` (вызывается из `build-css`),
+в `.gitignore`, в образ его кладёт та же стадия `Dockerfile`. При правке
+этих скриптов на `runserver` — `make build-js` или `make watch-js`.
+
 Ветка, начатая до этого изменения, при вливании `main` получит конфликт
 «modify/delete» по `app.css`: решается `git rm --cached public_html/static/css/app.css`
 (файл остаётся на диске, `make build-css` его обновит).
@@ -420,7 +430,8 @@ make check
 Отдельно:
 
 ```bash
-make build-css   # только пересборка
+make build-css   # только пересборка (CSS и app.js)
+make build-js    # только склейка app.js
 make test        # только тесты
 ```
 

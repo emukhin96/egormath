@@ -50,7 +50,7 @@ JS_OUT := $(JS_DIR)/app.js
 # В CI venv нет — тогда берётся системный python
 PYTHON := $(shell test -x "$(ROOT)venv/bin/python" && echo ../venv/bin/python || echo python)
 
-.PHONY: build-css build-js watch-css ensure-tailwind screens-css test check
+.PHONY: build-css build-js watch-css watch-js ensure-tailwind screens-css test check
 
 # С VPS соединения с CDN GitHub часто глохнут после первых сотен КБ и висят
 # без обрыва (так завис деплой 23.10), а нормальная загрузка идёт за секунды.
@@ -91,8 +91,17 @@ build-js: $(JS_FILES)
 	@echo "Built $(JS_OUT)"
 
 # Правки в screens/*.css при watch не подхватываются: после них — make build-css
-watch-css: ensure-tailwind screens-css
+watch-css: ensure-tailwind screens-css build-js
 	"$(TW)" -i "$(CSS_IN)" -o "$(CSS_OUT)" --watch
+
+# Пересборка app.js при правке склеиваемых скриптов (runserver отдаёт только
+# app.js): опрос раз в 2 с, без inotify и Node. Запускать во втором
+# терминале рядом с watch-css; Ctrl-C — выход.
+watch-js: build-js
+	@echo "watch-js: слежу за $(JS_BASE)"
+	@last=""; while :; do now=$$(ls -l $(JS_FILES) | cksum); \
+	  if [ "$$now" != "$$last" ]; then last=$$now; $(MAKE) --no-print-directory build-js; fi; \
+	  sleep 2; done
 
 # Тест collectstatic ждёт собранный app.css
 test: build-css
