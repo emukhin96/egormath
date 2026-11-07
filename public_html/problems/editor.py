@@ -97,6 +97,9 @@ def context(request, task):
                     ctx['iw_finish_url'] = reverse('independentworks:finish_analog', args=[position_id, task.pk])
                     break
     editable = can_edit_task(request.user, task)
+    # «N аналогов» в подзаголовке ведёт к блоку «Аналоги» под карточкой
+    from independentworks.analog_lists import attach_analog_counts
+    attach_analog_counts(request.user, [task])
     # Кнопка предложения (proposals.proposal_options): редактору не нужна —
     # он правит напрямую; остальным — только на общей задаче.
     from .proposals import proposal_options

@@ -1,0 +1,6 @@
+{# Ручная семья редактора: problems.analog_views.task_analog_link #}
+<form method="post" action="{% url 'task_analog_link' task.pk %}" class="analog-link-form">
+  {% csrf_token %}<input type="hidden" name="next" value="{{ analog_next }}">
+  <label>Связать с задачей №<input type="text" name="target" inputmode="numeric" pattern="[#№ ]*[0-9]+" required placeholder="12345"></label>
+  <button type="submit" class="btn btn-secondary btn-small">Связать</button>
+</form>

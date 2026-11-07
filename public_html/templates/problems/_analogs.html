@@ -1,0 +1,22 @@
+{% load task_extras %}{% comment %}
+Блок «Аналоги» карточки задачи (problems.analog_views.card_context): задачи
+семей аналогов, видимые учителю. Без аналогов блока нет; редактору тогда —
+только свёрнутая форма «Связать с задачей №…». Открыта из листка — у строк
+«Заменить в листке» и «Добавить после».
+{% endcomment %}
+{% if analogs %}
+<section class="card analogs-block" id="analogs">
+  <h2>Аналоги <span class="analogs-count">{{ analogs_total }}</span></h2>
+  <form id="analogs-form" method="post" hidden>{% csrf_token %}<input type="hidden" name="next" value="{{ analog_next }}"></form>
+  <ul class="analog-list">
+    {% for a in analogs %}{% include 'includes/analogs/row.html' with form_id='analogs-form' %}{% endfor %}
+  </ul>
+  {% if analogs_more %}<p class="helptext">И ещё {{ analogs_more }} {{ analogs_more|plural_ru:'аналог,аналога,аналогов' }} — в подборе самостоятельной и на карточках задач из списка.</p>{% endif %}
+  {% if analog_editor %}{% include 'problems/_analog_link_form.html' %}{% endif %}
+</section>
+{% elif analog_editor %}
+<details class="card analogs-block is-empty" id="analogs">
+  <summary>Аналоги: связать с задачей</summary>
+  {% include 'problems/_analog_link_form.html' %}
+</details>
+{% endif %}

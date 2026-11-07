@@ -1,0 +1,33 @@
+{% load task_extras %}{% comment %}
+Строка списка аналогов (карточка задачи — problems/_analogs.html, конструктор —
+worksheets/_item_analogs.html). Кнопки строки отправляют общую форму списка
+(form_id) через formaction, своей формы у строки нет.
+
+  a                  — задача-аналог (source_refs__source, subitems, images);
+  form_id            — id скрытой формы списка с CSRF;
+  analog_item        — строка листка: «Заменить в листке» / «Добавить после»
+                       (worksheets.analog_views.row_actions_context);
+  analog_in_sheet    — id задач, уже стоящих в листке;
+  analog_assigned    — листок выдан: замена спрашивает подтверждение;
+  analog_editor      — редактору «×» «Отвязать» (problems.analog_views);
+  task               — задача, к которой относится список.
+{% endcomment %}<li class="analog-row" data-task-png-root>
+  <div class="analog-head">
+    <a class="task-id" href="{% url 'task_detail' a.pk %}" title="Открыть задачу">#{{ a.pk }}</a>
+    <span class="analog-source">{% for ref in a.source_refs.all %}<span>{{ ref.source.short_name }}{% if ref.number %}, № {{ ref.number }}{% endif %}</span>{% endfor %}</span>
+    {% include 'includes/task_usage_badge.html' with task=a %}
+    <span class="analog-actions">
+      {% if analog_item %}{% if a.pk in analog_in_sheet %}<span class="analog-in-sheet">уже в листке</span>{% else %}
+      <button type="submit" form="{{ form_id }}" formaction="{{ analog_replace_url }}" name="task" value="{{ a.pk }}" class="btn btn-secondary btn-small" title="Поставить #{{ a.pk }} вместо #{{ analog_item.task_id }} на то же место листка"{% if analog_assigned %} onclick="return confirm('Листок уже выдан: ученики увидят задачу #{{ a.pk }} вместо #{{ analog_item.task_id }}. Заменить?');"{% endif %}>Заменить в листке</button>
+      <button type="submit" form="{{ form_id }}" formaction="{{ analog_after_url }}" name="task" value="{{ a.pk }}" class="btn btn-secondary btn-small" title="Добавить #{{ a.pk }} следующей строкой после #{{ analog_item.task_id }}">Добавить после</button>
+      {% endif %}{% endif %}
+      {% include 'includes/task_actions.html' with task=a compact=True %}
+      {% if analog_editor %}<button type="submit" form="{{ form_id }}" formaction="{% url 'task_analog_unlink' task.pk %}" name="task" value="{{ a.pk }}" class="icon-btn" title="Отвязать: #{{ a.pk }} больше не аналог задачи #{{ task.pk }}" aria-label="Отвязать задачу #{{ a.pk }} от аналогов" onclick="return confirm('Отвязать задачу #{{ a.pk }} от аналогов задачи #{{ task.pk }}? Синхронизация по источникам её не вернёт.');">×</button>{% endif %}
+    </span>
+  </div>
+  <div class="analog-body" data-task-png-content>
+    <div class="math-content task-text">{{ a.text_latex|web_text|linebreaksbr }}</div>
+    {% include 'problems/_subitems.html' with subitems=a.subitems.all %}
+    {% task_images a %}
+  </div>
+</li>

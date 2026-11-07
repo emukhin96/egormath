@@ -113,7 +113,7 @@
     {% for row in rows %}
     {% with item=row.item %}
     {# data-vis-url и data-hidden-* — данные для общего диалога видимости (#ws-visibility-dialog), его заполняет worksheet_controls.js #}
-    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" data-id="{{ item.pk }}"{% if item.task_id %} data-task-id="{{ item.task.pk }}" data-has-answer="{% if item.task.effective_answer_latex or item.task.effective_solution_latex or item.task.has_subitem_answers %}1{% endif %}" data-no-answer="{% if item.task.has_blank_answer %}1{% endif %}" data-task-png-root data-vis-url="{% url 'worksheet_item_visibility' worksheet.pk item.pk %}" data-hidden-links="{{ row.hidden_links|join:',' }}" data-hidden-groups="{{ row.hidden_groups|join:',' }}" data-hidden-assignments="{{ row.hidden_assignments|join:',' }}"{% endif %}>
+    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" id="ws-item-{{ item.pk }}" data-id="{{ item.pk }}"{% if item.task_id %} data-task-id="{{ item.task.pk }}" data-has-answer="{% if item.task.effective_answer_latex or item.task.effective_solution_latex or item.task.has_subitem_answers %}1{% endif %}" data-no-answer="{% if item.task.has_blank_answer %}1{% endif %}" data-task-png-root data-vis-url="{% url 'worksheet_item_visibility' worksheet.pk item.pk %}" data-hidden-links="{{ row.hidden_links|join:',' }}" data-hidden-groups="{{ row.hidden_groups|join:',' }}" data-hidden-assignments="{{ row.hidden_assignments|join:',' }}"{% endif %}>
       <div class="ws-body">
         {% if not item.task.block_id %}{% include 'includes/builder_drag_handle.html' %}{% endif %}
 
@@ -228,6 +228,8 @@
         <span class="task-meta-item ws-full-only-note">только полный ответ</span>
         <span class="task-meta-item" data-mask-links></span>
         <span class="task-meta-item">{% include 'includes/task_usage_badge.html' with task=item.task %}</span>
+        {# Аналоги строки: счётчик — worksheet_detail (attach_analog_counts), список по клику — static/js/analogs.js #}
+        {% if item.task.analog_count %}<span class="task-meta-item"><button type="button" class="badge badge-analogs" data-analogs-toggle data-analogs-url="{% url 'worksheet_item_analogs' worksheet.pk item.pk %}" aria-expanded="false" aria-controls="ws-analogs-{{ item.pk }}" title="Аналоги задачи: заменить в листке или добавить после">{% include 'includes/analogs/count.html' with count=item.task.analog_count %}</button></span>{% endif %}
         {% if item.task.subitems.all %}
         <label class="inline-label task-meta-item ws-column-control">колонки
           <input type="number" name="columns" form="settings-{{ item.pk }}"
@@ -235,6 +237,7 @@
                  placeholder="{{ item.task.columns }}" class="ws-columns"></label>
         {% endif %}
       </div>
+      {% if item.task.analog_count %}<div class="ws-analogs" id="ws-analogs-{{ item.pk }}" data-analogs-panel hidden></div>{% endif %}
       {% endif %}
     </div>
     {% endwith %}
@@ -505,6 +508,7 @@ worksheet_item_visibility.{% endcomment %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=3"></script>
 <script defer src="{% static 'js/builder.js' %}?v=10"></script>
 <script defer src="{% static 'js/worksheet_controls.js' %}?v=8"></script>
+<script defer src="{% static 'js/analogs.js' %}?v=1"></script>
 <script defer src="{% static 'js/task_finder.js' %}"></script>
 {% if assignments %}<script defer src="{% static 'js/teacher_progress.js' %}?v=8"></script>{% endif %}
 {% endblock %}

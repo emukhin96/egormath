@@ -384,6 +384,9 @@ def worksheet_detail(request, pk):
 
     from .block_presentation import decorate_block_rows
     decorate_block_rows(rows)
+    # Указатель «аналоги N» у строки: счётчики одним проходом, список — по клику
+    from independentworks.analog_lists import attach_analog_counts
+    attach_analog_counts(request.user, [item.task for item in items if item.task_id])
     point_groups = progress_groups([
         item for item in items if item.task_id], assignments)
     progress_people_rows = progress_people(point_groups, assignments)
