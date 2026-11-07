@@ -56,6 +56,21 @@ class BoardsEntryTests(TestCase):
         self.assertContains(page, 'data-dialog-step="-1"')
         self.assertContains(page, '1–9 задача')
 
+    def test_filter_links_drop_open(self):
+        """Ленты задач, «Все», группы и порядок не переносят ?open=: иначе после
+        закрытия диалога любой переход снова открывал бы ту же доску (ревью #332)."""
+        import re
+        group = StudentGroup.objects.create(name='8А', teacher=self.teacher)
+        group.students.add(self.students[0])
+        target = self.assignments[1]
+        html = self.boards_page(task=self.task2.pk, open=target.pk, order='name').content.decode()
+        hrefs = re.findall(r'href="([^"]*)"', html)
+        self.assertTrue(any('group=' in h for h in hrefs) and any('task=' in h for h in hrefs))
+        self.assertFalse([h for h in hrefs if 'open=' in h])
+        self.assertNotIn('name="open"', html)
+        # живой опрос держит ученика на экране, пока страница открыта
+        self.assertRegex(html, r'data-live-url="[^"]*open=%d' % target.pk)
+
     def test_open_outside_first_boards_max(self):
         """Ученик вне первых BOARDS_MAX: его карточку сервер всё равно ставит
         на экран, «не поместилось» уменьшается."""

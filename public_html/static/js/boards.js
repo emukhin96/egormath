@@ -104,6 +104,7 @@
       a.className = 'btn btn-small btn-secondary'; a.dataset.taskLink = task;
       var base = liveUrl.split('?')[1] || '', params = new URLSearchParams(base);
       params.set('task', task);
+      params.delete('open');   /* live_url держит открытого по ссылке ученика, переход по задаче — нет */
       a.href = '?' + params.toString();
       a.setAttribute('aria-label', 'Задача ' + wanted[task]); a.title = 'Доски задачи ' + wanted[task] + ' у всех учеников';
       a.textContent = wanted[task];
