@@ -138,6 +138,11 @@ class FacetValue(models.Model):
     code = models.CharField('Код', max_length=64)
     name = models.CharField('Название', max_length=160)
     order = models.PositiveSmallIntegerField('Порядок', default=0)
+    # Группа значений (фасет CONTENT: «Модуль» → «Уравнение с модулем»).
+    # Задаче ставятся только значения; группа в фильтре раскрывается в них.
+    parent = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.PROTECT,
+        related_name='children', verbose_name='Группа')
 
     class Meta:
         verbose_name = 'Значение фасета'

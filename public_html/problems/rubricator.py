@@ -11,6 +11,8 @@ from django.db.models import Count, Q
 
 from .models import (ExamItem, ExamModel, FacetType, FacetValue, GradeBand,
                      Task, TaskTopic, Topic)
+from .content_data import (CONTENT_FACET_CODE, CONTENT_FACET_NAME,
+                           CONTENT_GROUPS)
 from .rubricator_data import (BLOCKS, EXAM_MODELS, GRADE_BANDS, LEVELS,
                               METHODS)
 
@@ -130,6 +132,8 @@ def seed_rubricator():
             facet_type=method_type, code=code,
             defaults={'name': name, 'order': i})
 
+    seed_content_facet()
+
     for model_code, exam_type, year, name, items in EXAM_MODELS:
         model, _ = ExamModel.objects.update_or_create(
             code=model_code,
@@ -141,6 +145,48 @@ def seed_rubricator():
                           'name': item_name, 'order': number})
 
     return created_topics
+
+
+def seed_content_facet(groups=None):
+    """Фасет CONTENT: группы (без родителя) и значения (с родителем).
+
+    Идемпотентно, по кодам. Значение, которого больше нет в словаре,
+    удаляется, только если оно не стоит ни у одной задачи; иначе остаётся
+    и попадает в отчёт ``kept`` — снимать разметку решает человек.
+    Возвращает {'created', 'removed', 'kept'}.
+    """
+    groups = CONTENT_GROUPS if groups is None else groups
+    facet, _ = FacetType.objects.update_or_create(
+        code=CONTENT_FACET_CODE,
+        defaults={'name': CONTENT_FACET_NAME,
+                  'selection_mode': FacetType.MODE_MULTIPLE, 'order': 30})
+    created = 0
+    known = set()
+    for g_order, (g_code, g_name, values) in enumerate(groups):
+        group, was = FacetValue.objects.update_or_create(
+            facet_type=facet, code=g_code,
+            defaults={'name': g_name, 'order': g_order, 'parent': None})
+        created += was
+        known.add(g_code)
+        for v_order, (code, name, _when, _overlap) in enumerate(values):
+            _, was = FacetValue.objects.update_or_create(
+                facet_type=facet, code=code,
+                defaults={'name': name, 'order': v_order, 'parent': group})
+            created += was
+            known.add(code)
+    stale = FacetValue.objects.filter(facet_type=facet).exclude(
+        code__in=known).annotate(n=Count('tasks'))
+    kept = [v.code for v in stale if v.n]
+    removable = [v.pk for v in stale if not v.n]
+    # Сначала значения, потом опустевшие группы (PROTECT на parent).
+    removed, _ = FacetValue.objects.filter(
+        pk__in=removable, parent__isnull=False).delete()
+    groups, _ = FacetValue.objects.filter(pk__in=removable).exclude(
+        children__isnull=False).delete()
+    # Группа, у которой осталось значение с задачами, тоже остаётся.
+    kept += list(FacetValue.objects.filter(pk__in=removable).values_list(
+        'code', flat=True))
+    return {'created': created, 'removed': removed + groups, 'kept': kept}
 
 
 def migrate_legacy_grades():
@@ -246,9 +292,19 @@ def set_grade_bands(obj, codes, *, sync_legacy=True):
     return bands
 
 
+# Фасеты, которые редактируются пикером формы задачи (taxonomy.js).
+# Остальные (CONTENT — разметка содержания) форма не показывает и при
+# сохранении не трогает.
+PICKER_FACET_CODES = ('LEVEL', 'METHOD')
+
+
 def set_task_facets(task, value_ids):
-    values = FacetValue.objects.filter(pk__in=parse_int_ids(value_ids))
-    task.facet_values.set(values)
+    values = list(FacetValue.objects.filter(
+        pk__in=parse_int_ids(value_ids),
+        facet_type__code__in=PICKER_FACET_CODES))
+    kept = list(task.facet_values.exclude(
+        facet_type__code__in=PICKER_FACET_CODES))
+    task.facet_values.set(values + kept)
 
 
 def is_exam_line_item(item, exam_type=None):
