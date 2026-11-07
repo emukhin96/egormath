@@ -102,7 +102,10 @@ class VariantFamilyTests(TestCase):
 
     def test_shabunin_work_without_variant_label(self):
         alone = self.ref('СРIX.2/1')
-        self.assertEqual(len(sync_families(report=True)['incomplete']), 1)
+        self.ref('СРIX.2/2')
+        # Работа без вариантов — не неполная пара: в отчёт не попадает.
+        report = sync_families(report=True)
+        self.assertEqual((report['incomplete'], report['ambiguous']), ([], []))
         self.assertFalse(Family.objects.exists())
         # Вариант без «.В» — первый: подпись потеряна, другие варианты есть.
         second = self.ref('СРIX.2.В2/1')

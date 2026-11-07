@@ -96,9 +96,10 @@ WORK_ALL_VARIANTS = RULES['shabunin_method'].pattern
 
 
 def variant_identity(source_id, locator):
-    """``(ключ, подпись, номер варианта, правило)`` для варианта работы.
+    """``(ключ, подпись, номер варианта, правило, подписан ли вариант)``.
 
-    Подпись — без названия источника. Не вариант работы — ``None``.
+    Подпись — без названия источника. Вариант не подписан у работы без
+    вариантов («СРIX.2/1»). Не вариант работы — ``None``.
     """
     for rule in VARIANT_RULES:
         match = rule.pattern.fullmatch(locator or '')
@@ -116,7 +117,8 @@ def variant_identity(source_id, locator):
         # Ключ Зива — «ziv:ист:sr:03:пара:номер», как до общих правил.
         work_key = work.replace('/', ':') if rule.prefix == 'ziv' else work
         key = f'{rule.prefix}:{source_id}:{work_key}:{group}:{number}'
-        return key, f'{rule.work_title(work)} · {label} · №{shown}', variant, rule
+        labeled = match.group('variant') is not None
+        return key, f'{rule.work_title(work)} · {label} · №{shown}', variant, rule, labeled
     return None
 
 
@@ -223,6 +225,9 @@ def discover_families(*, source_id=None):
     ambiguous = []
     # Ключ семьи варианта работы → (пары ли, {вариант: задачи}).
     work_variants = {}
+    # Семьи, где есть задача с подписанным вариантом: одиночная работа без
+    # вариантов («СРIX.2/1») не неполная пара и в отчёт не идёт.
+    labeled_keys = set()
 
     def add(key, title, task_id, evidence):
         group = groups.setdefault(key, {'title': title[:255], 'members': defaultdict(list),
@@ -239,8 +244,10 @@ def discover_families(*, source_id=None):
         evidence = {'source_id': ref.source_id, 'locator': locator, 'path': path}
         identity = variant_identity(ref.source_id, locator)
         if identity:
-            key, title, variant, rule = identity
+            key, title, variant, rule, labeled = identity
             add(key, f'{ref.source.title} · {title}', ref.task_id, evidence)
+            if labeled:
+                labeled_keys.add(key)
             work_variants.setdefault(key, (rule.pairs, defaultdict(set)))[1][variant].add(ref.task_id)
         elif ZIV_UNKNOWN_VARIANT.fullmatch(locator):
             ambiguous.append(f'Задача #{ref.task_id}: вариант не распознан ({locator}), сверить с книгой')
@@ -293,7 +300,8 @@ def discover_families(*, source_id=None):
         # Пара вариантов (Зив, Высоцкий) — ровно два; все варианты работы
         # (Феоктистов, Шабунин, ДМ Мерзляка) — не меньше двух.
         if len(variants) != 2 if pairs else len(variants) < 2:
-            incomplete.append(groups[key]['title'])
+            if key in labeled_keys:
+                incomplete.append(groups[key]['title'])
             groups.pop(key)
         elif any(len(ids) != 1 for ids in variants.values()):
             ambiguous.append(groups[key]['title'] + ': несколько задач одного исходного номера')
