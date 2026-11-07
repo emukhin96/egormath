@@ -259,12 +259,17 @@ def _apply_owner(original, clone, values, keep_solution):
     if 'answer' in values:
         if (original.author_answer_latex or '').strip() and not corrected(original):
             # Правим действующий (авторский) ответ; AI-версия устарела.
-            # При ошибочном ответе книги действующий — редакторский: его и правим,
-            # ответ книги и отметка остаются как были (ревью #324).
+            # При ошибочном ответе книги действующий — редакторский: его и правим.
             clone.author_answer_latex = values['answer']
             clone.answer_latex = ''
         else:
             clone.answer_latex = values['answer']
+            if corrected(original):
+                # Ответ книги и отметка относятся к исходным числам — у клона
+                # их нет (ревью #324).
+                clone.author_answer_latex = ''
+                clone.author_answer_wrong = False
+                fields.append('author_answer_wrong')
         clone.answer_mask = values['mask']
         fields += ['author_answer_latex', 'answer_latex', 'answer_mask']
     if not keep_solution:

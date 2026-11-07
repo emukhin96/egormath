@@ -41,6 +41,10 @@ def _row(owner, label, author_field, ai_field):
     ai = _clean(getattr(owner, ai_field))
     if not author and not ai:
         return None
+    if corrected(owner) and not ai:
+        # Ответ книги ошибочен, а редакторского решения нет — книжное
+        # решение (к ошибочному ответу) не показываем (ревью #324).
+        return None
     if ai and corrected(owner):
         # Ответ книги ошибочен: основной — исправленный редакторский вариант;
         # книжный ответ — строкой «В книге: …», книжное решение не показываем.

@@ -87,15 +87,16 @@ class AuthorAnswerWrongCloneAndMaskTests(TestCase):
             answer_latex='$0{,}75$', answer_mask='{{decimal: 0,75}}',
             author_answer_wrong=True)
 
-    def test_clone_edits_corrected_answer_and_keeps_book(self):
+    def test_clone_edits_corrected_answer_without_foreign_book_answer(self):
         from .clone import _apply_owner, _owner_data
         self.assertEqual(_owner_data(self.task, 'task', 'Условие')['answer_source'], 'editor')
         clone = self.task.make_variant(standalone=True)
         _apply_owner(self.task, clone, {'answer': '$0{,}7$', 'mask': '{{decimal: 0,7}}'}, True)
         clone.refresh_from_db()
-        self.assertEqual((clone.author_answer_latex, clone.answer_latex), ('$0{,}8$', '$0{,}7$'))
-        self.assertTrue(clone.author_answer_wrong)
+        self.assertEqual((clone.author_answer_latex, clone.answer_latex), ('', '$0{,}7$'))
+        self.assertFalse(clone.author_answer_wrong)
         self.assertEqual(clone.effective_answer_latex, '$0{,}7$')
+        self.assertEqual(clone.wrong_book_answer, '')
 
     def test_mask_data_marks_wrong_book_answer(self):
         from .editor import mask_data
@@ -103,3 +104,17 @@ class AuthorAnswerWrongCloneAndMaskTests(TestCase):
         self.task.author_answer_wrong = False
         self.task.save()
         self.assertFalse(mask_data(self.task)[0]['wrong_book'])
+
+
+class AuthorAnswerWrongNoEditorSolutionTests(TestCase):
+    """Ревью #324: без редакторского решения книжное (к ошибочному ответу) не показываем."""
+
+    def test_book_solution_hidden(self):
+        task = Task.objects.create(
+            text_latex='Найдите вероятность.', author_answer_latex='$0{,}8$',
+            answer_latex='$0{,}75$', author_solution_latex='Книга: $16/20=0{,}8$.',
+            author_answer_wrong=True)
+        self.assertEqual(task.effective_solution_latex, '')
+        self.assertIsNone(answer_material(task)['solution'])
+        self.assertEqual(solution_texts(task), [])
+        self.assertNotIn('Книга', _combined_solution(task, []))

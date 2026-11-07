@@ -264,7 +264,9 @@ def effective_text(owner, author_field, editor_field):
     редакторский (ответ и решение книги с ним расходятся)."""
     author = (getattr(owner, author_field) or '').strip()
     editor = (getattr(owner, editor_field) or '').strip()
-    if corrected(owner) and editor:
+    if corrected(owner):
+        # Книжное решение ведёт к ошибочному ответу: без редакторского
+        # решения лучше пусто, чем противоречие (ревью #324).
         return editor
     return author or editor
 
