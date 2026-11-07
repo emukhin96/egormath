@@ -107,7 +107,7 @@ class FacetTypeAdmin(admin.ModelAdmin):
 
 @admin.register(FacetValue)
 class FacetValueAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'facet_type', 'order')
+    list_display = ('code', 'name', 'facet_type', 'parent', 'order')
     list_filter = ('facet_type',)
     search_fields = ('code', 'name')
 
