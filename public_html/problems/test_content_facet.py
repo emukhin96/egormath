@@ -193,3 +193,42 @@ class CommandTests(TestCase):
             list(self.task.facet_values.values_list('code', flat=True)),
             ['ST_CUBE'])
         self.assertFalse(other.facet_values.exists())
+
+
+class GuardTests(TestCase):
+    def setUp(self):
+        seed_content_facet()
+        self.task = Task.objects.create(text_latex='$|x|=1$')
+
+    def test_stale_text_is_skipped_and_backup_written(self):
+        good = {str(self.task.pk): ct.task_text_hash(self.task)}
+        other = Task.objects.create(text_latex='Старый текст')
+        bad = {str(other.pk): ct.text_hash('Другой текст')}
+        with tempfile.TemporaryDirectory() as tmp:
+            labels = Path(tmp) / 'labels.json'
+            labels.write_text(json.dumps({str(self.task.pk): ['ABS_EQ'],
+                                          str(other.pk): ['ABS_EQ']}))
+            hashes = Path(tmp) / 'hashes.json'
+            hashes.write_text(json.dumps({**good, **bad}))
+            backup = Path(tmp) / 'rollback.json'
+            out = StringIO()
+            call_command('label_content', '--from', str(labels), '--apply',
+                         '--hashes', str(hashes), '--backup', str(backup),
+                         stdout=out)
+            self.assertIn('пропущено задач 1', out.getvalue())
+            self.assertEqual(json.loads(backup.read_text()),
+                             {str(self.task.pk): []})
+        self.assertTrue(self.task.facet_values.filter(code='ABS_EQ').exists())
+        self.assertFalse(other.facet_values.exists())
+
+    def test_param_tag_dropped_only_with_param_value(self):
+        from .models import Tag
+        tag = Tag.objects.create(name='задача с параметром')
+        plain = Task.objects.create(text_latex='при каких a')
+        self.task.tags.add(tag)
+        plain.tags.add(tag)
+        ct.apply_labels({self.task.pk: ['PARAM_EQ']})
+        stats = ct.drop_param_tag()
+        self.assertEqual(stats, {'removed': [self.task.pk], 'kept': [plain.pk]})
+        self.assertFalse(self.task.tags.exists())
+        self.assertTrue(plain.tags.exists())

@@ -9,6 +9,11 @@
   label_content --from DIR|файл             — показать, что будет записано
   label_content --from DIR|файл --apply     — записать (--replace — снять
       значения CONTENT, которых нет в ответе)
+      --hashes FILE — {id: отпечаток текста}: задачи, чей текст изменился
+      после разметки, пропускаются; --backup FILE — до записи сохранить
+      прежние значения CONTENT этих задач (файл отката)
+  label_content --drop-param-tag [--apply]  — снять тег «задача с
+      параметром» у задач со значением группы «Параметр» (решение 07.11)
 
 Ответ агента — DIR/batch_001.answer.json: {"items": [{"id", "codes"}]}.
 Файлом разметки может быть и {"<id>": [коды]} или JSONL {"id", "codes"}.
@@ -38,10 +43,15 @@ class Command(BaseCommand):
         parser.add_argument('--from', dest='source')
         parser.add_argument('--apply', action='store_true')
         parser.add_argument('--replace', action='store_true')
+        parser.add_argument('--hashes')
+        parser.add_argument('--backup')
+        parser.add_argument('--drop-param-tag', action='store_true')
 
     def handle(self, *args, **opts):
-        if not (opts['seed'] or opts['batches'] or opts['source']):
-            raise CommandError('Нужен --seed, --make-batches или --from.')
+        if not (opts['seed'] or opts['batches'] or opts['source']
+                or opts['drop_param_tag']):
+            raise CommandError(
+                'Нужен --seed, --make-batches, --from или --drop-param-tag.')
         if opts['seed']:
             stats = seed_content_facet()
             self.stdout.write(
@@ -52,6 +62,8 @@ class Command(BaseCommand):
             self._make_batches(opts)
         if opts['source']:
             self._apply(opts)
+        if opts['drop_param_tag']:
+            self._drop_param_tag(opts)
 
     def _make_batches(self, opts):
         out = Path(opts['batches'])
@@ -106,6 +118,15 @@ class Command(BaseCommand):
         source = Path(opts['source'])
         labels = (self._labels_from_dir(source) if source.is_dir()
                   else ct.load_labels(source))
+        if opts['hashes']:
+            hashes = json.loads(Path(opts['hashes']).read_text('utf-8'))
+            stale = ct.stale_tasks(labels, hashes)
+            if stale:
+                self.stdout.write(
+                    f'Текст изменился после разметки, пропущено задач '
+                    f'{len(stale)}: ' + ', '.join(map(str, sorted(stale)[:30]))
+                    + (' …' if len(stale) > 30 else ''))
+            labels = {k: v for k, v in labels.items() if k not in stale}
         if not opts['apply']:
             by_code = ct.content_values_by_code()
             unknown = sorted({c for codes in labels.values() for c in codes
@@ -121,7 +142,30 @@ class Command(BaseCommand):
                    if unknown else '')
                 + '. Запись — с --apply.')
             return
+        if opts['backup']:
+            Path(opts['backup']).write_text(json.dumps(
+                ct.current_content(labels), ensure_ascii=False), 'utf-8')
+            self.stdout.write(f'Откат: {opts["backup"]}')
         stats = ct.apply_labels(labels, replace=opts['replace'])
         self.stdout.write(
             f'Записано: задач {stats["tasks"]}, добавлено {stats["added"]}, '
             f'снято {stats["removed"]}, неизвестных кодов {stats["unknown"]}')
+
+    def _drop_param_tag(self, opts):
+        if not opts['apply']:
+            from problems.models import Tag
+            tag = Tag.objects.filter(name__iexact=ct.PARAM_TAG_NAME).first()
+            n = tag.tasks.count() if tag else 0
+            self.stdout.write(f'Тег «{ct.PARAM_TAG_NAME}» у задач: {n}. '
+                              'Снятие — с --apply.')
+            return
+        stats = ct.drop_param_tag()
+        if opts['backup']:
+            Path(opts['backup']).write_text(json.dumps(
+                {'tag': ct.PARAM_TAG_NAME, 'removed_from': stats['removed']}),
+                'utf-8')
+            self.stdout.write(f'Откат: {opts["backup"]}')
+        self.stdout.write(
+            f'Тег снят у {len(stats["removed"])} задач; оставлен у '
+            f'{len(stats["kept"])} без значения «Параметр»: '
+            + ', '.join(map(str, stats['kept'][:50])))

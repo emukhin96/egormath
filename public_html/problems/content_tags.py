@@ -8,6 +8,7 @@ Gemini и внешних API): ``write_batch`` готовит файл-паке�
 пакета), ``apply_labels`` записывает значения задачам.
 """
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -144,6 +145,63 @@ def read_answer(path, ids, valid_codes=None):
     """Ответ агента из файла → ({id: [коды]}, отброшенные коды)."""
     return parse_response(Path(path).read_text(encoding='utf-8'), ids,
                           valid_codes)
+
+
+PARAM_TAG_NAME = 'задача с параметром'
+
+
+def text_hash(text, subitem_texts=()):
+    """Отпечаток условия: разметка привязана к тексту, на котором сделана."""
+    src = (text or '') + '\x00' + '\x00'.join(t or '' for t in subitem_texts)
+    return hashlib.sha1(src.encode('utf-8')).hexdigest()[:16]
+
+
+def task_text_hash(task):
+    return text_hash(task.text_latex,
+                     [s.text_latex for s in task.subitems.all()])
+
+
+def stale_tasks(labels, hashes):
+    """id задач, чей текст изменился после разметки (или отпечатка нет)."""
+    from .models import Task
+    stale = set()
+    tasks = Task.objects.filter(pk__in=list(labels)).prefetch_related('subitems')
+    for task in tasks:
+        if hashes.get(str(task.pk)) != task_text_hash(task):
+            stale.add(task.pk)
+    return stale
+
+
+def current_content(task_ids):
+    """{id: [коды CONTENT]} — для файла отката перед записью."""
+    from .models import Task
+    out = {}
+    tasks = Task.objects.filter(pk__in=list(task_ids)).prefetch_related(
+        'facet_values__facet_type')
+    for task in tasks:
+        out[task.pk] = sorted(v.code for v in task.facet_values.all()
+                              if v.facet_type.code == CONTENT_FACET_CODE)
+    return out
+
+
+def drop_param_tag():
+    """Снять тег «задача с параметром» у задач со значением группы PARAM.
+
+    Решение Егора 07.11: тег заменяется группой «Параметр». Задачи с тегом,
+    но без значения PARAM_*, не трогаем — их список возвращаем на проверку.
+    """
+    from .models import Tag, Task
+    tag = Tag.objects.filter(name__iexact=PARAM_TAG_NAME).first()
+    if tag is None:
+        return {'removed': [], 'kept': []}
+    tagged = Task.objects.filter(tags=tag)
+    with_param = set(tagged.filter(
+        facet_values__facet_type__code=CONTENT_FACET_CODE,
+        facet_values__parent__code='PARAM').values_list('pk', flat=True))
+    kept = sorted(set(tagged.values_list('pk', flat=True)) - with_param)
+    if with_param:
+        tag.tasks.remove(*with_param)
+    return {'removed': sorted(with_param), 'kept': kept}
 
 
 def task_item(task):
