@@ -51,3 +51,14 @@ class RecipientSectionsTests(TestCase):
         html = response.content.decode()
         self.assertNotIn('>Все</a>', html.split('aria-label="Вид работы"')[1].split('</nav>')[0])
         self.assertIn('>Задания</a>', html)
+
+    def test_sections_follow_filters(self):
+        """Фильтр по ученику: работа видна только под его секцией (ревью #326)."""
+        response = self.client.get(reverse('assignment_list'), {'student': self.solo.pk})
+        labels = [s['label'] for s in response.context['recipient_sections']]
+        self.assertEqual(labels, [self.solo.get_full_name() or 'solo'])
+        response = self.client.get(reverse('assignment_list'), {'student': self.ann.pk})
+        sections = response.context['recipient_sections']
+        self.assertTrue(all('solo' not in s['label'] for s in sections))
+        self.assertEqual(sum(len(s['rows']) for s in sections), 2)
+

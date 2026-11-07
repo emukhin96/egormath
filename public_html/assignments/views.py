@@ -162,7 +162,7 @@ def _recipient_sections(user, rows, by_worksheet):
                 put(('g', section['group'].pk), section['group'].name, row)
             students = [a.student for a in individual]
         else:
-            attempts = list(row['run'].attempts.all())
+            attempts = row.get('attempts') or list(row['run'].attempts.all())
             given = {a.student_id for a in attempts}
             covered = set()
             for group in groups:
@@ -339,7 +339,12 @@ def assignment_list(request):
             {'student': u, 'assignment': existing.get(u.pk),
              'locked': bool(existing.get(u.pk) and (existing[u.pk].started_at or run.kind != 'initial'))}
             for u in users.values() if run.kind == 'initial' or u.pk in existing]
-    recipient_sections = _recipient_sections(request.user, groups_on_page, by_worksheet)
+    # Секции — по выдачам, прошедшим фильтры (поиск, ученик, статус, срок),
+    # а не по всем выдачам листка (ревью #326)
+    filtered_by_worksheet = {}
+    for assignment in assignments.filter(worksheet_id__in=worksheet_ids).prefetch_related('source_groups'):
+        filtered_by_worksheet.setdefault(assignment.worksheet_id, {})[assignment.student_id] = assignment
+    recipient_sections = _recipient_sections(request.user, groups_on_page, filtered_by_worksheet)
     worksheets = Worksheet.visible_to(request.user).order_by('-updated_at')
     return render(request, 'assignments/assignment_list.html', {
         'page': page,
