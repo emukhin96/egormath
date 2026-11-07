@@ -1,0 +1,70 @@
+/* Панель действий с задачей (includes/task_actions.html): картинкой, в
+   корзину, открыть задачу. Обычная — кнопки .btn-secondary.btn-small с
+   подписями, компактная (.is-compact) — значки .icon-btn в ряд, как «+» и PNG
+   в строках подборки. Плашек нет: успех — тост #ws-saved. */
+@layer components {
+  .task-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    vertical-align: middle;
+  }
+
+  .task-actions.is-compact {
+    gap: 2px;
+    flex-wrap: nowrap;
+  }
+
+  .task-actions .inline-form {
+    margin: 0;
+  }
+
+  /* Подпись корзины в обычной панели: «✓ В корзине» — тем же зелёным, что «✓» */
+  .cart-btn-label.is-in-cart {
+    color: var(--ok);
+    border-color: var(--ok);
+  }
+
+  .task-open-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 5px;
+    text-decoration: none;
+  }
+
+  .task-open-btn:hover {
+    color: var(--accent);
+    background: #e8f1fb;
+  }
+
+  .task-open-btn svg {
+    display: block;
+  }
+
+  /* Панель в правом верхнем углу блока с условием (проверка, доски,
+     предложения): условие обтекает её, как .task-png-corner */
+  .task-actions-corner {
+    float: right;
+    margin: 0 0 var(--space-1) var(--space-2);
+  }
+
+  /* Ссылка блока («Окно задачи», «Доски этой задачи») и панель — одной группой */
+  .task-actions-head {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+}
+
+@layer components {
+  /* Хронология: условие в строке обрезано до двух строк, на картинку — целиком */
+  .task-png-sheet .tl-task-text {
+    display: block;
+    overflow: visible;
+    -webkit-line-clamp: none;
+    line-clamp: none;
+  }
+}

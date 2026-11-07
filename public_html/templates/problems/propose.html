@@ -11,8 +11,8 @@
   </div>
 </div>
 <div class="problem-columns">
-  <div class="card">
-    <h2>Условие</h2>
+  <div class="card" data-task-png-root>
+    <h2 class="task-png-heading" data-task-png-skip>Условие{% include 'includes/task_actions.html' with task=task compact=True %}</h2>
     <div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
     {% if task.subitems.all %}<ol class="subitems">{% for sub in task.subitems.all %}<li class="math-content">{{ sub.text_latex|web_text }}</li>{% endfor %}</ol>{% endif %}
     {% task_images task %}

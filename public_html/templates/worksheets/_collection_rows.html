@@ -33,7 +33,7 @@
       {% endif %}
     </div>
     {% if item.task_id %}
-    <div class="ws-actions">{% include 'includes/task_png_button.html' %}{% if not item.task.variant_of_id %}{% include 'includes/cart_button.html' with task=item.task %}{% endif %}</div>
+    <div class="ws-actions">{% include 'includes/task_actions.html' with task=item.task compact=True %}</div>
     {% endif %}
   </div>
 </div>
