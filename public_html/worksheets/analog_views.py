@@ -83,6 +83,9 @@ def worksheet_item_analog_replace(request, pk, item_id):
         if worksheet.items.filter(task=analog, deleted_at__isnull=True).exists():
             messages.error(request, f'Задача #{analog.pk} уже есть в листке.')
             return _back(worksheet, item)
+        # Как в «Добавить после»: мягко удалённая строка с той же задачей
+        # иначе вернулась бы второй строкой по «Отменить».
+        worksheet.items.filter(task=analog, deleted_at__isnull=False).delete()
         old = item.task
         # Звёзды листка остаются прежними, даже если у аналога другие.
         if item.stars_override is None and old.stars != analog.stars:

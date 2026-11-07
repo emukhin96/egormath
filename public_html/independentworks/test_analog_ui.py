@@ -163,6 +163,14 @@ class BuilderTests(AnalogBase):
         self.assertEqual([i.task for i in self.sheet.ordered_items()],
                          [self.first.task, self.b, self.last.task])
 
+    def test_replace_drops_trashed_copy_of_analog(self):
+        from django.utils import timezone
+        self.sheet.items.create(task=self.b, order=40, deleted_at=timezone.now())
+        self.client.post(self.url('worksheet_item_analog_replace'), {'task': self.b.pk})
+        self.assertEqual(self.sheet.items.filter(task=self.b).count(), 1)
+        self.client.post(reverse('worksheet_restore_item', args=[self.sheet.pk]))
+        self.assertEqual(self.sheet.items.filter(task=self.b, deleted_at__isnull=True).count(), 1)
+
     def test_add_after(self):
         self.client.post(self.url('worksheet_item_analog_after'), {'task': self.b.pk})
         self.assertEqual([i.task for i in self.sheet.ordered_items()],
