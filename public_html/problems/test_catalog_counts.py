@@ -123,6 +123,25 @@ class CatalogCountsCacheTests(Roles, TransactionTestCase):
         item.delete()
         self.assertEqual(self.root_block(self.guest).task_total, 2)
 
+    def test_topic_move_and_source_rename_refresh_counts(self):
+        # Справочники: перенос подтемы в другой раздел и переименование источника (ревью #318)
+        other = Topic.objects.create(name='Другой тестовый раздел')
+        child = Topic.objects.create(name='Подтема', parent=self.root)
+        moved = shared_task(self.editor, 'В подтеме')
+        link(moved, child, TaskTopic.ROLE_PRIMARY)
+        self.assertEqual(self.root_block().task_total, 2)
+        child.parent = other
+        child.save()
+        self.assertEqual(self.root_block().task_total, 1)
+        from .catalog_counts import source_rows
+        from .models import Source, TaskSource
+        source = Source.objects.create(title='Задачник до')
+        TaskSource.objects.create(task=self.task, source=source, number='1')
+        self.assertEqual(source_rows(self.editor)[0]['title'], 'Задачник до')
+        source.title = 'Задачник после'
+        source.save()
+        self.assertEqual(source_rows(self.editor)[0]['title'], 'Задачник после')
+
     def test_counts_separate_for_teachers(self):
         own = Task.new_for(self.guest, text_latex='Личная гостя')
         link(own, self.root, TaskTopic.ROLE_PRIMARY)

@@ -26,7 +26,7 @@ from django.db.models import Count, Exists, OuterRef, Q
 from accounts.permissions import (catalog_tasks, is_base_editor,
                                   shows_foreign_tasks)
 
-from .models import Task, TaskSource, TaskTopic
+from .models import Source, Task, TaskSource, TaskTopic, Topic
 from .rubricator import GRADE_LEVEL_TO_CODE, parse_grade_choice
 
 CACHE_ALIAS = 'catalog'
@@ -209,7 +209,9 @@ def connect_catalog_counts_signals():
 
     from worksheets.models import WorksheetItem
 
-    for model in (Task, TaskTopic, TaskSource):
+    # Topic и Source — справочники: перенос темы в другой раздел меняет
+    # поддеревья, а переименование источника — строки фасета (ревью #318)
+    for model in (Task, TaskTopic, TaskSource, Topic, Source):
         label = model._meta.label_lower
         post_save.connect(_on_task_data_changed, sender=model,
                           dispatch_uid=f'problems.invalidate_catalog_counts.save.{label}')
