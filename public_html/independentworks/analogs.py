@@ -59,6 +59,11 @@ def _feoktistov_work(work):
     return f"{({'sr': 'СР', 'kr': 'КР', 'test': 'Тест'})[kind]} {int(number)}"
 
 
+def _merzlyak_dm_work(work):
+    """«ДМ» → «Упражнения», «КР3» → «КР 3»."""
+    return 'Упражнения' if work == 'ДМ' else f'КР {work[2:]}'
+
+
 # Порядок важен только для читаемости: форматы не пересекаются.
 VARIANT_RULES = (
     # Феоктистов: «sr/01/prep/001», «kr/01/v3/002», «test/02/v1/001» —
@@ -86,7 +91,7 @@ VARIANT_RULES = (
     # «ДМ.В2/170» в вариантах 1–4, контрольные «КР3.В1/4».
     VariantRule('merzlyak_dm', re.compile(
         r'(?P<work>ДМ|КР\d{1,2})\.В(?P<variant>\d)/(?P<number>\d{1,4})'),
-        pairs=False),
+        pairs=False, work_title=_merzlyak_dm_work),
 )
 ZIV_UNKNOWN_VARIANT = re.compile(r'(sr|kr|pr)/\d{1,2}/v0/.+')
 RULES = {rule.name: rule for rule in VARIANT_RULES}
