@@ -13,13 +13,12 @@
   <link rel="icon" href="{% static 'favicon.ico' %}" sizes="32x32 16x16">
   <link rel="apple-touch-icon" href="{% static 'apple-touch-icon.png' %}">
   {% endif %}
-  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" crossorigin="anonymous">
+  {# Inter и KaTeX — со своего сервера (static/vendor/README.md): без блокирующих рендер CSS с чужих доменов #}
+  <link rel="stylesheet" href="{% static 'vendor/inter/inter.css' %}">
   <link rel="stylesheet" href="{% static 'css/app.css' %}?v=35">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="{% static 'vendor/katex/katex.min.css' %}">
+  <script defer src="{% static 'vendor/katex/katex.min.js' %}"></script>
+  <script defer src="{% static 'vendor/katex/contrib/auto-render.min.js' %}"></script>
   <script defer src="{% static 'js/math.js' %}?v=3"></script>
   <script defer src="{% static 'js/katex_copy.js' %}"></script>
   <script defer src="{% static 'js/autosave.js' %}?v=7"></script>
