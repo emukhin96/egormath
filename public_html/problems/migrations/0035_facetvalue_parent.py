@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('problems', '0033_source_short_title'),
+        ('problems', '0034_author_answer_wrong'),
     ]
 
     operations = [
