@@ -4,7 +4,7 @@
 видит ученик (с «Проверить как ученик»), эталон и решение; справа — как задачу
 решает класс и ответы каждого, ячейка открывает «задачу у ученика». Без «·».
 {% endcomment %}
-<div class="tw">
+<div class="tw" data-task-png-root>
   <div class="tw-head">
     <div class="tw-heading">
       <span class="tw-kicker">{{ worksheet.title }}, задача {{ number }} из {{ total }}</span>
@@ -17,8 +17,8 @@
   </div>
   <div class="tw-body">
     <div class="tw-main">
-      <div class="progress-condition">
-        <span class="tw-label">Условие</span>
+      <div class="progress-condition" data-task-png-content>
+        <span class="tw-label" data-task-png-skip>Условие</span>
         <div class="math-content">{{ task.text_latex|web_text }}</div>
         {% task_images task %}
         {% if subitems %}<ol class="subitems">{% for s in subitems %}<li><span class="math-content">{{ s.subitem.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
@@ -58,6 +58,7 @@
   </div>
   <div class="tw-foot">
     <a class="btn btn-secondary btn-small" href="{{ class_url }}{% if request.GET.group %}?group={{ request.GET.group }}{% endif %}">Открыть у всего класса</a>
-    <a class="btn btn-secondary btn-small" href="{% url 'task_detail' task.pk %}">Задача в базе</a>
+    {# Картинкой, в корзину, открыть задачу (только если она видна учителю) — общая панель #}
+    {% include 'includes/task_actions.html' with task=task %}
   </div>
 </div>

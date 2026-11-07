@@ -28,8 +28,8 @@
     <p class="helptext">{{ proposal.get_status_display }}, {{ proposal.resolved_by_name }}, {{ proposal.resolved_at|date:'d.m.Y H:i' }}</p>
     {% endif %}
   </div>
-  <div class="card">
-    <h2>Условие задачи #{{ task.pk }}</h2>
+  <div class="card" data-task-png-root>
+    <h2 class="task-png-heading" data-task-png-skip>Условие задачи #{{ task.pk }}{% include 'includes/task_actions.html' with task=task compact=True no_open=True %}</h2>
     <div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
     {% if task.subitems.all %}<ol class="subitems">{% for sub in task.subitems.all %}<li class="math-content">{{ sub.text_latex|web_text }}</li>{% endfor %}</ol>{% endif %}
     {% task_images task %}

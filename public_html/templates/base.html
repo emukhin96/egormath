@@ -36,6 +36,8 @@
   {% if is_base_editor %}<script>window.NEURO_SOLVE_URL = '{% url "task_neuro_solve" %}';</script>{% endif %}
   <script defer src="{% static 'js/neuro.js' %}?v=3"></script>
   <script defer src="{% static 'js/task_png.js' %}?v=5"></script>
+  {# Корзина — на всех страницах учителя: панель действий задачи (includes/task_actions.html) стоит в проверке, досках, окнах задачи. Страницы не подключают cart.js сами: второй экземпляр отправил бы «+» дважды #}
+  <script defer src="{% static 'js/cart.js' %}?v=4"></script>
   {% endif %}
   {% block extra_head %}{% endblock %}
 </head>

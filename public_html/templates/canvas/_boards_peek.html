@@ -7,8 +7,8 @@
     {% else %}<span class="boards-peek-status" data-status="hidden">задача скрыта у ученика</span>{% endif %}
   </summary>
   {% if row %}
-  <div class="boards-peek-body">
-    <div class="boards-peek-condition">
+  <div class="boards-peek-body" data-task-png-root>
+    <div class="boards-peek-condition" data-task-png-content>
       {% include 'worksheets/_common_condition.html' %}
       {% include 'includes/task_row.html' with number=task_no stars=row.item.effective_stars text=row.statement %}
       {% include 'problems/_subitems.html' %}
@@ -25,7 +25,7 @@
     </div>
     {% answer_material row.task subitems as material %}
     {% if material %}<details class="boards-peek-reference" data-peek-reference><summary>Ответ</summary>{% include 'problems/_task_answers.html' with task=row.task %}</details>{% endif %}
-    <p class="boards-peek-links"><a href="{% url 'review_assignment' assignment.pk %}#task-{{ row.number }}">Открыть в проверке</a></p>
+    <p class="boards-peek-links task-actions-head"><a href="{% url 'review_assignment' assignment.pk %}#task-{{ row.number }}">Открыть в проверке</a>{% include 'includes/task_actions.html' with task=row.task compact=True %}</p>
   </div>
   {% endif %}
 </details>

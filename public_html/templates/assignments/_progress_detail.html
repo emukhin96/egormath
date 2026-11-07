@@ -18,7 +18,8 @@ data-attempt-url (teacher_progress.js грузит их в то же окно). 
   </div>
   <div class="tw-body">
     <div class="tw-main">
-      <div class="progress-condition">
+      <div class="progress-condition" data-task-png-root>
+        <div class="task-actions-corner">{% include 'includes/task_actions.html' with task=row.task compact=True %}</div>
         <div class="math-content">{{ row.task.text_latex|web_text }}</div>
         {% task_images row.task %}
         {% if row.subrows %}<ol class="subitems">{% for sr in row.subrows %}<li {% if sr.subitem.pk == selected_point.pk %}class="progress-selected-part"{% endif %}><span class="math-content">{{ sr.subitem.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}

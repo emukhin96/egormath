@@ -1,7 +1,11 @@
 /* Корзина задач: кнопки «+» у задач (формы [data-cart-form]) и «×» в меню
    (формы [data-cart-remove]) шлют fetch вместо перезагрузки страницы и
    обновляют счётчик и меню в шапке.
-   Без JS формы работают как обычные POST с redirect. */
+   Без JS формы работают как обычные POST с redirect.
+   Панель действий задачи (includes/task_actions.html) ставит не форму, а
+   <span data-cart-form data-cart-js data-task-id> с кнопкой type=button:
+   её можно класть внутрь чужой формы (страница проверки целиком — форма),
+   запрос собирается здесь же. */
 (function () {
   'use strict';
 
@@ -13,12 +17,21 @@
     }
   }
 
+  function cartButton(form) {
+    return form.querySelector('[data-cart-button]') || form.querySelector('.cart-btn');
+  }
+
   function renderButton(form, inCart) {
-    var button = form.querySelector('.cart-btn');
+    var button = cartButton(form);
     form.dataset.inCart = inCart ? '1' : '0';
-    form.action = inCart ? form.dataset.removeUrl : form.dataset.addUrl;
+    if (form.tagName === 'FORM') form.action = inCart ? form.dataset.removeUrl : form.dataset.addUrl;
     button.classList.toggle('is-in-cart', inCart);
-    button.textContent = inCart ? '✓' : '+';
+    // Кнопка с подписью (панель действий задачи) — «+ В корзину» / «✓ В корзине»
+    if (button.dataset.labelAdd) {
+      button.textContent = inCart ? button.dataset.labelIn : button.dataset.labelAdd;
+    } else {
+      button.textContent = inCart ? '✓' : '+';
+    }
     button.title = inCart ? 'В корзине — нажмите, чтобы убрать' : 'В корзину — чтобы собрать листок';
     button.setAttribute('aria-label', inCart ? 'Убрать из корзины' : 'В корзину');
   }
@@ -39,7 +52,8 @@
     var ids = (taskIds || []).map(String);
     document.querySelectorAll('[data-cart-form]').forEach(function (f) {
       var input = f.querySelector('[name=task_id]');
-      if (input && ids.indexOf(input.value) !== -1) renderButton(f, inCart);
+      var id = f.dataset.taskId || (input && input.value);
+      if (id && ids.indexOf(id) !== -1) renderButton(f, inCart);
     });
   }
 
@@ -124,19 +138,12 @@
     });
   });
 
-  document.addEventListener('submit', function (e) {
-    var form = e.target.closest ? e.target.closest('[data-cart-form]') : null;
-    if (!form) return;
-    e.preventDefault();
-    var button = form.querySelector('.cart-btn');
+  function toggle(form, url, body, headers) {
+    var button = cartButton(form);
     button.disabled = true;
-    var body = new FormData(form);
+    headers['X-Requested-With'] = 'XMLHttpRequest';
     enqueue(function () {
-      return fetch(form.action, {
-        method: 'POST',
-        headers: {'X-Requested-With': 'XMLHttpRequest'},
-        body: body,
-      });
+      return fetch(url, {method: 'POST', headers: headers, body: body});
     }).then(function (r) {
       return r.json().then(function (data) { return {ok: r.ok && data.ok, data: data}; });
     }).then(function (result) {
@@ -153,5 +160,24 @@
     }).then(function () {
       button.disabled = false;
     });
+  }
+
+  document.addEventListener('submit', function (e) {
+    var form = e.target.closest ? e.target.closest('form[data-cart-form]') : null;
+    if (!form) return;
+    e.preventDefault();
+    toggle(form, form.action, new FormData(form), {});
+  });
+
+  // Кнопка панели действий: без формы, адрес — по текущему состоянию
+  document.addEventListener('click', function (e) {
+    var button = e.target.closest ? e.target.closest('[data-cart-js] [data-cart-button]') : null;
+    if (!button) return;
+    e.preventDefault();
+    var box = button.closest('[data-cart-js]');
+    var body = new FormData();
+    body.append('task_id', box.dataset.taskId);
+    var url = box.dataset.inCart === '1' ? box.dataset.removeUrl : box.dataset.addUrl;
+    toggle(box, url, body, {'X-CSRFToken': box.dataset.csrf});
   });
 })();

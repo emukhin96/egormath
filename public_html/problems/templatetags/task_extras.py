@@ -235,3 +235,30 @@ def sub(value, arg):
         return int(value) - int(arg)
     except (TypeError, ValueError):
         return ''
+
+
+@register.simple_tag(takes_context=True)
+def task_open_url(context, task, link=None):
+    """Адрес «Открыть задачу» для панели действий (includes/task_actions.html)
+    или пустая строка, если учителю эта задача не видна (accounts.permissions.
+    can_view_task): приглашённый учитель не получает ссылку на чужую личную
+    задачу. ``link`` — свой адрес карточки (например, с ?worksheet=…&item=…);
+    по умолчанию — карточка самой задачи, у локальной копии — копии.
+    Ответ кэшируется на запрос: на странице проверки задача повторяется."""
+    from django.urls import reverse
+
+    from accounts.permissions import can_view_task
+    if task is None or not getattr(task, 'pk', None):
+        return ''
+    request = context.get('request')
+    user = getattr(request, 'user', None)
+    cache = getattr(request, '_task_open_cache', None) if request is not None else None
+    if cache is None:
+        cache = {}
+        if request is not None:
+            request._task_open_cache = cache
+    if task.pk not in cache:
+        cache[task.pk] = can_view_task(user, task)
+    if not cache[task.pk]:
+        return ''
+    return link or reverse('task_detail', args=[task.pk])
