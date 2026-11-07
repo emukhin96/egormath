@@ -76,3 +76,30 @@ class AuthorAnswerWrongTests(TestCase):
         page = self.client.get(reverse('task_detail', args=[self.task.pk])).content.decode()
         self.assertIn('Исправленный', page)
         self.assertIn('В книге:', page)
+
+
+class AuthorAnswerWrongCloneAndMaskTests(TestCase):
+    """Ревью #324: клон и черновик маски не возвращают ошибочный ответ книги."""
+
+    def setUp(self):
+        self.task = Task.objects.create(
+            text_latex='Найдите вероятность.', author_answer_latex='$0{,}8$',
+            answer_latex='$0{,}75$', answer_mask='{{decimal: 0,75}}',
+            author_answer_wrong=True)
+
+    def test_clone_edits_corrected_answer_and_keeps_book(self):
+        from .clone import _apply_owner, _owner_data
+        self.assertEqual(_owner_data(self.task, 'task', 'Условие')['answer_source'], 'editor')
+        clone = self.task.make_variant(standalone=True)
+        _apply_owner(self.task, clone, {'answer': '$0{,}7$', 'mask': '{{decimal: 0,7}}'}, True)
+        clone.refresh_from_db()
+        self.assertEqual((clone.author_answer_latex, clone.answer_latex), ('$0{,}8$', '$0{,}7$'))
+        self.assertTrue(clone.author_answer_wrong)
+        self.assertEqual(clone.effective_answer_latex, '$0{,}7$')
+
+    def test_mask_data_marks_wrong_book_answer(self):
+        from .editor import mask_data
+        self.assertTrue(mask_data(self.task)[0]['wrong_book'])
+        self.task.author_answer_wrong = False
+        self.task.save()
+        self.assertFalse(mask_data(self.task)[0]['wrong_book'])

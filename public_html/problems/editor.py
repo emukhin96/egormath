@@ -17,6 +17,7 @@ from accounts.permissions import (BASE_LOCKED_MESSAGE, can_edit_task,
 from assignments.checks import HELP, KINDS, PRESETS
 from .forms import TaskForm, TaskImageFormSet, TaskSourceFormSet, clean_mask_text
 from .models import Task, TaskSubitem, Tag
+from .models import corrected
 from .rubricator import (apply_task_taxonomy, taxonomy_page_context,
                          task_taxonomy_state)
 
@@ -140,6 +141,8 @@ def mask_data(task, item=None, include_preview=False):
              'condition': task.text_latex + ('\n' + o.text_latex if isinstance(o, TaskSubitem) else ''),
              'author': o.author_answer_latex,
              'editor': o.answer_latex, 'mask': o.answer_mask,
+             # Ответ книги ошибочен — маску строим по редакторскому (ревью #324)
+             'wrong_book': corrected(o),
              'exam_codes': exam_codes,
              'full_answer_only': task.full_answer_only}
             for o in owners]

@@ -14,7 +14,7 @@
     if(root.matches('[data-problem-editor]'))result.answers.forEach(function(o){
       var section=root.querySelector('[data-answer-owner="'+(o.id||'')+'"]');
       // В простом режиме ответов (не-редактор, R22-1) авторского поля в разметке нет
-      if(section){var authorField=section.querySelector('[name=author_answer_latex]'),editorField=section.querySelector('[name=answer_latex]');o.condition=root.querySelector('[name=text_latex]').value+(o.id?'\n'+o.text:'');o.author=authorField?authorField.value:o.author;o.editor=editorField?editorField.value:o.editor;}
+      if(section){var authorField=section.querySelector('[name=author_answer_latex]'),editorField=section.querySelector('[name=answer_latex]');o.condition=root.querySelector('[name=text_latex]').value+(o.id?'\n'+o.text:'');o.author=authorField?authorField.value:o.author;o.editor=editorField?editorField.value:o.editor;var wrongField=section.querySelector('[name=author_answer_wrong]');if(wrongField)o.wrong_book=wrongField.checked&&!!o.editor.trim();}
     });
     return result.answers;
   }
@@ -24,7 +24,8 @@
   function open(root,o){
     active=root;current=o;dialog.querySelector('[data-editor-preview]').hidden=true;dialog.querySelector('[data-editor-preview]').textContent='';form.reset();form.elements.mask.value=o.mask;
     Array.from(form.elements.source.options).forEach(opt=>opt.disabled=!o[opt.value].trim());
-    form.elements.source.value=o.author.trim()?'author':'editor';
+    // Ответ книги помечен ошибочным — источник маски редакторский ответ
+    form.elements.source.value=o.author.trim()&&!o.wrong_book?'author':'editor';
     form.querySelector('[data-mask-message]').textContent='';form.querySelector('[data-mask-errors]').textContent='';
     // Общая задача из листка (data-base-locked): маска уйдёт в локальную копию (R16-1)
     var lockedNote=dialog.querySelector('[data-mask-locked-note]');if(lockedNote)lockedNote.hidden=!root.dataset.baseLocked;
@@ -93,7 +94,7 @@
       if(missing){
         var changes=[],unresolved=[];
         for(var o of owners.filter(o=>!o.mask.trim())){
-          var result=await api.request(config.draftUrl,body({answer:o.author.trim()||o.editor.trim(),condition:o.condition,exam_codes:o.exam_codes||[]})).catch(()=>({mask:''}));
+          var result=await api.request(config.draftUrl,body({answer:(o.wrong_book&&o.editor.trim())||o.author.trim()||o.editor.trim(),condition:o.condition,exam_codes:o.exam_codes||[]})).catch(()=>({mask:''}));
           if(result.mask)changes.push({id:o.id,mask:result.mask});else unresolved.push(o.label);
         }
         if(unresolved.length)api.toast(false,'Уточните тип вручную: '+unresolved.join(', '));
