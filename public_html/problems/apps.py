@@ -6,7 +6,9 @@ class ProblemsConfig(AppConfig):
     name = 'problems'
 
     def ready(self):
+        from .catalog_counts import connect_catalog_counts_signals
         from .rubricator import (connect_exam_parent_signal,
                                  connect_taxonomy_cache_signals)
         connect_exam_parent_signal()
         connect_taxonomy_cache_signals()
+        connect_catalog_counts_signals()
