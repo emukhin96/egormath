@@ -32,7 +32,7 @@
       <span class="helptext bd-hint">Нажмите доску, чтобы открыть её с инструментами и пометками</span>
     </div>
     {% if not canvas_enabled %}<p class="helptext">Доски для записей временно отключены.</p>{% else %}
-    <div class="boards-grid bd-grid" data-boards data-live-url="{{ live_url }}" data-peek-url="{{ peek_url }}" data-live-file="{% live_file 'worksheet' worksheet.pk %}"{% if task_id %} data-task="{{ task_id }}"{% endif %}>
+    <div class="boards-grid bd-grid" data-boards data-live-url="{{ live_url }}" data-peek-url="{{ peek_url }}" data-live-file="{% live_file 'worksheet' worksheet.pk %}"{% if task_id %} data-task="{{ task_id }}"{% endif %}{% if open_id %} data-open="{{ open_id }}"{% endif %} data-canvas-url="{{ canvas_url }}">
       {% for a in assignments %}<article class="board-card bd-card" data-board="{{ a.pk }}" tabindex="0" role="button" aria-label="Доска: {{ a.student.get_full_name|default:a.student.username }}">
         <div class="bd-card-head"><strong class="board-name">{{ a.student.get_full_name|default:a.student.username }}{% if a.copied %} <span class="live-copy" title="Копировал текст условия">•</span>{% endif %}</strong><span class="bd-mark" data-board-mark data-mark="{{ a.board_state.mark }}">{{ a.board_state.mark }}{% if a.board_state.mark_sub %}<sub>{{ a.board_state.mark_sub }}</sub>{% endif %}</span><span class="board-state" data-board-state hidden>{{ a.get_status_display }}</span></div>
         <canvas class="board-thumb" width="300" height="300" aria-hidden="true"></canvas>
@@ -40,8 +40,14 @@
       </article>{% empty %}<p class="helptext">Листок никому не назначен{% if group %} в этой группе{% endif %}.</p>{% endfor %}
     </div>
     {% if overflow %}<p class="helptext">На экране {{ boards_max }} досок с самой свежей активностью; ещё {{ overflow }} — выберите группу поменьше.</p>{% endif %}
-    <dialog class="dialog boards-dialog" id="boards-dialog">
+    <dialog class="dialog boards-dialog" id="boards-dialog" aria-describedby="boards-dialog-keys">
       <div class="dialog-heading"><h3 data-dialog-title>Доска</h3><button type="button" class="icon-btn" data-dialog-close aria-label="Закрыть">×</button></div>
+      {# Соседние ученики в порядке сетки — кнопками (телефон) и стрелками; подсказка клавиш — только при мыши #}
+      <div class="boards-dialog-nav">
+        <button type="button" class="btn btn-small btn-secondary" data-dialog-step="-1" aria-keyshortcuts="ArrowLeft" hidden></button>
+        <span class="helptext boards-dialog-keys" id="boards-dialog-keys">← → соседний ученик, 1–9 задача, Esc закрыть</span>
+        <button type="button" class="btn btn-small btn-secondary" data-dialog-step="1" aria-keyshortcuts="ArrowRight" hidden></button>
+      </div>
       <p class="boards-dialog-tasks" data-dialog-tasks></p>
       <div class="boards-dialog-peek" data-dialog-peek></div>
       <div data-dialog-canvas></div>
@@ -81,4 +87,4 @@
 </div>
 {% include 'assignments/_progress_dialog.html' %}
 {% endblock %}
-{% block extra_js %}{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=3"></script><script defer src="{% static 'js/boards.js' %}?v=3"></script>{% endif %}<script defer src="{% static 'js/boards_tasks.js' %}?v=2"></script><script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=11"></script>{% endblock %}
+{% block extra_js %}{% if canvas_enabled %}<script defer src="{% static 'js/canvas.js' %}?v=3"></script><script defer src="{% static 'js/boards.js' %}?v=4"></script>{% endif %}<script defer src="{% static 'js/boards_tasks.js' %}?v=2"></script><script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=11"></script>{% endblock %}

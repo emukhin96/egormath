@@ -50,7 +50,7 @@
         <span class="tw-label">Ответы класса</span>
         <ul class="tw-class">
           {% for a in answers %}{% with person=a.person %}
-          <li><span class="tw-class-name">{{ a.name }}{% if person.copied %} <span class="live-copy" title="{{ person.copy_note|capfirst }}">•</span>{% endif %}</span><span class="tw-class-marks live-table">{% for cell in a.cells %}{% include 'assignments/_progress_button.html' %}{% endfor %}</span><span class="tw-class-answer">{% for cell in a.cells %}{% if cell.shown %}{% include 'assignments/_mask.html' with fragments=cell.shown editable=False show_checks=False %}{% elif cell.answer %}<span class="math-content">{{ cell.answer|web_answer }}</span>{% endif %}{% endfor %}</span></li>
+          <li><span class="tw-class-name">{{ a.name }}{% if person.copied %} <span class="live-copy" title="{{ person.copy_note|capfirst }}">•</span>{% endif %}</span><span class="tw-class-marks live-table">{% for cell in a.cells %}{% include 'assignments/_progress_button.html' %}{% if cell.board and canvas_enabled %}{% include 'assignments/_progress_board_link.html' %}{% endif %}{% endfor %}</span><span class="tw-class-answer">{% for cell in a.cells %}{% if cell.shown %}{% include 'assignments/_mask.html' with fragments=cell.shown editable=False show_checks=False %}{% elif cell.answer %}<span class="math-content">{{ cell.answer|web_answer }}</span>{% endif %}{% endfor %}</span></li>
           {% endwith %}{% empty %}<li class="helptext">Листок пока никому не выдан.</li>{% endfor %}
         </ul>
       </div>
@@ -58,6 +58,7 @@
   </div>
   <div class="tw-foot">
     <a class="btn btn-secondary btn-small" href="{{ class_url }}{% if request.GET.group %}?group={{ request.GET.group }}{% endif %}">Открыть у всего класса</a>
+    {% if canvas_enabled %}<a class="btn btn-secondary btn-small" href="{{ boards_url }}?task={{ task.pk }}{% if group_id %}&amp;group={{ group_id|urlencode }}{% endif %}">Доски по задаче</a>{% endif %}
     {# Картинкой, в корзину, открыть задачу (только если она видна учителю) — общая панель #}
     {% include 'includes/task_actions.html' with task=task %}
   </div>

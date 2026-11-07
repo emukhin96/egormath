@@ -1,0 +1,34 @@
+/* Входы на экран «Доски учеников» (?task=&open=): значок доски в ячейке
+   и «Доски» у ученика в карте ответов, миниатюра в окне «задача у ученика»,
+   ссылки на проверке; соседние ученики и подсказка клавиш в диалоге доски. */
+@layer components {
+  .live-name .live-boards { margin-left: auto; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); text-decoration: none; }
+  .live-name .live-boards:hover { color: var(--accent); text-decoration: underline; }
+  .live-table .progress-cell { position: relative; }
+  .live-board {
+    position: absolute; top: 1px; right: 1px;
+    display: inline-grid; place-items: center; width: 16px; height: 16px;
+    border-radius: 4px; background: #fff; color: #1765b5;
+    box-shadow: 0 0 0 1px #d5e2f1;
+  }
+  .live-board:hover, .live-board:focus-visible { background: #1765b5; color: #fff; }
+  .tw-class-marks { position: relative; }
+  .tw-class-marks .live-board { position: static; margin-left: 2px; vertical-align: top; }
+
+  .tw-board { display: flex; flex-direction: column; gap: var(--space-2); }
+  .tw-board-thumb { display: block; width: 100%; max-width: 240px; aspect-ratio: 1; border: 1px solid var(--hairline); border-radius: 8px; background: #fff; overflow: hidden; }
+  .tw-board-thumb:hover, .tw-board-thumb:focus-visible { border-color: var(--accent); }
+  .tw-board-thumb canvas { display: block; width: 100%; height: 100%; }
+  .tw-board-links { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--fs-sm); }
+
+  .review-board-links { display: inline-flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--fs-sm); }
+  .review-board-links a { color: var(--muted); }
+  .review-board-links a:hover { color: var(--accent); }
+
+  .boards-dialog-nav { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; }
+  .boards-dialog-nav .btn { margin: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .boards-dialog-nav [data-dialog-step="1"] { margin-left: auto; }
+  .boards-dialog-keys { flex: 1 1 auto; text-align: center; }
+  /* На телефоне клавиш нет — только кнопки соседей */
+  @media (hover: none), (max-width: 760px) { .boards-dialog-keys { display: none; } }
+}

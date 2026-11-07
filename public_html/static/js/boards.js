@@ -114,6 +114,9 @@
     });
     if (empty) empty.hidden = !!bar.querySelector('[data-task-link]');
   }
+  /* ?open=<назначение>: диалог открывается сам после первого ответа опроса,
+     когда известны доски ученика (карточку сервер ставит на экран всегда) */
+  var pendingOpen = parseInt(root.dataset.open || '0', 10) || 0;
   function apply(data) {
     syncTaskLinks(data.tasks);
     answerVersions = {};
@@ -148,6 +151,12 @@
         if (node && node.canvasWidget) node.canvasWidget.reload();
       }
     });
+    if (open) syncNav(open.assignment);
+    if (pendingOpen) {
+      var id = pendingOpen;
+      pendingOpen = 0;
+      openBoard(id, taskFilter);
+    }
   }
   function tickAgo() {
     Array.prototype.forEach.call(root.querySelectorAll('[data-board][data-updated]'), function (el) {
@@ -245,8 +254,11 @@
   /* ---- диалог с виджетом учителя ---- */
   function mount(assignment, task) {
     var holder = dialog.querySelector('[data-dialog-canvas]');
+    /* Смена ученика или задачи: сначала дописать штрихи учителя на прежней доске */
+    var prev = holder.querySelector('[data-canvas]');
+    if (prev && prev.canvasWidget) prev.canvasWidget.close();
     holder.innerHTML = '';
-    var entry = pagesOf[assignment][task];
+    var entry = ensureEntry(assignment, task);
     var node = document.createElement('div');
     node.dataset.canvas = ''; node.dataset.role = 'teacher'; node.dataset.url = entry.canvas_url; node.dataset.pages = String(entry.count);
     node.dataset.always = '1';   /* тумблер «Показать доски» со страницы прогресса здесь не действует */
@@ -258,36 +270,133 @@
       b.setAttribute('aria-pressed', String(b.dataset.dialogTask === String(task)));
     });
     if (!same || !peekShown) { clearPeek(); loadPeek(assignment, task); }
+    syncReview();
   }
-  function openBoard(id) {
-    var byTask = pagesOf[id], el = card(id);
-    if (!byTask || !el) return;
+  /* Номера задач листка (лента над сеткой): 1–9 в диалоге и пустые доски задач,
+     по которым у ученика ещё нет страниц */
+  var taskNo = {}, taskByNo = {};
+  Array.prototype.forEach.call(document.querySelectorAll('[data-task-link]'), function (a) {
+    var task = parseInt(a.dataset.taskLink, 10), no = parseInt(a.textContent, 10);
+    if (task && no) { taskNo[task] = no; taskByNo[no] = task; }
+  });
+  var canvasUrl = root.dataset.canvasUrl || '';
+  /* Запись задачи ученика для диалога; нет страниц — пустая доска (count 0),
+     как сервер делает для выбранной в ?task= задачи */
+  function ensureEntry(id, task) {
+    var byTask = pagesOf[id] = pagesOf[id] || {};
+    if (!byTask[task] && canvasUrl && taskNo[task]) {
+      byTask[task] = {task_no: taskNo[task], count: 0,
+                      canvas_url: canvasUrl.replace('/0/canvas/0/', '/' + id + '/canvas/' + task + '/')};
+    }
+    return byTask[task];
+  }
+  /* Карточки в текущем порядке сетки (style.order из живого опроса) */
+  function orderedCards() {
+    return Array.prototype.slice.call(root.querySelectorAll('[data-board]')).sort(function (a, b) {
+      return (parseInt(a.style.order, 10) || 0) - (parseInt(b.style.order, 10) || 0);
+    });
+  }
+  function neighbour(id, step) {
+    var cards = orderedCards(), i = cards.indexOf(card(id));
+    return i < 0 ? null : cards[i + step] || null;
+  }
+  function syncNav(id) {
+    Array.prototype.forEach.call(dialog.querySelectorAll('[data-dialog-step]'), function (b) {
+      var step = parseInt(b.dataset.dialogStep, 10), el = neighbour(id, step);
+      var focused = document.activeElement === b;
+      b.hidden = !el;
+      if (el) {
+        b.textContent = step < 0 ? '← ' + el.dataset.student : el.dataset.student + ' →';
+        b.title = (step < 0 ? 'Предыдущий ученик' : 'Следующий ученик') + ' (' + (step < 0 ? '←' : '→') + ')';
+      } else if (focused) dialog.querySelector('[data-dialog-close]').focus();  /* фокус не теряется на скрытой кнопке */
+    });
+  }
+  /* Адрес страницы помнит открытую доску (?open=): перезагрузка открывает её же */
+  function syncAddress(id) {
+    if (!window.history || !history.replaceState) return;
+    var url = new URL(location.href);
+    if (id) url.searchParams.set('open', id); else url.searchParams.delete('open');
+    history.replaceState(history.state, '', url.toString());
+  }
+  function openBoard(id, wanted) {
+    var el = card(id);
+    if (!el) return;
+    /* Задача: запрошенная (соседний ученик, 1–9, ссылка), иначе выбранная в
+       ленте, иначе последняя изменённая доска, иначе первая задача листка */
+    var first = wanted || taskFilter || (latest[id] ? latest[id].task : 0);
+    if (!first) {
+      var own = Object.keys(pagesOf[id] || {});
+      first = own.length ? parseInt(own.sort(function (a, b) { return pagesOf[id][a].task_no - pagesOf[id][b].task_no; })[0], 10)
+                         : taskByNo[1];
+    }
+    if (!first || !ensureEntry(id, first)) return;
+    var byTask = pagesOf[id];
     var tasks = Object.keys(byTask).sort(function (a, b) { return byTask[a].task_no - byTask[b].task_no; });
-    dialog.querySelector('[data-dialog-title]').textContent = el.dataset.student;
-    dialog.querySelector('[data-dialog-review]').href = el.dataset.reviewUrl;
+    dialog.querySelector('[data-dialog-title]').textContent = el.dataset.student || el.querySelector('.board-name').textContent;
     var bar = dialog.querySelector('[data-dialog-tasks]');
     bar.innerHTML = '';
     tasks.forEach(function (task) {
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'btn btn-small btn-secondary'; b.dataset.dialogTask = task;
       b.textContent = 'Задача ' + byTask[task].task_no + (byTask[task].count ? '' : ' — пусто');
+      if (byTask[task].task_no <= 9) b.setAttribute('aria-keyshortcuts', String(byTask[task].task_no));
       b.addEventListener('click', function () { mount(id, parseInt(task, 10)); });
       bar.appendChild(b);
     });
-    /* При фильтре по задаче диалог открывается на ней — пустой, если доски нет:
-       сервер добавляет такую задачу в tasks с count 0 */
-    var first = taskFilter && byTask[taskFilter] ? taskFilter : latest[id] ? latest[id].task : parseInt(tasks[0], 10);
     mount(id, first);
+    syncNav(id);
+    syncAddress(id);
     if (!dialog.open) dialog.showModal();
     schedule();
   }
+  /* «Открыть проверку работы» — сразу к задаче открытой доски */
+  function syncReview() {
+    var el = open && card(open.assignment), link = dialog.querySelector('[data-dialog-review]');
+    if (!el || !link) return;
+    var entry = pagesOf[open.assignment] && pagesOf[open.assignment][open.task];
+    link.href = (el.dataset.reviewUrl || '#') + (entry && entry.task_no ? '#task-' + entry.task_no : '');
+  }
+  /* Клавиши диалога: ←/→ — соседний ученик (та же задача), 1–9 — задача,
+     Esc — закрыть (cancel ниже). Не мешаем доске: поля ввода, выделение
+     на холсте (там стрелки двигают элементы) и сочетания с модификаторами. */
+  dialog.addEventListener('keydown', function (e) {
+    if (!open || e.ctrlKey || e.metaKey || e.altKey) return;
+    var t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable || t.tagName === 'MATH-FIELD')) return;
+    var node = dialog.querySelector('[data-canvas]'), widget = node && node.canvasWidget;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      if (widget && widget.selection && widget.selection.length) return;
+      var el = neighbour(open.assignment, e.key === 'ArrowLeft' ? -1 : 1);
+      if (!el) return;
+      e.preventDefault();
+      openBoard(parseInt(el.dataset.board, 10), open.task);
+      return;
+    }
+    if (/^[1-9]$/.test(e.key) && !e.shiftKey) {
+      var task = taskByNo[parseInt(e.key, 10)];
+      if (!task) return;
+      e.preventDefault();
+      if (task !== open.task) openBoard(open.assignment, task);
+    }
+  });
+  Array.prototype.forEach.call(dialog.querySelectorAll('[data-dialog-step]'), function (b) {
+    b.addEventListener('click', function () {
+      var el = open && neighbour(open.assignment, parseInt(b.dataset.dialogStep, 10));
+      if (el) openBoard(parseInt(el.dataset.board, 10), open.task);
+    });
+  });
   function closeBoard() {
     var node = dialog.querySelector('[data-canvas]');
     if (node && node.canvasWidget) node.canvasWidget.close();
     dialog.querySelector('[data-dialog-canvas]').innerHTML = '';
     clearPeek();
+    var last = open && card(open.assignment);
     open = null;
+    syncAddress(null);
     if (dialog.open) dialog.close();
+    /* Фокус — на карточку последнего просмотренного ученика (после ←/→ или
+       открытия по ссылке прежнего фокуса на странице нет) */
+    if (last) last.focus();
     schedule();
     poll();
   }

@@ -6,6 +6,7 @@ from django.http import JsonResponse, HttpResponseNotModified
 from django.db.models import Prefetch, Max
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.decorators.cache import never_cache
 from django.utils import timezone
@@ -145,7 +146,10 @@ def progress_groups(items, assignments=None):
     return groups_of_points
 
 
-def progress_people(groups_of_points, assignments):
+def progress_people(groups_of_points, assignments, boards=None):
+    """Строки таблицы прогресса. boards — {назначение: {задачи с доской}}
+    (canvas.services.board_tasks): значок доски у первой колонки задачи."""
+    boards = boards or {}
     people = []
     copied = whole_copies('assignment', assignments)
     for assignment in assignments:
@@ -156,15 +160,18 @@ def progress_people(groups_of_points, assignments):
             item = group['item']
             sub = submissions.get(item.task_id)
             review = getattr(sub, 'review', None)
-            for column in group['columns']:
+            has_board = item.task_id in boards.get(assignment.pk, ())
+            for position, column in enumerate(group['columns']):
                 point = point_progress(sub, column['owner'], is_part=column['is_part'],
                                        enabled=not item.task.full_answer_only)
                 cells.append({**point, **column, 'status_label': point['label'], 'item': item, 'task': item.task,
-                              'hidden': item.pk in hidden, 'review': review})
+                              'hidden': item.pk in hidden, 'review': review,
+                              'board': has_board and position == 0, 'number': group['number']})
         visible = [c for c in cells if not c['hidden']]
         result = {'done': sum(c['status'] == 'ok' for c in visible), 'total': len(visible)}
         people.append({'assignment': assignment, 'cells': cells, 'result': result,
-                       'copied_whole': copied.get(assignment.pk, 0)})
+                       'copied_whole': copied.get(assignment.pk, 0),
+                       'has_boards': bool(boards.get(assignment.pk))})
     return people
 
 
@@ -257,6 +264,9 @@ def worksheet_progress(request, worksheet_id):
         assignments = assignments.filter(student__in=group.students.all())
     items = list(worksheet.ordered_items().filter(task__isnull=False))
     groups_of_points = progress_groups(items, assignments)
+    # Значок «есть доска» в ячейках — одним запросом; входит и в ETag фрагмента
+    from canvas.services import board_tasks
+    boards = board_tasks(assignments)
     etag = None
     if request.GET.get('fragment'):
         submissions = list(Submission.objects.filter(assignment__in=assignments).annotate(
@@ -271,11 +281,12 @@ def worksheet_progress(request, worksheet_id):
                  [(g['item'].pk, g['item'].task_id, g['item'].order, g['item'].task.updated_at,
                    [(c['owner'].pk, c['owner'].answer_mask, c['label']) for c in g['columns']]) for g in groups_of_points],
                  # метка «•» у ученика появляется от событий копирования
-                 ActivityEvent.objects.filter(assignment__in=assignments, kind='copy').aggregate(last=Max('pk'))['last']]
+                 ActivityEvent.objects.filter(assignment__in=assignments, kind='copy').aggregate(last=Max('pk'))['last'],
+                 sorted((a, sorted(t)) for a, t in boards.items())]
         etag = '"' + hashlib.sha256(json.dumps(state, default=str).encode()).hexdigest() + '"'
         if etags.matches(request, etag):
             return HttpResponseNotModified()
-    people = progress_people(groups_of_points, assignments.order_by('student__last_name', 'student__username'))
+    people = progress_people(groups_of_points, assignments.order_by('student__last_name', 'student__username'), boards)
     summary, column_stats = live_summary(groups_of_points, people)
     order = request.GET.get('order', 'name') if request.GET.get('order') in ORDERS else 'name'
     order_people(people, order)
@@ -285,7 +296,8 @@ def worksheet_progress(request, worksheet_id):
                'manage_status': request.GET.get('manage') == '1',
                'summary': summary, 'column_stats': column_stats, 'orders': ORDERS, 'order': order,
                'deadline': deadline, 'live_map': True, 'grade_choices': Review.grade_options(),
-               'has_parts': any(c['is_part'] for g in groups_of_points for c in g['columns'])}
+               'has_parts': any(c['is_part'] for g in groups_of_points for c in g['columns']),
+               'boards_url': reverse('worksheet_boards', args=[worksheet.pk])}
     template = 'assignments/_progress_table.html' if request.GET.get('fragment') else 'assignments/progress.html'
     response = render(request, template, context)
     if etag:

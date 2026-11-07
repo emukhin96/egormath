@@ -43,6 +43,15 @@ data-attempt-url (teacher_progress.js грузит их в то же окно). 
       {% else %}<div data-detail-answer>{% include 'assignments/_live_answer.html' %}</div>{% endif %}
     </div>
     <aside class="tw-side">
+      {% if canvas_enabled and row.canvas_pages %}
+      {# Доска ученика: миниатюра последней страницы (board_thumbs.js, один запрос этой доски) и вход на экран досок сразу в её диалог #}
+      {% url 'worksheet_boards' assignment.worksheet_id as boards_url %}
+      <div class="tw-block tw-board">
+        <span class="tw-label">Доска ученика</span>
+        {% if point %}<a class="tw-board-thumb" href="{{ boards_url }}?task={{ row.task.pk }}&amp;open={{ assignment.pk }}" aria-label="Открыть доску ученика"><canvas data-board-thumb data-url="{% url 'canvas:pages' assignment.pk row.task.pk %}" data-version="{{ row.canvas_version }}" width="240" height="240" aria-hidden="true"></canvas></a>{% endif %}
+        <span class="tw-board-links"><a href="{{ boards_url }}?task={{ row.task.pk }}&amp;open={{ assignment.pk }}">Открыть доску</a><a href="{{ boards_url }}?task={{ row.task.pk }}">Все доски по задаче</a></span>
+      </div>
+      {% endif %}
       <div class="tw-block">
         <span class="tw-label">Копирование в этой задаче</span>
         {% for copy in copies %}<p class="tw-copy-row">{{ copy.event.received_at|date:'d.m, H:i' }} {{ copy.label }}{% if copy.event.text %}: «{{ copy.event.text|truncatechars:80 }}»{% endif %}</p>{% empty %}<p class="helptext">Не копировал условие.</p>{% endfor %}

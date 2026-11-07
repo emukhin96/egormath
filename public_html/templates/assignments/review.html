@@ -64,6 +64,8 @@
     {% if canvas_enabled %}
     {# Холст вне живого фрагмента: пометки учителя не должны пропадать при обновлении ответов #}
     <div data-canvas data-url="{% url 'canvas:pages' assignment.pk row.task.pk %}" data-role="teacher" data-pages="{{ row.canvas_pages }}"></div>
+    {# Экран досок: эта доска рядом с соседями (←/→) и доски всего класса по задаче #}
+    <span class="review-board-links">{% if row.canvas_pages %}<a href="{% url 'worksheet_boards' assignment.worksheet_id %}?task={{ row.task.pk }}&amp;open={{ assignment.pk }}" title="Эта доска на экране досок: стрелками — соседние ученики">На экране досок</a>{% endif %}<a href="{% url 'worksheet_boards' assignment.worksheet_id %}?task={{ row.task.pk }}">Все доски по задаче</a></span>
     {% endif %}
     {% if row.subrows %}{% for sr in row.subrows %}{% if sr.part %}{% include 'workaudit/revisions.html' with kind='part' object=sr.part %}{% endif %}{% endfor %}{% else %}{% include 'workaudit/revisions.html' with kind='submission' object=row.submission %}{% endif %}
     {% if row.has_solution %}
