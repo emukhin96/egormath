@@ -85,6 +85,24 @@ class VariantFamilyTests(TestCase):
         self.assertEqual(Family.objects.get(tasks=sr[0]).title,
                          'Книга · СР 1 · все варианты · №1')
 
+    def test_feoktistov_old_ziv_pair_key_is_renamed(self):
+        # До общих правил ручная синхронизация давала Феоктистову пару v1–v2
+        # с ключом Зива; новая семья «все варианты» её продолжает, а не дублирует.
+        sr = [self.ref(f'sr/01/{v}/001') for v in ('prep', 'v1', 'v2', 'v3')]
+        old = Family.objects.create(key=f'ziv:{self.source.pk}:sr:01:0:001', title='Старая пара', origin='source')
+        FamilyMember.objects.create(family=old, task=sr[1], origin='source', evidence=[{'old': 1}])
+        FamilyMember.objects.create(family=old, task=sr[2], origin='manual')
+        report = sync_families(report=True, dry_run=True)
+        self.assertEqual((report['keys_updated'], report['created'], report['members_added']), (1, 0, 2))
+        self.assertEqual(Family.objects.get().key, old.key)
+        report = sync_families(report=True)
+        self.assertEqual(Family.objects.count(), 1)
+        old.refresh_from_db()
+        self.assertEqual(old.key, f'variants:{self.source.pk}:sr/01:all:001')
+        self.assertEqual(set(old.tasks.all()), set(sr))
+        self.assertEqual(old.familymember_set.get(task=sr[2]).origin, 'manual')
+        self.assertEqual(sync_families(report=True)['keys_updated'], 0)
+
     def test_ziv_pairs_are_difficulty_levels(self):
         tasks = {v: self.ref(f'sr/03/v{v}/2') for v in range(1, 9)}
         report = sync_families(report=True)

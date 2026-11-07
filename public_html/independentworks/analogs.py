@@ -309,6 +309,10 @@ def discover_families(*, source_id=None):
     return {key: value for key, value in groups.items() if len(value['members']) > 1}, incomplete, sorted(set(ambiguous))
 
 
+# Ключ семьи Феоктистова, который до общих правил строился как пара Зива.
+FEOKTISTOV_KEY = re.compile(r'variants:(\d+):(sr|kr)/(\d{2}):all:(\d{3})')
+
+
 def sync_families(*, dry_run=False, report=False, source_id=None):
     groups, incomplete, ambiguous = discover_families(source_id=source_id)
     result = {'families': len(groups), 'created': 0, 'members_added': 0,
@@ -316,12 +320,16 @@ def sync_families(*, dry_run=False, report=False, source_id=None):
     # По источникам: найдено семей, из них новых, новых участников.
     by_source = defaultdict(lambda: {'families': 0, 'created': 0, 'members_added': 0})
     with transaction.atomic():
-        # Старый ключ не различал главы. Переносим только однозначное
-        # семейство; ручных участников сохраняем вместе с его идентификатором.
+        # Старые ключи: банк не различал главы; Феоктистова ловило правило
+        # Зива парой v1–v2 («ziv:ист:sr:01:0:001»; v3 без пары семьи не
+        # давал). Переносим только однозначное семейство; ручных участников
+        # сохраняем вместе с его идентификатором.
         legacy_targets = defaultdict(list)
         for key in groups:
             if key.startswith('bank:') and key.count(':') == 3:
                 legacy_targets[key.rsplit(':', 1)[0]].append(key)
+            elif match := FEOKTISTOV_KEY.fullmatch(key):
+                legacy_targets['ziv:{}:{}:{}:0:{}'.format(*match.groups())].append(key)
         blocked = set()
         aliases = {}
         for old_key, targets in legacy_targets.items():
@@ -335,7 +343,7 @@ def sync_families(*, dry_run=False, report=False, source_id=None):
                     or Family.objects.filter(key=target).exists()):
                 blocked.update(targets)
                 blocked.add(old_key)
-                result['ambiguous'].append(f'{old_key}: старое семейство требует ручного уточнения раздела')
+                result['ambiguous'].append(f'{old_key}: старое семейство требует ручного уточнения')
                 continue
             result['keys_updated'] += 1
             aliases[target] = old
