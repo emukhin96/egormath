@@ -48,9 +48,10 @@ class AnswerPolicyTests(TestCase):
             reverse('worksheet_detail', args=[self.ws.pk]))
 
         self.assertContains(response, 'data-answer-policy-form')
+        # Тумблер без своей формы: листок и элемент — в data-атрибутах чекбокса
         self.assertContains(
-            response, f'name="worksheet" value="{self.ws.pk}"')
-        self.assertContains(response, f'name="item" value="{self.item.pk}"')
+            response, f'name="full_answer_only" data-worksheet="{self.ws.pk}" '
+                      f'data-item="{self.item.pk}"')
         self.assertNotContains(response, 'name="scope" value="global"')
         html = response.content.decode()
         self.assertLess(

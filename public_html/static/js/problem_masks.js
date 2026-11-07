@@ -111,15 +111,19 @@
   document.addEventListener('change',async function(e){
     var toggle=e.target.closest('[data-answer-policy-form] input[name="full_answer_only"]');
     if(!toggle)return;
-    var policyForm=toggle.form;
-    var root=policyForm.closest('.ws-item')?.querySelector('[data-worksheet-mask]');
+    var root=toggle.closest('.ws-item')?.querySelector('[data-worksheet-mask]');
     if(!root)return;
     var previous=!toggle.checked;
-    // Заблокированный checkbox не входит в FormData. Снимаем значение заранее.
-    var data=new FormData(policyForm);
+    // Тумблер в строке конструктора без своей формы: данные собираем сами
+    // (data-worksheet / data-item на чекбоксе), CSRF — заголовком в api.request.
+    var data=new FormData();
+    data.append('block','answer_policy');
+    data.append('worksheet',toggle.dataset.worksheet||'');
+    data.append('item',toggle.dataset.item||'');
+    if(toggle.checked)data.append('full_answer_only','on');
     toggle.disabled=true;
     try{
-      var result=await api.save(root,data,policyForm);
+      var result=await api.save(root,data,null);
       if(!result)toggle.checked=previous;
     }catch(error){toggle.checked=previous;api.toast(false,error.message);}
     finally{toggle.disabled=false;}

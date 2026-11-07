@@ -19,10 +19,6 @@
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from functools import reduce
-from operator import or_
-
-from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -179,15 +175,23 @@ def task_usage(teacher, tasks, *, student_ids=None):
     if student_ids is not None and not student_ids:
         return usage
 
+    # Локальные копии относятся к оригиналу: {id копии или оригинала: id
+    # оригинала}. Копий ищем по индексу variant_of_id, а элементы листков
+    # — по индексу task_id; условие «task_id ИЛИ variant_of через JOIN»
+    # индексы не использовало и на книжном листке читало всю таблицу.
+    from problems.models import Task
+    to_root = {pk: pk for pk in root_ids}
+    to_root.update(dict(Task.objects.filter(variant_of_id__in=root_ids)
+                        .values_list('pk', 'variant_of_id')))
+
     # Обычные задания: листок → задачи → назначения.
     items = list(WorksheetItem.objects.filter(
-        deleted_at__isnull=True).filter(
-        Q(task_id__in=root_ids) | Q(task__variant_of_id__in=root_ids)
-    ).values_list('pk', 'worksheet_id', 'task_id', 'task__variant_of_id'))
+        deleted_at__isnull=True, task_id__in=list(to_root),
+    ).values_list('pk', 'worksheet_id', 'task_id'))
     tasks_by_worksheet = {}
-    for item_pk, worksheet_id, task_id, variant_of_id in items:
-        root = variant_of_id if variant_of_id in root_ids else task_id
-        tasks_by_worksheet.setdefault(worksheet_id, []).append((item_pk, root))
+    for item_pk, worksheet_id, task_id in items:
+        tasks_by_worksheet.setdefault(worksheet_id, []).append(
+            (item_pk, to_root[task_id]))
     if tasks_by_worksheet:
         assignments = (Assignment.visible_to(teacher)
                        .filter(worksheet_id__in=tasks_by_worksheet)
@@ -231,26 +235,23 @@ def task_usage(teacher, tasks, *, student_ids=None):
 
     # Самостоятельные: пункты варианта → попытки учеников. В source_key
     # может стоять id локальной копии (аналог, созданный из подбора) —
-    # такие id ищем тоже и относим к оригиналу.
+    # такие id ищем тоже и относим к оригиналу. Пункты выданных работ
+    # учителя читаем разом и отбираем нужные по ключу в Python: условие
+    # из пары «равно / начинается с» на каждую задачу листка давало SQL
+    # на сотни OR, который база только разбирала дольше, чем выполняла.
     from independentworks.models import Attempt, Point, Work
-    from problems.models import Task
-    to_root = {pk: pk for pk in root_ids}
-    to_root.update(dict(Task.objects.filter(variant_of_id__in=root_ids)
-                        .values_list('pk', 'variant_of_id')))
-    key_filter = reduce(or_, (
-        Q(source_key=f't{pk}') | Q(source_key__startswith=f't{pk}:')
-        for pk in to_root))
-    points = list(Point.objects.filter(
+    points = Point.objects.filter(
         variant__run__work__in=Work.visible_to(teacher),
         variant__run__issued_at__isnull=False,
-    ).filter(key_filter).values_list('variant_id', 'source_key').distinct())
-    if points:
-        variant_tasks = {}
-        for variant_id, source_key in points:
-            match = _POINT_TASK.match(source_key)
-            root = to_root.get(int(match.group(1))) if match else None
-            if root is not None:
-                variant_tasks.setdefault(variant_id, set()).add(root)
+        source_key__startswith='t',
+    ).values_list('variant_id', 'source_key').distinct()
+    variant_tasks = {}
+    for variant_id, source_key in points:
+        match = _POINT_TASK.match(source_key)
+        root = to_root.get(int(match.group(1))) if match else None
+        if root is not None:
+            variant_tasks.setdefault(variant_id, set()).add(root)
+    if variant_tasks:
         attempts = (Attempt.objects.filter(variant_id__in=variant_tasks)
                     .select_related('student', 'run'))
         if student_ids is not None:

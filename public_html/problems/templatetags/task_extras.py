@@ -1,4 +1,5 @@
 import re
+from functools import lru_cache
 
 from django import template
 
@@ -101,9 +102,16 @@ def _strip_picture_separators(text):
 @register.filter
 def web_answer(text):
     """Авторский ответ: голый TeX вроде ``\\{-2;1\\}`` оборачивается для KaTeX."""
+    return _web_answer(str(text) if text else '')
+
+
+# Нормализация ответа — чистые строковые функции, результат по тому же
+# тексту одинаков; кэш в процессе — как у problems.web_tex.tex_to_web_html.
+@lru_cache(maxsize=4096)
+def _web_answer(text):
     # Рисунки выводит шаблон. Убираем ссылки до OCR-нормализации, иначе
     # ссылка после неравенства может ошибочно попасть внутрь формулы.
-    text, pictures = TASKPIC_NUM_RE.subn('', text or '')
+    text, pictures = TASKPIC_NUM_RE.subn('', text)
     if pictures:
         text = _strip_picture_separators(text)
     result = map_outside_tables(text, apply_imported_answer)
