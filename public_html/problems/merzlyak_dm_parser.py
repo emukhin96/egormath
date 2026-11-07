@@ -203,7 +203,9 @@ CAPTION_NUMBERS_RE = re.compile(r"Рис\.?\s*(?P<num>\d{1,3})")
 TRAILING_CAPTION_RE = re.compile(
     r"^[ \t]*(?:\\\\)?[ \t]*\n?[ \t]*(?P<caption>(?:Рис\.?\s*\d{1,3}[ \t]*)+)(?:\\\\)?[ \t]*(?=\n|$)")
 # Подпись, оставшаяся в тексте без картинки рядом: «… хорду Рис. 1».
-STRAY_CAPTION_RE = re.compile(r"(?<![(\w])Рис\.\s*(?P<num>\d{1,3})(?![\d.,]|\s*[)\w])")
+# Проверка после номера — только в той же строке: следующая строка может
+# начинаться с номера задачи («2. …»).
+STRAY_CAPTION_RE = re.compile(r"(?<![(\w])Рис\.\s*(?P<num>\d{1,3})(?![\d.,]|[ \t]*[)\w])")
 FIGURE_TOKEN = "\\dmfig{{{}}}"
 FIGURE_TOKEN_RE = re.compile(r"\\dmfig\{(?P<num>\d{1,3})\}")
 # Ссылки в условии: «(рис. 12)», «(рис. 5, 6)», «на рисунке 10», «рисунок 49».
@@ -282,30 +284,38 @@ def extract_figures(text: str, figures: Figures) -> str:
     # «134. Укажите … хорду Рис. 1»: подпись в тексте, картинка без подписи
     # рядом — ближайшая (сначала ниже, потом выше) в пределах страницы.
     def stray(text: str) -> str:
+        # Каждая подпись ищется заново в уже изменённом тексте: замена
+        # картинки перед подписью сдвигает всё, что после неё.
         result = text
-        for match in reversed(list(STRAY_CAPTION_RE.finditer(text))):
+        pos = 0
+        while True:
+            match = STRAY_CAPTION_RE.search(result, pos)
+            if match is None:
+                return result
+            start, end = match.span()
             number = match.group("num")
             if number in figures.by_number:
-                result = result[:match.start()] + result[match.end():]
+                result = result[:start] + result[end:]
+                pos = start
                 continue
-            after = GRAPHICS_RE.search(result, match.end(), match.end() + 800)
+            after = GRAPHICS_RE.search(result, end, end + 800)
             before = None
-            for candidate in GRAPHICS_RE.finditer(result, max(0, match.start() - 800), match.start()):
+            for candidate in GRAPHICS_RE.finditer(result, max(0, start - 800), start):
                 before = candidate
             pick = after or before
             if pick is None:
                 figures.stray_captions.append(number)
-                result = result[:match.start()] + result[match.end():]
+                result = result[:start] + result[end:]
+                pos = start
                 continue
             figures.add(number, pick.group("path"))
             token = FIGURE_TOKEN.format(number)
             if pick is after:
-                result = (result[:match.start()] + result[match.end():pick.start()]
-                          + token + result[pick.end():])
+                result = result[:start] + result[end:pick.start()] + token + result[pick.end():]
+                pos = start
             else:
-                result = (result[:pick.start()] + token + result[pick.end():match.start()]
-                          + result[match.end():])
-        return result
+                result = result[:pick.start()] + token + result[pick.end():start] + result[end:]
+                pos = pick.start() + len(token) + (start - pick.end())
 
     text = stray(text)
     text = re.sub(r"\\(?:begin|end)\{center\}", "", text)

@@ -268,3 +268,22 @@ class FragmentTests(SimpleTestCase):
         self.assertIn("на рисунке \\taskpic{1}", tasks[0].text_latex)
         self.assertNotIn("Рис.", tasks[0].text_latex)
         self.assertEqual(tasks[1].images, [])
+
+    def test_stray_captions_paired_with_pictures_above(self):
+        # Обе картинки выше подписей (ниже картинок нет): замена первой
+        # не должна сдвинуть вырезание второй подписи.
+        text = (TITLE + "\\section*{Вариант 1}\n"
+                "\\includegraphics[max width=\\textwidth]{first-picture-long-name}\n"
+                "\\includegraphics[max width=\\textwidth]{second-picture-long-name}\n"
+                "1. Найдите радиус окружности на рисунке 1. Рис. 1\n"
+                "2. Найдите диаметр окружности на рисунке 2. Рис. 2\n"
+                "3. Начертите круг.\n\\end{document}")
+        tasks, diagnostics = parse_merzlyak_dm(text, book={"title": "т", "grade": 6})
+        by_id = {task.external_id: task for task in tasks}
+        self.assertEqual(diagnostics["figure_captions_without_picture"], [])
+        self.assertEqual(by_id["ДМ.В1/1"].images, ["second-picture-long-name"])
+        self.assertEqual(by_id["ДМ.В1/2"].images, ["first-picture-long-name"])
+        self.assertTrue(by_id["ДМ.В1/2"].text_latex.startswith(
+            "Найдите диаметр окружности на рисунке \\taskpic{1}"))
+        for task in tasks:
+            self.assertNotIn("Рис.", task.text_latex)
