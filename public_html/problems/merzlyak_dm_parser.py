@@ -286,13 +286,18 @@ def wrap_prose_intervals(text: str) -> str:
         return _INTERVAL_RE.sub(
             lambda m: "\\(" + m.group(1) + end(m.group(2)) + "; " + end(m.group(3)) + m.group(4) + "\\)", chunk)
 
+    return re.sub(r"\x00([+-]?)\x00", r"\\(\1\\infty\\)", outside_math(text, prose))
+
+
+def outside_math(text: str, fix) -> str:
+    """Применить ``fix`` только к прозе между формулами, формулы не трогать."""
     out, pos = [], 0
     for span in MATH_SPAN_RE.finditer(text):
-        out.append(prose(text[pos:span.start()]))
+        out.append(fix(text[pos:span.start()]))
         out.append(span.group(0))
         pos = span.end()
-    out.append(prose(text[pos:]))
-    return re.sub(r"\x00([+-]?)\x00", r"\\(\1\\infty\\)", "".join(out))
+    out.append(fix(text[pos:]))
+    return "".join(out)
 
 
 _DELIMITER_RE = re.compile(r"(?<!\\)\$\$|(?<!\\)\$|\\[()\[\]]")
@@ -380,10 +385,12 @@ def heal_math_details(text: str) -> str:
     # Промежуток прозой: «[-4; 2)», «(-4; + \\(\\infty\\))» — только вне формул:
     # внутри \\(…\\) обёртка дала бы вложенную формулу (LaTeX падает).
     text = wrap_prose_intervals(text)
-    # Латиница в единицах: «2 m» → «2 м».
-    text = re.sub(r"(?<=\d) m(?=[\s.,;]|$)", " м", text)
-    # Периодическая дробь прозой: «6,(23)».
-    return re.sub(r"(?<![\w.,$\\])(-?\d+),\((\d+)\)", r"\\(\1{,}(\2)\\)", text)
+    # Латиница в единицах: «2 m» → «2 м» — только в прозе: в формуле
+    # «\\(5 m n\\)» это переменная, кириллица там не наберётся.
+    text = outside_math(text, lambda chunk: re.sub(r"(?<=\d) m(?=[\s.,;]|$)", " м", chunk))
+    # Периодическая дробь прозой: «6,(23)» — тоже вне формул, иначе вложенная \\(.
+    return outside_math(text, lambda chunk: re.sub(
+        r"(?<![\w.,$\\])(-?\d+),\((\d+)\)", r"\\(\1{,}(\2)\\)", chunk))
 
 
 # Арифметика прозой: «28 • 13-4 228: 14», «608 • 76» — «•» значит умножение.

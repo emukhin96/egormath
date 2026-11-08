@@ -497,6 +497,22 @@ class QaRulesTests(SimpleTestCase):
         for task in by_id.values():
             self.assertEqual(task.warnings, [])
 
+    def test_letter_m_in_formula_untouched(self):
+        # «2 m» прозой — единица «м», а в формуле m — переменная одночлена.
+        by_id = self.parse("1. Упростите \\(5 m n\\), \\(2 m ; 3 n\\) и \\(4 m \\cdot n\\).\n"
+                           "2. Длина участка 2 m. Запишите \\(0,(3)\\) и 6,(23).")
+        first = by_id["ДМ.В1/1"].text_latex
+        self.assertIn("5 m n", first)
+        self.assertIn("2 m ; 3 n", first)
+        self.assertIn("4 m \\cdot n", first)
+        self.assertNotIn("м", first.replace("Упростите", ""))
+        second = by_id["ДМ.В1/2"].text_latex
+        self.assertIn("$2$ м.", second)
+        self.assertNotIn(" m", second)
+        self.assertIn("\\(6{,}(23)\\)", second)
+        for task in by_id.values():
+            self.assertNotIn("Вложенные или незакрытые формулы: сверить с книгой", task.warnings)
+
     def test_broken_delimiters_warned(self):
         by_id = self.parse("1. Мусор OCR \\(\\min _{\\([5; 7]\\)} f(x)\\).\n2. Дальше.")
         self.assertIn("Вложенные или незакрытые формулы: сверить с книгой", by_id["ДМ.В1/1"].warnings)
