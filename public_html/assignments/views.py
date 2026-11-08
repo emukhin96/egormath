@@ -178,6 +178,37 @@ def _recipient_sections(user, rows, by_worksheet):
     return sorted(sections.values(), key=lambda s: (-s['latest'].timestamp(), not s['is_group'], s['label']))
 
 
+def worksheet_filter_options(user, kind, selected='', owner_id=''):
+    """Варианты фильтра «Листок» в списке заданий.
+
+    Не все листки учителя (у редактора — тысячи, с книжными подборками), а
+    только те, по которым есть выданные работы: для заданий — листки
+    ``Assignment.visible_to``, для самостоятельных — исходные листки
+    выданных проведений. Листок из ``?worksheet=`` показывается как текущий,
+    даже если выдач по нему нет (сброшенные или снятые), — но только из
+    доступных учителю. Один запрос, ``[{'pk', 'title'}, …]``.
+    """
+    if kind == 'independent':
+        from independentworks.models import Run, Work
+        if not settings.INDEPENDENT_WORKS_ENABLED:
+            return []
+        issued = Run.objects.filter(work__in=Work.visible_to(user), issued_at__isnull=False,
+                                    work__source_worksheet__isnull=False)
+        if owner_id.isdigit() and user.is_superuser:
+            issued = issued.filter(owner_id=owner_id)
+        with_work = issued.values('work__source_worksheet_id')
+    else:
+        with_assignments = Assignment.visible_to(user)
+        if owner_id.isdigit() and user.is_superuser:
+            with_assignments = with_assignments.filter(worksheet__owner_id=owner_id)
+        with_work = with_assignments.values('worksheet_id')
+    condition = Q(pk__in=with_work)
+    if selected.isdigit():
+        condition |= Q(pk__in=Worksheet.visible_to(user).filter(pk=selected).values('pk'))
+    return list(Worksheet.objects.filter(condition).order_by('-updated_at', '-pk')
+                .values('pk', 'title'))
+
+
 @teacher_required
 def assignment_list(request):
     """Единая очередь выданных работ с рабочими фильтрами."""
@@ -325,12 +356,17 @@ def assignment_list(request):
             for profile in all_profiles
             if not group['is_collection'] or profile.user_id in existing]
     runs_by_key = {f'independent-{r.pk}': r for r in independent_runs}
+    # Ученики владельца — один запрос на владельца, а не на каждое проведение
+    students_by_owner = {}
     for group in groups_on_page:
         if group['kind'] != 'independent':
             continue
         run = runs_by_key[group['key']]
         existing = {a.student_id: a for a in run.attempts.all()}
-        allowed = list(Profile.student_users_for(run.owner).order_by('last_name', 'first_name', 'username'))
+        if run.owner_id not in students_by_owner:
+            students_by_owner[run.owner_id] = list(
+                Profile.student_users_for(run.owner).order_by('last_name', 'first_name', 'username'))
+        allowed = students_by_owner[run.owner_id]
         users = {u.pk: u for u in allowed}
         users.update({a.student_id: a.student for a in existing.values()})
         group['run'] = run
@@ -345,7 +381,7 @@ def assignment_list(request):
     for assignment in assignments.filter(worksheet_id__in=worksheet_ids).prefetch_related('source_groups'):
         filtered_by_worksheet.setdefault(assignment.worksheet_id, {})[assignment.student_id] = assignment
     recipient_sections = _recipient_sections(request.user, groups_on_page, filtered_by_worksheet)
-    worksheets = Worksheet.visible_to(request.user).order_by('-updated_at')
+    worksheets = worksheet_filter_options(request.user, kind, worksheet_id, owner_id)
     return render(request, 'assignments/assignment_list.html', {
         'page': page,
         'recipient_sections': recipient_sections,
