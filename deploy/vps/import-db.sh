@@ -86,10 +86,13 @@ $COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroo
   WHERE table_schema = DATABASE() ORDER BY table_rows DESC LIMIT 15;
   SELECT CONVERT_TZ(NOW(), \"UTC\", \"Europe/Moscow\") AS tz_check;"'
 
+# Файловые кэши каталога (data/cache) пережили заливку и описывают старую
+# базу; сигналы при заливке дампа не срабатывают — сбрасываем явно, и
+# независимо от того, был ли web запущен (ревью #337).
+echo "==> clear_catalog_cache"
+$COMPOSE run --rm --no-deps -T egormath-web python manage.py clear_catalog_cache
+
 # Не список «&& …; exit 0»: ошибка запуска web должна стать кодом выхода скрипта.
 if [ "$WEB_RUNNING" = 1 ]; then
   $COMPOSE up -d egormath-web
-  # Файловые кэши каталога (data/cache) пережили заливку и описывают старую
-  # базу; сигналы при заливке дампа не срабатывают — сбрасываем явно.
-  $COMPOSE exec -T egormath-web python manage.py clear_catalog_cache
 fi

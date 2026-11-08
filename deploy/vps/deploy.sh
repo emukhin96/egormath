@@ -51,6 +51,11 @@ echo "==> seed_rubricator"
 $RUN seed_rubricator
 echo "==> collectstatic"
 $RUN collectstatic --noinput
+# Файловые кэши каталога в data/cache переживают выкладку, а ключи
+# версионированы по данным, не по коду: записи старого кода (pickle узлов
+# дерева подборок, счётчики) должны уйти вместе с ним (ревью #337).
+echo "==> clear_catalog_cache"
+$RUN clear_catalog_cache
 
 echo "==> LaTeX packages and fonts → latex-api"
 # До перезапуска web: новый код рассчитывает на свежие egor*.sty на сервере.
