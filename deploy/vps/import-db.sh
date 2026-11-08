@@ -89,4 +89,7 @@ $COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroo
 # Не список «&& …; exit 0»: ошибка запуска web должна стать кодом выхода скрипта.
 if [ "$WEB_RUNNING" = 1 ]; then
   $COMPOSE up -d egormath-web
+  # Файловые кэши каталога (data/cache) пережили заливку и описывают старую
+  # базу; сигналы при заливке дампа не срабатывают — сбрасываем явно.
+  $COMPOSE exec -T egormath-web python manage.py clear_catalog_cache
 fi

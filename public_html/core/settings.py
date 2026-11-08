@@ -152,21 +152,25 @@ CACHES = {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'egormath-default',
     },
-    # CGI-процессы не разделяют память. Файловый кэш хранит неизменяемую
-    # часть рубрикатора между запросами и не требует отдельного сервиса.
+    # Файловые кэши общие для воркеров gunicorn и не требуют отдельного
+    # сервиса. Записи сбрасываются сигналами при правке данных (темы,
+    # задачи, подборки, листки), поэтому срок жизни — только страховка от
+    # записей мимо ORM (заливка дампа, скрипты прямо в MySQL): 6 часов, а не
+    # 5 минут — иначе первый заход после перемены в школе платил за холодный
+    # кэш 1–3 с (контроль прода 09.11.2026). После прямых правок базы —
+    # manage.py clear_catalog_cache (import-db.sh делает это сам).
     'taxonomy': {
         'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
         'LOCATION': SITE_ROOT / '.cache' / 'taxonomy',
-        'TIMEOUT': 300,
+        'TIMEOUT': 6 * 3600,
         'OPTIONS': {'MAX_ENTRIES': 10},
     },
     # Счётчики каталога задач (разделы рубрикатора, классы, источники) —
-    # по записи на учителя и открытый раздел (problems/catalog_counts.py);
-    # сбрасываются сигналами при правке задач, иначе живут 5 минут.
+    # по записи на учителя и открытый раздел (problems/catalog_counts.py).
     'catalog': {
         'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
         'LOCATION': SITE_ROOT / '.cache' / 'catalog',
-        'TIMEOUT': 300,
+        'TIMEOUT': 6 * 3600,
         'OPTIONS': {'MAX_ENTRIES': 500},
     },
 }
