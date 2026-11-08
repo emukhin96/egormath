@@ -486,6 +486,18 @@ class QaRulesTests(SimpleTestCase):
         by_id = self.parse("1. На рисунке 3 изображён график функции.\\\\\n"
                            "\\includegraphics[max width=\\textwidth, alt={}, center]{" + name + "}\n2. Дальше.")
         self.assertEqual(by_id["ДМ.В1/1"].images, [name])
+        digits = "666e51e3-f294-4e56-ba6d-12345678-027_717_1090_1099_112"
+        by_id = self.parse("1. Рисунок.\\\\\n\\includegraphics[max width=\\textwidth, center]{" + digits + "}\n2. Дальше.")
+        self.assertEqual(by_id["ДМ.В1/1"].images, [digits])
+
+    def test_thousands_after_minus_grouped(self):
+        # Дефис перед числом в прозе — минус или диапазон, разряды нужны.
+        by_id = self.parse("1. Температура -12 345 градусов.\n2. Цена от 10 000-20 000 рублей.")
+        self.assertIn("$-12\\,345$", by_id["ДМ.В1/1"].text_latex)
+        second = by_id["ДМ.В1/2"].text_latex
+        self.assertIn("10\\,000", second)
+        self.assertIn("20\\,000", second)
+        self.assertNotIn("$20$", second)
 
     def test_interval_inside_formula_not_wrapped_again(self):
         # Вложенная \\(…\\(…\\)…\\) роняет сборку LaTeX (Алгебра 10, № 143, 309).

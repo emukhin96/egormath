@@ -778,7 +778,9 @@ def replace_figure_refs(body: str, figures: Figures) -> tuple[str, list[str]]:
 # Разряды: «4 325», «20 104 050», а также как попало у OCR — «3616 356»
 # (книга: 3 616 356) и «3617009». Число от пяти цифр — с тонкими пробелами.
 _THOUSANDS_RE = re.compile(
-    r"(?<![\w.,{}\\-])(?P<num>\d{1,4}(?:[ \u00a0\u2009\u202f]\d{3})+|\d{5,})(?![\w]|[.,]\d)")
+    r"(?<![\w.,{}\\])(?P<num>\d{1,4}(?:[ \u00a0\u2009\u202f]\d{3})+|\d{5,})(?![\w]|[.,]\d)")
+# Имя файла картинки («…-8ef57041ca2e-…», «…-12345-…») разрядами не трогаем.
+_GRAPHIC_RE = re.compile(r"\\includegraphics(?:\[[^\]]*\])?\{[^{}]*\}")
 _MATH_NUMBER_RE = re.compile(
     r"^(?P<open>\\\(|\$)\s*(?P<num>\d{1,4}(?:\s*(?:\\,|\\ |~)?\s*\d{3})+)\s*(?P<close>\\\)|\$)$")
 
@@ -796,7 +798,13 @@ def thin_groups(digits: str) -> str:
 def group_thousands(value: str) -> str:
     """«4 325» → «$4\\,325$» в тексте и в формуле из одного числа."""
     def prose(chunk: str) -> str:
-        return _THOUSANDS_RE.sub(lambda m: "$" + thin_groups(m.group("num")) + "$", chunk)
+        out, pos = [], 0
+        for graphic in _GRAPHIC_RE.finditer(chunk):
+            out.append(_THOUSANDS_RE.sub(lambda m: "$" + thin_groups(m.group("num")) + "$", chunk[pos:graphic.start()]))
+            out.append(graphic.group(0))
+            pos = graphic.end()
+        out.append(_THOUSANDS_RE.sub(lambda m: "$" + thin_groups(m.group("num")) + "$", chunk[pos:]))
+        return "".join(out)
 
     def math(span: str) -> str:
         match = _MATH_NUMBER_RE.match(span)
