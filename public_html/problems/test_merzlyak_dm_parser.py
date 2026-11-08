@@ -13,7 +13,7 @@ from independentworks.analogs import ANALOG_PROFILES, variant_identity
 from .forms import TextbookBundleUploadForm
 from .merzlyak_dm_parser import (
     detect_book, flatten_lists, group_thousands, parse_merzlyak_dm,
-    reorder_column_items)
+    reorder_column_items, wrap_bare_arithmetic)
 from .textbook_parser import bundle_from_text
 
 
@@ -538,6 +538,12 @@ class QaRulesTests(SimpleTestCase):
             self.assertEqual([item.label for item in task.subitems], ["1", "2"])
             for item in task.subitems:
                 self.assertNotIn(")", item.text_latex.replace("\\)", ""))
+
+    def test_division_colon_not_item_label(self):
+        # «:» — деление: «12)» после него не метка пункта.
+        out = wrap_bare_arithmetic("Вычислите: 1) (84 : 12) • 5 - 3; 2) 96 : 8.")
+        self.assertIn("\\((84 : 12) \\cdot 5 - 3\\)", out)
+        self.assertNotIn("•", out)
 
     def test_letter_m_in_formula_untouched(self):
         # «2 m» прозой — единица «м», а в формуле m — переменная одночлена.
