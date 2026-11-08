@@ -780,7 +780,8 @@ def replace_figure_refs(body: str, figures: Figures) -> tuple[str, list[str]]:
 _THOUSANDS_RE = re.compile(
     r"(?<![\w.,{}\\])(?P<num>\d{1,4}(?:[ \u00a0\u2009\u202f]\d{3})+|\d{5,})(?![\w]|[.,]\d)")
 # Имя файла картинки («…-8ef57041ca2e-…», «…-12345-…») разрядами не трогаем.
-_GRAPHIC_RE = re.compile(r"\\includegraphics(?:\[[^\]]*\])?\{[^{}]*\}")
+# \\taskpic{путь} — подписанный рисунок после replace_figure_refs.
+_GRAPHIC_RE = re.compile(r"\\(?:includegraphics|taskpic)(?:\[[^\]]*\])?\{[^{}]*\}")
 _MATH_NUMBER_RE = re.compile(
     r"^(?P<open>\\\(|\$)\s*(?P<num>\d{1,4}(?:\s*(?:\\,|\\ |~)?\s*\d{3})+)\s*(?P<close>\\\)|\$)$")
 

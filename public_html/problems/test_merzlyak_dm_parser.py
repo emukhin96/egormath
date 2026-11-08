@@ -490,6 +490,15 @@ class QaRulesTests(SimpleTestCase):
         by_id = self.parse("1. Рисунок.\\\\\n\\includegraphics[max width=\\textwidth, center]{" + digits + "}\n2. Дальше.")
         self.assertEqual(by_id["ДМ.В1/1"].images, [digits])
 
+    def test_captioned_picture_path_untouched(self):
+        # Подписанный рисунок к этому моменту уже \\taskpic{путь}: цифровой
+        # сегмент UUID не должен стать «$12\\,345\\,678$».
+        name = "666e51e3-f294-4e56-ba6d-12345678-027_717_1090_1099_112"
+        body = "На рисунке \\taskpic{merzlyak_dm/" + name + ".jpg} изображено 12 345 точек."
+        out = group_thousands(body)
+        self.assertIn("\\taskpic{merzlyak_dm/" + name + ".jpg}", out)
+        self.assertIn("$12\\,345$", out)
+
     def test_thousands_after_minus_grouped(self):
         # Дефис перед числом в прозе — минус или диапазон, разряды нужны.
         by_id = self.parse("1. Температура -12 345 градусов.\n2. Цена от 10 000-20 000 рублей.")
