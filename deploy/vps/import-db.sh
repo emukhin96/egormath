@@ -87,10 +87,15 @@ $COMPOSE exec -T egormath-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroo
   SELECT CONVERT_TZ(NOW(), \"UTC\", \"Europe/Moscow\") AS tz_check;"'
 
 # Файловые кэши каталога (data/cache) пережили заливку и описывают старую
-# базу; сигналы при заливке дампа не срабатывают — сбрасываем явно, и
-# независимо от того, был ли web запущен (ревью #337).
-echo "==> clear_catalog_cache"
-$COMPOSE run --rm --no-deps -T egormath-web python manage.py clear_catalog_cache
+# базу; сигналы при заливке дампа не срабатывают — сбрасываем явно и
+# независимо от того, был ли web запущен. Прямо на хосте, файлами
+# FileBasedCache (*.djcache), а не через образ: в образе может ещё не быть
+# команды clear_catalog_cache (git pull без deploy.sh), и сброс кэша не
+# должен оставить сайт лежать (ревью #337) — шаг нефатальный.
+echo "==> clear catalog cache"
+if ! find "$DATA_DIR/cache/taxonomy" "$DATA_DIR/cache/catalog" -name '*.djcache' -type f -delete 2>/dev/null; then
+  echo "!! кэш каталога не сброшен: после запуска web выполните deploy/vps/manage.sh clear_catalog_cache" >&2
+fi
 
 # Не список «&& …; exit 0»: ошибка запуска web должна стать кодом выхода скрипта.
 if [ "$WEB_RUNNING" = 1 ]; then
