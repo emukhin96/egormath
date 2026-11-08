@@ -518,6 +518,17 @@ class QaRulesTests(SimpleTestCase):
         for task in by_id.values():
             self.assertEqual(task.warnings, [])
 
+    def test_decimal_at_inequality_start_kept(self):
+        # «1,5<x<3» — десятичная дробь, а не две оценки «1, 5<x».
+        by_id = self.parse("1. Решите \\(1,5<x<3\\) и \\(-2,5 \\leqslant x\\).\n"
+                           "2. Известно, что \\(30<a<50,10<b<40\\) и \\(tg \\beta=1,5,0<\\alpha\\).")
+        first = by_id["ДМ.В1/1"].text_latex
+        self.assertNotIn("1, 5", first)
+        self.assertNotIn("2, 5", first)
+        second = by_id["ДМ.В1/2"].text_latex
+        self.assertIn("50, 10<b", second)
+        self.assertIn("1,5, 0<", second.replace("{,}", ","))
+
     def test_letter_m_in_formula_untouched(self):
         # «2 m» прозой — единица «м», а в формуле m — переменная одночлена.
         by_id = self.parse("1. Упростите \\(5 m n\\), \\(2 m ; 3 n\\) и \\(4 m \\cdot n\\).\n"

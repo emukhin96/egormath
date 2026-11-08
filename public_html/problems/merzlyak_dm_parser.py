@@ -321,6 +321,12 @@ def math_delimiters_broken(value: str) -> bool:
     return open_token is not None
 
 
+_ESTIMATE_COMMA_RE = re.compile(
+    r"(?<=\d),(?=-?\d+(?:\^\{?\\circ\}?)?\s*(?:<|>|\\leq|\\geq|\\leqslant|\\geqslant|\\le\b|\\ge\b)\s*\\?[A-Za-z])")
+_ESTIMATE_LEFT_RE = re.compile(
+    r"[A-Za-z}]\s*(?:<|>|=|\\leq|\\geq|\\leqslant|\\geqslant|\\le\b|\\ge\b)\s*-?\d+(?:,\d+)?(?:\^\{?\\circ\}?)?$")
+
+
 def heal_math_details(text: str) -> str:
     """Мелочи формул OCR (сверено вычиткой ДМ 5 и 8, 08.11.2026)."""
     # Единицы, разорванные OCR: «к м^{2}», «4 м м», «\\mathrm{kM} / \\mathrm{u}».
@@ -348,8 +354,10 @@ def heal_math_details(text: str) -> str:
         value = re.sub(r"\\\{([^{};]*?)\\\}",
                        lambda m: "\\{" + re.sub(r"(?<=\d),(?=-?\d)", ", ", m.group(1)) + "\\}", value)
         # Две оценки в одной формуле: «30<a<50,10<b<40», «tg β=1,5,0<α».
-        value = re.sub(r"(?<=\d),(?=-?\d+(?:\^\{?\\circ\}?)?\s*(?:<|>|\\leq|\\geq|\\leqslant|\\geqslant|\\le\b|\\ge\b)\s*\\?[A-Za-z])",
-                       ", ", value)
+        # Слева от запятой — законченная оценка «a<50» / «β=1,5»; иначе это
+        # десятичная дробь в начале неравенства «1,5<x<3».
+        value = _ESTIMATE_COMMA_RE.sub(
+            lambda m: ", " if _ESTIMATE_LEFT_RE.search(value, 0, m.start()) else ",", value)
         # Ряд чисел «1,9,25,49» — запятые-разделители (в десятичной дроби одна).
         value = re.sub(r"(?<![\d,.{])\d+(?:,\d+){2,}(?![\d,])",
                        lambda m: m.group(0).replace(",", ", "), value)
