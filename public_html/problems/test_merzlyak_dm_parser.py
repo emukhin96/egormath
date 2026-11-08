@@ -529,6 +529,16 @@ class QaRulesTests(SimpleTestCase):
         self.assertIn("50, 10<b", second)
         self.assertIn("1,5, 0<", second.replace("{,}", ","))
 
+    def test_items_after_semicolon_in_one_line(self):
+        # «; 2) …» в одной строке: метка не должна уйти в формулу.
+        by_id = self.parse("1. Вычислите: 1) 7,3 - 5,8; 2) 4,2 + 1,1.\n"
+                           "2. Найдите значение: 1) 28 • 13; 2) 608 • 76.")
+        for eid in ("ДМ.В1/1", "ДМ.В1/2"):
+            task = by_id[eid]
+            self.assertEqual([item.label for item in task.subitems], ["1", "2"])
+            for item in task.subitems:
+                self.assertNotIn(")", item.text_latex.replace("\\)", ""))
+
     def test_letter_m_in_formula_untouched(self):
         # «2 m» прозой — единица «м», а в формуле m — переменная одночлена.
         by_id = self.parse("1. Упростите \\(5 m n\\), \\(2 m ; 3 n\\) и \\(4 m \\cdot n\\).\n"

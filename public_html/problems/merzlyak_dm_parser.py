@@ -417,16 +417,22 @@ _PURE_ARITH_RE = re.compile(r"\(*-?\d[\d \t,()+\-−•·⋅:=<>]*")
 _HAS_OPERATOR_RE = re.compile(r"[\d)]\s*[-−+•·⋅:=<>]\s*\(?-?\d")
 # Метка пункта в начале куска прозы — граница кусков.
 _PIECE_SPLIT_RE = re.compile(
-    r"((?:^|(?<=\n)|(?<=;)|(?<=:)|(?<=\\\\))[ \t]*\d{1,2}\)[ \t]+|;[ \t]*|\\\\|\n)")
+    r"((?:^|(?<=\n)|(?<=;)|(?<=:)|(?<=\\\\))[ \t]*\d{1,2}\)[ \t]+|;|\\\\|\n)")
+# «;» забирает только сам символ: пробелы перед меткой «; 2) …» съедает первая
+# ветка, иначе метка уходит в формулу «\(2) 4,2 + 1,1\)».
 # Минус между величинами с единицами: «54 м 24 см - 18 м 19 см».
 _QUANTITY_MINUS_RE = re.compile(
     r"(\d(?:[ \t](?:мм|см|дм|км|кг|мин|га|м|г|т|ц|ч|с|л))?)[ \t]+[-–][ \t]+(?=\d)")
 
 
+_ITEM_LABEL_LEAD_RE = re.compile(r"\d{1,2}\)\s")
+
+
 def _arith_piece(piece: str) -> str:
     body = piece.strip()
     core = body.rstrip(".,?! \t")
-    if core and _PURE_ARITH_RE.fullmatch(core) and _HAS_OPERATOR_RE.search(core):
+    if (core and _PURE_ARITH_RE.fullmatch(core) and _HAS_OPERATOR_RE.search(core)
+            and not _ITEM_LABEL_LEAD_RE.match(core)):
         lead = piece[:len(piece) - len(piece.lstrip())]
         tail = piece[len(lead) + len(core):]
         return lead + "\\(" + _arith_inner(core) + "\\)" + tail
