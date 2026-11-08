@@ -13,7 +13,7 @@ from independentworks.analogs import ANALOG_PROFILES, variant_identity
 from .forms import TextbookBundleUploadForm
 from .merzlyak_dm_parser import (
     detect_book, flatten_lists, group_thousands, parse_merzlyak_dm,
-    reorder_column_items)
+    reorder_column_items, wrap_bare_arithmetic, Figures, extract_figure_tables)
 from .textbook_parser import bundle_from_text
 
 
@@ -207,14 +207,14 @@ class BookDetectionTests(SimpleTestCase):
         self.assertEqual(book["exercises"]["tasks"], 229)
 
     def test_unknown_book_parses_with_headings_as_topics(self):
-        text = book_text().replace("Математика : 6 класс", "Алгебра : 7 класс")
+        text = book_text().replace("Математика : 6 класс", "Алгебра : 11 класс")
         tasks, diagnostics = parse_merzlyak_dm(text)
         self.assertTrue(diagnostics["book_unknown"])
         by_id = {task.external_id: task for task in tasks}
         self.assertEqual(by_id["ДМ.В3/4"].source_path[1], "Признаки делимости на 10, на 5 и на 2")
         self.assertEqual(by_id["ДМ.В3/5"].source_path[1], "Окружность и круг")
         self.assertEqual(by_id["ДМ.В3/5"].topic_code, "")
-        self.assertEqual(by_id["ДМ.В1/1"].grade_band_codes, ["GRADE_7"])
+        self.assertEqual(by_id["ДМ.В1/1"].grade_band_codes, ["GRADE_11"])
 
     def test_text_without_variants_is_rejected(self):
         with self.assertRaisesMessage(ValueError, "Не найдены «Упражнения» ДМ Мерзляка"):
@@ -309,3 +309,291 @@ class FragmentTests(SimpleTestCase):
         self.assertEqual(diagnostics["figures_unreferenced"], [])
         for task in tasks:
             self.assertNotIn("Рис.", task.text_latex)
+
+
+class MathpixMarkupTests(SimpleTestCase):
+    """Разметка настоящего Mathpix (ДМ 5, алгебра 7–10, 08.11.2026)."""
+
+    def parse(self, body, tests=""):
+        text = TITLE + "\\section*{Вариант 1}\n" + body + "\n" + tests + "\n\\end{document}"
+        tasks, diagnostics = parse_merzlyak_dm(text, book={"title": "т", "grade": 5})
+        return {task.external_id: task for task in tasks}, diagnostics
+
+    def test_figure_table_captions_by_column(self):
+        by_id, diagnostics = self.parse(
+            "\\begin{itemize}\n  \\item[1.] Найдите \\(R K\\) (рис. 2).\n"
+            "  \\item[2.] Найдите \\(M B\\) (рис. 3).\n\n"
+            "\\begin{tabular}[t]{|l|l|}\n\\hline\nРис. 2 & Рис. 3 \\\\\n\\hline\n"
+            "\\includegraphics[max width=\\textwidth, alt={}]{left}\n"
+            " & \\includegraphics[max width=\\textwidth, alt={}]{right}\n \\\\\n\\hline\n"
+            "\\end{tabular}\n\\end{itemize}")
+        self.assertEqual(by_id["ДМ.В1/1"].images, ["left"])
+        self.assertEqual(by_id["ДМ.В1/2"].images, ["right"])
+        self.assertNotIn("array", by_id["ДМ.В1/2"].text_latex)
+        self.assertEqual(diagnostics["figures_numbered"], 2)
+
+    def test_lost_caption_picture_in_next_block(self):
+        by_id, diagnostics = self.parse(
+            "\\begin{itemize}\n  \\item[1.] Запишите все углы, изображённые на рисунке 85.\\\\\n"
+            "2. Постройте:\n  \\begin{itemize}\n    \\item[1)] угол \\(A P R\\);\n"
+            "    \\item[2)] угол \\(B O C\\).\n  \\end{itemize}\n"
+            "    \\includegraphics[max width=\\textwidth, alt={}]{angles}\n"
+            "  \\item[3.] Решите уравнение.\n\\end{itemize}")
+        self.assertEqual(by_id["ДМ.В1/1"].images, ["angles"])
+        self.assertEqual(by_id["ДМ.В1/2"].images, [])
+        self.assertIn("рис. 85", diagnostics["figures_caption_lost"])
+
+    def test_figure_number_inside_formula(self):
+        by_id, _diagnostics = self.parse(
+            "1. На рисунке \\(11 \\angle A B C=54^{\\circ}\\), найдите угол.\n"
+            + figure("11", "abc") + "2. Следующая.")
+        self.assertEqual(by_id["ДМ.В1/1"].images, ["abc"])
+        self.assertIn("\\angle A B C", by_id["ДМ.В1/1"].text_latex)
+
+    def test_plain_line_heading_not_glued_to_previous_task(self):
+        book = {"title": "т", "grade": 5, "exercises": {"variants": 1, "tasks": 2, "topics": [
+            {"first": 1, "title": "Отрезок. Длина отрезка", "topic": "GEO.01.01"},
+            {"first": 2, "title": "Прямая. Луч", "topic": "GEO.01.01"}]}}
+        text = (TITLE + "\\section*{Вариант 1}\n\\section*{Отрезок. Длина отрезка}\n\\begin{itemize}\n  \\item[1.] Найдите отрезок.\n"
+                "\\end{itemize}\n\nПрямая. Луч\n  \\item[2.] Пересекаются ли прямые?\n\\end{document}")
+        tasks, diagnostics = parse_merzlyak_dm(text, book=book)
+        self.assertEqual(tasks[0].text_latex, "Найдите отрезок.")
+        self.assertEqual(diagnostics["topic_headings_mismatch"], [])
+
+    def test_book_end_not_glued_to_last_test_task(self):
+        by_id, _diagnostics = self.parse(
+            "1. Задача.",
+            "\\section*{Вариант 1}\n\\section*{Контрольная работа № 1 \\\\\n Тема. Неравенства}\n"
+            "\\begin{itemize}\n  \\item[1.] Докажите неравенство.\n\\end{itemize}\n"
+            "\\section*{Справочный материал}\nЧисловые промежутки\n\\section*{Содержание}\nОт авторов ..... 3")
+        task = by_id["КР1.В1/1"]
+        self.assertEqual(task.text_latex, "Докажите неравенство.")
+        self.assertEqual(task.source_path[1], "Контрольная работа № 1. Неравенства")
+
+    def test_bold_digits_named_functions_and_arithmetic(self):
+        by_id, _diagnostics = self.parse(
+            "1. Вычислите: 28 • 13-4 228: 14.\n"
+            "2. Упростите \\(x^{2}+\\frac{1}{x^{2}}=\\mathbf{1 4}\\) и \\(y=\\boldsymbol{\\operatorname { a r c t g }} x\\) на \\(\\boldsymbol{R}\\).\n"
+            "3. Найдите аначение выражения:\\\\\n1) 608 • 76;\\\\\n2) 1 и 2.")
+        self.assertIn("\\(28 \\cdot 13-4\\,228: 14\\)", by_id["ДМ.В1/1"].text_latex)
+        text = by_id["ДМ.В1/2"].text_latex
+        self.assertIn("=14", text)
+        self.assertIn("\\operatorname{arctg} x", text)
+        self.assertIn("\\mathbb{R}", text)
+        task = by_id["ДМ.В1/3"]
+        self.assertIn("значение", task.text_latex)
+        self.assertEqual(task.subitems[0].text_latex, "\\(608 \\cdot 76\\)")
+        self.assertEqual(task.subitems[1].text_latex, "$1$ и $2$")
+
+    def test_book_without_title_page_detected_by_preface(self):
+        book = detect_book("\\section*{От авторов}\nДанное пособие входит в учебно-методический "
+                           "комплект для 10 класса авторов А. Г. Мерзляка, Д. А. Номировского, "
+                           "В. Б. Полонского\n\\section*{Вариант 1}")
+        self.assertEqual(book["key"], "alg10")
+        self.assertEqual(book["exercises"]["variants"], 3)
+
+
+class QaRulesTests(SimpleTestCase):
+    """Правила по вычитке пяти книг агентами (artifacts/merzlyak-dm/qa, 08.11.2026)."""
+
+    def parse(self, body, grade=7, book=None):
+        text = TITLE + "\\section*{Вариант 1}\n" + body + "\n\\end{document}"
+        tasks, _diagnostics = parse_merzlyak_dm(text, book=book or {"title": "т", "grade": grade})
+        return {task.external_id: task for task in tasks}
+
+    def test_ocr_z_label_is_three_and_columns_reordered(self):
+        by_id = self.parse("1. Разложите на множители:\\\\\n1) \\(a^{2}+1\\);\\\\\n4) \\(a^{2}+4\\);\\\\\n"
+                           "2) \\(a^{2}+2\\);\\\\\n5) \\(a^{2}+5\\);\\\\\nз) \\(a^{2}+3\\);\\\\\n6) \\(a^{2}+6\\).\n2. Дальше.")
+        items = by_id["ДМ.В1/1"].subitems
+        self.assertEqual([item.label for item in items], ["1", "2", "3", "4", "5", "6"])
+        self.assertEqual(items[2].text_latex, "\\(a^{2}+3\\)")
+
+    def test_label_inside_formula(self):
+        by_id = self.parse("1. Верно ли:\\\\\n1) \\(8 \\in N\\);\\\\\n\\(2)-5,4 \\in N\\).\n2. Дальше.")
+        items = by_id["ДМ.В1/1"].subitems
+        self.assertEqual(len(items), 2)
+        self.assertIn("\\mathbb{N}", items[1].text_latex)
+
+    def test_enumerate_items_are_subitems_not_tasks(self):
+        # Задачи 2 и 3 — enumerate со счётчиком у текущего номера; пункты задачи
+        # 2 — список формул без счётчика; пункт 2 задачи 4 — продолжение
+        # списка со \setcounter{enumi}{1}.
+        by_id = self.parse(
+            "\\begin{itemize}\n  \\item[1.] Задача.\n\\end{itemize}\n"
+            "\\begin{enumerate}\n  \\setcounter{enumi}{1}\n  \\item Решите уравнение:\n\\end{enumerate}\n"
+            "\\begin{enumerate}\n  \\item \\(\\sqrt{x}=1\\);\n  \\item \\(\\sqrt{x}=2\\).\n\\end{enumerate}\n"
+            "\\begin{itemize}\n  \\item[3.] Решите уравнение:\\\\\n1) \\(x=1\\);\\\\\n2) \\(x=2\\).\n\\end{itemize}\n"
+            "\\begin{itemize}\n  \\item[4.] Сократите дробь:\n  \\begin{itemize}\n    \\item[1)] \\(\\frac{a}{b}\\);\n"
+            "  \\end{itemize}\n\\end{itemize}\n"
+            "\\begin{enumerate}\n  \\setcounter{enumi}{1}\n  \\item \\(\\frac{c}{d}\\).\n\\end{enumerate}")
+        self.assertEqual(sorted(by_id), ["ДМ.В1/1", "ДМ.В1/2", "ДМ.В1/3", "ДМ.В1/4"])
+        self.assertEqual(len(by_id["ДМ.В1/2"].subitems), 2)
+        self.assertEqual([i.label for i in by_id["ДМ.В1/4"].subitems], ["1", "2"])
+
+    def test_stars_restored_from_italic(self):
+        by_id = self.parse("1. В записи чисел вместо нескольких цифр поставили звёздочки. Сравните:\\\\\n"
+                           "1) 63 *** и 61 **\\textit{;\\\\\n2) 28} и 1 **\\textit{;\\\\\n3) * \\textit{1} и 99}.\n2. Дальше.",
+                           grade=5)
+        items = by_id["ДМ.В1/1"].subitems
+        self.assertEqual(items[0].text_latex, "\\(63{*}{*}{*}\\) и \\(61{*}{*}{*}\\)")
+        self.assertEqual(items[2].text_latex, "\\({*}{*}1{*}\\) и \\(99{*}\\)")
+
+    def test_whole_arithmetic_items_and_quantities(self):
+        by_id = self.parse("1. Вычислите:\\\\\n1) 7,3 - 5,8;\\\\\n2) (12 078+1485)+(6922+3515);\\\\\n"
+                           "3) 54 м 24 см - 18 м 19 см.\n2. Сравните 3617009 и 3616 356.", grade=5)
+        items = by_id["ДМ.В1/1"].subitems
+        self.assertEqual(items[0].text_latex, "\\(7{,}3 - 5{,}8\\)")
+        self.assertEqual(items[1].text_latex, "\\((12\\,078+1485)+(6922+3515)\\)")
+        self.assertIn("$-$", items[2].text_latex)
+        self.assertIn("$3\\,617\\,009$ и $3\\,616\\,356$", by_id["ДМ.В1/2"].text_latex)
+
+    def test_units_formula_and_dash_in_grade_five(self):
+        by_id = self.parse("1. Выразите в гектарах: \\(340000 м^{2} ; 56 к м^{2}\\).\n"
+                           "2. Саша съел \\(-\\frac{5}{10}\\) арбуза.", grade=5)
+        self.assertEqual(by_id["ДМ.В1/1"].text_latex,
+                         "Выразите в гектарах: $340\\,000$ м$^{2}$; $56$ км$^{2}$.")
+        self.assertIn("съел — \\(", by_id["ДМ.В1/2"].text_latex)
+        algebra = self.parse("1. Значение равно \\(-\\frac{1}{2}\\).\n2. Дальше.")
+        self.assertNotIn("—", algebra["ДМ.В1/1"].text_latex)
+
+    def test_sets_series_estimates_and_intervals(self):
+        by_id = self.parse("1. Даны \\(A=\\{2,4\\}\\), ряд \\(1,9,25,49\\), оценка \\(30<a<50,10<b<40\\), "
+                           "дробь \\(5,(16)\\) и промежуток [-4; 2).\n2. Дальше.")
+        text = by_id["ДМ.В1/1"].text_latex
+        for part in ("\\{2, 4\\}", "1, 9, 25, 49", "50, 10<b", "5{,}(16)", "\\([-4; 2)\\)"):
+            self.assertIn(part, text)
+
+    def test_common_tail_moves_to_stem(self):
+        by_id = self.parse("1. Между какими натуральными числами находится число: 1) 16; 2) 374? "
+                           "Ответ запишите в виде двойного неравенства.\n2. Дальше.", grade=5)
+        task = by_id["ДМ.В1/1"]
+        self.assertTrue(task.text_latex.endswith("Ответ запишите в виде двойного неравенства."))
+        self.assertEqual(task.subitems[1].text_latex, "$374$?")
+        self.assertIn("Общая фраза перенесена из последнего пункта в условие: проверить", task.warnings)
+
+    def test_ocr_words_and_topic_overrides(self):
+        book = {"title": "т", "grade": 8, "exercises": {"variants": 1, "tasks": 2, "numbers": {"2": "ALG.02.04"},
+                "topics": [{"first": 1, "title": "Повторение", "topic": "ALG.02.12"}]}}
+        by_id = self.parse("1. Пайдите зпачение выражения.\n2. Разложитє на множители.", book=book)
+        self.assertEqual(by_id["ДМ.В1/1"].text_latex, "Найдите значение выражения.")
+        self.assertEqual(by_id["ДМ.В1/1"].topic_code, "ALG.02.12")
+        self.assertEqual(by_id["ДМ.В1/2"].topic_code, "ALG.02.04")
+        self.assertIn("Разложите", by_id["ДМ.В1/2"].text_latex)
+
+    def test_figure_table_cell_with_own_caption(self):
+        # Строка 2 — «картинка Рис. 2» в одной ячейке: подпись своя, не «Рис. 1» сверху.
+        figures = Figures()
+        text = ("\\begin{tabular}{c}\nРис. 1 \\\\\n\\includegraphics{pic-one} \\\\\n"
+                "\\includegraphics{pic-two} Рис. 2 \\\\\n\\end{tabular}")
+        extract_figure_tables(text, figures)
+        self.assertEqual(figures.by_number.get("1"), ["pic-one"])
+        self.assertEqual(figures.by_number.get("2"), ["pic-two"])
+
+    def test_picture_file_names_untouched(self):
+        # «…-8ef57041ca2e-…»: правило разрядов не должно трогать имя файла.
+        name = "666e51e3-f294-4e56-ba6d-8ef57041ca2e-027_717_1090_1099_112"
+        by_id = self.parse("1. На рисунке 3 изображён график функции.\\\\\n"
+                           "\\includegraphics[max width=\\textwidth, alt={}, center]{" + name + "}\n2. Дальше.")
+        self.assertEqual(by_id["ДМ.В1/1"].images, [name])
+        digits = "666e51e3-f294-4e56-ba6d-12345678-027_717_1090_1099_112"
+        by_id = self.parse("1. Рисунок.\\\\\n\\includegraphics[max width=\\textwidth, center]{" + digits + "}\n2. Дальше.")
+        self.assertEqual(by_id["ДМ.В1/1"].images, [digits])
+
+    def test_captioned_picture_path_untouched(self):
+        # Подписанный рисунок к этому моменту уже \\taskpic{путь}: цифровой
+        # сегмент UUID не должен стать «$12\\,345\\,678$».
+        name = "666e51e3-f294-4e56-ba6d-12345678-027_717_1090_1099_112"
+        body = "На рисунке \\taskpic{merzlyak_dm/" + name + ".jpg} изображено 12 345 точек."
+        out = group_thousands(body)
+        self.assertIn("\\taskpic{merzlyak_dm/" + name + ".jpg}", out)
+        self.assertIn("$12\\,345$", out)
+
+    def test_thousands_after_minus_grouped(self):
+        # Дефис перед числом в прозе — минус или диапазон, разряды нужны.
+        by_id = self.parse("1. Температура -12 345 градусов.\n2. Цена от 10 000-20 000 рублей.")
+        self.assertIn("$-12\\,345$", by_id["ДМ.В1/1"].text_latex)
+        second = by_id["ДМ.В1/2"].text_latex
+        self.assertIn("10\\,000", second)
+        self.assertIn("20\\,000", second)
+        self.assertNotIn("$20$", second)
+
+    def test_interval_inside_formula_not_wrapped_again(self):
+        # Вложенная \\(…\\(…\\)…\\) роняет сборку LaTeX (Алгебра 10, № 143, 309).
+        by_id = self.parse("1. Найдите координаты точки, полученной при повороте точки \\(P_{0}(1; 0)\\) на угол \\(90^{\\circ}\\).\n"
+                           "2. Найдите значение \\(f(x)=x^{2}\\) на промежутке [-1; 2] и на (0; + \\(\\infty\\)).")
+        self.assertIn("\\(P_{0}(1; 0)\\)", by_id["ДМ.В1/1"].text_latex)
+        self.assertIn("\\([-1; 2]\\)", by_id["ДМ.В1/2"].text_latex)
+        self.assertIn("\\((0; +\\infty)\\)", by_id["ДМ.В1/2"].text_latex)
+        for task in by_id.values():
+            self.assertEqual(task.warnings, [])
+
+    def test_decimal_at_inequality_start_kept(self):
+        # «1,5<x<3» — десятичная дробь, а не две оценки «1, 5<x».
+        by_id = self.parse("1. Решите \\(1,5<x<3\\) и \\(-2,5 \\leqslant x\\).\n"
+                           "2. Известно, что \\(30<a<50,10<b<40\\) и \\(tg \\beta=1,5,0<\\alpha\\).")
+        first = by_id["ДМ.В1/1"].text_latex
+        self.assertNotIn("1, 5", first)
+        self.assertNotIn("2, 5", first)
+        second = by_id["ДМ.В1/2"].text_latex
+        self.assertIn("50, 10<b", second)
+        self.assertIn("1,5, 0<", second.replace("{,}", ","))
+
+    def test_items_after_semicolon_in_one_line(self):
+        # «; 2) …» в одной строке: метка не должна уйти в формулу.
+        by_id = self.parse("1. Вычислите: 1) 7,3 - 5,8; 2) 4,2 + 1,1.\n"
+                           "2. Найдите значение: 1) 28 • 13; 2) 608 • 76.")
+        for eid in ("ДМ.В1/1", "ДМ.В1/2"):
+            task = by_id[eid]
+            self.assertEqual([item.label for item in task.subitems], ["1", "2"])
+            for item in task.subitems:
+                self.assertNotIn(")", item.text_latex.replace("\\)", ""))
+
+    def test_division_colon_not_item_label(self):
+        # «:» — деление: «12)» после него не метка пункта.
+        out = wrap_bare_arithmetic("Вычислите: 1) (84 : 12) • 5 - 3; 2) 96 : 8.")
+        self.assertIn("\\((84 : 12) \\cdot 5 - 3\\)", out)
+        self.assertNotIn("•", out)
+
+    def test_explicit_numbers_counted_in_items_list(self):
+        # Список «\\item[2.] \\(…\\)» ушёл в режим пунктов, но номера 2, 3
+        # учитываются: следующий словесный список идёт с 4, без дублей.
+        text = ("\\item[1.] Решите уравнение.\n\\begin{enumerate}\n\\item[2.] \\(2x+1=3\\)\n"
+                "\\item[3.] \\(x-1=0\\)\n\\end{enumerate}\n\\begin{enumerate}\n"
+                "\\item Найдите значение x.\n\\item Найдите значение y.\n\\end{enumerate}")
+        out = flatten_lists(text)
+        self.assertIn("4. Найдите значение x.", out)
+        self.assertIn("5. Найдите значение y.", out)
+
+    def test_letter_m_in_formula_untouched(self):
+        # «2 m» прозой — единица «м», а в формуле m — переменная одночлена.
+        by_id = self.parse("1. Упростите \\(5 m n\\), \\(2 m ; 3 n\\) и \\(4 m \\cdot n\\).\n"
+                           "2. Длина участка 2 m. Запишите \\(0,(3)\\) и 6,(23).")
+        first = by_id["ДМ.В1/1"].text_latex
+        self.assertIn("5 m n", first)
+        self.assertIn("2 m ; 3 n", first)
+        self.assertIn("4 m \\cdot n", first)
+        self.assertNotIn("м", first.replace("Упростите", ""))
+        second = by_id["ДМ.В1/2"].text_latex
+        self.assertIn("$2$ м.", second)
+        self.assertNotIn(" m", second)
+        self.assertIn("\\(6{,}(23)\\)", second)
+        for task in by_id.values():
+            self.assertNotIn("Вложенные или незакрытые формулы: сверить с книгой", task.warnings)
+
+    def test_broken_delimiters_warned(self):
+        by_id = self.parse("1. Мусор OCR \\(\\min _{\\([5; 7]\\)} f(x)\\).\n2. Дальше.")
+        self.assertIn("Вложенные или незакрытые формулы: сверить с книгой", by_id["ДМ.В1/1"].warnings)
+
+    def test_question_of_last_item_stays_in_item(self):
+        # «3) Цена 200 р. Найдите новую цену…» — вопрос самого пункта (ревью #336).
+        by_id = self.parse("1. Решите задачи: 1) найдите $20$\\% от $50$; 2) сколько процентов $3$ от $12$; "
+                           "3) цена товара была $200$ р., а после уценки её снизили на четверть, и ещё раз на "
+                           "десятую часть от новой цены. Найдите новую цену после скидки.\n2. Дальше.", grade=5)
+        task = by_id["ДМ.В1/1"]
+        self.assertIn("Найдите новую цену", task.subitems[2].text_latex)
+        self.assertEqual(task.warnings, [])
+
+    def test_carafe_word_untouched(self):
+        by_id = self.parse("1. В графин налили $2$ л воды. Сколько воды в графине?\n2. Дальше.", grade=5)
+        self.assertIn("В графин налили", by_id["ДМ.В1/1"].text_latex)
+
