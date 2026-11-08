@@ -175,7 +175,9 @@ def flatten_lists(text: str) -> str:
         elif match.group("label") is not None:
             label = match.group("label").strip()
             out.append("\n" + label + " " if label else "\n")
-            if not stack or stack[0][0] == "tasks":
+            # Явный номер задачи «12.» учитываем в любом режиме: список
+            # «\item[12.] \(…\)» мог попасть в «items» по первому пункту.
+            if not stack or stack[0][0] == "tasks" or re.fullmatch(r"\d+\.", label):
                 seen(label + " ")
         elif stack:
             mode = stack[-1]

@@ -545,6 +545,16 @@ class QaRulesTests(SimpleTestCase):
         self.assertIn("\\((84 : 12) \\cdot 5 - 3\\)", out)
         self.assertNotIn("•", out)
 
+    def test_explicit_numbers_counted_in_items_list(self):
+        # Список «\\item[2.] \\(…\\)» ушёл в режим пунктов, но номера 2, 3
+        # учитываются: следующий словесный список идёт с 4, без дублей.
+        text = ("\\item[1.] Решите уравнение.\n\\begin{enumerate}\n\\item[2.] \\(2x+1=3\\)\n"
+                "\\item[3.] \\(x-1=0\\)\n\\end{enumerate}\n\\begin{enumerate}\n"
+                "\\item Найдите значение x.\n\\item Найдите значение y.\n\\end{enumerate}")
+        out = flatten_lists(text)
+        self.assertIn("4. Найдите значение x.", out)
+        self.assertIn("5. Найдите значение y.", out)
+
     def test_letter_m_in_formula_untouched(self):
         # «2 m» прозой — единица «м», а в формуле m — переменная одночлена.
         by_id = self.parse("1. Упростите \\(5 m n\\), \\(2 m ; 3 n\\) и \\(4 m \\cdot n\\).\n"
