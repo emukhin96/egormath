@@ -14,9 +14,12 @@
     function apply() {
       var on = toggle.checked;
       list.classList.toggle('show-answers', on);
+      // На большой странице формулы ответов дорисовываются по мере прокрутки
+      // (EgorMath.observe, math.js), на маленькой — сразу, как раньше
+      var render = window.EgorMath ? window.EgorMath.observe : renderMathContent;
       list.querySelectorAll('.ws-answers').forEach(function (el) {
         el.hidden = !on;
-        if (on) el.querySelectorAll('.math-content').forEach(renderMathContent);
+        if (on) el.querySelectorAll('.math-content').forEach(render);
       });
       try { localStorage.setItem(KEY, on ? '1' : ''); } catch (e) {}
     }

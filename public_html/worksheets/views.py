@@ -387,6 +387,10 @@ def worksheet_detail(request, pk):
     # Указатель «аналоги N» у строки: счётчики одним проходом, список — по клику
     from independentworks.analog_lists import attach_analog_counts
     attach_analog_counts(request.user, [item.task for item in items if item.task_id])
+    # Готовые значения строк для шаблона (адреса, флаги, HTML условия)
+    from .builder_rows import decorate_builder_rows
+    from .cart import cart_ids
+    decorate_builder_rows(rows, worksheet, request.user, set(cart_ids(request)))
     point_groups = progress_groups([
         item for item in items if item.task_id], assignments)
     progress_people_rows = progress_people(point_groups, assignments)
@@ -442,6 +446,7 @@ def worksheet_detail(request, pk):
         'locked_check': locked_check,
         'groups': groups,
         'stars_choices': Task.STARS_CHOICES,
+        'star_values': [value for value, _ in Task.STARS_CHOICES if value],
         'grade_choices': Task.GRADE_CHOICES,
         'share_links': share_links,
         'assignments': assignments,

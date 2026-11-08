@@ -181,8 +181,10 @@ def task_usage(teacher, tasks, *, student_ids=None):
     # индексы не использовало и на книжном листке читало всю таблицу.
     from problems.models import Task
     to_root = {pk: pk for pk in root_ids}
+    # order_by() снимает сортировку Meta по created_at: с ней MySQL шёл
+    # полным сканом problems_task (20–65 мс на книжном листке) вместо индекса
     to_root.update(dict(Task.objects.filter(variant_of_id__in=root_ids)
-                        .values_list('pk', 'variant_of_id')))
+                        .order_by().values_list('pk', 'variant_of_id')))
 
     # Обычные задания: листок → задачи → назначения.
     items = list(WorksheetItem.objects.filter(
