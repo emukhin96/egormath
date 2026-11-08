@@ -13,7 +13,7 @@ from independentworks.analogs import ANALOG_PROFILES, variant_identity
 from .forms import TextbookBundleUploadForm
 from .merzlyak_dm_parser import (
     detect_book, flatten_lists, group_thousands, parse_merzlyak_dm,
-    reorder_column_items, wrap_bare_arithmetic)
+    reorder_column_items, wrap_bare_arithmetic, Figures, extract_figure_tables)
 from .textbook_parser import bundle_from_text
 
 
@@ -479,6 +479,15 @@ class QaRulesTests(SimpleTestCase):
         self.assertEqual(by_id["ДМ.В1/1"].topic_code, "ALG.02.12")
         self.assertEqual(by_id["ДМ.В1/2"].topic_code, "ALG.02.04")
         self.assertIn("Разложите", by_id["ДМ.В1/2"].text_latex)
+
+    def test_figure_table_cell_with_own_caption(self):
+        # Строка 2 — «картинка Рис. 2» в одной ячейке: подпись своя, не «Рис. 1» сверху.
+        figures = Figures()
+        text = ("\\begin{tabular}{c}\nРис. 1 \\\\\n\\includegraphics{pic-one} \\\\\n"
+                "\\includegraphics{pic-two} Рис. 2 \\\\\n\\end{tabular}")
+        extract_figure_tables(text, figures)
+        self.assertEqual(figures.by_number.get("1"), ["pic-one"])
+        self.assertEqual(figures.by_number.get("2"), ["pic-two"])
 
     def test_picture_file_names_untouched(self):
         # «…-8ef57041ca2e-…»: правило разрядов не должно трогать имя файла.

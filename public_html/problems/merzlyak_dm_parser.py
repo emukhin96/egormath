@@ -617,7 +617,7 @@ def extract_figure_tables(text: str, figures: Figures) -> str:
             return match.group(0)
         rows = [row.split("&") for row in re.split(r"\\\\", body.replace("\\hline", " "))]
         captions: dict[tuple[int, int], list[str]] = {}
-        pictures: dict[tuple[int, int], list[str]] = {}
+        pictures: dict[tuple[int, int], tuple[list[str], list[str]]] = {}
         for r, row in enumerate(rows):
             for c, cell in enumerate(row):
                 paths = [m.group("path") for m in GRAPHICS_RE.finditer(cell)]
@@ -626,13 +626,16 @@ def extract_figure_tables(text: str, figures: Figures) -> str:
                 if rest:
                     return match.group(0)
                 if paths:
-                    pictures[(r, c)] = paths
+                    pictures[(r, c)] = (paths, numbers)
                 elif numbers:
                     captions[(r, c)] = numbers
-        if not captions:
+        if not captions and not any(own for _paths, own in pictures.values()):
             return match.group(0)
         out = []
-        for (r, c), paths in sorted(pictures.items()):
+        for (r, c), (paths, own) in sorted(pictures.items()):
+            if own:  # «картинка Рис. 2» в одной ячейке — своя подпись
+                out.append(register_figures(figures, own, paths))
+                continue
             column = sorted(row for row, col in captions if col == c)
             above = [row for row in column if row < r]
             below = [row for row in column if row > r]
