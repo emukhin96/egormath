@@ -469,6 +469,7 @@ class QaRulesTests(SimpleTestCase):
         task = by_id["ДМ.В1/1"]
         self.assertTrue(task.text_latex.endswith("Ответ запишите в виде двойного неравенства."))
         self.assertEqual(task.subitems[1].text_latex, "$374$?")
+        self.assertIn("Общая фраза перенесена из последнего пункта в условие: проверить", task.warnings)
 
     def test_ocr_words_and_topic_overrides(self):
         book = {"title": "т", "grade": 8, "exercises": {"variants": 1, "tasks": 2, "numbers": {"2": "ALG.02.04"},
@@ -499,4 +500,17 @@ class QaRulesTests(SimpleTestCase):
     def test_broken_delimiters_warned(self):
         by_id = self.parse("1. Мусор OCR \\(\\min _{\\([5; 7]\\)} f(x)\\).\n2. Дальше.")
         self.assertIn("Вложенные или незакрытые формулы: сверить с книгой", by_id["ДМ.В1/1"].warnings)
+
+    def test_question_of_last_item_stays_in_item(self):
+        # «3) Цена 200 р. Найдите новую цену…» — вопрос самого пункта (ревью #336).
+        by_id = self.parse("1. Решите задачи: 1) найдите $20$\\% от $50$; 2) сколько процентов $3$ от $12$; "
+                           "3) цена товара была $200$ р., а после уценки её снизили на четверть, и ещё раз на "
+                           "десятую часть от новой цены. Найдите новую цену после скидки.\n2. Дальше.", grade=5)
+        task = by_id["ДМ.В1/1"]
+        self.assertIn("Найдите новую цену", task.subitems[2].text_latex)
+        self.assertEqual(task.warnings, [])
+
+    def test_carafe_word_untouched(self):
+        by_id = self.parse("1. В графин налили $2$ л воды. Сколько воды в графине?\n2. Дальше.", grade=5)
+        self.assertIn("В графин налили", by_id["ДМ.В1/1"].text_latex)
 

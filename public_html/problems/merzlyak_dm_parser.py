@@ -41,7 +41,7 @@ from pathlib import Path
 from .merzlyak_parser import (
     MATH_SPAN_RE, _heal_numeric_item_labels, _heal_ocr_words, _join_hyphenation,
     _tabular_to_array, _unwrap_footnotes)
-from .potoskuev_parser import _finish_fields, lift_common_tail, monotonic_numbers
+from .potoskuev_parser import _finish_fields, monotonic_numbers
 from .textbook_parser import (
     Marker, TaskDraft, blocks, finalize_draft_images, numeric_subitem_labels,
     read_group, remove_group_commands, task_from_block)
@@ -196,7 +196,7 @@ _LATIN_TO_CYRILLIC = str.maketrans("acepoxyACEHKMOPTX", "асеролуАСЕН�
 # Опечатки OCR в словах книг (сверено по TEX Mathpix 08.11.2026).
 OCR_WORDS = {
     "аначен": "значен", "Аначен": "Значен", "ураннен": "уравнен", "фуннц": "функц",
-    "графин ": "график ", "поназател": "показател", "Спожение": "Сложение",
+    "поназател": "показател", "Спожение": "Сложение",
     "Состввьте": "Составьте", "имяет": "имеет", "алreбр": "алгебр", "сонращ": "сокращ",
 }
 # Искажённые слова целиком (вычитка ДМ 7, 08.11.2026): только с границами слова.
@@ -217,6 +217,8 @@ OCR_WHOLE_WORDS = {
 OCR_PHRASES = {
     "На авводе изготовили дна вида": "На заводе изготовили два вида",
     "не имеет решении": "не имеет решений",
+    # «графин» — настоящее слово (графин воды): только в заголовке алгебры 7.
+    "её графин и свойства": "её график и свойства",
 }
 _NAMED_FUNCTIONS = {"sin", "cos", "tg", "ctg", "arcsin", "arccos", "arctg", "arcctg", "log", "lg", "ln"}
 
@@ -1069,7 +1071,7 @@ def build_task(marker: Marker, body: str, path: list[str], figures: Figures,
     return task
 
 
-_TAIL_RE = re.compile(r"(?<=[.?!])\s+(?=[А-ЯЁ][а-яё]+(?:\s+[^\s]+){2,}[.?!]?\s*$)")
+_TAIL_RE = re.compile(r"(?<=[.?!])(?:[ \t]*\\\\)?\s+(?=[А-ЯЁ][а-яё]*(?:\s+[^\s]+){2,}[.?!]?\s*$)")
 
 
 def tidy_fields(task: TaskDraft) -> bool:
@@ -1096,16 +1098,26 @@ def tidy_fields(task: TaskDraft) -> bool:
     head = last.text_latex[:match.start()].strip()
     if not head:
         return False
+    # Голова последнего пункта — того же масштаба, что и другие пункты:
+    # иначе фраза может быть вопросом самого пункта («3) Цена 200 р.
+    # Найдите новую цену…»), а не общим требованием.
+    def size(value: str) -> int:
+        return len(MATH_SPAN_RE.sub("x", value or ""))
+    longest = max(size(item.text_latex) for item in task.subitems[:-1])
+    if size(head) > 2 * longest + 10 or re.search(r"[.?!]\s+\S", MATH_SPAN_RE.sub("x", head)):
+        return False
     tail = last.text_latex[match.end():].strip()
     if not re.search(r"[.?!]\)?$", tail):
         tail += "."
-    last.text_latex = re.sub(r"[.;,]$", "", head)
+    last.text_latex = re.sub(r"(?:\s*\\\\)+$|[.;,]$", "", head)
     task.text_latex = task.text_latex.rstrip() + "\n" + tail
+    task.warnings.append("Общая фраза перенесена из последнего пункта в условие: проверить")
     return True
 
 
 def _finish(task: TaskDraft, grade: int) -> None:
-    lift_common_tail(task)
+    # lift_common_tail (Потоскуев) не проверяет масштаб головы пункта и
+    # уносит в условие вопрос самого пункта — здесь tidy_fields с защитой.
     tidy_fields(task)
     _finish_fields(task)
     canon_fields(task)
