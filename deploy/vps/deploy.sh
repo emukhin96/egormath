@@ -51,11 +51,6 @@ echo "==> seed_rubricator"
 $RUN seed_rubricator
 echo "==> collectstatic"
 $RUN collectstatic --noinput
-# Файловые кэши каталога в data/cache переживают выкладку, а ключи
-# версионированы по данным, не по коду: записи старого кода (pickle узлов
-# дерева подборок, счётчики) должны уйти вместе с ним (ревью #337).
-echo "==> clear_catalog_cache"
-$RUN clear_catalog_cache
 
 echo "==> LaTeX packages and fonts → latex-api"
 # До перезапуска web: новый код рассчитывает на свежие egor*.sty на сервере.
@@ -63,6 +58,16 @@ echo "==> LaTeX packages and fonts → latex-api"
 
 echo "==> Starting services"
 $COMPOSE up -d --remove-orphans
+
+# Файловые кэши каталога в data/cache переживают выкладку, а ключи
+# версионированы по данным, не по коду: записи старого кода (pickle узлов
+# дерева подборок, счётчики) должны уйти вместе с ним. Только после смены
+# контейнера: пока старые воркеры живы, они пишут кэш заново (ревью #337).
+# Шаг нефатальный — доступность сайта от сброса кэша не зависит.
+echo "==> clear_catalog_cache"
+if ! $COMPOSE exec -T egormath-web python manage.py clear_catalog_cache; then
+  echo "!! кэш каталога не сброшен: deploy/vps/manage.sh clear_catalog_cache" >&2
+fi
 
 echo "==> Site in shared Caddy"
 HOSTS="$(env_get EGORMATH_HOSTS)"
