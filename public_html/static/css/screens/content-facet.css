@@ -1,0 +1,13 @@
+/* Фасет «Содержание» (CONTENT) в поиске задач: выбор в строке фильтров
+   каталога и в форме подбора конструктора (problems/_content_select.html).
+   У quick-select потолок 160px — названия значений длиннее и обрезались. */
+@layer components {
+  .quick-select.content-select {
+    max-width: 16rem;
+  }
+
+  .quick-select.content-select.is-set {
+    color: var(--accent);
+    font-weight: 600;
+  }
+}

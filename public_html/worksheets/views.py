@@ -396,7 +396,7 @@ def worksheet_detail(request, pk):
     progress_people_rows = progress_people(point_groups, assignments)
 
     # Поиск задач для добавления (правая часть страницы)
-    search_active = any(request.GET.get(k) for k in ('q', 'topic', 'grade', 'tag', 'who'))
+    search_active = any(request.GET.get(k) for k in ('q', 'topic', 'grade', 'tag', 'who', 'content'))
     found_tasks = []
     if search_active:
         # subitems — для полного условия на картинке (панель действий в строке)

@@ -1,0 +1,9 @@
+{% load task_extras %}{# Выбор «Содержание» (фасет CONTENT) в поиске задач: группа = любое её значение. Отправляет форму при изменении (data-autosubmit), живой поиск берёт значение из формы #}{% content_choices as content_groups %}{% if content_groups %}<select name="content" id="{{ select_id }}" class="quick-select content-select{% if params.content %} is-set{% endif %}" data-autosubmit aria-label="Содержание задачи">
+  <option value="">{% if select_id == 'f_content' %}Содержание: любое{% else %}Любое{% endif %}</option>
+  {% for group in content_groups %}
+  <optgroup label="{{ group.name }}">
+    <option value="{{ group.code }}"{% if params.content == group.code %} selected{% endif %}>{{ group.name }}: всё</option>
+    {% for value in group.values %}<option value="{{ value.code }}"{% if params.content == value.code %} selected{% endif %}>{{ value.name }}</option>{% endfor %}
+  </optgroup>
+  {% endfor %}
+</select>{% endif %}

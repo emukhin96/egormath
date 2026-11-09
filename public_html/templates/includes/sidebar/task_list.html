@@ -16,6 +16,24 @@
     {% endfor %}
   </ul>
 </section>
+{% if content_facets %}
+{# «Содержание» — фасет CONTENT: группы со счётчиками, у выбранной группы раскрываются значения. Тот же фильтр — выбор «Содержание» в строке поиска #}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Содержание</p>
+  <ul class="sidebar-list">
+    {% for group in content_facets %}
+    <li{% if group.is_current %} class="is-current"{% endif %}><a class="sidebar-row sidebar-row-count" href="?content={{ group.code }}">{{ group.name }}<span class="sidebar-count">{{ group.count }}</span></a></li>
+    {% if group.values %}
+    <li class="sidebar-sublist-wrap"><ul class="sidebar-sublist">
+      {% for value in group.values %}
+      <li{% if value.is_current %} class="is-current"{% endif %}><a class="sidebar-row sidebar-row-count" href="?content={{ value.code }}">{{ value.name }}<span class="sidebar-count">{{ value.count }}</span></a></li>
+      {% endfor %}
+    </ul></li>
+    {% endif %}
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 {% if grade_facets %}
 <section class="sidebar-section">
   <p class="sidebar-kicker">Классы</p>
