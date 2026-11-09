@@ -57,10 +57,7 @@
       <label>Тема</label>
       {% include 'includes/taxonomy_picker.html' with mode='filter' primary=False facets=False grades=False compact=True selected_json=selected_json %}
     </div>
-    <div>
-      <label for="f_content_card">Содержание</label>
-      {% include 'problems/_content_select.html' with select_id='f_content_card' %}
-    </div>
+    {% include 'problems/_content_select.html' with select_id='f_content_card' labelled=True %}
     {% if audience_students or audience_groups %}
     <div>
       {% include 'includes/audience_select.html' %}

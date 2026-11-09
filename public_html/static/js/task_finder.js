@@ -104,10 +104,11 @@
 
   // Конструктор листка: после добавления задачи результаты перечитываются,
   // чтобы добавленная строка исчезла из поиска. Поиск активен, если задан
-  // любой из фильтров: текст, класс, тема или аудитория.
+  // любой из фильтров: текст, класс, тема, содержание или аудитория — тот
+  // же набор, что search_active в worksheets/views.py (worksheet_detail).
   function searchActive() {
     var params = new URLSearchParams(new FormData(form));
-    return ['q', 'grade', 'topic', 'who'].some(function (name) {
+    return ['q', 'grade', 'topic', 'content', 'who'].some(function (name) {
       return params.getAll(name).some(function (value) { return value.trim() !== ''; });
     });
   }

@@ -78,3 +78,16 @@ class ContentCatalogTests(Roles, TestCase):
     def test_no_section_without_labels(self):
         Task.facet_values.through.objects.all().delete()
         self.assertEqual(catalog_content({}, self.editor), [])
+
+
+class ContentSelectWithoutFacetTests(Roles, TestCase):
+    """Без словаря CONTENT (сид не запускали) в форме поиска нет ни поля,
+    ни подписи «Содержание» — подпись не ссылается на несуществующий id."""
+
+    def test_card_form_has_no_orphan_label(self):
+        self.make_users()
+        worksheet = Worksheet.objects.create(owner=self.editor, title='Листок')
+        self.client.force_login(self.editor)
+        response = self.client.get(reverse('worksheet_detail', args=[worksheet.pk]))
+        self.assertNotContains(response, 'f_content_card')
+        self.assertNotContains(response, '>Содержание</label>')

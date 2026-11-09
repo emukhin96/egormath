@@ -1,4 +1,6 @@
-{% load task_extras %}{# Выбор «Содержание» (фасет CONTENT) в поиске задач: группа = любое её значение. Отправляет форму при изменении (data-autosubmit), живой поиск берёт значение из формы #}{% content_choices as content_groups %}{% if content_groups %}<select name="content" id="{{ select_id }}" class="quick-select content-select{% if params.content %} is-set{% endif %}" data-autosubmit aria-label="Содержание задачи">
+{% load task_extras %}{# Выбор «Содержание» (фасет CONTENT) в поиске задач: группа = любое её значение. labelled=True — обёртка с подписью для карточной формы; без словаря не выводится ничего, и подписи тоже. Отправляет форму при изменении (data-autosubmit), живой поиск берёт значение из формы #}{% content_choices as content_groups %}{% if content_groups %}{% if labelled %}<div>
+  <label for="{{ select_id }}">Содержание</label>
+  {% endif %}<select name="content" id="{{ select_id }}" class="quick-select content-select{% if params.content %} is-set{% endif %}" data-autosubmit aria-label="Содержание задачи">
   <option value="">{% if select_id == 'f_content' %}Содержание: любое{% else %}Любое{% endif %}</option>
   {% for group in content_groups %}
   <optgroup label="{{ group.name }}">
@@ -6,4 +8,5 @@
     {% for value in group.values %}<option value="{{ value.code }}"{% if params.content == value.code %} selected{% endif %}>{{ value.name }}</option>{% endfor %}
   </optgroup>
   {% endfor %}
-</select>{% endif %}
+</select>{% if labelled %}
+</div>{% endif %}{% endif %}
