@@ -195,6 +195,7 @@ def flatten_lists(text: str) -> str:
 
 
 _LATIN_TO_CYRILLIC = str.maketrans("acepoxyACEHKMOPTX", "асеролуАСЕНКМОРТХ")
+_CLASS_LETTER = str.maketrans("ABCEHKMOPTX", "АВСЕНКМОРТХ")  # «6 «B» класса»
 # Опечатки OCR в словах книг (сверено по TEX Mathpix 08.11.2026).
 OCR_WORDS = {
     "аначен": "значен", "Аначен": "Значен", "ураннен": "уравнен", "фуннц": "функц",
@@ -203,6 +204,7 @@ OCR_WORDS = {
 }
 # Искажённые слова целиком (вычитка ДМ 7, 08.11.2026): только с границами слова.
 OCR_WHOLE_WORDS = {
+    "HOK": "НОК", "HOД": "НОД", "HOD": "НОД",  # ДМ-6, № 25: «$HOK$ (16; 24)»
     "сранните": "сравните", "звачение": "значение", "равеиство": "равенство", "пропёл": "прошёл",
     "пагревания": "нагревания", "равпо": "равно", "пайдите": "найдите", "Пайдите": "Найдите",
     "знячение": "значение", "знячения": "значения", "произнедение": "произведение",
@@ -252,6 +254,17 @@ def heal_bold_math(text: str) -> str:
 _LABEL_LEAD = r"(?m)(?P<lead>(?:^|\\\\|[;:]|\\item\[\][ \t]*|\\item\[)[ \t]*)"
 
 
+def _heal_g_label(text: str) -> str:
+    """«г)» вместо «2)» (ДМ-6, № 197): только среди цифровых меток — в списке
+    «а) б) в) г)» буква законная."""
+    def fix(match: re.Match) -> str:
+        window = text[max(0, match.start() - 300):match.start()]
+        digits = re.search(r"(?:^|\\\\|[;\n])[ \t]*[1-6]\)", window)
+        letters = re.search(r"(?:^|\\\\|[;\n])[ \t]*[абв]\)", window)
+        return match.group("lead") + "2)" if digits and not letters else match.group(0)
+    return re.sub(_LABEL_LEAD + r"г\)", fix, text)
+
+
 def heal_item_labels(text: str) -> str:
     """Метки пунктов, испорченные OCR.
 
@@ -259,6 +272,10 @@ def heal_item_labels(text: str) -> str:
     - метка внутри формулы: «\\(5)-5,4 \\in N\\)», «\\(\\displaystyle 2)\\left(…\\)».
     """
     text = re.sub(_LABEL_LEAD + r"[зЗ]\)", r"\g<lead>3)", text)
+    text = _heal_g_label(text)
+    # «2)-6,14» — метка вплотную к минусу (ДМ-6, № 169): без пробела пункт не
+    # отделяется и уходит в формулу целиком.
+    text = re.sub(_LABEL_LEAD + r"(?P<n>\d{1,2})\)(?=-\d)", r"\g<lead>\g<n>) ", text)
     # «\\(\\left.[-1 ; 2] ; 2\\right)(-\\infty ; 0]\\)» — метка «2)» стала скобкой.
     text = re.sub(r"\\left\.(?P<body>[^\n]*?)[;,]\s*(?P<label>\d{1,2})\\right\)",
                   r"\g<body>\\); \g<label>) \\(", text)
@@ -398,6 +415,10 @@ def heal_math_details(text: str) -> str:
     # Латиница в единицах: «2 m» → «2 м» — только в прозе: в формуле
     # «\\(5 m n\\)» это переменная, кириллица там не наберётся.
     text = outside_math(text, lambda chunk: re.sub(r"(?<=\d) m(?=[\s.,;]|$)", " м", chunk))
+    # «2 c» — секунды латинской «c» (ДМ-6, № 37); «6 «B» класса» — буква класса.
+    text = outside_math(text, lambda chunk: re.sub(r"(?<=\d) c(?=[\s.,;:?!]|$)", " с", chunk))
+    text = outside_math(text, lambda chunk: re.sub(
+        r"«([ABCEHKMOPTX])»", lambda m: "«" + m.group(1).translate(_CLASS_LETTER) + "»", chunk))
     # Периодическая дробь прозой: «6,(23)» — тоже вне формул, иначе вложенная \\(.
     return outside_math(text, lambda chunk: re.sub(
         r"(?<![\w.,$\\])(-?\d+),\((\d+)\)", r"\\(\1{,}(\2)\\)", chunk))
@@ -510,6 +531,23 @@ def restore_stars(body: str) -> str:
     return re.sub(r"(\d)\\\)[ \t]+\\\((?=[\d{])", r"\1", "".join(parts))
 
 
+# По правилам вёрстки знак на переносе строки повторяется: «…-(1-2,5a) −⏎
+# − 4(0,8a+3)». Mathpix режет формулу на две и оставляет оба знака
+# (ДМ-6, КР9 № 4; Алгебра 7, № 96, 98, 141).
+_WRAPPED_OP_RE = re.compile(
+    r"(?P<op>[-+=]|\\cdot)\s*(?P<right>\\right\.)?\s*\\\)\s*(?:\\\\)?\s*\\\(\s*"
+    r"(?:\\displaystyle\s*)?(?P<left>\\left\.)?\s*(?P=op)")
+
+
+def join_wrapped_operator(text: str) -> str:
+    def join(match: re.Match) -> str:
+        # «\right.» и «\left.» — пара заглушек разорванных скобок: снимаются вместе.
+        if bool(match.group("right")) != bool(match.group("left")):
+            return match.group(0)
+        return match.group("op")
+    return _WRAPPED_OP_RE.sub(join, text)
+
+
 def prepare_text(text: str, figures: "Figures | None" = None) -> str:
     text = text.replace("\r\n", "\n")
     begin = text.find("\\begin{document}")
@@ -517,7 +555,11 @@ def prepare_text(text: str, figures: "Figures | None" = None) -> str:
         text = text[begin + len("\\begin{document}"):]
     text = text.replace("\\end{document}", "")
     text = re.sub(r"\\textbackslash\s+item", r"\\item", text)
+    # «\textbackslash section*\{Параллельные прямые\}» (ДМ-6): иначе заголовок
+    # остаётся хвостом условия предыдущей задачи.
+    text = re.sub(r"\\textbackslash\s+section\*?\s*\\\{([^{}\\]*)\\\}", r"\\section*{\1}", text)
     text = _unwrap_footnotes(text)
+    text = join_wrapped_operator(text)
     text = heal_item_labels(text)
     text = flatten_lists(text)
     text = re.sub(r"\\\\\[0pt\]", r"\\\\", text)
@@ -541,7 +583,7 @@ def prepare_text(text: str, figures: "Figures | None" = None) -> str:
     text = re.sub(r"(?<![а-яёА-ЯЁ])(" + "|".join(OCR_WHOLE_WORDS) + r")(?![а-яёА-ЯЁ])",
                   lambda m: OCR_WHOLE_WORDS[m.group(1)], text)
     # Латинские двойники в начале русского слова: «apбуза», «cм»; «250 p.» — рубли.
-    text = re.sub(r"(?<![\w\\{])([acepoxyACEHKMOPTX]{1,3})(?=[а-яё]{1,})",
+    text = re.sub(r"(?<![\w\\{])([acepoxyACEHKMOPTX]{1,3})(?=[а-яёА-ЯЁ])",
                   lambda m: m.group(1).translate(_LATIN_TO_CYRILLIC), text)
     text = re.sub(r"(?<=\d) p\.", " р.", text)
     # Украинская «є» в русском слове («Разложитє»).
@@ -1152,12 +1194,27 @@ def tidy_fields(task: TaskDraft) -> bool:
     return True
 
 
+_DASH_AS_MINUS_RE = re.compile(r"(?<=[А-Яа-яЁё])(\s+)(\\\(\s*(?:\\displaystyle\s*)?|\$)-\s*(?=\d|\\[dt]?frac)")
+
+
+def dash_not_minus(task: TaskDraft) -> None:
+    """Тире «скорость течения реки — 1 7/8 км/ч» Mathpix читает минусом
+    внутри формулы. До темы отрицательных чисел (``negatives_from`` в таблице
+    книги) минус в начале формулы после слова — всегда тире (ДМ-6, № 54, 75, 93)."""
+    for item in [task, *task.subitems]:
+        item.text_latex = _DASH_AS_MINUS_RE.sub(lambda m: m.group(1) + "— " + m.group(2), item.text_latex)
+
+
 def _finish(task: TaskDraft, grade: int) -> None:
     # lift_common_tail (Потоскуев) не проверяет масштаб головы пункта и
     # уносит в условие вопрос самого пункта — здесь tidy_fields с защитой.
     tidy_fields(task)
     _finish_fields(task)
     canon_fields(task)
+    # «$20\\,104$ $050$» — разряды числа OCR разнёс по двум формулам (ДМ-6, № 13).
+    for item in [task, *task.subitems]:
+        item.text_latex = re.sub(r"\$(\d{1,3}(?:\\,\d{3})*)\$[ \t]+\$(\d{3})\$(?![\d{])", r"$\1\\,\2$",
+                                 item.text_latex)
     # «-$140^{\\circ}$» — минус снаружи формулы выйдет дефисом.
     for item in [task, *task.subitems]:
         item.text_latex = re.sub(r"(?:(?<=^)|(?<=[\s(]))-(\$|\\\()(?=\d)", r"\1-", item.text_latex)
@@ -1221,6 +1278,8 @@ def parse_exercises(text: str, zones: list, book: dict, figures: Figures,
             task.topic_original = title
             task.topic_code = code
             _finish(task, book.get("grade", 0))
+            if number < spec.get("negatives_from", 0):
+                dash_not_minus(task)
             tasks.append(task)
             if next_heading:
                 heading = " ".join(next_heading)
@@ -1283,6 +1342,8 @@ def parse_tests(text: str, zones: list, book: dict, figures: Figures,
             task.topic_code = ((work.get("topics") or {}).get(task.source_number)
                                or work.get("topic", ""))
             _finish(task, book.get("grade", 0))
+            if n < (book.get("tests") or {}).get("negatives_from", 0):
+                dash_not_minus(task)
             tasks.append(task)
     expected_variants = spec.get("variants")
     if expected_variants:

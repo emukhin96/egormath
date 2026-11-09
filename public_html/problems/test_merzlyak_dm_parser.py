@@ -597,3 +597,72 @@ class QaRulesTests(SimpleTestCase):
         by_id = self.parse("1. В графин налили $2$ л воды. Сколько воды в графине?\n2. Дальше.", grade=5)
         self.assertIn("В графин налили", by_id["ДМ.В1/1"].text_latex)
 
+
+
+class Mat6OcrTests(SimpleTestCase):
+    """Классы OCR из TEX Mathpix ДМ-6 (10.11.2026)."""
+
+    def parse(self, body):
+        text = TITLE + "\\section*{Вариант 1}\n" + body + "\n\\end{document}"
+        tasks, _diagnostics = parse_merzlyak_dm(text, book={"title": "т", "grade": 6})
+        return {task.external_id: task for task in tasks}
+
+    def test_escaped_section_heading_not_in_previous_task(self):
+        by_id = self.parse("1. Постройте четырёхугольник \\(A B C D\\).\\\\\n"
+                           "\\textbackslash section*\\{Параллельные прямые\\}\n2. Начертите прямую \\(m\\).")
+        self.assertNotIn("section", by_id["ДМ.В1/1"].text_latex)
+        self.assertNotIn("Параллельные", by_id["ДМ.В1/1"].text_latex)
+
+    def test_g_label_among_digits_is_two(self):
+        by_id = self.parse("1. Решите уравнение:\\\\\n1) \\(-4 x=32\\);\\\\\nз) \\(-1,2 x=-3,6\\);\\\\\n"
+                           "5) \\(x=1\\);\\\\\nг) \\(0,7 x=-1,4\\);\\\\\n4) \\(x=2\\);\\\\\n6) \\(x=3\\).\n2. Дальше.")
+        labels = [item.label for item in by_id["ДМ.В1/1"].subitems]
+        self.assertEqual(labels, ["1", "2", "3", "4", "5", "6"])
+        self.assertIn("0{,}7", by_id["ДМ.В1/1"].subitems[1].text_latex)
+
+    def test_g_label_in_letter_list_untouched(self):
+        by_id = self.parse("1. Сравните:\\\\\nа) \\(1\\) и \\(2\\);\\\\\nб) \\(3\\) и \\(4\\);\\\\\n"
+                           "в) \\(5\\) и \\(6\\);\\\\\nг) \\(7\\) и \\(8\\).\n2. Дальше.")
+        self.assertIn("г)", by_id["ДМ.В1/1"].text_latex + "".join(i.label for i in by_id["ДМ.В1/1"].subitems))
+        self.assertNotIn("2)", by_id["ДМ.В1/1"].text_latex)
+
+    def test_latin_lookalikes_and_seconds(self):
+        by_id = self.parse("1. Найдите HOК \\((12; 18)\\) и HOK \\((16; 24)\\). Какую часть минуты составляют 18 c?\n"
+                           "2. Из них 27 \\% собрали ученики 6 «B» класса.")
+        first = by_id["ДМ.В1/1"].text_latex
+        self.assertIn("НОК", first)
+        self.assertNotIn("HOK", first)
+        self.assertIn("$18$ с?", first)
+        self.assertIn("«В»", by_id["ДМ.В1/2"].text_latex)
+
+    def test_number_split_between_formulas_joined(self):
+        by_id = self.parse("1. Какое из чисел больше: 20104 050 или 20 104 500?\n2. Дальше.")
+        text = by_id["ДМ.В1/1"].text_latex
+        self.assertNotRegex(text, r"\$\s+\$\d{3}\$")
+
+    def test_label_glued_to_minus(self):
+        by_id = self.parse("1. Между какими целыми числами лежит число:\\\\\n1) \\(4 \\frac{2}{3}\\);\\\\\n"
+                           "2)-6,14;\\\\\n\\(3)-0,7\\);\\\\\n4) -0,6?\\\\\nОтвет запишите в виде двойного неравенства.\n2. Дальше.")
+        items = by_id["ДМ.В1/1"].subitems
+        self.assertEqual([item.label for item in items], ["1", "2", "3", "4"])
+        self.assertNotIn("2)", items[1].text_latex)
+        self.assertIn("-6{,}14", items[1].text_latex)
+
+    def test_dash_before_value_is_not_minus_before_negatives(self):
+        text = (TITLE + "\\section*{Вариант 1}\n1. Скорость теплохода \\(20\\) км/ч, скорость течения реки "
+                "\\(\\displaystyle -1 \\frac{7}{8}\\) км/ч.\n2. Дальше.\n\\end{document}")
+        book = {"title": "т", "grade": 6, "exercises": {"negatives_from": 148}}
+        tasks, _ = parse_merzlyak_dm(text, book=book)
+        first = {t.external_id: t for t in tasks}["ДМ.В1/1"].text_latex
+        self.assertIn("реки — ", first)
+        self.assertNotIn("-1", first)
+        # После темы отрицательных чисел минус остаётся минусом.
+        tasks, _ = parse_merzlyak_dm(text, book={"title": "т", "grade": 6})
+        self.assertIn("-1", {t.external_id: t for t in tasks}["ДМ.В1/1"].text_latex)
+
+    def test_operator_repeated_on_line_wrap(self):
+        by_id = self.parse("1. Упростите выражение \\(5(-1,4 a+3)-(1-2,5 a)-\\) \\(-4(0,8 a+3)\\) и вычислите.\n"
+                           "2. Разложите: \\(\\left(a^{12}+\\right.\\) \\(\\left.+1\\right)\\).\n3. Дальше.")
+        self.assertIn("-(1-2{,}5 a)-4(0{,}8 a+3)", by_id["ДМ.В1/1"].text_latex)
+        self.assertNotIn("+ +", by_id["ДМ.В1/2"].text_latex)
+        self.assertIn("a^{12}+1", by_id["ДМ.В1/2"].text_latex)
