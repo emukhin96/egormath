@@ -66,7 +66,7 @@ def student_assignments(user):
 def assignment_runs(user, params):
     if not settings.INDEPENDENT_WORKS_ENABLED or params.get('kind') == 'ordinary':
         return []
-    runs = Run.objects.filter(work__in=Work.visible_to(user), issued_at__isnull=False).select_related('owner', 'work').prefetch_related('attempts__student', 'attempts__answers', 'attempts__variant__points')
+    runs = Run.objects.filter(work__in=Work.visible_to(user), issued_at__isnull=False).select_related('owner', 'work').prefetch_related('attempts__student', 'attempts__answers', 'attempts__variant__points', 'variants')
     if params.get('owner', '').isdigit() and user.is_superuser:
         runs = runs.filter(owner_id=params['owner'])
     return list(runs)
