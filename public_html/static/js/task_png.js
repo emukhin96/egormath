@@ -37,6 +37,9 @@
     var root = button.closest('[data-task-png-root]');
     if (!root) return null;
     var source = root.querySelector('[data-task-png-content]') || root;
+    // На большой странице формулы вне экрана ещё не отрендерены (math.js):
+    // перед снимком дорисовываем всё внутри корня
+    if (window.EgorMath) window.EgorMath.renderAll(source);
     var clone = source.cloneNode(true);
     // В карточке кандидата самостоятельной подпункты — внутри формы выбора,
     // которая ниже удаляется целиком: поднимаем их под текст условия.
