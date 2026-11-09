@@ -59,6 +59,16 @@ echo "==> LaTeX packages and fonts → latex-api"
 echo "==> Starting services"
 $COMPOSE up -d --remove-orphans
 
+# Файловые кэши каталога в data/cache переживают выкладку, а ключи
+# версионированы по данным, не по коду: записи старого кода (pickle узлов
+# дерева подборок, счётчики) должны уйти вместе с ним. Только после смены
+# контейнера: пока старые воркеры живы, они пишут кэш заново (ревью #337).
+# Шаг нефатальный — доступность сайта от сброса кэша не зависит.
+echo "==> clear_catalog_cache"
+if ! $COMPOSE exec -T egormath-web python manage.py clear_catalog_cache; then
+  echo "!! кэш каталога не сброшен: deploy/vps/manage.sh clear_catalog_cache" >&2
+fi
+
 echo "==> Site in shared Caddy"
 HOSTS="$(env_get EGORMATH_HOSTS)"
 if [ -n "$HOSTS" ] && [ -d /opt/caddy/sites ]; then
