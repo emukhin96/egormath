@@ -573,6 +573,19 @@ class QaRulesTests(SimpleTestCase):
             self.assertEqual(task.grade_band_codes, [expected])
             self.assertTrue(set(task.grade_band_codes) <= known)
 
+    def test_parser_imports_without_django(self):
+        # tools/textbook_parser.py разбирает TEX без настроек Django: парсер не
+        # должен тянуть модели (через rubricator.py) при импорте.
+        import os
+        import subprocess
+        import sys
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env = {k: v for k, v in os.environ.items() if k != "DJANGO_SETTINGS_MODULE"}
+        code = ("import sys; sys.path.insert(0, %r); "
+                "import problems.merzlyak_dm_parser" % root)
+        run = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stderr[-500:])
+
     def test_letter_m_in_formula_untouched(self):
         # «2 m» прозой — единица «м», а в формуле m — переменная одночлена.
         by_id = self.parse("1. Упростите \\(5 m n\\), \\(2 m ; 3 n\\) и \\(4 m \\cdot n\\).\n"

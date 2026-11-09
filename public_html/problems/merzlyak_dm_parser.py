@@ -42,7 +42,7 @@ from .merzlyak_parser import (
     MATH_SPAN_RE, _heal_numeric_item_labels, _heal_ocr_words, _join_hyphenation,
     _tabular_to_array, _unwrap_footnotes)
 from .potoskuev_parser import _finish_fields, monotonic_numbers
-from .rubricator import GRADE_LEVEL_TO_CODE
+from .rubricator_data import GRADE_LEVEL_TO_CODE
 from .textbook_parser import (
     Marker, TaskDraft, blocks, finalize_draft_images, numeric_subitem_labels,
     read_group, remove_group_commands, task_from_block)

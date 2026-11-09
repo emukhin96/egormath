@@ -13,17 +13,10 @@ from .models import (ExamItem, ExamModel, FacetType, FacetValue, GradeBand,
                      Task, TaskTopic, Topic)
 from .content_data import (CONTENT_FACET_CODE, CONTENT_FACET_NAME,
                            CONTENT_GROUPS)
-from .rubricator_data import (BLOCKS, EXAM_MODELS, GRADE_BANDS, LEVELS,
+from .rubricator_data import (BLOCKS, CODE_TO_GRADE_LEVEL, EXAM_MODELS,  # noqa: F401
+                              GRADE_BANDS, GRADE_LEVEL_TO_CODE, LEVELS,
                               METHODS)
 
-GRADE_LEVEL_TO_CODE = {
-    5: 'GRADE_5', 6: 'GRADE_6', 7: 'GRADE_7',
-    8: 'GRADE_8', 9: 'GRADE_9', 10: 'GRADE_10_11', 11: 'GRADE_10_11',
-}
-CODE_TO_GRADE_LEVEL = {
-    'GRADE_5': 5, 'GRADE_6': 6, 'GRADE_7': 7,
-    'GRADE_8': 8, 'GRADE_9': 9, 'GRADE_10_11': 10,
-}
 GRADE_SHORT = {
     'GRADE_5': '5', 'GRADE_6': '6', 'GRADE_7': '7',
     'GRADE_8': '8', 'GRADE_9': '9', 'GRADE_10_11': '10–11',

@@ -421,6 +421,17 @@ METHODS = [
     ('COMPUTER', 'компьютерный эксперимент'),
 ]
 
+# Класс → код полосы; 10 и 11 — одна полоса. Здесь, а не в rubricator.py:
+# парсеры задачников импортируют таблицу без Django (tools/textbook_parser.py).
+GRADE_LEVEL_TO_CODE = {
+    5: 'GRADE_5', 6: 'GRADE_6', 7: 'GRADE_7',
+    8: 'GRADE_8', 9: 'GRADE_9', 10: 'GRADE_10_11', 11: 'GRADE_10_11',
+}
+CODE_TO_GRADE_LEVEL = {
+    'GRADE_5': 5, 'GRADE_6': 6, 'GRADE_7': 7,
+    'GRADE_8': 8, 'GRADE_9': 9, 'GRADE_10_11': 10,
+}
+
 GRADE_BANDS = [
     ('GRADE_5', '5 класс', 10),
     ('GRADE_6', '6 класс', 20),
