@@ -42,6 +42,7 @@ from .merzlyak_parser import (
     MATH_SPAN_RE, _heal_numeric_item_labels, _heal_ocr_words, _join_hyphenation,
     _tabular_to_array, _unwrap_footnotes)
 from .potoskuev_parser import _finish_fields, monotonic_numbers
+from .rubricator import GRADE_LEVEL_TO_CODE
 from .textbook_parser import (
     Marker, TaskDraft, blocks, finalize_draft_images, numeric_subitem_labels,
     read_group, remove_group_commands, task_from_block)
@@ -1162,7 +1163,8 @@ def _finish(task: TaskDraft, grade: int) -> None:
     for item in [task, *task.subitems]:
         item.text_latex = re.sub(r"(?:(?<=^)|(?<=[\s(]))-(\$|\\\()(?=\d)", r"\1-", item.text_latex)
     finalize_draft_images(task)
-    task.grade_band_codes = [f"GRADE_{grade}"] if grade else []
+    # Справочник классов: 10 и 11 — одна полоса GRADE_10_11, отдельного GRADE_10 нет.
+    task.grade_band_codes = [GRADE_LEVEL_TO_CODE[grade]] if grade in GRADE_LEVEL_TO_CODE else []
     fields = [task.text_latex] + [item.text_latex for item in task.subitems]
     if any(math_delimiters_broken(value) for value in fields):
         task.warnings.append("Вложенные или незакрытые формулы: сверить с книгой")
