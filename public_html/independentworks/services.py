@@ -243,7 +243,7 @@ def correction_fingerprint(parent):
 def prepare(work, owner, students, duration=40, deadline=None, max_variants=None,
             allow_photos=True, self_check=False, release_mode='manual', release_flags=None,
             parent=None, kind='initial', previous=None, restrict_clipboard=False, swap_numbers=False,
-            lock_on_leave=False):
+            lock_on_leave=False, lock_device=False):
     if kind not in ('initial', 'correction', 'retake') or (kind == 'initial') != (parent is None):
         raise WorkError('Исходная попытка нужна только для исправления или пересдачи.')
     if parent is not None and parent.run.work_id != work.pk:
@@ -300,7 +300,7 @@ def prepare(work, owner, students, duration=40, deadline=None, max_variants=None
         return Run.objects.create(work=work, owner=owner, title=work.title, duration=duration,
                                   deadline=deadline, max_variants=max_variants, allow_photos=allow_photos,
                                   self_check=self_check, restrict_clipboard=restrict_clipboard, swap_numbers=swap_numbers,
-                                  lock_on_leave=lock_on_leave,
+                                  lock_on_leave=lock_on_leave, lock_device=lock_device,
                                   release_mode=release_mode, release_flags=flags,
                                   fingerprint=correction_fingerprint(parent) if kind == 'correction' else digest(data),
                                   plan=plan, kind=kind, parent=parent)

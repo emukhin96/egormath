@@ -14,6 +14,7 @@ from assignments.models import Review
 from assignments.timeline import activity_events, finish_events
 from workaudit.models import ActivityEvent
 from workaudit.services import copied_words, copy_label, whole_copies
+from . import devices
 from . import services as svc
 from .views import group_point_rows, point_rows
 
@@ -82,6 +83,7 @@ def attempt_timeline(request, attempt):
             events.append({'at': photo.created_at, 'kind': 'photo', 'text': f'Загрузил фото к заданию {label}', 'detail': ''})
     if attempt.locked_at:
         events.append({'at': attempt.locked_at, 'kind': 'away', 'text': 'Задания заблокированы', 'detail': 'ушёл со страницы', 'seconds': None})
+    events.extend(devices.timeline_events(attempt))
     empty = [r['point'].label for r in rows if not r['answered']]
     gap = ('без ответа: ' + ', '.join(empty)) if empty else ''
     if attempt.submitted_at:
@@ -96,6 +98,8 @@ def attempt_timeline(request, attempt):
         'attempt': attempt, 'rows': rows, 'events': events, 'track': track, 'result': result,
         'cumulative': cumulative if attempt.root_id or attempt.corrections.exists() else None,
         'pending': pending, 'locked': bool(attempt.locked_at) and not attempt.finished,
+        # Устройства, которые ждут, пока учитель переключит на них доступ
+        'device_requests': devices.pending(attempt),
         'student_name': attempt.student.get_full_name() or attempt.student.username,
         'copied': any(c['words'] > 1 for c in copies), 'now': timezone.now(),
         # «копировал условие целиком» — как у имени в таблице прогресса

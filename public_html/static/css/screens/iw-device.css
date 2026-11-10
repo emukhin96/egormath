@@ -1,0 +1,21 @@
+@layer components {
+  /* Вход в самостоятельную с другого устройства (Run.lock_device).
+     Ученику — заглушка в виде заглушки ухода (.iw-lock в input.css), поверх
+     неё, если открыты обе. Учителю — запрос у имени в таблице прогресса и
+     в предупреждении на странице работы ученика. */
+  .iw-device { z-index: 1001; }
+  .iw-device .iw-lock-card .btn { margin: 0; }
+  .iw-device-row,
+  .iw-device-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .iw-device-row { margin-top: var(--space-1); }
+  .iw-device-row .btn, .iw-device-row .icon-btn, .iw-device-note .btn { margin: 0; }
+  .iw-device-what { font-weight: 400; }
+  .iw-device-note > span { flex: 1 1 280px; }
+  .tl-event-device .tl-dot { background: #c2410c; }
+  .tl-event-device .tl-event-text { font-weight: 700; }
+}

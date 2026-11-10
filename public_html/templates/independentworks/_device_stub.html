@@ -1,0 +1,17 @@
+{% load livefile %}
+{% comment %}
+Заглушка «Работа открыта на другом устройстве» (Run.lock_device, devices.py).
+foreign — сервер не пустил это устройство: страница пришла без заданий, а
+учитель уже видит попытку входа. Иначе заглушка скрыта, и iw_device.js
+покажет её, когда учитель переключит доступ на другое устройство; новый
+запрос — кнопкой, она заново открывает страницу. Вид — как у заглушки ухода.
+{% endcomment %}
+<div class="iw-lock iw-device" data-iw-device="{% url 'independentworks:device' attempt.pk %}" data-live-file="{% live_file 'attempt' attempt.pk %}" role="alertdialog" aria-modal="true" tabindex="-1" aria-labelledby="iw-device-title" aria-describedby="iw-device-text"{% if not foreign %} hidden{% endif %}>
+  <div class="iw-lock-card">
+    <span class="iw-lock-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="13" height="10" rx="1.5"/><path d="M5 19h7"/><rect x="16" y="9" width="6" height="11" rx="1.5"/></svg></span>
+    <h2 id="iw-device-title">Работа открыта на другом устройстве</h2>
+    {% if foreign %}<p id="iw-device-text">Учитель видит, что вы пытаетесь войти с этого устройства. Продолжить здесь можно, когда он переключит доступ.</p>
+    {% else %}<p id="iw-device-text">Продолжить здесь можно, когда учитель переключит доступ на это устройство.</p>
+    <a class="btn btn-secondary" href="{% url 'independentworks:attempt' attempt.pk %}">Попросить доступ</a>{% endif %}
+  </div>
+</div>

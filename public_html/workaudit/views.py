@@ -57,6 +57,12 @@ def copy_fields(row):
 @require_POST
 def events(request, kind, pk):
     work = work_for(request.user, kind, pk)
+    if kind == 'attempt':
+        # Работа открыта на другом устройстве: уходы и копирования отсюда —
+        # не события работы (independentworks/devices.py)
+        from independentworks import devices
+        if devices.foreign(work, devices.device_key(request)):
+            return JsonResponse({'error': devices.FOREIGN_MESSAGE}, status=409)
     now = timezone.now()
     ended = (work.submitted_at if kind == 'assignment' else
              work.submitted_at or work.ends_at)

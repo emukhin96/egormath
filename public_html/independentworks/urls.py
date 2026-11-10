@@ -1,4 +1,5 @@
 from django.urls import path
+from . import device_views
 from . import views
 from . import windows
 
@@ -37,6 +38,10 @@ urlpatterns = [
     path('attempt/<int:pk>/start/', views.start_attempt, name='start'),
     path('attempt/<int:pk>/lock/', views.attempt_lock, name='lock'),
     path('attempt/<int:pk>/unlock/', views.unlock_attempt, name='unlock'),
+    path('run/<int:pk>/device-settings/', device_views.device_settings, name='device_settings'),
+    path('attempt/<int:pk>/device/', device_views.device_status, name='device'),
+    path('attempt/<int:pk>/device/<int:device_id>/switch/', device_views.switch_device, name='switch_device'),
+    path('attempt/<int:pk>/device/<int:device_id>/dismiss/', device_views.dismiss_device, name='dismiss_device'),
     path('attempt/<int:pk>/submit/', views.submit_attempt, name='submit'),
     path('attempt/<int:pk>/assign/', views.reassign, name='reassign'),
     path('attempt/<int:pk>/repeat/', views.repeat, name='repeat'),

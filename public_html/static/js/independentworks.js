@@ -33,8 +33,11 @@
   }
   // 423 — работа под заглушкой «Вы ушли со страницы» (в этой или другой
   // вкладке): показать её здесь же (iw_leave_lock.js)
+  // 403 — работа открыта на другом устройстве (iw_device.js проверит и
+  // покажет свою заглушку)
   function rejected(response) {
     if (response.status === 423) document.dispatchEvent(new Event('iw:locked'));
+    if (response.status === 403) document.dispatchEvent(new Event('iw:device'));
   }
   function hasPhotos(point) { return !!document.querySelector('#point-' + point + ' .iw-photo'); }
   // Номер в ленте и счёт после загрузки или удаления фото без перезагрузки;
