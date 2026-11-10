@@ -32,6 +32,7 @@
 
 from __future__ import annotations
 
+import bisect
 import json
 import re
 from collections import Counter
@@ -267,10 +268,11 @@ def _heal_g_label(text: str) -> str:
     начале строки цифровые, «2)» среди них нет, буквенных «а) б) в)» нет —
     в списке «а) б) в) г)» буква законная, а «; 2)» в координатах не метка.
     """
+    marks = [m.start() for m in _TASK_MARK_RE.finditer(text)]
+
     def fix(match: re.Match) -> str:
-        starts = [m.start() for m in _TASK_MARK_RE.finditer(text, 0, match.start())]
-        following = _TASK_MARK_RE.search(text, match.end())
-        block = text[starts[-1] if starts else 0:following.start() if following else len(text)]
+        i = bisect.bisect_right(marks, match.start())
+        block = text[marks[i - 1] if i else 0:marks[i] if i < len(marks) else len(text)]
         digits = re.findall(r"(?m)" + _LINE_LABEL + r"([1-9])\)", block)
         letters = re.search(r"(?m)" + _LINE_LABEL + r"[абв]\)", block)
         return match.group("lead") + "2)" if digits and "2" not in digits and not letters else match.group(0)
