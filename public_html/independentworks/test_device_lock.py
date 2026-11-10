@@ -125,8 +125,8 @@ class DeviceLockTests(TestCase):
     def test_other_device_is_blocked_and_teacher_sees_request(self):
         attempt = self.begin(lock_device=True)
         page = self.phone.get(self.url('attempt', attempt.pk))
-        self.assertContains(page, 'Работа открыта на другом устройстве')
-        self.assertContains(page, 'Учитель видит, что вы пытаетесь войти')
+        self.assertContains(page, 'Работа уже открыта на другом устройстве')
+        self.assertContains(page, 'Попросите учителя переключить на новое, чтобы увидеть задания здесь.')
         self.assertNotContains(page, 'Два плюс два?')
         self.assertNotContains(page, 'data-iw-focus')
         # Заглушки ухода и журнала активности на чужом устройстве нет
@@ -195,7 +195,7 @@ class DeviceLockTests(TestCase):
         table = self.client.get(self.url('progress', attempt.run_id))
         self.assertNotContains(table, 'iw-device-row')
         self.assertContains(table, 'доступ переключён: iPhone, Safari')
-        self.assertContains(self.laptop.get(self.url('attempt', attempt.pk)), 'Работа открыта на другом устройстве')
+        self.assertContains(self.laptop.get(self.url('attempt', attempt.pk)), 'Работа уже открыта на другом устройстве')
         self.assertContains(self.client.get(self.url('progress', attempt.run_id)), 'Windows, Chrome')
         self.assertContains(self.client.get(self.url('attempt', attempt.pk)), 'Учитель переключил доступ')
 
@@ -216,7 +216,7 @@ class DeviceLockTests(TestCase):
         attempt = self.begin()
         page = self.phone.get(self.url('attempt', attempt.pk))
         self.assertContains(page, 'Два плюс два?')
-        self.assertNotContains(page, 'Учитель видит, что вы пытаетесь войти')
+        self.assertNotContains(page, 'Попросите учителя переключить на новое, чтобы увидеть задания здесь.')
         attempt.refresh_from_db()
         self.assertEqual(attempt.device.label, 'iPhone, Safari')
         self.assertEqual(list(DeviceEvent.objects.values_list('kind', flat=True)), ['enter'])
@@ -255,14 +255,14 @@ class DeviceLockTests(TestCase):
         attempt = self.begin(lock_device=True)
         del self.laptop.cookies[devices.COOKIE]
         self.assertEqual(self.save(self.laptop, attempt).status_code, 403)
-        self.assertContains(self.laptop.get(self.url('attempt', attempt.pk)), 'Работа открыта на другом устройстве')
+        self.assertContains(self.laptop.get(self.url('attempt', attempt.pk)), 'Работа уже открыта на другом устройстве')
         self.assertEqual(AttemptDevice.objects.count(), 2)
 
     def test_finished_work_is_open_from_any_device(self):
         attempt = self.begin(lock_device=True)
         self.laptop.post(self.url('submit', attempt.pk))
         page = self.phone.get(self.url('attempt', attempt.pk))
-        self.assertNotContains(page, 'Работа открыта на другом устройстве')
+        self.assertNotContains(page, 'Работа уже открыта на другом устройстве')
         self.assertEqual(AttemptDevice.objects.count(), 1)
         self.assertFalse(DeviceEvent.objects.exists())
 
