@@ -254,7 +254,8 @@ def heal_bold_math(text: str) -> str:
 
 
 # Позиция метки пункта: начало строки, после «\\», «;», «:» или «\item[».
-_LABEL_LEAD = r"(?m)(?P<lead>(?:^|\\\\|[;:]|\\item\[\][ \t]*|\\item\[)[ \t]*)"
+_ANY_LABEL = r"(?:^|\\\\|[;:]|\\item\[\][ \t]*|\\item\[)[ \t]*"
+_LABEL_LEAD = r"(?m)(?P<lead>" + _ANY_LABEL + ")"
 
 
 _TASK_MARK_RE = re.compile(r"\\item\[\d{1,3}\.\]|^[ \t]*\d{1,3}\.[ \t]", re.M)
@@ -265,17 +266,18 @@ def _heal_g_label(text: str) -> str:
     """«г)» вместо «2)» (ДМ-6, № 197: «1) з) 5) г) 4) 6)» по столбцам).
 
     Смотрим только на свою задачу (от номера до следующего номера): метки в
-    начале строки цифровые, «2)» среди них нет, буквенных «а) б) в)» нет —
-    в списке «а) б) в) г)» буква законная, а «; 2)» в координатах не метка.
+    начале строки цифровые, а «2)» и буквенных «а) б) в)» нет ни в одной
+    позиции метки — и в начале строки, и после «;»/«:», как у самой «г)».
+    В списке «а) б) в) г)» (в том числе в одну строку) буква законная.
     """
     marks = [m.start() for m in _TASK_MARK_RE.finditer(text)]
 
     def fix(match: re.Match) -> str:
         i = bisect.bisect_right(marks, match.start())
         block = text[marks[i - 1] if i else 0:marks[i] if i < len(marks) else len(text)]
-        digits = re.findall(r"(?m)" + _LINE_LABEL + r"([1-9])\)", block)
-        letters = re.search(r"(?m)" + _LINE_LABEL + r"[абв]\)", block)
-        return match.group("lead") + "2)" if digits and "2" not in digits and not letters else match.group(0)
+        digits = re.search(r"(?m)" + _LINE_LABEL + r"[1-9]\)", block)
+        taken = re.search(r"(?m)" + _ANY_LABEL + r"(?:2|[абв])\)", block)
+        return match.group("lead") + "2)" if digits and not taken else match.group(0)
     return re.sub(_LABEL_LEAD + r"г\)", fix, text)
 
 

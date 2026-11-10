@@ -636,6 +636,13 @@ class Mat6OcrTests(SimpleTestCase):
         self.assertIn("г", task.text_latex + "".join(i.label for i in task.subitems))
         self.assertNotIn("2", [i.label for i in task.subitems])
 
+    def test_g_label_inline_letter_list_untouched(self):
+        """Цифровые пункты в начале строк, буквенный список — в одну строку после «:»."""
+        by_id = self.parse("1. Выполните:\\\\\n1) Сравните: а) 5 и 6; б) 7 и 8; в) 1 и 2; г) 3 и 4.\n2. Дальше.")
+        self.assertIn("г) $3$ и $4$", by_id["ДМ.В1/1"].text_latex
+                      + "".join(i.text_latex for i in by_id["ДМ.В1/1"].subitems))
+        self.assertNotIn("2", [i.label for i in by_id["ДМ.В1/1"].subitems])
+
     def test_latin_hod_points_untouched(self):
         by_id = self.parse("1. Найдите \\(\\angle HOD\\), если треугольник HOK равнобедренный.\n"
                            "2. Найдите HOK (16; 24).\n3. Дальше.")
