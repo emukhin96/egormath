@@ -12,7 +12,7 @@ from independentworks.analogs import ANALOG_PROFILES, variant_identity
 
 from .forms import TextbookBundleUploadForm
 from .merzlyak_dm_parser import (
-    detect_book, flatten_lists, group_thousands, parse_merzlyak_dm,
+    detect_book, flatten_lists, group_thousands, join_split_thousands, parse_merzlyak_dm,
     reorder_column_items, wrap_bare_arithmetic, Figures, extract_figure_tables)
 from .textbook_parser import bundle_from_text
 
@@ -656,6 +656,12 @@ class Mat6OcrTests(SimpleTestCase):
         by_id = self.parse("1. Какое из чисел больше: 20104 050 или 20 104 500?\n2. Дальше.")
         text = by_id["ДМ.В1/1"].text_latex
         self.assertNotRegex(text, r"\$\s+\$\d{3}\$")
+        self.assertIn("20\\,104\\,050", text)
+
+    def test_number_list_not_joined(self):
+        """Соседние числа без разрядов — разные числа, не разряды одного."""
+        self.assertEqual(join_split_thousands("$125$ $250$ $375$"), "$125$ $250$ $375$")
+        self.assertEqual(join_split_thousands("$20\\,104$ $050$"), "$20\\,104\\,050$")
 
     def test_label_glued_to_minus(self):
         by_id = self.parse("1. Между какими целыми числами лежит число:\\\\\n1) \\(4 \\frac{2}{3}\\);\\\\\n"

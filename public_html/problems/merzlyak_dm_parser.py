@@ -1218,16 +1218,25 @@ def dash_not_minus(task: TaskDraft) -> None:
         item.text_latex = _DASH_AS_MINUS_RE.sub(lambda m: m.group(1) + "— " + m.group(2), item.text_latex)
 
 
+_SPLIT_THOUSANDS_RE = re.compile(r"\$(\d{1,3}(?:\\,\d{3})+)\$[ \t]+\$(\d{3})\$(?![\d{])")
+
+
+def join_split_thousands(text: str) -> str:
+    """«$20\\,104$ $050$» — разряды числа OCR разнёс по двум формулам (ДМ-6, № 13).
+
+    Только если в первой части уже есть разряды: «$125$ $250$» — два числа.
+    """
+    return _SPLIT_THOUSANDS_RE.sub(r"$\1\\,\2$", text)
+
+
 def _finish(task: TaskDraft, grade: int) -> None:
     # lift_common_tail (Потоскуев) не проверяет масштаб головы пункта и
     # уносит в условие вопрос самого пункта — здесь tidy_fields с защитой.
     tidy_fields(task)
     _finish_fields(task)
     canon_fields(task)
-    # «$20\\,104$ $050$» — разряды числа OCR разнёс по двум формулам (ДМ-6, № 13).
     for item in [task, *task.subitems]:
-        item.text_latex = re.sub(r"\$(\d{1,3}(?:\\,\d{3})*)\$[ \t]+\$(\d{3})\$(?![\d{])", r"$\1\\,\2$",
-                                 item.text_latex)
+        item.text_latex = join_split_thousands(item.text_latex)
     # «-$140^{\\circ}$» — минус снаружи формулы выйдет дефисом.
     for item in [task, *task.subitems]:
         item.text_latex = re.sub(r"(?:(?<=^)|(?<=[\s(]))-(\$|\\\()(?=\d)", r"\1-", item.text_latex)
