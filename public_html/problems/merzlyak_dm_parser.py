@@ -202,9 +202,11 @@ OCR_WORDS = {
     "поназател": "показател", "Спожение": "Сложение",
     "Состввьте": "Составьте", "имяет": "имеет", "алreбр": "алгебр", "сонращ": "сокращ",
 }
+# НОК/НОД латиницей (ДМ-6, № 25: «HOK (16; 24)») — только перед «(число»:
+# «\\angle HOD», «треугольник HOK» в геометрии — обозначения точек.
+_GCD_LCM_RE = re.compile(r"(?<![A-Za-zА-Яа-яЁё\\])HO(?P<last>[KДD])(?=\$?\s*(?:\\\(\s*)?\(\s*\d)")
 # Искажённые слова целиком (вычитка ДМ 7, 08.11.2026): только с границами слова.
 OCR_WHOLE_WORDS = {
-    "HOK": "НОК", "HOД": "НОД", "HOD": "НОД",  # ДМ-6, № 25: «$HOK$ (16; 24)»
     "сранните": "сравните", "звачение": "значение", "равеиство": "равенство", "пропёл": "прошёл",
     "пагревания": "нагревания", "равпо": "равно", "пайдите": "найдите", "Пайдите": "Найдите",
     "знячение": "значение", "знячения": "значения", "произнедение": "произведение",
@@ -254,14 +256,24 @@ def heal_bold_math(text: str) -> str:
 _LABEL_LEAD = r"(?m)(?P<lead>(?:^|\\\\|[;:]|\\item\[\][ \t]*|\\item\[)[ \t]*)"
 
 
+_TASK_MARK_RE = re.compile(r"\\item\[\d{1,3}\.\]|^[ \t]*\d{1,3}\.[ \t]", re.M)
+_LINE_LABEL = r"(?:^|\\\\|\\item\[)[ \t]*"
+
+
 def _heal_g_label(text: str) -> str:
-    """«г)» вместо «2)» (ДМ-6, № 197): только среди цифровых меток — в списке
-    «а) б) в) г)» буква законная."""
+    """«г)» вместо «2)» (ДМ-6, № 197: «1) з) 5) г) 4) 6)» по столбцам).
+
+    Смотрим только на свою задачу (от номера до следующего номера): метки в
+    начале строки цифровые, «2)» среди них нет, буквенных «а) б) в)» нет —
+    в списке «а) б) в) г)» буква законная, а «; 2)» в координатах не метка.
+    """
     def fix(match: re.Match) -> str:
-        window = text[max(0, match.start() - 300):match.start()]
-        digits = re.search(r"(?:^|\\\\|[;\n])[ \t]*[1-6]\)", window)
-        letters = re.search(r"(?:^|\\\\|[;\n])[ \t]*[абв]\)", window)
-        return match.group("lead") + "2)" if digits and not letters else match.group(0)
+        starts = [m.start() for m in _TASK_MARK_RE.finditer(text, 0, match.start())]
+        following = _TASK_MARK_RE.search(text, match.end())
+        block = text[starts[-1] if starts else 0:following.start() if following else len(text)]
+        digits = re.findall(r"(?m)" + _LINE_LABEL + r"([1-9])\)", block)
+        letters = re.search(r"(?m)" + _LINE_LABEL + r"[абв]\)", block)
+        return match.group("lead") + "2)" if digits and "2" not in digits and not letters else match.group(0)
     return re.sub(_LABEL_LEAD + r"г\)", fix, text)
 
 
@@ -580,6 +592,7 @@ def prepare_text(text: str, figures: "Figures | None" = None) -> str:
         text = text.replace(wrong, right)
     for wrong, right in OCR_PHRASES.items():
         text = text.replace(wrong, right)
+    text = _GCD_LCM_RE.sub(lambda m: "НОК" if m.group("last") == "K" else "НОД", text)
     text = re.sub(r"(?<![а-яёА-ЯЁ])(" + "|".join(OCR_WHOLE_WORDS) + r")(?![а-яёА-ЯЁ])",
                   lambda m: OCR_WHOLE_WORDS[m.group(1)], text)
     # Латинские двойники в начале русского слова: «apбуза», «cм»; «250 p.» — рубли.

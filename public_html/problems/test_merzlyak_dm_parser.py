@@ -626,6 +626,23 @@ class Mat6OcrTests(SimpleTestCase):
         self.assertIn("г)", by_id["ДМ.В1/1"].text_latex + "".join(i.label for i in by_id["ДМ.В1/1"].subitems))
         self.assertNotIn("2)", by_id["ДМ.В1/1"].text_latex)
 
+    def test_g_label_letter_list_after_digit_task(self):
+        """Окно — только своя задача: цифры соседней задачи и «; 2)» в координатах не в счёт."""
+        long = "очень длинный пункт про точку \\(A(1; 2)\\) и её образ " * 4
+        by_id = self.parse("1. Решите:\\\\\n1) \\(x=1\\);\\\\\n3) \\(x=3\\).\n"
+                           f"2. Постройте:\\\\\nа) {long};\\\\\nб) {long};\\\\\nв) {long};\\\\\n"
+                           "г) \\(B(1; 2)\\).\n3. Дальше.")
+        task = by_id["ДМ.В1/2"]
+        self.assertIn("г", task.text_latex + "".join(i.label for i in task.subitems))
+        self.assertNotIn("2", [i.label for i in task.subitems])
+
+    def test_latin_hod_points_untouched(self):
+        by_id = self.parse("1. Найдите \\(\\angle HOD\\), если треугольник HOK равнобедренный.\n"
+                           "2. Найдите HOK (16; 24).\n3. Дальше.")
+        self.assertIn("HOD", by_id["ДМ.В1/1"].text_latex)
+        self.assertIn("HOK", by_id["ДМ.В1/1"].text_latex)
+        self.assertIn("НОК", by_id["ДМ.В1/2"].text_latex)
+
     def test_latin_lookalikes_and_seconds(self):
         by_id = self.parse("1. Найдите HOК \\((12; 18)\\) и HOK \\((16; 24)\\). Какую часть минуты составляют 18 c?\n"
                            "2. Из них 27 \\% собрали ученики 6 «B» класса.")
