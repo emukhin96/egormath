@@ -214,7 +214,7 @@ class BookDetectionTests(SimpleTestCase):
         self.assertEqual(by_id["ДМ.В3/4"].source_path[1], "Признаки делимости на 10, на 5 и на 2")
         self.assertEqual(by_id["ДМ.В3/5"].source_path[1], "Окружность и круг")
         self.assertEqual(by_id["ДМ.В3/5"].topic_code, "")
-        self.assertEqual(by_id["ДМ.В1/1"].grade_band_codes, ["GRADE_11"])
+        self.assertEqual(by_id["ДМ.В1/1"].grade_band_codes, ["GRADE_10_11"])
 
     def test_text_without_variants_is_rejected(self):
         with self.assertRaisesMessage(ValueError, "Не найдены «Упражнения» ДМ Мерзляка"):
@@ -563,6 +563,28 @@ class QaRulesTests(SimpleTestCase):
         out = flatten_lists(text)
         self.assertIn("4. Найдите значение x.", out)
         self.assertIn("5. Найдите значение y.", out)
+
+    def test_grade_band_codes_from_rubricator(self):
+        # 10 класс — полоса GRADE_10_11 справочника: GRADE_10 рвал перенос партии на сервер.
+        from .rubricator_data import GRADE_BANDS
+        known = {code for code, *_rest in GRADE_BANDS}
+        for grade, expected in ((5, "GRADE_5"), (9, "GRADE_9"), (10, "GRADE_10_11")):
+            task = self.parse("1. Найдите значение выражения.\n2. Дальше.", grade=grade)["ДМ.В1/1"]
+            self.assertEqual(task.grade_band_codes, [expected])
+            self.assertTrue(set(task.grade_band_codes) <= known)
+
+    def test_parser_imports_without_django(self):
+        # tools/textbook_parser.py разбирает TEX без настроек Django: парсер не
+        # должен тянуть модели (через rubricator.py) при импорте.
+        import os
+        import subprocess
+        import sys
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env = {k: v for k, v in os.environ.items() if k != "DJANGO_SETTINGS_MODULE"}
+        code = ("import sys; sys.path.insert(0, %r); "
+                "import problems.merzlyak_dm_parser" % root)
+        run = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stderr[-500:])
 
     def test_letter_m_in_formula_untouched(self):
         # «2 m» прозой — единица «м», а в формуле m — переменная одночлена.
