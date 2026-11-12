@@ -17,6 +17,13 @@ from worksheets.latex import subitem_label as _subitem_label
 register = template.Library()
 
 
+@register.simple_tag
+def content_choices():
+    """Группы и значения фасета «Содержание» для выбора в поиске задач."""
+    from problems.rubricator import content_choices as _content_choices
+    return _content_choices()
+
+
 @register.inclusion_tag('problems/_task_images.html')
 def task_images(task, group='statement'):
     """Картинки задачи: условие, ответы/решения или все."""

@@ -30,8 +30,10 @@ from django.db.models import Count, Exists, OuterRef, Q
 from accounts.permissions import (catalog_tasks, is_base_editor,
                                   shows_foreign_tasks)
 
-from .models import Source, Task, TaskSource, TaskTopic, Topic
-from .rubricator import GRADE_LEVEL_TO_CODE, parse_grade_choice
+from .content_data import CONTENT_FACET_CODE
+from .models import FacetValue, Source, Task, TaskSource, TaskTopic, Topic
+from .rubricator import (GRADE_LEVEL_TO_CODE, content_choices,
+                         parse_grade_choice)
 
 CACHE_ALIAS = 'catalog'
 VERSION_KEY = 'catalog-counts:version'
@@ -195,6 +197,48 @@ def catalog_facets(params, user):
     return grades, sources
 
 
+# --- содержание (фасет CONTENT) ----------------------------------------------
+
+def content_counts(user):
+    """``{id значения или группы: число задач}`` по фасету CONTENT: два
+    запроса по связке задача–значение; задача с двумя значениями одной
+    группы в группе считается один раз."""
+    def build():
+        through = Task.facet_values.through
+        links = through.objects.filter(
+            task__in=catalog_tasks(user).values('pk'),
+            facetvalue__facet_type__code=CONTENT_FACET_CODE)
+        counts = dict(links.values_list('facetvalue_id')
+                      .annotate(n=Count('task_id')).values_list('facetvalue_id', 'n'))
+        counts.update(links.values_list('facetvalue__parent_id')
+                      .annotate(n=Count('task_id', distinct=True))
+                      .values_list('facetvalue__parent_id', 'n'))
+        counts.pop(None, None)
+        return counts
+    return _cached(user, 'content', build)
+
+
+def catalog_content(params, user):
+    """Группы «Содержания» для панели каталога: число задач, текущий выбор
+    (``?content=КОД``); у группы с выбором раскрываются значения."""
+    current = (params.get('content') or '').strip()
+    counts = content_counts(user)
+    groups = []
+    for group in content_choices():
+        total = counts.get(group['id'], 0)
+        if not total:
+            continue
+        codes = {v['code'] for v in group['values']}
+        values = []
+        if current == group['code'] or current in codes:
+            values = [dict(v, count=counts.get(v['id'], 0),
+                           is_current=v['code'] == current)
+                      for v in group['values'] if counts.get(v['id'])]
+        groups.append(dict(group, count=total, values=values,
+                           is_current=current == group['code']))
+    return groups
+
+
 # --- сигналы -----------------------------------------------------------------
 
 def _on_task_data_changed(sender, using=None, **kwargs):
@@ -222,13 +266,13 @@ def connect_catalog_counts_signals():
 
     # Topic и Source — справочники: перенос темы в другой раздел меняет
     # поддеревья, а переименование источника — строки фасета (ревью #318)
-    for model in (Task, TaskTopic, TaskSource, Topic, Source):
+    for model in (Task, TaskTopic, TaskSource, Topic, Source, FacetValue):
         label = model._meta.label_lower
         post_save.connect(_on_task_data_changed, sender=model,
                           dispatch_uid=f'problems.invalidate_catalog_counts.save.{label}')
         post_delete.connect(_on_task_data_changed, sender=model,
                             dispatch_uid=f'problems.invalidate_catalog_counts.delete.{label}')
-    for name in ('grade_bands', 'topics', 'sources'):
+    for name in ('grade_bands', 'topics', 'sources', 'facet_values'):
         m2m_changed.connect(_on_task_data_changed,
                             sender=getattr(Task, name).through,
                             dispatch_uid=f'problems.invalidate_catalog_counts.{name}')

@@ -25,7 +25,7 @@ from accounts.permissions import (BASE_LOCKED_MESSAGE, NEURO_EDITORS_ONLY_MESSAG
                                   shows_foreign_tasks, visible_tasks)
 from assignments.checks import HELP as MASK_HELP
 
-from .catalog_counts import catalog_facets, section_counts
+from .catalog_counts import catalog_content, catalog_facets, section_counts
 from .forms import (TaskForm, TaskImageFormSet, TaskSourceFormSet,
                     TaskSubitemFormSet, TextbookBundleUploadForm,
                     TextbookDraftReviewForm, TextbookImageArchiveForm)
@@ -142,6 +142,7 @@ def task_list(request):
         'topics': _rubricator_blocks(topics_flat, request.user, active_topic),
         'grade_facets': grade_facets,
         'source_facets': source_facets,
+        'content_facets': catalog_content(request.GET, request.user),
         'topics_flat': topics_flat,
         'sources': Source.objects.all(),
         'params': request.GET,

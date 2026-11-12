@@ -189,6 +189,40 @@ def seed_content_facet(groups=None):
     return {'created': created, 'removed': removed + groups, 'kept': kept}
 
 
+def content_choices():
+    """Группы фасета CONTENT со значениями — для выбора «Содержание».
+
+    [{'id', 'code', 'name', 'values': [{'id', 'code', 'name'}]}] в порядке
+    словаря; один запрос.
+    """
+    groups, by_id = [], {}
+    rows = (FacetValue.objects.filter(facet_type__code=CONTENT_FACET_CODE)
+            .order_by('parent_id', 'order', 'name')
+            .values('id', 'code', 'name', 'parent_id', 'order'))
+    rows = list(rows)
+    for row in sorted((r for r in rows if r['parent_id'] is None),
+                      key=lambda r: (r['order'], r['name'])):
+        group = {'id': row['id'], 'code': row['code'], 'name': row['name'],
+                 'values': []}
+        groups.append(group)
+        by_id[row['id']] = group
+    for row in rows:
+        group = by_id.get(row['parent_id'])
+        if group is not None:
+            group['values'].append(
+                {'id': row['id'], 'code': row['code'], 'name': row['name']})
+    return groups
+
+
+def content_value_ids(codes):
+    """id значений CONTENT по кодам; код группы — все её значения."""
+    codes = [c for c in codes if c]
+    values = FacetValue.objects.filter(facet_type__code=CONTENT_FACET_CODE)
+    return list(values.filter(Q(code__in=codes, parent__isnull=False)
+                              | Q(parent__code__in=codes))
+                .values_list('pk', flat=True))
+
+
 def migrate_legacy_grades():
     """Переносит Task.grade_level и Worksheet.grade в GradeBand."""
     from worksheets.models import Worksheet
@@ -588,6 +622,11 @@ def filter_by_taxonomy(qs, params, *, topics_lookups):
     methods = parse_int_ids(getlist(params, 'method'))
     if methods and qs.model is Task:
         qs = qs.filter(facet_values__pk__in=methods).distinct()
+
+    content = [c for c in getlist(params, 'content') if c]
+    if content and qs.model is Task:
+        # Код группы раскрывается во все её значения; ИЛИ внутри фасета.
+        qs = qs.filter(facet_values__pk__in=content_value_ids(content)).distinct()
 
     exams = expand_exam_filter_codes(getlist(params, 'exam'))
     if exams and qs.model is Task:
