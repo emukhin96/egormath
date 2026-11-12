@@ -27,6 +27,7 @@ from workaudit.services import whole_copies
 from .forms import WorkForm, RunForm
 from .models import Work, Position, Candidate, Family, Run, Attempt, Answer, Photo, Asset, Point
 from . import services as svc
+from . import devices
 
 
 def enabled(view):
@@ -60,7 +61,7 @@ def teacher_run(request, pk):
 
 
 def own_attempt(request, pk, teacher=False):
-    qs = Attempt.objects.select_related('run', 'variant', 'root', 'parent').prefetch_related(
+    qs = Attempt.objects.select_related('run', 'variant', 'root', 'parent', 'device').prefetch_related(
         'variant__points__assets', 'answers__photos', 'answers__check_history')
     if teacher:
         qs = qs.filter(run__work__in=Work.visible_to(request.user))
@@ -547,7 +548,7 @@ def prepare_run(request, pk):
         previous = teacher_run(request, request.GET['resume'])
         if previous.work_id != work.pk or previous.parent_id != (parent.pk if parent else None) or previous.kind != kind:
             raise Http404
-        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'self_check', 'release_mode', 'release_flags', 'restrict_clipboard', 'swap_numbers', 'lock_on_leave')}
+        initial = {key: getattr(previous, key) for key in ('duration', 'deadline', 'max_variants', 'allow_photos', 'self_check', 'release_mode', 'release_flags', 'restrict_clipboard', 'swap_numbers', 'lock_on_leave', 'lock_device')}
         initial['students'] = list(previous.plan['students'])
     form = RunForm(request.POST or None, teacher=request.user, initial=initial)
     if request.method == 'POST' and form.is_valid():
@@ -740,7 +741,13 @@ def attempt_page(request, pk):
         from .timeline import attempt_timeline
         return attempt_timeline(request, attempt)
     accessible = teacher or bool(attempt.started_at)
-    if accessible and not teacher:
+    # Идущую работу открывают с одного устройства (devices.py): чужое при
+    # включённой блокировке получает страницу без заданий, под заглушкой
+    device_key, foreign = None, False
+    if devices.active(attempt):
+        device_key = devices.device_key(request) or uuid.uuid4()
+        foreign = devices.enter(attempt.pk, device_key, request.headers.get('User-Agent', ''))
+    if accessible and not teacher and not foreign:
         # Досверка только своей работы: общая сводка и экспорт ничего
         # не вычисляют. За открытие страницы повторяем максимум один ответ.
         svc.recheck_unavailable(attempt)
@@ -753,15 +760,19 @@ def attempt_page(request, pk):
         clock = {'remaining_label': f'{remaining // 60}:{remaining % 60:02}',
                  'elapsed_percent': max(0, min(100, round(100 - 100 * remaining / (attempt.run.duration * 60)))) if attempt.run.duration else 0,
                  'answered': sum(1 for row in rows if row['state'] != 'empty')}
-    return render(request, 'independentworks/attempt.html', {
+    response = render(request, 'independentworks/attempt.html', {
         'attempt': attempt, 'teacher_view': teacher, 'rows': rows, 'clock': clock,
         'editable': editable, 'locked': bool(attempt.locked_at) and not attempt.finished,
+        'foreign': foreign,
         'can_start': not attempt.started_at and not (attempt.run.deadline and timezone.now() >= attempt.run.deadline),
         'accessible': accessible, 'show_checks': teacher or 'checks' in attempt.disclosure,
         'tail_notes': [n['text'] for n in attempt.variant.notes if n['before'] > max((p.position for p in attempt.variant.points.all()), default=0)] if accessible else [],
         'result': svc.result(attempt) if teacher or 'checks' in attempt.disclosure else None,
         'grades': [('', 'По автосверке', '↺')] + Review.grade_options(), 'now': timezone.now().isoformat(),
         'cumulative': svc.cumulative(attempt, student_view=not teacher) if teacher or 'checks' in attempt.disclosure else None})
+    if device_key:
+        devices.remember(request, response, device_key)
+    return response
 
 
 @enabled
@@ -769,6 +780,8 @@ def attempt_lock(request, pk):
     """Заглушка «Вы ушли со страницы»: POST — ученик ушёл дольше порога,
     GET — опрос, пока страница закрыта (не разблокировал ли учитель)."""
     attempt = own_attempt(request, pk)
+    # Уход с чужого устройства работу не блокирует
+    devices.guard(request, attempt)
     if request.method == 'POST':
         attempt = svc.lock_on_leave(attempt.pk)
     else:
@@ -803,6 +816,7 @@ def start_attempt(request, pk):
 @require_POST
 def save(request, pk, point_id):
     attempt = own_attempt(request, pk)
+    devices.guard(request, attempt)
     point = get_object_or_404(Point, pk=point_id, variant=attempt.variant)
     try:
         version = int(request.POST.get('version', '-1'))
@@ -818,6 +832,7 @@ def save(request, pk, point_id):
 @require_POST
 def check_answer(request, pk, point_id):
     attempt = own_attempt(request, pk)
+    devices.guard(request, attempt)
     if not attempt.run.self_check:
         raise PermissionDenied('Самопроверка для этой работы выключена.')
     point = get_object_or_404(Point, pk=point_id, variant=attempt.variant)
@@ -854,6 +869,7 @@ def check_answer(request, pk, point_id):
 @require_POST
 def submit_attempt(request, pk):
     attempt = own_attempt(request, pk)
+    devices.guard(request, attempt)
     svc.submit(attempt.pk)
     return redirect('independentworks:attempt', pk=pk)
 
@@ -999,6 +1015,7 @@ def repeat(request, pk):
 @require_POST
 def upload_photo(request, pk, point_id):
     attempt = own_attempt(request, pk)
+    devices.guard(request, attempt)
     point = get_object_or_404(Point, pk=point_id, variant=attempt.variant)
     if not attempt.run.allow_photos:
         raise PermissionDenied
@@ -1032,6 +1049,7 @@ def delete_photo(request, pk):
     photo = get_object_or_404(Photo.objects.select_related('answer__attempt'), pk=pk, answer__attempt__student=request.user)
     with transaction.atomic():
         attempt = Attempt.objects.select_for_update().get(pk=photo.answer.attempt_id)
+        devices.guard(request, attempt)
         svc.editable(attempt)
         point_id = photo.answer.point_id
         photo.delete()
@@ -1045,6 +1063,8 @@ def asset_file(request, pk, asset_id):
     teacher = get_role(request.user) == 'teacher'
     attempt = own_attempt(request, pk, teacher=teacher)
     asset = get_object_or_404(Asset, pk=asset_id, point__variant=attempt.variant)
+    if not teacher:
+        devices.guard(request, attempt)
     if not teacher and (not attempt.started_at or ('statement' not in asset.audiences and not set(asset.audiences) & attempt.disclosure)):
         raise Http404
     return FileResponse(asset.file.open('rb'), filename=asset.name)
@@ -1053,7 +1073,10 @@ def asset_file(request, pk, asset_id):
 @enabled
 def photo_file(request, pk):
     photo = get_object_or_404(Photo.objects.select_related('answer__attempt__run'), pk=pk)
-    own_attempt(request, photo.answer.attempt_id, teacher=get_role(request.user) == 'teacher')
+    teacher = get_role(request.user) == 'teacher'
+    attempt = own_attempt(request, photo.answer.attempt_id, teacher=teacher)
+    if not teacher:
+        devices.guard(request, attempt)
     return FileResponse(photo.file.open('rb'), filename='solution.jpg')
 
 
@@ -1062,6 +1085,7 @@ def progress_context(run):
     numbers = sorted(set(p.position for a in attempts for p in a.variant.points.all()))
     people = []
     copied = whole_copies('attempt', attempts)
+    device_report = devices.report(attempts)
     variant_stats = {}
     for a in attempts:
         svc.finish_expired(a)
@@ -1077,7 +1101,7 @@ def progress_context(run):
                     status = 'ok' if row['answer'].credit == 1 else 'draft' if row['answer'].credit else 'wrong'
                 points.append({'detail_url': reverse('independentworks:point_detail', args=[a.pk, row['point'].pk]), 'label': row['point'].label, 'status': status, 'status_label': row['grade'] or ('На проверке' if row['pending'] else {'ok': 'Верно', 'wrong': 'Неверно'}.get(row['auto'], 'Ответ не введён')), 'mark': row['grade_symbol'], 'attempt_count': 0})
             cells.append({'item': {'pk': number}, 'owner': {'pk': number}, 'points': points, 'hidden': not points})
-        people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a), 'show_cumulative': bool(a.root_id or any(c.started_at for c in a.corrections.all())), 'copied_whole': copied.get(a.pk, 0)})
+        people.append({'attempt': a, 'assignment': a, 'review_url': reverse('independentworks:attempt', args=[a.pk]), 'cells': cells, 'result': svc.result(a), 'cumulative': svc.cumulative(a), 'show_cumulative': bool(a.root_id or any(c.started_at for c in a.corrections.all())), 'copied_whole': copied.get(a.pk, 0), 'device': device_report.get(a.pk)})
         variant_stat = variant_stats.setdefault(a.variant_id, {
             'number': a.variant.number, 'count': 0, 'started': 0,
             'by_number': {}, 'points': 0, 'done': 0})

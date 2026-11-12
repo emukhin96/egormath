@@ -9,6 +9,12 @@ LOCK_LABEL = 'Блокировать задания, если ученик уш�
 LOCK_HELP = ('Дольше 2 секунд на другой вкладке или в другом приложении — '
              'и задания закрываются, пока вы не разблокируете их на странице прогресса.')
 
+# Что такое «устройство» — в devices.py: браузер с его cookie.
+DEVICE_LABEL = 'Блокировать вход с другого устройства'
+DEVICE_HELP = ('Работу можно выполнять только там, где её начали: вход с другого устройства '
+               'или из другого браузера вы увидите на странице прогресса и разрешите кнопкой. '
+               'Выключено — ученик войдёт сам, а вы увидите это там же.')
+
 
 class WorkForm(forms.ModelForm):
     class Meta:
@@ -25,6 +31,7 @@ class RunForm(forms.Form):
     restrict_clipboard = forms.BooleanField(label=RESTRICT_LABEL, required=False)
     swap_numbers = forms.BooleanField(label=SWAP_LABEL, required=False, help_text=SWAP_HELP)
     lock_on_leave = forms.BooleanField(label=LOCK_LABEL, required=False, help_text=LOCK_HELP)
+    lock_device = forms.BooleanField(label=DEVICE_LABEL, required=False, help_text=DEVICE_HELP)
     allow_photos = forms.BooleanField(
         label='Принимать фотографии', required=False, initial=False)
     self_check = forms.BooleanField(

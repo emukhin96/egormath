@@ -105,6 +105,11 @@ class Run(models.Model):
     # заглушкой, пока учитель не разблокирует (Attempt.locked_at). Можно
     # включить и после выдачи.
     lock_on_leave = models.BooleanField(default=False)
+    # Идущую работу можно открыть только на одном устройстве; вход с другого
+    # ждёт, пока учитель переключит доступ (devices.py). Выключено — пускаем
+    # молча, но учитель видит вход в таблице прогресса. Можно менять и после
+    # выдачи.
+    lock_device = models.BooleanField(default=False)
     allow_photos = models.BooleanField(default=True)
     self_check = models.BooleanField(default=False)
     release_mode = models.CharField(max_length=12, default='manual')
@@ -169,6 +174,10 @@ class Attempt(models.Model):
     # Когда страницу закрыла заглушка «Вы ушли со страницы»; учитель
     # разблокирует разово — при следующем уходе блокировка повторится.
     locked_at = models.DateTimeField(null=True, blank=True)
+    # Устройство, на котором сейчас идёт работа (devices.py): первое, с
+    # которого открыли начатую работу, дальше — куда учитель переключил
+    # доступ; без блокировки (Run.lock_device) — последнее вошедшее.
+    device = models.ForeignKey('AttemptDevice', null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
     started_at = models.DateTimeField(null=True, blank=True)
     ends_at = models.DateTimeField(null=True, blank=True, db_index=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
@@ -253,3 +262,33 @@ class Photo(models.Model):
     answer = models.ForeignKey(Answer, on_delete=models.CASCADE, related_name='photos')
     file = models.FileField(upload_to='independent_photos/%Y/%m/')
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class AttemptDevice(models.Model):
+    """Устройство (браузер), с которого ученик открывал идущую работу: его
+    помечает cookie devices.COOKIE. Другой браузер или режим инкогнито на том
+    же компьютере — другое устройство."""
+    attempt = models.ForeignKey(Attempt, on_delete=models.CASCADE, related_name='devices')
+    key = models.UUIDField()
+    # «iPhone, Safari» — по User-Agent первого входа (devices.device_label)
+    label = models.CharField(max_length=80)
+    first_seen = models.DateTimeField(auto_now_add=True)
+    # Вход отсюда не пущен (Run.lock_device) и ждёт решения учителя
+    requested_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['attempt', 'key'], name='iw_attempt_device')]
+
+
+class DeviceEvent(models.Model):
+    """Лента учителя: вход с другого устройства, отказ во входе, переключение
+    доступа учителем. Первое устройство попытки событием не считается."""
+    ENTER, DENIED, SWITCH = 'enter', 'denied', 'switch'
+    device = models.ForeignKey(AttemptDevice, on_delete=models.CASCADE, related_name='events')
+    kind = models.CharField(max_length=8, choices=[
+        (ENTER, 'Вошёл с другого устройства'), (DENIED, 'Пытался войти с другого устройства'),
+        (SWITCH, 'Учитель переключил доступ')])
+    at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['at', 'pk']

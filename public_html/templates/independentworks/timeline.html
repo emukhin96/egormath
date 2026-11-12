@@ -22,6 +22,8 @@
 </div>
 {% if locked %}<form id="tl-unlock" method="post" action="{% url 'independentworks:unlock' attempt.pk %}" hidden>{% csrf_token %}<input type="hidden" name="back" value="attempt"></form>{% endif %}
 {% if attempt.finished %}<form id="tl-repeat" method="post" action="{% url 'independentworks:repeat' attempt.pk %}" hidden>{% csrf_token %}</form>{% endif %}
+{# Вход с другого устройства ждёт решения (devices.py): кнопки — в строке предупреждения, устройств может быть несколько #}
+{% for device in device_requests %}<form class="msg msg-warning iw-device-note" method="post" action="{% url 'independentworks:switch_device' attempt.pk device.pk %}">{% csrf_token %}<input type="hidden" name="back" value="attempt"><span>Пытается войти с другого устройства: {{ device.label }}, в {{ device.requested_at|date:'H:i' }}.{% if attempt.device %} Сейчас работа открыта на: {{ attempt.device.label }}.{% endif %}</span><button class="btn btn-small btn-secondary" title="Работа продолжится на этом устройстве, на прежнем закроется">Переключить доступ</button><button class="btn btn-small btn-secondary" formaction="{% url 'independentworks:dismiss_device' attempt.pk device.pk %}">Не пускать</button></form>{% endfor %}
 {% if locked %}<p class="msg msg-warning">Задания заблокированы. Ученик ушёл со страницы в {{ attempt.locked_at|date:'H:i' }}.</p>{% endif %}
 
 {% if track %}

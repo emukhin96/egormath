@@ -34,6 +34,12 @@
   let pending = false, busy = false, polling = null, watch = null;
 
   function away() { return document.hidden || blurred; }
+  // Работа закрыта здесь заглушкой «открыта на другом устройстве»
+  // (iw_device.js): уходы с этой страницы работу не блокируют
+  function foreign() {
+    const stub = document.querySelector('[data-iw-device]');
+    return !!stub && !stub.hidden;
+  }
   function enabled() { return lock.dataset.enabled === '1'; }
 
   function show(locked) {
@@ -68,13 +74,14 @@
     finally { busy = false; }
   }
   function lockNow() {
+    if (foreign()) return;
     // Настройка включена — заглушка сразу, не дожидаясь ответа сервера
     if (enabled()) show(true);
     pending = true;
     report();
   }
   async function poll() {
-    if (document.hidden || busy) return;
+    if (document.hidden || busy || foreign()) return;
     if (pending) return report();
     busy = true;
     try {

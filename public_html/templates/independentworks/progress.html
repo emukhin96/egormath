@@ -21,7 +21,7 @@
 </div>
 <p class="helptext iw-live-status" data-live-status role="status">Обновляется каждые 5 секунд</p>
 <div data-progress-table data-progress-url="{% url 'independentworks:progress' run.pk %}" data-live-file="{% live_file 'run' run.pk %}">{% include 'independentworks/_progress.html' %}</div>
-{# «Разблокировать» в таблице — кнопки form="iw-unlock" с formaction: токен CSRF вне опрашиваемого фрагмента, иначе ETag менялся бы каждый раз #}
+{# «Разблокировать» и «Переключить доступ» в таблице — кнопки form="iw-unlock" с formaction: токен CSRF вне опрашиваемого фрагмента, иначе ETag менялся бы каждый раз #}
 <form id="iw-unlock" method="post" hidden>{% csrf_token %}</form>
 
 <dialog class="settings-drawer" id="run-settings" aria-labelledby="run-settings-title"{% if recipient_error %} data-open-on-load{% endif %}>
@@ -88,6 +88,14 @@
       <h3 id="sd-leave">Уход со страницы</h3>
       <form method="post" action="{% url 'independentworks:lock_settings' run.pk %}" class="sd-row">{% csrf_token %}
         <label class="ws-toggle"><input type="checkbox" name="lock_on_leave"{% if run.lock_on_leave %} checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Блокировать задания, если ученик ушёл со страницы<span class="helptext">Дольше 2 секунд на другой вкладке или в другом приложении — и ученик видит заглушку «Вы ушли со страницы». Разблокировать — кнопкой у ученика в таблице, каждый раз заново. Таймер работы не останавливается. Включённая настройка сразу действует и в начатых работах, при выключении заглушки снимаются у всех.</span></span></label>
+        <button class="btn btn-secondary btn-small">Сохранить</button>
+      </form>
+    </section>
+
+    <section class="sd-section" aria-labelledby="sd-device">
+      <h3 id="sd-device">Другое устройство</h3>
+      <form method="post" action="{% url 'independentworks:device_settings' run.pk %}" class="sd-row">{% csrf_token %}
+        <label class="ws-toggle"><input type="checkbox" name="lock_device"{% if run.lock_device %} checked{% endif %}><span class="ws-toggle-slider"></span><span class="ws-toggle-text">Блокировать вход с другого устройства<span class="helptext">С другого устройства или из другого браузера ученик увидит «Работа уже открыта на другом устройстве», а вы — попытку входа у его имени в таблице. «Переключить доступ» пускает его туда и закрывает работу на прежнем устройстве. Выключено — ученик войдёт сам, вход будет виден у его имени и в хронологии работы. Действует сразу и в начатых работах.</span></span></label>
         <button class="btn btn-secondary btn-small">Сохранить</button>
       </form>
     </section>

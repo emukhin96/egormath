@@ -1,0 +1,8 @@
+{% comment %}
+Строка ученика в таблице прогресса: вход с другого устройства (devices.py).
+Запрос при включённой блокировке — с кнопками «Переключить доступ» и «×»
+(не пускать); иначе — пометка о последнем событии, как «копировал условие
+целиком». Кнопки — form="iw-unlock" с formaction: токен CSRF вне
+опрашиваемого фрагмента. Без «·».
+{% endcomment %}
+{% with info=person.device %}{% if info %}{% for device in info.pending %}<div class="iw-device-row"><span class="badge badge-locked">Вход с другого устройства</span><span class="iw-device-what">{{ device.label }}, {{ device.requested_at|date:'H:i' }}</span><button class="btn btn-small btn-secondary" form="iw-unlock" formaction="{% url 'independentworks:switch_device' person.attempt.pk device.pk %}" title="Работа продолжится на этом устройстве, на прежнем закроется">Переключить доступ</button><button class="icon-btn" form="iw-unlock" formaction="{% url 'independentworks:dismiss_device' person.attempt.pk device.pk %}" aria-label="Не пускать: {{ device.label }}" title="Не пускать">×</button></div>{% empty %}{% if info.last %}<div class="audit-flag" title="Подробности — в хронологии работы ученика">{% if info.last.kind == 'enter' %}вошёл с другого устройства{% elif info.last.kind == 'denied' %}пытался войти с другого устройства{% else %}доступ переключён{% endif %}: {{ info.last.device.label }}, {{ info.last.at|date:'H:i' }}{% if info.count > 1 %} ×{{ info.count }}{% endif %}</div>{% endif %}{% endfor %}{% endif %}{% endwith %}
