@@ -56,6 +56,15 @@ echo "==> LaTeX packages and fonts → latex-api"
 # До перезапуска web: новый код рассчитывает на свежие egor*.sty на сервере.
 "$APP_DIR/deploy/vps/latex-files.sh"
 
+# Пересоздание контейнера обнуляет его лог доступа — недельная сводка за
+# период до деплоя иначе пропадает (план аудита, раздел 10, п. 2). Шаг
+# нефатальный: web может быть не запущен (первый деплой).
+echo "==> Access log report before restart → $DATA_DIR/logs/predeploy-report.log"
+if ! { echo "### $(date -u +%FT%TZ) before deploy of $(git rev-parse --short HEAD)";
+       "$APP_DIR/deploy/vps/log-report.sh" 168h; } >> "$DATA_DIR/logs/predeploy-report.log" 2>&1; then
+  echo "!! сводка лога не снята (web не запущен?) — продолжаем" >&2
+fi
+
 echo "==> Starting services"
 $COMPOSE up -d --remove-orphans
 
@@ -67,6 +76,15 @@ $COMPOSE up -d --remove-orphans
 echo "==> clear_catalog_cache"
 if ! $COMPOSE exec -T egormath-web python manage.py clear_catalog_cache; then
   echo "!! кэш каталога не сброшен: deploy/vps/manage.sh clear_catalog_cache" >&2
+fi
+
+# Воркеры нового контейнера прогрели справочники при старте
+# (post_worker_init), но из кэша старого кода — сброс выше стёр и это.
+# Собираем заново, пока сайт уже отвечает: первый посетитель после
+# выкладки получает тёплый рубрикатор и дерево подборок (ревью #345).
+echo "==> warm_caches"
+if ! $COMPOSE exec -T egormath-web python manage.py warm_caches; then
+  echo "!! кэши не прогреты: deploy/vps/manage.sh warm_caches" >&2
 fi
 
 echo "==> Site in shared Caddy"

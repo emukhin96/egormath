@@ -173,6 +173,19 @@ CACHES = {
         'TIMEOUT': 6 * 3600,
         'OPTIONS': {'MAX_ENTRIES': 500},
     },
+    # Значения числового вычислителя масок (assignments/checks/sets.py,
+    # numeric_value): чистая функция текста, разбор Earley стоит 50–70 мс,
+    # а lru_cache живёт только в процессе и остывает при каждом перезапуске
+    # воркера. Ключ включает хэш исходников вычислителя — при его правке
+    # старые значения не читаются. Не истекает; чистится только руками.
+    # Записей десятки тысяч, поэтому бэкенд с редкой чисткой: стандартный
+    # перечисляет весь каталог при каждой записи (core/cache_backends.py).
+    'numeric': {
+        'BACKEND': 'core.cache_backends.SparseCullFileBasedCache',
+        'LOCATION': SITE_ROOT / '.cache' / 'numeric',
+        'TIMEOUT': None,
+        'OPTIONS': {'MAX_ENTRIES': 50000, 'CULL_FREQUENCY': 10, 'CULL_EVERY': 500},
+    },
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -217,6 +230,7 @@ if len(sys.argv) > 1 and sys.argv[1] == 'test':
     # теста. Каждому прогону — свой каталог вне рабочей копии.
     CACHES['taxonomy']['LOCATION'] = tempfile.mkdtemp(prefix='egormath-taxonomy-')
     CACHES['catalog']['LOCATION'] = tempfile.mkdtemp(prefix='egormath-catalog-')
+    CACHES['numeric']['LOCATION'] = tempfile.mkdtemp(prefix='egormath-numeric-')
 
 # Тесты дают вычислителю формул запас на загруженной машине; продовые
 # лимиты не меняются (core/runner.py).
