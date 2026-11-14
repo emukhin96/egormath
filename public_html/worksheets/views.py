@@ -440,8 +440,11 @@ def worksheet_detail(request, pk):
         'collection': collection,
         'items': items,
         'rows': rows,
-        'answers_url': ('' if inline_answers
-                        else reverse('worksheet_answers', args=[worksheet.pk])),
+        # Адрес рамок — всегда: число задач меняется без перезагрузки, и свежая
+        # строка (worksheet_controls.refresh, problem_editor.updateWorksheet)
+        # сама несёт data-answers-pending, если сервер её рамку не вывел
+        'answers_url': reverse('worksheet_answers', args=[worksheet.pk]),
+        'answers_pending': not inline_answers,
         'found_tasks': found_tasks,
         'search_active': search_active,
         'params': request.GET,

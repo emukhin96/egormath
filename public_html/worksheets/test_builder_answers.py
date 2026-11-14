@@ -64,11 +64,15 @@ class BuilderAnswersTests(TestCase):
         self.assertEqual(response.status_code, 200)
         return response.content.decode()
 
-    def test_long_worksheet_html_has_no_answers_but_url(self):
+    def test_long_worksheet_html_has_no_answers_but_pending_rows(self):
         html = self.page()
         self.assertNotIn('class="ws-answers"', html)
         self.assertNotIn('<strong>Ответ:</strong>', html)
         self.assertIn(f'data-answers-url="{self.url}"', html)
+        # Пометка «рамки нет в HTML» — на каждой строке задачи, не на рубрике
+        self.assertEqual(html.count(' data-answers-pending'), len(self.items))
+        rubric = next(item for item in self.worksheet.ordered_items() if item.is_rubric)
+        self.assertNotIn('data-answers-pending', row_html(html, rubric))
         # Флаги строк не зависят от способа показа ответов
         self.assertIn('data-has-answer="1"', row_html(html, self.items[0]))
         self.assertIn('data-no-answer="1"', row_html(html, self.blank_item))
@@ -76,13 +80,37 @@ class BuilderAnswersTests(TestCase):
     def test_short_worksheet_keeps_inline_answers(self):
         short = make_worksheet(self.teacher, 'Короткий', n_tasks=3)
         html = self.page(short.pk)
-        self.assertNotIn('data-answers-url', html)
+        # Адрес есть всегда (листок может стать длинным без перезагрузки), пометок нет
+        self.assertIn(f'data-answers-url="{reverse("worksheet_answers", args=[short.pk])}"', html)
+        self.assertNotIn('data-answers-pending', html)
         self.assertEqual(html.count('<div class="ws-answers" hidden>'), 3)
         # Ровно порог — ещё в HTML
         edge = make_worksheet(self.teacher, 'На пороге', n_tasks=ANSWERS_INLINE_MAX)
         html = self.page(edge.pk)
-        self.assertNotIn('data-answers-url', html)
+        self.assertNotIn('data-answers-pending', html)
         self.assertEqual(html.count('<div class="ws-answers" hidden>'), ANSWERS_INLINE_MAX)
+
+    def test_crossing_threshold_switches_row_markup(self):
+        """Листок переходит порог без перезагрузки страницы: скрипт берёт свежие
+        строки с сервера, и каждая несёт либо рамку, либо пометку — по текущему
+        числу задач (ревью #347)."""
+        edge = make_worksheet(self.teacher, 'На пороге', n_tasks=ANSWERS_INLINE_MAX)
+        first = edge.ordered_items()[0]
+        row = row_html(self.page(edge.pk), first)
+        self.assertIn('<div class="ws-answers" hidden>', row)
+        self.assertNotIn('data-answers-pending', row)
+        extra = Task.objects.create(text_latex='Ещё $1$', answer_latex='1', created_by=self.teacher)
+        added = WorksheetItem.objects.create(worksheet=edge, task=extra, order=5000)
+        html = self.page(edge.pk)
+        for item in (first, added):
+            row = row_html(html, item)
+            self.assertNotIn('ws-answers', row)
+            self.assertIn(' data-answers-pending', row)
+        # Обратно: удалили задачу — рамки снова в HTML, пометок нет
+        added.delete()
+        row = row_html(self.page(edge.pk), first)
+        self.assertIn('<div class="ws-answers" hidden>', row)
+        self.assertNotIn('data-answers-pending', row)
 
     def test_endpoint_returns_same_markup_as_inline(self):
         response = self.client.get(self.url)
@@ -96,7 +124,7 @@ class BuilderAnswersTests(TestCase):
         # Тот же листок с порогом выше — рамки в HTML; разметка совпадает построчно
         with mock.patch('worksheets.builder_rows.ANSWERS_INLINE_MAX', 10_000):
             html = self.page()
-        self.assertNotIn('data-answers-url', html)
+        self.assertNotIn('data-answers-pending', html)
         for item in self.items:
             inline = answers_block(row_html(html, item))
             if item.pk == self.blank_item.pk:
@@ -165,7 +193,10 @@ class AnswersToggleScriptTests(SimpleTestCase):
         src = (STATIC_JS / 'answers-toggle.js').read_text(encoding='utf-8')
         self.assertIn("list.getAttribute('data-answers-url')", src)
         self.assertIn('fetch(url', src)
-        self.assertIn("data-answers-loaded", src)
+        # Решение по строке: пометка сервера, снимается после вставки; вторая рамка не вставляется
+        self.assertIn("querySelectorAll('.ws-item[data-answers-pending]')", src)
+        self.assertIn("row.removeAttribute('data-answers-pending')", src)
+        self.assertIn("row.querySelector('.ws-answers')) return;", src)
         # Рамка встаёт на своё место — перед блоком масок
         self.assertIn("insertAdjacentHTML('beforebegin', html)", src)
         # Дорендер формул — ленивым API math.js
@@ -175,5 +206,6 @@ class AnswersToggleScriptTests(SimpleTestCase):
     def test_template_marks_list_and_skips_empty_rows(self):
         src = (TEMPLATES / 'worksheets' / 'worksheet_detail.html').read_text(encoding='utf-8')
         self.assertIn('data-answers-url="{{ answers_url }}"', src)
+        self.assertIn('{% if answers_pending %} data-answers-pending{% endif %}', src)
         self.assertIn("{% if row.material %}{% include 'problems/_task_answers.html'", src)
         self.assertIn("answers-toggle.js' %}?v=5", src)

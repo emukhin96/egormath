@@ -117,12 +117,13 @@
   числа в строках (id, звёзды) выводятся как есть, без локализации каждого.{% endcomment %}
   {% url 'cart_add' as cart_add_url %}{% url 'cart_remove' as cart_remove_url %}
   {% localize off %}{% with cart_next=request.get_full_path %}
-  {# data-answers-url — у длинного листка рамки ответов не в HTML, их подгружает answers-toggle.js (builder_rows.ANSWERS_INLINE_MAX) #}
-  <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}"{% if answers_url %} data-answers-url="{{ answers_url }}"{% endif %}>
+  {% comment %}data-answers-url — адрес рамок ответов; у длинного листка (builder_rows.ANSWERS_INLINE_MAX) их в HTML нет,
+  строка задачи помечена data-answers-pending, и answers-toggle.js подгружает их по тумблеру{% endcomment %}
+  <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}" data-answers-url="{{ answers_url }}">
     {% for row in rows %}
     {% with item=row.item urls=row.urls %}
     {# data-vis-url и data-hidden-* — данные для общего диалога видимости (#ws-visibility-dialog), его заполняет worksheet_controls.js #}
-    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" id="ws-item-{{ row.pk }}" data-id="{{ row.pk }}"{% if item.task_id %} data-task-id="{{ row.task_pk }}" data-has-answer="{% if row.has_answer %}1{% endif %}" data-no-answer="{% if row.no_answer %}1{% endif %}" data-task-png-root data-vis-url="{{ urls.visibility }}" data-hidden-links="{{ row.hidden_links|join:',' }}" data-hidden-groups="{{ row.hidden_groups|join:',' }}" data-hidden-assignments="{{ row.hidden_assignments|join:',' }}"{% endif %}>
+    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" id="ws-item-{{ row.pk }}" data-id="{{ row.pk }}"{% if item.task_id %} data-task-id="{{ row.task_pk }}" data-has-answer="{% if row.has_answer %}1{% endif %}" data-no-answer="{% if row.no_answer %}1{% endif %}" data-task-png-root{% if answers_pending %} data-answers-pending{% endif %} data-vis-url="{{ urls.visibility }}" data-hidden-links="{{ row.hidden_links|join:',' }}" data-hidden-groups="{{ row.hidden_groups|join:',' }}" data-hidden-assignments="{{ row.hidden_assignments|join:',' }}"{% endif %}>
       <div class="ws-body">
         {% if not row.block %}<span class="drag-handle" title="Перетащите, чтобы изменить порядок">⠿</span>{% endif %}
 

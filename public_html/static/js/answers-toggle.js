@@ -4,13 +4,15 @@
    Ключ localStorage — data-answers-key (у подборки свой, чтобы не
    подхватывать состояние конструктора).
 
-   Длинный листок (#ws-items[data-answers-url], порог —
-   worksheets/builder_rows.py ANSWERS_INLINE_MAX) приходит без рамок ответов:
-   при включённом тумблере они запрашиваются одним fetch
-   (JSON {items: {id строки: HTML рамки}}) и вставляются в строки перед
-   блоком масок; строки, появившиеся позже (worksheet:updated после
-   добавления задачи), дозапрашиваются с ?items=. Формулы дорисовывает
-   EgorMath (math.js) — по мере прокрутки на большой странице. */
+   Длинный листок (порог — worksheets/builder_rows.py ANSWERS_INLINE_MAX)
+   приходит без рамок ответов: сервер помечает такие строки
+   data-answers-pending, и при включённом тумблере они запрашиваются одним
+   fetch по #ws-items[data-answers-url] (JSON {items: {id строки: HTML рамки}})
+   и вставляются перед блоком масок. Решение — по строке, а не по странице:
+   число задач меняется без перезагрузки (refresh в worksheet_controls.js,
+   updateWorksheet в problem_editor.js), и свежая строка несёт либо рамку в
+   HTML, либо пометку — тогда её дозапрашивают с ?items=. Формулы
+   дорисовывает EgorMath (math.js) — по мере прокрутки на большой странице. */
 (function () {
   'use strict';
 
@@ -34,15 +36,15 @@
       });
     }
 
-    // Строки задач, в которые рамки ответов ещё не вставлялись
+    // Строки, рамки которых сервер в HTML не вывел (пометка снимается после вставки)
     function pendingRows() {
-      return Array.prototype.slice.call(
-        list.querySelectorAll('.ws-item[data-task-id]:not([data-answers-loaded])'));
+      return Array.prototype.slice.call(list.querySelectorAll('.ws-item[data-answers-pending]'));
     }
 
     function insertAnswers(row, html) {
-      row.setAttribute('data-answers-loaded', '1');
-      if (!html) return;
+      row.removeAttribute('data-answers-pending');
+      // Рамка уже в строке (свежая разметка короткого листка) — второй не нужно
+      if (!html || row.querySelector('.ws-answers')) return;
       // Место рамки — как в HTML короткого листка: после условия и рисунков,
       // перед блоком масок
       var anchor = row.querySelector('[data-worksheet-mask]');
