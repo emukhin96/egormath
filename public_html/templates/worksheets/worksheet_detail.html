@@ -117,11 +117,13 @@
   числа в строках (id, звёзды) выводятся как есть, без локализации каждого.{% endcomment %}
   {% url 'cart_add' as cart_add_url %}{% url 'cart_remove' as cart_remove_url %}
   {% localize off %}{% with cart_next=request.get_full_path %}
-  <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}">
+  {% comment %}data-answers-url — адрес рамок ответов; у длинного листка (builder_rows.ANSWERS_INLINE_MAX) их в HTML нет,
+  строка задачи помечена data-answers-pending, и answers-toggle.js подгружает их по тумблеру{% endcomment %}
+  <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}" data-answers-url="{{ answers_url }}">
     {% for row in rows %}
     {% with item=row.item urls=row.urls %}
     {# data-vis-url и data-hidden-* — данные для общего диалога видимости (#ws-visibility-dialog), его заполняет worksheet_controls.js #}
-    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" id="ws-item-{{ row.pk }}" data-id="{{ row.pk }}"{% if item.task_id %} data-task-id="{{ row.task_pk }}" data-has-answer="{% if row.has_answer %}1{% endif %}" data-no-answer="{% if row.no_answer %}1{% endif %}" data-task-png-root data-vis-url="{{ urls.visibility }}" data-hidden-links="{{ row.hidden_links|join:',' }}" data-hidden-groups="{{ row.hidden_groups|join:',' }}" data-hidden-assignments="{{ row.hidden_assignments|join:',' }}"{% endif %}>
+    <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}" id="ws-item-{{ row.pk }}" data-id="{{ row.pk }}"{% if item.task_id %} data-task-id="{{ row.task_pk }}" data-has-answer="{% if row.has_answer %}1{% endif %}" data-no-answer="{% if row.no_answer %}1{% endif %}" data-task-png-root{% if answers_pending %} data-answers-pending{% endif %} data-vis-url="{{ urls.visibility }}" data-hidden-links="{{ row.hidden_links|join:',' }}" data-hidden-groups="{{ row.hidden_groups|join:',' }}" data-hidden-assignments="{{ row.hidden_assignments|join:',' }}"{% endif %}>
       <div class="ws-body">
         {% if not row.block %}<span class="drag-handle" title="Перетащите, чтобы изменить порядок">⠿</span>{% endif %}
 
@@ -155,7 +157,7 @@
 {% endfor %}</ol>
           {% endif %}
           {% if row.statement_images %}{% include 'problems/_task_images.html' with images=row.statement_images %}{% endif %}
-          {% include 'problems/_task_answers.html' with task=item.task material=row.material material_ready=True hide_answers=True %}
+          {% if row.material %}{% include 'problems/_task_answers.html' with task=item.task material=row.material material_ready=True hide_answers=True %}{% endif %}
           <div data-worksheet-mask data-task-id="{{ row.task_pk }}" data-manage-url="{{ urls.manage }}" data-worksheet="{{ worksheet.pk }}" data-item="{{ row.pk }}"{% if row.base_locked %} data-base-locked="1"{% endif %} hidden><div data-mask-tools class="problem-mask-tools"></div></div>
         </div>
 
@@ -516,7 +518,7 @@ worksheet_item_visibility.{% endcomment %}
 {% include 'problems/_mask_dialogs.html' %}
 <script defer src="{% static 'js/problem_editor.js' %}?v=8"></script>
 {% include 'problems/_mask_scripts.html' %}
-<script defer src="{% static 'js/answers-toggle.js' %}?v=4"></script>
+<script defer src="{% static 'js/answers-toggle.js' %}?v=5"></script>
 <script defer src="{% static 'js/builder.js' %}?v=10"></script>
 <script defer src="{% static 'js/worksheet_controls.js' %}?v=8"></script>
 <script defer src="{% static 'js/analogs.js' %}?v=1"></script>

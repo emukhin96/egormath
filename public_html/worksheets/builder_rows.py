@@ -7,11 +7,21 @@
 Теперь ``rows`` — словари с готовыми адресами, флагами и HTML условия;
 шаблон только подставляет их.
 """
+from django.template.loader import render_to_string
 from django.urls import reverse
 
 from accounts.permissions import can_edit_task
 from problems.answer_material import answer_material
 from problems.templatetags.task_extras import plural_ru, subitem_tail, web_text
+
+# Рамки «Ответ / Решение» входят в HTML конструктора только у листка не длиннее
+# ANSWERS_INLINE_MAX задач (третий круг быстродействия, 11.2026). У длинного
+# листка их отдаёт ``worksheet_answers`` (``/worksheets/<pk>/answers/``), когда
+# учитель включает тумблер «ответы» (``answers-toggle.js``): на книжном листке
+# из 357 задач рамки весили 656 КБ из 2,9 МБ HTML и половину сжатого ответа
+# (166 → 86 КБ gzip), а смотрят их редко. Короткий листок — как раньше, всё в
+# HTML: без лишнего запроса и без задержки, когда тумблер уже включён.
+ANSWERS_INLINE_MAX = 30
 
 # Адреса строк и задач отличаются только одним числом в пути: ``reverse``
 # на каждую из 4 771 ссылок страницы стоил 80 мс, поэтому адрес каждого
@@ -60,13 +70,44 @@ class RowUrls:
                 for key, url in self.task.items()}
 
 
-def decorate_builder_rows(rows, worksheet, user, cart_task_ids):
+def answers_inline(items):
+    """Рамки ответов — прямо в HTML конструктора (короткий листок) или по
+    запросу ``worksheet_answers`` (длиннее ``ANSWERS_INLINE_MAX`` задач)."""
+    return sum(1 for item in items if item.task_id) <= ANSWERS_INLINE_MAX
+
+
+def render_answers(items, request=None, only=None):
+    """HTML рамок «Ответ / Решение» строк листка: ``{id строки: разметка}``.
+
+    Тот же шаблон и те же данные (``answer_material`` по всем подпунктам
+    задачи, ``hide_answers``), что у рамки в HTML конструктора короткого
+    листка, — вид не расходится. Строки без ответа и решения пропускаются;
+    ``only`` — множество id строк, если нужны не все.
+    """
+    answers = {}
+    for item in items:
+        if not item.task_id or (only is not None and item.pk not in only):
+            continue
+        material = answer_material(item.task)
+        if not material:
+            continue
+        # Без пустых строк от {% load %} и комментария шаблона в начале
+        answers[item.pk] = render_to_string('problems/_task_answers.html', {
+            'task': item.task, 'material': material,
+            'material_ready': True, 'hide_answers': True,
+        }, request=request).strip()
+    return answers
+
+
+def decorate_builder_rows(rows, worksheet, user, cart_task_ids, with_answers=True):
     """Дополняет ``rows`` конструктора (``item``, ``number``, ``selected_ids``,
     ``statement``, ``hidden_*``) готовыми значениями для шаблона.
 
     ``cart_task_ids`` — задачи в корзине учителя (``worksheets.cart.cart_ids``).
-    Ответы (``material``) и аналоги (``task.analog_count``) должны быть уже
-    навешаны: ``attach_analog_counts`` до вызова.
+    ``with_answers=False`` — рамки ответов (``material``) не собираются: их
+    подгрузит ``worksheet_answers`` (см. ``ANSWERS_INLINE_MAX``). Аналоги
+    (``task.analog_count``) должны быть уже навешаны: ``attach_analog_counts``
+    до вызова.
     """
     urls = RowUrls(worksheet.pk)
     for row in rows:
@@ -87,7 +128,7 @@ def decorate_builder_rows(rows, worksheet, user, cart_task_ids):
             'tail': subitem_tail(sub.text_latex, index == len(subitems) - 1),
             'checked': selected is None or sub.pk in selected,
         } for index, sub in enumerate(subitems)]
-        row['material'] = answer_material(task, subitems)
+        row['material'] = answer_material(task, subitems) if with_answers else None
         row['has_answer'] = bool(task.effective_answer_latex
                                  or task.effective_solution_latex
                                  or task.has_subitem_answers)

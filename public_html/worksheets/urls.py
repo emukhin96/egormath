@@ -51,6 +51,7 @@ urlpatterns = [
          name='worksheet_corpus_unpush'),
     path('<int:pk>/', views.worksheet_detail, name='worksheet_detail'),
     path('<int:pk>/edit/', views.worksheet_edit, name='worksheet_edit'),
+    path('<int:pk>/answers/', views.worksheet_answers, name='worksheet_answers'),
     path('<int:pk>/copy/', views.worksheet_copy, name='worksheet_copy'),
     path('<int:pk>/to-collections/', views.worksheet_to_collections,
          name='worksheet_to_collections'),
