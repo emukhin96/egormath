@@ -56,6 +56,15 @@ echo "==> LaTeX packages and fonts → latex-api"
 # До перезапуска web: новый код рассчитывает на свежие egor*.sty на сервере.
 "$APP_DIR/deploy/vps/latex-files.sh"
 
+# Пересоздание контейнера обнуляет его лог доступа — недельная сводка за
+# период до деплоя иначе пропадает (план аудита, раздел 10, п. 2). Шаг
+# нефатальный: web может быть не запущен (первый деплой).
+echo "==> Access log report before restart → $DATA_DIR/logs/predeploy-report.log"
+if ! { echo "### $(date -u +%FT%TZ) before deploy of $(git rev-parse --short HEAD)";
+       "$APP_DIR/deploy/vps/log-report.sh" 168h; } >> "$DATA_DIR/logs/predeploy-report.log" 2>&1; then
+  echo "!! сводка лога не снята (web не запущен?) — продолжаем" >&2
+fi
+
 echo "==> Starting services"
 $COMPOSE up -d --remove-orphans
 

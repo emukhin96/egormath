@@ -35,15 +35,71 @@ def numeric_value(text):
     Понимает школьные дроби и любое числовое LaTeX-выражение без переменных.
 
     Результат зависит только от текста и неизменяем (Fraction, float, None),
-    поэтому запоминается на процесс: маски пунктов самостоятельных и
-    эталоны чисел разбираются при каждом показе кабинета, каталога
-    самостоятельных и страницы попытки, а разбор Earley формульного
-    эталона стоит десятки миллисекунд (аудит быстродействия 06.11.2026)."""
+    поэтому запоминается: в процессе (lru_cache) и в файловом кэше
+    ``numeric``, общем для воркеров и переживающем их перезапуск. Маски
+    пунктов самостоятельных и эталоны чисел разбираются при каждом показе
+    кабинета, каталога самостоятельных и страницы попытки, а разбор Earley
+    формульного эталона стоит десятки миллисекунд (аудит быстродействия
+    06.11.2026; холодный воркер — раздел 10 плана)."""
     return _numeric_value(text or '')
+
+
+# Ключ файлового кэша включает хэш исходников вычислителя: правка
+# грамматики или нормализации не должна отдавать старые значения.
+_NUMERIC_CACHE_ALIAS = 'numeric'
+_NUMERIC_MISSING = '__none__'
+_numeric_code_version = None
+
+
+def _code_version():
+    global _numeric_code_version
+    if _numeric_code_version is None:
+        import hashlib
+        from pathlib import Path
+        here = Path(__file__).resolve().parent
+        digest = hashlib.sha1()
+        for name in ('sets.py', 'expressions.py', '../check_answer.py'):
+            digest.update((here / name).read_bytes())
+        _numeric_code_version = digest.hexdigest()[:12]
+    return _numeric_code_version
+
+
+def _file_cache():
+    """Кэш ``numeric`` или None: вычислитель formula_worker живёт без
+    настроек Django, а в тестах внутри транзакции кэш не мешает."""
+    try:
+        from django.conf import settings
+        if not settings.configured or _NUMERIC_CACHE_ALIAS not in settings.CACHES:
+            return None
+        from django.core.cache import caches
+        return caches[_NUMERIC_CACHE_ALIAS]
+    except Exception:  # noqa: BLE001 — без Django или без кэша считаем заново
+        return None
 
 
 @lru_cache(maxsize=4096)
 def _numeric_value(text):
+    cache = _file_cache()
+    key = None
+    if cache is not None:
+        import hashlib
+        key = f'numval:{_code_version()}:{hashlib.sha1(text.encode()).hexdigest()}'
+        try:
+            stored = cache.get(key)
+        except OSError:
+            stored = None
+        if stored is not None:
+            return None if stored == _NUMERIC_MISSING else stored
+    value = _numeric_value_uncached(text)
+    if key is not None:
+        try:
+            cache.set(key, _NUMERIC_MISSING if value is None else value)
+        except OSError:
+            pass
+    return value
+
+
+def _numeric_value_uncached(text):
     # MathLive сокращает односимвольный аргумент: \sqrt8 вместо \sqrt{8}.
     text = re.sub(r'(\\sqrt(?:\[[^\]]+\])?)\s*([0-9])', r'\1{\2}', text)
     text = normalize(_strip_var(text))

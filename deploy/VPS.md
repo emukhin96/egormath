@@ -287,6 +287,11 @@ crontab -e   # строки из deploy/vps/crontab.example
 делает `deploy.sh` при каждой выкладке); после любых других правок прямо в MySQL
 (скрипты, ручные UPDATE) выполнить `deploy/vps/manage.sh clear_catalog_cache`,
 иначе счётчики каталога и дерево подборок до 6 часов показывают старое.
+Кэш `numeric` (значения числового вычислителя масок, `data/cache/numeric`)
+сбрасывать не нужно: его ключи включают хэш исходников вычислителя, а
+значения зависят только от текста. При старте gunicorn греет воркеры сам
+(`deploy/vps/gunicorn.conf.py`, `GUNICORN_WARMUP=0` отключает) — в логе
+контейнера строки `warmup (master)` и `warmup (worker)` с временем.
 
 ### 5. LaTeX API
 
