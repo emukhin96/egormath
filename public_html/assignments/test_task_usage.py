@@ -149,6 +149,24 @@ class TaskUsageTests(TestCase):
         self.client.get(reverse('task_list'), {'who': ''})
         self.assertNotIn(SESSION_KEY, self.client.session)
 
+    def test_builder_ignores_its_own_worksheet(self):
+        """В конструкторе листка его же выдачи «исп.» не зажигают."""
+        self.assign(self.student)
+        url = reverse('worksheet_detail', args=[self.worksheet.pk])
+        self.assertNotContains(self.client.get(url), 'задавалась')
+        # Та же задача, выданная другим листком, — по-прежнему «исп.»
+        other = Worksheet.objects.create(title='Повторение', owner=self.teacher)
+        WorksheetItem.objects.create(worksheet=other, task=self.tasks[0], order=1)
+        self.assign(self.student, other)
+        response = self.client.get(url)
+        self.assertContains(response, 'задавалась', count=1)
+        self.assertContains(response, 'Повторение</a>')
+        usage = task_usage(self.teacher, self.tasks,
+                           exclude_worksheet_id=self.worksheet.pk)
+        self.assertEqual([row.source_id for row in usage[self.tasks[0].pk]],
+                         [other.pk])
+        self.assertEqual(usage[self.tasks[1].pk], [])
+
     def test_attach_usage_marks_tasks(self):
         self.assign(self.student)
         request = self.client.get(reverse('task_list')).wsgi_request
