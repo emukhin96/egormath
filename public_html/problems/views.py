@@ -39,6 +39,7 @@ from .rubricator import (GRADE_LEVEL_TO_CODE, apply_task_taxonomy,
                          set_grade_bands, set_task_topics,
                          taxonomy_page_context, taxonomy_state_from_post,
                          task_taxonomy_state)
+from .search import text_search
 
 
 def filter_tasks(params, user):
@@ -63,8 +64,8 @@ def filter_tasks(params, user):
         # «#123» или «123» — задача по id
         tasks = tasks.filter(pk=int(q.lstrip('#')))
     elif q:
-        tasks = tasks.filter(
-            Q(text_plain__icontains=q) | Q(text_latex__icontains=q))
+        # FULLTEXT на MySQL, icontains на sqlite и для спецзапросов (search.py)
+        tasks = text_search(tasks, q)
     tasks = filter_by_taxonomy(tasks, params, topics_lookups=('topics',))
     tag = params.get('tag')
     if tag:
