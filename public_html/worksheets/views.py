@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST, require_http_methods
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from django.utils.dateparse import parse_date
 
@@ -387,10 +387,13 @@ def worksheet_detail(request, pk):
     # Указатель «аналоги N» у строки: счётчики одним проходом, список — по клику
     from independentworks.analog_lists import attach_analog_counts
     attach_analog_counts(request.user, [item.task for item in items if item.task_id])
-    # Готовые значения строк для шаблона (адреса, флаги, HTML условия)
-    from .builder_rows import decorate_builder_rows
+    # Готовые значения строк для шаблона (адреса, флаги, HTML условия);
+    # у длинного листка рамки ответов — отдельным запросом worksheet_answers
+    from .builder_rows import answers_inline, decorate_builder_rows
     from .cart import cart_ids
-    decorate_builder_rows(rows, worksheet, request.user, set(cart_ids(request)))
+    inline_answers = answers_inline(items)
+    decorate_builder_rows(rows, worksheet, request.user, set(cart_ids(request)),
+                          with_answers=inline_answers)
     point_groups = progress_groups([
         item for item in items if item.task_id], assignments)
     progress_people_rows = progress_people(point_groups, assignments)
@@ -437,6 +440,8 @@ def worksheet_detail(request, pk):
         'collection': collection,
         'items': items,
         'rows': rows,
+        'answers_url': ('' if inline_answers
+                        else reverse('worksheet_answers', args=[worksheet.pk])),
         'found_tasks': found_tasks,
         'search_active': search_active,
         'params': request.GET,
@@ -457,6 +462,30 @@ def worksheet_detail(request, pk):
         'status_choices': Assignment.STATUS_CHOICES,
         'deleted_items': deleted_items,
     })
+
+
+@teacher_required
+@require_GET
+def worksheet_answers(request, pk):
+    """Рамки «Ответ / Решение» задач листка для тумблера «ответы» конструктора.
+
+    JSON ``{"items": {id строки: HTML рамки}}`` — та же разметка
+    ``problems/_task_answers.html``, что у короткого листка прямо в HTML
+    (``builder_rows.render_answers``). Длинному листку (``ANSWERS_INLINE_MAX``)
+    конструктор рамок не отдаёт, ``answers-toggle.js`` запрашивает их здесь
+    при включённом тумблере; ``?items=1,2`` — только эти строки (после
+    добавления задачи). Права — как у конструктора: чужой листок — 404.
+    """
+    worksheet = _own_worksheet(request, pk)
+    only = None
+    if request.GET.get('items'):
+        only = {int(value) for value in request.GET['items'].split(',')
+                if value.isdigit()}
+    from .builder_rows import render_answers
+    # Кириллица как есть, не \uXXXX: сырой ответ почти вдвое короче
+    return JsonResponse({'items': render_answers(
+        worksheet.ordered_items(), request, only=only)},
+        json_dumps_params={'ensure_ascii': False})
 
 
 @teacher_required

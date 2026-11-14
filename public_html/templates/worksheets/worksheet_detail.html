@@ -117,7 +117,8 @@
   числа в строках (id, звёзды) выводятся как есть, без локализации каждого.{% endcomment %}
   {% url 'cart_add' as cart_add_url %}{% url 'cart_remove' as cart_remove_url %}
   {% localize off %}{% with cart_next=request.get_full_path %}
-  <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}">
+  {# data-answers-url — у длинного листка рамки ответов не в HTML, их подгружает answers-toggle.js (builder_rows.ANSWERS_INLINE_MAX) #}
+  <div id="ws-items" data-reorder-url="{% url 'worksheet_reorder' worksheet.pk %}"{% if answers_url %} data-answers-url="{{ answers_url }}"{% endif %}>
     {% for row in rows %}
     {% with item=row.item urls=row.urls %}
     {# data-vis-url и data-hidden-* — данные для общего диалога видимости (#ws-visibility-dialog), его заполняет worksheet_controls.js #}
@@ -155,7 +156,7 @@
 {% endfor %}</ol>
           {% endif %}
           {% if row.statement_images %}{% include 'problems/_task_images.html' with images=row.statement_images %}{% endif %}
-          {% include 'problems/_task_answers.html' with task=item.task material=row.material material_ready=True hide_answers=True %}
+          {% if row.material %}{% include 'problems/_task_answers.html' with task=item.task material=row.material material_ready=True hide_answers=True %}{% endif %}
           <div data-worksheet-mask data-task-id="{{ row.task_pk }}" data-manage-url="{{ urls.manage }}" data-worksheet="{{ worksheet.pk }}" data-item="{{ row.pk }}"{% if row.base_locked %} data-base-locked="1"{% endif %} hidden><div data-mask-tools class="problem-mask-tools"></div></div>
         </div>
 
@@ -516,7 +517,7 @@ worksheet_item_visibility.{% endcomment %}
 {% include 'problems/_mask_dialogs.html' %}
 <script defer src="{% static 'js/problem_editor.js' %}?v=8"></script>
 {% include 'problems/_mask_scripts.html' %}
-<script defer src="{% static 'js/answers-toggle.js' %}?v=4"></script>
+<script defer src="{% static 'js/answers-toggle.js' %}?v=5"></script>
 <script defer src="{% static 'js/builder.js' %}?v=10"></script>
 <script defer src="{% static 'js/worksheet_controls.js' %}?v=8"></script>
 <script defer src="{% static 'js/analogs.js' %}?v=1"></script>
