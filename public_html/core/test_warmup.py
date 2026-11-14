@@ -12,6 +12,7 @@ from django.test import SimpleTestCase, TestCase, TransactionTestCase
 from core import warmup
 
 GUNICORN_CONF = Path(settings.SITE_ROOT) / 'deploy' / 'vps' / 'gunicorn.conf.py'
+DEPLOY_SH = Path(settings.SITE_ROOT) / 'deploy' / 'vps' / 'deploy.sh'
 
 
 class WarmProcessTests(TestCase):
@@ -56,6 +57,16 @@ class GunicornConfigTests(SimpleTestCase):
             conf['post_worker_init'](worker)  # не бросает
         self.assertIn('skipped', worker.log.info.call_args[0][0])
 
+    def test_deploy_warms_after_clearing_cache(self):
+        # Сброс кэша после старта контейнера стирает прогрев воркеров —
+        # deploy.sh греет заново уже после сброса (ревью #345)
+        text = DEPLOY_SH.read_text()
+        up = text.index('up -d --remove-orphans')
+        clear = text.index('manage.py clear_catalog_cache')
+        warm = text.index('manage.py warm_caches')
+        self.assertLess(up, clear)
+        self.assertLess(clear, warm)
+
 
 class WarmWorkerTests(TransactionTestCase):
     """Вне транзакции, как в воркере: кэши наполняются, соединение закрыто."""
@@ -80,6 +91,14 @@ class WarmWorkerTests(TransactionTestCase):
         with mock.patch('assignments.checks.mask.parse_mask', wraps=__import__('assignments.checks.mask', fromlist=['parse_mask']).parse_mask) as spy:
             self.assertEqual(warmup.warm_open_masks(), 1)
         spy.assert_called_once_with('{{number: 5}}')
+
+    def test_warm_caches_command_reports_masks(self):
+        from io import StringIO
+        from django.core.management import call_command
+        out = StringIO()
+        with mock.patch('problems.management.commands.warm_caches.warm_worker', return_value=3):
+            call_command('warm_caches', stdout=out)
+        self.assertIn('масок: 3', out.getvalue())
 
     def test_warm_worker_fills_caches_and_closes_connection(self):
         # sqlite в памяти не закрывается по-настоящему — проверяем сам вызов

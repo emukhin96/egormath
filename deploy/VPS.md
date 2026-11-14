@@ -291,7 +291,9 @@ crontab -e   # строки из deploy/vps/crontab.example
 сбрасывать не нужно: его ключи включают хэш исходников вычислителя, а
 значения зависят только от текста. При старте gunicorn греет воркеры сам
 (`deploy/vps/gunicorn.conf.py`, `GUNICORN_WARMUP=0` отключает) — в логе
-контейнера строки `warmup (master)` и `warmup (worker)` с временем.
+контейнера строки `warmup (master)` и `warmup (worker)` с временем. После
+сброса кэша `deploy.sh` греет его заново (`manage.py warm_caches`); после
+ручного `clear_catalog_cache` при желании — `deploy/vps/manage.sh warm_caches`.
 
 ### 5. LaTeX API
 

@@ -178,11 +178,13 @@ CACHES = {
     # а lru_cache живёт только в процессе и остывает при каждом перезапуске
     # воркера. Ключ включает хэш исходников вычислителя — при его правке
     # старые значения не читаются. Не истекает; чистится только руками.
+    # Записей десятки тысяч, поэтому бэкенд с редкой чисткой: стандартный
+    # перечисляет весь каталог при каждой записи (core/cache_backends.py).
     'numeric': {
-        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'BACKEND': 'core.cache_backends.SparseCullFileBasedCache',
         'LOCATION': SITE_ROOT / '.cache' / 'numeric',
         'TIMEOUT': None,
-        'OPTIONS': {'MAX_ENTRIES': 50000, 'CULL_FREQUENCY': 10},
+        'OPTIONS': {'MAX_ENTRIES': 50000, 'CULL_FREQUENCY': 10, 'CULL_EVERY': 500},
     },
 }
 

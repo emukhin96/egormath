@@ -78,6 +78,15 @@ if ! $COMPOSE exec -T egormath-web python manage.py clear_catalog_cache; then
   echo "!! кэш каталога не сброшен: deploy/vps/manage.sh clear_catalog_cache" >&2
 fi
 
+# Воркеры нового контейнера прогрели справочники при старте
+# (post_worker_init), но из кэша старого кода — сброс выше стёр и это.
+# Собираем заново, пока сайт уже отвечает: первый посетитель после
+# выкладки получает тёплый рубрикатор и дерево подборок (ревью #345).
+echo "==> warm_caches"
+if ! $COMPOSE exec -T egormath-web python manage.py warm_caches; then
+  echo "!! кэши не прогреты: deploy/vps/manage.sh warm_caches" >&2
+fi
+
 echo "==> Site in shared Caddy"
 HOSTS="$(env_get EGORMATH_HOSTS)"
 if [ -n "$HOSTS" ] && [ -d /opt/caddy/sites ]; then

@@ -5,7 +5,8 @@
 кэши справочников (контроль прода 11.11.2026, docs/PERF_AUDIT_2026-11.md,
 раздел 10). ``warm_process`` не трогает базу и годится для мастера
 gunicorn до fork; ``warm_worker`` ходит в базу и закрывает за собой
-соединение.
+соединение (его же вызывает ``manage.py warm_caches`` после сброса кэша
+в deploy.sh).
 """
 import logging
 
@@ -68,7 +69,7 @@ def warm_worker():
     try:
         taxonomy_catalog()
         catalog_nodes()
-        warm_open_masks()
+        return warm_open_masks()
     finally:
         connections.close_all()
 
