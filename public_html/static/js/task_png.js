@@ -3,9 +3,12 @@
 // [data-task-png-root], а внутри него [data-task-png-content], если он есть.
 // Копия условия рисуется на белом листе шириной не больше 600px (как строка
 // на карточке самостоятельной), без номера, ответов, масок и кнопок.
-// Рендер DOM → PNG — modern-screenshot, грузится только при первом нажатии.
+// Рендер DOM → PNG — modern-screenshot (static/vendor/modern-screenshot),
+// грузится только при первом нажатии; адрес с хэшем манифеста base.html
+// передаёт в data-lib своего тега <script>.
 (function () {
-  var LIB_URL = 'https://cdn.jsdelivr.net/npm/modern-screenshot@4.6.8/dist/index.js';
+  var LIB_URL = (document.currentScript && document.currentScript.dataset.lib)
+    || '/static/vendor/modern-screenshot/modern-screenshot.js';
   // Всё, что не относится к самому условию: управление, ответы, маски, бейджи
   var SKIP = [
     'button', 'form', 'details', 'input', 'select', 'textarea', 'script', 'template',

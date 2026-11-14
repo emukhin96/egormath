@@ -38,4 +38,4 @@ _task_class_body.html, его обновляет опрос teacher_progress.js.
 </div>
 {% include 'assignments/_progress_dialog.html' %}
 {% endblock %}
-{% block extra_js %}{# mathlive, mask.js и check_badge.js — маска «так видит ученик» в окне задачи #}<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/check_badge.js' %}"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=9"></script>{% endblock %}
+{% block extra_js %}{# mathlive, mask.js и check_badge.js — маска «так видит ученик» в окне задачи #}<script defer src="{% static 'vendor/mathlive/mathlive.min.js' %}"></script><script defer src="{% static 'js/check_badge.js' %}"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=9"></script>{% endblock %}
