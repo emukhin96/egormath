@@ -4632,6 +4632,15 @@
     max-width: 640px;
   }
 
+  /* MathLive (static/vendor/mathlive) свои шрифты не подгружает: при
+     --ML__static-fonts он берёт @font-face KaTeX_* из katex.min.css, который
+     base.html подключает на каждой странице (те же 20 woff2 байт в байт).
+     Без переменной он бы грузил копии по относительному пути от скрипта
+     мимо имён с хэшем манифеста (core/test_vendor_assets.py). */
+  :root {
+    --ML__static-fonts: true;
+  }
+
   math-field {
     display: block;
     width: 100%;

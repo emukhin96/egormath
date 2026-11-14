@@ -61,4 +61,4 @@
 {% if attempt.parent_id %}<p><a href="{% url 'independentworks:attempt' attempt.parent_id %}">Предыдущая попытка</a></p>{% endif %}
 {% include 'assignments/_progress_dialog.html' %}
 {% endblock %}
-{% block extra_js %}<script defer src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script><script defer src="{% static 'js/check_badge.js' %}?v=2"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/work_history.js' %}"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=10"></script>{% endblock %}
+{% block extra_js %}<script defer src="{% static 'vendor/mathlive/mathlive.min.js' %}"></script><script defer src="{% static 'js/check_badge.js' %}?v=2"></script><script defer src="{% static 'js/mask.js' %}?v=5"></script><script defer src="{% static 'js/work_history.js' %}"></script><script defer src="{% static 'js/teacher_progress.js' %}?v=10"></script>{% endblock %}
