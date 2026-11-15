@@ -1,21 +1,66 @@
 #!/usr/bin/env bash
 # Бэкап egormath: дамп MySQL, архивы media и var, зашифрованный архив секретов
-# (data/secrets, .env, crontab, rclone.conf) в $DATA_DIR/backups. Старше
-# RETENTION_DAYS удаляются; при BACKUP_RCLONE_REMOTE — копия в S3, где дампы
-# базы за 1-е число месяца и дампы Timeweb хранятся бессрочно.
+# (data/secrets, .env, crontab, rclone.conf) в $DATA_DIR/backups. На диске
+# наборы старше LOCAL_RETENTION_DAYS (7) удаляются ДО новых архивов; при
+# BACKUP_RCLONE_REMOTE — копия в S3, где наборы живут RETENTION_DAYS (14), а
+# дампы базы за 1-е число месяца и дампы Timeweb — бессрочно.
 # Запускается из cron (crontab.example) и из deploy.sh перед миграциями.
 # Восстановление — restore.sh; репетиция на Mac — tools/stage.sh --s3.
 # Пароль MySQL — через MYSQL_PWD, а не -p: без предупреждения в логе и не виден в ps.
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 RETENTION_DAYS="$(env_get RETENTION_DAYS)"; RETENTION_DAYS="${RETENTION_DAYS:-14}"
+LOCAL_RETENTION_DAYS="$(env_get LOCAL_RETENTION_DAYS)"; LOCAL_RETENTION_DAYS="${LOCAL_RETENTION_DAYS:-7}"
+# Запас свободного места после архива: иначе бэкап сам заполнит диск и база
+# сайта останется без места (15.11.2026 диск дошёл до 100%).
+RESERVE_MB="$(env_get BACKUP_RESERVE_MB)"; RESERVE_MB="${RESERVE_MB:-1024}"
 REMOTE="$(env_get BACKUP_RCLONE_REMOTE)"
 PASSPHRASE="${BACKUP_SECRETS_PASSPHRASE:-$(env_get BACKUP_SECRETS_PASSPHRASE)}"
 PING_URL="$(env_get BACKUP_PING_URL)"
 DIR="$DATA_DIR/backups"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$DIR"
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d)"
+# Недописанный файл (ошибка, нехватка места) не остаётся на диске.
+trap 'rm -rf "$TMP"; rm -f "$DIR"/*-"$STAMP".*.part' EXIT
+
+# Набор старше срока — по отметке в имени, а не по mtime: архив media/var
+# без изменений — жёсткая ссылка на прежний, у ссылок общий mtime.
+prune_local() {
+  local cutoff name stamp
+  cutoff="$(date -d "-$LOCAL_RETENTION_DAYS days" +%Y%m%d-%H%M%S)"
+  for name in "$DIR"/*-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].*; do
+    [ -e "$name" ] || continue
+    stamp="$(basename "$name" | sed -E 's/^.*-([0-9]{8}-[0-9]{6})\..*$/\1/')"
+    [[ "$stamp" < "$cutoff" ]] && rm -f "$name"
+  done
+  return 0
+}
+
+# Свободно на разделе бэкапов, МБ.
+free_mb() { df -Pm "$DIR" | awk 'NR==2 {print $4}'; }
+
+# Архив каталога data/<name>: если с прошлого архива в нём ничего не
+# менялось — жёсткая ссылка (0 байт), иначе tar с проверкой места.
+archive_dir() {
+  local name="$1" out="$DIR/$1-$STAMP.tar.gz" prev need
+  prev="$(ls "$DIR/$name"-*.tar.gz 2>/dev/null | sort | tail -n 1 || true)"
+  if [ -n "$prev" ] && [ -z "$(find "$DATA_DIR/$name" -newer "$prev" -print -quit)" ]; then
+    echo "==> $name без изменений -> ссылка на $(basename "$prev")"
+    ln "$prev" "$out"
+    return
+  fi
+  need=$(( RESERVE_MB + ( $( [ -n "$prev" ] && du -m "$prev" | cut -f1 || du -sm "$DATA_DIR/$name" | cut -f1 ) * 12 / 10 ) ))
+  if [ "$(free_mb)" -lt "$need" ]; then
+    echo "!! мало места для $name: свободно $(free_mb) МБ, нужно ~$need МБ — архив не создан"
+    return 1
+  fi
+  echo "==> $name -> backups/$name-$STAMP.tar.gz"
+  tar -czf "$out.part" --exclude='__pycache__' -C "$DATA_DIR" "$name"
+  mv "$out.part" "$out"
+}
+
+prune_local
 
 echo "==> mysqldump -> backups/db-$STAMP.sql.gz"
 $COMPOSE exec -T egormath-db sh -c \
@@ -23,14 +68,12 @@ $COMPOSE exec -T egormath-db sh -c \
   | gzip > "$DIR/db-$STAMP.sql.gz.part"
 mv "$DIR/db-$STAMP.sql.gz.part" "$DIR/db-$STAMP.sql.gz"
 
-echo "==> media -> backups/media-$STAMP.tar.gz"
-tar -czf "$DIR/media-$STAMP.tar.gz" -C "$DATA_DIR" media
+archive_dir media
 
 # var/: корпус листков и партии задачников — работа, которой нет в базе,
 # пока партия не загружена в каталог.
 if [ -d "$DATA_DIR/var" ]; then
-  echo "==> var -> backups/var-$STAMP.tar.gz"
-  tar -czf "$DIR/var-$STAMP.tar.gz" --exclude='__pycache__' -C "$DATA_DIR" var
+  archive_dir var
 fi
 
 # Секреты: без DJANGO_SECRET_KEY, ключей API и .env стек с нуля не поднять.
@@ -52,8 +95,9 @@ else
   echo "!! BACKUP_SECRETS_PASSPHRASE пуст в $ENV_FILE — секреты не бэкапятся (deploy/VPS.md, «Бэкапы»)"
 fi
 
-find "$DIR" -type f -mtime +"$RETENTION_DAYS" -delete
+prune_local
 ls -lh "$DIR" | tail -n 5
+echo "==> диск: свободно $(free_mb) МБ"
 
 if [ -n "$REMOTE" ] && command -v rclone >/dev/null 2>&1; then
   echo "==> rclone -> $REMOTE"
