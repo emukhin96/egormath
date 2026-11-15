@@ -1,21 +1,69 @@
 #!/usr/bin/env bash
 # Бэкап egormath: дамп MySQL, архивы media и var, зашифрованный архив секретов
-# (data/secrets, .env, crontab, rclone.conf) в $DATA_DIR/backups. Старше
-# RETENTION_DAYS удаляются; при BACKUP_RCLONE_REMOTE — копия в S3, где дампы
-# базы за 1-е число месяца и дампы Timeweb хранятся бессрочно.
+# (data/secrets, .env, crontab, rclone.conf) в $DATA_DIR/backups. На диске
+# наборы старше LOCAL_RETENTION_DAYS (7) удаляются ДО новых архивов; при
+# BACKUP_RCLONE_REMOTE — копия в S3, где наборы живут RETENTION_DAYS (14), а
+# дампы базы за 1-е число месяца и дампы Timeweb — бессрочно.
 # Запускается из cron (crontab.example) и из deploy.sh перед миграциями.
 # Восстановление — restore.sh; репетиция на Mac — tools/stage.sh --s3.
 # Пароль MySQL — через MYSQL_PWD, а не -p: без предупреждения в логе и не виден в ps.
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 RETENTION_DAYS="$(env_get RETENTION_DAYS)"; RETENTION_DAYS="${RETENTION_DAYS:-14}"
+LOCAL_RETENTION_DAYS="$(env_get LOCAL_RETENTION_DAYS)"; LOCAL_RETENTION_DAYS="${LOCAL_RETENTION_DAYS:-7}"
+# Запас свободного места после архива: иначе бэкап сам заполнит диск и база
+# сайта останется без места (15.11.2026 диск дошёл до 100%).
+RESERVE_MB="$(env_get BACKUP_RESERVE_MB)"; RESERVE_MB="${RESERVE_MB:-1024}"
 REMOTE="$(env_get BACKUP_RCLONE_REMOTE)"
 PASSPHRASE="${BACKUP_SECRETS_PASSPHRASE:-$(env_get BACKUP_SECRETS_PASSPHRASE)}"
 PING_URL="$(env_get BACKUP_PING_URL)"
 DIR="$DATA_DIR/backups"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$DIR"
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d)"
+# Недописанный файл (ошибка, нехватка места) не остаётся на диске.
+trap 'rm -rf "$TMP"; rm -f "$DIR"/*-"$STAMP".*.part' EXIT
+
+# Набор старше срока — по отметке времени в имени файла: так набор
+# удаляется целиком, а посторонние файлы в каталоге не трогаются.
+prune_local() {
+  local cutoff name stamp
+  cutoff="$(date -d "-$LOCAL_RETENTION_DAYS days" +%Y%m%d-%H%M%S)"
+  for name in "$DIR"/*-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].*; do
+    [ -e "$name" ] || continue
+    stamp="$(basename "$name" | sed -E 's/^.*-([0-9]{8}-[0-9]{6})\..*$/\1/')"
+    [[ "$stamp" < "$cutoff" ]] && rm -f "$name"
+  done
+  return 0
+}
+
+# Свободно на разделе бэкапов, МБ.
+free_mb() { df -Pm "$DIR" | awk 'NR==2 {print $4}'; }
+
+# Архив каталога data/<name> с проверкой места: ~1,2 прошлого архива
+# (или размера каталога) плюс запас; иначе архив не создаётся (код 1).
+archive_dir() {
+  local name="$1" out="$DIR/$1-$STAMP.tar.gz" prev need
+  prev="$(ls "$DIR/$name"-*.tar.gz 2>/dev/null | sort | tail -n 1 || true)"
+  need=$(( RESERVE_MB + ( $( [ -n "$prev" ] && du -m "$prev" | cut -f1 || du -sm "$DATA_DIR/$name" | cut -f1 ) * 12 / 10 ) ))
+  if [ "$(free_mb)" -lt "$need" ]; then
+    echo "!! мало места для $name: свободно $(free_mb) МБ, нужно ~$need МБ — архив не создан"
+    return 1
+  fi
+  echo "==> $name -> backups/$name-$STAMP.tar.gz"
+  # Вызов идёт через «|| SKIPPED=…», где set -e не действует: ошибки — явно.
+  if ! tar -czf "$out.part" --exclude='__pycache__' -C "$DATA_DIR" "$name"; then
+    echo "!! tar $name завершился с ошибкой — архив не создан"
+    rm -f "$out.part"
+    return 2
+  fi
+  mv "$out.part" "$out"
+}
+
+prune_local
+# Архив, пропущенный из-за места или ошибки tar: дамп базы, секреты и S3 всё равно
+# делаются, а в конце — выход с ошибкой без пинга (тревога).
+SKIPPED=""
 
 echo "==> mysqldump -> backups/db-$STAMP.sql.gz"
 $COMPOSE exec -T egormath-db sh -c \
@@ -23,14 +71,12 @@ $COMPOSE exec -T egormath-db sh -c \
   | gzip > "$DIR/db-$STAMP.sql.gz.part"
 mv "$DIR/db-$STAMP.sql.gz.part" "$DIR/db-$STAMP.sql.gz"
 
-echo "==> media -> backups/media-$STAMP.tar.gz"
-tar -czf "$DIR/media-$STAMP.tar.gz" -C "$DATA_DIR" media
+archive_dir media || SKIPPED="$SKIPPED media"
 
 # var/: корпус листков и партии задачников — работа, которой нет в базе,
 # пока партия не загружена в каталог.
 if [ -d "$DATA_DIR/var" ]; then
-  echo "==> var -> backups/var-$STAMP.tar.gz"
-  tar -czf "$DIR/var-$STAMP.tar.gz" --exclude='__pycache__' -C "$DATA_DIR" var
+  archive_dir var || SKIPPED="$SKIPPED var"
 fi
 
 # Секреты: без DJANGO_SECRET_KEY, ключей API и .env стек с нуля не поднять.
@@ -52,8 +98,9 @@ else
   echo "!! BACKUP_SECRETS_PASSPHRASE пуст в $ENV_FILE — секреты не бэкапятся (deploy/VPS.md, «Бэкапы»)"
 fi
 
-find "$DIR" -type f -mtime +"$RETENTION_DAYS" -delete
+prune_local
 ls -lh "$DIR" | tail -n 5
+echo "==> диск: свободно $(free_mb) МБ"
 
 if [ -n "$REMOTE" ] && command -v rclone >/dev/null 2>&1; then
   echo "==> rclone -> $REMOTE"
@@ -63,6 +110,11 @@ if [ -n "$REMOTE" ] && command -v rclone >/dev/null 2>&1; then
   # В S3 бессрочно: дампы базы за 1-е число месяца (~3 МБ) и дампы Timeweb.
   rclone delete "$REMOTE" --min-age "${RETENTION_DAYS}d" \
     --exclude 'db-??????01-*' --exclude 'timeweb*' || true
+fi
+
+if [ -n "$SKIPPED" ]; then
+  echo "!! не создано (место или ошибка tar, см. выше):$SKIPPED — пинга нет"
+  exit 1
 fi
 
 # Пинг «бэкап прошёл» (Healthchecks.io и т. п.): если строки нет — сервис
