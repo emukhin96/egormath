@@ -233,7 +233,7 @@ def task_markers(body: str) -> tuple[list[tuple[int, int, int]], list[int]]:
     for number in range(1, TASKS_PER_VARIANT + 1):
         pattern = re.compile(
             rf"\\item\[{number}\]\s*"
-            rf"|(?m)^[ \t]*(?:\\item\[\][ \t]*)?{number}[ \t]+(?=[А-ЯЁA-Z\\])")
+            rf"|^[ \t]*(?:\\item\[\][ \t]*)?{number}[ \t]+(?=[А-ЯЁA-Z\\])", re.M)
         match = pattern.search(body, pos)
         if not match:
             missing.append(number)
@@ -628,10 +628,98 @@ def _cyrillic_in_math(value: str) -> str:
     return MATH_RE.sub(fix, value or "")
 
 
+INLINE_SPAN_RE = re.compile(r"(?<![$\\])\$(?!\$)([^$]+)\$|\\\((.*?)\\\)", re.S)
+YEAR_RE = re.compile(
+    r"\$((?:1[89]|20)\d\d)\$(?=(?:\s*(?:,|и|–|-)\s*\$?(?:1[89]|20)\d\d\$?)*\s+г(?:од|г\.))")
+DEGREE_RE = re.compile(r"(?:\$([^$]*\d)\$|(?<![\w{])(\d+(?:\{,\}\d+|,\d+)?))[ \t]*°(?:[ \t]*([CС])(?![а-яё]))?")
+SENTENCE_VERB_RE = re.compile(
+    r"(\\\)|\$|[а-яё0-9])([ \t]+)(?=(?:Найдите|Определите|Вычислите|Укажите|Решите|Запишите|Докажите)\b)")
+
+
+def _years_as_text(value: str) -> str:
+    """«В июле $2030$ года», «в июле $2031$, $2032$ и $2033$ годов» — год
+    не формула, пишется текстом."""
+    previous = None
+    while previous != value:
+        previous = value
+        value = YEAR_RE.sub(r"\1", value)
+    return value
+
+
+def _degrees_in_math(value: str) -> str:
+    """«равен 30°», «$21{,}5$ °C» → «$30^{\\circ}$», «$21{,}5^{\\circ}\\mathrm{C}$»."""
+    def fix(match: re.Match) -> str:
+        number = match.group(1) or match.group(2).replace(",", "{,}")
+        if match.group(3):
+            return f"${number}^{{\\circ}}\\mathrm{{C}}$"
+        return f"${number}^{{\\circ}}$"
+    out, pos = [], 0
+    for span in re.finditer(r"\\\(.*?\\\)|\\\[.*?\\\]|\$\$.*?\$\$", value, re.S):
+        out.append(DEGREE_RE.sub(fix, value[pos:span.start()]))
+        out.append(span.group(0))
+        pos = span.end()
+    out.append(DEGREE_RE.sub(fix, value[pos:]))
+    return "".join(out)
+
+
+def _display_style(value: str, *, exponents: bool) -> str:
+    """Строчная формула с дробью или вложенной степенью — ``\\displaystyle``;
+    дробь в показателе — ``^{\\textstyle …}`` (иначе мелко). Ответы без
+    ``\\textstyle``: его не знает разбор маски."""
+    def fix(match: re.Match) -> str:
+        span = match.group(0)
+        inner = match.group(1) if match.group(1) is not None else match.group(2)
+        if "\\begin{" in inner:
+            return span
+        heavy = "\\frac" in inner or re.search(r"\^\{[^{}]*\^", inner)
+        if exponents:
+            inner = re.sub(r"\^\{(?!\\textstyle)(?=[^{}]*\\frac)", r"^{\\textstyle ", inner)
+        if heavy and "\\displaystyle" not in inner:
+            inner = "\\displaystyle " + inner.lstrip()
+        return f"${inner}$" if match.group(1) is not None else f"\\({inner}\\)"
+    return INLINE_SPAN_RE.sub(fix, value or "")
+
+
+def _layout(value: str) -> str:
+    """Условия книги — сплошной текст: без пустых строк и отступов строк."""
+    value = re.sub(r"(?m)^[ \t]+", "", value)
+    return re.sub(r"\n(?:[ \t]*\n)+", "\n", value).strip()
+
+
+def _sentence_ends(value: str, *, close: bool) -> str:
+    """Точка, потерянная OCR перед «Найдите…» (рисунок разорвал строку), и
+    в конце условия; «?» внутри формулы — после неё."""
+    value = SENTENCE_VERB_RE.sub(r"\1.\2", value)
+    value = re.sub(r"\s*\?\s*\\\)", r"\\)?", value)
+    if close:
+        tail = re.sub(r"(?:\s|\\taskpic\{\d+\}|\\\\)+$", "", value)
+        if tail and tail[-1] not in ".?!:;" and not re.search(r"(?:\\\]|\$\$|\\end\{\w+\})$", tail):
+            value = tail + "." + value[len(tail):]
+    return value
+
+
+def typography(task: TaskDraft) -> None:
+    """Канон оформления партии (замечания владельца 15.11.2026)."""
+    for item in [task] + list(task.subitems):
+        is_sub = item is not task
+        for attr in FIELDS.values():
+            value = getattr(item, attr)
+            if not value:
+                continue
+            value = _degrees_in_math(_years_as_text(value))
+            value = _display_style(value, exponents=attr != "author_answer_latex")
+            if attr != "author_answer_latex":
+                value = _layout(value)
+            if attr == "text_latex":
+                value = _sentence_ends(value, close=bool(value.strip()) and (is_sub or not task.subitems))
+            setattr(item, attr, value)
+
+
 def final_cleanup(task: TaskDraft) -> None:
     for item in [task] + list(task.subitems):
         for attr in FIELDS.values():
             setattr(item, attr, _cyrillic_in_math(_cleanup(getattr(item, attr))))
+    typography(task)
 
 
 def apply_masks(task: TaskDraft, masks: dict) -> None:

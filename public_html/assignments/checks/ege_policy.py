@@ -113,7 +113,12 @@ def ege_draft(answer, condition='', exam_codes=None, *, source_number='', subite
     # уходят в общий разбор, невалидная маска — тоже.
     if number in {15, 17, 18} and not re.search(
             r'[:;=<>≤≥≠]|\\in|\\[lg]e(?:q)?(?![A-Za-z])|\\ne(?:q)?(?![A-Za-z])', text):
-        letters = sorted(set(PARAMETER_RE.findall(re.sub(r'\\[A-Za-z]+', ' ', text))))
+        # Параметр — буква формулы, которая есть и в условии; единицы в
+        # \mathrm{…}/\text{…} («14,4 \mathrm{c}», «204 \mathrm{~m}») — не он.
+        bare = re.sub(r'\\(?:mathrm|text|operatorname)\s*\{[^{}]*\}', ' ', text)
+        letters = sorted(
+            letter for letter in set(PARAMETER_RE.findall(re.sub(r'\\[A-Za-z]+', ' ', bare)))
+            if re.search(rf'(?<![A-Za-z\\]){letter}(?![A-Za-z])', condition or ''))
         if letters and sets.numeric_value(text) is None:
             expression = slot('expression', f"{text} | positive: {','.join(letters)}")
             if expression:

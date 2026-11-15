@@ -9,7 +9,7 @@ from .checks.ege_policy import ege_draft
 OK = 'ok'
 
 
-def draft(answer, number, condition=''):
+def draft(answer, number, condition='Найдите \\(x\\), если \\(n\\), \\(R\\) заданы.'):
     return ege_draft(answer, condition, [f'EGE_PROFILE_2027_{number:02d}'])
 
 
@@ -56,3 +56,11 @@ class EgePolicyUnitsTests(SimpleTestCase):
         for answer in (r'\(x=2\)', r'\(a>1\)', r'\(S = 12\)', r'\(a \leq 3\)', 'a ≤ 3'):
             mask = draft(answer, 17)
             self.assertNotIn('expression', mask or '', answer)
+
+    def test_units_in_mathrm_are_not_parameters(self):
+        for answer in (r'\(14{,}4 \mathrm{c}\)', r'\(204 \mathrm{~m}\)', r'\(75 \text{ Вт}\)'):
+            mask = draft(answer, 17, r'Найдите \(\tau\), если \(T=14{,}4\) с.')
+            self.assertNotIn('expression', mask or '', answer)
+
+    def test_parameter_must_be_in_condition(self):
+        self.assertNotIn('expression', draft(r'\(125 \sqrt{2 R}\)', 17, 'Найдите мощность.') or '')

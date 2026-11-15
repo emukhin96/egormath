@@ -79,7 +79,8 @@ class YashchenkoParserTests(SimpleTestCase):
         }), variant(2)], [answers(1), answers(2)]))
         first, third = tasks[0], tasks[2]
         self.assertEqual(first.text_latex,
-                         "Два угла четырёхугольника равны 48° и 74°. Найдите угол.\n\\taskpic{1}")
+                         "Два угла четырёхугольника равны $48^{\\circ}$ и $74^{\\circ}$. "
+                         "Найдите угол.\n\\taskpic{1}")
         # Рисунок после поля ответа №2 — боковой рисунок №3 (стереометрия).
         self.assertEqual(third.images, ["p-075_2_2_9_9"])
         self.assertEqual(tasks[1].images, [])
@@ -171,3 +172,34 @@ class ImportedMathTests(SimpleTestCase):
             "\\(R=8{,}31 \\frac{\\text{Дж}}{\\text { моль } \\cdot \\text{К}}\\), \\(T_{\\text{п}}=15\\)")
         self.assertEqual(yp._cyrillic_in_math("\\(v=55 \\mathrm{~км} / \\mathrm{ч}\\)"),
                          "\\(v=55 \\text{км} / \\text{ч}\\)")
+
+
+class TypographyTests(SimpleTestCase):
+    """Замечания владельца 15.11.2026: годы текстом, градусы формулой,
+    \\displaystyle, без пустых строк, потерянные точки."""
+
+    def test_years_are_text_and_degrees_are_math(self):
+        self.assertEqual(
+            yp._years_as_text("В июле $2030$ года; в июле $2031$, $2032$ и $2033$ годов; $2030$ рублей"),
+            "В июле 2030 года; в июле 2031, 2032 и 2033 годов; $2030$ рублей")
+        self.assertEqual(yp._degrees_in_math("равен 30°. Углы 48° и \\(74^{\\circ}\\)"),
+                         "равен $30^{\\circ}$. Углы $48^{\\circ}$ и \\(74^{\\circ}\\)")
+        self.assertEqual(yp._degrees_in_math("ниже $21{,}5$ °C"), "ниже $21{,}5^{\\circ}\\mathrm{C}$")
+
+    def test_display_style_for_fractions_and_powers(self):
+        self.assertEqual(yp._display_style("\\(m=2^{-\\frac{t}{T}}\\)", exponents=True),
+                         "\\(\\displaystyle m=2^{\\textstyle -\\frac{t}{T}}\\)")
+        self.assertEqual(yp._display_style("$2^{x^{2}-3}$", exponents=True),
+                         "$\\displaystyle 2^{x^{2}-3}$")
+        self.assertEqual(yp._display_style("\\(2^{-\\frac{t}{T}}\\)", exponents=False),
+                         "\\(\\displaystyle 2^{-\\frac{t}{T}}\\)")
+        self.assertEqual(yp._display_style("\\(x^{2}\\)", exponents=True), "\\(x^{2}\\)")
+
+    def test_layout_and_sentence_ends(self):
+        self.assertEqual(yp._layout("таковы:\n\n— один;\n\n    — два.\n\nСколько?"),
+                         "таковы:\n— один;\n— два.\nСколько?")
+        self.assertEqual(yp._sentence_ends("функции \\(f(x)=ax+c\\) Найдите \\(f(1)\\)", close=True),
+                         "функции \\(f(x)=ax+c\\). Найдите \\(f(1)\\).")
+        self.assertEqual(yp._sentence_ends("если \\(T=14 \\text{ с} ?\\)", close=True),
+                         "если \\(T=14 \\text{ с}\\)?")
+        self.assertEqual(yp._sentence_ends("Формула\n\\[x=1.\\]", close=True), "Формула\n\\[x=1.\\]")

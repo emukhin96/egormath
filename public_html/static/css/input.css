@@ -4271,7 +4271,11 @@
     margin: var(--space-2) 0;
   }
 
-  .tex-table td {
+  .tex-table td,
+  table.list .tex-table td,
+  table.list .tex-table tr:last-child td {
+    /* В списке (table.list) правила строк списка — свой отступ и «без
+       нижней границы у последней строки» — таблицу задачи не трогают. */
     border: 1px solid var(--border);
     padding: 4px 10px;
   }
