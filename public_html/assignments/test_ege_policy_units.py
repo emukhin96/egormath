@@ -51,3 +51,8 @@ class EgePolicyUnitsTests(SimpleTestCase):
         mask = draft(r'\(\operatorname{arctg} 5{,}5+\pi n, n \in \mathbb{Z};'
                      r' \operatorname{arctg} 0{,}5+\pi k, k \in \mathbb{Z}\)', 14)
         self.assert_accepts(mask, r'arctg 5.5+\pi n; arctg 0.5+\pi k')
+
+    def test_relations_are_not_parameter_formulas(self):
+        for answer in (r'\(x=2\)', r'\(a>1\)', r'\(S = 12\)', r'\(a \leq 3\)', 'a ≤ 3'):
+            mask = draft(answer, 17)
+            self.assertNotIn('expression', mask or '', answer)

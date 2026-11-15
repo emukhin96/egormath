@@ -109,10 +109,15 @@ def ege_draft(answer, condition='', exam_codes=None, *, source_number='', subite
         yes_no = re.fullmatch(r'(да|нет)\s*[(,;].*', text, re.S)
         if yes_no:
             return slot('yesno', yes_no.group(1))
-    if number in {15, 17, 18} and not re.search(r'[:;]|\\in', text):
+    # Только формула-значение: равенства и неравенства («x=2», «a>1»)
+    # уходят в общий разбор, невалидная маска — тоже.
+    if number in {15, 17, 18} and not re.search(
+            r'[:;=<>≤≥≠]|\\in|\\[lg]e(?:q)?(?![A-Za-z])|\\ne(?:q)?(?![A-Za-z])', text):
         letters = sorted(set(PARAMETER_RE.findall(re.sub(r'\\[A-Za-z]+', ' ', text))))
         if letters and sets.numeric_value(text) is None:
-            return slot('expression', f"{text} | positive: {','.join(letters)}")
+            expression = slot('expression', f"{text} | positive: {','.join(letters)}")
+            if expression:
+                return expression
     if number == 14:
         text = _rename_series_parameters(text)
         if re.search(r'\\in\s*\\mathbb\{Z\}|∈\s*ℤ|(?<![A-Za-z])[nkm](?![A-Za-z])', text):
