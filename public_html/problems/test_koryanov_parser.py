@@ -102,6 +102,14 @@ E F= & \sqrt{2} . \quad \text { Ombem: } \sqrt{2} .
 
 Peueние. 1-й способ. Угол равен 30°.
 
+\begin{figure}[h]
+\begin{center}
+  \includegraphics[alt={},max width=\textwidth]{scan-004_300_300_500_500}
+\captionsetup{labelformat=empty}
+\caption{Рис. 7}
+\end{center}
+\end{figure}
+
 Ответ: 30°.\\
 2-й способ. Тот же угол, как показано на рисунке 2.
 
@@ -111,7 +119,7 @@ Peueние. 1-й способ. Угол равен 30°.
 
 Пример 3. Найти расстояние, длина ребра равна \(а\).
 
-Решение. Ребро равно \(a\).
+Решение. Ребро равно \(a\) (см. рис. 7).
 
 Ответ:
 
@@ -317,6 +325,13 @@ class KoryanovParserTests(SimpleTestCase):
         # Рисунок, который OCR потерял, — вырезка из PDF по сверенной правке.
         self.assertEqual(self.by_id["П5"].images, ["koryanov-p074-1"])
         self.assertEqual(self.diagnostics["figures_missing_by_task"], {})
+
+    def test_figure_of_next_example_in_two_columns(self):
+        # Рис. 7 стоит внутри текста П2 (колонки), а ссылается на него П3:
+        # рисунок у П3, а не «по положению» у П2.
+        self.assertEqual(self.by_id["П3"].images, ["scan-004_300_300_500_500"])
+        self.assertNotIn("scan-004_300_300_500_500", self.by_id["П2"].images)
+        self.assertNotIn("П2", self.diagnostics["figures_positional"])
 
     def test_exercises_numbers_and_answers(self):
         self.assertEqual(self.by_id["1"].author_answer_latex, "$3$")

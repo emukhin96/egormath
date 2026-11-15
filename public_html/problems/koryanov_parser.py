@@ -996,6 +996,9 @@ def parse_koryanov(text: str, *, structure: dict | None = None,
         missing = attach_figures(task, figures, used)
         if missing:
             diagnostics["figures_missing_by_task"][task.external_id] = missing
+    # По положению — вторым проходом, когда учтены явные ссылки всех задач:
+    # в две колонки рисунок примера k+1 часто стоит внутри текста примера k.
+    for task in tasks:
         positional = _attach_positional_figures(task, figures, used, example_ranges)
         if positional:
             diagnostics["figures_positional"][task.external_id] = positional
