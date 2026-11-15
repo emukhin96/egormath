@@ -1,0 +1,445 @@
+{
+  "note": "Сверенные с PDF правки OCR Mathpix «Корянов ЕГЭ стереометрия.tex» (страница PDF = страница книги). patches — замены текста до разбора (фрагмент встречается ровно один раз); tasks — поля задачи по скану целиком; figures — рисунки, потерянные OCR (номер → файл в ZIP), crops — их вырезки из PDF (tools/koryanov_images.py).",
+  "editions": [
+    {
+      "source_sha256": "ea520a28f5a098cde1cd9ba26cfd9b78841791aaba68ad83e16fd38462ed9f70",
+      "pdf_sha256": "c4f4c599e4828941d08e89dd4c0ee983a57ee87800022a0cfe62270e60b5be2d",
+      "patches": [
+        {
+          "id": "answers-1",
+          "source": "PDF с. 100: «1. 3. 2. √78/10» — ответ 1 OCR потерял",
+          "before": "\\setcounter{enumiii}{1}\n      \\item \\(\\frac{\\sqrt{78}}{10}\\).",
+          "after": "\\setcounter{enumiii}{0}\n      \\item 3. 2. \\(\\frac{\\sqrt{78}}{10}\\)."
+        },
+        {
+          "id": "answers-5",
+          "source": "PDF с. 100: «5. 2. 6. √307/3» — ответ 5 OCR потерял",
+          "before": "\\setcounter{enumiii}{5}\n      \\item \\(\\frac{\\sqrt{307}}{3}\\).",
+          "after": "\\setcounter{enumiii}{4}\n      \\item 2. 6. \\(\\frac{\\sqrt{307}}{3}\\)."
+        },
+        {
+          "id": "answers-124",
+          "source": "PDF с. 101: «124. 2. 125. arctg 24/25» — ответ 124 OCR потерял",
+          "before": "\\setcounter{enumiii}{124}\n      \\item \\(\\operatorname{arctg} \\frac{24}{25}\\).",
+          "after": "\\setcounter{enumiii}{123}\n      \\item 2. 125. \\(\\operatorname{arctg} \\frac{24}{25}\\)."
+        },
+        {
+          "id": "answers-141",
+          "source": "PDF с. 101: «141. 4. 142. 1,5» — ответ 141 OCR потерял",
+          "before": "\\setcounter{enumiii}{141}\n      \\item 1,5. 143.",
+          "after": "\\setcounter{enumiii}{140}\n      \\item 4. 142. 1,5. 143."
+        },
+        {
+          "id": "answers-165",
+          "source": "PDF с. 101: «165. 36. 166. 12. 167. 12. 168. 28. 169. d√3/12» — ответы 165–168 OCR потерял, вложенность списков вместо номеров",
+          "before": "\\item \\(\\frac{d \\sqrt{3}}{12}\\). 170.",
+          "after": "\\item 36. 166. 12. 167. 12. 168. 28. 169. \\(\\frac{d \\sqrt{3}}{12}\\). 170."
+        },
+        {
+          "id": "ex11-label",
+          "source": "PDF с. 9: упражнение 11, пункт «з) CB₁» (OCR: «3)»)",
+          "before": "; 3) \\(C B_{1}\\)",
+          "after": "; з) \\(C B_{1}\\)"
+        },
+        {
+          "id": "p24-fig26v",
+          "source": "PDF с. 20: «3-й способ (см. рис. 26в)» (OCR: «266»)",
+          "before": "3-й способ (см. рис. 266).",
+          "after": "3-й способ (см. рис. 26в)."
+        },
+        {
+          "id": "p28-method1",
+          "source": "PDF с. 22: «1-й способ. Пусть отрезок PQ (см. рис. 30) есть общий перпендикуляр…» (OCR — разрядка в формуле)",
+          "before": "\\(1-u ̆ ́ с п о с о б . ~ П у с т ь ~ о т р е з о к ~ P Q ~(с м . ~ р и с . ~\\) 30)",
+          "after": "1-й способ. Пусть отрезок \\(P Q\\) (см. рис. 30)"
+        },
+        {
+          "id": "p2-and",
+          "source": "PDF с. 3: «где Q — середина отрезка EM, а L — точка отрезка MK»",
+          "before": "\\(E M, a ~ L\\) - точка",
+          "after": "\\(E M\\), а \\(L\\) - точка"
+        }
+      ],
+      "tasks": {
+        "П4": {
+          "source": "PDF с. 5: «При условиях примера 1…» — в условие подставлены данные примера 1 (с. 3), иначе задача неполна",
+          "text": "В единичном кубе \\(A B C D A_{1} B_{1} C_{1} D_{1}\\) на диагоналях граней \\(A D_{1}\\) и \\(D_{1} B_{1}\\) взяты точки \\(E\\) и \\(F\\) так, что \\(D_{1} E=\\frac{1}{3} A D_{1}\\), \\(D_{1} F=\\frac{2}{3} D_{1} B_{1}\\). Найти расстояние от точки \\(D_{1}\\) до прямой \\(E F\\)."
+        },
+        "П73": {
+          "source": "PDF с. 54: «Ответ: ∠(α, ABC) = arccos 2/√14, ∠(α, DM) = 0» — вторая часть ответа OCR унёс в выносную формулу; по пунктам а) и б)",
+          "answer": "а) \\(\\angle(\\alpha, A B C)=\\arccos \\frac{2}{\\sqrt{14}}\\); б) \\(\\angle(\\alpha, D M)=0\\)"
+        }
+      },
+      "figures": {
+        "109": "koryanov-p074-1"
+      },
+      "crops": [
+        {
+          "name": "koryanov-p074-1",
+          "page": 74,
+          "box_pt": [
+            80,
+            205,
+            196,
+            398
+          ],
+          "source": "Рис. 109 (пример 96): Mathpix не вырезал рисунок, оставил подпись строкой"
+        }
+      ],
+      "fixes": [
+        {
+          "id": "П23-1",
+          "task": "П23",
+          "field": "text",
+          "old": "от вершины А до",
+          "new": "от вершины \\(A\\) до",
+          "source": "PDF с. 17: точка A"
+        },
+        {
+          "id": "П23-2",
+          "task": "П23",
+          "field": "solution",
+          "old": "\\[\n=\\frac{\\left|\\sqrt{69}",
+          "new": "\\[\n\\rho(A ; C M K)=\\frac{\\left|\\sqrt{69}",
+          "source": "PDF с. 18: левая часть формулы потеряна OCR"
+        },
+        {
+          "id": "П23-3",
+          "task": "П23",
+          "field": "solution",
+          "old": "(5 \\sqrt{3})^{2}}}=\n\\]",
+          "new": "(5 \\sqrt{3})^{2}}}=\\frac{\\sqrt{23}}{2} .\n\\]",
+          "source": "PDF с. 18: итог формулы потерян OCR"
+        },
+        {
+          "id": "П23-4",
+          "task": "П23",
+          "field": "solution",
+          "old": "=\\frac{2 \\sqrt{23}}{3} \\cdot\n\\end{gathered}",
+          "new": "=\\frac{2 \\sqrt{23}}{3} .\n\\end{gathered}",
+          "source": "PDF с. 18: точка, а не \\cdot"
+        },
+        {
+          "id": "П17-5",
+          "task": "П17",
+          "field": "solution",
+          "old": "после сокращения на — \\(d \\neq 0\\)",
+          "new": "после сокращения на \\(-d \\neq 0\\)",
+          "source": "PDF с. 14: минус, а не тире"
+        },
+        {
+          "id": "П20-6",
+          "task": "П20",
+          "field": "solution",
+          "old": "\\(\\overline{C_{1} M}=x",
+          "new": "\\(\\overrightarrow{C_{1} M}=x",
+          "source": "PDF с. 15: вектор"
+        },
+        {
+          "id": "П20-7",
+          "task": "П20",
+          "field": "solution",
+          "old": "(\\vec{b}+\\bar{c})",
+          "new": "(\\vec{b}+\\vec{c})",
+          "source": "PDF с. 16: вектор c"
+        },
+        {
+          "id": "П13-8",
+          "task": "П13",
+          "field": "solution",
+          "old": "\\(A D E A E=\\sqrt{A D^{2}-E D^{2}}\\)",
+          "new": "\\(A D E\\) \\(A E=\\sqrt{A D^{2}-E D^{2}}\\)",
+          "source": "PDF с. 11: название треугольника и формула"
+        },
+        {
+          "id": "П27-9",
+          "task": "П27",
+          "field": "text",
+          "old": "равными а и \\(b\\)",
+          "new": "равными \\(a\\) и \\(b\\)",
+          "source": "PDF с. 21: параметр a"
+        },
+        {
+          "id": "П31-10",
+          "task": "П31",
+          "field": "solution",
+          "old": "и \\(E M=\\vec{m}",
+          "new": "и \\(\\overrightarrow{E M}=\\vec{m}",
+          "source": "PDF с. 25: вектор EM"
+        },
+        {
+          "id": "П32-11",
+          "task": "П32",
+          "field": "solution",
+          "old": "\\[\n=\\frac{\\begin{array}{l}\n\\rho\\left(A A_{1} ; B B_{1}\\right)=\\rho\\left(A ; C_{1} B_{1} B\\right)= \\\\\n\\left|0 \\cdot 0+1 \\cdot \\frac{7 \\sqrt{3}}{2}+0 \\cdot 0+0\\right|\n\\end{array}=\\frac{7 \\sqrt{3}}{2}}{\\sqrt{0^{2}+1^{2}+0^{2}}}\n\\]",
+          "new": "\\[\n\\begin{gathered}\n\\rho\\left(A A_{1} ; B B_{1}\\right)=\\rho\\left(A ; C_{1} B_{1} B\\right)= \\\\\n=\\frac{\\left|0 \\cdot 0+1 \\cdot \\frac{7 \\sqrt{3}}{2}+0 \\cdot 0+0\\right|}{\\sqrt{0^{2}+1^{2}+0^{2}}}=\\frac{7 \\sqrt{3}}{2} .\n\\end{gathered}\n\\]",
+          "source": "PDF с. 26: формула, разобранная OCR в array внутри \\frac"
+        },
+        {
+          "id": "П44-12",
+          "task": "П44",
+          "field": "solution",
+          "old": "{\\sqrt{1^{2}+0^{2}+(\\sqrt{3})^{2}}} \\cdot \\sqrt{1^{2}+\\left(\\frac{\\sqrt{3}}{2}\\right)^{2}+\\left(\\frac{\\sqrt{3}}{2}\\right)^{2}} \\\\",
+          "new": "{\\sqrt{1^{2}+0^{2}+(\\sqrt{3})^{2}} \\cdot \\sqrt{1^{2}+\\left(\\frac{\\sqrt{3}}{2}\\right)^{2}+\\left(\\frac{\\sqrt{3}}{2}\\right)^{2}}}= \\\\",
+          "source": "PDF с. 33: знаменатель дроби целиком и знак ="
+        },
+        {
+          "id": "П50-13",
+          "task": "П50",
+          "field": "solution",
+          "old": "=\\frac{\\sqrt{3}}{3}\\) пример 14).",
+          "new": "=\\frac{\\sqrt{3}}{3}\\) (см. пример 14).",
+          "source": "PDF с. 38: «(см. пример 14)»"
+        },
+        {
+          "id": "П48-14",
+          "task": "П48",
+          "field": "solution",
+          "old": "Тогда \\(E F=12\\)\\\\\n",
+          "new": "Тогда \\(E F=12\\).\n",
+          "source": "PDF с. 37: конец фразы"
+        },
+        {
+          "id": "П73-15",
+          "task": "П73",
+          "field": "solution",
+          "old": "\\overrightarrow{O M}|} .\n\\]",
+          "new": "\\overrightarrow{O M}|} . \\tag{*}\n\\]",
+          "source": "PDF с. 54: метка формулы (*)"
+        },
+        {
+          "id": "П73-16",
+          "task": "П73",
+          "field": "solution",
+          "old": "\\overrightarrow{D M}|} .\n\\]",
+          "new": "\\overrightarrow{D M}|} . \\tag{**}\n\\]",
+          "source": "PDF с. 54: метка формулы (**)"
+        },
+        {
+          "id": "П76-17",
+          "task": "П76",
+          "field": "solution",
+          "old": "Отсюда\n\\[\nk=0{,}8\n\\]\n□\\\\\n",
+          "new": "Отсюда \\(k=0{,}8\\) и ",
+          "source": "PDF с. 56: «Отсюда k = 0,8 и …», □ — мусор OCR"
+        },
+        {
+          "id": "П77-18",
+          "task": "П77",
+          "field": "solution",
+          "old": "«Геометрия, $10$-11»",
+          "new": "«Геометрия, 10–11»",
+          "source": "PDF с. 57: название учебника"
+        },
+        {
+          "id": "П79-19",
+          "task": "П79",
+          "field": "solution",
+          "old": "пирамиды \\(-B_{1} D=d\\)",
+          "new": "пирамиды — \\(B_{1} D=d\\)",
+          "source": "PDF с. 63: тире, а не минус"
+        },
+        {
+          "id": "П79-20",
+          "task": "П79",
+          "field": "solution",
+          "old": "\\text {, a }",
+          "new": "\\text {, а }",
+          "source": "PDF с. 63: союз «а»"
+        },
+        {
+          "id": "П80-21",
+          "task": "П80",
+          "field": "solution",
+          "old": "боковой поверхности \\(-\\frac{16 H^{2}}{15}\\)",
+          "new": "боковой поверхности — \\(\\frac{16 H^{2}}{15}\\)",
+          "source": "PDF с. 64: тире, а не минус"
+        },
+        {
+          "id": "П84-22",
+          "task": "П84",
+          "field": "solution",
+          "old": "N P=\\sqrt{(P C-S C)^{2}} +N S^{2}=",
+          "new": "N P=\\sqrt{(P C-S C)^{2}+N S^{2}}=",
+          "source": "PDF с. 66: NS² под корнем"
+        },
+        {
+          "id": "П85-23",
+          "task": "П85",
+          "field": "text",
+          "old": "реб\\(p a B_{1} C_{1}\\)",
+          "new": "ребра \\(B_{1} C_{1}\\)",
+          "source": "PDF с. 66: «середина ребра B₁C₁»"
+        },
+        {
+          "id": "П85-24",
+          "task": "П85",
+          "field": "solution",
+          "old": "па- раллельной",
+          "new": "параллельной",
+          "source": "PDF с. 66: перенос слова"
+        },
+        {
+          "id": "П86-25",
+          "task": "П86",
+          "field": "solution",
+          "old": "\\text {ceu }",
+          "new": "\\text {сеч}",
+          "source": "PDF с. 67: S сеч"
+        },
+        {
+          "id": "П87-26",
+          "task": "П87",
+          "field": "text",
+          "old": "от точки А до",
+          "new": "от точки \\(A\\) до",
+          "source": "PDF с. 68: точка A"
+        },
+        {
+          "id": "П88-27",
+          "task": "П88",
+          "field": "solution",
+          "old": "Так как ∠\\(OKD\\)",
+          "new": "Так как \\(\\angle O K D\\)",
+          "source": "PDF с. 70: знак угла"
+        },
+        {
+          "id": "П89-28",
+          "task": "П89",
+          "field": "solution",
+          "old": "причем\n\\[\n\\begin{aligned}\n& A B=1, \\quad B C=2, \\\\\n& \\angle A B C=60^{\\circ} \\quad(\\text { см. }\n\\end{aligned}\n\\]\nрисунке \\taskpic{1}).\\\\\n",
+          "new": "причем \\(A B=1\\), \\(B C=2\\), \\(\\angle A B C=60^{\\circ}\\) \\taskpic{1}.\n",
+          "source": "PDF с. 70: данные и «(см. рис. 101)», разорванные OCR"
+        },
+        {
+          "id": "П90-29",
+          "task": "П90",
+          "field": "solution",
+          "old": "\\quad(\\) так как \\(O \\in A N)\\)",
+          "new": "\\) (так как \\(O \\in A N\\))",
+          "source": "PDF с. 71: скобки"
+        },
+        {
+          "id": "П90-30",
+          "task": "П90",
+          "field": "solution",
+          "old": "\\cos \\alpha} \\cdot\n\\end{gathered}",
+          "new": "\\cos \\alpha} .\n\\end{gathered}",
+          "source": "PDF с. 71: точка, а не \\cdot"
+        },
+        {
+          "id": "П92-31",
+          "task": "П92",
+          "field": "text",
+          "old": "равно b.",
+          "new": "равно \\(b\\).",
+          "source": "PDF с. 71: переменная b"
+        },
+        {
+          "id": "П93-32",
+          "task": "П93",
+          "field": "solution",
+          "old": "\\(A B C D A C \\perp B D\\)",
+          "new": "\\(A B C D\\) \\(A C \\perp B D\\)",
+          "source": "PDF с. 72: две формулы"
+        },
+        {
+          "id": "П96-33",
+          "task": "П96",
+          "field": "text",
+          "old": "Плошади",
+          "new": "Площади",
+          "source": "PDF с. 74: опечатка OCR"
+        },
+        {
+          "id": "П96-34",
+          "task": "П96",
+          "field": "solution",
+          "old": "S_{A_{1} B_{1} C_{1}}=S_{1}, \\\\",
+          "new": "S_{A_{1} B_{1} C_{1}}=S_{1}=2, \\\\",
+          "source": "PDF с. 74: S₁ = 2"
+        },
+        {
+          "id": "П99-35",
+          "task": "П99",
+          "field": "solution",
+          "old": "V_{M B C A} \\cdot\n\\end{aligned}",
+          "new": "V_{M B C A} .\n\\end{aligned}",
+          "source": "PDF с. 76: точка, а не \\cdot"
+        },
+        {
+          "id": "П101-36",
+          "task": "П101",
+          "field": "text",
+          "old": "\\(N\\), \\(a\\) на скрещивающейся",
+          "new": "\\(N\\), а на скрещивающейся",
+          "source": "PDF с. 76: союз «а»"
+        },
+        {
+          "id": "П103-37",
+          "task": "П103",
+          "field": "text",
+          "old": "середины рёбер \\(B_{1}\\) и",
+          "new": "середины рёбер \\(B B_{1}\\) и",
+          "source": "PDF с. 77: ребро BB₁"
+        },
+        {
+          "id": "П103-38",
+          "task": "П103",
+          "field": "solution",
+          "old": "\\(k=\\frac{1}{3}\\left(S C_{1}: S C=\\right.\\) \\(=1: 3)\\)",
+          "new": "\\(k=\\frac{1}{3}\\) \\((S C_{1}: S C=1: 3)\\)",
+          "source": "PDF с. 78: формула, разорванная OCR"
+        },
+        {
+          "id": "П104-39",
+          "task": "П104",
+          "field": "text",
+          "old": "Bo сколько",
+          "new": "Во сколько",
+          "source": "PDF с. 78: «Во» латиницей"
+        },
+        {
+          "id": "П113-40",
+          "task": "П113",
+          "field": "solution",
+          "old": "грани \\(S B C, N_{1}\\) и \\(N\\)",
+          "new": "грани \\(S B C\\), \\(N_{1}\\) и \\(N\\)",
+          "source": "PDF с. 85: две формулы"
+        },
+        {
+          "id": "П113-41",
+          "task": "П113",
+          "field": "solution",
+          "old": "\\(M_{1}=S D \\cap N_{1} N, M_{1}\\) и \\(M\\)",
+          "new": "\\(M_{1}=S D \\cap N_{1} N\\), \\(M_{1}\\) и \\(M\\)",
+          "source": "PDF с. 85: две формулы"
+        },
+        {
+          "id": "П114-42",
+          "task": "П114",
+          "field": "solution",
+          "old": "\\(D K_{1} K_{2} - K_{1} K_{3}\\)",
+          "new": "\\(D K_{1} K_{2}\\) — \\(K_{1} K_{3}\\)",
+          "source": "PDF с. 86: тире, а не минус"
+        },
+        {
+          "id": "П120-43",
+          "task": "П120",
+          "field": "answer",
+          "old": "\\overrightarrow{A C}_{1}",
+          "new": "\\overrightarrow{A C_{1}}",
+          "source": "PDF с. 89: вектор AC₁"
+        },
+        {
+          "id": "155-44",
+          "task": "155",
+          "field": "text",
+          "old": "D_{1} A B=B C=a, B B_{1}=b\\)",
+          "new": "D_{1}\\), \\(A B=B C=a\\), \\(B B_{1}=b\\)",
+          "source": "PDF с. 81: название и данные — разные формулы"
+        }
+      ]
+    }
+  ]
+}
