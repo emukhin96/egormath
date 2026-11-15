@@ -177,6 +177,8 @@ class SubitemDraft:
     text_latex: str
     author_answer_latex: str = ""
     author_solution_latex: str = ""
+    # Явная маска подпункта (профиль знает её по книге); пусто — подбор.
+    answer_mask: str = ""
 
 
 @dataclass
@@ -3390,6 +3392,9 @@ def bundle_from_text(
     elif profile == "volchkevich":
         from .volchkevich_parser import parse_volchkevich
         tasks, diagnostics = parse_volchkevich(tasks_text)
+    elif profile == "yashchenko_ege":
+        from .yashchenko_parser import parse_yashchenko
+        tasks, diagnostics = parse_yashchenko(tasks_text)
     elif profile == "vysotsky":
         from .vysotsky_parser import parse_vysotsky
         tasks, diagnostics = parse_vysotsky(tasks_text)
@@ -3614,7 +3619,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--profile", required=True,
-        choices=("galitsky", "merzlyak", "merzlyak_dm", "shabunin", "shabunin_method", "potoskuev", "volchkevich", "vysotsky", "tkachuk", "koropets", "koryanov", "feoktistov", "ziv", "shestakov", "ostromogilsky",
+        choices=("galitsky", "merzlyak", "merzlyak_dm", "shabunin", "shabunin_method", "potoskuev", "volchkevich", "yashchenko_ege", "vysotsky", "tkachuk", "koropets", "koryanov", "feoktistov", "ziv", "shestakov", "ostromogilsky",
                  "ostromogilsky_ege"))
     parser.add_argument("--tasks", required=True, type=Path)
     parser.add_argument("--solutions", type=Path)

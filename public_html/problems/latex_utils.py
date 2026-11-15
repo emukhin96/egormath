@@ -491,6 +491,10 @@ def wrap_bare_math(text):
     return ''.join(parts)
 
 
+_TABLE_RULE_RE = re.compile(
+    r'(?:\\(?:hline|cline\{[^{}]*\}|toprule|midrule|bottomrule)\s*)+')
+
+
 def _wrap_chunk(chunk):
     # Незакрытая ``\(`` — уже математика: иначе ``\{`` получит ``$`` внутри
     # и выйдет ``$\(\{…\}$``.
@@ -517,7 +521,11 @@ def _wrap_chunk(chunk):
     for start, end in spans:
         out.append(chunk[last:start])
         piece = chunk[start:end].strip()
-        if piece:
+        if piece and _TABLE_RULE_RE.fullmatch(piece):
+            # ``\hline`` между строками tabular — разметка таблицы, не
+            # формула: ``$\hline$`` ломает сборку PDF (Misplaced \noalign).
+            out.append(chunk[start:end])
+        elif piece:
             out.append('$%s$' % piece)
         last = end
     out.append(chunk[last:])

@@ -2249,12 +2249,25 @@
     display: inline-block;
     vertical-align: middle;
   }
+  /* Без заливки: иконка и подпись мелким текстом; одна строка, длинные
+     названия обрезаются многоточием, строка метаданных не распирается */
   .usage-badge > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 18rem;
     list-style: none;
     cursor: pointer;
-    background: #fff6e5;
-    color: var(--warn);
+    color: var(--muted);
+    font-size: var(--fs-sm);
+    line-height: 1.3;
+    white-space: nowrap;
   }
+  .usage-badge > summary.is-fresh { color: var(--warn); }
+  .usage-badge > summary:hover .usage-names { text-decoration: underline; text-underline-offset: 2px; }
+  .usage-badge .usage-icon { flex: none; width: 14px; height: 14px; }
+  .usage-badge .usage-names { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .usage-badge .usage-more { flex: none; font-variant-numeric: tabular-nums; }
   .usage-badge > summary::-webkit-details-marker { display: none; }
   /* Список выдач — всплывающий слой под бейджем, строка метаданных не разъезжается */
   .usage-list {
@@ -4271,7 +4284,11 @@
     margin: var(--space-2) 0;
   }
 
-  .tex-table td {
+  .tex-table td,
+  table.list .tex-table td,
+  table.list .tex-table tr:last-child td {
+    /* В списке (table.list) правила строк списка — свой отступ и «без
+       нижней границы у последней строки» — таблицу задачи не трогают. */
     border: 1px solid var(--border);
     padding: 4px 10px;
   }

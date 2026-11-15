@@ -22,11 +22,12 @@ SAMPLES = [
     ('shabunin_method', 'СРIX.2/1'),
     ('merzlyak_dm', 'ДМ.В1/170'), ('merzlyak_dm', 'ДМ.В4/1'),
     ('merzlyak_dm', 'КР3.В2/4'), ('merzlyak_dm', 'КР10.В1/12'),
+    ('yashchenko_ege', 'В1/1'), ('yashchenko_ege', 'В36/20'),
 ]
 # Не варианты работ: карточки Высоцкого, задачники, банки, «v0» Зива.
 NOT_VARIANTS = ['И1.1/2', 'П2.5', 'С9.7', '1.1', '1.1.2', 'I.1.П3', 'IV.12',
                 '1970.ВМК.1', 'sr/00/v0/3', 'sr/01/v0/5', '1.2.A01', 'ДМ.В1',
-                'КР3/4', 'sr/01/prep', '9 класс/лист#90']
+                'КР3/4', 'sr/01/prep', '9 класс/лист#90', 'В7', 'В7/14а']
 
 
 class RuleContractTests(TestCase):
@@ -56,6 +57,15 @@ class RuleContractTests(TestCase):
                          ('ziv:1:sr:03:2:2', 'sr/03 · варианты 5–6 · №2'))
         self.assertEqual(variant_identity(16, 'kr/01/prep/002')[:2],
                          ('variants:16:kr/01:all:002', 'КР 1 · все варианты · №2'))
+
+    def test_yashchenko_pairs_of_variants(self):
+        # Ященко: варианты 2k-1 и 2k собраны по одному плану.
+        self.assertEqual(variant_identity(20, 'В7/14')[:2],
+                         ('variants:20:В:3:14', 'ЕГЭ · варианты 7–8 · №14'))
+        self.assertEqual(variant_identity(20, 'В8/14')[0],
+                         variant_identity(20, 'В7/14')[0])
+        self.assertNotEqual(variant_identity(20, 'В9/14')[0],
+                            variant_identity(20, 'В8/14')[0])
 
     def test_ziv_wizard_does_not_take_feoktistov(self):
         self.assertTrue(ZIV.fullmatch('sr/03/v5/2'))

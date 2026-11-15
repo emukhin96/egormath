@@ -318,6 +318,10 @@ def _trim_display_gap(text, after_display, before_display):
 CACHE_SIZE = 8192
 
 
+_TABLE_GAP_RE = re.compile(
+    r'[ \t]*(?:(?:\\\\)?[ \t]*\n[ \t]*)*(\x05\d+\x06)(?:[ \t]*(?:\\\\)?[ \t]*\n)*[ \t]*')
+
+
 def tex_to_web_html(source):
     """HTML-версия текста задачи для веб-страниц (формулы рендерит KaTeX).
 
@@ -343,6 +347,9 @@ def _tex_to_web_html(source):
         return f'\x05{len(tables) - 1}\x06'
 
     text = _sub_outside_math(_TABULAR_RE, stash, text)
+    # Таблица — блок со своим отступом: переносы строк вокруг неё дали бы
+    # лишнюю пустую строку (<br><br>) до и после таблицы.
+    text = _TABLE_GAP_RE.sub(r'\1', text)
     text = _sub_outside_math(_TASKPIC_RE, '', text)
     text = _expand_lists(text)
     for pattern, repl in _COMMANDS:
