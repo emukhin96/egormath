@@ -19,6 +19,7 @@
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from datetime import timedelta
 from django.urls import reverse
 from django.utils import timezone
 
@@ -48,6 +49,31 @@ class UsageRow:
 
 def _student_name(student):
     return student.get_full_name() or student.username
+
+
+def _short_name(student):
+    """«Фамилия И.» — для подписи бейджа, где важна ширина."""
+    if student.last_name and student.first_name:
+        return f'{student.last_name} {student.first_name[0]}.'
+    return _student_name(student)
+
+
+# Подпись бейджа: кому выдавали последним (группа или ученик вне неё),
+# дальше — «+N»; выдача свежее FRESH_DAYS дней — акцентный цвет.
+BADGE_RECIPIENTS = 2
+FRESH_DAYS = 30
+
+
+def badge_label(events):
+    """Последние получатели по убыванию даты: (подписи, сколько скрыто)."""
+    seen, names = set(), []
+    for event in events:
+        for key, name in ([(('g', g.pk), g.name) for g in event.groups]
+                          + [(('s', s.pk), _short_name(s)) for s in event.students]):
+            if key not in seen:
+                seen.add(key)
+                names.append(name)
+    return names[:BADGE_RECIPIENTS], max(len(names) - BADGE_RECIPIENTS, 0)
 
 
 @dataclass
@@ -349,11 +375,17 @@ def attach_usage(request, tasks, *, audience=None, exclude_worksheet_id=None):
                        exclude_worksheet_id=exclude_worksheet_id)
     group_members = (_group_members(request.user)
                      if any(usage.values()) else [])
+    fresh_since = timezone.now() - timedelta(days=FRESH_DAYS)
     for task in tasks:
         rows = usage.get(task.variant_of_id or task.pk, [])
+        events = usage_events(rows, group_members)
+        names, more = badge_label(events)
         task.usage = {
             'rows': rows,
-            'events': usage_events(rows, group_members),
+            'events': events,
+            'names': names,
+            'more_names': more,
+            'fresh': bool(rows) and rows[0].date >= fresh_since,
             'audience': audience,
             'students_total': len({row.student.pk for row in rows}),
             'audience_total': (len(audience.student_ids)

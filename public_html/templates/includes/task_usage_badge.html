@@ -1,8 +1,10 @@
 {# Бейдж «уже задавалась»: task.usage из assignments.task_usage.attach_usage #}
 {% with usage=task.usage %}{% if usage.rows %}
 <details class="usage-badge">
-  {# Коротко «исп.» (использована); кому и когда — в подсказке и в списке по клику #}
-  <summary class="badge badge-usage" title="{% if usage.audience.student %}задавалась {{ usage.rows.0.date|date:'d.m.Y' }}{% if usage.rows|length > 1 %}, ещё {{ usage.rows|length|add:'-1' }}{% endif %}{% elif usage.audience.group %}задавалась {{ usage.students_total }} из {{ usage.audience_total }}, {{ usage.rows.0.date|date:'d.m.Y' }}{% else %}задавалась, {{ usage.students_total }} уч., {{ usage.rows.0.date|date:'d.m.Y' }}{% endif %}">исп.</summary>
+  {% comment %}Компактно: иконка и кому выдавали последним (не больше двух, дальше «+N»);
+     при выбранном ученике — дата. Свежая выдача — акцентным цветом, давняя — серым.
+     Кому и когда целиком — в подсказке и в списке по клику{% endcomment %}
+  <summary class="usage-badge-summary{% if usage.fresh %} is-fresh{% endif %}" title="{% if usage.audience.student %}задавалась {{ usage.rows.0.date|date:'d.m.Y' }}{% if usage.rows|length > 1 %}, ещё {{ usage.rows|length|add:'-1' }}{% endif %}{% elif usage.audience.group %}задавалась {{ usage.students_total }} из {{ usage.audience_total }}, {{ usage.rows.0.date|date:'d.m.Y' }}{% else %}задавалась, {{ usage.students_total }} уч., {{ usage.rows.0.date|date:'d.m.Y' }}{% endif %}"><svg class="usage-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg><span class="usage-names">{% if usage.audience.student %}{{ usage.rows.0.date|date:'d.m.Y' }}{% else %}{{ usage.names|join:', ' }}{% endif %}</span>{% if usage.more_names and not usage.audience.student %}<span class="usage-more">+{{ usage.more_names }}</span>{% endif %}</summary>
   {# Одна строка на выдачу: группа целиком — её названием, остальные — по именам #}
   <ul class="usage-list">
     {% for event in usage.events|slice:':30' %}

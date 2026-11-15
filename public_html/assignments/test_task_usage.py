@@ -12,6 +12,8 @@ from worksheets.tests import make_worksheet
 from .models import Assignment
 from .task_usage import (
     SESSION_KEY, _group_members, attach_usage, task_usage, usage_events)
+from .task_usage import UsageEvent
+from .task_usage import badge_label
 
 
 class TaskUsageTests(TestCase):
@@ -173,6 +175,47 @@ class TaskUsageTests(TestCase):
         attach_usage(request, self.tasks)
         self.assertEqual(self.tasks[0].usage['students_total'], 1)
         self.assertIsNone(self.tasks[0].usage['audience_total'])
+
+
+class UsageBadgeLabelTests(TestCase):
+    """Подпись бейджа: последние получатели, не больше двух, дальше «+N»."""
+
+    def setUp(self):
+        self.teacher = make_teacher()
+        self.ivanov = make_student(self.teacher, 'ivanov')
+        self.ivanov.first_name, self.ivanov.last_name = 'Пётр', 'Иванов'
+        self.ivanov.save()
+        self.petrov = make_student(self.teacher, 'petrov')
+        self.group = StudentGroup.objects.create(teacher=self.teacher, name='9А')
+
+    def event(self, days_ago, groups=(), students=()):
+        return UsageEvent(date=timezone.now() - timezone.timedelta(days=days_ago),
+                          kind='assignment', title='Листок', url='/',
+                          groups=list(groups), students=list(students))
+
+    def test_latest_first_without_repeats(self):
+        events = [self.event(1, students=[self.ivanov]),
+                  self.event(5, groups=[self.group]),
+                  self.event(9, students=[self.ivanov, self.petrov])]
+        self.assertEqual(badge_label(events), (['Иванов П.', '9А'], 1))
+        self.assertEqual(badge_label(events[:2]), (['Иванов П.', '9А'], 0))
+
+    def test_badge_shows_recipients_and_freshness(self):
+        worksheet = make_worksheet(self.teacher)
+        task = worksheet.ordered_items()[0].task
+        assignment = Assignment.objects.create(
+            worksheet=worksheet, student=self.ivanov, assigned_by=self.teacher)
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('task_list'))
+        self.assertContains(response, 'usage-badge-summary is-fresh')
+        self.assertContains(response, '<span class="usage-names">Иванов П.</span>')
+        # Давняя выдача — без акцентного цвета
+        Assignment.objects.filter(pk=assignment.pk).update(
+            assigned_at=timezone.now() - timezone.timedelta(days=40))
+        request = self.client.get(reverse('task_list')).wsgi_request
+        attach_usage(request, [task])
+        self.assertFalse(task.usage['fresh'])
+        self.assertEqual(task.usage['names'], ['Иванов П.'])
 
 
 class UsageEventsTests(TestCase):
