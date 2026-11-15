@@ -1,0 +1,1388 @@
+{
+ "_comment": "Правки OCR Ященко «36 вариантов ЕГЭ-2027», сверенные со сканом PDF (sha256 c83fb4bf…8777) 15.11.2026. text_fixes — правки готовых полей задачи (field: text/answer/solution, label — подпункт; before встречается в поле ровно один раз; replace — поле целиком), применяются после нумерации рисунков. answer_masks — явные маски, где формат линии ЕГЭ не выводится из ответа.",
+ "editions": [
+  {
+   "source_sha256": "6270385e59638aa2933de4faca20cb22b1eccdd3b76140d52cb99b721a00b535",
+   "patches": [],
+   "text_fixes": [
+    {
+     "id": "В1/14",
+     "field": "text",
+     "label": "б",
+     "before": "\\left[-6 \\pi ; \\frac{9 \\pi}{2}\\right]",
+     "after": "\\left[-6 \\pi ;-\\frac{9 \\pi}{2}\\right]",
+     "source": "PDF стр. 13"
+    },
+    {
+     "id": "В2/16",
+     "field": "answer",
+     "after": "\\([0 ; 2{,}5) ;[16 ; 81]\\)",
+     "replace": true,
+     "source": "PDF стр. 155"
+    },
+    {
+     "id": "В2/19",
+     "field": "text",
+     "before": "(a-x)^{1.5}+5 x",
+     "after": "(a-x)^{1{,}5}+5 x",
+     "source": "PDF стр. 18"
+    },
+    {
+     "id": "В2/19",
+     "field": "text",
+     "before": "\\frac{1}{5}(a-x)^{1.5}",
+     "after": "\\frac{1}{5}(a-x)^{1{,}5}",
+     "source": "PDF стр. 18"
+    },
+    {
+     "id": "В3/5",
+     "field": "text",
+     "before": "темперадура",
+     "after": "температура",
+     "source": "PDF стр. 19"
+    },
+    {
+     "id": "В3/16",
+     "field": "answer",
+     "before": "[-2 \\sqrt{5} ; 2 \\sqrt{5}] \\cup \\cup\\left[",
+     "after": "[-2 \\sqrt{5} ; 2 \\sqrt{5}] \\cup\\left[",
+     "source": "PDF стр. 156"
+    },
+    {
+     "id": "В3/17",
+     "field": "answer",
+     "before": "$0{,}8$ Om",
+     "after": "$0{,}8$ Ом",
+     "source": "PDF стр. 156"
+    },
+    {
+     "id": "В4/16",
+     "field": "answer",
+     "after": "\\([-\\sqrt{7{,}96} ;-\\sqrt{7{,}8}] \\cup[-\\sqrt{3} ; \\sqrt{3}] \\cup[\\sqrt{7{,}8} ; \\sqrt{7{,}96}]\\)",
+     "replace": true,
+     "source": "PDF стр. 156"
+    },
+    {
+     "id": "В5/10",
+     "field": "text",
+     "before": "\\(v_{0}=55 \\mathrm{kM} / \\mathrm{q}\\)",
+     "after": "\\(v_{0}=55\\) км/ч",
+     "source": "PDF стр. 28"
+    },
+    {
+     "id": "В5/10",
+     "field": "text",
+     "before": "\\(a=6 \\mathrm{~km} / \\mathrm{q}^{2}\\)",
+     "after": "\\(a=6\\) км/ч\\(^{2}\\)",
+     "source": "PDF стр. 28"
+    },
+    {
+     "id": "В5/11",
+     "field": "text",
+     "before": "в пункт от равления",
+     "after": "в пункт отправления",
+     "source": "PDF стр. 28"
+    },
+    {
+     "id": "В5/17",
+     "field": "text",
+     "before": "\\frac{\\mathrm{~K}}{\\text { моль }}",
+     "after": "\\frac{\\text { кг }}{\\text { моль }}",
+     "source": "PDF стр. 30"
+    },
+    {
+     "id": "В5/19",
+     "field": "answer",
+     "after": "\\(0<a<6, 6<a<6{,}25\\)",
+     "replace": true,
+     "source": "PDF стр. 157"
+    },
+    {
+     "id": "В6/10",
+     "field": "text",
+     "before": "\\(v_{0}=58 \\mathrm{~km} / \\mathrm{ч}\\)",
+     "after": "\\(v_{0}=58\\) км/ч",
+     "source": "PDF стр. 32"
+    },
+    {
+     "id": "В6/10",
+     "field": "text",
+     "before": "\\(a=8 \\mathrm{kM} / \\mathrm{ч}^{2}\\)",
+     "after": "\\(a=8\\) км/ч\\(^{2}\\)",
+     "source": "PDF стр. 32"
+    },
+    {
+     "id": "В6/11",
+     "field": "text",
+     "before": "fеплоход",
+     "after": "теплоход",
+     "source": "PDF стр. 32"
+    },
+    {
+     "id": "В6/19",
+     "field": "answer",
+     "after": "\\(-0{,}25<a<0, 0<a<6, a>6\\)",
+     "replace": true,
+     "source": "PDF стр. 157"
+    },
+    {
+     "id": "В7/17",
+     "field": "text",
+     "before": "\\(U=180 \\mathrm{~B}, L=0{,}045 \\Gamma \\mathrm{H}, C=2{,}5 \\cdot 10^{-5} \\Phi\\) и \\(R=20\\) Ом",
+     "after": "\\(U=180\\) В, \\(L=0{,}045\\) Гн, \\(C=2{,}5 \\cdot 10^{-5}\\) Ф и \\(R=20\\) Ом",
+     "source": "PDF стр. 38"
+    },
+    {
+     "id": "В7/20",
+     "field": "text",
+     "before": "\\(n_{l}(i=1",
+     "after": "\\(n_{i}\\ (i=1",
+     "source": "PDF стр. 38"
+    },
+    {
+     "id": "В8/10",
+     "field": "text",
+     "before": "на әкране",
+     "after": "на экране",
+     "source": "PDF стр. 40"
+    },
+    {
+     "id": "В8/16",
+     "field": "text",
+     "before": "\\log _{\\sqrt{ } 5+2}\\left(\\log _{\\sqrt{ } \\sqrt{ }-2}(2-5 x)\\right)",
+     "after": "\\log _{\\sqrt{5}+2}\\left(\\log _{\\sqrt{5}-2}(2-5 x)\\right)",
+     "source": "PDF стр. 42"
+    },
+    {
+     "id": "В8/16",
+     "field": "answer",
+     "after": "\\(\\left(0{,}2 ; 0{,}8-\\frac{\\sqrt{5}}{5}\\right]\\)",
+     "replace": true,
+     "source": "PDF стр. 158"
+    },
+    {
+     "id": "В8/17",
+     "field": "text",
+     "before": "\\(U=180 \\mathrm{~B}, L=0{,}018\\) Гн, \\(C=4 \\cdot 10^{-5} \\Phi\\) и \\(R=100 \\mathrm{~m}\\)?",
+     "after": "\\(U=180\\) В, \\(L=0{,}018\\) Гн, \\(C=4 \\cdot 10^{-5}\\) Ф и \\(R=10\\) Ом?",
+     "source": "PDF стр. 42"
+    },
+    {
+     "id": "В8/20",
+     "field": "text",
+     "before": "\\(n_{t}(i=1",
+     "after": "\\(n_{i}\\ (i=1",
+     "source": "PDF стр. 42"
+    },
+    {
+     "id": "В9/9",
+     "field": "text",
+     "before": "x_{5}, x_{8}, x_{7}",
+     "after": "x_{5}, x_{6}, x_{7}",
+     "source": "PDF стр. 44"
+    },
+    {
+     "id": "В9/10",
+     "field": "text",
+     "before": "\\sin \\frac{\\pi t}{6}(\\mathrm{~cm} / \\text{ с})\\)",
+     "after": "\\sin \\frac{\\pi t}{6}\\) (см/с)",
+     "source": "PDF стр. 44"
+    },
+    {
+     "id": "В9/17",
+     "field": "text",
+     "before": "\\(h=85 м, u=1{,}3 м / \\text{ с}, v=0{,}5 м / \\text{ с}\\)",
+     "after": "\\(h=85\\) м, \\(u=1{,}3\\) м/с, \\(v=0{,}5\\) м/с",
+     "source": "PDF стр. 46"
+    },
+    {
+     "id": "В10/10",
+     "field": "text",
+     "before": "\\sin \\frac{\\pi t}{4}(\\mathrm{~cm} / \\text{ с})\\)",
+     "after": "\\sin \\frac{\\pi t}{4}\\) (см/с)",
+     "source": "PDF стр. 48"
+    },
+    {
+     "id": "В10/17",
+     "field": "text",
+     "before": "\\(h=20 \\mathrm{~m}, u=3 \\mathrm{~m} / \\text{ с}, v=2{,}4 \\mathrm{~m} / \\text{ с}\\)",
+     "after": "\\(h=20\\) м, \\(u=3\\) м/с, \\(v=2{,}4\\) м/с",
+     "source": "PDF стр. 50"
+    },
+    {
+     "id": "В11/15",
+     "field": "text",
+     "before": "точка \\(K\\) середина ребра \\(S B\\). Прямая \\(D K\\) пересекается с плоскостью \\(S A C\\) в точке \\(N\\)",
+     "after": "точка \\(K\\) — середина ребра \\(S B\\). Прямая \\(D K\\) пересекается с плоскостью \\(S A C\\) в точке \\(N\\).",
+     "source": "PDF стр. 53"
+    },
+    {
+     "id": "В11/17",
+     "field": "text",
+     "before": "\\(T=\\mathbf{4 5 0}\\) К?",
+     "after": "\\(T=450\\) К?",
+     "source": "PDF стр. 54"
+    },
+    {
+     "id": "В11/20",
+     "field": "text",
+     "label": "в",
+     "before": "Ильича?\n\n* Кляссер — альбом (папка) для коллекционирования марок, монет.",
+     "after": "Ильича?",
+     "source": "PDF стр. 54"
+    },
+    {
+     "id": "В11/20",
+     "field": "text",
+     "before": "но меньше $120$ ячеек.",
+     "after": "но меньше $120$ ячеек.\n\n* Кляссер — альбом (папка) для коллекционирования марок, монет.",
+     "source": "PDF стр. 54"
+    },
+    {
+     "id": "В12/10",
+     "field": "text",
+     "before": "2^{-\\frac{t}{\\tau}}",
+     "after": "2^{-\\frac{t}{T}}",
+     "source": "PDF стр. 56"
+    },
+    {
+     "id": "В12/17",
+     "field": "text",
+     "before": "e^{-\\frac{\\text{ с}}{k T}}",
+     "after": "e^{-\\frac{\\varepsilon}{k T}}",
+     "source": "PDF стр. 58"
+    },
+    {
+     "id": "В12/17",
+     "field": "text",
+     "before": "\\(T=80 \\mathrm{~K}\\)?",
+     "after": "\\(T=80\\) К?",
+     "source": "PDF стр. 58"
+    },
+    {
+     "id": "В12/20",
+     "field": "text",
+     "label": "в",
+     "before": "Львовича?\n\n* Кляссер — альбом (папка) для коллекционирования марок, монет.",
+     "after": "Львовича?",
+     "source": "PDF стр. 58"
+    },
+    {
+     "id": "В12/20",
+     "field": "text",
+     "before": "но меньше $120$ ячеек.",
+     "after": "но меньше $120$ ячеек.\n\n* Кляссер — альбом (папка) для коллекционирования марок, монет.",
+     "source": "PDF стр. 58"
+    },
+    {
+     "id": "В13/17",
+     "field": "answer",
+     "before": "$562{,}5$ Bt",
+     "after": "$562{,}5$ Вт",
+     "source": "PDF стр. 161 (ответы, В13 №17)"
+    },
+    {
+     "id": "В14/17",
+     "field": "answer",
+     "before": "$750$ Bt",
+     "after": "$750$ Вт",
+     "source": "PDF стр. 161 (ответы, В14 №17)"
+    },
+    {
+     "id": "В14/14",
+     "field": "text",
+     "label": "б",
+     "before": "отрезку [$-0{,}5$, $0$]",
+     "after": "отрезку \\([-0{,}5; 0]\\)",
+     "source": "PDF стр. 65"
+    },
+    {
+     "id": "В15/10",
+     "field": "text",
+     "before": "\\(v_{0}=0{,}8 \\mathrm{~m} / \\text{ с}\\)",
+     "after": "\\(v_{0}=0{,}8\\) м/с",
+     "source": "PDF стр. 68"
+    },
+    {
+     "id": "В16/10",
+     "field": "text",
+     "before": "\\(v_{0}=2 \\mathrm{~m} / \\text{ с}\\)",
+     "after": "\\(v_{0}=2\\) м/с",
+     "source": "PDF стр. 72"
+    },
+    {
+     "id": "В15/17",
+     "field": "text",
+     "before": "\\(M=0{,}004 \\frac{\\mathrm{~K}}{\\text { моль }}\\)",
+     "after": "\\(M=0{,}004\\,\\frac{\\text{кг}}{\\text{моль}}\\)",
+     "source": "PDF стр. 69"
+    },
+    {
+     "id": "В16/17",
+     "field": "text",
+     "before": "\\(B\\) — универсальная газовая постоянная",
+     "after": "\\(R\\) — универсальная газовая постоянная",
+     "source": "PDF стр. 73"
+    },
+    {
+     "id": "В16/17",
+     "field": "text",
+     "before": "\\(M=0{,}004 \\frac{к г}{\\text { моль }}\\)",
+     "after": "\\(M=0{,}004\\,\\frac{\\text{кг}}{\\text{моль}}\\)",
+     "source": "PDF стр. 73"
+    },
+    {
+     "id": "В16/19",
+     "field": "answer",
+     "before": "\\cup(1 ; 2) \\cup \\cup\\left(2",
+     "after": "\\cup(1 ; 2) \\cup\\left(2",
+     "source": "PDF стр. 162 (ответы, В16 №19)"
+    },
+    {
+     "id": "В18/3",
+     "field": "text",
+     "before": "\\(A A_{1}=10\\)..",
+     "after": "\\(A A_{1}=10\\).",
+     "source": "PDF стр. 79"
+    },
+    {
+     "id": "В19/2",
+     "field": "text",
+     "before": "\\(1{,}5 \\bar{b}-\\bar{a}\\)",
+     "after": "\\(1{,}5 \\vec{b}-\\vec{a}\\)",
+     "source": "PDF стр. 83"
+    },
+    {
+     "id": "В19/10",
+     "field": "text",
+     "before": "\\(m=1{,}4 \\mathrm{kr} / \\text{ с}\\)",
+     "after": "\\(m=1{,}4\\) кг/с",
+     "source": "PDF стр. 84"
+    },
+    {
+     "id": "В19/10",
+     "field": "text",
+     "before": "\\(T_{\\mathrm{n}}=75^{\\circ} \\mathrm{C}\\)",
+     "after": "\\(T_{\\text{в}}=75^{\\circ} \\mathrm{C}\\)",
+     "source": "PDF стр. 84"
+    },
+    {
+     "id": "В19/10",
+     "field": "text",
+     "before": "\\frac{T_{\\mathrm{B}}-T_{\\text {п }}}{T-T_{\\text {n }}}",
+     "after": "\\frac{T_{\\text{в}}-T_{\\text{п}}}{T-T_{\\text{п}}}",
+     "source": "PDF стр. 84"
+    },
+    {
+     "id": "В19/10",
+     "field": "text",
+     "before": "\\frac{\\text { Вт } \\cdot \\mathbf{c}}{\\text { кг } \\cdot{ }^{\\circ} \\mathrm{C}}",
+     "after": "\\frac{\\text{Вт} \\cdot \\text{с}}{\\text{кг} \\cdot{ }^{\\circ} \\mathrm{C}}",
+     "source": "PDF стр. 84"
+    },
+    {
+     "id": "В19/10",
+     "field": "text",
+     "before": "\\gamma=63 \\frac{\\mathrm{BT}}{\\mathrm{m} \\cdot{ }^{\\circ} \\mathrm{C}}",
+     "after": "\\gamma=63 \\frac{\\text{Вт}}{\\text{м} \\cdot{ }^{\\circ} \\mathrm{C}}",
+     "source": "PDF стр. 84"
+    },
+    {
+     "id": "В19/14",
+     "field": "answer",
+     "label": "б",
+     "before": "-\\frac{23 \\pi}{8}, \\frac{21 \\pi}{8},",
+     "after": "-\\frac{23 \\pi}{8},-\\frac{21 \\pi}{8},",
+     "source": "PDF стр. 164"
+    },
+    {
+     "id": "В19/17",
+     "field": "text",
+     "before": "\\(\\left(\\mathrm{B}^{-1}\\right), R\\)",
+     "after": "(в \\(\\text{с}^{-1}\\)), \\(R\\)",
+     "source": "PDF стр. 86"
+    },
+    {
+     "id": "В19/17",
+     "field": "answer",
+     "before": "\\(1250 ~ c^{-1}\\)",
+     "after": "$1250$ с$^{-1}$",
+     "source": "PDF стр. 164"
+    },
+    {
+     "id": "В20/10",
+     "field": "text",
+     "before": "\\(T_{\\mathrm{n}}=25^{\\circ} \\mathrm{C}\\)",
+     "after": "\\(T_{\\text{п}}=25^{\\circ} \\mathrm{C}\\)",
+     "source": "PDF стр. 88"
+    },
+    {
+     "id": "В20/10",
+     "field": "text",
+     "before": "\\(m=0{,}5 \\mathrm{kr} / \\text{ с}\\)",
+     "after": "\\(m=0{,}5\\) кг/с",
+     "source": "PDF стр. 88"
+    },
+    {
+     "id": "В20/10",
+     "field": "text",
+     "before": "\\(T_{\\mathrm{b}}=81^{\\circ} \\mathrm{C}\\)",
+     "after": "\\(T_{\\text{в}}=81^{\\circ} \\mathrm{C}\\)",
+     "source": "PDF стр. 88"
+    },
+    {
+     "id": "В20/10",
+     "field": "text",
+     "before": "\\frac{T_{\\mathrm{a}}-T_{\\mathrm{n}}}{T-T_{\\mathrm{n}}}",
+     "after": "\\frac{T_{\\text{в}}-T_{\\text{п}}}{T-T_{\\text{п}}}",
+     "source": "PDF стр. 88"
+    },
+    {
+     "id": "В20/10",
+     "field": "text",
+     "before": "\\frac{\\mathrm{BT} \\cdot \\text{ с}}",
+     "after": "\\frac{\\text{Вт} \\cdot \\text{с}}",
+     "source": "PDF стр. 88"
+    },
+    {
+     "id": "В20/10",
+     "field": "text",
+     "before": "\\gamma=42 \\frac{\\mathrm{Bt}}{\\mathrm{m} \\cdot",
+     "after": "\\gamma=42 \\frac{\\text{Вт}}{\\text{м} \\cdot",
+     "source": "PDF стр. 88"
+    },
+    {
+     "id": "В20/16",
+     "field": "text",
+     "before": "\\log _{\\sqrt[7]{8}}^{2}|x|",
+     "after": "\\log _{\\sqrt{3}}^{2}|x|",
+     "source": "PDF стр. 90"
+    },
+    {
+     "id": "В21/10",
+     "field": "text",
+     "before": "\\(a\\) км/ \\(\\mathrm{q}^{2}\\)",
+     "after": "\\(a\\) км/ч\\(^{2}\\)",
+     "source": "PDF стр. 92"
+    },
+    {
+     "id": "В21/10",
+     "field": "text",
+     "before": "\\(\\mathrm{KM} / \\mathrm{ч}^{2}\\)",
+     "after": "км/ч\\(^{2}\\)",
+     "source": "PDF стр. 92"
+    },
+    {
+     "id": "В21/14",
+     "field": "answer",
+     "after": "",
+     "replace": true,
+     "source": "PDF стр. 165"
+    },
+    {
+     "id": "В21/14",
+     "field": "answer",
+     "label": "а",
+     "after": "\\(\\pi+2 \\pi n, n \\in \\mathbb{Z} ; \\frac{\\pi}{3}+4 \\pi k, k \\in \\mathbb{Z} ; \\frac{5 \\pi}{3}+4 \\pi m, m \\in \\mathbb{Z}\\)",
+     "replace": true,
+     "source": "PDF стр. 165"
+    },
+    {
+     "id": "В21/17",
+     "field": "text",
+     "before": "\\(h=60 \\mathrm{~m}, u=1{,}3 \\mathrm{~m} / \\text{ с}, v=1{,}2 \\mathrm{~m} / \\text{ с}\\)",
+     "after": "\\(h=60\\) м, \\(u=1{,}3\\) м/с, \\(v=1{,}2\\) м/с",
+     "source": "PDF стр. 94"
+    },
+    {
+     "id": "В22/10",
+     "field": "text",
+     "before": "\\(a=6250 \\mathrm{kM} / \\mathrm{ч}^{2}\\)",
+     "after": "\\(a=6250\\) км/ч\\(^{2}\\)",
+     "source": "PDF стр. 96"
+    },
+    {
+     "id": "В22/11",
+     "field": "text",
+     "before": "$3$ км/ . Ответ",
+     "after": "$3$ км/ч. Ответ",
+     "source": "PDF стр. 96"
+    },
+    {
+     "id": "В22/14",
+     "field": "answer",
+     "after": "",
+     "replace": true,
+     "source": "PDF стр. 165"
+    },
+    {
+     "id": "В22/14",
+     "field": "answer",
+     "label": "а",
+     "after": "\\(2 \\pi+4 \\pi n, n \\in \\mathbb{Z} ; \\frac{2 \\pi}{3}+4 \\pi k, k \\in \\mathbb{Z} ; -\\frac{2 \\pi}{3}+4 \\pi m, m \\in \\mathbb{Z}\\)",
+     "replace": true,
+     "source": "PDF стр. 165"
+    },
+    {
+     "id": "В22/16",
+     "field": "text",
+     "before": "15^{-\\frac{8}{x}}",
+     "after": "15^{-\\frac{3}{x}}",
+     "source": "PDF стр. 98"
+    },
+    {
+     "id": "В22/17",
+     "field": "text",
+     "before": "$h=75$ м $, u=2{,}6$ м $/ с, v=1$ м $/ с$",
+     "after": "$h=75$ м, $u=2{,}6$ м/с, $v=1$ м/с",
+     "source": "PDF стр. 98"
+    },
+    {
+     "id": "В23/10",
+     "field": "text",
+     "before": "\\(v=2\\) моля",
+     "after": "\\(\\nu=2\\) моля",
+     "source": "PDF стр. 100"
+    },
+    {
+     "id": "В23/10",
+     "field": "text",
+     "before": "\\alpha v T \\log _{2}",
+     "after": "\\alpha \\nu T \\log _{2}",
+     "source": "PDF стр. 100"
+    },
+    {
+     "id": "В23/10",
+     "field": "text",
+     "before": "\\cdot К}-\\) постоянная",
+     "after": "\\cdot \\text{К}}\\) — постоянная",
+     "source": "PDF стр. 100"
+    },
+    {
+     "id": "В23/17",
+     "field": "text",
+     "before": "\\(r=1{,}50\\) м",
+     "after": "\\(r=1{,}5\\) Ом",
+     "source": "PDF стр. 102"
+    },
+    {
+     "id": "В23/17",
+     "field": "answer",
+     "before": "$1{,}5$ Oм",
+     "after": "$1{,}5$ Ом",
+     "source": "PDF стр. 166"
+    },
+    {
+     "id": "В23/19",
+     "field": "answer",
+     "after": "$[-3;3)$",
+     "replace": true,
+     "source": "PDF стр. 166"
+    },
+    {
+     "id": "В24/10",
+     "field": "text",
+     "before": "\\(v=13\\) молей",
+     "after": "\\(\\nu=13\\) молей",
+     "source": "PDF стр. 104"
+    },
+    {
+     "id": "В24/19",
+     "field": "answer",
+     "after": "$(-7;5]$",
+     "replace": true,
+     "source": "PDF стр. 166"
+    },
+    {
+     "id": "В25/10",
+     "field": "text",
+     "before": "$v=8$ м $/ с$",
+     "after": "$v=8$ м/с",
+     "source": "PDF стр. 108"
+    },
+    {
+     "id": "В25/17",
+     "field": "answer",
+     "before": "\\(6{,}21 ⿱ 10^{- 22}\\)",
+     "after": "\\(6{,}21 \\cdot 10^{-22}\\)",
+     "source": "PDF стр. 167 (ответы)"
+    },
+    {
+     "id": "В25/19",
+     "field": "answer",
+     "before": "(-12 \\sqrt{2} ;-8 \\sqrt{2}) \\cup \\cup(8 \\sqrt{2}",
+     "after": "(-12 \\sqrt{2} ;-8 \\sqrt{2}) \\cup(8 \\sqrt{2}",
+     "source": "PDF стр. 167 (ответы)"
+    },
+    {
+     "id": "В25/20",
+     "field": "answer",
+     "after": "",
+     "replace": true,
+     "source": "PDF стр. 167 (ответы)"
+    },
+    {
+     "id": "В25/20",
+     "field": "answer",
+     "label": "а",
+     "after": "да",
+     "replace": true,
+     "source": "PDF стр. 167 (ответы)"
+    },
+    {
+     "id": "В25/20",
+     "field": "answer",
+     "label": "б",
+     "after": "$12$",
+     "replace": true,
+     "source": "PDF стр. 167 (ответы)"
+    },
+    {
+     "id": "В25/20",
+     "field": "answer",
+     "label": "в",
+     "after": "$(7; 1)$, $(6; 2)$, $(5; 3)$, $(9; 5)$, $(8; 6)$",
+     "replace": true,
+     "source": "PDF стр. 167 (ответы)"
+    },
+    {
+     "id": "В26/10",
+     "field": "text",
+     "before": "\\(v=3{,}6 \\mathrm{~m} / \\text{ с}\\)",
+     "after": "\\(v=3{,}6\\) м/с",
+     "source": "PDF стр. 112"
+    },
+    {
+     "id": "В26/10",
+     "field": "text",
+     "before": "v \\cos \\alpha(м / с)\\)",
+     "after": "v \\cos \\alpha\\) (м/с)",
+     "source": "PDF стр. 112"
+    },
+    {
+     "id": "В26/17",
+     "field": "text",
+     "before": "\\(T=\\mathbf{7 5}\\) К",
+     "after": "\\(T=75\\) К",
+     "source": "PDF стр. 113"
+    },
+    {
+     "id": "В28/8",
+     "field": "text",
+     "before": "8^{0.45} \\cdot 32^{0.33}",
+     "after": "8^{0{,}45} \\cdot 32^{0{,}33}",
+     "source": "PDF стр. 120"
+    },
+    {
+     "id": "В28/17",
+     "field": "text",
+     "before": "\\(\\mathrm{m} / \\text{ с}, R\\)",
+     "after": "м/с, \\(R\\)",
+     "source": "PDF стр. 122"
+    },
+    {
+     "id": "В29/10",
+     "field": "text",
+     "before": "$\\rho=1000$ кг $/ \\mathrm{м}^{3}$",
+     "after": "$\\rho=1000$ кг/м$^{3}$",
+     "source": "PDF стр. 124"
+    },
+    {
+     "id": "В29/10",
+     "field": "text",
+     "before": "\\(g=9{,}8 \\mathrm{H} / к г\\) )",
+     "after": "\\(g=9{,}8\\) Н/кг)",
+     "source": "PDF стр. 124"
+    },
+    {
+     "id": "В29/10",
+     "field": "text",
+     "before": "$893025$ H?",
+     "after": "$893025$ Н?",
+     "source": "PDF стр. 124"
+    },
+    {
+     "id": "В29/14",
+     "field": "answer",
+     "label": "а",
+     "before": "\\(-0{,}5{,}0{,}5,",
+     "after": "\\(-0{,}5,\\ 0{,}5,",
+     "source": "PDF стр. 169 (ответы)"
+    },
+    {
+     "id": "В29/14",
+     "field": "answer",
+     "label": "б",
+     "before": "\\(-0{,}5{,}0{,}5,",
+     "after": "\\(-0{,}5,\\ 0{,}5,",
+     "source": "PDF стр. 169 (ответы)"
+    },
+    {
+     "id": "В29/19",
+     "field": "answer",
+     "after": "\\(\\left[-4-2 \\sqrt{3} ;-2\\right)\\)",
+     "replace": true,
+     "source": "PDF стр. 169 (ответы)"
+    },
+    {
+     "id": "В29/20",
+     "field": "answer",
+     "label": "б",
+     "before": "да ($3$ + $71$; $33$ + 4)",
+     "after": "да ($3+71$; $33+4$)",
+     "source": "PDF стр. 169 (ответы)"
+    },
+    {
+     "id": "В30/10",
+     "field": "text",
+     "before": "\\(\\rho=1000 \\mathrm{kr} / \\mathrm{м}^{3}\\)",
+     "after": "\\(\\rho=1000\\) кг/м$^{3}$",
+     "source": "PDF стр. 128"
+    },
+    {
+     "id": "В30/10",
+     "field": "text",
+     "before": "\\(g=10 \\mathrm{H} / к г\\) )",
+     "after": "\\(g=10\\) Н/кг)",
+     "source": "PDF стр. 128"
+    },
+    {
+     "id": "В30/10",
+     "field": "text",
+     "before": "$447216$ H?",
+     "after": "$447216$ Н?",
+     "source": "PDF стр. 128"
+    },
+    {
+     "id": "В30/19",
+     "field": "answer",
+     "after": "\\(\\left[-16-8 \\sqrt{3} ;-8\\right)\\)",
+     "replace": true,
+     "source": "PDF стр. 169 (ответы)"
+    },
+    {
+     "id": "В30/20",
+     "field": "answer",
+     "label": "б",
+     "before": "да ($33$ + $7$; $3$ + 77)",
+     "after": "да ($33+7$; $3+77$)",
+     "source": "PDF стр. 169 (ответы)"
+    },
+    {
+     "id": "В31/3",
+     "field": "text",
+     "before": "$2100$ с $ м^{3}$",
+     "after": "$2100$ см$^{3}$",
+     "source": "PDF стр. 131"
+    },
+    {
+     "id": "В31/10",
+     "field": "text",
+     "before": "\\(H_{0}=5 \\mathrm{~m}\\)",
+     "after": "\\(H_{0}=5\\) м",
+     "source": "PDF стр. 132"
+    },
+    {
+     "id": "В31/10",
+     "field": "text",
+     "before": "\\(g=10 \\mathrm{~m} / \\text{ с}^{2}\\) )",
+     "after": "\\(g=10\\) м/с\\(^{2}\\))",
+     "source": "PDF стр. 132"
+    },
+    {
+     "id": "В31/16",
+     "field": "answer",
+     "before": "[$0$; 4)",
+     "after": "$[0; 4)$",
+     "source": "PDF стр. 170"
+    },
+    {
+     "id": "В31/17",
+     "field": "answer",
+     "before": "$75$ Вt",
+     "after": "$75$ Вт",
+     "source": "PDF стр. 170"
+    },
+    {
+     "id": "В32/5",
+     "field": "text",
+     "before": "одного цвета.\\\\.",
+     "after": "одного цвета.",
+     "source": "PDF стр. 135"
+    },
+    {
+     "id": "В32/6",
+     "field": "text",
+     "before": "Всего вышущено",
+     "after": "Всего выпущено",
+     "source": "PDF стр. 136"
+    },
+    {
+     "id": "В32/7",
+     "field": "text",
+     "before": "\\log _{10}(5 x+4)",
+     "after": "\\log _{16}(5 x+4)",
+     "source": "PDF стр. 136"
+    },
+    {
+     "id": "В32/10",
+     "field": "text",
+     "before": "\\(H_{0}=20 \\mathrm{~m}\\)",
+     "after": "\\(H_{0}=20\\) м",
+     "source": "PDF стр. 136"
+    },
+    {
+     "id": "В32/10",
+     "field": "text",
+     "before": "\\(g=10 \\mathrm{~m} / \\text{ с}^{2}\\) )",
+     "after": "\\(g=10\\) м/с\\(^{2}\\))",
+     "source": "PDF стр. 136"
+    },
+    {
+     "id": "В32/16",
+     "field": "answer",
+     "before": "[$0$;16)",
+     "after": "$[0; 16)$",
+     "source": "PDF стр. 170"
+    },
+    {
+     "id": "В33/4",
+     "field": "text",
+     "before": "турист $3$. полетит",
+     "after": "турист З. полетит",
+     "source": "PDF стр. 139"
+    },
+    {
+     "id": "В33/10",
+     "field": "text",
+     "before": "\\(U_{0}=36 \\mathrm{kB}\\)",
+     "after": "\\(U_{0}=36\\) кВ",
+     "source": "PDF стр. 140"
+    },
+    {
+     "id": "В33/14",
+     "field": "text",
+     "label": "б",
+     "before": "\\left[-4 \\pi ; \\frac{5 \\pi}{2}\\right]",
+     "after": "\\left[-4 \\pi ;-\\frac{5 \\pi}{2}\\right]",
+     "source": "PDF стр. 141"
+    },
+    {
+     "id": "В34/9",
+     "field": "text",
+     "before": "отмечено девять точек",
+     "after": "отмечено десять точек",
+     "source": "PDF стр. 144"
+    },
+    {
+     "id": "В34/10",
+     "field": "text",
+     "before": "\\(U_{0}=10 \\mathrm{kB}\\)",
+     "after": "\\(U_{0}=10\\) кВ",
+     "source": "PDF стр. 144"
+    },
+    {
+     "id": "В34/10",
+     "field": "text",
+     "before": "\\(U(к \\mathrm{~B})\\)",
+     "after": "\\(U\\) (кВ)",
+     "source": "PDF стр. 144"
+    },
+    {
+     "id": "В34/15",
+     "field": "text",
+     "before": "эту пофему",
+     "after": "эту апофему",
+     "source": "PDF стр. 146"
+    },
+    {
+     "id": "В35/10",
+     "field": "text",
+     "before": "\\(T_{0}=1400 \\mathrm{~K}, a=-25 К /\\) мин \\(^{2}, b=300 ~ К /\\) мин .",
+     "after": "\\(T_{0}=1400\\) К, \\(a=-25\\) К/мин\\(^{2}\\), \\(b=300\\) К/мин.",
+     "source": "PDF стр. 148"
+    },
+    {
+     "id": "В35/17",
+     "field": "text",
+     "before": "\\(h=45 \\mathrm{~m}, u=3{,}5 \\mathrm{~m} / \\text{ с}, v=2{,}1 \\mathrm{~m} / \\text{ с}\\)",
+     "after": "\\(h=45\\) м, \\(u=3{,}5\\) м/с, \\(v=2{,}1\\) м/с",
+     "source": "PDF стр. 150"
+    },
+    {
+     "id": "В35/17",
+     "field": "answer",
+     "before": "$60$ m",
+     "after": "$60$ м",
+     "source": "PDF стр. 172"
+    },
+    {
+     "id": "В36/10",
+     "field": "text",
+     "before": "\\(a=\\frac{1}{49} м /\\) мин \\(^{2}\\) и \\(b=-\\frac{5}{7} м / м и н\\)",
+     "after": "\\(a=\\frac{1}{49}\\) м/мин\\(^{2}\\) и \\(b=-\\frac{5}{7}\\) м/мин",
+     "source": "PDF стр. 152"
+    },
+    {
+     "id": "В36/14",
+     "field": "answer",
+     "label": "а",
+     "before": "$1$,\\(5 ; 6 ;",
+     "after": "\\(1{,}5 ; 6 ;",
+     "source": "PDF стр. 172"
+    },
+    {
+     "id": "В36/17",
+     "field": "text",
+     "before": "пристани А и В (см. рисунок)",
+     "after": "пристани А и Б (см. рисунок)",
+     "source": "PDF стр. 154"
+    },
+    {
+     "id": "В36/17",
+     "field": "text",
+     "before": "\\(h=48 \\mathrm{~m}, u=2{,}5 \\mathrm{~m} / \\text{ с}, v=2{,}4 \\mathrm{~m} / \\text{ с}\\)",
+     "after": "\\(h=48\\) м, \\(u=2{,}5\\) м/с, \\(v=2{,}4\\) м/с",
+     "source": "PDF стр. 154"
+    },
+    {
+     "id": "В36/20",
+     "field": "text",
+     "before": "\\ldots \\cdot p_{h}}",
+     "after": "\\ldots \\cdot p_{k}}",
+     "source": "PDF стр. 154"
+    },
+    {
+     "id": "В1/14",
+     "field": "solution",
+     "before": "\\item[а)] Запишем исходное уравнение в виде:",
+     "after": "а) Запишем исходное уравнение в виде:",
+     "source": "PDF стр. 173"
+    },
+    {
+     "id": "В1/14",
+     "field": "solution",
+     "before": "\\item[б)] \\(-\\frac{11 \\pi}{2},-5 \\pi\\).",
+     "after": "б) \\(-\\frac{11 \\pi}{2},-5 \\pi\\).",
+     "source": "PDF стр. 173"
+    },
+    {
+     "id": "В1/15",
+     "field": "solution",
+     "before": "треугольников \\(\\operatorname{COS}\\)",
+     "after": "треугольников \\(C O S\\)",
+     "source": "PDF стр. 174"
+    },
+    {
+     "id": "В1/15",
+     "field": "solution",
+     "before": "Прямяя \\(F H\\)",
+     "after": "Прямая \\(F H\\)",
+     "source": "PDF стр. 174"
+    },
+    {
+     "id": "В1/15",
+     "field": "solution",
+     "before": "б) В плоскости \\(A B C\\) через точку \\(O\\) проведём прямую,\\\\\n\\taskpic{2}\\\\\nперпендикулярную прямой \\(A D\\)",
+     "after": "\\taskpic{2}\nб) В плоскости \\(A B C\\) через точку \\(O\\) проведём прямую, перпендикулярную прямой \\(A D\\)",
+     "source": "PDF стр. 174"
+    },
+    {
+     "id": "В1/16",
+     "field": "solution",
+     "before": "Получили, что:\n\n  \\item если \\(2^{2 x}>2^{3}",
+     "after": "Получили, что:\\\\\n— если \\(2^{2 x}>2^{3}",
+     "source": "PDF стр. 175"
+    },
+    {
+     "id": "В1/16",
+     "field": "solution",
+     "before": "x \\geq 16\\);\n  \\item если \\(2^{2 x}<2^{3}",
+     "after": "x \\geq 16\\);\\\\\n— если \\(2^{2 x}<2^{3}",
+     "source": "PDF стр. 175"
+    },
+    {
+     "id": "В1/18",
+     "field": "solution",
+     "before": "лежат на одной прямой.\\\\\nб) Косинус угла \\(A B D\\) равен \\(\\frac{B D-A E}{2 A B}=\\frac{5}{13}\\). Следовательно:\\\\\n    \\taskpic{1}\n",
+     "after": "лежат на одной прямой.\\\\\n\\taskpic{1}\nб) Косинус угла \\(A B D\\) равен \\(\\frac{B D-A E}{2 A B}=\\frac{5}{13}\\). Следовательно:\n",
+     "source": "PDF стр. 177"
+    },
+    {
+     "id": "В1/20",
+     "field": "solution",
+     "before": "Тогда \\(\\mathbf{5 7 0}=100+\\mathbf{7 0} k_{1}+\\mathbf{9 0} k_{2}\\) где",
+     "after": "Тогда \\(570=100+70 k_{1}+90 k_{2}\\), где",
+     "source": "PDF стр. 179"
+    },
+    {
+     "id": "В7/14",
+     "field": "solution",
+     "before": "\\item[а)] Запишем исходное уравнение в виде:",
+     "after": "а) Запишем исходное уравнение в виде:",
+     "source": "PDF стр. 180"
+    },
+    {
+     "id": "В7/14",
+     "field": "solution",
+     "before": "\\item[б)] \\(\\frac{19 \\pi}{6}",
+     "after": "б) \\(\\frac{19 \\pi}{6}",
+     "source": "PDF стр. 181"
+    },
+    {
+     "id": "В7/15",
+     "field": "solution",
+     "before": "а в квадрате \\(O C D E-\\frac{\\sqrt{2} a}{2}\\) и а соответственно.",
+     "after": "а в квадрате \\(O C D E\\) — \\(\\frac{\\sqrt{2} a}{2}\\) и \\(a\\) соответственно.",
+     "source": "PDF стр. 181"
+    },
+    {
+     "id": "В7/17",
+     "field": "solution",
+     "before": "Ответ: \\(\\omega=1000 \\mathbf{~ c}^{-\\mathbf{1}}\\).",
+     "after": "Ответ: \\(\\omega=1000 \\text{ с}^{-1}\\).",
+     "source": "PDF стр. 183"
+    },
+    {
+     "id": "В7/18",
+     "field": "solution",
+     "before": "а) Обозначим середины сторон \\(A B\\) и \\(B C\\) точками \\(K\\) и \\(N\\)\\\\\n\\taskpic{1}\\\\\nсоответственно,",
+     "after": "\\taskpic{1}\nа) Обозначим середины сторон \\(A B\\) и \\(B C\\) точками \\(K\\) и \\(N\\) соответственно,",
+     "source": "PDF стр. 184"
+    },
+    {
+     "id": "В7/19",
+     "field": "solution",
+     "before": "на плоскости Оху две",
+     "after": "на плоскости \\(O x y\\) две",
+     "source": "PDF стр. 185"
+    },
+    {
+     "id": "В7/19",
+     "field": "solution",
+     "before": "Получили, что в первом случае окружность \\(w\\) в пересечении с прямой \\(l_{1}\\):\n\n  \\item при \\(\\frac{1}{a}<0{,}072 ; a>\\frac{1}{0{,}072} ; a>\\frac{125}{9}\\) имеет $0$ точек,\n  \\item при \\(\\frac{1}{a}=0{,}072 ; a=\\frac{125}{9}\\) имеет $1$ точку (на рисунке окружность \\(w_{1}\\) и точка \\(A\\) ),\n  \\item при \\(\\frac{1}{a}>0{,}072 ; a<\\frac{1}{0{,}072} ; a<\\frac{125}{9}\\) имеет $2$ точки,\\\\\nВо втором случае окружность \\(w\\) в пересечении с прямой \\(l_{2}\\):\n  \\item при \\(a<0{,}392\\) имеет $0$ точек,\n  \\item при \\(a=0{,}392\\) имеет $1$ точку (на рисунке окружность \\(w_{1}\\) и точка \\(B\\) ),\n  \\item при \\(a>0{,}392\\) имеет $2$ точки.\\\\\nЗначит, первоначальная система:\n  \\item при \\(0<a<0{,}392\\) имеет $2$ корня,\n  \\item при \\(a=0{,}392\\) имеет $3$ корня,\n  \\item при \\(0{,}392<a<\\frac{125}{9}\\) имеет $4$ корня,\n  \\item при \\(a=\\frac{125}{9}\\) имеет $3$ корня,\n  \\item при \\(a>\\frac{125}{9}\\) имеет $2$ корня.\\\\",
+     "after": "Получили, что в первом случае окружность \\(w\\) в пересечении с прямой \\(l_{1}\\):\n\n— при \\(\\frac{1}{a}<0{,}072 ; a>\\frac{1}{0{,}072} ; a>\\frac{125}{9}\\) имеет $0$ точек,\\\\\n— при \\(\\frac{1}{a}=0{,}072 ; a=\\frac{125}{9}\\) имеет $1$ точку (на рисунке окружность \\(w_{1}\\) и точка \\(A\\) ),\\\\\n— при \\(\\frac{1}{a}>0{,}072 ; a<\\frac{1}{0{,}072} ; a<\\frac{125}{9}\\) имеет $2$ точки,\\\\\nВо втором случае окружность \\(w\\) в пересечении с прямой \\(l_{2}\\):\\\\\n— при \\(a<0{,}392\\) имеет $0$ точек,\\\\\n— при \\(a=0{,}392\\) имеет $1$ точку (на рисунке окружность \\(w_{1}\\) и точка \\(B\\) ),\\\\\n— при \\(a>0{,}392\\) имеет $2$ точки.\\\\\nЗначит, первоначальная система:\\\\\n— при \\(0<a<0{,}392\\) имеет $2$ корня,\\\\\n— при \\(a=0{,}392\\) имеет $3$ корня,\\\\\n— при \\(0{,}392<a<\\frac{125}{9}\\) имеет $4$ корня,\\\\\n— при \\(a=\\frac{125}{9}\\) имеет $3$ корня,\\\\\n— при \\(a>\\frac{125}{9}\\) имеет $2$ корня.\\\\",
+     "source": "PDF стр. 186"
+    },
+    {
+     "id": "В11/14",
+     "field": "solution",
+     "before": "\\item[а)] Запишем исходное уравнение в виде:",
+     "after": "а) Запишем исходное уравнение в виде:",
+     "source": "PDF стр. 187"
+    },
+    {
+     "id": "В11/14",
+     "field": "solution",
+     "before": "\\(\\left[-4 \\pi ; \\frac{5 \\pi}{2}\\right]\\)",
+     "after": "\\(\\left[-4 \\pi ;-\\frac{5 \\pi}{2}\\right]\\)",
+     "source": "PDF стр. 188"
+    },
+    {
+     "id": "В11/14",
+     "field": "solution",
+     "before": "б) С помощью числовой окружности отберём корни,\\\\\n\\taskpic{1}\\\\\nпринадлежащие",
+     "after": "\\taskpic{1}\nб) С помощью числовой окружности отберём корни, принадлежащие",
+     "source": "PDF стр. 188"
+    },
+    {
+     "id": "В11/15",
+     "field": "solution",
+     "before": "a) В треугольнике \\(B S D\\) отрезки \\(D K\\) и \\(S O\\) являются\\\\\n\\taskpic{1}\\\\\nмедианами",
+     "after": "\\taskpic{1}\nа) В треугольнике \\(B S D\\) отрезки \\(D K\\) и \\(S O\\) являются медианами",
+     "source": "PDF стр. 188"
+    },
+    {
+     "id": "В11/15",
+     "field": "solution",
+     "before": "пересечение прямой а с прямой \\(A C\\)",
+     "after": "пересечение прямой \\(a\\) с прямой \\(A C\\)",
+     "source": "PDF стр. 188"
+    },
+    {
+     "id": "В11/15",
+     "field": "solution",
+     "before": "Прямые \\(а\\) и \\(S C\\)",
+     "after": "Прямые \\(a\\) и \\(S C\\)",
+     "source": "PDF стр. 188"
+    },
+    {
+     "id": "В11/16",
+     "field": "solution",
+     "before": "\\(0<\\log _{5} 2<1{,}1<\\log _{5} 8<\\log _{3} 8\\)",
+     "after": "\\(0<\\log _{5} 2<1\\), \\(1<\\log _{5} 8<\\log _{3} 8\\)",
+     "source": "PDF стр. 189"
+    },
+    {
+     "id": "В11/18",
+     "field": "solution",
+     "before": "Треугольники \\(O G B\\) и \\(O N B\\) равны по катету и гипотенузе, откуда\\\\\n\\taskpic{2}\\\\\n\\(O B\\)",
+     "after": "\\taskpic{2}\nТреугольники \\(O G B\\) и \\(O N B\\) равны по катету и гипотенузе, откуда \\(O B\\)",
+     "source": "PDF стр. 191"
+    },
+    {
+     "id": "В11/19",
+     "field": "solution",
+     "before": "\\(\\mathbf{2 5} \\boldsymbol{a}^{\\mathbf{2}}-\\mathbf{3 6} \\boldsymbol{a} \\geq \\mathbf{0}\\)",
+     "after": "\\(25 a^{2}-36 a \\geq 0\\)",
+     "source": "PDF стр. 192"
+    },
+    {
+     "id": "В11/19",
+     "field": "solution",
+     "before": "получаем, что \\(a=\\frac{\\mathbf{3 6}}{\\mathbf{2 5}}\\)",
+     "after": "получаем, что \\(a=\\frac{36}{25}\\)",
+     "source": "PDF стр. 192"
+    },
+    {
+     "id": "В11/19",
+     "field": "solution",
+     "before": "при \\(a>\\frac{\\mathbf{3 6}}{\\mathbf{2 5}}\\)",
+     "after": "при \\(a>\\frac{36}{25}\\)",
+     "source": "PDF стр. 192"
+    },
+    {
+     "id": "В11/20",
+     "field": "solution",
+     "before": "a) Пусть \\(k=3\\).",
+     "after": "а) Пусть \\(k=3\\).",
+     "source": "PDF стр. 193"
+    },
+    {
+     "id": "В17/14",
+     "field": "solution",
+     "before": "\\item[а)] Запишем исходное уравнение в виде:",
+     "after": "а) Запишем исходное уравнение в виде:",
+     "source": "PDF стр. 194"
+    },
+    {
+     "id": "В17/14",
+     "field": "solution",
+     "before": "\\(l=0, x=\\pi\\) 。",
+     "after": "\\(l=0, x=\\pi\\).",
+     "source": "PDF стр. 195"
+    },
+    {
+     "id": "В17/14",
+     "field": "solution",
+     "before": "\\item[б)] \\(0, \\frac{\\pi}{2}",
+     "after": "б) \\(0, \\frac{\\pi}{2}",
+     "source": "PDF стр. 195"
+    },
+    {
+     "id": "В17/15",
+     "field": "solution",
+     "before": "a) Плоскость \\(\\alpha\\) пересекает ребро \\(C C_{1}\\), поэтому пересекает\\\\\n\\taskpic{1}\\\\\nи ребро",
+     "after": "\\taskpic{1}\nа) Плоскость \\(\\alpha\\) пересекает ребро \\(C C_{1}\\), поэтому пересекает и ребро",
+     "source": "PDF стр. 195"
+    },
+    {
+     "id": "В17/18",
+     "field": "solution",
+     "before": "а) Треугольники \\(A O C\\) и \\(E O D\\) равны по двум сторонам и углу\\\\\n\\taskpic{1}\\\\\nмежду ними,",
+     "after": "\\taskpic{1}\nа) Треугольники \\(A O C\\) и \\(E O D\\) равны по двум сторонам и углу между ними,",
+     "source": "PDF стр. 198"
+    },
+    {
+     "id": "В17/18",
+     "field": "solution",
+     "before": "Ответ: б) \\(\\mathbf{1 5 0} \\sqrt{\\mathbf{3}}\\).",
+     "after": "Ответ: б) \\(150 \\sqrt{3}\\).",
+     "source": "PDF стр. 198"
+    },
+    {
+     "id": "В17/19",
+     "field": "solution",
+     "before": "{ \\frac { k + 1 0 } { 6 } - \\frac { \\operatorname { a r c c o s } 0 , 6 } { 6 \\pi } \\leq k + \\frac { \\operatorname { a r c c o s } 0 , 6 } { \\pi } , } \\\\\n{ k - \\frac { \\operatorname { a r c c o s } 0 , 6 } { \\pi } < \\frac { k + 1 0 } { 6 } + \\frac { \\operatorname { a r c c o s } 0 , 6 } { 6 \\pi } ; }",
+     "after": "\\frac{k+10}{6}-\\frac{\\arccos 0{,}6}{6 \\pi} \\leq k+\\frac{\\arccos 0{,}6}{\\pi}, \\\\\nk-\\frac{\\arccos 0{,}6}{\\pi}<\\frac{k+10}{6}+\\frac{\\arccos 0{,}6}{6 \\pi} ;",
+     "source": "PDF стр. 200"
+    },
+    {
+     "id": "В17/19",
+     "field": "solution",
+     "before": "{ \\frac { k + 9 } { 6 } + \\frac { \\operatorname { a r c c o s } 0 , 6 } { 6 \\pi } \\leq k + 1 - \\frac { \\operatorname { a r c c o s } 0 , 6 } { \\pi } , } \\\\\n{ k - 1 + \\frac { \\operatorname { a r c c o s } 0 , 6 } { \\pi } < \\frac { k + 1 1 } { 6 } - \\frac { \\operatorname { a r c c o s } 0 , 6 } { 6 \\pi } , }",
+     "after": "\\frac{k+9}{6}+\\frac{\\arccos 0{,}6}{6 \\pi} \\leq k+1-\\frac{\\arccos 0{,}6}{\\pi}, \\\\\nk-1+\\frac{\\arccos 0{,}6}{\\pi}<\\frac{k+11}{6}-\\frac{\\arccos 0{,}6}{6 \\pi},",
+     "source": "PDF стр. 200"
+    },
+    {
+     "id": "В17/20",
+     "field": "solution",
+     "before": "\\item[a)] Пусть на доске",
+     "after": "а) Пусть на доске",
+     "source": "PDF стр. 201"
+    },
+    {
+     "id": "В17/20",
+     "field": "solution",
+     "before": "равна $2025$.\n  \\item[б)] Если",
+     "after": "равна $2025$.\\\\\nб) Если",
+     "source": "PDF стр. 201"
+    },
+    {
+     "id": "В17/20",
+     "field": "solution",
+     "before": "равна $2: 1001$, $1010$",
+     "after": "равна $2$: $1001$, $1010$",
+     "source": "PDF стр. 201"
+    },
+    {
+     "id": "В17/20",
+     "field": "solution",
+     "before": "равна \\(1(1+0)\\), то",
+     "after": "равна $1$ ($1+0$), то",
+     "source": "PDF стр. 201"
+    },
+    {
+     "id": "В17/20",
+     "field": "solution",
+     "before": "равна \\(3(3+0{,}1+2\\) или \\(2+1)\\), то",
+     "after": "равна $3$ ($3+0$, $1+2$ или $2+1$), то",
+     "source": "PDF стр. 201"
+    },
+    {
+     "id": "В17/20",
+     "field": "solution",
+     "before": "первых двух дифр равна",
+     "after": "первых двух цифр равна",
+     "source": "PDF стр. 201"
+    },
+    {
+     "id": "В21/14",
+     "field": "solution",
+     "before": "\\(x=\\frac{5 \\pi}{3}+4 \\pi m, m \\in \\mathbb{Z}\\) 。",
+     "after": "\\(x=\\frac{5 \\pi}{3}+4 \\pi m, m \\in \\mathbb{Z}\\).",
+     "source": "PDF стр. 202"
+    },
+    {
+     "id": "В21/15",
+     "field": "solution",
+     "before": "\\(O Q=4 S Q ; O S=3 S Q\\) 。",
+     "after": "\\(O Q=4 S Q ; O S=3 S Q\\).",
+     "source": "PDF стр. 204"
+    },
+    {
+     "id": "В21/17",
+     "field": "solution",
+     "before": "\\taskpic{2}\n\nИсследуем функцию",
+     "after": "Исследуем функцию",
+     "source": "PDF стр. 205"
+    },
+    {
+     "id": "В21/17",
+     "field": "solution",
+     "before": "Oтвет: $25$ м.",
+     "after": "Ответ: $25$ м.",
+     "source": "PDF стр. 205"
+    },
+    {
+     "id": "В21/19",
+     "field": "solution",
+     "before": "\\[\n\\begin{aligned}\n\\left\\{\\begin{array}{l}\ny=a x-a, \\\\\ny=\\frac{a}{2} x+2 a, \\\\\nx \\geq 0\n\\end{array}\\right. & \\text { или } \\\\\n& \\left\\{\\begin{array} { l }\n{ y = - a x - a , } \\\\\n{ y = \\frac { a } { 2 } x + 2 a , } \\\\\n{ y = 5 a }\n\\end{array} \\quad \\text { или } \\quad \\left\\{\\begin{array}{l}\nx=-2, \\\\\ny=a .\n\\end{array}\\right.\\right.\n\\end{aligned}\n\\]",
+     "after": "\\[\n\\left\\{\\begin{array}{l}\ny=a x-a, \\\\\ny=\\frac{a}{2} x+2 a, \\\\\nx \\geq 0\n\\end{array}\\right. \\text { или } \\left\\{\\begin{array}{l}\ny=-a x-a, \\\\\ny=\\frac{a}{2} x+2 a, \\\\\nx \\leq 0 ;\n\\end{array}\\right.\n\\]\n\\[\n\\left\\{\\begin{array}{l}\nx=6, \\\\\ny=5 a\n\\end{array}\\right. \\text { или } \\left\\{\\begin{array}{l}\nx=-2, \\\\\ny=a .\n\\end{array}\\right.\n\\]",
+     "source": "PDF стр. 207"
+    },
+    {
+     "id": "В21/19",
+     "field": "solution",
+     "before": "Otbet: \\(\\left(-\\frac{7}{12}",
+     "after": "Ответ: \\(\\left(-\\frac{7}{12}",
+     "source": "PDF стр. 208"
+    },
+    {
+     "id": "В21/20",
+     "field": "solution",
+     "before": "чем отметка \\(«-55\\) ».",
+     "after": "чем отметка «$-55$».",
+     "source": "PDF стр. 209"
+    },
+    {
+     "id": "В27/14",
+     "field": "solution",
+     "after": "а) Запишем исходное уравнение в виде:\n\\[\n\\begin{gathered}\n\\frac{4 \\sin ^{3} x-2 \\sin x}{-\\sin 2 x}-1=0 ; \\frac{2 \\sin x-4 \\sin ^{3} x-\\sin 2 x}{\\sin 2 x}=0 ; \\\\\n\\frac{\\sin x\\left(1-2 \\sin ^{2} x-\\cos x\\right)}{\\sin x \\cos x}=0 ; \\frac{\\sin x\\left(2 \\cos ^{2} x-\\cos x-1\\right)}{\\sin x \\cos x}=0 ; \\\\\n\\frac{\\sin x(\\cos x-1)(2 \\cos x+1)}{\\sin x \\cos x}=0 .\n\\end{gathered}\n\\]\nПолучили, \\(\\sin x=0, \\cos x=1\\) или \\(\\cos x=-0{,}5\\) при условии \\(\\sin x \\cos x \\neq 0\\). Уравнения \\(\\sin x=0, \\cos x=1\\) не удовлетворяют условию \\(\\sin x \\cos x \\neq 0\\).\n\nЗначит, \\(\\cos x=-0{,}5\\), откуда \\(x=\\pm \\frac{2 \\pi}{3}+2 \\pi n\\).\n\nб) С помощью числовой окружности отберём корни, принадлежащие отрезку \\(\\left[-3 \\pi ;-\\frac{\\pi}{2}\\right]\\).\\\\\n\\taskpic{1}\\\\\nПолучим:\n\\[\n\\begin{gathered}\nx_{1}=-3 \\pi+\\frac{\\pi}{3}=-\\frac{8 \\pi}{3} ; \\\\\nx_{2}=-3 \\pi+\\pi+\\frac{2 \\pi}{3}=-\\frac{4 \\pi}{3} ; \\\\\nx_{3}=x_{1}+2 \\pi=-\\frac{8 \\pi}{3}+2 \\pi=-\\frac{2 \\pi}{3} .\n\\end{gathered}\n\\]\nОтвет: а) \\(\\frac{2 \\pi}{3}+2 \\pi k, k \\in \\mathbb{Z} ;-\\frac{2 \\pi}{3}+2 \\pi n, n \\in \\mathbb{Z}\\);\\\\\nб) \\(-\\frac{8 \\pi}{3},-\\frac{4 \\pi}{3},-\\frac{2 \\pi}{3}\\).\n\nЗамечание. Отбор корней может быть произведён и любым другим способом: с помощью графика, решением линейных неравенств и т.п.",
+     "replace": true,
+     "source": "PDF стр. 209–210",
+     "images": [
+      "yashchenko-v27-14s"
+     ]
+    },
+    {
+     "id": "В27/15",
+     "field": "solution",
+     "after": "а) Точка \\(S\\) — пересечение прямых \\(A A_{1}\\) и \\(N P\\). Точка \\(S\\) лежит в плоскости \\(K N P\\). Значит, прямые \\(S K\\) и \\(A_{1} C_{1}\\) пересекаются в точке \\(F\\).\n\nТреугольники \\(P B_{1} N\\) и \\(P A_{1} S\\) подобны по двум углам с коэффициентом подобия, равным \\(P B_{1}: P A_{1}=1: 2\\). Значит, \\(A_{1} S=2 B_{1} N=4\\).\n\nТочка \\(T\\) — пересечение прямой \\(A A_{1}\\) и прямой, проходящей\\\\\n\\taskpic{1}\\\\\nчерез точку \\(K\\) параллельно прямой \\(A_{1} C_{1}\\). Четырёхугольник \\(A_{1} C_{1} K T\\) является прямоугольником, откуда \\(A_{1} T=6-2=4\\).\n\nПолучили, что \\(A_{1}\\) — середина отрезка \\(S T\\). Поскольку прямые \\(A_{1} F\\) и \\(T K\\) параллельны, \\(A_{1} F\\) — средняя линия треугольника \\(K T S\\), откуда \\(A_{1} F=2\\) и, значит, точка \\(F\\) — середина \\(A_{1} C_{1}\\).\\\\\nб) Рассмотрим пирамиду $FANK$. Используя формулу объёма пирамиды, получаем:\n\n\\[\nx \\cdot S_{A N K}=y \\cdot S_{A F K},\n\\]\n\nгде \\(x\\) — расстояние от точки \\(F\\) до плоскости \\(A N K\\), а \\(y\\) — расстояние от точки \\(N\\) до плоскости \\(A F K\\).\\\\\n\\taskpic{2}\n\nПризма \\(A B C A_{1} B_{1} C_{1}\\) правильная, значит, \\(y=\\frac{\\sqrt{3}}{2} A B=2 \\sqrt{3}\\).\\\\\nВ треугольнике \\(A F K\\) получаем:\n\n\\[\nA K=\\sqrt{16+4}=\\sqrt{20}, F K=\\sqrt{16+4}=\\sqrt{20}, A F=\\sqrt{36+4}=\\sqrt{40},\n\\]\n\nоткуда треугольник \\(A F K\\) прямоугольный и \\(S_{A F K}=\\frac{1}{2} A K \\cdot F K=10\\).\\\\\nВ треугольнике \\(A N K\\) получаем:\n\n\\[\nA K=K N=\\sqrt{20}, A N=\\sqrt{16+16}=\\sqrt{32},\n\\]\n\nоткуда треугольник \\(A N K\\) равнобедренный и \\(S_{A N K}=\\frac{1}{2} A N \\cdot \\sqrt{A K^{2}-\\frac{A N^{2}}{4}}=4 \\sqrt{6}\\).\\\\\nЗначит, расстояние от точки \\(F\\) до плоскости $ANK$\n\n\\[\nx=\\frac{2 \\sqrt{3} \\cdot 10}{4 \\sqrt{6}}=\\frac{5 \\sqrt{2}}{2} .\n\\]\n\nОтвет: б) \\(\\frac{5 \\sqrt{2}}{2}\\).",
+     "replace": true,
+     "source": "PDF стр. 210–211",
+     "images": [
+      "d8426feb-ff61-4c16-b372-98ea6db24150-211_453_306_340_1576",
+      "d8426feb-ff61-4c16-b372-98ea6db24150-211_321_311_805_1583"
+     ]
+    },
+    {
+     "id": "В27/16",
+     "field": "solution",
+     "before": "Oтвет: \\((-\\infty",
+     "after": "Ответ: \\((-\\infty",
+     "source": "PDF стр. 212"
+    },
+    {
+     "id": "В27/17",
+     "field": "solution",
+     "before": "при одном и том же значении переменной $0$.",
+     "after": "при одном и том же значении переменной \\(v\\).",
+     "source": "PDF стр. 212"
+    },
+    {
+     "id": "В27/17",
+     "field": "solution",
+     "before": "Oтвет: \\(100 \\sqrt{30 R}\\).",
+     "after": "Ответ: \\(100 \\sqrt{30 R}\\).",
+     "source": "PDF стр. 213"
+    },
+    {
+     "id": "В27/19",
+     "field": "solution",
+     "before": "{ - 3 < a < 1 , 5 }",
+     "after": "{ - 3 < a < 1{,}5 }",
+     "source": "PDF стр. 214"
+    },
+    {
+     "id": "В27/20",
+     "field": "solution",
+     "before": "поскольку в одной\n\nгруппе находится",
+     "after": "поскольку в одной группе находится",
+     "source": "PDF стр. 216–217"
+    },
+    {
+     "id": "В31/14",
+     "field": "solution",
+     "before": "C помощью числовой окружности",
+     "after": "С помощью числовой окружности",
+     "source": "PDF стр. 217"
+    },
+    {
+     "id": "В31/19",
+     "field": "solution",
+     "before": "Число -a — $9$ является корнем",
+     "after": "Число \\(-a-9\\) является корнем",
+     "source": "PDF стр. 222"
+    },
+    {
+     "id": "В19/16",
+     "field": "answer",
+     "replace": true,
+     "after": "\\((-\\infty ;-10),\\left[-4 \\sqrt{2} ;-\\frac{\\sqrt{2}}{8}\\right],\\left[\\frac{\\sqrt{2}}{8} ; 4 \\sqrt{2}\\right],(10 ;+\\infty)\\)",
+     "source": "PDF стр. 164 (300 dpi): лишние фигурные скобки OCR"
+    },
+    {
+     "id": "В20/16",
+     "field": "answer",
+     "replace": true,
+     "after": "\\([-3 \\sqrt{3} ;-3),\\left[-\\frac{\\sqrt{3}}{9} ; 0\\right),\\left(0 ; \\frac{\\sqrt{3}}{9}\\right],(3 ; 3 \\sqrt{3}]\\)",
+     "source": "PDF стр. 164 (300 dpi): лишние фигурные скобки OCR"
+    }
+   ],
+   "answer_masks": {
+    "В9/14б": "{{number: (\\log_{5} 34)^{2}}}"
+   }
+  }
+ ]
+}

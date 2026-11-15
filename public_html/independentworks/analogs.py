@@ -25,7 +25,7 @@ ZIV = re.compile(r'(sr|kr|pr)/(\d{1,2})/v([1-8])/(\d{1,2}[а-я]?)')
 # (``test_analog_rules.RuleContractTests``).
 ANALOG_PROFILES = frozenset({
     'ziv', 'feoktistov', 'vysotsky', 'shabunin_method', 'merzlyak_dm',
-    'ostromogilsky', 'ostromogilsky_ege',
+    'ostromogilsky', 'ostromogilsky_ege', 'yashchenko_ege',
 })
 
 
@@ -92,6 +92,12 @@ VARIANT_RULES = (
     VariantRule('merzlyak_dm', re.compile(
         r'(?P<work>ДМ|КР\d{1,2})\.В(?P<variant>\d)/(?P<number>\d{1,4})'),
         pairs=False, work_title=_merzlyak_dm_work),
+    # Ященко, «36 вариантов ЕГЭ»: «В7/14». Варианты 1–2, 3–4, … собраны по
+    # одному плану (так сказано в книге и видно по условиям) — один номер
+    # в паре вариантов аналогичен, в разных парах — нет.
+    VariantRule('yashchenko_ege', re.compile(
+        r'(?P<work>В)(?P<variant>\d{1,2})/(?P<number>\d{1,2})'),
+        pairs=True, work_title=lambda _work: 'ЕГЭ'),
 )
 ZIV_UNKNOWN_VARIANT = re.compile(r'(sr|kr|pr)/\d{1,2}/v0/.+')
 RULES = {rule.name: rule for rule in VARIANT_RULES}
