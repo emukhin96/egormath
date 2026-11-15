@@ -163,6 +163,11 @@ def normalize_answer_mask(value, *, key='answer_mask'):
     return value
 
 
+# Профили ЕГЭ: маска каждого ответа строится при загрузке в каталог по
+# формату линии (``assignments.checks.ege_policy``), а не подбором.
+EGE_MASK_PROFILES = frozenset({'ostromogilsky_ege', 'yashchenko_ege'})
+
+
 def fill_draft_answer_masks(draft, *, deadline=None):
     """Заполняет пустые маски; False — осталась работа после лимита времени."""
     from assignments.checks import draft_mask
@@ -1466,7 +1471,7 @@ def commit_batch(batch, *, user, draft_ids=None, require_complete=True):
             if mask:
                 task.answer_mask = mask
                 task.save(update_fields=['answer_mask'])
-        if batch.profile == 'ostromogilsky_ege':
+        if batch.profile in EGE_MASK_PROFILES:
             targets = list(task.subitems.order_by('order', 'pk')) if draft.subitems else [task]
             for index, target in enumerate(targets):
                 if target.answer_mask.strip():
