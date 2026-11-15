@@ -24,8 +24,8 @@ TMP="$(mktemp -d)"
 # Недописанный файл (ошибка, нехватка места) не остаётся на диске.
 trap 'rm -rf "$TMP"; rm -f "$DIR"/*-"$STAMP".*.part' EXIT
 
-# Набор старше срока — по отметке в имени, а не по mtime: архив media/var
-# без изменений — жёсткая ссылка на прежний, у ссылок общий mtime.
+# Набор старше срока — по отметке времени в имени файла: так набор
+# удаляется целиком, а посторонние файлы в каталоге не трогаются.
 prune_local() {
   local cutoff name stamp
   cutoff="$(date -d "-$LOCAL_RETENTION_DAYS days" +%Y%m%d-%H%M%S)"
@@ -40,16 +40,11 @@ prune_local() {
 # Свободно на разделе бэкапов, МБ.
 free_mb() { df -Pm "$DIR" | awk 'NR==2 {print $4}'; }
 
-# Архив каталога data/<name>: если с прошлого архива в нём ничего не
-# менялось — жёсткая ссылка (0 байт), иначе tar с проверкой места.
+# Архив каталога data/<name> с проверкой места: ~1,2 прошлого архива
+# (или размера каталога) плюс запас; иначе архив не создаётся.
 archive_dir() {
   local name="$1" out="$DIR/$1-$STAMP.tar.gz" prev need
   prev="$(ls "$DIR/$name"-*.tar.gz 2>/dev/null | sort | tail -n 1 || true)"
-  if [ -n "$prev" ] && [ -z "$(find "$DATA_DIR/$name" -newer "$prev" -print -quit)" ]; then
-    echo "==> $name без изменений -> ссылка на $(basename "$prev")"
-    ln "$prev" "$out"
-    return
-  fi
   need=$(( RESERVE_MB + ( $( [ -n "$prev" ] && du -m "$prev" | cut -f1 || du -sm "$DATA_DIR/$name" | cut -f1 ) * 12 / 10 ) ))
   if [ "$(free_mb)" -lt "$need" ]; then
     echo "!! мало места для $name: свободно $(free_mb) МБ, нужно ~$need МБ — архив не создан"
