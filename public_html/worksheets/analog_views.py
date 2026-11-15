@@ -50,7 +50,7 @@ def worksheet_item_analogs(request, pk, item_id):
     worksheet, item = _row(request, pk, item_id)
     analogs, total = analog_lists.analog_tasks(request.user, item.task)
     from assignments.task_usage import attach_usage
-    attach_usage(request, analogs)
+    attach_usage(request, analogs, exclude_worksheet_id=worksheet.pk)
     ctx = {'analogs': analogs, 'analogs_total': total,
            'analogs_more': max(total - len(analogs), 0), 'task': item.task,
            'form_id': f'analogs-form-{item.pk}'}

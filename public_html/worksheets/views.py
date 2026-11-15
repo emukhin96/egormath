@@ -427,8 +427,10 @@ def worksheet_detail(request, pk):
     collection = Collection.objects.filter(worksheet=worksheet).select_related('source').first()
     from .authored import SOURCE_TITLE as AUTHORED_SOURCE, is_section
     from assignments.task_usage import attach_usage, audience_context
+    # Выдачи самого листка не считаются: иначе «исп.» горит у всех его задач
     usage_ctx = audience_context(request, attach_usage(
-        request, [item.task for item in items if item.task_id] + list(found_tasks)))
+        request, [item.task for item in items if item.task_id] + list(found_tasks),
+        exclude_worksheet_id=worksheet.pk))
     return render(request, 'worksheets/worksheet_detail.html', {
         **usage_ctx,
         **taxonomy_page_context(filter_state_from_params(request.GET)),

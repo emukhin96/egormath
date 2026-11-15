@@ -162,11 +162,13 @@ def _root_ids(tasks):
     return {task.variant_of_id or task.pk for task in tasks}
 
 
-def task_usage(teacher, tasks, *, student_ids=None):
+def task_usage(teacher, tasks, *, student_ids=None, exclude_worksheet_id=None):
     """История выдачи по задачам: {id оригинала: [UsageRow, …]}.
 
     ``student_ids`` — ограничение аудитории (None — все ученики учителя).
-    Строки отсортированы по убыванию даты.
+    ``exclude_worksheet_id`` — листок, выдачи которого не считаются: в его
+    же конструкторе каждая задача листка иначе помечалась бы «исп.» из-за
+    самого листка. Строки отсортированы по убыванию даты.
     """
     root_ids = _root_ids(tasks)
     usage = {pk: [] for pk in root_ids}
@@ -187,9 +189,11 @@ def task_usage(teacher, tasks, *, student_ids=None):
                         .order_by().values_list('pk', 'variant_of_id')))
 
     # Обычные задания: листок → задачи → назначения.
-    items = list(WorksheetItem.objects.filter(
-        deleted_at__isnull=True, task_id__in=list(to_root),
-    ).values_list('pk', 'worksheet_id', 'task_id'))
+    items = WorksheetItem.objects.filter(
+        deleted_at__isnull=True, task_id__in=list(to_root))
+    if exclude_worksheet_id is not None:
+        items = items.exclude(worksheet_id=exclude_worksheet_id)
+    items = list(items.values_list('pk', 'worksheet_id', 'task_id'))
     tasks_by_worksheet = {}
     for item_pk, worksheet_id, task_id in items:
         tasks_by_worksheet.setdefault(worksheet_id, []).append(
@@ -329,19 +333,20 @@ def usage_events(rows, group_members):
     return events
 
 
-def attach_usage(request, tasks, *, audience=None):
+def attach_usage(request, tasks, *, audience=None, exclude_worksheet_id=None):
     """Навешивает ``task.usage`` на каждую задачу списка одним проходом.
 
     ``task.usage`` — словарь для ``includes/task_usage_badge.html``:
     строки истории, выдачи (свёрнутые по группам), аудитория и число
-    разных учеников.
+    разных учеников. ``exclude_worksheet_id`` — как у ``task_usage``.
     """
     tasks = [task for task in tasks if task is not None]
     if not tasks:
         return audience
     if audience is None:
         audience = resolve_audience(request)
-    usage = task_usage(request.user, tasks, student_ids=audience.student_ids)
+    usage = task_usage(request.user, tasks, student_ids=audience.student_ids,
+                       exclude_worksheet_id=exclude_worksheet_id)
     group_members = (_group_members(request.user)
                      if any(usage.values()) else [])
     for task in tasks:

@@ -48,8 +48,9 @@
     .worksheet-catalog table.ws-list .ws-list-topics { display: none; }
   }
 
-  /* Телефон и узкий контент: строка — карточка без рамки, название с
-     меню наверху, класс, число задач и дата — мелкой строкой под ним */
+  /* Телефон и узкий контент: строка — блок без заливки и рамки с линией
+     снизу (как на широком экране), название с меню наверху, класс, число
+     задач и дата — мелкой строкой под ним */
   @container (max-width: 760px) {
     .worksheet-catalog table.ws-list, .worksheet-catalog table.ws-list tbody { display: block; width: 100%; }
     .worksheet-catalog table.ws-list tr:has(> th) { display: block; }
@@ -70,11 +71,9 @@
       grid-template-columns: auto auto auto minmax(0, 1fr) auto;
       align-items: center;
       gap: 2px var(--space-2);
-      padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-      border-radius: var(--radius);
-      background: var(--bg);
+      padding: var(--space-2) 0 var(--space-2) var(--space-1);
+      border-bottom: 1px solid var(--hairline);
     }
-    .worksheet-catalog table.ws-list .ws-list-row + .ws-list-row { margin-top: var(--space-2); }
     .worksheet-catalog table.ws-list .ws-list-row td,
     .worksheet-catalog table.ws-list tbody .ws-list-row:hover td {
       min-width: 0;
