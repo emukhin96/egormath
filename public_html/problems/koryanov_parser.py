@@ -269,19 +269,20 @@ def _paths_for(number: str, figures: Figures) -> list[str] | None:
 
 
 def _attach_positional_figures(task: TaskDraft, figures: Figures, used: set[str],
-                               ranges: dict[str, tuple[int, int]]) -> list[str]:
+                               ranges: dict[str, list[tuple[int, int]]]) -> list[str]:
     """Рисунок внутри разбора примера без ссылки на него — в конец разбора.
 
     Ссылки нет только там, где OCR её потерял (сверено с PDF); рисунок
     принадлежит примеру, в тексте которого стоит.
     """
-    span = ranges.get(task.external_id)
-    if not span:
+    spans = ranges.get(task.external_id)
+    if not spans:
         return []
     found = []
     for number, position in sorted(figures.position.items(), key=lambda kv: kv[1]):
         base = re.match(r"\d+", number).group(0)
-        if base in used or not span[0] <= position < span[1]:
+        # Диапазоны примера: его собственный блок и дополнительные решения.
+        if base in used or not any(a <= position < b for a, b in spans):
             continue
         used.add(base)
         found.append(number)
@@ -888,7 +889,7 @@ def parse_koryanov(text: str, *, structure: dict | None = None,
     example_numbers: list[int] = []
     exercise_numbers: list[int] = []
     example_paragraph: dict[int, str] = {}
-    example_ranges: dict[str, tuple[int, int]] = {}
+    example_ranges: dict[str, list[tuple[int, int]]] = {}
     for index, mark in enumerate(marks):
         if mark.kind == "paragraph":
             paragraph, method = mark.paragraph, ""
@@ -917,7 +918,7 @@ def parse_koryanov(text: str, *, structure: dict | None = None,
             task.topic_code = paragraph["topic"]
             task.topic_original = paragraph["title"]
             kept = (mark.end, nxt - len(parts.dropped))
-            example_ranges[key] = kept
+            example_ranges.setdefault(key, []).append(kept)
             if parts.dropped.strip():
                 diagnostics["dropped_tails"][key] = re.sub(r"\s+", " ", parts.dropped.strip())[:120]
             if method:
@@ -955,7 +956,7 @@ def parse_koryanov(text: str, *, structure: dict | None = None,
         own = re.sub(r"^\s*(?:\\\\\s*)?", "", parts.solution)
         block = f"{extra['title']} {_clean_solution(own)}"
         task.author_solution_latex = task.author_solution_latex.rstrip() + "\n\n" + block
-        example_ranges[extra["task"] + "+"] = (at, after)
+        example_ranges.setdefault(extra["task"], []).append((at, after))
         diagnostics["extra_solutions"].append(extra["task"])
 
     if example_numbers != list(range(1, structure["examples_total"] + 1)):

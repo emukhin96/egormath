@@ -133,6 +133,14 @@ Peueние. 1-й способ. Угол равен 30°.
 
 Ответ: \(\sqrt{2}\).
 
+\begin{figure}[h]
+\begin{center}
+  \includegraphics[alt={},max width=\textwidth]{scan-005_200_200_900_900}
+\captionsetup{labelformat=empty}
+\caption{Рис. 5}
+\end{center}
+\end{figure}
+
 \section*{Тренировочные упражнения}
 \begin{enumerate}
   \item Ребра призмы равны 1, 4 и 4. Найдите расстояние.
@@ -282,10 +290,11 @@ class KoryanovParserTests(SimpleTestCase):
         first, second = self.by_id["П1"], self.by_id["П2"]
         # Рисунок 1 — ссылка в разборе, рисунок 3 — в дополнительном решении.
         self.assertEqual(first.images, ["scan-003_459_482_1878_440", "scan-005_300_300_200_200",
-                                        "scan-003_100_100_100_100"])
-        # Рисунок 4 стоит внутри разбора без ссылки — в конец разбора, с предупреждением.
-        self.assertEqual(self.diagnostics["figures_positional"], {"П1": ["4"]})
-        self.assertTrue(first.author_solution_latex.endswith(r"\taskpic{3}"))
+                                        "scan-003_100_100_100_100", "scan-005_200_200_900_900"])
+        # Рисунки без ссылки внутри разбора (4) и внутри дополнительного решения
+        # из теории (5) — в конец разбора, с предупреждением.
+        self.assertEqual(self.diagnostics["figures_positional"], {"П1": ["4", "5"]})
+        self.assertTrue(first.author_solution_latex.endswith(r"\taskpic{3}" + "\n\n" + r"\taskpic{4}"))
         self.assertIn("Рисунок без ссылки привязан по положению: проверить", first.warnings)
         self.assertNotIn(r"\taskpic", first.text_latex)
         self.assertIn(r"\taskpic{1}", first.author_solution_latex)
