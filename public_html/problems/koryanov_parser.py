@@ -957,7 +957,8 @@ def parse_koryanov(text: str, *, structure: dict | None = None,
         own = re.sub(r"^\s*(?:\\\\\s*)?", "", parts.solution)
         block = f"{extra['title']} {_clean_solution(own)}"
         task.author_solution_latex = task.author_solution_latex.rstrip() + "\n\n" + block
-        example_ranges.setdefault(extra["task"], []).append((at, after))
+        # Теория после ответа дополнительного решения — не его диапазон.
+        example_ranges.setdefault(extra["task"], []).append((at, after - len(parts.dropped)))
         diagnostics["extra_solutions"].append(extra["task"])
 
     if example_numbers != list(range(1, structure["examples_total"] + 1)):

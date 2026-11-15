@@ -131,13 +131,23 @@ Peueние. 1-й способ. Угол равен 30°.
 \end{center}
 \end{figure}
 
-Ответ: \(\sqrt{2}\).
-
 \begin{figure}[h]
 \begin{center}
   \includegraphics[alt={},max width=\textwidth]{scan-005_200_200_900_900}
 \captionsetup{labelformat=empty}
 \caption{Рис. 5}
+\end{center}
+\end{figure}
+
+Ответ: \(\sqrt{2}\).
+
+Теория метода параллельных прямых.
+
+\begin{figure}[h]
+\begin{center}
+  \includegraphics[alt={},max width=\textwidth]{scan-005_100_100_950_950}
+\captionsetup{labelformat=empty}
+\caption{Рис. 6}
 \end{center}
 \end{figure}
 
@@ -294,6 +304,8 @@ class KoryanovParserTests(SimpleTestCase):
         # Рисунки без ссылки внутри разбора (4) и внутри дополнительного решения
         # из теории (5) — в конец разбора, с предупреждением.
         self.assertEqual(self.diagnostics["figures_positional"], {"П1": ["4", "5"]})
+        # Рисунок теории после ответа дополнительного решения — не в разбор.
+        self.assertIn("6", self.diagnostics["figures_unreferenced"])
         self.assertTrue(first.author_solution_latex.endswith(r"\taskpic{3}" + "\n\n" + r"\taskpic{4}"))
         self.assertIn("Рисунок без ссылки привязан по положению: проверить", first.warnings)
         self.assertNotIn(r"\taskpic", first.text_latex)
