@@ -64,3 +64,13 @@ class EgePolicyUnitsTests(SimpleTestCase):
 
     def test_parameter_must_be_in_condition(self):
         self.assertNotIn('expression', draft(r'\(125 \sqrt{2 R}\)', 17, 'Найдите мощность.') or '')
+
+    def test_count_question_in_variant_book_is_digits(self):
+        condition = 'Найдите количество точек, в которых производная функции равна 0.'
+        mask = ege_draft('$4$', condition, ['EGE_PROFILE_2027_09'], source_number='В7/9')
+        self.assertTrue(mask.startswith('{{digits:'), mask)
+        mask = ege_draft('$-2$', 'Найдите точку максимума.', ['EGE_PROFILE_2027_09'], source_number='В7/9')
+        self.assertTrue(mask.startswith('{{decimal:'), mask)
+        # Банк: прототип по номеру, слова условия не решают.
+        mask = ege_draft('$4$', condition, ['EGE_PROFILE_2027_09'], source_number='9.2.5')
+        self.assertTrue(mask.startswith('{{decimal:'), mask)

@@ -92,8 +92,12 @@ def ege_draft(answer, condition='', exam_codes=None, *, source_number='', subite
     if 1 <= number <= 13:
         prototype = '.'.join(str(source_number).split('.')[:2])
         count_question = bool(re.search(r'найдите\s+количество|сколько\s+(?:из\s+этих\s+)?точек', condition, re.I))
+        # Номер банка «9.3.12» знает прототип; у сборников вариантов
+        # («В7/9») и без номера формат решает вопрос условия.
+        bank_number = re.fullmatch(r'\d+\.\d+(?:\.\d+)*', str(source_number))
         kind = 'digits' if number == 9 and (
-            prototype in {'9.1', '9.3', '9.6', '9.8'} or (not source_number and count_question)) else 'decimal'
+            prototype in {'9.1', '9.3', '9.6', '9.8'}
+            or (not bank_number and count_question)) else 'decimal'
         reference = _decimal_reference(text)
         return slot(kind, reference) if reference else ''
     if number in {16, 19}:
