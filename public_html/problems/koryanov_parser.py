@@ -143,8 +143,9 @@ def prepare_text(text: str) -> str:
     text = text.replace("\\mathrm{och}", "\\text{осн}")
     # «\(6 см, 10 см\)» — перечень длин: число формулой, единица текстом.
     text = re.sub(r"\\\(\s*(\d+(?:,\d+)?\s*см(?:\s*,\s*\d+(?:,\d+)?\s*см)+)\s*\\\)",
-                  lambda m: ", ".join("\\(" + re.sub(r"\s*см", "", part).strip() + "\\) см"
-                                      for part in m.group(1).split(",") if part.strip()),
+                  # Длины по «число + см»: десятичная запятая «2,5» — не разделитель.
+                  lambda m: ", ".join(f"\\({length}\\) см" for length in
+                                      re.findall(r"\d+(?:,\d+)?(?=\s*см)", m.group(1))),
                   text)
     # «длина ребра которого равна \(а\)» — кириллическая «а» вместо буквы.
     text = re.sub(r"\\\(\s*а\s*\\\)(?=\.)", r"\\(a\\)", text)

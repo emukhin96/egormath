@@ -8,7 +8,7 @@ from pathlib import Path
 from django.test import SimpleTestCase
 
 from .koryanov_parser import (
-    answer_latex, answer_stream, apply_fixes, cyrillic_words, degrees, exercise_items,
+    answer_latex, answer_stream, apply_fixes, prepare_text, cyrillic_words, degrees, exercise_items,
     lift_display_answers, parse_koryanov, point_names, split_example, tidy)
 from .textbook_parser import TaskDraft
 
@@ -395,6 +395,10 @@ class KoryanovHelpersTests(SimpleTestCase):
                          "точки \\(P\\), \\(M\\) и \\(K\\); [Л.М. Атанасян]")
         self.assertEqual(tidy("у \\(\\) которого co стороной, т.e. основания а."),
                          "у которого со стороной, т.е. основания \\(a\\).")
+
+    def test_lengths_list_keeps_decimal_comma(self):
+        self.assertEqual(prepare_text("равны \\(6 с м, 2,5 см\\) и"), "равны \\(6\\) см, \\(2,5\\) см и")
+        self.assertEqual(prepare_text("\\(2,5 см, 3 см\\)"), "\\(2,5\\) см, \\(3\\) см")
 
     def test_tidy_splits_equalities_list(self):
         self.assertEqual(tidy("что \\(A C=B D=14, \\quad B C=A D=13\\). Найдите"),
