@@ -41,7 +41,7 @@ prune_local() {
 free_mb() { df -Pm "$DIR" | awk 'NR==2 {print $4}'; }
 
 # Архив каталога data/<name> с проверкой места: ~1,2 прошлого архива
-# (или размера каталога) плюс запас; иначе архив не создаётся.
+# (или размера каталога) плюс запас; иначе архив не создаётся (код 1).
 archive_dir() {
   local name="$1" out="$DIR/$1-$STAMP.tar.gz" prev need
   prev="$(ls "$DIR/$name"-*.tar.gz 2>/dev/null | sort | tail -n 1 || true)"
@@ -51,11 +51,19 @@ archive_dir() {
     return 1
   fi
   echo "==> $name -> backups/$name-$STAMP.tar.gz"
-  tar -czf "$out.part" --exclude='__pycache__' -C "$DATA_DIR" "$name"
+  # Вызов идёт через «|| SKIPPED=…», где set -e не действует: ошибки — явно.
+  if ! tar -czf "$out.part" --exclude='__pycache__' -C "$DATA_DIR" "$name"; then
+    echo "!! tar $name завершился с ошибкой — архив не создан"
+    rm -f "$out.part"
+    return 2
+  fi
   mv "$out.part" "$out"
 }
 
 prune_local
+# Архив, пропущенный из-за места или ошибки tar: дамп базы, секреты и S3 всё равно
+# делаются, а в конце — выход с ошибкой без пинга (тревога).
+SKIPPED=""
 
 echo "==> mysqldump -> backups/db-$STAMP.sql.gz"
 $COMPOSE exec -T egormath-db sh -c \
@@ -63,12 +71,12 @@ $COMPOSE exec -T egormath-db sh -c \
   | gzip > "$DIR/db-$STAMP.sql.gz.part"
 mv "$DIR/db-$STAMP.sql.gz.part" "$DIR/db-$STAMP.sql.gz"
 
-archive_dir media
+archive_dir media || SKIPPED="$SKIPPED media"
 
 # var/: корпус листков и партии задачников — работа, которой нет в базе,
 # пока партия не загружена в каталог.
 if [ -d "$DATA_DIR/var" ]; then
-  archive_dir var
+  archive_dir var || SKIPPED="$SKIPPED var"
 fi
 
 # Секреты: без DJANGO_SECRET_KEY, ключей API и .env стек с нуля не поднять.
@@ -102,6 +110,11 @@ if [ -n "$REMOTE" ] && command -v rclone >/dev/null 2>&1; then
   # В S3 бессрочно: дампы базы за 1-е число месяца (~3 МБ) и дампы Timeweb.
   rclone delete "$REMOTE" --min-age "${RETENTION_DAYS}d" \
     --exclude 'db-??????01-*' --exclude 'timeweb*' || true
+fi
+
+if [ -n "$SKIPPED" ]; then
+  echo "!! не создано (место или ошибка tar, см. выше):$SKIPPED — пинга нет"
+  exit 1
 fi
 
 # Пинг «бэкап прошёл» (Healthchecks.io и т. п.): если строки нет — сервис
