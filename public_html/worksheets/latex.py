@@ -475,9 +475,12 @@ def worksheet_to_tex(worksheet, variant='student', exclude_ids=None, items=None)
         lines.append('\\end{enumerate}')
     if has_images:
         lines.append('')
-        # На A5 даже два составных чертежа в ряд уменьшают буквы до 3–4 pt.
-        # Выбор делаем в TeX, чтобы он учитывал изменение формата в редакторе.
-        lines.append(r'\ifdim\textwidth<160mm\picsperrow{1}\else\picsperrow{2}\fi')
+        # Рисунки к задачам — мелкие чертежи, их ставим в ряд: на A5 по два,
+        # на A4 по три (у обоих ~5,6 см на рисунок — подписи графика вроде
+        # x₁…x₉ ещё читаются; три в ряд на A5 — уже нет). Высоту ограничивает
+        # \egorpicmaxheight в egorweb.sty. Выбор делаем в TeX, чтобы он
+        # учитывал изменение формата в редакторе.
+        lines.append(r'\ifdim\textwidth<160mm\picsperrow{2}\else\picsperrow{3}\fi')
         lines.append('\\flushpics')
     lines.append('')
     lines.append('\\end{document}')

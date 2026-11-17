@@ -31,11 +31,12 @@
 % Крупный рисунок вписываем в ширину строки и \egorpicmaxheight по высоте.
 % Натуральному размеру верить нельзя: кропы сканов (Mathpix) — JPEG без
 % DPI, XeTeX считает их 72 dpi, и чертёж 460 px выходит в 16 см — на A5
-% цилиндр к задаче занимал полстраницы. Потолок 0.3 высоты текста — ~5 см
-% на A5, ~8 см на A4; меньшие рисунки остаются в натуральную величину.
-% Учитель может поменять его в редакторе PDF:
-%   \renewcommand{\egorpicmaxheight}{.5\textheight}
-\providecommand{\egorpicmaxheight}{.3\textheight}
+% цилиндр к задаче занимал полстраницы. Потолок 0.2 высоты текста — ~3,5 см
+% на A5, ~5 см на A4: рисунки встают по 2–3 в ряд (\picsperrow в листке);
+% меньшие остаются в натуральную величину. Учитель может поменять потолок
+% в редакторе PDF:
+%   \renewcommand{\egorpicmaxheight}{.4\textheight}
+\providecommand{\egorpicmaxheight}{.2\textheight}
 \renewcommand{\egor@fitpic}[1]{%
   \sbox{\egor@picbox}{\includegraphics{#1}}%
   \ifdim\wd\egor@picbox>\linewidth
