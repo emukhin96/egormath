@@ -59,9 +59,11 @@ def load_repairs(text: str, path: Path = REPAIRS_PATH) -> tuple[str, dict, list[
     ``patches`` — замены текста OCR до разбора (``before`` встречается ровно
     один раз); ``fixes`` — точечные правки готового поля карточки
     (``old`` → ``new``), применяются последними; ``answer_masks`` — маска
-    задачи вместо построенной по ответу. У каждой правки — ``page`` (PDF).
+    задачи вместо построенной по ответу; ``editor_answers`` — редакторский
+    ответ, решение и маска при доказанной ошибке книги (поля автора не
+    меняются). У каждой правки — ``page`` (PDF).
     """
-    spec: dict = {"fixes": [], "answer_masks": {}}
+    spec: dict = {"fixes": [], "answer_masks": {}, "editor_answers": {}}
     if not path.exists():
         return text, spec, []
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -78,6 +80,7 @@ def load_repairs(text: str, path: Path = REPAIRS_PATH) -> tuple[str, dict, list[
             applied.append(patch["id"])
         spec["fixes"].extend(edition.get("fixes", []))
         spec["answer_masks"].update(edition.get("answer_masks", {}))
+        spec["editor_answers"].update(edition.get("editor_answers", {}))
     return text, spec, applied
 
 
@@ -205,6 +208,23 @@ def answer_latex(value: str) -> str:
         value = value.replace("°", "^{\\circ}")
         return "\\(" + value + "\\)"
     return degrees(value)
+
+
+# Вопрос об угле, а не о его косинусе: «найдите угол между…», «найдите угол
+# \(SAC\)», «найдите двугранный угол». Ответ книги — градусы без знака.
+ANGLE_QUESTION_RE = re.compile(
+    r"(?:[Нн]айдите|[Вв]ычислите|[Оо]пределите|[Чч]ему равен)\s+"
+    r"(?:(?:величину|двугранный|линейный)\s+)*угол(?![а-яё])")
+# «В правильном тетраэдре \(A B C D E\) — точка» — OCR склеил ABCD и E.
+GLUED_NAMES_RE = re.compile(r"тетраэдр[а-яё]*\s+\\\((?:\s*[A-Z]){5}\s*\\\)\s*—")
+
+
+def degree_answer(condition: str, answer: str) -> str:
+    """Угол в градусах: книга печатает «90» (оговорено во введении), по
+    канону ответ — \\(90^{\\circ}\\); значение не меняется."""
+    if ANGLE_QUESTION_RE.search(condition) and re.fullmatch(r"\\\(\d+(?:\{,\}\d+)?\\\)", answer):
+        return answer[:-2] + "^{\\circ}\\)"
+    return answer
 
 
 _PLAIN_NUMBER_RE = re.compile(r"-?\d+(?:(?:\{,\}|,)\d+)?")
@@ -347,6 +367,15 @@ def apply_fixes(task: TaskDraft, fixes: list[dict], diagnostics: dict) -> None:
             diagnostics["fixes_failed"].append(f"{fix['id']}: «было» встречается {count} раз")
 
 
+def round_kinds(text: str, structure: dict) -> set[str]:
+    """Разные тела вращения в условии: цилиндр, конус, шар (сфера)."""
+    kinds = set()
+    for kind, pattern in structure.get("round_kinds", {}).items():
+        if re.search(pattern, text, re.I):
+            kinds.add(kind)
+    return kinds
+
+
 def external_id(section: int, level: str, number: int) -> str:
     return f"S{section}/{level}{number}"
 
@@ -385,6 +414,9 @@ def parse_smirnov(text: str, *, structure: dict | None = None,
         "masks_missing": [],
         "masks_by_kind": {},
         "periods_added": [],
+        "angle_answers": [],
+        "editor_answers": [],
+        "glued_names": [],
         "figures_missing": [],
         "fixes_applied": [],
         "fixes_skipped": [],
@@ -409,12 +441,14 @@ def parse_smirnov(text: str, *, structure: dict | None = None,
             task = task_from_block(Marker(0, 0, key), clean(body), path)
             task.topic_code = spec["topic"]
             task.topic_original = spec["title"]
-            # Тела вращения в разделах объёмов и площадей — своя ветвь,
-            # многогранник, вписанный в тело вращения или описанный около
-            # него, — комбинации тел.
+            # Тела вращения в разделах объёмов и площадей — своя ветвь;
+            # комбинации тел — вписанное или описанное тело (многогранник
+            # или тело вращения) и два разных тела вращения в одной задаче
+            # («цилиндр и конус имеют общие основание и высоту»).
             if spec.get("round_bodies") and round_re.search(task.text_latex):
                 task.topic_code = structure["round_bodies_topic"]
-                if combination_re.search(task.text_latex):
+                if (combination_re.search(task.text_latex)
+                        or len(round_kinds(task.text_latex, structure)) > 1):
                     task.topic_code = structure["combination_topic"]
             seen.setdefault((section, level), []).append(number)
             tasks.append(task)
@@ -453,15 +487,29 @@ def parse_smirnov(text: str, *, structure: dict | None = None,
         if added:
             diagnostics["periods_added"].append(task.external_id)
         task.author_answer_latex = tidy(canon_field(task.author_answer_latex))
+        degree = degree_answer(task.text_latex, task.author_answer_latex)
+        if degree != task.author_answer_latex:
+            task.author_answer_latex = degree
+            diagnostics["angle_answers"].append(task.external_id)
         task.collection_title = task.source_path[-1]
         task.grade_band_codes = list(structure["grade_bands"])
         if not task.images:
             diagnostics["figures_missing"].append(task.external_id)
         finalize_draft_images(task)
         apply_fixes(task, repairs["fixes"], diagnostics)
+        if GLUED_NAMES_RE.search(task.text_latex):
+            task.warnings.append("Склеены обозначения: «тетраэдре \\(ABCDE\\)» — сверить со сканом")
+            diagnostics["glued_names"].append(task.external_id)
         if not task.author_answer_latex:
             diagnostics["missing_answers"].append(task.external_id)
         task.answer_mask = repairs["answer_masks"].get(task.external_id) or answer_mask(task.author_answer_latex)
+        editor = repairs["editor_answers"].get(task.external_id)
+        if editor:
+            # Ответ книги остаётся в авторском поле, маска — по верному ответу.
+            task.answer_latex = editor["answer"]
+            task.solution_latex = editor["solution"]
+            task.answer_mask = editor["mask"]
+            diagnostics["editor_answers"].append(task.external_id)
         if task.author_answer_latex and not task.answer_mask:
             diagnostics["masks_missing"].append(task.external_id)
         kind = re.match(r"\{\{(\w+)", task.answer_mask)

@@ -8,8 +8,8 @@ from pathlib import Path
 from django.test import SimpleTestCase
 
 from .smirnov_parser import (
-    answer_latex, answer_mask, condition_text, list_items, parse_smirnov,
-    prose_dashes, tex_answer_chain)
+    answer_latex, answer_mask, condition_text, degree_answer, list_items,
+    parse_smirnov, prose_dashes, tex_answer_chain)
 
 
 STRUCTURE = {
@@ -20,13 +20,14 @@ STRUCTURE = {
     "round_bodies_re": "цилиндр|конус|шар|сфер",
     "combination_topic": "GEO.10.05",
     "combination_re": "вписан|описан",
+    "round_kinds": {"cylinder": "цилиндр", "cone": "конус", "ball": "шар|сфер"},
     "sections": [
         {"number": 1, "title": "1. Расстояние между двумя точками в пространстве",
          "topic": "GEO.08.04", "counts": {"": 2}},
         {"number": 5, "title": "5. Угол между прямыми в пространстве",
          "topic": "GEO.08.04", "counts": {"A": 5, "C": 1}},
         {"number": 8, "title": "8. Объем фигур в пространстве",
-         "topic": "GEO.09.06", "round_bodies": True, "counts": {"A": 3}},
+         "topic": "GEO.09.06", "round_bodies": True, "counts": {"A": 4}},
     ],
 }
 
@@ -92,6 +93,8 @@ BOOK = r"""
 """ + PIC % "221_384_292_863_483" + r"""
   \item В куб с ребром 3 вписан шар. Найдите объем этого шара, деленный на \(\pi\).\\
 """ + PIC % "236_384_292_863_483" + r"""
+  \item Цилиндр и конус имеют общие основание и высоту. Найдите объем конуса, если объем цилиндра равен 150.\\
+""" + PIC % "237_384_292_863_483" + r"""
 \end{enumerate}
 
 \section*{Ответы}
@@ -121,7 +124,7 @@ BOOK = r"""
 \section*{Уровень А}
 \[
 \begin{aligned}
-& \text { 1. 3. 2. 12. 3. } 4,5 .
+& \text { 1. 3. 2. 12. 3. 4,5. 4. } 50 .
 \end{aligned}
 \]
 """
@@ -139,7 +142,7 @@ ANSWERS = {
     "1": {"": {"1": "3", "2": "1"}},
     "5": {"A": {"1": "90", "2": "90", "3": "60", "4": "60", "5": "45"},
           "C": {"1": "\\(\\frac{\\sqrt{3}}{3}\\)"}},
-    "8": {"A": {"1": "3", "2": "12", "3": "4{,}5"}},
+    "8": {"A": {"1": "3", "2": "12", "3": "4{,}5", "4": "50"}},
 }
 
 
@@ -159,7 +162,7 @@ class SmirnovParserTests(SimpleTestCase):
         tasks, diagnostics = self.parse()
         self.assertEqual(
             [t.external_id for t in tasks],
-            ["S1/1", "S1/2", "S5/A1", "S5/A2", "S5/A3", "S5/A4", "S5/A5", "S5/C1", "S8/A1", "S8/A2", "S8/A3"])
+            ["S1/1", "S1/2", "S5/A1", "S5/A2", "S5/A3", "S5/A4", "S5/A5", "S5/C1", "S8/A1", "S8/A2", "S8/A3", "S8/A4"])
         self.assertEqual(diagnostics["count_mismatch"], [])
         self.assertEqual(diagnostics["duplicate_task_ids"], [])
 
@@ -181,6 +184,8 @@ class SmirnovParserTests(SimpleTestCase):
         self.assertEqual(by_id["S8/A2"].topic_code, "GEO.09.06")
         self.assertEqual(by_id["S8/A3"].topic_code, "GEO.10.05")  # шар, вписанный в куб
         self.assertEqual(by_id["S8/A3"].answer_mask, "{{decimal: 4,5}}")
+        # Два разных тела вращения в одной задаче — тоже комбинация тел.
+        self.assertEqual(by_id["S8/A4"].topic_code, "GEO.10.05")
         self.assertEqual(by_id["S8/A2"].stars, 0)
 
     def test_condition_canon(self):
@@ -198,15 +203,20 @@ class SmirnovParserTests(SimpleTestCase):
     def test_answers_from_table_and_masks(self):
         tasks, diagnostics = self.parse()
         by_id = {t.external_id: t for t in tasks}
-        self.assertEqual(by_id["S5/A3"].author_answer_latex, "\\(60\\)")
-        self.assertEqual(by_id["S5/A3"].answer_mask, "{{decimal: 60}}")
+        # Вопрос об угле: книга печатает «60», ответ — градусы.
+        self.assertEqual(by_id["S5/A3"].author_answer_latex, "\\(60^{\\circ}\\)")
+        self.assertEqual(by_id["S5/A3"].answer_mask, "{{number: 60}}°")
+        self.assertEqual(len(diagnostics["angle_answers"]), 5)
+        # Косинус угла и объём — числа без градуса.
+        self.assertEqual(by_id["S5/C1"].author_answer_latex, "\\(\\frac{\\sqrt{3}}{3}\\)")
+        self.assertEqual(by_id["S8/A2"].answer_mask, "{{decimal: 12}}")
         self.assertEqual(by_id["S5/C1"].answer_mask, "{{number: \\frac{\\sqrt{3}}{3}}}")
         self.assertEqual(diagnostics["missing_answers"], [])
         self.assertEqual(diagnostics["masks_missing"], [])
 
     def test_tex_answers_checked_where_readable(self):
         _, diagnostics = self.parse()
-        self.assertEqual(diagnostics["answers_tex_checked"], 8)  # 5А, 8А; одиночный ответ 5С не цепочка
+        self.assertEqual(diagnostics["answers_tex_checked"], 9)  # 5А, 8А; одиночный ответ 5С не цепочка
         self.assertEqual(diagnostics["answers_tex_mismatch"], [])
         wrong = json.loads(json.dumps(ANSWERS))
         wrong["8"]["A"]["2"] = "13"
@@ -233,6 +243,9 @@ class SmirnovParserTests(SimpleTestCase):
             "fixes": [{"id": "f1", "page": 112, "task": "S5/A1", "field": "text",
                        "old": "\\(C C_{1}\\)", "new": "\\(C_{1} C\\)"}],
             "answer_masks": {"S5/C1": "{{number: \\frac{1}{\\sqrt{3}}}}"},
+            "editor_answers": {"S8/A2": {
+                "page": 221, "answer": "\\(24\\)", "mask": "{{decimal: 24}}",
+                "solution": "Примечание редактора (AI): в ответах книги — 12.\nОтвет: \\(24\\)."}},
         }]}
         tasks, diagnostics = self.parse(repairs=repairs)
         by_id = {t.external_id: t for t in tasks}
@@ -241,6 +254,21 @@ class SmirnovParserTests(SimpleTestCase):
         self.assertEqual(by_id["S5/C1"].answer_mask, "{{number: \\frac{1}{\\sqrt{3}}}}")
         self.assertEqual(diagnostics["source_repairs_applied"], ["p1"])
         self.assertEqual(diagnostics["fixes_applied"], ["f1"])
+        # Ошибка книги: авторский ответ как в книге, редакторский — в своём поле.
+        self.assertEqual(by_id["S8/A2"].author_answer_latex, "\\(12\\)")
+        self.assertEqual(by_id["S8/A2"].answer_latex, "\\(24\\)")
+        self.assertEqual(by_id["S8/A2"].answer_mask, "{{decimal: 24}}")
+        self.assertTrue(by_id["S8/A2"].solution_latex.endswith("Ответ: \\(24\\)."))
+        self.assertEqual(diagnostics["editor_answers"], ["S8/A2"])
+
+    def test_glued_point_names_warning(self):
+        text = BOOK.replace(
+            r"В правильном тетраэдре \(A B C D\) точки \(E\) и \(F\) - середины ребер соответственно \(B D\) и \(C D\).",
+            r"В правильном тетраэдре \(A B C D E\) - точка пересечения медиан треугольника \(B C D\).")
+        tasks, diagnostics = self.parse(text=text)
+        by_id = {t.external_id: t for t in tasks}
+        self.assertEqual(diagnostics["glued_names"], ["S5/A3"])
+        self.assertTrue(any("Склеены обозначения" in w for w in by_id["S5/A3"].warnings))
 
     def test_not_smirnov(self):
         with self.assertRaises(ValueError):
@@ -270,6 +298,19 @@ class SmirnovHelpersTests(SimpleTestCase):
         self.assertEqual(answer_latex("2,5."), "\\(2,5\\)")
         self.assertEqual(answer_latex("60°"), "\\(60^{\\circ}\\)")
         self.assertEqual(answer_latex("\\(\\frac{\\sqrt{3}}{2}\\)"), "\\(\\frac{\\sqrt{3}}{2}\\)")
+
+    def test_degree_answer_only_for_angle_question(self):
+        self.assertEqual(degree_answer("Найдите угол между прямыми \\(A B\\) и \\(C D\\).", "\\(90\\)"),
+                         "\\(90^{\\circ}\\)")
+        self.assertEqual(degree_answer("В кубе найдите угол \\(S A C\\).", "\\(45\\)"), "\\(45^{\\circ}\\)")
+        self.assertEqual(degree_answer("Найдите двугранный угол \\(A B C\\).", "\\(60\\)"), "\\(60^{\\circ}\\)")
+        # Косинус и тангенс угла, угол в данных условия — без градуса.
+        self.assertEqual(degree_answer("Найдите тангенс угла \\(A B E_{1}\\).", "\\(2\\)"), "\\(2\\)")
+        self.assertEqual(degree_answer("Найдите косинус двугранного угла.", "\\(0{,}6\\)"), "\\(0{,}6\\)")
+        self.assertEqual(degree_answer("Ромб с острым углом \\(60^{\\circ}\\). Найдите диагональ.", "\\(5\\)"),
+                         "\\(5\\)")
+        self.assertEqual(degree_answer("Найдите угол \\(A B C\\).", "\\(\\frac{1}{3}\\)"),
+                         "\\(\\frac{1}{3}\\)")
 
     def test_masks_by_printed_answer(self):
         self.assertEqual(answer_mask("$2{,}5$"), "{{decimal: 2,5}}")

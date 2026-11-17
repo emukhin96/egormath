@@ -7,6 +7,7 @@
   "round_bodies_re": "цилиндр|конус|шар|сфер",
   "combination_topic": "GEO.10.05",
   "combination_re": "вписан|описан",
+  "round_kinds": {"cylinder": "цилиндр", "cone": "конус", "ball": "шар|сфер"},
   "sections": [
     {"number": 1, "title": "1. Расстояние между двумя точками в пространстве",
      "topic": "GEO.08.04", "counts": {"": 30}},

@@ -204,6 +204,10 @@ class TaskDraft:
     confidence: float = 1.0
     review_status: str = "needs_review"
     warnings: list[str] = field(default_factory=list)
+    # Редакторский ответ и решение (не авторские): профиль заполняет их
+    # только сверенными правками, например при доказанной ошибке книги.
+    answer_latex: str = ""
+    solution_latex: str = ""
 
 
 @dataclass
