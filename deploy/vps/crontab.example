@@ -1,6 +1,9 @@
 # crontab пользователя deploy на сервере (crontab -e). Время сервера — UTC.
 # Бэкап chemolymp идёт в 00:15 — наш на час позже, чтобы не совпадать.
 15 1 * * * /opt/egormath/deploy/vps/backup.sh >> /opt/egormath/data/logs/backup.log 2>&1
+# Копия в Selectel (deploy/VPS.md, «Копия в Selectel»): база, секреты, media и var — зашифровано gpg.
+# 01:45 UTC — после backup.sh. Ставит tools/backup-mac.sh setup; лог — data/offsite/offsite.log
+45 1 * * * /opt/egormath/deploy/vps/backup-offsite.sh daily >> /opt/egormath/data/logs/backup-offsite.log 2>&1
 # Очистка журнала работ (было в планировщике Timeweb): 03:20 UTC = 06:20 МСК
 20 3 * * * /opt/egormath/deploy/vps/manage.sh cleanup_work_activity >> /opt/egormath/data/logs/cleanup.log 2>&1
 # Недельная сводка по логу (понедельник 06:05 МСК) — читать перед решением о масштабировании
