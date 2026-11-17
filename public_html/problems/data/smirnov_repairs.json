@@ -1,0 +1,20 @@
+{
+  "editions": [
+    {
+      "source": "Смирнов стереометрия ЕГЭ.tex (Mathpix)",
+      "source_sha256": "6f9b92514e456a1ee992480ac77c8530d3094e7b1548aeb2a63fbaae9def2c58",
+      "pdf_sha256": "eeffde75244344ee9d63bd55fdbaaddc9a90bd14aa56eb9aa85b858e7e3f0c87",
+      "patches": [
+        {
+          "id": "S6/C22-tetrahedron",
+          "page": 181,
+          "note": "OCR потерял «е» и склеил ABCD и E; запятой между ними нет и в книге",
+          "before": "В правильном тетраэдр \\(A B C D E\\) - точка пересечения медиан",
+          "after": "В правильном тетраэдре \\(A B C D\\) \\(E\\) - точка пересечения медиан"
+        }
+      ],
+      "fixes": [],
+      "answer_masks": {}
+    }
+  ]
+}
