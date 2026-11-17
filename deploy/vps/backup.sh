@@ -115,7 +115,9 @@ if [ -n "$REMOTE" ] && command -v rclone >/dev/null 2>&1; then
   # (rclone пропускает уже загруженные по размеру и времени).
   rclone copy "$DIR" "$REMOTE"
   # В S3 бессрочно: дампы базы за 1-е число месяца (~3 МБ) и дампы Timeweb.
-  rclone delete "$REMOTE" --min-age "${RETENTION_DAYS}d" \
+  # Возраст — по времени загрузки (--use-server-modtime), а не по mtime файла: у жёсткой
+  # ссылки на неизменный архив mtime первого из них, и свежая копия удалялась бы сразу.
+  rclone delete "$REMOTE" --use-server-modtime --min-age "${RETENTION_DAYS}d" \
     --exclude 'db-??????01-*' --exclude 'timeweb*' || true
 fi
 
