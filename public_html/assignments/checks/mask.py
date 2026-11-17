@@ -134,6 +134,13 @@ _UNIT_TOKEN_RE = re.compile(
     r'единиц(?:а|ы)?|кв\.\s*ед\.|куб\.\s*ед\.', re.I)
 
 
+
+def _unit_text(unit):
+    """«см^2» из ответа «$30$ см$^{2}$» → «см$^{2}$»: вне формулы «^2»
+    ученик видел бы буквально."""
+    match = re.fullmatch(r'(.+?)\s*\^\s*([23])', unit)
+    return f'{match.group(1)}$^{{{match.group(2)}}}$' if match else unit
+
 @dataclass
 class Slot:
     index: int
@@ -1115,7 +1122,7 @@ def _numeric_math_set(answer, condition=''):
     if any(degrees) and not all(degrees):
         return ''
     degree = all(degrees)
-    suffix = '°' if degree else (f' {units[0]}' if units else '')
+    suffix = '°' if degree else (f' {_unit_text(units[0])}' if units else '')
     question = ' '.join(_question_sentences(condition))
     named, measure = _named_objects(condition, with_measure=True)
     if (named and not has_or and len(named) == len(values)
@@ -1303,7 +1310,7 @@ def _single_numeric_math(answer):
     residue = _UNIT_TOKEN_RE.sub(' ', outside)
     if re.sub(r'[\s,;./]', '', residue):
         return ''
-    suffix = '°' if degree else (f' {units[0]}' if len(units) == 1 else '')
+    suffix = '°' if degree else (f' {_unit_text(units[0])}' if len(units) == 1 else '')
     if len(units) > 1:
         return ''
     if approximate:

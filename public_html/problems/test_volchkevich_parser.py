@@ -294,6 +294,20 @@ class VolchkevichCanonTests(SimpleTestCase):
         system = "\\[\n\\begin{aligned}\nx & =1, \\\\\ny & =2 .\n\\end{aligned}\n\\]"
         self.assertEqual(canon_field(system), system)
 
+    def test_long_wrapped_formula_keeps_book_line_break(self):
+        """Корянов, пример 56: склейка двух строк книги уходила за поле A5."""
+        from .volchkevich_parser import canon_field, formula_width
+        chain = ("\\[\n\\begin{aligned}\n"
+                 "& \\cos \\angle A_{1} N C_{1}=\\frac{A_{1} N^{2}+C_{1} N^{2}-A_{1} C_{1}^{2}}"
+                 "{2 \\cdot A_{1} N \\cdot C_{1} N}= \\\\\n"
+                 "& =\\frac{\\left(\\sqrt{\\frac{2}{3}}\\right)^{2}+\\left(\\sqrt{\\frac{2}{3}}\\right)^{2}"
+                 "-(\\sqrt{2})^{2}}{2 \\cdot \\sqrt{\\frac{2}{3}} \\cdot \\sqrt{\\frac{2}{3}}}=-0{,}5 .\n"
+                 "\\end{aligned}\n\\]")
+        self.assertEqual(canon_field(chain), chain)
+        self.assertEqual(formula_width("d^{2}=a^{2}+b^{2}"), 8)
+        self.assertEqual(formula_width("\\frac{a+b}{2}=\\sqrt{x}"), 5)
+        self.assertEqual(formula_width("\\frac{a}{"), 1)
+
     def test_points_lookalikes_and_part_letters(self):
         from .volchkevich_parser import canon_field
         self.assertEqual(canon_field("B четырёхугольнике угол CKD прямой."),
