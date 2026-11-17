@@ -40,6 +40,8 @@ $COMPOSE up -d --wait egormath-db
 if $COMPOSE ps --status running --services 2>/dev/null | grep -q '^egormath-web$'; then
   echo "==> Backup before migrate"
   "$APP_DIR/deploy/vps/backup.sh" || echo "!! backup failed, continuing"
+  # Копия базы в Selectel (без настройки — тихо пропускает; ошибка — в data/offsite/offsite.log)
+  "$APP_DIR/deploy/vps/backup-offsite.sh" premigrate || echo "!! offsite backup failed, continuing"
 fi
 
 RUN="$COMPOSE run --rm --no-deps -T egormath-web python manage.py"

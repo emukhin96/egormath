@@ -97,8 +97,21 @@ egormath (`/opt/egormath`, этот документ). SSH: `ssh chemolymp-demo`
 ошибкой без пинга. Недописанный `.part` удаляется. 15.11.2026 бэкап заполнил диск до
 100%: чистка стояла в конце скрипта и после ошибки tar не выполнилась.
 Без пароля секретов архив не создаётся (скрипт пишет `!!` в
-`data/logs/backup.log`) — и после потери сервера пропадут `DJANGO_SECRET_KEY`
-(сессии, токены форм), ключи API и `.env`.
+`data/logs/backup.log`); секреты теперь уходят в Selectel (раздел «Копия в
+Selectel», зашифрованы gpg), пароль для этого не нужен.
+
+Если media или var за сутки не менялись, новый архив побайтно совпадает с
+прошлым, и `backup.sh` заменяет его жёсткой ссылкой: на диске 7 дней
+наборов не стоят 7 копий media и var (17.11.2026 их было 9 ГБ). В S3 Timeweb
+rclone всё равно грузит каждый набор целиком.
+
+**Версионирование бакета `egormath-backups` должно быть выключено**
+(`rclone backend versioning s3:egormath-backups` → `Suspended`). Если оно
+включено, `rclone delete` по сроку только прячет файлы, а не удаляет их:
+17.11.2026 в бакете было 709 объектов на 76,6 ГБ, из них 593 скрытых
+версии (52 ГБ) — все наборы с 27.09, 18 ГБ одних media. Скрытые версии
+видны через `rclone size --s3-versions s3:egormath-backups`, удаляются
+`rclone backend cleanup-hidden s3:egormath-backups`.
 
 Включается один раз:
 
@@ -151,6 +164,103 @@ tools/stage.sh --s3     # ~1–2 мин: набор из S3 → локальны
 кратном росте», ступень 1). Логи контейнера обнуляются при его
 пересоздании (`deploy.sh`), поэтому сводка по расписанию надёжнее ручной.
 
+## Копия в Selectel
+
+S3 Timeweb — тот же провайдер, что и сервер: блокировка аккаунта или авария
+у Timeweb уносит и сайт, и копии, а дампы там не зашифрованы. Поэтому
+`backup-offsite.sh` (cron, 01:45 UTC, и перед миграциями в `deploy.sh`)
+шлёт отдельную копию в Selectel. Схема перенесена из chemolymp
+(`docs/BACKUP.md` там) и проверена им с 02.11.2026.
+
+| Что | Как часто | Папка в бакете |
+|---|---|---|
+| Дамп MySQL | каждую ночь и перед каждым деплоем (`-premigrate`) | `db/<дата>/` |
+| `data/secrets`, `.env`, `crontab`, `rclone.conf` | ночью, если менялись, и не реже раза в неделю | `secrets/<месяц>/` |
+| `data/media`, `data/var` | полный архив раз в неделю, в остальные ночи — только новые и изменённые файлы | `media/<дата>/`, `var/<дата>/` |
+| Отчёт сторожу | после каждого ночного запуска (`ok`) и при любой ошибке (`fail`) | `_status/daily/` |
+
+- Бакет `egormath`: Selectel, Москва (`ru-6`), холодный класс, приватный,
+  vHosted, **без версионирования и Object Lock**, автоудаление 2160 ч
+  (90 дней) — поэтому полные архивы раз в неделю. Аккаунт и проект
+  (My First Project) — те же, что у chgkmsu и chemolymp.
+- Всё зашифровано gpg **публичным** ключом `deploy/vps/backup-pubkey.asc`
+  (тот же ключ, что у chemolymp, отпечаток
+  `037E9E3101E208B41F657D291600760E751BC0E1`): приватный — в связке gpg на
+  Mac владельца и в менеджере паролей. Без него копии бесполезны.
+- Ключ S3 сервера (`egormath-backup-writer`) может только загружать: ни
+  прочитать, ни удалить, ни получить список. В имени каждой копии —
+  случайный суффикс, которого нет в логе, поэтому взломанный сервер не
+  перезапишет снятые копии. Ключ лежит в `data/offsite-keys/` (не в `.env`
+  и не в `data/secrets` — их видят контейнеры). Читает бакет только Mac
+  ключом `egormath-backup-reader` (`~/egormath/.secrets-backup-reader/`).
+- Архивы идут потоком `tar | gpg` частями по 1 ГиБ: на диске сервера —
+  не больше одной части; если свободно меньше 3 ГиБ, архив не снимается.
+  Последним загружается маркер `<ключ>.done`; Mac берёт только копии с ним.
+- Сторож: healthchecks.io не принимает запросы с российских IP, поэтому
+  сервер кладёт отчёт в бакет, а Mac (launchd `ru.egormath.backup-watch`,
+  10:23) читает отчёты и пингует проверку «egormath: копия в Selectel».
+- Лог — `data/offsite/offsite.log` (там же состояние: описи media/var и
+  время последнего полного архива).
+- Ночной прогон на данных 17.11.2026: 50 с, база 16 МБ, media 478 МБ,
+  var 219 МБ, секреты 3 КБ; ночь без изменений — только база.
+
+### Настройка (один раз)
+
+1. **Панель Selectel — владелец.** Бакет `egormath` уже создан (ru-6,
+   холодный, автоудаление 2160 ч). Дальше:
+   - IAM → Сервисные пользователи → Добавить, два раза: `egormath-backup-writer`
+     и `egormath-backup-reader`; область доступа — «Проекты» → My First Project,
+     роль `s3.bucket.user`, пароль «Сгенерировать» → в менеджер паролей.
+   - У каждого: вкладка «Доступ» → S3-ключи → Добавить ключ (`prod-server` у
+     writer, `macbook` у reader). Access key и Secret key — сразу в менеджер
+     паролей (Secret показывается один раз).
+   - Бакет `egormath` → «Политика доступа» → Создать, три правила
+     («Разрешить», пользователи «Из списка», набор «Произвольный»):
+
+     | Правило | Пользователь | Действие | Ресурс |
+     |---|---|---|---|
+     | `writer-put-only` | `egormath-backup-writer` | `PutObject` | `egormath/*` |
+     | `reader` | `egormath-backup-reader` | `GetObject` | `egormath/*` |
+     | `reader-list` | `egormath-backup-reader` | `ListBucket` | `egormath` |
+
+     «Все авторизованные» не выбирать: правило получат все сервисные
+     пользователи проекта (chgkmsu, chemolymp). Список и чтение в одном
+     правиле Selectel не смешивает — поэтому у reader два правила.
+2. **healthchecks.io — владелец** (можно позже): проверка «egormath: копия в
+   Selectel», Period 1 day, Grace 1 day; Ping URL спросит `setup`.
+3. **Деплой** ветки со скриптами (`deploy/vps/deploy.sh`). До `setup`
+   `backup-offsite.sh` молча ничего не делает.
+4. **`setup` на Mac** (из корня репозитория; окна — на экране владельца,
+   ключи Claude не видит):
+
+   ```bash
+   tools/backup-mac.sh setup
+   ```
+
+   Окна: пул (`ru-6`), имя бакета, Access/Secret key writer → сервер
+   `data/offsite-keys/`, Access/Secret key reader → `~/egormath/.secrets-backup-reader/`.
+   Затем строка cron из `crontab.example`, `check-write-only` (тестовый
+   объект в `_checks/`: загрузка разрешена, чтение, удаление и список — 403),
+   первая полная копия, `check` ключом reader и `watch-install` (Ping URL,
+   launchd). Повторный `setup` ключи не спрашивает; новые ключи — `setup --rekey`.
+5. **Через сутки — «проверь бэкапы»**: `tools/backup-mac.sh check`.
+
+### Проверки и восстановление
+
+```bash
+tools/backup-mac.sh check                     # последние копии по папкам и хвост лога сервера
+tools/backup-mac.sh drill                     # раз в месяц: дамп → временная база в локальном MySQL → счётчики → удалить
+tools/backup-mac.sh fetch ~/egormath-restore  # набор: дамп, secrets/, media/ (полный + инкременты), var/
+tools/backup-mac.sh fetch ~/egormath-restore --before 2026-11-20_1200   # только копии до взлома (МСК)
+```
+
+После потери сервера (и Timeweb вместе с ним) — порядок раздела
+«Восстановление после потери сервера» с такими отличиями: набор берётся
+`fetch` на Mac и переносится на сервер (`scp -r`); `secrets/secrets/*` →
+`data/secrets/`, `secrets/env` — основа нового `.env`; база —
+`deploy/vps/import-db.sh <дамп>.sql.gz --no-backup`; `media/` и `var/` →
+`data/media`, `data/var` (`rsync -a`); затем `deploy.sh`.
+
 ## Восстановление после потери сервера
 
 Репетиция 30.09.2026 (набор из S3 → Mac): база 3 МБ заливается за 3 с, все
@@ -160,7 +270,8 @@ tools/stage.sh --s3     # ~1–2 мин: набор из S3 → локальны
 | Что | Где |
 |---|---|
 | Код | GitHub `emukhin96/egormath`, ветка `main` (прод всегда на `origin/main`) |
-| База, media, var, секреты | S3 Timeweb, бакет `egormath-backups` (ключи — в панели Timeweb) |
+| База, media, var, секреты | S3 Timeweb, бакет `egormath-backups` (ключи — в панели Timeweb); копия вне Timeweb — Selectel, бакет `egormath` (раздел «Копия в Selectel») |
+| Приватный ключ gpg копии в Selectel | связка gpg на Mac и менеджер паролей (`037E9E31…0BC0E1`) |
 | Пароль архива секретов | Mac, `.secrets/BACKUP_SECRETS_PASSPHRASE` (и менеджер паролей) |
 | DNS `math.emukhin.ru` | панель Timeweb → Домены |
 | Всё остальное | воссоздаётся: `.env` (новые пароли MySQL), deploy key GitHub, crontab (`crontab.example`), `staticfiles`, `live/`, кэш |
@@ -439,8 +550,10 @@ test -s LATEX_API_KEY && chmod 600 LATEX_API_URL LATEX_API_KEY && cd /opt/egorma
 ### После переезда
 
 - Убрать задание очистки из планировщика Timeweb, вернуть TTL 3600.
-- rclone + `BACKUP_RCLONE_REMOTE` — сделано 27.09; осталось `BACKUP_SECRETS_PASSPHRASE`
-  и `BACKUP_PING_URL` (раздел «Бэкапы»).
+- rclone + `BACKUP_RCLONE_REMOTE` — сделано 27.09. Вместо `BACKUP_SECRETS_PASSPHRASE`
+  и `BACKUP_PING_URL` — копия в Selectel со сторожем на Mac (раздел «Копия в
+  Selectel»). Когда она проверена учениями (`drill`), копию в S3 Timeweb можно
+  выключить (убрать `BACKUP_RCLONE_REMOTE`), как в chemolymp.
 - Внешний мониторинг `https://math.emukhin.ru/healthz`.
 - Удалить CGI-обвязку (`public_html/wsgi.py`, `.htaccess`, `deploy/deploy.sh`) и
   обновить `CLAUDE.md`/`AGENTS.md` — отдельным PR после отказа от отката.
