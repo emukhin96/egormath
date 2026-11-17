@@ -384,7 +384,7 @@ class LatexGenerationTests(TestCase):
         self.assertIn('\\taskpic{pic2.jpg}', tex)
         ws_tex = worksheet_to_tex(self.worksheet, 'student')
         self.assertIn(
-            r'\ifdim\textwidth<160mm\picsperrow{1}\else\picsperrow{2}\fi', ws_tex)
+            r'\ifdim\textwidth<160mm\picsperrow{2}\else\picsperrow{3}\fi', ws_tex)
         self.assertIn('\\flushpics', ws_tex)
         self.assertLess(ws_tex.index('\\end{enumerate}'),
                         ws_tex.rindex('\\flushpics'))

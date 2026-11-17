@@ -28,14 +28,22 @@
 %% --- Очередь рисунков ------------------------------------------------------
 % egor складывает всю очередь в один figure: сотня чертежей выходит за
 % страницу без Overfull. Разрешаем переносы между рядами, сохраняя подписи.
-% Крупный рисунок вписываем в ширину строки и 0.8 высоты страницы.
+% Крупный рисунок вписываем в ширину строки и \egorpicmaxheight по высоте.
+% Натуральному размеру верить нельзя: кропы сканов (Mathpix) — JPEG без
+% DPI, XeTeX считает их 72 dpi, и чертёж 460 px выходит в 16 см — на A5
+% цилиндр к задаче занимал полстраницы. Потолок 0.2 высоты текста — ~3,5 см
+% на A5, ~5 см на A4: рисунки встают по 2–3 в ряд (\picsperrow в листке);
+% меньшие остаются в натуральную величину. Учитель может поменять потолок
+% в редакторе PDF:
+%   \renewcommand{\egorpicmaxheight}{.4\textheight}
+\providecommand{\egorpicmaxheight}{.2\textheight}
 \renewcommand{\egor@fitpic}[1]{%
   \sbox{\egor@picbox}{\includegraphics{#1}}%
   \ifdim\wd\egor@picbox>\linewidth
-    \includegraphics[width=\linewidth,height=.8\textheight,keepaspectratio]{#1}%
+    \includegraphics[width=\linewidth,height=\egorpicmaxheight,keepaspectratio]{#1}%
   \else
-    \ifdim\ht\egor@picbox>.8\textheight
-      \includegraphics[width=\linewidth,height=.8\textheight,keepaspectratio]{#1}%
+    \ifdim\ht\egor@picbox>\egorpicmaxheight
+      \includegraphics[width=\linewidth,height=\egorpicmaxheight,keepaspectratio]{#1}%
     \else\usebox{\egor@picbox}\fi
   \fi
 }
