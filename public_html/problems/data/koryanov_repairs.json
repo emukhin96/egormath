@@ -762,6 +762,14 @@
           "old": "\\begin{enumerate}\n\\item По формуле\n\\end{enumerate}",
           "new": "1. По формуле",
           "source": "PDF с. 68: шаг 1 — абзацем, как шаг 2"
+        },
+        {
+          "id": "П9-78",
+          "task": "П9",
+          "field": "solution",
+          "old": "Тогда \\(\\overrightarrow{M H}=\\frac{1}{2} \\vec{a}-\\frac{1}{2} \\vec{b}+\\frac{1}{2} \\cdot \\frac{5}{9}(-\\vec{a}+\\vec{b}+\\vec{c})=\\frac{2}{9} \\vec{a}-\\frac{2}{9} \\vec{b}+\\frac{5}{18} \\vec{c}=\\frac{1}{18}(4 \\vec{a}-4 \\vec{b}+5 \\vec{c}).\n\\)",
+          "new": "Тогда\n\\[\n\\begin{gathered}\n\\overrightarrow{M H}=\\frac{1}{2} \\vec{a}-\\frac{1}{2} \\vec{b}+\\frac{1}{2} \\cdot \\frac{5}{9}(-\\vec{a}+\\vec{b}+\\vec{c})= \\\\\n=\\frac{2}{9} \\vec{a}-\\frac{2}{9} \\vec{b}+\\frac{5}{18} \\vec{c}=\\frac{1}{18}(4 \\vec{a}-4 \\vec{b}+5 \\vec{c}) .\n\\end{gathered}\n\\]",
+          "source": "PDF с. 8: строчная цепочка за полем A5 (59pt) — выносной с переносом после «=»"
         }
       ]
     }
