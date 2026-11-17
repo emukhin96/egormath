@@ -83,7 +83,20 @@ def post_worker_init(worker):
     и дерево подборок. При деплое этого мало — deploy.sh сбрасывает кэш
     уже после старта контейнера и затем прогревает его заново командой
     manage.py warm_caches. Соединение с базой закрывается: запросы
-    обслуживают потоки со своими."""
+    обслуживают потоки со своими.
+
+    Forkserver вычислителя формул — тоже здесь, в каждом воркере и при
+    любом GUNICORN_WARMUP: forkserver мастера воркеру, порождённому fork,
+    не годится (formula_fork._forget_parent_forkserver), а без прогрева
+    запросы, пришедшие во время запуска forkserver, получали бы
+    «Проверка временно недоступна»."""
+    import sys
+    if sys.platform == 'linux':
+        from assignments.checks.formula_fork import warmup
+        try:
+            warmup()
+        except Exception as exc:  # noqa: BLE001 — проверка повторит прогрев сама
+            _log(worker, f'formula warmup skipped: {exc!r}')
     if not WARMUP:
         return
     import time

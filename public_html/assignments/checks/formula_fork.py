@@ -24,6 +24,42 @@ class FormulaStartupUnavailable(RuntimeError):
     """Парсер не готов; ученический ввод ещё не запускался."""
 
 
+def _forget_parent_forkserver():
+    """После fork: forkserver родителя — не наш ребёнок, запустим свой.
+
+    ``multiprocessing`` хранит PID forkserver и при каждом запуске делает
+    ``waitpid`` по нему; в процессе-потомке это ``ChildProcessError``, и
+    любая проверка формулы — «временно недоступна». Так было на проде с
+    #345: gunicorn с ``preload_app`` грузит приложение в мастере, а
+    воркеры — fork мастера (17.11.2026, test_formula_fork). Здесь только
+    забываем чужой сервер: сам он принадлежит родителю и живёт, пока жив
+    тот. Копию его «alive»-дескриптора закрываем — иначе потомок держал
+    бы чужой сервер после смерти родителя.
+    """
+    global _ready, _failed_until, _startup_lock
+    _ready = False
+    _failed_until = 0
+    _startup_lock = threading.Lock()
+    from multiprocessing import forkserver
+    server = forkserver._forkserver
+    alive = server._forkserver_alive_fd
+    server._forkserver_address = None
+    server._forkserver_alive_fd = None
+    server._forkserver_pid = None
+    server._inherited_fds = None
+    # Блокировку мог держать поток родителя в момент fork.
+    server._lock = threading.Lock()
+    if alive is not None:
+        try:
+            os.close(alive)
+        except OSError:
+            pass
+
+
+if hasattr(os, 'register_at_fork'):
+    os.register_at_fork(after_in_child=_forget_parent_forkserver)
+
+
 def warmup():
     """Доверенный прогрев без очереди запросов и без блокировки их ввода.
 
@@ -78,7 +114,8 @@ def _run_process(payload, timeout):
     # Forkserver берёт окружение процесса, который его запускает, а дети —
     # хэши forkserver. Значение остаётся и для его перезапусков; хэши самого
     # веб-процесса уже выбраны при старте и не меняются. Первый вызов —
-    # прогрев из core/wsgi.py, до приёма запросов потоками.
+    # прогрев до приёма запросов потоками: post_worker_init gunicorn или
+    # core/wsgi.py вне gunicorn.
     if os.environ.get('PYTHONHASHSEED') != HASH_SEED:
         os.environ['PYTHONHASHSEED'] = HASH_SEED
     context = multiprocessing.get_context('forkserver')
