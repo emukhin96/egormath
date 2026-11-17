@@ -1225,15 +1225,70 @@ _TIME_RE = re.compile(r"(?P<lead>(?:\b(?:после|показывают|в|до
 _ALIGNED_RE = re.compile(r"\\begin\{aligned\}(?P<body>.*?)\\end\{aligned\}", re.S)
 
 
+# Склеенная строка не шире ~32 знаков: знак формулы в листке A5 (10pt) —
+# около 8pt, строка набора — 336pt, а у пункта листка есть отступ. Книга в
+# две колонки (Корянов) переносит длинные цепочки «…= \\\\ & =…», и
+# склейка таких строк уходила за поле листка на 100–200pt.
+WRAPPED_JOIN_LIMIT = 32
+_WIDTHLESS_RE = re.compile(
+    r"\\(?:left|right|displaystyle|textstyle|[,;!]|quad|qquad)(?![A-Za-z])")
+_WRAPPER_RE = re.compile(
+    r"\\(?:overrightarrow|vec|overline|bar|text|mathrm|operatorname|sqrt)\s*")
+
+
+def _brace_group(value: str, start: int) -> tuple[str, int]:
+    """Аргумент команды с позиции ``start``: «{…}» или один знак."""
+    while start < len(value) and value[start] == " ":
+        start += 1
+    if start >= len(value):
+        return "", start
+    if value[start] != "{":
+        return value[start], start + 1
+    depth = 0
+    for index in range(start, len(value)):
+        depth += value[index] == "{"
+        depth -= value[index] == "}"
+        if depth == 0:
+            return value[start + 1:index], index + 1
+    return value[start + 1:], len(value)
+
+
+def formula_width(value: str) -> int:
+    """Примерная ширина строки формулы в знаках (для решения о склейке).
+
+    Дробь занимает ширину большего этажа, индексы и степени — половину,
+    обёртки (\\left, \\sqrt, \\overrightarrow…) ширины не добавляют,
+    любая другая команда — один знак.
+    """
+    value = _WIDTHLESS_RE.sub("", re.sub(r"(?<!\\)&", "", value))
+    frac = re.search(r"\\[dt]?frac(?![A-Za-z])", value)
+    if frac:
+        numerator, end = _brace_group(value, frac.end())
+        denominator, end = _brace_group(value, end)
+        return (formula_width(value[:frac.start()])
+                + max(formula_width(numerator), formula_width(denominator))
+                + formula_width(value[end:]))
+    script = re.search(r"[\^_]", value)
+    if script:
+        argument, end = _brace_group(value, script.end())
+        return (formula_width(value[:script.start()])
+                + (formula_width(argument) + 1) // 2
+                + formula_width(value[end:]))
+    value = re.sub(r"\\[A-Za-z]+", "x", _WRAPPER_RE.sub("", value))
+    return len(re.sub(r"[{}\s]", "", value))
+
+
 def _join_wrapped_formula(match: re.Match) -> str:
-    """Строка формулы, перенесённая в книге по знаку («…+ \\\\ & +…»), — одной строкой."""
+    """Строка формулы, перенесённая в книге по знаку («…+ \\\\ & +…»), — одной
+    строкой, если она помещается в строку листка (``WRAPPED_JOIN_LIMIT``)."""
     rows = [row.strip() for row in re.split(r"\\\\", match.group("body"))]
     rows = [row for row in rows if row]
     joined = [rows[0]]
     for row in rows[1:]:
         tail = re.search(r"([+\-=])\s*$", joined[-1])
         head = re.match(r"&\s*([+\-=])\s*", row)
-        if tail and head and tail.group(1) == head.group(1):
+        if (tail and head and tail.group(1) == head.group(1)
+                and formula_width(joined[-1] + row) <= WRAPPED_JOIN_LIMIT):
             joined[-1] = joined[-1][:tail.end(1)] + " " + row[head.end():]
         else:
             joined.append(row)

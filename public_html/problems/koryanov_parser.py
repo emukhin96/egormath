@@ -733,6 +733,46 @@ def degrees(value: str) -> str:
 _SINGLE_TWIN_RE = re.compile(r"(?<![\wА-Яа-яЁё\\{$.])([ЕНМРТХ])(?![\wА-Яа-яЁё}$.])")
 
 
+def _top_level_parts(body: str) -> list[str]:
+    """«a=1, b=2» → части по запятой вне скобок {…}, (…), […]."""
+    parts, depth, start = [], 0, 0
+    for index, char in enumerate(body):
+        if char in "{([":
+            depth += 1
+        elif char in "})]":
+            depth -= 1
+        elif char == "," and depth == 0 and body[index + 1:index + 2] == " ":
+            parts.append(body[start:index])
+            start = index + 1
+    parts.append(body[start:])
+    return [part.strip() for part in parts]
+
+
+def _split_equality_list(match: re.Match) -> str:
+    """Перечень «\\(A B=3, S A=7\\)» — по формуле на равенство.
+
+    Делим только по запятой вне скобок, если частей не меньше двух, равенство
+    есть хотя бы в одной и части без «=» стоят только в начале («\\(60^{\\circ},
+    N K=18\\)», имя многогранника перед «A B=2»). Точки «\\(E, F, P\\)»,
+    координаты «\\(A(0;0;0), B\\)», системы и \\left…\\right не трогаем.
+    """
+    body = match.group(1)
+    if re.search(r"\\left|\\begin|\\quad|\\text", body):
+        return match.group(0)
+    display = body.lstrip().startswith("\\displaystyle")
+    if display:
+        body = body.lstrip()[len("\\displaystyle"):]
+    parts = _top_level_parts(body)
+    flags = ["=" in part for part in parts]
+    if (len(parts) < 2 or not any(flags) or not all(parts)
+            or any(not flag for flag in flags[flags.index(True):])
+            or any(re.search(r"[+\-=<>]$|^[+\-=<>]", part) for part in parts)):
+        return match.group(0)
+    return ", ".join(
+        "\\(" + ("\\displaystyle " if display and "\\frac" in part else "") + part + "\\)"
+        for part in parts)
+
+
 def tidy(value: str) -> str:
     """Пробел перед знаком препинания после формулы: «равны $2$ , найдите»."""
     value = re.sub(r"(?<=\$|\))[ \t]+(?=[,.;:](?:\s|$))", "", value or "")
@@ -764,6 +804,9 @@ def tidy(value: str) -> str:
             return match.group(0)
         return ", ".join(f"\\({part.strip()}\\)" for part in parts)
     value = re.sub(r"\\\(((?:(?!\\\)).)*?,\s*\\quad(?:(?!\\\)).)*?)\\\)", split_list, value)
+    # То же через запятую: «\(A B=3, S A=7\)», «\(60^{\circ}, N K=18\)»,
+    # «\(A B C D A_{1} B_{1} C_{1} D_{1}, A B=2\)» — по формуле на равенство.
+    value = re.sub(r"\\\(((?:(?!\\\)).)*?)\\\)", _split_equality_list, value)
     # «1-й способ», «2-го» — порядковое числительное, не формула.
     value = re.sub(r"\$(\d)\$-(?=[а-я])", r"\1-", value)
     # «точки \(P\), М и \(K\)», «середину Е ребра» — точка кириллицей;
@@ -775,9 +818,20 @@ def tidy(value: str) -> str:
         lambda m: "\\(a\\)", chunk))
     # «т.e.», «Ee высота» — латиница OCR в коротких словах.
     value = _prose(value, lambda chunk: re.sub(r"т\.e\.", "т.е.", re.sub(r"(?<![A-Za-z])Ee(?= [а-яё])", "Ее", chunk)))
-    value = _prose(value, lambda chunk: re.sub(r"(?<=, )to(?= [а-яё])", "то", chunk))
+    value = _prose(value, lambda chunk: re.sub(r"(?<=, )to(?=\s)", "то", chunk))
     # «\\» в конце абзаца после формулы или слова с точкой — лишний.
+    value = re.sub(r"(?m)^(Замечание\.)[ \t]*\\\\[ \t]*\n", r"\1 ", value)
     value = re.sub(r"(?<=\\\)\.)[ \t]*\\\\[ \t]*(?=\n)", "", value)
+    value = re.sub(r"(?<=[а-яё]\.)[ \t]*\\\\[ \t]*(?=\n)", "", value)
+    value = re.sub(r"(?<=\\taskpic\{\d\}\.)[ \t]*\\\\[ \t]*(?=\n)", "", value)
+    # Строка из одного «\\» перед абзацем («\]\n\\\\\nЗамечание») и
+    # «Замечание.\\» отдельной строкой — остатки вёрстки колонок.
+    value = re.sub(r"\n[ \t]*\\\\[ \t]*\n(?=[А-ЯЁ])", "\n", value)
+    # Номер шага разбора формулой: «$1$. Достраиваем» — текстом.
+    value = re.sub(r"(?m)^\$(\d)\$\.(?= )", r"\1.", value)
+    # Пробел OCR внутри скобки вокруг формулы: «( \(E\) — вершина)», «\(S\) )».
+    value = re.sub(r"\([ \t]+(?=\\\()", "(", value)
+    value = re.sub(r"(?<=\\\))[ \t]+\)", ")", value)
     # «на рисунке .» — номер рисунка ушёл, пробел перед точкой остался.
     value = _prose(value, lambda chunk: re.sub(r"(?<=[а-яё])[ \t]+(?=[.,;:](?:\s|$))", "", chunk))
     value = _prose(value, lambda chunk: re.sub(r"(?<![\w\\{$])Oxyz(?![\w}])", lambda m: "\\(Oxyz\\)", chunk))

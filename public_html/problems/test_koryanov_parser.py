@@ -433,6 +433,22 @@ class KoryanovHelpersTests(SimpleTestCase):
         # Перечень точек без равенств — одна формула.
         value = "точки \\(M, \\quad N\\)"
         self.assertEqual(tidy(value), value)
+        # Через запятую: части без «=» — только в начале перечня.
+        self.assertEqual(tidy("\\(A B=3, S A=7\\)"), "\\(A B=3\\), \\(S A=7\\)")
+        self.assertEqual(tidy("\\(60^{\\circ}, N K=18\\)"), "\\(60^{\\circ}\\), \\(N K=18\\)")
+        self.assertEqual(tidy("\\(\\displaystyle B M=\\frac{3 a}{4}, C P=2\\)"),
+                         "\\(\\displaystyle B M=\\frac{3 a}{4}\\), \\(C P=2\\)")
+        for value in ("точки \\(E, F, P\\)", "\\(A(0 ; 0 ; 0), B(1 ; 0 ; 0)\\)",
+                      "\\(x=1, y\\)", "\\(\\vec{n}=\\{x, y, z\\}\\)"):
+            self.assertEqual(tidy(value), value)
+
+    def test_tidy_layout_leftovers(self):
+        self.assertEqual(tidy("расстояние.\n\\\\\nЗамечание.\\\\\nОтметим"),
+                         "расстояние.\nЗамечание. Отметим")
+        self.assertEqual(tidy("основания.\\\\\nАналогично"), "основания.\nАналогично")
+        self.assertEqual(tidy("$1$. Достраиваем \\(D\\)."), "1. Достраиваем \\(D\\).")
+        self.assertEqual(tidy("( \\(E\\) — вершина) и \\(S\\) )."), "(\\(E\\) — вершина) и \\(S\\)).")
+        self.assertEqual(tidy("в треугольнике \\(OAL\\), to\n\\["), "в треугольнике \\(OAL\\), то\n\\[")
 
     def test_apply_fixes(self):
         task = TaskDraft("П1", "П1", [], "", "", "", "Найти \\(x\\).")

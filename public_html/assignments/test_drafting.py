@@ -68,3 +68,9 @@ class ContextDraftTests(SimpleTestCase):
         self.assertEqual(
             draft_mask('$x=3$', 'Составьте уравнение прямой.'),
             '{{equation: x=3}}')
+
+    def test_square_unit_outside_formula_is_math(self):
+        """Корянов, П81: «см^2» вне формулы ученик видел буквально."""
+        self.assertEqual(draft_mask('$30$ см$^{2}$', 'Найдите площадь сечения.'),
+                         '{{number: 30}} см$^{2}$')
+        self.assertEqual(draft_mask('$5$ см', 'Найдите длину ребра.'), '{{number: 5}} см')
