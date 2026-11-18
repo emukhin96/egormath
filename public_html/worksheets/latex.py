@@ -88,6 +88,38 @@ def _opt(content):
     return '[{%s}]' % content
 
 
+# Хвостовые переносы строки в тексте подпункта: \\, \\*, \\[2pt],
+# \newline, \par. В конце \item они ничего не дают, а «;» после них
+# уезжала на отдельную строку.
+_TRAILING_BREAK_RE = re.compile(
+    r'(?:\s|\\\\\*?(?:\[[^\[\]]*\])?|\\newline(?![A-Za-z])|\\par(?![A-Za-z]))+$')
+# Закрывающие math/группы, за которыми может прятаться знак препинания:
+# «$39^\circ.$», «\(x=1.\)», «\textbf{Докажите.}».
+_TRAILING_CLOSERS_RE = re.compile(r'(?:\$|\\\)|\})+$')
+# Точка-разделитель после \right, \bigr и т.п. («\left\{…\right.$» у
+# систем уравнений) — не знак препинания.
+_NULL_DELIMITER_RE = re.compile(r'\\(?:right|middle|[bB]igg?[rlm]?)\s*\.$')
+_FINAL_PUNCT = ';.!?:'
+
+
+def punctuate_subitem(text, last):
+    """Знак препинания в конце подпункта.
+
+    Между подпунктами «;», после последнего — «.». Подпункт с заглавной
+    буквы — законченное предложение, ему всегда «.». Если знак уже стоит
+    (в т.ч. перед закрывающим «$» или «}»), ничего не добавляем.
+    """
+    text = _TRAILING_BREAK_RE.sub('', text)
+    if not text:
+        return text
+    core = _TRAILING_CLOSERS_RE.sub('', text)
+    if core[-1:] in tuple(_FINAL_PUNCT) and not _NULL_DELIMITER_RE.search(core):
+        return text
+    first = text.lstrip()[:1]
+    sentence = first.isalpha() and first.isupper()
+    return text + ('.' if last or sentence else ';')
+
+
 def subitem_label(index):
     """Метка подпункта по позиции в листке (перенумерация заново)."""
     if index < len(CYRILLIC_LABELS):
@@ -253,12 +285,9 @@ def task_to_tex(item, variant='teacher', *, statement=None, common_indices=()):
         sub_texts.append(sub_text)
     # Пунктуация подпунктов: «;» между пунктами, «.» после последнего
     # (в базе тексты хранятся без знака препинания на конце)
-    sub_lines = []
-    for i, text in enumerate(sub_texts):
-        punct = '.' if i == len(sub_texts) - 1 else ';'
-        if text and text[-1] not in ';.!?:':
-            text += punct
-        sub_lines.append('\\item %s' % text)
+    sub_lines = [
+        '\\item %s' % punctuate_subitem(text, i == len(sub_texts) - 1)
+        for i, text in enumerate(sub_texts)]
     # Без подпунктов колонки обнуляются: \columned{0} печатает только
     # условие, а columns>=1 с пустым списком падают на «missing \item»
     # (пустой [{}] всё равно передаётся, когда дальше идёт ответ).
