@@ -17,9 +17,12 @@ application = get_wsgi_application()
 
 # Загружаем доверенную грамматику до приёма запросов. Отказ не мешает
 # остальному сайту: проверка формул позже повторит ограниченный прогрев.
+# Под gunicorn этот модуль грузит мастер (preload_app), а forkserver
+# мастера воркерам не годится — их прогревает post_worker_init
+# (deploy/vps/gunicorn.conf.py, assignments/test_formula_fork.py).
 import sys
 import subprocess
-if sys.platform == 'linux':
+if sys.platform == 'linux' and 'gunicorn' not in sys.modules:
     from assignments.checks.formula_fork import warmup
     try:
         warmup()
