@@ -39,6 +39,17 @@ class PunctuateSubitemTests(SimpleTestCase):
         self.assertEqual(
             punctuate_subitem(r'$\frac{1}{2}$', False), r'$\frac{1}{2}$;')
 
+    def test_null_delimiter_dot_is_not_punctuation(self):
+        # Система уравнений: точка в «\right.» — пустой разделитель
+        system = r'$\left\{\begin{array}{l}x+y=1\\x-y=3\end{array}\right.$'
+        self.assertEqual(punctuate_subitem(system, False), system + ';')
+        self.assertEqual(punctuate_subitem(system, True), system + '.')
+        self.assertEqual(
+            punctuate_subitem(r'\(\bigl\{x\bigr.\)', False), r'\(\bigl\{x\bigr.\)' + ';')
+        # Настоящая точка после команды остаётся точкой
+        self.assertEqual(
+            punctuate_subitem(r'$39^\circ.$', False), r'$39^\circ.$')
+
 
 class SubitemPunctInDocumentsTests(TestCase):
     def setUp(self):

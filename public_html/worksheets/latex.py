@@ -96,6 +96,9 @@ _TRAILING_BREAK_RE = re.compile(
 # Закрывающие math/группы, за которыми может прятаться знак препинания:
 # «$39^\circ.$», «\(x=1.\)», «\textbf{Докажите.}».
 _TRAILING_CLOSERS_RE = re.compile(r'(?:\$|\\\)|\})+$')
+# Точка-разделитель после \right, \bigr и т.п. («\left\{…\right.$» у
+# систем уравнений) — не знак препинания.
+_NULL_DELIMITER_RE = re.compile(r'\\(?:right|middle|[bB]igg?[rlm]?)\s*\.$')
 _FINAL_PUNCT = ';.!?:'
 
 
@@ -109,7 +112,8 @@ def punctuate_subitem(text, last):
     text = _TRAILING_BREAK_RE.sub('', text)
     if not text:
         return text
-    if _TRAILING_CLOSERS_RE.sub('', text)[-1:] in tuple(_FINAL_PUNCT):
+    core = _TRAILING_CLOSERS_RE.sub('', text)
+    if core[-1:] in tuple(_FINAL_PUNCT) and not _NULL_DELIMITER_RE.search(core):
         return text
     first = text.lstrip()[:1]
     sentence = first.isalpha() and first.isupper()
