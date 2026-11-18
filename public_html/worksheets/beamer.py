@@ -8,7 +8,8 @@ import re
 
 from problems.latex_utils import escape_latex
 
-from .latex import (_drop_empty_rubrics, _opt, _resolve_taskpics, subitem_label)
+from .latex import (_drop_empty_rubrics, _opt, _resolve_taskpics,
+                    punctuate_subitem, subitem_label)
 
 THEMES = ('light', 'night', 'grid')
 ASPECTS = ('169', '43')
@@ -149,9 +150,7 @@ def _subitem_lines(item, filenames, used, deferred):
         text = _TASKPIC_CMD_RE.sub('', text)
         deferred.update(sub_used)
         used.update(sub_used)
-        punct = '.' if i == len(subitem_objs) - 1 else ';'
-        if text and text[-1] not in ';.!?:':
-            text += punct
+        text = punctuate_subitem(text, i == len(subitem_objs) - 1)
         lines.append('\\item[{%s)}] %s' % (subitem_label(i), text))
     return lines, subitem_objs
 
