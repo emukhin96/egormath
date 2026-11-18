@@ -204,6 +204,10 @@ class TaskDraft:
     confidence: float = 1.0
     review_status: str = "needs_review"
     warnings: list[str] = field(default_factory=list)
+    # Редакторский ответ и решение (не авторские): профиль заполняет их
+    # только сверенными правками, например при доказанной ошибке книги.
+    answer_latex: str = ""
+    solution_latex: str = ""
 
 
 @dataclass
@@ -3410,6 +3414,9 @@ def bundle_from_text(
     elif profile == "koryanov":
         from .koryanov_parser import parse_koryanov
         tasks, diagnostics = parse_koryanov(tasks_text)
+    elif profile == "smirnov":
+        from .smirnov_parser import parse_smirnov
+        tasks, diagnostics = parse_smirnov(tasks_text)
     elif profile == "feoktistov":
         from .feoktistov_parser import parse_feoktistov
         tasks, diagnostics = parse_feoktistov(tasks_text)
@@ -3619,7 +3626,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--profile", required=True,
-        choices=("galitsky", "merzlyak", "merzlyak_dm", "shabunin", "shabunin_method", "potoskuev", "volchkevich", "yashchenko_ege", "vysotsky", "tkachuk", "koropets", "koryanov", "feoktistov", "ziv", "shestakov", "ostromogilsky",
+        choices=("galitsky", "merzlyak", "merzlyak_dm", "shabunin", "shabunin_method", "potoskuev", "volchkevich", "yashchenko_ege", "vysotsky", "tkachuk", "koropets", "koryanov", "smirnov", "feoktistov", "ziv", "shestakov", "ostromogilsky",
                  "ostromogilsky_ege"))
     parser.add_argument("--tasks", required=True, type=Path)
     parser.add_argument("--solutions", type=Path)
