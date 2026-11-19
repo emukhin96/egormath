@@ -78,7 +78,9 @@ def worksheet_list(request):
     worksheets = (Worksheet.visible_to(request.user).filter(
                       collection__isnull=True)
                   .select_related('owner')
-                  .prefetch_related('topics', 'grade_bands')
+                  .prefetch_related('topics', 'grade_bands',
+                                    'assignments__student',
+                                    'assignments__source_groups')
                   .annotate(items_total=models.Count(
                       'items',
                       filter=(models.Q(items__deleted_at__isnull=True)
@@ -131,6 +133,8 @@ def worksheet_list(request):
     for w in worksheets:
         w.taxonomy_json = dumps_state(worksheet_taxonomy_state(w))
         w.corpus_key = corpus_key_from_comment(w.comment)
+    from .recipients import attach_issued_to
+    attach_issued_to(worksheets)
     return render(request, 'worksheets/worksheet_list.html', ctx)
 
 
