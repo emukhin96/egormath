@@ -23,7 +23,8 @@
       {% include 'problems/_task_images.html' with images=row.statement_images %}
       {# #id — карточка задачи (свойства, правка или «Предложить исправление»); «ответ» — рамка только этой задачи, answers-toggle.js #}
       {% if is_teacher or row.material %}<div class="task-meta collection-task-meta">
-        {% if is_teacher %}<a class="task-id" href="{% url 'task_detail' item.task.pk %}" title="Карточка задачи #{{ item.task.pk }}: свойства и правка">#{{ item.task.pk }}</a>{% endif %}
+        {# Ссылка — только на задачу, видимую учителю (task_open_url → can_view_task); чужая личная — номер без ссылки #}
+        {% if is_teacher %}{% task_open_url item.task as card_url %}{% if card_url %}<a class="task-id" href="{{ card_url }}" title="Карточка задачи #{{ item.task.pk }}: свойства и правка">#{{ item.task.pk }}</a>{% else %}<span class="task-id">#{{ item.task.pk }}</span>{% endif %}{% endif %}
         {% if row.material %}<button type="button" class="link-btn answer-peek" data-answer-peek aria-pressed="false" title="Показать или скрыть {% if row.material.answer and row.material.solution %}ответ и решение{% elif row.material.solution %}решение{% else %}ответ{% endif %} только этой задачи">{% if row.material.answer and row.material.solution %}ответ и решение{% elif row.material.solution %}{{ row.material.solution.heading|lower }}{% else %}ответ{% endif %}</button>{% endif %}
       </div>{% endif %}
       {% include 'problems/_task_answers.html' with task=item.task material=row.material material_ready=True hide_answers=True %}
