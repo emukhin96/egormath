@@ -1,5 +1,5 @@
 {% load task_extras %}
-{# Строки подборки (задачи, рубрики, тексты). Контекст: rows, worksheet #}
+{# Строки подборки (задачи, рубрики, тексты). Контекст: rows (worksheets.views._collection_rows), worksheet #}
 {% for row in rows %}
 {% with item=row.item %}
 <div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}"{% if item.task_id %} data-task-png-root{% endif %}>
@@ -21,7 +21,12 @@
       </ol>
       {% endif %}
       {% include 'problems/_task_images.html' with images=row.statement_images %}
-      {% include 'problems/_task_answers.html' with task=item.task subitems=row.subitems hide_answers=True %}
+      {# #id — карточка задачи (свойства, правка или «Предложить исправление»); «ответ» — рамка только этой задачи, answers-toggle.js #}
+      {% if is_teacher or row.material %}<div class="task-meta collection-task-meta">
+        {% if is_teacher %}<a class="task-id" href="{% url 'task_detail' item.task.pk %}" title="Карточка задачи #{{ item.task.pk }}: свойства и правка">#{{ item.task.pk }}</a>{% endif %}
+        {% if row.material %}<button type="button" class="link-btn answer-peek" data-answer-peek aria-pressed="false" title="Показать или скрыть {% if row.material.answer and row.material.solution %}ответ и решение{% elif row.material.solution %}решение{% else %}ответ{% endif %} только этой задачи">{% if row.material.answer and row.material.solution %}ответ и решение{% elif row.material.solution %}{{ row.material.solution.heading|lower }}{% else %}ответ{% endif %}</button>{% endif %}
+      </div>{% endif %}
+      {% include 'problems/_task_answers.html' with task=item.task material=row.material material_ready=True hide_answers=True %}
       {% include 'includes/task_usage_badge.html' with task=item.task %}
       <div data-worksheet-mask data-task-id="{{ item.task.pk }}" data-manage-url="{% url 'task_manage' item.task.pk %}"{% if not item.task.variant_of_id and not item.task|editable_by:request.user %} data-base-locked="1"{% endif %} hidden><div data-mask-tools class="problem-mask-tools"></div></div>
       {% elif item.is_rubric %}

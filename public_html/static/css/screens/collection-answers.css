@@ -1,0 +1,70 @@
+/* Подборка: тумблеры «ответы» и «решения» по отдельности, кнопка «ответ»
+   одной задачи и ряд «Показать», закреплённый под шапкой при прокрутке
+   (worksheets/collection_detail.html, _collection_rows.html,
+   static/js/answers-toggle.js). Рамка .ws-answers видна, когда JS снял с неё
+   hidden; какая её часть видна — по классам #ws-items и строки. */
+@layer components {
+  /* Ряд «Показать» не уезжает со страницы: тумблеры под рукой у любой задачи */
+  .collection-view-options.is-sticky {
+    position: sticky;
+    top: var(--topbar-height);
+    z-index: 30;
+    margin-top: 0;
+    padding: var(--space-2) 0;
+    background: var(--page);
+  }
+
+  /* На телефоне шапка не закреплена (input.css, ≤760px): ряд прилипает
+     к самому верху и ужат в одну строку — без подписи «Показать:» */
+  @media (max-width: 760px) {
+    .collection-view-options.is-sticky {
+      top: 0;
+      gap: var(--space-2) var(--space-3);
+    }
+    .collection-view-options.is-sticky .show-toggles { gap: var(--space-3); }
+    .collection-view-options.is-sticky .show-toggles-label { display: none; }
+  }
+
+  /* Раздельные тумблеры: рамка показывается без .show-answers, если включены
+     решения или раскрыта одна задача */
+  #ws-items.split-solutions .ws-answers:not([hidden]),
+  #ws-items .answers-peek .ws-answers:not([hidden]) {
+    display: block;
+  }
+
+  #ws-items.split-solutions:not(.show-answers) .ws-item:not(.answers-peek) .answer-box,
+  #ws-items.split-solutions:not(.show-solutions) .ws-item:not(.answers-peek) .solution-box {
+    display: none;
+  }
+
+  /* Строка «#id, ответ» под условием — на линии текста задачи */
+  #ws-items.ws-collection .ws-content > .collection-task-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-3);
+    margin: var(--space-1) 0 0 var(--task-indent);
+  }
+
+  #ws-items .collection-task-meta a.task-id {
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  #ws-items .collection-task-meta a.task-id:hover,
+  #ws-items .collection-task-meta .answer-peek:hover {
+    color: var(--accent);
+  }
+
+  /* Раскрытый ответ одной задачи — кнопка остаётся подсвеченной */
+  #ws-items .collection-task-meta .answer-peek[aria-pressed="true"] {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* Когда тумблеры уже показывают всё, кнопка одной задачи не нужна */
+  #ws-items.show-answers:not(.split-solutions) .answer-peek,
+  #ws-items.show-answers.show-solutions .answer-peek {
+    display: none;
+  }
+}

@@ -12,7 +12,15 @@
    число задач меняется без перезагрузки (refresh в worksheet_controls.js,
    updateWorksheet в problem_editor.js), и свежая строка несёт либо рамку в
    HTML, либо пометку — тогда её дозапрашивают с ?items=. Формулы
-   дорисовывает EgorMath (math.js) — по мере прокрутки на большой странице. */
+   дорисовывает EgorMath (math.js) — по мере прокрутки на большой странице.
+
+   #toggle-solutions (подборка, includes/show_toggles.html с solutions) —
+   отдельный тумблер решений: тогда «ответы» показывают только .answer-box,
+   «решения» — только .solution-box (классы .show-answers / .show-solutions
+   и .split-solutions на #ws-items). Без него решения идут вместе с ответами.
+   Кнопка [data-answer-peek] в строке (worksheets/_collection_rows.html)
+   раскрывает рамку только этой задачи целиком — класс .answers-peek строки,
+   независимо от тумблеров. */
 (function () {
   'use strict';
 
@@ -23,14 +31,26 @@
     var KEY = list.getAttribute('data-answers-key') || 'ws-show-answers';
     var answersUrl = list.getAttribute('data-answers-url');
     var loading = false;
+    var solutions = document.getElementById('toggle-solutions');
+    var SOLUTIONS_KEY = solutions && (solutions.getAttribute('data-storage-key') || 'ws-show-solutions');
 
-    // Показ/скрытие рамок внутри root по состоянию тумблера
+    // Видна ли рамка el: целиком по кнопке строки, иначе — по тумблерам
+    // (при раздельном тумблере решений — та её часть, что включена)
+    function answersVisible(el) {
+      var row = el.closest('.ws-item');
+      if (row && row.classList.contains('answers-peek')) return true;
+      if (!solutions) return toggle.checked;
+      return (toggle.checked && !!el.querySelector('.answer-box'))
+        || (solutions.checked && !!el.querySelector('.solution-box'));
+    }
+
+    // Показ/скрытие рамок внутри root по состоянию тумблеров
     function showAnswers(root) {
-      var on = toggle.checked;
       // На большой странице формулы ответов дорисовываются по мере прокрутки
       // (EgorMath.observe, math.js), на маленькой — сразу, как раньше
       var render = window.EgorMath ? window.EgorMath.observe : renderMathContent;
       root.querySelectorAll('.ws-answers').forEach(function (el) {
+        var on = answersVisible(el);
         el.hidden = !on;
         if (on) el.querySelectorAll('.math-content').forEach(render);
       });
@@ -87,14 +107,34 @@
     function apply() {
       var on = toggle.checked;
       list.classList.toggle('show-answers', on);
+      list.classList.toggle('split-solutions', !!solutions);
+      if (solutions) list.classList.toggle('show-solutions', solutions.checked);
       showAnswers(list);
       if (on && answersUrl && pendingRows().length) loadAnswers(pendingRows());
-      try { localStorage.setItem(KEY, on ? '1' : ''); } catch (e) {}
+      try {
+        localStorage.setItem(KEY, on ? '1' : '');
+        if (solutions) localStorage.setItem(SOLUTIONS_KEY, solutions.checked ? '1' : '');
+      } catch (e) {}
     }
-    try { toggle.checked = localStorage.getItem(KEY) === '1'; } catch (e) {}
+    try {
+      toggle.checked = localStorage.getItem(KEY) === '1';
+      if (solutions) solutions.checked = localStorage.getItem(SOLUTIONS_KEY) === '1';
+    } catch (e) {}
     apply();
     toggle.addEventListener('change', apply);
+    if (solutions) solutions.addEventListener('change', apply);
     document.addEventListener('worksheet:updated', apply);
+
+    // Ответ одной задачи: кнопка строки раскрывает и прячет её рамку.
+    // Делегирование — строки подменяются (предпросмотр авторских листков).
+    list.addEventListener('click', function (event) {
+      var button = event.target.closest('[data-answer-peek]');
+      if (!button) return;
+      var row = button.closest('.ws-item');
+      var on = row.classList.toggle('answers-peek');
+      button.setAttribute('aria-pressed', on ? 'true' : 'false');
+      showAnswers(row);
+    });
 
     // «Только из задачника»: #toggle-author-only прячет AI-ответы и решения
     // (.author-only на #ws-items, правила в input.css). Ключ — data-storage-key.

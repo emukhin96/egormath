@@ -40,8 +40,9 @@
   </div>
 </div>
 {% if tasks_total or flat_groups %}
-<div class="collection-view-options">
-  {% include 'includes/show_toggles.html' with masks_key='collection-masks' %}
+{# Ряд «Показать» закреплён под шапкой при прокрутке (.is-sticky): тумблеры под рукой у любой задачи #}
+<div class="collection-view-options is-sticky">
+  {% include 'includes/show_toggles.html' with masks_key='collection-masks' solutions=has_solutions solutions_key='collection-show-solutions' %}
   {# Редкие фильтры — в «Ещё» (G8) #}
   <details class="more-menu show-more"><summary aria-label="Ещё фильтры" title="Ещё фильтры">Ещё<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></summary><div class="more-menu-list">
     <label class="ws-toggle" title="Скрыть редакторские / AI-ответы и решения: только то, что есть в задачнике">
@@ -119,5 +120,5 @@
 {% include 'problems/_mask_dialogs.html' %}
 <script defer src="{% static 'js/problem_editor.js' %}?v=8"></script>
 {% include 'problems/_mask_scripts.html' %}
-<script defer src="{% static 'js/answers-toggle.js' %}?v=2"></script>
+<script defer src="{% static 'js/answers-toggle.js' %}?v=6"></script>
 {% endblock %}

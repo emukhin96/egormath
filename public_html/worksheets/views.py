@@ -610,17 +610,25 @@ def _collection_rows(items, number=0, source_id=None):
     ``label`` — то, что печатается перед условием: номер из задачника
     (``source_id`` — источник подборки), а если его нет — сквозной
     позиционный номер ``number``.
+
+    ``material`` — рамка «Ответ / Решение» (``answer_material``): по ней
+    строка решает, что показывает кнопка «ответ» одной задачи, а страница —
+    нужен ли тумблер «решения».
     """
+    from problems.answer_material import answer_material
     rows = []
     for item in items:
         if item.task_id:
             number += 1
+        subitems = item.selected_subitems() if item.task_id else []
         rows.append({
             'item': item,
             'number': number if item.task_id else None,
             'label': ((_source_number(item.task, source_id) or str(number))
                       if item.task_id else ''),
-            'subitems': item.selected_subitems() if item.task_id else [],
+            'subitems': subitems,
+            'material': (answer_material(item.task, subitems)
+                         if item.task_id else None),
         })
     from .block_presentation import decorate_block_rows
     decorate_block_rows(rows)
@@ -719,6 +727,8 @@ def collection_detail(request, pk):
         page_tasks += [row['item'].task for group in flat_groups
                        for row in group['rows'] if row['item'].task_id]
     cart_task_ids = [task.pk for task in page_tasks if not task.variant_of_id]
+    page_rows = rows + [row for group in (flat_groups or [])
+                        for row in group['rows']]
     from assignments.task_usage import attach_usage, audience_context
     usage_ctx = audience_context(request, attach_usage(request, page_tasks))
     sources = _collection_catalog(request.user)
@@ -746,16 +756,13 @@ def collection_detail(request, pk):
                         if any(s.heading is not None for s in sections)
                         else []),
         # Номера вроде «127» или «3.15» не помещаются в колонку 2rem
-        'wide_numbers': any(
-            len(row['label']) > 3
-            for row in rows + [r for g in (flat_groups or [])
-                               for r in g['rows']]),
+        'wide_numbers': any(len(row['label']) > 3 for row in page_rows),
         # Ширина колонки номера — по самому длинному номеру страницы («26.149»):
         # шаблон задаёт --task-num-col, чтобы номер не наползал на текст.
-        'number_width': max(
-            [len(row['label']) for row in rows + [r for g in (flat_groups or [])
-                                                  for r in g['rows']]]
-            or [2]),
+        'number_width': max([len(row['label']) for row in page_rows] or [2]),
+        # Тумблер «решения» — только если на странице есть что им показать
+        'has_solutions': any(row['material'] and row['material']['solution']
+                             for row in page_rows),
         'page': page,
         'children': children,
         'flat_groups': flat_groups,
