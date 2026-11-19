@@ -208,4 +208,4 @@ class AnswersToggleScriptTests(SimpleTestCase):
         self.assertIn('data-answers-url="{{ answers_url }}"', src)
         self.assertIn('{% if answers_pending %} data-answers-pending{% endif %}', src)
         self.assertIn("{% if row.material %}{% include 'problems/_task_answers.html'", src)
-        self.assertIn("answers-toggle.js' %}?v=5", src)
+        self.assertIn("answers-toggle.js' %}?v=6", src)
