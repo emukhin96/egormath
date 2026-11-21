@@ -233,8 +233,18 @@ def assignment_list(request):
             | Q(student__username__icontains=q))
     if status in dict(Assignment.STATUS_CHOICES):
         assignments = assignments.filter(status=status)
-    if student_id.isdigit():
-        assignments = assignments.filter(student_id=student_id)
+    # «Кому» — группа и ученик быстрым фильтром (assignments/recipient_filters.py);
+    # варианты — по виду работы: выдачи листков или самостоятельные
+    from .recipient_filters import apply_to_assignments, recipient_filter
+    independent_kind = (request.GET.get('kind') == 'independent'
+                        and settings.INDEPENDENT_WORKS_ENABLED)
+    if independent_kind:
+        from independentworks.integration import attempt_student_ids
+        recipients = recipient_filter(request.user, request.GET, attempt_student_ids(request.user))
+    else:
+        recipients = recipient_filter(request.user, request.GET)
+    student_id = recipients['student_value']
+    assignments = apply_to_assignments(assignments, recipients)
     if worksheet_id.isdigit():
         assignments = assignments.filter(worksheet_id=worksheet_id)
     if due == 'overdue':
@@ -411,8 +421,9 @@ def assignment_list(request):
             ('week', 'Срок в ближайшие 7 дней'),
             ('none', 'Без срока'),
         ],
+        'recipient_filter': recipients,
         'filters': {
-            'q': q, 'status': status, 'student': student_id,
+            'q': q, 'status': status, 'student': student_id, 'group': recipients['group_value'],
             'worksheet': worksheet_id, 'due': due, 'owner': owner_id, 'kind': kind,
         },
         'return_query': request.GET.urlencode(),

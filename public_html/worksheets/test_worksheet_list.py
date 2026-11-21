@@ -42,7 +42,10 @@ class WorksheetListIssuedToTests(TestCase):
         self.assertEqual(row.issued_students, ['Ученик3 Ученик/ов'])
         self.assertContains(response, '<span class="ws-issued-group">8А</span>, Ученик3 Ученик/ов',
                             html=False)
-        self.assertNotContains(response, 'Ученик0 Ученик/ов')
+        # Ученик группы в колонке «Кому выдан» не перечисляется (имя есть
+        # только в списке фильтра «Кому» — assignments/recipient_filters.py)
+        issued = response.content.decode().split('class="ws-list-issued"', 2)[-1]
+        self.assertNotIn('Ученик0 Ученик/ов', issued.split('</td>')[0])
 
     def test_many_individual_students_collapse_to_count(self):
         self.give(self.students)

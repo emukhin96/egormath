@@ -63,6 +63,12 @@ def student_assignments(user):
     return rows
 
 
+def attempt_student_ids(user):
+    """id учеников, получавших самостоятельные учителя (фильтр «Кому»)."""
+    return (Attempt.objects.filter(run__work__in=Work.visible_to(user), run__issued_at__isnull=False)
+            .values('student_id'))
+
+
 def assignment_runs(user, params):
     if not settings.INDEPENDENT_WORKS_ENABLED or params.get('kind') == 'ordinary':
         return []
@@ -79,11 +85,18 @@ def assignment_groups(user, params, *, runs=None):
         runs = assignment_runs(user, params)
     if params.get('worksheet', '').isdigit():
         runs = [r for r in runs if r.work.source_worksheet_id == int(params['worksheet'])]
+    members = None
+    if params.get('group', '').strip() or params.get('student', '').strip():
+        from assignments.recipient_filters import member_ids, recipient_filter
+        members = member_ids(recipient_filter(user, params, attempt_student_ids(user)))
     rows = []
     now = timezone.now()
     for run in runs:
         attempts = list(run.attempts.all())
-        if params.get('student', '').isdigit():
+        # «Кому» (assignments/recipient_filters.py): ученик или ученики группы
+        if members is not None:
+            attempts = [a for a in attempts if a.student_id in members]
+        elif params.get('student', '').isdigit():
             attempts = [a for a in attempts if a.student_id == int(params['student'])]
         q = params.get('q', '').strip().casefold()
         if q and q not in run.title.casefold():
