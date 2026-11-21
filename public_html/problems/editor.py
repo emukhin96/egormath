@@ -105,6 +105,13 @@ def context(request, task):
     from .proposals import proposal_options
     propose = None if is_base_editor(request.user) else proposal_options(request.user, task)
     simple = simple_answers(request.user, task)
+    # Крошки «Задачи › источник › подборка» и ссылки источников в мета-строке
+    # (problems/source_trail.py); карточка перерисовывается после правки
+    # тем же контекстом, поэтому путь считается здесь, а не во view.
+    from .source_trail import source_trails
+    trails = source_trails(request.user, task)
+    ctx.update(source_trails=trails,
+               source_trail=next((t for t in trails if t['url']), None))
     ctx.update(task=task, item=item, worksheet=item.worksheet if item else None,
                propose=propose, simple_answers=simple,
                # Общая задача у приглашённого: в листке правки уходят в
