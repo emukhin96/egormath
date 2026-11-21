@@ -1,4 +1,4 @@
-{% load task_extras %}
+{% load task_extras page_tools %}
 {# Список источников в панели не показываем (ревизия 03.11, P1): те же источники с теми же счётчиками — карточками на странице «Подборки». Панель остаётся только с содержимым выбранного источника: структура, параграфы, темы; без выбранного источника она пустая и скрыта #}
 {% if selected_source %}
 <section class="sidebar-section">
@@ -10,7 +10,7 @@
   <p class="sidebar-kicker">Структура источника</p>
   <ul class="sidebar-list collection-sidebar-tree">
     {% for row in selected_source.roots %}
-    <li style="--collection-depth: {{ row.depth }}"{% if current_collection.pk == row.collection.pk %} class="is-current"{% endif %}><a href="{% url 'collection_detail' row.collection.pk %}">{{ row.collection.catalog_title }}</a></li>
+    <li style="--collection-depth: {{ row.depth }}"{% if current_collection.pk == row.collection.pk or collection_ancestors.0.pk == row.collection.pk %} class="is-current"{% endif %}><a href="{% url 'collection_detail' row.collection.pk %}">{{ row.collection.catalog_title }}</a></li>
     {% endfor %}
   </ul>
 </section>
@@ -27,15 +27,25 @@
 <section class="sidebar-section">
   <p class="sidebar-kicker">Параграфы</p>
   <ul class="sidebar-list collection-sidebar-tree">
-    {% for entry in section_nav %}<li style="--collection-depth: 0"{% if page.has_other_pages and entry.section.index in chunk.section_indexes %} class="is-current"{% endif %}><a href="?page={{ entry.page }}#section-{{ entry.section.index }}" class="sidebar-row math-content">{% if entry.section.title %}{{ entry.section.title }}{% else %}Без параграфа{% endif %}{% if entry.total %}<span>{% if entry.first != entry.last %}{{ entry.first }}–{{ entry.last }}{% else %}{{ entry.first }}{% endif %}, {{ entry.total }} {{ entry.total|plural_ru:'задача,задачи,задач' }}</span>{% endif %}</a></li>{% endfor %}
+    {% for entry in section_nav %}<li style="--collection-depth: 0"{% if page.has_other_pages and entry.section.index in chunk.section_indexes %} class="is-current"{% endif %}><a href="{% query_set page=entry.page task=None %}#section-{{ entry.section.index }}" class="sidebar-row math-content">{% if entry.section.title %}{{ entry.section.title }}{% else %}Без параграфа{% endif %}{% if entry.total %}<span>{% if entry.first != entry.last %}{{ entry.first }}–{{ entry.last }}{% else %}{{ entry.first }}{% endif %}, {{ entry.total }} {{ entry.total|plural_ru:'задача,задачи,задач' }}</span>{% endif %}</a></li>{% endfor %}
   </ul>
 </section>
 {% endif %}
-{% if current_collection %}
+{% if current_collection and collection_filter.topics or current_collection and collection_filter.content or collection_filter.active %}
+{# Фильтр задач ЭТОЙ подборки (worksheets/collection_filters.py): темы и содержание берутся из её задач, щелчок сужает список, повторный — снимает; выбор подборки не сбрасывается #}
 <section class="sidebar-section">
-  <p class="sidebar-kicker">Темы раздела</p>
+  <p class="sidebar-kicker">Темы задач подборки</p>
+  {% if collection_filter.active %}<div class="sidebar-actions"><a class="sidebar-action" href="{{ collection_filter.reset_url }}">Все задачи подборки</a></div>{% endif %}
   <ul class="sidebar-list">
-    {% for topic in current_collection_topics %}<li><a class="sidebar-row" href="{% url 'task_list' %}?topic={{ topic.pk }}" title="Задачи темы в базе">{% if topic.code %}<strong>{{ topic.code }}</strong>{% endif %}<span>{{ topic.name }}</span></a></li>{% empty %}<li>Тема не назначена</li>{% endfor %}
+    {% for choice in collection_filter.topics %}<li{% if choice.active %} class="is-current"{% endif %}><a class="sidebar-row sidebar-row-count" href="{{ choice.url }}"{% if choice.active %} aria-current="true" title="Снять фильтр"{% else %} title="Только задачи этой темы в подборке"{% endif %}>{{ choice.obj.name }}<span class="sidebar-count">{{ choice.total }}</span></a></li>{% empty %}<li>Темы задачам не назначены</li>{% endfor %}
   </ul>
 </section>
+{% if collection_filter.content %}
+<section class="sidebar-section">
+  <p class="sidebar-kicker">Содержание</p>
+  <ul class="sidebar-list">
+    {% for choice in collection_filter.content %}<li{% if choice.active %} class="is-current"{% endif %}><a class="sidebar-row sidebar-row-count" href="{{ choice.url }}"{% if choice.active %} aria-current="true" title="Снять фильтр"{% else %} title="Только такие задачи в подборке"{% endif %}>{{ choice.obj.name }}<span class="sidebar-count">{{ choice.total }}</span></a></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
 {% endif %}

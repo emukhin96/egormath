@@ -173,10 +173,13 @@ class CollectionTests(TestCase):
         })
         self.assertContains(catalog, 'TEST.COL')
         self.assertContains(catalog, 'Алгебра')
+        # В панели подборки — темы её задач, фильтром этой же подборки
+        # (worksheets/test_collection_filters.py), а не темы листка
+        self.task.topics.add(topic)
         detail = self.client.get(reverse(
             'collection_detail', args=[self.collection.pk]))
-        self.assertContains(detail, 'Темы раздела')
-        self.assertContains(detail, 'TEST.COL')
+        self.assertContains(detail, 'Темы задач подборки')
+        self.assertContains(detail, f'href="?topic={topic.pk}"')
 
     def test_large_collection_is_paginated_with_continuous_numbering(self):
         worksheet = Worksheet.objects.create(

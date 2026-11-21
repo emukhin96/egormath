@@ -597,6 +597,17 @@ def _visible_children(request, collection):
     return children
 
 
+def _collection_ancestors(collection):
+    """Родительские разделы от корня источника — крошки страницы подборки."""
+    chain, node, seen = [], collection.parent, {collection.pk}
+    while node is not None and node.pk not in seen:
+        seen.add(node.pk)
+        node.catalog_title = _collection_title(node)
+        chain.append(node)
+        node = node.parent
+    return list(reversed(chain))
+
+
 def _source_number(task, source_id):
     """Номер задачи в задачнике подборки («3.15» у Мерзляка, «1.1» у ФИПИ)
     из TaskSource; None, если ссылки на этот источник нет."""
@@ -644,8 +655,15 @@ def _flat_groups(request, children):
 
     Подборки первого и второго уровня показываются с задачами; у
     подраздела второго уровня, где есть свои дети, — только ссылка.
-    Возвращает None, если задач слишком много для одной страницы.
+    Возвращает ``(группы, id задач до фильтра)``; группы — None, если задач
+    слишком много для одной страницы.
+
+    С фильтром панели (?topic=, ?content=, worksheets/collection_filters.py)
+    в группах остаются подходящие задачи, пустые группы без подразделов
+    скрываются; id задач до фильтра — для счётчиков панели, чтобы список
+    тем не менялся при выборе.
     """
+    from .collection_filters import filter_items, matching_task_ids
     groups = []
     for child in children:
         groups.append({'collection': child, 'depth': 1,
@@ -656,7 +674,7 @@ def _flat_groups(request, children):
                                'has_children': grand.children_total > 0})
     total = sum(g['collection'].items_total for g in groups)
     if not total or total > FLAT_ITEMS_LIMIT:
-        return None
+        return None, []
     by_worksheet = {}
     items = (WorksheetItem.objects
              .filter(worksheet_id__in=[g['collection'].worksheet_id for g in groups],
@@ -667,11 +685,16 @@ def _flat_groups(request, children):
              .order_by('worksheet_id', 'order', 'id'))
     for item in items:
         by_worksheet.setdefault(item.worksheet_id, []).append(item)
+    all_ids = [item.task_id for item in items if item.task_id]
+    matching = matching_task_ids(request.GET, all_ids)
     for group in groups:
         group['rows'] = _collection_rows(
-            by_worksheet.get(group['collection'].worksheet_id, []),
+            filter_items(by_worksheet.get(group['collection'].worksheet_id, []), matching),
             source_id=group['collection'].source_id)
-    return groups
+    if matching is not None:
+        groups = [group for group in groups
+                  if group['rows'] or group['has_children']]
+    return groups, all_ids
 
 
 def _section_nav(sections, chunks, source_id):
@@ -705,6 +728,14 @@ def collection_detail(request, pk):
     collection.catalog_title = _collection_title(collection)
     all_items = list(collection.worksheet.ordered_items())
     prefetch_related_objects(all_items, 'task__source_refs')
+    # Фильтр правой панели — по задачам ЭТОЙ подборки, выбор не сбрасывается
+    # (worksheets/collection_filters.py)
+    from .collection_filters import (
+        active_filter, filter_items, matching_task_ids, reset_url, sidebar_options)
+    own_task_ids = [item.task_id for item in all_items if item.task_id]
+    unfiltered_items = all_items
+    all_items = filter_items(
+        all_items, matching_task_ids(request.GET, own_task_ids))
     # Страница — параграф (рубрика «§ N» и её задачи), а не 25 элементов
     # подряд; без рубрик — прежние куски по 25.
     sections, chunks = build_chunks(all_items)
@@ -713,7 +744,7 @@ def collection_detail(request, pk):
     children = _visible_children(request, collection)
     # Пустой технический раздел с единственным продолжением не заставляет
     # пользователя проходить ещё один экран дерева.
-    if not all_items and len(children) == 1:
+    if not unfiltered_items and len(children) == 1:
         return redirect('collection_detail', pk=children[0].pk)
     # Строки по блокам страницы (параграф или его часть — со своим заголовком)
     page_blocks, number = [], chunk.first_task_number if chunk else 0
@@ -723,9 +754,11 @@ def collection_detail(request, pk):
         number += block.tasks_total
         page_blocks.append({'block': block, 'rows': block_rows})
     rows = [row for entry in page_blocks for row in entry['rows']]
-    flat_groups = None
+    if not rows and active_filter(request.GET):
+        page_blocks = []   # «Нет задач по выбранному фильтру» вместо пустой страницы
+    flat_groups, flat_task_ids = None, []
     if children and request.GET.get('view') != 'tree':
-        flat_groups = _flat_groups(request, children)
+        flat_groups, flat_task_ids = _flat_groups(request, children)
     page_tasks = [row['item'].task for row in rows if row['item'].task_id]
     if flat_groups:
         page_tasks += [row['item'].task for group in flat_groups
@@ -739,9 +772,6 @@ def collection_detail(request, pk):
     selected_source = next(
         (row for row in sources if row['source'].pk == collection.source_id),
         None)
-    current_collection_row = next(
-        (row for row in (selected_source['rows'] if selected_source else [])
-         if row['collection'].pk == collection.pk), None)
     from .authored import SOURCE_TITLE as AUTHORED_SOURCE, is_section
     return render(request, 'worksheets/collection_detail.html', {
         **usage_ctx,
@@ -782,8 +812,13 @@ def collection_detail(request, pk):
         'collection_sources': sources,
         'selected_source': selected_source,
         'current_collection': collection,
-        'current_collection_topics': (
-            current_collection_row['topics'] if current_collection_row else []),
+        'collection_ancestors': _collection_ancestors(collection),
+        # Панель «Фильтр подборки»: темы и содержание задач этой подборки
+        'collection_filter': {
+            **sidebar_options(request.GET, own_task_ids + flat_task_ids),
+            'active': active_filter(request.GET),
+            'reset_url': reset_url(request.GET),
+        },
     })
 
 
