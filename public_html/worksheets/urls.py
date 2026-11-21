@@ -1,7 +1,7 @@
 from django.urls import path
 
 from . import analog_views
-from . import corpus_views, views
+from . import corpus_views, presets, views
 
 urlpatterns = [
     path('', views.worksheet_list, name='worksheet_list'),
@@ -44,6 +44,9 @@ urlpatterns = [
     path('collections/<int:pk>/publish/', views.collection_publish,
          name='collection_publish'),
     path('new/', views.worksheet_create, name='worksheet_create'),
+    path('presets/save/', presets.preset_save, name='worksheet_preset_save'),
+    path('presets/<int:pk>/delete/', presets.preset_delete,
+         name='worksheet_preset_delete'),
     path('import/', views.worksheet_import, name='worksheet_import'),
     path('import/solve/', views.worksheet_import_solve,
          name='worksheet_import_solve'),
