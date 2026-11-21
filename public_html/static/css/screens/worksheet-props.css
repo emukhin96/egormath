@@ -90,7 +90,7 @@
   .sheet-head-slot.is-title .sheet-head-input {
     margin-top: var(--space-1);
     font-family: "Times New Roman", "STIX Two Text", Georgia, serif;
-    font-size: 1.45rem;
+    font-size: var(--fs-h1);
     line-height: 1.25;
     text-align: center;
   }
