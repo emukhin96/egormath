@@ -94,13 +94,14 @@
 </form>
 <div class="card worksheet-catalog">
 <div class="catalog-table-wrap">
-{% comment %}Ревизия 03.11, L1: листок — одна строка. Класс и темы — текстом (менять —
-выделением строк или в «Свойствах»), путь корпуса — в подсказке названия, действия — в «⋯».{% endcomment %}
+{% comment %}Ревизия 03.11, L1: листок — одна строка; путь корпуса — в подсказке названия,
+действия — в «⋯». 18.11: класс и темы убраны (обычно не заполнены), вместо них —
+«Кому выдан»: группы названием, ученики вне групп — по имени (больше двух — числом).{% endcomment %}
 <table class="list ws-list">
   <tr>
     <th class="col-select"><input type="checkbox" data-bulk-all="ws-bulk-form"
         title="Выбрать все листки"></th>
-    <th>Название</th><th class="ws-list-grade">Класс</th><th class="ws-list-topics" title="Тема учитывается у листка и его задач">Темы</th><th class="ws-list-count">Задач</th><th class="ws-list-date">Изменён</th><th></th>
+    <th>Название</th><th class="ws-list-issued">Кому выдан</th><th class="ws-list-count">Задач</th><th class="ws-list-date">Изменён</th><th></th>
   </tr>
   {% for w in worksheets %}
   <tr class="ws-list-row">
@@ -109,20 +110,12 @@
              form="ws-bulk-form" title="Выбрать листок">
     </td>
     <td class="ws-list-title">
-      <a href="{% url 'worksheet_detail' w.pk %}"{% if w.comment %} title="{{ w.comment }}"{% endif %}>{{ w.title }}</a>{% if w.was_assigned %}
-      <span class="worksheet-issued-badge" role="img" aria-label="Выдан ученикам" title="Выдан ученикам">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-          <circle cx="9" cy="7" r="4"></circle>
-          <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path>
-        </svg>
-      </span>{% endif %}
+      <a href="{% url 'worksheet_detail' w.pk %}"{% if w.comment %} title="{{ w.comment }}"{% endif %}>{{ w.title }}</a>
       {% if w.owner_id != request.user.pk %}<span class="ws-list-author">{{ w.owner.get_full_name|default:w.owner.username }}</span>{% endif %}
     </td>
-    <td class="ws-list-grade">{% if w.grade_option == 10 %}10–11{% elif w.grade_option %}{{ w.grade_option }}{% else %}<span class="muted">—</span>{% endif %}</td>
-    <td class="ws-list-topics">{% for topic in w.topics.all %}{% if forloop.counter < 3 %}<span class="ws-topic-chip" title="{{ topic.name }}">{% if topic.code %}{{ topic.code }}{% else %}{{ topic.name }}{% endif %}</span>{% elif forloop.counter == 3 %}<span class="ws-topic-more">+{{ forloop.revcounter }}</span>{% endif %}{% endfor %}</td>
+    <td class="ws-list-issued">{% if w.issued_groups or w.issued_students %}<span class="ws-issued" title="{% for name in w.issued_groups %}группа {{ name }}{% if not forloop.last or w.issued_students %}, {% endif %}{% endfor %}{{ w.issued_students|join:', ' }}">{% for name in w.issued_groups %}<span class="ws-issued-group">{{ name }}</span>{% if not forloop.last or w.issued_students %}, {% endif %}{% endfor %}{% if w.issued_students|length > 2 %}{% if w.issued_groups %}ещё {% endif %}{{ w.issued_students|length }} {{ w.issued_students|length|plural_ru:'ученик,ученика,учеников' }}{% else %}{{ w.issued_students|join:', ' }}{% endif %}</span>{% endif %}</td>
     <td class="ws-list-count">{{ w.items_total }}</td>
-    <td class="ws-list-date"><time datetime="{{ w.updated_at|date:'c' }}" title="Изменён {{ w.updated_at|date:'d.m.Y H:i' }}, создан {{ w.created_at|date:'d.m.Y' }}">{{ w.updated_at|date:'d.m.y' }}</time></td>
+    <td class="ws-list-date"><time datetime="{{ w.updated_at|date:'c' }}" title="Изменён {{ w.updated_at|date:'d.m.Y H:i' }}, создан {{ w.created_at|date:'d.m.Y' }}">{{ w.updated_at|date:'d.m.y' }}, {{ w.updated_at|date:'D'|lower }}</time></td>
     <td class="row-actions">
       <details class="more-menu on-hover"><summary aria-label="Действия с листком" title="Действия с листком"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg></summary><div class="more-menu-list">
         <a href="{% url 'worksheet_pdf_editor' w.pk %}">PDF</a>

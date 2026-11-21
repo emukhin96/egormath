@@ -57,9 +57,10 @@ class SuperuserWorksheetAccessTests(TestCase):
         self.assertEqual(len(rows), 2)
         self.assertTrue(next(w for w in rows if w.pk == self.worksheet.pk).was_assigned)
         self.assertFalse(next(w for w in rows if w.pk == unassigned.pk).was_assigned)
-        self.assertContains(response, 'class="worksheet-issued-badge"', count=1)
-        self.assertContains(response, 'aria-label="Выдан ученикам"', count=1)
-        self.assertContains(response, '<svg viewBox="0 0 24 24"', count=1)
+        # Вместо значка «выдан» — колонка «Кому выдан» (test_worksheet_list.py)
+        self.assertEqual(next(w for w in rows if w.pk == self.worksheet.pk).issued_students,
+                         ['Петя Ученик/ов', 'Петя Ученик/ов'])
+        self.assertContains(response, '<span class="ws-issued"', count=1)
 
     @mock.patch('worksheets.views._worksheet_pdf_response')
     def test_superuser_opens_foreign_teacher_pdf(self, pdf_response):

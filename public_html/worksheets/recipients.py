@@ -22,6 +22,33 @@ def assignment_sections(assignments, groups):
     return sorted(by_group.values(), key=lambda section: section['group'].name), individual
 
 
+def attach_issued_to(worksheets):
+    """«Кому выдан» в списке листков: ``issued_groups`` — названия групп,
+    ``issued_students`` — ученики, получившие листок не через группу.
+
+    Учеников группы поимённо не перечисляем. Группы — только владельца
+    листка (у суперпользователя в списке листки разных учителей). Назначения
+    берутся из ``prefetch_related('assignments__student',
+    'assignments__source_groups')`` списка; группы — одним запросом.
+    """
+    from accounts.models import StudentGroup
+
+    worksheets = list(worksheets)
+    owner_ids = {w.owner_id for w in worksheets if getattr(w, 'was_assigned', True)}
+    groups = {}
+    for group in (StudentGroup.objects.filter(teacher_id__in=owner_ids)
+                  .prefetch_related('students')):
+        groups.setdefault(group.teacher_id, []).append(group)
+    for worksheet in worksheets:
+        assignments = list(worksheet.assignments.all())
+        sections, individual = assignment_sections(
+            assignments, groups.get(worksheet.owner_id, []))
+        worksheet.issued_groups = [section['group'].name for section in sections]
+        worksheet.issued_students = sorted(
+            (a.student.get_full_name() or a.student.username for a in individual),
+            key=str.casefold)
+
+
 def visibility_options(worksheet, recipient):
     """Одна галочка на общий блок: его вопросы нельзя раздавать по отдельности."""
     hidden = set(recipient.hidden_items.values_list('pk', flat=True))

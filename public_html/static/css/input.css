@@ -1445,6 +1445,15 @@
     accent-color: var(--accent);
   }
 
+  /* Галочка выбора строки — блок высотой ровно в строку текста ячейки,
+     сама по центру этой строки. Строчная галочка стоит на базовой линии
+     и оказывается на ~1,5 px выше текста заголовков и названий; отступы
+     через 1lh держат центр и при vertical-align: top, и при middle */
+  table.list .col-select input[type="checkbox"] {
+    display: block;
+    margin: calc((1lh - 15px) / 2) 0;
+  }
+
   /* Карточки вместо таблицы на узком экране. Обёртка .catalog-table-wrap —
      контейнер запроса (порог 760px), поэтому таблица складывается и в узкой
      карточке сетки, и в контенте рядом с боковой панелью, а не только на
@@ -2304,28 +2313,6 @@
     font-size: var(--fs-md);
   }
 
-  .worksheet-issued-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.55rem;
-    height: 1.55rem;
-    border-radius: 50%;
-    background: #e8f1fb;
-    color: var(--accent);
-    vertical-align: middle;
-  }
-
-  .worksheet-issued-badge svg {
-    display: block;
-    width: 1rem;
-    height: 1rem;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2.25;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
   .progress-assignment { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
 
   .task-meta a, .task-meta .link-btn {
