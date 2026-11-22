@@ -100,3 +100,14 @@ class WorksheetPresetTests(TestCase):
         self.assertTrue(self.client.post(
             reverse('worksheet_preset_delete', args=[preset.pk])).json()['ok'])
         self.assertFalse(WorksheetPreset.objects.exists())
+
+
+class WorksheetFormScriptsTests(TestCase):
+    def test_bundle_scripts_not_included_twice(self):
+        """dialogs.js и autosave.js — в app.js; второй экземпляр удвоил бы
+        обработчики и запросы автосохранения."""
+        self.client.force_login(make_teacher())
+        response = self.client.get(reverse('worksheet_create'))
+        self.assertContains(response, 'js/worksheet_form.js')
+        self.assertNotContains(response, 'js/dialogs.js')
+        self.assertNotContains(response, 'js/autosave.js')

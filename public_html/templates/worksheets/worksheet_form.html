@@ -89,7 +89,6 @@
 {{ presets_json|json_script:'worksheet-presets' }}
 {% endblock %}
 {% block extra_js %}
-<script defer src="{% static 'js/dialogs.js' %}"></script>
-<script defer src="{% static 'js/autosave.js' %}"></script>
+{# dialogs.js и autosave.js уже в app.js (base.html) #}
 <script defer src="{% static 'js/worksheet_form.js' %}"></script>
 {% endblock %}
