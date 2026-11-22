@@ -287,10 +287,31 @@ def worksheet_import_solve(request):
     return task_neuro_solve(request)
 
 
+def _worksheet_form_context(request, form, worksheet=None, preset=None, presets=None):
+    """Общее для «Нового листка» и «Свойств листка»: сохранённые настройки
+    (worksheets/presets.py) и начало имени PDF для живой подсказки."""
+    from .filenames import DEFAULT_SUBJECT, worksheet_grade, worksheet_subject
+    from .presets import presets_for, presets_json
+    presets = presets_for(request.user) if presets is None else presets
+    # Без своего префикса имя начинается с предмета и класса; у нового
+    # листка их ещё нет — «math», как у листка без тем и задач.
+    auto = DEFAULT_SUBJECT
+    if worksheet:
+        grade = worksheet_grade(worksheet)
+        auto = f'{worksheet_subject(worksheet, grade)}{grade or ""}'
+    return {'form': form, 'worksheet': worksheet, 'presets': presets,
+            'presets_json': presets_json(presets), 'applied_preset': preset,
+            'auto_pdf_prefix': auto}
+
+
 @teacher_required
 def worksheet_create(request):
+    from .presets import initial_preset, presets_for
+    author = request.user.get_full_name() or request.user.username
+    presets = presets_for(request.user)
+    preset = None
     if request.method == 'POST':
-        form = WorksheetForm(request.POST)
+        form = WorksheetForm(request.POST, author_placeholder=author)
         if form.is_valid():
             worksheet = form.save(commit=False)
             worksheet.owner = request.user
@@ -299,31 +320,35 @@ def worksheet_create(request):
             messages.success(request, 'Листок создан. Добавьте в него задачи.')
             return redirect('worksheet_detail', pk=worksheet.pk)
     else:
-        form = WorksheetForm()
+        # Настройки «для новых листков» (или ?preset=) — сразу в форму
+        preset = initial_preset(request.user, request.GET, presets)
+        form = WorksheetForm(initial=preset.values() if preset else None,
+                             author_placeholder=author)
     tax_state = (taxonomy_state_from_post(request.POST)
                  if request.method == 'POST' else None)
     ctx = taxonomy_page_context(tax_state)
-    ctx.update({'form': form})
+    ctx.update(_worksheet_form_context(request, form, preset=preset, presets=presets))
     return render(request, 'worksheets/worksheet_form.html', ctx)
 
 
 @teacher_required
 def worksheet_edit(request, pk):
     worksheet = _own_worksheet(request, pk)
+    author = worksheet.owner.get_full_name() or worksheet.owner.username
     if request.method == 'POST':
-        form = WorksheetForm(request.POST, instance=worksheet)
+        form = WorksheetForm(request.POST, instance=worksheet, author_placeholder=author)
         if form.is_valid():
             form.save()
             apply_worksheet_taxonomy(worksheet, request.POST)
             messages.success(request, 'Листок сохранён.')
             return redirect('worksheet_detail', pk=worksheet.pk)
     else:
-        form = WorksheetForm(instance=worksheet)
+        form = WorksheetForm(instance=worksheet, author_placeholder=author)
     tax_state = (taxonomy_state_from_post(request.POST)
                  if request.method == 'POST'
                  else worksheet_taxonomy_state(worksheet))
     ctx = taxonomy_page_context(tax_state)
-    ctx.update({'form': form, 'worksheet': worksheet})
+    ctx.update(_worksheet_form_context(request, form, worksheet))
     return render(request, 'worksheets/worksheet_form.html', ctx)
 
 

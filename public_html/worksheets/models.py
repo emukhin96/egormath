@@ -58,6 +58,10 @@ class Worksheet(models.Model):
         'Имя PDF-файла', max_length=80, blank=True,
         help_text='Без расширения, например alg8-kvad_urav; '
                   'пусто — сгенерируется из предмета, класса и названия')
+    pdf_prefix = models.CharField(
+        'Префикс имени PDF', max_length=40, blank=True,
+        help_text='Начало имени файла вместо предмета и класса (math6, geom8), '
+                  'например lyceum8; дальше — сокращение по словам названия')
     student_pdf_options = models.JSONField(
         'Оформление PDF для ученика', default=dict, blank=True,
         help_text='Последние параметры ученического PDF, собранного учителем')
@@ -141,6 +145,43 @@ class Worksheet(models.Model):
             if selected:
                 item.subitems.set(selected)
         return copy
+
+
+class WorksheetPreset(models.Model):
+    """Сохранённые настройки листка учителя: шапка и префикс имени PDF.
+
+    Выбираются в «Свойствах листка» (worksheets/presets.py); настройки «по
+    умолчанию» сразу подставляются в новый листок.
+    """
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='worksheet_presets', verbose_name='Учитель')
+    name = models.CharField('Название настроек', max_length=100)
+    grade_label = models.CharField('Левый верхний подзаголовок', max_length=100, blank=True)
+    author_name = models.CharField('Правый верхний подзаголовок', max_length=190, blank=True)
+    subtitle = models.CharField('Подзаголовок', max_length=190, blank=True)
+    pdf_prefix = models.CharField('Префикс имени PDF', max_length=40, blank=True)
+    is_default = models.BooleanField('Для новых листков', default=False)
+    updated_at = models.DateTimeField('Изменены', auto_now=True)
+
+    # Поля, которые настройки переносят в листок
+    FIELDS = ('grade_label', 'author_name', 'subtitle', 'pdf_prefix')
+
+    class Meta:
+        verbose_name = 'Настройки листка'
+        verbose_name_plural = 'Настройки листков'
+        ordering = ['name', 'pk']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['owner', 'name'], name='unique_worksheet_preset_name'),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def values(self):
+        return {field: getattr(self, field) for field in self.FIELDS}
 
 
 class Collection(models.Model):

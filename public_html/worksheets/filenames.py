@@ -1,5 +1,9 @@
 """Имена PDF листка: «предмет + класс — сокращённое название».
 
+Вместо «предмет + класс» учитель может задать свой префикс
+(``Worksheet.pdf_prefix``, «Свойства листка» и сохранённые настройки):
+lyceum8-razl_mnozh.pdf.
+
 alg7-razl_mnozh.pdf, geom9-podob_treug-otvety.pdf.
 Предмет — по корневой теме рубрикатора (ALG → alg, GEO → geom, STA →
 stat или teorver); если тем несколько или их нет — math. В 5–6 классах
@@ -128,9 +132,36 @@ def worksheet_grade(worksheet):
     return normalize_grade_level(_majority(list(grades)))
 
 
-def auto_basename(worksheet):
-    """alg8-kvad_urav: предмет, класс, сокращённое название."""
+def clean_prefix(text):
+    """Префикс имени файла от учителя: «Лицей-8» → licey-8.
+
+    Кириллица — транслитом, буквы и цифры, «-» и «_» между ними; остальное
+    отбрасывается. Пустой результат — префикса нет (тогда предмет и класс).
+    """
+    out = ''.join(_TRANSLIT.get(ch, ch) for ch in (text or '').strip().lower())
+    out = re.sub(r'\s+', '-', out)
+    out = re.sub(r'[^a-z0-9_-]+', '', out)
+    out = re.sub(r'([_-])[_-]+', r'\1', out)
+    return out.strip('-_')
+
+
+def prefix_too_long(limit):
+    """Сообщение, если префикс после транслита не помещается в поле."""
+    return (f'Префикс латиницей — не длиннее {limit} символов '
+            '(кириллица в имени файла пишется транслитом): сократите его.')
+
+
+def auto_prefix(worksheet):
+    """Начало имени: свой префикс листка или предмет и класс (geom8)."""
+    custom = clean_prefix(getattr(worksheet, 'pdf_prefix', ''))
+    if custom:
+        return custom
     grade = worksheet_grade(worksheet)
-    prefix = f'{worksheet_subject(worksheet, grade)}{grade or ""}'
+    return f'{worksheet_subject(worksheet, grade)}{grade or ""}'
+
+
+def auto_basename(worksheet):
+    """alg8-kvad_urav: предмет и класс (или свой префикс), сокращённое название."""
+    prefix = auto_prefix(worksheet)
     slug = title_slug(worksheet.title)
     return f'{prefix}-{slug}' if slug else prefix

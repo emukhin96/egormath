@@ -1,48 +1,94 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}{% if worksheet %}{{ worksheet.title }}{% else %}Новый листок{% endif %} — Математика{% endblock %}
 {% block content %}
 <div class="page-head"><div>
   <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'worksheet_list' %}">Листки</a>{% if worksheet %}<a href="{% url 'worksheet_detail' worksheet.pk %}">{{ worksheet.title }}</a>{% endif %}</nav>
   <h1>{% if worksheet %}Свойства листка{% else %}Новый листок{% endif %}</h1>
 </div></div>
-<div class="card">
-  <form method="post">
-    {% csrf_token %}
-    {{ form.non_field_errors }}
-    <p>
-      <label for="{{ form.title.id_for_label }}">{{ form.title.label }}</label>
-      {{ form.title.errors }}{{ form.title }}
-    </p>
+{# Шапка редактируется прямо в макете шапки PDF (\bighead, worksheets/tex/egor.sty): слева сверху, справа сверху, название, подзаголовок. Настройки листка — сохранённые шапка и префикс PDF (worksheets/presets.py, static/js/worksheet_form.js) #}
+<form method="post" class="ws-props" data-worksheet-props
+      data-preset-save-url="{% url 'worksheet_preset_save' %}"
+      data-preset-delete-url="{% url 'worksheet_preset_delete' 0 %}"
+      data-auto-prefix="{{ auto_pdf_prefix }}">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  <section class="card ws-props-head" aria-labelledby="ws-head-title">
+    <div class="ws-props-bar">
+      <h2 id="ws-head-title">Шапка листка</h2>
+      <label class="sort-inline filter-inline ws-preset-pick">Настройки:
+        <select data-preset-select aria-label="Сохранённые настройки листка">
+          <option value="">{% if presets %}не выбраны{% else %}пока нет{% endif %}</option>
+          {% for preset in presets %}<option value="{{ preset.pk }}"{% if applied_preset.pk == preset.pk %} selected{% endif %}>{{ preset.name }}{% if preset.is_default %} (для новых){% endif %}</option>{% endfor %}
+        </select>
+      </label>
+      <button type="button" class="icon-btn" data-preset-delete{% if not applied_preset %} hidden{% endif %} aria-label="Удалить выбранные настройки" title="Удалить выбранные настройки">×</button>
+      <button type="button" class="btn btn-secondary btn-small ws-preset-save" data-dialog-open="preset-dialog" title="Запомнить шапку и префикс PDF, чтобы сразу создавать такие листки">Сохранить настройки</button>
+    </div>
+    {% if applied_preset and not worksheet %}<p class="helptext ws-preset-note">Шапка заполнена по настройкам «{{ applied_preset.name }}».</p>{% endif %}
+    {# Макет шапки PDF: рамка, верхняя строка мелким рубленым, название крупно по центру, подзаголовок под ним #}
+    <div class="sheet-head" data-sheet-head>
+      <div class="sheet-head-top">
+        <div class="sheet-head-slot is-left">{{ form.grade_label }}</div>
+        <div class="sheet-head-slot is-right">{{ form.author_name }}</div>
+      </div>
+      <div class="sheet-head-slot is-title">{{ form.title }}</div>
+      <div class="sheet-head-slot is-subtitle">{{ form.subtitle }}</div>
+    </div>
+    {{ form.title.errors }}{{ form.grade_label.errors }}{{ form.author_name.errors }}{{ form.subtitle.errors }}
+    <p class="helptext">Щёлкните по строке шапки и пишите — так она будет выглядеть в PDF. Если правый угол пуст, в PDF там будет «{{ form.author_name.field.widget.attrs.placeholder }}».</p>
+    <div class="ws-props-file">
+      <label for="{{ form.pdf_prefix.id_for_label }}">Префикс имени PDF</label>
+      {{ form.pdf_prefix }}
+      <span class="ws-props-filename">Файл: <code data-pdf-name>{% if worksheet %}{{ worksheet.pdf_filename }}{% endif %}</code></span>
+      {{ form.pdf_prefix.errors }}
+      <span class="helptext">Вместо предмета и класса ({{ auto_pdf_prefix }}) — своё начало имени, дальше сокращение по словам названия.</span>
+    </div>
+  </section>
+  <section class="card ws-props-more">
     <p>
       <label>Рубрикатор</label>
       {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=True selected_json=selected_json %}
-    </p>
-    <p>
-      <label for="{{ form.grade_label.id_for_label }}">{{ form.grade_label.label }}</label>
-      {{ form.grade_label.errors }}{{ form.grade_label }}
-      <span class="helptext">{{ form.grade_label.help_text }}</span>
-    </p>
-    <p>
-      <label for="{{ form.subtitle.id_for_label }}">{{ form.subtitle.label }}</label>
-      {{ form.subtitle.errors }}{{ form.subtitle }}
-    </p>
-    <p>
-      <label for="{{ form.author_name.id_for_label }}">{{ form.author_name.label }}</label>
-      {{ form.author_name.errors }}{{ form.author_name }}
-      <span class="helptext">{{ form.author_name.help_text }}</span>
-    </p>
-    <p>
-      <label for="{{ form.pdf_basename.id_for_label }}">{{ form.pdf_basename.label }}</label>
-      {{ form.pdf_basename.errors }}{{ form.pdf_basename }}
-      <span class="helptext">{{ form.pdf_basename.help_text }}</span>
     </p>
     <p>
       <label for="{{ form.comment.id_for_label }}">{{ form.comment.label }}</label>
       {{ form.comment.errors }}{{ form.comment }}
       <span class="helptext">{{ form.comment.help_text }}</span>
     </p>
+    <details class="ws-props-basename"{% if form.pdf_basename.value or form.pdf_basename.errors %} open{% endif %}>
+      <summary>Своё имя PDF-файла целиком</summary>
+      <p>
+        <label for="{{ form.pdf_basename.id_for_label }}">{{ form.pdf_basename.label }}</label>
+        {{ form.pdf_basename.errors }}{{ form.pdf_basename }}
+        <span class="helptext">{{ form.pdf_basename.help_text }}; заменяет и префикс.</span>
+      </p>
+    </details>
+  </section>
+  <div class="form-buttons">
     <button type="submit" class="btn">Сохранить</button>
     <a class="btn btn-secondary" href="{% if worksheet %}{% url 'worksheet_detail' worksheet.pk %}{% else %}{% url 'worksheet_list' %}{% endif %}">Отмена</a>
+  </div>
+</form>
+
+<dialog id="preset-dialog" class="dialog">
+  <form method="dialog" data-preset-form>
+    <h3>Сохранить настройки листка</h3>
+    <p class="helptext">Запоминаются шапка (кроме названия) и префикс имени PDF. То же название — настройки перезапишутся.</p>
+    <p>
+      <label for="preset-name">Название настроек</label>
+      <input type="text" id="preset-name" name="name" maxlength="100" required list="preset-names" value="{{ applied_preset.name|default:'' }}" placeholder="Например, 8 класс, лицей">
+      <datalist id="preset-names">{% for preset in presets %}<option value="{{ preset.name }}">{% endfor %}</datalist>
+    </p>
+    <label class="ws-preset-default"><input type="checkbox" name="is_default" value="1"{% if applied_preset.is_default %} checked{% endif %}> Подставлять в новые листки</label>
+    <div class="form-buttons">
+      <button type="submit" class="btn">Сохранить</button>
+      <button type="button" class="btn btn-secondary" data-dialog-close>Отмена</button>
+    </div>
   </form>
-</div>
+</dialog>
+{{ presets_json|json_script:'worksheet-presets' }}
+{% endblock %}
+{% block extra_js %}
+{# dialogs.js и autosave.js уже в app.js (base.html) #}
+<script defer src="{% static 'js/worksheet_form.js' %}"></script>
 {% endblock %}
