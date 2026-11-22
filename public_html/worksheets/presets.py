@@ -14,6 +14,7 @@ from django.views.decorators.http import require_POST
 from accounts.decorators import teacher_required
 
 from .filenames import clean_prefix
+from .filenames import prefix_too_long
 from .models import WorksheetPreset
 
 NAME_MAX = WorksheetPreset._meta.get_field('name').max_length
@@ -54,8 +55,14 @@ def preset_save(request):
     if len(name) > NAME_MAX:
         return JsonResponse(
             {'ok': False, 'message': f'Название — не длиннее {NAME_MAX} символов'}, status=400)
-    values = {field: _field(request, field) for field in WorksheetPreset.FIELDS}
-    values['pdf_prefix'] = clean_prefix(values['pdf_prefix'])
+    values = {field: _field(request, field)
+              for field in WorksheetPreset.FIELDS if field != 'pdf_prefix'}
+    # Префикс — по длине после транслита («щ» → sch), а не до него
+    values['pdf_prefix'] = clean_prefix(request.POST.get('pdf_prefix', ''))
+    prefix_limit = WorksheetPreset._meta.get_field('pdf_prefix').max_length
+    if len(values['pdf_prefix']) > prefix_limit:
+        return JsonResponse(
+            {'ok': False, 'message': prefix_too_long(prefix_limit)}, status=400)
     is_default = request.POST.get('is_default') == '1'
     if is_default:
         # «Для новых листков» — одни настройки

@@ -40,6 +40,9 @@ class PdfPrefixTests(TestCase):
         self.assertEqual(sheet.pdf_prefix, 'licey-8')
         response = self.client.post(url, {'title': 'Дроби', 'pdf_prefix': '!!!'})
         self.assertContains(response, 'В префиксе нужны буквы или цифры')
+        # 40 символов кириллицы в транслите втрое длиннее поля — ошибка, не 500
+        response = self.client.post(url, {'title': 'Дроби', 'pdf_prefix': 'щ' * 40})
+        self.assertContains(response, 'Префикс латиницей — не длиннее 40 символов')
 
 
 class WorksheetPresetTests(TestCase):
@@ -62,6 +65,10 @@ class WorksheetPresetTests(TestCase):
         self.save(name='Лицей', grade_label='9 класс')
         self.assertEqual(WorksheetPreset.objects.get(owner=self.owner).grade_label, '9 класс')
         self.assertEqual(self.save(name='  ').status_code, 400)
+        too_long = self.save(name='Длинный', pdf_prefix='щ' * 30)
+        self.assertEqual(too_long.status_code, 400)
+        self.assertIn('не длиннее 40 символов', too_long.json()['message'])
+        self.assertFalse(WorksheetPreset.objects.filter(name='Длинный').exists())
 
     def test_one_default_and_new_worksheet_prefilled(self):
         self.save(name='Восьмые', is_default='1')

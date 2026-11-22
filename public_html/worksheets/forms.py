@@ -1,6 +1,7 @@
 from django import forms
 
 from .filenames import clean_prefix
+from .filenames import prefix_too_long
 from .models import Worksheet
 
 
@@ -42,4 +43,8 @@ class WorksheetForm(forms.ModelForm):
         if raw.strip() and not prefix:
             raise forms.ValidationError(
                 'В префиксе нужны буквы или цифры: например, lyceum8.')
+        # Кириллица в транслите длиннее («щ» → sch): длина — по результату
+        limit = Worksheet._meta.get_field('pdf_prefix').max_length
+        if len(prefix) > limit:
+            raise forms.ValidationError(prefix_too_long(limit))
         return prefix

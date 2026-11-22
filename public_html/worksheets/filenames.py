@@ -145,6 +145,12 @@ def clean_prefix(text):
     return out.strip('-_')
 
 
+def prefix_too_long(limit):
+    """Сообщение, если префикс после транслита не помещается в поле."""
+    return (f'Префикс латиницей — не длиннее {limit} символов '
+            '(кириллица в имени файла пишется транслитом): сократите его.')
+
+
 def auto_prefix(worksheet):
     """Начало имени: свой префикс листка или предмет и класс (geom8)."""
     custom = clean_prefix(getattr(worksheet, 'pdf_prefix', ''))

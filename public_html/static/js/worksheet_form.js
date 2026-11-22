@@ -99,7 +99,11 @@
   if (select) {
     select.addEventListener('change', function () {
       var preset = presetById(select.value);
+      var defaultBox = dialogForm && dialogForm.elements.namedItem('is_default');
       syncDeleteButton();
+      // Галочка «для новых» в окне сохранения — как у выбранных настроек,
+      // иначе пересохранение молча снимет или перенесёт признак
+      if (defaultBox) defaultBox.checked = !!(preset && preset.is_default);
       if (!preset) return;
       FIELDS.forEach(function (name) {
         var input = field(name);
