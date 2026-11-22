@@ -162,6 +162,11 @@ class FilterItemsTests(TestCase):
         self.assertEqual(self.titles(items, {2, 3}), ['Глава 1', '§ 2', 2, 'Глава 2', '§ 3', 3])
         self.assertEqual(self.titles(items, {3}), ['Глава 2', '§ 3', 3])
 
+    def test_intro_text_keeps_chapter_with_paragraph(self):
+        items = [_Item('Глава 1'), _Item('§ 1'), _Item(task_id=1),
+                 _Item('Глава 2'), _Item(), _Item('§ 5'), _Item(task_id=5)]
+        self.assertEqual(self.titles(items, {5}), ['Глава 2', '§ 5', 5])
+
     def test_position_number_survives_filter(self):
         from worksheets.collection_filters import filter_items
         items = [_Item('§ 1'), _Item(task_id=10), _Item(task_id=11), _Item(task_id=12)]

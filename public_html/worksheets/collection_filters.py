@@ -63,6 +63,9 @@ def filter_items(items, matching):
         if item.is_rubric:
             run.append(item)
             continue
+        if not item.task_id:
+            # Вводный текст главы не разрывает пачку «глава, параграф»
+            continue
         if run:
             if len(run) > 1:
                 headers = run[:-1]
