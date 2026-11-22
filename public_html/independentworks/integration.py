@@ -78,7 +78,13 @@ def assignment_runs(user, params):
     return list(runs)
 
 
-def assignment_groups(user, params, *, runs=None):
+def assignment_groups(user, params, *, runs=None, recipients=None):
+    """Строки самостоятельных для «Заданий».
+
+    ``recipients`` — фильтр «Кому», уже разобранный во view
+    (assignments/recipient_filters.py), чтобы выдачи листков и
+    самостоятельные отбирались по одной и той же группе и ученику.
+    """
     if not settings.INDEPENDENT_WORKS_ENABLED or params.get('kind') == 'ordinary':
         return []
     if runs is None:
@@ -88,7 +94,13 @@ def assignment_groups(user, params, *, runs=None):
     members = None
     if params.get('group', '').strip() or params.get('student', '').strip():
         from assignments.recipient_filters import member_ids, recipient_filter
-        members = member_ids(recipient_filter(user, params, attempt_student_ids(user)))
+        if recipients is None:
+            recipients = recipient_filter(user, params, attempt_student_ids(user))
+        # Группа или ученик заданы, но среди получателей их нет — ничего не
+        # показываем, а не снимаем фильтр
+        members = member_ids(recipients)
+        if members is None:
+            members = set()
     rows = []
     now = timezone.now()
     for run in runs:
@@ -96,8 +108,6 @@ def assignment_groups(user, params, *, runs=None):
         # «Кому» (assignments/recipient_filters.py): ученик или ученики группы
         if members is not None:
             attempts = [a for a in attempts if a.student_id in members]
-        elif params.get('student', '').isdigit():
-            attempts = [a for a in attempts if a.student_id == int(params['student'])]
         q = params.get('q', '').strip().casefold()
         if q and q not in run.title.casefold():
             attempts = [a for a in attempts if q in (a.student.get_full_name() + ' ' + a.student.username).casefold()]

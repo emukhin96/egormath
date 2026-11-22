@@ -311,7 +311,8 @@ def assignment_list(request):
         group['kind'] = 'ordinary'
         group['key'] = f"ordinary-{group['worksheet_id']}"
     independent_runs = assignment_runs(request.user, params)
-    independent_groups = assignment_groups(request.user, params, runs=independent_runs)
+    independent_groups = assignment_groups(
+        request.user, params, runs=independent_runs, recipients=recipients)
     grouped += independent_groups
     # Свежие выдачи сверху независимо от статуса: очередь проверки доступна
     # плиткой «На проверке» и фильтром по статусу.

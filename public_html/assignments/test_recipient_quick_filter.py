@@ -1,6 +1,6 @@
 """Быстрый фильтр «Кому» в «Листках» и «Заданиях» (assignments/recipient_filters.py):
 группа — сегментами (много групп — списком), ученик — списком своей группы."""
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import StudentGroup
@@ -70,3 +70,26 @@ class RecipientQuickFilterTests(TestCase):
         response = self.client.get(reverse('worksheet_list'))
         self.assertContains(response, '<select name="group"')
         self.assertNotContains(response, '?group=%d' % self.group.pk)
+
+    @override_settings(INDEPENDENT_WORKS_ENABLED=True)
+    def test_independent_rows_follow_group_without_attempts(self):
+        """Группа есть среди выдач листков, но у её учеников нет
+        самостоятельных: самостоятельные под фильтром пусты, а не все."""
+        from independentworks import services as svc
+        from independentworks.integration import assignment_groups, assignment_runs
+        from independentworks.models import Candidate, Position, Work
+        from problems.models import Task
+
+        from .recipient_filters import recipient_filter
+        work = Work.objects.create(owner=self.teacher, title='Самостоятельная соло')
+        Candidate.objects.create(position=Position.objects.create(work=work),
+                                 task=Task.objects.create(text_latex='Два плюс два?'))
+        svc.issue(svc.prepare(work, self.teacher, [self.solo.pk]).pk)
+        params = {'group': str(self.group.pk)}
+        runs = assignment_runs(self.teacher, params)
+        self.assertEqual(assignment_groups(self.teacher, params, runs=runs), [])
+        selected = recipient_filter(self.teacher, params)
+        self.assertEqual(
+            assignment_groups(self.teacher, params, runs=runs, recipients=selected), [])
+        everyone = assignment_groups(self.teacher, {}, runs=runs)
+        self.assertEqual([g['students_total'] for g in everyone], [1])
