@@ -111,6 +111,14 @@ def worksheet_list(request):
         if date:
             worksheets = worksheets.filter(**{lookup: date})
 
+    # «Кому»: листки, выданные группе или ученику (assignments/recipient_filters.py)
+    from assignments.recipient_filters import apply_to_assignments, recipient_filter
+    recipients = recipient_filter(request.user, params, Assignment.visible_to(request.user).filter(
+        worksheet__collection__isnull=True).values('student_id'))
+    if recipients['active']:
+        worksheets = worksheets.filter(pk__in=apply_to_assignments(
+            Assignment.visible_to(request.user), recipients).values('worksheet_id'))
+
     order = params.get('order', '-updated_at')
     if order not in WORKSHEET_ORDERINGS:
         order = '-updated_at'
@@ -125,6 +133,7 @@ def worksheet_list(request):
         'topics': Topic.objects.filter(parent=None),
         'current_topic': current_topic,
         'owner_filter': owner_id,
+        'recipient_filter': recipients,
         'owners': (get_user_model().objects.filter(
             worksheets__collection__isnull=True).distinct()
             .order_by('last_name', 'first_name', 'username')

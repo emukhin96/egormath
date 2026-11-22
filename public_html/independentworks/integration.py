@@ -63,6 +63,12 @@ def student_assignments(user):
     return rows
 
 
+def attempt_student_ids(user):
+    """id учеников, получавших самостоятельные учителя (фильтр «Кому»)."""
+    return (Attempt.objects.filter(run__work__in=Work.visible_to(user), run__issued_at__isnull=False)
+            .values('student_id'))
+
+
 def assignment_runs(user, params):
     if not settings.INDEPENDENT_WORKS_ENABLED or params.get('kind') == 'ordinary':
         return []
@@ -72,19 +78,34 @@ def assignment_runs(user, params):
     return list(runs)
 
 
-def assignment_groups(user, params, *, runs=None):
+def assignment_groups(user, params, *, runs=None, recipients=None):
+    """Строки самостоятельных для «Заданий».
+
+    ``recipients`` — фильтр «Кому», уже разобранный во view
+    (assignments/recipient_filters.py), чтобы выдачи листков и
+    самостоятельные отбирались по одной и той же группе и ученику.
+    """
     if not settings.INDEPENDENT_WORKS_ENABLED or params.get('kind') == 'ordinary':
         return []
     if runs is None:
         runs = assignment_runs(user, params)
     if params.get('worksheet', '').isdigit():
         runs = [r for r in runs if r.work.source_worksheet_id == int(params['worksheet'])]
+    members = None
+    if params.get('group', '').strip() or params.get('student', '').strip():
+        from assignments.recipient_filters import member_ids, recipient_filter
+        if recipients is None:
+            recipients = recipient_filter(user, params, attempt_student_ids(user))
+        # Группы или ученика нет среди вариантов фильтра — фильтр снят, как
+        # у выдач листков (apply_to_assignments) и в самой строке «Кому»
+        members = member_ids(recipients)
     rows = []
     now = timezone.now()
     for run in runs:
         attempts = list(run.attempts.all())
-        if params.get('student', '').isdigit():
-            attempts = [a for a in attempts if a.student_id == int(params['student'])]
+        # «Кому» (assignments/recipient_filters.py): ученик или ученики группы
+        if members is not None:
+            attempts = [a for a in attempts if a.student_id in members]
         q = params.get('q', '').strip().casefold()
         if q and q not in run.title.casefold():
             attempts = [a for a in attempts if q in (a.student.get_full_name() + ' ' + a.student.username).casefold()]

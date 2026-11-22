@@ -30,21 +30,12 @@
     <input type="search" name="q" id="assignment-q" value="{{ filters.q }}"
            placeholder="Листок или ученик" aria-label="Поиск: листок или ученик">
   </div>
-  {% if filters.q or filters.status or filters.student or filters.worksheet or filters.due or filters.owner %}
+  {% if filters.q or filters.status or filters.student or filters.group or filters.worksheet or filters.due or filters.owner %}
   <a class="filter-reset" href="{% url 'assignment_list' %}{% if filters.kind == 'independent' %}?kind=independent{% endif %}">Сбросить</a>
   {% endif %}
-  <details class="filter-more"{% if filters.student or filters.worksheet or filters.due or filters.owner %} open{% endif %}>
+  <details class="filter-more"{% if filters.worksheet or filters.due or filters.owner %} open{% endif %}>
     <summary>Ещё фильтры</summary>
     <div class="filter-more-body">
-      <div>
-        <label for="assignment-student">Ученик</label>
-        <select name="student" id="assignment-student">
-          <option value="">Все ученики</option>
-          {% for profile in students %}
-          <option value="{{ profile.user_id }}"{% if filters.student == profile.user_id|stringformat:'s' %} selected{% endif %}>{{ profile.user.get_full_name|default:profile.user.username }}</option>
-          {% endfor %}
-        </select>
-      </div>
       <div>
         <label for="assignment-worksheet">Листок</label>
         <select name="worksheet" id="assignment-worksheet">
@@ -77,6 +68,8 @@
     </div>
   </details>
   <noscript><button class="btn btn-small" type="submit">Показать</button></noscript>
+  {# Ученик — вместе с группой в строке «Кому», а не в «Ещё фильтры» #}
+  {% include 'includes/recipient_quick_filter.html' with flt=recipient_filter %}
 </form>
 
 <form id="assignment-bulk-form" method="post" action="{% url 'assignment_bulk' %}" class="bulk-bar assignment-bulk" data-bulk hidden>
@@ -144,7 +137,7 @@
   {{ recipient_dialogs|json_script:'recipient-dialogs' }}
   {% else %}
   <div class="empty-state">
-    {% if filters.q or filters.status or filters.student or filters.worksheet or filters.due or filters.owner %}
+    {% if filters.q or filters.status or filters.student or filters.group or filters.worksheet or filters.due or filters.owner %}
     <h2>Работы не найдены</h2>
     <p class="muted">Измените фильтры или выдайте новый листок.</p>
     {% elif filters.kind == 'independent' %}

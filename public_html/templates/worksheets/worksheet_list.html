@@ -67,6 +67,7 @@
       <noscript><button type="submit" class="btn btn-small">Показать</button></noscript>
     </div>
   </details>
+  {% include 'includes/recipient_quick_filter.html' with flt=recipient_filter %}
 </form>
 
 {% if worksheets %}

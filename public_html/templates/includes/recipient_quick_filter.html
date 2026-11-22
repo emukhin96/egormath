@@ -1,0 +1,29 @@
+{% load page_tools %}{% comment %}
+Быстрый фильтр «Кому» (assignments/recipient_filters.py) — внутри GET-формы
+строки фильтров с data-autosubmit. Отдельной строкой под остальными
+фильтрами: группы сегментами, как «Класс» (больше SEG_GROUPS_MAX — список),
+ученик — списком, при выбранной группе только её ученики.
+Смена группы сбрасывает ученика (ссылки сегментов — student=None; в списке
+групп ученик не из группы просто не выбирается — recipient_filter).
+
+  {% include 'includes/recipient_quick_filter.html' with flt=recipient_filter %}
+{% endcomment %}{% if flt.groups or flt.students %}
+<div class="recipient-quick" role="group" aria-label="Кому выдано">
+  <span class="recipient-quick-label">Кому</span>
+  {% if flt.groups %}{% if flt.seg %}
+  <nav class="seg" aria-label="Группа"><a class="seg-item{% if not flt.group %} is-active{% endif %}" href="{% query_set group=None student=None %}"{% if not flt.group %} aria-current="true"{% endif %}>Все группы</a>{% for g in flt.groups %}<a class="seg-item{% if flt.group.pk == g.pk %} is-active{% endif %}" href="{% query_set group=g.pk student=None %}"{% if flt.group.pk == g.pk %} aria-current="true"{% endif %}>{{ g.name }}</a>{% endfor %}</nav>
+  {% if flt.group %}<input type="hidden" name="group" value="{{ flt.group_value }}">{% endif %}
+  {% else %}
+  <select name="group" aria-label="Группа">
+    <option value="">Все группы</option>
+    {% for g in flt.groups %}<option value="{{ g.pk }}"{% if flt.group.pk == g.pk %} selected{% endif %}>{{ g.name }}</option>{% endfor %}
+  </select>
+  {% endif %}{% endif %}
+  {% if flt.students %}
+  <select name="student" aria-label="Ученик">
+    <option value="">{% if flt.group %}Все ученики группы{% else %}Все ученики{% endif %}</option>
+    {% for s in flt.students %}<option value="{{ s.pk }}"{% if flt.student.pk == s.pk %} selected{% endif %}>{{ s.get_full_name|default:s.username }}</option>{% endfor %}
+  </select>
+  {% endif %}
+</div>
+{% endif %}
