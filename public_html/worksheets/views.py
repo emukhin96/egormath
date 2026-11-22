@@ -634,7 +634,9 @@ def _collection_rows(items, number=0, source_id=None):
     rows = []
     for item in items:
         if item.task_id:
-            number += 1
+            # Под фильтром панели — номер из полной подборки
+            # (collection_filters.filter_items)
+            number = getattr(item, 'collection_number', number + 1)
         subitems = item.selected_subitems() if item.task_id else []
         rows.append({
             'item': item,
@@ -705,9 +707,10 @@ def _section_nav(sections, chunks, source_id):
         tasks = [item for item in section.items if item.task_id]
         first = last = ''
         if tasks:
-            first = _source_number(tasks[0].task, source_id) or str(number + 1)
+            first = (_source_number(tasks[0].task, source_id)
+                     or str(getattr(tasks[0], 'collection_number', number + 1)))
             last = (_source_number(tasks[-1].task, source_id)
-                    or str(number + len(tasks)))
+                    or str(getattr(tasks[-1], 'collection_number', number + len(tasks))))
         number += len(tasks)
         nav.append({'section': section, 'page': pages.get(section.index, 1),
                     'first': first, 'last': last, 'total': len(tasks)})

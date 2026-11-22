@@ -110,3 +110,37 @@ class CollectionFilterTests(TestCase):
         self.assertContains(response, 'x^2=4')
         self.assertNotContains(response, 'Докажите неравенство')
         self.assertNotContains(response, 'x+1=2')
+
+    def test_task_without_book_number_keeps_collection_number(self):
+        response = self.url(topic=self.square.pk)
+        labels = [row['label'] for row in response.context['rows'] if row['item'].task_id]
+        self.assertEqual(labels, ['3'])
+
+
+class _Item:
+    """Элемент подборки для filter_items без базы."""
+
+    def __init__(self, rubric='', task_id=None):
+        self.rubric, self.task_id = rubric, task_id
+        self.is_rubric = bool(rubric) and task_id is None
+
+
+class FilterItemsTests(TestCase):
+    def titles(self, items, matching):
+        from worksheets.collection_filters import filter_items
+        return [item.rubric or item.task_id for item in filter_items(items, matching)]
+
+    def test_paragraph_keeps_its_chapter_when_previous_paragraph_drops(self):
+        items = [_Item('Глава 1'), _Item('§ 1'), _Item(task_id=1),
+                 _Item('§ 2'), _Item(task_id=2),
+                 _Item('Глава 2'), _Item('§ 3'), _Item(task_id=3)]
+        self.assertEqual(self.titles(items, {2}), ['Глава 1', '§ 2', 2])
+        self.assertEqual(self.titles(items, {2, 3}), ['Глава 1', '§ 2', 2, 'Глава 2', '§ 3', 3])
+        self.assertEqual(self.titles(items, {3}), ['Глава 2', '§ 3', 3])
+
+    def test_position_number_survives_filter(self):
+        from worksheets.collection_filters import filter_items
+        items = [_Item('§ 1'), _Item(task_id=10), _Item(task_id=11), _Item(task_id=12)]
+        kept = filter_items(items, {12})
+        self.assertEqual(kept[-1].collection_number, 3)
+

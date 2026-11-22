@@ -38,24 +38,40 @@ def matching_task_ids(params, task_ids):
 def filter_items(items, matching):
     """Элементы подборки без задач вне фильтра.
 
-    Рубрики остаются, только если за ними есть подходящая задача; рубрики
-    подряд (глава и сразу параграф) идут вместе. Текстовые элементы при
-    фильтре не показываются — они поясняют весь параграф, а не задачу.
+    Рубрики остаются, только если за ними есть подходящая задача. Уровней у
+    рубрик нет, поэтому рубрики подряд читаются как «глава, затем
+    параграф»: последняя из них — параграф, предыдущие — заголовки выше,
+    они действуют до следующей такой же пачки рубрик. Так параграф,
+    перед которым выпал соседний, не теряет свою главу. Текстовые
+    элементы при фильтре не показываются — они поясняют весь параграф, а
+    не задачу.
+
+    Номер задачи в подборке (``collection_number``) запоминается до
+    фильтра: у задач без номера из задачника под фильтром печатается тот
+    же позиционный номер, что и в полной подборке.
     """
     if matching is None:
         return items
-    kept, pending, section_had_items = [], [], False
+    number = 0
+    for item in items:
+        if item.task_id:
+            number += 1
+            item.collection_number = number
+    kept, emitted = [], set()
+    headers, run, leaf = [], [], None
     for item in items:
         if item.is_rubric:
-            if section_had_items:
-                pending = []
-            pending.append(item)
-            section_had_items = False
+            run.append(item)
             continue
-        section_had_items = True
+        if run:
+            if len(run) > 1:
+                headers = run[:-1]
+            leaf, run = run[-1], []
         if item.task_id and item.task_id in matching:
-            kept.extend(pending)
-            pending = []
+            for rubric in (*headers, leaf):
+                if rubric is not None and id(rubric) not in emitted:
+                    emitted.add(id(rubric))
+                    kept.append(rubric)
             kept.append(item)
     return kept
 
