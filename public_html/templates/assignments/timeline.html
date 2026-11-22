@@ -16,6 +16,7 @@
   {# Кнопки над правой колонкой и той же ширины (правило «панель = контролы над ней») #}
   <form method="post" action="{% url 'save_review' assignment.pk %}" class="tl-actions">{% csrf_token %}
     <a class="btn btn-secondary" href="{% url 'review_assignment' assignment.pk %}">Комментарии</a>
+    {% if canvas_enabled %}<a class="btn btn-secondary" href="{% url 'worksheet_boards' assignment.worksheet_id %}?open={{ assignment.pk }}" title="Доски этого ученика на экране досок">Доски</a>{% endif %}
     {% if assignment.status != 'returned' %}<button class="btn btn-secondary" name="action" value="return" onclick="return confirm('Вернуть работу ученику на доработку?')">Вернуть на доработку</button>{% endif %}
     {% if assignment.status != 'reviewed' %}<button class="btn tl-complete" name="action" value="complete">Завершить проверку</button>{% endif %}
   </form>

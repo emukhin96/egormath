@@ -708,7 +708,17 @@ def collection_detail(request, pk):
     # Страница — параграф (рубрика «§ N» и её задачи), а не 25 элементов
     # подряд; без рубрик — прежние куски по 25.
     sections, chunks = build_chunks(all_items)
-    page = Paginator(chunks or [None], 1).get_page(request.GET.get('page'))
+    page_number = request.GET.get('page')
+    # ?task= — из крошек карточки задачи (problems/source_trail.py):
+    # открыть страницу (параграф), на которой стоит задача.
+    wanted_task = request.GET.get('task', '')
+    if wanted_task.isdigit() and not page_number:
+        page_number = next(
+            (index for index, piece in enumerate(chunks, start=1)
+             if any(item.task_id == int(wanted_task)
+                    for block in piece.blocks for item in block.items)),
+            None)
+    page = Paginator(chunks or [None], 1).get_page(page_number)
     chunk = page.object_list[0] if chunks else None
     children = _visible_children(request, collection)
     # Пустой технический раздел с единственным продолжением не заставляет

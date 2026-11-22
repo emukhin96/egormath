@@ -11,7 +11,13 @@
   {% if assignment.submitted_at %}<span>отправлено {{ assignment.submitted_at|date:'d.m.Y H:i' }}</span>{% endif %}
   <span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span>
 </p>
-</div></div>
+</div>
+{# Доски ученика и хронология — в любой момент проверки, не только у задачи с уже нарисованной доской #}
+<div class="form-buttons page-actions">
+  <a class="btn btn-secondary" href="{% url 'assignment_timeline' assignment.pk %}" title="Хронология работы ученика: дорожка, ответы, события">Хронология</a>
+  {% if canvas_enabled %}<a class="btn btn-secondary" href="{% url 'worksheet_boards' assignment.worksheet_id %}?open={{ assignment.pk }}" title="Доски этого ученика на экране досок">Доски ученика</a>{% endif %}
+</div>
+</div>
 
 {% if has_stale_checks %}
 <form method="post" action="{% url 'refresh_assignment_check' assignment.pk %}">

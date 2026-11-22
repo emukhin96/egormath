@@ -121,4 +121,12 @@
 <script defer src="{% static 'js/problem_editor.js' %}?v=8"></script>
 {% include 'problems/_mask_scripts.html' %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=6"></script>
+{# Переход из крошек карточки задачи (?task=…#task-N, problems/source_trail.py): формулы и рисунки меняют высоту строк уже после первой прокрутки к якорю — после загрузки задача доводится в поле зрения ещё раз #}
+<script>
+window.addEventListener('load', function () {
+  if (location.hash.indexOf('#task-') !== 0) return;
+  var target = document.getElementById(location.hash.slice(1));
+  if (target) setTimeout(function () { target.scrollIntoView({block: 'start'}); }, 60);
+});
+</script>
 {% endblock %}

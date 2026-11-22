@@ -2,7 +2,7 @@
 {# Строки подборки (задачи, рубрики, тексты). Контекст: rows (worksheets.views._collection_rows), worksheet #}
 {% for row in rows %}
 {% with item=row.item %}
-<div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}"{% if item.task_id %} data-task-png-root{% endif %}>
+<div class="ws-item{% if item.is_rubric %} ws-item-rubric{% endif %}"{% if item.task_id %} id="task-{{ item.task_id }}" data-task-png-root{% endif %}>
   <div class="ws-body">
     <div class="ws-content" data-task-png-content>
       {% if item.task_id %}
