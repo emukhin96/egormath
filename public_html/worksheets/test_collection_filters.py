@@ -119,6 +119,22 @@ class CollectionFilterTests(TestCase):
         nothing = Topic.objects.create(code='T.NONE', name='Без задач')
         self.assertContains(self.client.get(url, {'topic': nothing.pk}), empty_text)
 
+    def test_parent_topic_count_matches_filter(self):
+        """У темы-раздела счётчик по поддереву — столько же задач, сколько
+        покажет щелчок по ней."""
+        equations = Topic.objects.create(code='T.EQ', name='Уравнения')
+        Topic.objects.filter(pk__in=[self.linear.pk, self.square.pk]).update(parent=equations)
+        general = Task.objects.create(text_latex='Что такое корень уравнения?', created_by=self.owner)
+        general.topics.add(equations)
+        WorksheetItem.objects.create(worksheet=self.sheet, task=general, order=5)
+        counts = {c['obj'].pk: c['total']
+                  for c in self.url().context['collection_filter']['topics']}
+        self.assertEqual(counts[equations.pk], 4)
+        self.assertEqual(counts[self.linear.pk], 2)
+        filtered = self.url(topic=equations.pk)
+        shown = [row for row in filtered.context['rows'] if row['item'].task_id]
+        self.assertEqual(len(shown), counts[equations.pk])
+
     def test_task_without_book_number_keeps_collection_number(self):
         response = self.url(topic=self.square.pk)
         labels = [row['label'] for row in response.context['rows'] if row['item'].task_id]

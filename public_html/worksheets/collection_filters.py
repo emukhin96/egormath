@@ -95,9 +95,17 @@ def sidebar_options(params, task_ids):
     if not task_ids:
         return {'topics': [], 'content': []}
     selected_topics = set(_ids(params, 'topic'))
-    topic_counts = dict(
-        TaskTopic.objects.filter(task_id__in=task_ids)
-        .values_list('topic_id').annotate(total=Count('task_id', distinct=True)))
+    # Счётчик темы — по её поддереву, как считает сам фильтр
+    # (rubricator.expand_topic_ids): у раздела — и задачи его подтем
+    tasks_by_topic = {}
+    for task_id, topic_id in (TaskTopic.objects.filter(task_id__in=task_ids)
+                              .values_list('task_id', 'topic_id')):
+        tasks_by_topic.setdefault(topic_id, set()).add(task_id)
+    by_parent = Topic.children_map() if tasks_by_topic else {}
+    topic_counts = {
+        topic_id: len(set().union(*(tasks_by_topic.get(pk, ())
+                                    for pk in Topic.subtree_ids(topic_id, by_parent))))
+        for topic_id in tasks_by_topic}
     topics = sorted(Topic.objects.filter(pk__in=topic_counts),
                     key=lambda topic: (topic.code or '', topic.name))
     through = Task.facet_values.through
