@@ -110,6 +110,14 @@ class CollectionFilterTests(TestCase):
         self.assertContains(response, 'x^2=4')
         self.assertNotContains(response, 'Докажите неравенство')
         self.assertNotContains(response, 'x+1=2')
+        empty_text = 'нет задач по выбранному фильтру'
+        self.assertNotContains(response, empty_text)
+        # В виде дерева фильтр к подборкам не применяется — и не «нет задач»
+        tree = self.client.get(url, {'topic': self.square.pk, 'view': 'tree'})
+        self.assertNotContains(tree, empty_text)
+        self.assertContains(tree, 'Это раздел, который объединяет')
+        nothing = Topic.objects.create(code='T.NONE', name='Без задач')
+        self.assertContains(self.client.get(url, {'topic': nothing.pk}), empty_text)
 
     def test_task_without_book_number_keeps_collection_number(self):
         response = self.url(topic=self.square.pk)

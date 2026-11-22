@@ -69,7 +69,7 @@
     <span class="muted">Подборки раздела на одной странице (два уровня).</span>
     <a class="btn btn-small btn-secondary" href="?view=tree">Деревом</a>
     {% else %}
-    {% if collection_filter.active %}<span class="muted">В подборках раздела нет задач по выбранному фильтру.</span> <a class="btn btn-small btn-secondary" href="{{ collection_filter.reset_url }}">Все задачи</a>{% elif flat_too_big %}<span class="muted">В разделе слишком много задач для одной страницы — откройте подраздел.</span>{% else %}<span class="muted">Это раздел, который объединяет дочерние подборки.</span>{% endif %}
+    {% if flat_filtered_empty %}<span class="muted">В подборках раздела нет задач по выбранному фильтру.</span> <a class="btn btn-small btn-secondary" href="{{ collection_filter.reset_url }}">Все задачи</a>{% elif flat_too_big %}<span class="muted">В разделе слишком много задач для одной страницы — откройте подраздел.</span>{% else %}<span class="muted">Это раздел, который объединяет дочерние подборки.</span>{% endif %}
     {% if tree_view %}<a class="btn btn-small btn-secondary" href="{{ request.path }}">Списком</a>{% endif %}
     {% endif %}
   </div>

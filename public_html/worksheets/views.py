@@ -804,6 +804,9 @@ def collection_detail(request, pk):
         'children': children,
         'flat_groups': flat_groups,
         'tree_view': request.GET.get('view') == 'tree',
+        # Фильтр панели применён к подборкам «списком» и ничего не оставил
+        # (в виде дерева и в слишком большом разделе он не применяется)
+        'flat_filtered_empty': flat_groups == [] and active_filter(request.GET),
         'flat_too_big': bool(children) and request.GET.get('view') != 'tree'
         and flat_groups is None,
         'cart_task_ids': cart_task_ids,
