@@ -2086,13 +2086,14 @@
     white-space: nowrap;
   }
 
-  table.list tbody tr:hover td {
-    background: #f2f6fc;
-  }
+  /* Строки списков (каталог задач, поиск в конструкторе, ученики…) при
+     наведении фон не меняют: нажатие на саму строку ничего не делает,
+     действуют только кнопки и ссылки внутри — подсветка лишь мелькала.
+     Исключение — карта ответов (.progress-table): там подсветка ведёт
+     взгляд по строке ученика через все столбцы. */
 
   /* Ученики по группам: строка-заголовок блока группы внутри таблицы */
-  table.list tr.student-group-head td,
-  table.list tbody tr.student-group-head:hover td {
+  table.list tr.student-group-head td {
     padding-top: var(--space-4);
     padding-bottom: var(--space-1);
     border-bottom: 2px solid var(--hairline);
@@ -4153,18 +4154,13 @@
     background: var(--card);
   }
 
-  .ws-item:hover {
-    background: #f7f9fb;
-  }
-
   .ws-item:last-child {
     border-bottom: none;
   }
 
   /* Рубрика — тонкий заголовок раздела: акцентная черта слева и лёгкий
      фон вместо толстой серой плашки; заголовок без собственных отступов. */
-  .ws-item-rubric,
-  .ws-item-rubric:hover {
+  .ws-item-rubric {
     background: var(--accent-soft);
   }
 
@@ -9027,8 +9023,6 @@
       align-items: start;
       padding: var(--space-3) var(--space-1);
     }
-    /* На тач-экране :hover залипает после касания — подсветки строки нет */
-    #ws-items .ws-item:not(.ws-item-rubric):hover { background: var(--card); }
     #ws-items .ws-item-rubric { padding: 6px var(--space-2); }
     #ws-items .ws-body { display: contents; }
     #ws-items .drag-handle { grid-column: 1; grid-row: 1; padding: 0; }
