@@ -79,7 +79,7 @@
     <section class="collection-flat-group depth-{{ group.depth }}" id="collection-{{ group.collection.pk }}">
       <h3 class="collection-flat-heading">
         <a href="{% url 'collection_detail' group.collection.pk %}" title="{{ group.collection.catalog_title }}">{{ group.collection.short_title }}</a>
-        <span class="muted">{{ group.collection.items_total }} {{ group.collection.items_total|plural_ru:'задача,задачи,задач' }}{% if group.has_children %}, <a href="{% url 'collection_detail' group.collection.pk %}">открыть раздел</a>{% endif %}</span>
+        <span class="muted">{% if group.tasks_shown is not None %}{{ group.tasks_shown }} из {{ group.tasks_total }} {{ group.tasks_total|plural_ru:'задачи,задач,задач' }}{% else %}{{ group.collection.items_total }} {{ group.collection.items_total|plural_ru:'задача,задачи,задач' }}{% endif %}{% if group.has_children %}, <a href="{% url 'collection_detail' group.collection.pk %}">открыть раздел</a>{% endif %}</span>
       </h3>
       {% if group.rows %}{% include 'worksheets/_collection_rows.html' with rows=group.rows %}{% endif %}
     </section>

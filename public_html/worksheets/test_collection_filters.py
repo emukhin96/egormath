@@ -110,6 +110,9 @@ class CollectionFilterTests(TestCase):
         self.assertContains(response, 'x^2=4')
         self.assertNotContains(response, 'Докажите неравенство')
         self.assertNotContains(response, 'x+1=2')
+        # Заголовок группы под фильтром — «1 из 3 задач»
+        self.assertContains(response, '1 из 3 задач')
+        self.assertNotContains(full, ' из 3 задач')
         empty_text = 'нет задач по выбранному фильтру'
         self.assertNotContains(response, empty_text)
         # В виде дерева фильтр к подборкам не применяется — и не «нет задач»

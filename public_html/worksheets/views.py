@@ -694,6 +694,13 @@ def _flat_groups(request, children):
             filter_items(by_worksheet.get(group['collection'].worksheet_id, []), matching),
             source_id=group['collection'].source_id)
     if matching is not None:
+        # Под фильтром в заголовке группы — «2 из 12 задач»: обе цифры по
+        # задачам (items_total считает и рубрики)
+        for group in groups:
+            group['tasks_shown'] = sum(1 for row in group['rows'] if row['item'].task_id)
+            group['tasks_total'] = sum(
+                1 for item in by_worksheet.get(group['collection'].worksheet_id, [])
+                if item.task_id)
         groups = [group for group in groups
                   if group['rows'] or group['has_children']]
     return groups, all_ids
