@@ -96,11 +96,9 @@ def assignment_groups(user, params, *, runs=None, recipients=None):
         from assignments.recipient_filters import member_ids, recipient_filter
         if recipients is None:
             recipients = recipient_filter(user, params, attempt_student_ids(user))
-        # Группа или ученик заданы, но среди получателей их нет — ничего не
-        # показываем, а не снимаем фильтр
+        # Группы или ученика нет среди вариантов фильтра — фильтр снят, как
+        # у выдач листков (apply_to_assignments) и в самой строке «Кому»
         members = member_ids(recipients)
-        if members is None:
-            members = set()
     rows = []
     now = timezone.now()
     for run in runs:

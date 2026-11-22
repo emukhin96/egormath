@@ -72,9 +72,10 @@ class RecipientQuickFilterTests(TestCase):
         self.assertNotContains(response, '?group=%d' % self.group.pk)
 
     @override_settings(INDEPENDENT_WORKS_ENABLED=True)
-    def test_independent_rows_follow_group_without_attempts(self):
-        """Группа есть среди выдач листков, но у её учеников нет
-        самостоятельных: самостоятельные под фильтром пусты, а не все."""
+    def test_independent_rows_follow_same_recipient_choice(self):
+        """Самостоятельные и выдачи листков отбираются по одному разбору
+        «Кому»: выбранная группа сужает и самостоятельные, а группа не из
+        вариантов снимает фильтр везде — как показывает строка «Кому»."""
         from independentworks import services as svc
         from independentworks.integration import assignment_groups, assignment_runs
         from independentworks.models import Candidate, Position, Work
@@ -87,9 +88,15 @@ class RecipientQuickFilterTests(TestCase):
         svc.issue(svc.prepare(work, self.teacher, [self.solo.pk]).pk)
         params = {'group': str(self.group.pk)}
         runs = assignment_runs(self.teacher, params)
-        self.assertEqual(assignment_groups(self.teacher, params, runs=runs), [])
+        # Группа 8 Б выбрана (есть среди выдач листков): соло в неё не входит
         selected = recipient_filter(self.teacher, params)
         self.assertEqual(
             assignment_groups(self.teacher, params, runs=runs, recipients=selected), [])
-        everyone = assignment_groups(self.teacher, {}, runs=runs)
-        self.assertEqual([g['students_total'] for g in everyone], [1])
+        # Среди получателей самостоятельных группы нет — фильтр снят, и
+        # строка «Кому» показывает «Все группы»
+        response = self.client.get(
+            reverse('assignment_list'), {'kind': 'independent', 'group': self.group.pk})
+        self.assertIsNone(response.context['recipient_filter']['group'])
+        titles = [g['worksheet__title'] for g in response.context['worksheet_groups']
+                  if g['kind'] == 'independent']
+        self.assertEqual(len(titles), 1)
