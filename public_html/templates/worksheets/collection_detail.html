@@ -1,13 +1,14 @@
 {% extends 'base.html' %}
-{% load static task_extras %}
+{% load static task_extras page_tools %}
 {% block title %}{{ collection.catalog_title }} — Математика{% endblock %}
 {% block sidebar %}{% include 'includes/sidebar/collections.html' %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <span class="page-eyebrow">{{ collection.source }}{% for part in collection.source_path %}{% if not forloop.last %} › {{ part }}{% endif %}{% endfor %}</span>
+    {# Крошки — ссылками: каталог, источник, родительские разделы (раньше — текстом) #}
+    <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'collection_list' %}">Подборки</a><a href="{% url 'collection_list' %}?source={{ collection.source_id }}">{{ collection.source }}</a>{% for node in collection_ancestors %}<a href="{% url 'collection_detail' node.pk %}">{{ node.catalog_title }}</a>{% endfor %}</nav>
     <h1>{{ collection.catalog_title }}</h1>
-    <p class="page-subtitle">{% if children %}Раздел: {{ children|length }} {{ children|length|plural_ru:'подборка,подборки,подборок' }}{% if flat_groups %}, {{ cart_task_ids|length }} {{ cart_task_ids|length|plural_ru:'задача,задачи,задач' }}{% endif %}{% elif tasks_total %}{{ tasks_total }} {{ tasks_total|plural_ru:'задача,задачи,задач' }}{% if section_nav %}, {{ section_nav|length }} {{ section_nav|length|plural_ru:'параграф,параграфа,параграфов' }}{% endif %}{% if page.has_other_pages %}, страница {{ page.number }} из {{ page.paginator.num_pages }}{% endif %}{% else %}Подборка{% endif %}</p>
+    <p class="page-subtitle">{% if children %}Раздел: {{ children|length }} {{ children|length|plural_ru:'подборка,подборки,подборок' }}{% if flat_groups %}, {{ cart_task_ids|length }} {{ cart_task_ids|length|plural_ru:'задача,задачи,задач' }}{% endif %}{% elif tasks_total %}{{ tasks_total }} {{ tasks_total|plural_ru:'задача,задачи,задач' }}{% if section_nav %}, {{ section_nav|length }} {{ section_nav|length|plural_ru:'параграф,параграфа,параграфов' }}{% endif %}{% if page.has_other_pages %}, страница {{ page.number }} из {{ page.paginator.num_pages }}{% endif %}{% else %}Подборка{% endif %}{% if collection_filter.active %}, по фильтру панели: <a href="{{ collection_filter.reset_url }}">показать все</a>{% endif %}</p>
   </div>
   {# Действия над подборкой — одна заливная кнопка; настройки просмотра ниже, отдельным рядом #}
   <div class="form-buttons collection-head-actions">
@@ -52,6 +53,8 @@
     </label>
     {% if rows and audience_students or rows and audience_groups %}
     <form method="get" class="inline-form audience-form">
+      {# Фильтр панели и вид раздела не сбрасываются при выборе «кому» #}
+      {% for name, values in request.GET.lists %}{% if name != 'who' and name != 'page' %}{% for value in values %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}{% endif %}{% endfor %}
       {% include 'includes/audience_select.html' with label='Отмечать задававшиеся' %}
     </form>
     {% endif %}
@@ -66,7 +69,7 @@
     <span class="muted">Подборки раздела на одной странице (два уровня).</span>
     <a class="btn btn-small btn-secondary" href="?view=tree">Деревом</a>
     {% else %}
-    {% if flat_too_big %}<span class="muted">В разделе слишком много задач для одной страницы — откройте подраздел.</span>{% else %}<span class="muted">Это раздел, который объединяет дочерние подборки.</span>{% endif %}
+    {% if flat_filtered_empty %}<span class="muted">В подборках раздела нет задач по выбранному фильтру.</span> <a class="btn btn-small btn-secondary" href="{{ collection_filter.reset_url }}">Все задачи</a>{% elif flat_too_big %}<span class="muted">В разделе слишком много задач для одной страницы — откройте подраздел.</span>{% else %}<span class="muted">Это раздел, который объединяет дочерние подборки.</span>{% endif %}
     {% if tree_view %}<a class="btn btn-small btn-secondary" href="{{ request.path }}">Списком</a>{% endif %}
     {% endif %}
   </div>
@@ -76,7 +79,7 @@
     <section class="collection-flat-group depth-{{ group.depth }}" id="collection-{{ group.collection.pk }}">
       <h3 class="collection-flat-heading">
         <a href="{% url 'collection_detail' group.collection.pk %}" title="{{ group.collection.catalog_title }}">{{ group.collection.short_title }}</a>
-        <span class="muted">{{ group.collection.items_total }} {{ group.collection.items_total|plural_ru:'задача,задачи,задач' }}{% if group.has_children %}, <a href="{% url 'collection_detail' group.collection.pk %}">открыть раздел</a>{% endif %}</span>
+        <span class="muted">{% if group.tasks_shown is not None %}{{ group.tasks_shown }} из {{ group.tasks_total }} {{ group.tasks_total|plural_ru:'задачи,задач,задач' }}{% else %}{{ group.collection.items_total }} {{ group.collection.items_total|plural_ru:'задача,задачи,задач' }}{% endif %}{% if group.has_children %}, <a href="{% url 'collection_detail' group.collection.pk %}">открыть раздел</a>{% endif %}</span>
       </h3>
       {% if group.rows %}{% include 'worksheets/_collection_rows.html' with rows=group.rows %}{% endif %}
     </section>
@@ -109,6 +112,8 @@
     {% include 'worksheets/_collection_rows.html' with rows=entry.rows %}
     {% endfor %}
   </div>
+  {% elif collection_filter.active %}
+  <p class="muted">Нет задач по выбранному фильтру. <a href="{{ collection_filter.reset_url }}">Показать все задачи подборки</a></p>
   {% else %}
   <p class="muted">Подборка пуста.</p>
   {% endif %}
