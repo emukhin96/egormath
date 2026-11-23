@@ -8,6 +8,9 @@
 наверху со ссылками на свои разделы.
 """
 import re
+from pathlib import PurePosixPath
+
+from django.urls import reverse
 
 from problems.models import Source
 from problems.source_meta import SUBJECT_CHOICES, grade_label, guess_grades
@@ -37,6 +40,16 @@ def _grades_of(title):
     return set(range(low, high + 1)) if low else set()
 
 
+def cover_url(source):
+    """Ссылка на файл обложки или ''. ``?v=`` — хвост имени файла (хеш
+    содержимого, problems/source_covers.py): перерисованная обложка
+    обходит суточный кэш браузера."""
+    if not source.cover:
+        return ''
+    version = PurePosixPath(source.cover.name).stem.rsplit('-', 1)[-1]
+    return f"{reverse('source_cover', args=[source.pk])}?v={version}"
+
+
 def _book(source):
     low, high = source.grade_from, source.grade_to or source.grade_from
     return {
@@ -45,6 +58,7 @@ def _book(source):
         'range': grade_label(low, high) if low and high != low else '',
         'cover_grade': grade_label(low, high),
         'cover_name': cover_name(source),
+        'cover_url': cover_url(source),
         'subject_label': SUBJECT_LABELS.get(source.subject, ''),
     }
 
