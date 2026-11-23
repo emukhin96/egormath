@@ -827,6 +827,7 @@ def collection_detail(request, pk):
         (row for row in sources if row['source'].pk == collection.source_id),
         None)
     from .authored import SOURCE_TITLE as AUTHORED_SOURCE, is_section
+    from .collection_neighbors import collection_neighbors
     return render(request, 'worksheets/collection_detail.html', {
         **usage_ctx,
         'is_authored': (collection.source.title == AUTHORED_SOURCE
@@ -870,6 +871,9 @@ def collection_detail(request, pk):
         'selected_source': selected_source,
         'current_collection': collection,
         'collection_ancestors': _collection_ancestors(collection),
+        # Другие варианты той же работы и соседние подборки уровня
+        # (worksheets/collection_neighbors.py)
+        'neighbors': collection_neighbors(selected_source, collection.pk),
         # Панель «Фильтр подборки»: темы и содержание задач этой подборки
         'collection_filter': {
             **sidebar_options(request.GET, own_task_ids + flat_task_ids),

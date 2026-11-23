@@ -9,6 +9,14 @@
     <nav class="page-crumbs" aria-label="Путь"><a href="{% url 'collection_list' %}">Подборки</a><a href="{% url 'collection_list' %}?source={{ collection.source_id }}">{{ collection.source }}</a>{% for node in collection_ancestors %}<a href="{% url 'collection_detail' node.pk %}">{{ node.catalog_title }}</a>{% endfor %}</nav>
     <h1>{{ collection.catalog_title }}</h1>
     <p class="page-subtitle">{% if children %}Раздел: {{ children|length }} {{ children|length|plural_ru:'подборка,подборки,подборок' }}{% if flat_groups %}, {{ cart_task_ids|length }} {{ cart_task_ids|length|plural_ru:'задача,задачи,задач' }}{% endif %}{% elif tasks_total %}{{ tasks_total }} {{ tasks_total|plural_ru:'задача,задачи,задач' }}{% if section_nav %}, {{ section_nav|length }} {{ section_nav|length|plural_ru:'параграф,параграфа,параграфов' }}{% endif %}{% if page.has_other_pages %}, страница {{ page.number }} из {{ page.paginator.num_pages }}{% endif %}{% else %}Подборка{% endif %}{% if collection_filter.active %}, по фильтру панели: <a href="{{ collection_filter.reset_url }}">показать все</a>{% endif %}</p>
+    {# Соседи того же уровня (worksheets/collection_neighbors.py): варианты одной работы — сегментами, с той же страницей и фильтром; стрелки — в соседнюю работу на тот же вариант #}
+    {% if neighbors %}
+    <nav class="collection-neighbors" aria-label="Соседние подборки">
+      {% if neighbors.prev %}<a class="collection-neighbor is-prev" href="{% url 'collection_detail' neighbors.prev.pk %}" title="Предыдущая: {{ neighbors.prev.catalog_title }}{% if neighbors.prev.variant %}, {{ neighbors.prev.variant|lower }}{% endif %}"><span aria-hidden="true">←</span><span class="collection-neighbor-title">{{ neighbors.prev.catalog_title }}</span></a>{% endif %}
+      {% if neighbors.variants %}<span class="collection-variants"><span class="collection-variants-label">Вариант</span><span class="seg">{% for variant in neighbors.variants %}<a class="seg-item" href="{% url 'collection_detail' variant.node.pk %}{% if page.number > 1 %}{% query_set task=None page=page.number %}{% else %}{% query_set task=None %}{% endif %}"{% if variant.current %} aria-current="page"{% endif %} title="{{ variant.node.variant|default:'Вариант' }}">{{ variant.label }}</a>{% endfor %}</span></span>{% endif %}
+      {% if neighbors.next %}<a class="collection-neighbor is-next" href="{% url 'collection_detail' neighbors.next.pk %}" title="Следующая: {{ neighbors.next.catalog_title }}{% if neighbors.next.variant %}, {{ neighbors.next.variant|lower }}{% endif %}"><span class="collection-neighbor-title">{{ neighbors.next.catalog_title }}</span><span aria-hidden="true">→</span></a>{% endif %}
+    </nav>
+    {% endif %}
   </div>
   {# Действия над подборкой — одна заливная кнопка; настройки просмотра ниже, отдельным рядом #}
   <div class="form-buttons collection-head-actions">
