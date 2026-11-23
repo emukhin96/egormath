@@ -8,6 +8,7 @@ from django.db import models, transaction
 from PIL import Image
 
 from .latex_utils import strip_latex
+from .source_meta import SUBJECT_CHOICES as SOURCE_SUBJECT_CHOICES
 
 
 class Topic(models.Model):
@@ -231,6 +232,20 @@ class Source(models.Model):
     short_title = models.CharField(
         'Короткое имя', max_length=60, blank=True,
         help_text='Для строк задач и боковой панели, например «Шабунин, задачник 10–11».')
+    # Полки страницы «Подборки» (worksheets/collection_shelves.py): класс и
+    # раздел заполнены миграцией по названию (problems/source_meta.py),
+    # дальше их правит редактор; обложка — по желанию, без неё заглушка.
+    grade_from = models.PositiveSmallIntegerField(
+        'Класс, с', null=True, blank=True,
+        help_text='Пусто — книга на полке «Без класса».')
+    grade_to = models.PositiveSmallIntegerField(
+        'Класс, по', null=True, blank=True,
+        help_text='Для книги на один класс — пусто или тот же класс.')
+    subject = models.CharField(
+        'Раздел', max_length=20, blank=True, choices=SOURCE_SUBJECT_CHOICES)
+    cover = models.ImageField(
+        'Обложка', upload_to='source_covers/', blank=True,
+        help_text='Миниатюра на странице «Подборки»; без неё — заглушка цвета раздела.')
 
     class Meta:
         verbose_name = 'Источник (учебник/задачник)'

@@ -1,0 +1,43 @@
+{# Полки по классам (worksheets/collection_shelves.py): авторские листки наверху, бейджи «Класс» и «Раздел», карточка задачника — обложка, название, авторы, раздел #}
+{% if shelves.authored %}
+<section class="authored-banner" aria-label="Авторские листки">
+  <a class="source-cover source-cover-authored" href="{% url 'authored_collections' %}" aria-hidden="true" tabindex="-1"><span class="source-cover-grade">ЕМ</span><span class="source-cover-name">листки</span></a>
+  <div class="authored-banner-body">
+    <p class="authored-banner-title"><a href="{% url 'authored_collections' %}">{{ shelves.authored.source.title }}</a>{% if shelves.authored.source.author %}<span>{{ shelves.authored.source.author }}</span>{% endif %}</p>
+    <ul class="authored-banner-sections">
+      {% for section in shelves.authored.sections %}<li><a class="shelf-chip"{% if section.active %} aria-current="true"{% endif %} href="{% url 'collection_detail' section.collection.pk %}">{{ section.collection.catalog_title }}</a></li>{% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}
+
+{% if shelves.books_total %}
+<div class="shelf-filters">
+  <nav class="shelf-filter-row" aria-label="Класс"><span class="shelf-filter-label">Класс</span>{% for chip in shelves.grade_chips %}<a class="shelf-chip" href="{{ chip.url }}"{% if chip.active %} aria-current="true"{% endif %}>{{ chip.label }}</a>{% endfor %}</nav>
+  {% if shelves.subject_chips|length > 2 %}<nav class="shelf-filter-row" aria-label="Раздел"><span class="shelf-filter-label">Раздел</span>{% for chip in shelves.subject_chips %}<a class="shelf-chip" href="{{ chip.url }}"{% if chip.active %} aria-current="true"{% endif %}>{{ chip.label }}</a>{% endfor %}</nav>{% endif %}
+</div>
+
+{% if shelves.shelves %}
+<div class="shelves">
+  {% for shelf in shelves.shelves %}
+  <section class="shelf shelf-span-{{ shelf.span }}">
+    <h2 class="shelf-title">{{ shelf.label }}</h2>
+    <div class="shelf-books">
+      {% for book in shelf.books %}
+      <a class="shelf-book" href="?source={{ book.source.pk }}">
+        {% if book.source.cover %}<img class="source-cover" src="{{ book.source.cover.url }}" alt="" loading="lazy">{% else %}<span class="source-cover subject-{{ book.source.subject|default:'none' }}" aria-hidden="true"><span class="source-cover-grade">{{ book.cover_grade }}</span><span class="source-cover-name">{{ book.cover_name }}</span></span>{% endif %}
+        <span class="shelf-book-body">
+          <span class="shelf-book-title">{{ book.source.title }}</span>
+          {% if book.source.author %}<span class="shelf-book-author">{{ book.source.author }}</span>{% endif %}
+          {% if book.subject_label or book.range %}<span class="shelf-book-meta">{% if book.subject_label %}<span class="subject-tag subject-{{ book.source.subject }}">{{ book.subject_label }}</span>{% endif %}{% if book.range %}<span>{{ book.range }} классы</span>{% endif %}</span>{% endif %}
+        </span>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted">Нет задачников по выбранным фильтрам. <a href="?">Показать все</a></p>
+{% endif %}
+{% endif %}

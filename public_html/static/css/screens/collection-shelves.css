@@ -1,0 +1,273 @@
+/* «Подборки» полками по классам (templates/worksheets/_collection_shelves.html,
+   worksheets/collection_shelves.py): авторские листки наверху, бейджи
+   фильтров, полка шириной в число своих книг — маленькие полки встают в
+   строку рядом. Обложка — картинка источника или заглушка цвета раздела. */
+@layer components {
+  /* Авторские листки — единственное исключение из полок */
+  .authored-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+    padding: var(--space-4) var(--space-5);
+    border-radius: 12px;
+    background: #e9f0f9;
+  }
+
+  .authored-banner-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .authored-banner-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-3);
+    margin: 0;
+  }
+
+  .authored-banner-title a {
+    color: var(--text);
+    font-size: var(--fs-lg);
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .authored-banner-title a:hover {
+    color: var(--accent);
+  }
+
+  .authored-banner-title span {
+    color: var(--muted);
+    font-size: var(--fs-sm);
+  }
+
+  .authored-banner-sections {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .authored-banner .shelf-chip:not([aria-current]) {
+    background: #fff;
+  }
+
+  /* Бейджи фильтров: «Класс», «Раздел» */
+  .shelf-filters {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-5);
+  }
+
+  .shelf-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .shelf-filter-label {
+    width: 4.5rem;
+    color: var(--muted);
+    font-size: var(--fs-sm);
+  }
+
+  .shelf-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--accent-dark);
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .shelf-chip:hover {
+    color: var(--accent);
+  }
+
+  .shelf-chip[aria-current] {
+    background: var(--accent-dark);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  /* Полки: сетка из четырёх колонок, полка — на число своих книг */
+  .shelves {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-6, 28px) var(--space-3);
+    align-items: start;
+  }
+
+  .shelf {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+  }
+
+  .shelf-title {
+    margin: 0;
+    font-size: var(--fs-lg);
+    font-weight: 600;
+  }
+
+  .shelf-books {
+    display: grid;
+    gap: 10px;
+  }
+
+  .shelf-span-1 { grid-column: span 1; }
+  .shelf-span-2 { grid-column: span 2; }
+  .shelf-span-3 { grid-column: span 3; }
+  .shelf-span-4 { grid-column: span 4; }
+  .shelf-span-1 .shelf-books { grid-template-columns: minmax(0, 1fr); }
+  .shelf-span-2 .shelf-books { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shelf-span-3 .shelf-books { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .shelf-span-4 .shelf-books { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+  .shelf-book {
+    display: flex;
+    gap: var(--space-3);
+    min-height: 92px;
+    padding: 10px 12px 10px 10px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    background: var(--tile, #f3f6fa);
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .shelf-book:hover {
+    background: var(--tile-hover, #e9eff6);
+  }
+
+  .shelf-book:hover .shelf-book-title {
+    color: var(--accent);
+  }
+
+  .shelf-book-body {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .shelf-book-title {
+    font-weight: 600;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+
+  .shelf-book-author {
+    color: var(--muted);
+    font-size: var(--fs-sm);
+  }
+
+  .shelf-book-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: auto;
+    color: var(--muted);
+    font-size: var(--fs-xs);
+  }
+
+  /* Обложка: картинка источника или заглушка — цвет раздела, класс, фамилия */
+  .source-cover {
+    flex: none;
+    width: 52px;
+    height: 72px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgb(16 43 85 / 25%);
+    object-fit: cover;
+    /* Надписи заглушки — часть рисунка обложки: em от мелкого размера шкалы */
+    font-size: var(--fs-xs);
+  }
+
+  span.source-cover,
+  a.source-cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 6px;
+    box-sizing: border-box;
+    background: #4d5868;
+    color: #fff;
+    text-decoration: none;
+  }
+
+  .source-cover-grade {
+    font-size: 1.25em;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  .source-cover-name {
+    overflow: hidden;
+    font-size: 0.75em;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .source-cover.source-cover-authored {
+    width: 60px;
+    height: 82px;
+    background: var(--accent-dark);
+  }
+
+  .source-cover-authored .source-cover-grade {
+    font-size: 1.8em;
+  }
+
+  .source-cover.subject-math { background: #1d5fa8; }
+  .source-cover.subject-algebra { background: #24704a; }
+  .source-cover.subject-geometry { background: #9a4f12; }
+  .source-cover.subject-statistics { background: #5d3a96; }
+  .source-cover.subject-exams { background: #a12a42; }
+
+  .subject-tag {
+    padding: 1px 7px;
+    border-radius: 6px;
+    font-size: var(--fs-xs);
+    font-weight: 500;
+  }
+
+  .subject-tag.subject-math { background: #e6effa; color: #134a86; }
+  .subject-tag.subject-algebra { background: #e8f3ec; color: #1c5a34; }
+  .subject-tag.subject-geometry { background: #fbeee2; color: #7a3d0b; }
+  .subject-tag.subject-statistics { background: #f1ebfa; color: #4b2a7f; }
+  .subject-tag.subject-exams { background: #fbe9ec; color: #8a1f33; }
+
+  /* Планшет: две колонки, большие полки — во всю ширину */
+  @media (max-width: 1100px) {
+    .shelves { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .shelf-span-3, .shelf-span-4 { grid-column: 1 / -1; }
+    .shelf-span-3 .shelf-books,
+    .shelf-span-4 .shelf-books { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  /* Телефон: одна колонка */
+  @media (max-width: 640px) {
+    .shelves { grid-template-columns: minmax(0, 1fr); }
+    .shelf { grid-column: auto; }
+    .shelf .shelf-books { grid-template-columns: minmax(0, 1fr); }
+    .authored-banner { align-items: flex-start; padding: var(--space-3); }
+  }
+}

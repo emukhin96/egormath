@@ -11,7 +11,7 @@
     <p class="page-meta">{% if selected_source.source.author %}<span>{{ selected_source.source.author }}</span>{% endif %}{% if selected_source.source.year %}<span>{{ selected_source.source.year }}</span>{% endif %}<span>{{ selected_source.leaf_total }} {{ selected_source.leaf_total|plural_ru:'подборка,подборки,подборок' }}</span><span>{{ selected_source.item_total }} {{ selected_source.item_total|plural_ru:'задача,задачи,задач' }}</span></p>
     {% else %}
     <h1>Подборки</h1>
-    <p class="page-meta"><span>{{ collection_totals.sources }} {{ collection_totals.sources|plural_ru:'источник,источника,источников' }}</span><span>{{ collection_totals.leaves }} {{ collection_totals.leaves|plural_ru:'подборка,подборки,подборок' }}</span><span>{{ collection_totals.items }} {{ collection_totals.items|plural_ru:'задача,задачи,задач' }}</span></p>
+    <p class="page-meta"><span>{% if shelves.filtered %}{{ shelves.shown_total }} из {{ shelves.books_total }} {{ shelves.books_total|plural_ru:'задачника,задачников,задачников' }}{% else %}{{ shelves.books_total }} {{ shelves.books_total|plural_ru:'задачник,задачника,задачников' }}{% endif %}</span></p>
     {% endif %}
   </div>
 </div>
@@ -27,15 +27,6 @@
   {% endfor %}
 </div>
 {% elif collection_sources %}
-<div class="collection-source-grid">
-  {% for group in collection_sources %}
-  <a class="card collection-source-card" href="?source={{ group.source.pk }}">
-    <h2>{{ group.source.title }}</h2>
-    {% if group.source.author %}<p>{{ group.source.author }}{% if group.source.year %}, {{ group.source.year }}{% endif %}</p>{% endif %}
-    <div class="collection-source-stats"><span><strong>{{ group.leaf_total }}</strong> {{ group.leaf_total|plural_ru:'подборка,подборки,подборок' }}</span><span><strong>{{ group.item_total }}</strong> {{ group.item_total|plural_ru:'задача,задачи,задач' }}</span></div>
-    {% include 'worksheets/_collection_topics.html' with topics=group.topics limit=3 %}
-  </a>
-  {% endfor %}
-</div>
+{% include 'worksheets/_collection_shelves.html' %}
 {% else %}<div class="card"><p class="muted">Подборок пока нет.</p></div>{% endif %}
 {% endblock %}
