@@ -45,8 +45,10 @@ class TagAdmin(admin.ModelAdmin):
 
 @admin.register(Source)
 class SourceAdmin(admin.ModelAdmin):
-    list_display = ('title', 'short_title', 'author', 'year')
-    list_editable = ('short_title',)
+    # Класс, раздел и обложка — полки страницы «Подборки»
+    list_display = ('title', 'short_title', 'author', 'year', 'grade_from', 'grade_to', 'subject')
+    list_editable = ('short_title', 'grade_from', 'grade_to', 'subject')
+    list_filter = ('subject',)
     search_fields = ('title', 'short_title', 'author')
 
 

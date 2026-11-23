@@ -542,15 +542,15 @@ def collection_list(request):
     if (selected_source
             and selected_source['source'].title == AUTHORED_SOURCE):
         return redirect('authored_collections')
+    # Без выбранного источника — полки по классам (worksheets/collection_shelves.py)
+    shelves = None
+    if selected_source is None:
+        from .collection_shelves import shelves_context
+        shelves = shelves_context(sources, request.GET)
     return render(request, 'worksheets/collection_list.html', {
         'collection_sources': sources,
         'selected_source': selected_source,
-        # Мета-строка шапки: «3 источника · 120 подборок · 2400 задач»
-        'collection_totals': {
-            'sources': len(sources),
-            'leaves': sum(row['leaf_total'] for row in sources),
-            'items': sum(row['item_total'] for row in sources),
-        },
+        'shelves': shelves,
     })
 
 
