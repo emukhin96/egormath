@@ -1,11 +1,13 @@
 {% comment %}Подпункты задачи списком «а) …» без \item; ожидает subitems.
+С pics_task рисунки подпунктов (\taskpic в их тексте) выводятся под подпунктом —
+галерея условия тогда {% task_images pics_task 'main' %}.
 Пунктуация («;» между пунктами, «.» в конце) расставляется здесь — в базе
 тексты хранятся без знака препинания.{% endcomment %}
 {% load task_extras %}
 {% if subitems %}
 <ol class="subitems">
   {% for s in subitems %}
-  <li><span class="math-content">{{ s.text_latex|web_text }}</span>{{ s.text_latex|subitem_tail:forloop.last }}</li>
+  <li><span class="math-content">{{ s.text_latex|web_text }}</span>{{ s.text_latex|subitem_tail:forloop.last }}{% if pics_task %}{% subitem_images pics_task s %}{% endif %}</li>
   {% endfor %}
 </ol>
 {% endif %}

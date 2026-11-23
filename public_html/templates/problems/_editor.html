@@ -34,9 +34,9 @@
         {% if not editor_readonly %}<details class="ws-add-text block-edit">{% include 'problems/_edit_pen.html' with label='Править условие' %}
           {% include 'problems/_editor_form.html' with form=condition_form block='condition' %}
         </details>{% endif %}
-        {% if subrows %}<ol class="subitems">{% for row in subrows %}<li class="math-content">{{ row.sub.text_latex|web_text }}</li>{% endfor %}</ol>{% endif %}
-        {# Только рисунки условия; рисунки к ответам и решениям — в их блоках ниже (owner_images) #}
-        {% task_images task %}
+        {% if subrows %}<ol class="subitems">{% for row in subrows %}<li><span class="math-content">{{ row.sub.text_latex|web_text }}</span>{% subitem_images task row.sub %}</li>{% endfor %}</ol>{% endif %}
+        {# Только рисунки условия; рисунки подпунктов — под ними, к ответам и решениям — в их блоках ниже (owner_images) #}
+        {% task_images task 'main' %}
       </section>
       {% if not editor_readonly %}
       <details class="problem-section"><summary>Подпункты: добавить, изменить порядок</summary>

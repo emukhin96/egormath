@@ -12,6 +12,7 @@ from django.urls import reverse
 
 from accounts.permissions import can_edit_task
 from problems.answer_material import answer_material
+from problems.task_images import subitem_image_map
 from problems.templatetags.task_extras import plural_ru, subitem_tail, web_text
 
 # Рамки «Ответ / Решение» входят в HTML конструктора только у листка не длиннее
@@ -122,8 +123,10 @@ def decorate_builder_rows(rows, worksheet, user, cart_task_ids, with_answers=Tru
         row['urls'].update(urls.for_task(task.pk))
         row['task_pk'] = task.pk
         row['statement_html'] = web_text(row.get('statement', task.text_latex))
+        sub_images = subitem_image_map(task)
         row['subitems'] = [{
             'pk': sub.pk,
+            'images': sub_images.get(sub.pk, []),
             'html': web_text(sub.text_latex),
             'tail': subitem_tail(sub.text_latex, index == len(subitems) - 1),
             'checked': selected is None or sub.pk in selected,

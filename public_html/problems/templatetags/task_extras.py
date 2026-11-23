@@ -7,7 +7,7 @@ from problems.answer_material import (answer_material as _answer_material,
                                      solution_texts)
 from problems.task_images import (
     TASKPIC_NUM_RE, images_for_group, owner_material_images,
-    unplaced_material_images)
+    subitem_image_map, unplaced_material_images)
 from problems.textbook_parser import (
     apply_imported_answer, cyrillic_item_label as _cyrillic_item_label,
     normalize_imported_text, order_letter_subitems, strip_heading_dot)
@@ -28,6 +28,16 @@ def content_choices():
 def task_images(task, group='statement'):
     """Картинки задачи: условие, ответы/решения или все."""
     return {'images': images_for_group(task, group)}
+
+
+@register.inclusion_tag('problems/_task_images.html')
+def subitem_images(task, subitem):
+    """Рисунки подпункта (``\\taskpic`` в его тексте) — под самим подпунктом.
+
+    ``subitem`` — подпункт или его pk; пара к ``{% task_images task 'main' %}``.
+    """
+    pk = getattr(subitem, 'pk', subitem)
+    return {'images': subitem_image_map(task).get(pk, [])}
 
 
 @register.inclusion_tag('problems/_task_images.html')
@@ -212,10 +222,13 @@ def subitem_tail(text, is_last):
     """Знак после подпункта: «;» между пунктами, «.» после последнего.
 
     Подпункты-предложения хранятся со своим знаком («Приведите пример.») —
-    таким ничего не добавляется.
+    таким ничего не добавляется. Подпункт «только рисунок» (``\\taskpic``
+    без текста) знака не получает: рисунок стоит под ним.
     """
-    text = normalize_imported_text(text or '')
-    if text and text[-1] in ';,.!?:':
+    text = normalize_imported_text(TASKPIC_NUM_RE.sub('', text or '')).strip()
+    if not text:
+        return ''
+    if text[-1] in ';,.!?:':
         return ''
     return '.' if is_last else ';'
 

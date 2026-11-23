@@ -56,7 +56,7 @@
     <ol class="subitems">
       {% for sr in row.subrows %}
       <li>
-        <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}
+        <span class="math-content">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}{% subitem_images row.item.task sr.subitem %}
       </li>
       {% endfor %}
     </ol>
