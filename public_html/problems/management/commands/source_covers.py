@@ -43,7 +43,8 @@ class Command(BaseCommand):
         if not isinstance(rows, list):
             raise CommandError(f'{mapping}: нужен список объектов')
         export_dir = Path(export) if export else None
-        if export_dir:
+        # --dry-run ничего не пишет и при выгрузке: ни папку, ни covers.json
+        if export_dir and not dry_run:
             export_dir.mkdir(parents=True, exist_ok=True)
         exported, done, problems = [], 0, 0
         for row in rows:
@@ -97,7 +98,7 @@ class Command(BaseCommand):
                                   save=True)
             done += 1
             self.stdout.write(f'+ {label} ({len(data) // 1024} КБ)')
-        if export_dir:
+        if export_dir and not dry_run:
             (export_dir / 'covers.json').write_text(
                 json.dumps(exported, ensure_ascii=False, indent=1), encoding='utf-8')
         verb = 'выгружено' if export_dir else 'записано'

@@ -176,3 +176,14 @@ class SourceCoversCommandTests(TestCase):
         self.client.login(username='teacher1', password='pass12345')
         response = self.client.get(reverse('source_cover', args=[self.geo7.pk]))
         self.assertEqual(response['Content-Type'], 'image/png')
+
+    def test_export_dry_run_keeps_previous_export(self):
+        export = self.dir / 'export'
+        rows = [{'match': 'Зив-8', 'file': 'book.pdf'}]
+        self.run_command(rows, '--export', str(export))
+        before = (export / 'covers.json').read_text(encoding='utf-8')
+        self.run_command(rows, '--export', str(export), '--dry-run')
+        self.assertEqual((export / 'covers.json').read_text(encoding='utf-8'), before)
+        fresh = self.dir / 'never'
+        self.run_command(rows, '--export', str(fresh), '--dry-run')
+        self.assertFalse(fresh.exists())
