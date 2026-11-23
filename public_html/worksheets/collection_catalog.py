@@ -35,7 +35,8 @@ from problems.models import Source, Topic
 from .models import Collection, Worksheet, WorksheetItem
 
 CACHE_ALIAS = 'taxonomy'
-CACHE_KEY = 'collection-catalog'
+# v2 — у узла есть ``variant`` (ключ кэша сменён, чтобы не читать старые узлы)
+CACHE_KEY = 'collection-catalog-v2'
 
 
 # --- названия ----------------------------------------------------------------
@@ -53,6 +54,21 @@ def catalog_title(title):
     if match:
         title = f'№0{match.group(1)}{match.group(2)}{title[match.end():]}'
     return title
+
+
+# Последняя часть ключа подборки: «key:…/Самостоятельная работа III.1/Вариант 3*»
+_VARIANT_RE = re.compile(r'(?:^|/)\s*(вариант(?![а-яё])\s*[^/]*?)\s*$', re.IGNORECASE)
+
+
+def variant_label(locator):
+    """«Вариант 3*» из ключа подборки или ''. Варианты одной работы в
+    задачниках (Шабунин, ДМ Мерзляка) — одноимённые соседи, номер есть
+    только в ключе."""
+    match = _VARIANT_RE.search(locator or '')
+    if not match:
+        return ''
+    label = match.group(1)
+    return label[0].upper() + label[1:]
 
 
 def natural_key(text):
@@ -88,12 +104,14 @@ class CatalogNode:
     catalog_title: str
     direct_items_total: int = 0
     topic_ids: list = field(default_factory=list)
+    # «Вариант 2» из ключа источника — у одноимённых соседей-вариантов
+    variant: str = ''
 
 
 def build_catalog_nodes():
     """Узлы всех подборок, темы и источники — без учёта пользователя."""
     rows = list(Collection.objects.values(
-        'pk', 'parent_id', 'source_id', 'order', 'is_published',
+        'pk', 'parent_id', 'source_id', 'order', 'is_published', 'locator',
         'worksheet_id', 'worksheet__title', 'worksheet__owner_id'))
     worksheet_ids = {row['worksheet_id'] for row in rows}
     counts = dict(
@@ -123,6 +141,7 @@ def build_catalog_nodes():
         catalog_title=catalog_title(row['worksheet__title']),
         direct_items_total=counts.get(row['worksheet_id'], 0),
         topic_ids=topic_ids_by_worksheet.get(row['worksheet_id'], []),
+        variant=variant_label(row['locator']),
     ) for row in rows]
     nodes.sort(key=lambda n: (source_order[n.source_id], n.order, n.pk))
     return {'nodes': nodes, 'topics': topics, 'sources': sources}
