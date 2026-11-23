@@ -37,13 +37,22 @@
     display: none;
   }
 
-  /* Строка «#id, ответ» под условием — на линии текста задачи */
+  /* Строка «#id, ответ» под условием — на линии текста задачи. Колонка
+     номера задана в ch (--task-num-col из шаблона), а ch считается шрифтом
+     того элемента, где отступ применён: при мелком шрифте .task-meta строка
+     вылезала левее текста (на «35.1.» — на 6px). Поэтому у самой строки
+     шрифт строки задачи, мелкий — только у её содержимого. */
   #ws-items.ws-collection .ws-content > .collection-task-meta {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     gap: var(--space-3);
     margin: var(--space-1) 0 0 var(--task-indent);
+    font-size: inherit;
+  }
+
+  #ws-items.ws-collection .ws-content > .collection-task-meta > * {
+    font-size: var(--fs-md);
   }
 
   #ws-items .collection-task-meta a.task-id {
