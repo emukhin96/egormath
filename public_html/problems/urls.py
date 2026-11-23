@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import analog_views
+from . import cover_views
 from . import clone, editor, proposals, views
 
 urlpatterns = [
@@ -81,4 +82,6 @@ urlpatterns = [
          name='task_subitem_update'),
     path('images/<int:pk>/file/', views.task_image_file,
          name='task_image_file'),
+    path('sources/<int:pk>/cover/', cover_views.source_cover,
+         name='source_cover'),
 ]

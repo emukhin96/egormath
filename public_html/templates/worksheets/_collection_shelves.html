@@ -25,7 +25,7 @@
     <div class="shelf-books">
       {% for book in shelf.books %}
       <a class="shelf-book" href="?source={{ book.source.pk }}">
-        {% if book.source.cover %}<img class="source-cover" src="{{ book.source.cover.url }}" alt="" loading="lazy">{% else %}<span class="source-cover subject-{{ book.source.subject|default:'none' }}" aria-hidden="true"><span class="source-cover-grade">{{ book.cover_grade }}</span><span class="source-cover-name">{{ book.cover_name }}</span></span>{% endif %}
+        {% if book.cover_url %}<img class="source-cover" src="{{ book.cover_url }}" alt="" loading="lazy">{% else %}<span class="source-cover subject-{{ book.source.subject|default:'none' }}" aria-hidden="true"><span class="source-cover-grade">{{ book.cover_grade }}</span><span class="source-cover-name">{{ book.cover_name }}</span></span>{% endif %}
         <span class="shelf-book-body">
           <span class="shelf-book-title">{{ book.source.title }}</span>
           {% if book.source.author %}<span class="shelf-book-author">{{ book.source.author }}</span>{% endif %}
