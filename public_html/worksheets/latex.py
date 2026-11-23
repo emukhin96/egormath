@@ -119,10 +119,12 @@ def punctuate_subitem(text, last):
         return text
     core = _TRAILING_CLOSERS_RE.sub('', text)
     if core.endswith(',') and not _ESCAPED_PUNCT_RE.search(core):
-        text = core[:-1].rstrip() + text[len(core):]
-        core = core[:-1].rstrip()
-        if not core:
+        # После запятой снова снимаем переносы и пересчитываем закрывающие:
+        # «x\\,» → «x;», а не «x\\;»; «$x.$,» → «$x.$», без второго знака.
+        text = _TRAILING_BREAK_RE.sub('', core[:-1] + text[len(core):])
+        if not text:
             return text
+        core = _TRAILING_CLOSERS_RE.sub('', text)
     if (core[-1:] in tuple(_FINAL_PUNCT) and not _NULL_DELIMITER_RE.search(core)
             and not _ESCAPED_PUNCT_RE.search(core)):
         return text

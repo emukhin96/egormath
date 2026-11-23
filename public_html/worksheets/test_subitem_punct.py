@@ -58,6 +58,10 @@ class PunctuateSubitemTests(SimpleTestCase):
         self.assertEqual(punctuate_subitem(system + ',', True), system + '.')
         self.assertEqual(punctuate_subitem('$x=1,$', False), '$x=1$;')
         self.assertEqual(punctuate_subitem(r'при $a=2$ ,\\', True), 'при $a=2$.')
+        # Запятая после переноса или после знака внутри формулы
+        self.assertEqual(punctuate_subitem(r'$x$\\,', False), '$x$;')
+        self.assertEqual(punctuate_subitem(r'$x$\\ ,', True), '$x$.')
+        self.assertEqual(punctuate_subitem('$x.$,', False), '$x.$')
 
     def test_spacing_command_is_not_punctuation(self):
         # «\;» «\,» в конце — пробелы, знак всё равно нужен
