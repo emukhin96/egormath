@@ -51,6 +51,23 @@ class PunctuateSubitemTests(SimpleTestCase):
             punctuate_subitem(r'$39^\circ.$', False), r'$39^\circ.$')
 
 
+    def test_trailing_comma_is_replaced(self):
+        # Прод, задача 28365: «…\right.\),» печаталось как «,;»
+        system = r'\(\left\{\begin{array}{l}x=1\end{array}\right.\)'
+        self.assertEqual(punctuate_subitem(system + ',', False), system + ';')
+        self.assertEqual(punctuate_subitem(system + ',', True), system + '.')
+        self.assertEqual(punctuate_subitem('$x=1,$', False), '$x=1$;')
+        self.assertEqual(punctuate_subitem(r'при $a=2$ ,\\', True), 'при $a=2$.')
+
+    def test_spacing_command_is_not_punctuation(self):
+        # «\;» «\,» в конце — пробелы, знак всё равно нужен
+        self.assertEqual(punctuate_subitem(r'$a \leqslant 0\;$', False),
+                         r'$a \leqslant 0\;$;')
+        self.assertEqual(punctuate_subitem(r'$x\,$', True), r'$x\,$.')
+        # «\\;» — перенос и настоящая «;»
+        self.assertEqual(punctuate_subitem(r'$x$\\;', False), r'$x$\\;')
+
+
 class SubitemPunctInDocumentsTests(TestCase):
     def setUp(self):
         self.worksheet = Worksheet.objects.create(

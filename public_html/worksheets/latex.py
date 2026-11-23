@@ -100,6 +100,9 @@ _TRAILING_CLOSERS_RE = re.compile(r'(?:\$|\\\)|\})+$')
 # систем уравнений) — не знак препинания.
 _NULL_DELIMITER_RE = re.compile(r'\\(?:right|middle|[bB]igg?[rlm]?)\s*\.$')
 _FINAL_PUNCT = ';.!?:'
+# «\,» «\;» «\.» и т.п. в конце — команды (пробел, акцент), а не знак
+# препинания; «\\;» — перенос строки и настоящая «;».
+_ESCAPED_PUNCT_RE = re.compile(r'(?<!\\)(?:\\\\)*\\[;,.!?:]$')
 
 
 def punctuate_subitem(text, last):
@@ -108,12 +111,20 @@ def punctuate_subitem(text, last):
     Между подпунктами «;», после последнего — «.». Подпункт с заглавной
     буквы — законченное предложение, ему всегда «.». Если знак уже стоит
     (в т.ч. перед закрывающим «$» или «}»), ничего не добавляем.
+    Хвостовая запятая — служебная (недочищенный импорт): её заменяем
+    нужным знаком, иначе в печати выходило «,;».
     """
     text = _TRAILING_BREAK_RE.sub('', text)
     if not text:
         return text
     core = _TRAILING_CLOSERS_RE.sub('', text)
-    if core[-1:] in tuple(_FINAL_PUNCT) and not _NULL_DELIMITER_RE.search(core):
+    if core.endswith(',') and not _ESCAPED_PUNCT_RE.search(core):
+        text = core[:-1].rstrip() + text[len(core):]
+        core = core[:-1].rstrip()
+        if not core:
+            return text
+    if (core[-1:] in tuple(_FINAL_PUNCT) and not _NULL_DELIMITER_RE.search(core)
+            and not _ESCAPED_PUNCT_RE.search(core)):
         return text
     first = text.lstrip()[:1]
     sentence = first.isalpha() and first.isupper()
