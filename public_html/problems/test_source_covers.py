@@ -6,6 +6,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from django.core.files.base import ContentFile
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -166,3 +167,12 @@ class SourceCoversCommandTests(TestCase):
         self.assertEqual(b''.join(response.streaming_content)[:2], b'\xff\xd8')
         missing = self.client.get(reverse('source_cover', args=[self.geo7.pk]))
         self.assertEqual(missing.status_code, 404)
+
+    def test_cover_uploaded_in_admin_keeps_its_type(self):
+        png = io.BytesIO()
+        Image.new('RGB', (52, 72), 'green').save(png, 'PNG')
+        self.geo7.cover.save('geo7.png', ContentFile(png.getvalue()), save=True)
+        make_teacher()
+        self.client.login(username='teacher1', password='pass12345')
+        response = self.client.get(reverse('source_cover', args=[self.geo7.pk]))
+        self.assertEqual(response['Content-Type'], 'image/png')
