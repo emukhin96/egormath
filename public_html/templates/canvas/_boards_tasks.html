@@ -5,7 +5,7 @@
   <div data-task-png-content>
   {% include 'worksheets/_common_condition.html' %}
   {% include 'includes/task_row.html' with number=row.number stars=row.item.effective_stars text=row.statement %}
-  {% include 'problems/_subitems.html' with subitems=row.subitems %}
+  {% include 'problems/_subitems.html' with subitems=row.subitems pics_task=row.item.task %}
   {% include 'problems/_task_images.html' with images=row.statement_images %}
   </div>
   {% answer_material row.item.task row.subitems as material %}

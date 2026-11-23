@@ -56,7 +56,8 @@ def block_presentations(items):
 def decorate_block_rows(rows):
     """Добавляет представление общего условия к строкам веб-листка."""
     import re
-    from problems.task_images import images_for_group, taskpic_indices
+    from problems.task_images import (images_for_group, taskpic_indices,
+                                      without_subitem_images)
     presentations = block_presentations([row['item'] for row in rows])
     for row in rows:
         item = row['item']
@@ -64,8 +65,9 @@ def decorate_block_rows(rows):
             continue
         presentation = presentations.get(item.pk)
         row['statement'] = presentation.text if presentation else item.task.text_latex
-        row['statement_images'] = images_for_group(item.task)
-        row['review_images'] = list(item.task.images.all())
+        # Рисунки подпунктов выводит {% subitem_images %} под самим подпунктом
+        row['statement_images'] = images_for_group(item.task, 'main')
+        row['review_images'] = without_subitem_images(item.task, list(item.task.images.all()))
         if not presentation:
             continue
         images = list(item.task.images.all())

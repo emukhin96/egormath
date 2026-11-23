@@ -1,6 +1,5 @@
 {% load task_extras %}
 <div class="math-content task-text">{{ task.text_latex|web_text|linebreaksbr }}</div>
-{% if not selecting %}{% include 'problems/_subitems.html' with subitems=task.subitems.all %}{% endif %}
-{% task_images task %}
+{% if not selecting %}{% include 'problems/_subitems.html' with subitems=task.subitems.all pics_task=task %}{% task_images task 'main' %}{% else %}{% task_images task %}{% endif %}
 {% include 'problems/_task_answers.html' with subitems=task.subitems.all hide_answers=True %}
 {% include 'includes/task_usage_badge.html' %}

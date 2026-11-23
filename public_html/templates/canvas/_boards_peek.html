@@ -11,7 +11,7 @@
     <div class="boards-peek-condition" data-task-png-content>
       {% include 'worksheets/_common_condition.html' %}
       {% include 'includes/task_row.html' with number=task_no stars=row.item.effective_stars text=row.statement %}
-      {% include 'problems/_subitems.html' %}
+      {% include 'problems/_subitems.html' with pics_task=row.task %}
       {% include 'problems/_task_images.html' with images=row.statement_images %}
     </div>
     <div class="boards-peek-answer">

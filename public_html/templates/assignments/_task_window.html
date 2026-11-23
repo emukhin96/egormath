@@ -20,8 +20,8 @@
       <div class="progress-condition" data-task-png-content>
         <span class="tw-label" data-task-png-skip>Условие</span>
         <div class="math-content">{{ task.text_latex|web_text }}</div>
-        {% task_images task %}
-        {% if subitems %}<ol class="subitems">{% for s in subitems %}<li><span class="math-content">{{ s.subitem.text_latex|web_text }}</span></li>{% endfor %}</ol>{% endif %}
+        {% task_images task 'main' %}
+        {% if subitems %}<ol class="subitems">{% for s in subitems %}<li><span class="math-content">{{ s.subitem.text_latex|web_text }}</span>{% subitem_images task s.subitem %}</li>{% endfor %}</ol>{% endif %}
       </div>
       <div class="tw-answers">
         <div class="tw-answer">

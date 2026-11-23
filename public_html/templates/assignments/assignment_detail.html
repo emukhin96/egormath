@@ -64,7 +64,7 @@
     <ol class="subitems">
       {% for sr in row.subrows %}
       <li>
-        <span class="math-content" data-audit-statement="{{ row.number }}{{ forloop.counter0|subitem_label }}">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}
+        <span class="math-content" data-audit-statement="{{ row.number }}{{ forloop.counter0|subitem_label }}">{{ sr.subitem.text_latex|web_text }}</span>{{ sr.subitem.text_latex|subitem_tail:forloop.last }}{% subitem_images row.item.task sr.subitem %}
         {% if sr.fragments %}
         {% if sr.part.legacy_answer and not sr.part.has_mask_values %}
         <div class="subitem-answer">

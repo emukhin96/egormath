@@ -88,11 +88,40 @@ def unplaced_material_images(task):
     return [image for image in answers if images.index(image) not in placed]
 
 
+def subitem_image_map(task):
+    """Рисунки, на которые ссылается текст подпункта, а общее условие — нет.
+
+    Возвращает ``{pk подпункта: [TaskImage, …]}``. На веб-страницах
+    ``\\taskpic`` вырезается из текста (``web_text``), поэтому такой рисунок
+    выводится сразу под своим подпунктом, а не в общей галерее условия, —
+    как в PDF, где он стоит внутри ``\\item``.
+    """
+    images = list(task.images.all())
+    main = taskpic_indices(task.text_latex)
+    result = {}
+    for subitem in task.subitems.all():
+        indices = sorted(i for i in taskpic_indices(subitem.text_latex)
+                         if i not in main and i < len(images))
+        if indices:
+            result[subitem.pk] = [images[i] for i in indices]
+    return result
+
+
+def without_subitem_images(task, images):
+    """Галерея условия без рисунков, которые стоят под подпунктами."""
+    placed = {image.pk for group in subitem_image_map(task).values()
+              for image in group}
+    return [image for image in images if image.pk not in placed]
+
+
 def images_for_group(task, group='statement'):
-    """Картинки для веб-блока: ``statement``, ``answers`` или ``all``."""
+    """Картинки для веб-блока: ``statement``, ``answers``, ``all`` или
+    ``main`` — условие без рисунков подпунктов (их выводит ``subitem_images``)."""
     if group == 'all':
         return list(task.images.all())
     statement, answers = classify_task_images(task)
     if group == 'answers':
         return answers
+    if group == 'main':
+        return without_subitem_images(task, statement)
     return statement

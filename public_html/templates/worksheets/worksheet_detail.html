@@ -153,7 +153,7 @@
           {% if row.subitems %}
           <ol class="subitems">
 {% for part in row.subitems %}<li><label class="subitem-label"><input type="checkbox" name="subitems" value="{{ part.pk }}" form="settings-{{ row.pk }}"{% if part.checked %} checked{% endif %}>
-<span class="math-content">{{ part.html }}</span>{{ part.tail }}</label></li>
+<span class="math-content">{{ part.html }}</span>{{ part.tail }}</label>{% if part.images %}{% include 'problems/_task_images.html' with images=part.images %}{% endif %}</li>
 {% endfor %}</ol>
           {% endif %}
           {% if row.statement_images %}{% include 'problems/_task_images.html' with images=row.statement_images %}{% endif %}
