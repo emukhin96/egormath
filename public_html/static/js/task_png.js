@@ -9,11 +9,12 @@
 (function () {
   var LIB_URL = (document.currentScript && document.currentScript.dataset.lib)
     || '/static/vendor/modern-screenshot/modern-screenshot.js';
-  // Всё, что не относится к самому условию: управление, ответы, маски, бейджи
+  // Всё, что не относится к самому условию: управление, ответы, маски, бейджи,
+  // строка свойств под условием (номер «#33388» в подборке и листке)
   var SKIP = [
     'button', 'form', 'details', 'input', 'select', 'textarea', 'script', 'template',
     'object', '[hidden]', '.ws-answers', '.usage-badge', '[data-worksheet-mask]',
-    '.ws-stars', '.ws-num', '[data-task-png-skip]',
+    '.ws-stars', '.ws-num', '.task-meta', '.task-id', '[data-task-png-skip]',
   ].join(',');
   var LETTERS = 'абвгдежзиклмнопрстуф';
   // Доска вставляет картинку в её пиксельном размере: при 2× условие
