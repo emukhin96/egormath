@@ -243,6 +243,35 @@ def _fragment_html(text):
     return _markers_to_html(escape(''.join(parts)))
 
 
+# Число и единица в ячейке таблицы («100 р.», «50 тыс. р.», «$5$ кг»)
+# не должны расходиться по строкам, когда таблица сжата шириной колонки.
+_UNIT_GAP_AFTER_NUMBER = re.compile(r'(?<=\d) +(?=[^\W\d_])')
+_UNIT_GAP_AFTER_ABBR = re.compile(r'(?<![^\W\d_])([^\W\d_]{1,4}\.) +(?=[^\W\d_])')
+_UNIT_GAP_AFTER_MATH = re.compile(r'^ +(?=[^\W\d_]{1,5}(?:\.|\b))')
+
+
+def _glue_units(cell):
+    """Пробелы «число единица» и «сокр. единица» вне формул → ~ (неразрывный)."""
+    parts = []
+    pos = 0
+    prev_math = ''
+    for m in _MATH_RE.finditer(cell):
+        parts.append(_glue_plain(cell[pos:m.start()], prev_math))
+        parts.append(m.group(0))
+        prev_math = m.group(0)
+        pos = m.end()
+    parts.append(_glue_plain(cell[pos:], prev_math))
+    return ''.join(parts)
+
+
+def _glue_plain(text, prev_math):
+    text = _UNIT_GAP_AFTER_NUMBER.sub('~', text)
+    text = _UNIT_GAP_AFTER_ABBR.sub(r'\1~', text)
+    if re.search(r'\d\s*(?:\$|\\\))$', prev_math):
+        text = _UNIT_GAP_AFTER_MATH.sub('~', text)
+    return text
+
+
 def _table_html(body):
     """tabular → <table>: строки по \\\\, ячейки по неэкранированному &.
 
@@ -257,7 +286,8 @@ def _table_html(body):
         if not any(cells) and len(cells) == 1:
             continue
         rows.append('<tr>'
-                    + ''.join(f'<td>{_fragment_html(c)}</td>' for c in cells)
+                    + ''.join(f'<td>{_fragment_html(_glue_units(c))}</td>'
+                              for c in cells)
                     + '</tr>')
     return '<table class="tex-table">' + ''.join(rows) + '</table>'
 
