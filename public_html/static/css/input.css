@@ -4265,6 +4265,11 @@
   .tex-table {
     border-collapse: collapse;
     margin: var(--space-2) 0;
+    /* Широкая таблица в узкой колонке условия прокручивается сама,
+       а не сжимает столбцы до переноса «100 р.» на две строки. */
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
   }
 
   .tex-table td,
