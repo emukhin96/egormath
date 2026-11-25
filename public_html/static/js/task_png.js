@@ -21,6 +21,8 @@
   // выходило вдвое крупнее страницы (до 1200px). 1.25× — до 750px,
   // текст и формулы ещё чёткие при увеличении, файл почти вдвое меньше.
   var SCALE = 1.25;
+  // Запас ширины листа против переноса строк при рендере (см. buildSheet)
+  var SLACK = 4;
   var libPromise = null;
 
   function loadLib() {
@@ -92,6 +94,15 @@
     sheet.appendChild(clone);
     holder.appendChild(sheet);
     document.body.appendChild(holder);
+    // Лист шириной max-content: при рендере (SVG foreignObject) текст
+    // выходит на доли пикселя шире, строка условия переносится, а высоты
+    // блоков уже посчитаны — перенос налезает на подпункт «а)». Фиксируем
+    // ширину по странице с запасом в несколько пикселей.
+    var width = sheet.getBoundingClientRect().width;
+    if (width) {
+      sheet.style.maxWidth = 'none';
+      sheet.style.width = (Math.ceil(width) + SLACK) + 'px';
+    }
     return {holder: holder, sheet: sheet};
   }
 
