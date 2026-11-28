@@ -21,6 +21,8 @@
   // выходило вдвое крупнее страницы (до 1200px). 1.25× — до 750px,
   // текст и формулы ещё чёткие при увеличении, файл почти вдвое меньше.
   var SCALE = 1.25;
+  // Запас ширины листа против переноса строк при рендере (см. fixWidth)
+  var SLACK = 4;
   var libPromise = null;
 
   function loadLib() {
@@ -95,6 +97,18 @@
     return {holder: holder, sheet: sheet};
   }
 
+  // Лист шириной max-content: при рендере (SVG foreignObject) текст
+  // выходит на доли пикселя шире, строка условия переносится, а высоты
+  // блоков уже посчитаны — перенос налезает на подпункт «а)». Фиксируем
+  // ширину по странице с запасом в несколько пикселей — после загрузки
+  // рисунков, иначе лист закрепится по одному тексту и сожмёт рисунок.
+  function fixWidth(sheet) {
+    var width = sheet.getBoundingClientRect().width;
+    if (!width) return;
+    sheet.style.maxWidth = 'none';
+    sheet.style.width = (Math.ceil(width) + SLACK) + 'px';
+  }
+
   function render(parts) {
     var images = Array.prototype.slice.call(parts.sheet.querySelectorAll('img'));
     var ready = images.map(function (img) {
@@ -102,6 +116,7 @@
       return img.decode ? img.decode().catch(function () { img.remove(); }) : null;
     });
     return Promise.all([loadLib()].concat(ready)).then(function (result) {
+      fixWidth(parts.sheet);
       return result[0].domToBlob(parts.sheet, {scale: SCALE, type: 'image/png', backgroundColor: '#ffffff'});
     }).finally(function () {
       parts.holder.remove();
