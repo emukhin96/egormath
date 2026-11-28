@@ -930,7 +930,7 @@ def _authored_browser(request, source, section=None):
     (``?sheet=<pk>``, без JS всё работает ссылками); «Таблица» — темы-главы.
     """
     from .authored_browser import (SORTS, VIEWS, group_sheets, load_sheets,
-                                   sections_of)
+                                   root_sections, sections_of)
     from .cart import CART_ADD_MANY_LIMIT
     view = request.GET.get('view')
     view = view if view in VIEWS else 'list'
@@ -984,6 +984,7 @@ def _authored_browser(request, source, section=None):
         'tasks_total': sum(sheet.tasks_total for sheet in sheets),
         'groups': groups,
         'topic_groups': topic_groups,
+        'root_sections': root_sections(sheets),
         'sections': sections,
         'all_sheets_total': sum(row.sheets_total for row in sections),
         'segments': segments,

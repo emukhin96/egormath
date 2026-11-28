@@ -24,13 +24,6 @@
   <nav class="seg" aria-label="Раздел">
     {% for segment in segments %}<a class="seg-item{% if segment.active %} is-active{% endif %}"{% if segment.active %} aria-current="true"{% endif %} href="{{ segment.url }}" data-sheet-scope="{{ segment.scope }}">{{ segment.label }}</a>{% endfor %}
   </nav>
-  {# Темы — фильтром над колонкой листков вместо панели (ревизия 03.11, P3): пункт — ссылка на группу темы (без JS — переход к якорю, при другой сортировке — вид по темам); authored_browser.js оставляет на странице только листки выбранной темы #}
-  {% if topic_groups|length > 1 %}
-  <details class="more-menu show-more authored-topic-filter" data-authored-topic-menu><summary aria-label="Тема" title="Листки одной темы"><span data-authored-topic-label>Все темы</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></summary><div class="more-menu-list is-left">
-    <a href="{{ topic_query }}#" data-authored-topic="" class="is-current">Все темы<span class="muted">{{ sheets_total }}</span></a>
-    {% for group in topic_groups %}<a href="{{ topic_query }}#{{ group.anchor }}" data-authored-topic="{{ group.anchor }}">{{ group.label|default:'Все листки' }}<span class="muted">{{ group.sheets|length }}</span></a>{% endfor %}
-  </div></details>
-  {% endif %}
   {# Поиск по названию — на клиенте; без JS поле не показываем #}
   <label class="filter-search" hidden data-authored-filter-wrap>
     <input type="search" placeholder="Найти листок…" aria-label="Найти листок по названию" autocomplete="off" data-authored-filter>
@@ -47,6 +40,25 @@
     <noscript><button class="btn btn-small" type="submit">Показать</button></noscript>
   </form>
 </div>
+
+{# «Листалка» разделов рубрикатора (Арифметика, Алгебра, Геометрия…) и тема внутри раздела. Раздел листка — корень его главной темы; authored_browser.js фильтрует строки по data-root и оставляет в «Все темы ▾» темы выбранного раздела #}
+{% if root_sections|length > 1 or topic_groups|length > 1 %}
+<div class="page-toolbar authored-roots-bar">
+  {% if root_sections|length > 1 %}
+  <nav class="seg authored-roots" aria-label="Раздел рубрикатора" data-authored-roots>
+    <a class="seg-item is-active" aria-current="true" href="#" data-authored-root="" data-count="{{ sheets_total }}">Все разделы</a>
+    {% for root in root_sections %}<a class="seg-item" href="#{{ root.anchor }}" data-authored-root="{{ root.pk }}" data-count="{{ root.sheets_total }}">{{ root.topic.name }}<span class="seg-count">{{ root.sheets_total }}</span></a>{% endfor %}
+  </nav>
+  {% endif %}
+  {# Темы — фильтром над колонкой листков вместо панели (ревизия 03.11, P3): пункт — ссылка на группу темы (без JS — переход к якорю, при другой сортировке — вид по темам); authored_browser.js оставляет на странице только листки выбранной темы #}
+  {% if topic_groups|length > 1 %}
+  <details class="more-menu show-more authored-topic-filter" data-authored-topic-menu><summary aria-label="Тема" title="Листки одной темы"><span data-authored-topic-label>Все темы</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></summary><div class="more-menu-list is-left">
+    <a href="{{ topic_query }}#" data-authored-topic="" class="is-current">Все темы<span class="muted" data-authored-topic-total>{{ sheets_total }}</span></a>
+    {% for group in topic_groups %}<a href="{{ topic_query }}#{{ group.anchor }}" data-authored-topic="{{ group.anchor }}"{% if group.topic %} data-root="{{ group.topic.root_pk }}"{% endif %}>{{ group.label|default:'Все листки' }}<span class="muted">{{ group.sheets|length }}</span></a>{% endfor %}
+  </div></details>
+  {% endif %}
+</div>
+{% endif %}
 
 {% if not sheets_total %}
 <div class="card"><p class="muted">{% if section %}В этом разделе пока нет листков, которые вам видны.{% else %}Авторских листков пока нет.{% endif %}</p></div>
@@ -67,7 +79,7 @@
       {% endif %}{% endwith %}
     </summary>
     {% for sheet in group.sheets %}
-    <div class="authored-sr" data-authored-row>
+    <div class="authored-sr" data-authored-row data-root="{{ sheet.main_topic.root_pk|default:'' }}">
       <div class="authored-sr-main">
         <a class="authored-sr-title" href="{{ list_url }}{% if '?' in list_url %}&amp;{% else %}?{% endif %}sheet={{ sheet.pk }}" data-authored-title>{{ sheet.title }}</a>{% if not sheet.collection.is_published %} <span class="muted authored-private" title="Подборку видите только вы">видна только вам</span>{% endif %}
         {% if sheet.other_topics %}<div class="authored-also">также: {% for info in sheet.other_topics|slice:':3' %}{{ info.topic.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
@@ -94,7 +106,7 @@
       {% for sheet in group.sheets %}
       <a class="authored-li{% if selected.pk == sheet.pk %} is-active{% endif %}"{% if selected.pk == sheet.pk %} aria-current="true"{% endif %}
          href="{{ sheet_query }}{% if sheet_query != '?' %}&amp;{% endif %}sheet={{ sheet.pk }}"
-         data-authored-row
+         data-authored-row data-root="{{ sheet.main_topic.root_pk|default:'' }}"
          data-preview-url="{% url 'collection_preview' sheet.pk %}"
          data-detail-url="{% url 'collection_detail' sheet.pk %}">
         <span class="authored-li-name" data-authored-title>{{ sheet.title }}</span>
@@ -125,5 +137,5 @@
 {% endblock %}
 {% block extra_js %}
 <script defer src="{% static 'js/answers-toggle.js' %}?v=6"></script>
-<script defer src="{% static 'js/authored_browser.js' %}?v=4"></script>
+<script defer src="{% static 'js/authored_browser.js' %}?v=5"></script>
 {% endblock %}

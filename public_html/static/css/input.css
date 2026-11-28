@@ -7140,7 +7140,10 @@
     font-size: var(--fs-sm);
   }
 
-  .tax-picker-compact .tax-node {
+  /* Ветка со стрелкой: в компактном пикере и там, где раздел выбирается
+     целиком (data-branches) — стрелка раскрывает, название выбирает */
+  .tax-picker-compact .tax-node,
+  .tax-node:has(> .tax-twist) {
     display: flex;
     align-items: stretch;
     gap: 0;
@@ -7164,7 +7167,8 @@
     color: var(--accent-dark);
   }
 
-  .tax-picker-compact .tax-node button[data-tax-node] {
+  .tax-picker-compact .tax-node button[data-tax-node],
+  .tax-node > .tax-twist + button[data-tax-node] {
     flex: 1;
     width: auto;
     padding-left: 6px;

@@ -79,6 +79,11 @@ class TopicInfo:
     topic: Topic
     label: str
     order: int
+    root: Topic | None = None
+
+    @property
+    def root_pk(self):
+        return (self.root or self.topic).pk
 
 
 @dataclass
@@ -154,8 +159,46 @@ def topic_index():
         roots[topic.pk] = root
         label = (f'{root.name} › {topic.name}' if root.pk != topic.pk
                  else topic.name)
-        index[topic.pk] = TopicInfo(topic=topic, label=label, order=position)
+        index[topic.pk] = TopicInfo(topic=topic, label=label, order=position,
+                                    root=root)
     return index
+
+
+@dataclass
+class Root:
+    """Раздел рубрикатора (корень дерева) для «листалки» над списком."""
+    topic: Topic
+    sheets_total: int
+
+    @property
+    def anchor(self):
+        return f'section-{self.topic.pk}'
+
+    @property
+    def pk(self):
+        return self.topic.pk
+
+
+def root_sections(sheets):
+    """Разделы, под которые попадают главные темы листков, в порядке дерева.
+
+    Листок без темы не считается ни в одном разделе — он виден только
+    при «Все разделы».
+    """
+    counts, order = {}, {}
+    for sheet in sheets:
+        info = sheet.main_topic
+        if info is None:
+            continue
+        root = info.root or info.topic
+        counts[root.pk] = counts.get(root.pk, 0) + 1
+        # Поддерево раздела в topic_tree() идёт подряд: наименьший номер
+        # темы внутри раздела задаёт порядок разделов.
+        known = order.get(root.pk)
+        if known is None or info.order < known[0]:
+            order[root.pk] = (info.order, root)
+    rows = sorted(order.values(), key=lambda pair: pair[0])
+    return [Root(topic=root, sheets_total=counts[root.pk]) for _, root in rows]
 
 
 def sections_of(source, user):
