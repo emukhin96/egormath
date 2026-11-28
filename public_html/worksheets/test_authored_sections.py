@@ -106,3 +106,19 @@ class WorksheetBranchTopicTests(TestCase):
             reverse('worksheet_edit', args=[self.worksheet.pk]))
         self.assertContains(response, 'data-branches="1"')
         self.assertNotContains(response, '{#')  # комментарий шаблона не в HTML
+
+    def test_quick_task_inherits_only_leaf_topics(self):
+        equations = Topic.objects.get(code='XAL.01')
+        self.worksheet.topics.set([self.algebra, equations])
+        self.client.post(
+            reverse('worksheet_quick_task', args=[self.worksheet.pk]),
+            {'text_latex': 'Решите уравнение $x^2=49$.'})
+        task = self.worksheet.ordered_items().last().task
+        self.assertEqual(list(task.topics.all()), [equations])
+        # Раздел без подтемы — задача остаётся без темы.
+        self.worksheet.topics.set([self.algebra])
+        self.client.post(
+            reverse('worksheet_quick_task', args=[self.worksheet.pk]),
+            {'text_latex': 'Решите неравенство $x>3$.'})
+        task = self.worksheet.ordered_items().last().task
+        self.assertFalse(task.topics.exists())

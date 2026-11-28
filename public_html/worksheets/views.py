@@ -1430,7 +1430,11 @@ def worksheet_quick_task(request, pk):
         code = GRADE_LEVEL_TO_CODE.get(worksheet.grade)
         if code:
             set_grade_bands(task, [code], sync_legacy=False)
-        topics = list(worksheet.topics.values_list('pk', flat=True))
+        # Задаче — только листовые темы листка: раздел целиком («Алгебра»)
+        # годится листку, а задача в нём не попала бы ни в одну подтему
+        # рубрикатора и выглядела бы неразмеченной.
+        topics = list(worksheet.topics.filter(children__isnull=True)
+                      .values_list('pk', flat=True))
         if topics:
             set_task_topics(task, topics, topics[0])
         outcome, message = append_task(worksheet, task)
