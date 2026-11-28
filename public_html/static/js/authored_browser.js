@@ -92,6 +92,21 @@
       apply();
     }
 
+    // Раздел выбран — справа открывается первый листок раздела (тем же
+    // кликом по строке, что и вручную: фрагмент предпросмотра без
+    // перезагрузки). На узком экране клик ведёт на страницу листка — там
+    // не открываем.
+    function openFirst() {
+      if (NARROW.matches) return;
+      var rows = browser.querySelectorAll('a.authored-li');
+      for (var i = 0; i < rows.length; i += 1) {
+        var group = rows[i].closest('[data-authored-group]');
+        if (rows[i].hidden || (group && group.hidden)) continue;
+        if (!rows[i].classList.contains('is-active')) rows[i].click();
+        return;
+      }
+    }
+
     if (wrap && input) {
       wrap.hidden = false;
       input.addEventListener('input', apply);
@@ -102,6 +117,7 @@
         if (!link) return;
         event.preventDefault();
         setRoot(link);
+        openFirst();
       });
     }
     if (menu) {
@@ -124,7 +140,9 @@
         'a[href="#' + CSS.escape(initial) + '"]');
       var startTopic = menu && menu.querySelector(
         'a[data-authored-topic="' + CSS.escape(initial) + '"]');
-      if (startRoot) startRoot.click();
+      // Без openFirst: предпросмотр ещё не подключён, а выбранный ссылкой
+      // листок (?sheet=) не подменяем
+      if (startRoot) setRoot(startRoot);
       else if (startTopic) startTopic.click();
     }
   }
@@ -217,7 +235,8 @@
       }).then(function (html) {
         if (!swap(html)) throw new Error('bad fragment');
         browser.classList.add('has-sheet');
-        history.replaceState(null, '', link.href);
+        // Якорь выбранного раздела (#section-…) остаётся в адресе
+        history.replaceState(null, '', link.pathname + link.search + location.hash);
         // Начало листка уехало выше топбара — возвращаем его в поле зрения
         var topbar = document.querySelector('.topbar');
         var offset = (topbar ? topbar.offsetHeight : 0) + 16;
