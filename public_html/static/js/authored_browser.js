@@ -17,15 +17,19 @@
     });
   }
 
-  // Фильтры колонки листков: «Найти листок…» по названию и «Тема ▾»
-  // (ревизия 03.11, P3: темы — над колонкой вместо панели). Оба условия
-  // применяются вместе; тема — id группы [data-authored-group].
+  // Фильтры колонки листков: «Найти листок…» по названию, раздел
+  // рубрикатора («листалка» Арифметика / Алгебра / Геометрия…) и «Тема ▾»
+  // внутри раздела (ревизия 03.11, P3: темы — над колонкой вместо панели).
+  // Условия применяются вместе; тема — id группы [data-authored-group],
+  // раздел — data-root строки (корень главной темы листка).
   function setupFilter(browser) {
     var wrap = document.querySelector('[data-authored-filter-wrap]');
     var input = document.querySelector('[data-authored-filter]');
     var menu = document.querySelector('[data-authored-topic-menu]');
+    var roots = document.querySelector('[data-authored-roots]');
     var empty = browser.querySelector('[data-authored-empty]');
     var topic = '';
+    var root = '';
 
     function apply() {
       var query = input ? input.value.trim().toLowerCase() : '';
@@ -36,21 +40,85 @@
         group.querySelectorAll('[data-authored-row]').forEach(function (row) {
           var title = row.querySelector('[data-authored-title]');
           var name = (title ? title.textContent : row.textContent).toLowerCase();
-          var match = inTopic && (!query || name.indexOf(query) !== -1);
+          var match = inTopic && (!root || row.dataset.root === root)
+            && (!query || name.indexOf(query) !== -1);
           row.hidden = !match;
           if (match) visible += 1;
         });
         group.hidden = !visible;
         // В таблице свёрнутая глава с найденным листком раскрывается
-        if ((query || topic) && visible && group.tagName === 'DETAILS') group.open = true;
+        if ((query || topic || root) && visible && group.tagName === 'DETAILS') group.open = true;
         shown += visible;
       });
       if (empty) empty.hidden = shown > 0;
     }
 
+    function setTopic(link) {
+      if (!menu) return;
+      var anchor = link ? link.dataset.authoredTopic : '';
+      topic = anchor;
+      menu.querySelectorAll('a[data-authored-topic]').forEach(function (a) {
+        a.classList.toggle('is-current', a.dataset.authoredTopic === anchor);
+      });
+      var label = menu.querySelector('[data-authored-topic-label]');
+      if (label) label.textContent = anchor ? link.firstChild.textContent.trim() : 'Все темы';
+      menu.classList.toggle('is-set', Boolean(anchor));
+    }
+
+    // Раздел: в «Тема ▾» остаются темы раздела; выбранная тема другого
+    // раздела сбрасывается.
+    function setRoot(link) {
+      root = link.dataset.authoredRoot;
+      roots.querySelectorAll('a[data-authored-root]').forEach(function (a) {
+        var on = a === link;
+        a.classList.toggle('is-active', on);
+        if (on) a.setAttribute('aria-current', 'true');
+        else a.removeAttribute('aria-current');
+      });
+      if (menu) {
+        menu.querySelectorAll('a[data-authored-topic]').forEach(function (a) {
+          if (!a.dataset.authoredTopic) return;
+          a.hidden = Boolean(root) && a.dataset.root !== root;
+        });
+        var total = menu.querySelector('[data-authored-topic-total]');
+        if (total) total.textContent = link.dataset.count;
+        var current = topic && menu.querySelector(
+          'a[data-authored-topic="' + CSS.escape(topic) + '"]');
+        if (current && current.hidden) setTopic(null);
+      }
+      history.replaceState(null, '', root
+        ? '#' + link.getAttribute('href').split('#')[1]
+        : location.pathname + location.search);
+      apply();
+    }
+
+    // Раздел выбран — справа открывается первый листок раздела (тем же
+    // кликом по строке, что и вручную: фрагмент предпросмотра без
+    // перезагрузки). На узком экране клик ведёт на страницу листка — там
+    // не открываем.
+    function openFirst() {
+      if (NARROW.matches) return;
+      var rows = browser.querySelectorAll('a.authored-li');
+      for (var i = 0; i < rows.length; i += 1) {
+        var group = rows[i].closest('[data-authored-group]');
+        if (rows[i].hidden || (group && group.hidden)) continue;
+        if (!rows[i].classList.contains('is-active')) rows[i].click();
+        return;
+      }
+    }
+
     if (wrap && input) {
       wrap.hidden = false;
       input.addEventListener('input', apply);
+    }
+    if (roots) {
+      roots.addEventListener('click', function (event) {
+        var link = event.target.closest('a[data-authored-root]');
+        if (!link) return;
+        event.preventDefault();
+        setRoot(link);
+        openFirst();
+      });
     }
     if (menu) {
       menu.addEventListener('click', function (event) {
@@ -60,20 +128,22 @@
         // Группы темы нет на странице (сортировка не по теме) — обычный переход
         if (anchor && !document.getElementById(anchor)) return;
         event.preventDefault();
-        topic = anchor;
-        menu.querySelectorAll('a[data-authored-topic]').forEach(function (a) {
-          a.classList.toggle('is-current', a === link);
-        });
-        var label = menu.querySelector('[data-authored-topic-label]');
-        if (label) label.textContent = anchor ? link.firstChild.textContent.trim() : 'Все темы';
-        menu.classList.toggle('is-set', Boolean(anchor));
+        setTopic(anchor ? link : null);
         menu.open = false;
         apply();
       });
-      // Пришли по ссылке с якорем темы — сразу показываем только её
-      var initial = location.hash.slice(1);
-      var start = initial && menu.querySelector('a[data-authored-topic="' + CSS.escape(initial) + '"]');
-      if (start) start.click();
+    }
+    // Пришли по ссылке с якорем раздела или темы — сразу показываем только его
+    var initial = location.hash.slice(1);
+    if (initial) {
+      var startRoot = roots && roots.querySelector(
+        'a[href="#' + CSS.escape(initial) + '"]');
+      var startTopic = menu && menu.querySelector(
+        'a[data-authored-topic="' + CSS.escape(initial) + '"]');
+      // Без openFirst: предпросмотр ещё не подключён, а выбранный ссылкой
+      // листок (?sheet=) не подменяем
+      if (startRoot) setRoot(startRoot);
+      else if (startTopic) startTopic.click();
     }
   }
 
@@ -165,7 +235,8 @@
       }).then(function (html) {
         if (!swap(html)) throw new Error('bad fragment');
         browser.classList.add('has-sheet');
-        history.replaceState(null, '', link.href);
+        // Якорь выбранного раздела (#section-…) остаётся в адресе
+        history.replaceState(null, '', link.pathname + link.search + location.hash);
         // Начало листка уехало выше топбара — возвращаем его в поле зрения
         var topbar = document.querySelector('.topbar');
         var offset = (topbar ? topbar.offsetHeight : 0) + 16;

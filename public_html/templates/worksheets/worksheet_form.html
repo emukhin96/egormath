@@ -48,7 +48,8 @@
   <section class="card ws-props-more">
     <p>
       <label>Рубрикатор</label>
-      {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=True selected_json=selected_json %}
+      {% include 'includes/taxonomy_picker.html' with mode='assign' primary=False facets=False grades=True branches=True selected_json=selected_json %}
+      <span class="helptext">Можно выбрать раздел целиком (Алгебра, Геометрия…), если конкретная тема не важна.</span>
     </p>
     <p>
       <label for="{{ form.comment.id_for_label }}">{{ form.comment.label }}</label>

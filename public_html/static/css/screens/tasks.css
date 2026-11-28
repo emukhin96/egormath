@@ -152,3 +152,15 @@
   /* Темы листка — строкой чипов под подзаголовком */
   .authored-preview-head > .authored-preview-topics { display: flex; margin-top: var(--space-1); }
 }
+
+/* Авторские листки: «листалка» разделов рубрикатора и «Тема ▾» вторым рядом */
+@layer components {
+  .page-toolbar.authored-roots-bar { margin-top: calc(-1 * var(--space-2)); }
+  .authored-roots .seg-count {
+    margin-left: 6px;
+    color: var(--muted);
+    font-size: var(--fs-sm);
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+  }
+}

@@ -224,6 +224,10 @@
     this.chipFull = root.dataset.chipFull === '1';
     this.topicFieldName = root.dataset.topicField || '';
     this.isFilter = this.mode === 'filter';
+    // Можно ли выбрать ветку (раздел) целиком: в фильтре — всегда, при
+    // назначении — где разрешено (data-branches, например тема листка:
+    // «Алгебра» без конкретной подтемы). Ветка тогда раскрывается стрелкой.
+    this.pickBranches = this.isFilter || root.dataset.branches === '1';
     this.state = parseState(root.dataset.state);
     if (!this.isFilter) {
       this.state.exams = ensureExamParentIds(this.state.exams || []);
@@ -395,7 +399,7 @@
     var topic = topicById(id);
     if (!topic) return;
     if (!topic.leaf) {
-      if (this.isFilter) {
+      if (this.pickBranches) {
         this.toggleTopic(id, false);
         if (this.compact) {
           this.clearSearch();
@@ -582,7 +586,7 @@
       if (!q) return null;
       for (var i = 0; i < catalog.topics.length; i += 1) {
         var topic = catalog.topics[i];
-        if (!this.isFilter && !topic.leaf) continue;
+        if (!this.pickBranches && !topic.leaf) continue;
         if (matchesQuery(topic, q)) return topic.id;
       }
       return null;
@@ -625,7 +629,7 @@
     var more = false;
     for (var i = 0; i < catalog.topics.length; i += 1) {
       var topic = catalog.topics[i];
-      if (!this.isFilter && !topic.leaf) continue;
+      if (!this.pickBranches && !topic.leaf) continue;
       if (!matchesQuery(topic, q)) continue;
       if (shown >= max) { more = true; break; }
       shown += 1;
@@ -714,7 +718,7 @@
       var label = (topic.code ? '<span class="tax-code">' + escapeHtml(topic.code)
         + '</span> ' : '') + escapeHtml(topic.name) + count;
       html += '<div class="' + cls + '" style="--depth:' + topic.depth + '">';
-      if (self.compact && !topic.leaf) {
+      if ((self.compact || self.pickBranches) && !topic.leaf) {
         html += '<button type="button" class="tax-twist" data-tax-twist="'
           + topic.id + '" aria-expanded="' + (isOpen ? 'true' : 'false') + '"'
           + ' aria-label="' + (isOpen ? 'Свернуть' : 'Развернуть') + '">'
